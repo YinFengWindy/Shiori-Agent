@@ -1,74 +1,20 @@
-import { SettingsField } from "../settings/SettingsField";
+import { useState } from "react";
 import { SettingsSectionCard } from "../settings/SettingsFieldPrimitives";
-import { SettingsToggleCard } from "../settings/SettingsToggleCard";
 import { cardClass, cx, ghostButtonClass } from "../shared/styles";
-import type { PluginSummary } from "./pluginBridgeClient";
 import { usePluginManagementController } from "./usePluginManagementController";
 import { PluginTrustDialog } from "./PluginTrustDialog";
-
-/** One plugin row: identity, runtime state/diagnostics, and its enable switch. */
-function PluginRow({
-  plugin,
-  pending,
-  onToggle,
-  onTrust,
-}: {
-  plugin: PluginSummary;
-  pending: boolean;
-  onToggle: (enabled: boolean) => void;
-  onTrust: () => void;
-}) {
-  const hint = [plugin.id, plugin.version && `v${plugin.version}`, plugin.source === "workspace" ? "工作区" : "内置", plugin.description].filter(Boolean).join(" · ");
-  const pendingTrust = plugin.trustPendingRestart && plugin.diagnostic?.code === "trust_required";
-  // Backend contributions are already live once setup() succeeds, but the
-  // Plugins page must not present the plugin as fully ACTIVE until every
-  // declared ui/background entry has confirmed (#262 AC1).
-  const activating = plugin.state === "ACTIVE" && plugin.pendingRendererKinds.length > 0;
-  const stateLabel = plugin.trustPendingRestart
-    ? "待重启"
-    : plugin.state === "UNTRUSTED"
-      ? "未信任"
-      : plugin.state === "RESTART_REQUIRED"
-        ? "需要重启"
-        : activating
-          ? "激活中…"
-          : plugin.state;
-  return (
-    <SettingsField label={plugin.name} hint={hint || undefined}>
-      <div className="grid gap-2">
-        <div className="flex items-center justify-end gap-3">
-          <span className="text-caption text-ink-muted">{stateLabel}</span>
-          {plugin.canTrust ? <button type="button" className={ghostButtonClass} disabled={pending} onClick={onTrust}>信任…</button> : null}
-          {plugin.canToggle && plugin.supportsHotUnload === false ? <span className="text-caption text-ink-muted">更改需重启</span> : null}
-          <SettingsToggleCard
-            checked={plugin.canToggle && plugin.enabled}
-            disabled={pending || !plugin.canToggle}
-            ariaLabel={`启用 ${plugin.name}`}
-            onChange={onToggle}
-          />
-        </div>
-        {plugin.error && !pendingTrust ? <span className="line-clamp-2 break-words text-body text-danger-text">{plugin.error}</span> : null}
-        {plugin.trustPendingRestart ? <span className="text-body text-ink-secondary">信任已保存，重启 Shiori 后加载。</span> : null}
-        {plugin.rendererError ? <span className="break-words text-body text-danger-text">UI FAILED · {plugin.rendererError}</span> : null}
-        <details className="text-caption text-ink-muted">
-          <summary className="cursor-pointer">详情</summary>
-          <div className="mt-2 grid gap-1 break-all">
-            <span>{plugin.directory}</span>
-            {plugin.diagnostic && !pendingTrust ? <>
-              <span>{plugin.diagnostic.code} · {plugin.diagnostic.stage} · {plugin.diagnostic.field}</span>
-              <span>{plugin.diagnostic.reason}</span>
-              {plugin.diagnostic.path ? <span>{plugin.diagnostic.path}</span> : null}
-            </> : null}
-          </div>
-        </details>
-      </div>
-    </SettingsField>
-  );
-}
+import { PluginRow } from "./PluginRow";
+import { PluginPackageDialogs } from "./PluginPackageDialogs";
+import { usePluginPackageController } from "./usePluginPackageController";
+import { PluginPackageToolbar } from "./PluginPackageToolbar";
+import { canManagePluginPackage, selectedPluginPackage } from "./pluginPackageSelection";
 
 /** Settings.section entry: lists every discovered plugin and lets it be hot enabled/disabled. */
 export function PluginManagementSection() {
-  const { plugins, error, pendingIds, setEnabled, reload, trustCandidate, requestTrust, confirmTrust, closeTrust } = usePluginManagementController();
+  const { plugins, error, pendingIds, setEnabled, reload, runMutation, trustCandidate, requestTrust, confirmTrust, closeTrust } = usePluginManagementController();
+  const packages = usePluginPackageController(runMutation);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
+  const selected = selectedPluginPackage(plugins, selectedCandidateId);
 
   if (error && !plugins) {
     return (
@@ -82,18 +28,25 @@ export function PluginManagementSection() {
     return <div className="text-sm text-ink-muted">正在加载插件列表…</div>;
   }
   return (
-    <><SettingsSectionCard>
+    <><PluginPackageToolbar busy={packages.busy || pendingIds.size > 0} hasSelection={selected !== null}
+      onInstall={() => void packages.pickPackage()} onUpdate={() => { if (selected) void packages.pickPackage(selected); }}
+      onUninstall={() => { if (selected) packages.requestUninstall(selected); }} />
+    <SettingsSectionCard>
       {error ? <div role="alert" className="text-sm text-danger-text">{error}</div> : null}
       {plugins.map((plugin) => (
         <PluginRow
           key={plugin.candidateId}
           plugin={plugin}
-          pending={pendingIds.has(plugin.id)}
+          pending={packages.busy || pendingIds.has(plugin.id)}
           onToggle={(enabled) => void setEnabled(plugin.id, enabled)}
           onTrust={() => requestTrust(plugin)}
+          selectable={canManagePluginPackage(plugin)}
+          selected={selected?.candidateId === plugin.candidateId}
+          onSelect={() => setSelectedCandidateId(plugin.candidateId)}
         />
       ))}
     </SettingsSectionCard>
+    <PluginPackageDialogs controller={packages} error={error} />
     <PluginTrustDialog plugin={trustCandidate} busy={Boolean(trustCandidate && pendingIds.has(trustCandidate.id))} error={error} onClose={closeTrust} onConfirm={() => void confirmTrust()} /></>
   );
 }

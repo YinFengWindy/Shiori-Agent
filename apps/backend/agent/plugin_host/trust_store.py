@@ -53,13 +53,17 @@ class PluginTrustStore:
         # activate approvals created by this session's confirmation dialog.
         return not (activation and session and approval["approved_session"] == session)
 
-    def approve(self, directory: Path, fingerprint: str) -> None:
+    def approve(
+        self, directory: Path, fingerprint: str, *, approved_session: str | None = None
+    ) -> None:
         """Replace one approval while preserving other packages and prior file on failure."""
         approvals = self._read()
         approvals[str(directory.absolute())] = {
             "fingerprint": fingerprint,
-            "approved_session": os.environ.get(
-                "SHIORI_DESKTOP_APPLICATION_SESSION_ID", ""
+            "approved_session": (
+                approved_session
+                if approved_session is not None
+                else os.environ.get("SHIORI_DESKTOP_APPLICATION_SESSION_ID", "")
             ),
         }
         atomic_save_text(
@@ -69,3 +73,15 @@ class PluginTrustStore:
             )
             + "\n",
         )
+
+    def revoke(self, directory: Path) -> None:
+        """Uninstall removes code approval independently of the retained user data."""
+        approvals = self._read()
+        if approvals.pop(str(directory.absolute()), None) is not None:
+            atomic_save_text(
+                self.path,
+                json.dumps(
+                    {"version": 1, "approvals": approvals}, ensure_ascii=False, indent=2
+                )
+                + "\n",
+            )

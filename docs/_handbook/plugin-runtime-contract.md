@@ -219,9 +219,64 @@ bytecode-only modules and native extensions cannot bypass that namespace boundar
 Every settings generation rechecks the original approved fingerprint before
 re-importing an external backend. Finder lifetime follows the plugin effect scope.
 
-Manual trust is implemented here; zip install, update and uninstall workflows
-remain in #216. Bundled source UI, external background entries, and external
-surface entries retain their existing paths in this slice.
+Manual trust and the ZIP lifecycle below share the same complete-trust disclosure.
+All confirmations use the shared desktop confirmation dialog. Bundled plugins
+remain host-owned and cannot be overwritten or uninstalled through these actions.
+
+## Desktop ZIP installation, updates and removal (#216)
+
+Settings → Plugins groups the **安装插件 ZIP**, **更新插件**, and **卸载插件** icon
+buttons in one toolbar. Update/removal require selecting a unique workspace
+package; builtin, conflicting, pending, and uninstalled failed candidates cannot
+be selected for those actions. The native file picker stages ZIP files in
+`private_runtime/imports/plugin-packages/`; renderer-supplied arbitrary paths are
+not accepted. The picker permits at most 32 MiB compressed, while the shared ZIP
+validator retains its 4,096-member / 64 MiB uncompressed limits and root-manifest
+layout. Extraction performs the same static contract, entry, runtime compatibility
+and declared host-dependency checks as manual discovery; it never executes code or
+installs additional dependencies.
+
+Preview returns an opaque token for the exact staged package and target directory.
+The confirmation shows ID, version, prior version for updates, ZIP filename and
+destination. Every install and every update requires **信任并安装** or
+**信任并更新**, with explicit notice that backend and renderer receive the host's
+permissions, can read/write the workspace, access the network and execute arbitrary
+frontend code, and have no runtime sandbox. Cancel removes the preview without
+installing, scheduling an update or granting trust. Confirmation rechecks the
+displayed bytes and current target; duplicate IDs, builtin IDs and competing
+confirmed operations are rejected before publication.
+
+Confirmed operations are journaled under `private_runtime/plugin-operations/`,
+outside plugin discovery. `plugins.list` exposes `pending_operation`
+(`install`, `update`, `uninstall`) and `pending_version`; the page shows **待重启**.
+The running generation retains its current code and activation state. The next
+application launch applies operations before config loading and plugin discovery:
+validated directories are renamed into `workspace/plugins/`, with the previous
+directory retained for rollback until trust and journal publication finish. An
+interrupted rename is recovered before any plugin can execute. A failed update
+restores the old directory and its trust record, removes staged package bytes and
+retains the original cause in `package_operation_error`. Restarting only the bridge
+within the same desktop application session never applies a pending operation.
+Updates preserve the user's existing enabled/disabled setting.
+
+Uninstall first requests disable through the existing settings-generation
+transaction so renderer, background and surface resources reconcile normally.
+If the runtime or a dependent does not support hot unload, the operation waits for
+application exit and final resource cleanup; it never forces a hot unload. Code
+removal occurs at the following startup. The default keeps `plugin-data/<id>/`
+and `[plugins.<id>]` configuration so reinstalling the same ID retains its data.
+The independent, initially unchecked **同时删除插件数据** option permanently
+removes both the private data directory and that plugin's config table at startup.
+Inline/dotted TOML settings are normalized when necessary while preserving other
+configuration values. Uninstall always revokes the removed code's trust approval,
+independently of data retention; reinstall requires fresh explicit trust.
+
+The bridge lifecycle methods are `plugins.install.preview` (`source`, optional
+`candidate_id` for updates), `plugins.install.confirm` (`token`, `trusted: true`),
+`plugins.install.cancel` (`token`), and `plugins.uninstall` (`candidate_id`,
+`delete_data`, `operation_id`). They share existing management diagnostics and
+roster refresh notifications. There is no store, automatic update, package-level
+HMR, dependency installer or additional sandbox.
 
 Focused Electron verification builds a separate test renderer, uses a fixture
 `ACTIVE` roster, and checks actual `file://` ESM loading, shared React hooks,

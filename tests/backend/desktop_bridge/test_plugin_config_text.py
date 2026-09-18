@@ -6,7 +6,11 @@ import tomllib
 
 import pytest
 
-from desktop_bridge.plugin_config_text import PluginTableConflict, merge_plugin_table
+from desktop_bridge.plugin_config_text import (
+    PluginTableConflict,
+    merge_plugin_table,
+    remove_plugin_table,
+)
 
 
 def test_appends_a_new_table_when_missing():
@@ -18,6 +22,31 @@ def test_appends_a_new_table_when_missing():
     parsed = tomllib.loads(result)
     assert parsed["plugins"]["demo"] == {"a": 1}
     assert parsed["llm"] == {"model": "x"}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '[plugins.demo]\nnote = "delete"\n[plugins.other]\nkeep = true\n',
+        '[plugins]\ndemo.note = "delete"\nother.keep = true\n',
+        'plugins = { demo = { note = "delete" }, other = { keep = true } }\n',
+    ],
+)
+def test_removes_plugin_settings_in_every_supported_toml_representation(text):
+    config = text + '[llm]\nmodel = "retain"\n'
+    result = remove_plugin_table(config, "demo")
+    assert tomllib.loads(result) == {
+        "plugins": {"other": {"keep": True}},
+        "llm": {"model": "retain"},
+    }
+
+
+def test_removing_header_form_preserves_unrelated_text():
+    config = '# comment\n[plugins.demo]\nnote = "delete"\n[plugins.other]\nkeep = true # keep comment\n'
+    assert (
+        remove_plugin_table(config, "demo")
+        == "# comment\n[plugins.other]\nkeep = true # keep comment\n"
+    )
 
 
 def test_appends_to_an_empty_file():

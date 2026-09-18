@@ -1,8 +1,9 @@
-"""Read-only zip validation using the same package-root contract as manual folders."""
+"""Bounded ZIP extraction and validation shared by inspection and installation."""
 
 from __future__ import annotations
 
 import stat
+import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import BadZipFile, ZipFile
@@ -24,11 +25,17 @@ def validate_package_zip(
     This performs no installation, trust grant, workspace write or code execution.
     A release zip has manifest.yaml at its root (no wrapping plugin-ID directory).
     """
+    with TemporaryDirectory(prefix="shiori-contract-") as scratch:
+        return extract_package_zip(archive, Path(scratch) / "package", host=host)
+
+
+def extract_package_zip(
+    archive: Path, destination: Path, *, host: HostRuntimeContract | None = None
+) -> ValidatedPackage:
+    """Extract into a new owned directory; failed validation removes all staged bytes."""
+    destination.mkdir(parents=True, exist_ok=False)
     try:
-        with (
-            ZipFile(archive) as source,
-            TemporaryDirectory(prefix="shiori-contract-") as scratch,
-        ):
+        with ZipFile(archive) as source:
             members = source.infolist()
             if (
                 len(members) > MAX_PACKAGE_MEMBERS
@@ -72,7 +79,7 @@ def validate_package_zip(
                 raise PackageContractError(
                     "invalid_layout", "manifest", "Zip requires root manifest.yaml"
                 )
-            root = Path(scratch)
+            root = destination
             # Names and member types are checked before creating any files.
             for member in members:
                 target = root.joinpath(*member.filename.rstrip("/").split("/"))
@@ -83,6 +90,11 @@ def validate_package_zip(
                     _ = target.write_bytes(source.read(member))
             return validate_package(root, host=host)
     except (OSError, BadZipFile, RuntimeError, NotImplementedError) as exc:
+        shutil.rmtree(destination)
         raise PackageContractError(
             "invalid_archive", "zip", str(exc), path=str(archive)
         ) from exc
+
+    except BaseException:
+        shutil.rmtree(destination)
+        raise

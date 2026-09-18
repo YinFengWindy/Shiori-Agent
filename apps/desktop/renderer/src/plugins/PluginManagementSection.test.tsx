@@ -12,6 +12,35 @@ before(async () => {
 });
 
 describe("PluginManagementSection", () => {
+  it("keeps icon actions together and requires selecting an external package before removal", async () => {
+    resetPluginEnabledStateForTests();
+    const view = await mountTestComponent(null);
+    Object.defineProperty(window, "miraDesktop", { configurable: true, value: {
+      onEvent: () => () => undefined,
+      invoke: async ({ method }: { method: string }) => ({ id: "r", type: "response", method, error: null, payload: { plugins: [
+        { id: "builtin", candidate_id: "builtin/one", directory: "builtin/one", source: "builtin", name: "Builtin", version: "1.0.0", state: "ACTIVE", enabled: true, can_toggle: true },
+        { id: "external", candidate_id: "workspace/external", directory: "workspace/external", source: "workspace", name: "External", version: "1.0.0", state: "ACTIVE", enabled: true, can_toggle: true },
+      ] } }),
+    } });
+    try {
+      await view.render(<PluginManagementSection />);
+      const toolbar = view.container.querySelector('[role="toolbar"]')!;
+      const buttons = toolbar.querySelectorAll<HTMLButtonElement>("button");
+      assert.deepEqual(Array.from(buttons, (button) => button.getAttribute("aria-label")), ["安装插件 ZIP", "更新插件", "卸载插件"]);
+      assert.equal(buttons[0].disabled, false);
+      assert.equal(buttons[1].disabled, true);
+      assert.equal(buttons[2].disabled, true);
+      assert.equal(view.container.querySelector<HTMLInputElement>('[aria-label="选择 Builtin"]')?.disabled, true);
+      await act(async () => view.container.querySelector<HTMLInputElement>('[aria-label="选择 External"]')!.click());
+      assert.equal(buttons[1].disabled, false);
+      assert.equal(buttons[2].disabled, false);
+      await act(async () => buttons[2].click());
+      const dialog = document.querySelector('[role="dialog"]')!;
+      assert.match(dialog.textContent ?? "", /External/);
+      assert.equal(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked, false);
+    } finally { await view.cleanup(); resetPluginEnabledStateForTests(); }
+  });
+
   it("lists every discovered plugin and hot toggles one through plugins.setEnabled", async () => {
     const view = await mountTestComponent(null);
     const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
@@ -164,7 +193,7 @@ it("requires explicit trust confirmation and then shows pending restart without 
     await view.render(<PluginManagementSection />);
     assert.equal(view.container.querySelector<HTMLButtonElement>('[role="switch"]')?.disabled, true);
     await act(async () => button("信任…").click());
-    assert.ok(document.querySelector('[role="dialog"]')?.textContent?.includes("可读写文件、访问网络并执行代码"));
+    assert.ok(document.querySelector('[role="dialog"]')?.textContent?.includes("可读写你的工作区、访问网络并执行任意前端代码"));
     await act(async () => button("取消").click());
     assert.equal(requests.filter((request) => request.method === "plugins.trust").length, 0);
     await act(async () => button("信任…").click());

@@ -4,7 +4,7 @@ import { ChatSurface } from "../chat/ChatSurface";
 import type { ChatMessageNavigationScroller } from "../chat/useChatScrollController";
 import { guardedNavPageSelect } from "../plugins/pluginUiRegistry";
 import { FeedbackChip } from "./FeedbackChip";
-import { ConfirmDialog } from "../roles/ConfirmDialog";
+import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { RoleAssetsPage } from "../roles/RoleAssetsPage";
 import { RoleCreatePage } from "../roles/RoleCreatePage";
 import { RoleDetailPage } from "../roles/RoleDetailPage";

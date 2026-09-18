@@ -125,6 +125,13 @@ async def serve_bridge(
         ConfigTransaction(
             Path(config_path), workspace or resolve_default_workspace()
         ).recover()
+        from desktop_bridge.runtime.plugin_package_transaction import (
+            apply_pending_plugin_operations,
+        )
+
+        apply_pending_plugin_operations(
+            workspace or resolve_default_workspace(), Path(config_path)
+        )
         runtime = build_app_runtime(
             Config.load(
                 config_path, workspace=workspace or resolve_default_workspace()

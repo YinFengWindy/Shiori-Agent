@@ -29,6 +29,8 @@ from typing import Any
 from agent.plugin_host.kernel import PLUGIN_ENABLED_CONFIG_KEY, PluginKernel
 from bootstrap.app import AppRuntime
 from desktop_bridge.runtime.plugin_trust import RuntimePluginTrust
+from desktop_bridge.runtime.plugin_packages import RuntimePluginPackages
+from desktop_bridge.runtime.plugin_package_listing import with_package_operations
 from desktop_bridge.plugin_config_text import merge_plugin_table
 from desktop_bridge.runtime.apply import (
     DerivedWrite,
@@ -46,6 +48,7 @@ class RuntimePluginManagement:
         self._app = app
         self._settings = settings
         self.trust = RuntimePluginTrust(app)
+        self.packages = RuntimePluginPackages(self, app.workspace)
 
     def list(self, _payload: dict[str, Any]) -> dict[str, Any]:
         """Returns every discovered plugin with its enabled flag and runtime state."""
@@ -114,7 +117,7 @@ class RuntimePluginManagement:
                     is not None,
                 }
             )
-        return {"plugins": plugins}
+        return {"plugins": with_package_operations(plugins, self.packages.store)}
 
     async def set_enabled(
         self,

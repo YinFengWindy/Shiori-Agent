@@ -141,6 +141,21 @@ def remove_table(config_toml: str, path_segments: list[str]) -> str:
     return "".join(out)
 
 
+def remove_plugin_table(config_toml: str, plugin_id: str) -> str:
+    """Remove plugin settings, including inline/dotted TOML representations.
+
+    Header-form documents preserve unrelated text. Inline/dotted tables need
+    a semantic serialization so no unrelated table values are removed.
+    """
+    result = remove_table(config_toml, ["plugins", plugin_id])
+    document = tomllib.loads(result)
+    plugins = document.get("plugins", {})
+    if plugin_id in plugins:
+        del plugins[plugin_id]
+        return toml.dumps(document)
+    return result
+
+
 def _reject_if_owned_by_an_unlocatable_form(config_toml: str, plugin_id: str) -> None:
     """Raises ``PluginTableConflict`` if ``plugin_id`` already has values elsewhere.
 

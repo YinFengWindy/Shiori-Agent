@@ -56,6 +56,13 @@ export type PluginSummary = {
   trustFingerprint?: string | null;
   trustDirectory?: string;
   trustPendingRestart?: boolean;
+  /** Approved code changes applied only at the next application startup. */
+  pendingOperation?: "install" | "update" | "uninstall";
+  pendingVersion?: string;
+  /** False for queued installs or failed installs without a code directory. */
+  packageInstalled?: boolean;
+  /** Retained startup transaction failure, with the prior package restored. */
+  packageOperationError?: string;
 };
 
 /** Structured static admission or runtime dependency rejection. */
@@ -155,6 +162,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         can_trust?: boolean; trust_fingerprint?: string | null; trust_directory?: string; trust_pending_restart?: boolean;
         enabled: boolean; state: string; error: string; has_config_schema: boolean; supports_hot_unload: boolean;
         pending_renderer_kinds?: string[];
+        package_installed?: boolean; pending_operation?: PluginSummary["pendingOperation"]; pending_version?: string; package_operation_error?: string;
       }> }>(resolveInvoke(), "plugins.list", {});
       return payload.plugins.map((item) => ({
         id: item.id,
@@ -176,6 +184,10 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         trustFingerprint: item.trust_fingerprint,
         trustDirectory: item.trust_directory,
         trustPendingRestart: item.trust_pending_restart,
+        pendingOperation: item.pending_operation,
+        pendingVersion: item.pending_version,
+        packageInstalled: item.package_installed,
+        packageOperationError: item.package_operation_error,
         hasConfigSchema: item.has_config_schema,
         supportsHotUnload: item.supports_hot_unload,
         pendingRendererKinds: item.pending_renderer_kinds ?? [],
