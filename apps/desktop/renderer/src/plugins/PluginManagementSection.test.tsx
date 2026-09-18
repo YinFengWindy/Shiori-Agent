@@ -31,6 +31,9 @@ describe("PluginManagementSection", () => {
       assert.equal(view.container.querySelector('input[type="radio"], details, summary'), null);
       assert.equal(view.container.querySelector('.bg-accent-softer'), null);
       assert.equal(document.querySelector('[role="dialog"]'), null);
+      assert.match(view.container.textContent ?? "", /builtin · v1\.0\.0 · 内置/);
+      assert.match(view.container.textContent ?? "", /external · v1\.0\.0 · 工作区/);
+      assert.doesNotMatch(view.container.textContent ?? "", /An external plugin/);
       const title = (name: string) => Array.from(view.container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === name)!;
       assert.equal(title("Builtin").getAttribute("aria-haspopup"), "dialog");
       await act(async () => { title("Builtin").focus(); title("Builtin").click(); });

@@ -18,7 +18,7 @@ export function PluginRow({
   onTrust: () => void;
   onOpenDetails: () => void;
 }) {
-  const hint = [plugin.id, plugin.version && `v${plugin.version}`, plugin.source === "workspace" ? "工作区" : "内置", plugin.description].filter(Boolean).join(" · ");
+  const hint = [plugin.id, plugin.version && `v${plugin.version}`, plugin.source === "workspace" ? "工作区" : "内置"].filter(Boolean).join(" · ");
   const pendingTrust = plugin.trustPendingRestart && plugin.diagnostic?.code === "trust_required";
   // Backend contributions are already live once setup() succeeds, but the
   // Plugins page must not present the plugin as fully ACTIVE until every
