@@ -216,7 +216,7 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot():
 
     result = asyncio.run(reasoner.run_turn(msg=msg, session=cast(Any, session)))
 
-    assert json.loads(result.reply)["content"] == "final"
+    assert result.reply == "final"
     assert probe.calls == [
         {
             "session_key": "telegram:123",

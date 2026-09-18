@@ -9,6 +9,7 @@ from typing import Any, Awaitable, Callable
 import agent.core.passive_support as support
 from agent.core.types import ReasonerResult
 from agent.core.reply_completion import fetch_role_mood
+from agent.core.reply_output import RoleReplyOutput
 from core.roles.reply_state import RoleReply
 from agent.lifecycle.types import (
     AfterStepCtx,
@@ -213,14 +214,18 @@ class _PassiveReasoningLoopMixin:
                 raise ContextLengthError(
                     "推理过程中追加工具结果后输入超过预算，已停止继续调用模型。"
                 )
+            reply_output = RoleReplyOutput(
+                on_content_delta, enabled=reply_moods is not None
+            )
             response = await self._llm.provider.chat(
                 messages=messages,
                 tools=schemas,
                 model=self._llm_config.model,
                 max_tokens=self._llm_config.max_tokens,
                 tool_choice="auto",
-                on_content_delta=on_content_delta,
+                on_content_delta=reply_output.callback,
             )
+            response.content = await reply_output.finish(response.content)
             if on_content_delta is not None and response.content:
                 streamed = True
             if response.cache_prompt_tokens is not None:
@@ -685,12 +690,18 @@ class _PassiveReasoningLoopMixin:
                     raise ContextLengthError(
                         "空回复重试追加提示后输入超过预算，已停止继续调用模型。"
                     )
+                retry_output = RoleReplyOutput(
+                    on_content_delta, enabled=reply_moods is not None
+                )
                 retry_response = await self._llm.provider.chat(
                     messages=messages,
                     tools=[],
                     model=self._llm_config.model,
                     max_tokens=self._llm_config.max_tokens,
-                    on_content_delta=on_content_delta,
+                    on_content_delta=retry_output.callback,
+                )
+                retry_response.content = await retry_output.finish(
+                    retry_response.content
                 )
                 if retry_response.cache_prompt_tokens is not None:
                     react_cache_seen = True

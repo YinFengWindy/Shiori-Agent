@@ -9,6 +9,7 @@ wrapper and no format-correction retry, and mood/thought come from one
 separate auxiliary call afterward that degrades quietly on failure.
 """
 
+import json
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
@@ -51,8 +52,6 @@ def make_reasoner(provider, tools, *, max_iterations=5, tool_search_enabled=Fals
 
 
 def mood_payload(mood="平静", thought="我终于放心了。") -> str:
-    import json
-
     return json.dumps({"mood": mood, "thought": thought}, ensure_ascii=False)
 
 
@@ -106,6 +105,106 @@ async def test_content_with_quotes_newlines_and_emoji_delivers_without_json_wrap
     assert result.metadata["role_reply_mood_fresh"] is True
 
 
+@pytest.mark.parametrize("streamed", [False, True])
+@pytest.mark.parametrize(
+    "keys,fence",
+    [
+        (("mood", "thought", "content"), ""),
+        (("content", "mood", "thought"), "json"),
+        (("thought", "content", "mood"), "plain"),
+        (("mood", "thought", "content"), "html-space"),
+    ],
+)
+async def test_legacy_role_envelope_is_removed_before_all_content_consumers(
+    streamed, keys, fence
+):
+    content = '她说："稍等一下"。\n（拿起 {伞}）🌸 C:\\雨伞'
+    fields = {"content": content, "mood": "害羞", "thought": "我不该公开的旧想法。"}
+    raw = json.dumps({key: fields[key] for key in keys}, ensure_ascii=False)
+    if fence in ("json", "plain"):
+        raw = f"```{'json' if fence == 'json' else ''}\n{raw}\n```"
+    elif fence == "html-space":
+        raw += "&#x20;"
+    raw = f" \n{raw}\n "
+    provider = AsyncMock()
+    responses = [
+        LLMResponse(content=raw, thinking="保留主调用思考"),
+        LLMResponse(content=mood_payload()),
+    ]
+    provider.chat.side_effect = streaming_chat(responses) if streamed else responses
+    emitted: list[str] = []
+
+    async def sink(delta):
+        emitted.append(delta.get("content_delta", ""))
+
+    messages = [{"role": "user", "content": "回来了吗？"}]
+    result = await make_reasoner(provider, ToolRegistry()).run(
+        messages,
+        reply_moods=("平静", "害羞"),
+        on_content_delta=sink if streamed else None,
+    )
+
+    assert result.reply == content
+    assert result.thinking == "保留主调用思考"
+    assert result.streamed is streamed
+    assert "".join(emitted) == (content if streamed else "")
+    assert messages[-1] == {"role": "assistant", "content": content}
+    assert provider.chat.await_count == 2
+    main_call, mood_call = provider.chat.call_args_list
+    assert "response_format" not in main_call.kwargs
+    assert mood_call.kwargs["messages"][-2] == {
+        "role": "assistant",
+        "content": content,
+    }
+    role_reply = result.metadata["role_reply"]
+    assert role_reply.content == content
+    assert role_reply.mood == "平静"
+    assert role_reply.thought == "我终于放心了。"
+
+
+async def test_empty_reply_retry_normalizes_legacy_output_even_when_mood_fails():
+    provider = AsyncMock()
+    raw = json.dumps(
+        {"content": "我回来了。", "mood": "平静", "thought": "我想直接回你。"},
+        ensure_ascii=False,
+    )
+    provider.chat.side_effect = streaming_chat(
+        [
+            LLMResponse(content="", thinking="只有思考"),
+            LLMResponse(content=raw, thinking="重试思考"),
+            LLMResponse(content="非法心情回复"),
+        ]
+    )
+    emitted: list[str] = []
+
+    async def sink(delta):
+        emitted.append(delta.get("content_delta", ""))
+
+    messages = [{"role": "user", "content": "回来了吗？"}]
+    result = await make_reasoner(provider, ToolRegistry()).run(
+        messages,
+        reply_moods=("平静", "害羞"),
+        previous_mood="害羞",
+        previous_thought="我在等你。",
+        on_content_delta=sink,
+    )
+
+    assert result.reply == "我回来了。"
+    assert "".join(emitted) == result.reply
+    assert result.thinking == "重试思考"
+    assert result.streamed is True
+    assert messages[-1]["content"] == result.reply
+    role_reply = result.metadata["role_reply"]
+    assert role_reply.content == result.reply
+    assert role_reply.mood == "害羞"
+    assert role_reply.thought == "我在等你。"
+    assert result.metadata["role_reply_mood_fresh"] is False
+    assert provider.chat.await_count == 3
+    assert provider.chat.call_args_list[-1].kwargs["messages"][-2]["content"] == (
+        result.reply
+    )
+
+
 async def test_mood_fetch_reuses_the_reply_prefix_with_produced_content():
     provider = AsyncMock()
     provider.chat.side_effect = [
@@ -120,6 +219,41 @@ async def test_mood_fetch_reuses_the_reply_prefix_with_produced_content():
     mood_messages = mood_call.kwargs["messages"]
     assert mood_messages[0] == {"role": "user", "content": "你好"}
     assert mood_messages[1] == {"role": "assistant", "content": "回来啦"}
+
+
+async def test_legacy_tool_prelude_is_cleaned_before_next_request_and_stream():
+    provider = AsyncMock()
+    tools = ToolRegistry()
+    tool = CounterTool()
+    tools.register(tool, always_on=True)
+    provider.chat.side_effect = streaming_chat(
+        [
+            LLMResponse(
+                content='{"mood":"平静","thought":"我想确认。","content":"先查一下。"}',
+                tool_calls=[ToolCall("c1", "counter", {})],
+            ),
+            LLMResponse(content="查到了。"),
+            LLMResponse(content=mood_payload()),
+        ]
+    )
+    emitted = []
+
+    async def sink(delta):
+        emitted.append(delta.get("content_delta", ""))
+
+    messages = [{"role": "user", "content": "请检查"}]
+    result = await make_reasoner(provider, tools).run(
+        messages, reply_moods=("平静",), on_content_delta=sink
+    )
+
+    assert tool.calls == 1
+    assert result.reply == "查到了。"
+    assert "".join(emitted) == "先查一下。查到了。"
+    assert result.metadata["tool_chain"][0]["text"] == "先查一下。"
+    assert messages[1]["content"] == "先查一下。"
+    assert provider.chat.call_args_list[-1].kwargs["messages"][1]["content"] == (
+        "先查一下。"
+    )
 
 
 async def test_mood_fetch_failure_degrades_without_failing_delivery():
