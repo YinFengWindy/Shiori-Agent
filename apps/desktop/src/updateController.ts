@@ -25,7 +25,7 @@ export class DesktopUpdateController {
     if (!options.engine) return;
     options.engine.autoDownload = true;
     this.listen("checking-for-update", () => this.update({ phase: "checking", error: null }));
-    this.listen("update-not-available", () => this.update({ phase: "current", latestVersion: null, progress: 0 }));
+    this.listen("update-not-available", () => this.markCurrent());
     this.listen("update-available", (info: UpdateInfo) => this.update({
       phase: "downloading", latestVersion: info.version, progress: 0,
     }));
@@ -35,7 +35,10 @@ export class DesktopUpdateController {
     this.listen("update-downloaded", (info: UpdateInfo) => this.update({
       phase: "downloaded", latestVersion: info.version, progress: 100, error: null,
     }));
-    this.listen("error", (error: Error) => this.recordError(error));
+    this.listen("error", (error: Error) => {
+      // The engine emits before rejecting its check; let check() finish an empty channel normally.
+      if (!this.isEmptyReleaseCheck(error)) this.recordError(error);
+    });
   }
 
   /** Returns the most recent immutable status snapshot. */
@@ -53,6 +56,10 @@ export class DesktopUpdateController {
       void result.downloadPromise?.catch((error: unknown) => this.recordError(error));
       return this.state;
     }).catch((error: unknown) => {
+      if (this.isEmptyReleaseCheck(error)) {
+        this.markCurrent();
+        return this.state;
+      }
       this.recordError(error);
       throw error;
     }).finally(() => { this.checking = null; });
@@ -85,6 +92,16 @@ export class DesktopUpdateController {
   private update(patch: Partial<DesktopUpdateState>) {
     this.state = { ...this.state, ...patch, revision: this.state.revision + 1 };
     this.options.publish(this.state);
+  }
+
+  private markCurrent() {
+    this.update({ phase: "current", latestVersion: null, progress: 0, error: null });
+  }
+
+  private isEmptyReleaseCheck(error: unknown) {
+    return this.state.phase === "checking"
+      && typeof error === "object" && error !== null && "code" in error
+      && error.code === "ERR_UPDATER_NO_PUBLISHED_VERSIONS";
   }
 
   private recordError(error: unknown) {
