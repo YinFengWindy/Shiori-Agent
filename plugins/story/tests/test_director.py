@@ -1,10 +1,42 @@
 import json
+from unittest.mock import AsyncMock
 
 import pytest
 
+from agent.provider import LLMResponse
 from plugins.story.backend.director import ProviderStoryDirector
 from plugins.story.backend.errors import StoryInvalidOutputError
 from plugins.story.backend.models import StoryContext
+
+
+async def test_director_requests_auxiliary_generation_with_existing_budget():
+    provider = AsyncMock()
+    provider.chat.return_value = LLMResponse(
+        content=json.dumps(
+            {
+                "beats": [{"text": "门开了。"}],
+                "current_scene": {"key": "home", "name": "家中", "character_ids": []},
+            },
+            ensure_ascii=False,
+        )
+    )
+    director = ProviderStoryDirector(provider=provider, model="director-model")
+
+    result = await director.generate(
+        context=StoryContext(
+            story={"title": "归家", "background": "门前"},
+            role_snapshot={},
+            player_profile={},
+            segment={"storyDate": "2026-09-18", "timeBand": "上午"},
+        ),
+        input_text="继续。",
+        opening=False,
+    )
+
+    assert result.beats[0].text == "门开了。"
+    request = provider.chat.await_args.kwargs
+    assert request["call_purpose"] == "auxiliary"
+    assert request["max_tokens"] == 1600
 
 
 def test_director_parser_keeps_only_an_explicit_time_band() -> None:

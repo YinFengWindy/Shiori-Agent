@@ -317,7 +317,7 @@ class DefaultMemoryEngine(
                 tools=[],
                 model=self._config.model,
                 max_tokens=600,
-                disable_thinking=True,
+                call_purpose="auxiliary",
             )
             text = (resp.content or "").strip()
             elapsed_ms = int((time.perf_counter() - started_at) * 1000)

@@ -139,6 +139,7 @@ class _PassiveReasoningResultMixin:
                 tools=[],
                 model=self._llm_config.model,
                 max_tokens=min(_SUMMARY_MAX_TOKENS, self._llm_config.max_tokens),
+                call_purpose="auxiliary",
             )
             text = (response.content or "").strip()
             if text:

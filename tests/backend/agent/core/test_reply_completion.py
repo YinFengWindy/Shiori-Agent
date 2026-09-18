@@ -3,6 +3,8 @@
 import json
 from unittest.mock import AsyncMock
 
+import pytest
+
 from agent.core.reply_completion import fetch_role_mood
 from agent.provider import LLMResponse
 
@@ -11,13 +13,14 @@ def mood_payload(mood="平静", thought="我终于放心了。"):
     return json.dumps({"mood": mood, "thought": thought}, ensure_ascii=False)
 
 
-async def test_fetch_role_mood_reuses_prefix_and_appends_produced_content():
+@pytest.mark.parametrize("max_tokens", [200, 8192])
+async def test_fetch_role_mood_reuses_prefix_and_appends_produced_content(max_tokens):
     provider = AsyncMock()
     provider.chat.return_value = LLMResponse(content=mood_payload())
     reply = await fetch_role_mood(
         provider=provider,
         model="m",
-        max_tokens=200,
+        max_tokens=max_tokens,
         messages=[{"role": "user", "content": "你好"}],
         content='她说："稍等"，（转身离开）。\n然后走了。',
         moods=("平静",),
@@ -27,7 +30,9 @@ async def test_fetch_role_mood_reuses_prefix_and_appends_produced_content():
     assert reply.mood == "平静"
     assert reply.thought == "我终于放心了。"
     request = provider.chat.call_args.kwargs
-    assert request["disable_thinking"] is True
+    assert request["call_purpose"] == "auxiliary"
+    assert request["max_tokens"] == max_tokens
+    assert request["auxiliary_max_tokens"] == 512
     assert request["response_format"] == {"type": "json_object"}
     assert request["messages"][0] == {"role": "user", "content": "你好"}
     assert request["messages"][1] == {

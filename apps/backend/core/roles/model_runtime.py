@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, Generator, Literal
 
 from agent.config_models import ModelRegistration
-from agent.provider import LLMProvider, LLMResponse, StreamDelta
+from agent.provider import LLMCallPurpose, LLMProvider, LLMResponse, StreamDelta
 
 from .store import RoleStore
 from .model_errors import ModelConfigurationError, incomplete_registration_fields
@@ -175,7 +175,10 @@ class RoleAwareProvider(LLMProvider):
         payload_snapshot_enabled: bool | None = None,
         on_content_delta: Callable[[StreamDelta], Awaitable[None]] | None = None,
         response_format: dict[str, str] | None = None,
+        call_purpose: LLMCallPurpose = "default",
+        auxiliary_max_tokens: int | None = None,
     ) -> LLMResponse:
+        """Keeps role effort for default calls and permits explicit auxiliary work."""
         snapshot = _current_snapshot.get()
         provider = snapshot.provider if snapshot is not None else self._fallback
         resolved_model = snapshot.model if snapshot is not None else model
@@ -186,8 +189,12 @@ class RoleAwareProvider(LLMProvider):
             max_tokens=max_tokens,
             tool_choice=tool_choice,
             extra_body=None if snapshot is not None else extra_body,
+            # Legacy flags in role-speaking paths (including proactive/drift)
+            # do not override role effort. Auxiliary purpose is preserved separately.
             disable_thinking=False if snapshot is not None else disable_thinking,
             payload_snapshot_enabled=payload_snapshot_enabled,
             on_content_delta=on_content_delta,
             **({"response_format": response_format} if response_format else {}),
+            call_purpose=call_purpose,
+            auxiliary_max_tokens=auxiliary_max_tokens,
         )

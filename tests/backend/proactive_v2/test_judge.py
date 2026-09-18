@@ -1,9 +1,11 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+from agent.provider import LLMResponse
 from proactive_v2.config import ProactiveConfig
-from proactive_v2.judge import Judge
+from proactive_v2.judge import Judge, MessageDeduper
 
 
 class _RecordingProvider:
@@ -43,3 +45,24 @@ async def test_judge_uses_complete_migrated_scoring_contract() -> None:
     assert "5：很强，强价值且很贴合" in prompt
     assert "CS2/电竞相关消息" in prompt
     assert "HLTV Top 15" in prompt
+
+
+@pytest.mark.parametrize("max_tokens,expected_budget", [(64, 64), (8192, 128)])
+async def test_message_deduper_uses_auxiliary_budget(max_tokens, expected_budget):
+    provider = AsyncMock()
+    provider.chat.return_value = LLMResponse(
+        content='{"is_duplicate":true,"reason":"同一事件重复"}'
+    )
+    deduper = MessageDeduper(
+        provider=provider, model="test-model", max_tokens=max_tokens
+    )
+
+    result = await deduper.is_duplicate(
+        new_message="比赛已经结束了。",
+        recent_proactive=[{"content": "刚才那场比赛结束了。"}],
+    )
+
+    assert result == (True, "同一事件重复")
+    request = provider.chat.await_args.kwargs
+    assert request["call_purpose"] == "auxiliary"
+    assert request["max_tokens"] == expected_budget

@@ -51,7 +51,7 @@ async def test_decide_scene_forces_observer_tool_with_isolated_system_prompt() -
     assert decision.scene_key == "rain-confession"
     call = provider.chat.await_args.kwargs
     assert call["model"] == "qwen-flash"
-    assert call["disable_thinking"] is True
+    assert call["call_purpose"] == "auxiliary"
     assert call["messages"][0]["role"] == "system"
     assert "不是角色扮演者" in call["messages"][0]["content"]
     assert call["tool_choice"] == {

@@ -6,8 +6,9 @@ parenthetical asides used to break the old `{content, mood, thought}` JSON
 contract and cost the whole turn). Mood and thought are asked for afterward,
 in one separate follow-up call that reuses the reply's own message prefix
 plus the content just produced, so the model reflects on "how it felt having
-just said this" rather than deciding mood before speaking. See
-`fetch_role_mood` for why that call still carries the full turn budget.
+just said this" rather than deciding mood before speaking. This auxiliary
+call opts out of role reasoning and uses a small output budget when the
+provider supports explicitly disabling thinking.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from core.common.llm_output_log import summarize_llm_output_for_log
 from core.roles.reply_state import RoleReply, role_mood_prompt, validate_role_reply
 
 logger = logging.getLogger(__name__)
+_MOOD_MAX_TOKENS = 512
 
 
 async def fetch_role_mood(
@@ -37,18 +39,11 @@ async def fetch_role_mood(
     content is appended as an assistant turn before asking the mood question,
     so thought reflects the moment right after speaking, not before.
 
-    `max_tokens` is deliberately the caller's full turn budget, not a small
-    cap of its own, even though the output is one short `{mood, thought}`
-    object: in a role-backed session, `RoleAwareProvider.chat` overrides
-    `disable_thinking` to False no matter what this call passes, so thinking
-    stays on (it owns reasoning effort per role config, not per call - see
-    `core/roles/model_runtime.py`), and this call still burns through a full
-    reasoning chain before answering. A small cap here does not shorten that
-    chain; it just truncates it mid-thought and leaves `content` empty,
-    turning what should be a rare timeout/malformed-JSON degrade into the
-    common case (measured ~2/3 of calls at a 300-token cap). `max_tokens` is
-    an upper bound, not a reservation, so billing is unaffected by leaving it
-    generous.
+    The auxiliary purpose bypasses role effort through the provider's thinking
+    controls. Providers with explicit thinking-off support cap this short
+    `{mood, thought}` object at 512 output tokens, or the caller's budget if
+    smaller. Other providers keep the caller's budget because removing reasoning
+    options alone may still leave thinking enabled. Main reply effort is unchanged.
 
     Any failure - transport error, timeout, malformed JSON, mood outside the
     catalog, malformed thought - returns None. Callers must degrade to last
@@ -88,7 +83,8 @@ async def fetch_role_mood(
             tools=[],
             model=model,
             max_tokens=max_tokens,
-            disable_thinking=True,
+            call_purpose="auxiliary",
+            auxiliary_max_tokens=_MOOD_MAX_TOKENS,
             response_format={"type": "json_object"},
         )
         if is_truncated_finish_reason(response.finish_reason):

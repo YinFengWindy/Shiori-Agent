@@ -157,7 +157,7 @@ def test_consolidation_service_archive_all_and_profile_extract():
     assert draft.conversation
     assert provider.chat.await_count == 1
     assert all(
-        call.kwargs.get("disable_thinking") is True
+        call.kwargs.get("call_purpose") == "auxiliary"
         for call in provider.chat.await_args_list
     )
     event_prompt = next(
@@ -804,7 +804,7 @@ def test_consolidation_archive_all_compresses_full_history_before_recent_turns()
     draft = _prepare(service, session, archive_all=True)
 
     assert all(
-        call.kwargs.get("disable_thinking") is True
+        call.kwargs.get("call_purpose") == "auxiliary"
         for call in provider.chat.await_args_list
     )
     prompt = next(

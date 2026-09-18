@@ -324,6 +324,7 @@ class PostResponseMemoryWorker:
                 tools=[],
                 model=self._model,
                 max_tokens=self.TOKENS_EXTRACT_INVALIDATION,
+                call_purpose="auxiliary",
             )
             text = (resp.content or "").strip()
             if text.startswith("```"):
@@ -371,6 +372,7 @@ class PostResponseMemoryWorker:
                 tools=[],
                 model=self._model,
                 max_tokens=self.TOKENS_CHECK_INVALIDATE,
+                call_purpose="auxiliary",
             )
             text = (resp.content or "").strip()
             if text.startswith("```"):

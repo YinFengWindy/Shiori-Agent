@@ -11,6 +11,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock
 
+import pytest
+
 from agent.provider import LLMResponse, ToolCall
 from agent.subagent import SubAgent
 from agent.tool_hooks.base import ToolHook
@@ -80,6 +82,10 @@ async def test_finalize_denial_from_a_different_plugin_truncates_subagent_batch(
     assert subagent.last_exit_reason == "tool_loop"
     assert result == "收尾总结"
     assert provider.chat.await_count == 2
+    main_call, summary_call = provider.chat.await_args_list
+    assert main_call.kwargs.get("call_purpose", "default") == "default"
+    assert summary_call.kwargs["call_purpose"] == "auxiliary"
+    assert summary_call.kwargs["max_tokens"] == 512
 
 
 async def test_plain_deny_without_finalize_does_not_truncate_subagent_batch():
@@ -103,3 +109,29 @@ async def test_plain_deny_without_finalize_does_not_truncate_subagent_batch():
     assert subagent.last_exit_reason == "completed"
     assert result == "最终结果"
     assert provider.chat.await_count == 2
+
+
+@pytest.mark.parametrize("max_tokens,expected_budget", [(256, 256), (8192, 512)])
+async def test_forced_final_summary_is_auxiliary_with_a_bounded_budget(
+    max_tokens, expected_budget
+):
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(content="", tool_calls=[ToolCall("c1", "counter", {})]),
+        LLMResponse(content="工具结果已整理。"),
+    ]
+    subagent = SubAgent(
+        provider=provider,
+        model="test-model",
+        tools=[_CounterTool()],
+        max_iterations=1,
+        max_tokens=max_tokens,
+    )
+
+    result = await subagent.run("do the thing")
+
+    assert result == "工具结果已整理。"
+    assert subagent.last_exit_reason == "forced_summary"
+    summary_call = provider.chat.await_args
+    assert summary_call.kwargs["call_purpose"] == "auxiliary"
+    assert summary_call.kwargs["max_tokens"] == expected_budget

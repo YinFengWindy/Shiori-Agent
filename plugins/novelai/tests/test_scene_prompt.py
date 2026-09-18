@@ -44,6 +44,8 @@ async def test_prompt_model_uses_only_frozen_scene_and_validates_provider_parame
     )
     call = provider.chat.await_args.kwargs
     assert call["model"] == "configured-light"
+    assert call["call_purpose"] == "auxiliary"
+    assert call["max_tokens"] == 600
     snapshot = json.loads(call["messages"][1]["content"])
     assert snapshot["visual_description"] == "少女坐在车站长椅上"
     assert snapshot["role_description"] == "粉发少女"

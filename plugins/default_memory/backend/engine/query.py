@@ -311,6 +311,7 @@ class _QueryMixin:
                     tools=[],
                     model=self._light_model,
                     max_tokens=_HYPOTHESIS_MAX_TOKENS,
+                    call_purpose="auxiliary",
                 ),
                 timeout=_HYPOTHESIS_TIMEOUT_S,
             )

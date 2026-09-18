@@ -2,15 +2,36 @@ import asyncio
 import json
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from agent.provider import LLMResponse
 from memory2.store import MemoryStore2
 from bus.event_bus import EventBus
 from core.memory.events import ConsolidationCommitted
 from plugins.default_memory.backend.engine.lifecycle import DefaultMemoryEngine
 from session.manager import ConsolidationCommitRequest, SessionManager
+
+
+async def test_implicit_long_term_extraction_uses_auxiliary_budget(monkeypatch):
+    provider = AsyncMock()
+    provider.chat.return_value = LLMResponse(
+        content='{"preference":[{"summary":"你喜欢拿铁"}]}'
+    )
+    engine = DefaultMemoryEngine.__new__(DefaultMemoryEngine)
+    monkeypatch.setattr(engine, "_provider", provider, raising=False)
+    monkeypatch.setattr(
+        engine, "_config", SimpleNamespace(model="memory-model"), raising=False
+    )
+
+    result = await engine._extract_implicit_long_term(conversation="USER: 我喜欢拿铁")
+
+    assert result == {"preference": [{"summary": "你喜欢拿铁"}]}
+    request = provider.chat.await_args.kwargs
+    assert request["call_purpose"] == "auxiliary"
+    assert request["max_tokens"] == 600
 
 
 @pytest.mark.asyncio

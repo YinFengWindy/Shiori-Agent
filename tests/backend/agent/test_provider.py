@@ -539,6 +539,51 @@ async def test_deepseek_strategy_disables_thinking(monkeypatch: pytest.MonkeyPat
     assert "reasoning_effort" not in fake.calls[-1]
 
 
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("max_tokens", [128, 8192])
+@pytest.mark.parametrize(
+    "provider_name,expected_extra",
+    [
+        ("deepseek", {"thinking": {"type": "disabled"}, "temperature": 0.2}),
+        ("dashscope", {"enable_thinking": False, "temperature": 0.2}),
+        ("generic", {"temperature": 0.2}),
+    ],
+)
+async def test_auxiliary_call_overrides_reasoning_without_mutating_config(
+    monkeypatch, streaming, max_tokens, provider_name, expected_extra
+):
+    fake = _FakeClient([_FakeStream([]) if streaming else _Response(content="ok")])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    defaults = {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
+    overrides = {"enable_thinking": True, "temperature": 0.2}
+    provider = LLMProvider(
+        api_key="k", provider_name=provider_name, extra_body=defaults
+    )
+
+    await provider.chat(
+        messages=[{"role": "user", "content": "summarize"}],
+        tools=[],
+        model="model",
+        max_tokens=max_tokens,
+        extra_body=overrides,
+        call_purpose="auxiliary",
+        auxiliary_max_tokens=512,
+        on_content_delta=AsyncMock() if streaming else None,
+    )
+
+    request = fake.calls[0]
+    assert request["extra_body"] == expected_extra
+    assert "reasoning_effort" not in request
+    assert "call_purpose" not in request
+    assert "auxiliary_max_tokens" not in request
+    assert request["max_tokens"] == (
+        max_tokens if provider_name == "generic" else min(max_tokens, 512)
+    )
+    assert request.get("stream", False) is streaming
+    assert defaults == {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
+    assert overrides == {"enable_thinking": True, "temperature": 0.2}
+
+
 @pytest.mark.asyncio
 async def test_token_plan_strategy_disables_thinking(monkeypatch: pytest.MonkeyPatch):
     fake = _FakeClient([_Response(content="ok")])

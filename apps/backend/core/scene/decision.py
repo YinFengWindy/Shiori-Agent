@@ -52,7 +52,7 @@ async def decide_scene(
                     "type": "function",
                     "function": {"name": SCENE_DECISION_TOOL_NAME},
                 },
-                disable_thinking=True,
+                call_purpose="auxiliary",
             )
         except json.JSONDecodeError as error:
             protocol_error = SceneDecisionProtocolError(

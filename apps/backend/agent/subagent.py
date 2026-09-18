@@ -282,6 +282,7 @@ class SubAgent:
                 tools=[],
                 model=self._model,
                 max_tokens=min(_SUMMARY_MAX_TOKENS, self._max_tokens),
+                call_purpose="auxiliary",
             )
             text = (resp.content or "").strip()
             if text:
@@ -307,6 +308,7 @@ class SubAgent:
                 tools=[],
                 model=self._model,
                 max_tokens=min(_SUMMARY_MAX_TOKENS, self._max_tokens),
+                call_purpose="auxiliary",
             )
             text = (resp.content or "").strip()
             if text:
