@@ -28,7 +28,7 @@ related:
 
 ## 插件边界（2026-09-11）
 
-NovelAI 的业务代码、Logo、设置、聊天图片重生成和角色自动 CG 开关均由 `plugins/novelai/` 持有。宿主通过通用角色设置与聊天图片操作扩展位挂载 UI；插件不可用时撤下对应操作。角色表单通过插件的 read/write 适配器保存既有 `auto_scene_cg_enabled`，停用插件不会擦除偏好。长耗时 RPC 由插件显式传入 `timeoutMs`，宿主只验证通用截止时间，不识别供应商或生图方法名。
+NovelAI 的业务代码、Logo、设置、聊天图片重生成和角色自动 CG 开关均由 `plugins/novelai/` 持有。宿主通过通用角色设置与聊天图片操作扩展位挂载 UI；插件不可用时撤下对应操作。自动 CG 偏好由插件以 `roles/roles.json` 的 `plugin_data.novelai.<role_id>.auto_scene_cg_enabled` 保存；角色表单只修改插件草稿，点击「保存」时和角色字段共同原子提交，取消编辑不落盘。清单 v5 在投影前原子迁出旧 `runtime_config.auto_scene_cg_enabled`，保留 true/false 并以已有命名空间为准，插件停用时的普通角色编辑也不会丢失偏好。停用或清空插件文件不擦除仍存角色的偏好；插件启用及收到角色删除事件时清理已删角色的记录。长耗时 RPC 由插件显式传入 `timeoutMs`，宿主只验证通用截止时间，不识别供应商或生图方法名。
 
 故事模式归于 `plugins/story/`，manifest 显式声明 `dependencies: [novelai]`，通过 `ctx.dependencies.require("novelai")` 获取 NovelAI 导出的 `GenerateImageTool`。故事的模型与提示词策略属于故事插件。宿主没有通用生图接口，也不装配故事业务；故事页面注册为全屏插件导航，RPC 与事件使用 `plugin.story.*` 命名空间。
 
@@ -36,7 +36,9 @@ NovelAI 的业务代码、Logo、设置、聊天图片重生成和角色自动 C
 
 素材页的一键生成差分及 `roles.differences.generate` 已移除。已有差分、素材分类和手动心情绑定保持可用。故事数据存于 workspace 的 `plugin-data/story/stories/`，NovelAI 运行数据存于 `plugin-data/novelai/generation/`，启停不删除这些数据。
 
-Story 采用的 CG 和会话消息媒体各有独立副本，分别随 Story 与会话内容保留；NovelAI 提示词参考图复制到自身的 `generation/references/`。旧生成目录的 JSONL 记录与元数据路径在迁移后指向新根，并保留旧输出身份用于会话副本的来源查找；请求快照随生成目录迁移。清理 NovelAI 数据不会让 Story 或聊天已有图片消失，但重新生成依赖的原始记录与请求也会被清理。共享 imports 不随 NovelAI 清理，已明确写回角色的素材仍归角色。
+Story 采用的 CG 和会话消息图片各有独立副本，分别随 Story 与会话内容保留；NovelAI 提示词参考图复制到自身的 `generation/references/`。旧生成目录的 JSONL 记录与元数据路径在迁移后指向新根，并保留旧输出身份用于会话副本的来源查找；请求快照随生成目录迁移。清理 NovelAI 数据不会让 Story 或聊天已有图片消失，但重新生成依赖的原始记录与请求也会被清理。共享 imports 不随 NovelAI 清理，已明确写回角色的素材仍归角色。
+
+Story 播放偏好继续保存在设备 renderer 的 `localStorage["shiori.story-preferences.v1"]`，与工作区故事内容分离；工作区或插件数据目录备份不包含这些偏好。
 
 `_migrate_legacy_novelai_config()` 仍由宿主在加载插件前升级旧配置。共享场景事件、角色存储、会话呈现与资产服务是宿主契约，插件可以复用；本次归位不等同于将全部宿主服务封装为独立 SDK。UI 通过注入的宿主服务访问角色列表、文件选择与事件，不直接使用 Electron 全局对象。
 

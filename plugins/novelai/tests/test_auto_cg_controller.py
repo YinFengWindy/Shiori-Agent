@@ -14,6 +14,17 @@ from plugins.novelai.backend.auto_cg import AutoCgPolicy
 from plugins.novelai.backend.auto_cg_controller import AutoCgController
 from bootstrap.runtime.generations import RuntimeCandidate
 from core.common.runtime_scope import bind_runtime, current_runtime_lease
+from core.roles.store import RoleStore
+
+
+def _roles(workspace: Path, *, enabled: bool = True) -> RoleStore:
+    roles = RoleStore(workspace)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    roles.extensions.update(
+        "novelai",
+        lambda data: data.update({"mira": {"auto_scene_cg_enabled": enabled}}),
+    )
+    return roles
 
 
 def _observation(**overrides: Any) -> SceneObservationCommitted:
@@ -42,11 +53,7 @@ async def test_cg_task_holds_generation_until_image_work_finishes(tmp_path):
                 "size_preset": "portrait",
             }
         ),
-        role_store=SimpleNamespace(
-            get_role=lambda _: SimpleNamespace(
-                runtime_config={"auto_scene_cg_enabled": True}
-            )
-        ),
+        role_store=_roles(tmp_path),
         policy=AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json")),
         session_manager=SimpleNamespace(
             get_or_create=lambda _: SimpleNamespace(metadata={})
@@ -287,11 +294,7 @@ async def test_prompt_model_is_not_called_for_ineligible_cg(tmp_path, blocked):
         )
     prompt = AsyncMock()
     controller = AutoCgController(
-        role_store=SimpleNamespace(
-            get_role=lambda _: SimpleNamespace(
-                runtime_config={"auto_scene_cg_enabled": blocked != "disabled"}
-            )
-        ),
+        role_store=_roles(tmp_path, enabled=blocked != "disabled"),
         policy=policy,
         session_manager=SimpleNamespace(
             get_or_create=lambda _: SimpleNamespace(metadata={})

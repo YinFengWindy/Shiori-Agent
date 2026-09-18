@@ -13,6 +13,7 @@ capabilities:
   - config
   - rpc
   - workspace
+  - role_store
   - session_manager
   - relationship_runtime
 config_model: "config:NovelAIConfig"

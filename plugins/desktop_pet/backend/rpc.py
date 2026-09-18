@@ -8,6 +8,7 @@ from .import_source import resolve_package_import_source
 from .models import RolePetPackage, RolePetState
 from .pet_packages import RolePetPackageService
 from .pet_state import RolePetStateStore
+from .storage import asset_path
 from core.roles.store import RoleStore
 
 
@@ -73,12 +74,12 @@ class DesktopPetRpcHandlers:
         ``apps/desktop/src/assets/localAssetPolicy.ts``; the names are the
         contract, not the shape, so they match what ``role_presenter`` emitted.
         """
-        roles_dir = self._role_store.roles_dir
+        workspace = self._role_store.workspace
         preview = package.preview_path
         return {
             **package.to_dict(),
-            "spritesheet_abs": str((roles_dir / package.spritesheet_path).resolve()),
-            "preview_abs": str((roles_dir / preview).resolve()) if preview else None,
+            "spritesheet_abs": str(asset_path(workspace, package.spritesheet_path)),
+            "preview_abs": str(asset_path(workspace, preview)) if preview else None,
         }
 
     async def binding_get(self, _payload: dict[str, Any]) -> dict[str, Any]:
@@ -101,7 +102,7 @@ class DesktopPetRpcHandlers:
         package = self._selected_package(role)
         if package is None:
             return {"binding": None}
-        spritesheet = self._role_store.roles_dir / package.spritesheet_path
+        spritesheet = asset_path(self._role_store.workspace, package.spritesheet_path)
         if not spritesheet.is_file():
             return {"binding": None}
         return {

@@ -114,8 +114,12 @@ def test_binding_get_returns_the_selected_package(tmp_path: Path) -> None:
     # `shiori-asset://` URL on the way to the renderer.
     assert (
         Path(package["spritesheet_abs"])
-        == (store.roles_dir / "assets/mira/pets/pet-1/spritesheet.webp").resolve()
+        == (
+            tmp_path / "plugin-data/desktop_pet/pets-mira/pet-1/spritesheet.webp"
+        ).resolve()
     )
+
+    assert Path(package["spritesheet_abs"]).read_bytes() == b"not-a-real-webp"
 
 
 def test_binding_get_ignores_a_role_whose_pet_is_switched_off(tmp_path: Path) -> None:
@@ -274,10 +278,17 @@ def test_disabled_upgrade_then_ordinary_save_restores_binding_on_enable(tmp_path
     asyncio.run(kernel.unload("desktop_pet"))
 
 
-def test_role_deleted_while_disabled_prunes_pet_data_and_whole_asset_root(tmp_path):
+@pytest.mark.parametrize("migrated", [False, True])
+def test_role_deleted_while_disabled_prunes_pet_data_and_whole_asset_root(
+    tmp_path, migrated
+):
     store = RoleStore(tmp_path)
     _bind_pet(tmp_path, store=store)
     pets = store.assets_dir / "mira" / "pets"
+    if migrated:
+        kernel = _load_desktop_pet_plugin(services=_services(tmp_path, store))
+        asyncio.run(kernel.unload("desktop_pet"))
+        pets = tmp_path / "plugin-data/desktop_pet/pets-mira"
     (pets / "orphan.tmp").write_text("interrupted import", encoding="utf-8")
     unrelated = store.assets_dir / "mira" / "avatar.png"
     unrelated.write_bytes(b"keep")
@@ -304,6 +315,7 @@ def test_live_role_deleted_reconciles_and_unload_removes_draft_participant(tmp_p
     asyncio.run(services.event_bus.observe(RoleDeleted("mira")))
     assert store.extensions.read("desktop_pet") == {}
     assert not (store.assets_dir / "mira" / "pets").exists()
+    assert not (tmp_path / "plugin-data/desktop_pet/pets-mira").exists()
     asyncio.run(kernel.unload("desktop_pet"))
     assert store.extensions.project("mira") == {}
 

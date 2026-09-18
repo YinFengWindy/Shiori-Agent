@@ -10,6 +10,7 @@ import pytest
 from agent.plugin_host import HostServices, PluginKernel
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
+from core.roles.store import RoleStore
 from shiori_plugin_testkit.bridge import plugin_bridge_request
 from desktop_bridge.method_policy import Concurrency
 
@@ -49,6 +50,7 @@ def test_story_requires_active_novelai_and_unloads_before_it(
             event_bus=EventBus(),
             tool_registry=ToolRegistry(),
             workspace=tmp_path / "workspace",
+            role_store=RoleStore(tmp_path / "workspace"),
             plugin_configs={
                 "novelai": {"enabled": novelai_enabled},
                 "story": {"enabled": True},

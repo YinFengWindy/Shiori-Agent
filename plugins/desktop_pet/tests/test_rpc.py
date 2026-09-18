@@ -27,8 +27,8 @@ def test_pet_import_passes_staged_source_to_service_and_refuses_outside_before_i
             "pet",
             "codex-sprite@1",
             "Pet",
-            "assets/mira/pets/pet/pet.json",
-            "assets/mira/pets/pet/spritesheet.webp",
+            "plugin-data/desktop_pet/pets-mira/pet/pet.json",
+            "plugin-data/desktop_pet/pets-mira/pet/spritesheet.webp",
             "today",
         )
 

@@ -27,7 +27,7 @@ class RolePetPackage:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "RolePetPackage":
-        """Restores package metadata and normalizes role-relative asset paths."""
+        """Restores package metadata and normalizes workspace-relative asset paths."""
         package_id = str(payload.get("id") or "").strip()
         display_name = str(payload.get("display_name") or "").strip()
         manifest_path = normalize_rel_path(str(payload.get("manifest_path") or ""))
