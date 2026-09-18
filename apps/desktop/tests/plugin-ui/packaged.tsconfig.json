@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2022", "DOM"], "types": ["node"], "noEmit": true, "resolveJsonModule": true },
+  "include": ["packaged*.ts", "../../renderer/src/types.d.ts", "../../src/runtimePaths.test.ts"]
+}

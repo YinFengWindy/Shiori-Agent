@@ -1,8 +1,3 @@
-import * as React from "react";
-import * as ReactDOM from "react-dom";
-import * as ReactDOMClient from "react-dom/client";
-import * as ReactJsx from "react/jsx-runtime";
-import { pluginUiImportMap } from "../../../src/plugins/uiContract";
 import { applyPluginUiModules } from "./pluginUiModuleContract";
 import { pluginUiRegistry } from "./pluginUiRegistry";
 import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
@@ -12,15 +7,8 @@ import { importRuntimePluginModule, loadRuntimePluginCss } from "./runtimePlugin
 import { createPluginBridgeClient } from "./pluginBridgeClient";
 import { reportRuntimePluginActivation, reportRuntimePluginRendererLoadFailure } from "./runtimePluginActivationReporting";
 
-/** Installs shared React peers before evaluating any workspace plugin module. */
+/** Coordinates runtime UI contributions with the current plugin roster. */
 export function initializeRuntimePluginUi() {
-  Object.defineProperty(globalThis, "__shioriPluginPeers", { value: Object.freeze({
-    react: React, "react/jsx-runtime": ReactJsx, "react-dom": ReactDOM, "react-dom/client": ReactDOMClient,
-  }), configurable: false, writable: false });
-  const map = document.createElement("script");
-  map.type = "importmap";
-  map.textContent = pluginUiImportMap;
-  document.head.append(map);
   const pluginBridge = createPluginBridgeClient();
   registerPluginUiSynchronization(createRuntimePluginUiSynchronization({
     importModule: importRuntimePluginModule,

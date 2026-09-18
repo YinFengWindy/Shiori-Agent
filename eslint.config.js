@@ -13,6 +13,9 @@
 import { desktopEslintConfig } from "./apps/desktop/eslint.config.js";
 
 export default desktopEslintConfig([
+  "apps/desktop/tests/plugin-ui/packaged*.ts",
+  "tests/fixtures/external-plugin/src/**/*.ts",
+  "tests/fixtures/external-plugin/src/**/*.tsx",
   "apps/desktop/src/**/*.ts",
   "apps/desktop/src/**/*.tsx",
   "apps/desktop/renderer/src/**/*.ts",

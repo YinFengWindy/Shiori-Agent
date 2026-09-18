@@ -2,9 +2,9 @@ api: 2
 package_contract: 1
 id: external_demo
 version: 1.0.0
-runtime_api: '>=2.0.0 <3.0.0'
+runtime_api: '>=2.1.0 <3.0.0'
 entry: backend/plugin.py
-capabilities: []
+capabilities: [rpc, tools, events, kv]
 host_dependencies:
   python: []
 peer_dependencies:

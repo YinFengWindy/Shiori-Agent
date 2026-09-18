@@ -91,3 +91,24 @@ test("is idempotent: an already-registered or already-reported plugin is never r
   assert.deepEqual(await failLoad([failing]), ["broken"]);
   assert.deepEqual(await failLoad([failing]), [], "an already-reported failure must not be retried within the session");
 });
+
+
+test("re-enable restores styles and acknowledges the new activation without reimporting code", async () => {
+  const registry = new PluginBackgroundRegistry();
+  const events: string[] = [];
+  const load = createRuntimePluginBackgroundLoader({
+    importModule: async () => { events.push("import"); return { default: { pluginId: "demo", setup() {} } }; },
+    loadCss: async () => { events.push("css"); return () => events.push("remove-css"); },
+    succeeded: (entry) => { events.push(`ready:${entry.activationToken}`); },
+    failed: () => assert.fail("unexpected failure"),
+  }, registry);
+  const entry = { pluginId: "demo", entry: "demo.mjs", css: ["demo.css"], activationToken: "first" };
+  await load([entry]);
+  await load([entry]);
+  await load([]);
+  assert.ok(registry.get("demo"), "background host still needs the entry to tear down its scope");
+  await load([{ ...entry, activationToken: "second" }]);
+  await load([{ ...entry, activationToken: "third" }]);
+  await load([{ ...entry, activationToken: "third" }]);
+  assert.deepEqual(events, ["css", "import", "ready:first", "remove-css", "css", "ready:second", "ready:third"]);
+});
