@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, test } from "node:test";
@@ -14,7 +14,7 @@ const temporary: string[] = [];
 const policy: NativeFilePickerOptions = { namespace: "sample-packages", maxFileBytes: 64, filters: [{ name: "Packages", extensions: ["zip"] }] };
 afterEach(async () => { await Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "shiori-picker-")); temporary.push(root);
+  const root = await realpath(await mkdtemp(join(tmpdir(), "shiori-picker-"))); temporary.push(root);
   const source = join(root, "package.ZIP");
   await writeFile(source, Buffer.from([0x50, 0x4b, 3, 4]));
   return { root, source, imports: join(root, "imports") };
