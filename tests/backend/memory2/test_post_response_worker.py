@@ -312,6 +312,9 @@ def test_extract_invalidation_topics_returns_topics_parsed_from_light_model():
     )
 
     assert topics == ["topic"]
+    request = provider.chat.await_args.kwargs
+    assert request["call_purpose"] == "auxiliary"
+    assert request["max_tokens"] == 96
 
 
 def test_check_invalidate_returns_ids_selected_by_light_model():
@@ -328,6 +331,9 @@ def test_check_invalidate_returns_ids_selected_by_light_model():
     )
 
     assert ids == ["x1"]
+    request = provider.chat.await_args.kwargs
+    assert request["call_purpose"] == "auxiliary"
+    assert request["max_tokens"] == 96
 
 
 def test_extract_invalidation_topics_skips_when_token_budget_exhausted():

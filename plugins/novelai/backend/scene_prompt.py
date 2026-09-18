@@ -56,7 +56,7 @@ async def prepare_scene_prompt(
         model=model,
         max_tokens=600,
         tool_choice={"type": "function", "function": {"name": _TOOL_NAME}},
-        disable_thinking=True,
+        call_purpose="auxiliary",
     )
     calls = response.tool_calls
     if len(calls) != 1 or calls[0].name != _TOOL_NAME:

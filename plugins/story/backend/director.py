@@ -57,7 +57,7 @@ class ProviderStoryDirector:
             tools=[],
             model=self._model,
             max_tokens=1600,
-            disable_thinking=True,
+            call_purpose="auxiliary",
         )
         return self._parse(response.content)
 

@@ -327,6 +327,7 @@ class MessageDeduper:
                 tools=[],
                 model=self._model,
                 max_tokens=min(128, self._max_tokens),
+                call_purpose="auxiliary",
             )
             payload = extract_json_object((response.content or "").strip())
         except Exception as exc:

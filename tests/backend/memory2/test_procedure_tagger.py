@@ -23,6 +23,9 @@ async def test_procedure_tagger_drops_unknown_tools_skills_and_keywords():
 
     tag = await tagger.tag("测试")
 
+    request = provider.chat.await_args.kwargs
+    assert request["call_purpose"] == "auxiliary"
+    assert request["max_tokens"] == 128
     assert tag == {
         "tools": ["shell"],
         "skills": ["rsshub-route-finder"],

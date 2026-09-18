@@ -6,7 +6,7 @@ parenthetical asides, so the model routinely produced unescaped ASCII double
 quotes that closed the JSON early and failed the whole turn. These tests
 assert the replacement contract: content streams as plain text with no JSON
 wrapper and no format-correction retry, and mood/thought come from one
-separate `disable_thinking` call afterward that degrades quietly on failure.
+separate auxiliary call afterward that degrades quietly on failure.
 """
 
 from typing import Any, cast
@@ -95,7 +95,10 @@ async def test_content_with_quotes_newlines_and_emoji_delivers_without_json_wrap
     assert provider.chat.await_count == 2
     main_call, mood_call = provider.chat.call_args_list
     assert "response_format" not in main_call.kwargs
-    assert mood_call.kwargs["disable_thinking"] is True
+    assert main_call.kwargs.get("call_purpose", "default") == "default"
+    assert mood_call.kwargs["call_purpose"] == "auxiliary"
+    assert mood_call.kwargs["max_tokens"] == main_call.kwargs["max_tokens"]
+    assert mood_call.kwargs["auxiliary_max_tokens"] == 512
     assert mood_call.kwargs["response_format"] == {"type": "json_object"}
     role_reply = result.metadata["role_reply"]
     assert role_reply.content == content
@@ -333,8 +336,10 @@ async def test_iteration_summary_fetches_mood_without_json_content_contract():
     assert provider.chat.await_count == 3
     summary_call, mood_call = provider.chat.call_args_list[1:]
     assert "response_format" not in summary_call.kwargs
+    assert summary_call.kwargs.get("call_purpose", "default") == "default"
+    assert summary_call.kwargs["max_tokens"] == LLMConfig().max_tokens
     assert "不要输出 JSON" in summary_call.kwargs["messages"][-1]["content"]
-    assert mood_call.kwargs["disable_thinking"] is True
+    assert mood_call.kwargs["call_purpose"] == "auxiliary"
     role_reply = result.metadata["role_reply"]
     assert role_reply.content == "查到了这些，余下稍后继续。"
     assert role_reply.thought == "我想先把现有结果告诉你。"

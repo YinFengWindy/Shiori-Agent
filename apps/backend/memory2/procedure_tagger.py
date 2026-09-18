@@ -115,6 +115,7 @@ class ProcedureTagger:
                 tools=[],
                 model=self._model,
                 max_tokens=MAX_TOKENS,
+                call_purpose="auxiliary",
             )
             raw = (resp.content or "").strip()
             raw = re.sub(r"^```[a-z]*\n?", "", raw)

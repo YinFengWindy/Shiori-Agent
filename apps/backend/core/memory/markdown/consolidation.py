@@ -88,7 +88,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
                     tools=[],
                     model=model,
                     max_tokens=max_tokens,
-                    disable_thinking=True,
+                    call_purpose="auxiliary",
                 ),
                 timeout=timeout_s,
             )

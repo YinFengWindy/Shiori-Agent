@@ -374,20 +374,17 @@ async def test_first_chat_seed_failure_reports_error_and_next_chat_retries(
                 raise RuntimeError("seed provider unavailable")
             return LLMResponse(content="# 我是谁\n\n我是本地测试角色。")
         if kwargs.get("response_format") == {"type": "json_object"}:
-            # The post-reply mood/thought follow-up call (#303): content is
-            # plain now, so only this separate call is JSON-shaped. Tracked
-            # in its own list so a turn's two calls (content + mood) don't
-            # blur into one count. Detected via `response_format`, not
-            # `disable_thinking`: RoleAwareProvider forces disable_thinking
-            # back to False whenever a role model snapshot is active (it
-            # owns reasoning effort per role config, not per call) - that is
-            # pre-existing, unrelated routing behaviour, not a #303 bug.
+            # The mood follow-up remains auxiliary through role routing; the
+            # resolved provider applies the cap when it can disable thinking.
+            assert kwargs["call_purpose"] == "auxiliary"
+            assert kwargs["auxiliary_max_tokens"] == 512
             mood_replies.append(kwargs["model"])
             return LLMResponse(
                 content='{"mood":"平静","thought":"我终于能和你说话了。"}'
             )
         content_replies.append(kwargs["model"])
         assert "response_format" not in kwargs
+        assert kwargs["call_purpose"] == "default"
         return LLMResponse(content="你好。")
 
     monkeypatch.setattr(LLMProvider, "chat", fake_chat)

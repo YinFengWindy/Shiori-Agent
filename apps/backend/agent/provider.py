@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Callable, cast
+from typing import Any, Awaitable, Callable, Literal, cast
 from openai import AsyncOpenAI
 
 from core.common.llm_output_log import summarize_llm_output_for_log
@@ -29,6 +29,9 @@ _LAST_PAYLOAD_PATH = Path(tempfile.gettempdir()) / "shiori-last-llm-payload.json
 _PAYLOAD_SNAPSHOT_DIR = Path(tempfile.gettempdir()) / "shiori-llm-payloads"
 _PAYLOAD_SNAPSHOT_SEQ = itertools.count(1)
 StreamDelta = dict[str, str]
+# Auxiliary work uses provider-specific non-thinking controls; default calls
+# retain the owning role/provider's reasoning configuration.
+LLMCallPurpose = Literal["default", "auxiliary"]
 
 # 安全审查错误码（各厂商）
 _SAFETY_ERROR_CODES = {
@@ -135,14 +138,9 @@ def _warn_if_truncated(
     itself marks truncation" requirement: every consumer gets at least this
     even if it never checks `response.finish_reason` itself.
 
-    This deliberately stays at WARNING even though it can be noisy. Truncation
-    is *not* safely rare here: several auxiliary call sites cap output at
-    512-1024 tokens (passive-turn and subagent summaries, recent-context and
-    consolidation) while a role session forces thinking back on regardless of
-    what the call passes (see #310), and a reasoning chain alone routinely
-    runs longer than those caps. If this line turns out to fire constantly on
-    one of those paths, that is the signal working - it means that path has
-    been silently truncating all along - not a reason to lower the level.
+    Auxiliary calls opt out of thinking and often cap output at 512-1024
+    tokens. Their output can still exceed that budget, so truncation remains
+    a warning even when a provider supports explicitly disabling reasoning.
 
     Call sites that already label truncation with their own semantics still
     do so; the resulting second line is intentional redundancy, because this
@@ -160,6 +158,9 @@ def _warn_if_truncated(
 
 
 class ProviderStrategy:
+    # Only known thinking-off protocols can safely use tighter auxiliary budgets.
+    supports_thinking_disable = False
+
     def normalize_messages(self, messages: list[dict]) -> list[dict]:
         return _strip_reasoning_content(_normalize_chat_messages(messages))
 
@@ -171,6 +172,8 @@ class ProviderStrategy:
         disable_thinking: bool,
     ) -> None:
         if disable_thinking:
+            # Unknown OpenAI-compatible providers have no universal thinking-off
+            # parameter. Remove inherited options without sending unsupported flags.
             _drop_thinking_keys(extra_body)
         if extra_body:
             kwargs["extra_body"] = extra_body
@@ -200,6 +203,8 @@ class ProviderStrategy:
 
 
 class DeepSeekStrategy(ProviderStrategy):
+    supports_thinking_disable = True
+
     def normalize_messages(self, messages: list[dict]) -> list[dict]:
         return _strip_image_url_blocks(
             _normalize_chat_messages(messages, fill_tool_call_content=False)
@@ -268,6 +273,8 @@ class DeepSeekStrategy(ProviderStrategy):
 
 
 class DashScopeStrategy(ProviderStrategy):
+    supports_thinking_disable = True
+
     def prepare_request(
         self,
         kwargs: dict[str, Any],
@@ -339,12 +346,27 @@ class LLMProvider:
         on_content_delta: Callable[[StreamDelta], Awaitable[None]] | None = None,
         # Opt-in final role output constraint; background calls remain unconstrained.
         response_format: dict[str, str] | None = None,
+        call_purpose: LLMCallPurpose = "default",
+        auxiliary_max_tokens: int | None = None,
     ) -> LLMResponse:
+        """Generates a reply; auxiliary work opts out of configured reasoning.
+
+        DeepSeek and DashScope explicitly disable thinking and apply the optional
+        auxiliary output cap, bounded by max_tokens. Generic compatible providers
+        only drop reasoning options; they keep max_tokens because their thinking
+        defaults and off switches are unknown. Default calls ignore the extra cap.
+        """
         strategy = _select_provider_strategy(
             provider_name=self._provider_name,
             base_url=self._base_url,
             model=model,
         )
+        if (
+            call_purpose == "auxiliary"
+            and auxiliary_max_tokens is not None
+            and strategy.supports_thinking_disable
+        ):
+            max_tokens = min(max_tokens, auxiliary_max_tokens)
         full_messages = _merge_leading_system_messages(messages)
         full_messages = strategy.normalize_messages(full_messages)
         kwargs: dict = dict(model=model, max_tokens=max_tokens, messages=full_messages)
@@ -359,7 +381,11 @@ class LLMProvider:
         strategy.prepare_request(
             kwargs,
             merged_extra_body,
-            disable_thinking=self._force_disable_thinking or disable_thinking,
+            disable_thinking=(
+                self._force_disable_thinking
+                or disable_thinking
+                or call_purpose == "auxiliary"
+            ),
         )
 
         if on_content_delta is not None:
