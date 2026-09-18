@@ -3,7 +3,11 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { collectPluginBackendModules } from "./runtime-plugin-modules.mjs";
+import {
+  collectHostBackendModules,
+  collectPluginBackendModules,
+  collectTopLevelPythonPackageRoots,
+} from "./runtime-plugin-modules.mjs";
 
 test("collectPluginBackendModules discovers namespace backends and nested packages", async () => {
   const directory = await mkdtemp(join(tmpdir(), "shiori-runtime-modules-"));
@@ -34,6 +38,86 @@ test("collectPluginBackendModules discovers namespace backends and nested packag
       "plugins.default_memory.backend.engine.lifecycle",
       "plugins.default_memory.backend.memory_plugin",
     ]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("collectHostBackendModules enumerates implicit namespace subdirectories without __init__.py", async () => {
+  // 复刻真实的坑：agent/tools/ 没有 __init__.py。CPython 的
+  // pkgutil.iter_modules（PyInstaller --collect-submodules 依赖它）会直接跳过
+  // 这种目录，历史上导致 agent.tools.* 整体漏收（#315）。这里如果退回旧的
+  // --collect-submodules 语义，下面的断言会失败。
+  const directory = await mkdtemp(join(tmpdir(), "shiori-runtime-host-modules-"));
+  try {
+    for (const relativePath of [
+      "agent/__init__.py",
+      "agent/core.py",
+      "agent/tools/base.py",
+      "agent/tools/registry.py",
+      "agent/tools/shell/runner.py",
+      "agent/tools/meta/__init__.py",
+      "agent/tools/meta/handler.py",
+      "agent/__pycache__/cache.py",
+      "bootstrap/__init__.py",
+      "bootstrap/app.py",
+    ]) {
+      const path = join(directory, relativePath);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "", "utf8");
+    }
+
+    const modules = await collectHostBackendModules(directory, ["agent", "bootstrap"]);
+
+    assert.deepEqual(modules, [
+      "agent",
+      "agent.core",
+      "agent.tools.base",
+      "agent.tools.meta",
+      "agent.tools.meta.handler",
+      "agent.tools.registry",
+      "agent.tools.shell.runner",
+      "bootstrap",
+      "bootstrap.app",
+    ]);
+
+    // 显式核对本次修复要保证的三类场景都命中了。
+    assert.ok(modules.includes("agent.tools.base"), "没有 __init__.py 的命名空间目录必须被枚举");
+    assert.ok(modules.includes("agent.tools.shell.runner"), "嵌套命名空间目录必须被枚举");
+    assert.ok(
+      modules.includes("agent.tools.meta") && modules.includes("agent.tools.meta.handler"),
+      "带 __init__.py 的包必须同时产出包名与其子模块",
+    );
+    assert.ok(
+      !modules.some((name) => name.includes("__pycache__") || name.includes("cache")),
+      "__pycache__ 必须被排除",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("collectTopLevelPythonPackageRoots reports nested .py files and ignores empty or __pycache__-only directories", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "shiori-runtime-toplevel-"));
+  try {
+    for (const relativePath of [
+      // 顶层目录本身没有 .py，只有几层之下才有 —— 仍然必须被报出来。
+      "agent/tools/deep/nested/module.py",
+      // 完全没有 .py 文件的目录不应被报出来。
+      "empty_dir/readme.txt",
+      // .py 文件全部藏在 __pycache__ 里，等价于“没有真正的 .py”。
+      "cache_only/__pycache__/module.py",
+      // 顶层目录本身就叫 __pycache__，永远不应被当成包根候选。
+      "__pycache__/module.py",
+    ]) {
+      const path = join(directory, relativePath);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "", "utf8");
+    }
+
+    const roots = await collectTopLevelPythonPackageRoots(directory);
+
+    assert.deepEqual(roots, ["agent"]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
