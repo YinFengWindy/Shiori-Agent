@@ -95,7 +95,7 @@ try {
   await close();
 
   await launch();
-  await row().getByText("ACTIVE", { exact: true }).waitFor();
+  await row().locator('[role="switch"][aria-checked="true"]:enabled').waitFor();
   await page!.getByRole("button", { name: "手动信任验证", exact: true }).click();
   await page!.getByRole("button", { name: "点击计数 0", exact: true }).click();
   await page!.getByRole("button", { name: "点击计数 1", exact: true }).waitFor();

@@ -34,7 +34,7 @@ export function PluginRow({
         ? "需要重启"
         : activating
           ? "激活中…"
-          : plugin.state;
+          : null;
   return (
     <SettingsField label={
       <Dialog.Trigger className={cx(sidebarNavItemClass, "-my-1 -ml-2 cursor-pointer px-2 py-1 text-left text-body font-medium text-ink hover:text-accent-text")} onClick={onOpenDetails}>
@@ -43,7 +43,7 @@ export function PluginRow({
     } hint={hint || undefined}>
       <div className="grid gap-2">
         <div className="flex items-center justify-end gap-3">
-          <span className="text-caption text-ink-muted">{stateLabel}</span>
+          {stateLabel ? <span className="text-caption text-ink-muted">{stateLabel}</span> : null}
           {plugin.canTrust ? <button type="button" className={ghostButtonClass} disabled={pending} onClick={onTrust}>信任…</button> : null}
           {plugin.canToggle && plugin.supportsHotUnload === false ? <span className="text-caption text-ink-muted">更改需重启</span> : null}
           <SettingsToggleCard

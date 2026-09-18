@@ -89,7 +89,7 @@ describe("PluginManagementSection", () => {
     try {
       await view.render(<PluginManagementSection />);
       assert.match(view.container.textContent ?? "", /hello/);
-      assert.match(view.container.textContent ?? "", /ACTIVE/);
+      assert.doesNotMatch(view.container.textContent ?? "", /ACTIVE|DISABLED/);
 
       const toggle = view.container.querySelector('button[role="switch"]') as HTMLButtonElement;
       assert.ok(toggle, "expected an enable switch to render");
@@ -98,7 +98,8 @@ describe("PluginManagementSection", () => {
       await act(async () => { toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
 
       assert.ok(calls.some((call) => call.method === "plugins.setEnabled" && call.payload.enabled === false));
-      assert.match(view.container.textContent ?? "", /DISABLED/);
+      assert.equal(toggle.getAttribute("aria-checked"), "false");
+      assert.doesNotMatch(view.container.textContent ?? "", /ACTIVE|DISABLED/);
     } finally {
       await view.cleanup();
     }
