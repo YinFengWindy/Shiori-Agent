@@ -25,7 +25,7 @@ related:
 | 会话 | `apps/backend/session/` | Agent 回合、在线状态、消息历史、搜索 |
 | 对话持久化 | `apps/backend/conversation/` | 线程投影、旧数据迁移、跨入口消息连续性 |
 | 记忆契约 | `apps/backend/core/memory/` | Agent 检索与生命周期插件 |
-| 默认与增强记忆 | `plugins/default_memory/`、`apps/backend/memory2/` | 查询改写、召回、注入规划、响应后写入 |
+| 默认与增强记忆 | `plugins/default_memory/`、`apps/backend/memory2/` | 查询与提取策略、向量存储、召回与上下文注入、响应后写入 |
 | 主动行为 | `apps/backend/proactive_v2/` | 传感、裁定、Agent tick、投递、状态持久化 |
 | Drift | `apps/backend/agent/core/drift_turn.py`、`apps/backend/proactive_v2/drift_state.py` | 特殊回合、工具、主动状态 |
 | NovelAI | `apps/backend/core/integrations/novelai/` | 手动图片生成、自动 CG、桌面图片面板 |

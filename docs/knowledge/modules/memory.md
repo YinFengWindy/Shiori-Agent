@@ -18,8 +18,8 @@ related:
 ## 分层
 
 - `apps/backend/core/memory/` 定义 `MemoryEngine`、查询、变更和运行时契约，并提供生命周期接入点。
-- `plugins/default_memory/` 是默认记忆插件与 engine 策略实现，负责查询、变更、管理和提示词。
-- `apps/backend/memory2/` 提供增强处理链，包括查询构造/改写、HyDE、召回、充分性判断、去重、注入规划、画像与响应后记忆化。
+- `plugins/default_memory/` 是默认记忆插件与 engine 策略实现，负责查询、显式召回的 HyDE 假设生成、隐式长期记忆提取、变更、管理和提示词。
+- `apps/backend/memory2/` 提供插件使用的向量编码、存储、召回与注入块构造、procedure 查询构造与标签、记忆写入和响应后 worker。查询与长期记忆提取策略由默认记忆插件持有。
 - `apps/backend/agent/retrieval/` 将具体记忆召回适配到 Agent 上下文准备阶段。
 
 ## 典型数据流
@@ -31,7 +31,7 @@ related:
 ## 修改影响
 
 - 修改记忆记录 schema：检查 store、向量索引、时间索引、迁移、去重和管理工具。
-- 修改召回评分：检查注入阈值、HyDE 合并、上下文 token 预算和评测；不要无意重写原始 score。
+- 修改召回评分：检查注入阈值、默认记忆插件的 HyDE 辅助查询、上下文 token 预算和评测；不要无意重写原始 score。
 - 修改角色/群聊隔离：检查查询过滤、权限策略、会话键和响应后写入。
 - 修改生命周期接入：检查 `BeforeTurn` 上下文准备和响应后的异步整理，不要阻塞消息投递。
 
