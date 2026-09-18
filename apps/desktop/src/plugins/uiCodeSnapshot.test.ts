@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { matchesPluginUiCode, snapshotPluginUiCode } from "./uiCodeSnapshot";
 
 test("code snapshot covers nested chunks and rejects modified or newly added scripts", async () => {
-  const root = await mkdtemp(join(tmpdir(), "shiori-ui-code-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "shiori-ui-code-")));
   try {
     await mkdir(join(root, "chunks"));
     const path = join(root, "chunks", "lazy.mjs");
