@@ -14,7 +14,7 @@
   </p>
   <p>
     <img src="https://img.shields.io/badge/platform-Windows%20x64-2563eb?style=flat-square" alt="Windows x64" />
-    <img src="https://img.shields.io/badge/version-v0.2.0-7c3aed?style=flat-square" alt="v0.2.0" />
+    <img src="https://img.shields.io/badge/version-v0.3.1-7c3aed?style=flat-square" alt="v0.3.1" />
     <img src="https://img.shields.io/badge/license-MIT-16a34a?style=flat-square" alt="MIT license" />
   </p>
 </div>
@@ -56,9 +56,10 @@
 - 创建、编辑、删除和切换角色；头像、立绘、聊天图片和本地素材都按角色分开管理
 - 每个角色可以开多个会话，历史记录完整保留，回复流式输出
 - 近期上下文和长期记忆分两层管理，需要时检索并定期整理
+- 聊天侧栏显示角色当下的心情和想法，每轮回复后跟着更新，关系标签和寂寞值另算
 - 角色会根据关系、场景和上次互动判断要不要主动开口，而不是按固定间隔提醒你
 - 空闲时可以跑 Drift 任务
-- 支持工具调用、插件扩展和生命周期拦截
+- 支持工具调用和生命周期拦截
 
 ### 故事模式
 
@@ -71,7 +72,7 @@
 - 每个角色可以单独启用桌宠，绑定自己的素材包
 - 素材包用 `codex-sprite@1` 格式，支持 ZIP 导入、安全校验和动作映射
 - 透明窗口原生拖拽，记住上次的位置，托盘常驻；拖动时按方向播动作，停下来回到 idle
-- 授权之后可以开启屏幕观察，角色会读屏幕内容并在桌宠旁边弹气泡回你
+- 角色的回复直接在桌宠旁边弹气泡
 
 ### 图片生成
 
@@ -82,11 +83,23 @@
 
 - 桌面端、Telegram 和 QQ 共用同一份角色状态和会话记录
 
+### 插件
+
+故事模式、桌宠、NovelAI 生图这些功能本身就是插件，跟第三方插件走同一套机制。
+
+- 「设置 → 插件」列出全部插件，可以逐个启用、停用和配置；插件自带的设置表单直接挂在这个 tab 下
+- 插件打成 ZIP 就能装，也能更新和卸载；这三件事都在重启 Shiori 后生效，卸载默认保留插件的数据和配置
+- 工作区里放的插件会被自动发现，加载前需要你手动确认信任，没确认的不会运行
+- 停用一个插件，它的工具、命令、界面入口和后台任务会一起消失
+- 屏幕读取由「24h视奸插件」提供：按需截一次主屏，用角色配置的视觉模型只读分析，截图只在本次分析里用，不做点击和输入
+
 ## 开始使用
 
 1. 打开 [最新 Release](https://github.com/YinFengWindy/Shiori-Agent/releases/latest)，下载 Windows x64 安装程序装上。
 2. 第一次启动后，在设置里填上模型服务的 API Key。
 3. 创建一个角色，给它选好模型，就可以开始聊了。
+
+装好之后启动时会自动检查更新。想自己看版本、手动检查或者立刻重启安装，去「设置 → 关于」。
 
 需要另外配置的服务：
 
@@ -127,6 +140,19 @@ pnpm test --file plugins/desktop_pet/surface/ --test-name-pattern "reply bubbles
 pnpm test --file roles/ --file plugins/story/ui/ --list
 ```
 
+插件都放在顶层 `plugins/<id>/`，一个目录装完一个插件：
+
+```text
+plugins/<id>/
+├── manifest.yaml   # id、版本、描述、声明用到的 capability
+├── pyproject.toml
+├── backend/        # Python 后端
+├── ui/             # React 前端（可选）
+└── tests/          # 测试跟着插件走
+```
+
+插件在 manifest 里声明要用哪些 capability，内核只注入声明过的那些；注册的事件、工具、渠道、RPC 和后台任务都按可回滚的副作用登记，停用或初始化失败时整体清理。写个 pydantic 配置模型就能自动得到设置页表单，需要复杂界面再写 React 组件。
+
 运行结构：
 
 ```text
@@ -147,6 +173,7 @@ pnpm test --file roles/ --file plugins/story/ui/ --list
 ## 数据存在哪里
 
 - 角色、会话和记忆默认存在本地：`%USERPROFILE%\.shiori\workspace\`。
+- 插件自己的数据和配置存在工作区的 `plugin-data\<插件 id>\`，跟插件安装目录分开，升级应用不会动它。
 - 模型请求会发给你自己配置的模型服务。开了 NovelAI、Telegram、QQ 或语音之后，相应的内容也会发到这些服务。
 - 外部渠道、NovelAI、语音和桌宠素材都要单独配置；不配也不影响桌面端本地功能的使用。
 - 要改或者删工作区里的文件，先退出 Shiori，动手之前先备份。
