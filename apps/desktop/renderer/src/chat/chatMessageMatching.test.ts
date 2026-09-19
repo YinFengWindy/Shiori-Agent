@@ -5,9 +5,38 @@ import type { SessionMessage } from "../shared/types";
 
 describe("getChatMessageMatchStrength", () => {
   it("rejects conflicting durable identities even for the same assistant turn or render key", () => {
-    const current: SessionMessage = { id: "a1", seq: 1, render_id: "local:a", role: "assistant", content: "same", metadata: { client_message_id: "turn" } };
+    const current: SessionMessage = { id: "a1", seq: 1, render_id: "local:a", role: "assistant", content: "same", metadata: { client_message_id: "client-1", turn_id: "turn-1" } };
     assert.equal(getChatMessageMatchStrength(current, { ...current, id: "a2", seq: 2 }), 0);
     assert.equal(getChatMessageMatchStrength(current, { ...current, id: undefined, seq: 2 }), 0);
+  });
+
+  it("uses the assistant turn to acknowledge postprocessed and interrupted replies", () => {
+    const current: SessionMessage = {
+      role: "assistant", content: "<emoji:moon>", reasoning_content: "partial thinking",
+      metadata: { turn_id: "turn-1", client_message_id: "client-1", interrupted_reply: true },
+    };
+    assert.equal(getChatMessageMatchStrength(current, {
+      id: "a1", role: "assistant", content: "🌙", reasoning_content: "final thinking", media: ["night.png"],
+      metadata: { turn_id: "turn-1", interrupted_reply: true },
+    }), 2);
+    assert.equal(getChatMessageMatchStrength(current, {
+      id: "u1", role: "user", content: "<emoji:moon>", metadata: { turn_id: "turn-1" },
+    }), 0);
+  });
+
+  it("rejects different turns and proactive replies despite otherwise positive evidence", () => {
+    const current: SessionMessage = {
+      role: "assistant", content: "hello", render_id: "local:a", metadata: { turn_id: "turn-1", client_message_id: "client-1" },
+    };
+    assert.equal(getChatMessageMatchStrength(current, {
+      ...current, id: "a2", metadata: { ...current.metadata, turn_id: "turn-2" },
+    }), 0);
+    assert.equal(getChatMessageMatchStrength(current, {
+      ...current, id: "a1", metadata: { ...current.metadata, proactive: true },
+    }), 0);
+    assert.equal(getChatMessageMatchStrength(current, {
+      ...current, id: "a1", metadata: { ...current.metadata, client_message_id: "client-2" },
+    }), 0);
   });
 
   it("does not merge repeated local errors or user turns with distinct render identities", () => {
@@ -48,6 +77,17 @@ describe("getChatMessageMatchStrength", () => {
 });
 
 describe("createChatMessageMatcher", () => {
+  it("indexes assistant turn identity before falling back to content matches", () => {
+    const find = createChatMessageMatcher([
+      { role: "assistant", content: "🌙", metadata: { turn_id: "turn-old", interrupted_reply: true } },
+      { role: "user", content: "again", metadata: { client_message_id: "client-1" } },
+      { role: "assistant", content: "<emoji:moon>", metadata: { turn_id: "turn-1" } },
+    ]);
+    assert.equal(find({
+      id: "a1", role: "assistant", content: "🌙", metadata: { turn_id: "turn-1", client_message_id: "client-1" },
+    }, undefined, 2), 2);
+  });
+
   it("bounds content acknowledgement by neighbors while allowing a reply-before-user acknowledgement", () => {
     const find = createChatMessageMatcher([
       { id: "old", seq: 5, role: "assistant", content: "old" },

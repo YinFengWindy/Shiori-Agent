@@ -23,6 +23,25 @@ function createSession(messages: SessionMessage[]): SessionPayload {
 }
 
 describe("mergeSessionSummaryAndMessage", () => {
+  it("acknowledges an interrupted turn without consuming the next turn's identical prefix", () => {
+    const interrupted: SessionMessage = {
+      role: "assistant", content: "晚安<emoji:moon>", render_id: "local:interrupted", streaming: false,
+      metadata: { turn_id: "turn-old", interrupted_reply: true },
+    };
+    const user: SessionMessage = { id: "u2", seq: 3, role: "user", content: "再说一次" };
+    const next: SessionMessage = {
+      role: "assistant", content: "晚安<emoji:moon>", render_id: "local:next", streaming: true,
+      metadata: { turn_id: "turn-next" },
+    };
+    const committed: SessionMessage = {
+      id: "a1", seq: 2, role: "assistant", content: "晚安🌙", reasoning_content: "中断前的思考",
+      metadata: { turn_id: "turn-old", interrupted_reply: true },
+    };
+    const merged = mergeSessionMessage([interrupted, user, next], committed);
+    assert.deepEqual(merged, [{ ...committed, render_id: interrupted.render_id }, user, next]);
+    assert.deepEqual(mergeSessionMessage(merged, committed), merged);
+  });
+
   it("keeps a failed trace from consuming a later turn's repeated-prefix reply", () => {
     const current: SessionMessage[] = [
       { id: "user-1", seq: 1, role: "user", content: "first" },

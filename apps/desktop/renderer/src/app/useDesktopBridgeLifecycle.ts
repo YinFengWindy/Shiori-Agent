@@ -241,7 +241,7 @@ export function useDesktopBridgeLifecycle({
           if (!delta && !thinkingDelta) return;
           callbacks.updateCommittedActiveSession((current) => {
             if (!current) return current;
-            return applyChatStreamDelta(current, delta, thinkingDelta);
+            return applyChatStreamDelta(current, delta, thinkingDelta, eventTurnId);
           });
           return;
         }
@@ -254,6 +254,7 @@ export function useDesktopBridgeLifecycle({
           callbacks.updateCommittedActiveSession((current) => {
             if (!current || current.key !== eventSessionKey) return current;
             return applyChatToolStarted(current, {
+              turnId: eventTurnId,
               iteration: Number(event.payload.iteration ?? 1),
               callId: String(event.payload.call_id ?? ""),
               toolName: String(event.payload.tool_name ?? ""),
@@ -273,6 +274,7 @@ export function useDesktopBridgeLifecycle({
           callbacks.updateCommittedActiveSession((current) => {
             if (!current || current.key !== eventSessionKey) return current;
             return applyChatToolCompleted(current, {
+              turnId: eventTurnId,
               iteration: Number(event.payload.iteration ?? 1),
               callId: String(event.payload.call_id ?? ""),
               toolName: String(event.payload.tool_name ?? ""),

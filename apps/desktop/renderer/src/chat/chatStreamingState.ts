@@ -6,26 +6,14 @@ export function applyChatStreamDelta(
   session: SessionPayload,
   contentDelta: string,
   thinkingDelta: string,
+  turnId = "",
 ): SessionPayload {
   if (!contentDelta && !thinkingDelta) return session;
-  const messages = [...session.messages];
-  const last = messages[messages.length - 1];
-  if (last?.role === "assistant" && !last.id && last.streaming === true) {
-    messages[messages.length - 1] = {
-      ...last,
-      content: last.content + contentDelta,
-      reasoning_content: `${last.reasoning_content ?? ""}${thinkingDelta}`,
-      streaming: true,
-    };
-  } else {
-    messages.push(ensureChatMessageRenderId({
-      role: "assistant",
-      content: contentDelta,
-      reasoning_content: thinkingDelta,
-      streaming: true,
-    }));
-  }
-  return { ...session, messages };
+  return updateTransientAssistant(session, turnId, (message) => ({
+    ...message,
+    content: message.content + contentDelta,
+    reasoning_content: `${message.reasoning_content ?? ""}${thinkingDelta}`,
+  }));
 }
 
 /** Marks the transient assistant message complete after the bridge emits chat.done. */
@@ -108,6 +96,7 @@ export function finalizeChatCancellation(
 }
 
 type ToolStartedEvent = {
+  turnId?: string;
   iteration: number;
   callId: string;
   toolName: string;
@@ -126,7 +115,7 @@ export function applyChatToolStarted(
   event: ToolStartedEvent,
 ): SessionPayload {
   if (!event.callId.trim() || !event.toolName.trim()) return session;
-  return updateTransientAssistantTool(session, event.iteration, {
+  return updateTransientAssistantTool(session, event, {
     call_id: event.callId,
     name: event.toolName,
     status: "running",
@@ -142,7 +131,7 @@ export function applyChatToolCompleted(
   event: ToolCompletedEvent,
 ): SessionPayload {
   if (!event.callId.trim() || !event.toolName.trim()) return session;
-  return updateTransientAssistantTool(session, event.iteration, {
+  return updateTransientAssistantTool(session, event, {
     call_id: event.callId,
     name: event.toolName,
     status: event.status,
@@ -154,15 +143,32 @@ export function applyChatToolCompleted(
 
 function updateTransientAssistantTool(
   session: SessionPayload,
-  iteration: number,
+  event: ToolStartedEvent,
   toolCall: ChatToolCall,
+): SessionPayload {
+  return updateTransientAssistant(session, event.turnId ?? "", (message) => (
+    mergeToolCall(message, event.iteration, toolCall)
+  ));
+}
+
+function updateTransientAssistant(
+  session: SessionPayload,
+  turnId: string,
+  update: (message: SessionMessage) => SessionMessage,
 ): SessionPayload {
   const messages = [...session.messages];
   const last = messages[messages.length - 1];
-  const assistant = last?.role === "assistant" && !last.id && last.streaming === true
+  const normalizedTurnId = turnId.trim();
+  // Text, thinking, and tool-first traces share an identity, but another turn's
+  // unfinished trace must never receive this turn's deltas.
+  const assistant = last?.role === "assistant" && !last.id && last.seq == null && last.streaming === true
+    && String(last.metadata?.turn_id ?? "").trim() === normalizedTurnId
     ? last
-    : ensureChatMessageRenderId({ role: "assistant", content: "", streaming: true });
-  const nextAssistant = mergeToolCall(assistant, iteration, toolCall);
+    : ensureChatMessageRenderId({
+        role: "assistant", content: "", streaming: true,
+        ...(normalizedTurnId ? { metadata: { turn_id: normalizedTurnId } } : {}),
+      });
+  const nextAssistant = update(assistant);
   if (assistant === last) {
     messages[messages.length - 1] = nextAssistant;
   } else {
