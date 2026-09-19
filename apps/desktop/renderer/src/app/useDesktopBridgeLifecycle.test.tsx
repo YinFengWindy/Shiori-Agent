@@ -64,6 +64,58 @@ async function mountLifecycle({ cancelling = false } = {}) {
 }
 
 describe("useDesktopBridgeLifecycle", () => {
+  for (const doneFirst of [true, false]) it(`replaces an emoji placeholder in the same bubble when done arrives ${doneFirst ? "before" : "after"} persistence`, async () => {
+    const view = await mountLifecycle();
+    try {
+      await view.emit("chat.delta", { thinking_delta: "先道晚安" });
+      await view.emit("chat.delta", { content_delta: "晚安。<emoji:moon>" });
+      const { messages, ...summary } = view.activeSessionRef.current!;
+      const streamed = messages[1]!;
+      const committed = {
+        id: "assistant-1", seq: 2, role: "assistant", content: "晚安。🌙",
+        reasoning_content: "先道晚安，再提醒早点休息",
+        metadata: {
+          turn_id: "turn-1", client_message_id: "client-1",
+          turn_metrics: { total_tokens: 72176, thinking_duration_ms: 1600 },
+        },
+      };
+      if (doneFirst) await view.emit("chat.done", { total_tokens: 70000, thinking_duration_ms: 1500 });
+      await view.emit("session.updated", { session: summary, message: committed });
+      if (!doneFirst) await view.emit("chat.done", { total_tokens: 70000, thinking_duration_ms: 1500 });
+
+      const replies = view.activeSessionRef.current!.messages.filter((message) => message.role === "assistant");
+      assert.equal(replies.length, 1);
+      assert.deepEqual(replies[0], { ...committed, render_id: streamed.render_id });
+      assert.deepEqual(view.completions, ["turn-1"]);
+    } finally { await view.cleanup(); }
+  });
+
+  for (const firstEvent of ["chat.delta", "chat.tool.started", "chat.tool.completed"]) {
+    it(`reconciles a rewritten media reply after a ${firstEvent} first event`, async () => {
+      const view = await mountLifecycle();
+      try {
+        await view.emit(firstEvent, {
+          thinking_delta: "查找合适的图片", iteration: 1, call_id: "call-1", tool_name: "lookup",
+          arguments: {}, final_arguments: {}, status: "success", result_preview: "found",
+        });
+        const first = view.activeSessionRef.current!.messages[1]!;
+        assert.equal(first.metadata?.turn_id, "turn-1");
+        await view.emit("chat.delta", { content_delta: "<image:night>" });
+        await view.emit("chat.done");
+        const { messages, ...summary } = view.activeSessionRef.current!;
+        assert.equal(messages.length, 2);
+        assert.equal(messages[1]?.render_id, first.render_id);
+        const committed = {
+          id: "assistant-1", seq: 2, role: "assistant", content: "送你一张晚安图。",
+          media: ["night.png"], reasoning_content: "选好图片了",
+          metadata: { turn_id: "turn-1", client_message_id: "client-1" },
+        };
+        await view.emit("session.updated", { session: summary, message: committed });
+        assert.deepEqual(view.activeSessionRef.current!.messages.slice(1), [{ ...committed, render_id: first.render_id }]);
+      } finally { await view.cleanup(); }
+    });
+  }
+
   it("reconciles a failed stream before appending its error and releasing the turn", async () => {
     const view = await mountLifecycle();
     try {

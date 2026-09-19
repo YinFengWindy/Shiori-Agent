@@ -24,17 +24,23 @@ export function getChatMessageMatchStrength(current: SessionMessage, incoming: S
   if (current.seq != null && incoming.seq != null && current.seq !== incoming.seq) return 0;
   if (currentId && currentId === incomingId) return 4;
   if (current.seq != null && current.seq === incoming.seq) return 4;
+  const currentTurnId = current.role === "assistant" ? normalized(current.metadata?.turn_id) : "";
+  const incomingTurnId = incoming.role === "assistant" ? normalized(incoming.metadata?.turn_id) : "";
+  if (currentTurnId && incomingTurnId && currentTurnId !== incomingTurnId) return 0;
+  if (current.metadata?.proactive !== incoming.metadata?.proactive
+    && (current.metadata?.proactive === true || incoming.metadata?.proactive === true)) return 0;
   const currentClientId = normalized(current.metadata?.client_message_id);
   const incomingClientId = normalized(incoming.metadata?.client_message_id);
   if (currentClientId && incomingClientId && currentClientId !== incomingClientId) return 0;
   if (normalized(current.render_id) && normalized(current.render_id) === normalized(incoming.render_id)) return 3;
   if (currentClientId && currentClientId === incomingClientId) return 2;
-  if (currentClientId && !incomingClientId) return 0;
   // Content is evidence only when upgrading a transient row. A new local turn
   // must never borrow an earlier persisted row's identity, even with equal text.
   if (currentId || current.seq != null || (!incomingId && incoming.seq == null)) return 0;
-  if (current.metadata?.proactive !== incoming.metadata?.proactive
-    && (current.metadata?.proactive === true || incoming.metadata?.proactive === true)) return 0;
+  // The backend can rewrite text, reasoning, or media before persistence. Its
+  // turn identity acknowledges the transient reply independently of that payload.
+  if (currentTurnId && currentTurnId === incomingTurnId) return 2;
+  if (currentClientId && !incomingClientId) return 0;
   const currentCallIds = new Set(toolCallIds(current));
   if (toolCallIds(incoming).some((id) => currentCallIds.has(id))) return 2;
   if (!samePayloadContext(current, incoming)) return 0;
@@ -62,6 +68,7 @@ function identityKeys(message: SessionMessage) {
     ["seq", message.seq == null ? "" : String(message.seq)],
     ["render", normalized(message.render_id)],
     ["client", normalized(message.metadata?.client_message_id)],
+    ["turn", message.role === "assistant" ? normalized(message.metadata?.turn_id) : ""],
     ...toolCallIds(message).map((id) => ["call", id]),
   ].filter(([, value]) => value).map(([kind, value]) => JSON.stringify([message.role, kind, value]));
 }

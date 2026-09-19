@@ -25,6 +25,44 @@ function session(): SessionPayload {
 }
 
 describe("chat streaming state", () => {
+  it("retains the turn and render identities through text, tools, completion, and cancellation", () => {
+    const thinking = applyChatStreamDelta(session(), "", "thinking", "turn-1");
+    const started = applyChatToolStarted(thinking, {
+      turnId: "turn-1", iteration: 1, callId: "call-1", toolName: "lookup", arguments: {},
+    });
+    const completed = applyChatToolCompleted(started, {
+      turnId: "turn-1", iteration: 1, callId: "call-1", toolName: "lookup", arguments: {},
+      finalArguments: {}, status: "success", resultPreview: "found",
+    });
+    const text = applyChatStreamDelta(completed, "reply", "", "turn-1");
+    assert.equal(text.messages.length, 2);
+    assert.equal(text.messages[1]?.tool_chain?.[0]?.calls[0]?.status, "success");
+    for (const updated of [started, completed, text, finishChatStream(text), interruptChatStream(text)]) {
+      assert.equal(updated.messages[1]?.metadata?.turn_id, "turn-1");
+      assert.equal(updated.messages[1]?.render_id, thinking.messages[1]?.render_id);
+    }
+  });
+
+  it("starts text and tool traces separately from another turn's unfinished assistant", () => {
+    const old = applyChatStreamDelta(session(), "old", "old thinking", "turn-old");
+    const nextTurns = [
+      applyChatStreamDelta(old, "new", "", "turn-new"),
+      applyChatToolStarted(old, {
+        turnId: "turn-new", iteration: 1, callId: "call-new", toolName: "lookup", arguments: {},
+      }),
+      applyChatToolCompleted(old, {
+        turnId: "turn-new", iteration: 1, callId: "call-new", toolName: "lookup", arguments: {},
+        finalArguments: {}, status: "success", resultPreview: "found",
+      }),
+    ];
+    for (const next of nextTurns) {
+      assert.equal(next.messages.length, 3);
+      assert.equal(next.messages[1], old.messages[1]);
+      assert.equal(next.messages[2]?.metadata?.turn_id, "turn-new");
+      assert.notEqual(next.messages[2]?.render_id, old.messages[1]?.render_id);
+    }
+  });
+
   it("finishes failed text and tool traces before a later persisted reply", () => {
     const streaming = applyChatToolStarted(applyChatStreamDelta(session(), "partial", "thinking"), {
       iteration: 1, callId: "running", toolName: "web_search", arguments: { query: "test" },
