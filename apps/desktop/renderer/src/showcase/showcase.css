@@ -1,0 +1,26 @@
+.showcase-root { background-image: var(--gradient-app); }
+.showcase-story [data-testid="story-app-surface"] { height: 100%; }
+.showcase-chat { padding: 6px 10px 10px 0; }
+.showcase-banner a { text-decoration: none; }
+.showcase-story [data-testid="story-dialogue-panel"] {
+  /* This preset is much lighter than generated scenes; keep white Story text readable. */
+  background-color: color-mix(in srgb, var(--color-text-primary) 88%, transparent) !important;
+}
+
+@media (max-width: 999px) {
+  .showcase-roles { display: none; }
+  .showcase-status { position: absolute; inset: 0 0 0 auto; z-index: 4; background: var(--color-bg-soft); }
+}
+
+@media (max-width: 600px) {
+  .showcase-banner { gap: 6px; }
+  .showcase-banner > div:first-of-type { flex: 1; }
+  .showcase-banner > div:last-child { width: 100%; justify-content: flex-end; }
+  .showcase-story-entry { margin-right: auto; }
+  .showcase-chat { padding-right: 4px; padding-bottom: 4px; }
+  .showcase-chat .nav-rail { width: 40px; }
+  .showcase-chat .composer-wrap { bottom: 30px; }
+  .showcase-story [data-testid="story-current-time"] { top: 12px; left: 12px; right: 12px; max-width: none; }
+  .showcase-story [data-testid="story-current-time"] + div { top: 76px; right: 12px; }
+  .showcase-story [data-testid="story-game-backdrop"] { background-position: 30% center; }
+}

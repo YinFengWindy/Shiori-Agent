@@ -3,6 +3,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import { normalizeExternalLink } from "../../../src/externalLinks";
+import { rendererHost } from "../shared/rendererHost";
 
 const markdownComponents: Components = {
   a({ href, children }) {
@@ -14,7 +15,7 @@ const markdownComponents: Components = {
         rel="noreferrer"
         onClick={(event) => {
           event.preventDefault();
-          void window.miraDesktop.openExternal(safeHref);
+          rendererHost.openExternal(safeHref);
         }}
       >
         {children}
