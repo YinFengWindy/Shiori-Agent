@@ -10,6 +10,7 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
+    "../showcase/**/*.ts",
     "../tests/integration/**/*.ts",
     // Colocated plugin UI, compiled into this renderer's bundle by the
     // `import.meta.glob` entries in `src/plugins/pluginUiModules.ts`,

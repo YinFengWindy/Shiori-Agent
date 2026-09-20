@@ -20,6 +20,7 @@ export default desktopEslintConfig([
   "apps/desktop/src/**/*.tsx",
   "apps/desktop/renderer/src/**/*.ts",
   "apps/desktop/renderer/src/**/*.tsx",
+  "apps/desktop/showcase/**/*.ts",
   "plugins/*/ui/**/*.ts",
   "plugins/*/ui/**/*.tsx",
   "plugins/*/surface/**/*.ts",

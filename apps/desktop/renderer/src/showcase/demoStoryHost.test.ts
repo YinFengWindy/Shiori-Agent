@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { StoryDetails } from "../../../../../plugins/story/ui/types";
 import { createStoryBridgeClient } from "../../../../../plugins/story/ui/storyBridgeClient";
 import { createDemoStoryHost } from "./demoStoryHost";
+import { storyChapters } from "./demoStoryChapters";
 
 function storage() {
   const values = new Map<string, string>();
@@ -23,18 +24,20 @@ test("the actual Story client creates, records free input, continues and restore
   const advanced = await client.submitInput(story.id, "我把车票拿起来看看。");
   assert.equal(advanced.turns.at(-1)?.input, "我把车票拿起来看看。");
   assert.equal(advanced.revision, story.revision + 1);
-  assert.equal(advanced.beats.length, 6);
+  assert.equal(advanced.beats.length, story.beats.length + storyChapters[1].beats.length);
   assert.ok(events.includes("plugin.story.operation.changed"));
   assert.ok(events.includes("plugin.story.beat.committed"));
+  await client.continueStory(story.id);
   await client.continueStory(story.id);
   assert.equal((await client.listCgGallery()).find((entry) => entry.storyId === story.id)?.items.length, 2);
   const reopened = createStoryBridgeClient(createDemoStoryHost(saved, async () => undefined).client);
   const restored = await reopened.getStory(story.id);
-  assert.equal(restored.turns.length, 3);
+  assert.equal(restored.turns.length, 4);
   assert.equal(restored.turns[1].input, "我把车票拿起来看看。");
-  assert.equal(restored.revision, 3);
-  await reopened.continueStory(story.id);
-  await assert.rejects(reopened.continueStory(story.id), /预设剧情已读完/);
+  assert.equal(restored.revision, 4);
+  for (let index = restored.turns.length; index < 12; index += 1) await reopened.continueStory(story.id);
+  assert.equal((await reopened.listCgGallery()).find((entry) => entry.storyId === story.id)?.items.length, 5);
+  await assert.rejects(reopened.continueStory(story.id), /这一段故事已读完/);
 });
 
 test("concurrent or stale Story mutations cannot duplicate a sample page", async () => {
@@ -43,7 +46,7 @@ test("concurrent or stale Story mutations cannot duplicate a sample page", async
   const client = createStoryBridgeClient(host.client);
   const story = await client.getStory("demo-bookshop");
   const pending = client.submitInput(story.id, "你好");
-  await assert.rejects(client.continueStory(story.id), /等当前演示/);
+  await assert.rejects(client.continueStory(story.id), /等当前操作/);
   release();
   await pending;
   await assert.rejects(host.client.call("input", { story_id: story.id, expected_revision: 1, input: "stale" }), /剧情已更新/);

@@ -2,7 +2,8 @@ import type { BridgeEvent } from "../../../src/bridge/shared";
 import type { PluginRpcClient } from "../plugins/pluginBridgeClient";
 import type { PluginHostServices } from "../plugins/pluginHostServices";
 import type { StoryDetails } from "../../../../../plugins/story/ui/types";
-import { demoRole, storySamples } from "./demoContent";
+import { demoRole } from "./demoContent";
+import { storyChapters } from "./demoStoryChapters";
 import { appendDemoStoryTurn, createDemoStory, demoStorySummary } from "./demoStoryModel";
 import type { DemoStorage } from "./demoStorage";
 import { demoStoriesStorageKey, persistDemoStories, restoreDemoStories } from "./demoStoryPersistence";
@@ -22,7 +23,7 @@ export function createDemoStoryHost(storage: DemoStorage, wait = sleep) {
   };
   const requireStory = (payload: Record<string, unknown>) => {
     const story = stories.get(String(payload.story_id));
-    if (!story) throw new Error("找不到这段演示剧情。");
+    if (!story) throw new Error("找不到这段剧情。");
     return story;
   };
   const unsupported = async (): Promise<never> => { throw new Error("此能力需下载 Shiori 桌面端使用。"); };
@@ -32,20 +33,20 @@ export function createDemoStoryHost(storage: DemoStorage, wait = sleep) {
   };
 
   async function call(name: string, payload: Record<string, unknown>) {
-    if (disposed) throw new Error("演示页面已关闭。");
+    if (disposed) throw new Error("页面已关闭。");
     if (name === "list") return { stories: [...stories.values()].map(demoStorySummary) };
     if (name === "get") return { story: requireStory(payload) };
     if (name === "cg.list") return { stories: [...stories.values()].map((story) => ({ story_id: story.id, title: story.title, status: story.status, created_at: story.turns[0]?.createdAt ?? "", items: story.cgGallery })) };
-    if (busy) throw new Error("请等当前演示操作完成。");
+    if (busy) throw new Error("请等当前操作完成。");
     if (!["create", "input", "continue", "cg.retry", "cg.regenerate"].includes(name)) return unsupported();
     let story = name === "create" ? createDemoStory(payload) : requireStory(payload);
     if (name === "create") {
       if (stories.has(story.id)) return { story: stories.get(story.id) };
-      if (stories.size >= 12) throw new Error("演示最多保留 12 段故事，可在网页顶部重置体验。");
+      if (stories.size >= 12) throw new Error("最多保留 12 段故事，可在网页顶部选择「重新开始」。");
     }
     if (name === "input" || name === "continue") {
       if (payload.expected_revision !== story.revision) throw new Error("剧情已更新，请重新打开这段故事。");
-      if (story.turns.length >= storySamples.length) throw new Error("预设剧情已读完。可返回剧情记录重读，或回主菜单新建体验。");
+      if (story.turns.length >= storyChapters.length) throw new Error("这一段故事已读完。可返回剧情记录重读，或回主菜单新建故事。");
       if (name === "input" && !String(payload.input || "").trim()) throw new Error("请输入一句台词或行动。");
     }
     busy = true;
@@ -55,7 +56,7 @@ export function createDemoStoryHost(storage: DemoStorage, wait = sleep) {
     emit(story, "operation.changed");
     try {
       await wait();
-      if (lifetime !== token) throw new Error("演示已重置或关闭。");
+      if (lifetime !== token) throw new Error("页面已重置或关闭。");
       if (name === "input" || name === "continue") story = appendDemoStoryTurn(story, String(payload.input || ""), name === "input" ? "player" : "continue");
       // Regeneration is an explicitly labelled replay of the same preset artwork.
       if (name.startsWith("cg.")) story = { ...story, cgGallery: story.cgGallery.map((resource) => resource.id === payload.resource_id ? { ...resource, updatedAt: new Date().toISOString() } : resource) };

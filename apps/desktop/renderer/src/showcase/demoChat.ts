@@ -31,7 +31,7 @@ export function createDemoChat(storage: DemoStorage, wait = delay) {
   const update = (next: ChatSnapshot) => { state = next; for (const listener of listeners) listener(); };
   const persist = () => {
     try { storage.setItem(storageKey, JSON.stringify(state)); }
-    catch { update({ ...state, error: "无法保存演示记录，请检查浏览器存储设置。" }); }
+    catch { update({ ...state, error: "无法保存对话记录，请检查浏览器存储设置。" }); }
   };
   const finish = () => {
     update({ ...state, sending: false, messages: state.messages.map((message) => message.streaming ? { ...message, streaming: false } : message) });
@@ -42,7 +42,7 @@ export function createDemoChat(storage: DemoStorage, wait = delay) {
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     async send(request: ChatSendRequest) {
       if (state.sending || !request.content.trim()) return false;
-      if (request.content.length > 2000) { update({ ...state, error: "演示输入请控制在 2000 字以内。" }); return false; }
+      if (request.content.length > 2000) { update({ ...state, error: "消息请控制在 2000 字以内。" }); return false; }
       const sample = chatSamples[state.sampleIndex % chatSamples.length];
       const token = ++generation;
       const id = crypto.randomUUID();
@@ -60,7 +60,7 @@ export function createDemoChat(storage: DemoStorage, wait = delay) {
         update({ ...state, mood: sample.mood, thought: sample.thought });
         finish();
     } catch {
-        if (generation === token) { update({ ...state, error: "演示播放中断，请重试。" }); finish(); }
+        if (generation === token) { update({ ...state, error: "回复中断，请重试。" }); finish(); }
       }
       return true;
     },

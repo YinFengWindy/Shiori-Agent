@@ -1,6 +1,8 @@
 import type { StoryDetails, StoryResource } from "../../../../../plugins/story/ui/types";
-import { normalizeStoryTimeBand } from "../../../../../plugins/story/ui/storyTime";
-import { demoBackdrop, demoRole, storySamples } from "./demoContent";
+import { normalizeStoryTimeBand, STORY_TIME_BANDS } from "../../../../../plugins/story/ui/storyTime";
+import { demoRole } from "./demoContent";
+import { storyArtwork } from "./demoAssets";
+import { storyChapters } from "./demoStoryChapters";
 
 /** Build a genuine Story read model from a public sample or the existing creation form. */
 export function createDemoStory(payload: Record<string, unknown> = {}): StoryDetails {
@@ -25,28 +27,32 @@ export function createDemoStory(payload: Record<string, unknown> = {}): StoryDet
 /** Append a prewritten page with the same turns, beats, revision and operation states as Story. */
 export function appendDemoStoryTurn(story: StoryDetails, input: string, kind: "opening" | "player" | "continue"): StoryDetails {
   const pageIndex = story.turns.length;
-  const sample = storySamples[pageIndex];
-  if (!sample) throw new Error("预设剧情已读完。可返回剧情记录重读，或回主菜单新建体验。");
+  const chapter = storyChapters[pageIndex];
+  if (!chapter) throw new Error("这一段故事已读完。可返回剧情记录重读，或回主菜单新建故事。");
+  const currentScene = { ...chapter.scene, characterIds: [demoRole.id, "player"] };
+  // A visitor may choose a later opening time; the fixed narrative never moves it back.
+  const timeBand = chapter.timeBand && STORY_TIME_BANDS.indexOf(chapter.timeBand) > STORY_TIME_BANDS.indexOf(story.currentTimeBand) ? chapter.timeBand : story.currentTimeBand;
   const timestamp = new Date().toISOString();
   const turnId = `${story.id}-turn-${pageIndex + 1}`;
-  const beats = sample.map((sampleBeat, index) => ({
+  const beats = chapter.beats.map((sampleBeat, index) => ({
     ...sampleBeat, id: `${turnId}-beat-${index + 1}`, storyId: story.id, segmentId: story.segment.id,
     turnId, sequence: story.beats.length + index + 1, storyDate: story.currentStoryDate,
-    timeBand: story.currentTimeBand, speaker: sampleBeat.kind === "dialogue" ? demoRole.name : null, recordedAt: timestamp,
+    timeBand, speaker: sampleBeat.kind === "dialogue" ? demoRole.name : null, recordedAt: timestamp,
   }));
   const resource: StoryResource = {
-    id: `${story.id}-visual-${pageIndex}`, storyId: story.id, kind: pageIndex === 0 ? "background" : "cg",
-    visualType: "character", sceneKey: "bookshop", status: "ready", path: demoBackdrop,
-    prompt: "预设演示素材", sourceTurnId: turnId, sequence: pageIndex + 1, errorCode: null,
+    id: `${story.id}-visual-${chapter.artwork}`, storyId: story.id, kind: pageIndex === 0 ? "background" : "cg",
+    visualType: "character", sceneKey: currentScene.key, status: "ready", path: storyArtwork[chapter.artwork],
+    prompt: currentScene.name, sourceTurnId: turnId, sequence: pageIndex + 1, errorCode: null,
     createdAt: timestamp, updatedAt: timestamp,
   };
   return {
     ...story, revision: story.revision + 1,
-    segment: { ...story.segment, operation: "awaiting_player" },
+    segment: { ...story.segment, timeBand, operation: "awaiting_player" },
+    currentScene, currentTimeBand: timeBand,
     beats: [...story.beats, ...beats],
     turns: [...story.turns, { id: turnId, kind, input, status: "committed", attemptId: null, committedBeatIds: beats.map((beat) => beat.id), error: null, createdAt: timestamp, updatedAt: timestamp }],
     backgroundResource: story.backgroundResource ?? resource,
-    cgGallery: pageIndex === 0 || pageIndex === 2 ? [...story.cgGallery, resource] : story.cgGallery,
+    cgGallery: story.cgGallery.some((existing) => existing.path === resource.path) ? story.cgGallery : [...story.cgGallery, resource],
   };
 }
 

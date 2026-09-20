@@ -52,7 +52,7 @@ test("a storage write failure reports the problem once without rejecting the sen
   const chat = createDemoChat({ getItem: () => null, setItem: () => { writes += 1; throw new Error("Storage full"); }, removeItem: () => undefined }, async () => undefined);
   assert.equal(await chat.send({ content: "你好", attachments: [], replyTarget: null }), true);
   assert.equal(writes, 1);
-  assert.match(chat.getSnapshot().error, /无法保存演示记录/);
+  assert.match(chat.getSnapshot().error, /无法保存对话记录/);
   assert.equal(chat.getSnapshot().sending, false);
 });
 

@@ -27,7 +27,7 @@
     "desktop:typecheck": "pnpm --filter shiori-desktop run typecheck",
     "dev": "pnpm run desktop:dev",
     "//lint": "Run from the repository root, not through --filter: ESLint takes the lintable area from the working directory, so an apps/desktop-rooted run cannot reach plugins/*/{ui,surface}/. See eslint.config.js.",
-    "lint": "eslint apps/desktop/src apps/desktop/renderer/src apps/desktop/tests/integration apps/desktop/tests/plugin-ui/packaged*.ts tests/fixtures/external-plugin/src plugins",
+    "lint": "eslint apps/desktop/src apps/desktop/renderer/src apps/desktop/showcase apps/desktop/tests/integration apps/desktop/tests/plugin-ui/packaged*.ts tests/fixtures/external-plugin/src plugins",
     "test": "pnpm run desktop:test",
     "typecheck": "pnpm --filter shiori-desktop run typecheck"
   },
