@@ -1,0 +1,86 @@
+/* The body owns this theme so shared dialogs rendered through a portal inherit it too. */
+.showcase-theme {
+  --radius-md: var(--radius-sm);
+  --gradient-app: linear-gradient(135deg in oklab, var(--blue-100), var(--pink-100));
+  --gradient-accent-hover: linear-gradient(135deg in oklab, var(--blue-200), var(--pink-200));
+}
+
+.showcase-root, .showcase-chat-main { background-image: var(--gradient-app); }
+.showcase-story [data-testid="story-app-surface"] { height: 100%; }
+.showcase-chat { padding: 6px 10px 10px 0; }
+.showcase-banner { background: var(--color-bg-glass); }
+.showcase-banner a { text-decoration: none; white-space: nowrap; }
+.showcase-banner-actions { flex-shrink: 0; }
+.showcase-banner-actions > :is(button, a) { min-height: 40px; white-space: nowrap; }
+.showcase-theme :is(button, a).bg-gradient-accent {
+  background-color: var(--color-bg-surface);
+  background-image: var(--gradient-accent);
+  color: var(--color-text-primary);
+  border-color: transparent;
+  transition-property: background-color, border-color, color, box-shadow;
+}
+.showcase-theme :is(button, a).bg-gradient-accent:hover:not(:disabled) {
+  background-image: var(--gradient-accent-hover);
+  filter: none;
+}
+.showcase-theme button.bg-gradient-accent:disabled {
+  background-image: var(--gradient-accent-soft);
+  color: var(--color-text-muted);
+  opacity: 0.65;
+  box-shadow: none;
+}
+.showcase-theme :is(.showcase-secondary, .confirm-dialog button:not(.bg-gradient-accent)) {
+  background-color: var(--color-bg-surface);
+  background-image: var(--gradient-accent-soft);
+  border-color: var(--color-border-soft);
+  color: var(--color-text-secondary);
+}
+.showcase-theme :is(.showcase-secondary, .confirm-dialog button:not(.bg-gradient-accent)):hover:not(:disabled) {
+  background-image: var(--gradient-accent);
+  border-color: var(--color-border-accent);
+}
+.showcase-chat .composer-wrap { bottom: 16px; }
+.showcase-chat .composer { border-color: var(--color-border-soft); }
+.showcase-chat .send-btn { border-radius: var(--radius-md); }
+.showcase-story [data-testid="story-game-backdrop"] {
+  /* Portrait CG stays complete; a separate blurred copy fills the wider stage. */
+  background-size: 0 0;
+}
+.showcase-story [data-testid="story-game-backdrop"]::before,
+.showcase-story [data-testid="story-game-backdrop"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: inherit;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.showcase-story [data-testid="story-game-backdrop"]::before {
+  inset: -24px;
+  background-size: cover;
+  filter: blur(24px) brightness(0.65);
+}
+.showcase-story [data-testid="story-game-backdrop"]::after { background-size: contain; }
+.showcase-story [data-testid="story-dialogue-panel"] {
+  /* This preset is much lighter than generated scenes; keep white Story text readable. */
+  background-color: color-mix(in srgb, var(--color-text-primary) 88%, transparent) !important;
+}
+
+@media (max-width: 999px) {
+  .showcase-roles { display: none; }
+  .showcase-status { position: absolute; inset: 0 0 0 auto; z-index: 4; background: var(--color-bg-soft); }
+}
+
+@media (max-width: 600px) {
+  .showcase-banner { gap: 8px; padding-inline: 8px; }
+  .showcase-brand-icon { display: none; }
+  .showcase-banner-actions { gap: 4px; }
+  .showcase-banner-actions > :is(button, a) { min-height: 36px; gap: 6px; }
+  .showcase-banner-actions > :is(.showcase-story-entry, .showcase-download) { padding-inline: 8px !important; }
+  .showcase-reset { width: 36px; height: 36px; }
+  .showcase-chat { padding-right: 4px; padding-bottom: 4px; }
+  .showcase-chat .nav-rail { width: 40px; }
+  .showcase-chat .composer-wrap { bottom: 12px; }
+  .showcase-story [data-testid="story-current-time"] { top: 12px; left: 12px; right: 12px; max-width: none; }
+  .showcase-story [data-testid="story-current-time"] + div { top: 76px; right: 12px; }
+}

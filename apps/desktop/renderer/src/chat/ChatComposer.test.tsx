@@ -27,6 +27,12 @@ function renderChatComposer({
 }
 
 describe("ChatComposer", () => {
+  it("hides only unsupported native capabilities in a browser host", () => {
+    const markup = renderToStaticMarkup(<ChatComposer activeRoleId="demo" sessionKey="demo" bridgeReady sending={false} cancelling={false} replyTarget={null} onSendMessage={async () => true} onCancelChat={() => undefined} onClearReplyTarget={() => undefined} onJumpToMessage={() => undefined} capabilities={{ attachments: false, modelSelection: false }} />);
+    assert.doesNotMatch(markup, /aria-label="添加附件"/);
+    assert.match(markup, /aria-label="发送消息"/);
+    assert.match(markup, /aria-label="打开常用表情面板"/);
+  });
   it("renders attachment, emoji, and send actions in the desktop composer", () => {
     const markup = renderChatComposer();
 

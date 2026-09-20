@@ -20,6 +20,12 @@ function renderRail(overrides?: Partial<Parameters<typeof NavRail>[0]>) {
 }
 
 describe("NavRail", () => {
+  it("shows only host-supported builtins while retaining plugin navigation", () => {
+    const markup = renderRail({ visibleBuiltins: ["messages"], pluginEntries: [{ pageId: "story", label: "故事", onSelect: () => undefined }] });
+    assert.match(markup, /aria-label="消息"/);
+    assert.match(markup, /aria-label="故事"/);
+    assert.doesNotMatch(markup, /aria-label="搜索"|aria-label="角色"|aria-label="设置"/);
+  });
   it("renders only the built-in navigation entries", () => {
     const markup = renderRail();
     const labels = ["搜索", "消息", "角色", "设置"];
