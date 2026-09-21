@@ -65,6 +65,10 @@ class BrowserSession:
         """Whether this generation can no longer accept actions."""
         return self._closed
 
+    def stop(self) -> None:
+        """Closes admission before the manager cancels this generation's actions."""
+        self._closed = True
+
     async def _start(self) -> None:
         self._lease = ProfileLease(self.profile)
         # The CLI's auto-spawned daemon loses its stderr reader when CLI exits.
@@ -91,8 +95,17 @@ class BrowserSession:
             try:
                 if self._client is None:
                     await self._start()
+                if self._closed:
+                    raise RuntimeError("Browser Use 会话已停止，请重新调用工具")
                 if self._client is None:
                     raise RuntimeError("Browser Use MCP 连接未建立")
+            except BaseException:
+                # Initialization/listing errors are startup failures even when
+                # represented by McpToolError; no usable page exists yet.
+                self.stop()
+                await self._dispose()
+                raise
+            try:
                 if name == "agent_browser_screenshot":
                     screenshots = self.profile.parent.parent / "screenshots"
                     screenshots.mkdir(parents=True, exist_ok=True)
@@ -125,12 +138,18 @@ class BrowserSession:
                 # not a lost page. Transport interruption invalidates the generation.
                 raise
             except BaseException:
-                await self.close()
+                self.stop()
+                await self._dispose()
                 raise
 
     async def close(self, *, graceful: bool = False) -> None:
         """Stops owned input-capable processes before releasing the persistent profile."""
-        self._closed = True
+        self.stop()
+        async with self._lock:
+            await self._dispose(graceful=graceful)
+
+    async def _dispose(self, *, graceful: bool = False) -> None:
+        # Both the action failure path and public close hold _lock here.
         try:
             if self._client is not None:
                 try:
@@ -140,7 +159,7 @@ class BrowserSession:
                         )
                 finally:
                     await self._client.disconnect()
-                self._client = None
+                    self._client = None
         finally:
             try:
                 if self._daemon is not None:
