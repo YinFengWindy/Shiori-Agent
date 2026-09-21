@@ -239,9 +239,13 @@ class McpClientPool:
 
 def _decode_result(raw: str | ToolResult) -> Any:
     if isinstance(raw, ToolResult):
-        raise ValueError(
-            "Proactive MCP sources require text results; images are unsupported"
-        )
+        if raw.content_blocks:
+            raise ValueError(
+                "Proactive MCP sources require text results; images are unsupported"
+            )
+        if raw.structured_content is not None:
+            return raw.structured_content
+        raw = raw.text
     if raw and raw.strip().startswith(("[", "{")):
         return json.loads(raw)
     return raw

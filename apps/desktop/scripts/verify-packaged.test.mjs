@@ -14,6 +14,8 @@ test("verifyPackagedDesktop accepts the required Windows release layout", async 
       "resources/runtime/_internal/common_emojis.json",
       ...["agent-browser.exe", "chrome-win64/chrome.exe", "chrome-win64/ABOUT", "native-runtime.json", "LICENSE.agent-browser"]
         .map((name) => `resources/runtime/_internal/native/browser-use/${name}`),
+      ...["cua-driver.exe", "cua-driver-uia.exe", "native-runtime.json", "LICENSE.cua-driver"]
+        .map((name) => `resources/runtime/_internal/native/computer-use/${name}`),
       "resources/config.example.toml",
       "resources/assets/shiori-app-icon.ico",
       "resources/app.asar.unpacked/node_modules/uiohook-napi/prebuilds/win32-x64/uiohook-napi.node",
@@ -25,6 +27,10 @@ test("verifyPackagedDesktop accepts the required Windows release layout", async 
     }
 
     await assert.doesNotReject(verifyPackagedDesktop(root));
+    const driver = join(root, "resources/runtime/_internal/native/computer-use/cua-driver-uia.exe");
+    await rm(driver);
+    await assert.rejects(verifyPackagedDesktop(root), /ENOENT/);
+    await writeFile(driver, "fixture");
     await rm(join(root, "resources/runtime/_internal/native/browser-use/agent-browser.exe"));
     await assert.rejects(verifyPackagedDesktop(root), /ENOENT/);
   } finally {

@@ -1,0 +1,426 @@
+[
+  {
+    "name": "list_windows",
+    "description": "发现 Windows 窗口，返回 pid、window_id、标题和边界。后续操作必须使用这组精确身份。",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "on_screen_only": {
+          "description": "为 true 时只列出当前屏幕可见窗口。",
+          "type": "boolean"
+        },
+        "pid": {
+          "description": "computer_list_windows 返回的进程 ID；必须与 window_id 匹配。",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_window_state",
+    "description": "观察指定窗口的 UIA 控件树及原始截图，返回 snapshot_id 与 element_token。仅支持完整位于主显示器且未最小化的窗口。窗口移动、缩放或引用失效后重新观察。",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "max_depth": {
+          "description": "控件树最大深度。",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_dimension": {
+          "description": "截图最长边的像素上限；坐标必须来自返回的截图。",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_elements": {
+          "description": "控件树最大条目数。",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "pid": {
+          "description": "computer_list_windows 返回的进程 ID；必须与 window_id 匹配。",
+          "type": "integer"
+        },
+        "query": {
+          "description": "按控件文字筛选，保留匹配项的祖先及原始索引。",
+          "type": "string"
+        },
+        "window_id": {
+          "description": "computer_list_windows 返回的精确 HWND。不会自动选取其他窗口。",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pid",
+        "window_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "click",
+    "description": "点击当前窗口快照中的 element_token，或该截图内的 x/y 像素坐标。必须同时传入 pid、window_id 和 snapshot_id；之后重新观察确认实际效果。",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "button": {
+          "description": "鼠标按键，默认 left。",
+          "enum": [
+            "left",
+            "right",
+            "middle"
+          ],
+          "type": "string"
+        },
+        "count": {
+          "description": "点击次数，默认 1。",
+          "maximum": 3,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "delivery_mode": {
+          "description": "默认 background。先尝试后台输入并观察实际状态；仅在明确后台不可用或已验证无预期效果后，使用 foreground 重试。foreground 会短暂切换焦点。",
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "element_index": {
+          "description": "可选的原始控件索引；必须同时提供匹配的 element_token，不能单独使用。",
+          "type": "integer"
+        },
+        "element_token": {
+          "description": "最近一次 computer_get_window_state 返回的原始 element_token；不同窗口或过期 token 会失败。",
+          "type": "string"
+        },
+        "modifier": {
+          "description": "点击期间按下的修饰键，如 ctrl、shift、alt。",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pid": {
+          "description": "computer_list_windows 返回的进程 ID；必须与 window_id 匹配。",
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "description": "最近一次 computer_get_window_state 返回的 snapshot_id；过期、窗口移动或缩放后必须重新观察。",
+          "pattern": "^s[0-9a-f]{8}$",
+          "type": "string"
+        },
+        "window_id": {
+          "description": "computer_list_windows 返回的精确 HWND。不会自动选取其他窗口。",
+          "type": "integer"
+        },
+        "x": {
+          "description": "当前窗口截图内的 X 像素坐标，必须与 y 一起提供；不能使用屏幕绝对坐标。",
+          "type": "number"
+        },
+        "y": {
+          "description": "当前窗口截图内的 Y 像素坐标，必须与 x 一起提供。",
+          "type": "number"
+        },
+        "observation_id": {
+          "type": "string",
+          "description": "最近一次 computer_get_window_state 返回的 Shiori observation_id；用于区分不同回合或驱动进程的同名快照。"
+        }
+      },
+      "type": "object",
+      "required": [
+        "pid",
+        "window_id",
+        "snapshot_id",
+        "observation_id"
+      ]
+    }
+  },
+  {
+    "name": "type_text",
+    "description": "向快照中的 element_token 输入文字，或先点击该窗口截图内的 x/y 再输入。可输入中文。每次输入后观察实际内容，不能仅凭返回值确认成功。",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "delay_ms": {
+          "description": "每个字符间隔毫秒数。",
+          "maximum": 200,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "delivery_mode": {
+          "description": "默认 background。先尝试后台输入并观察实际状态；仅在明确后台不可用或已验证无预期效果后，使用 foreground 重试。foreground 会短暂切换焦点。",
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "element_index": {
+          "description": "可选的原始控件索引；必须同时提供匹配的 element_token，不能单独使用。",
+          "type": "integer"
+        },
+        "element_token": {
+          "description": "最近一次 computer_get_window_state 返回的原始 element_token；不同窗口或过期 token 会失败。",
+          "type": "string"
+        },
+        "pid": {
+          "description": "computer_list_windows 返回的进程 ID；必须与 window_id 匹配。",
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "description": "最近一次 computer_get_window_state 返回的 snapshot_id；过期、窗口移动或缩放后必须重新观察。",
+          "pattern": "^s[0-9a-f]{8}$",
+          "type": "string"
+        },
+        "text": {
+          "description": "要插入的文字；不能假定会替换已有内容。",
+          "type": "string"
+        },
+        "window_id": {
+          "description": "computer_list_windows 返回的精确 HWND。不会自动选取其他窗口。",
+          "type": "integer"
+        },
+        "x": {
+          "description": "当前窗口截图内的 X 像素坐标，必须与 y 一起提供；不能使用屏幕绝对坐标。",
+          "type": "number"
+        },
+        "y": {
+          "description": "当前窗口截图内的 Y 像素坐标，必须与 x 一起提供。",
+          "type": "number"
+        },
+        "observation_id": {
+          "type": "string",
+          "description": "最近一次 computer_get_window_state 返回的 Shiori observation_id；用于区分不同回合或驱动进程的同名快照。"
+        }
+      },
+      "required": [
+        "text",
+        "pid",
+        "window_id",
+        "snapshot_id",
+        "observation_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "press_key",
+    "description": "向精确窗口发送一个按键，可附加 modifiers，或用 element_token / x/y 指定接收控件。必须使用当前 snapshot_id；随后验证目标实际状态。 带 modifiers 的组合键只支持显式 delivery_mode=\"foreground\"；后台组合键在输入前拒绝。",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "delivery_mode": {
+          "description": "默认 background。先尝试后台输入并观察实际状态；仅在明确后台不可用或已验证无预期效果后，使用 foreground 重试。foreground 会短暂切换焦点。",
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "element_index": {
+          "description": "可选的原始控件索引；必须同时提供匹配的 element_token，不能单独使用。",
+          "type": "integer"
+        },
+        "element_token": {
+          "description": "最近一次 computer_get_window_state 返回的原始 element_token；不同窗口或过期 token 会失败。",
+          "type": "string"
+        },
+        "key": {
+          "description": "按键名称，如 return、tab、escape、space、f1 或字母。",
+          "type": "string"
+        },
+        "modifiers": {
+          "description": "按键修饰键，如 ctrl、shift、alt、win。",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pid": {
+          "description": "computer_list_windows 返回的进程 ID；必须与 window_id 匹配。",
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "description": "最近一次 computer_get_window_state 返回的 snapshot_id；过期、窗口移动或缩放后必须重新观察。",
+          "pattern": "^s[0-9a-f]{8}$",
+          "type": "string"
+        },
+        "window_id": {
+          "description": "computer_list_windows 返回的精确 HWND。不会自动选取其他窗口。",
+          "type": "integer"
+        },
+        "x": {
+          "description": "当前窗口截图内的 X 像素坐标，必须与 y 一起提供；不能使用屏幕绝对坐标。",
+          "type": "number"
+        },
+        "y": {
+          "description": "当前窗口截图内的 Y 像素坐标，必须与 x 一起提供。",
+          "type": "number"
+        },
+        "observation_id": {
+          "type": "string",
+          "description": "最近一次 computer_get_window_state 返回的 Shiori observation_id；用于区分不同回合或驱动进程的同名快照。"
+        }
+      },
+      "required": [
+        "key",
+        "pid",
+        "window_id",
+        "snapshot_id",
+        "observation_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "hotkey",
+    "description": "向精确窗口发送组合键，例如 keys=[\"ctrl\",\"shift\",\"k\"]。固定版本不支持可靠的后台组合键；必须显式选择 delivery_mode=\"foreground\"，会短暂切换焦点。操作后必须重新观察实际状态，effect=unverifiable 不代表成功。",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "delivery_mode": {
+          "description": "组合键只支持显式 foreground；background 会在输入前拒绝。",
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "element_index": {
+          "description": "可选的原始控件索引；必须同时提供匹配的 element_token，不能单独使用。",
+          "type": "integer"
+        },
+        "element_token": {
+          "description": "最近一次 computer_get_window_state 返回的原始 element_token；不同窗口或过期 token 会失败。",
+          "type": "string"
+        },
+        "keys": {
+          "description": "一个或多个修饰键以及一个普通键，例如 [\"ctrl\", \"a\"]。",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "type": "array"
+        },
+        "pid": {
+          "description": "computer_list_windows 返回的进程 ID；必须与 window_id 匹配。",
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "description": "最近一次 computer_get_window_state 返回的 snapshot_id；过期、窗口移动或缩放后必须重新观察。",
+          "pattern": "^s[0-9a-f]{8}$",
+          "type": "string"
+        },
+        "window_id": {
+          "description": "computer_list_windows 返回的精确 HWND。不会自动选取其他窗口。",
+          "type": "integer"
+        },
+        "x": {
+          "description": "当前窗口截图内的 X 像素坐标，必须与 y 一起提供；不能使用屏幕绝对坐标。",
+          "type": "number"
+        },
+        "y": {
+          "description": "当前窗口截图内的 Y 像素坐标，必须与 x 一起提供。",
+          "type": "number"
+        },
+        "observation_id": {
+          "type": "string",
+          "description": "最近一次 computer_get_window_state 返回的 Shiori observation_id；用于区分不同回合或驱动进程的同名快照。"
+        }
+      },
+      "required": [
+        "keys",
+        "pid",
+        "window_id",
+        "snapshot_id",
+        "observation_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "scroll",
+    "description": "在精确窗口内滚动。可用当前截图内的 x/y 指定位置。必须使用当前 snapshot_id；随后验证目标实际状态。",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "description": "滚动次数，默认 3。",
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "by": {
+          "description": "滚动单位，默认为 line。",
+          "enum": [
+            "line",
+            "page"
+          ],
+          "type": "string"
+        },
+        "delivery_mode": {
+          "description": "默认 background。先尝试后台输入并观察实际状态；仅在明确后台不可用或已验证无预期效果后，使用 foreground 重试。foreground 会短暂切换焦点。",
+          "enum": [
+            "background",
+            "foreground"
+          ],
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right"
+          ],
+          "type": "string",
+          "description": "滚动方向。"
+        },
+        "pid": {
+          "description": "computer_list_windows 返回的进程 ID；必须与 window_id 匹配。",
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "description": "最近一次 computer_get_window_state 返回的 snapshot_id；过期、窗口移动或缩放后必须重新观察。",
+          "pattern": "^s[0-9a-f]{8}$",
+          "type": "string"
+        },
+        "window_id": {
+          "description": "computer_list_windows 返回的精确 HWND。不会自动选取其他窗口。",
+          "type": "integer"
+        },
+        "x": {
+          "description": "当前窗口截图内的 X 像素坐标，必须与 y 一起提供；不能使用屏幕绝对坐标。",
+          "type": "number"
+        },
+        "y": {
+          "description": "当前窗口截图内的 Y 像素坐标，必须与 x 一起提供。",
+          "type": "number"
+        },
+        "observation_id": {
+          "type": "string",
+          "description": "最近一次 computer_get_window_state 返回的 Shiori observation_id；用于区分不同回合或驱动进程的同名快照。"
+        }
+      },
+      "required": [
+        "direction",
+        "pid",
+        "window_id",
+        "snapshot_id",
+        "observation_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "release",
+    "description": "结束本回合的桌面操作并释放独占控制。本回合之后不能再输入；正常回合结束也会自动释放。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  }
+]

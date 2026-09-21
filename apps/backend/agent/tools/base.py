@@ -6,8 +6,11 @@ from typing import Any
 
 @dataclass
 class ToolResult:
+    """Tool text, original model-facing media, and optional structured MCP data."""
+
     text: str = ""
     content_blocks: list[dict[str, Any]] = field(default_factory=list)
+    structured_content: dict[str, Any] | None = None
 
     def preview(self) -> str:
         if self.text:

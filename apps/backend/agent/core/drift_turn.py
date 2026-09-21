@@ -17,6 +17,8 @@ DriftTurnPipeline — Drift 空闲时间链路顶层抽象。
 
 from __future__ import annotations
 
+from agent.tools.turn_scope import tool_turn
+
 import inspect
 import json
 import logging
@@ -91,6 +93,7 @@ class DriftTurnPipeline:
     # ── 入口 ──────────────────────────────────────────────────────────
 
     # 核心方法：处理一次 drift tick，串起 Scan → Prepare → Execute → Finish 四段链路。
+    @tool_turn
     async def run(self, ctx: AgentTickContext, llm_fn: LlmFn | None) -> bool:
         # 1. llm_fn 为空 → 无法进入 Execute，直接退出。
         if llm_fn is None:

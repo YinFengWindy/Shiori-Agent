@@ -442,3 +442,28 @@ def test_decode_mcp_images_rejects_non_text_proactive_payload_explicitly():
                 text='{"event": "image"}', content_blocks=[{"type": "image_url"}]
             )
         )
+
+
+@pytest.mark.parametrize("text", ["", 'human summary\n{"available": true}'])
+def test_decode_structured_context_does_not_parse_concatenated_text(text):
+    from agent.mcp.result import decode_tool_result
+
+    raw = decode_tool_result(
+        "context",
+        "get_context",
+        {
+            "result": {
+                "content": [{"type": "text", "text": text}],
+                "structuredContent": {"available": True},
+            }
+        },
+    )
+    assert mcp_sources._decode_result(raw) == {"available": True}
+
+
+def test_decode_text_tool_result_retains_legacy_json_behavior():
+    from agent.tools.base import ToolResult
+
+    assert mcp_sources._decode_result(ToolResult(text='[{"kind": "alert"}]')) == [
+        {"kind": "alert"}
+    ]

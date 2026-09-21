@@ -12,6 +12,7 @@ from agent.lifecycle.types import PromptRenderResult
 from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import ContentSafetyError, ContextLengthError
 from agent.tools.registry import ToolRegistry
+from agent.tools.turn_scope import current_tool_turn
 from session.manager import SessionManager
 
 
@@ -65,9 +66,28 @@ async def test_run_turn_retry_preserves_persisted_history(
     responses = [error_type("retry required") for _ in range(failure_count)]
     if success_attempt is not None:
         responses.append(ReasonerResult(reply="recovered"))
-    reasoner.run = AsyncMock(side_effect=responses)
+    scopes, released = [], []
+    pending = iter(responses)
+
+    async def attempt(*args, **kwargs):
+        scope = current_tool_turn()
+        scopes.append(scope)
+        assert not released
+
+        async def release():
+            released.append(scope)
+
+        scope.own("desktop", release)
+        response = next(pending)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    reasoner.run = AsyncMock(side_effect=attempt)
 
     result = await reasoner.run_turn(msg=msg, session=session)
+    assert all(scope is scopes[0] for scope in scopes)
+    assert released == [scopes[0]] and scopes[0].closed
 
     # Each request can shrink its context while the current user input remains.
     expected_windows = [6, 6, 6, 6, 6, 3, 0][: len(responses)]

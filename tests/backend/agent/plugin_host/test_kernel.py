@@ -220,6 +220,7 @@ async def test_force_cleanup_recovers_effects_after_rollback_is_cancelled(tmp_pa
 _EXPECTED_TOP_LEVEL_PLUGINS = {
     "akasha",
     "browser_use",
+    "computer_use",
     "citation",
     "context_pressure",
     "default_memory",
