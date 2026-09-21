@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent.tools.turn_scope import tool_turn
+
 from core.roles.reply_state import role_mood_catalog
 
 import asyncio
@@ -274,6 +276,7 @@ class DefaultReasoner(
     ) -> None:
         self._stream_sink_factory = factory
 
+    @tool_turn
     async def run_turn(
         self,
         *,

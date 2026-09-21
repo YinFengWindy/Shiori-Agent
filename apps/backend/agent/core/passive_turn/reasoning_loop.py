@@ -29,6 +29,7 @@ from agent.tool_runtime import (
 )
 from agent.tools.base import normalize_tool_result
 from agent.tools.registry import ToolRegistry
+from agent.tools.turn_scope import tool_turn
 from agent.provider import ContextLengthError, is_truncated_finish_reason
 
 logger = logging.getLogger("agent.core.passive_turn")
@@ -51,6 +52,7 @@ class _PassiveReasoningLoopMixin:
     ) -> int:
         return support.estimate_messages_tokens(messages, schemas)
 
+    @tool_turn
     async def run(
         self,
         initial_messages: list[dict],

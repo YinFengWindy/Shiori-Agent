@@ -1,33 +1,8 @@
-import { createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { downloadVerified, exists, extractZip } from "./native-runtime.mjs";
 import { fileURLToPath } from "node:url";
 import { resolveReleaseManifest } from "./release-manifest.mjs";
-
-const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
-
-async function exists(path) {
-  try { return (await stat(path)).isFile(); }
-  catch (error) { if (error.code === "ENOENT") return false; throw error; }
-}
-
-async function downloadVerified(asset, path, download) {
-  if (await exists(path) && digest(await readFile(path)) === asset.sha256) return;
-  const response = await download(asset.url);
-  if (!response.ok) throw new Error(`Browser runtime download failed: ${response.status} ${asset.url}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (digest(bytes) !== asset.sha256) throw new Error(`Browser runtime SHA256 mismatch: ${asset.url}`);
-  await writeFile(`${path}.part`, bytes);
-  await rename(`${path}.part`, path);
-}
-
-function extractZip(archive, destination, repositoryRoot) {
-  const python = join(repositoryRoot, ".venv", "Scripts", "python.exe");
-  const result = spawnSync(python, ["-m", "zipfile", "-e", archive, destination], { encoding: "utf8", windowsHide: true });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`Browser archive extraction failed: ${result.stderr}`);
-}
 
 /** Prepares pinned Windows components; never downloads or runs them on other platforms. */
 export async function prepareBrowserRuntime({ repositoryRoot, targetPlatform = process.platform,

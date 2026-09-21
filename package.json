@@ -30,7 +30,8 @@
     "lint": "eslint apps/desktop/src apps/desktop/renderer/src apps/desktop/showcase apps/desktop/tests/integration apps/desktop/tests/plugin-ui/packaged*.ts tests/fixtures/external-plugin/src plugins",
     "test": "pnpm run desktop:test",
     "typecheck": "pnpm --filter shiori-desktop run typecheck",
-    "prepare:browser-use": "node apps/desktop/scripts/browser-runtime.mjs"
+    "prepare:browser-use": "node apps/desktop/scripts/browser-runtime.mjs",
+    "prepare:computer-use": "node apps/desktop/scripts/computer-runtime.mjs"
   },
   "devDependencies": {
     "@phosphor-icons/react": "^2.1.10",

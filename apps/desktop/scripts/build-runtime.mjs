@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { cp, mkdir, rm } from "node:fs/promises";
 import { basename, delimiter, join, relative, resolve, sep } from "node:path";
 import { prepareBrowserRuntime } from "./browser-runtime.mjs";
+import { prepareComputerRuntime } from "./computer-runtime.mjs";
 import { resolveReleaseManifest } from "./release-manifest.mjs";
 import {
   collectHostBackendModules,
@@ -32,6 +33,7 @@ const HOST_PACKAGE_ROOTS = [
 const releaseManifest = resolveReleaseManifest();
 const { backendRoot, repositoryRoot } = releaseManifest;
 const browserRuntime = await prepareBrowserRuntime({ repositoryRoot });
+const computerRuntime = await prepareComputerRuntime({ repositoryRoot });
 const runtimeRoot = releaseManifest.runtimeOutput;
 const workRoot = releaseManifest.pyinstallerWork;
 const python = resolve(repositoryRoot, ".venv", "Scripts", "python.exe");
@@ -121,6 +123,8 @@ const args = [
   `${stagedPluginsDir}${dataSeparator}plugins`,
   "--add-data",
   `${browserRuntime}${dataSeparator}native/browser-use`,
+  "--add-data",
+  `${computerRuntime}${dataSeparator}native/computer-use`,
   "--add-data",
   `${join(backendRoot, "skills")}${dataSeparator}skills`,
   "--add-data",

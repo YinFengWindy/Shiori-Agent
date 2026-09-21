@@ -2,6 +2,7 @@
 
 import base64
 import binascii
+import json
 from typing import Any
 
 from agent.tools.base import ToolResult
@@ -66,9 +67,20 @@ def decode_tool_result(
             )
         else:
             texts.append(str(block))
+    structured = result.get("structuredContent")
+    if structured is not None:
+        if not isinstance(structured, dict):
+            raise ValueError("MCP structuredContent must be an object")
+        # Snapshot handles and target identity often exist only here. Keep them
+        # visible to the current model as well as available to owning adapters.
+        texts.append(json.dumps(structured, ensure_ascii=False))
     text = "\n".join(texts)
     if result.get("isError"):
         raise McpToolError(
             server=server, tool_name=tool_name, message=text or "Remote tool failed"
         )
-    return ToolResult(text=text, content_blocks=images) if images else text
+    if images or structured is not None:
+        return ToolResult(
+            text=text, content_blocks=images, structured_content=structured
+        )
+    return text

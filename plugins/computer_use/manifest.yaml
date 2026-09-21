@@ -1,0 +1,10 @@
+api: 2
+id: computer_use
+display_name: Computer Use
+version: "0.1.0"
+desc: Windows 窗口操作与截图
+capabilities:
+  - tools
+  - workspace
+  - config
+config_model: "config:ComputerUseConfig"

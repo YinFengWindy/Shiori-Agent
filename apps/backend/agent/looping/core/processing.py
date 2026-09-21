@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent.tools.turn_scope import tool_turn
+
 import asyncio
 import time
 from datetime import datetime
@@ -355,6 +357,7 @@ class _ProcessingMixin:
             )
         return await registry.dispatch_background_task(context, operation)
 
+    @tool_turn
     async def _run_agent_loop(
         self,
         initial_messages: list[dict],

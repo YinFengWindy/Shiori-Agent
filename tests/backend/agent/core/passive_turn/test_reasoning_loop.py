@@ -633,7 +633,7 @@ for line in sys.stdin:
     elif method == 'tools/list': result = {'tools': [{'name': 'image', 'description': 'Screenshot', 'inputSchema': {'type': 'object', 'properties': {}}}]}
     else: result = {'content': [{'type': 'text', 'text': 'screenshot'}, {'type': 'image', 'mimeType': 'image/png', 'data': """
         + repr(image_data)
-        + """}]}
+        + """}], 'structuredContent': {'pid': 42, 'window_id': 81, 'snapshot_id': 's00000001', 'elements': [{'element_token': 's00000001:1'}]}}
     print(json.dumps({'jsonrpc': '2.0', 'id': message['id'], 'result': result}), flush=True)
 """,
         encoding="utf-8",
@@ -678,6 +678,8 @@ for line in sys.stdin:
             "image_url": {"url": f"data:image/png;base64,{image_data}"},
         }
         assert image_data not in messages[batch + 1]["content"]
+        assert '"snapshot_id": "s00000001"' in messages[batch + 1]["content"]
+        assert '"element_token": "s00000001:1"' in messages[batch + 1]["content"]
         assert requests[0].get("model") == requests[1].get("model")
     finally:
         await client.disconnect()
