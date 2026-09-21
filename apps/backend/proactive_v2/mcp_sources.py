@@ -15,6 +15,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from agent.tools.base import ToolResult
 from core.common.workspace import resolve_default_workspace
 
 if TYPE_CHECKING:
@@ -236,7 +237,11 @@ class McpClientPool:
         self._clients.clear()
 
 
-def _decode_result(raw: str) -> Any:
+def _decode_result(raw: str | ToolResult) -> Any:
+    if isinstance(raw, ToolResult):
+        raise ValueError(
+            "Proactive MCP sources require text results; images are unsupported"
+        )
     if raw and raw.strip().startswith(("[", "{")):
         return json.loads(raw)
     return raw

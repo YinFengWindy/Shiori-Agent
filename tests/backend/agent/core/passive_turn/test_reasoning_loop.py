@@ -609,3 +609,75 @@ async def test_plain_deny_without_finalize_does_not_truncate_the_batch():
     # 回合正常推进到了下一轮 LLM 调用，而不是提前收尾。
     assert provider.chat.await_count == 2
     assert result.reply == "最终回复"
+
+
+async def test_mcp_image_and_sibling_tool_replies_reach_current_model_in_valid_order(
+    tmp_path,
+):
+    """A real stdio image response reaches the next model request, after the whole tool batch."""
+    from copy import deepcopy
+    import sys
+
+    from agent.mcp.client import McpClient
+    from agent.mcp.tool import McpToolWrapper
+
+    image_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aE3sAAAAASUVORK5CYII="
+    script = tmp_path / "mcp_image.py"
+    script.write_text(
+        """import json, sys
+for line in sys.stdin:
+    message = json.loads(line)
+    if 'id' not in message: continue
+    method = message['method']
+    if method == 'initialize': result = {}
+    elif method == 'tools/list': result = {'tools': [{'name': 'image', 'description': 'Screenshot', 'inputSchema': {'type': 'object', 'properties': {}}}]}
+    else: result = {'content': [{'type': 'text', 'text': 'screenshot'}, {'type': 'image', 'mimeType': 'image/png', 'data': """
+        + repr(image_data)
+        + """}]}
+    print(json.dumps({'jsonrpc': '2.0', 'id': message['id'], 'result': result}), flush=True)
+""",
+        encoding="utf-8",
+    )
+    client = McpClient("test_image", [sys.executable, "-u", str(script)])
+    try:
+        infos = await client.connect()
+        tools = ToolRegistry()
+        image_tool = McpToolWrapper(client, infos[0])
+        tools.register(image_tool)
+        tools.register(CounterTool())
+        responses = [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall("image", image_tool.name, {}),
+                    ToolCall("counter", "counter", {}),
+                ],
+            ),
+            LLMResponse(content="看到了截图"),
+            LLMResponse(content=mood_payload()),
+        ]
+        requests = []
+
+        async def chat(**kwargs):
+            requests.append(deepcopy(kwargs))
+            return responses.pop(0)
+
+        provider = AsyncMock()
+        provider.chat.side_effect = chat
+        result = await make_reasoner(provider, tools).run(
+            [{"role": "user", "content": "查看网页"}], reply_moods=("平静",)
+        )
+        assert result.reply == "看到了截图"
+        messages = requests[1]["messages"]
+        roles = [message["role"] for message in messages]
+        batch = roles.index("assistant")
+        assert roles[batch : batch + 4] == ["assistant", "tool", "tool", "user"]
+        image = messages[batch + 3]["content"][1]
+        assert image == {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{image_data}"},
+        }
+        assert image_data not in messages[batch + 1]["content"]
+        assert requests[0].get("model") == requests[1].get("model")
+    finally:
+        await client.disconnect()

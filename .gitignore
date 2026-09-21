@@ -86,3 +86,6 @@ apps/desktop/showcase-dist/
 # Python distribution build products
 build/
 *.egg-info/
+
+# Prepared, checksum-pinned native browser resources
+/native/

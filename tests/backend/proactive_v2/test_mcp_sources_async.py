@@ -430,3 +430,15 @@ async def test_acknowledge_content_entries_async_passes_ttl_hours(monkeypatch):
         {"event_ids": ["evt-1", "evt-2"], "ttl_hours": 24},
     ) in pool.calls
     assert pool.retry_flags == [False]
+
+
+def test_decode_mcp_images_rejects_non_text_proactive_payload_explicitly():
+    from agent.tools.base import ToolResult
+
+    assert mcp_sources._decode_result('{"event": "text"}') == {"event": "text"}
+    with pytest.raises(ValueError, match="require text results"):
+        mcp_sources._decode_result(
+            ToolResult(
+                text='{"event": "image"}', content_blocks=[{"type": "image_url"}]
+            )
+        )
