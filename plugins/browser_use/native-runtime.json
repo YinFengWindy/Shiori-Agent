@@ -1,0 +1,16 @@
+{
+  "agentBrowser": {
+    "version": "0.38.1",
+    "url": "https://github.com/vercel-labs/agent-browser/releases/download/v0.38.1/agent-browser-win32-x64.exe",
+    "sha256": "70bd758b2a5a72b18055f60ff877d2297d036c4104e3bc94af6f7c1ceb941408",
+    "license": "Apache-2.0",
+    "licenseUrl": "https://github.com/vercel-labs/agent-browser/blob/v0.38.1/LICENSE"
+  },
+  "chrome": {
+    "version": "153.0.8010.52",
+    "url": "https://storage.googleapis.com/chrome-for-testing-public/153.0.8010.52/win64/chrome-win64.zip",
+    "sha256": "df4854428c509fcf2f790ac448bca3f994151bcff22008236fa7c4587294fbe1",
+    "license": "Google Chrome Terms of Service; bundled ABOUT and chrome://credits",
+    "licenseUrl": "https://www.google.com/chrome/terms/"
+  }
+}

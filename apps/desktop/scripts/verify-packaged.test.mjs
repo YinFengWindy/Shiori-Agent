@@ -12,6 +12,8 @@ test("verifyPackagedDesktop accepts the required Windows release layout", async 
       "resources/app.asar",
       "resources/runtime/shiori-runtime.exe",
       "resources/runtime/_internal/common_emojis.json",
+      ...["agent-browser.exe", "chrome-win64/chrome.exe", "chrome-win64/ABOUT", "native-runtime.json", "LICENSE.agent-browser"]
+        .map((name) => `resources/runtime/_internal/native/browser-use/${name}`),
       "resources/config.example.toml",
       "resources/assets/shiori-app-icon.ico",
       "resources/app.asar.unpacked/node_modules/uiohook-napi/prebuilds/win32-x64/uiohook-napi.node",
@@ -23,6 +25,8 @@ test("verifyPackagedDesktop accepts the required Windows release layout", async 
     }
 
     await assert.doesNotReject(verifyPackagedDesktop(root));
+    await rm(join(root, "resources/runtime/_internal/native/browser-use/agent-browser.exe"));
+    await assert.rejects(verifyPackagedDesktop(root), /ENOENT/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

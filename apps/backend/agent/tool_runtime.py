@@ -112,18 +112,34 @@ def append_tool_result(
     tool_name: str | None = None,
 ) -> None:
     result = normalize_tool_result(content)
-    messages.append(
+    # A model may request multiple tools together. Keep their replies contiguous;
+    # multimodal observations from earlier replies remain after the complete batch.
+    insert_at = len(messages)
+    for index in range(len(messages) - 1, -1, -1):
+        if messages[index].get("role") == "assistant":
+            if messages[index].get("tool_calls"):
+                insert_at = next(
+                    (
+                        offset
+                        for offset in range(index + 1, len(messages))
+                        if messages[offset].get("role") != "tool"
+                    ),
+                    len(messages),
+                )
+            break
+    messages.insert(
+        insert_at,
         {
             "role": "tool",
             "tool_call_id": tool_call_id,
             "content": result.text or "工具执行完成。",
-        }
+        },
     )
     if result.content_blocks:
         prefix = (
-            f"以下是工具 {tool_name} 读取到的文件内容，请直接查看。"
+            f"以下是工具 {tool_name} 返回的内容，请直接查看。"
             if tool_name
-            else "以下是工具读取到的文件内容，请直接查看。"
+            else "以下是工具返回的内容，请直接查看。"
         )
         messages.append(
             {

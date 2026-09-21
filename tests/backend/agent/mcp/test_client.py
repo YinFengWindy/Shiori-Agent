@@ -1,208 +1,247 @@
-from __future__ import annotations
+"""Exercise the stdio transport against a real, concurrent JSON-RPC peer."""
 
 import asyncio
 import logging
-from pathlib import Path
+import sys
 from unittest.mock import AsyncMock
 
 import pytest
-import agent.mcp.client as mcp_client_module
 
 from agent.mcp.client import McpClient, McpToolError, _infer_cwd
+from agent.tools.base import ToolResult
+
+_SERVER = r"""
+import json, sys, threading, time, os
+lock=threading.Lock()
+def send(message):
+    with lock:
+        print(json.dumps(message), flush=True)
+def respond(request):
+    ident=request['id']; method=request['method']; args=request.get('params',{})
+    if method=='initialize':
+        if os.environ.get('FAIL_INIT'):
+            send({'id':ident,'error':{'code':-32000,'message':'init failed'}}); return
+        send({'id':ident,'result':{}}); return
+    if method=='tools/list':
+        result={'tools':[{'name':'echo','description':'Echo','inputSchema':{'type':'object'}}]}
+        if not args.get('cursor'): result['nextCursor']='second'
+        else: result={'tools':[{'name':'image','description':'Image','inputSchema':{'type':'object'}}]}
+        send({'id':ident,'result':result}); return
+    name=args['name']; args=args['arguments']
+    if name=='env':
+        send({'id':ident,'result':{'content':[{'type':'text','text':os.environ.get('MCP_TEST_POLLUTION','clean')}]}}); return
+    if name=='crash': os._exit(1)
+    if name=='noise':
+        for _ in range(100):
+            send({'method':'notification'}); time.sleep(.01)
+    time.sleep(args.get('delay',0))
+    if name=='rpc_error':
+        send({'id':ident,'error':{'code':-32602,'message':'bad args','data':{'field':'q'}}}); return
+    content=[{'type':'text','text':args.get('text','ok')}]
+    if name=='image': content.append({'type':'image','mimeType':'image/png','data':'iVBORw0KGgo='})
+    if name=='large_image': content.append({'type':'image','mimeType':'image/png','data':'AAAA'*1600000})
+    send({'id':ident,'result':{'content':content,'isError':name=='tool_error'}})
+for line in sys.stdin:
+    request=json.loads(line)
+    if 'id' in request:
+        threading.Thread(target=respond,args=(request,),daemon=True).start()
+"""
 
 
-class _Pipe:
-    def __init__(
-        self, lines: list[bytes] | None = None, *, block_on_eof: bool = False
-    ) -> None:
-        self._lines = list(lines or [])
-        # 行读完后是否一直挂起（模拟仍然存活、暂时没有输出的真实流）
-        self._block_on_eof = block_on_eof
-        self.writes: list[bytes] = []
-
-    def write(self, data: bytes) -> None:
-        self.writes.append(data)
-
-    async def drain(self) -> None:
-        return None
-
-    async def readline(self) -> bytes:
-        if self._lines:
-            return self._lines.pop(0)
-        if self._block_on_eof:
-            await asyncio.Event().wait()
-        return b""
-
-
-class _Proc:
-    def __init__(
-        self,
-        stdout_lines: list[bytes],
-        stderr_lines: list[bytes] | None = None,
-        *,
-        with_stderr: bool = True,
-        stderr_blocks: bool = False,
-    ) -> None:
-        self.stdin = _Pipe()
-        self.stdout = _Pipe(stdout_lines)
-        self.stderr: _Pipe | None = (
-            _Pipe(stderr_lines, block_on_eof=stderr_blocks) if with_stderr else None
-        )
-        self.terminated = False
-
-    def terminate(self) -> None:
-        self.terminated = True
-
-    async def wait(self) -> None:
-        return None
-
-
-@pytest.mark.asyncio
-async def test_mcp_client_and_loop_factory_cover_core_paths(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
+@pytest.fixture
+async def client(tmp_path):
     script = tmp_path / "server.py"
-    script.write_text("print(1)", encoding="utf-8")
-    assert _infer_cwd(["python", str(script)]) == str(tmp_path)
-    assert _infer_cwd(["python", "srv.py"]) is None
+    script.write_text(_SERVER, encoding="utf-8")
+    result = McpClient("test", [sys.executable, "-u", str(script)])
+    await result.connect()
+    yield result
+    await result.disconnect()
 
-    proc = _Proc(
-        [
-            b'{"jsonrpc":"2.0","id":1,"result":{}}\n',
-            b'{"jsonrpc":"2.0","method":"note"}\n',
-            b'{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"tool1","description":"desc","inputSchema":{"type":"object"}}]}}\n',
-            b"not json\n",
-            b'{"jsonrpc":"2.0","id":3,"result":{"content":[{"text":"ok"}]}}\n',
-        ],
-        [b"warn\n", b""],
-    )
-    monkeypatch.setattr(
-        "agent.mcp.client.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
-    )
-    client = McpClient("docs", ["python", str(script)], env={"X": "1"})
-    infos = await client.connect()
-    assert infos[0].name == "tool1"
-    assert proc.stdin.writes
-    assert await client.call("tool1", {"q": "x"}) == "ok"
-    await client.disconnect()
-    assert proc.terminated is True
 
-    error_proc = _Proc(
-        [
-            b'{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"bad args","data":{"field":"q"}}}\n'
-        ]
+async def test_stdio_discovery_text_images_and_out_of_order_replies(client):
+    assert [tool.name for tool in client.tool_infos] == ["echo", "image"]
+    first, second = await asyncio.gather(
+        client.call("echo", {"text": "first", "delay": 0.1}),
+        client.call("echo", {"text": "second"}),
     )
-    error_client = McpClient("docs", ["python", str(script)])
-    error_client._process = error_proc
-    with pytest.raises(McpToolError) as exc_info:
-        await error_client.call("tool1", {"q": "x"})
-    assert exc_info.value.code == -32602
-    assert exc_info.value.data == {"field": "q"}
-    assert exc_info.value.server == "docs"
-    assert exc_info.value.tool_name == "tool1"
+    assert (first, second) == ("first", "second")
+    result = await client.call("image", {})
+    assert isinstance(result, ToolResult)
+    assert result.text == "ok"
+    assert result.content_blocks == [
+        {
+            "type": "image_url",
+            "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="},
+        }
+    ]
 
-    proc = _Proc([b""])
-    monkeypatch.setattr(
-        "agent.mcp.client.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
+
+async def test_image_larger_than_previous_stream_limit(client):
+    result = await client.call("large_image", {})
+    assert isinstance(result, ToolResult)
+    assert len(result.content_blocks[0]["image_url"]["url"]) > 4 * 1024 * 1024
+
+
+@pytest.mark.parametrize("name", ["rpc_error", "tool_error"])
+async def test_remote_failure_is_not_a_success(client, name):
+    with pytest.raises(McpToolError) as error:
+        await client.call(name, {"text": "operation failed"})
+    assert error.value.server == "test"
+    if name == "rpc_error":
+        assert error.value.code == -32602
+        assert error.value.data == {"field": "q"}
+    assert await client.call("echo", {}) == "ok"
+
+
+async def test_timeout_and_cancel_discard_late_responses(client):
+    with pytest.raises(TimeoutError, match="tools/call"):
+        await client.call("echo", {"delay": 0.15, "text": "expired"}, timeout=0.02)
+    pending = asyncio.create_task(
+        client.call("echo", {"delay": 0.15, "text": "cancelled"})
     )
-    client = McpClient("docs", ["python", str(script)])
-    client._process = proc
+    await asyncio.sleep(0.01)
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending
+    assert await client.call("echo", {"delay": 0.2, "text": "current"}) == "current"
+    assert not client._pending
+
+
+async def test_notifications_do_not_extend_request_deadline(client):
+    with pytest.raises(TimeoutError, match="expected_id="):
+        await asyncio.wait_for(client.call("noise", {}, timeout=0.05), 0.3)
+
+
+async def test_process_exit_fails_all_pending_and_future_requests(client):
+    pending = asyncio.create_task(client.call("echo", {"delay": 2}))
     with pytest.raises(ConnectionError):
-        await client._recv(expected_id=1)
+        await client.call("crash", {})
+    with pytest.raises(ConnectionError):
+        await pending
+    with pytest.raises(ConnectionError):
+        await client.call("echo", {})
 
 
-@pytest.mark.asyncio
-async def test_mcp_recv_timeout_includes_stage_and_recent_output(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-):
-    script = tmp_path / "server.py"
-    script.write_text("print(1)", encoding="utf-8")
-    proc = _Proc([])
-    client = McpClient("docs", ["python", str(script)])
-    client._process = proc
-    client._recent_stdout.append('{"jsonrpc":"2.0","method":"note"}')
-    client._recent_stderr.append("GitHub MCP Server running on stdio")
-
-    async def raise_timeout(awaitable, *args, **kwargs):
-        awaitable.close()
-        raise asyncio.TimeoutError
-
-    monkeypatch.setattr(mcp_client_module.asyncio, "wait_for", raise_timeout)
-    with pytest.raises(TimeoutError) as exc:
-        await client._recv(expected_id=1, stage="initialize", timeout=12.0)
-    text = str(exc.value)
-    assert "initialize" in text
-    assert "12s" in text
-    assert "expected_id=1" in text
-    assert "recent_stderr=GitHub MCP Server running on stdio" in text
-
-
-_HANDSHAKE_LINES = [
-    b'{"jsonrpc":"2.0","id":1,"result":{}}\n',
-    b'{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}\n',
-]
-
-
-@pytest.mark.asyncio
-async def test_mcp_connect_fails_when_stderr_unavailable(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """stderr 不可用时 connect() 必须报错，而不是把异常留给后台任务。"""
-    proc = _Proc(_HANDSHAKE_LINES, with_stderr=False)
-    monkeypatch.setattr(
-        "agent.mcp.client.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
-    )
-    client = McpClient("docs", ["python", "srv.py"])
-    with pytest.raises(RuntimeError, match="stderr"):
-        await client.connect()
-    assert client._stderr_task is None
-
-
-@pytest.mark.asyncio
-async def test_mcp_disconnect_leaves_no_pending_stderr_task(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """disconnect() 返回后 stderr 排空任务必须已经结束且不再被持有。"""
-    # stderr 读完后继续挂起，排空协程只能靠 disconnect() 收掉。
-    proc = _Proc(_HANDSHAKE_LINES, [b"warn\n"], stderr_blocks=True)
-    monkeypatch.setattr(
-        "agent.mcp.client.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
-    )
-    client = McpClient("docs", ["python", "srv.py"])
-    _ = await client.connect()
-    task = client._stderr_task
-    assert task is not None
-    assert not task.done()
-
+async def test_disconnect_reaps_readers_and_rejects_old_tools(client):
+    tasks = (client._reader_task, client._stderr_task)
+    pending = asyncio.create_task(client.call("echo", {"delay": 2}))
+    await asyncio.sleep(0.02)
     await client.disconnect()
-    assert client._stderr_task is None
-    assert task.done()
+    with pytest.raises(ConnectionError):
+        await pending
+    assert all(task.done() for task in tasks)
+    assert client._reader_task is client._stderr_task is None
+    assert client.tool_infos == []
+    with pytest.raises(ConnectionError):
+        await client.call("echo", {})
 
 
-@pytest.mark.asyncio
-async def test_mcp_stderr_drain_logs_failure_instead_of_swallowing(
-    caplog: pytest.LogCaptureFixture,
+async def test_initialize_error_reclaims_process(tmp_path):
+    script = tmp_path / "server.py"
+    script.write_text(_SERVER, encoding="utf-8")
+    client = McpClient("bad", [sys.executable, str(script)], env={"FAIL_INIT": "1"})
+    with pytest.raises(McpToolError, match="init failed"):
+        await client.connect()
+    assert client._process is client._reader_task is client._stderr_task is None
+
+
+async def test_disconnect_cleans_tasks_even_when_process_wait_fails(
+    client, monkeypatch
 ):
-    """排空过程中的异常必须留下 warning，不能被静默吞掉。"""
+    process = client._process
+    assert process is not None
+    original_wait = process.wait
+    monkeypatch.setattr(
+        process, "wait", AsyncMock(side_effect=[TimeoutError(), TimeoutError()])
+    )
+    with pytest.raises(TimeoutError):
+        await client.disconnect()
+    assert client._reader_task is client._stderr_task is None
+    await original_wait()
 
-    class _BrokenStream:
-        async def readline(self) -> bytes:
-            raise OSError("stream closed")
 
-    client = McpClient("docs", ["python", "srv.py"])
-    with caplog.at_level(logging.WARNING, logger="agent.mcp.client"):
-        await client._drain_stderr(_BrokenStream())
-
+async def test_stderr_invalid_bytes_and_failure_are_visible(caplog):
+    reader = asyncio.StreamReader()
+    reader.feed_data(b"\xff\xfe\nafter\n")
+    reader.feed_eof()
+    client = McpClient("test", [sys.executable])
+    await client._drain_stderr(reader)
+    assert list(client._recent_stderr)[-1] == "after"
+    reader = asyncio.StreamReader()
+    reader.set_exception(OSError("stream closed"))
+    with caplog.at_level(logging.WARNING):
+        await client._drain_stderr(reader)
     assert "stream closed" in caplog.text
 
 
-@pytest.mark.asyncio
-async def test_mcp_stderr_drain_survives_undecodable_output():
-    """非 UTF-8 的 stderr 不能中断排空循环，否则子进程会被写满的管道卡住。"""
-    stream = _Pipe([b"\xff\xfe bad\n", b"after\n", b""])
-    client = McpClient("docs", ["python", "srv.py"])
+def test_inferred_cwd(tmp_path):
+    script = tmp_path / "server.py"
+    script.write_text("", encoding="utf-8")
+    assert _infer_cwd(["python", str(script)]) == str(tmp_path)
+    assert _infer_cwd(["python", "relative.py"]) is None
 
-    await client._drain_stderr(stream)
 
-    assert list(client._recent_stderr)[-1] == "after"
+async def test_complete_environment_does_not_restore_filtered_values(
+    tmp_path, monkeypatch
+):
+    import os
+
+    monkeypatch.setenv("MCP_TEST_POLLUTION", "must-not-inherit")
+    script = tmp_path / "server.py"
+    script.write_text(_SERVER, encoding="utf-8")
+    env = {
+        key: value for key, value in os.environ.items() if key != "MCP_TEST_POLLUTION"
+    }
+    client = McpClient(
+        "isolated", [sys.executable, str(script)], env=env, inherit_env=False
+    )
+    try:
+        await client.connect()
+        assert await client.call("env", {}) == "clean"
+    finally:
+        await client.disconnect()
+
+
+async def test_job_failure_still_reaps_process_and_protocol_tasks(client):
+    from unittest.mock import Mock
+
+    process = client._process
+    job = Mock()
+    job.close.side_effect = RuntimeError("job close failed")
+    client._job = job
+    with pytest.raises(RuntimeError, match="job close failed"):
+        await client.disconnect()
+    assert process.returncode is not None
+    assert client._reader_task is client._stderr_task is client._job is None
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_backpressure_cannot_block_timeout_or_cancellation(tmp_path, cancel):
+    script = tmp_path / "blocked_stdin.py"
+    script.write_text(
+        """import json,sys,time
+for line in sys.stdin:
+    request=json.loads(line)
+    if 'id' not in request: continue
+    result={'tools':[]} if request['method']=='tools/list' else {}
+    print(json.dumps({'id':request['id'],'result':result}),flush=True)
+    if request['method']=='tools/list':
+        time.sleep(30)
+""",
+        encoding="utf-8",
+    )
+    client = McpClient("backpressure", [sys.executable, str(script)])
+    try:
+        await client.connect()
+        pending = asyncio.create_task(
+            client.call(
+                "echo", {"text": "x" * 4000000}, timeout=0.05 if not cancel else 10
+            )
+        )
+        if cancel:
+            await asyncio.sleep(0.02)
+            pending.cancel()
+        with pytest.raises(asyncio.CancelledError if cancel else TimeoutError):
+            await asyncio.wait_for(pending, 1)
+    finally:
+        await client.disconnect()

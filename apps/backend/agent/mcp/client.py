@@ -1,4 +1,4 @@
-"""McpClient: 管理单个 MCP server 的 stdio 子进程连接和 JSON-RPC 通信。"""
+"""Owns one stdio MCP connection with a single reader and correlated requests."""
 
 import asyncio
 import json
@@ -10,42 +10,27 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from agent.mcp.result import McpToolError as McpToolError, decode_tool_result
+from agent.mcp.windows_job import WindowsJob
+from agent.tools.base import ToolResult
 
+logger = logging.getLogger(__name__)
 _RECV_TIMEOUT = 30.0
 _CONNECT_TIMEOUT = 8.0
-_STREAM_LIMIT = 4 * 1024 * 1024  # 4 MB，防止大响应触发 StreamReader 行限
+# agent-browser permits 10 MiB images; allow base64 plus JSON and text metadata.
+_STREAM_LIMIT = 20 * 1024 * 1024
 
 
 @dataclass
 class McpToolInfo:
+    """A discovered remote tool schema."""
+
     name: str
     description: str
     input_schema: dict[str, Any]
 
 
-class McpToolError(RuntimeError):
-    """Represents a structured JSON-RPC error returned by an MCP tool."""
-
-    def __init__(
-        self,
-        *,
-        server: str,
-        tool_name: str,
-        message: str,
-        code: int | None = None,
-        data: Any = None,
-    ) -> None:
-        self.server = server
-        self.tool_name = tool_name
-        self.message = message
-        self.code = code
-        self.data = data
-        super().__init__(f"MCP tool error ({server}/{tool_name}): {message}")
-
-
 def _infer_cwd(command: list[str]) -> str | None:
-    """从 command 中找第一个绝对路径文件，返回其父目录作为 cwd。"""
     for arg in command:
         p = Path(arg)
         if p.is_absolute() and p.is_file():
@@ -54,7 +39,7 @@ def _infer_cwd(command: list[str]) -> str | None:
 
 
 class McpClient:
-    """启动并管理一个 stdio MCP server 子进程，处理 JSON-RPC 通信。"""
+    """One MCP process, response dispatcher and explicit connection lifetime."""
 
     def __init__(
         self,
@@ -62,14 +47,23 @@ class McpClient:
         command: list[str],
         env: dict[str, str] | None = None,
         cwd: str | None = None,
+        *,
+        own_process_tree: bool = False,
+        inherit_env: bool = True,
     ) -> None:
-        self.name = name
-        self.command = command
+        self.name, self.command = name, command
         self.env = env or {}
-        # cwd 未指定时从 command 中推断，避免子进程继承 agent 工作目录
         self.cwd = cwd or _infer_cwd(command)
+        self._own_process_tree = own_process_tree
+        self._inherit_env = inherit_env
+        self._job: WindowsJob | None = None
         self._process: asyncio.subprocess.Process | None = None
         self._stderr_task: asyncio.Task[None] | None = None
+        self._reader_task: asyncio.Task[None] | None = None
+        self._read_error: Exception | None = None
+        self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
+        self._write_lock = asyncio.Lock()
+        self._disconnect_lock = asyncio.Lock()
         self._next_id = 1
         self._tool_infos: list[McpToolInfo] = []
         self._recent_stdout: deque[str] = deque(maxlen=8)
@@ -77,242 +71,236 @@ class McpClient:
 
     @property
     def tool_infos(self) -> list[McpToolInfo]:
+        """Returns the schemas discovered by this connection."""
         return self._tool_infos
 
     async def connect(self) -> list[McpToolInfo]:
+        """Starts the server and discovers all pages of tools; failure closes it."""
+        if self._process is not None:
+            raise RuntimeError(f"MCP client {self.name!r} is already connected")
         try:
-            return await asyncio.wait_for(
-                self._connect_impl(),
-                timeout=_CONNECT_TIMEOUT,
-            )
-        except Exception:
+            return await asyncio.wait_for(self._connect_impl(), _CONNECT_TIMEOUT)
+        except BaseException:
             await self.disconnect()
             raise
 
     async def _connect_impl(self) -> list[McpToolInfo]:
-        """启动子进程，完成握手，获取工具列表。"""
-        proc_env = {**os.environ, **self.env}
-        logger.debug("[mcp] 启动 %r: %s  cwd=%s", self.name, self.command, self.cwd)
+        self._read_error = None
         self._process = await asyncio.create_subprocess_exec(
             *self.command,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=proc_env,
+            env={**os.environ, **self.env} if self._inherit_env else self.env,
             cwd=self.cwd,
             limit=_STREAM_LIMIT,
+            creationflags=0x08000004 if self._own_process_tree else 0,
         )
-        # 在连接路径上取流：流不可用时 RuntimeError 由 connect() 冒泡，
-        # 而不是丢进一个无人接管的后台任务里。
+        if self._own_process_tree:
+            self._job = WindowsJob(self._process.pid, resume=True)
+        if self._process.stdout is None or self._process.stderr is None:
+            raise RuntimeError("MCP stdout/stderr unavailable")
         self._stderr_task = asyncio.create_task(
-            self._drain_stderr(self._require_stderr())
+            self._drain_stderr(self._process.stderr)
         )
-
-        # initialize 握手
-        init_id = self._new_id()
-        await self._send(
+        self._reader_task = asyncio.create_task(
+            self._read_responses(self._process.stdout)
+        )
+        await self._request(
+            "initialize",
             {
-                "jsonrpc": "2.0",
-                "id": init_id,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {"tools": {}},
-                    "clientInfo": {"name": "shiori-agent", "version": "1.0"},
-                },
-            }
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "shiori-agent", "version": "1.0"},
+            },
         )
-        _ = await self._recv(expected_id=init_id, stage="initialize")
-
-        # initialized 通知（无 id，不等响应）
         await self._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
-
-        # 获取工具列表
-        list_id = self._new_id()
-        await self._send(
-            {"jsonrpc": "2.0", "id": list_id, "method": "tools/list", "params": {}}
-        )
-        resp = await self._recv(expected_id=list_id, stage="tools/list")
-
-        raw_tools = resp.get("result", {}).get("tools", [])
-        self._tool_infos = [
-            McpToolInfo(
-                name=t["name"],
-                description=t.get("description", ""),
-                input_schema=t.get("inputSchema", {"type": "object", "properties": {}}),
+        self._tool_infos = []
+        params: dict[str, Any] = {}
+        cursors: set[str] = set()
+        while True:
+            response = await self._request("tools/list", params)
+            result = response["result"]
+            self._tool_infos.extend(
+                McpToolInfo(
+                    name=t["name"],
+                    description=t.get("description", ""),
+                    input_schema=t.get(
+                        "inputSchema", {"type": "object", "properties": {}}
+                    ),
+                )
+                for t in result.get("tools", [])
             )
-            for t in raw_tools
-        ]
-        logger.debug(
-            "[mcp] %r 已连接，工具：%s", self.name, [t.name for t in self._tool_infos]
-        )
+            cursor = result.get("nextCursor")
+            if not cursor:
+                break
+            if cursor in cursors:
+                raise RuntimeError("MCP tools/list repeated a pagination cursor")
+            cursors.add(cursor)
+            params = {"cursor": cursor}
         return self._tool_infos
 
     async def call(
+        self, tool_name: str, arguments: dict[str, Any], *, timeout: float | None = None
+    ) -> str | ToolResult:
+        """Returns text or original images; protocol/tool errors propagate."""
+        response = await self._request(
+            "tools/call",
+            {"name": tool_name, "arguments": arguments},
+            timeout=timeout,
+            tool_name=tool_name,
+        )
+        return decode_tool_result(self.name, tool_name, response)
+
+    async def _request(
         self,
-        tool_name: str,
-        arguments: dict[str, Any],
+        method: str,
+        params: dict[str, Any],
         *,
         timeout: float | None = None,
-    ) -> str:
-        """调用远端工具，返回结果字符串。"""
-        call_id = self._new_id()
-        await self._send(
-            {
-                "jsonrpc": "2.0",
-                "id": call_id,
-                "method": "tools/call",
-                "params": {"name": tool_name, "arguments": arguments},
-            }
-        )
-        resp = await self._recv(
-            expected_id=call_id,
-            stage=f"tools/call:{tool_name}",
-            timeout=timeout,
-        )
-
-        if "error" in resp:
-            err = resp["error"]
-            if isinstance(err, dict):
-                raw_code = err.get("code")
-                code = raw_code if isinstance(raw_code, int) else None
-                message = str(err.get("message", err))
-                data = err.get("data")
-            else:
-                code = None
-                message = str(err)
-                data = None
-            raise McpToolError(
-                server=self.name,
-                tool_name=tool_name,
-                message=message,
-                code=code,
-                data=data,
-            )
-
-        content = resp.get("result", {}).get("content", [])
-        if isinstance(content, list):
-            return "\n".join(
-                block.get("text", str(block)) if isinstance(block, dict) else str(block)
-                for block in content
-            )
-        return str(resp.get("result", ""))
-
-    async def disconnect(self) -> None:
-        """终止子进程，并回收 stderr 排空任务。"""
-        if self._process is not None:
-            try:
-                self._process.terminate()
-                _ = await asyncio.wait_for(self._process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                self._process.kill()
-                _ = await self._process.wait()
-            except Exception as e:
-                logger.warning("[mcp] 断开 %r 时出错: %s", self.name, e)
-            finally:
-                self._process = None
-        # 先结束子进程再收任务：子进程还活着时停止排空 stderr，可能让它写满
-        # 管道缓冲区而卡在退出路径上。
-        await self._close_stderr_task()
-
-    async def _close_stderr_task(self) -> None:
-        """取消并等待 stderr 排空任务，确保 disconnect() 后不残留悬挂 task。"""
-        task = self._stderr_task
-        if task is None:
-            return
-        self._stderr_task = None
-        _ = task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
-
-    def _new_id(self) -> int:
-        i = self._next_id
+        tool_name: str | None = None,
+    ) -> dict[str, Any]:
+        if self._read_error is not None:
+            raise ConnectionError(
+                f"MCP connection {self.name!r} failed"
+            ) from self._read_error
+        call_id = self._next_id
         self._next_id += 1
-        return i
+        future: asyncio.Future[dict[str, Any]] = (
+            asyncio.get_running_loop().create_future()
+        )
+        self._pending[call_id] = future
+        deadline = _RECV_TIMEOUT if timeout is None else timeout
+        try:
+            async with asyncio.timeout(deadline):
+                await self._send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": call_id,
+                        "method": method,
+                        "params": params,
+                    }
+                )
+                response = await future
+            if "error" in response:
+                decode_tool_result(self.name, tool_name or method, response)
+            return response
+        except (asyncio.CancelledError, TimeoutError) as exc:
+            # Late responses have no pending recipient; never recycle request ids.
+            # Cancellation is advisory at this transport boundary and must never
+            # block teardown behind a peer that stopped reading stdin.
+            with suppress(ConnectionError, BrokenPipeError, RuntimeError, TimeoutError):
+                async with asyncio.timeout(0.2):
+                    await self._send(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "notifications/cancelled",
+                            "params": {
+                                "requestId": call_id,
+                                "reason": "Request stopped",
+                            },
+                        }
+                    )
+            if isinstance(exc, TimeoutError):
+                raise TimeoutError(
+                    self._build_timeout_message(method, call_id, deadline)
+                ) from exc
+            raise
+        finally:
+            self._pending.pop(call_id, None)
+            if not future.done():
+                future.cancel()
 
-    def _require_process(self) -> asyncio.subprocess.Process:
-        """返回已连接的子进程；未连接时立即失败，而不是让调用方在下游拿到 None。"""
-        if self._process is None:
-            raise RuntimeError(f"MCP 客户端 {self.name!r} 未连接")
-        return self._process
+    async def _read_responses(self, stdout: asyncio.StreamReader) -> None:
+        try:
+            while True:
+                line = await stdout.readline()
+                if not line:
+                    raise ConnectionError(f"MCP server {self.name!r} 意外关闭了 stdout")
+                text = line.decode().strip()
+                try:
+                    response = json.loads(text)
+                except json.JSONDecodeError:
+                    self._recent_stdout.append(text[:500])
+                    continue
+                if not isinstance(response, dict):
+                    continue
+                # Diagnostics retain envelope metadata, never image bytes.
+                self._recent_stdout.append(
+                    f"id={response.get('id')!r} method={response.get('method')!r}"
+                )
+                if "method" in response:
+                    continue
+                response_id = response.get("id")
+                if not isinstance(response_id, int):
+                    continue
+                future = self._pending.get(response_id)
+                if future is not None and not future.done():
+                    future.set_result(response)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._read_error = exc
+            self._fail_pending(exc)
 
-    def _require_stdin(self) -> asyncio.StreamWriter:
-        """返回已连接进程的 stdin。
-
-        connect() 总是以 stdin/stdout/stderr=PIPE 创建子进程，因此进程存在时
-        三个流理论上必非空；这里仍做真实的 None 检查并立即失败，而不是让
-        None 流入下游触发一个更晚、更隐晦的错误。
-        """
-        stdin = self._require_process().stdin
-        if stdin is None:
-            raise RuntimeError(f"MCP 客户端 {self.name!r} 的 stdin 不可用")
-        return stdin
-
-    def _require_stdout(self) -> asyncio.StreamReader:
-        """返回已连接进程的 stdout；未连接或流不可用时立即失败。"""
-        stdout = self._require_process().stdout
-        if stdout is None:
-            raise RuntimeError(f"MCP 客户端 {self.name!r} 的 stdout 不可用")
-        return stdout
-
-    def _require_stderr(self) -> asyncio.StreamReader:
-        """返回已连接进程的 stderr；未连接或流不可用时立即失败。"""
-        stderr = self._require_process().stderr
-        if stderr is None:
-            raise RuntimeError(f"MCP 客户端 {self.name!r} 的 stderr 不可用")
-        return stderr
+    def _fail_pending(self, exc: Exception) -> None:
+        for future in self._pending.values():
+            if not future.done():
+                future.set_exception(exc)
 
     async def _send(self, payload: dict[str, Any]) -> None:
-        stdin = self._require_stdin()
-        logger.debug(
-            "[mcp:%s] -> %s",
-            self.name,
-            json.dumps(payload, ensure_ascii=False)[:400],
-        )
-        stdin.write((json.dumps(payload, ensure_ascii=False) + "\n").encode())
-        await stdin.drain()
+        async with self._write_lock:
+            if (
+                self._process is None
+                or self._process.stdin is None
+                or self._process.returncode is not None
+            ):
+                raise ConnectionError(f"MCP client {self.name!r} 未连接")
+            self._process.stdin.write(
+                (json.dumps(payload, ensure_ascii=False) + "\n").encode()
+            )
+            await self._process.stdin.drain()
 
-    async def _recv(
-        self,
-        expected_id: int | None = None,
-        stage: str = "recv",
-        timeout: float | None = None,
-    ) -> dict[str, Any]:
-        stdout = self._require_stdout()
-        recv_timeout = _RECV_TIMEOUT if timeout is None else timeout
-        while True:
+    async def disconnect(self) -> None:
+        """Closes the owned process tree and drains protocol tasks before returning."""
+        async with self._disconnect_lock:
+            self._fail_pending(
+                ConnectionError(f"MCP client {self.name!r} disconnected")
+            )
+            process, self._process = self._process, None
+            errors: list[Exception] = []
+            if self._job is not None:
+                try:
+                    self._job.close()
+                except Exception as exc:
+                    errors.append(exc)
+                finally:
+                    self._job = None
             try:
-                line = await asyncio.wait_for(stdout.readline(), timeout=recv_timeout)
-            except asyncio.TimeoutError as e:
-                raise TimeoutError(
-                    self._build_timeout_message(stage, expected_id, recv_timeout)
-                ) from e
-            if not line:
-                raise ConnectionError(f"MCP server {self.name!r} 意外关闭了 stdout")
-            text = line.decode().strip()
-            if not text:
-                continue
-            self._recent_stdout.append(text[:500])
-            try:
-                msg = json.loads(text)
-            except json.JSONDecodeError:
-                logger.debug("[mcp:%s] 非 JSON 输出: %s", self.name, text[:200])
-                continue
-            # 跳过通知（有 method 但无 id）
-            if "method" in msg and "id" not in msg:
-                logger.debug("[mcp:%s] <- notification: %s", self.name, text[:400])
-                continue
-            if expected_id is not None and msg.get("id") != expected_id:
-                logger.debug(
-                    "[mcp:%s] <- skip id=%r expect=%r: %s",
-                    self.name,
-                    msg.get("id"),
-                    expected_id,
-                    text[:400],
-                )
-                continue
-            logger.debug("[mcp:%s] <- %s", self.name, text[:400])
-            return msg
+                if process is not None:
+                    if process.returncode is None:
+                        with suppress(ProcessLookupError):
+                            process.terminate()
+                    try:
+                        await asyncio.wait_for(process.wait(), 5)
+                    except TimeoutError:
+                        with suppress(ProcessLookupError):
+                            process.kill()
+                        await asyncio.wait_for(process.wait(), 5)
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                for task in (self._reader_task, self._stderr_task):
+                    if task is not None:
+                        task.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await task
+                self._reader_task = self._stderr_task = None
+                self._tool_infos = []
+            if len(errors) == 1:
+                raise errors[0]
+            if errors:
+                raise ExceptionGroup("MCP cleanup failed", errors)
 
     async def _drain_stderr(self, stderr: asyncio.StreamReader) -> None:
         """后台读取 stderr，防止缓冲区阻塞。

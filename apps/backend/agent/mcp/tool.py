@@ -3,7 +3,7 @@
 from typing import Any
 
 from agent.mcp.client import McpClient, McpToolInfo
-from agent.tools.base import Tool
+from agent.tools.base import Tool, ToolResult
 
 
 class McpToolWrapper(Tool):
@@ -29,5 +29,5 @@ class McpToolWrapper(Tool):
     def parameters(self) -> dict[str, Any]:
         return self._info.input_schema
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str | ToolResult:
         return await self._client.call(self._info.name, kwargs)

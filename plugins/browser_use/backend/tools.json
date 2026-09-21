@@ -1,0 +1,609 @@
+[
+  {
+    "description": "Launch the browser and optionally navigate to a URL. On Windows, owned headless Chrome uses a private desktop and its process tree closes with the daemon, including forced termination. Headed browsers use the interactive desktop. Successful navigation responses include WebMCP availability metadata when the page exposes allowed tools.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "description": "URL to open. Omit to launch about:blank.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_open",
+    "title": "Open page"
+  },
+  {
+    "description": "Fetch a URL as agent-readable text, preferring text/markdown. Omit url to read the active tab.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "description": "Filter page sections, --llms links/sections, or --outline headings.",
+          "type": "string"
+        },
+        "llms": {
+          "description": "Return nearest-ancestor llms data: index for compact llms.txt links, full for llms-full.txt.",
+          "enum": [
+            "index",
+            "full"
+          ],
+          "type": "string"
+        },
+        "outline": {
+          "description": "Return a heading outline for the selected page instead of the full page text.",
+          "type": "boolean"
+        },
+        "raw": {
+          "description": "Return the response body without HTML extraction.",
+          "type": "boolean"
+        },
+        "readTimeoutMs": {
+          "description": "Request timeout in milliseconds.",
+          "type": "integer"
+        },
+        "requireMd": {
+          "description": "Fail unless the response is Content-Type: text/markdown.",
+          "type": "boolean"
+        },
+        "url": {
+          "description": "URL to read. Bare hosts are normalized to https. Omit to read the active tab.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_read",
+    "title": "Read URL"
+  },
+  {
+    "description": "Return an accessibility-tree snapshot with reusable element refs.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "compact": {
+          "default": false,
+          "description": "Remove empty structural elements.",
+          "type": "boolean"
+        },
+        "delta": {
+          "default": false,
+          "description": "Return full state once, then unchanged or bounded structural deltas. Apply changes to refs and treeChange (zero-based startLine, deleteCount, lines) to the previous tree.",
+          "type": "boolean"
+        },
+        "depth": {
+          "description": "Limit tree depth.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "full": {
+          "default": false,
+          "description": "Force full state while updating the delta baseline.",
+          "type": "boolean"
+        },
+        "includeUrls": {
+          "default": false,
+          "description": "Include href URLs on links.",
+          "type": "boolean"
+        },
+        "interactive": {
+          "default": true,
+          "description": "Only include interactive elements.",
+          "type": "boolean"
+        },
+        "selector": {
+          "description": "Scope the snapshot to a CSS selector.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_snapshot",
+    "title": "Snapshot page"
+  },
+  {
+    "description": "Click an element by @ref or CSS selector.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "human": {
+          "default": false,
+          "description": "Approach the target with seeded, curved mouse movement.",
+          "type": "boolean"
+        },
+        "newTab": {
+          "default": false,
+          "description": "Open link targets in a new tab after applying session setup.",
+          "type": "boolean"
+        },
+        "selector": {
+          "description": "Element @ref from snapshot, or a CSS selector.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_click",
+    "title": "Click element"
+  },
+  {
+    "description": "Clear and fill an input by @ref or CSS selector.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "selector": {
+          "description": "Element @ref from snapshot, or a CSS selector.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Text to fill.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector",
+        "text"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_fill",
+    "title": "Fill input"
+  },
+  {
+    "description": "Type text into an element by @ref or CSS selector.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "clear": {
+          "default": false,
+          "description": "Clear the field before typing.",
+          "type": "boolean"
+        },
+        "delayMs": {
+          "description": "Delay between keystrokes.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "selector": {
+          "description": "Element @ref from snapshot, or a CSS selector.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Text to type.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector",
+        "text"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_type",
+    "title": "Type text"
+  },
+  {
+    "description": "Press a key at the current focus.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "description": "Key name such as Enter, Tab, or Control+a.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_press",
+    "title": "Press key"
+  },
+  {
+    "description": "Check a checkbox or switch.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "selector": {
+          "description": "Element @ref from snapshot, or a CSS selector.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_check",
+    "title": "Check element"
+  },
+  {
+    "description": "Uncheck a checkbox or switch.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "selector": {
+          "description": "Element @ref from snapshot, or a CSS selector.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_uncheck",
+    "title": "Uncheck element"
+  },
+  {
+    "description": "Select one or more options in a select element.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "selector": {
+          "description": "Element @ref from snapshot, or a CSS selector.",
+          "type": "string"
+        },
+        "values": {
+          "description": "Option values or labels to select.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "selector",
+        "values"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_select",
+    "title": "Select options"
+  },
+  {
+    "description": "Scroll the page or an element.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "default": 300,
+          "description": "Pixels to scroll.",
+          "type": "integer"
+        },
+        "direction": {
+          "default": "down",
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right"
+          ],
+          "type": "string"
+        },
+        "selector": {
+          "description": "Optional element selector to scroll.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_scroll",
+    "title": "Scroll page"
+  },
+  {
+    "description": "Wait for a fixed time.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "ms": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ms"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_wait_ms",
+    "title": "Wait milliseconds"
+  },
+  {
+    "description": "Wait for an element to appear.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "selector": {
+          "description": "Element @ref from snapshot, or a CSS selector.",
+          "type": "string"
+        },
+        "waitTimeoutMs": {
+          "description": "Maximum time for the browser wait condition.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "selector"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_wait_for_selector",
+    "title": "Wait for selector"
+  },
+  {
+    "description": "Wait for text to appear.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "waitTimeoutMs": {
+          "description": "Maximum time for the browser wait condition.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_wait_for_text",
+    "title": "Wait for text"
+  },
+  {
+    "description": "Wait for a page load state.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "enum": [
+            "load",
+            "domcontentloaded",
+            "networkidle"
+          ],
+          "type": "string"
+        },
+        "waitTimeoutMs": {
+          "description": "Maximum time for the browser wait condition.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_wait_for_load",
+    "title": "Wait for load state"
+  },
+  {
+    "description": "Capture a screenshot and return the saved path. Small PNG/JPEG screenshots are also returned as image content.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "annotate": {
+          "default": false,
+          "description": "Number visible elements in the screenshot.",
+          "type": "boolean"
+        },
+        "format": {
+          "description": "Screenshot format.",
+          "enum": [
+            "png",
+            "jpeg"
+          ],
+          "type": "string"
+        },
+        "fullPage": {
+          "default": false,
+          "type": "boolean"
+        },
+        "ifChanged": {
+          "default": false,
+          "description": "Recommended for repeated captures to save tokens: return image content only when pixels changed.",
+          "type": "boolean"
+        },
+        "quality": {
+          "description": "JPEG quality.",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "selector": {
+          "description": "Optional @ref or CSS selector to capture.",
+          "type": "string"
+        },
+        "threshold": {
+          "description": "Maximum changed-pixel ratio to treat as unchanged. Implies ifChanged.",
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_screenshot",
+    "title": "Take screenshot"
+  },
+  {
+    "description": "Get visible text from an element.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "selector": {
+          "description": "Element @ref from snapshot, or a CSS selector.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_get_text",
+    "title": "Get text"
+  },
+  {
+    "description": "Get the current page URL.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_get_url",
+    "title": "Get URL"
+  },
+  {
+    "description": "Get the current page title.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_get_title",
+    "title": "Get title"
+  },
+  {
+    "description": "Run JavaScript in the page using stdin to avoid shell escaping.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "script": {
+          "description": "JavaScript expression or script to evaluate.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "script"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_eval",
+    "title": "Evaluate JavaScript"
+  },
+  {
+    "description": "Close the current browser session.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_close",
+    "title": "Close browser"
+  },
+  {
+    "description": "Navigate back.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_back",
+    "title": "Back"
+  },
+  {
+    "description": "Navigate forward.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_forward",
+    "title": "Forward"
+  },
+  {
+    "description": "Reload the page.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_reload",
+    "title": "Reload"
+  },
+  {
+    "description": "Open a new tab after applying session setup before its first navigation.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_tab_new",
+    "title": "Tab new"
+  },
+  {
+    "description": "List tabs.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_tab_list",
+    "title": "Tab list"
+  },
+  {
+    "description": "Switch to a tab by id (t1), label, or CDP target id. Switching also binds the session to that tab.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "tab": {
+          "description": "Tab id (t1), label, or CDP target id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tab"
+      ],
+      "type": "object"
+    },
+    "name": "agent_browser_tab_switch",
+    "title": "Tab switch"
+  },
+  {
+    "description": "Close a tab by id (t1), label, or CDP target id. Omit to close the current tab.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "tab": {
+          "description": "Tab id (t1), label, or CDP target id.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": []
+    },
+    "name": "agent_browser_tab_close",
+    "title": "Tab close"
+  }
+]

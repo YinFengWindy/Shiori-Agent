@@ -27,6 +27,8 @@ export async function verifyPackagedDesktop(appOutDir) {
     requireFile(join(resources, "app.asar")),
     requireFile(join(resources, "runtime", "shiori-runtime.exe")),
     requireFile(join(resources, "runtime", "_internal", "common_emojis.json")),
+    ...["agent-browser.exe", "chrome-win64/chrome.exe", "chrome-win64/ABOUT", "native-runtime.json", "LICENSE.agent-browser"]
+      .map((name) => requireFile(join(resources, "runtime", "_internal", "native", "browser-use", name))),
     requireFile(join(resources, "config.example.toml")),
     requireFile(join(resources, "assets", "shiori-app-icon.ico")),
     requireDirectory(join(resources, "app.asar.unpacked", "node_modules", "uiohook-napi")),
