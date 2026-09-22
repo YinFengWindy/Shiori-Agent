@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+import asyncio
+import codecs
 import json
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
 
-from .constants import _MAX_OUTPUT
+from .constants import _MAX_OUTPUT, _STREAM_CHUNK_SIZE
+
+
+async def _read_output(stream: asyncio.StreamReader | None):
+    """逐流增量解码 UTF-8，避免读取块边界拆断中文字符。"""
+    if stream is None:
+        return
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    while True:
+        data = await stream.read(_STREAM_CHUNK_SIZE)
+        text = decoder.decode(data, final=not data)
+        if text:
+            yield text
+        if not data:
+            break
 
 
 def _err(msg: str) -> str:

@@ -104,7 +104,7 @@ async def test_scripting_shell_allows_pipes_and_target_paths(tmp_path: Path):
     shell_tool = next(t for t in spec.tools if t.name == "shell")
 
     command = (
-        f'if exist "{target_dir}" (echo ok) else (exit /b 1)'
+        f'Get-Item -LiteralPath "{target_dir}" -ErrorAction Stop | Select-Object -First 1'
         if os.name == "nt"
         else f"ls -la {target_dir} 2>&1 | head -1"
     )

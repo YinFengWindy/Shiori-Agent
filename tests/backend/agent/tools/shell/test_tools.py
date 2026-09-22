@@ -61,14 +61,14 @@ class _BlockingPipe:
 async def test_shell_tool_runs_directly_by_default(monkeypatch):
     observed: dict[str, object] = {}
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         observed["command"] = command
         observed["kwargs"] = kwargs
         return _FakeProc(stdout="ok")
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     tool = ShellTool()
@@ -87,20 +87,20 @@ async def test_shell_tool_runs_directly_by_default(monkeypatch):
 async def test_shell_tool_uses_configured_working_dir(monkeypatch, tmp_path: Path):
     observed: dict[str, object] = {}
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         observed["kwargs"] = kwargs
         return _FakeProc(stdout="ok")
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     tool = ShellTool(working_dir=tmp_path, restricted_dir=tmp_path)
     await tool.execute(command="ls", description="列目录")
 
     observed_kwargs = cast(dict[str, object], observed["kwargs"])
-    assert observed_kwargs["cwd"] == str(tmp_path)
+    assert observed_kwargs["cwd"] == tmp_path
 
 
 @pytest.mark.asyncio
@@ -111,7 +111,7 @@ async def test_shell_tool_adds_nvm_bin_to_path(
     nvm_bin = tmp_path / ".nvm" / "versions" / "node" / "v22.17.1" / "bin"
     nvm_bin.mkdir(parents=True)
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         observed["kwargs"] = kwargs
         return _FakeProc(stdout="ok")
 
@@ -120,8 +120,8 @@ async def test_shell_tool_adds_nvm_bin_to_path(
     monkeypatch.delenv("NVM_BIN", raising=False)
     monkeypatch.delenv("NVM_DIR", raising=False)
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     tool = ShellTool()
@@ -141,14 +141,14 @@ async def test_shell_tool_supports_spawn_hook_and_streaming(
     observed: dict[str, object] = {}
     streamed: list[str] = []
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         observed["command"] = command
         observed["kwargs"] = kwargs
         return _FakeProc(stdout="part1", stderr="part2", returncode=0)
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     def _hook(ctx):
@@ -171,7 +171,7 @@ async def test_shell_tool_supports_spawn_hook_and_streaming(
     observed_kwargs = cast(dict[str, object], observed["kwargs"])
     env = cast(dict[str, object], observed_kwargs["env"])
     assert observed["command"] == "printf hooked"
-    assert observed_kwargs["cwd"] == str(tmp_path)
+    assert observed_kwargs["cwd"] == tmp_path
     assert env["TEST_FLAG"] == "1"
     assert streamed == ["part1", "part2"]
     # 新实现 stdout/stderr 直接合流写文件，无分隔行
@@ -203,13 +203,13 @@ async def test_restricted_shell_spawn_hook_empty_cwd_falls_back_to_restricted_di
 ):
     observed: dict[str, object] = {}
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         observed["kwargs"] = kwargs
         return _FakeProc(stdout="ok")
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     def _hook(ctx):
@@ -224,7 +224,7 @@ async def test_restricted_shell_spawn_hook_empty_cwd_falls_back_to_restricted_di
 
     assert result["exit_code"] == 0
     observed_kwargs = cast(dict[str, object], observed["kwargs"])
-    assert observed_kwargs["cwd"] == str(tmp_path)
+    assert observed_kwargs["cwd"] == tmp_path
 
 
 @pytest.mark.asyncio
@@ -233,12 +233,12 @@ async def test_shell_tool_truncates_to_tail_and_persists_full_output(
 ):
     long_stdout = "HEAD\n" + ("x" * 31_000) + "\nTAIL\n"
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         return _FakeProc(stdout=long_stdout, stderr="", returncode=0)
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     tool = ShellTool()
@@ -258,12 +258,12 @@ async def test_shell_tool_truncates_to_tail_and_persists_full_output(
 async def test_run_streams_stdout_and_stderr(monkeypatch):
     proc = _FakeProc(stdout="hello", stderr="world", returncode=0)
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         return proc
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     chunks: list[str] = []
@@ -346,7 +346,7 @@ async def test_shell_tool_cancel_kills_process_group(monkeypatch):
     proc = _FakeProc(stdout="", stderr="")
     observed: dict[str, object] = {}
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         observed["kwargs"] = kwargs
         return proc
 
@@ -356,8 +356,8 @@ async def test_shell_tool_cancel_kills_process_group(monkeypatch):
         raise asyncio.CancelledError
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
     monkeypatch.setattr("agent.tools.shell.asyncio.wait_for", _fake_wait_for)
     killpg_mock = []
@@ -371,10 +371,7 @@ async def test_shell_tool_cancel_kills_process_group(monkeypatch):
         await __import__("agent.tools.shell", fromlist=["_run"])._run("sleep 10", 5)
 
     observed_kwargs = cast(dict[str, object], observed["kwargs"])
-    if os.name == "nt":
-        assert "creationflags" in observed_kwargs
-    else:
-        assert observed_kwargs["start_new_session"] is True
+    assert observed_kwargs == {"cwd": None, "env": None}
     assert killpg_mock == [(proc.pid, _KILL_SIGNAL)]
 
 
@@ -384,12 +381,12 @@ async def test_run_does_not_hang_when_pipe_never_closes_after_exit(monkeypatch):
     proc.stdout = _BlockingPipe()
     proc.stderr = _BlockingPipe()
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         return proc
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     stdout, stderr, exit_code, interrupted = await _run("false", 5)
@@ -407,12 +404,12 @@ async def test_run_does_not_hang_when_pipe_never_closes_after_exit(monkeypatch):
 async def test_shell_run_in_background_returns_task_id(monkeypatch, tmp_path):
     """run_in_background=True 时立即返回 background_task_id，不阻塞。"""
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         return _FakeProc(stdout="bg output", stderr="", returncode=0)
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     tool = ShellTool()
@@ -738,12 +735,12 @@ async def test_shell_run_in_background_started_at_ms_is_wall_clock(
     """started_at_ms 应是 Unix epoch 毫秒（wall clock），不是 monotonic。"""
     import time as time_mod
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         return _FakeProc(stdout="", stderr="", returncode=0)
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     before_ms = int(time_mod.time() * 1000)
@@ -771,7 +768,7 @@ async def test_shell_auto_promotes_to_background_after_fg_threshold(monkeypatch)
     # 把 FG_THRESHOLD 设为 0，让任何命令都立即触发自动转后台
     monkeypatch.setattr("agent.tools.shell.tools._FG_THRESHOLD", 0)
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         # 这个进程永远不会退出（wait 永远 pending）
         proc = _FakeProc(stdout="", stderr="", returncode=None)
 
@@ -782,8 +779,8 @@ async def test_shell_auto_promotes_to_background_after_fg_threshold(monkeypatch)
         return proc
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
     monkeypatch.setattr("agent.tools.shell._kill_process_tree", lambda *_: None)
 
@@ -813,7 +810,7 @@ async def test_shell_auto_promote_preserves_explicit_timeout(monkeypatch):
 
     monkeypatch.setattr("agent.tools.shell.tools._FG_THRESHOLD", 0)
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         proc = _FakeProc(stdout="", stderr="", returncode=None)
 
         async def _wait_forever():
@@ -823,8 +820,8 @@ async def test_shell_auto_promote_preserves_explicit_timeout(monkeypatch):
         return proc
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
     monkeypatch.setattr("agent.tools.shell._kill_process_tree", lambda *_: None)
 
@@ -850,7 +847,7 @@ async def test_shell_auto_promote_false_waits_for_foreground_completion(monkeypa
 
     monkeypatch.setattr("agent.tools.shell.tools._FG_THRESHOLD", 0)
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         proc = _FakeProc(stdout="done", stderr="", returncode=0)
 
         async def _wait_after_threshold():
@@ -861,8 +858,8 @@ async def test_shell_auto_promote_false_waits_for_foreground_completion(monkeypa
         return proc
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     tool = ShellTool()
@@ -887,7 +884,7 @@ async def test_shell_auto_promote_false_defaults_to_long_blocking_timeout(monkey
 
     observed: list[float | None] = []
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         return _FakeProc(stdout="done", stderr="", returncode=0)
 
     async def _fake_wait_for(awaitable, timeout):
@@ -895,8 +892,8 @@ async def test_shell_auto_promote_false_defaults_to_long_blocking_timeout(monkey
         return await awaitable
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
     monkeypatch.setattr("agent.tools.shell.asyncio.wait_for", _fake_wait_for)
 
@@ -917,12 +914,12 @@ async def test_shell_auto_promote_false_defaults_to_long_blocking_timeout(monkey
 async def test_shell_foreground_completes_normally_within_threshold(monkeypatch):
     """命令在 FG_THRESHOLD 内完成时，应正常返回前台格式（无 background_task_id）。"""
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         return _FakeProc(stdout="hello", stderr="", returncode=0)
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
 
     tool = ShellTool()
@@ -946,7 +943,7 @@ async def test_shell_foreground_timeout_kills_instead_of_auto_promote(monkeypatc
 
     proc.wait = _wait_forever
 
-    async def _fake_create_subprocess_shell(command, **kwargs):
+    async def _fake_start_process(command, **kwargs):
         return proc
 
     killed = []
@@ -955,8 +952,8 @@ async def test_shell_foreground_timeout_kills_instead_of_auto_promote(monkeypatc
         killed.append((proc.pid, _KILL_SIGNAL))
 
     monkeypatch.setattr(
-        "agent.tools.shell.asyncio.create_subprocess_shell",
-        _fake_create_subprocess_shell,
+        "agent.tools.shell.runner._start_process",
+        _fake_start_process,
     )
     monkeypatch.setattr("agent.tools.shell._kill_process_tree", _fake_kill_process_tree)
     monkeypatch.setattr("agent.tools.shell.tools._FG_THRESHOLD", 15)
@@ -1162,10 +1159,112 @@ async def test_shell_tool_reports_nonzero_exit_code_in_output():
         return p
 
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(
-            "agent.tools.shell.asyncio.create_subprocess_shell", _fake_subprocess
-        )
+        mp.setattr("agent.tools.shell.runner._start_process", _fake_subprocess)
         result = json.loads(await tool.execute(command="echo 1", timeout=999))
 
     assert result["exit_code"] == 2
     assert "Exit code 2" in result["output"]
+
+
+@pytest.mark.parametrize("windows", [True, False])
+def test_shell_describes_actual_platform(monkeypatch, windows):
+    monkeypatch.setattr("agent.tools.shell.tools._IS_WINDOWS", windows)
+    tool = ShellTool()
+    expected = "PowerShell 7" if windows else "/bin/sh"
+    assert expected in tool.description
+    assert expected in tool.parameters["properties"]["command"]["description"]
+    assert "在 bash 中" not in tool.description
+
+
+@pytest.mark.parametrize("background", [True, False])
+@pytest.mark.asyncio
+async def test_shell_reports_missing_pwsh_and_cleans_log(
+    monkeypatch, tmp_path, background
+):
+    import agent.tools.shell.tools as tools_module
+
+    monkeypatch.setattr("agent.tools.shell.runner._IS_WINDOWS", True)
+    monkeypatch.setattr(
+        "agent.tools.shell.runner.subprocess.CREATE_NEW_PROCESS_GROUP",
+        512,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "agent.tools.shell.runner.shutil.which", lambda *args, **kwargs: None
+    )
+    mkstemp = tools_module.tempfile.mkstemp
+    monkeypatch.setattr(
+        tools_module.tempfile,
+        "mkstemp",
+        lambda **kwargs: mkstemp(dir=tmp_path, **kwargs),
+    )
+    before = set(_BG_REGISTRY)
+    result = json.loads(
+        await ShellTool().execute(command="echo ok", run_in_background=background)
+    )
+    assert "PowerShell 7" in result["error"]
+    assert "PATH" in result["error"]
+    assert set(_BG_REGISTRY) == before
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell integration")
+@pytest.mark.parametrize("background", [True, False])
+@pytest.mark.asyncio
+async def test_shell_executes_real_powershell_foreground_and_background(
+    tmp_path, background
+):
+    chunks = []
+    tool = ShellTool(working_dir=tmp_path)
+    result = json.loads(
+        await tool.execute(
+            command="Write-Output '你好'; Write-Output 'it''s literal'\nWrite-Output (Get-Location).Path\nexit 7",
+            description="验证 PowerShell",
+            timeout=10,
+            run_in_background=background,
+            _on_data=chunks.append,
+        )
+    )
+    task_id = result.get("background_task_id")
+    try:
+        if task_id:
+            result = json.loads(
+                await ShellTaskOutputTool().execute(
+                    task_id=task_id, block=True, timeout_ms=10000
+                )
+            )
+            assert result["status"] == "done"
+        assert result["exit_code"] == 7
+        assert "你好" in result["output"]
+        assert "it's literal" in result["output"]
+        assert str(tmp_path) in result["output"]
+        if not background:
+            assert "你好" in "".join(chunks)
+    finally:
+        if task_id:
+            await ShellTaskStopTool().execute(task_id=task_id)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell integration")
+@pytest.mark.asyncio
+async def test_shell_stops_real_powershell_background_task():
+    result = json.loads(
+        await ShellTool().execute(
+            command="Start-Sleep -Seconds 60",
+            description="等待终止",
+            run_in_background=True,
+        )
+    )
+    task_id = result["background_task_id"]
+    task = _BG_REGISTRY[task_id]
+    try:
+        stopped = json.loads(await ShellTaskStopTool().execute(task_id=task_id))
+        assert stopped["status"] == "stopped"
+        await asyncio.wait_for(task.proc.wait(), timeout=5)
+        assert task.proc.returncode is not None
+        assert task_id not in _BG_REGISTRY
+    finally:
+        if task_id in _BG_REGISTRY:
+            await ShellTaskStopTool().execute(task_id=task_id)
+        if task.pump_task:
+            await asyncio.gather(task.pump_task, return_exceptions=True)

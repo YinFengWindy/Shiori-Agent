@@ -26,19 +26,43 @@ from .constants import (
     _BLOCKING_TIMEOUT,
     _DEFAULT_TIMEOUT,
     _FG_THRESHOLD,
+    _IS_WINDOWS,
     _MAX_TIMEOUT,
     _STREAM_DRAIN_GRACE_S,
 )
 from .environment import _shell_env
 from .output import _err, _truncate, _write_full_output
-from .runner import _invoke_kill_process_tree, _subprocess_options
+from . import runner
+from .runner import _invoke_kill_process_tree
 from .validation import _validate_command
 
 logger = logging.getLogger("agent.tools.shell")
 
 
+async def _start_logged_process(
+    command: str,
+    cwd: Path | None,
+    env: dict[str, str],
+    task_id: str,
+    prefix: str,
+):
+    """准备日志并启动进程；启动失败时清理日志，保留原始异常。"""
+    log_fd, log_path = tempfile.mkstemp(
+        prefix=f"shiori-{prefix}-{task_id}-", suffix=".log"
+    )
+    os.close(log_fd)
+    wall_start_ms = int(time.time() * 1000)
+    start_mono = time.monotonic()
+    try:
+        proc = await runner._start_process(command, cwd=cwd, env=env)
+    except BaseException:
+        os.unlink(log_path)
+        raise
+    return proc, log_path, wall_start_ms, start_mono
+
+
 class ShellTool(Tool):
-    """在 bash 中执行命令，返回结构化结果"""
+    """在 Windows PowerShell 7 或 POSIX /bin/sh 中执行命令。"""
 
     name = "shell"
 
@@ -58,10 +82,15 @@ class ShellTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "在 bash 中执行命令并返回输出。\n"
+            f"在 {'PowerShell 7（pwsh）' if _IS_WINDOWS else 'POSIX shell（/bin/sh）'} 中执行命令并返回输出。\n"
             "注意：\n"
-            "- 使用绝对路径，避免依赖 cd 切换目录\n"
-            "- 多条命令用 ; 或 && 连接，不要用换行分隔\n"
+            + (
+                "- 使用 PowerShell 语法，环境变量写作 $env:NAME，不能使用 cmd 的 %NAME% 或 bash 语法\n"
+                if _IS_WINDOWS
+                else ""
+            )
+            + "- 使用绝对路径，避免依赖 cd 切换目录\n"
+            "- 多条命令可用 ;、&& 或换行分隔\n"
             "- 网络命令（curl/wget/httpie/xh）仅允许访问公网 HTTP(S)，且禁止上传/写文件\n"
             "- 以下命令被禁止：nc、telnet、浏览器等高风险工具\n"
             "- 输出超过 30000 字符时自动截断\n"
@@ -82,7 +111,11 @@ class ShellTool(Tool):
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "要执行的 bash 命令",
+                    "description": (
+                        "要执行的 PowerShell 7 命令"
+                        if _IS_WINDOWS
+                        else "要执行的 POSIX /bin/sh 命令"
+                    ),
                 },
                 "description": {
                     "type": "string",
@@ -206,22 +239,18 @@ class ShellTool(Tool):
         timeout_s: int | None,
     ) -> str:
         task_id = f"shell_{uuid4().hex[:12]}"
-        log_fd, log_path = tempfile.mkstemp(
-            prefix=f"shiori-bg-{task_id}-", suffix=".log"
-        )
-        os.close(log_fd)
-
-        wall_start_ms = int(time.time() * 1000)
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            **_subprocess_options(cwd, env),
-        )
+        try:
+            proc, log_path, wall_start_ms, start_mono = await _start_logged_process(
+                command, cwd, env, task_id, "bg"
+            )
+        except FileNotFoundError as exc:
+            return _err(str(exc))
         # 先建 bg_task 对象，pump 需要引用它来更新 last_output_at_ms
         bg = _BackgroundTask(
             proc=proc,
             log_path=log_path,
             pump_task=None,
-            started_at=time.monotonic(),
+            started_at=start_mono,
             wall_started_at_ms=wall_start_ms,
             command=command,
             description=description,
@@ -261,19 +290,14 @@ class ShellTool(Tool):
     ) -> str:
         """前台执行；允许按需关闭自动转后台，直接等待完整结果。"""
         task_id = f"shell_{uuid4().hex[:12]}"
-        log_fd, log_path = tempfile.mkstemp(
-            prefix=f"shiori-fg-{task_id}-", suffix=".log"
-        )
-        os.close(log_fd)
-
-        wall_start_ms = int(time.time() * 1000)
-        start_mono = time.monotonic()
+        try:
+            proc, log_path, wall_start_ms, start_mono = await _start_logged_process(
+                command, cwd, env, task_id, "fg"
+            )
+        except FileNotFoundError as exc:
+            return _err(str(exc))
         hard_timeout_s = timeout
 
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            **_subprocess_options(cwd, env),
-        )
         bg = _BackgroundTask(
             proc=proc,
             log_path=log_path,
@@ -324,6 +348,8 @@ class ShellTool(Tool):
             except (ProcessLookupError, PermissionError):
                 pass
             pump.cancel()
+            await asyncio.gather(pump, return_exceptions=True)
+            await proc.wait()
             try:
                 os.unlink(log_path)
             except OSError:
