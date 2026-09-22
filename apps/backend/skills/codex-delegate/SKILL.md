@@ -12,6 +12,20 @@ metadata: {"shiori": {"always": false, "requires": {"bins": ["codex"]}}}
 
 ## 流程
 
+先根据 `shell` 工具说明选择平台语法。下文 `command -v`、`< prompt.txt`、`bash`、`sed` 示例用于 POSIX；Windows 的 shell 是 PowerShell 7，必须使用本节的对应命令，包括传给 subagent 的任务说明。
+
+Windows 检查 Codex：`Get-Command codex -ErrorAction Stop; if ($?) { codex --version }`。
+Windows subagent 仍使用 `auto_promote=false`，执行以下 PowerShell 命令（替换绝对路径）；`Get-Content` 在此仅用于将已经生成的 prompt 文件传入 Codex stdin：
+
+```powershell
+Get-Content -LiteralPath 'C:\path\task_dir\prompt.txt' -Raw -Encoding utf8 | codex exec --cd 'C:\path\repo' --output-last-message 'C:\path\task_dir\codex-result.md' - 2>&1 | Tee-Object -FilePath 'C:\path\task_dir\codex-run.log'
+$codexExitCode = $LASTEXITCODE
+Select-String -LiteralPath 'C:\path\task_dir\codex-run.log' -Pattern '^session id: (.+)$' | Select-Object -Last 1 | ForEach-Object { $_.Matches[0].Groups[1].Value } | Set-Content -LiteralPath 'C:\path\task_dir\codex-session.txt' -Encoding utf8
+exit $codexExitCode
+```
+
+Windows 续聊同样使用 `Get-Content -Raw -Encoding utf8 | codex exec resume <session_id> ... -`，不使用 `<` 输入重定向。
+
 ```
 ┌─ 主会话
 │  ├─ shell(command -v codex && codex --version, auto_promote=false)

@@ -101,6 +101,8 @@
 
 装好之后启动时会自动检查更新。想自己看版本、手动检查或者立刻重启安装，去「设置 → 关于」。
 
+Windows 上使用 Agent 的 shell 工具需要安装 PowerShell 7，并确保 `pwsh` 在 PATH 中；不会自动回退到 cmd 或 Windows PowerShell 5.1。
+
 需要另外配置的服务：
 
 | 服务 | 用来做什么 | 必需 |
@@ -113,7 +115,7 @@
 
 ## 开发
 
-环境要求：Windows x64、Node.js 22+、pnpm 10.33.0、Python 3.12+。
+环境要求：Windows x64、Node.js 22+、pnpm 10.33.0、Python 3.12+、PowerShell 7（`pwsh` 可从 PATH 启动）。
 
 ```powershell
 py -3.12 -m venv .venv

@@ -51,7 +51,7 @@ def register_common_meta_tools(
         ShellTool(),
         always_on=True,
         risk="external-side-effect",
-        search_hint="终端 脚本 bash 命令",
+        search_hint="终端 脚本 shell sh bash pwsh PowerShell 命令",
     )
     tools.register(
         ShellTaskOutputTool(),

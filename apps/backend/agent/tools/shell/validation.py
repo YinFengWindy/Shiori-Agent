@@ -16,6 +16,10 @@ from .constants import (
     _RESTRICTED_SHELL_RUNNERS,
 )
 
+_POWERSHELL_NETWORK_CMDS = frozenset(
+    {"invoke-webrequest", "iwr", "invoke-restmethod", "irm"}
+)
+
 
 def _validate_command(
     command: str,
@@ -24,6 +28,17 @@ def _validate_command(
     restricted_dir: Path | None,
     cwd: Path | None = None,
 ) -> str | None:
+    if _IS_WINDOWS:
+        first_command = command.split()[0].lower() if command.split() else ""
+        if not allow_network and first_command in _POWERSHELL_NETWORK_CMDS:
+            return "当前 shell 配置禁止网络访问"
+        # 完整 PowerShell 语法由 pwsh 解析；shlex 不理解转义引号和 here-string。
+        # 受限模式仅接受静态命令，先拒绝会被分词吞掉的换行和动态展开语法。
+        if restricted_dir is not None:
+            if any(char in command for char in "\r\n$`{}()@,"):
+                return "受限 shell 禁止 PowerShell 动态表达式、转义或多行命令"
+        elif first_command.removesuffix(".exe") not in _NETWORK_CMDS:
+            return None
     try:
         tokens = _split_command(command)
     except ValueError:
@@ -31,7 +46,7 @@ def _validate_command(
     if not tokens:
         return None
 
-    cmd = tokens[0].lower()
+    cmd = tokens[0].lower().removesuffix(".exe") if _IS_WINDOWS else tokens[0].lower()
     if not allow_network and cmd in _NETWORK_CMDS:
         return "当前 shell 配置禁止网络访问"
 
@@ -55,7 +70,7 @@ def _validate_network_command(command: str) -> str | None:
     if not tokens:
         return None
 
-    cmd = tokens[0].lower()
+    cmd = tokens[0].lower().removesuffix(".exe") if _IS_WINDOWS else tokens[0].lower()
     if cmd not in _NETWORK_CMDS:
         return None
 
@@ -109,10 +124,30 @@ def _validate_restricted_command(tokens: list[str], restricted_dir: Path) -> str
         return "受限 shell 禁止管道、重定向或串联命令"
 
     base_cmd = tokens[0].lower()
+    if _IS_WINDOWS:
+        base_cmd = PureWindowsPath(base_cmd).stem
+        if base_cmd in {
+            "pwsh",
+            "powershell",
+            "cmd",
+            "invoke-expression",
+            "iex",
+            "invoke-command",
+            "icm",
+            "start-process",
+            "saps",
+            "start",
+        }:
+            return f"受限 shell 禁止启动解释器或二级 shell：{base_cmd}"
     if base_cmd in _RESTRICTED_SHELL_RUNNERS:
         return f"受限 shell 禁止启动解释器或二级 shell：{base_cmd}"
 
     for token in tokens[1:]:
+        # PowerShell 支持 -LiteralPath:值；不能作为普通开关直接跳过路径检查。
+        if _IS_WINDOWS and token.startswith("-") and ":" in token:
+            token = token.partition(":")[2]
+            if '"' in token or "'" in token:
+                return "受限 shell 中带引号的参数值必须与参数名用空格分开"
         if token.startswith("-") or token == "--":
             continue
         err = _validate_restricted_token(token, restricted_dir)

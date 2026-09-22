@@ -3,13 +3,49 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
+import shutil
 import signal
 import subprocess
 from pathlib import Path
 from typing import Any, Callable
 
-from .constants import _IS_WINDOWS, _STREAM_CHUNK_SIZE, _STREAM_DRAIN_GRACE_S
+from .constants import _IS_WINDOWS, _STREAM_DRAIN_GRACE_S
+from .output import _read_output
+
+
+async def _start_process(
+    command: str, *, cwd: Path | None = None, env: dict[str, str] | None = None
+) -> asyncio.subprocess.Process:
+    """使用平台对应 shell 启动命令；Windows 明确要求 PowerShell 7。"""
+    options = _subprocess_options(cwd, env)
+    if not _IS_WINDOWS:
+        return await asyncio.create_subprocess_shell(command, **options)
+
+    executable = shutil.which("pwsh", path=env.get("PATH") if env is not None else None)
+    if executable is None:
+        raise FileNotFoundError(
+            "Windows shell 需要 PowerShell 7：请安装 pwsh 并加入 PATH"
+        )
+    # 编码传参避免 Windows argv 再次解释引号；不追加命令以保留 $? / exit 语义。
+    script = (
+        "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false); "
+        "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
+        "$OutputEncoding = [Console]::OutputEncoding\n" + command
+    )
+    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+    return await asyncio.create_subprocess_exec(
+        executable,
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-OutputFormat",
+        "Text",
+        "-EncodedCommand",
+        encoded,
+        **options,
+    )
 
 
 def _subprocess_options(cwd: Path | None, env: dict[str, str] | None) -> dict[str, Any]:
@@ -57,10 +93,7 @@ async def _run(
     on_data: Callable[[str], None] | None = None,
 ) -> tuple[str, str, int, bool]:
     """执行命令，并发读取 stdout/stderr，返回 (stdout, stderr, exit_code, interrupted)"""
-    proc = await asyncio.create_subprocess_shell(
-        command,
-        **_subprocess_options(cwd, env),
-    )
+    proc = await _start_process(command, cwd=cwd, env=env)
 
     def _kill_tree() -> None:
         """杀掉整棵进程树（按 pgid）。"""
@@ -70,13 +103,7 @@ async def _run(
             pass  # 进程已退出或无权限
 
     async def _pump(stream, chunks: list[str]) -> None:
-        if stream is None:
-            return
-        while True:
-            data = await stream.read(_STREAM_CHUNK_SIZE)
-            if not data:
-                break
-            text = data.decode(errors="replace")
+        async for text in _read_output(stream):
             chunks.append(text)
             if on_data is not None:
                 on_data(text)
@@ -115,6 +142,7 @@ async def _run(
     except asyncio.TimeoutError:
         _kill_tree()
         await _finish_pumps()
+        await _wait_proc()
         return (
             "".join(stdout_chunks),
             "".join(stderr_chunks),
@@ -126,4 +154,5 @@ async def _run(
         stdout_task.cancel()
         stderr_task.cancel()
         await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
+        await _wait_proc()
         raise

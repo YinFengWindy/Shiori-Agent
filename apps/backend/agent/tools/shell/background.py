@@ -17,10 +17,9 @@ from .constants import (
     _BG_TTL_S,
     _BLOCK_DEFAULT_MS,
     _BLOCK_MAX_MS,
-    _STREAM_CHUNK_SIZE,
     _STREAM_DRAIN_GRACE_S,
 )
-from .output import _err, _truncate
+from .output import _err, _read_output, _truncate
 from .runner import _invoke_kill_process_tree
 
 
@@ -59,31 +58,26 @@ async def _bg_pump(
     with open(log_path, "wb") as f:
 
         async def _drain_stream(stream) -> None:
-            if stream is None:
-                return
-            while True:
-                chunk = await stream.read(_STREAM_CHUNK_SIZE)
-                if not chunk:
-                    break
-                f.write(chunk)
+            async for text in _read_output(stream):
+                f.write(text.encode("utf-8"))
                 f.flush()
                 bg_task.last_output_at_ms = int(time.time() * 1000)
                 if on_data is not None:
-                    on_data(chunk.decode(errors="replace"))
+                    on_data(text)
 
         stdout_task = asyncio.create_task(_drain_stream(proc.stdout))
         stderr_task = asyncio.create_task(_drain_stream(proc.stderr))
 
-        # 等主进程本体退出（不等子孙进程关 fd）
-        await proc.wait()
-
-        # 短暂排水：捕获最后几帧输出；超时后强制取消
         try:
+            # 等主进程本体退出后短暂排水；取消时也必须关闭子读取任务。
+            await proc.wait()
             await asyncio.wait_for(
                 asyncio.gather(stdout_task, stderr_task),
                 timeout=_STREAM_DRAIN_GRACE_S,
             )
         except asyncio.TimeoutError:
+            pass
+        finally:
             stdout_task.cancel()
             stderr_task.cancel()
             await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
@@ -293,7 +287,7 @@ class ShellTaskStopTool(Tool):
 
     @property
     def description(self) -> str:
-        return "停止后台 shell 任务（SIGKILL 整棵进程树）并从注册表移除。"
+        return "终止后台 shell 任务的整棵进程树，并从注册表移除。"
 
     @property
     def parameters(self) -> dict[str, Any]:
