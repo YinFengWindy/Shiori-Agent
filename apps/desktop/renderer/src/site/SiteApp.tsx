@@ -1,20 +1,29 @@
-/** Relative to the built site's own output root (see vite.site.config.ts), not the desktop renderer's. */
-const SITE_LOGO_URL = "./assets/branding/shiori-title-logo.png";
+import { SITE_PLACEHOLDER_COPY } from "./content/siteCopy";
+import { PlaceholderScreen } from "./screens/PlaceholderScreen";
+import { SettingsModal } from "./screens/SettingsModal";
+import { TitleScreen } from "./components/TitleScreen";
+import { useSiteScreen } from "./screens/useSiteScreen";
 
 /**
- * Static site skeleton entry: shows only the Shiori brand wordmark and a
- * placeholder title. Later tickets build the real galgame-style landing
- * site on top of this shell (see #345). Deliberately has no desktop
- * business components, host bridge, or backend dependency.
+ * Site entry: wiring and screen dispatch only. `useSiteScreen` owns the
+ * title/adv/character/gallery switch and the settings modal's open state;
+ * #348 and #350 replace the adv/character/gallery placeholders in place.
  */
 export function SiteApp() {
+  const { screen, settingsOpen, openScreen, goToTitle, openSettings, closeSettings } = useSiteScreen();
+
   return (
-    <div className="bg-gradient-app grid h-dvh min-h-0 place-items-center px-6 text-center text-ink">
-      <div className="flex flex-col items-center gap-6">
-        <h1 className="sr-only">栞 / SHIORI</h1>
-        <img className="w-[min(18rem,70vw)]" src={SITE_LOGO_URL} alt="" />
-        <p className="font-display text-title text-ink-secondary">敬请期待</p>
-      </div>
+    <div className="site-root h-dvh min-h-0 text-site-ink">
+      {screen === "title" ? (
+        <TitleScreen onOpenScreen={openScreen} onOpenSettings={openSettings} />
+      ) : (
+        <PlaceholderScreen
+          title={SITE_PLACEHOLDER_COPY[screen].title}
+          body={SITE_PLACEHOLDER_COPY[screen].body}
+          onBack={goToTitle}
+        />
+      )}
+      {settingsOpen ? <SettingsModal onClose={closeSettings} /> : null}
     </div>
   );
 }

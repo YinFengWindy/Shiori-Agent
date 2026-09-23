@@ -1,0 +1,262 @@
+/*
+ * Static site — galgame title screen and screen-switching chrome.
+ *
+ * The night palette below is new (the app design system only has a light
+ * theme so far, see docs/_handbook/design-system.md "已知遗留"): it lives as
+ * CSS custom properties here, scoped to `.site-root`, rather than scattered
+ * hex values in TSX. `--pink-*` primitives are reused from styles.css for
+ * the accent so the sakura hue stays consistent with the rest of the brand.
+ */
+
+.site-root {
+  --site-bg-from: #191330; /* deep indigo */
+  --site-bg-via: #2a1a3d;
+  --site-bg-to: #3c1f3a; /* plum */
+  --site-accent: var(--pink-400);
+  --site-accent-strong: var(--pink-300);
+  --site-ink: #fdf6fb;
+  --site-ink-muted: rgb(253 246 251 / 72%);
+  --site-ink-faint: rgb(253 246 251 / 48%);
+  --site-glass-bg: rgb(42 26 61 / 55%);
+  --site-glass-border: rgb(255 142 186 / 28%);
+  --site-ring: var(--pink-300);
+
+  background:
+    radial-gradient(120% 90% at 88% 8%, rgb(255 142 186 / 20%), transparent 55%),
+    linear-gradient(165deg in oklab, var(--site-bg-from), var(--site-bg-via) 55%, var(--site-bg-to));
+  color: var(--site-ink);
+  color-scheme: dark;
+  overflow: hidden;
+}
+
+.site-screen {
+  isolation: isolate;
+}
+
+.text-site-ink {
+  color: var(--site-ink);
+}
+
+.text-site-ink-muted {
+  color: var(--site-ink-muted);
+}
+
+/* Glass panel used for placeholders and the settings modal. */
+.site-panel {
+  background: var(--site-glass-bg);
+  border: 1px solid var(--site-glass-border);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 20px 60px rgb(10 6 20 / 45%);
+}
+
+.site-modal-backdrop {
+  background: rgb(10 6 20 / 55%);
+}
+
+.site-icon-button {
+  color: var(--site-ink-muted);
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.site-icon-button:hover {
+  color: var(--site-ink);
+  background-color: rgb(255 142 186 / 14%);
+}
+
+.site-icon-button:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 2px;
+}
+
+.site-back-button {
+  color: var(--site-ink);
+  background: rgb(255 142 186 / 14%);
+  border: 1px solid var(--site-glass-border);
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.site-back-button:hover {
+  background: rgb(255 142 186 / 24%);
+}
+
+.site-back-button:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- title -- */
+
+.site-title-layout {
+  isolation: isolate;
+}
+
+.site-title-panel {
+  position: relative;
+  background: linear-gradient(180deg, rgb(25 19 48 / 78%), rgb(25 19 48 / 40%));
+}
+
+@media (min-width: 640px) {
+  .site-title-panel {
+    background: none;
+  }
+}
+
+.site-title-logo {
+  filter: drop-shadow(0 6px 18px rgb(255 142 186 / 25%));
+}
+
+/* Thin decorative ornament line between the logo and the menu. */
+.site-ornament-line {
+  display: block;
+  width: 3rem;
+  height: 1px;
+  background: linear-gradient(90deg, var(--site-accent), transparent);
+}
+
+.site-title-menu {
+  font-variant-ligatures: none;
+}
+
+.site-menu-item {
+  color: var(--site-ink-muted);
+  letter-spacing: 0.02em;
+  transition: color 200ms var(--ease-out-soft, ease-out), background-color 200ms var(--ease-out-soft, ease-out),
+    box-shadow 200ms var(--ease-out-soft, ease-out), transform 200ms var(--ease-out-soft, ease-out);
+}
+
+.site-menu-item:hover {
+  color: var(--site-ink);
+  background-color: rgb(255 142 186 / 12%);
+  box-shadow: 0 0 0 1px var(--site-glass-border), 0 0 22px rgb(255 142 186 / 35%);
+  transform: translateX(2px);
+}
+
+.site-menu-item:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------- artwork -- */
+
+.site-title-art-area {
+  padding-bottom: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .site-title-art-area {
+    padding-bottom: 0;
+  }
+}
+
+.site-artwork-frame {
+  width: min(20rem, 78vw);
+  aspect-ratio: 832 / 1216;
+  box-shadow: 0 24px 70px rgb(10 6 20 / 55%);
+}
+
+@media (min-width: 640px) {
+  .site-artwork-frame {
+    width: min(24rem, 34vw);
+  }
+}
+
+.site-artwork-image {
+  transition: opacity 420ms var(--ease-out-soft, ease-out), transform 420ms var(--ease-out-soft, ease-out);
+}
+
+.site-artwork-image-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.site-artwork-image-inactive {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.site-artwork-advance {
+  cursor: pointer;
+  background: transparent;
+}
+
+.site-artwork-advance:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: -2px;
+}
+
+.site-artwork-dot {
+  background: rgb(255 246 251 / 35%);
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.site-artwork-dot:hover {
+  background: rgb(255 246 251 / 60%);
+}
+
+.site-artwork-dot:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 2px;
+}
+
+.site-artwork-dot-active {
+  background: var(--site-accent-strong);
+  transform: scale(1.25);
+}
+
+/* --------------------------------------------------------- decorations -- */
+
+.site-decorations {
+  z-index: 0;
+}
+
+.site-decoration-star {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 9999px;
+  background: #fff;
+  opacity: 0.55;
+  animation: site-star-twinkle calc(3.2s + var(--i) * 0.3s) ease-in-out calc(var(--i) * 0.25s) infinite;
+}
+
+.site-decoration-petal {
+  position: absolute;
+  top: -5%;
+  width: 8px;
+  height: 8px;
+  border-radius: 60% 40% 60% 40%;
+  background: rgb(255 182 214 / 45%);
+  animation: site-petal-drift calc(14s + var(--i) * 2.5s) linear calc(var(--i) * 1.8s) infinite;
+}
+
+@keyframes site-star-twinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.75; }
+}
+
+@keyframes site-petal-drift {
+  0% { transform: translate(0, -5vh) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.7; }
+  90% { opacity: 0.5; }
+  100% { transform: translate(6vw, 110vh) rotate(240deg); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-decoration-star,
+  .site-decoration-petal {
+    animation: none;
+    opacity: 0.3;
+  }
+
+  .site-artwork-image {
+    transition: opacity 1ms linear;
+  }
+
+  .site-artwork-image-inactive {
+    transform: none;
+  }
+
+  .site-menu-item:hover {
+    transform: none;
+  }
+}
