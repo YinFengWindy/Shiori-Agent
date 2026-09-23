@@ -42,13 +42,30 @@ export const SITE_MENU_ITEMS: readonly SiteMenuItem[] = [
   { id: "settings", label: "设置", kind: "modal" },
 ];
 
-/** Placeholder sub-screen copy until #350 fills in the real screens. */
-export const SITE_PLACEHOLDER_COPY: Record<Exclude<SiteScreenId, "title" | "adv">, { title: string; body: string }> = {
-  character: { title: "人物", body: "准备中" },
-  gallery: { title: "CG 鉴赏", body: "准备中" },
-};
-
 export const SITE_BACK_LABEL = "返回标题";
+
+/** 「人物」 screen chrome (吟风's profile itself lives in characterProfile.ts). */
+export const SITE_CHARACTER_COPY = {
+  title: "人物",
+  eyebrow: "CHARACTER",
+  outfits: "换装",
+  lines: "台词",
+} as const;
+
+/** 「CG 鉴赏」 screen and lightbox chrome. */
+export const SITE_GALLERY_COPY = {
+  title: "CG 鉴赏",
+  eyebrow: "GALLERY",
+  collected: "已收集",
+  gridLabel: "CG 列表",
+  open: (n: number, alt: string) => `查看第 ${n} 张 ${alt}`,
+  tileNumber: (n: number) => `No.${String(n).padStart(2, "0")}`,
+  lightboxLabel: "CG 大图",
+  previous: "上一张",
+  next: "下一张",
+  close: "关闭大图",
+} as const;
+
 export const SITE_GITHUB_LABEL = "在 GitHub 查看 Shiori";
 /** Speaker toggle: fixed accessible name (on/off is aria-pressed) + hover tooltips. */
 export const SITE_SOUND_COPY = { label: "声音", enableTitle: "开启声音", disableTitle: "关闭声音" } as const;

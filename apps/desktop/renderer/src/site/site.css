@@ -58,7 +58,7 @@
 
 /* ---------------------------------------------------------- glass chrome -- */
 
-/* Frosted lavender-white panel: placeholders, settings, backlog. */
+/* Frosted lavender-white panel: settings, backlog. */
 .site-panel {
   background: var(--site-glass-strong);
   border: 1px solid var(--site-glass-border);
@@ -105,6 +105,7 @@
   color: var(--site-ink);
   background: var(--pink-100);
   border: 1px solid var(--pink-200);
+  box-shadow: 0 6px 18px var(--site-shadow);
   transition: background-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -900,7 +901,7 @@
  * (`.site-corner-chip`, 20px icon + p-2.5 = 2.625rem), fixed one chip width
  * plus a 0.5rem gap left of it (`right-4 top-4 sm:right-6 sm:top-6`), so the
  * two sit side by side on the title screen and the toggle keeps the same
- * spot on the ADV and placeholder screens.
+ * spot on the ADV, 人物 and CG 鉴赏 screens.
  */
 .site-sound-toggle {
   top: 1rem;

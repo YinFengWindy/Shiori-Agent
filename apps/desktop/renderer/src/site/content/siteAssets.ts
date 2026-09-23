@@ -43,7 +43,7 @@ export interface SiteImage {
  */
 
 /**
- * Scene background behind the title screen, the ADV and the placeholder
+ * Scene background behind the title screen, the ADV and the 人物 / CG 鉴赏
  * screens: a soft lavender bedroom with an arched window and a full moon.
  * Purely decorative (rendered with an empty alt), so it carries no alt text.
  */
@@ -60,7 +60,7 @@ export const titleSprites: readonly SiteImage[] = [
   { src: sprite3, alt: "吟风立绘：白色露肩上衣配黑色短裙，双手轻提裙摆" },
 ];
 
-/** Character screen standing art (#350 consumes these). */
+/** 人物 screen standing art, one per selectable outfit (see characterProfile.ts). */
 export const characterArtwork: readonly SiteImage[] = [
   { src: character1, alt: "吟风人物立绘：身着水手服，走在秋日林荫道上" },
   { src: character2, alt: "吟风人物立绘：抱着笔记本，站在黄昏时分的小巷中" },
@@ -74,7 +74,7 @@ export const topicArtwork: readonly SiteImage[] = [
   { src: topic3, alt: "吟风配图：月夜窗边浅笑，黑色晚装缀有蝙蝠翼装饰" },
 ];
 
-/** CG gallery art (#350 consumes these): landscape scenes, then the three night portraits. */
+/** CG 鉴赏 art: landscape scenes, then the three night portraits. */
 export const galleryArtwork: readonly SiteImage[] = [
   { src: cg1, alt: "CG：睡前由人帮忙用吹风机吹干头发的温馨卧室场景" },
   { src: cg2, alt: "CG：侧躺在床上，蓝紫色柔光近景" },

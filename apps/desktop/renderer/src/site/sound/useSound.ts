@@ -21,3 +21,16 @@ export function useLineAdvanceSfx(lineKey: number) {
     playSfx("advance");
   }, [lineKey, playSfx]);
 }
+
+/**
+ * Menu-style button sounds: a soft blip on hover and a chime on click, as
+ * the title menu plays them. Spread `hover` on `onPointerEnter` and call
+ * `click` from the button's click handler.
+ */
+export function useButtonSfx() {
+  const { playSfx } = useSound();
+  return {
+    hover: () => playSfx("hover"),
+    click: () => playSfx("click"),
+  };
+}

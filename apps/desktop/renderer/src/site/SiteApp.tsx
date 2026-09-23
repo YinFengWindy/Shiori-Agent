@@ -1,6 +1,6 @@
-import { SITE_PLACEHOLDER_COPY } from "./content/siteCopy";
 import { AdvScreen } from "./screens/AdvScreen";
-import { PlaceholderScreen } from "./screens/PlaceholderScreen";
+import { CharacterScreen } from "./screens/CharacterScreen";
+import { GalleryScreen } from "./screens/GalleryScreen";
 import { SettingsModal } from "./screens/SettingsModal";
 import { SoundToggle } from "./components/SoundToggle";
 import { TitleScreen } from "./components/TitleScreen";
@@ -9,7 +9,7 @@ import { useSiteScreen } from "./screens/useSiteScreen";
 /**
  * Site entry: wiring and screen dispatch only. `useSiteScreen` owns the
  * title/adv/character/gallery switch and the settings modal's open state;
- * #350 replaces the character/gallery placeholders in place. Sound lives in
+ * the 人物 / CG 鉴赏 screens are self-contained. Sound lives in
  * `<SoundProvider>` (mounted in main.tsx); the speaker toggle is global.
  */
 export function SiteApp() {
@@ -21,12 +21,10 @@ export function SiteApp() {
         <TitleScreen onOpenScreen={openScreen} onOpenSettings={openSettings} />
       ) : screen === "adv" ? (
         <AdvScreen settingsOpen={settingsOpen} onOpenSettings={openSettings} onExit={goToTitle} />
+      ) : screen === "character" ? (
+        <CharacterScreen onBack={goToTitle} />
       ) : (
-        <PlaceholderScreen
-          title={SITE_PLACEHOLDER_COPY[screen].title}
-          body={SITE_PLACEHOLDER_COPY[screen].body}
-          onBack={goToTitle}
-        />
+        <GalleryScreen onBack={goToTitle} />
       )}
       <SoundToggle />
       {settingsOpen ? <SettingsModal onClose={closeSettings} /> : null}
