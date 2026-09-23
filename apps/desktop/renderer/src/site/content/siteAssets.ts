@@ -15,6 +15,10 @@ import title3 from "../assets/title-3.webp";
 import topic1 from "../assets/topic-1.webp";
 import topic2 from "../assets/topic-2.webp";
 import topic3 from "../assets/topic-3.webp";
+import type { AdvArtKey } from "./advScript";
+
+/** Shiori title logo, relative to the built site's output root (see vite.site.config.ts). */
+export const SITE_LOGO_URL = "./assets/branding/shiori-title-logo.png";
 
 /** One site image: the built asset URL plus its accessible alt text. */
 export interface SiteImage {
@@ -54,6 +58,20 @@ export const topicArtwork: readonly SiteImage[] = [
   { src: topic2, alt: "吟风配图：坐在课桌前看手机，逆光的教室场景" },
   { src: topic3, alt: "吟风配图：月夜窗边浅笑，黑色晚装缀有蝙蝠翼装饰" },
 ];
+
+/**
+ * Every art slot the ADV dialogue script (`advScript.ts`) can name: the three
+ * title images plus the three topic illustrations. A `Record` so adding a
+ * slot to the script without an image here is a type error.
+ */
+export const advArtwork: Record<AdvArtKey, SiteImage> = {
+  "title-1": titleArtwork[0],
+  "title-2": titleArtwork[1],
+  "title-3": titleArtwork[2],
+  "topic-1": topicArtwork[0],
+  "topic-2": topicArtwork[1],
+  "topic-3": topicArtwork[2],
+};
 
 /** CG gallery landscape art (#350 consumes these). */
 export const galleryArtwork: readonly SiteImage[] = [

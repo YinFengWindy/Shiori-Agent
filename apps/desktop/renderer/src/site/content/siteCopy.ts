@@ -42,9 +42,8 @@ export const SITE_MENU_ITEMS: readonly SiteMenuItem[] = [
   { id: "settings", label: "设置", kind: "modal" },
 ];
 
-/** Placeholder sub-screen copy until #348/#350 fill in the real screens. */
-export const SITE_PLACEHOLDER_COPY: Record<Exclude<SiteScreenId, "title">, { title: string; body: string }> = {
-  adv: { title: "开始", body: "准备中" },
+/** Placeholder sub-screen copy until #350 fills in the real screens. */
+export const SITE_PLACEHOLDER_COPY: Record<Exclude<SiteScreenId, "title" | "adv">, { title: string; body: string }> = {
   character: { title: "人物", body: "准备中" },
   gallery: { title: "CG 鉴赏", body: "准备中" },
 };
@@ -52,5 +51,30 @@ export const SITE_PLACEHOLDER_COPY: Record<Exclude<SiteScreenId, "title">, { tit
 export const SITE_BACK_LABEL = "返回标题";
 export const SITE_GITHUB_LABEL = "在 GitHub 查看 Shiori";
 export const SITE_SETTINGS_TITLE = "设置";
-export const SITE_SETTINGS_PLACEHOLDER = "准备中";
 export const SITE_SETTINGS_CLOSE_LABEL = "关闭设置";
+
+/** Settings modal labels; values are stored by `prefs/sitePrefs.ts`. */
+export const SITE_SETTINGS_COPY = {
+  bgmVolume: "BGM 音量",
+  sfxVolume: "音效音量",
+  textSpeed: "文字速度",
+  textSpeedOptions: { slow: "慢", normal: "中", fast: "快" },
+  textSpeedPreview: "文字会以这样的速度出现哦～",
+} as const;
+
+/** ADV dialogue box chrome (the dialogue itself lives in advScript.ts). */
+export const SITE_ADV_COPY = {
+  screenLabel: "吟风的对话",
+  advance: "继续",
+  auto: "自动",
+  skip: "跳过",
+  backlog: "记录",
+  settings: "设置",
+  title: "标题",
+  titleLabel: "返回标题",
+  choicesLabel: "选项",
+  visited: "已读",
+  backlogTitle: "对话记录",
+  backlogClose: "关闭记录",
+  backlogChoice: "你选择了",
+} as const;

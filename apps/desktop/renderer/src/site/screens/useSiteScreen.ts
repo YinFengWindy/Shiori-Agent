@@ -20,9 +20,10 @@ export function useSiteScreen() {
   const openSettings = useCallback(() => setSettingsOpen(true), []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
-  // Esc closes the settings modal first; otherwise it returns to the title
-  // screen. Right-click (contextmenu) always returns to the title screen and
-  // never opens the native menu, matching galgame convention.
+  // Esc and right-click (contextmenu) close the settings modal first;
+  // otherwise they return to the title screen. Right-click never opens the
+  // native menu off the title screen, matching galgame convention. Overlays
+  // owned by a screen (the ADV backlog) stop these events themselves.
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
@@ -35,7 +36,10 @@ export function useSiteScreen() {
     function handleContextMenu(event: MouseEvent) {
       if (screen === "title" && !settingsOpen) return;
       event.preventDefault();
-      if (settingsOpen) closeSettings();
+      if (settingsOpen) {
+        closeSettings();
+        return;
+      }
       goToTitle();
     }
     window.addEventListener("keydown", handleKeyDown);

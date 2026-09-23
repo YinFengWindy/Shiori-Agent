@@ -1,30 +1,37 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { X } from "@phosphor-icons/react";
-import { SITE_SETTINGS_CLOSE_LABEL, SITE_SETTINGS_PLACEHOLDER, SITE_SETTINGS_TITLE } from "../content/siteCopy";
+import { TextSpeedPicker } from "../components/settings/TextSpeedPicker";
+import { TextSpeedPreview } from "../components/settings/TextSpeedPreview";
+import { VolumeSlider } from "../components/settings/VolumeSlider";
+import { SITE_SETTINGS_CLOSE_LABEL, SITE_SETTINGS_COPY, SITE_SETTINGS_TITLE } from "../content/siteCopy";
+import { useDialogFocus } from "../hooks/useDialogFocus";
+import { TEXT_SPEED_MS_PER_CHAR } from "../prefs/sitePrefs";
+import { useSitePrefs } from "../prefs/useSitePrefs";
 
 interface SettingsModalProps {
   onClose: () => void;
 }
 
 /**
- * Placeholder settings dialog (BGM/SFX volume, text speed land here in
- * #348). Esc is handled by `useSiteScreen`; this component only owns the
- * close button and initial focus.
+ * Settings dialog: BGM / SFX volume and text speed, saved immediately via
+ * `useSitePrefs` (the ADV typewriter picks up a new speed on its next
+ * frame). Volumes are only stored for now; the sound ticket (#349) plays
+ * them. Esc and right-click are handled by `useSiteScreen`.
  */
 export function SettingsModal({ onClose }: SettingsModalProps) {
+  const { prefs, update } = useSitePrefs();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    closeButtonRef.current?.focus();
-  }, []);
+  useDialogFocus(dialogRef, closeButtonRef);
 
   return (
     <div className="site-modal-backdrop fixed inset-0 z-50 grid place-items-center px-4" onClick={onClose}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="site-settings-title"
-        className="site-panel w-full max-w-sm rounded-xl px-6 py-6"
+        className="site-panel site-settings w-full max-w-sm rounded-xl px-6 py-6"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-4">
@@ -41,7 +48,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             <X size={16} aria-hidden="true" />
           </button>
         </div>
-        <p className="mt-4 text-body text-site-ink-muted">{SITE_SETTINGS_PLACEHOLDER}</p>
+        <div className="mt-5 flex flex-col gap-5">
+          <VolumeSlider id="site-bgm-volume" label={SITE_SETTINGS_COPY.bgmVolume} value={prefs.bgmVolume} onChange={(bgmVolume) => update({ bgmVolume })} />
+          <VolumeSlider id="site-sfx-volume" label={SITE_SETTINGS_COPY.sfxVolume} value={prefs.sfxVolume} onChange={(sfxVolume) => update({ sfxVolume })} />
+          <div className="flex flex-col gap-3">
+            <TextSpeedPicker value={prefs.textSpeed} onChange={(textSpeed) => update({ textSpeed })} />
+            <TextSpeedPreview key={prefs.textSpeed} text={SITE_SETTINGS_COPY.textSpeedPreview} msPerChar={TEXT_SPEED_MS_PER_CHAR[prefs.textSpeed]} />
+          </div>
+        </div>
       </div>
     </div>
   );
