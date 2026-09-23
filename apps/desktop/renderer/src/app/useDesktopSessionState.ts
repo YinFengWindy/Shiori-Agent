@@ -19,6 +19,8 @@ import {
   type RoleSessionCache,
 } from "../chat/roleSessionCache";
 import { getRoleIdFromSession } from "./appState";
+import type { ChatSendFailure } from "../chat/chatSendFailure";
+import { errorMessage, type FeedbackReporter } from "../shared/feedback/feedbackStore";
 import {
   getSessionPaginationState,
   mergeOpenedSessionSnapshot,
@@ -100,8 +102,9 @@ type UseDesktopSessionStateArgs = {
   setRoles: React.Dispatch<React.SetStateAction<RoleRecord[]>>;
   setActiveRoleId: React.Dispatch<React.SetStateAction<string>>;
   setActiveSession: React.Dispatch<React.SetStateAction<SessionPayload | null>>;
-  setError: React.Dispatch<React.SetStateAction<string>>;
-  setNotice: React.Dispatch<React.SetStateAction<string>>;
+  feedback: FeedbackReporter;
+  /** Surfaces a failed send; the caller attaches remedies (e.g. choosing a model) it can navigate to. */
+  reportSendFailure: (failure: ChatSendFailure) => void;
   setUnreadCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   setSelectedAvatarAsset: React.Dispatch<React.SetStateAction<string>>;
   setSelectedChatBackground: React.Dispatch<React.SetStateAction<string>>;
@@ -175,8 +178,8 @@ export function useDesktopSessionState({
   setRoles,
   setActiveRoleId,
   setActiveSession,
-  setError,
-  setNotice,
+  feedback,
+  reportSendFailure,
   setUnreadCounts,
   setSelectedAvatarAsset,
   setSelectedChatBackground,
@@ -286,7 +289,7 @@ export function useDesktopSessionState({
   } = useDesktopSessionPagination({
     activeRoleIdRef,
     activeSessionRef,
-    setError,
+    reportError: feedback.error,
     updateCommittedActiveSession,
   });
 
@@ -296,7 +299,7 @@ export function useDesktopSessionState({
       payload: {},
     });
     if (rolesRes.error) {
-      setError(rolesRes.error.message);
+      feedback.error(`角色列表加载失败：${rolesRes.error.message}`);
       return null;
     }
     const nextRoles = (rolesRes.payload.roles as RoleRecord[]) ?? [];
@@ -462,7 +465,6 @@ export function useDesktopSessionState({
     const preserveCurrentSession = Boolean(options?.preserveCurrentSession && !cachedSession);
     if (role && !preserveCurrentSession) {
       applyRoleSnapshotRef.current(role, cachedSession);
-      setError("");
     }
     if (!preserveCurrentSession && immediateSession !== activeSessionRef.current) {
       commitActiveSession(immediateSession);
@@ -494,7 +496,7 @@ export function useDesktopSessionState({
           ));
         }
       }
-      setError(sessionError ?? "打开角色会话失败");
+      feedback.error(`打开会话失败：${sessionError ?? "未知错误"}`);
       return false;
     }
     const latestRoles = await loadRolesFromBridge();
@@ -505,7 +507,6 @@ export function useDesktopSessionState({
     invalidateSessionPagination(session.key);
     setActiveRoleId(roleId);
     commitActiveSession(session);
-    setError("");
     const resolvedRole = roleOverride
       ?? latestRoles?.find((item) => item.id === roleId)
       ?? rolesRef.current.find((item) => item.id === roleId)
@@ -529,7 +530,7 @@ export function useDesktopSessionState({
     if (!activeRoleIdRef.current) return;
     const refreshed = await openRole(activeRoleIdRef.current, null, { recordHistory: false });
     if (refreshed) {
-      setNotice("会话已刷新。");
+      feedback.success("会话已刷新");
     }
   }
 
@@ -554,7 +555,6 @@ export function useDesktopSessionState({
     pendingUserMessagesRef.current[sessionKey] = pendingUserMessage;
     activeTurnIdsRef.current[sessionKey] = turnId;
     markSessionSending(sessionKey, roleId);
-    setError("");
     updateCommittedActiveSession((current) =>
       current?.key === sessionKey
         ? {
@@ -595,7 +595,7 @@ export function useDesktopSessionState({
             current?.key === sessionKey ? previousSession : current,
           );
         }
-        window.alert(res.error.message);
+        reportSendFailure(res.error);
         return false;
       }
       const update = parseSessionMessageUpdatePayload(res.payload);
@@ -624,8 +624,7 @@ export function useDesktopSessionState({
           current?.key === sessionKey ? previousSession : current,
         );
       }
-      const message = error instanceof Error ? error.message : String(error);
-      window.alert(message);
+      reportSendFailure({ message: errorMessage(error) });
       return false;
     }
   }
@@ -668,7 +667,7 @@ export function useDesktopSessionState({
     } catch (error) {
       if (shouldSurfaceChatCancellationFailure(activeTurnIdsRef.current, sessionKey, turnId)) {
         clearSessionCancelling(sessionKey);
-        window.alert(error instanceof Error ? error.message : String(error));
+        feedback.error(errorMessage(error));
       }
       return false;
     }

@@ -4,13 +4,13 @@ import type { AppMainView, NewRoleFormState, PendingRoleCardAction, RoleRecord }
 import { createEmptyNewRoleForm, createPendingRoleRecord, waitForMinimumRoleCardBusy } from "./appState";
 import type { NavigationEntry } from "./appState";
 import { buildRoleCreationRequest, createRoleFromDraft } from "../roles/roleCreation";
+import { errorMessage, type FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 /** Workspace dependencies used to activate and navigate to a created role. */
 export type RoleCreationControllerArgs = {
   activeRoleIdRef: React.MutableRefObject<string>;
   setPendingRoleCardAction: React.Dispatch<React.SetStateAction<PendingRoleCardAction>>;
-  setWorkspaceFeedback: React.Dispatch<React.SetStateAction<{ tone: "success" | "error"; message: string } | null>>;
-  setError: React.Dispatch<React.SetStateAction<string>>;
+  feedback: FeedbackReporter;
   setRoles: React.Dispatch<React.SetStateAction<RoleRecord[]>>;
   setActiveRoleId: React.Dispatch<React.SetStateAction<string>>;
   openRoleWorkspace: (
@@ -32,21 +32,20 @@ export type RoleCreationWorkflowArgs = RoleCreationControllerArgs & {
   createPendingRoleId?: () => string;
 };
 
-type FormActionArgs = Pick<RoleCreationControllerArgs, "setWorkspaceFeedback" | "openRoleWorkspace"> & {
+type FormActionArgs = Pick<RoleCreationControllerArgs, "feedback" | "openRoleWorkspace"> & {
   updateNewRoleForm: (next: NewRoleFormState) => void;
 };
 
 /** Resets the new-role draft and its feedback. */
-export function resetRoleCreationForm({ updateNewRoleForm, setWorkspaceFeedback }: FormActionArgs) {
+export function resetRoleCreationForm({ updateNewRoleForm, feedback }: FormActionArgs) {
   updateNewRoleForm(createEmptyNewRoleForm());
-  setWorkspaceFeedback({ tone: "success", message: "新建角色表单已重置。" });
+  feedback.success("已重置新建角色表单");
 }
 
 /** Leaves role creation only when there is no creation request in flight. */
-export function cancelRoleCreation({ creating, updateNewRoleForm, setWorkspaceFeedback, openRoleWorkspace }: FormActionArgs & { creating: boolean }) {
+export function cancelRoleCreation({ creating, updateNewRoleForm, openRoleWorkspace }: FormActionArgs & { creating: boolean }) {
   if (creating) return false;
   updateNewRoleForm(createEmptyNewRoleForm());
-  setWorkspaceFeedback(null);
   openRoleWorkspace({ kind: "roles-list" });
   return true;
 }
@@ -69,7 +68,7 @@ async function completeRoleCreation(role: RoleRecord, pendingId: string | undefi
   const destination: AppMainView = imported ? { kind: "role-detail", roleId: role.id } : { kind: "roles-list" };
   args.openRoleWorkspace(destination, { recordHistory: false });
   args.replaceNavigationEntry(args.buildNavigationEntry(destination, role.id));
-  args.setWorkspaceFeedback({ tone: "success", message: imported ? "角色卡导入成功。" : "角色创建成功。" });
+  args.feedback.success(imported ? "角色卡已导入" : "角色已创建");
 }
 
 function startOptimisticCreation(form: NewRoleFormState, pendingId: string, args: RoleCreationWorkflowArgs) {
@@ -94,9 +93,7 @@ export async function runRoleCreation(form: NewRoleFormState, args: RoleCreation
   try {
     buildRoleCreationRequest(form);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    args.setError(message);
-    args.setWorkspaceFeedback({ tone: "error", message: `角色创建失败：${message}` });
+    args.feedback.error(`角色创建失败：${errorMessage(error)}`);
     return false;
   }
 
@@ -106,8 +103,6 @@ export async function runRoleCreation(form: NewRoleFormState, args: RoleCreation
   const startedAt = Date.now();
   let createdRole: RoleRecord | undefined;
   args.setCreating(true);
-  args.setError("");
-  args.setWorkspaceFeedback(null);
   try {
     if (pendingId) startOptimisticCreation(form, pendingId, args);
     createdRole = await createRoleFromDraft(form, args.invoke);
@@ -115,19 +110,18 @@ export async function runRoleCreation(form: NewRoleFormState, args: RoleCreation
     await completeRoleCreation(createdRole, pendingId, imported, args);
     return true;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    args.setError(message);
+    const message = errorMessage(error);
     if (createdRole?.id) {
       // Persistence has succeeded: keep the role so retrying navigation cannot create it again.
       activateCreatedRole(createdRole, pendingId, args);
       const destination = { kind: "role-detail" as const, roleId: createdRole.id };
       args.openRoleWorkspace(destination, { recordHistory: false });
       args.replaceNavigationEntry(args.buildNavigationEntry(destination, createdRole.id));
-      args.setWorkspaceFeedback({ tone: "error", message: `角色已创建，打开失败：${message}` });
+      args.feedback.error(`角色已创建，打开失败：${message}`);
       return true;
     }
     if (pendingId) restoreFailedCreation(pendingId, previousRoleId, args);
-    args.setWorkspaceFeedback({ tone: "error", message: `${imported ? "角色卡导入" : "角色创建"}失败：${message}` });
+    args.feedback.error(`${imported ? "角色卡导入" : "角色创建"}失败：${message}`);
     return false;
   } finally {
     args.setCreating(false);

@@ -117,9 +117,9 @@ function createHarness(initialSession: SessionPayload) {
   let error = "";
   let updateCount = 0;
 
-  const setError = ((next: React.SetStateAction<string>) => {
-    error = typeof next === "function" ? next(error) : next;
-  }) as React.Dispatch<React.SetStateAction<string>>;
+  const reportError = (message: string) => {
+    error = message;
+  };
   const updateCommittedActiveSession = (updater: (current: SessionPayload | null) => SessionPayload | null) => {
     updateCount += 1;
     activeSessionRef.current = updater(activeSessionRef.current);
@@ -133,7 +133,7 @@ function createHarness(initialSession: SessionPayload) {
   const controller = createDesktopSessionPaginationController({
     activeRoleIdRef,
     activeSessionRef,
-    setError,
+    reportError,
     updateCommittedActiveSession,
     invoke,
     generationRef,

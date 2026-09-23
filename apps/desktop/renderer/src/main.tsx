@@ -15,7 +15,6 @@ import {
   sidebarMaxWidth,
   sidebarMinWidth,
   type PendingMessageNavigation,
-  type WorkspaceFeedback,
 } from "./app/appState";
 import { useDesktopSessionState } from "./app/useDesktopSessionState";
 import { useDesktopViewSynchronization } from "./app/useDesktopViewSynchronization";
@@ -31,6 +30,10 @@ import { navigateToRoleSearchResult } from "./app/roleSearchNavigation";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
+import { requestChatModelMenu } from "./chat/chatModelMenuRequests";
+import { chatSendFailureAction } from "./chat/chatSendFailure";
+import { feedback } from "./shared/feedback/feedbackStore";
+import { FeedbackToaster } from "./shared/feedback/FeedbackToaster";
 import type { ChatMessageNavigationScroller } from "./chat/useChatScrollController";
 import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
 import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalDiagnostics";
@@ -59,11 +62,10 @@ import { OnboardingPage } from "./onboarding/OnboardingPage";
 
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
+  const [bridgeError, setBridgeError] = useState("");
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [activeRoleId, setActiveRoleId] = useState("");
   const [activeSession, setActiveSession] = useState<SessionPayload | null>(null);
-  const [, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [savingRole, setSavingRole] = useState(false);
   const [savingRoleAssets, setSavingRoleAssets] = useState(false);
   const [deletingRole, setDeletingRole] = useState(false);
@@ -73,15 +75,6 @@ function App(): React.ReactElement {
   const [pendingRoleCardAction, setPendingRoleCardAction] = useState<PendingRoleCardAction>(null);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [pendingDeleteRoleId, setPendingDeleteRoleId] = useState("");
-  const [workspaceFeedback, setWorkspaceFeedback] = useState<WorkspaceFeedback | null>(null);
-  // Own lifetime, separate from `workspaceFeedback` on purpose (issue #226
-  // follow-up): that one is gated to the role-workspace view and cleared by
-  // that flow's own state transitions, so relaxing its gate would let a
-  // stale role-workspace message follow the user into an unrelated view. A
-  // refused nav.page selection (`guardedNavPageSelect`) can happen from any
-  // view, so it gets its own slot, auto-cleared the same way `notice`/
-  // `workspaceFeedback` already are (see `useDesktopUiEffects`).
-  const [navBlockedMessage, setNavBlockedMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingMessageNavigation, setPendingMessageNavigation] = useState<PendingMessageNavigation | null>(null);
   const [highlightedMessageKey, setHighlightedMessageKey] = useState("");
@@ -122,6 +115,7 @@ function App(): React.ReactElement {
   const openRoleRequestIdRef = useRef(0);
   const roleAssetSaveRequestIdRef = useRef(0);
   const activeRoleIdRef = useLatestRef(activeRoleId);
+  const healthRef = useLatestRef(health);
   const activeSessionRef = useLatestRef(activeSession);
   const pendingMessageNavigationRef = useLatestRef(pendingMessageNavigation);
   const roleSessionCacheRef = useRef<RoleSessionCache>({});
@@ -267,8 +261,13 @@ function App(): React.ReactElement {
     setRoles,
     setActiveRoleId,
     setActiveSession,
-    setError,
-    setNotice,
+    feedback,
+    reportSendFailure: (failure) => feedback.error(failure.message, {
+      action: chatSendFailureAction(failure, {
+        chooseRoleModel: requestChatModelMenu,
+        openModelSettings: () => openSettingsWorkspace("models"),
+      }),
+    }),
     setUnreadCounts,
     setSelectedAvatarAsset,
     setSelectedChatBackground,
@@ -329,8 +328,9 @@ function App(): React.ReactElement {
     setActiveRoleId,
     setActiveIllustration,
     setHealth,
-    setError,
-    setNotice,
+    setBridgeError,
+    feedback,
+    healthRef,
     setWindowMaximized,
     setWindowVisible,
     setUnreadCounts,
@@ -432,15 +432,13 @@ function App(): React.ReactElement {
     updateCommittedActiveSession,
     loadMessagesAround,
     queueMessageNavigation,
-    setError,
-    setNotice,
+    feedback,
   });
 
   const roleCreation = useRoleCreationController({
     activeRoleIdRef,
     setPendingRoleCardAction,
-    setWorkspaceFeedback,
-    setError,
+    feedback,
     setRoles,
     setActiveRoleId,
     openRoleWorkspace,
@@ -471,9 +469,7 @@ function App(): React.ReactElement {
     setSavingRoleAssets,
     setDeletingRole,
     setPendingRoleCardAction,
-    setWorkspaceFeedback,
-    setError,
-    setNotice,
+    feedback,
     setRoles,
     setActiveRoleId,
     setSelectedAvatarAsset,
@@ -506,8 +502,7 @@ function App(): React.ReactElement {
     applyRoleSnapshot,
     openRoleWorkspace,
     openRole,
-    setNotice,
-    setError,
+    feedback,
     setHighlightedMessageKey,
   });
 
@@ -516,12 +511,6 @@ function App(): React.ReactElement {
     setSidebarAnimating: leftSidebar.setAnimating,
     pendingMessageNavigation,
     setHighlightedMessageKey,
-    notice,
-    setNotice,
-    workspaceFeedback,
-    setWorkspaceFeedback,
-    navBlockedMessage,
-    setNavBlockedMessage,
     highlightedMessageKey,
     previewIllustrations,
     activeIllustration,
@@ -535,14 +524,13 @@ function App(): React.ReactElement {
   async function resetRoleForm(): Promise<void> {
     if (!detailRole) return;
     updateRoleForm(createRoleFormFromRole(detailRole));
-    setNotice("角色表单已重置。");
+    feedback.success("已重置角色表单");
   }
 
   const onboarding = useOnboardingController(openRole, bridgeLifecycle);
   if (onboarding.visible) {
     return <OnboardingPage controller={onboarding} windowMaximized={windowMaximized} />;
   }
-
 
   return (
     <DesktopAppFrame
@@ -586,10 +574,10 @@ function App(): React.ReactElement {
       onOpenSearch={() => setShowSearchDialog(true)}
       onOpenRolesWorkspace={() => openRoleWorkspace({ kind: "roles-list" })}
       onOpenPluginPage={(pageId) => openPluginPage(pageId)}
-      navBlockedMessage={navBlockedMessage}
-      onNavigationBlocked={(message) => setNavBlockedMessage(message)}
       onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
-      workspaceFeedback={workspaceFeedback}
+      health={health}
+      bridgeError={bridgeError}
+      onRestartBridge={bridgeLifecycle.restartBridge}
       activeRole={activeRole}
       activeSession={activeSession}
       chatLatestImagePath={resolvedChatImagePath}
@@ -605,7 +593,6 @@ function App(): React.ReactElement {
       headerTitle={headerTitle}
       highlightedMessageKey={highlightedMessageKey}
       onMessageNavigationTargetMounted={handleMessageNavigationTargetMounted}
-      notice={notice}
       isVisibleChatSending={isVisibleChatSending}
       isVisibleChatCancelling={isVisibleChatCancelling}
       visibleIllustrationUrl={visibleIllustrationUrl}
@@ -696,7 +683,7 @@ function App(): React.ReactElement {
       canGoToPreviousLightboxImage={selectedChatImageIndex > 0}
       chatImageActions={selectedChatImageEntry ? <PluginChatImageActions
         target={{ ...selectedChatImageEntry, sessionKey: activeSessionKey }}
-        onSessionUpdate={applyPluginImageUpdate} onError={setError} onNotice={setNotice}
+        onSessionUpdate={applyPluginImageUpdate} onError={feedback.error} onNotice={feedback.success}
       /> : null}
       canLocateLightboxMessage={Boolean(activeRoleId && selectedChatImageEntry?.messageId)}
       addingChatImageToAssetLibrary={addingChatImageToAssetLibrary}
@@ -714,5 +701,7 @@ initializeRuntimePluginUi();
 createRoot(document.getElementById("root") as HTMLElement).render(
   <DesktopErrorBoundary>
     <App />
+    {/* Outside App so every branch (onboarding, workspace, full-screen plugin pages) shares one outlet. */}
+    <FeedbackToaster />
   </DesktopErrorBoundary>,
 );

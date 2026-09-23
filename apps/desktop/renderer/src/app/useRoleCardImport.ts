@@ -3,10 +3,12 @@ import type { NewRoleFormState } from "../shared/types";
 import { useLatestRef } from "../shared/useLatestRef";
 import { createRoleFormFromImport, idleRoleCardImport, readRoleCardImportPreview } from "./roleCardImportState";
 import type { RoleCardImportState } from "./roleCardImportState";
-import type { RoleCreationControllerArgs } from "./roleCreationWorkflow";
+import { errorMessage } from "../shared/feedback/feedbackStore";
 
-type ImportControllerArgs = Pick<RoleCreationControllerArgs, "setWorkspaceFeedback"> & {
+type ImportControllerArgs = {
   updateNewRoleForm: (next: React.SetStateAction<NewRoleFormState>) => void;
+  /** Receives the already-prefixed failure message; the caller decides where it is shown. */
+  reportImportError: (message: string) => void;
 };
 
 async function releasePreview(importId: string) {
@@ -15,7 +17,7 @@ async function releasePreview(importId: string) {
 }
 
 /** Owns staging and invalidates stale preview responses when a draft is cancelled or reset. */
-export function useRoleCardImport({ updateNewRoleForm, setWorkspaceFeedback }: ImportControllerArgs) {
+export function useRoleCardImport({ updateNewRoleForm, reportImportError }: ImportControllerArgs) {
   const [roleCardImport, setRoleCardImport] = useState(idleRoleCardImport);
   const currentImportRef = useLatestRef(roleCardImport);
   const generation = useRef(0);
@@ -32,8 +34,7 @@ export function useRoleCardImport({ updateNewRoleForm, setWorkspaceFeedback }: I
   }
 
   function reportError(error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    setWorkspaceFeedback({ tone: "error", message: `角色导入失败：${message}` });
+    reportImportError(`角色导入失败：${errorMessage(error)}`);
   }
 
   async function previewRoleCard() {

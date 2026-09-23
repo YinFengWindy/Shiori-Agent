@@ -1,6 +1,7 @@
 import type React from "react";
 import { findChatMessageElement } from "../chat/chatMessageDom";
 import type { AppMainView, RoleRecord, SessionPayload } from "../shared/types";
+import { errorMessage, type FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 type UseChatInteractionsArgs = {
   activeRoleId: string;
@@ -13,8 +14,7 @@ type UseChatInteractionsArgs = {
     options?: { recordHistory?: boolean },
   ) => void;
   openRole: (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<boolean>;
-  setNotice: React.Dispatch<React.SetStateAction<string>>;
-  setError: React.Dispatch<React.SetStateAction<string>>;
+  feedback: FeedbackReporter;
   setHighlightedMessageKey: React.Dispatch<React.SetStateAction<string>>;
 };
 
@@ -27,8 +27,7 @@ export function useChatInteractions({
   applyRoleSnapshot,
   openRoleWorkspace,
   openRole,
-  setNotice,
-  setError,
+  feedback,
   setHighlightedMessageKey,
 }: UseChatInteractionsArgs) {
   async function openRoleDetail(roleId: string): Promise<void> {
@@ -66,7 +65,7 @@ export function useChatInteractions({
   async function copyChatMessage(content: string): Promise<void> {
     const normalizedContent = content.trim();
     if (!normalizedContent) {
-      setNotice("当前消息没有可复制的文本。");
+      feedback.info("这条消息没有可复制的文字");
       return;
     }
     try {
@@ -82,9 +81,9 @@ export function useChatInteractions({
         document.execCommand("copy");
         textarea.remove();
       }
-      setNotice("已复制消息。");
+      feedback.success("已复制");
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      feedback.error(`复制失败：${errorMessage(error)}`);
     }
   }
 

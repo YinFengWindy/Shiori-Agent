@@ -403,7 +403,26 @@ button[role="combobox"]:focus-visible {
   55%, 100% { opacity: 0.2; }
 }
 
+/* Toast entry: a short drop-in from above the stack. */
+.feedback-toast {
+  animation: feedback-toast-in var(--duration-base) var(--ease-out-soft) both;
+}
+
+@keyframes feedback-toast-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes feedback-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .feedback-toast {
+    animation-name: feedback-fade-in;
+  }
+
   .chat-thinking-content,
   .chat-thinking-content-expanded {
     transition: opacity 160ms ease;

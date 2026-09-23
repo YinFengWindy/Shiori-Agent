@@ -32,10 +32,7 @@ async function mountImport({
     replaceForm = setForm;
     controller = useRoleCardImport({
       updateNewRoleForm: setForm,
-      setWorkspaceFeedback: (next) => {
-        const feedback = typeof next === "function" ? next(null) : next;
-        if (feedback) feedbackMessages.push(feedback.message);
-      },
+      reportImportError: (message) => { feedbackMessages.push(message); },
     });
     return <output>{controller.roleCardImport.status}:{form.name}</output>;
   }

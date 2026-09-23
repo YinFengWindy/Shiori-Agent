@@ -29,7 +29,7 @@ test("plugin asset refresh clears stale enabled drafts while retaining unsaved r
     draft = { ...form, pluginSettings: { sample: { enabled: form.pluginSettings.sample?.enabled === true } } };
     refresh = useRolePluginRefresh({ detailRoleId: role.id, detailRole: persisted, roleFormRef: { current: form },
       loadRolesFromBridge: async () => [persisted], updateRoleForm: setForm,
-      setError: (error) => { throw new Error(error); },
+      reportError: (error) => { throw new Error(error); },
     });
     return <span>{form.name}</span>;
   }
@@ -60,7 +60,7 @@ test("enabling a plugin reloads its projection for a role cached while disabled"
     edit = () => setForm((current) => ({ ...current, pluginSettings: { sample: { enabled: false } } }));
     useRolePluginRefresh({ detailRoleId: role.id, detailRole: persisted, roleFormRef: { current: form },
       loadRolesFromBridge: async () => { calls += 1; return [persisted]; }, updateRoleForm: setForm,
-      setError: (error) => { throw new Error(error); },
+      reportError: (error) => { throw new Error(error); },
     });
     return null;
   }
@@ -97,7 +97,7 @@ test("an in-flight refresh does not overwrite an edit made after the request beg
     edit = () => setForm((current) => ({ ...current, pluginSettings: { sample: { enabled: true } } }));
     useRolePluginRefresh({ detailRoleId: role.id, detailRole: persisted, roleFormRef: { current: form },
       loadRolesFromBridge: () => pending, updateRoleForm: setForm,
-      setError: (error) => { throw new Error(error); },
+      reportError: (error) => { throw new Error(error); },
     });
     return null;
   }

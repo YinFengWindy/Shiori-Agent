@@ -3,7 +3,8 @@ import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { ChatSurface } from "../chat/ChatSurface";
 import type { ChatMessageNavigationScroller } from "../chat/useChatScrollController";
 import { guardedNavPageSelect } from "../plugins/pluginUiRegistry";
-import { FeedbackChip } from "./FeedbackChip";
+import { BridgeOfflineBanner } from "./BridgeOfflineBanner";
+import { feedback } from "../shared/feedback/feedbackStore";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { RoleAssetsPage } from "../roles/RoleAssetsPage";
 import { RoleCreatePage } from "../roles/RoleCreatePage";
@@ -29,7 +30,6 @@ import type {
 } from "../shared/types";
 import type { RoleCardImportState } from "./roleCardImportState";
 import { TitleBar } from "../shell/TitleBar";
-import type { WorkspaceFeedback } from "./appState";
 
 type RightSidebarViewState = {
   collapsed: boolean;
@@ -71,10 +71,10 @@ type DesktopAppFrameProps = {
   onOpenRolesWorkspace: () => void;
   onOpenPluginPage: (pageId: string) => void;
   onOpenRole: (roleId: string) => void;
-  workspaceFeedback: WorkspaceFeedback | null;
-  /** A refused nav.page selection's reason (issue #226 gap B, owner decision: 拦住 + 给提示); empty when none is showing. Its own lifetime — see `navBlockedMessage` in `main.tsx`/`useDesktopUiEffects`, deliberately not merged into `workspaceFeedback`. */
-  navBlockedMessage: string;
-  onNavigationBlocked: (message: string) => void;
+  /** Raw bridge health ("connecting" / "online" / "offline"); drives the offline banner. */
+  health: string;
+  bridgeError: string;
+  onRestartBridge: () => Promise<void>;
   activeRole: RoleRecord | null;
   activeSession: SessionPayload | null;
   chatLatestImagePath: string;
@@ -94,7 +94,6 @@ type DesktopAppFrameProps = {
     target: HTMLElement,
     scrollToMessage: ChatMessageNavigationScroller,
   ) => void;
-  notice: string;
   isVisibleChatSending: boolean;
   isVisibleChatCancelling: boolean;
   visibleIllustrationUrl: string;
@@ -199,9 +198,9 @@ export function DesktopAppFrame({
   onOpenRolesWorkspace,
   onOpenPluginPage,
   onOpenRole,
-  workspaceFeedback,
-  navBlockedMessage,
-  onNavigationBlocked,
+  health,
+  bridgeError,
+  onRestartBridge,
   activeRole,
   activeSession,
   chatLatestImagePath,
@@ -217,7 +216,6 @@ export function DesktopAppFrame({
   headerTitle,
   highlightedMessageKey,
   onMessageNavigationTargetMounted,
-  notice,
   isVisibleChatSending,
   isVisibleChatCancelling,
   visibleIllustrationUrl,
@@ -327,6 +325,9 @@ export function DesktopAppFrame({
         onGoForward={onGoForward}
         onRefreshSession={onRefreshSession}
       />
+      <div>
+        <BridgeOfflineBanner health={health} bridgeError={bridgeError} onRestart={onRestartBridge} />
+      </div>
       <div
         className={cx(
           "desktop-shell grid min-h-0 overflow-hidden bg-transparent",
@@ -343,7 +344,7 @@ export function DesktopAppFrame({
             pageId: page.id,
             label: page.label,
             icon: page.icon,
-            onSelect: guardedNavPageSelect(page, () => onOpenPluginPage(page.id), onNavigationBlocked),
+            onSelect: guardedNavPageSelect(page, () => onOpenPluginPage(page.id), (message) => feedback.warning(message)),
           }))}
           onOpenSearch={onOpenSearch}
           onBackToChat={onBackToChat}
@@ -384,12 +385,6 @@ export function DesktopAppFrame({
               onPointerDown={sidebarState.onBeginResize}
             />
           ) : null}
-          {roleWorkspaceViewActive && workspaceFeedback ? (
-            <FeedbackChip tone={workspaceFeedback.tone} message={workspaceFeedback.message} />
-          ) : null}
-          {navBlockedMessage ? (
-            <FeedbackChip tone="error" message={navBlockedMessage} slot="secondary" />
-          ) : null}
           {mainView.kind === "chat" ? (
             <ChatSurface
               activeRole={activeRole}
@@ -412,7 +407,6 @@ export function DesktopAppFrame({
               headerTitle={headerTitle}
               highlightedMessageKey={highlightedMessageKey}
               onMessageNavigationTargetMounted={onMessageNavigationTargetMounted}
-              notice={notice}
               sending={isVisibleChatSending}
               cancelling={isVisibleChatCancelling}
               visibleIllustrationUrl={visibleIllustrationUrl}

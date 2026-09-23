@@ -116,7 +116,8 @@ export default {
         "out-soft": "var(--ease-out-soft)",
       },
       gridTemplateRows: {
-        app: "calc(var(--titlebar-height) + 5px) minmax(0, 1fr)",
+        // title bar · status banner slot (collapses to 0 when empty) · shell
+        app: "calc(var(--titlebar-height) + 5px) auto minmax(0, 1fr)",
         chat: "55px minmax(0, 1fr)",
         conversation: "auto minmax(0, 1fr) auto",
       },

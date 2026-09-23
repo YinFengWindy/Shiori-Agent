@@ -9,18 +9,19 @@ import {
   parseSessionSummary,
 } from "./sessionMessagePagination";
 import type { SessionPayload } from "../shared/types";
+import { errorMessage } from "../shared/feedback/feedbackStore";
 
 type UseDesktopSessionPaginationArgs = {
   activeRoleIdRef: React.MutableRefObject<string>;
   activeSessionRef: React.MutableRefObject<SessionPayload | null>;
-  setError: React.Dispatch<React.SetStateAction<string>>;
+  reportError: (message: string) => void;
   updateCommittedActiveSession: (
     updater: (current: SessionPayload | null) => SessionPayload | null,
   ) => void;
 };
 
 type DesktopSessionPaginationControllerArgs = UseDesktopSessionPaginationArgs & {
-  setError: React.Dispatch<React.SetStateAction<string>>;
+  reportError: (message: string) => void;
   updateCommittedActiveSession: (
     updater: (current: SessionPayload | null) => SessionPayload | null,
   ) => void;
@@ -33,7 +34,7 @@ type DesktopSessionPaginationControllerArgs = UseDesktopSessionPaginationArgs & 
 export function createDesktopSessionPaginationController({
   activeRoleIdRef,
   activeSessionRef,
-  setError,
+  reportError,
   updateCommittedActiveSession,
   invoke,
   generationRef,
@@ -83,7 +84,7 @@ export function createDesktopSessionPaginationController({
       return true;
     } catch (error) {
       if (isCurrentGeneration(sessionKey, generation)) {
-        setError(error instanceof Error ? error.message : String(error));
+        reportError(errorMessage(error));
       }
       return false;
     } finally {
@@ -116,7 +117,7 @@ export function createDesktopSessionPaginationController({
       return true;
     } catch (error) {
       if (isCurrentGeneration(expectedSessionKey, generation)) {
-        setError(error instanceof Error ? error.message : String(error));
+        reportError(errorMessage(error));
       }
       return false;
     }

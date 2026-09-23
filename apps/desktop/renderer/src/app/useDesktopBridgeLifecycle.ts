@@ -16,6 +16,7 @@ import {
   parseSessionMessageUpdatePayload,
 } from "./useDesktopSessionState";
 import type { RoleRecord, SessionPayload, AppMainView } from "../shared/types";
+import { errorMessage, type FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 type UseDesktopBridgeLifecycleArgs = {
   activeRoleId: string;
@@ -23,8 +24,10 @@ type UseDesktopBridgeLifecycleArgs = {
   setActiveRoleId: React.Dispatch<React.SetStateAction<string>>;
   setActiveIllustration: React.Dispatch<React.SetStateAction<string>>;
   setHealth: React.Dispatch<React.SetStateAction<string>>;
-  setError: React.Dispatch<React.SetStateAction<string>>;
-  setNotice: React.Dispatch<React.SetStateAction<string>>;
+  /** The latest bridge failure reason, shown by the offline banner; cleared once the bridge is healthy. */
+  setBridgeError: React.Dispatch<React.SetStateAction<string>>;
+  feedback: FeedbackReporter;
+  healthRef: React.MutableRefObject<string>;
   setWindowMaximized: React.Dispatch<React.SetStateAction<boolean>>;
   setWindowVisible: React.Dispatch<React.SetStateAction<boolean>>;
   setUnreadCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>;
@@ -55,8 +58,9 @@ export function useDesktopBridgeLifecycle({
   setActiveRoleId,
   setActiveIllustration,
   setHealth,
-  setError,
-  setNotice,
+  setBridgeError,
+  feedback,
+  healthRef,
   setWindowMaximized,
   setWindowVisible,
   setUnreadCounts,
@@ -96,8 +100,16 @@ export function useDesktopBridgeLifecycle({
     updateCommittedActiveSession,
   });
 
-  const refreshBridge = useCallback(async (): Promise<void> => {
-    setError("");
+  const reportPluginStateError = useCallback((error: unknown) => {
+    feedback.error(`插件状态刷新失败：${errorMessage(error)}`);
+  }, [feedback]);
+
+  /**
+   * Re-reads health, the plugin roster and roles, then reopens the active role.
+   * Returns whether the bridge answered, so callers can tell a recovery apart
+   * from a still-offline bridge.
+   */
+  const refreshBridge = useCallback(async (): Promise<boolean> => {
     setHealth("connecting");
     const res = await window.miraDesktop.invoke({
       method: "health",
@@ -105,14 +117,15 @@ export function useDesktopBridgeLifecycle({
     });
     if (res.error) {
       setHealth("offline");
-      setError(res.error.message);
-      return;
+      setBridgeError(res.error.message);
+      return false;
     }
     setHealth("online");
-    void refreshPluginEnabledState().catch((error) => setError(String(error)));
+    setBridgeError("");
+    void refreshPluginEnabledState().catch(reportPluginStateError);
     const nextRoles = await callbacksRef.current.loadRolesFromBridge();
     if (!nextRoles) {
-      return;
+      return true;
     }
     const currentRoleId = activeRoleIdRef.current;
     if (currentRoleId) {
@@ -129,21 +142,20 @@ export function useDesktopBridgeLifecycle({
     } else if (nextRoles[0]) {
       await callbacksRef.current.openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
     }
-    setNotice("连接桥已刷新。");
-  }, [activeRoleIdRef, callbacksRef, setActiveIllustration, setActiveRoleId, setError, setHealth, setNotice]);
+    return true;
+  }, [activeRoleIdRef, callbacksRef, reportPluginStateError, setActiveIllustration, setActiveRoleId, setBridgeError, setHealth]);
 
   const restartBridge = useCallback(async (): Promise<void> => {
-    setError("");
     setHealth("connecting");
     const result = await window.miraDesktop.restartBridge();
     if (!result.ok) {
       setHealth("offline");
-      setError(result.lastError || "连接桥重启失败");
+      setBridgeError(result.lastError || "连接桥重启失败");
+      feedback.error("重新连接失败，请稍后再试");
       return;
     }
-    setNotice("连接桥已重启。");
-    await refreshBridge();
-  }, [refreshBridge, setError, setHealth, setNotice]);
+    if (await refreshBridge()) feedback.success("连接已恢复");
+  }, [feedback, refreshBridge, setBridgeError, setHealth]);
 
   useEffect(() => {
     const savedRoleId = window.localStorage.getItem("miraDesktop.activeRoleId") ?? "";
@@ -185,15 +197,27 @@ export function useDesktopBridgeLifecycle({
         if (event.method === "bridge.exit") {
           callbacks.clearAllSendingSessions();
           setHealth("offline");
-          setError(String(event.payload.message ?? "bridge exited"));
-          setNotice("连接桥已停止。你可以刷新或重启它。");
+          setBridgeError(String(event.payload.message ?? "bridge exited"));
+          return;
+        }
+
+        // The main process restarts an exited bridge on the next request
+        // (any invoke, e.g. the title bar's refresh) and announces it here.
+        // Only an offline renderer needs to reload: a restart it drives itself
+        // (`restartBridge`, `refreshBridge`, first load) is already
+        // "connecting" and reloads on its own when the request returns.
+        if (event.method === "bridge.ready") {
+          if (healthRef.current !== "offline") return;
+          void refreshBridge().then((recovered) => {
+            if (recovered) feedback.success("连接已恢复");
+          });
           return;
         }
 
         if (event.method === "runtime.applied") {
-          void refreshPluginEnabledState().catch((error) => setError(String(error)));
+          void refreshPluginEnabledState().catch(reportPluginStateError);
           void callbacks.loadRolesFromBridge().catch((error: unknown) => {
-            setError(error instanceof Error ? error.message : String(error));
+            feedback.error(`角色列表加载失败：${errorMessage(error)}`);
           });
           return;
         }
@@ -307,9 +331,8 @@ export function useDesktopBridgeLifecycle({
               if (!current || current.key !== eventSessionKey) return current;
               return failChatStream(current);
             });
-            const message = String(event.payload.message ?? "对话失败");
-            setError(message);
-            callbacks.appendSessionErrorMessage(currentSession.key, message);
+            // Shown inline as an error bubble in the conversation, not as a toast.
+            callbacks.appendSessionErrorMessage(currentSession.key, String(event.payload.message ?? "对话失败"));
           }
           callbacks.completeChatTurn(eventSessionKey, eventTurnId);
         }
@@ -326,12 +349,15 @@ export function useDesktopBridgeLifecycle({
     activeRoleIdRef,
     activeSessionRef,
     callbacksRef,
+    feedback,
+    healthRef,
     mainViewRef,
+    refreshBridge,
+    reportPluginStateError,
     rolesRef,
     setActiveIllustration,
-    setError,
+    setBridgeError,
     setHealth,
-    setNotice,
     setUnreadCounts,
     setWindowMaximized,
     setWindowVisible,
@@ -350,7 +376,7 @@ export function useDesktopBridgeLifecycle({
       if (cancelled) return;
       if (!bridgeStatus.running && bridgeStatus.lastError) {
         setHealth("offline");
-        setError(bridgeStatus.lastError);
+        setBridgeError(bridgeStatus.lastError);
         return;
       }
       const healthRes = await window.miraDesktop.invoke({
@@ -360,11 +386,11 @@ export function useDesktopBridgeLifecycle({
       if (cancelled) return;
       if (healthRes.error) {
         setHealth("offline");
-        setError(healthRes.error.message);
+        setBridgeError(healthRes.error.message);
         return;
       }
       setHealth("online");
-      setError("");
+      setBridgeError("");
 
       const nextRoles = await callbacksRef.current.loadRolesFromBridge();
       if (cancelled || !nextRoles) {
@@ -390,7 +416,7 @@ export function useDesktopBridgeLifecycle({
   }, [
     activeRoleIdRef,
     callbacksRef,
-    setError,
+    setBridgeError,
     setHealth,
     setWindowMaximized,
     setWindowVisible,

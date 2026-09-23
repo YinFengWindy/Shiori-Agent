@@ -11,6 +11,8 @@ import {
 } from "./chatModelSelection";
 import { getChatModelMenuPosition } from "./chatModelMenuLayout";
 import { MenuItem, MenuPanel, menuLabelClass } from "../shared/ui/Menu";
+import { errorMessage, feedback } from "../shared/feedback/feedbackStore";
+import { subscribeChatModelMenuRequests } from "./chatModelMenuRequests";
 
 type ChatModelMenuProps = {
   activeRoleId: string;
@@ -44,7 +46,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
       setRegistrations(settings.formData.models.registrations);
       setSelection(selectionFromRole(role, settings.formData.models.registrations));
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+      feedback.error(`模型选项加载失败：${errorMessage(error)}`);
     }
   });
 
@@ -56,6 +58,14 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
     setSelection(null);
     void loadSelection();
   }, [activeRoleId, bridgeReady]);
+
+  // Opened on request (e.g. the "选择模型" action of a send that failed for
+  // lack of a model), straight onto the dialogue-model list.
+  useEffect(() => subscribeChatModelMenuRequests(() => {
+    setOpen(true);
+    setSubmenu("dialogue");
+    setHoveredModelId(null);
+  }), []);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -101,7 +111,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
         runtimeConfig,
       });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+      feedback.error(`模型切换失败：${errorMessage(error)}`);
     }
   }
 
