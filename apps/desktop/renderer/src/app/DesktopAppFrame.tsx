@@ -165,6 +165,11 @@ type DesktopAppFrameProps = {
   onAddSelectedChatImageToAssetLibrary: () => void;
   onCloseSelectedChatImageLightbox: () => void;
   onLocateSelectedChatImageMessage: () => void;
+  /** Unsaved-role-edits guard (see `useLeaveGuard`): a held-back navigation waiting for the user. */
+  leaveConfirmOpen: boolean;
+  leaveRoleName: string;
+  onConfirmLeave: () => void;
+  onCancelLeave: () => void;
 };
 
 /** Renders the desktop shell around the already-prepared application state. */
@@ -287,6 +292,10 @@ export function DesktopAppFrame({
   onAddSelectedChatImageToAssetLibrary,
   onCloseSelectedChatImageLightbox,
   onLocateSelectedChatImageMessage,
+  leaveConfirmOpen,
+  leaveRoleName,
+  onConfirmLeave,
+  onCancelLeave,
 }: DesktopAppFrameProps) {
   const navRailActiveView: NavRailViewId | null = mainView.kind === "chat"
     ? "messages"
@@ -519,6 +528,15 @@ export function DesktopAppFrame({
         busy={deletingRole}
         onClose={onCloseDeleteDialog}
         onConfirm={onConfirmDeleteRole}
+      />
+      <ConfirmDialog
+        open={leaveConfirmOpen}
+        title="放弃未保存的修改？"
+        description={`对“${leaveRoleName || "角色"}”的修改还没有保存，离开后会丢失。`}
+        confirmLabel="放弃修改"
+        cancelLabel="继续编辑"
+        onClose={onCancelLeave}
+        onConfirm={onConfirmLeave}
       />
       <ChatImageLightbox
         canAddToAssetLibrary={canAddToAssetLibrary}

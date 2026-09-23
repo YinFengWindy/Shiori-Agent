@@ -23,6 +23,7 @@ import { useDesktopUiEffects } from "./app/useDesktopUiEffects";
 import { useChatImageState } from "./app/useChatImageState";
 import { useChatInteractions } from "./app/useChatInteractions";
 import { useNavigationHistory } from "./app/useNavigationHistory";
+import { shouldGuardRoleEditorLeave, useLeaveGuard } from "./app/useLeaveGuard";
 import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleCreationController } from "./app/useRoleCreationController";
 import { useRoleSearch } from "./app/roleSearch";
@@ -53,6 +54,7 @@ import type {
   AppMainView,
   PendingRoleCardAction,
   RoleRecord,
+  RoleSearchResult,
   SessionImageHistoryMessage,
   SessionPayload,
 } from "./shared/types";
@@ -506,6 +508,16 @@ function App(): React.ReactElement {
     setHighlightedMessageKey,
   });
 
+  // Every navigation intent below that can leave the role editor goes through
+  // `guardLeave`, so unsaved role edits are never dropped silently.
+  const leaveGuard = useLeaveGuard({
+    active: shouldGuardRoleEditorLeave(mainView, roleFormDirty),
+    onDiscard: () => {
+      if (detailRole) updateRoleForm(createRoleFormFromRole(detailRole));
+    },
+  });
+  const guardLeave = leaveGuard.guard;
+
   useDesktopUiEffects({
     sidebarAnimating: leftSidebar.animating,
     setSidebarAnimating: leftSidebar.setAnimating,
@@ -540,10 +552,10 @@ function App(): React.ReactElement {
       canGoForward={canGoForward}
       canRefreshSession={mainView.kind === "chat" && Boolean(activeRoleId)}
       onToggleSidebar={leftSidebar.toggle}
-      onGoBack={() => void navigateHistory("back", openRole)}
-      onGoForward={() => void navigateHistory("forward", openRole)}
+      onGoBack={guardLeave(() => void navigateHistory("back", openRole))}
+      onGoForward={guardLeave(() => void navigateHistory("forward", openRole))}
       onRefreshSession={() => void refreshSession()}
-      onOpenSettings={() => openSettingsWorkspace()}
+      onOpenSettings={guardLeave(() => openSettingsWorkspace())}
       shellResizing={leftSidebar.resizing || chatLatestImageSidebar.resizing}
       sidebarState={{
         collapsed: leftSidebar.collapsed,
@@ -556,25 +568,25 @@ function App(): React.ReactElement {
       settingsSection={settingsSection}
       activeSettingsSubsections={settingsSubsectionMemory.activeSubsections}
       onChangeSettingsSubsection={updateSettingsSubsection}
-      onBackToChat={() => openChatView()}
-      onOpenSettingsSection={(section) => openSettingsWorkspace(section)}
+      onBackToChat={guardLeave(() => openChatView())}
+      onOpenSettingsSection={guardLeave((section: SettingsSectionId) => openSettingsWorkspace(section))}
       roleWorkspaceViewActive={roleWorkspaceViewActive}
       roleWorkspaceSection={roleWorkspaceSection}
-      onOpenRoleWorkspaceSection={(section) => {
+      onOpenRoleWorkspaceSection={guardLeave((section: RoleWorkspaceSectionId) => {
         if (section === "role-create") {
           openRoleWorkspace({ kind: "role-create" });
           return;
         }
         openRoleWorkspace({ kind: "roles-list" });
-      }}
+      })}
       roles={roles}
       activeRoleId={activeRoleId}
       unreadCounts={unreadCounts}
       bridgeReady={bridgeReady}
       onOpenSearch={() => setShowSearchDialog(true)}
-      onOpenRolesWorkspace={() => openRoleWorkspace({ kind: "roles-list" })}
-      onOpenPluginPage={(pageId) => openPluginPage(pageId)}
-      onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
+      onOpenRolesWorkspace={guardLeave(() => openRoleWorkspace({ kind: "roles-list" }))}
+      onOpenPluginPage={guardLeave((pageId: string) => openPluginPage(pageId))}
+      onOpenRole={guardLeave((roleId: string) => void openRole(roleId, null, { recordHistory: true }))}
       health={health}
       bridgeError={bridgeError}
       onRestartBridge={bridgeLifecycle.restartBridge}
@@ -614,7 +626,7 @@ function App(): React.ReactElement {
       onRequestDeleteRole={setPendingDeleteRoleId}
       creating={roleCreation.creating}
       newRoleForm={roleCreation.newRoleForm}
-      onBackToRoleList={roleCreation.cancelCreateRole}
+      onBackToRoleList={guardLeave(roleCreation.cancelCreateRole)}
       onCreateNewRole={() => void roleCreation.createRole()}
       onResetNewRoleForm={roleCreation.resetNewRoleForm}
       onUpdateNewRoleForm={roleCreation.updateNewRoleForm}
@@ -651,7 +663,7 @@ function App(): React.ReactElement {
         setShowSearchDialog(false);
         setSearchQuery("");
       }}
-      onSelectSearchResult={(result) => {
+      onSelectSearchResult={guardLeave((result: RoleSearchResult) => {
         setShowSearchDialog(false);
         setSearchQuery("");
         const messageKey = result.matchedField === "message"
@@ -669,7 +681,7 @@ function App(): React.ReactElement {
           openRole: (roleId, options) => openRole(roleId, null, options),
           loadMessagesAround,
         });
-      }}
+      })}
       onUpdateSearchQuery={setSearchQuery}
       pendingDeleteRole={pendingDeleteRole}
       deletingRole={deletingRole}
@@ -691,6 +703,10 @@ function App(): React.ReactElement {
       onAddSelectedChatImageToAssetLibrary={() => void addSelectedChatImageToAssetLibrary()}
       onCloseSelectedChatImageLightbox={closeSelectedChatImageLightbox}
       onLocateSelectedChatImageMessage={locateSelectedChatImageMessage}
+      leaveConfirmOpen={leaveGuard.confirming}
+      leaveRoleName={detailRole?.name ?? ""}
+      onConfirmLeave={leaveGuard.confirmLeave}
+      onCancelLeave={leaveGuard.cancelLeave}
     />
   );
 }
