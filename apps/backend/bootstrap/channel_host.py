@@ -4,9 +4,15 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
+from typing import Literal, NotRequired, TypedDict
 
 from core.common.task_collector import TaskCollector
-from infra.channels.contract import Channel, ChannelContext
+from infra.channels.contract import (
+    Channel,
+    ChannelContext,
+    ChannelStatus,
+    SupportsChannelStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +45,14 @@ class ChannelHandoverError(RuntimeError):
             "failure": asdict(self.failure),
             "degraded": [asdict(item) for item in self.degraded],
         }
+
+
+class ChannelSnapshot(TypedDict):
+    """Host-side state of one registered or failed channel."""
+
+    state: Literal["active", "failed"]
+    error: str
+    status: NotRequired[ChannelStatus]
 
 
 def _failure(name: str, phase: str, error: BaseException) -> ChannelFailure:
@@ -291,8 +305,43 @@ class ChannelHost:
     def channels(self) -> list[Channel]:
         return list(self._channels)
 
+    def snapshot(self) -> dict[str, ChannelSnapshot]:
+        """Returns each registered or failed channel's state, keyed by channel name.
+
+        A recorded failure wins over registration: ``start_all`` keeps a channel
+        whose start failed. Only the latest failure per name is reported. The
+        optional ``status()`` of a healthy channel is included verbatim; if it
+        raises, the channel is reported failed instead of hiding the error.
+        """
+        latest = {failure.channel: failure for failure in self._failures}
+        result: dict[str, ChannelSnapshot] = {
+            name: {"state": "failed", "error": _describe_failure(failure)}
+            for name, failure in latest.items()
+        }
+        for channel in self._channels:
+            if channel.name in latest:
+                continue
+            entry: ChannelSnapshot = {"state": "active", "error": ""}
+            if isinstance(channel, SupportsChannelStatus):
+                try:
+                    entry["status"] = channel.status()
+                except Exception as error:
+                    logger.warning("渠道状态读取失败 %s: %s", channel.name, error)
+                    entry = {
+                        "state": "failed",
+                        "error": _describe_failure(
+                            _failure(channel.name, "status", error)
+                        ),
+                    }
+            result[channel.name] = entry
+        return result
+
     @property
     def failures(self) -> list[ChannelFailure]:
         """Returns a snapshot of channel construction/start failures."""
 
         return list(self._failures)
+
+
+def _describe_failure(failure: ChannelFailure) -> str:
+    return f"{failure.phase}: {failure.error_type}: {failure.message}"

@@ -126,6 +126,18 @@ activates; candidates that already conflict by plugin ID keep `duplicate_id`.
 Packages using `channels` must require `runtime_api: ">=2.2.0 <3.0.0"`; older
 hosts reject the unknown top-level key.
 
+`plugins.list` rows carry the manifest's `capabilities` and `channels`. The
+read-only bridge method `channels.list` returns `{channels: [...]}`: `desktop`
+first, then the channels still built into the host, then every declared plugin
+channel. Each row has the declaration fields plus `plugin_id` (`null` for host
+channels), `plugin_enabled`, `state`, `error` and `status`. `state` is `active`,
+`not_configured` (enabled but nothing contributed, usually missing credentials),
+`failed` (construction, start or `status()` failed, or the plugin itself did not
+activate; `error` keeps the cause) or `plugin_disabled`. A channel may implement
+an optional `status()` returning `{connected, account?, detail?}`; `status` is
+that value for an active channel and `null` otherwise. Changes follow the existing
+`runtime.applied` broadcast; there is no separate channel event.
+
 ## Renderer artifacts and dependencies
 
 The plugin's own build emits browser ESM, with a default export (direct or

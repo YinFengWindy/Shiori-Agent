@@ -125,6 +125,10 @@ async def test_list_reports_every_discovered_plugin_enabled_by_default(
         assert by_id["qqbot"]["has_config_schema"] is True
         assert by_id["hello"]["has_config_schema"] is False
         assert by_id["hello"]["renderer"] == {}
+        assert by_id["qqbot"]["capabilities"] == ["config", "channels"]
+        assert [item["name"] for item in by_id["qqbot"]["channels"]] == ["qqbot"]
+        assert by_id["qqbot"]["channels"][0]["label"] == "QQBot"
+        assert by_id["hello"]["channels"] == []
     finally:
         await service.aclose()
         await app.shutdown()

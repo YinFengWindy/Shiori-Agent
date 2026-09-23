@@ -58,3 +58,46 @@ def test_resume_intake_uses_current_connections_after_publication():
     old.pause_intake.assert_called_once()
     new.resume_intake.assert_called_once()
     old.resume_intake.assert_not_called()
+
+
+class _StatusChannel:
+    def __init__(self, name, status):
+        self.name = name
+        self._status = status
+
+    def status(self):
+        if isinstance(self._status, Exception):
+            raise self._status
+        return self._status
+
+
+def test_snapshot_reports_registered_and_failed_channels():
+    host = ChannelHost(lambda channel: None)
+    host.add(connection("telegram"))
+    host.add(connection("qq"))
+    host.record_failure("qq", phase="start", error=ConnectionError("refused"))
+    host.record_failure("broken", phase="construct", error=ValueError("bad token"))
+    assert host.snapshot() == {
+        "telegram": {"state": "active", "error": ""},
+        "qq": {"state": "failed", "error": "start: ConnectionError: refused"},
+        "broken": {"state": "failed", "error": "construct: ValueError: bad token"},
+    }
+
+
+def test_snapshot_passes_optional_channel_status_through():
+    host = ChannelHost(lambda channel: None)
+    host.add(_StatusChannel("demo", {"connected": True, "account": "@shiori_bot"}))
+    assert host.snapshot()["demo"] == {
+        "state": "active",
+        "error": "",
+        "status": {"connected": True, "account": "@shiori_bot"},
+    }
+
+
+def test_snapshot_reports_a_raising_status_as_failure():
+    host = ChannelHost(lambda channel: None)
+    host.add(_StatusChannel("demo", RuntimeError("socket gone")))
+    assert host.snapshot()["demo"] == {
+        "state": "failed",
+        "error": "status: RuntimeError: socket gone",
+    }

@@ -111,6 +111,12 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
         admission_exempt=True,
         handler=Handler.PLUGIN_MANAGEMENT,
     ),
+    "channels.list": MethodPolicy(
+        # Static declarations plus the published generation's channel state.
+        concurrency=Concurrency.READ_ONLY,
+        admission_exempt=True,
+        handler=Handler.PLUGIN_MANAGEMENT,
+    ),
     "plugins.trust": MethodPolicy(
         concurrency=Concurrency.MUTATION,
         admission_exempt=True,
