@@ -10,15 +10,18 @@ on:
     # Only inputs that can change `pnpm build:site` output trigger a deploy:
     # the site entry, the renderer toolchain/styles/public assets it reuses,
     # plugin UI sources that the shared Tailwind config scans for class names,
-    # the dependency graph, and this workflow. Backend-only merges would
-    # otherwise republish an identical site. Use workflow_dispatch to force it.
+    # the TypeScript base config, the dependency graph, and this workflow.
+    # Backend-only merges would otherwise republish an identical site. Use
+    # workflow_dispatch (on main) to force a deploy.
     paths:
       - "apps/desktop/site/**"
       - "apps/desktop/renderer/**"
+      - "apps/desktop/tsconfig.base.json"
       - "plugins/*/ui/**"
       - "apps/desktop/package.json"
       - "package.json"
       - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".github/workflows/site-pages.yml"
   workflow_dispatch:
 
@@ -32,42 +35,45 @@ concurrency:
 
 jobs:
   deploy:
+    # workflow_dispatch can target any branch; only main may publish.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
+      # The token is not persisted into .git/config: only the publish step
+      # below receives it, so install/build scripts never see it.
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Same toolchain setup as the desktop job in ci.yml.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      # pnpm comes from Corepack (bundled with Node) pinned by the root
-      # `packageManager` field, so no third-party setup action is needed.
-      - name: Enable pnpm via Corepack
-        env:
-          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-        run: |
-          corepack enable
-          pnpm --version
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        env:
-          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
         run: pnpm install --frozen-lockfile
 
       - name: Build static site
-        env:
-          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
         run: pnpm run build:site
 
       # Replace the whole gh-pages branch with a single parentless commit
       # holding only the fresh build. `.nojekyll` makes the legacy Pages build
       # serve files as-is (e.g. `_`-prefixed assets). The commit is built with
       # plumbing against a throwaway index, so the checkout's working tree is
-      # untouched and the push reuses the credentials actions/checkout set up.
+      # untouched.
       - name: Publish to gh-pages
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           SITE_DIR: apps/desktop/site-dist
           SOURCE_SHA: ${{ github.sha }}
           GIT_AUTHOR_NAME: github-actions[bot]
@@ -82,9 +88,12 @@ jobs:
           mkdir -p "$publish_dir"
           cp -R "$SITE_DIR"/. "$publish_dir"/
           touch "$publish_dir/.nojekyll"
+          printf '{"kind":"site","sourceSha":"%s","builtAt":"%s"}\n' \
+            "$SOURCE_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$publish_dir/build-info.json"
           export GIT_INDEX_FILE="$RUNNER_TEMP/gh-pages.index"
           rm -f "$GIT_INDEX_FILE"
           git --work-tree="$publish_dir" add --all --force .
           tree="$(git write-tree)"
           commit="$(git commit-tree "$tree" -m "Deploy site from ${SOURCE_SHA}")"
-          git push --force origin "${commit}:refs/heads/gh-pages"
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force "$remote" "${commit}:refs/heads/gh-pages"
