@@ -19,6 +19,7 @@ from agent.plugin_host.capabilities import (
     ToolsCapability,
     contribute_to_list,
 )
+from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.rpc import PluginRpcRegistry
 from desktop_bridge.method_policy import Concurrency, Handler
@@ -247,12 +248,32 @@ async def test_channels_capability_add_and_dispose():
     scope = EffectScope("demo")
     channel = _Named("qq")
 
-    ChannelsCapability(contributions, scope).add(channel)  # type: ignore[arg-type]
+    capability = ChannelsCapability(
+        contributions, scope, plugin_id="demo", declared=frozenset({"qq"})
+    )
+    capability.add(channel)  # type: ignore[arg-type]
     assert contributions.channels == [channel]
     assert scope.labels == ["channel:qq"]
 
     _ = await scope.dispose_all()
     assert contributions.channels == []
+
+
+def test_channels_capability_rejects_undeclared_channel_without_registering():
+    contributions = PluginContributions()
+    scope = EffectScope("demo")
+    capability = ChannelsCapability(
+        contributions, scope, plugin_id="demo", declared=frozenset({"qq"})
+    )
+
+    with pytest.raises(ChannelDeclarationError) as caught:
+        capability.add(_Named("telegram"))  # type: ignore[arg-type]
+
+    assert caught.value.diagnostic.code == "undeclared_channel"
+    assert caught.value.diagnostic.state == "FAILED"
+    assert "telegram" in caught.value.diagnostic.reason
+    assert contributions.channels == []
+    assert scope.labels == []
 
 
 # ── RpcCapability ─────────────────────────────────────────────────────────

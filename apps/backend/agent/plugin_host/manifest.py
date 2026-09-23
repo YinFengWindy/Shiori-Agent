@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+import re
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -48,10 +49,38 @@ KNOWN_CAPABILITIES = frozenset(
 DEFAULT_ENTRY = "backend/plugin.py"
 
 
+# 渠道名同时是角色绑定、会话线程与消息引用的数据键，限定为可移植的小写标识
+_CHANNEL_NAME = re.compile(r"[a-z][a-z0-9_-]{0,63}")
+# 宿主自有渠道，插件不能声明
+RESERVED_CHANNEL_NAMES = frozenset({"desktop"})
+_CHANNEL_REQUIRED_FIELDS = ("name", "label")
+_CHANNEL_OPTIONAL_FIELDS = ("contact_label", "chat_id_label", "chat_id_hint")
+
+
 class ManifestError(Exception):
     """manifest 无法读取、解析，或声明不符合插件契约。"""
 
     metadata: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class ChannelDeclaration:
+    """manifest 静态声明的一个外部渠道：插件未激活或未填凭据时也能列出。
+
+    ``name`` 是插件唯一允许经 ``ctx.channels.add`` 贡献的渠道名；其余字段只供
+    桌面端绑定面板展示，``contact_label`` 描述 ``allow_from`` 联系人，
+    ``chat_id_label`` / ``chat_id_hint`` 描述会话 ID 及其格式。
+    """
+
+    name: str
+    label: str
+    contact_label: str | None = None
+    chat_id_label: str | None = None
+    chat_id_hint: str | None = None
+
+    def to_dict(self) -> dict[str, str | None]:
+        """Returns the JSON-compatible bridge representation."""
+        return asdict(self)
 
 
 @dataclass
@@ -68,6 +97,8 @@ class PluginManifest:
     # backend/ 下；manifest 显式写 entry 时以它为准。
     entry: str = DEFAULT_ENTRY
     capabilities: tuple[str, ...] = ()
+    # Runtime API 2.2：静态渠道声明，需同时声明 channels capability
+    channels: tuple[ChannelDeclaration, ...] = ()
     config_model: str | None = None
     dependencies: tuple[str, ...] = ()
     # Optional APIs never cause provider activation or dependent teardown.
@@ -118,6 +149,7 @@ def _parse_manifest(
     if not isinstance(supports_hot_unload, bool):
         raise ManifestError("supports_hot_unload 必须是布尔值")
     capabilities = _parse_capabilities(raw, manifest_path)
+    channels = _parse_channels(raw, capabilities)
     dependencies = _parse_dependencies(raw, "dependencies")
     optional_dependencies = _parse_dependencies(raw, "optional_dependencies")
     if set(dependencies) & set(optional_dependencies):
@@ -132,6 +164,7 @@ def _parse_manifest(
         author=_optional_str(raw.get("author")),
         entry=str(raw.get("entry") or DEFAULT_ENTRY),
         capabilities=capabilities,
+        channels=channels,
         config_model=_optional_str(raw.get("config_model")),
         dependencies=dependencies,
         optional_dependencies=optional_dependencies,
@@ -154,6 +187,47 @@ def _parse_capabilities(raw: dict[str, object], manifest_path: Path) -> tuple[st
             f"manifest 声明了未知 capability {unknown}: {manifest_path}"
         )
     return names
+
+
+def _parse_channels(
+    raw: dict[str, object], capabilities: tuple[str, ...]
+) -> tuple[ChannelDeclaration, ...]:
+    value = raw.get("channels", [])
+    if not isinstance(value, list):
+        raise ManifestError("channels 必须是渠道声明列表")
+    items: list[object] = value
+    if items and "channels" not in capabilities:
+        raise ManifestError("声明 channels 的插件必须在 capabilities 中声明 channels")
+    declarations: list[ChannelDeclaration] = []
+    for index, item in enumerate(items):
+        declarations.append(_parse_channel(item, f"channels[{index}]"))
+    names = [declaration.name for declaration in declarations]
+    if duplicates := sorted({name for name in names if names.count(name) > 1}):
+        raise ManifestError(f"channels 重复声明渠道名 {duplicates}")
+    return tuple(declarations)
+
+
+def _parse_channel(item: object, field_name: str) -> ChannelDeclaration:
+    if not isinstance(item, dict) or any(not isinstance(key, str) for key in item):
+        raise ManifestError(f"{field_name} 必须是对象")
+    entry: dict[str, object] = item
+    allowed = {*_CHANNEL_REQUIRED_FIELDS, *_CHANNEL_OPTIONAL_FIELDS}
+    if unknown := sorted(set(entry) - allowed):
+        raise ManifestError(f"{field_name} 含未知字段 {unknown}")
+    values: dict[str, str] = {}
+    for key, value in entry.items():
+        if not isinstance(value, str) or not value.strip():
+            raise ManifestError(f"{field_name}.{key} 必须是非空字符串")
+        values[key] = value
+    for key in _CHANNEL_REQUIRED_FIELDS:
+        if key not in values:
+            raise ManifestError(f"{field_name} 缺少 {key}")
+    name = values["name"]
+    if _CHANNEL_NAME.fullmatch(name) is None:
+        raise ManifestError(f"{field_name}.name 必须是小写可移植标识: {name!r}")
+    if name in RESERVED_CHANNEL_NAMES:
+        raise ManifestError(f"{field_name}.name 是宿主保留渠道名: {name}")
+    return ChannelDeclaration(**values)
 
 
 def _optional_str(value: object) -> str | None:

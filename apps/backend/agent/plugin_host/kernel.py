@@ -455,7 +455,12 @@ class PluginKernel:
                 handle.contributions, handle.effects
             ),
             "channels": lambda: ChannelsCapability(
-                handle.contributions, handle.effects
+                handle.contributions,
+                handle.effects,
+                plugin_id=handle.plugin_id,
+                declared=frozenset(
+                    declaration.name for declaration in handle.record.manifest.channels
+                ),
             ),
             "background": lambda: BackgroundCapability(
                 handle.effects, handle.plugin_id
@@ -757,13 +762,18 @@ class PluginKernel:
         ]
 
     @property
-    def telegram_bot_commands(self) -> list[tuple[str, str]]:
+    def bot_commands(self) -> list[tuple[str, str]]:
         """Returns active plugins' scoped bot-command contributions."""
         return [
             command
             for handle in self._active_handles()
             for command in handle.contributions.bot_commands
         ]
+
+    @property
+    def telegram_bot_commands(self) -> list[tuple[str, str]]:
+        """Read-only alias of ``bot_commands``; removed once channels are plugins."""
+        return self.bot_commands
 
 
 def _import_module(module_name: str, path: Path, loader: Loader | None = None) -> None:

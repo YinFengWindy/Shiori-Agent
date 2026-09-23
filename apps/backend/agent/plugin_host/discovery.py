@@ -27,7 +27,7 @@ def discover_plugins(
     host: HostRuntimeContract | None,
     trust: PluginTrustStore | None = None,
 ) -> list[PluginRecord]:
-    """Keep every candidate, then reject every participant in an ID conflict.
+    """Keep every candidate, then reject every participant in an ID or channel conflict.
 
     Host-owned roots are admitted by classification. Workspace packages additionally
     require persisted approval of their exact content; IDs and enable flags cannot grant it.
@@ -66,8 +66,36 @@ def discover_plugins(
                 str(record.plugin_dir),
                 "CONFLICT",
             )
+    _check_channel_conflicts(records)
     _check_external_dependencies(records, by_id)
     return records
+
+
+def _check_channel_conflicts(records: list[PluginRecord]) -> None:
+    """Rejects every plugin that declares a channel name another plugin also declares.
+
+    Channel names key role bindings and conversation threads, so the host must not
+    pick a winner. Candidates sharing one plugin ID are already ID conflicts.
+    """
+    claimants: dict[str, list[PluginRecord]] = defaultdict(list)
+    for record in records:
+        for declaration in record.manifest.channels:
+            claimants[declaration.name].append(record)
+    for channel, candidates in claimants.items():
+        plugin_ids = sorted({record.manifest.id for record in candidates})
+        if len(plugin_ids) < 2:
+            continue
+        for record in candidates:
+            if record.admission is not None and record.admission.code == "duplicate_id":
+                continue
+            record.admission = PluginDiagnostic(
+                "duplicate_channel",
+                "discovery",
+                "channels",
+                f"渠道 {channel} 被多个插件声明：{', '.join(plugin_ids)}",
+                str(record.plugin_dir),
+                "CONFLICT",
+            )
 
 
 def _check_external_dependencies(
