@@ -138,6 +138,49 @@ async def test_model_only_change_reuses_independently_owned_qqbot_connection(tmp
 
 
 @pytest.mark.asyncio
+async def test_changed_bot_commands_rebuild_plugin_connection(tmp_path):
+    config = Config(provider="", model="", api_key="")
+    resources = SharedHttpResources()
+    old = QQBotChannel("account-A", "secret-A")
+    same = QQBotChannel("account-A", "secret-A")
+    rebuilt = QQBotChannel("account-A", "secret-A")
+    context = dict(
+        bus=MessageBus(),
+        session_manager=SessionManager(tmp_path),
+        push_tool=MessagePushTool(),
+        http_resources=resources,
+        event_bus=EventBus(),
+    )
+    commands = [("undo", "撤销上一轮对话")]
+    try:
+        active = await start_channels(
+            config, plugin_channels=[old], bot_commands=commands, **context
+        )
+        unchanged = await start_channels(
+            config,
+            plugin_channels=[same],
+            bot_commands=list(commands),
+            previous_host=active,
+            **context,
+        )
+        assert unchanged.channels == [old]
+        changed = await start_channels(
+            config,
+            plugin_channels=[rebuilt],
+            bot_commands=[*commands, ("chatid", "查看我的 chat_id")],
+            previous_host=active,
+            **context,
+        )
+        assert changed.channels == [rebuilt]
+        assert active.requires_exclusive_handover(changed)
+    finally:
+        await old.stop()
+        await same.stop()
+        await rebuilt.stop()
+        await resources.aclose()
+
+
+@pytest.mark.asyncio
 async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
     starts: list[str] = []
     registrations: list[tuple[str, list[str]]] = []
