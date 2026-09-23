@@ -9,7 +9,7 @@ const SITE_LOGO_URL = "./assets/branding/shiori-title-logo.png";
  */
 export function SiteApp() {
   return (
-    <div className="site-root grid h-dvh min-h-0 place-items-center px-6 text-center text-ink">
+    <div className="bg-gradient-app grid h-dvh min-h-0 place-items-center px-6 text-center text-ink">
       <div className="flex flex-col items-center gap-6">
         <h1 className="sr-only">栞 / SHIORI</h1>
         <img className="w-[min(18rem,70vw)]" src={SITE_LOGO_URL} alt="" />
