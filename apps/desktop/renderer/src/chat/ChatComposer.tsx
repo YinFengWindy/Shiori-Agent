@@ -21,8 +21,6 @@ type ChatComposerProps = {
   onCancelChat: () => void;
   onClearReplyTarget: () => void;
   onJumpToMessage: (messageKey: string) => void;
-  /** Hide native-only actions when this composer is mounted by a browser host. */
-  capabilities?: { attachments: boolean; modelSelection: boolean };
 };
 
 function getAttachmentName(path: string): string {
@@ -50,7 +48,6 @@ export const ChatComposer = React.memo(function ChatComposer({
   onCancelChat,
   onClearReplyTarget,
   onJumpToMessage,
-  capabilities,
 }: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
@@ -238,7 +235,7 @@ export const ChatComposer = React.memo(function ChatComposer({
             placeholder="给当前角色发送消息..."
           />
           <div className="composer-actions flex items-center gap-2">
-            {capabilities?.attachments !== false ? <button
+            <button
               className="grid h-[30px] w-[30px] place-items-center rounded-full border-0 bg-transparent p-0 text-ink-secondary transition hover:bg-accent-softer hover:text-accent-text focus:outline-none disabled:cursor-default disabled:opacity-40"
               type="button"
               aria-label="添加附件"
@@ -246,8 +243,8 @@ export const ChatComposer = React.memo(function ChatComposer({
               disabled={composerInputDisabled}
             >
               <PlusIcon className="h-[14px] w-[14px] fill-current" />
-            </button> : null}
-            {capabilities?.modelSelection !== false ? <ChatModelMenu activeRoleId={activeRoleId} bridgeReady={bridgeReady} /> : null}
+            </button>
+            <ChatModelMenu activeRoleId={activeRoleId} bridgeReady={bridgeReady} />
             <div className="composer-spacer flex-1" />
             <ChatEmojiPicker
               disabled={composerInputDisabled}

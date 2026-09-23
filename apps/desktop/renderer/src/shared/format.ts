@@ -1,5 +1,4 @@
 import { unavailableLocalAssetUrl } from "../../../src/bridge/shared";
-import { rendererHost } from "./rendererHost";
 
 /** Converts one trusted bridge path into its renderer-safe opaque URL. */
 export type LocalAssetUrlResolver = (path: string) => string;
@@ -8,7 +7,7 @@ function resolveDesktopLocalAssetUrl(path: string): string {
   if (typeof window === "undefined") {
     return unavailableLocalAssetUrl;
   }
-  return rendererHost.localAssetUrl(path);
+  return window.miraDesktop.localAssetUrl(path);
 }
 
 /** Resolves a local path to an opaque renderer-safe asset URL through the desktop bridge. */

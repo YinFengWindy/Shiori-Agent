@@ -47,8 +47,6 @@ type NavRailProps = {
   onBackToChat: () => void;
   onOpenRolesWorkspace: () => void;
   onOpenSettings: () => void;
-  /** Limit built-in navigation when a host only provides selected workspaces. */
-  visibleBuiltins?: readonly (BuiltinNavRailViewId | "search")[];
 };
 
 const railButtonClass =
@@ -63,7 +61,6 @@ export function NavRail({
   onBackToChat,
   onOpenRolesWorkspace,
   onOpenSettings,
-  visibleBuiltins,
 }: NavRailProps) {
   const entries: NavRailEntry[] = [
     { id: "search", label: "搜索", icon: MagnifyingGlass, onSelect: onOpenSearch },
@@ -106,8 +103,8 @@ export function NavRail({
 
   return (
     <nav className="nav-rail flex w-12 shrink-0 flex-col items-center gap-1 py-2.5" aria-label="主导航">
-      {entries.filter((entry) => entry.id.startsWith("plugin:") || !visibleBuiltins || visibleBuiltins.some((id) => id === entry.id)).map(renderEntry)}
-      {!visibleBuiltins || visibleBuiltins.includes("settings") ? <div className="mt-auto">{renderEntry({ id: "settings", label: "设置", icon: GearSix, onSelect: onOpenSettings })}</div> : null}
+      {entries.map(renderEntry)}
+      <div className="mt-auto">{renderEntry({ id: "settings", label: "设置", icon: GearSix, onSelect: onOpenSettings })}</div>
     </nav>
   );
 }
