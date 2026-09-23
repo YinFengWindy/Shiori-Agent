@@ -99,8 +99,8 @@ jobs:
       - name: Run production build
         run: pnpm run build
 
-      - name: Build static product showcase
-        run: pnpm run build:showcase
+      - name: Build static site skeleton
+        run: pnpm run build:site
 
       # The only check that proves the two `import.meta.glob` patterns for
       # colocated plugin UI (`plugins/<id>/ui/` and `plugins/<id>/surface/`)

@@ -81,7 +81,7 @@ lme_error_log_*.txt
 /locks/
 /start.sh
 *.log
-apps/desktop/showcase-dist/
+apps/desktop/site-dist/
 
 # Python distribution build products
 build/
