@@ -19,7 +19,7 @@ const eventCg = (key: AdvEventCgKey): AdvArtRef => ({ kind: "cg", key });
  * visitor through Shiori's real features. Every claim here must match
  * README.md; keep each line short (≤ 40 characters).
  *
- * Art: the opening and closing show 吟风's standing sprite over the room
+ * Art: the opening and closing show 吟风's standing sprite over the scene
  * background (gothic dress to greet, casual clothes to say goodbye); each
  * topic swaps the sprite for an event CG — the 3 topic illustrations plus
  * two of the night CGs — and 生图 and 插件 share the bright window one.

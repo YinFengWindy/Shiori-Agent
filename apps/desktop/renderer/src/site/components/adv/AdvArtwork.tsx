@@ -10,7 +10,7 @@ interface AdvArtProps {
 }
 
 /**
- * 吟风's standing sprite, centre-right over the room background, behind the
+ * 吟风's standing sprite, centre-right over the scene background, behind the
  * dialogue box. Every sprite is stacked so a change cross-fades; while an
  * event CG is up (see `AdvEventCg`) no sprite is active, so the sprite fades
  * out under the CG and back in when the topic ends.

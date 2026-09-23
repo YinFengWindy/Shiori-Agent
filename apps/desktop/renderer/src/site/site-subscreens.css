@@ -2,9 +2,9 @@
  * 人物 / CG 鉴赏 sub-screens (#350) and the CG lightbox. Palette, glass and
  * `--site-*` variables come from site.css (scoped to `.site-root`).
  *
- * Both screens: the room scene under a slightly stronger veil, a header
- * row (返回标題 + title; the top-right corner stays free for the fixed sound
- * toggle), then the screen body filling the rest. Exactly one viewport
+ * Both screens: the time-of-day scene under a slightly stronger veil, a
+ * header row (返回标題 + title; the top-right corner stays free for the
+ * fixed corner icons), then the screen body filling the rest. Exactly one viewport
  * tall; only the CG grid may scroll internally.
  */
 
@@ -22,8 +22,8 @@
 .site-subscreen-header {
   position: relative;
   z-index: 1;
-  /* Clear the fixed sound toggle on the right. */
-  padding: 1rem calc(1rem + 2.625rem + 0.75rem) 0 1rem;
+  /* Clear the fixed corner icons on the right. */
+  padding: 1rem calc(var(--site-corner-clear) + 0.75rem) 0 1rem;
   min-height: 3.625rem;
 }
 

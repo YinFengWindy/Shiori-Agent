@@ -1,7 +1,8 @@
 /*
  * Static site — galgame title screen, ADV and screen-switching chrome, all
- * over one light scene: the lavender bedroom background with 吟风's cut-out
- * sprite standing in it.
+ * over one scene: the time-of-day background (day / dusk / night, picked
+ * once at page load, see scene/timeOfDay.ts) with 吟风's cut-out sprite
+ * standing in it.
  *
  * The site palette lives as CSS custom properties here, scoped to
  * `.site-root`, rather than scattered hex values in TSX. It is built from
@@ -22,11 +23,25 @@
   --site-glass-edge: rgb(197 165 247 / 45%); /* --lavender-400 */
   --site-shadow: rgb(119 84 166 / 22%); /* --lavender-700 */
   --site-ring: var(--pink-600);
+  /*
+   * Fixed top-right corner icons (SiteCornerLinks): two 2.625rem chips
+   * (20px icon + p-2.5) with a 0.5rem gap, inset 1rem (1.5rem from sm).
+   * `--site-corner-clear` is how far from the right edge the cluster
+   * reaches; headers pad by it so nothing slides under the icons.
+   */
+  --site-corner-inset: 1rem;
+  --site-corner-clear: calc(var(--site-corner-inset) + 2 * 2.625rem + 0.5rem);
 
   background: var(--lavender-100);
   color: var(--site-ink);
   color-scheme: light;
   overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  .site-root {
+    --site-corner-inset: 1.5rem;
+  }
 }
 
 .site-screen {
@@ -42,7 +57,7 @@
 }
 
 /* ---------------------------------------------------------------- scene -- */
-/* The room background, cover-fitted and unblurred, under a very light veil. */
+/* The phase background, cover-fitted and unblurred, under a light veil. */
 
 .site-scene {
   z-index: 0;
@@ -88,7 +103,13 @@
   outline-offset: 2px;
 }
 
-/* Round glass chip behind the corner GitHub icon so it reads on the scene. */
+/* Fixed top-right corner icon cluster (SiteCornerLinks). */
+.site-corner-links {
+  top: var(--site-corner-inset);
+  right: var(--site-corner-inset);
+}
+
+/* Round glass chip behind each corner icon so it reads on the scene. */
 .site-corner-chip {
   color: var(--site-ink);
   background: var(--site-glass);
@@ -381,7 +402,7 @@
 
 /* ----------------------------------------------------------------- adv -- */
 /*
- * 「开始」 ADV screen: the room scene and 吟风's sprite (z 0), a
+ * 「开始」 ADV screen: the scene background and 吟风's sprite (z 0), a
  * screen-wide transparent "advance" button (z 1), then the stage (z 2): a
  * two-row grid whose first row holds the event CG and the choice list and
  * whose second row is the dialogue window. The stage itself is
@@ -811,7 +832,7 @@
     row-gap: 0.75rem;
   }
 
-  /* Keep the event CG's top edge below the fixed sound toggle (#349). */
+  /* Keep the event CG's top edge below the fixed corner icons (#349, #360). */
   .site-adv-cg {
     inset: 2.75rem 0 0;
     max-height: calc(100% - 2.75rem);
@@ -898,23 +919,8 @@
 
 /*
  * Sound toggle (#349): the same glass circle as the GitHub corner link
- * (`.site-corner-chip`, 20px icon + p-2.5 = 2.625rem), fixed one chip width
- * plus a 0.5rem gap left of it (`right-4 top-4 sm:right-6 sm:top-6`), so the
- * two sit side by side on the title screen and the toggle keeps the same
- * spot on the ADV, 人物 and CG 鉴赏 screens.
+ * (`.site-corner-chip`); both sit in the fixed `SiteCornerLinks` cluster.
  */
-.site-sound-toggle {
-  top: 1rem;
-  right: calc(1rem + 2.625rem + 0.5rem);
-}
-
-@media (min-width: 640px) {
-  .site-sound-toggle {
-    top: 1.5rem;
-    right: calc(1.5rem + 2.625rem + 0.5rem);
-  }
-}
-
 /* On: sakura accent icon on a pink-tinted chip. */
 .site-sound-toggle[aria-pressed="true"] {
   color: var(--site-accent-text);

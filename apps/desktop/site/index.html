@@ -7,6 +7,16 @@
     <!-- #fbf9fa mirrors --neutral-50 in styles.css; a <meta> can't read CSS custom properties. -->
     <meta name="theme-color" content="#fbf9fa" />
     <title>Shiori</title>
+    <!--
+      Site-only icons, rendered from the desktop app icon (assets/shiori-app-icon.png).
+      Relative hrefs: Vite emits them as hashed files under assets/, so they resolve
+      under the Pages sub-path and stay out of renderer/public (shared with the desktop build).
+    -->
+    <link rel="icon" href="./icons/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/png" href="./icons/favicon-32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="./icons/icon-192.png" sizes="192x192" />
+    <link rel="icon" type="image/png" href="./icons/icon-512.png" sizes="512x512" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" sizes="180x180" />
   </head>
   <body>
     <div id="root"></div>

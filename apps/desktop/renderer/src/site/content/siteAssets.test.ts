@@ -12,6 +12,14 @@ import { describe, it } from "node:test";
 const assetsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../assets");
 const siteAssetsSourcePath = resolve(dirname(fileURLToPath(import.meta.url)), "siteAssets.ts");
 const MAX_EDGE = 1920;
+/**
+ * Full-viewport scene backgrounds (`bg-<phase>.webp`) get a larger budget:
+ * they are cover-fitted to the whole window, so at 1920px they visibly soften
+ * on 2560-wide / HiDPI screens next to the crisp cut-out sprites (#360). The
+ * owner's picks are 2x-upscaled to 2432px; 2560 is the cap for any refresh.
+ */
+const MAX_BACKGROUND_EDGE = 2560;
+const BACKGROUND = /^bg-[a-z]+\.webp$/;
 const METADATA_CHUNKS = new Set(["EXIF", "XMP ", "ICCP"]);
 // VP8X feature flags (byte 0 of the chunk): ICC profile, alpha, EXIF, XMP.
 const VP8X_ICC = 0x20;
@@ -98,13 +106,14 @@ describe("site asset hygiene", () => {
         assert.equal(data.toString("ascii", 8, 12), "WEBP");
       });
 
-      it("has a longest edge <= 1920px", () => {
+      const maxEdge = BACKGROUND.test(file) ? MAX_BACKGROUND_EDGE : MAX_EDGE;
+      it(`has a longest edge <= ${maxEdge}px`, () => {
         const chunks = readRiffChunks(data);
         const { width, height } = readWebpDimensions(data, chunks);
         assert.ok(width > 0 && height > 0, `expected positive dimensions, got ${width}x${height}`);
         assert.ok(
-          Math.max(width, height) <= MAX_EDGE,
-          `${file} is ${width}x${height}, longest edge exceeds ${MAX_EDGE}px`,
+          Math.max(width, height) <= maxEdge,
+          `${file} is ${width}x${height}, longest edge exceeds ${maxEdge}px`,
         );
       });
 

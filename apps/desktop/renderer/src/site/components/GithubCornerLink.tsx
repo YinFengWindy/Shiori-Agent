@@ -1,7 +1,7 @@
 import { GithubLogo } from "@phosphor-icons/react";
 import { SITE_GITHUB_LABEL, SITE_LINKS } from "../content/siteCopy";
 
-/** Small corner GitHub icon link, always visible on the title screen. */
+/** Corner GitHub icon link; placed by `SiteCornerLinks` on every screen. */
 export function GithubCornerLink() {
   return (
     <a
@@ -9,7 +9,7 @@ export function GithubCornerLink() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label={SITE_GITHUB_LABEL}
-      className="site-icon-button site-corner-chip absolute right-4 top-4 z-10 rounded-full p-2.5 sm:right-6 sm:top-6"
+      className="site-icon-button site-corner-chip rounded-full p-2.5"
     >
       <GithubLogo size={20} aria-hidden="true" />
     </a>

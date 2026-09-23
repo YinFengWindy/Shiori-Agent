@@ -11,7 +11,7 @@ interface GalleryScreenProps {
 }
 
 /**
- * 「CG 鉴赏」: every CG as a thumbnail tile on a glass panel over the room
+ * 「CG 鉴赏」: every CG as a thumbnail tile on a glass panel over the
  * scene; a tile opens the lightbox. Wiring only — the lightbox state is
  * `gallery/lightboxModel.ts`, driven (with sound and focus return) by
  * `useCgLightbox`.
@@ -21,7 +21,7 @@ export function GalleryScreen({ onBack }: GalleryScreenProps) {
   const total = galleryArtwork.length;
 
   // The lightbox renders beside (not inside) the isolated screen so it
-  // stacks above the global sound toggle, like the settings modal.
+  // stacks above the global corner icons, like the settings modal.
   return (
     <>
       <div className="site-screen site-subscreen relative flex h-dvh min-h-0 flex-col overflow-hidden">

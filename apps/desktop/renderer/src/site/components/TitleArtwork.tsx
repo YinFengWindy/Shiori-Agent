@@ -7,7 +7,7 @@ interface TitleArtworkProps {
 }
 
 /**
- * 吟风's cut-out standing sprite over the room background: one of the three
+ * 吟风's cut-out standing sprite over the scene background: one of the three
  * title sprites, anchored to the bottom (feet may be cropped) — on the right
  * on desktop, centred behind the menu on narrow screens (see
  * `.site-title-sprite-stage` in site.css). Clicking the sprite advances to
