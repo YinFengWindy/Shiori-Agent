@@ -50,6 +50,8 @@ export const SITE_PLACEHOLDER_COPY: Record<Exclude<SiteScreenId, "title" | "adv"
 
 export const SITE_BACK_LABEL = "返回标题";
 export const SITE_GITHUB_LABEL = "在 GitHub 查看 Shiori";
+/** Speaker toggle: fixed accessible name (on/off is aria-pressed) + hover tooltips. */
+export const SITE_SOUND_COPY = { label: "声音", enableTitle: "开启声音", disableTitle: "关闭声音" } as const;
 export const SITE_SETTINGS_TITLE = "设置";
 export const SITE_SETTINGS_CLOSE_LABEL = "关闭设置";
 

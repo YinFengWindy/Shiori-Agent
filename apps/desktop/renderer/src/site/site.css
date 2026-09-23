@@ -775,3 +775,24 @@
     animation: none;
   }
 }
+
+/*
+ * Sound toggle (#349): fixed top-right, one icon-button width (+ a small
+ * gap) left of the GitHub corner link (`right-4 top-4 sm:right-6 sm:top-6`,
+ * 2.25rem wide), so the two never overlap on the title screen.
+ */
+.site-sound-toggle {
+  top: 1rem;
+  right: 3.5rem;
+}
+
+@media (min-width: 640px) {
+  .site-sound-toggle {
+    top: 1.5rem;
+    right: 4rem;
+  }
+}
+
+.site-sound-toggle[aria-pressed="true"] {
+  color: var(--site-accent-strong);
+}
