@@ -6,8 +6,8 @@ import type { SiteScreenId } from "../content/siteCopy";
  * gallery is showing, plus the settings modal's open state layered on top of
  * whichever screen is active. Back button, Esc and right-click all return to
  * the title screen (or close the settings modal first if it is open); #348
- * and #350 replace the adv/character/gallery placeholders without touching
- * this module.
+ * and #350 built the adv/character/gallery screens on top of it without
+ * touching this module.
  */
 export function useSiteScreen() {
   const [screen, setScreen] = useState<SiteScreenId>("title");
