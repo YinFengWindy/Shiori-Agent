@@ -10,9 +10,9 @@
 export type TextSpeed = "slow" | "normal" | "fast";
 
 export interface SitePrefs {
-  /** 0–100; stored only until the sound ticket (#349) plays BGM. */
+  /** 0–100; BGM level (perceptual curve, see sound/soundModel.ts). */
   readonly bgmVolume: number;
-  /** 0–100; stored only until the sound ticket (#349) plays SFX. */
+  /** 0–100; sound-effect level (perceptual curve, see sound/soundModel.ts). */
   readonly sfxVolume: number;
   readonly textSpeed: TextSpeed;
   /** Master sound switch; off by default (the site starts muted). */

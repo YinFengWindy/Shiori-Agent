@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { X } from "@phosphor-icons/react";
 import { TextSpeedPicker } from "../components/settings/TextSpeedPicker";
 import { TextSpeedPreview } from "../components/settings/TextSpeedPreview";
@@ -7,6 +7,7 @@ import { SITE_SETTINGS_CLOSE_LABEL, SITE_SETTINGS_COPY, SITE_SETTINGS_TITLE } fr
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { TEXT_SPEED_MS_PER_CHAR } from "../prefs/sitePrefs";
 import { useSitePrefs } from "../prefs/useSitePrefs";
+import { useSound } from "../sound/useSound";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -15,14 +16,19 @@ interface SettingsModalProps {
 /**
  * Settings dialog: BGM / SFX volume and text speed, saved immediately via
  * `useSitePrefs` (the ADV typewriter picks up a new speed on its next
- * frame). Volumes are only stored for now; the sound ticket (#349) plays
- * them. Esc and right-click are handled by `useSiteScreen`.
+ * frame). Volumes apply live via `SoundProvider`; moving the SFX slider
+ * plays a sample blip. Esc and right-click are handled by `useSiteScreen`.
  */
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const { prefs, update } = useSitePrefs();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   useDialogFocus(dialogRef, closeButtonRef);
+  const { playSfx, previewSfx } = useSound();
+  useEffect(() => {
+    playSfx("open");
+    return () => playSfx("close");
+  }, [playSfx]);
 
   return (
     <div className="site-modal-backdrop fixed inset-0 z-50 grid place-items-center px-4" onClick={onClose}>
@@ -50,7 +56,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
         <div className="mt-5 flex flex-col gap-5">
           <VolumeSlider id="site-bgm-volume" label={SITE_SETTINGS_COPY.bgmVolume} value={prefs.bgmVolume} onChange={(bgmVolume) => update({ bgmVolume })} />
-          <VolumeSlider id="site-sfx-volume" label={SITE_SETTINGS_COPY.sfxVolume} value={prefs.sfxVolume} onChange={(sfxVolume) => update({ sfxVolume })} />
+          <VolumeSlider id="site-sfx-volume" label={SITE_SETTINGS_COPY.sfxVolume} value={prefs.sfxVolume} onChange={(sfxVolume) => {
+              update({ sfxVolume });
+              previewSfx(sfxVolume);
+            }} />
           <div className="flex flex-col gap-3">
             <TextSpeedPicker value={prefs.textSpeed} onChange={(textSpeed) => update({ textSpeed })} />
             <TextSpeedPreview key={prefs.textSpeed} text={SITE_SETTINGS_COPY.textSpeedPreview} msPerChar={TEXT_SPEED_MS_PER_CHAR[prefs.textSpeed]} />

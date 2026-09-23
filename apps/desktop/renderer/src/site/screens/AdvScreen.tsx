@@ -13,6 +13,7 @@ import { SITE_ADV_COPY } from "../content/siteCopy";
 import { usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
 import { TEXT_SPEED_MS_PER_CHAR } from "../prefs/sitePrefs";
 import { useSitePrefs } from "../prefs/useSitePrefs";
+import { useLineAdvanceSfx } from "../sound/useSound";
 
 interface AdvScreenProps {
   /** Settings modal is open on top: pause typing, auto mode and key handling. */
@@ -39,6 +40,7 @@ export function AdvScreen({ settingsOpen, onOpenSettings, onExit }: AdvScreenPro
     onEnd: onExit,
   });
   useAdvKeyboard(!paused && adv.phase === "line", adv.click);
+  useLineAdvanceSfx(adv.lineKey);
 
   const speaking = adv.line !== null;
 

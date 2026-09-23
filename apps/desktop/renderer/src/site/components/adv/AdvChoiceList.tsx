@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Check } from "@phosphor-icons/react";
 import { SITE_ADV_COPY } from "../../content/siteCopy";
 import { cx } from "../../siteClassNames";
+import { useSound } from "../../sound/useSound";
 
 export interface AdvChoiceItem {
   id: string;
@@ -21,6 +22,7 @@ interface AdvChoiceListProps {
  */
 export function AdvChoiceList({ choices, onChoose }: AdvChoiceListProps) {
   const firstRef = useRef<HTMLButtonElement>(null);
+  const { playSfx } = useSound();
 
   useEffect(() => {
     firstRef.current?.focus();
@@ -33,6 +35,7 @@ export function AdvChoiceList({ choices, onChoose }: AdvChoiceListProps) {
           <button
             ref={index === 0 ? firstRef : undefined}
             type="button"
+            onPointerEnter={() => playSfx("hover")}
             onClick={() => onChoose(choice.id)}
             className={cx("site-adv-choice flex w-full items-center justify-center gap-2 rounded-md font-display", choice.visited && "site-adv-choice-visited")}
           >
