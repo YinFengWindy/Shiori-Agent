@@ -8,6 +8,7 @@ import { applyMoodToIllustration, getMoodForIllustration } from "./roleMoodBindi
 import { RoleMoodBindingsPanel } from "./RoleMoodBindingsPanel";
 import { RoleAssetCategoryGroups } from "./RoleAssetCategoryGroups";
 import { useRoleAssetsPanels } from "../plugins/useRoleAssetsPanels";
+import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 
 type RoleAssetsPageProps = {
   activeRole: RoleRecord | null;
@@ -56,6 +57,10 @@ export function RoleAssetsPage({
   }));
   const [selectionMode, setSelectionMode] = useState<"avatar" | "chat-background" | "mood-binding">("avatar");
   const [selectedMoodAsset, setSelectedMoodAsset] = useState("");
+  // Removing an asset deletes its file, so both delete buttons on this page
+  // (the preview strip and the category groups) go through one confirmation.
+  const [pendingRemoveAssetPath, setPendingRemoveAssetPath] = useState("");
+  const pendingRemoveAsset = assetPairs.find((item) => item.relPath === pendingRemoveAssetPath) ?? null;
   const selectedAssetPath = getSelectedRoleAssetPath(
     selectionMode === "mood-binding" ? "chat-background" : selectionMode,
     selectedAvatarAsset,
@@ -143,7 +148,7 @@ export function RoleAssetsPage({
                       disabled={!bridgeReady || savingSelection}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onRemoveAsset(relPath);
+                        setPendingRemoveAssetPath(relPath);
                       }}
                     >
                       <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
@@ -172,7 +177,7 @@ export function RoleAssetsPage({
                 selectedAssetPath={selectionMode === "mood-binding" ? selectedMoodAssetPath : selectedAsset?.relPath ?? ""}
                 onBackToDetail={onBackToDetail}
                 onPickAssets={onPickAssets}
-                onRemoveAsset={onRemoveAsset}
+                onRemoveAsset={setPendingRemoveAssetPath}
                 onSelectAsset={(relPath) => void applyAsset(relPath)}
                 onUpdateOrganization={onUpdateAssetOrganization}
               />
@@ -289,6 +294,21 @@ export function RoleAssetsPage({
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={pendingRemoveAsset !== null}
+        title="删除素材"
+        description="删除后这张图片会从角色素材库中移除，无法恢复。"
+        confirmLabel="删除"
+        onClose={() => setPendingRemoveAssetPath("")}
+        onConfirm={() => {
+          if (pendingRemoveAsset) onRemoveAsset(pendingRemoveAsset.relPath);
+          setPendingRemoveAssetPath("");
+        }}
+      >
+        {pendingRemoveAsset ? (
+          <img className="h-24 w-24 rounded-md border border-line-soft object-cover" src={toFileUrl(pendingRemoveAsset.absPath)} alt="待删除的素材" />
+        ) : null}
+      </ConfirmDialog>
     </section>
   );
 }

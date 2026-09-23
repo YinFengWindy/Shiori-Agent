@@ -8,6 +8,8 @@ import {
   roleSectionTitleClass,
 } from "./roleEditorStyles";
 import { RoleKnowledgeEntryRow } from "./RoleKnowledgeEntryRow";
+import { knowledgeEntryHasContent, knowledgeEntryLabel } from "./roleKnowledgeEntries";
+import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 
 type RoleKnowledgePanelProps = {
   roleForm: RoleFormState;
@@ -18,6 +20,7 @@ type RoleKnowledgePanelProps = {
 export function RoleKnowledgePanel({ roleForm, onUpdate }: RoleKnowledgePanelProps) {
   const knowledge = roleForm.profile?.knowledge_base ?? {};
   const [expandedEntries, setExpandedEntries] = useState<ReadonlySet<string>>(new Set());
+  const [pendingRemoveIndex, setPendingRemoveIndex] = useState<number | null>(null);
   const entries = knowledge.entries ?? [];
   const enabled = knowledge.enabled === true;
 
@@ -65,6 +68,16 @@ export function RoleKnowledgePanel({ roleForm, onUpdate }: RoleKnowledgePanelPro
       ],
     }));
     setExpandedEntries((current) => new Set(current).add(id));
+  }
+
+  /** Removes an empty entry at once; one with written content is confirmed first. */
+  function requestRemoveEntry(index: number): void {
+    const entry = entries[index];
+    if (entry && knowledgeEntryHasContent(entry)) {
+      setPendingRemoveIndex(index);
+      return;
+    }
+    removeEntry(index);
   }
 
   function removeEntry(index: number): void {
@@ -119,7 +132,7 @@ export function RoleKnowledgePanel({ roleForm, onUpdate }: RoleKnowledgePanelPro
                 expanded={expandedEntries.has(entryKey(entry, index))}
                 onToggle={() => toggleEntry(index)}
                 onUpdate={(update) => updateEntry(index, update)}
-                onRemove={() => removeEntry(index)}
+                onRemove={() => requestRemoveEntry(index)}
                 key={entry.id ?? index}
               />
             ))}
@@ -131,6 +144,19 @@ export function RoleKnowledgePanel({ roleForm, onUpdate }: RoleKnowledgePanelPro
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={pendingRemoveIndex !== null && Boolean(entries[pendingRemoveIndex])}
+        title="删除条目"
+        description={pendingRemoveIndex !== null && entries[pendingRemoveIndex]
+          ? `“${knowledgeEntryLabel(entries[pendingRemoveIndex], pendingRemoveIndex)}” 会从知识库中移除，保存角色后生效。`
+          : ""}
+        confirmLabel="删除"
+        onClose={() => setPendingRemoveIndex(null)}
+        onConfirm={() => {
+          if (pendingRemoveIndex !== null) removeEntry(pendingRemoveIndex);
+          setPendingRemoveIndex(null);
+        }}
+      />
     </div>
   );
 }
