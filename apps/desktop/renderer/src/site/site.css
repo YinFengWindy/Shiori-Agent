@@ -810,6 +810,12 @@
     row-gap: 0.75rem;
   }
 
+  /* Keep the event CG's top edge below the fixed sound toggle (#349). */
+  .site-adv-cg {
+    inset: 2.75rem 0 0;
+    max-height: calc(100% - 2.75rem);
+  }
+
   .site-adv-box {
     min-height: 10rem;
     padding-top: 2.1rem;
@@ -890,22 +896,35 @@
 }
 
 /*
- * Sound toggle (#349): fixed top-right, one icon-button width (+ a small
- * gap) left of the GitHub corner link (`right-4 top-4 sm:right-6 sm:top-6`,
- * 2.25rem wide), so the two never overlap on the title screen.
+ * Sound toggle (#349): the same glass circle as the GitHub corner link
+ * (`.site-corner-chip`, 20px icon + p-2.5 = 2.625rem), fixed one chip width
+ * plus a 0.5rem gap left of it (`right-4 top-4 sm:right-6 sm:top-6`), so the
+ * two sit side by side on the title screen and the toggle keeps the same
+ * spot on the ADV and placeholder screens.
  */
 .site-sound-toggle {
   top: 1rem;
-  right: 3.5rem;
+  right: calc(1rem + 2.625rem + 0.5rem);
 }
 
 @media (min-width: 640px) {
   .site-sound-toggle {
     top: 1.5rem;
-    right: 4rem;
+    right: calc(1.5rem + 2.625rem + 0.5rem);
   }
 }
 
+/* On: sakura accent icon on a pink-tinted chip. */
 .site-sound-toggle[aria-pressed="true"] {
-  color: var(--site-accent-strong);
+  color: var(--site-accent-text);
+  background: var(--pink-100);
+  border-color: var(--pink-300);
+  box-shadow:
+    0 6px 18px var(--site-shadow),
+    0 0 14px rgb(255 142 186 / 45%);
+}
+
+.site-sound-toggle:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 2px;
 }

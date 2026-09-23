@@ -19,7 +19,7 @@ export function SoundToggle() {
       aria-pressed={soundEnabled}
       aria-label={SITE_SOUND_COPY.label}
       title={soundEnabled ? SITE_SOUND_COPY.disableTitle : SITE_SOUND_COPY.enableTitle}
-      className="site-icon-button site-sound-toggle fixed z-20 rounded-md p-2"
+      className="site-icon-button site-corner-chip site-sound-toggle fixed z-20 rounded-full p-2.5"
     >
       <Icon size={20} aria-hidden="true" />
     </button>
