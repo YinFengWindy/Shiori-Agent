@@ -1,23 +1,33 @@
 import type { AdvScript } from "../adv/advModel";
 
 /**
- * Art slots the ADV screen can show. `siteAssets.advArtwork` maps every key
- * to an image, so the script below only names slots and never imports files.
+ * Art slots the ADV screen can show. `siteAssets` maps every key to an image
+ * (`advSprites` / `advEventCgs`), so the script below only names slots and
+ * never imports files.
  */
-export type AdvArtKey = "title-1" | "title-2" | "title-3" | "topic-1" | "topic-2" | "topic-3";
+export type AdvSpriteKey = "sprite-1" | "sprite-2" | "sprite-3";
+export type AdvEventCgKey = "topic-1" | "topic-2" | "topic-3" | "cg-8" | "cg-10";
+
+/** A segment's art: 吟风's standing sprite, or an event CG that replaces it. */
+export type AdvArtRef = { readonly kind: "sprite"; readonly key: AdvSpriteKey } | { readonly kind: "cg"; readonly key: AdvEventCgKey };
+
+const sprite = (key: AdvSpriteKey): AdvArtRef => ({ kind: "sprite", key });
+const eventCg = (key: AdvEventCgKey): AdvArtRef => ({ kind: "cg", key });
 
 /**
  * 「开始」 dialogue: 吟风 (Shiori 的看板娘, a playful little devil) walks the
  * visitor through Shiori's real features. Every claim here must match
  * README.md; keep each line short (≤ 40 characters).
  *
- * Art mapping: 3 topic illustrations + the 3 title images cover 6 topics and
- * the opening; 生图 and 插件 share the bright window illustration.
+ * Art: the opening and closing show 吟风's standing sprite over the room
+ * background (gothic dress to greet, casual clothes to say goodbye); each
+ * topic swaps the sprite for an event CG — the 3 topic illustrations plus
+ * two of the night CGs — and 生图 and 插件 share the bright window one.
  */
-export const ADV_SCRIPT: AdvScript<AdvArtKey> = {
+export const ADV_SCRIPT: AdvScript<AdvArtRef> = {
   speaker: "吟风",
   opening: {
-    art: "title-2",
+    art: sprite("sprite-1"),
     lines: [
       "哎呀，终于点进来了？让我等了好久呢，笨蛋访客～",
       "我是吟风，Shiori 的看板娘。记住了哦，不许忘。",
@@ -35,7 +45,7 @@ export const ADV_SCRIPT: AdvScript<AdvArtKey> = {
     {
       id: "chat",
       label: "聊天与多端",
-      art: "topic-2",
+      art: eventCg("topic-2"),
       lines: [
         "每个角色都能开好几个会话，聊天记录全都留着。",
         "回复是流式一点点冒出来的，不用傻等哦。",
@@ -47,7 +57,7 @@ export const ADV_SCRIPT: AdvScript<AdvArtKey> = {
     {
       id: "memory",
       label: "角色与记忆",
-      art: "title-1",
+      art: eventCg("cg-8"),
       lines: [
         "每个角色的人设、立绘和素材都分开放，互不打扰。",
         "聊过的事会变成记忆，分近期和长期两层，还会定期整理。",
@@ -59,7 +69,7 @@ export const ADV_SCRIPT: AdvScript<AdvArtKey> = {
     {
       id: "image",
       label: "生图",
-      art: "topic-1",
+      art: eventCg("topic-1"),
       lines: [
         "生图靠 NovelAI，用提示词标签就能控制画面。",
         "画好直接在应用里预览，很方便吧？",
@@ -71,7 +81,7 @@ export const ADV_SCRIPT: AdvScript<AdvArtKey> = {
     {
       id: "story",
       label: "故事模式",
-      art: "topic-3",
+      art: eventCg("topic-3"),
       lines: [
         "故事模式里，每段故事都是一次独立的经历。",
         "角色快照、背景、剧情记录和场景状态都会带着。",
@@ -83,7 +93,7 @@ export const ADV_SCRIPT: AdvScript<AdvArtKey> = {
     {
       id: "pet",
       label: "桌宠",
-      art: "title-3",
+      art: eventCg("cg-10"),
       lines: [
         "每个角色都能单独变成桌宠，住进你的桌面。",
         "素材包支持 ZIP 导入，会做安全校验和动作映射。",
@@ -95,7 +105,7 @@ export const ADV_SCRIPT: AdvScript<AdvArtKey> = {
     {
       id: "plugins",
       label: "插件",
-      art: "topic-1",
+      art: eventCg("topic-1"),
       lines: [
         "故事模式、桌宠、NovelAI 生图，其实本身都是插件。",
         "在「设置 → 插件」里能逐个启用、停用和配置。",
@@ -107,7 +117,7 @@ export const ADV_SCRIPT: AdvScript<AdvArtKey> = {
   ],
   exit: {
     label: "没什么想问的了",
-    art: "title-2",
+    art: sprite("sprite-3"),
     lines: [
       "哼，这就问完了？……好吧，也不是不能放你走。",
       "想要我陪的话，就去「下载」把 Shiori 带回家吧。",

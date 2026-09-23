@@ -19,15 +19,19 @@ import {
   type AdvState,
 } from "./advModel";
 
+const OPEN = { kind: "sprite", key: "open" } as const;
+const CHAT_CG = { kind: "cg", key: "chat-cg" } as const;
+const BYE = { kind: "sprite", key: "bye" } as const;
+
 const SCRIPT: AdvScript = {
   speaker: "吟风",
-  opening: { art: "open", lines: ["你好呀", "我是吟风"] },
+  opening: { art: OPEN, lines: ["你好呀", "我是吟风"] },
   choicePrompt: { first: "选吧", again: "还想听？" },
   topics: [
-    { id: "chat", label: "聊天", art: "chat-art", lines: ["聊天一", "聊天二", "聊天三"] },
-    { id: "pet", label: "桌宠", art: "pet-art", lines: ["桌宠一"] },
+    { id: "chat", label: "聊天", art: CHAT_CG, lines: ["聊天一", "聊天二", "聊天三"] },
+    { id: "pet", label: "桌宠", art: { kind: "cg", key: "pet-cg" }, lines: ["桌宠一"] },
   ],
-  exit: { label: "没什么想问的了", art: "bye-art", lines: ["再见"] },
+  exit: { label: "没什么想问的了", art: BYE, lines: ["再见"] },
 };
 
 const CONFIG: AdvConfig = { script: SCRIPT, msPerChar: 50, reducedMotion: false };
@@ -50,7 +54,7 @@ describe("typewriter", () => {
     assert.equal(state.phase, "line");
     assert.equal(currentLine(state, SCRIPT), "你好呀");
     assert.equal(state.shownChars, 0);
-    assert.equal(currentArt(state, SCRIPT), "open");
+    assert.equal(currentArt(state, SCRIPT), OPEN);
   });
 
   it("reveals one character per msPerChar of ticked time, carrying remainders", () => {
@@ -170,16 +174,16 @@ describe("auto mode", () => {
 });
 
 describe("choices", () => {
-  it("plays the chosen topic with its art, then returns to the choices", () => {
+  it("plays the chosen topic with its event CG, then returns to the choices and the sprite", () => {
     let state = run(atChoices(), [{ type: "choose", choiceId: "chat" }]);
     assert.equal(currentLine(state, SCRIPT), "聊天一");
-    assert.equal(currentArt(state, SCRIPT), "chat-art");
+    assert.equal(currentArt(state, SCRIPT), CHAT_CG);
     assert.equal(currentTopic(state, SCRIPT)?.label, "聊天");
     state = run(state, [...next, ...next]);
     assert.equal(currentLine(state, SCRIPT), "聊天三");
     state = run(state, next);
     assert.equal(state.phase, "choice");
-    assert.equal(currentArt(state, SCRIPT), "open");
+    assert.equal(currentArt(state, SCRIPT), OPEN);
     assert.equal(currentTopic(state, SCRIPT), null);
     assert.equal(choicePrompt(state, SCRIPT), "还想听？");
   });
@@ -203,9 +207,10 @@ describe("choices", () => {
   it("the exit choice plays the closing line and then ends", () => {
     let state = run(atChoices(), [{ type: "choose", choiceId: ADV_EXIT_CHOICE_ID }]);
     assert.equal(currentLine(state, SCRIPT), "再见");
-    assert.equal(currentArt(state, SCRIPT), "bye-art");
+    assert.equal(currentArt(state, SCRIPT), BYE);
     state = run(state, next);
     assert.equal(state.phase, "ended");
+    assert.equal(currentArt(state, SCRIPT), BYE);
     // Nothing moves after the end.
     assert.equal(run(state, [click, { type: "skip" }, { type: "toggleAuto" }]), state);
   });

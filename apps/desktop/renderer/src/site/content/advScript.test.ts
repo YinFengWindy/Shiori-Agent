@@ -43,9 +43,14 @@ describe("ADV_SCRIPT", () => {
     assert.ok(!ids.includes(ADV_EXIT_CHOICE_ID));
   });
 
-  it("switches art away from the opening for every topic", () => {
+  it("greets and says goodbye with a standing sprite", () => {
+    assert.equal(ADV_SCRIPT.opening.art.kind, "sprite");
+    assert.equal(ADV_SCRIPT.exit.art.kind, "sprite");
+  });
+
+  it("shows an event CG in place of the sprite for every topic", () => {
     for (const topic of ADV_SCRIPT.topics) {
-      assert.notEqual(topic.art, ADV_SCRIPT.opening.art, topic.id);
+      assert.equal(topic.art.kind, "cg", topic.id);
     }
   });
 });

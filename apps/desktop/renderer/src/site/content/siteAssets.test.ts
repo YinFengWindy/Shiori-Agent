@@ -13,6 +13,13 @@ const assetsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../assets");
 const siteAssetsSourcePath = resolve(dirname(fileURLToPath(import.meta.url)), "siteAssets.ts");
 const MAX_EDGE = 1920;
 const METADATA_CHUNKS = new Set(["EXIF", "XMP ", "ICCP"]);
+// VP8X feature flags (byte 0 of the chunk): ICC profile, alpha, EXIF, XMP.
+const VP8X_ICC = 0x20;
+const VP8X_ALPHA = 0x10;
+const VP8X_EXIF = 0x08;
+const VP8X_XMP = 0x04;
+/** Cut-out standing sprites must keep their transparent background. */
+const ALPHA_REQUIRED = /^sprite-\d+\.webp$/;
 
 interface RiffChunk {
   tag: string;
@@ -65,6 +72,18 @@ function readWebpDimensions(data: Buffer, chunks: RiffChunk[]): { width: number;
   throw new Error("no VP8/VP8L/VP8X chunk found");
 }
 
+/**
+ * Whether the WebP carries an alpha channel: a lossless VP8L bitstream
+ * (which always has an alpha bit), or an extended VP8X file whose alpha flag
+ * is set and that actually contains an ALPH chunk or a VP8L bitstream.
+ */
+function hasAlpha(data: Buffer, chunks: RiffChunk[]): boolean {
+  const vp8x = chunks.find((chunk) => chunk.tag === "VP8X");
+  if (!vp8x) return chunks.some((chunk) => chunk.tag === "VP8L");
+  const flagged = (data[vp8x.offset] & VP8X_ALPHA) !== 0;
+  return flagged && chunks.some((chunk) => chunk.tag === "ALPH" || chunk.tag === "VP8L");
+}
+
 function listWebpFiles(): string[] {
   return readdirSync(assetsDir).filter((name) => name.endsWith(".webp"));
 }
@@ -93,7 +112,18 @@ describe("site asset hygiene", () => {
         const chunks = readRiffChunks(data);
         const found = chunks.map((chunk) => chunk.tag).filter((tag) => METADATA_CHUNKS.has(tag));
         assert.deepEqual(found, [], `${file} must not carry metadata chunks, found: ${found.join(", ")}`);
+        const vp8x = chunks.find((chunk) => chunk.tag === "VP8X");
+        if (vp8x) {
+          const flags = data[vp8x.offset];
+          assert.equal(flags & (VP8X_ICC | VP8X_EXIF | VP8X_XMP), 0, `${file} VP8X header must not declare ICC/EXIF/XMP`);
+        }
       });
+
+      if (ALPHA_REQUIRED.test(file)) {
+        it("keeps its transparent background (alpha WebP)", () => {
+          assert.ok(hasAlpha(data, readRiffChunks(data)), `${file} must be a WebP with alpha (VP8X+ALPH or VP8L)`);
+        });
+      }
     });
   }
 
@@ -110,6 +140,28 @@ describe("site asset hygiene", () => {
     for (const fileName of referenced) {
       assert.ok(onDisk.has(fileName), `siteAssets.ts references missing asset: ${fileName}`);
     }
+  });
+
+  it("recognizes both alpha encodings and rejects an opaque file", () => {
+    const riff = (...chunks: [string, Buffer][]) =>
+      Buffer.concat([
+        Buffer.from("RIFF\0\0\0\0WEBP", "ascii"),
+        ...chunks.map(([tag, body]) => {
+          const header = Buffer.alloc(8);
+          header.write(tag, 0, "ascii");
+          header.writeUInt32LE(body.length, 4);
+          return Buffer.concat([header, body, Buffer.alloc(body.length % 2)]);
+        }),
+      ]);
+    const vp8x = (flags: number) => Buffer.from([flags, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const lossyWithAlpha = riff(["VP8X", vp8x(VP8X_ALPHA)], ["ALPH", Buffer.alloc(2)], ["VP8 ", Buffer.alloc(2)]);
+    const lossless = riff(["VP8L", Buffer.alloc(6)]);
+    const opaque = riff(["VP8 ", Buffer.alloc(2)]);
+    const flagWithoutAlpha = riff(["VP8X", vp8x(VP8X_ALPHA)], ["VP8 ", Buffer.alloc(2)]);
+    assert.equal(hasAlpha(lossyWithAlpha, readRiffChunks(lossyWithAlpha)), true);
+    assert.equal(hasAlpha(lossless, readRiffChunks(lossless)), true);
+    assert.equal(hasAlpha(opaque, readRiffChunks(opaque)), false);
+    assert.equal(hasAlpha(flagWithoutAlpha, readRiffChunks(flagWithoutAlpha)), false);
   });
 
   it("has a non-empty asset directory", () => {
