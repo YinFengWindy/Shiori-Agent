@@ -1,0 +1,90 @@
+name: Site Pages
+
+# Publishes the static site (apps/desktop/site-dist/) to the `gh-pages` branch,
+# which is the repository's existing Pages source (legacy build, branch root).
+# Repository Pages settings are intentionally left unchanged.
+on:
+  push:
+    branches:
+      - main
+    # Only inputs that can change `pnpm build:site` output trigger a deploy:
+    # the site entry, the renderer toolchain/styles/public assets it reuses,
+    # plugin UI sources that the shared Tailwind config scans for class names,
+    # the dependency graph, and this workflow. Backend-only merges would
+    # otherwise republish an identical site. Use workflow_dispatch to force it.
+    paths:
+      - "apps/desktop/site/**"
+      - "apps/desktop/renderer/**"
+      - "plugins/*/ui/**"
+      - "apps/desktop/package.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/site-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Only the latest main matters for a deploy: a newer run supersedes older ones.
+concurrency:
+  group: site-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # pnpm comes from Corepack (bundled with Node) pinned by the root
+      # `packageManager` field, so no third-party setup action is needed.
+      - name: Enable pnpm via Corepack
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Install dependencies
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: pnpm install --frozen-lockfile
+
+      - name: Build static site
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: pnpm run build:site
+
+      # Replace the whole gh-pages branch with a single parentless commit
+      # holding only the fresh build. `.nojekyll` makes the legacy Pages build
+      # serve files as-is (e.g. `_`-prefixed assets). The commit is built with
+      # plumbing against a throwaway index, so the checkout's working tree is
+      # untouched and the push reuses the credentials actions/checkout set up.
+      - name: Publish to gh-pages
+        env:
+          SITE_DIR: apps/desktop/site-dist
+          SOURCE_SHA: ${{ github.sha }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+          test -f "$SITE_DIR/index.html"
+          publish_dir="$RUNNER_TEMP/gh-pages"
+          rm -rf "$publish_dir"
+          mkdir -p "$publish_dir"
+          cp -R "$SITE_DIR"/. "$publish_dir"/
+          touch "$publish_dir/.nojekyll"
+          export GIT_INDEX_FILE="$RUNNER_TEMP/gh-pages.index"
+          rm -f "$GIT_INDEX_FILE"
+          git --work-tree="$publish_dir" add --all --force .
+          tree="$(git write-tree)"
+          commit="$(git commit-tree "$tree" -m "Deploy site from ${SOURCE_SHA}")"
+          git push --force origin "${commit}:refs/heads/gh-pages"
