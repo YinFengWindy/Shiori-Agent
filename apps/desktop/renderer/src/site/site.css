@@ -1,0 +1,351 @@
+/*
+ * Static site — galgame title screen and screen-switching chrome.
+ *
+ * The night palette below is new (the app design system only has a light
+ * theme so far, see docs/_handbook/design-system.md "已知遗留"): it lives as
+ * CSS custom properties here, scoped to `.site-root`, rather than scattered
+ * hex values in TSX. `--pink-*` primitives are reused from styles.css for
+ * the accent so the sakura hue stays consistent with the rest of the brand.
+ */
+
+.site-root {
+  --site-bg-from: #191330; /* deep indigo */
+  --site-bg-via: #2a1a3d;
+  --site-bg-to: #3c1f3a; /* plum */
+  --site-accent: var(--pink-400);
+  --site-accent-strong: var(--pink-300);
+  --site-ink: #fdf6fb;
+  --site-ink-muted: rgb(253 246 251 / 72%);
+  --site-ink-faint: rgb(253 246 251 / 48%);
+  --site-glass-bg: rgb(42 26 61 / 55%);
+  --site-glass-border: rgb(255 142 186 / 28%);
+  --site-ring: var(--pink-300);
+
+  background:
+    radial-gradient(120% 90% at 88% 8%, rgb(255 142 186 / 20%), transparent 55%),
+    linear-gradient(165deg in oklab, var(--site-bg-from), var(--site-bg-via) 55%, var(--site-bg-to));
+  color: var(--site-ink);
+  color-scheme: dark;
+  overflow: hidden;
+}
+
+.site-screen {
+  isolation: isolate;
+}
+
+.text-site-ink {
+  color: var(--site-ink);
+}
+
+.text-site-ink-muted {
+  color: var(--site-ink-muted);
+}
+
+/* Glass panel used for placeholders and the settings modal. */
+.site-panel {
+  background: var(--site-glass-bg);
+  border: 1px solid var(--site-glass-border);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 20px 60px rgb(10 6 20 / 45%);
+}
+
+.site-modal-backdrop {
+  background: rgb(10 6 20 / 55%);
+}
+
+.site-icon-button {
+  color: var(--site-ink-muted);
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.site-icon-button:hover {
+  color: var(--site-ink);
+  background-color: rgb(255 142 186 / 14%);
+}
+
+.site-icon-button:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 2px;
+}
+
+.site-back-button {
+  color: var(--site-ink);
+  background: rgb(255 142 186 / 14%);
+  border: 1px solid var(--site-glass-border);
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.site-back-button:hover {
+  background: rgb(255 142 186 / 24%);
+}
+
+.site-back-button:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- title -- */
+/*
+ * The standing art (TitleArtwork) is a full-bleed absolutely-positioned
+ * layer behind everything else on the title screen; the logo/menu/dots
+ * column (site-title-content) sits on top of it. On narrow screens the art
+ * covers the whole screen and the content column is pinned to the bottom
+ * (via `justify-end` in TitleScreen.tsx) over the scrim; from `sm:` up the
+ * content column becomes a normal top-to-bottom centered column on the left
+ * while the art anchors bottom-right.
+ */
+
+.site-title-content {
+  width: 100%;
+  /* Own backdrop behind the logo/menu/dots on narrow screens, where they sit
+     directly over the full-bleed art: guarantees legible contrast no matter
+     how bright that part of the source image is, on top of the art layer's
+     own (viewport-wide) scrim. Stays fully transparent through the top ~56%
+     (the face) and only starts darkening below the chin, reaching solid
+     well before the menu text; fades to transparent at its own top edge
+     instead of a hard rectangle. */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 56%,
+    rgb(25 19 48 / 55%) 64%,
+    var(--site-bg-to) 78%,
+    rgb(20 14 36 / 94%) 100%
+  );
+}
+
+@media (min-width: 640px) {
+  .site-title-content {
+    width: auto;
+    max-width: 24rem;
+    padding-left: clamp(2.5rem, 5vw, 4.5rem);
+    background: none;
+  }
+}
+
+.site-title-logo {
+  filter: drop-shadow(0 6px 18px rgb(255 142 186 / 25%));
+}
+
+/* Thin decorative ornament line between the logo and the menu. */
+.site-ornament-line {
+  display: block;
+  width: 3rem;
+  height: 1px;
+  background: linear-gradient(90deg, var(--site-accent), transparent);
+}
+
+.site-title-menu {
+  gap: 0.3rem;
+}
+
+.site-menu-item {
+  color: var(--site-ink-muted);
+  font-size: clamp(1.1rem, 0.9rem + 0.9vw, 1.4rem);
+  letter-spacing: 0.04em;
+  padding: 0.4rem 0.6rem 0.4rem 0.25rem;
+  transition: color 200ms var(--ease-out-soft, ease-out), text-shadow 200ms var(--ease-out-soft, ease-out);
+}
+
+.site-menu-item:hover,
+.site-menu-item:focus-visible {
+  color: var(--site-ink);
+  text-shadow: 0 0 20px rgb(255 142 186 / 55%);
+}
+
+.site-menu-item:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 2px;
+}
+
+/* Small ornament dash that slides in from the left on hover/focus. */
+.site-menu-marker {
+  display: inline-block;
+  width: 0;
+  height: 2px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, var(--site-accent), var(--site-accent-strong));
+  opacity: 0;
+  transition: width 200ms var(--ease-out-soft, ease-out), opacity 200ms var(--ease-out-soft, ease-out);
+}
+
+.site-menu-item:hover .site-menu-marker,
+.site-menu-item:focus-visible .site-menu-marker {
+  width: 1.1rem;
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------- artwork -- */
+
+.site-title-art-layer {
+  z-index: 0;
+  pointer-events: none;
+}
+
+.site-artwork-viewport {
+  inset: 0;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+@media (min-width: 640px) {
+  .site-artwork-viewport {
+    inset: 0 0 0 auto;
+    width: clamp(22rem, 52vw, 58rem);
+  }
+}
+
+.site-artwork-image {
+  object-fit: cover;
+  object-position: 50% 10%;
+  transition: opacity 420ms var(--ease-out-soft, ease-out), transform 420ms var(--ease-out-soft, ease-out);
+}
+
+@media (min-width: 640px) {
+  .site-artwork-image {
+    object-position: 50% 5%;
+    /* Wide, multi-stop fade (42% of the art's own width) instead of a short
+       linear ramp, so the left edge melts into the background rather than
+       reading as a vertical line. */
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      rgb(0 0 0 / 6%) 8%,
+      rgb(0 0 0 / 30%) 18%,
+      rgb(0 0 0 / 70%) 30%,
+      black 42%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      rgb(0 0 0 / 6%) 8%,
+      rgb(0 0 0 / 30%) 18%,
+      rgb(0 0 0 / 70%) 30%,
+      black 42%
+    );
+  }
+}
+
+.site-artwork-image-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.site-artwork-image-inactive {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* Feathers the art into the night background using the page's own gradient
+   colors so the blend reads as "painted into the scene" rather than a scrim
+   rectangle. The bottom fade is intentionally light on narrow screens — the
+   real legibility work for the menu is `.site-title-content`'s own backdrop
+   below — and the top fade is just a hint (not a band) behind the GitHub
+   icon; it must stay clear of the face. */
+.site-artwork-scrim {
+  background:
+    linear-gradient(to top, rgb(25 19 48 / 50%) 0%, transparent 30%),
+    linear-gradient(to bottom, rgb(10 6 20 / 18%) 0%, transparent 9%);
+  pointer-events: none;
+}
+
+@media (min-width: 640px) {
+  .site-artwork-scrim {
+    background:
+      linear-gradient(to top, rgb(30 18 44 / 55%) 0%, transparent 24%),
+      linear-gradient(to bottom, rgb(20 14 36 / 30%) 0%, transparent 10%);
+  }
+}
+
+.site-artwork-advance {
+  cursor: pointer;
+  background: transparent;
+}
+
+.site-artwork-advance:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: -2px;
+}
+
+.site-artwork-dots {
+  margin-top: -0.25rem;
+}
+
+.site-artwork-dot {
+  background: rgb(255 246 251 / 35%);
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.site-artwork-dot:hover {
+  background: rgb(255 246 251 / 60%);
+}
+
+.site-artwork-dot:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 2px;
+}
+
+.site-artwork-dot-active {
+  background: var(--site-accent-strong);
+  transform: scale(1.25);
+}
+
+/* --------------------------------------------------------- decorations -- */
+
+.site-decorations {
+  z-index: 0;
+}
+
+.site-decoration-star {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 9999px;
+  background: #fff;
+  opacity: 0.55;
+  animation: site-star-twinkle calc(3.2s + var(--i) * 0.3s) ease-in-out calc(var(--i) * 0.25s) infinite;
+}
+
+.site-decoration-petal {
+  position: absolute;
+  top: -5%;
+  width: 8px;
+  height: 8px;
+  border-radius: 60% 40% 60% 40%;
+  background: rgb(255 182 214 / 45%);
+  animation: site-petal-drift calc(14s + var(--i) * 2.5s) linear calc(var(--i) * 1.8s) infinite;
+}
+
+@keyframes site-star-twinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.75; }
+}
+
+@keyframes site-petal-drift {
+  0% { transform: translate(0, -5vh) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.7; }
+  90% { opacity: 0.5; }
+  100% { transform: translate(6vw, 110vh) rotate(240deg); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-decoration-star,
+  .site-decoration-petal {
+    animation: none;
+    opacity: 0.3;
+  }
+
+  .site-artwork-image {
+    transition: opacity 1ms linear;
+  }
+
+  .site-artwork-image-inactive {
+    transform: none;
+  }
+
+  .site-menu-item:hover,
+  .site-menu-item:focus-visible {
+    text-shadow: none;
+  }
+}
