@@ -1,4 +1,4 @@
-import { titleArtwork } from "../content/siteAssets";
+import { SITE_LOGO_URL, titleArtwork } from "../content/siteAssets";
 import type { SiteScreenId } from "../content/siteCopy";
 import { useTitleArtSelection } from "../titleArt/useTitleArtSelection";
 import { GithubCornerLink } from "./GithubCornerLink";
@@ -6,9 +6,6 @@ import { SiteDecorations } from "./SiteDecorations";
 import { TitleArtwork } from "./TitleArtwork";
 import { TitleArtworkDots } from "./TitleArtworkDots";
 import { TitleMenu } from "./TitleMenu";
-
-/** Relative to the built site's own output root (see vite.site.config.ts). */
-const SITE_LOGO_URL = "./assets/branding/shiori-title-logo.png";
 
 interface TitleScreenProps {
   onOpenScreen: (screen: Exclude<SiteScreenId, "title">) => void;

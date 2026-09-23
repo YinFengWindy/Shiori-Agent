@@ -349,3 +349,429 @@
     text-shadow: none;
   }
 }
+
+/* ----------------------------------------------------------------- adv -- */
+/*
+ * 「开始」 ADV screen: the title screen's night scene and art layer, a
+ * screen-wide transparent "advance" button (z 1), then the stage (z 2):
+ * the choice list above the bottom dialogue window. The stage itself is
+ * pointer-events: none so clicks on the dialogue text reach the advance
+ * button; the choices and the box's control row opt back in.
+ */
+
+.site-adv-screen {
+  --site-adv-gutter: clamp(0.75rem, 2.5vw, 2rem);
+}
+
+.site-adv-advance {
+  cursor: pointer;
+  background: transparent;
+}
+
+.site-adv-advance:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: -4px;
+}
+
+.site-adv-stage {
+  gap: 1rem;
+  padding: 1rem var(--site-adv-gutter) max(var(--site-adv-gutter), env(safe-area-inset-bottom));
+}
+
+/* Glass dialogue window with a sakura hairline along the top edge. */
+.site-adv-box {
+  width: min(62rem, 100%);
+  margin-inline: auto;
+  min-height: clamp(8.75rem, 19vh, 11rem);
+  padding: 2.35rem clamp(1.1rem, 3vw, 2.25rem) 0.7rem;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgb(58 30 72 / 72%), rgb(28 18 48 / 86%));
+  border: 1px solid var(--site-glass-border);
+  box-shadow:
+    0 24px 60px rgb(10 6 20 / 55%),
+    inset 0 1px 0 rgb(255 214 228 / 14%);
+  backdrop-filter: blur(14px);
+}
+
+.site-adv-box::before {
+  content: "";
+  position: absolute;
+  inset: 0 12% auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--site-accent), transparent);
+  opacity: 0.8;
+}
+
+.site-adv-nameplate {
+  top: -1.35rem;
+  left: clamp(0.9rem, 2.6vw, 2rem);
+  padding: 0.2rem 1.1rem 0.2rem 0.2rem;
+  color: var(--site-ink);
+  background: linear-gradient(90deg, var(--pink-600), var(--pink-800));
+  border: 1px solid rgb(255 184 209 / 55%);
+  box-shadow: 0 8px 24px rgb(197 70 127 / 35%);
+  letter-spacing: 0.12em;
+}
+
+.site-adv-avatar {
+  flex-shrink: 0;
+  border: 2px solid var(--pink-200);
+  background: var(--pink-100);
+}
+
+/* The avatar source is a bust crop; zoom in on the face. */
+.site-adv-avatar img {
+  object-position: 50% 20%;
+  transform: scale(1.75);
+  transform-origin: 50% 28%;
+}
+
+.site-adv-text {
+  flex: 1;
+  font-size: clamp(1rem, 0.9rem + 0.4vw, 1.3rem);
+  line-height: 1.85;
+  letter-spacing: 0.03em;
+  color: var(--site-ink);
+  text-shadow: 0 1px 2px rgb(10 6 20 / 60%);
+}
+
+/* The not-yet-typed remainder keeps its space so lines never reflow. */
+.site-adv-text-pending {
+  color: transparent;
+  text-shadow: none;
+}
+
+/* "Next" mark after a completed line: a small sakura diamond that bobs. */
+.site-adv-next {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-left: 0.45rem;
+  vertical-align: 0.05em;
+  border-radius: 2px;
+  background: linear-gradient(135deg, var(--pink-200), var(--site-accent));
+  box-shadow: 0 0 10px rgb(255 142 186 / 70%);
+  transform: rotate(45deg);
+  animation: site-adv-next-blink 1.1s ease-in-out infinite;
+}
+
+@keyframes site-adv-next-blink {
+  0%, 100% { opacity: 1; transform: translateY(0) rotate(45deg); }
+  50% { opacity: 0.35; transform: translateY(3px) rotate(45deg); }
+}
+
+.site-adv-controls {
+  pointer-events: auto;
+  margin-top: 0.35rem;
+  margin-right: -0.4rem;
+}
+
+.site-adv-control {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  color: var(--site-ink-faint);
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.site-adv-control:hover:not(:disabled) {
+  color: var(--site-ink);
+  background: rgb(255 142 186 / 14%);
+}
+
+.site-adv-control:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 1px;
+}
+
+.site-adv-control:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.site-adv-control-active {
+  color: var(--site-accent-strong);
+  background: rgb(255 142 186 / 16%);
+}
+
+/* Top-left logo + chapter caption (desktop only, see AdvChapterMark). */
+.site-adv-chapter {
+  top: clamp(1.5rem, 4vh, 2.5rem);
+  left: clamp(2.5rem, 5vw, 4.5rem);
+}
+
+.site-adv-chapter-label {
+  min-height: 1.5em;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--site-accent);
+  font-size: 1.05rem;
+  letter-spacing: 0.3em;
+  color: var(--site-ink-muted);
+  animation: site-adv-fade-in 420ms var(--ease-out-soft, ease-out) both;
+}
+
+.site-adv-chapter-label:empty {
+  border-left-color: transparent;
+}
+
+@keyframes site-adv-fade-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ------------------------------------------------------------- choices -- */
+
+.site-adv-choices {
+  max-width: 27rem;
+  gap: 0.6rem;
+}
+
+.site-adv-choice-item {
+  animation: site-adv-choice-in 320ms var(--ease-out-soft, ease-out) both;
+}
+
+@keyframes site-adv-choice-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.site-adv-choice {
+  position: relative;
+  min-height: 2.9rem;
+  padding: 0.55rem 1.25rem;
+  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.1rem);
+  letter-spacing: 0.1em;
+  color: var(--site-ink);
+  background: linear-gradient(90deg, rgb(28 18 48 / 78%), rgb(58 30 72 / 84%) 50%, rgb(28 18 48 / 78%));
+  border: 1px solid var(--site-glass-border);
+  box-shadow: 0 10px 30px rgb(10 6 20 / 40%);
+  backdrop-filter: blur(10px);
+  transition: border-color 180ms ease, box-shadow 180ms ease, color 180ms ease;
+}
+
+.site-adv-choice:hover,
+.site-adv-choice:focus-visible {
+  border-color: var(--site-accent);
+  background: linear-gradient(90deg, rgb(95 26 58 / 80%), rgb(197 70 127 / 72%) 50%, rgb(95 26 58 / 80%));
+  box-shadow: 0 10px 30px rgb(10 6 20 / 40%), 0 0 24px rgb(255 142 186 / 35%);
+}
+
+.site-adv-choice:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 2px;
+}
+
+.site-adv-choice-visited {
+  color: var(--site-ink-faint);
+}
+
+.site-adv-choice-visited:hover,
+.site-adv-choice-visited:focus-visible {
+  color: var(--site-ink-muted);
+}
+
+.site-adv-choice-read {
+  padding: 0.1rem 0.45rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--site-accent-strong);
+  background: rgb(255 142 186 / 14%);
+  border: 1px solid rgb(255 142 186 / 30%);
+}
+
+/* ------------------------------------------------------------- backlog -- */
+
+.site-adv-backlog {
+  max-height: min(82dvh, 42rem);
+}
+
+.site-adv-backlog-list:focus-visible {
+  outline: 2px solid var(--site-ring);
+  outline-offset: -2px;
+}
+
+.site-adv-backlog-line {
+  padding: 0.7rem 0;
+  border-bottom: 1px solid rgb(255 142 186 / 12%);
+}
+
+.site-adv-backlog-speaker {
+  display: block;
+  margin-bottom: 0.15rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  color: var(--site-accent-strong);
+}
+
+.site-adv-backlog-choice {
+  margin: 0.6rem 0;
+  padding: 0.4rem 0.75rem;
+  border-left: 2px solid var(--site-accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--site-accent-strong);
+  background: rgb(255 142 186 / 10%);
+}
+
+/* ------------------------------------------------------------ settings -- */
+
+.site-settings-value {
+  color: var(--site-accent-strong);
+}
+
+.site-range {
+  --site-range-fill: 50%;
+  height: 1.25rem;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.site-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, var(--site-accent) var(--site-range-fill), rgb(253 246 251 / 18%) var(--site-range-fill));
+}
+
+.site-range::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, var(--site-accent) var(--site-range-fill), rgb(253 246 251 / 18%) var(--site-range-fill));
+}
+
+.site-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 9999px;
+  background: var(--pink-100);
+  border: 2px solid var(--site-accent);
+  box-shadow: 0 0 10px rgb(255 142 186 / 55%);
+}
+
+.site-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--pink-100);
+  border: 2px solid var(--site-accent);
+}
+
+/* Opts out of the global field focus halo (styles.css), which would draw a
+   box around the whole track; the focus ring goes on the thumb instead. */
+.site-range:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.site-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--site-ring);
+}
+
+.site-range:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px var(--site-ring);
+}
+
+.site-segmented {
+  background: rgb(10 6 20 / 35%);
+  border: 1px solid var(--site-glass-border);
+}
+
+.site-segmented-option {
+  padding: 0.35rem 0;
+  color: var(--site-ink-muted);
+  cursor: pointer;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.site-segmented-option:hover {
+  color: var(--site-ink);
+}
+
+.site-segmented-option-active {
+  color: var(--site-ink);
+  background: linear-gradient(90deg, var(--pink-600), var(--pink-700));
+}
+
+.site-segmented-option:has(input:focus-visible) {
+  outline: 2px solid var(--site-ring);
+  outline-offset: 1px;
+}
+
+.site-settings-preview {
+  min-height: 2.75rem;
+  padding: 0.6rem 0.8rem;
+  color: var(--site-ink);
+  background: rgb(10 6 20 / 30%);
+  border: 1px dashed rgb(255 142 186 / 25%);
+}
+
+/* -------------------------------------------------------------- mobile -- */
+
+@media (max-width: 639px) {
+  .site-adv-stage {
+    gap: 0.75rem;
+  }
+
+  .site-adv-box {
+    min-height: 10rem;
+    padding-top: 2.1rem;
+  }
+
+  .site-adv-nameplate {
+    top: -1.1rem;
+  }
+
+  .site-adv-avatar {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .site-adv-controls {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    margin-inline: -0.4rem;
+  }
+
+  .site-adv-control {
+    padding-inline: 0.35rem;
+    letter-spacing: 0.02em;
+  }
+
+  .site-adv-choices {
+    max-width: none;
+    gap: 0.45rem;
+  }
+
+  .site-adv-choice {
+    min-height: 2.6rem;
+    padding-block: 0.4rem;
+  }
+}
+
+@media (max-width: 639px) and (max-height: 700px) {
+  .site-adv-box {
+    min-height: 8.5rem;
+  }
+
+  .site-adv-text {
+    line-height: 1.7;
+  }
+
+  .site-adv-choices {
+    gap: 0.35rem;
+  }
+
+  .site-adv-choice {
+    min-height: 2.35rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-adv-next,
+  .site-adv-choice-item,
+  .site-adv-chapter-label {
+    animation: none;
+  }
+}
