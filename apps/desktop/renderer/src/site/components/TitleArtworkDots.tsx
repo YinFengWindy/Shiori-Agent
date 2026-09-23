@@ -1,4 +1,4 @@
-import { titleArtwork } from "../content/siteAssets";
+import { titleSprites } from "../content/siteAssets";
 import { cx } from "../siteClassNames";
 
 interface TitleArtworkDotsProps {
@@ -10,7 +10,7 @@ interface TitleArtworkDotsProps {
 export function TitleArtworkDots({ index, onSelect }: TitleArtworkDotsProps) {
   return (
     <div role="group" aria-label="立绘选择" className="site-artwork-dots flex items-center gap-2">
-      {titleArtwork.map((art, i) => (
+      {titleSprites.map((art, i) => (
         <button
           key={art.src}
           type="button"

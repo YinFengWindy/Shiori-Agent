@@ -10,11 +10,12 @@ import {
   currentLine,
   isLineComplete,
   type AdvAction,
+  type AdvArt,
   type AdvConfig,
   type AdvState,
 } from "./advModel";
 
-interface UseAdvDialogueOptions<Art extends string> extends AdvConfig<Art> {
+interface UseAdvDialogueOptions<Art extends AdvArt> extends AdvConfig<Art> {
   /** Freeze typing and auto mode (e.g. while the backlog or settings is open). */
   readonly paused: boolean;
   /** Called once when the closing lines finish. */
@@ -26,7 +27,7 @@ interface UseAdvDialogueOptions<Art extends string> extends AdvConfig<Art> {
  * feeds `tick` while a line is typing or auto mode is waiting, and the
  * derived view (line, art, choices, prompt) is computed from the state.
  */
-export function useAdvDialogue<Art extends string>({ script, msPerChar, reducedMotion, paused, onEnd }: UseAdvDialogueOptions<Art>) {
+export function useAdvDialogue<Art extends AdvArt>({ script, msPerChar, reducedMotion, paused, onEnd }: UseAdvDialogueOptions<Art>) {
   const config = useMemo(() => ({ script, msPerChar, reducedMotion }), [script, msPerChar, reducedMotion]);
   // The reducer closes over the latest config, so a text-speed change takes
   // effect on the very next tick.

@@ -10,20 +10,30 @@
  * → phase "ended" (the screen returns to the title).
  */
 
+/**
+ * What fills the stage above the dialogue box while a segment plays: 吟风's
+ * standing sprite, or an event CG that takes the sprite's place. `key` names
+ * an art slot; the screen maps slots to images.
+ */
+export interface AdvArt<Key extends string = string> {
+  readonly kind: "sprite" | "cg";
+  readonly key: Key;
+}
+
 /** A run of lines spoken in one go, with the art shown while it plays. */
-export interface AdvSegment<Art extends string = string> {
+export interface AdvSegment<Art extends AdvArt = AdvArt> {
   readonly art: Art;
   readonly lines: readonly string[];
 }
 
 /** One selectable topic in the choice list. */
-export interface AdvTopic<Art extends string = string> extends AdvSegment<Art> {
+export interface AdvTopic<Art extends AdvArt = AdvArt> extends AdvSegment<Art> {
   readonly id: string;
   readonly label: string;
 }
 
-/** The whole dialogue: opening, the topics offered as choices, and the exit. `Art` names art slots. */
-export interface AdvScript<Art extends string = string> {
+/** The whole dialogue: opening, the topics offered as choices, and the exit. `Art` narrows the art each segment names. */
+export interface AdvScript<Art extends AdvArt = AdvArt> {
   readonly speaker: string;
   readonly opening: AdvSegment<Art>;
   /** Text shown in the dialogue box while the choice list is up. */
@@ -34,7 +44,7 @@ export interface AdvScript<Art extends string = string> {
 }
 
 /** Timing inputs; may change between actions (text speed is live). */
-export interface AdvConfig<Art extends string = string> {
+export interface AdvConfig<Art extends AdvArt = AdvArt> {
   readonly script: AdvScript<Art>;
   /** Typewriter speed; 0 shows each line in full immediately. */
   readonly msPerChar: number;
@@ -77,13 +87,13 @@ export function autoAdvanceDelayMs(text: string): number {
   return 1200 + text.length * 60;
 }
 
-function topicOf<Art extends string>(script: AdvScript<Art>, topicId: string): AdvTopic<Art> {
+function topicOf<Art extends AdvArt>(script: AdvScript<Art>, topicId: string): AdvTopic<Art> {
   const topic = script.topics.find((candidate) => candidate.id === topicId);
   if (!topic) throw new Error(`Unknown ADV topic: ${topicId}`);
   return topic;
 }
 
-function segmentOf<Art extends string>(ref: AdvSegmentRef, script: AdvScript<Art>): AdvSegment<Art> {
+function segmentOf<Art extends AdvArt>(ref: AdvSegmentRef, script: AdvScript<Art>): AdvSegment<Art> {
   if (ref.kind === "opening") return script.opening;
   if (ref.kind === "closing") return script.exit;
   return topicOf(script, ref.topicId);
@@ -137,13 +147,17 @@ export function isLineComplete(state: AdvState, script: AdvScript): boolean {
 }
 
 /** The topic being explained right now (for the chapter caption), else null. */
-export function currentTopic<Art extends string>(state: AdvState, script: AdvScript<Art>): AdvTopic<Art> | null {
+export function currentTopic<Art extends AdvArt>(state: AdvState, script: AdvScript<Art>): AdvTopic<Art> | null {
   if (state.phase !== "line" || state.segment.kind !== "topic") return null;
   return topicOf(script, state.segment.topicId);
 }
 
-/** Art key to show: the segment's art while speaking, the opening art otherwise. */
-export function currentArt<Art extends string>(state: AdvState, script: AdvScript<Art>): Art {
+/**
+ * Art to show: the segment's art while speaking (a topic's event CG, say),
+ * the opening art while the choices are up — so a topic's CG gives way to
+ * the sprite again when it ends — and the closing art once it has ended.
+ */
+export function currentArt<Art extends AdvArt>(state: AdvState, script: AdvScript<Art>): Art {
   if (state.phase === "line") return segmentOf(state.segment, script).art;
   return state.phase === "ended" ? script.exit.art : script.opening.art;
 }
