@@ -85,18 +85,40 @@
 }
 
 /* ---------------------------------------------------------------- title -- */
+/*
+ * The standing art (TitleArtwork) is a full-bleed absolutely-positioned
+ * layer behind everything else on the title screen; the logo/menu/dots
+ * column (site-title-content) sits on top of it. On narrow screens the art
+ * covers the whole screen and the content column is pinned to the bottom
+ * (via `justify-end` in TitleScreen.tsx) over the scrim; from `sm:` up the
+ * content column becomes a normal top-to-bottom centered column on the left
+ * while the art anchors bottom-right.
+ */
 
-.site-title-layout {
-  isolation: isolate;
-}
-
-.site-title-panel {
-  position: relative;
-  background: linear-gradient(180deg, rgb(25 19 48 / 78%), rgb(25 19 48 / 40%));
+.site-title-content {
+  width: 100%;
+  /* Own backdrop behind the logo/menu/dots on narrow screens, where they sit
+     directly over the full-bleed art: guarantees legible contrast no matter
+     how bright that part of the source image is, on top of the art layer's
+     own (viewport-wide) scrim. Stays fully transparent through the top ~56%
+     (the face) and only starts darkening below the chin, reaching solid
+     well before the menu text; fades to transparent at its own top edge
+     instead of a hard rectangle. */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 56%,
+    rgb(25 19 48 / 55%) 64%,
+    var(--site-bg-to) 78%,
+    rgb(20 14 36 / 94%) 100%
+  );
 }
 
 @media (min-width: 640px) {
-  .site-title-panel {
+  .site-title-content {
+    width: auto;
+    max-width: 24rem;
+    padding-left: clamp(2.5rem, 5vw, 4.5rem);
     background: none;
   }
 }
@@ -114,21 +136,21 @@
 }
 
 .site-title-menu {
-  font-variant-ligatures: none;
+  gap: 0.3rem;
 }
 
 .site-menu-item {
   color: var(--site-ink-muted);
-  letter-spacing: 0.02em;
-  transition: color 200ms var(--ease-out-soft, ease-out), background-color 200ms var(--ease-out-soft, ease-out),
-    box-shadow 200ms var(--ease-out-soft, ease-out), transform 200ms var(--ease-out-soft, ease-out);
+  font-size: clamp(1.1rem, 0.9rem + 0.9vw, 1.4rem);
+  letter-spacing: 0.04em;
+  padding: 0.4rem 0.6rem 0.4rem 0.25rem;
+  transition: color 200ms var(--ease-out-soft, ease-out), text-shadow 200ms var(--ease-out-soft, ease-out);
 }
 
-.site-menu-item:hover {
+.site-menu-item:hover,
+.site-menu-item:focus-visible {
   color: var(--site-ink);
-  background-color: rgb(255 142 186 / 12%);
-  box-shadow: 0 0 0 1px var(--site-glass-border), 0 0 22px rgb(255 142 186 / 35%);
-  transform: translateX(2px);
+  text-shadow: 0 0 20px rgb(255 142 186 / 55%);
 }
 
 .site-menu-item:focus-visible {
@@ -136,32 +158,73 @@
   outline-offset: 2px;
 }
 
+/* Small ornament dash that slides in from the left on hover/focus. */
+.site-menu-marker {
+  display: inline-block;
+  width: 0;
+  height: 2px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, var(--site-accent), var(--site-accent-strong));
+  opacity: 0;
+  transition: width 200ms var(--ease-out-soft, ease-out), opacity 200ms var(--ease-out-soft, ease-out);
+}
+
+.site-menu-item:hover .site-menu-marker,
+.site-menu-item:focus-visible .site-menu-marker {
+  width: 1.1rem;
+  opacity: 1;
+}
+
 /* ------------------------------------------------------------- artwork -- */
 
-.site-title-art-area {
-  padding-bottom: 1.5rem;
+.site-title-art-layer {
+  z-index: 0;
+  pointer-events: none;
+}
+
+.site-artwork-viewport {
+  inset: 0;
+  overflow: hidden;
+  pointer-events: auto;
 }
 
 @media (min-width: 640px) {
-  .site-title-art-area {
-    padding-bottom: 0;
-  }
-}
-
-.site-artwork-frame {
-  width: min(20rem, 78vw);
-  aspect-ratio: 832 / 1216;
-  box-shadow: 0 24px 70px rgb(10 6 20 / 55%);
-}
-
-@media (min-width: 640px) {
-  .site-artwork-frame {
-    width: min(24rem, 34vw);
+  .site-artwork-viewport {
+    inset: 0 0 0 auto;
+    width: clamp(22rem, 52vw, 58rem);
   }
 }
 
 .site-artwork-image {
+  object-fit: cover;
+  object-position: 50% 10%;
   transition: opacity 420ms var(--ease-out-soft, ease-out), transform 420ms var(--ease-out-soft, ease-out);
+}
+
+@media (min-width: 640px) {
+  .site-artwork-image {
+    object-position: 50% 5%;
+    /* Wide, multi-stop fade (42% of the art's own width) instead of a short
+       linear ramp, so the left edge melts into the background rather than
+       reading as a vertical line. */
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      rgb(0 0 0 / 6%) 8%,
+      rgb(0 0 0 / 30%) 18%,
+      rgb(0 0 0 / 70%) 30%,
+      black 42%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      rgb(0 0 0 / 6%) 8%,
+      rgb(0 0 0 / 30%) 18%,
+      rgb(0 0 0 / 70%) 30%,
+      black 42%
+    );
+  }
 }
 
 .site-artwork-image-active {
@@ -174,6 +237,27 @@
   transform: translateY(10px);
 }
 
+/* Feathers the art into the night background using the page's own gradient
+   colors so the blend reads as "painted into the scene" rather than a scrim
+   rectangle. The bottom fade is intentionally light on narrow screens — the
+   real legibility work for the menu is `.site-title-content`'s own backdrop
+   below — and the top fade is just a hint (not a band) behind the GitHub
+   icon; it must stay clear of the face. */
+.site-artwork-scrim {
+  background:
+    linear-gradient(to top, rgb(25 19 48 / 50%) 0%, transparent 30%),
+    linear-gradient(to bottom, rgb(10 6 20 / 18%) 0%, transparent 9%);
+  pointer-events: none;
+}
+
+@media (min-width: 640px) {
+  .site-artwork-scrim {
+    background:
+      linear-gradient(to top, rgb(30 18 44 / 55%) 0%, transparent 24%),
+      linear-gradient(to bottom, rgb(20 14 36 / 30%) 0%, transparent 10%);
+  }
+}
+
 .site-artwork-advance {
   cursor: pointer;
   background: transparent;
@@ -182,6 +266,10 @@
 .site-artwork-advance:focus-visible {
   outline: 2px solid var(--site-ring);
   outline-offset: -2px;
+}
+
+.site-artwork-dots {
+  margin-top: -0.25rem;
 }
 
 .site-artwork-dot {
@@ -256,7 +344,8 @@
     transform: none;
   }
 
-  .site-menu-item:hover {
-    transform: none;
+  .site-menu-item:hover,
+  .site-menu-item:focus-visible {
+    text-shadow: none;
   }
 }

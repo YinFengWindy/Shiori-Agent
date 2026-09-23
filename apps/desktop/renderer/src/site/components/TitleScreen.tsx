@@ -1,7 +1,10 @@
+import { titleArtwork } from "../content/siteAssets";
 import type { SiteScreenId } from "../content/siteCopy";
+import { useTitleArtSelection } from "../titleArt/useTitleArtSelection";
 import { GithubCornerLink } from "./GithubCornerLink";
 import { SiteDecorations } from "./SiteDecorations";
 import { TitleArtwork } from "./TitleArtwork";
+import { TitleArtworkDots } from "./TitleArtworkDots";
 import { TitleMenu } from "./TitleMenu";
 
 /** Relative to the built site's own output root (see vite.site.config.ts). */
@@ -14,24 +17,29 @@ interface TitleScreenProps {
 
 /**
  * The galgame title screen: night gradient + faint star/petal decoration,
- * logo and vertical menu on the left, standing art with dot indicators on
- * the right, a small GitHub icon in the corner. On narrow screens the art
- * sits full-bleed behind the menu, which overlays the bottom.
+ * full-bleed standing art (bottom-right on desktop, full-bleed behind the
+ * menu on narrow screens — see TitleArtwork/site.css for the feathering),
+ * logo + vertical menu + dot indicators on top, a small GitHub icon in the
+ * corner. The whole screen is exactly one viewport tall, no scrolling.
+ *
+ * The title art's random-index selection lives here (not inside
+ * TitleArtwork) so both the art layer and the dot indicators — which sit
+ * next to the menu rather than guessing an overlay position against the
+ * art's responsive sizing — share the same state.
  */
 export function TitleScreen({ onOpenScreen, onOpenSettings }: TitleScreenProps) {
+  const { index, advance, select } = useTitleArtSelection(titleArtwork.length);
+
   return (
     <div className="site-screen site-title-screen relative h-dvh min-h-0 overflow-hidden">
       <SiteDecorations />
+      <TitleArtwork index={index} onAdvance={advance} />
       <GithubCornerLink />
-      <div className="site-title-layout relative z-[1] flex h-full min-h-0 flex-col-reverse sm:flex-row">
-        <div className="site-title-panel flex flex-col justify-center gap-8 px-6 py-8 sm:w-[22rem] sm:px-10 sm:py-12">
-          <img className="site-title-logo w-[min(14rem,60vw)]" src={SITE_LOGO_URL} alt="" />
-          <span className="site-ornament-line" aria-hidden="true" />
-          <TitleMenu onOpenScreen={onOpenScreen} onOpenSettings={onOpenSettings} />
-        </div>
-        <div className="site-title-art-area relative flex flex-1 items-end justify-center sm:items-center sm:justify-end sm:pr-12">
-          <TitleArtwork />
-        </div>
+      <div className="site-title-content relative z-[1] flex h-full min-h-0 flex-col justify-end gap-3 px-6 pb-6 pt-10 sm:justify-center sm:gap-7 sm:pb-0 sm:pt-0">
+        <img className="site-title-logo w-[min(9rem,40vw)] sm:w-[min(15rem,22vw)]" src={SITE_LOGO_URL} alt="" />
+        <span className="site-ornament-line" aria-hidden="true" />
+        <TitleMenu onOpenScreen={onOpenScreen} onOpenSettings={onOpenSettings} />
+        <TitleArtworkDots index={index} onSelect={select} />
       </div>
       <h1 className="sr-only">栞 / SHIORI</h1>
     </div>

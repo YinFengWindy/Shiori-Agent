@@ -45,7 +45,7 @@ export const titleArtwork: readonly SiteImage[] = [
 export const characterArtwork: readonly SiteImage[] = [
   { src: character1, alt: "吟风人物立绘：身着水手服，走在秋日林荫道上" },
   { src: character2, alt: "吟风人物立绘：抱着笔记本，站在黄昏时分的小巷中" },
-  { src: character3, alt: "吟风人物立绘：白色连衣裙，双臂交叠靠在窗台上" },
+  { src: character3, alt: "吟风人物立绘：粉色双马尾，白色露肩上衣配黑色短裙，在门口伸手张望" },
 ];
 
 /** ADV dialogue topic illustrations (#348 consumes these). */
