@@ -15,7 +15,7 @@ interface SubScreenHeaderProps {
 /**
  * Top bar shared by the 人物 and CG 鉴赏 screens: the 返回标题 button and the
  * screen's `<h1>`. Esc and right-click also return to the title via
- * `useSiteScreen`. Leaves the top-right corner free for the sound toggle.
+ * `useSiteScreen`. Leaves the top-right corner free for the corner icons (`SiteCornerLinks`).
  */
 export function SubScreenHeader({ title, eyebrow, onBack, children }: SubScreenHeaderProps) {
   const { hover, click } = useButtonSfx();

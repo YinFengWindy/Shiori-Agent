@@ -23,7 +23,7 @@ interface AdvScreenProps {
 }
 
 /**
- * 「开始」: a standard galgame ADV — the room scene, 吟风's sprite
+ * 「开始」: a standard galgame ADV — the time-of-day scene, 吟风's sprite
  * centre-right, the dialogue box at the bottom; a topic swaps the sprite for
  * its event CG above the box. The stage is a two-row grid: row 1 holds the
  * event CG and (in the choice phase) the choice list, row 2 the dialogue

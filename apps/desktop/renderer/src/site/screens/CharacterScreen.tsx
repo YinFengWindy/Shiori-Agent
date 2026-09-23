@@ -12,7 +12,7 @@ interface CharacterScreenProps {
 }
 
 /**
- * 「人物」: 吟风's galgame-style character profile over the room scene — her
+ * 「人物」: 吟风's galgame-style character profile over the time-of-day scene — her
  * framed standing art, 换装 thumbnails switching between the three outfits,
  * and the profile card. Wiring only; the grid areas in site.css place the
  * art, card and outfit picker for desktop and mobile.
