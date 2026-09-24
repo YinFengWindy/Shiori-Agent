@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { pluginUiRegistry, type EditorSettingsSectionEntry } from "../plugins/pluginUiRegistry";
 import { SettingsSaveFeedback } from "./SettingsSaveFeedback";
+import { SettingsSavedIndicator } from "./SettingsSavedIndicator";
 import { SettingsPageLayout, settingsPageSurfaceClass } from "./SettingsPageLayout";
 import { SettingsSectionContent } from "./SettingsSectionContent";
 import { SettingsSubsectionNav } from "./SettingsSubsectionNav";
@@ -130,6 +131,7 @@ function EditableSettingsPage({
 
   return (
     <SettingsPageLayout
+      status={<SettingsSavedIndicator phase={controller.savePhase} />}
       feedback={
         <SettingsSaveFeedback
           phase={controller.savePhase}

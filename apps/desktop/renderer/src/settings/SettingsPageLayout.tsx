@@ -7,12 +7,15 @@ export const settingsPageSurfaceClass = "settings-page bg-gradient-app bg-fixed"
 type SettingsPageLayoutProps = {
   children: ReactNode;
   feedback?: ReactNode;
+  /** Corner status mark (the autosave "已保存"), overlaid on the page rather than in its flow. */
+  status?: ReactNode;
 };
 
 /** Owns the bounded scroll area for both shared-draft and standalone settings. */
-export function SettingsPageLayout({ children, feedback }: SettingsPageLayoutProps) {
+export function SettingsPageLayout({ children, feedback, status }: SettingsPageLayoutProps) {
   return (
     <section className={cx(settingsPageSurfaceClass, "relative grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden")} data-testid="settings-page">
+      {status}
       <div>{feedback}</div>
       <div className="relative scrollbar-soft min-h-0 overflow-y-auto px-4 py-8 sm:px-10 lg:px-16 lg:py-10">
         <div className="mx-auto w-full max-w-[840px]">
