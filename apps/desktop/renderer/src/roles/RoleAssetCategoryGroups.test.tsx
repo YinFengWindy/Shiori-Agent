@@ -16,8 +16,8 @@ function createRole(): RoleRecord {
     avatar_abs: null,
     chat_background: null,
     chat_background_abs: null,
-    illustrations: [],
-    illustrations_abs: [],
+    illustrations: ["assets/a.png", "assets/b.png"],
+    illustrations_abs: ["C:/roles/assets/a.png", "C:/roles/assets/b.png"],
     asset_categories: [{ id: "default", name: "默认", allow_role_send: false }],
     asset_category_bindings: {},
     created_at: "",
@@ -25,44 +25,36 @@ function createRole(): RoleRecord {
   };
 }
 
-describe("RoleAssetCategoryGroups", () => {
-  it("keeps back and add-category actions in the same toolbar", () => {
-    const markup = renderToStaticMarkup(
-      <RoleAssetCategoryGroups
-        role={null}
-        bridgeReady
-        saving={false}
-        selectedAssetPath=""
-        onBackToDetail={() => undefined}
-        onPickAssets={() => undefined}
-        onRemoveAsset={() => undefined}
-        onSelectAsset={() => undefined}
-        onUpdateOrganization={async () => true}
-      />,
-    );
+function render(focusedAssetPath = "") {
+  return renderToStaticMarkup(
+    <RoleAssetCategoryGroups
+      role={createRole()}
+      bridgeReady
+      saving={false}
+      focusedAssetPath={focusedAssetPath}
+      onPickAssets={() => undefined}
+      onFocusAsset={() => undefined}
+      onUpdateOrganization={async () => true}
+    />,
+  );
+}
 
-    assert.match(markup, /aria-label="返回角色详情"/);
-    assert.match(markup, /aria-label="新建分类"/);
-    assert.match(markup, /class="flex items-center justify-between px-2 pb-3"/);
+describe("RoleAssetCategoryGroups", () => {
+  it("lists every category with its thumbnails and a labeled 新建分类 action", () => {
+    const markup = render();
+
+    assert.match(markup, />新建分类</);
+    assert.match(markup, /aria-label="收起默认"/);
+    assert.equal(markup.match(/aria-label="查看素材"/g)?.length, 2);
+    assert.match(markup, /aria-label="上传到默认"/);
   });
 
-  it("keeps the back action flat and centers the category caret with a fixed-size icon", () => {
-    const markup = renderToStaticMarkup(
-      <RoleAssetCategoryGroups
-        role={createRole()}
-        bridgeReady
-        saving={false}
-        selectedAssetPath=""
-        onBackToDetail={() => undefined}
-        onPickAssets={() => undefined}
-        onRemoveAsset={() => undefined}
-        onSelectAsset={() => undefined}
-        onUpdateOrganization={async () => true}
-      />,
-    );
+  it("puts no delete button on the thumbnails; deleting happens in the preview pane", () => {
+    assert.doesNotMatch(render("assets/a.png"), /删除素材/);
+  });
 
-    const backButtonClass = markup.match(/<button class="([^"]+)" type="button" aria-label="返回角色详情"/)?.[1] ?? "";
-    assert.doesNotMatch(backButtonClass, /shadow/);
-    assert.match(markup, /aria-label="收起默认"[^>]*><svg[^>]*class="h-4 w-4 shrink-0 stroke-current transition-transform/);
+  it("marks only the previewed thumbnail as selected", () => {
+    const markup = render("assets/b.png");
+    assert.equal(markup.match(/aria-pressed="true"[^>]*aria-label="查看素材"/g)?.length, 1);
   });
 });
