@@ -1,8 +1,22 @@
 import React from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Components } from "react-markdown";
+import type { Components, ExtraProps } from "react-markdown";
 import { normalizeExternalLink } from "../../../src/externalLinks";
+import { ChatCodeBlock } from "./ChatCodeBlock";
+import { getChatCodeLanguage } from "./chatCodeHighlight";
+
+type HastElement = NonNullable<ExtraProps["node"]>;
+type HastContent = HastElement["children"][number];
+
+/** Concatenates the text of a hast subtree (the raw source of a code block). */
+function hastText(node: HastContent): string {
+  if (node.type === "text") return node.value;
+  if (node.type === "element") return node.children.map(hastText).join("");
+  return "";
+}
+
+const tableCellClass = "border-line-soft px-3 py-1.5 text-left align-top";
 
 const markdownComponents: Components = {
   a({ href, children }) {
@@ -25,16 +39,28 @@ const markdownComponents: Components = {
     return alt ? <span>{alt}</span> : null;
   },
   table({ children }) {
-    return <div className="my-2 max-w-full overflow-x-auto"><table>{children}</table></div>;
+    return (
+      <div className="chat-markdown-table scrollbar-soft my-2 max-w-full overflow-x-auto rounded-md border border-line-soft bg-white/60">
+        <table className="w-full border-collapse text-[13px] leading-5">{children}</table>
+      </div>
+    );
   },
-  pre({ children }) {
-    return <pre className="my-2 max-w-full overflow-x-auto rounded-md bg-surface-soft p-3 font-mono text-[12px] leading-5">{children}</pre>;
+  thead({ children }) { return <thead className="bg-accent-softer">{children}</thead>; },
+  tbody({ children }) { return <tbody className="[&>tr:nth-child(even)]:bg-surface-soft">{children}</tbody>; },
+  th({ children, style }) { return <th className={`${tableCellClass} whitespace-nowrap border-b font-semibold text-ink`} style={style}>{children}</th>; },
+  td({ children, style }) { return <td className={`${tableCellClass} border-t`} style={style}>{children}</td>; },
+  pre({ node, children }) {
+    // Fenced blocks arrive as <pre><code class="language-x">; render them from
+    // the source text so the header, copy button and highlighting see raw code.
+    const codeNode = node?.children[0];
+    if (codeNode?.type !== "element" || codeNode.tagName !== "code") return <pre>{children}</pre>;
+    const className = codeNode.properties.className;
+    const language = getChatCodeLanguage(Array.isArray(className) ? className.join(" ") : String(className ?? ""));
+    return <ChatCodeBlock code={hastText(codeNode).replace(/\n$/, "")} language={language} />;
   },
-  code({ className, children }) {
-    const isBlock = Boolean(className);
-    return isBlock
-      ? <code className={className}>{children}</code>
-      : <code className="rounded-md bg-surface-soft px-1 py-0.5 font-mono text-[0.9em]">{children}</code>;
+  code({ children }) {
+    // Only inline code reaches here: fenced blocks are rendered whole by `pre`.
+    return <code className="rounded-md bg-surface-soft px-1 py-0.5 font-mono text-[0.9em]">{children}</code>;
   },
   blockquote({ children }) {
     return <blockquote className="my-2 border-l-2 border-line pl-3 text-ink-muted">{children}</blockquote>;
