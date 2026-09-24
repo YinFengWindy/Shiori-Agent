@@ -26,7 +26,7 @@ export function SettingsSavedIndicator({ phase }: { phase: SettingsSavePhase }) 
   return (
     <div
       className={cx(
-        "pointer-events-none absolute right-5 top-4 z-[1] inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-caption text-success-text shadow-soft transition-opacity duration-[var(--duration-base)] ease-out-soft",
+        "pointer-events-none inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-caption text-success-text shadow-soft transition-opacity duration-[var(--duration-base)] ease-out-soft",
         visible ? "opacity-100" : "opacity-0",
       )}
       role="status"

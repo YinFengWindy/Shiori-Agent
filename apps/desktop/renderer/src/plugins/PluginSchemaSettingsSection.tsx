@@ -1,123 +1,25 @@
-import { useEffect, useRef, useState } from "react";
-import { SettingsField } from "../settings/SettingsField";
-import {
-  SettingsSecretInput,
-  SettingsSectionCard,
-  SettingsToggleField,
-  settingsInputClass,
-} from "../settings/SettingsFieldPrimitives";
+import { useId, useState, type ReactNode } from "react";
+import { SettingsDisclosure, SettingsDisclosureToggle } from "../settings/SettingsDisclosure";
+import { SettingsSectionCard } from "../settings/SettingsFieldPrimitives";
 import { SettingsSaveFeedback } from "../settings/SettingsSaveFeedback";
-import { parseSettingsNumber } from "../settings/settingsSectionUtils";
-import { cardClass, cx, ghostButtonClass, textareaClass } from "../shared/styles";
-import { describePluginConfigFields, type PluginConfigField } from "./jsonSchemaForm";
+import { SettingsSavedIndicator } from "../settings/SettingsSavedIndicator";
+import { SettingsStatus } from "../settings/SettingsStatusSlot";
+import { cardClass, cx, ghostButtonClass } from "../shared/styles";
+import { describePluginConfigFields, partitionPluginConfigFields, type PluginConfigField } from "./jsonSchemaForm";
+import { PluginConfigFieldRow } from "./PluginConfigFieldRow";
 import { usePluginConfigController } from "./usePluginConfigController";
 
-type FieldRowProps = {
-  field: PluginConfigField;
-  value: unknown;
-  onChange: (value: unknown) => void;
-};
-
-/** Renders one scalar control, or a raw JSON editor for shapes the form can't render natively. */
-function FieldRow({ field, value, onChange }: FieldRowProps) {
-  if (field.kind === "boolean") {
-    return (
-      <SettingsToggleField
-        label={field.label}
-        hint={field.hint}
-        checked={Boolean(value)}
-        onChange={onChange}
-      />
-    );
-  }
-  if (field.kind === "enum") {
-    return (
-      <SettingsField label={field.label} hint={field.hint}>
-        <select
-          className={settingsInputClass}
-          value={String(value ?? "")}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          {(field.options ?? []).map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
-      </SettingsField>
-    );
-  }
-  if (field.kind === "secret") {
-    return (
-      <SettingsField label={field.label} hint={field.hint}>
-        <SettingsSecretInput value={String(value ?? "")} onChange={onChange} ariaLabel={field.label} />
-      </SettingsField>
-    );
-  }
-  if (field.kind === "number" || field.kind === "integer") {
-    return (
-      <SettingsField label={field.label} hint={field.hint}>
-        <input
-          className={settingsInputClass}
-          value={String(value ?? 0)}
-          onChange={(event) => onChange(parseSettingsNumber(event.target.value, Number(value ?? 0)))}
-        />
-      </SettingsField>
-    );
-  }
-  if (field.kind === "json") {
-    return <JsonFieldRow field={field} value={value} onChange={onChange} />;
-  }
+/** The raw-JSON fields, folded under 「高级」 so the everyday form stays plain. */
+function AdvancedFields({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const bodyId = useId();
   return (
-    <SettingsField label={field.label} hint={field.hint}>
-      <input
-        className={settingsInputClass}
-        value={String(value ?? "")}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </SettingsField>
-  );
-}
-
-/**
- * Raw JSON editor for fields whose shape (array/object/$ref) has no
- * dedicated control. Resyncs its text from `value` whenever that value
- * changed for a reason other than this field's own last edit (e.g.
- * `reloadConfig` replacing the whole draft) — otherwise a reload after this
- * field mounted would leave the textarea showing stale content.
- */
-function JsonFieldRow({ field, value, onChange }: FieldRowProps) {
-  const [text, setText] = useState(() => JSON.stringify(value ?? null, null, 2));
-  const [invalid, setInvalid] = useState(false);
-  const pendingLocalEditRef = useRef(false);
-
-  useEffect(() => {
-    if (pendingLocalEditRef.current) {
-      pendingLocalEditRef.current = false;
-      return;
-    }
-    setText(JSON.stringify(value ?? null, null, 2));
-    setInvalid(false);
-  }, [value]);
-
-  return (
-    <SettingsField label={field.label} hint={field.hint} layout="stack">
-      <textarea
-        className={cx(textareaClass, "font-mono text-body-sm", invalid && "border-danger")}
-        value={text}
-        onChange={(event) => {
-          const nextText = event.target.value;
-          setText(nextText);
-          try {
-            const parsed = JSON.parse(nextText);
-            pendingLocalEditRef.current = true;
-            onChange(parsed);
-            setInvalid(false);
-          } catch {
-            setInvalid(true);
-          }
-        }}
-      />
-      {invalid ? <p className="mt-1 text-caption text-danger-text">JSON 格式无效</p> : null}
-    </SettingsField>
+    <section className="grid gap-2.5">
+      <SettingsDisclosureToggle open={open} controls={bodyId} onToggle={() => setOpen((current) => !current)}>高级</SettingsDisclosureToggle>
+      <SettingsDisclosure open={open} id={bodyId}>
+        <SettingsSectionCard>{children}</SettingsSectionCard>
+      </SettingsDisclosure>
+    </section>
   );
 }
 
@@ -140,32 +42,26 @@ export function PluginSchemaSettingsSection({ pluginId }: PluginSchemaSettingsSe
     return <div className="text-sm text-ink-muted">正在加载插件配置…</div>;
   }
 
-  const fields = describePluginConfigFields(schema);
+  const { primary, advanced } = partitionPluginConfigFields(describePluginConfigFields(schema));
+  const row = (field: PluginConfigField) => (
+    <PluginConfigFieldRow
+      key={field.key}
+      field={field}
+      value={draft[field.key]}
+      onChange={(value) => updateDraft((current) => ({ ...current, [field.key]: value }))}
+    />
+  );
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-7">
+      <SettingsStatus><SettingsSavedIndicator phase={savePhase} /></SettingsStatus>
       <SettingsSaveFeedback
         phase={savePhase}
         message={statusMessage}
         onRetry={retrySave}
         onReload={reloadConfig}
       />
-      <SettingsSectionCard>
-        {fields.map((field) => (
-          <FieldRow
-            key={field.key}
-            field={field}
-            value={draft[field.key]}
-            onChange={(value) => updateDraft((current) => ({ ...current, [field.key]: value }))}
-          />
-        ))}
-      </SettingsSectionCard>
+      {primary.length > 0 ? <SettingsSectionCard>{primary.map(row)}</SettingsSectionCard> : null}
+      {advanced.length > 0 ? <AdvancedFields>{advanced.map(row)}</AdvancedFields> : null}
     </div>
   );
-}
-
-/** Binds a plugin id into a settings.section-compatible component (registry entry shape). */
-export function createPluginSchemaSettingsSection(pluginId: string) {
-  return function BoundPluginSchemaSettingsSection() {
-    return <PluginSchemaSettingsSection pluginId={pluginId} />;
-  };
 }

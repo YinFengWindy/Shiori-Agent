@@ -423,6 +423,24 @@ button[role="combobox"]:focus-visible {
   overflow: hidden;
 }
 
+/* Settings disclosures (plugin groups, 开发者详情, 高级 fields): same 0fr → 1fr expansion. */
+.disclosure-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows var(--duration-base) var(--ease-out-soft), opacity var(--duration-quick) var(--ease-out-soft);
+}
+
+.disclosure-content-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.disclosure-content > div {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .chat-tool-call-content,
 .chat-tool-call-detail {
   display: grid;
@@ -1231,6 +1249,11 @@ button[role="combobox"]:focus-visible {
 
   .chat-thinking-content,
   .chat-thinking-content-expanded {
+    transition: opacity var(--duration-quick) var(--ease-out-soft);
+  }
+
+  .disclosure-content,
+  .disclosure-content-open {
     transition: opacity var(--duration-quick) var(--ease-out-soft);
   }
 

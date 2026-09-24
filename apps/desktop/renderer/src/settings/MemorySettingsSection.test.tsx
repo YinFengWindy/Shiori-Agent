@@ -12,7 +12,7 @@ it("MemorySettingsSection retains custom engine values and can reset to the empt
   try {
     await view.render(<MemorySettingsSection draft={draft} subsectionId="general" updateDraft={(mutate) => { draft = mutate(draft); }} />);
     assert.equal(document.querySelector('[role="combobox"]')?.textContent, "custom_memory");
-    await chooseSelectOption("记忆引擎", "default");
+    await chooseSelectOption("记忆引擎", "默认");
     assert.equal(draft.memory.engine, "");
   } finally { await view.cleanup(); }
 });

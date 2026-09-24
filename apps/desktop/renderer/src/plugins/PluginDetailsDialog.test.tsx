@@ -18,7 +18,7 @@ const plugin: PluginSummary = {
   directory: "C:/workspace/plugins/external", description: "Line one\nLine two", source: "workspace",
   enabled: false, canToggle: false, state: "BLOCKED", error: "Activation failed",
   diagnostic: { code: "missing_dependency", stage: "setup", field: "dependencies", reason: "Dependency is unavailable", path: "C:/workspace/plugins/external/manifest.yaml", state: "BLOCKED" },
-  hasConfigSchema: false, capabilities: [], channels: [], supportsHotUnload: true, pendingRendererKinds: [],
+  hasConfigSchema: false, capabilities: [], channels: [], category: "feature", supportsHotUnload: true, pendingRendererKinds: [],
 };
 
 test("details expose candidate metadata and full diagnostics within a scrollable body", async () => {
@@ -73,7 +73,7 @@ test("in-flight changes disable detail actions and retained failures remain visi
   try {
     const dialog = document.querySelector('[role="dialog"]')!;
     assert.match(dialog.textContent ?? "", /disk full/);
-    assert.match(dialog.textContent ?? "", /UI FAILED · UI unavailable/);
+    assert.match(dialog.textContent ?? "", /界面加载失败 · UI unavailable/);
     assert.match(dialog.textContent ?? "", /bridge unavailable/);
     for (const button of Array.from(dialog.querySelectorAll<HTMLButtonElement>("button"))) assert.equal(button.disabled, true);
   } finally { await view.cleanup(); }

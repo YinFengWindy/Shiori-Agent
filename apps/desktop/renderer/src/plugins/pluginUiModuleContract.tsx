@@ -4,7 +4,7 @@ import { desktopPluginHostServices, type PluginHostServices } from "./pluginHost
 import type React from "react";
 import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry, type PluginChatImageActionProps, type PluginRoleSettingsContribution } from "./pluginFeatureRegistry";
 import type { StandaloneSettingsSectionProps } from "../settings/settingsPageTypes";
-import { createPluginSchemaSettingsSection } from "./PluginSchemaSettingsSection";
+import { createPluginSchemaSettingsSection } from "./pluginSchemaSettingsSectionFactory";
 import { type PluginRpcClient } from "./pluginBridgeClient";
 import {
   pluginUiRegistry,

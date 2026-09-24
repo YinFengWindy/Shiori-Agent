@@ -31,9 +31,9 @@ describe("PluginManagementSection", () => {
       assert.equal(view.container.querySelector('input[type="radio"], details, summary'), null);
       assert.equal(view.container.querySelector('.bg-accent-softer'), null);
       assert.equal(document.querySelector('[role="dialog"]'), null);
-      assert.match(view.container.textContent ?? "", /builtin · v1\.0\.0 · 内置/);
-      assert.match(view.container.textContent ?? "", /external · v1\.0\.0 · 工作区/);
-      assert.doesNotMatch(view.container.textContent ?? "", /An external plugin/);
+      // Rows show name and description; id, version and source live in the dialog's 开发者详情.
+      assert.doesNotMatch(view.container.textContent ?? "", /builtin · v1\.0\.0|workspace\/external/);
+      assert.match(view.container.textContent ?? "", /An external plugin/);
       const title = (name: string) => Array.from(view.container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === name)!;
       assert.equal(title("Builtin").getAttribute("aria-haspopup"), "dialog");
       await act(async () => { title("Builtin").focus(); title("Builtin").click(); });
@@ -91,7 +91,8 @@ describe("PluginManagementSection", () => {
 
     try {
       await view.render(<PluginManagementSection />);
-      assert.match(view.container.textContent ?? "", /hello/);
+      // No display_name: the id is word-cased rather than shown raw.
+      assert.match(view.container.textContent ?? "", /Hello/);
       assert.doesNotMatch(view.container.textContent ?? "", /ACTIVE|DISABLED/);
 
       const toggle = view.container.querySelector('button[role="switch"]') as HTMLButtonElement;
@@ -237,7 +238,8 @@ it("renders each conflicting directory and disables every unsafe candidate", asy
       assert.equal(toggle.disabled, true);
       assert.equal(toggle.getAttribute("aria-checked"), "false");
       assert.equal(view.container.textContent?.includes(`C:/plugins/root-${index}`), false);
-      assert.ok(view.container.textContent?.includes(`diagnostic-${index}`));
+      // Raw diagnostics stay out of the row; it carries a readable line instead.
+      assert.equal(view.container.textContent?.includes(`diagnostic-${index}`), false);
       const titles = view.container.querySelectorAll<HTMLButtonElement>('[aria-haspopup="dialog"]');
       await act(async () => titles[index].click());
       const dialog = document.querySelector('[role="dialog"]')!;
@@ -246,8 +248,9 @@ it("renders each conflicting directory and disables every unsafe candidate", asy
       if (index < 2) assert.doesNotMatch(dialog.textContent ?? "", /从 ZIP 更新|卸载插件/);
       await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="关闭插件详情"]')!.click());
     }
-    assert.ok(view.container.textContent?.includes("内置"));
-    assert.ok(view.container.textContent?.includes("工作区"));
+    assert.match(view.container.textContent ?? "", /与另一个同 ID 的插件冲突/);
+    assert.match(view.container.textContent ?? "", /未信任/);
+    assert.match(view.container.textContent ?? "", /无法加载：插件包没有通过检查/);
     assert.deepEqual(calls, ["plugins.list"]);
   } finally {
     await view.cleanup();
@@ -290,5 +293,36 @@ it("requires explicit trust confirmation and then shows pending restart without 
     assert.ok(view.container.textContent?.includes("重启 Shiori 后加载"));
     assert.equal(view.container.textContent?.includes("尚未获得信任"), false);
     assert.equal(view.container.querySelector<HTMLButtonElement>('[role="switch"]')?.disabled, true);
+  } finally { await view.cleanup(); resetPluginEnabledStateForTests(); }
+});
+
+it("groups plugins by manifest category and keeps 系统组件 folded, flagging problems inside it", async () => {
+  resetPluginEnabledStateForTests();
+  const view = await mountTestComponent(null);
+  const row = (id: string, category: string, extra: Record<string, unknown> = {}) => ({
+    id, name: id, candidate_id: `builtin/${id}`, directory: `builtin/${id}`, source: "builtin", version: "0.1.0", description: "",
+    state: "ACTIVE", enabled: true, can_toggle: true, error: "", diagnostic: null, has_config_schema: false,
+    capabilities: [], channels: [], category, supports_hot_unload: true, ...extra,
+  });
+  Object.defineProperty(window, "miraDesktop", { configurable: true, value: {
+    onEvent: () => () => undefined,
+    invoke: async ({ method }: { method: string }) => ({ id: "r", type: "response", method, error: null, payload: { plugins: [
+      row("shell_safety", "system", { state: "FAILED", error: "boom" }),
+      row("telegram", "channel"),
+      row("story", "feature"),
+    ] } }),
+  } });
+  try {
+    await view.render(<PluginManagementSection />);
+    const groups = Array.from(view.container.querySelectorAll<HTMLElement>("[data-plugin-group]"));
+    assert.deepEqual(groups.map((group) => group.getAttribute("data-plugin-group")), ["feature", "channel", "system"]);
+    assert.deepEqual(groups.map((group) => group.querySelector("[data-plugin-row]")?.getAttribute("data-plugin-row")), ["story", "telegram", "shell_safety"]);
+    const fold = groups[2]!.querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    assert.equal(fold.getAttribute("aria-expanded"), "false");
+    assert.match(fold.textContent ?? "", /系统组件.*1 项异常/);
+    assert.ok(groups[2]!.querySelector("[inert]"), "folded rows are out of the tab order");
+    await act(async () => fold.click());
+    assert.equal(fold.getAttribute("aria-expanded"), "true");
+    assert.equal(groups[2]!.querySelector("[inert]"), null);
   } finally { await view.cleanup(); resetPluginEnabledStateForTests(); }
 });

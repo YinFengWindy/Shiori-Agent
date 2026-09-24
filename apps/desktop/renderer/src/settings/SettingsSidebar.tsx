@@ -1,4 +1,5 @@
 import type React from "react";
+import { Brain, BookBookmark, Info, Microphone, Palette, PuzzlePiece, SlidersHorizontal, type Icon } from "@phosphor-icons/react";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { SidebarResizeHandle } from "../shared/SidebarResizeHandle";
 import { cx, secondarySidebarSurfaceClass, sidebarContentMotionClass, sidebarNavItemClass } from "../shared/styles";
@@ -46,6 +47,17 @@ export function listSettingsSidebarSections(
     .map((entry) => ({ id: entry.id, label: entry.label }));
 }
 
+/** Icons for the built-in sections; a section without one renders its label alone. */
+const sectionIcons: Partial<Record<SettingsSectionId, Icon>> = {
+  models: Brain,
+  memory: BookBookmark,
+  voice: Microphone,
+  appearance: Palette,
+  advanced: SlidersHorizontal,
+  plugins: PuzzlePiece,
+  about: Info,
+};
+
 type SettingsSidebarProps = {
   sections?: Array<{ id: SettingsSectionId; label: string }>;
   activeSection: SettingsSectionId;
@@ -67,7 +79,7 @@ export function SettingsSidebar({
 }: SettingsSidebarProps) {
   const sidebarActionClass = cx(
     sidebarNavItemClass,
-    "flex min-h-[38px] items-center px-3 text-left text-sm text-ink-secondary",
+    "flex min-h-[38px] items-center gap-2.5 px-3 text-left text-sm text-ink-secondary",
   );
 
   return (
@@ -83,18 +95,23 @@ export function SettingsSidebar({
     >
       <nav className="scrollbar-soft grid min-h-0 content-start gap-1 overflow-y-auto px-2 pr-0">
         <div className="grid gap-1">
-          {sections.map((section) => <button
+          {sections.map((section) => {
+            const SectionIcon = sectionIcons[section.id];
+            const active = activeSection === section.id;
+            return <button
               key={section.id}
               className={cx(
                 sidebarActionClass,
-                activeSection === section.id
-                  && "bg-white/80 font-medium text-ink shadow-soft hover:bg-white focus-visible:bg-white",
+                active && "bg-white/80 font-medium text-ink shadow-soft hover:bg-white focus-visible:bg-white",
               )}
               type="button"
+              aria-current={active ? "page" : undefined}
               onClick={() => onOpenSection(section.id)}
             >
+              {SectionIcon ? <SectionIcon className={cx("h-4 w-4 shrink-0", active ? "text-accent-text" : "text-ink-muted")} aria-hidden="true" /> : null}
               <span>{section.label}</span>
-            </button>)}
+            </button>;
+          })}
         </div>
       </nav>
       <SidebarResizeHandle collapsed={collapsed} onBeginResize={onBeginResize} />

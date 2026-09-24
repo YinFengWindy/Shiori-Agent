@@ -80,7 +80,7 @@ describe("pluginEnabledStateStore", () => {
       events.push(`list ${calls}`);
       const plugin: PluginSummary = {
         id: "demo", candidateId: "workspace/demo", source: "workspace", directory: "workspace/demo", name: "demo", version: "1.0.0", description: "",
-        enabled: calls === 1, canToggle: true, state: calls === 1 ? "ACTIVE" : "DISABLED", error: "", diagnostic: null, hasConfigSchema: false, capabilities: [], channels: [], supportsHotUnload: true,
+        enabled: calls === 1, canToggle: true, state: calls === 1 ? "ACTIVE" : "DISABLED", error: "", diagnostic: null, hasConfigSchema: false, capabilities: [], channels: [], category: "feature", supportsHotUnload: true,
         pendingRendererKinds: [],
         rendererUi: calls === 1 ? { pluginId: "demo", entry: "granted", css: [] } : undefined,
       };

@@ -73,6 +73,8 @@ async def setup(ctx):
     ctx.rpc.register("label.get", read_label)
 ```
 
+自动表单按 JSON Schema 渲染：字段标签取 Pydantic `Field(title=...)`，说明取 `description`（不写 `title` 时 Pydantic 会生成 "Timeout Seconds" 这类英文标题，请为每个字段写中文 `title`）；数字字段可用 `json_schema_extra={"unit": "秒"}` 声明单位，`ge`/`le` 会作为取值范围；`list[str]` 渲染为可增删的标签列表；`SecretStr` 或名称含 secret/token/password/api_key 的字符串按密钥遮挡；对象、对象列表等其余形状放进「高级」折叠区，以 JSON 编辑。
+
 运行配置来自 `[plugins.example]`。`enabled` 是宿主拥有的启停字段，不应放进插件模型。插件自己在 `setup` 校验读取值；宿主配置 schema 注册表为 `plugin.config.get/set` 提供 schema、默认值和写入校验。没有配置模型的插件不会得到自动表单。
 
 桌面普通设置草稿不携带插件配置快照。保存时后端在同一配置事务锁内保留当前插件表，因此不会覆盖其它窗口刚完成的插件设置或启停更改。原始 `runtime.apply` 仍是整份配置替换；普通表单通过 `preserve_plugins: true` 明确选择保留语义。
@@ -217,7 +219,7 @@ const exampleUi: PluginUiModule = {
 export default exampleUi;
 ```
 
-`settings.section` 不再是设置侧栏的顶层条目：它注册为内建「插件」区块下的一个子标签（与「已安装」并列），侧栏始终只有模型/记忆/语音/高级/插件/关于六项（「频道」已随渠道插件化移除，#363）。manifest 声明了 `config_model` 的插件（如 qqbot）无需手写 `ui/index.tsx` 就能自动获得一个 schema 表单子标签，标签取自后端 `plugins.list` 已实现的回退链：manifest 的 `display_name` → 插件记录名（未声明 `display_name` 时即插件目录名，通常与 `id` 同形）→ `id`；因此不声明 `display_name` 的插件会得到目录名原样大小写的标签（例如目录名 `qqbot` 会显示为 "qqbot" 而非 "QQBot"），manifest 需要显式写出 `display_name` 才能拿到期望的展示大小写。只有需要自定义表单组件、或额外贡献 `navPage`/`roleAssets` 等插槽时才需要手写（如 novelai——它的手写 `settingsSection` 会优先于自动注册，不会重复出现两个子标签）。已使用的插槽还包括 `nav.page`（story）、`role.assets`（desktop_pet）。角色设置与聊天图片动作也有独立贡献契约。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
+`settings.section` 不再是设置侧栏的顶层条目：它注册为内建「插件」区块下的一个子页面。设置 › 插件的列表按 manifest 的 `category` 分成功能、渠道、系统组件三组，有设置页的插件在所在行显示「设置」按钮，点开进入它的设置页（页头带返回），不再作为「已安装」旁的子标签；侧栏始终只有模型/记忆/语音/外观/高级/插件/关于七项（「频道」已随渠道插件化移除，#363）。深链 `openSettingsWorkspace("plugins", { subsectionId: pluginId })` 直接打开该插件的设置页。manifest 声明了 `config_model` 的插件（如 qqbot）无需手写 `ui/index.tsx` 就能自动获得一个 schema 表单设置页，页标题取自后端 `plugins.list` 的回退链：manifest 的 `display_name` → 插件记录名（未声明 `display_name` 时即插件目录名）→ `id`，所以请在 manifest 里写出 `display_name`。只有需要自定义表单组件、或额外贡献 `navPage`/`roleAssets` 等插槽时才需要手写（如 novelai——它的手写 `settingsSection` 会优先于自动注册，不会重复出现两个子标签）。已使用的插槽还包括 `nav.page`（story）、`role.assets`（desktop_pet）。角色设置与聊天图片动作也有独立贡献契约。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
 
 `app.background` 在隐藏的 plugin-host renderer 运行，入口是 `background/index.ts` 的 `{ pluginId, setup(ctx) }`。桌宠已通过它拥有控制器、surface、托盘项与订阅。它的 `BackgroundCtx` 不是 Python 上下文：通过自己的 `effect`、`events`、`rpc`、`surfaces`、`tray`、`store` 管理资源。使用 `surface/` 入口渲染独立桌面窗口。
 

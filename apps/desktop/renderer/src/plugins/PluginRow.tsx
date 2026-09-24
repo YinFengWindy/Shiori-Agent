@@ -1,65 +1,72 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { SettingsField } from "../settings/SettingsField";
+import { GearSix, WarningCircle } from "@phosphor-icons/react";
 import { SettingsToggleCard } from "../settings/SettingsToggleCard";
-import { cx, ghostButtonClass, sidebarNavItemClass } from "../shared/styles";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass, sidebarNavItemClass } from "../shared/styles";
 import type { PluginSummary } from "./pluginBridgeClient";
+import { pluginDisplayName, pluginProblem, pluginStateLabel } from "./pluginPresentation";
 
-/** One plugin row: identity, runtime state/diagnostics, and its enable switch. */
+/** Pending/transitional state tag; lavender keeps it apart from the accent-colored actions. */
+const stateBadgeClass = "inline-flex items-center rounded-full bg-lavender-soft px-2.5 py-0.5 text-caption text-lavender-text";
+
+/**
+ * One plugin row: display name (opens the details dialog), one-line
+ * description, state and a readable problem line, then the actions — trust,
+ * the plugin's own settings page when it has one, and the enable switch.
+ */
 export function PluginRow({
   plugin,
   pending,
   onToggle,
   onTrust,
   onOpenDetails,
+  onOpenSettings,
 }: {
   plugin: PluginSummary;
   pending: boolean;
   onToggle: (enabled: boolean) => void;
   onTrust: () => void;
   onOpenDetails: () => void;
+  /** Present when the plugin has a settings page (a registered 「插件」 nested subsection). */
+  onOpenSettings?: () => void;
 }) {
-  const hint = [plugin.id, plugin.version && `v${plugin.version}`, plugin.source === "workspace" ? "工作区" : "内置"].filter(Boolean).join(" · ");
-  const pendingTrust = plugin.trustPendingRestart && plugin.diagnostic?.code === "trust_required";
-  // Backend contributions are already live once setup() succeeds, but the
-  // Plugins page must not present the plugin as fully ACTIVE until every
-  // declared ui/background entry has confirmed (#262 AC1).
-  const activating = plugin.state === "ACTIVE" && plugin.pendingRendererKinds.length > 0;
-  const stateLabel = plugin.pendingOperation
-    ? `待重启 · ${{ install: "安装", update: "更新", uninstall: "卸载" }[plugin.pendingOperation]}`
-    : plugin.trustPendingRestart
-    ? "待重启"
-    : plugin.state === "UNTRUSTED"
-      ? "未信任"
-      : plugin.state === "RESTART_REQUIRED"
-        ? "需要重启"
-        : activating
-          ? "激活中…"
-          : null;
+  const name = pluginDisplayName(plugin);
+  const stateLabel = pluginStateLabel(plugin);
+  const problem = pluginProblem(plugin);
   return (
-    <SettingsField label={
-      <Dialog.Trigger className={cx(sidebarNavItemClass, "-my-1 -ml-2 cursor-pointer px-2 py-1 text-left text-body font-medium text-ink hover:text-accent-text")} onClick={onOpenDetails}>
-        {plugin.name}
-      </Dialog.Trigger>
-    } hint={hint || undefined}>
-      <div className="grid gap-2">
-        <div className="flex items-center justify-end gap-3">
-          {stateLabel ? <span className="text-caption text-ink-muted">{stateLabel}</span> : null}
-          {plugin.canTrust ? <button type="button" className={ghostButtonClass} disabled={pending} onClick={onTrust}>信任…</button> : null}
-          {plugin.canToggle && plugin.supportsHotUnload === false ? <span className="text-caption text-ink-muted">更改需重启</span> : null}
-          <SettingsToggleCard
-            checked={plugin.enabled && (plugin.canToggle || Boolean(plugin.pendingOperation))}
-            disabled={pending || !plugin.canToggle}
-            ariaLabel={`启用 ${plugin.name}`}
-            onChange={onToggle}
-          />
+    <div className="flex items-start gap-3 border-b border-line-soft py-4 last:border-b-0" data-plugin-row={plugin.id}>
+      <div className="grid min-w-0 flex-1 gap-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <Dialog.Trigger className={cx(sidebarNavItemClass, "-my-0.5 -ml-1.5 min-w-0 cursor-pointer truncate px-1.5 py-0.5 text-left text-body font-medium text-ink hover:text-accent-text")} onClick={onOpenDetails}>
+            {name}
+          </Dialog.Trigger>
+          {stateLabel ? <span className={stateBadgeClass}>{stateLabel}</span> : null}
         </div>
-        {plugin.error && !pendingTrust ? <span className="line-clamp-2 break-words text-body text-danger-text">{plugin.error}</span> : null}
-        {plugin.trustPendingRestart ? <span className="text-body text-ink-secondary">信任已保存，重启 Shiori 后加载。</span> : null}
-        {plugin.pendingOperation === "update" ? <span className="text-body text-ink-secondary">{plugin.version} → {plugin.pendingVersion}</span> : null}
-        {plugin.packageOperationError ? <span role="alert" className="break-words text-body text-danger-text">操作失败 · {plugin.packageOperationError}</span> : null}
-        {plugin.rendererError ? <span className="break-words text-body text-danger-text">UI FAILED · {plugin.rendererError}</span> : null}
+        {plugin.description ? <p className="m-0 truncate text-caption text-ink-muted" title={plugin.description}>{plugin.description}</p> : null}
+        {problem ? (
+          <p className="m-0 flex items-center gap-1 text-caption text-danger-text">
+            <WarningCircle className="h-3.5 w-3.5 shrink-0" weight="bold" aria-hidden="true" />
+            {problem}
+          </p>
+        ) : null}
+        {plugin.trustPendingRestart ? <p className="m-0 text-caption text-ink-secondary">信任已保存，重启 Shiori 后加载。</p> : null}
+        {plugin.pendingOperation === "update" ? <p className="m-0 text-caption text-ink-secondary">{plugin.version} → {plugin.pendingVersion}</p> : null}
+        {plugin.canToggle && plugin.supportsHotUnload === false ? <p className="m-0 text-caption text-ink-muted">更改需重启</p> : null}
       </div>
-    </SettingsField>
+      <div className="flex shrink-0 items-center gap-2">
+        {plugin.canTrust ? <button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} disabled={pending} onClick={onTrust}>信任…</button> : null}
+        {onOpenSettings ? (
+          <button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} aria-label={`${name} 设置`} onClick={onOpenSettings}>
+            <GearSix className="h-4 w-4" aria-hidden="true" />
+            设置
+          </button>
+        ) : null}
+        <SettingsToggleCard
+          checked={plugin.enabled && (plugin.canToggle || Boolean(plugin.pendingOperation))}
+          disabled={pending || !plugin.canToggle}
+          ariaLabel={`启用 ${name}`}
+          onChange={onToggle}
+        />
+      </div>
+    </div>
   );
 }
-

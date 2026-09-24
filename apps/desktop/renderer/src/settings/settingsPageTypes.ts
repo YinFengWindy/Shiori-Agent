@@ -25,4 +25,10 @@ export type SettingsSubsection = {
 /** Props for a settings section that owns its own data (no shared draft). */
 export type StandaloneSettingsSectionProps = {
   subsectionId: string;
+  /**
+   * Opens another subsection of the same section — how 「插件」's list
+   * reaches a plugin's nested settings page. Absent where a component is
+   * mounted outside `SettingsPage`.
+   */
+  onSelectSubsection?: (subsectionId: string) => void;
 };

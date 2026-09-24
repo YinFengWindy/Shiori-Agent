@@ -75,6 +75,9 @@ function mapChannelDeclaration(item: PluginChannelDeclarationPayload): PluginCha
 }
 
 /** One row of the plugin management list (`plugins.list`). */
+/** Manifest `category`: which group of 设置 › 插件 a plugin is listed under. */
+export type PluginCategory = "feature" | "channel" | "system";
+
 export type PluginSummary = {
   id: string;
   /** Stable identity of this directory candidate, including duplicate IDs. */
@@ -102,6 +105,8 @@ export type PluginSummary = {
   capabilities: string[];
   /** Static channel declarations, present even while the plugin is inactive. */
   channels: PluginChannelDeclaration[];
+  /** Manifest grouping for 设置 › 插件 (`feature` / `channel` / `system`). */
+  category: PluginCategory;
   /** Whether an active plugin can be replaced without restarting the process. */
   supportsHotUnload: boolean;
   /**
@@ -224,7 +229,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         can_trust?: boolean; trust_fingerprint?: string | null; trust_directory?: string; trust_pending_restart?: boolean;
         enabled: boolean; state: string; error: string; has_config_schema: boolean; supports_hot_unload: boolean;
         pending_renderer_kinds?: string[];
-        capabilities: string[]; channels: PluginChannelDeclarationPayload[];
+        capabilities: string[]; channels: PluginChannelDeclarationPayload[]; category: PluginCategory;
         package_installed?: boolean; pending_operation?: PluginSummary["pendingOperation"]; pending_version?: string; package_operation_error?: string;
       }> }>(resolveInvoke(), "plugins.list", {});
       return payload.plugins.map((item) => ({
@@ -254,6 +259,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         hasConfigSchema: item.has_config_schema,
         capabilities: item.capabilities,
         channels: item.channels.map(mapChannelDeclaration),
+        category: item.category,
         supportsHotUnload: item.supports_hot_unload,
         pendingRendererKinds: item.pending_renderer_kinds ?? [],
       }));
