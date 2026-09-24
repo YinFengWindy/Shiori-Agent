@@ -1,11 +1,11 @@
-import { CaretDown } from "@phosphor-icons/react";
-import { DeleteIcon } from "../shared/icons";
-import { cx } from "../shared/styles";
+import { CaretDown, Trash } from "@phosphor-icons/react";
+import { compactButtonSizeClass, cx, dangerGhostButtonSurfaceClass } from "../shared/styles";
 import type { RoleKnowledgeEntry } from "../shared/types";
-import { roleChipClass, roleFieldClass } from "./roleEditorStyles";
+import { roleChipClass, roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";
 import { RoleKeywordInput } from "./RoleKeywordInput";
 import { RoleKnowledgeEntryOptions } from "./RoleKnowledgeEntryOptions";
 import { knowledgeEntryLabel } from "./roleKnowledgeEntries";
+import { RoleTextareaField } from "./RoleTextareaField";
 
 type RoleKnowledgeEntryRowProps = {
   entry: RoleKnowledgeEntry;
@@ -23,24 +23,24 @@ export function RoleKnowledgeEntryRow({ entry, index, expanded, onToggle, onUpda
   return (
     <div className="border-b border-line-soft last:border-b-0" data-testid={`knowledge-entry-${index}`}>
       <button
-        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3 text-left focus:outline-none"
+        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-hover"
         type="button"
         aria-expanded={expanded}
         onClick={onToggle}
       >
         <span className="grid min-w-0 gap-1.5">
-          <span className="truncate text-sm font-medium text-ink">{knowledgeEntryLabel(entry, index)}</span>
-          <span className="flex flex-wrap gap-1.5">
-            {keywords.length
-              ? keywords.map((keyword) => <span className={roleChipClass} key={keyword}>{keyword}</span>)
-              : null}
-          </span>
+          <span className="truncate text-body font-medium text-ink">{knowledgeEntryLabel(entry, index)}</span>
+          {keywords.length ? (
+            <span className="flex flex-wrap gap-1.5">
+              {keywords.map((keyword) => <span className={roleChipClass} key={keyword}>{keyword}</span>)}
+            </span>
+          ) : null}
         </span>
-        <CaretDown className={cx("h-4 w-4 shrink-0 text-ink-faint transition-transform", expanded && "rotate-180")} weight="bold" />
+        <CaretDown className={cx("h-4 w-4 shrink-0 text-ink-muted transition-transform duration-quick", expanded && "rotate-180")} weight="bold" aria-hidden="true" />
       </button>
       {expanded ? (
-        <div className="grid gap-3 pb-4">
-          <label className="grid gap-1.5 text-xs text-ink-muted">
+        <div className="grid gap-4 px-4 pb-4">
+          <label className={roleFieldLabelClass}>
             <span>标题</span>
             <input
               className={roleFieldClass}
@@ -49,26 +49,25 @@ export function RoleKnowledgeEntryRow({ entry, index, expanded, onToggle, onUpda
               onChange={(event) => onUpdate((current) => ({ ...current, title: event.target.value }))}
             />
           </label>
-          <RoleKeywordInput label="关键词" keywords={keywords} onChange={(primary_keys) => onUpdate((current) => ({ ...current, primary_keys }))} />
-          <RoleKeywordInput label="次关键词" keywords={entry.secondary_keys ?? []} onChange={(secondary_keys) => onUpdate((current) => ({ ...current, secondary_keys }))} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <RoleKeywordInput label="关键词" keywords={keywords} onChange={(primary_keys) => onUpdate((current) => ({ ...current, primary_keys }))} />
+            <RoleKeywordInput label="次关键词" keywords={entry.secondary_keys ?? []} onChange={(secondary_keys) => onUpdate((current) => ({ ...current, secondary_keys }))} />
+          </div>
+          <RoleTextareaField
+            label="内容"
+            value={entry.content ?? ""}
+            minHeightClass="min-h-32"
+            placeholder="输入会注入角色上下文的内容"
+            onChange={(content) => onUpdate((current) => ({ ...current, content }))}
+          />
           <RoleKnowledgeEntryOptions entry={entry} onUpdate={onUpdate} />
-          <label className="grid gap-1.5 text-xs text-ink-muted">
-            <span>内容</span>
-            <textarea
-              className={cx(roleFieldClass, "min-h-32 resize-none leading-6")}
-              value={entry.content ?? ""}
-              placeholder="输入会注入角色上下文的内容"
-              onChange={(event) => onUpdate((current) => ({ ...current, content: event.target.value }))}
-            />
-          </label>
           <button
-            className="inline-flex w-fit items-center gap-1.5 text-xs text-danger-text transition hover:text-danger-text focus:outline-none"
+            className={cx(dangerGhostButtonSurfaceClass, compactButtonSizeClass, "w-fit")}
             type="button"
             onClick={onRemove}
             aria-label={`删除条目 ${index + 1}`}
-            title="删除条目"
           >
-            <DeleteIcon className="h-3.5 w-3.5 fill-current" />
+            <Trash className="h-4 w-4" aria-hidden="true" />
             删除条目
           </button>
         </div>

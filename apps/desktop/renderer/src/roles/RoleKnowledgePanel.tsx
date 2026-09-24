@@ -1,12 +1,10 @@
-import { BookOpenText } from "@phosphor-icons/react";
-import { PlusIcon } from "../shared/icons";
+import { BookOpenText, Plus } from "@phosphor-icons/react";
+import { cardClass, cx } from "../shared/styles";
 import { useState } from "react";
 import { SettingsToggleCard } from "../settings/SettingsToggleCard";
 import type { RoleFormState, RoleKnowledgeBase, RoleKnowledgeEntry } from "../shared/types";
-import {
-  rolePanelGhostButtonClass,
-  roleSectionTitleClass,
-} from "./roleEditorStyles";
+import { rolePanelGhostButtonClass } from "./roleEditorStyles";
+import { RoleEditorSection } from "./RoleEditorSection";
 import { RoleKnowledgeEntryRow } from "./RoleKnowledgeEntryRow";
 import { knowledgeEntryHasContent, knowledgeEntryLabel } from "./roleKnowledgeEntries";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
@@ -94,56 +92,41 @@ export function RoleKnowledgePanel({ roleForm, onUpdate }: RoleKnowledgePanelPro
   }
 
   return (
-    <div className="grid gap-6" data-testid="role-knowledge-panel">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent-text" aria-hidden="true">
-            <BookOpenText className="h-5 w-5" weight="duotone" />
-          </span>
-          <div>
-            <h2 className={roleSectionTitleClass}>知识库</h2>
+    <div className="grid gap-7" data-testid="role-knowledge-panel">
+      <RoleEditorSection
+        title="知识库"
+        action={<SettingsToggleCard checked={enabled} ariaLabel="启用知识库" onChange={(checked) => updateKnowledge((current) => ({ ...current, enabled: checked }))} />}
+      >
+        <div className="grid gap-3">
+          <div className="flex items-center justify-between gap-4">
+            <h3 className="m-0 text-body-sm font-medium text-ink-secondary">条目 · {entries.length}</h3>
+            <button className={rolePanelGhostButtonClass} type="button" onClick={addEntry} aria-label="添加知识库条目" data-testid="add-knowledge-entry-button">
+              <Plus className="h-4 w-4" weight="bold" aria-hidden="true" />
+              添加条目
+            </button>
           </div>
+          {entries.length ? (
+            <div className={cx(cardClass, "overflow-hidden")}>
+              {entries.map((entry, index) => (
+                <RoleKnowledgeEntryRow
+                  entry={entry}
+                  index={index}
+                  expanded={expandedEntries.has(entryKey(entry, index))}
+                  onToggle={() => toggleEntry(index)}
+                  onUpdate={(update) => updateEntry(index, update)}
+                  onRemove={() => requestRemoveEntry(index)}
+                  key={entry.id ?? index}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="grid justify-items-center gap-2 rounded-lg border border-dashed border-line bg-surface-soft py-8 text-center">
+              <BookOpenText className="h-6 w-6 text-ink-faint" weight="duotone" aria-hidden="true" />
+              <p className="m-0 text-caption text-ink-muted">当前没有知识库条目</p>
+            </div>
+          )}
         </div>
-      </div>
-
-      <div className="grid gap-4 border-y border-line-soft py-4">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h3 className="text-sm font-medium text-ink">启用知识库</h3>
-          </div>
-          <SettingsToggleCard checked={enabled} ariaLabel="启用知识库" onChange={(checked) => updateKnowledge((current) => ({ ...current, enabled: checked }))} />
-        </div>
-      </div>
-
-      <div className="grid gap-1">
-        <div className="flex items-center justify-between gap-4">
-          <h3 className="text-sm font-medium text-ink">条目 · {entries.length}</h3>
-          <button className={rolePanelGhostButtonClass} type="button" onClick={addEntry} aria-label="添加知识库条目" data-testid="add-knowledge-entry-button">
-            <PlusIcon className="h-4 w-4 fill-current" />
-            添加条目
-          </button>
-        </div>
-        {entries.length ? (
-          <div>
-            {entries.map((entry, index) => (
-              <RoleKnowledgeEntryRow
-                entry={entry}
-                index={index}
-                expanded={expandedEntries.has(entryKey(entry, index))}
-                onToggle={() => toggleEntry(index)}
-                onUpdate={(update) => updateEntry(index, update)}
-                onRemove={() => requestRemoveEntry(index)}
-                key={entry.id ?? index}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-2 grid justify-items-center gap-2 border-y border-dashed border-line-soft py-8 text-center">
-            <BookOpenText className="h-6 w-6 text-ink-faint" weight="duotone" aria-hidden="true" />
-            <p className="text-xs text-ink-muted">当前没有知识库条目</p>
-          </div>
-        )}
-      </div>
+      </RoleEditorSection>
       <ConfirmDialog
         open={pendingRemoveIndex !== null && Boolean(entries[pendingRemoveIndex])}
         title="删除条目"
