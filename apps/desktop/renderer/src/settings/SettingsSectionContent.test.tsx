@@ -86,7 +86,7 @@ describe("SettingsSectionContent", () => {
 
     assert.doesNotMatch(markup, />名称</);
     assert.match(markup, />gpt-agent</);
-    assert.match(markup, />https:\/\/agent\.example</);
+    assert.match(markup, /agent\.example</);
     assert.doesNotMatch(markup, /value="gpt-agent"/);
     assert.doesNotMatch(markup, /agent-key/);
   });

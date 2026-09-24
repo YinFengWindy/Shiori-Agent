@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ModelRegistrationList } from "./ModelRegistrationList.js";
 
 describe("ModelRegistrationList", () => {
-  it("renders compact registration previews and an icon-only create action", () => {
+  it("renders compact registration previews and a labeled create action", () => {
     const markup = renderToStaticMarkup(
       <ModelRegistrationList
         registrations={[{
@@ -22,11 +22,11 @@ describe("ModelRegistrationList", () => {
       />,
     );
 
-    assert.match(markup, /aria-label="新建模型注册"/);
+    assert.match(markup, />添加模型</);
     assert.match(markup, />gpt-agent</);
-    assert.match(markup, />https:\/\/agent\.example</);
-    assert.match(markup, />openai</);
-    assert.doesNotMatch(markup, />新建注册</);
+    // Provider (a preset's label when it matches) and the base URL's host.
+    assert.match(markup, />openai · agent\.example</);
+    assert.match(markup, /思考 高/);
     assert.doesNotMatch(markup, /secret/);
     assert.doesNotMatch(markup, /<input/);
   });

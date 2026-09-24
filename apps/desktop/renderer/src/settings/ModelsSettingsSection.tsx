@@ -8,7 +8,7 @@ import {
   type ModelRegistrationRemovalPlan,
 } from "./modelRegistrationRemoval";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
-import { createModelRegistration } from "./modelRegistration";
+import { useModelRegistrationDraft } from "./useModelRegistrationDraft";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { errorMessage, feedback } from "../shared/feedback/feedbackStore";
 
@@ -19,6 +19,13 @@ export function ModelsSettingsSection({
 }: SettingsSectionEditorProps) {
   const [activeRegistrationId, setActiveRegistrationId] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<ModelRegistrationRemovalPlan | null>(null);
+  const newRegistration = useModelRegistrationDraft((registration) => {
+    updateDraft((current) => ({
+      ...current,
+      models: { registrations: [...current.models.registrations, registration] },
+    }));
+    setActiveRegistrationId(registration.id);
+  });
   const activeRegistration = draft.models.registrations.find(
     (registration) => registration.id === activeRegistrationId,
   ) ?? null;
@@ -35,17 +42,6 @@ export function ModelsSettingsSection({
         )),
       },
     }));
-  }
-
-  function addRegistration(): void {
-    const registration = createModelRegistration();
-    updateDraft((current) => ({
-      ...current,
-      models: {
-        registrations: [...current.models.registrations, registration],
-      },
-    }));
-    setActiveRegistrationId(registration.id);
   }
 
   async function requestRemoval(registration: ModelRegistrationFormData): Promise<void> {
@@ -86,16 +82,31 @@ export function ModelsSettingsSection({
     />
   );
 
-  if (activeRegistration) {
+  // A new entry is edited here until complete; deleting it or going back just
+  // drops it. Both detail branches share one element position, so the edit
+  // that completes a draft keeps the same mounted fields (and their focus).
+  const detail = newRegistration.draft
+    ? {
+        registration: newRegistration.draft,
+        isDraft: true,
+        onBack: newRegistration.discard,
+        onChange: newRegistration.update,
+        onDelete: newRegistration.discard,
+      }
+    : activeRegistration
+      ? {
+          registration: activeRegistration,
+          isDraft: false,
+          onBack: () => setActiveRegistrationId(null),
+          onChange: (mutate: (registration: ModelRegistrationFormData) => ModelRegistrationFormData) => updateRegistration(activeRegistration.id, mutate),
+          onDelete: () => void requestRemoval(activeRegistration),
+        }
+      : null;
+
+  if (detail) {
     return (
       <>
-        <ModelRegistrationDetails
-          registration={activeRegistration}
-          canDelete
-          onBack={() => setActiveRegistrationId(null)}
-          onChange={(mutate) => updateRegistration(activeRegistration.id, mutate)}
-          onDelete={() => void requestRemoval(activeRegistration)}
-        />
+        <ModelRegistrationDetails canDelete {...detail} />
         {removalDialog}
       </>
     );
@@ -104,7 +115,7 @@ export function ModelsSettingsSection({
   return (
     <ModelRegistrationList
       registrations={draft.models.registrations}
-      onCreate={addRegistration}
+      onCreate={newRegistration.start}
       onOpen={setActiveRegistrationId}
     />
   );

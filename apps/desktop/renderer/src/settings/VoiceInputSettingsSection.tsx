@@ -72,7 +72,7 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
   return (
     <SettingsSectionCard>
       <SettingsToggleField
-        label="启用桌宠语音"
+        label="桌宠语音输入"
         checked={draft.voice.enabled}
         onChange={(checked) => updateDraft((current) => ({ ...current, voice: { ...current.voice, enabled: checked } }))}
       />
@@ -104,7 +104,7 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
           </button>
         </div>
       </Field>
-      {testError ? <div className="text-[11px] text-danger-text">{testError}</div> : null}
+      {testError ? <div role="alert" className="pb-4 text-caption text-danger-text">{testError}</div> : null}
     </SettingsSectionCard>
   );
 }
