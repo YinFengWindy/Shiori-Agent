@@ -6,6 +6,8 @@ type SettingsFieldProps = {
   label: React.ReactNode;
   hint?: string;
   layout?: "side" | "stack";
+  /** Tighter rows for fields hosted in a small floating card (first-run setup). */
+  dense?: boolean;
   children: React.ReactNode;
 };
 
@@ -14,12 +16,14 @@ export function SettingsField({
   label,
   hint,
   layout = "side",
+  dense = false,
   children,
 }: SettingsFieldProps) {
   const stacked = layout === "stack";
   return (
     <div className={cx(
-      "grid gap-3 border-b border-stroke py-6 last:border-b-0",
+      "grid border-b border-stroke last:border-b-0",
+      dense ? "gap-2 py-3.5" : "gap-3 py-6",
       stacked
         ? "grid-cols-[minmax(0,1fr)]"
         : cx(

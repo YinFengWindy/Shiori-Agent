@@ -11,6 +11,9 @@ export type ModelConnectionTestView =
   | { status: "success"; latencyMs: number }
   | { status: "failure"; message: string };
 
+/** A finished probe, as reported to observers such as the first-run guide. */
+export type ModelConnectionTestOutcome = Extract<ModelConnectionTestView, { status: "success" | "failure" }>;
+
 /** A probe that belongs to one exact set of connection fields. */
 export type ModelConnectionTestRecord = { key: string; view: ModelConnectionTestView };
 
@@ -30,7 +33,7 @@ export function selectModelConnectionTestView(record: ModelConnectionTestRecord 
 }
 
 /** Sends the unsaved draft to the bridge; nothing is persisted. */
-export async function testModelConnection(invoke: DesktopInvoke, registration: ModelRegistrationFormData): Promise<ModelConnectionTestView> {
+export async function testModelConnection(invoke: DesktopInvoke, registration: ModelRegistrationFormData): Promise<ModelConnectionTestOutcome> {
   const result = await invokeBridgePayload<ModelConnectionResult>(invoke, "models.test", {
     provider: registration.provider,
     model: registration.model,

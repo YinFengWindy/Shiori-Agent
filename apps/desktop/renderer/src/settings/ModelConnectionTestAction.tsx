@@ -1,6 +1,7 @@
 import { CheckCircle, CircleNotch, PlugsConnected, WarningCircle } from "@phosphor-icons/react";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { cx, pressableClass } from "../shared/styles";
+import type { ModelConnectionTestOutcome } from "./modelConnectionTest";
 import { useModelConnectionTest } from "./useModelConnectionTest";
 
 const testButtonClass = cx(
@@ -9,8 +10,11 @@ const testButtonClass = cx(
 );
 
 /** Probes the draft connection with one tiny request and shows the result beside the action. */
-export function ModelConnectionTestAction({ registration }: { registration: ModelRegistrationFormData }) {
-  const { view, run } = useModelConnectionTest(registration);
+export function ModelConnectionTestAction({ registration, onTested }: {
+  registration: ModelRegistrationFormData;
+  onTested?: (outcome: ModelConnectionTestOutcome) => void;
+}) {
+  const { view, run } = useModelConnectionTest(registration, onTested);
   const testing = view.status === "testing";
   return (
     <div className="flex flex-wrap items-start gap-x-3 gap-y-2">

@@ -7,11 +7,11 @@ import { chooseSelectOption } from "../shared/testing/selectTestActions";
 
 const initial: ModelRegistrationFormData = { id: "test", provider: "openai", model: "test-model", baseUrl: "https://example.test", apiKey: "key", effort: "none" };
 
-async function mountFields(invoke: (request: Omit<BridgeRequest, "id">) => Promise<unknown> = async () => ({})) {
+async function mountFields(invoke: (request: Omit<BridgeRequest, "id">) => Promise<unknown> = async () => ({}), onConnectionTested?: (outcome: unknown) => void) {
   const view = await mountTestComponent(null, { windowGlobals: { miraDesktop: { invoke } } });
   const { ModelRegistrationFields } = await import("./ModelRegistrationFields");
   const state = { registration: initial };
-  const render = () => view.render(<ModelRegistrationFields registration={state.registration} onChange={(mutate) => { state.registration = mutate(state.registration); void render(); }} />);
+  const render = () => view.render(<ModelRegistrationFields compact onConnectionTested={onConnectionTested} registration={state.registration} onChange={(mutate) => { state.registration = mutate(state.registration); void render(); }} />);
   await render();
   return { view, state };
 }
@@ -45,13 +45,16 @@ it("ModelRegistrationFields fills a preset and hides the free-text provider unti
 
 it("ModelRegistrationFields probes the draft and shows the scrubbed failure inline", async () => {
   const requests: Array<Omit<BridgeRequest, "id">> = [];
+  const outcomes: unknown[] = [];
   const { view } = await mountFields(async (request) => {
     requests.push(request);
     return { id: "1", type: "response", method: request.method, payload: { ok: false, message: "AuthenticationError: 401" }, error: null };
-  });
+  }, (outcome) => outcomes.push(outcome));
   try {
     await act(async () => button("测试连接").click());
     assert.equal(requests[0]?.method, "models.test");
     assert.match(document.querySelector('[role="status"]')?.textContent ?? "", /AuthenticationError: 401/);
+    // The first-run guide hears the finished probe to make 吟风 react.
+    assert.deepEqual(outcomes, [{ status: "failure", message: "AuthenticationError: 401" }]);
   } finally { await view.cleanup(); }
 });
