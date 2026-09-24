@@ -60,7 +60,8 @@ export function roleBindingAvailability(binding: RoleChannelBinding, catalog: Ro
 
 /**
  * Channel picker options: every channel whose provider is enabled (external
- * ones first, desktop last), with not-yet-usable ones marked. While the
+ * ones first, desktop last), with not-yet-usable ones marked in the list
+ * only; the closed trigger shows the plain label next to the row badge. While the
  * catalog is loading only the binding's own channel is offered, so the
  * picker never shows a value it cannot label.
  */
@@ -72,7 +73,7 @@ export function roleBindingChannelOptions(catalog: RoleChannelCatalog, currentCh
     .filter((channel) => channel.name !== desktopChannelName && isSelectableChannel(channel))
     .map((channel) => {
       const marker = roleChannelStateMarker(channel);
-      return { value: channel.name, label: marker ? `${channel.label}（${marker}）` : channel.label };
+      return { value: channel.name, label: marker ? `${channel.label}（${marker}）` : channel.label, triggerLabel: channel.label };
     });
   return [...external, { value: desktopChannelName, label: desktopChannelLabel }];
 }

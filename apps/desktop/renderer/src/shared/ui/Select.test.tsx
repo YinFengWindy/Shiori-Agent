@@ -58,6 +58,16 @@ describe("Select", () => {
     } finally { await view.cleanup(); }
   });
 
+  it("shows an option's trigger label when closed and its full label in the list", async () => {
+    const annotated: SelectOption[] = [{ value: "qqbot", label: "QQBot（未配置）", triggerLabel: "QQBot" }, { value: "desktop", label: "桌面端" }];
+    const view = await mountTestComponent(<Select aria-label="Input device" value="qqbot" options={annotated} onValueChange={() => undefined} />);
+    try {
+      assert.equal(trigger().textContent, "QQBot");
+      await act(async () => trigger().click());
+      assert.deepEqual(Array.from(document.querySelectorAll('[role="option"]'), (item) => item.textContent), ["QQBot（未配置）", "桌面端"]);
+    } finally { await view.cleanup(); }
+  });
+
   it("opens by keyboard, skips disabled options, confirms and cancels without changing values", async () => {
     const changes: string[] = [];
     const view = await mountTestComponent(<Picker onChange={(value) => changes.push(value)} />);

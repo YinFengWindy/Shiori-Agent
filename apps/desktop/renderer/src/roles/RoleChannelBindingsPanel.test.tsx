@@ -44,6 +44,17 @@ describe("RoleChannelBindingsPanel", () => {
     assert.match(markup, /role="combobox"/);
   });
 
+  it("shows the plain label on the closed picker next to the state badge", async () => {
+    const view = await mountTestComponent(<RoleChannelBindingsPanel activeRoleId="mira" bindings={[qqbotBinding]} channels={[desktop, channel("qqbot", "not_configured", qqbotDeclaration)]} onUpdate={() => undefined} />);
+    try {
+      const trigger = view.container.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="渠道"]');
+      assert.ok(trigger);
+      assert.equal(trigger.textContent, "QQBot");
+    } finally {
+      await view.cleanup();
+    }
+  });
+
   it("sends builtin channels to the 频道 settings section until they become plugins", () => {
     const markup = renderPanel([{ channel: "telegram", chat_id: "100", allow_from: [] }], [desktop, channel("telegram", "not_configured", { label: "Telegram", pluginId: null })]);
 
