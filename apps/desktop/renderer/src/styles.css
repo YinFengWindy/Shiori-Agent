@@ -195,6 +195,10 @@
     --duration-pulse: 600ms; /* one-shot attention pulse (jump-to-message highlight) */
     --duration-morph: 420ms; /* shared-element view transition (role card <-> detail header), on ease-drawer */
     --duration-page-rise: 380ms; /* the incoming page of a view transition rising in */
+    --duration-spring: 700ms; /* tilt spring-back after the pointer leaves (ease-spring) */
+    /* ease-spring: a damped spring (zeta 0.42, omega 11) sampled into linear()
+       where supported; the cubic-bezier is the overshooting fallback. */
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
     /* ---------- legacy aliases (pre-restyle var names still used
        by tailwind.config + older components; keep pointing at the
@@ -786,6 +790,81 @@ button[role="combobox"]:focus-visible {
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
 
+/* ---------- motion: spring easing ---------- */
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(0, 0.025, 0.091, 0.189, 0.309, 0.44, 0.576, 0.707, 0.83, 0.939, 1.032, 1.107, 1.164, 1.203, 1.226, 1.234, 1.229, 1.214, 1.192, 1.165, 1.134, 1.103, 1.072, 1.043, 1.017, 0.995, 0.977, 0.963, 0.953, 0.948, 0.945, 0.946, 0.949, 0.954, 0.961, 0.968, 0.975, 0.983, 0.989, 0.995, 1.001, 1.005, 1.008, 1.011, 1.012, 1.013, 1.013, 1.012, 1);
+  }
+}
+
+/* ---------- tilt card (shared/ui/reactBits/TiltedCard) ----------
+   The component writes --tilt-* from the pointer; hovering follows it
+   quickly, leaving springs back to flat. */
+.tilt-card {
+  transform: perspective(900px) rotateX(var(--tilt-rx, 0deg)) rotateY(var(--tilt-ry, 0deg)) scale(var(--tilt-scale, 1));
+  transition: transform var(--duration-spring) var(--ease-spring);
+}
+
+.tilt-card[data-tilting] {
+  --tilt-scale: 1.02;
+  transition: transform var(--duration-fast) var(--ease-out-soft);
+}
+
+.tilt-glare,
+.tilt-highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-panel) var(--ease-out-soft);
+}
+
+.tilt-card[data-tilting] > .tilt-glare,
+.tilt-card[data-tilting] > .tilt-highlight {
+  opacity: 1;
+}
+
+/* A diagonal light band sliding across as the card turns. */
+.tilt-glare::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  bottom: -50%;
+  left: -100%;
+  width: 300%;
+  transform: translateX(var(--tilt-glare-x, 0%));
+  background: linear-gradient(
+    105deg,
+    transparent 36%,
+    color-mix(in srgb, var(--color-bg-surface) 10%, transparent) 42%,
+    color-mix(in srgb, var(--color-bg-surface) 50%, transparent) 48%,
+    color-mix(in srgb, var(--color-bg-surface) 20%, transparent) 53%,
+    transparent 60%
+  );
+}
+
+/* A soft spot of light under the pointer. */
+.tilt-highlight {
+  background: radial-gradient(circle at var(--tilt-mx, 50%) var(--tilt-my, 50%), color-mix(in srgb, var(--color-bg-surface) 32%, transparent), transparent 45%);
+}
+
+/* Touch screens and coarse pointers never tilt (TiltedCard also checks). */
+@media (hover: none), (pointer: coarse) {
+  .tilt-card,
+  .tilt-card[data-tilting] {
+    transform: none;
+    transition: none;
+  }
+
+  .tilt-glare,
+  .tilt-highlight {
+    display: none;
+  }
+}
+
 /* ---------- view transitions (shared/viewTransition.ts) ----------
    Role card <-> detail (roles/roleViewTransition.ts): the portrait, avatar,
    name and intro morph on the drawer curve; the page they sit on fades out
@@ -915,6 +994,18 @@ button[role="combobox"]:focus-visible {
   .crossfade-in,
   .crossfade-out {
     animation: none;
+  }
+
+  /* Tilt: flat, no glare (TiltedCard also stops writing angles). */
+  .tilt-card,
+  .tilt-card[data-tilting] {
+    transform: none;
+    transition: none;
+  }
+
+  .tilt-glare,
+  .tilt-highlight {
+    display: none;
   }
 
   /* View transitions name nothing under reduced motion (shared/viewTransition.ts);
