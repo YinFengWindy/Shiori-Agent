@@ -1,5 +1,5 @@
 import { SettingsField as Field } from "./SettingsField";
-import { SettingsSecretInput, SettingsSectionCard, settingsInputClass } from "./SettingsFieldPrimitives";
+import { SettingsSectionCard, settingsInputClass } from "./SettingsFieldPrimitives";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 
 /** Renders channel credentials for the selected channel subsection. */
@@ -9,14 +9,6 @@ export function ChannelsSettingsSection({
   updateDraft,
 }: SettingsSectionEditorProps) {
   switch (subsectionId) {
-    case "telegram":
-      return (
-        <SettingsSectionCard>
-          <Field label="Telegram Token">
-            <SettingsSecretInput value={draft.channels.telegramToken} onChange={(value) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramToken: value } }))} />
-          </Field>
-        </SettingsSectionCard>
-      );
     case "qq":
       return (
         <SettingsSectionCard>

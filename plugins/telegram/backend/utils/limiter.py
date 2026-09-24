@@ -7,7 +7,7 @@ from typing import TypeVar
 
 from telegram.error import NetworkError, RetryAfter, TimedOut
 
-logger = logging.getLogger("infra.channels.telegram_utils")
+logger = logging.getLogger("plugins.telegram.utils")
 _T = TypeVar("_T")
 
 

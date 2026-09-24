@@ -5,9 +5,9 @@ import type { SaveSettingsResult, SettingsFormData, SettingsSaveOptions } from "
 import { SettingsSaveQueue } from "./settingsSaveQueue.js";
 import { createSettingsDraft } from "./testFixtures.js";
 
-function editedDraft(token: string) {
+function editedDraft(marker: string) {
   const draft = createSettingsDraft();
-  draft.channels.telegramToken = token;
+  draft.memory.engine = marker;
   return draft;
 }
 
@@ -39,7 +39,7 @@ describe("SettingsSaveQueue", () => {
     await setImmediate();
     assert.equal(calls.length, 3);
     assert.deepEqual(calls[1], calls[0]);
-    assert.equal(calls[2]?.draft.channels.telegramToken, "second");
+    assert.equal(calls[2]?.draft.memory.engine, "second");
     assert.equal(calls[2]?.options?.expectedGeneration, 5);
     assert.notEqual(calls[2]?.options?.operationId, calls[0]?.options?.operationId);
   });
@@ -71,7 +71,7 @@ describe("SettingsSaveQueue", () => {
     const queue = new SettingsSaveQueue({
       api: {
         saveSettings: async (draft) => {
-          calls.push(draft.channels.telegramToken);
+          calls.push(draft.memory.engine);
           return calls.length === 1
             ? { ok: false, error: { code: "runtime_config_invalid", message: "invalid" } }
             : { ok: true, generation: 2 };
@@ -95,7 +95,7 @@ describe("SettingsSaveQueue", () => {
     const queue = new SettingsSaveQueue({
       api: {
         saveSettings: async (draft) => {
-          calls.push(draft.channels.telegramToken);
+          calls.push(draft.memory.engine);
           return new Promise<SaveSettingsResult>((resolve) => { release = resolve; });
         },
         readSettings: async () => ({ configPath: "config.toml", formData: editedDraft("first"), generation: 2 }),
@@ -119,7 +119,7 @@ describe("SettingsSaveQueue", () => {
     const queue = new SettingsSaveQueue({
       api: {
         saveSettings: async (draft) => {
-          calls.push(draft.channels.telegramToken);
+          calls.push(draft.memory.engine);
           persisted = draft;
           if (calls.length === 1) return new Promise<SaveSettingsResult>((resolve) => { release = resolve; });
           return { ok: true, generation: 3 };

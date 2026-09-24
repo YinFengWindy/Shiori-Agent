@@ -180,7 +180,6 @@ export type SettingsFormData = {
     registrations: ModelRegistrationFormData[];
   };
   channels: {
-    telegramToken: string;
     qqBotUin: string;
   };
   memory: {

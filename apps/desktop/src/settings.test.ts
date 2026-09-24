@@ -167,8 +167,6 @@ describe("settings TOML comments", () => {
 [agent.proactive_strategies] # core preferences
 scene_followup = false # disabled
 relationship = true # enabled
-[channels.telegram] # channel token
- token = "token\"#inside" # outside
 [channels.qq]
 bot_uin = 'literal#inside' # literal value
 [plugins.example]
@@ -177,7 +175,6 @@ path = "C:\\" # escaped slash before closing quote
 `;
     const draft = loadSettingsData(source).formData;
     assert.deepEqual(draft.proactiveStrategies, { sceneFollowup: false, relationship: true });
-    assert.equal(draft.channels.telegramToken, 'token"#inside');
     assert.equal(draft.channels.qqBotUin, "literal#inside");
     let applyCalls = 0;
     const result = await saveSettings(draft, async (request) => {
@@ -297,4 +294,17 @@ active = true
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+describe("migrated channel tables", () => {
+  it("never writes [channels.telegram] back; the backend rejects a non-empty one (#363)", async () => {
+    configureSettingsConfigPath(join(tmpdir(), "unused-migrated-channels.toml"));
+    const draft = loadSettingsData('[channels.telegram]\ntoken = "legacy"\n').formData;
+    let rendered = "";
+    await saveSettings(draft, async (request) => {
+      rendered = request.config_toml;
+      return { ok: true, generation: 2, changed: true };
+    });
+    assert.doesNotMatch(rendered, /channels\.telegram/);
+  });
 });

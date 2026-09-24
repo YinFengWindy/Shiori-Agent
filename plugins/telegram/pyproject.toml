@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shiori-plugin-telegram"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "shiori-agent==0.1.0",
+    "python-telegram-bot>=22.7",
+    "telegramify-markdown",
+]
+
+[project.optional-dependencies]
+test = ["shiori-plugin-testkit==0.1.0"]
+
+[tool.setuptools]
+include-package-data = false
+packages = [
+    "plugins.telegram",
+    "plugins.telegram.backend",
+    "plugins.telegram.backend.channel",
+    "plugins.telegram.backend.utils",
+]
+package-dir = {"plugins.telegram" = "."}
+
+[tool.setuptools.package-data]
+"plugins.telegram" = ["manifest.yaml", "TESTING.md", "backend/**/*.json", "backend/**/*.yaml", "backend/**/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-W error --import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+required_plugins = ["pytest-asyncio", "shiori-plugin-testkit"]

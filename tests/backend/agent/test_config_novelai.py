@@ -135,16 +135,15 @@ def test_migration_does_not_disturb_unrelated_config_sections(tmp_path: Path) ->
 enabled = true
 token = "novel-token"
 
-[channels.telegram]
-token = "telegram-token"
+[agent]
+max_tokens = 4096
 """),
         encoding="utf-8",
     )
 
     config = load_config(config_path)
 
-    assert config.channels.telegram is not None
-    assert config.channels.telegram.token == "telegram-token"
+    assert config.max_tokens == 4096
 
 
 def test_load_config_preserves_proactive_base_config_without_role_target(
@@ -208,8 +207,8 @@ allow_from = ["legacy-user"]
 
     config = load_config(config_path)
 
-    assert config.channels.telegram is not None
+    # 旧的 allow_from 不随 Telegram 迁入插件表；白名单只看角色绑定。
+    assert config.plugins["telegram"] == {"token": "telegram-token"}
     assert config.channels.qq is not None
-    assert not hasattr(config.channels.telegram, "allow_from")
     assert not hasattr(config.channels.qq, "allow_from")
     assert not hasattr(config.channels.qq, "groups")

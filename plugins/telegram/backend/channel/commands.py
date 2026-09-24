@@ -9,7 +9,7 @@ from telegram.ext import ContextTypes
 
 from .compat import _call_send_markdown
 
-logger = logging.getLogger("infra.channels.telegram_channel")
+logger = logging.getLogger("plugins.telegram.channel")
 
 
 class _CommandMixin:

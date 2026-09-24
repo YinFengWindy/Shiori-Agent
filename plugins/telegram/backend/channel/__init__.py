@@ -14,7 +14,7 @@ from telegram.ext import (
     filters,
 )
 
-from infra.channels.telegram_utils import (
+from ..utils import (
     TelegramLiveEditQueue,
     TelegramLiveTextMessage,
     TelegramOutboundLimiter,
@@ -47,4 +47,4 @@ from .formatting import (
 )
 from .lifecycle import TelegramChannel
 
-logger = logging.getLogger("infra.channels.telegram_channel")
+logger = logging.getLogger("plugins.telegram.channel")

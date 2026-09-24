@@ -10,12 +10,6 @@ from proactive_v2.config import ProactiveConfig, ProactiveStrategiesConfig
 
 
 @dataclass
-class TelegramChannelConfig:
-    token: str
-    channel_name: str = "telegram"
-
-
-@dataclass
 class QQChannelConfig:
     bot_uin: str
     websocket_open_timeout_seconds: float = 5.0
@@ -23,7 +17,6 @@ class QQChannelConfig:
 
 @dataclass
 class ChannelsConfig:
-    telegram: TelegramChannelConfig | None = None
     qq: QQChannelConfig | None = None
 
 
@@ -150,6 +143,5 @@ __all__ = [
     "Effort",
     "ModelRegistration",
     "QQChannelConfig",
-    "TelegramChannelConfig",
     "WiringConfig",
 ]

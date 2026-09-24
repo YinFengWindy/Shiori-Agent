@@ -13,8 +13,8 @@ from bus.events_lifecycle import (
     ToolCallStarted,
     TurnStarted,
 )
-from infra.channels.telegram_utils import TelegramLiveTextMessage
 
+from ..utils import TelegramLiveTextMessage
 from .compat import _call_send_markdown, _call_send_thinking_block
 from .formatting import (
     _LIVE_STREAM_MIN_CHARS,
@@ -29,7 +29,7 @@ from .formatting import (
     _tail_text,
 )
 
-logger = logging.getLogger("infra.channels.telegram_channel")
+logger = logging.getLogger("plugins.telegram.channel")
 
 
 class _StreamingMixin:

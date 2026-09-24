@@ -33,10 +33,8 @@ export function registerBuiltinSettingsSections(): void {
 
   pluginUiRegistry.registerSettingsSection({
     kind: "editor", slot: "settings.section", id: "channels", label: "频道",
-    subsections: [
-      { id: "telegram", label: "Telegram" },
-      { id: "qq", label: "QQ" },
-    ],
+    // Telegram 已迁为插件，在 设置 › 插件 中配置（#363 T4）。
+    subsections: [{ id: "qq", label: "QQ" }],
     Component: ChannelsSettingsSection,
   }, "builtin");
 

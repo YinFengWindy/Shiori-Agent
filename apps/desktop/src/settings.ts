@@ -83,7 +83,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
   const parsed = parseToml(content, { integersAsBigInt: "asNeeded" });
   const llm = asRecord(parsed.llm);
   const channels = asRecord(parsed.channels);
-  const telegram = asRecord(channels.telegram);
   const qq = asRecord(channels.qq);
   const memory = asRecord(parsed.memory);
   const embedding = asRecord(memory.embedding);
@@ -103,7 +102,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
         registrations: loadModelRegistrations(llm),
       },
       channels: {
-        telegramToken: String(telegram.token ?? ""),
         qqBotUin: String(qq.bot_uin ?? ""),
       },
       memory: {
@@ -207,10 +205,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
     'context = "default"',
     'memory = "default"',
     "toolsets = []",
-    "",
-    "[channels.telegram]",
-    `token = ${quote(formData.channels.telegramToken)}`,
-    'channel_name = "telegram"',
     "",
     "[channels.qq]",
     `bot_uin = ${quote(formData.channels.qqBotUin)}`,

@@ -237,6 +237,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "shell_restore",
     "shell_safety",
     "status_commands",
+    "telegram",
     "tool_loop_guard",
 }
 

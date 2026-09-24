@@ -93,3 +93,10 @@ async def test_qqbot_setup_raises_on_invalid_config_and_kernel_rolls_back() -> N
         await kernel.load_all()
 
         assert kernel.loaded_count == 0
+
+
+def test_qqbot_channel_does_not_consume_bot_commands() -> None:
+    # 不读 ctx.bot_commands，命令列表变化不应重建官方 QQBot 连接（#363）。
+    from plugins.qqbot.backend.channel import QQBotChannel
+
+    assert getattr(QQBotChannel, "uses_bot_commands", False) is False

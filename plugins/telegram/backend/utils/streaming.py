@@ -17,7 +17,7 @@ from .rendering import (
     render_telegram_preview_html,
 )
 
-logger = logging.getLogger("infra.channels.telegram_utils")
+logger = logging.getLogger("plugins.telegram.utils")
 _STREAM_CHUNK_STEP = 120
 _STREAM_PUSH_MIN_INTERVAL_S = 2.5
 _STREAM_PUSH_MIN_CHARS = 200

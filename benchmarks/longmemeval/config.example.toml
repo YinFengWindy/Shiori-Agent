@@ -60,11 +60,6 @@ memory   = "default"
 # No fitbit / spawn / schedule / mcp needed for benchmark.
 toolsets = ["meta_common"]
 
-# ── Channels: disabled ───────────────────────────────────────
-[channels.telegram]
-token      = ""
-allow_from = []
-
 # ── Embedding model ──────────────────────────────────────────
 # Called once per memory write during consolidation, and once
 # per recall_memory call during QA. Use a cheap text-embedding API.

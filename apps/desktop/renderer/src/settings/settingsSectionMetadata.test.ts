@@ -16,7 +16,7 @@ afterEach(() => {
 describe("settingsSectionMetadata", () => {
   it("keeps every configured subsection attached to its owning domain", () => {
     assert.deepEqual(getSettingsSubsections("models").map((item) => item.id), ["catalog"]);
-    assert.deepEqual(getSettingsSubsections("channels").map((item) => item.id), ["telegram", "qq"]);
+    assert.deepEqual(getSettingsSubsections("channels").map((item) => item.id), ["qq"]);
   });
 
   it("falls back to the first subsection when persisted selection is invalid", () => {

@@ -16,7 +16,7 @@ from .rendering import (
 )
 from .sending import _utf16_cut
 
-logger = logging.getLogger("infra.channels.telegram_utils")
+logger = logging.getLogger("plugins.telegram.utils")
 _T = TypeVar("_T")
 _LIVE_MESSAGE_LIMIT = 3900
 _LIVE_EDIT_MIN_INTERVAL_S = 1.0

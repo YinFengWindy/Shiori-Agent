@@ -13,7 +13,6 @@ function createSettingsFormData(): SettingsFormData {
       registrations: [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "gpt-agent", apiKey: "agent-key", baseUrl: "https://agent.example", effort: "high" }],
     },
     channels: {
-      telegramToken: "telegram-token",
       qqBotUin: "10001",
     },
     memory: {

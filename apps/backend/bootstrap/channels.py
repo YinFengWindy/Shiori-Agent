@@ -65,37 +65,6 @@ async def start_channels(
         if getattr(session_manager, "workspace", None) is not None
         else None
     )
-    if config.channels.telegram and config.channels.telegram.token:
-        tg = config.channels.telegram
-        configuration = (tg, tuple(bot_commands or []))
-        existing = (
-            previous_host.reusable(tg.channel_name, configuration)
-            if previous_host
-            else None
-        )
-        try:
-            from infra.channels.telegram_channel import TelegramChannel
-
-            host.add(
-                existing
-                or TelegramChannel(
-                    token=tg.token,
-                    bus=bus,
-                    session_manager=session_manager,
-                    bot_commands=bot_commands,
-                    event_bus=event_bus,
-                    interrupt_controller=interrupt_controller,
-                    channel_name=tg.channel_name,
-                    channel_hub=channel_hub,
-                ),
-                configuration=configuration,
-            )
-        except Exception as exc:
-            if strict:
-                raise
-            host.record_failure("telegram", phase="construct", error=exc)
-            logger.warning("跳过 Telegram 渠道: %s", exc)
-
     if config.channels.qq and config.channels.qq.bot_uin:
         qq = config.channels.qq
         existing = previous_host.reusable("qq", qq) if previous_host else None
@@ -125,10 +94,15 @@ async def start_channels(
     for channel in plugin_channels or []:
         # Only independently owned plugin connections opt into reuse. Other
         # channels may retain resources owned by their plugin generation.
-        # A started channel captures ctx.bot_commands, so a changed command
-        # list must rebuild the connection just like changed credentials.
+        # A channel that declares ``uses_bot_commands`` captures
+        # ctx.bot_commands at start, so a changed command list must rebuild it
+        # just like changed credentials; other channels ignore the list.
         key = getattr(channel, "configuration_key", None)
-        configuration = (key, tuple(bot_commands or [])) if key is not None else None
+        configuration = (
+            (key, tuple(bot_commands or []))
+            if key is not None and getattr(channel, "uses_bot_commands", False)
+            else key
+        )
         existing = (
             previous_host.reusable(channel.name, configuration)
             if previous_host is not None and configuration is not None

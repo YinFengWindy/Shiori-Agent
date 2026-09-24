@@ -21,7 +21,6 @@ from agent.config_models import (
     MemoryEmbeddingConfig,
     ModelRegistration,
     QQChannelConfig,
-    TelegramChannelConfig,
     WiringConfig,
 )
 from agent.scene_preferences import load_scene_preferences, migrate_scene_preferences
@@ -53,14 +52,20 @@ def load_config(
     """Loads and validates the persisted TOML configuration.
 
     Runs the one-time ``[integrations.novelai]`` -> ``[plugins.novelai]``
-    migration (issue #180) against the real file before parsing, so an
-    upgrading user's existing token/settings show up under the plugin's own
-    config channel with no action required. ``load_config_text`` deliberately
-    does not run this: it promises never to touch the persisted file.
+    migration (issue #180) and the built-in channel table migration
+    (``[channels.telegram]`` -> ``[plugins.telegram]``, issue #363) against
+    the real file before parsing, so an upgrading user's existing
+    token/settings show up under the plugin's own config channel with no
+    action required. ``load_config_text`` deliberately does not run these: it
+    promises never to touch the persisted file, and rejects a non-empty
+    migrated table instead.
     """
     resolved_path = Path(path)
     data = _load_config_data(resolved_path)
     data = _migrate_legacy_novelai_config(resolved_path, data)
+    from agent.channel_config_migration import migrate_legacy_channel_configs
+
+    data = migrate_legacy_channel_configs(resolved_path, data)
     from agent.proactive_preferences import migrate_proactive_preferences
 
     data = migrate_proactive_preferences(resolved_path, data)
@@ -239,15 +244,6 @@ def _effort_extra_body(effort: str) -> dict[str, Any]:
 def _load_channels_config(data: dict) -> ChannelsConfig:
     channels_data = data.get("channels", {})
 
-    telegram = None
-    if tg := channels_data.get("telegram"):
-        token = _normalize_optional_config_text(_resolve(str(tg.get("token", ""))))
-        if bool(tg.get("enabled", True)) and token:
-            telegram = TelegramChannelConfig(
-                token=token,
-                channel_name=str(tg.get("channel_name", "telegram")),
-            )
-
     qq = None
     if qq_data := channels_data.get("qq"):
         bot_uin = _normalize_optional_config_text(str(qq_data.get("bot_uin", "")))
@@ -259,10 +255,7 @@ def _load_channels_config(data: dict) -> ChannelsConfig:
                 ),
             )
 
-    return ChannelsConfig(
-        telegram=telegram,
-        qq=qq,
-    )
+    return ChannelsConfig(qq=qq)
 
 
 def _load_proactive_config(data: dict) -> ProactiveConfig:
@@ -395,6 +388,9 @@ def _load_plugins_config(data: dict) -> dict[str, dict[str, Any]]:
 
 def _reject_removed_runtime_config(data: dict) -> None:
     """Rejects configuration for product surfaces removed from the runtime."""
+    from agent.channel_config_migration import reject_migrated_channel_tables
+
+    reject_migrated_channel_tables(data)
     sections = {
         "channels": {"cli", "qqbot", "socket"},
         "integrations": {"fitbit"},
@@ -463,7 +459,6 @@ __all__ = [
     "MemoryConfig",
     "MemoryEmbeddingConfig",
     "QQChannelConfig",
-    "TelegramChannelConfig",
     "_validated_timezone",
     "load_config",
     "load_config_data",

@@ -1,7 +1,7 @@
 """channels.list：渲染端的渠道发现与状态（#363）。
 
 渠道来源有三类，按固定顺序列出：宿主自有的 ``desktop``、仍写死在宿主里的
-内置渠道（Telegram、QQ，迁为插件后删除）、各插件 manifest 的静态 ``channels``
+内置渠道（QQ，迁为插件后删除）、各插件 manifest 的静态 ``channels``
 声明。静态声明让插件停用、未信任或未填凭据时也能列出渠道；实际连接状态来自
 当前运行代的 ``ChannelHost.snapshot()``。
 
@@ -27,14 +27,8 @@ from bootstrap.channel_host import ChannelSnapshot
 
 DESKTOP_CHANNEL = ChannelDeclaration(name="desktop", label="桌面端")
 
-# 仍由 bootstrap/channels.py 硬编码构造的渠道；Telegram、QQ 迁为插件后连同这里删除。
+# 仍由 bootstrap/channels.py 硬编码构造的渠道；QQ 迁为插件后连同这里删除。
 _BUILTIN_CHANNELS = (
-    ChannelDeclaration(
-        name="telegram",
-        label="Telegram",
-        contact_label="Telegram 用户 ID 或用户名",
-        chat_id_label="会话 / 群组 ID",
-    ),
     ChannelDeclaration(
         name="qq",
         label="QQ",
@@ -73,12 +67,8 @@ class RuntimeChannelListing:
     def _builtin_row(
         self, declaration: ChannelDeclaration, snapshot: dict[str, ChannelSnapshot]
     ) -> dict[str, Any]:
-        channels = self._app.config.channels
-        configured = (
-            bool(channels.telegram and channels.telegram.token)
-            if declaration.name == "telegram"
-            else bool(channels.qq and channels.qq.bot_uin)
-        )
+        qq = self._app.config.channels.qq
+        configured = bool(qq and qq.bot_uin)
         entry = snapshot.get(declaration.name) if configured else None
         if entry is None:
             return _row(declaration, None, True, "not_configured")
