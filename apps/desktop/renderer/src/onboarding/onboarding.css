@@ -1,0 +1,160 @@
+/*
+ * First-run guide: 吟风's ADV over the time-of-day scene (see OnboardingStage).
+ * Layers inside the stage: 吟风 (z 1), the transparent advance surface (z 2),
+ * then the layout grid (z 3) — step indicator row, the card slot, and the
+ * shared dialogue box (shared/adv/adv.css). The grid is pointer-events: none
+ * so clicks on empty space and on the box reach the advance surface; the
+ * card, the indicator and 「跳过」 opt back in.
+ */
+
+.onboarding-layout {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 0.75rem;
+  padding: 0.75rem clamp(1rem, 3vw, 2.5rem) 1rem;
+}
+
+/* Left of 吟风; the card itself caps its height to the slot and scrolls inside. */
+.onboarding-card-slot {
+  padding-left: clamp(0rem, 5vw - 2rem, 7rem);
+}
+
+.onboarding-card {
+  max-width: 30rem;
+}
+
+/* The name plate hangs above the box; keep that room below the card. */
+.onboarding-adv {
+  width: min(62rem, 100%);
+  margin: 1.35rem auto 0;
+  animation: onboarding-adv-enter var(--duration-stage) var(--ease-out-soft) both;
+}
+
+/* The sprite is a full figure: frame her face in the name plate avatar. */
+.onboarding-adv .adv-avatar img {
+  object-position: 50% 0;
+  transform: scale(2.4);
+  transform-origin: 44% 31%;
+}
+
+@media (max-height: 700px) {
+  .onboarding-adv {
+    min-height: 7.5rem;
+    padding-top: 2rem;
+  }
+
+  .onboarding-adv .adv-text {
+    line-height: 1.7;
+  }
+}
+
+/* ------------------------------------------------------------- 吟风 -- */
+
+.onboarding-mascot {
+  position: absolute;
+  z-index: 1;
+  right: clamp(0rem, 6vw - 2rem, 7rem);
+  bottom: 0;
+  height: 80%;
+  aspect-ratio: 826 / 1213;
+  pointer-events: none;
+  animation: onboarding-mascot-enter var(--duration-stage) var(--ease-drawer) both;
+}
+
+.onboarding-mascot-body {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+}
+
+.onboarding-mascot-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: 50% 100%;
+  filter: drop-shadow(0 18px 36px rgb(119 84 166 / 22%));
+  user-select: none;
+}
+
+/* New face fades in on top; the replaced one stays opaque beneath it. */
+.onboarding-mascot-layer[data-layer="current"] {
+  z-index: 2;
+  opacity: 1;
+  transition: opacity var(--duration-quick) var(--ease-in-out-soft);
+}
+
+.onboarding-mascot-layer[data-layer="previous"] {
+  z-index: 1;
+  opacity: 1;
+}
+
+.onboarding-mascot-layer[data-layer="hidden"] {
+  opacity: 0;
+}
+
+/*
+ * Laugh: a small squash-and-bounce. Surprised: a quick hop. Two identical
+ * keyframes per move, picked by the line's parity (data-cue), so the same
+ * move on consecutive lines restarts.
+ */
+.onboarding-mascot-body[data-reaction="bounce"][data-cue="0"] { animation: onboarding-bounce-a var(--duration-motif) var(--ease-out-soft); }
+.onboarding-mascot-body[data-reaction="bounce"][data-cue="1"] { animation: onboarding-bounce-b var(--duration-motif) var(--ease-out-soft); }
+.onboarding-mascot-body[data-reaction="hop"][data-cue="0"] { animation: onboarding-hop-a var(--duration-base) var(--ease-out-soft); }
+.onboarding-mascot-body[data-reaction="hop"][data-cue="1"] { animation: onboarding-hop-b var(--duration-base) var(--ease-out-soft); }
+
+@keyframes onboarding-bounce-a {
+  0%, 100% { transform: none; }
+  30% { transform: translateY(-10px) scaleY(1.015); }
+  60% { transform: translateY(0) scaleY(0.99); }
+}
+
+@keyframes onboarding-bounce-b {
+  0%, 100% { transform: none; }
+  30% { transform: translateY(-10px) scaleY(1.015); }
+  60% { transform: translateY(0) scaleY(0.99); }
+}
+
+@keyframes onboarding-hop-a {
+  0%, 100% { transform: none; }
+  40% { transform: translateY(-16px); }
+}
+
+@keyframes onboarding-hop-b {
+  0%, 100% { transform: none; }
+  40% { transform: translateY(-16px); }
+}
+
+@keyframes onboarding-mascot-enter {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes onboarding-adv-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Narrow windows: 吟风 steps back behind the card, translucent. */
+@media (max-width: 899px) {
+  .onboarding-mascot {
+    height: 70%;
+  }
+
+  .onboarding-mascot-body {
+    opacity: 0.45;
+  }
+}
+
+/* Reduced motion: expressions still cross-fade; nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-mascot,
+  .onboarding-adv {
+    animation-name: motion-fade-in;
+  }
+
+  .onboarding-mascot-body[data-reaction] {
+    animation: none;
+  }
+}

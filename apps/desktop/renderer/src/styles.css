@@ -193,6 +193,7 @@
     --duration-enter: 240ms; /* a new chat message arriving */
     --duration-crossfade: 320ms; /* image swaps: mood portrait, chat background (shared/crossfadeLayerState.ts) */
     --duration-pulse: 600ms; /* one-shot attention pulse (jump-to-message highlight) */
+    --duration-stage: 420ms; /* a scene's cast entering (onboarding mascot, dialogue box) */
     --duration-morph: 420ms; /* shared-element view transition (role card <-> detail header), on ease-drawer */
     --duration-page-rise: 380ms; /* the incoming page of a view transition rising in */
     --duration-spring: 700ms; /* tilt spring-back after the pointer leaves (ease-spring) */
