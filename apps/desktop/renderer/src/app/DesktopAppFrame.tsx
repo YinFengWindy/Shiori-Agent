@@ -374,11 +374,26 @@ export function DesktopAppFrame({
         />
         <div
           className={cx(
-            "sidebar-track relative min-h-0 overflow-hidden",
-            sidebarState.animating && sidebarTrackMotionClass,
+            "sidebar-track relative min-h-0",
+            // Compact: the track takes no width and its content floats over the main pane.
+            sidebarState.compact ? "z-20 overflow-visible" : "overflow-hidden",
+            sidebarState.animating && !sidebarState.compact && sidebarTrackMotionClass,
           )}
-          style={{ width: sidebarState.collapsed ? 0 : sidebarState.width }}
+          style={{ width: sidebarState.compact || sidebarState.collapsed ? 0 : sidebarState.width }}
+          data-testid="sidebar-track"
+          data-compact={sidebarState.compact || undefined}
         >
+          {sidebarState.compact ? (
+            <div
+              className={cx(
+                "sidebar-overlay-surface surface-glass-strong absolute inset-y-0 left-0 rounded-r-lg transition-opacity duration-base ease-out-soft",
+                sidebarState.collapsed ? "pointer-events-none opacity-0" : "opacity-100",
+              )}
+              style={{ width: sidebarState.width }}
+              aria-hidden="true"
+            />
+          ) : null}
+          <div className={cx("h-full", sidebarState.compact && "absolute inset-y-0 left-0")}>
           <SidebarTrackContent
             mainView={mainView}
             sidebarState={sidebarState}
@@ -395,9 +410,19 @@ export function DesktopAppFrame({
             onOpenRole={onOpenRole}
             activePluginNavPage={activePluginNavPage}
           />
+          </div>
         </div>
         <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-lg border-b border-l border-t border-line-soft bg-[var(--chat-bg)] shadow-soft">
-          {sidebarState.collapsed ? (
+          {sidebarState.compact && !sidebarState.collapsed ? (
+            <button
+              className="motion-fade-enter absolute inset-0 z-[19] cursor-default border-0 bg-white/25 p-0"
+              type="button"
+              aria-label="收起侧边栏"
+              tabIndex={-1}
+              onClick={onToggleSidebar}
+            />
+          ) : null}
+          {sidebarState.collapsed && !sidebarState.compact ? (
             <div
               className="absolute inset-y-0 left-0 z-[7] w-[3px] cursor-col-resize transition-colors hover:bg-accent-soft"
               role="separator"

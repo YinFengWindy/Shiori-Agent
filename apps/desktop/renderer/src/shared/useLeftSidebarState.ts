@@ -1,13 +1,22 @@
 import type React from "react";
-import { useState } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import { flushSync } from "react-dom";
 import { clampSidebarWidth, hasSidebarCollapseChanged } from "./sidebarResize";
+import {
+  compactShellBreakpoint,
+  initialSidebarLayout,
+  isCompactShellWidth,
+  isSidebarCollapsed,
+  reduceSidebarLayout,
+} from "./sidebarLayout";
 
 type UseLeftSidebarStateArgs = {
   minWidth: number;
   maxWidth: number;
   defaultWidth: number;
   collapseThreshold: number;
+  animationDurationMs: number;
+  compactBreakpoint?: number;
 };
 
 /**
@@ -41,27 +50,75 @@ export function resolveLeftSidebarDragUpdate(
   return { collapsed: false, width: clampSidebarWidth(requestedWidth, minWidth, maxWidth) };
 }
 
-/** Manages the desktop shell's collapsible and resizable left sidebar. */
+function currentWindowWidth(): number {
+  return typeof window === "undefined" ? Number.POSITIVE_INFINITY : window.innerWidth;
+}
+
+/**
+ * Manages the desktop shell's collapsible, resizable left sidebar. Open /
+ * closed comes from the single layout model in `sidebarLayout.ts`: the
+ * user's preference plus a responsive compact mode in which the sidebar
+ * becomes an overlay drawer instead of being force-collapsed.
+ */
 export function useLeftSidebarState({
   minWidth,
   maxWidth,
   defaultWidth,
   collapseThreshold,
+  animationDurationMs,
+  compactBreakpoint = compactShellBreakpoint,
 }: UseLeftSidebarStateArgs) {
   const [width, setWidth] = useState(defaultWidth);
-  const [collapsed, setCollapsed] = useState(false);
+  const [layout, dispatch] = useReducer(reduceSidebarLayout, undefined, () => initialSidebarLayout(currentWindowWidth(), compactBreakpoint));
   const [resizing, setResizing] = useState(false);
   const [animating, setAnimating] = useState(false);
+  const collapsed = isSidebarCollapsed(layout);
 
-  function toggle(): void {
-    setAnimating(true);
-    if (collapsed) {
-      setWidth((current) => clampSidebarWidth(current, minWidth, maxWidth));
-      setCollapsed(false);
-      return;
+  // Follow the window across the compact breakpoint.
+  useEffect(() => {
+    function syncCompact(): void {
+      dispatch({ type: "set-compact", compact: isCompactShellWidth(window.innerWidth, compactBreakpoint) });
     }
-    setCollapsed(true);
-  }
+    syncCompact();
+    window.addEventListener("resize", syncCompact);
+    return () => window.removeEventListener("resize", syncCompact);
+  }, [compactBreakpoint]);
+
+  // Escape closes the overlay drawer unless something above it (a dialog, a menu) already took the key.
+  useEffect(() => {
+    if (!layout.overlayOpen) return undefined;
+    function closeOnEscape(event: KeyboardEvent): void {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      setAnimating(true);
+      dispatch({ type: "dismiss-overlay" });
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [layout.overlayOpen]);
+
+  useEffect(() => {
+    if (!animating) return undefined;
+    const timer = window.setTimeout(() => setAnimating(false), animationDurationMs + 40);
+    return () => window.clearTimeout(timer);
+  }, [animating, animationDurationMs]);
+
+  const toggle = useCallback((): void => {
+    setAnimating(true);
+    setWidth((current) => clampSidebarWidth(current, minWidth, maxWidth));
+    dispatch({ type: "toggle" });
+  }, [maxWidth, minWidth]);
+
+  /** Opens the sidebar for a workspace whose navigation lives there (a no-op in compact mode). */
+  const reveal = useCallback((): void => {
+    if (!layout.compact && layout.preferredCollapsed) setAnimating(true);
+    setWidth((current) => clampSidebarWidth(current, minWidth, maxWidth));
+    dispatch({ type: "reveal" });
+  }, [layout.compact, layout.preferredCollapsed, maxWidth, minWidth]);
+
+  /** Closes the compact overlay drawer, e.g. after the user navigated from it. */
+  const dismissOverlay = useCallback((): void => {
+    dispatch({ type: "dismiss-overlay" });
+  }, []);
 
   function beginResize(event: React.PointerEvent<HTMLDivElement>): void {
     event.preventDefault();
@@ -94,7 +151,7 @@ export function useLeftSidebarState({
         setAnimating(true);
         dragCollapsed = update.collapsed;
       }
-      setCollapsed(update.collapsed);
+      dispatch({ type: "drag", collapsed: update.collapsed });
       if (update.width !== null) setWidth(update.width);
     }
 
@@ -106,12 +163,13 @@ export function useLeftSidebarState({
   return {
     width,
     collapsed,
+    /** Below the shell breakpoint: the sidebar overlays the main pane instead of taking width. */
+    compact: layout.compact,
     resizing,
     animating,
-    setWidth,
-    setCollapsed,
-    setAnimating,
     toggle,
+    reveal,
+    dismissOverlay,
     beginResize,
   };
 }

@@ -7,6 +7,8 @@ import type { AppMainView, RoleRecord } from "../shared/types";
 
 export type SidebarViewState = {
   collapsed: boolean;
+  /** Compact window: the sidebar is an overlay drawer over the main pane (see `sidebarLayout.ts`). */
+  compact: boolean;
   width: number;
   animating: boolean;
   resizing: boolean;

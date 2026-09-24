@@ -21,7 +21,6 @@ export const chatLatestImageSidebarMaxWidth = 360;
 export const chatLatestImageSidebarDefaultWidth = 200;
 /** Mirrors `--duration-panel` in styles.css; the host drops the sidebar transition classes shortly after this elapses. */
 export const sidebarAnimationDurationMs = 260;
-export const sidebarAutoCollapseWindowWidth = 980;
 export const minRoleCardBusyMs = 600;
 
 /** Keeps optimistic role-card actions visible long enough for the transition to be perceived. */
@@ -65,6 +64,13 @@ export type PendingMessageNavigation = {
 };
 
 /** Clones a main-view value so history entries stay immutable. */
+/** Stable string identity of a view (kind plus its role / page target), for change detection. */
+export function viewKey(view: AppMainView): string {
+  if (view.kind === "role-detail" || view.kind === "role-assets") return `${view.kind}:${view.roleId}`;
+  if (view.kind === "plugin-page") return `${view.kind}:${view.pageId}`;
+  return view.kind;
+}
+
 export function cloneView(view: AppMainView): AppMainView {
   if (view.kind === "role-detail") {
     return { kind: "role-detail", roleId: view.roleId };

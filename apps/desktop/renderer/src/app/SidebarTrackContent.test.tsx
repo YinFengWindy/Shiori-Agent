@@ -8,6 +8,7 @@ import { SidebarTrackContent, type SidebarViewState } from "./SidebarTrackConten
 function sidebarState(overrides: Partial<SidebarViewState> = {}): SidebarViewState {
   return {
     collapsed: false,
+    compact: false,
     width: 280,
     animating: false,
     resizing: false,

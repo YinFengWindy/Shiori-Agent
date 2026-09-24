@@ -10,12 +10,12 @@ import {
   chatLatestImageSidebarMinWidth,
   createEmptyRoleForm,
   sidebarAnimationDurationMs,
-  sidebarAutoCollapseWindowWidth,
   sidebarCollapseThreshold,
   sidebarDefaultWidth,
   sidebarMaxWidth,
   sidebarMinWidth,
   type PendingMessageNavigation,
+  viewKey,
 } from "./app/appState";
 import { useDesktopSessionState } from "./app/useDesktopSessionState";
 import { useDesktopViewSynchronization } from "./app/useDesktopViewSynchronization";
@@ -89,6 +89,7 @@ function App(): React.ReactElement {
     maxWidth: sidebarMaxWidth,
     defaultWidth: sidebarDefaultWidth,
     collapseThreshold: sidebarCollapseThreshold,
+    animationDurationMs: sidebarAnimationDurationMs,
   });
   const [activeIllustration, setActiveIllustration] = useState("");
   const [selectedAvatarAsset, setSelectedAvatarAsset] = useState("");
@@ -236,9 +237,7 @@ function App(): React.ReactElement {
     lastNonSettingsViewRef,
     roles,
     setSettingsSection,
-    setSidebarAnimating: leftSidebar.setAnimating,
-    setSidebarCollapsed: leftSidebar.setCollapsed,
-    setSidebarWidth: leftSidebar.setWidth,
+    revealSidebar: leftSidebar.reveal,
     setMainView,
     applyRoleSnapshot,
   });
@@ -525,8 +524,6 @@ function App(): React.ReactElement {
   const guardLeave = leaveGuard.guard;
 
   useDesktopUiEffects({
-    sidebarAnimating: leftSidebar.animating,
-    setSidebarAnimating: leftSidebar.setAnimating,
     pendingMessageNavigation,
     setHighlightedMessageKey,
     highlightedMessageKey,
@@ -534,10 +531,14 @@ function App(): React.ReactElement {
     activeIllustration,
     persistedChatBackground: detailRole?.chat_background_abs ?? "",
     setActiveIllustration,
-    sidebarAnimationDurationMs,
-    sidebarAutoCollapseWindowWidth,
-    setSidebarCollapsed: leftSidebar.setCollapsed,
   });
+
+  // Navigating from the compact overlay drawer closes it, whatever the entry point was.
+  const { dismissOverlay: dismissSidebarOverlay } = leftSidebar;
+  const sidebarNavigationKey = `${viewKey(mainView)}|${activeRoleId}|${settingsSection}`;
+  useEffect(() => {
+    dismissSidebarOverlay();
+  }, [dismissSidebarOverlay, sidebarNavigationKey]);
 
   function selectSearchResult(result: RoleSearchResult): void {
     setShowSearchDialog(false);
@@ -585,6 +586,7 @@ function App(): React.ReactElement {
       shellResizing={leftSidebar.resizing || chatLatestImageSidebar.resizing}
       sidebarState={{
         collapsed: leftSidebar.collapsed,
+        compact: leftSidebar.compact,
         width: leftSidebar.width,
         animating: leftSidebar.animating,
         resizing: leftSidebar.resizing,
