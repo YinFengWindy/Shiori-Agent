@@ -32,7 +32,13 @@ from infra.channels.telegram_utils import (
 from session.manager import SessionManager
 
 from .commands import _CommandMixin
-from .formatting import _CHANNEL, _SEEN_MSG_MAXSIZE, _ToolLiveLine
+from .formatting import (
+    _CHANNEL,
+    _RENDERING_PROMPT,
+    _SEEN_MSG_MAXSIZE,
+    _ToolLiveLine,
+    _is_private_chat_id,
+)
 from .inbound import _InboundMixin
 from .media import _MediaMixin
 from .outbound import _OutboundMixin
@@ -49,6 +55,9 @@ class TelegramChannel(
     _OutboundMixin,
 ):
     """连接 Telegram Bot、消息总线与 lifecycle 事件。"""
+
+    # Inbound handlers always annotate chat_type; this only covers omissions.
+    default_chat_type = "private"
 
     def __init__(
         self,
@@ -126,6 +135,14 @@ class TelegramChannel(
     @property
     def bot(self):
         return self._app.bot
+
+    def supports_stream_events(self, chat_id: str) -> bool:
+        """Streams live previews only into private chats."""
+        return _is_private_chat_id(chat_id)
+
+    def system_prompt_hint(self, chat_id: str) -> str:
+        """Forbids Markdown tables, which Telegram mobile cannot render."""
+        return _RENDERING_PROMPT
 
     async def start(self, ctx: ChannelContext | None = None) -> None:
         self._intake.start(paused=ctx.intake_paused if ctx is not None else False)

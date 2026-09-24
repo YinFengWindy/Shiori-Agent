@@ -66,6 +66,35 @@ async def test_app_runtime_desktop_mode_enables_message_channels(
 
 
 @pytest.mark.asyncio
+async def test_app_runtime_resolves_channel_hooks_through_its_channel_host(
+    tmp_path,
+    empty_config,
+):
+    class _Streaming:
+        name = "qqbot"
+
+        def supports_stream_events(self, chat_id: str) -> bool:
+            return True
+
+    app = AppRuntime(empty_config, tmp_path, features=DESKTOP_RUNTIME_FEATURES)
+
+    try:
+        await app.start()
+        assert app.core is not None and app.channel_host is not None
+        directory = app.core.channel_directory
+        assert app.core.loop._channel_directory is directory
+        assert not directory.supports_stream_events("qqbot", "c2c:u1")
+
+        # Handover swaps the connections of this same long-lived host.
+        app.channel_host._channels.append(_Streaming())
+        assert directory.supports_stream_events("qqbot", "c2c:u1")
+        async with app.acquire() as lease:
+            assert lease.channel_names == frozenset()
+    finally:
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("cancel", [False, True])
 async def test_initial_partial_core_failure_forces_unsafe_plugin_cleanup(
     tmp_path, monkeypatch, cancel

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from core.roles.relationship_runtime import RoleRelationshipRuntimeService
     from core.roles.role_runtime import RoleRuntimeRegistry
     from conversation.service import ConversationService
+    from core.common.channel_directory import ChannelDirectory
     from session.manager import SessionManager
 
 
@@ -94,6 +95,7 @@ class AgentLoopDeps:
     reasoner: "Reasoner | None" = None
     core_runner: "CoreRunner | None" = None
     role_runtime_registry: "RoleRuntimeRegistry | None" = None
+    channel_directory: "ChannelDirectory | None" = None
 
 
 @dataclass

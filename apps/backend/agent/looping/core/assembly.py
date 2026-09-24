@@ -29,6 +29,7 @@ from ..ports import (
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.turns.outbound import BusOutboundPort
 from bus.event_bus import EventBus
+from core.common.channel_directory import ChannelDirectory
 from core.roles.model_runtime import RoleAwareProvider
 
 from typing import TYPE_CHECKING
@@ -54,6 +55,8 @@ class _AssemblyMixin:
         self._processing_state = deps.processing_state
         self._event_bus = deps.event_bus or EventBus()
         self._role_runtime_registry = deps.role_runtime_registry
+        # Channel-owned hooks (stream support, prompt hints) resolve through here.
+        self._channel_directory = deps.channel_directory or ChannelDirectory()
 
         # ── 中断控制面（纯内存态） ──
         self._active_tasks: dict[str, asyncio.Task] = {}
@@ -75,6 +78,7 @@ class _AssemblyMixin:
             deps.workspace,
             memory=memory_profile,
             multimodal=config.llm.multimodal,
+            channel_directory=self._channel_directory,
         )
         base_llm_services = deps.llm_services or LLMServices(
             provider=deps.provider,

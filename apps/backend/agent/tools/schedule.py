@@ -58,7 +58,7 @@ class ScheduleTool(Tool):
             },
             "channel": {
                 "type": "string",
-                "description": "目标渠道，如 telegram、qq",
+                "description": "目标渠道原名，与 message_push 的 channel 取值相同",
             },
             "chat_id": {
                 "type": "string",

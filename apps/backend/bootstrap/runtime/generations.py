@@ -35,6 +35,8 @@ class RuntimeCandidate:
     )
     _close_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
     channel_host: ChannelHost | None = None
+    # Names of the channels this generation carried; fixed once channels are built.
+    channel_names: frozenset[str] = frozenset()
     force_close: bool = False
     _work_changed: asyncio.Event = field(
         default_factory=asyncio.Event, init=False, repr=False
@@ -115,6 +117,11 @@ class RuntimeLease:
     def generation(self) -> int:
         """Returns the retained generation identifier."""
         return self._candidate.generation
+
+    @property
+    def channel_names(self) -> frozenset[str]:
+        """Returns the channel names the retained generation was published with."""
+        return self._candidate.channel_names
 
     def retain(self):
         """Pins the same version for child work that can outlive its parent."""

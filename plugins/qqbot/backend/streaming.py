@@ -11,7 +11,6 @@ from bus.events_lifecycle import StreamDeltaReady, TurnStarted
 from .formatting import (
     CHANNEL,
     LIVE_MAX_FAILURES,
-    LIVE_STREAM_MIN_CHARS,
     LIVE_STREAM_MIN_INTERVAL_S,
     format_turn_live,
     http_status_code,
@@ -42,24 +41,43 @@ class _StreamingMixin:
     async def _on_stream_delta(self, event: StreamDeltaReady) -> None:
         if event.channel != CHANNEL or not event.content_delta:
             return
-        reply = self._reply_buffers.get(event.session_key, "") + event.content_delta
-        self._reply_buffers[event.session_key] = reply
-        now = asyncio.get_running_loop().time()
-        last_len = self._live_last_lengths.get(event.session_key, 0)
-        next_at = self._live_next_at.get(event.session_key, 0.0)
-        if now < next_at and len(reply) - last_len < LIVE_STREAM_MIN_CHARS:
+        session_key = event.session_key
+        self._reply_buffers[session_key] = (
+            self._reply_buffers.get(session_key, "") + event.content_delta
+        )
+        # One refresh per session at a time; it re-reads the buffer before sending.
+        if any(
+            not task.done() for task in self._live_tasks_by_session.get(session_key, ())
+        ):
             return
-        self._live_next_at[event.session_key] = now + LIVE_STREAM_MIN_INTERVAL_S
-        self._live_last_lengths[event.session_key] = len(reply)
         self._start_live_task(
-            event.session_key,
-            self._sync_live_message(event.session_key, event.chat_id),
+            session_key,
+            self._sync_live_message(session_key, event.chat_id),
         )
 
     async def _sync_live_message(self, session_key: str, chat_id: str) -> None:
-        text = format_turn_live(self._reply_buffers.get(session_key, ""))
-        if text:
-            await self._send_live_stream(session_key, chat_id, text, terminal=False)
+        """Replaces the preview with the latest reply, at most once per interval.
+
+        Loops until the buffer stops growing, so text that arrives while a
+        request is in flight (for example right before a tool call) still
+        reaches the preview without waiting for the final reply.
+        """
+        loop = asyncio.get_running_loop()
+        synced_length = -1
+        while True:
+            delay = self._live_next_at.get(session_key, 0.0) - loop.time()
+            if delay > 0:
+                await asyncio.sleep(delay)
+            reply = self._reply_buffers.get(session_key, "")
+            if len(reply) == synced_length:
+                return
+            synced_length = len(reply)
+            self._live_next_at[session_key] = loop.time() + LIVE_STREAM_MIN_INTERVAL_S
+            text = format_turn_live(reply)
+            if not text or not await self._send_live_stream(
+                session_key, chat_id, text, terminal=False
+            ):
+                return
 
     async def _delete_live_preview(self, session_key: str) -> None:
         state = self._live_states.get(session_key)
@@ -175,7 +193,6 @@ class _StreamingMixin:
         self._live_states.pop(session_key, None)
         self._reply_buffers.pop(session_key, None)
         self._live_next_at.pop(session_key, None)
-        self._live_last_lengths.pop(session_key, None)
         self._live_failures.pop(session_key, None)
         self._live_disabled.discard(session_key)
         self._live_locks.pop(session_key, None)

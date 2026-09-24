@@ -16,7 +16,7 @@ from core.channels import ChannelHub
 from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
 
-from .formatting import CHANNEL
+from .formatting import CHANNEL, PUSH_TARGET_HINT, SYSTEM_PROMPT_HINT
 from .gateway import _GatewayMixin, _TokenCache
 from .inbound import _InboundMixin
 from .outbound import _OutboundMixin
@@ -72,7 +72,6 @@ class QQBotChannel(
         self._live_states: dict[str, _LiveStreamState] = {}
         self._reply_buffers: dict[str, str] = {}
         self._live_next_at: dict[str, float] = {}
-        self._live_last_lengths: dict[str, int] = {}
         self._live_failures: dict[str, int] = {}
         self._live_disabled: set[str] = set()
         self._live_locks: dict[str, asyncio.Lock] = {}
@@ -89,6 +88,18 @@ class QQBotChannel(
             tuple(sorted(self._allow_from)),
             {key: group.model_dump() for key, group in self._groups.items()},
         )
+
+    def supports_stream_events(self, chat_id: str) -> bool:
+        """Streams live previews into C2C chats; groups only get final replies."""
+        try:
+            kind, _target = self._parse_chat_id(chat_id)
+        except ValueError:
+            return False
+        return kind == "c2c"
+
+    def system_prompt_hint(self, chat_id: str) -> str:
+        """Keeps proactive sends on `qqbot` instead of NapCat's `qq`."""
+        return SYSTEM_PROMPT_HINT
 
     async def start(self, ctx: ChannelContext) -> None:
         """Registers runtime hooks and starts the official Gateway loop."""
@@ -108,6 +119,7 @@ class QQBotChannel(
             text=self.send_proactive,
             stream_text=self.send_stream,
             image=self.send_image,
+            description=PUSH_TARGET_HINT,
         )
         self._stopped.clear()
         self._intake.start(paused=ctx.intake_paused)

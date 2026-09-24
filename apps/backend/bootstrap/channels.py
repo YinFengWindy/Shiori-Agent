@@ -9,6 +9,7 @@ from bootstrap.channel_host import ChannelHost
 from bus.event_bus import EventBus
 from bus.queue import MessageBus
 from core.channels import ChannelHub
+from core.common.channel_directory import ChannelDirectory
 from core.net.http import SharedHttpResources
 from infra.channels.base import AttachmentStore
 from infra.channels.contract import Channel, ChannelContext
@@ -31,6 +32,7 @@ async def start_channels(
     enable_message_channels: bool = True,
     previous_host: ChannelHost | None = None,
     strict: bool = False,
+    channel_directory: ChannelDirectory | None = None,
 ) -> ChannelHost:
     """Constructs a traffic-free host, optionally reusing unchanged connections."""
     attachment_store = AttachmentStore()
@@ -58,6 +60,7 @@ async def start_channels(
         ChannelHub.from_workspace(
             session_manager.workspace,
             session_manager=session_manager,
+            channel_directory=channel_directory,
         )
         if getattr(session_manager, "workspace", None) is not None
         else None

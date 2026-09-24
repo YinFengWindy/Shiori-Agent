@@ -184,7 +184,13 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
                 interrupt_controller=self._dispatcher,
                 plugin_channels=plugin_manager.channels if plugin_manager else None,
                 enable_message_channels=self.features.enable_message_channels,
+                channel_directory=self.core.channel_directory,
             )
+            current.channel_names = frozenset(
+                channel.name for channel in self.channel_host.channels
+            )
+            # The long-lived host keeps the published connections across handovers.
+            self.core.channel_directory.bind(self.channel_host.get)
             await self.channel_host.start_all()
 
             self._background_tasks = [

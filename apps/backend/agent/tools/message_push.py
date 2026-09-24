@@ -20,30 +20,16 @@ PENDING_TURN_DELIVERY = object()
 
 class MessagePushTool(Tool):
     name = "message_push"
-    description = (
-        "向指定渠道的用户主动发送消息、文件或图片。"
-        "需要提供当前会话对应的渠道名和目标 chat_id。"
-        "渠道名必须使用渠道原名：desktop（桌面端）、telegram、qq（NapCat QQ）或 qqbot（官方 QQBot）；"
-        "桌面端使用 channel=desktop，chat_id 使用当前角色会话 ID（role:<角色ID>）。"
-        "官方 QQBot 不能写成 qq。QQBot 私聊 chat_id 格式为 c2c:<user_openid>。"
-        "message/file/image 三者至少提供一个。"
-    )
     parameters = {
         "type": "object",
         "properties": {
             "channel": {
                 "type": "string",
-                "description": (
-                    "目标渠道原名：desktop（桌面端）、telegram、qq（NapCat QQ）或 qqbot（官方 QQBot）。"
-                    "官方 QQBot 必须填写 qqbot，不能填写 qq。"
-                ),
+                "description": "目标渠道原名，只能取工具描述里列出的可用渠道。",
             },
             "chat_id": {
                 "type": "string",
-                "description": (
-                    "目标会话 ID；桌面端使用当前角色会话 ID（role:<角色ID>）；"
-                    "官方 QQBot 私聊使用 c2c:<user_openid>"
-                ),
+                "description": "目标会话 ID，格式见工具描述里对应渠道的说明。",
             },
             "message": {
                 "type": "string",
@@ -64,11 +50,32 @@ class MessagePushTool(Tool):
     def __init__(self, event_bus: EventBus | None = None) -> None:
         # channel -> {type: sender_fn}
         self._senders: dict[str, dict[str, Callable[..., Awaitable[None]]]] = {}
+        self._descriptions: dict[str, str] = {}
         self._target_resolvers: dict[str, Callable[[str], str]] = {}
         self._role_target_validator: Callable[[str, str, str], bool | str] | None = None
         self._event_bus = event_bus
         self._transport_lock: asyncio.Lock | None = None
         self._retired_channels: set[str] = set()
+
+    @property
+    def description(self) -> str:
+        """Lists only the channels registered now, each with its own target hint."""
+        available = [
+            (
+                f"{channel}（{hint}）"
+                if (hint := self._descriptions.get(channel))
+                else channel
+            )
+            for channel in self._senders
+            if channel not in self._retired_channels
+        ]
+        return (
+            "向指定渠道的用户主动发送消息、文件或图片。"
+            "需要提供当前会话对应的渠道名和目标 chat_id。"
+            "渠道名必须使用渠道原名，当前可用渠道："
+            f"{'、'.join(available) if available else '（无）'}。"
+            "message/file/image 三者至少提供一个。"
+        )
 
     def set_transport_lock(self, lock: asyncio.Lock) -> None:
         """Shares the bus handover barrier so direct sends drain before disconnect."""
@@ -80,6 +87,7 @@ class MessagePushTool(Tool):
         if senders is None or (text is not None and senders.get("text") != text):
             return
         self._senders.pop(channel, None)
+        self._descriptions.pop(channel, None)
         self._target_resolvers.pop(channel, None)
         self._retired_channels.discard(channel)
 
@@ -114,6 +122,7 @@ class MessagePushTool(Tool):
         image_with_metadata: (
             Callable[[str, str, dict[str, object]], Awaitable[None]] | None
         ) = None,
+        description: str = "",
     ) -> None:
         """注册渠道的各类 sender。
         - text(chat_id, message)
@@ -122,8 +131,13 @@ class MessagePushTool(Tool):
         - image(chat_id, image_path_or_url)
         - target_resolver(chat_id) -> canonical chat_id
         - text_with_metadata(chat_id, message, metadata) preserves delivery ownership
+        - description: 渠道身份与 chat_id 格式的简短说明，写进工具描述的可用渠道列表
         """
         self._senders[channel] = {}
+        if description.strip():
+            self._descriptions[channel] = description.strip()
+        else:
+            self._descriptions.pop(channel, None)
         self._retired_channels.discard(channel)
         if text:
             self._senders[channel]["text"] = text
@@ -154,18 +168,9 @@ class MessagePushTool(Tool):
 
     @staticmethod
     def _has_retired_transport(channel: str) -> bool:
+        # A retired transport only serves work its own runtime generation accepted.
         lease = current_runtime_lease()
-        if lease is None:
-            return False
-        channels = lease.config.channels
-        if channels.telegram is not None and channel == channels.telegram.channel_name:
-            return True
-        if channels.qq is not None and channel == "qq":
-            return True
-        manager = lease.core.plugin_manager
-        return manager is not None and any(
-            item.name == channel for item in manager.channels
-        )
+        return lease is not None and channel in lease.channel_names
 
     async def _execute_send(self, **kwargs: Any) -> str:
         channel: str = kwargs["channel"]

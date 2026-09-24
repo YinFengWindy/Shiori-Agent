@@ -139,6 +139,7 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
                 text=self.send,
                 file=self.send_file,
                 image=self.send_image,
+                description="NapCat QQ",
             )
         self._main_loop = asyncio.get_running_loop()
         self._configure_sdk()

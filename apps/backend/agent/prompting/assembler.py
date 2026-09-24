@@ -154,6 +154,7 @@ class PromptAssembler:
             system_prompt=system_prompt,
             context_frame=context_frame,
             channel=channel,
+            chat_id=chat_id,
             message_timestamp=message_timestamp,
             media=media,
         )

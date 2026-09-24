@@ -23,8 +23,10 @@ class _OutboundMixin:
         sent_as_stream = False
         send_failed = False
         try:
+            # A throttled refresh may still be waiting to create the preview;
+            # it must not start one after the final reply.
+            await self._cancel_live_tasks(session_key)
             if session_key in self._live_states:
-                await self._cancel_live_tasks(session_key)
                 if msg.content.strip():
                     sent_as_stream = await self._send_live_stream(
                         session_key,
@@ -32,9 +34,11 @@ class _OutboundMixin:
                         msg.content,
                         terminal=True,
                     )
-                else:
+                if not sent_as_stream:
+                    # An unfinished preview next to the fallback message would
+                    # show the reply twice, so withdraw it first.
                     await self._delete_live_preview(session_key)
-                self._clear_live_session(session_key)
+            self._clear_live_session(session_key)
             if msg.content.strip() and not sent_as_stream:
                 await self.send(msg.chat_id, msg.content)
             for image in msg.media:
