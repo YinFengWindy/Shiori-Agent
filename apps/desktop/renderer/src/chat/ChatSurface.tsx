@@ -28,6 +28,7 @@ import { shouldLoadOlderChatMessagesAfterSessionRestore } from "./chatMessagePag
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { ChatScrollToBottomButton } from "./ChatScrollToBottomButton";
 import { ChatSurfaceBackdrop } from "./ChatSurfaceBackdrop";
+import { useChatBackdropMotion } from "./useChatBackdropMotion";
 import { useRoleTasks } from "./useRoleTasks";
 import { useChatMessageContextMenu } from "./useChatMessageContextMenu";
 import { useChatMessageEnterKeys } from "./useChatMessageEnterKeys";
@@ -40,6 +41,7 @@ import {
 import { useRoleChannelCatalog } from "../roles/useRoleChannelCatalog";
 import { cx, sidebarContentMotionClass, sidebarTrackMotionClass } from "../shared/styles";
 import { useLatestRef } from "../shared/useLatestRef";
+import { useWindowActivity } from "../shared/useWindowActivity";
 import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
 
 type ChatSurfaceProps = {
@@ -137,9 +139,8 @@ export function ChatSurface({
   onLoadOlderMessages = async () => false,
   onToggleChatLatestImageSidebar,
 }: ChatSurfaceProps) {
-  const [visualsActive, setVisualsActive] = useState(() => (
-    typeof document === "undefined" ? true : !document.hidden
-  ));
+  const { visible: visualsActive, focused: windowFocused } = useWindowActivity();
+  const chatColumnRef = useRef<HTMLDivElement | null>(null);
   const conversationPanelRef = useRef<HTMLElement | null>(null);
   const conversationListRef = useRef<HTMLDivElement | null>(null);
   const previousMessageCountRef = useRef(0);
@@ -233,30 +234,6 @@ export function ChatSurface({
   });
 
   useEffect(() => {
-    if (typeof document === "undefined") {
-      return undefined;
-    }
-
-    const updateVisualsActive = () => {
-      setVisualsActive((current) => {
-        const next = !document.hidden;
-        return current === next ? current : next;
-      });
-    };
-
-    updateVisualsActive();
-    document.addEventListener("visibilitychange", updateVisualsActive);
-    window.addEventListener("focus", updateVisualsActive);
-    window.addEventListener("blur", updateVisualsActive);
-
-    return () => {
-      document.removeEventListener("visibilitychange", updateVisualsActive);
-      window.removeEventListener("focus", updateVisualsActive);
-      window.removeEventListener("blur", updateVisualsActive);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!chatLatestImageSidebarCollapsed) {
       setChatLatestImageSidebarMounted(true);
       return undefined;
@@ -334,6 +311,12 @@ export function ChatSurface({
 
   const renderHeavyVisuals = visualsActive && windowVisible;
   const hasIllustration = Boolean(visibleIllustrationUrl) && renderHeavyVisuals;
+  const backdropMotion = useChatBackdropMotion({
+    surfaceRef: chatColumnRef,
+    foregroundRef: conversationPanelRef,
+    hasBackdrop: hasIllustration,
+    windowActive: windowFocused,
+  });
   const showScrollToBottom = scrollState.isScrollable && !scrollState.isAtBottom;
   const hasChatImageHistory = chatLatestImageSidebarCount > 0;
   const canGoToPreviousChatImage = chatLatestImagePosition > 1;
@@ -425,8 +408,16 @@ export function ChatSurface({
           }}
         />
       ) : null}
-      <div className="relative grid h-full min-h-0 grid-rows-chat overflow-hidden">
-      {hasIllustration ? <ChatSurfaceBackdrop url={visibleIllustrationUrl} /> : null}
+      <div ref={chatColumnRef} className="relative grid h-full min-h-0 grid-rows-chat overflow-hidden">
+      {hasIllustration ? (
+        <ChatSurfaceBackdrop
+          url={visibleIllustrationUrl}
+          resetKey={activeRoleId}
+          parallaxRef={backdropMotion.parallaxRef}
+          motion={backdropMotion.motion}
+          paused={backdropMotion.paused}
+        />
+      ) : null}
       <ChatHeader
         activeRole={activeRole}
         detailRole={detailRole}
