@@ -19,7 +19,11 @@ import { useOnboardingScene } from "./useOnboardingScene";
  * reach it, and her dialogue box along the bottom. Clicking the scene, Enter
  * or Space advances her lines; the card itself never advances them.
  */
-export function OnboardingStage({ controller }: { controller: ReturnType<typeof useOnboardingController> }) {
+export function OnboardingStage({ controller, paused }: {
+  controller: ReturnType<typeof useOnboardingController>;
+  /** Covered by the settings detour: typing and keys stop, state is kept. */
+  paused: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   const { progress, data, error } = controller;
   const step = progress?.step;
@@ -27,16 +31,16 @@ export function OnboardingStage({ controller }: { controller: ReturnType<typeof 
   const roles = data?.roles ?? [];
   const [selectedRoleId, setSelectedRoleId] = useState(() => window.localStorage.getItem("miraDesktop.activeRoleId") ?? "");
   const role = roles.find((item) => item.id === selectedRoleId) ?? roles[0];
-  const director = useOnboardingScene({ scene, roleName: role?.name ?? "", onSkip: controller.skip });
+  const director = useOnboardingScene({ scene, roleName: role?.name ?? "", paused, onSkip: controller.skip });
   const { dialogue } = director;
   const line = dialogue.line;
   const expression = line?.expression ?? "neutral";
-  useAdvKeyboard(line !== null, director.advance);
+  useAdvKeyboard(!paused && line !== null, director.advance);
   // The error card is the guide's offline banner: toasts that only restate it are dropped.
   useBridgeOfflineFeedbackFilter(scene === "offline", error);
   const locked = busy || controller.entering || director.leaving;
   return (
-    <main className="onboarding-stage relative min-h-0 flex-1">
+    <main className="onboarding-stage relative min-h-0 flex-1" inert={paused} aria-hidden={paused || undefined}>
       <OnboardingMascot expression={expression} cue={dialogue.serial} />
       <button type="button" aria-label="继续对话" tabIndex={-1} onClick={director.advance}
         className="absolute inset-0 z-[2] h-full w-full cursor-default bg-transparent" />

@@ -78,7 +78,13 @@ try {
   await says(page, "后台还没醒过来");
   assert.equal(await page.getByRole("button", { name: "保存并继续" }).count(), 0);
   await page.getByRole("button", { name: "模型注册设置" }).click();
+  // The bridge recovers during the settings detour; coming back resumes at the
+  // model step's own line instead of replaying the opening greeting.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("qa:bridge", { detail: { offline: false } })));
   await page.getByRole("button", { name: "返回引导" }).click();
+  await says(page, "首先给 Shiori 接上一个大模型");
+  assert.equal(await dialogue(page).filter({ hasText: "我是吟风" }).count(), 0);
+  await page.getByRole("heading", { name: "注册模型", exact: true }).waitFor();
   await state(page, { offline: false, failSave: true });
   await reveal(page, "注册模型");
   await page.getByRole("textbox", { name: "模型", exact: true }).fill("qa-model");

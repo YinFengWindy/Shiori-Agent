@@ -11,8 +11,8 @@ const LEAVE_DWELL_MS = 1200;
  * changes, raises the form once those lines reach their last one, answers
  * form actions, and plays the skip line before dismissing.
  */
-export function useOnboardingScene({ scene, roleName, onSkip }: { scene: OnboardingScene; roleName: string; onSkip: () => void }) {
-  const dialogue = useOnboardingDialogue();
+export function useOnboardingScene({ scene, roleName, paused, onSkip }: { scene: OnboardingScene; roleName: string; paused: boolean; onSkip: () => void }) {
+  const dialogue = useOnboardingDialogue(paused);
   const { say } = dialogue;
   const [revealedScene, setRevealedScene] = useState<OnboardingScene | null>(null);
   const [leaving, setLeaving] = useState(false);

@@ -16,8 +16,8 @@ import type { MascotLine } from "./onboardingScript";
 /** Typewriter speed: the site's 「普通」 text speed. */
 const MS_PER_CHAR = 45;
 
-/** React driver for the guide's dialogue: a frame loop types the current line. */
-export function useOnboardingDialogue() {
+/** React driver for the guide's dialogue: a frame loop types the current line unless paused. */
+export function useOnboardingDialogue(paused: boolean) {
   const reducedMotion = usePrefersReducedMotion();
   const timing = useMemo(() => ({ msPerChar: MS_PER_CHAR, reducedMotion }), [reducedMotion]);
   const [state, dispatch] = useReducer(
@@ -26,7 +26,7 @@ export function useOnboardingDialogue() {
   );
   const line = currentDialogueLine(state);
   const complete = isDialogueLineComplete(state);
-  useFrameTicker(line !== null && !complete, (elapsedMs) => dispatch({ type: "tick", elapsedMs }));
+  useFrameTicker(!paused && line !== null && !complete, (elapsedMs) => dispatch({ type: "tick", elapsedMs }));
   const actions = useMemo(() => ({
     say: (scene: OnboardingDialogueState["scene"], lines: readonly MascotLine[]) => dispatch({ type: "say", scene, lines }),
     click: () => dispatch({ type: "click" }),
