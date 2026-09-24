@@ -5,7 +5,6 @@ import {
   Chats,
   GearSix,
   MagnifyingGlass,
-  PaintBrushBroad,
   Users,
   type Icon,
 } from "@phosphor-icons/react";
@@ -118,7 +117,5 @@ export const ChatsGlyph = withMotif(Chats, navMotifs.heart(104, 94, 3.1), "beat"
 export const RolesGlyph = withMotif(Users, navMotifs.ribbon(84, 58, 5.2), "wiggle", "RolesGlyph");
 /** 设置: a sakura in the gear hole. */
 export const SettingsGlyph = withMotif(GearSix, navMotifs.sakura(128, 128, 27), "spin", "SettingsGlyph");
-/** 生图 (novelai plugin): a sparkle in the bristles. */
-export const ImageStudioGlyph = withMotif(PaintBrushBroad, navMotifs.sparkle(112, 74, 26), "twinkle", "ImageStudioGlyph");
 /** 故事 (story plugin): a bookmark on the left page. */
 export const StoryGlyph = withMotif(BookOpenText, navMotifs.bookmark(52, 36, 30, 96), "flutter", "StoryGlyph");

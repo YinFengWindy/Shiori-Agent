@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MagnifyingGlass } from "@phosphor-icons/react";
-import { ChatsGlyph, ImageStudioGlyph, RolesGlyph, SearchGlyph, SettingsGlyph, StoryGlyph } from "./navGlyphs.js";
+import { ChatsGlyph, RolesGlyph, SearchGlyph, SettingsGlyph, StoryGlyph } from "./navGlyphs.js";
 
 const plainSearchBody = renderToStaticMarkup(<MagnifyingGlass size={256} weight="regular" />);
 
@@ -31,7 +31,6 @@ describe("nav glyphs", () => {
       [ChatsGlyph, "beat"],
       [RolesGlyph, "wiggle"],
       [SettingsGlyph, "spin"],
-      [ImageStudioGlyph, "twinkle"],
       [StoryGlyph, "flutter"],
     ] as const;
     for (const [Glyph, motion] of motions) {

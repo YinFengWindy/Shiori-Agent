@@ -215,11 +215,10 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | 消息 | Chats | 后面气泡里的心 | 心跳 |
 | 角色 | Users | 前面人头上的蝴蝶结 | 左右摆动 ±12° |
 | 设置 | GearSix | 齿轮孔里的五瓣樱花 | 转 72° |
-| 生图（novelai 插件） | PaintBrushBroad | 刷毛里的星芒 | 星芒闪烁 |
 | 故事（story 插件） | BookOpenText | 左页的飘带书签 | 书签飘动 |
 
 插件的导航图标契约仍是 `React.ComponentType<{ className?: string }>`，可以直接用上面导出的 glyph，
-或用 `withMotif(Phosphor 图标, 小元素, 动画, 组件名)` 组合自己的。
+或用 `withMotif(Phosphor 图标, 小元素, 动画, 组件名)` 组合自己的。第三方服务有官方标识的插件（如 NovelAI 生图）保留其官方图标，不套品牌小元素。
 
 新增品牌母题时按 `shared/ui/icons/SPEC.md`：`viewBox="0 0 24 24"`、活动区 20×20、
 线性为主（`fill="none"` + `stroke="currentColor"` + `strokeWidth={1.7}` + 圆头）、
