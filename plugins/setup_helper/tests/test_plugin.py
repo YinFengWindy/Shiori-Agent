@@ -65,7 +65,7 @@ async def test_unrelated_command_is_ignored() -> None:
 async def test_setup_contributes_before_turn_module_and_bot_command_via_kernel(
     tmp_path: Path,
 ) -> None:
-    """setup(ctx) 必须与旧 SetupHelper 的 before_turn_modules/telegram_bot_commands 等价。
+    """setup(ctx) 必须与旧 SetupHelper 的 before_turn_modules/bot_commands 等价。
 
     用真实 PluginKernel 装配真实插件目录来验证，而不是自造 fake capability——
     fake 与真实 capability 契约脱钩，capability 改坏也不会让测试变红（#182 评审）。
@@ -79,11 +79,9 @@ async def test_setup_contributes_before_turn_module_and_bot_command_via_kernel(
     assert [type(m).__name__ for m in kernel.before_turn_modules] == [
         "ChatIdCommandModule"
     ]
-    assert kernel.telegram_bot_commands == [
-        ("chatid", "查看我的 chat_id（配置 proactive 用）")
-    ]
+    assert kernel.bot_commands == [("chatid", "查看我的 chat_id（配置 proactive 用）")]
 
     # 卸载后贡献必须整体撤回，证明 phase 槽位与 bot 命令都真正挂在插件作用域上
     _ = await kernel.unload("setup_helper")
     assert kernel.before_turn_modules == []
-    assert kernel.telegram_bot_commands == []
+    assert kernel.bot_commands == []

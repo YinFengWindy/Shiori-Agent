@@ -1,8 +1,8 @@
 """channels.list：渲染端的渠道发现与状态（#363）。
 
 渠道来源有两类，按固定顺序列出：宿主自有的 ``desktop``、各插件 manifest 的
-静态 ``channels`` 声明（Telegram、QQ 也已迁为插件，#363 T4/T5）。静态声明让插件停用、未信任或未填凭据时也能列出渠道；实际连接状态来自
-当前运行代的 ``ChannelHost.snapshot()``。
+静态 ``channels`` 声明（所有外部渠道都由插件提供）。静态声明让插件停用、未信任
+或未填凭据时也能列出渠道；实际连接状态来自当前运行代的 ``ChannelHost.snapshot()``。
 
 ``state`` 取值：
 

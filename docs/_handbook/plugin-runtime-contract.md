@@ -68,6 +68,22 @@ wildcard, comma, OR and hyphen ranges are deliberately unsupported and rejected.
 Build metadata does not affect precedence. Prerelease hosts require a comparator
 mentioning a prerelease of that same major/minor/patch tuple.
 
+## Runtime API version history
+
+Each minor version only adds opt-in surface; a package declares the lowest
+version whose additions it uses.
+
+| Version | Adds | Introduced by |
+| --- | --- | --- |
+| `2.0.0` | package contract v1 and the v2 `setup(ctx)` protocol | #265 |
+| `2.1.0` | renderer communication (`client.events`, `client.dependency`, `client.background`) | #218; first released in v0.3.0 |
+| `2.2.0` | static manifest `channels` declarations and `channels.list` | #363 T1 |
+| `2.3.0` | optional channel hooks, including `uses_bot_commands`, and `register_channel(..., description=)` | #363 T2 (hooks) and T4 (`uses_bot_commands`) |
+
+2.2 and 2.3 first ship together in the release that turns every external
+channel into a plugin (#363): no released host advertises 2.2 alone, and
+`uses_bot_commands` joined 2.3 before any host advertising 2.3 was released.
+
 ## Runtime API 2.1 communication
 
 API 2.1 adds injected renderer `client.events.on(localName, handler)`,
@@ -127,10 +143,10 @@ Packages using `channels` must require `runtime_api: ">=2.2.0 <3.0.0"`; older
 hosts reject the unknown top-level key.
 
 `plugins.list` rows carry the manifest's `capabilities` and `channels`. The
-read-only bridge method `channels.list` returns `{channels: [...]}`: `desktop`
-first, then the channels still built into the host, then every declared plugin
-channel. Each row has the declaration fields plus `plugin_id` (`null` for host
-channels), `plugin_enabled`, `state`, `error` and `status`. `state` is `active`,
+read-only bridge method `channels.list` returns `{channels: [...]}`: the
+host-owned `desktop` first, then every declared plugin channel (every external
+channel is a plugin). Each row has the declaration fields plus `plugin_id` (`null`
+only for `desktop`), `plugin_enabled`, `state`, `error` and `status`. `state` is `active`,
 `not_configured` (enabled but nothing contributed, usually missing credentials),
 `failed` (construction, start or `status()` failed, or the plugin itself did not
 activate; `error` keeps the cause) or `plugin_disabled`. A channel may implement

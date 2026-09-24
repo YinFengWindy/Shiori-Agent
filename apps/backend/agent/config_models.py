@@ -10,11 +10,6 @@ from proactive_v2.config import ProactiveConfig, ProactiveStrategiesConfig
 
 
 @dataclass
-class ChannelsConfig:
-    """内置渠道已全部迁为插件（#363 T4/T5）；T7 删除这个空壳及 ``Config.channels``。"""
-
-
-@dataclass
 class MemoryEmbeddingConfig:
     model: str = "text-embedding-v3"
     api_key: str = ""
@@ -74,7 +69,6 @@ class Config:
     memory_consolidation_input_token_threshold: int = 75000
     base_url: str | None = None
     extra_body: dict = field(default_factory=dict)
-    channels: ChannelsConfig = field(default_factory=ChannelsConfig)
     proactive: ProactiveConfig = field(default_factory=ProactiveConfig)
     proactive_strategies: ProactiveStrategiesConfig = field(
         default_factory=ProactiveStrategiesConfig
@@ -130,7 +124,6 @@ class Config:
 
 
 __all__ = [
-    "ChannelsConfig",
     "Config",
     "MemoryConfig",
     "MemoryEmbeddingConfig",

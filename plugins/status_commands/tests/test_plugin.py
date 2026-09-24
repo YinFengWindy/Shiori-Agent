@@ -51,7 +51,7 @@ async def test_kernel_staging_excludes_package_virtual_environments(
         assert not (staged / "custom-python").exists()
         assert (source / ".venv" / "pyvenv.cfg").is_file()
         assert (source / "custom-python" / "pyvenv.cfg").is_file()
-        assert kernel.telegram_bot_commands == _COMMANDS
+        assert kernel.bot_commands == _COMMANDS
         assert "还没有完成过记忆整理" in await run_command(kernel, bus, "/memorystatus")
         cache_reply = await run_command(kernel, bus, "/kvcache")
         if plugin_id == "observe":
@@ -77,7 +77,7 @@ async def test_status_commands_stay_active_without_observe(
             "bot_commands",
             "dependencies",
         }
-        assert kernel.telegram_bot_commands == _COMMANDS
+        assert kernel.bot_commands == _COMMANDS
         assert "还没有完成过记忆整理" in await run_command(kernel, bus, "/memorystatus")
         assert (
             await run_command(kernel, bus, "/kvcache")
@@ -129,7 +129,7 @@ async def test_real_observe_writer_and_provider_reload_use_current_api(
         assert "80.0%" in reply and "真实回复" in reply
         assert await kernel.unload("observe") == []
         assert kernel.before_turn_modules == modules
-        assert kernel.telegram_bot_commands == _COMMANDS
+        assert kernel.bot_commands == _COMMANDS
         assert "KVCache 不可用" in await run_command(kernel, bus, "/kvcache")
         assert await kernel.load("observe")
         assert kernel._dependency_api("observe") is not first_api
@@ -147,11 +147,11 @@ async def test_repeated_status_enable_and_unload_have_no_duplicate_contributions
     async with kernel_factory() as (kernel, bus):
         for _ in range(3):
             assert await kernel.load("status_commands")
-            assert kernel.telegram_bot_commands == _COMMANDS
+            assert kernel.bot_commands == _COMMANDS
             assert len(kernel.before_turn_modules) == 2
             assert "KVCache 不可用" in await run_command(kernel, bus, "/kvcache")
             assert await kernel.unload("status_commands") == []
-            assert kernel.telegram_bot_commands == []
+            assert kernel.bot_commands == []
             assert kernel.before_turn_modules == []
             assert await kernel.load("status_commands")
 
@@ -172,8 +172,8 @@ async def test_partial_setup_failure_rolls_back_modules_and_commands(
         async with kernel_factory() as (kernel, _):
             assert kernel.states()[0]["state"] == "FAILED"
             assert kernel.before_turn_modules == []
-            assert kernel.telegram_bot_commands == []
+            assert kernel.bot_commands == []
             patch.undo()
             assert await kernel.load("status_commands")
-            assert kernel.telegram_bot_commands == _COMMANDS
+            assert kernel.bot_commands == _COMMANDS
             assert len(kernel.before_turn_modules) == 2

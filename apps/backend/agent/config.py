@@ -15,7 +15,6 @@ from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from agent.config_models import (
-    ChannelsConfig,
     Config,
     MemoryConfig,
     MemoryEmbeddingConfig,
@@ -93,7 +92,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
     agent_context = _as_dict(agent_cfg.get("context"))
     agent_tools = _as_dict(agent_cfg.get("tools"))
     agent_maintenance = _as_dict(agent_cfg.get("maintenance"))
-    channels = _load_channels_config(data)
     proactive = _load_proactive_config(data)
     from agent.proactive_preferences import load_proactive_preferences
 
@@ -131,7 +129,6 @@ def load_config_data(data: dict[str, Any]) -> Config:
             if primary_registration
             else {}
         ),
-        channels=channels,
         proactive=proactive,
         proactive_strategies=proactive_strategies,
         memory_optimizer_enabled=bool(
@@ -238,11 +235,6 @@ def _validate_model_registrations(registrations: list[ModelRegistration]) -> Non
 
 def _effort_extra_body(effort: str) -> dict[str, Any]:
     return {} if effort == "none" else {"reasoning_effort": effort}
-
-
-def _load_channels_config(data: dict) -> ChannelsConfig:
-    # [channels.telegram|qq] 已迁为插件配置，旧表由迁移/拒绝逻辑处理。
-    return ChannelsConfig()
 
 
 def _load_proactive_config(data: dict) -> ProactiveConfig:
@@ -441,7 +433,6 @@ def _load_config_data(path: str | Path) -> dict:
 
 
 __all__ = [
-    "ChannelsConfig",
     "Config",
     "MemoryConfig",
     "MemoryEmbeddingConfig",

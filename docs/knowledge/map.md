@@ -30,7 +30,7 @@ related:
 | Drift | `apps/backend/agent/core/drift_turn.py`、`apps/backend/proactive_v2/drift_state.py` | 特殊回合、工具、主动状态 |
 | NovelAI | `apps/backend/core/integrations/novelai/` | 手动图片生成、自动 CG、桌面图片面板 |
 | 自动 CG | `plugins/novelai/` | 场景判断、生成、消息推送、权威角色会话 |
-| 渠道 | `apps/backend/infra/channels/`、`apps/backend/core/channels/hub.py`、`plugins/qqbot/`、`plugins/feishu/` | 消息总线、会话定位、媒体发送 |
+| 渠道 | `apps/backend/infra/channels/`、`apps/backend/bootstrap/channels.py`、`apps/backend/core/channels/hub.py`；外部渠道全部是插件：`plugins/telegram/`、`plugins/qq/`、`plugins/qqbot/`、`plugins/feishu/` | 消息总线、会话定位、媒体发送、角色绑定 |
 | Agent 回合 | `apps/backend/agent/core/`、`apps/backend/agent/turns/`、`apps/backend/agent/lifecycle/` | 上下文、推理、工具、输出、生命周期事件 |
 | 工具、插件、MCP | `apps/backend/agent/tools/`、`apps/backend/agent/plugins/`、`apps/backend/agent/mcp/` | ToolRegistry、ToolExecutor、远端工具连接 |
 | 调度任务 | `apps/backend/agent/scheduler.py`、`apps/backend/agent/tools/schedule.py`、`apps/backend/desktop_bridge/schedule_role_task_service.py` | 主动触发、角色任务、桌面展示 |

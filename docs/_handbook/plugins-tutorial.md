@@ -101,6 +101,8 @@ async def setup(ctx):
 
 ## 渠道声明
 
+所有外部聊天渠道都是插件，宿主只拥有 `desktop`。从零写一个渠道插件（配置表单、渠道契约、入站路由、流式、测试）的完整步骤见 [写一个渠道插件](channel-plugins.md)；本节只列声明与钩子的规则。
+
 贡献外部聊天渠道的插件要在 manifest 里静态声明渠道，并同时声明 `channels` 能力（Runtime API 2.2）：
 
 ```yaml

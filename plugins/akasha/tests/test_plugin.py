@@ -1408,7 +1408,7 @@ def _load_akasha_kernel(*, memory_engine: object, workspace: Path) -> Any:
         )
         asyncio.run(kernel.load_all())
         assert kernel.loaded_count == 1
-        return kernel.telegram_bot_commands, kernel.before_turn_modules
+        return kernel.bot_commands, kernel.before_turn_modules
 
 
 def test_akashalast_command_only_registers_for_akasha_engine(tmp_path: Path) -> None:

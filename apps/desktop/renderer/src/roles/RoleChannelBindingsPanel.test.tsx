@@ -82,7 +82,7 @@ describe("RoleChannelBindingsPanel", () => {
 
   it("removes a disabled plugin's binding and adds new bindings on an enabled channel in the saved format", async () => {
     let latest: RoleFormState | undefined;
-    const channels = [desktop, channel("qqbot", "plugin_disabled", qqbotDeclaration), channel("telegram", "active", { label: "Telegram", pluginId: null })];
+    const channels = [desktop, channel("qqbot", "plugin_disabled", qqbotDeclaration), channel("telegram", "active", { label: "Telegram" })];
     function Harness() {
       const [form, setForm] = useState<RoleFormState>({ ...createEmptyRoleForm(), channelBindings: [qqbotBinding], proactiveTargetChannel: "qqbot", proactiveTargetChatId: "c2c:ABC" });
       latest = form;

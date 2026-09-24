@@ -22,7 +22,7 @@ const desktop = channel("desktop", "active", { label: "桌面端", pluginId: nul
 
 describe("roleChannelCatalog", () => {
   it("offers enabled channels with unusable ones marked in the list only, hides disabled plugins and keeps desktop last", () => {
-    const catalog = [desktop, channel("telegram", "active", { pluginId: null, label: "Telegram" }), channel("qqbot", "not_configured", { label: "QQBot" }), channel("feishu", "failed", { label: "飞书" }), channel("lark", "plugin_disabled")];
+    const catalog = [desktop, channel("telegram", "active", { label: "Telegram" }), channel("qqbot", "not_configured", { label: "QQBot" }), channel("feishu", "failed", { label: "飞书" }), channel("lark", "plugin_disabled")];
     assert.deepEqual(roleBindingChannelOptions(catalog, "telegram"), [
       { value: "telegram", label: "Telegram", triggerLabel: "Telegram" },
       { value: "qqbot", label: "QQBot（未配置）", triggerLabel: "QQBot" },

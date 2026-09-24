@@ -126,7 +126,7 @@ async def test_scoped_setup_unload_and_restart_remove_and_restore_single_contrib
             assert [module.slot for module in kernel.before_turn_modules] == [
                 "plugin_undo.undo"
             ]
-            assert kernel.telegram_bot_commands == [("undo", "撤销上一轮对话")]
+            assert kernel.bot_commands == [("undo", "撤销上一轮对话")]
             # Exercise the actual dynamically loaded v2 contribution as well.
             frame = SimpleNamespace(
                 input=SimpleNamespace(
@@ -144,7 +144,7 @@ async def test_scoped_setup_unload_and_restart_remove_and_restore_single_contrib
             assert frame.slots["session:ctx"].abort_reply == "没有可撤销的上一轮对话。"
             assert await kernel.unload("plugin_undo") == []
             assert kernel.before_turn_modules == []
-            assert kernel.telegram_bot_commands == []
+            assert kernel.bot_commands == []
             assert await kernel.load("plugin_undo") is True
     finally:
         await kernel.unload("plugin_undo")

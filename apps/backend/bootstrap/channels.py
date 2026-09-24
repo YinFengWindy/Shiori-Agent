@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 
-from agent.config_models import Config
 from agent.looping.interrupt import InterruptController
 from agent.tools.message_push import MessagePushTool
 from bootstrap.channel_host import ChannelHost
@@ -19,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 async def start_channels(
-    config: Config,
     *,
     bus: MessageBus,
     session_manager: SessionManager,
@@ -31,7 +29,6 @@ async def start_channels(
     plugin_channels: list[Channel] | None = None,
     enable_message_channels: bool = True,
     previous_host: ChannelHost | None = None,
-    strict: bool = False,
     channel_directory: ChannelDirectory | None = None,
 ) -> ChannelHost:
     """Constructs a traffic-free host, optionally reusing unchanged connections."""

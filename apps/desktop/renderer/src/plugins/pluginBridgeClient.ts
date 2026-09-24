@@ -56,7 +56,7 @@ export type ChannelConnectionStatus = {
 
 /** One row of `channels.list`: a declaration joined with its provider and runtime state. */
 export type ChannelSummary = PluginChannelDeclaration & {
-  /** Null for host-owned channels (`desktop`, and builtin Telegram/QQ until they become plugins). */
+  /** Null only for the host-owned `desktop` channel; every external channel comes from a plugin. */
   pluginId: string | null;
   pluginEnabled: boolean;
   state: ChannelState;

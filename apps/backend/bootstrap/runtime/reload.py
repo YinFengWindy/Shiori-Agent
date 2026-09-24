@@ -69,7 +69,6 @@ class RuntimeReloadMixin:
             self._prepare_background(candidate)
             plugins = core.plugin_manager
             candidate.channel_host = await start_channels(
-                snapshot,
                 bus=self.bus,
                 session_manager=self.session_manager,
                 push_tool=self.push_tool,
@@ -80,7 +79,6 @@ class RuntimeReloadMixin:
                 plugin_channels=plugins.channels if plugins else None,
                 enable_message_channels=self.features.enable_message_channels,
                 previous_host=self.channel_host,
-                strict=True,
                 channel_directory=core.channel_directory,
             )
             candidate.channel_names = frozenset(

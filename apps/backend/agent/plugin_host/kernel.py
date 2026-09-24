@@ -770,11 +770,6 @@ class PluginKernel:
             for command in handle.contributions.bot_commands
         ]
 
-    @property
-    def telegram_bot_commands(self) -> list[tuple[str, str]]:
-        """Read-only alias of ``bot_commands``; removed once channels are plugins."""
-        return self.bot_commands
-
 
 def _import_module(module_name: str, path: Path, loader: Loader | None = None) -> None:
     # 把入口文件当成包加载，允许插件内部相对 import；先入 sys.modules 再执行
