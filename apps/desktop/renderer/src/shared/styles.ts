@@ -28,16 +28,16 @@ export const textareaClass = cx(inputClass, "min-h-24 resize-y");
  * the same curve so rapid clicks retarget mid-flight instead of snapping. It
  * owns the element's whole transition list (colors, shadow, filter, opacity
  * and transform), so it replaces rather than sits beside other `transition*`
- * classes. Reduced motion keeps the color feedback and drops the scale.
+ * classes. The scale is motion-safe only; reduced motion keeps the color feedback.
  */
 const pressTransitionClass =
-  "transition-[color,background-color,border-color,box-shadow,filter,opacity,transform] duration-quick ease-out-soft motion-reduce:enabled:active:scale-100";
+  "transition-[color,background-color,border-color,box-shadow,filter,opacity,transform] duration-quick ease-out-soft";
 
 /** Press feedback for buttons and icon buttons larger than 30px. */
-export const pressableClass = cx(pressTransitionClass, "enabled:active:scale-97");
+export const pressableClass = cx(pressTransitionClass, "motion-safe:enabled:active:scale-97");
 
 /** Press feedback for compact icon buttons (30px and below), where 0.97 would not read. */
-export const compactPressableClass = cx(pressTransitionClass, "enabled:active:scale-96");
+export const compactPressableClass = cx(pressTransitionClass, "motion-safe:enabled:active:scale-96");
 
 /**
  * Sidebar open/close. The track animates its width (the only way to push the

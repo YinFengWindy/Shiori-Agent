@@ -77,7 +77,7 @@ export function RoleDetailPage({
       <div className="relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-5 pb-8 pt-6 sm:px-8">
         <div data-testid="role-detail-info-card">
           <div className="mb-6 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-line-soft pb-4">
-            <button className={cx(floatingActionClass, "hover:-translate-x-0.5")} data-testid="role-detail-back-button" type="button" onClick={onBackToList} aria-label="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>
+            <button className={cx(floatingActionClass, "motion-safe:hover:-translate-x-0.5")} data-testid="role-detail-back-button" type="button" onClick={onBackToList} aria-label="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>
             <RoleDetailTabs activeTab={activeTab} onChange={(tab) => { setTabSwitched(true); setActiveTab(tab); }} />
             <div className="flex items-center gap-2">
               <button className={floatingActionClass} type="button" onClick={onResetRoleForm} disabled={!roleFormDirty} aria-label="重置角色表单"><ResetIcon className="h-[18px] w-[18px] fill-current" /></button>
