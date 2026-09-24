@@ -60,8 +60,10 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
   }, [activeRoleId, bridgeReady]);
 
   // Opened on request (e.g. the "选择模型" action of a send that failed for
-  // lack of a model), straight onto the dialogue-model list.
+  // lack of a model), straight onto the dialogue-model list. The selection is
+  // re-read first: the failure means the cached one may already be stale.
   useEffect(() => subscribeChatModelMenuRequests(() => {
+    void loadSelection();
     setOpen(true);
     setSubmenu("dialogue");
     setHoveredModelId(null);
