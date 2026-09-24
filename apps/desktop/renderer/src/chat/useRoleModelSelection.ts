@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import type { RoleRecord } from "../shared/types";
 import { errorMessage, feedback } from "../shared/feedback/feedbackStore";
@@ -16,8 +16,12 @@ export type RoleModelSelectionChange = "dialogue" | "visual" | "dialogueEffort" 
  * Loads the model registrations and the active role's model/effort binding,
  * and writes changes back through `roles.update`. Failures surface as error
  * toasts; the menu keeps the last good selection.
+ *
+ * `revision` (the role's `updated_at`) re-reads the binding after the role was
+ * saved elsewhere, so a later change never writes back a stale runtime config.
+ * Only a role switch clears the shown selection; a revision reload keeps it.
  */
-export function useRoleModelSelection(activeRoleId: string, bridgeReady: boolean) {
+export function useRoleModelSelection(activeRoleId: string, bridgeReady: boolean, revision = "") {
   const [registrations, setRegistrations] = useState<ModelRegistrationFormData[]>([]);
   const [selection, setSelection] = useState<RoleModelSelection | null>(null);
 
@@ -41,13 +45,18 @@ export function useRoleModelSelection(activeRoleId: string, bridgeReady: boolean
     }
   }, [activeRoleId, bridgeReady]);
 
+  const shownRoleIdRef = useRef("");
   useEffect(() => {
-    setSelection(null);
+    if (shownRoleIdRef.current !== activeRoleId) {
+      shownRoleIdRef.current = activeRoleId;
+      setSelection(null);
+    }
     void reload();
-  }, [reload]);
+  }, [activeRoleId, reload, revision]);
 
-  const update = useCallback(async (kind: RoleModelSelectionChange, value: string) => {
-    if (!selection || !activeRoleId) return;
+  /** Applies one change; resolves true once the bridge accepted it. */
+  const update = useCallback(async (kind: RoleModelSelectionChange, value: string): Promise<boolean> => {
+    if (!selection || !activeRoleId) return false;
     const runtimeConfig = runtimeConfigForSelection(selection, kind, value);
     try {
       const response = await window.miraDesktop.invoke({
@@ -63,8 +72,10 @@ export function useRoleModelSelection(activeRoleId: string, bridgeReady: boolean
         visualEffort: String(runtimeConfig.visual_model_effort) as ModelEffort,
         runtimeConfig,
       });
+      return true;
     } catch (error) {
       feedback.error(`模型切换失败：${errorMessage(error)}`);
+      return false;
     }
   }, [activeRoleId, registrations, selection]);
 

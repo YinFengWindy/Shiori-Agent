@@ -131,13 +131,15 @@ type DesktopAppFrameProps = {
   onPreviewRoleCard: () => void;
   onCancelRoleCardImport: () => void;
   detailRoleId: string;
-  activeIllustration: string;
   previewAvatar: string | null;
-  chatBackgroundUrl: string;
   roleForm: RoleFormState;
   roleFormDirty: boolean;
   savingRole: boolean;
   onOpenAssetsPage: () => void;
+  /** Opens 设置 › 插件, on the plugin's own settings tab when given (role detail channel notices). */
+  onOpenPluginSettings: (pluginId: string | null) => void;
+  /** A role's model binding changed outside the draft (role detail 模型 section). */
+  onRoleModelChanged: () => void;
   onUpdateRoleForm: React.Dispatch<React.SetStateAction<RoleFormState>>;
   onResetRoleForm: () => void;
   onSaveRole: () => void;
@@ -261,13 +263,13 @@ export function DesktopAppFrame({
   onPreviewRoleCard,
   onCancelRoleCardImport,
   detailRoleId,
-  activeIllustration,
   previewAvatar,
-  chatBackgroundUrl,
   roleForm,
   roleFormDirty,
   savingRole,
   onOpenAssetsPage,
+  onOpenPluginSettings,
+  onRoleModelChanged,
   onUpdateRoleForm,
   onResetRoleForm,
   onSaveRole,
@@ -328,6 +330,8 @@ export function DesktopAppFrame({
     ? resolveVisibleNavPage(mainView.pageId)
     : undefined;
   const fullscreenPluginActive = activePluginNavPage?.presentation === "fullscreen";
+  // Shared by the role sidebar and the empty role grid: an import needs the bridge and no import/create in flight.
+  const canImportRoleCard = bridgeReady && !creating && roleCardImport.status === "idle";
   const navRailViews = buildNavRailViews({
     onBackToChat,
     onOpenRolesWorkspace,
@@ -418,7 +422,7 @@ export function DesktopAppFrame({
             onOpenRoleWorkspaceSection={onOpenRoleWorkspaceSection}
             roleWorkspaceRoleId={mainView.kind === "role-detail" || mainView.kind === "role-assets" ? mainView.roleId : ""}
             pendingRoleId={pendingRoleCardAction?.roleId ?? ""}
-            canImportRoleCard={bridgeReady && !creating && roleCardImport.status === "idle"}
+            canImportRoleCard={canImportRoleCard}
             onOpenRoleDetail={onOpenRoleManagementDetail}
             onImportRoleCard={onImportRoleCard}
             roles={roles}
@@ -496,10 +500,14 @@ export function DesktopAppFrame({
             <RoleManagementPage
               activeRoleId={activeRoleId}
               bridgeReady={bridgeReady}
+              canImportRoleCard={canImportRoleCard}
               pendingCardAction={pendingRoleCardAction}
               roles={roles}
               onOpenRoleDetail={onOpenRoleManagementDetail}
+              onGoToChat={onGoToRoleChat}
               onDeleteRole={onRequestDeleteRole}
+              onCreateRole={() => onOpenRoleWorkspaceSection("role-create")}
+              onImportRoleCard={onImportRoleCard}
             />
           ) : null}
           {mainView.kind === "role-create" ? (
@@ -520,16 +528,18 @@ export function DesktopAppFrame({
             <RoleDetailPage
               activeRole={detailRole}
               activeRoleId={detailRoleId}
-              activeIllustration={activeIllustration}
               bridgeReady={bridgeReady}
               previewAvatar={previewAvatar}
-              chatBackgroundUrl={chatBackgroundUrl}
+              currentMood={currentMood}
+              moodIllustrationUrl={moodIllustrationUrl}
               roleForm={roleForm}
               roleFormDirty={roleFormDirty}
               savingRole={savingRole}
               onBackToList={onBackToRoleList}
               onGoToChat={() => onGoToRoleChat(detailRoleId)}
               onOpenAssetsPage={onOpenAssetsPage}
+              onOpenPluginSettings={onOpenPluginSettings}
+              onRoleModelChanged={onRoleModelChanged}
               onUpdateRoleForm={onUpdateRoleForm}
               onResetRoleForm={onResetRoleForm}
               onSaveRole={onSaveRole}

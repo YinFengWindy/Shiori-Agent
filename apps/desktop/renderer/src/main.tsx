@@ -388,7 +388,6 @@ function App(): React.ReactElement {
     relationshipTags,
     lonelinessValue,
     visibleIllustrationUrl,
-    chatBackgroundUrl,
     activeSessionKey,
     isVisibleChatSending,
     isVisibleChatCancelling,
@@ -672,13 +671,13 @@ function App(): React.ReactElement {
       onPreviewRoleCard={() => void roleCreation.previewRoleCard()}
       onCancelRoleCardImport={() => void roleCreation.cancelRoleCardImport()}
       detailRoleId={detailRoleId}
-      activeIllustration={activeIllustration}
       previewAvatar={previewAvatar}
-      chatBackgroundUrl={chatBackgroundUrl}
       roleForm={roleForm}
       roleFormDirty={roleFormDirty}
       savingRole={savingRole}
       onOpenAssetsPage={() => void openRoleAssets(detailRoleId)}
+      onOpenPluginSettings={(pluginId) => guardLeave(() => openSettingsWorkspace("plugins", { subsectionId: pluginId ?? undefined }))}
+      onRoleModelChanged={() => void loadRolesFromBridge()}
       onUpdateRoleForm={updateRoleForm}
       onResetRoleForm={resetRoleForm}
       onSaveRole={() => void saveRole()}
