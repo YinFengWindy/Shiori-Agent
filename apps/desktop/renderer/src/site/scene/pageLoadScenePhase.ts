@@ -1,5 +1,4 @@
-import { scenePhaseAt } from "./timeOfDay";
-import type { ScenePhase } from "./timeOfDay";
+import { scenePhaseAt, type ScenePhase } from "../../shared/scene/timeOfDay";
 
 /**
  * The visitor's scene phase, read once when the site bundle loads: a visit

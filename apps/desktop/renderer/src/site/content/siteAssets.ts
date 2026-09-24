@@ -1,7 +1,4 @@
 import avatarSrc from "../assets/avatar.webp";
-import bgDay from "../assets/bg-day.webp";
-import bgDusk from "../assets/bg-dusk.webp";
-import bgNight from "../assets/bg-night.webp";
 import cg1 from "../assets/cg-1.webp";
 import cg2 from "../assets/cg-2.webp";
 import cg3 from "../assets/cg-3.webp";
@@ -21,7 +18,6 @@ import sprite3 from "../assets/sprite-3.webp";
 import topic1 from "../assets/topic-1.webp";
 import topic2 from "../assets/topic-2.webp";
 import topic3 from "../assets/topic-3.webp";
-import type { ScenePhase } from "../scene/timeOfDay";
 import type { AdvEventCgKey, AdvSpriteKey } from "./advScript";
 
 /** Shiori title logo, relative to the built site's output root (see vite.site.config.ts). */
@@ -44,18 +40,6 @@ export interface SiteImage {
  * on disk; that test also owns the WebP/size/metadata hygiene checks for
  * every file in `../assets/`.
  */
-
-/**
- * Scene backgrounds behind the title screen, the ADV and the 人物 / CG 鉴赏
- * screens, one per time-of-day phase (see `scene/timeOfDay.ts`): a sakura
- * street by day, a rooftop at dusk, an arched-window bedroom under the moon
- * at night. Purely decorative (rendered with an empty alt), so no alt text.
- */
-export const sceneBackgrounds: Record<ScenePhase, string> = {
-  day: bgDay,
-  dusk: bgDusk,
-  night: bgNight,
-};
 
 /**
  * 吟风's cut-out standing sprites (transparent WebP), shown over the scene

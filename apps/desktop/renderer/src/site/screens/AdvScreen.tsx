@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { useAdvDialogue } from "../adv/useAdvDialogue";
-import { useAdvKeyboard } from "../adv/useAdvKeyboard";
+import { useAdvKeyboard } from "../../shared/adv/useAdvKeyboard";
 import { AdvEventCg, AdvSprite } from "../components/adv/AdvArtwork";
 import { AdvBacklog } from "../components/adv/AdvBacklog";
 import { AdvChapterMark } from "../components/adv/AdvChapterMark";
 import { AdvChoiceList } from "../components/adv/AdvChoiceList";
 import { AdvControls } from "../components/adv/AdvControls";
-import { AdvDialogueBox } from "../components/adv/AdvDialogueBox";
-import { SiteScene } from "../components/SiteScene";
+import { AdvDialogueBox } from "../../shared/adv/AdvDialogueBox";
+import { SceneBackdrop } from "../../shared/scene/SceneBackdrop";
 import { ADV_SCRIPT } from "../content/advScript";
 import { SITE_ADV_COPY } from "../content/siteCopy";
-import { usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
+import { usePrefersReducedMotion } from "../../shared/usePrefersReducedMotion";
+import { avatarImage } from "../content/siteAssets";
+import { pageLoadScenePhase } from "../scene/pageLoadScenePhase";
 import { TEXT_SPEED_MS_PER_CHAR } from "../prefs/sitePrefs";
 import { useSitePrefs } from "../prefs/useSitePrefs";
 import { useLineAdvanceSfx } from "../sound/useSound";
@@ -50,7 +52,7 @@ export function AdvScreen({ settingsOpen, onOpenSettings, onExit }: AdvScreenPro
   return (
     <div className="site-screen site-adv-screen relative h-dvh min-h-0 overflow-hidden">
       <h1 className="sr-only">{SITE_ADV_COPY.screenLabel}</h1>
-      <SiteScene />
+      <SceneBackdrop phase={pageLoadScenePhase} />
       <AdvSprite art={adv.art} />
       <AdvChapterMark topicLabel={adv.topicLabel} />
       {speaking ? (
@@ -64,7 +66,9 @@ export function AdvScreen({ settingsOpen, onOpenSettings, onExit }: AdvScreenPro
           </div>
         ) : null}
         <AdvDialogueBox
+          className="site-adv-box"
           speaker={ADV_SCRIPT.speaker}
+          avatarSrc={avatarImage.src}
           text={adv.line ?? adv.prompt}
           shownChars={speaking ? adv.shownChars : adv.prompt.length}
           waiting={speaking && adv.complete}

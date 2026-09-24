@@ -14,7 +14,7 @@ export async function loadOnboardingData(api: Pick<DesktopApi, "readSettings" | 
 
 /** Applies a registration through the same settings transaction used by the catalog. */
 export async function registerOnboardingModel(api: Pick<DesktopApi, "readSettings" | "saveSettings">, registration: ModelRegistrationFormData) {
-  if (!registration.provider.trim() || !registration.model.trim()) throw new Error("Provider 和模型不能为空。");
+  if (!registration.provider.trim() || !registration.model.trim()) throw new Error("服务商和模型不能为空。");
   const snapshot = await api.readSettings();
   const registrations = snapshot.formData.models.registrations;
   const result = await saveSettingsPageData(api, {

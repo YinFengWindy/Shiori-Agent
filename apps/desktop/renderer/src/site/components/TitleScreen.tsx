@@ -2,7 +2,8 @@ import { SITE_LOGO_URL, titleSprites } from "../content/siteAssets";
 import type { SiteScreenId } from "../content/siteCopy";
 import { useTitleArtSelection } from "../titleArt/useTitleArtSelection";
 import { SiteDecorations } from "./SiteDecorations";
-import { SiteScene } from "./SiteScene";
+import { SceneBackdrop } from "../../shared/scene/SceneBackdrop";
+import { pageLoadScenePhase } from "../scene/pageLoadScenePhase";
 import { TitleArtwork } from "./TitleArtwork";
 import { TitleArtworkDots } from "./TitleArtworkDots";
 import { TitleMenu } from "./TitleMenu";
@@ -28,7 +29,7 @@ export function TitleScreen({ onOpenScreen, onOpenSettings }: TitleScreenProps) 
 
   return (
     <div className="site-screen site-title-screen relative h-dvh min-h-0 overflow-hidden">
-      <SiteScene />
+      <SceneBackdrop phase={pageLoadScenePhase} />
       <TitleArtwork index={index} onAdvance={advance} />
       <SiteDecorations />
       <div className="site-title-content pointer-events-none relative z-[1] flex h-full min-h-0 flex-col justify-end sm:justify-center">

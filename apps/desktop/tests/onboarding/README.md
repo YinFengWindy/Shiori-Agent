@@ -15,9 +15,15 @@ pnpm desktop:test:onboarding:electron
 
 The browser test uses a persistent fake bridge and Edge on Windows. Set
 `SHIORI_QA_BROWSER` to another Chromium executable or `SHIORI_QA_URL` to another
-renderer URL when needed. It checks failed reads/writes, retry behavior, temporary
-dismissal, restart recovery, avatar selection/removal, completion, existing-user
-exemption, and desktop/mobile screenshots.
+renderer URL when needed. The guide is 吟风's ADV: the tests click through her
+lines (the transparent 「继续对话」 surface) until each step's card appears. It
+checks the greeting, the step indicator, 「跳过」 and her answer, failed
+reads/writes, connection test results and her reactions, retry behavior,
+temporary dismissal, restart recovery, avatar selection/removal, completion,
+existing-user exemption, and that every step's primary action and the dialogue
+box fit at 1280x800, 960x640, 1920x1080 and the 520x680 minimum window. The fake
+bridge answers only the methods it implements with real payload shapes; any
+other method is recorded and fails the run.
 
 The Electron test uses the real preload, IPC, project `.venv` Python bridge,
 settings transactions, role storage, and local asset transport. Only the native
