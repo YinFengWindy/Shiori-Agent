@@ -99,8 +99,8 @@ export function SettingsNumberInput({
         aria-label={ariaLabel}
         className={cx(settingsInputClass, "tabular-nums", unit && "pr-14")}
         inputMode="decimal"
-        aria-valuemin={min}
-        aria-valuemax={max}
+        // A textbox cannot carry aria-value*; the accepted range is a hover hint and the backend validates.
+        title={min !== undefined || max !== undefined ? `${min ?? "…"} – ${max ?? "…"}` : undefined}
         value={String(value)}
         onChange={(event) => onChange(parseSettingsNumber(event.target.value, value))}
       />
