@@ -66,7 +66,7 @@ function ChannelBindingNotice({ availability }: { availability: RoleBindingAvail
 /** Marks a channel whose binding cannot deliver right now. */
 function ChannelStateBadge({ availability }: { availability: RoleBindingAvailability }) {
   if (availability.kind !== "editable") {
-    return <span className={cx(stateBadgeClass, "bg-surface-hover text-ink-muted")}>{availability.kind === "missing" ? "未安装" : "已停用"}</span>;
+    return <span className={cx(stateBadgeClass, "border border-line bg-surface text-ink-muted")}>{availability.kind === "missing" ? "未安装" : "已停用"}</span>;
   }
   if (availability.channel?.state === "not_configured") return <span className={cx(stateBadgeClass, "bg-warning-soft text-warning-text")}>未配置</span>;
   if (availability.channel?.state === "failed") return <span className={cx(stateBadgeClass, "bg-danger-soft text-danger-text")}>异常</span>;
@@ -90,7 +90,7 @@ function ChannelBindingRow({ activeRoleId, binding, channels, index, bindingsCou
     onUpdateBindings((current) => current.map((item, itemIndex) => itemIndex === index ? update(item) : item));
 
   return (
-    <div className={cx("grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 rounded-lg p-4", readOnly ? "border border-dashed border-line bg-surface-soft" : "bg-lavender-soft/60")} data-testid="role-channel-binding" data-availability={availability.kind}>
+    <div className={cx("grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 rounded-lg p-4", readOnly ? "border border-dashed border-line bg-surface-soft" : "bg-lavender-soft")} data-testid="role-channel-binding" data-availability={availability.kind}>
       <span className="grid h-8 w-8 place-items-center rounded-md bg-white/75 text-xs font-medium text-lavender-text" aria-label={`投递顺序 ${index + 1}`}>{index + 1}</span>
       <div className="grid min-w-0 gap-3">
         <div className="grid gap-3 sm:grid-cols-[168px_minmax(0,1fr)]">
