@@ -855,3 +855,46 @@ async def test_session_image_history_returns_media_only_projection(tmp_path) -> 
             "media": ["D:\\images\\old.png"],
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("registration_ids", "expected"), [(["first", "second"], "first"), ([], "")]
+)
+async def test_roles_create_binds_the_first_registered_model(
+    tmp_path, registration_ids, expected
+) -> None:
+    from agent.config_models import ModelRegistration
+
+    config = SimpleNamespace(
+        model_registrations=[
+            ModelRegistration(
+                id=registration_id,
+                provider="openai",
+                base_url="http://127.0.0.1:1/v1",
+                api_key="sk-test",
+                model=registration_id,
+            )
+            for registration_id in registration_ids
+        ]
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+        config=config,
+    )
+
+    response = await service.handle(
+        {
+            "id": "request-1",
+            "method": "roles.create",
+            "payload": {"name": "Mira", "system_prompt": "You are Mira."},
+        },
+        emit_event=Mock(),
+    )
+
+    assert response.error is None
+    runtime_config = response.payload["role"]["runtime_config"]
+    assert runtime_config["dialogue_model_registration_id"] == expected

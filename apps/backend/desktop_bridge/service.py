@@ -131,6 +131,12 @@ class DesktopBridgeService:
             workspace=workspace,
             role_store=role_store,
             session_manager=session_manager,
+            # 与启动迁移一致：第一个模型注册即默认模型；桌面端新建/导入的角色默认绑定它。
+            default_dialogue_registration_id=(
+                registrations[0].id
+                if isinstance(registrations, list) and registrations
+                else ""
+            ),
         )
         self.role_service.add_role_deleted_listener(self._role_deleted_listener)
         self.conversation_service = ConversationService(

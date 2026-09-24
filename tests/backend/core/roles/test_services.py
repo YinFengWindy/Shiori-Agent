@@ -150,3 +150,38 @@ def test_sync_role_creation_persists_the_structured_profile(tmp_path) -> None:
 
     assert aggregate.role.profile.character.profile == "A careful archivist."
     assert aggregate.role.profile.character.personality == "Quiet and precise."
+
+
+@pytest.mark.parametrize(
+    ("runtime_config", "expected"),
+    [
+        (None, "default-model"),
+        ({"nsfw_memory_enabled": True}, "default-model"),
+        ({"dialogue_model_registration_id": ""}, ""),
+        ({"dialogue_model_registration_id": "chosen"}, "chosen"),
+    ],
+)
+def test_new_roles_bind_the_default_model_unless_the_caller_chose(
+    tmp_path, runtime_config, expected
+):
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        default_dialogue_registration_id="default-model",
+    )
+    created = service.create_role(
+        role_id="mira", name="Mira", system_prompt="mira", runtime_config=runtime_config
+    )
+    assert created.role.runtime_config["dialogue_model_registration_id"] == expected
+    assert created.role.runtime_config["visual_model_registration_id"] == ""
+
+
+def test_new_roles_stay_unbound_without_a_default_model(tmp_path):
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+    )
+    created = service.create_role(role_id="mira", name="Mira", system_prompt="mira")
+    assert created.role.runtime_config["dialogue_model_registration_id"] == ""
