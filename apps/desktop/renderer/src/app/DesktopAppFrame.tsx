@@ -17,7 +17,8 @@ import { usePluginUiVisibility } from "./usePluginUiVisibility";
 import { SettingsPage } from "../settings/SettingsPage";
 import { type SettingsSectionId } from "../settings/SettingsSidebar";
 import { cx, sidebarTrackMotionClass } from "../shared/styles";
-import { NavRail, pluginNavRailViewId, type NavRailViewId } from "../shell/NavRail";
+import { buildNavRailViews, NavRail, pluginNavRailViewId, type NavRailViewId } from "../shell/NavRail";
+import { useGlobalShortcuts } from "../shell/useGlobalShortcuts";
 import type {
   AppMainView,
   ChatSendRequest,
@@ -112,6 +113,10 @@ type DesktopAppFrameProps = {
   detailRole: RoleRecord | null;
   pendingRoleCardAction: PendingRoleCardAction;
   onOpenRoleManagementDetail: (roleId: string) => void;
+  /** Leaves role detail for the chat with that role. */
+  onGoToRoleChat: (roleId: string) => void;
+  /** Starts a role card import from the role workspace sidebar. */
+  onImportRoleCard: () => void;
   onRequestDeleteRole: (roleId: string) => void;
   creating: boolean;
   newRoleForm: NewRoleFormState;
@@ -239,6 +244,8 @@ export function DesktopAppFrame({
   detailRole,
   pendingRoleCardAction,
   onOpenRoleManagementDetail,
+  onGoToRoleChat,
+  onImportRoleCard,
   onRequestDeleteRole,
   creating,
   newRoleForm,
@@ -316,8 +323,26 @@ export function DesktopAppFrame({
   const activePluginNavPage = mainView.kind === "plugin-page"
     ? resolveVisibleNavPage(mainView.pageId)
     : undefined;
+  const fullscreenPluginActive = activePluginNavPage?.presentation === "fullscreen";
+  const navRailViews = buildNavRailViews({
+    onBackToChat,
+    onOpenRolesWorkspace,
+    pluginEntries: pluginNavPages.map((page) => ({
+      pageId: page.id,
+      label: page.label,
+      icon: page.icon,
+      onSelect: guardedNavPageSelect(page, () => onOpenPluginPage(page.id), (message) => feedback.warning(message)),
+    })),
+  });
+  // A full-window plugin surface (story) owns its own keys, including leaving.
+  useGlobalShortcuts({
+    enabled: !fullscreenPluginActive,
+    onSearch: onOpenSearch,
+    onSettings: onOpenSettings,
+    views: navRailViews,
+  });
 
-  if (activePluginNavPage?.presentation === "fullscreen") {
+  if (activePluginNavPage && fullscreenPluginActive) {
     return <activePluginNavPage.Component pageId={activePluginNavPage.id} activeRoleId={activeRoleId} onExit={onBackToChat} />;
   }
 
@@ -349,24 +374,32 @@ export function DesktopAppFrame({
         <NavRail
           activeView={navRailActiveView}
           unreadTotal={navRailUnreadTotal}
-          pluginEntries={pluginNavPages.map((page) => ({
-            pageId: page.id,
-            label: page.label,
-            icon: page.icon,
-            onSelect: guardedNavPageSelect(page, () => onOpenPluginPage(page.id), (message) => feedback.warning(message)),
-          }))}
+          views={navRailViews}
           onOpenSearch={onOpenSearch}
-          onBackToChat={onBackToChat}
-          onOpenRolesWorkspace={onOpenRolesWorkspace}
           onOpenSettings={onOpenSettings}
         />
         <div
           className={cx(
-            "sidebar-track relative min-h-0 overflow-hidden",
-            sidebarState.animating && sidebarTrackMotionClass,
+            "sidebar-track relative min-h-0",
+            // Compact: the track takes no width and its content floats over the main pane.
+            sidebarState.compact ? "z-20 overflow-visible" : "overflow-hidden",
+            sidebarState.animating && !sidebarState.compact && sidebarTrackMotionClass,
           )}
-          style={{ width: sidebarState.collapsed ? 0 : sidebarState.width }}
+          style={{ width: sidebarState.compact || sidebarState.collapsed ? 0 : sidebarState.width }}
+          data-testid="sidebar-track"
+          data-compact={sidebarState.compact || undefined}
         >
+          {sidebarState.compact ? (
+            <div
+              className={cx(
+                "sidebar-overlay-surface surface-glass-strong absolute inset-y-0 left-0 rounded-r-lg transition-opacity duration-base ease-out-soft",
+                sidebarState.collapsed ? "pointer-events-none opacity-0" : "opacity-100",
+              )}
+              style={{ width: sidebarState.width }}
+              aria-hidden="true"
+            />
+          ) : null}
+          <div className={cx("h-full", sidebarState.compact && "absolute inset-y-0 left-0")}>
           <SidebarTrackContent
             mainView={mainView}
             sidebarState={sidebarState}
@@ -376,6 +409,11 @@ export function DesktopAppFrame({
             roleWorkspaceViewActive={roleWorkspaceViewActive}
             roleWorkspaceSection={roleWorkspaceSection}
             onOpenRoleWorkspaceSection={onOpenRoleWorkspaceSection}
+            roleWorkspaceRoleId={mainView.kind === "role-detail" || mainView.kind === "role-assets" ? mainView.roleId : ""}
+            pendingRoleId={pendingRoleCardAction?.roleId ?? ""}
+            canImportRoleCard={bridgeReady && !creating && roleCardImport.status === "idle"}
+            onOpenRoleDetail={onOpenRoleManagementDetail}
+            onImportRoleCard={onImportRoleCard}
             roles={roles}
             activeRoleId={activeRoleId}
             unreadCounts={unreadCounts}
@@ -383,9 +421,19 @@ export function DesktopAppFrame({
             onOpenRole={onOpenRole}
             activePluginNavPage={activePluginNavPage}
           />
+          </div>
         </div>
         <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-lg border-b border-l border-t border-line-soft bg-[var(--chat-bg)] shadow-soft">
-          {sidebarState.collapsed ? (
+          {sidebarState.compact && !sidebarState.collapsed ? (
+            <button
+              className="motion-fade-enter absolute inset-0 z-[19] cursor-default border-0 bg-white/25 p-0"
+              type="button"
+              aria-label="收起侧边栏"
+              tabIndex={-1}
+              onClick={onToggleSidebar}
+            />
+          ) : null}
+          {sidebarState.collapsed && !sidebarState.compact ? (
             <div
               className="absolute inset-y-0 left-0 z-[7] w-[3px] cursor-col-resize transition-colors hover:bg-accent-soft"
               role="separator"
@@ -471,6 +519,7 @@ export function DesktopAppFrame({
               roleFormDirty={roleFormDirty}
               savingRole={savingRole}
               onBackToList={onBackToRoleList}
+              onGoToChat={() => onGoToRoleChat(detailRoleId)}
               onOpenAssetsPage={onOpenAssetsPage}
               onUpdateRoleForm={onUpdateRoleForm}
               onResetRoleForm={onResetRoleForm}

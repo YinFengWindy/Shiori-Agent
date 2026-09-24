@@ -10,12 +10,12 @@ import {
   chatLatestImageSidebarMinWidth,
   createEmptyRoleForm,
   sidebarAnimationDurationMs,
-  sidebarAutoCollapseWindowWidth,
   sidebarCollapseThreshold,
   sidebarDefaultWidth,
   sidebarMaxWidth,
   sidebarMinWidth,
   type PendingMessageNavigation,
+  viewKey,
 } from "./app/appState";
 import { useDesktopSessionState } from "./app/useDesktopSessionState";
 import { useDesktopViewSynchronization } from "./app/useDesktopViewSynchronization";
@@ -36,6 +36,7 @@ import { requestChatModelMenu } from "./chat/chatModelMenuRequests";
 import { chatSendFailureAction } from "./chat/chatSendFailure";
 import { feedback } from "./shared/feedback/feedbackStore";
 import { FeedbackToaster } from "./shared/feedback/FeedbackToaster";
+import { TooltipProvider } from "./shared/ui/Tooltip";
 import type { ChatMessageNavigationScroller } from "./chat/useChatScrollController";
 import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
 import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalDiagnostics";
@@ -88,6 +89,7 @@ function App(): React.ReactElement {
     maxWidth: sidebarMaxWidth,
     defaultWidth: sidebarDefaultWidth,
     collapseThreshold: sidebarCollapseThreshold,
+    animationDurationMs: sidebarAnimationDurationMs,
   });
   const [activeIllustration, setActiveIllustration] = useState("");
   const [selectedAvatarAsset, setSelectedAvatarAsset] = useState("");
@@ -235,9 +237,7 @@ function App(): React.ReactElement {
     lastNonSettingsViewRef,
     roles,
     setSettingsSection,
-    setSidebarAnimating: leftSidebar.setAnimating,
-    setSidebarCollapsed: leftSidebar.setCollapsed,
-    setSidebarWidth: leftSidebar.setWidth,
+    revealSidebar: leftSidebar.reveal,
     setMainView,
     applyRoleSnapshot,
   });
@@ -524,8 +524,6 @@ function App(): React.ReactElement {
   const guardLeave = leaveGuard.guard;
 
   useDesktopUiEffects({
-    sidebarAnimating: leftSidebar.animating,
-    setSidebarAnimating: leftSidebar.setAnimating,
     pendingMessageNavigation,
     setHighlightedMessageKey,
     highlightedMessageKey,
@@ -533,10 +531,14 @@ function App(): React.ReactElement {
     activeIllustration,
     persistedChatBackground: detailRole?.chat_background_abs ?? "",
     setActiveIllustration,
-    sidebarAnimationDurationMs,
-    sidebarAutoCollapseWindowWidth,
-    setSidebarCollapsed: leftSidebar.setCollapsed,
   });
+
+  // Navigating from the compact overlay drawer closes it, whatever the entry point was.
+  const { dismissOverlay: dismissSidebarOverlay } = leftSidebar;
+  const sidebarNavigationKey = `${viewKey(mainView)}|${activeRoleId}|${settingsSection}`;
+  useEffect(() => {
+    dismissSidebarOverlay();
+  }, [dismissSidebarOverlay, sidebarNavigationKey]);
 
   function selectSearchResult(result: RoleSearchResult): void {
     setShowSearchDialog(false);
@@ -584,6 +586,7 @@ function App(): React.ReactElement {
       shellResizing={leftSidebar.resizing || chatLatestImageSidebar.resizing}
       sidebarState={{
         collapsed: leftSidebar.collapsed,
+        compact: leftSidebar.compact,
         width: leftSidebar.width,
         animating: leftSidebar.animating,
         resizing: leftSidebar.resizing,
@@ -647,7 +650,15 @@ function App(): React.ReactElement {
       onLoadOlderMessages={loadOlderMessages}
       detailRole={detailRole}
       pendingRoleCardAction={pendingRoleCardAction}
-      onOpenRoleManagementDetail={(roleId) => void openRoleDetail(roleId)}
+      onOpenRoleManagementDetail={(roleId) => guardLeave(() => void openRoleDetail(roleId))}
+      onGoToRoleChat={(roleId) => guardLeave(() => {
+        openChatView({ recordHistory: false });
+        void openRole(roleId, null, { recordHistory: true });
+      })}
+      onImportRoleCard={() => guardLeave(() => {
+        openRoleWorkspace({ kind: "role-create" });
+        void roleCreation.previewRoleCard();
+      })}
       onRequestDeleteRole={setPendingDeleteRoleId}
       creating={roleCreation.creating}
       newRoleForm={roleCreation.newRoleForm}
@@ -725,7 +736,9 @@ createRoot(document.getElementById("root") as HTMLElement).render(
   <DesktopErrorBoundary>
     {/* reducedMotion="user": every motion/react animation drops its transforms when the OS asks for reduced motion. */}
     <MotionConfig reducedMotion="user">
-      <App />
+      <TooltipProvider>
+        <App />
+      </TooltipProvider>
       {/* Outside App so every branch (onboarding, workspace, full-screen plugin pages) shares one outlet. */}
       <FeedbackToaster />
     </MotionConfig>

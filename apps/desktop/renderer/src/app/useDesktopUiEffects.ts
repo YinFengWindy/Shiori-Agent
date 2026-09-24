@@ -2,8 +2,6 @@ import { useEffect } from "react";
 import type React from "react";
 
 type UseDesktopUiEffectsArgs = {
-  sidebarAnimating: boolean;
-  setSidebarAnimating: React.Dispatch<React.SetStateAction<boolean>>;
   pendingMessageNavigation: { roleId: string; messageKey: string } | null;
   setHighlightedMessageKey: React.Dispatch<React.SetStateAction<string>>;
   highlightedMessageKey: string;
@@ -11,9 +9,6 @@ type UseDesktopUiEffectsArgs = {
   activeIllustration: string;
   persistedChatBackground: string;
   setActiveIllustration: React.Dispatch<React.SetStateAction<string>>;
-  sidebarAnimationDurationMs: number;
-  sidebarAutoCollapseWindowWidth: number;
-  setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 /** Keeps a message target pending while its destination role session is opening. */
@@ -33,10 +28,8 @@ export function shouldWaitForMessageNavigation(
   );
 }
 
-/** Runs UI-only desktop effects such as sidebar timers and message highlight retries. */
+/** Runs UI-only desktop effects such as message highlight retries and illustration fallback. */
 export function useDesktopUiEffects({
-  sidebarAnimating,
-  setSidebarAnimating,
   pendingMessageNavigation,
   setHighlightedMessageKey,
   highlightedMessageKey,
@@ -44,29 +37,7 @@ export function useDesktopUiEffects({
   activeIllustration,
   persistedChatBackground,
   setActiveIllustration,
-  sidebarAnimationDurationMs,
-  sidebarAutoCollapseWindowWidth,
-  setSidebarCollapsed,
 }: UseDesktopUiEffectsArgs) {
-  useEffect(() => {
-    if (!sidebarAnimating) return undefined;
-    const timer = window.setTimeout(() => setSidebarAnimating(false), sidebarAnimationDurationMs + 40);
-    return () => window.clearTimeout(timer);
-  }, [setSidebarAnimating, sidebarAnimating, sidebarAnimationDurationMs]);
-
-  useEffect(() => {
-    function collapseSidebarForNarrowWindow(): void {
-      if (window.innerWidth < sidebarAutoCollapseWindowWidth) {
-        setSidebarAnimating(true);
-        setSidebarCollapsed(true);
-      }
-    }
-
-    collapseSidebarForNarrowWindow();
-    window.addEventListener("resize", collapseSidebarForNarrowWindow);
-    return () => window.removeEventListener("resize", collapseSidebarForNarrowWindow);
-  }, [setSidebarAnimating, setSidebarCollapsed, sidebarAutoCollapseWindowWidth]);
-
   useEffect(() => {
     if (!highlightedMessageKey) return;
     if (

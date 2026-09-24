@@ -28,9 +28,7 @@ function Harness({ capture }: { capture: (api: HarnessApi) => void }) {
     lastNonSettingsViewRef,
     roles: [],
     setSettingsSection,
-    setSidebarAnimating: () => undefined,
-    setSidebarCollapsed: () => undefined,
-    setSidebarWidth: () => undefined,
+    revealSidebar: () => undefined,
     setMainView,
     applyRoleSnapshot: () => undefined,
   });

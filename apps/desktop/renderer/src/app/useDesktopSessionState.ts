@@ -530,7 +530,7 @@ export function useDesktopSessionState({
     if (!activeRoleIdRef.current) return;
     const refreshed = await openRole(activeRoleIdRef.current, null, { recordHistory: false });
     if (refreshed) {
-      feedback.success("会话已刷新");
+      feedback.success("对话已重新载入");
     }
   }
 

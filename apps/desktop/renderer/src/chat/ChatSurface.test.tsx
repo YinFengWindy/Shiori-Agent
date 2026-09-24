@@ -3,7 +3,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import React from "react";
+import { act } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { mountTestComponent } from "../shared/testing/domTestHarness";
 import { ChatSurface } from "./ChatSurface";
 import type { RoleRecord, SessionPayload } from "../shared/types";
 
@@ -41,15 +43,26 @@ function createSession(): SessionPayload {
 function renderChatSurface(
   activeRole: RoleRecord | null,
   activeRoleId: string,
+  options: Parameters<typeof chatSurfaceElement>[2] = {},
+): string {
+  return renderToStaticMarkup(chatSurfaceElement(activeRole, activeRoleId, options));
+}
+
+function chatSurfaceElement(
+  activeRole: RoleRecord | null,
+  activeRoleId: string,
   options: {
     activeSession?: SessionPayload;
     currentMood?: string;
     moodIllustrationUrl?: string;
+    roleSelfView?: string;
     chatLatestImageSidebarCollapsed?: boolean;
     windowVisible?: boolean;
+    chatLatestImageSidebarCount?: number;
+    onToggleChatLatestImageSidebar?: () => void;
   } = {},
-): string {
-  return renderToStaticMarkup(
+) {
+  return (
     <ChatSurface
       activeRole={activeRole}
       activeRoleId={activeRoleId}
@@ -60,11 +73,11 @@ function renderChatSurface(
       chatLatestImageSidebarAnimating={false}
       chatLatestImageSidebarResizing={false}
       chatLatestImageSidebarCollapsed={options.chatLatestImageSidebarCollapsed ?? true}
-      chatLatestImageSidebarCount={options.chatLatestImageSidebarCollapsed === false ? 1 : 0}
+      chatLatestImageSidebarCount={options.chatLatestImageSidebarCount ?? (options.chatLatestImageSidebarCollapsed === false ? 1 : 0)}
       chatLatestImageSidebarWidth={320}
       currentMood={options.currentMood ?? ""}
       moodIllustrationUrl={options.moodIllustrationUrl ?? ""}
-      roleSelfView="我最近会不自觉地想起你。"
+      roleSelfView={options.roleSelfView ?? "我最近会不自觉地想起你。"}
       relationshipTags={["亲近", "等你主动"]}
       lonelinessValue={72}
       conversationEndRef={React.createRef<HTMLDivElement>()}
@@ -85,8 +98,8 @@ function renderChatSurface(
       onCopyMessage={() => undefined}
       onSendMessage={async () => true}
       onCancelChat={() => undefined}
-      onToggleChatLatestImageSidebar={() => undefined}
-    />,
+      onToggleChatLatestImageSidebar={options.onToggleChatLatestImageSidebar ?? (() => undefined)}
+    />
   );
 }
 
@@ -260,15 +273,16 @@ describe("ChatSurface", () => {
     const markup = renderChatSurface(createRole(), "mira", {
       currentMood: "开心",
       moodIllustrationUrl: "",
+      roleSelfView: "",
       chatLatestImageSidebarCollapsed: false,
     });
 
-    assert.match(markup, /aria-label="图片侧栏"/);
-    assert.match(markup, /aria-label="状态侧栏"/);
-    assert.match(markup, /justify-self-center inline-flex/);
-    assert.match(markup, /h-7 w-7/);
-    assert.match(markup, /class="[^"]*focus:ring-0[^"]*"[^>]*aria-label="图片侧栏"/);
-    assert.match(markup, /disabled=""/);
+    assert.match(markup, /aria-label="图片"/);
+    // Unavailable but still focusable, so its tooltip can say why.
+    assert.match(markup, /aria-label="状态"[^>]*aria-disabled="true"/);
+    assert.match(markup, /aria-label="图片" aria-pressed="true"/);
+    // Segments rely on the global focus-visible ring instead of opting out of it.
+    assert.doesNotMatch(markup, /<button class="[^"]*focus:ring-0[^"]*"[^>]*aria-label="图片"/);
     assert.doesNotMatch(markup, />使用回退立绘</);
   });
 
@@ -279,9 +293,9 @@ describe("ChatSurface", () => {
       chatLatestImageSidebarCollapsed: false,
     });
 
-    assert.match(markup, /aria-label="图片侧栏"/);
-    assert.match(markup, /aria-label="状态侧栏"/);
-    assert.doesNotMatch(markup, /aria-label="状态侧栏"[^>]*disabled=""/);
+    assert.match(markup, /aria-label="图片"/);
+    assert.match(markup, /aria-label="状态"/);
+    assert.doesNotMatch(markup, /aria-label="状态"[^>]*aria-disabled/);
   });
 
   it("renders relationship summary, tags, and loneliness value inside the status sidebar", () => {
@@ -309,5 +323,25 @@ describe("ChatSurface", () => {
 
     assert.match(markup, />窗口隐藏时已暂停图片渲染</);
     assert.doesNotMatch(markup, /happy\.png/);
+  });
+
+  it("marks a new image with a dot instead of opening the role panel", async () => {
+    let toggles = 0;
+    const onToggle = () => { toggles += 1; };
+    const fakeDesktop = { invoke: async () => ({ payload: { roles: [] }, error: null }), readSettings: async () => ({ formData: { models: { registrations: [] } } }), localAssetUrl: (path: string) => `shiori-asset://local/${path}` };
+    const view = await mountTestComponent(
+      chatSurfaceElement(createRole(), "mira", { chatLatestImageSidebarCount: 0, onToggleChatLatestImageSidebar: onToggle }),
+      { windowGlobals: { miraDesktop: fakeDesktop } },
+    );
+    try {
+      const toggle = () => view.container.querySelector('[data-testid="chat-panel-toggle"]');
+      assert.equal(toggle()?.getAttribute("aria-label"), "展开角色面板");
+      assert.equal(view.container.querySelector('[data-testid="chat-panel-toggle-badge"]'), null);
+      await view.render(chatSurfaceElement(createRole(), "mira", { chatLatestImageSidebarCount: 1, onToggleChatLatestImageSidebar: onToggle }));
+      await act(async () => undefined);
+      assert.equal(toggles, 0);
+      assert.ok(view.container.querySelector('[data-testid="chat-panel-toggle-badge"]'));
+      assert.equal(toggle()?.getAttribute("aria-label"), "展开角色面板（有新内容）");
+    } finally { await view.cleanup(); }
   });
 });

@@ -3,8 +3,6 @@ import type React from "react";
 import {
   cloneView,
   navigationEntriesEqual,
-  sidebarMaxWidth,
-  sidebarMinWidth,
   type NavigationEntry,
 } from "./appState";
 import type { RoleRecord, SessionPayload } from "../shared/types";
@@ -32,9 +30,8 @@ type UseNavigationHistoryArgs = {
   lastNonSettingsViewRef: React.MutableRefObject<AppMainView>;
   roles: RoleRecord[];
   setSettingsSection: React.Dispatch<React.SetStateAction<SettingsSectionId>>;
-  setSidebarAnimating: React.Dispatch<React.SetStateAction<boolean>>;
-  setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
-  setSidebarWidth: React.Dispatch<React.SetStateAction<number>>;
+  /** Opens the left sidebar for a workspace whose navigation lives there (see `useLeftSidebarState`). */
+  revealSidebar: () => void;
   setMainView: React.Dispatch<React.SetStateAction<AppMainView>>;
   applyRoleSnapshot: (role: RoleRecord, sessionOverride?: SessionPayload | null) => void;
 };
@@ -48,9 +45,7 @@ export function useNavigationHistory({
   lastNonSettingsViewRef,
   roles,
   setSettingsSection,
-  setSidebarAnimating,
-  setSidebarCollapsed,
-  setSidebarWidth,
+  revealSidebar,
   setMainView,
   applyRoleSnapshot,
 }: UseNavigationHistoryArgs) {
@@ -128,15 +123,12 @@ export function useNavigationHistory({
   function openSettingsView(section: SettingsSectionId = "models"): void {
     lastNonSettingsViewRef.current = mainView;
     setSettingsSection(section);
-    setSidebarAnimating(true);
-    setSidebarCollapsed(false);
-    setSidebarWidth((current) => Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, current)));
+    revealSidebar();
     setMainView({ kind: "settings" });
   }
 
   function openRoleWorkspaceView(nextView: RoleWorkspaceView): void {
-    setSidebarAnimating(true);
-    setSidebarCollapsed(false);
+    revealSidebar();
     setMainView(nextView);
   }
 
@@ -151,8 +143,7 @@ export function useNavigationHistory({
   /** Opens a plugin-contributed nav.page full-page surface by its registry id. */
   function openPluginPage(pageId: string, options?: { recordHistory?: boolean }): void {
     const nextView: AppMainView = { kind: "plugin-page", pageId };
-    setSidebarAnimating(true);
-    setSidebarCollapsed(false);
+    revealSidebar();
     setMainView(nextView);
     if (options?.recordHistory !== false) {
       pushNavigationEntry(buildNavigationEntry(nextView));

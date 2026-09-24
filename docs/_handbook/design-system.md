@@ -177,6 +177,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
   | `--duration-quick` | 160ms | 按压反馈、菜单/下拉/小弹层、角色详情切 tab |
   | `--duration-base` | 220ms | 对话框、提示、侧栏内容淡入 |
   | `--duration-panel` | 260ms | 侧栏宽度（和 `app/appState.ts` 的 `sidebarAnimationDurationMs` 同步，有测试守着） |
+  | `--duration-motif` | 480ms | 导航栏图标里品牌小元素的一次性小动画 |
 
 - 缓动：`--ease-out-soft`（`ease-out-soft`，也是裸 `transition` 的默认值）用于入场、按压、悬停；
   `--ease-drawer`（`ease-drawer`）只给侧栏开合这类抽屉
@@ -201,6 +202,23 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 |---|---|---|
 | `shared/icons.tsx` + `@phosphor-icons/react` | 功能图标（保存、删除、上传、发送、关闭……） | **一律复用，不要自绘。** 2026-09 视觉验收时自绘功能图标被逐一打回 |
 | `shared/ui/icons`（`brand.tsx`） | 品牌装饰母题：星芒、恶魔翅膀、蝴蝶结、樱瓣 | 只用于空状态、加载、成就等情绪点缀 |
+
+**导航栏图标**是两者的组合（`shared/ui/icons/navGlyphs.tsx`）：Phosphor **regular** 原图，外轮廓不改，里面嵌**一个**品牌小元素。
+小元素是独立的 `<g class="nav-glyph-motif">`，平时 `--color-motif`（pink-500），选中时换品牌渐变（渐变 id 每个实例用 `useId` 生成）；
+描边仍走导航栏原来的颜色。悬停、键盘聚焦和变为选中时，只有小元素播一次 `--duration-motif` 的小动画，
+动画写在 `styles.css` 的 `prefers-reduced-motion: no-preference` 里，减弱动态效果时只保留颜色变化。
+不要改成 fill / bold 字重，也不要用 duotone。
+
+| 入口 | Phosphor 原图 | 小元素 | 动画 |
+|---|---|---|---|
+| 搜索 | MagnifyingGlass | 镜片里的星芒 + 小圆点 | 星芒闪烁（缩放+旋转），圆点淡出再回来 |
+| 消息 | Chats | 后面气泡里的心 | 心跳 |
+| 角色 | Users | 前面人头上的蝴蝶结 | 左右摆动 ±12° |
+| 设置 | GearSix | 齿轮孔里的五瓣樱花 | 转 72° |
+| 故事（story 插件） | BookOpenText | 左页的飘带书签 | 书签飘动 |
+
+插件的导航图标契约仍是 `React.ComponentType<{ className?: string }>`，可以直接用上面导出的 glyph，
+或用 `withMotif(Phosphor 图标, 小元素, 动画, 组件名)` 组合自己的。第三方服务有官方标识的插件（如 NovelAI 生图）保留其官方图标，不套品牌小元素。
 
 新增品牌母题时按 `shared/ui/icons/SPEC.md`：`viewBox="0 0 24 24"`、活动区 20×20、
 线性为主（`fill="none"` + `stroke="currentColor"` + `strokeWidth={1.7}` + 圆头）、

@@ -1,8 +1,10 @@
 import type React from "react";
-import { Chats, GearSix, MagnifyingGlass, Users } from "@phosphor-icons/react";
 import { cx, pressableClass } from "../shared/styles";
+import { ChatsGlyph, RolesGlyph, SearchGlyph, SettingsGlyph } from "../shared/ui/icons/navGlyphs";
+import { Tooltip } from "../shared/ui/Tooltip";
+import { formatShortcut, viewShortcutLabel } from "./globalShortcuts";
 
-/** The rail's fixed built-in workspace targets (excludes the "search" action button, which never becomes an active view). */
+/** The rail's fixed built-in workspace targets (search is an action, never an active view). */
 export type BuiltinNavRailViewId = "messages" | "roles" | "settings";
 
 /**
@@ -22,13 +24,14 @@ export function pluginNavRailViewId(pageId: string): NavRailViewId {
 /** Icon contract shared by built-in phosphor icons and a plugin's own icon component. */
 type NavRailIcon = React.ComponentType<{ className?: string }>;
 
-type NavRailEntry = {
-  id: NavRailViewId | "search";
+/** One top-level view in the rail, in rail order; `shortcut` is its Ctrl+digit label when it has one. */
+export type NavRailView = {
+  id: NavRailViewId;
   label: string;
   icon?: NavRailIcon;
-  imageSrc?: string;
   onSelect: () => void;
   showUnreadBadge?: boolean;
+  shortcut?: string;
 };
 
 /** A plugin-contributed nav.page entry rendered alongside the built-in rail icons. */
@@ -39,35 +42,23 @@ export type NavRailPluginEntry = {
   onSelect: () => void;
 };
 
-type NavRailProps = {
-  activeView: NavRailViewId | null;
-  unreadTotal: number;
-  pluginEntries?: NavRailPluginEntry[];
-  onOpenSearch: () => void;
-  onBackToChat: () => void;
-  onOpenRolesWorkspace: () => void;
-  onOpenSettings: () => void;
-};
-
-const railButtonClass = cx(
-  pressableClass,
-  "relative grid h-9 w-9 place-items-center rounded-md text-ink-muted focus-visible:bg-white/70 hover:bg-white/70 hover:text-ink",
-);
-
-/** Renders the primary icon navigation rail shown across every workspace. */
-export function NavRail({
-  activeView,
-  unreadTotal,
-  pluginEntries = [],
-  onOpenSearch,
+/**
+ * The rail's view entries in display order — 消息, 角色, then plugin pages —
+ * each with its Ctrl+digit label. Shared by the rail and the global
+ * shortcuts so the number shown in a tooltip is the number that works.
+ */
+export function buildNavRailViews({
   onBackToChat,
   onOpenRolesWorkspace,
-  onOpenSettings,
-}: NavRailProps) {
-  const entries: NavRailEntry[] = [
-    { id: "search", label: "搜索", icon: MagnifyingGlass, onSelect: onOpenSearch },
-    { id: "messages", label: "消息", icon: Chats, onSelect: onBackToChat, showUnreadBadge: true },
-    { id: "roles", label: "角色", icon: Users, onSelect: onOpenRolesWorkspace },
+  pluginEntries = [],
+}: {
+  onBackToChat: () => void;
+  onOpenRolesWorkspace: () => void;
+  pluginEntries?: NavRailPluginEntry[];
+}): NavRailView[] {
+  const views: Omit<NavRailView, "shortcut">[] = [
+    { id: "messages", label: "消息", icon: ChatsGlyph, onSelect: onBackToChat, showUnreadBadge: true },
+    { id: "roles", label: "角色", icon: RolesGlyph, onSelect: onOpenRolesWorkspace },
     ...pluginEntries.map((entry) => ({
       id: pluginNavRailViewId(entry.pageId),
       label: entry.label,
@@ -75,38 +66,91 @@ export function NavRail({
       onSelect: entry.onSelect,
     })),
   ];
+  return views.map((view, index) => ({ ...view, shortcut: viewShortcutLabel(index) }));
+}
 
-  function renderEntry(entry: NavRailEntry): React.ReactNode {
-    const active = entry.id === activeView;
-    const showBadge = Boolean(entry.showUnreadBadge && unreadTotal > 0);
-    const Icon = entry.icon;
+/** `aria-keyshortcuts` spelling of a displayed shortcut label. */
+function ariaKeyShortcut(label: string | undefined): string | undefined {
+  return label?.replace("⌘", "Meta+");
+}
+
+type NavRailProps = {
+  activeView: NavRailViewId | null;
+  unreadTotal: number;
+  views: NavRailView[];
+  onOpenSearch: () => void;
+  onOpenSettings: () => void;
+};
+
+const railButtonClass = cx(
+  pressableClass,
+  "relative grid h-9 w-9 place-items-center rounded-md",
+);
+// Idle and active colours are exclusive: with both text colours on one element
+// the stylesheet order, not the state, decided which won (active read as muted).
+const railIdleClass = "text-ink-muted focus-visible:bg-white/70 hover:bg-white/70 hover:text-ink";
+const railActiveClass = "bg-white text-accent shadow-soft";
+
+// Search is an action, not a place: an outlined round button with a divider
+// under it, so it never reads as the first of the view entries below.
+const railActionButtonClass = cx(
+  pressableClass,
+  "grid h-9 w-9 place-items-center rounded-full border border-line-soft bg-white/45 text-ink-muted hover:border-line-accent hover:bg-white/80 hover:text-accent-text focus-visible:bg-white/80",
+);
+
+const railIconClass = "h-[19px] w-[19px]";
+
+/** Renders the primary icon navigation rail shown across every workspace. */
+export function NavRail({
+  activeView,
+  unreadTotal,
+  views,
+  onOpenSearch,
+  onOpenSettings,
+}: NavRailProps) {
+  function renderView(view: NavRailView): React.ReactNode {
+    const active = view.id === activeView;
+    const showBadge = Boolean(view.showUnreadBadge && unreadTotal > 0);
+    const Icon = view.icon;
     return (
-      <button
-        key={entry.id}
-        className={cx(
-          railButtonClass,
-          active
-            && "bg-white text-accent shadow-soft hover:bg-white hover:text-accent",
-        )}
-        type="button"
-        aria-label={showBadge ? `${entry.label}（${unreadTotal} 条未读）` : entry.label}
-        aria-current={active ? "page" : undefined}
-        title={entry.label}
-        onClick={entry.onSelect}
-      >
-        {entry.imageSrc ? <img className="h-[19px] w-[19px]" src={entry.imageSrc} alt="" /> : null}
-        {!entry.imageSrc && Icon ? <span aria-hidden="true"><Icon className="h-[19px] w-[19px]" /></span> : null}
-        {showBadge ? (
-          <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-danger" aria-hidden="true" />
-        ) : null}
-      </button>
+      <Tooltip key={view.id} label={showBadge ? `${view.label} · ${unreadTotal} 条未读` : view.label} shortcut={view.shortcut}>
+        <button
+          className={cx(railButtonClass, active ? railActiveClass : railIdleClass)}
+          type="button"
+          aria-label={showBadge ? `${view.label}（${unreadTotal} 条未读）` : view.label}
+          aria-keyshortcuts={ariaKeyShortcut(view.shortcut)}
+          aria-current={active ? "page" : undefined}
+          onClick={view.onSelect}
+        >
+          {Icon ? <span aria-hidden="true"><Icon className={railIconClass} /></span> : null}
+          {showBadge ? (
+            <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-danger" aria-hidden="true" />
+          ) : null}
+        </button>
+      </Tooltip>
     );
   }
 
+  const searchShortcut = formatShortcut("K");
   return (
     <nav className="nav-rail flex w-12 shrink-0 flex-col items-center gap-1 py-2.5" aria-label="主导航">
-      {entries.map(renderEntry)}
-      <div className="mt-auto">{renderEntry({ id: "settings", label: "设置", icon: GearSix, onSelect: onOpenSettings })}</div>
+      <Tooltip label="搜索" shortcut={searchShortcut}>
+        <button
+          className={railActionButtonClass}
+          type="button"
+          aria-label="搜索"
+          aria-keyshortcuts={ariaKeyShortcut(searchShortcut)}
+          aria-haspopup="dialog"
+          onClick={onOpenSearch}
+        >
+          <SearchGlyph className={railIconClass} />
+        </button>
+      </Tooltip>
+      <span className="my-1.5 h-px w-6 rounded-full bg-line-soft" aria-hidden="true" />
+      {views.map(renderView)}
+      <div className="mt-auto">
+        {renderView({ id: "settings", label: "设置", icon: SettingsGlyph, onSelect: onOpenSettings, shortcut: formatShortcut(",") })}
+      </div>
     </nav>
   );
 }
