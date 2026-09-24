@@ -346,6 +346,8 @@ export type DesktopApi = {
     running: boolean;
     lastError: string | null;
   }>;
+  /** Quits and relaunches the application; resolves false when the caller window may not do so. */
+  relaunchApp(): Promise<boolean>;
   readSettings(): Promise<SettingsSnapshot>;
   saveSettings(formData: SettingsFormData, options?: SettingsSaveOptions): Promise<SaveSettingsResult>;
   /** Lists input devices exposed by the hidden capture renderer. */

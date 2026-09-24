@@ -4,9 +4,10 @@ import { act } from "react";
 import type { BridgeEvent } from "../../../src/bridge/shared";
 import type { SessionPayload } from "../shared/types";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { createFeedbackRecorder } from "../shared/testing/feedbackRecorder";
 import { useDesktopBridgeLifecycle } from "./useDesktopBridgeLifecycle";
 
-async function mountLifecycle({ cancelling = false } = {}) {
+async function mountLifecycle({ cancelling = false, health = "online" } = {}) {
   let listener!: (event: BridgeEvent) => void;
   const activeSessionRef: React.MutableRefObject<SessionPayload | null> = { current: {
     key: "role:mira", created_at: "", updated_at: "", last_consolidated: 0,
@@ -14,13 +15,22 @@ async function mountLifecycle({ cancelling = false } = {}) {
   } };
   const completions: string[] = [];
   const statesAtError: SessionPayload[] = [];
-  const errors: string[] = [];
+  const feedback = createFeedbackRecorder();
+  const healthRef = { current: health };
+  const healthChanges: string[] = [];
+  const invokedMethods: string[] = [];
+  const openedRoles: string[] = [];
   const ignore = () => {};
   const args: Parameters<typeof useDesktopBridgeLifecycle>[0] = {
     activeRoleId: "mira", activeIllustration: "",
-    setActiveRoleId: ignore, setActiveIllustration: ignore, setHealth: ignore,
-    setError: (value) => { if (typeof value === "string" && value) errors.push(value); },
-    setNotice: ignore, setWindowMaximized: ignore, setWindowVisible: ignore,
+    setActiveRoleId: ignore, setActiveIllustration: ignore,
+    setHealth: (value) => {
+      const next = typeof value === "function" ? value(healthRef.current) : value;
+      healthRef.current = next;
+      healthChanges.push(next);
+    },
+    setBridgeError: ignore, feedback: feedback.reporter, healthRef,
+    setWindowMaximized: ignore, setWindowVisible: ignore,
     setUnreadCounts: ignore,
     activeRoleIdRef: { current: "mira" }, activeSessionRef,
     mainViewRef: { current: { kind: "chat" } }, rolesRef: { current: [] },
@@ -37,7 +47,8 @@ async function mountLifecycle({ cancelling = false } = {}) {
       statesAtError.push(current);
       activeSessionRef.current = { ...current, messages: [...current.messages, { role: "error", content: message }] };
     },
-    loadRolesFromBridge: async () => [], openRole: async () => true,
+    loadRolesFromBridge: async () => [{ id: "mira" } as never],
+    openRole: async (roleId) => { openedRoles.push(roleId); return true; },
     buildNavigationEntry: () => ({ view: { kind: "chat" }, activeRoleId: "mira", settingsSection: "models", settingsSubsection: "" }),
     pushNavigationEntry: ignore,
   };
@@ -50,11 +61,12 @@ async function mountLifecycle({ cancelling = false } = {}) {
     onEvent: (callback: typeof listener) => { listener = callback; return ignore; },
     windowState: async () => ({ isMaximized: false, isVisible: true }),
     bridgeStatus: async () => ({ running: true }),
-    invoke: async () => ({ error: null }),
+    invoke: async (request: { method: string }) => { invokedMethods.push(request.method); return { error: null, payload: {} }; },
+    plugins: undefined,
   } });
   await view.render(<Harness />);
   return {
-    ...view, activeSessionRef, completions, statesAtError, errors,
+    ...view, activeSessionRef, completions, statesAtError, feedback, healthRef, healthChanges, invokedMethods, openedRoles,
     async emit(method: string, payload: BridgeEvent["payload"] = {}) {
       await act(async () => listener({ id: "request-1", type: "event", method, payload: {
         session_key: "role:mira", turn_id: "turn-1", ...payload,
@@ -135,7 +147,7 @@ describe("useDesktopBridgeLifecycle", () => {
       assert.equal(beforeError.messages[1]?.reasoning_content, "thinking");
       assert.equal(beforeError.messages[1]?.tool_chain?.[0]?.calls[0]?.status, "error");
       assert.equal(view.activeSessionRef.current?.messages.at(-1)?.role, "error");
-      assert.deepEqual(view.errors, ["provider failed"]);
+      assert.deepEqual(view.feedback.entries, [], "the inline error bubble is the only outlet for a failed turn");
       assert.deepEqual(view.completions, ["turn-1"]);
       await view.emit("chat.delta", { content_delta: "late" });
       assert.equal(view.activeSessionRef.current?.messages.length, 3);
@@ -162,8 +174,36 @@ describe("useDesktopBridgeLifecycle", () => {
       assert.deepEqual(view.completions, []);
       await view.emit("chat.error", { message: "cancelled" });
       assert.equal(view.activeSessionRef.current, streaming);
-      assert.deepEqual(view.errors, []);
+      assert.deepEqual(view.feedback.entries, []);
       assert.deepEqual(view.completions, ["turn-1"]);
+    } finally { await view.cleanup(); }
+  });
+
+  it("reloads an offline renderer once the main process reports the bridge ready again", async () => {
+    const view = await mountLifecycle();
+    try {
+      view.healthRef.current = "offline";
+      view.healthChanges.length = 0;
+      view.invokedMethods.length = 0;
+      view.openedRoles.length = 0;
+      await view.emit("bridge.ready");
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+      assert.deepEqual(view.healthChanges, ["connecting", "online"]);
+      assert.equal(view.invokedMethods[0], "health");
+      assert.deepEqual(view.openedRoles, ["mira"]);
+      assert.deepEqual(view.feedback.messages("success"), ["连接已恢复"]);
+    } finally { await view.cleanup(); }
+  });
+
+  it("leaves a bridge.ready alone while the renderer is already (re)connecting on its own", async () => {
+    const view = await mountLifecycle();
+    try {
+      view.healthRef.current = "connecting";
+      view.healthChanges.length = 0;
+      view.invokedMethods.length = 0;
+      await view.emit("bridge.ready");
+      assert.deepEqual(view.healthChanges, []);
+      assert.deepEqual(view.invokedMethods, []);
     } finally { await view.cleanup(); }
   });
 });

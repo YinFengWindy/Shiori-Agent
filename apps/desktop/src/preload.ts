@@ -157,6 +157,9 @@ const api: DesktopApi = {
   restartBridge() {
     return ipcRenderer.invoke("desktop:bridge-restart") as Promise<{ ok: boolean; running: boolean; lastError: string | null }>;
   },
+  relaunchApp() {
+    return ipcRenderer.invoke("desktop:app-relaunch") as Promise<boolean>;
+  },
   readSettings() {
     return ipcRenderer.invoke("desktop:settings-read") as Promise<import("./bridge/shared.js").SettingsSnapshot>;
   },

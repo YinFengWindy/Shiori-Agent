@@ -8,6 +8,7 @@ import type { NavigationEntry } from "./appState";
 import { writeRoleMoodConfigToRuntimeConfig } from "../roles/roleMoodConfig";
 import { buildRoleProactiveConfig } from "../roles/roleFormState";
 import { writeRoleVoiceConfigToRuntimeConfig } from "../roles/roleVoiceConfig";
+import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 type UseRoleManagementArgs = {
   activeRoleId: string;
@@ -21,9 +22,7 @@ type UseRoleManagementArgs = {
   setSavingRoleAssets: React.Dispatch<React.SetStateAction<boolean>>;
   setDeletingRole: React.Dispatch<React.SetStateAction<boolean>>;
   setPendingRoleCardAction: React.Dispatch<React.SetStateAction<PendingRoleCardAction>>;
-  setWorkspaceFeedback: React.Dispatch<React.SetStateAction<{ tone: "success" | "error"; message: string } | null>>;
-  setError: React.Dispatch<React.SetStateAction<string>>;
-  setNotice: React.Dispatch<React.SetStateAction<string>>;
+  feedback: FeedbackReporter;
   setRoles: React.Dispatch<React.SetStateAction<RoleRecord[]>>;
   setActiveRoleId: React.Dispatch<React.SetStateAction<string>>;
   setSelectedAvatarAsset: React.Dispatch<React.SetStateAction<string>>;
@@ -61,9 +60,7 @@ export function useRoleManagement({
   setSavingRoleAssets,
   setDeletingRole,
   setPendingRoleCardAction,
-  setWorkspaceFeedback,
-  setError,
-  setNotice,
+  feedback,
   setRoles,
   setActiveRoleId,
   setSelectedAvatarAsset,
@@ -81,7 +78,7 @@ export function useRoleManagement({
   rememberIllustration,
   roleAssetSaveRequestIdRef,
 }: UseRoleManagementArgs) {
-  const refreshDetailRoleForPlugins = useRolePluginRefresh({ detailRoleId, detailRole, roleFormRef, loadRolesFromBridge, updateRoleForm, setError });
+  const refreshDetailRoleForPlugins = useRolePluginRefresh({ detailRoleId, detailRole, roleFormRef, loadRolesFromBridge, updateRoleForm, reportError: feedback.error });
   async function refreshRolesAndResolveRole(updated: RoleRecord): Promise<{
     resolvedRole: RoleRecord;
     nextRoles: RoleRecord[] | null;
@@ -106,8 +103,6 @@ export function useRoleManagement({
   async function saveRole(): Promise<void> {
     if (!detailRoleId) return;
     setSavingRole(true);
-    setError("");
-    setWorkspaceFeedback(null);
     const nextRoleForm = roleFormRef.current;
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
@@ -137,8 +132,7 @@ export function useRoleManagement({
     });
     if (res.error) {
       setSavingRole(false);
-      setError(res.error.message);
-      setWorkspaceFeedback({ tone: "error", message: `角色保存失败：${res.error.message}` });
+      feedback.error(`角色保存失败：${res.error.message}`);
       return;
     }
     const updated = res.payload.role as RoleRecord;
@@ -153,7 +147,7 @@ export function useRoleManagement({
     }));
     await openRole(updated.id, resolvedRole, { recordHistory: false });
     setSavingRole(false);
-    setWorkspaceFeedback({ tone: "success", message: "角色保存成功。" });
+    feedback.success("角色已保存");
   }
 
   async function saveRoleAssets(nextSelection?: {
@@ -165,7 +159,6 @@ export function useRoleManagement({
     const requestId = roleAssetSaveRequestIdRef.current + 1;
     roleAssetSaveRequestIdRef.current = requestId;
     setSavingRoleAssets(true);
-    setError("");
     const pendingRoleForm = roleFormRef.current;
     const hasAvatarSelection = Boolean(
       nextSelection && Object.prototype.hasOwnProperty.call(nextSelection, "avatarAsset"),
@@ -209,7 +202,7 @@ export function useRoleManagement({
       return;
     }
     if (res.error) {
-      setError(res.error.message);
+      feedback.error(res.error.message);
       return;
     }
     const updated = res.payload.role as RoleRecord;
@@ -220,7 +213,7 @@ export function useRoleManagement({
       setActiveIllustration(nextIllustration);
       await rememberIllustration(resolvedRole.id, nextIllustration);
     }
-    setNotice("角色素材已更新。");
+    feedback.success("角色素材已更新");
     updateRoleForm({ ...pendingRoleForm });
     openRoleWorkspace({ kind: "role-assets", roleId: resolvedRole.id }, { recordHistory: false });
   }
@@ -231,7 +224,6 @@ export function useRoleManagement({
     const startedAt = Date.now();
     setDeletingRole(true);
     setPendingRoleCardAction({ roleId, action: "delete" });
-    setError("");
     const res = await window.miraDesktop.invoke({
       method: "roles.delete",
       payload: { role_id: roleId },
@@ -240,7 +232,7 @@ export function useRoleManagement({
     setDeletingRole(false);
     if (res.error) {
       setPendingRoleCardAction(null);
-      setError(res.error.message);
+      feedback.error(res.error.message);
       return;
     }
     const nextRoles = (await loadRolesFromBridge()) ?? [];
@@ -251,7 +243,7 @@ export function useRoleManagement({
       setActiveIllustration("");
     }
     removeCachedRoleSession(roleId);
-    setNotice("角色已删除。");
+    feedback.success("角色已删除");
     if (nextRoles[0]) {
       await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
       navigateToRolesList(nextRoles[0].id);
@@ -271,7 +263,6 @@ export function useRoleManagement({
     const files = await window.miraDesktop.pickImages({ multiple: true });
     if (!files.length || !detailRoleId) return;
     setSavingRoleAssets(true);
-    setError("");
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
       payload: {
@@ -282,7 +273,7 @@ export function useRoleManagement({
     });
     setSavingRoleAssets(false);
     if (res.error) {
-      setError(res.error.message);
+      feedback.error(res.error.message);
       return;
     }
     const updated = res.payload.role as RoleRecord;
@@ -298,7 +289,6 @@ export function useRoleManagement({
   ): Promise<boolean> {
     if (!detailRoleId) return false;
     setSavingRoleAssets(true);
-    setError("");
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
       payload: {
@@ -310,14 +300,14 @@ export function useRoleManagement({
     });
     setSavingRoleAssets(false);
     if (res.error) {
-      setError(res.error.message);
+      feedback.error(res.error.message);
       return false;
     }
     const updated = res.payload.role as RoleRecord;
     setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
     applyRoleSnapshot(updated);
     syncRoleAssetSelections(updated);
-    setNotice("素材分类已更新。");
+    feedback.success("素材分类已更新");
     openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
     return true;
   }
@@ -328,7 +318,6 @@ export function useRoleManagement({
     const removedIndex = detailRole.illustrations.findIndex((item) => item === cleanPath);
     const removedAbsPath = removedIndex >= 0 ? (detailRole.illustrations_abs[removedIndex] ?? "") : "";
     setSavingRoleAssets(true);
-    setError("");
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
       payload: {
@@ -338,7 +327,7 @@ export function useRoleManagement({
     });
     setSavingRoleAssets(false);
     if (res.error) {
-      setError(res.error.message);
+      feedback.error(res.error.message);
       return;
     }
     const updated = res.payload.role as RoleRecord;
@@ -349,7 +338,7 @@ export function useRoleManagement({
       setActiveIllustration(nextIllustration);
       await rememberIllustration(resolvedRole.id, nextIllustration);
     }
-    setNotice("角色素材已删除。");
+    feedback.success("素材已删除");
     openRoleWorkspace({ kind: "role-assets", roleId: resolvedRole.id }, { recordHistory: false });
   }
 

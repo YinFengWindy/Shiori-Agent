@@ -3,6 +3,7 @@ import type { ChatImageHistoryEntry } from "../chat/chatImageHistory";
 import type { RoleRecord, SessionPayload } from "../shared/types";
 import { applySessionMessageUpdate } from "../chat/applySessionMessageUpdate";
 import type { SessionMessageUpdatePayload } from "../shared/types";
+import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 type UseChatImageStateArgs = {
   activeRoleId: string;
@@ -24,8 +25,7 @@ type UseChatImageStateArgs = {
   ) => void;
   loadMessagesAround: (messageId: string, sessionKey: string) => Promise<boolean>;
   queueMessageNavigation: (roleId: string, messageKey: string) => void;
-  setError: React.Dispatch<React.SetStateAction<string>>;
-  setNotice: React.Dispatch<React.SetStateAction<string>>;
+  feedback: FeedbackReporter;
 };
 
 /** Owns chat image preview, lightbox, and right-rail state for the desktop chat surface. */
@@ -47,8 +47,7 @@ export function useChatImageState({
   updateCommittedActiveSession,
   loadMessagesAround,
   queueMessageNavigation,
-  setError,
-  setNotice,
+  feedback,
 }: UseChatImageStateArgs) {
   const latestChatImageRef = useRef<{ sessionKey: string; latestKey: string }>({ sessionKey: "", latestKey: "" });
   function applyPluginImageUpdate(sessionKey: string, update: SessionMessageUpdatePayload): void {
@@ -89,12 +88,11 @@ export function useChatImageState({
   async function addSelectedChatImageToAssetLibrary(): Promise<void> {
     if (!activeRoleId || !resolvedChatImagePath) return;
     if (activeRole?.illustrations_abs.includes(resolvedChatImagePath)) {
-      setNotice("当前图片已在素材库中。");
+      feedback.info("这张图片已在素材库中");
       return;
     }
 
     setAddingChatImageToAssetLibrary(true);
-    setError("");
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
       payload: {
@@ -104,11 +102,11 @@ export function useChatImageState({
     });
     setAddingChatImageToAssetLibrary(false);
     if (res.error) {
-      setError(res.error.message);
+      feedback.error(res.error.message);
       return;
     }
     await loadRolesFromBridge();
-    setNotice("已加入素材库。");
+    feedback.success("已加入素材库");
   }
 
   function selectPreviousChatImage(): void {

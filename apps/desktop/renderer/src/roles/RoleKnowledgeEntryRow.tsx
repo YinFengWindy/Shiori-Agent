@@ -5,6 +5,7 @@ import type { RoleKnowledgeEntry } from "../shared/types";
 import { roleChipClass, roleFieldClass } from "./roleEditorStyles";
 import { RoleKeywordInput } from "./RoleKeywordInput";
 import { RoleKnowledgeEntryOptions } from "./RoleKnowledgeEntryOptions";
+import { knowledgeEntryLabel } from "./roleKnowledgeEntries";
 
 type RoleKnowledgeEntryRowProps = {
   entry: RoleKnowledgeEntry;
@@ -28,7 +29,7 @@ export function RoleKnowledgeEntryRow({ entry, index, expanded, onToggle, onUpda
         onClick={onToggle}
       >
         <span className="grid min-w-0 gap-1.5">
-          <span className="truncate text-sm font-medium text-ink">{entry.title || `条目 ${index + 1}`}</span>
+          <span className="truncate text-sm font-medium text-ink">{knowledgeEntryLabel(entry, index)}</span>
           <span className="flex flex-wrap gap-1.5">
             {keywords.length
               ? keywords.map((keyword) => <span className={roleChipClass} key={keyword}>{keyword}</span>)

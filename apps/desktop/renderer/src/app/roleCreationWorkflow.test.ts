@@ -6,6 +6,7 @@ import type React from "react";
 import type { BridgeResponse } from "../../../src/bridge/shared";
 import type { AppMainView, NewRoleFormState, PendingRoleCardAction, RoleRecord } from "../shared/types";
 import type { NavigationEntry } from "./appState";
+import { createFeedbackRecorder } from "../shared/testing/feedbackRecorder";
 import {
   cancelRoleCreation,
   resetRoleCreationForm,
@@ -61,8 +62,7 @@ function createHarness({
   let activeRoleId = "existing";
   let creating = false;
   let pendingAction: PendingRoleCardAction = null;
-  let error = "";
-  let feedback: { tone: "success" | "error"; message: string } | null = null;
+  const feedback = createFeedbackRecorder();
   const activeRoleIdRef = { current: activeRoleId };
   const views: AppMainView[] = [];
   const navigationEntries: NavigationEntry[] = [];
@@ -79,8 +79,7 @@ function createHarness({
   const args: RoleCreationWorkflowArgs = {
       activeRoleIdRef,
       setPendingRoleCardAction: (next: React.SetStateAction<PendingRoleCardAction>) => { pendingAction = apply(pendingAction, next); },
-      setWorkspaceFeedback: (next: React.SetStateAction<{ tone: "success" | "error"; message: string } | null>) => { feedback = apply(feedback, next); },
-      setError: (next: React.SetStateAction<string>) => { error = apply(error, next); },
+      feedback: feedback.reporter,
       setRoles: (next: React.SetStateAction<RoleRecord[]>) => { roles = apply(roles, next); },
       setActiveRoleId: (next: React.SetStateAction<string>) => { activeRoleId = apply(activeRoleId, next); },
       openRoleWorkspace: (view: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" | "role-assets" }>) => { views.push(view); },
@@ -98,7 +97,7 @@ function createHarness({
   return {
     args,
     get state() {
-      return { roles, activeRoleId, activeRoleIdRef, creating, pendingAction, error, feedback, views, navigationEntries, snapshots, requests, openedRoles, openedSnapshots, refreshCount };
+      return { roles, activeRoleId, activeRoleIdRef, creating, pendingAction, feedback: feedback.last, views, navigationEntries, snapshots, requests, openedRoles, openedSnapshots, refreshCount };
     },
   };
 }
@@ -115,8 +114,8 @@ describe("runRoleCreation", () => {
     assert.equal(created, false);
     assert.equal(harness.state.requests.length, 0);
     assert.equal(harness.state.roles.length, 1);
-    assert.equal(harness.state.error, "角色名称和系统提示词不能为空。");
     assert.equal(harness.state.feedback?.tone, "error");
+    assert.equal(harness.state.feedback?.message, "角色创建失败：角色名称和系统提示词不能为空。");
   });
 
   it("creates optimistically, refreshes roles, and opens the created role", async () => {
@@ -143,7 +142,7 @@ describe("runRoleCreation", () => {
     assert.equal(harness.state.snapshots[0]?.id, "pending-create:test");
     assert.equal(harness.state.snapshots.at(-1)?.id, "new-role");
     assert.equal(harness.state.pendingAction, null);
-    assert.equal(harness.state.feedback?.message, "角色创建成功。");
+    assert.deepEqual(harness.state.feedback, { tone: "success", message: "角色已创建", options: undefined });
     assert.deepEqual(harness.state.views.map((view) => view.kind), ["roles-list", "roles-list"]);
     assert.equal(harness.state.navigationEntries.at(-1)?.activeRoleId, "new-role");
   });
@@ -195,7 +194,7 @@ describe("runRoleCreation", () => {
     assert.equal(harness.state.activeRoleId, "existing");
     assert.equal(harness.state.activeRoleIdRef.current, "existing");
     assert.equal(harness.state.pendingAction, null);
-    assert.equal(harness.state.error, "保存失败");
+    assert.equal(harness.state.feedback?.tone, "error");
     assert.equal(harness.state.feedback?.message, "角色创建失败：保存失败");
     assert.deepEqual(harness.state.views.map((view) => view.kind), ["roles-list", "role-create"]);
     assert.equal(harness.state.navigationEntries.at(-1)?.view.kind, "role-create");
@@ -247,7 +246,8 @@ describe("runRoleCreation", () => {
     assert.equal(harness.state.creating, false);
     assert.equal(harness.state.pendingAction, null);
     assert.deepEqual(harness.state.roles.map((role) => role.id), ["existing"]);
-    assert.match(harness.state.error, /disconnected/);
+    assert.equal(harness.state.feedback?.tone, "error");
+    assert.match(harness.state.feedback?.message ?? "", /disconnected/);
   });
 
   it("preserves a committed role when its subsequent refresh fails", async () => {
@@ -266,10 +266,10 @@ describe("runRoleCreation", () => {
 describe("role creation form actions", () => {
   it("resets the draft and reports success", () => {
     let form: NewRoleFormState = createForm();
-    let feedback: { tone: "success" | "error"; message: string } | null = null;
+    const feedback = createFeedbackRecorder();
     resetRoleCreationForm({
       updateNewRoleForm: (next) => { form = next; },
-      setWorkspaceFeedback: (next) => { feedback = typeof next === "function" ? next(feedback) : next; },
+      feedback: feedback.reporter,
       openRoleWorkspace: () => undefined,
     });
 
@@ -282,16 +282,16 @@ describe("role creation form actions", () => {
         knowledge_base: { enabled: false, entries: [] },
       },
     });
-    assert.deepEqual(feedback, { tone: "success", message: "新建角色表单已重置。" });
+    assert.deepEqual(feedback.messages("success"), ["已重置新建角色表单"]);
   });
 
   it("cancels only when creation is idle", () => {
     let form: NewRoleFormState = createForm();
-    let feedback: { tone: "success" | "error"; message: string } | null = { tone: "error", message: "old" };
+    const feedback = createFeedbackRecorder();
     const views: AppMainView[] = [];
     const action = {
       updateNewRoleForm: (next: NewRoleFormState) => { form = next; },
-      setWorkspaceFeedback: (next: React.SetStateAction<typeof feedback>) => { feedback = typeof next === "function" ? next(feedback) : next; },
+      feedback: feedback.reporter,
       openRoleWorkspace: (view: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" | "role-assets" }>) => { views.push(view); },
     };
 
@@ -307,7 +307,7 @@ describe("role creation form actions", () => {
         knowledge_base: { enabled: false, entries: [] },
       },
     });
-    assert.equal(feedback, null);
+    assert.deepEqual(feedback.entries, []);
     assert.deepEqual(views, [{ kind: "roles-list" }]);
   });
 });

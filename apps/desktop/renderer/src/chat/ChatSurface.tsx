@@ -50,7 +50,6 @@ type ChatSurfaceProps = {
     target: HTMLElement,
     scrollToMessage: ChatMessageNavigationScroller,
   ) => void;
-  notice: string;
   sending: boolean;
   cancelling: boolean;
   visibleIllustrationUrl: string;
@@ -96,7 +95,6 @@ export function ChatSurface({
   headerTitle,
   highlightedMessageKey,
   onMessageNavigationTargetMounted,
-  notice,
   sending,
   cancelling,
   visibleIllustrationUrl,
@@ -450,7 +448,6 @@ export function ChatSurface({
         onOpenRoleDetail={handleOpenRoleDetail}
       />
       <section className="conversation-panel relative z-[1] h-full min-h-0 overflow-hidden bg-transparent">
-        {notice ? <div className="notice-chip absolute left-1/2 top-4 z-[2] -translate-x-1/2 rounded-md border border-[var(--success-300)] bg-success-soft px-3.5 py-2.5 text-success-text">{notice}</div> : null}
         <ChatMessageList
           activeRole={activeRole}
           sessionKey={activeSession?.key ?? ""}

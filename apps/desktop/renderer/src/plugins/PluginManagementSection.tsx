@@ -8,6 +8,7 @@ import { PluginRow } from "./PluginRow";
 import { PluginPackageDialogs } from "./PluginPackageDialogs";
 import { usePluginPackageController } from "./usePluginPackageController";
 import { PluginPackageToolbar } from "./PluginPackageToolbar";
+import { PluginRestartBanner } from "./PluginRestartBanner";
 import { PluginDetailsDialog } from "./PluginDetailsDialog";
 import { pluginDetailsCandidate } from "./pluginPackageState";
 
@@ -33,6 +34,7 @@ export function PluginManagementSection() {
   }
   return (
     <Dialog.Root open={details !== null} onOpenChange={(open) => { if (!open && !busy) setDetailsCandidateId(null); }}>
+    <PluginRestartBanner plugins={plugins} />
     <PluginPackageToolbar busy={busy} onInstall={() => void packages.pickPackage()} />
     <SettingsSectionCard>
       {error ? <div role="alert" className="text-sm text-danger-text">{error}</div> : null}

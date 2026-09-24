@@ -412,7 +412,11 @@ async def test_first_chat_seed_failure_reports_error_and_next_chat_retries(
             "roles.create", {"name": "Mira", "system_prompt": "Be Mira"}
         )
         role_id = created["role"]["id"]
-        assert created["role"]["runtime_config"]["dialogue_model_registration_id"] == ""
+        # New roles default to the first registered model (the only one here).
+        assert (
+            created["role"]["runtime_config"]["dialogue_model_registration_id"]
+            == _REGISTRATION
+        )
         await request(
             "roles.update",
             {

@@ -484,6 +484,12 @@ void app.whenReady().then(async () => {
     // desktop surface window behind — nothing else in this process is told
     // the plugin stopped, so its window would otherwise sit there forever.
     onPluginDeactivated: (pluginId) => activeDesktopSurfaces.destroyAllForPlugin(pluginId),
+    // Same quit path as the tray (bridge stopped gracefully in before-quit),
+    // with the next launch scheduled first.
+    relaunchApp: () => {
+      app.relaunch();
+      requestAppQuit();
+    },
   });
   getOrCreateDesktopWindow();
   if (trayLifecycleEnabled) {

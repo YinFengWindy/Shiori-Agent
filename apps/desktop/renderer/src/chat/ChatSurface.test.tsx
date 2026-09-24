@@ -70,7 +70,6 @@ function renderChatSurface(
       conversationEndRef={React.createRef<HTMLDivElement>()}
       headerTitle={activeRole?.name ?? "Mira"}
       highlightedMessageKey=""
-      notice=""
       sending={false}
       cancelling={false}
       visibleIllustrationUrl=""

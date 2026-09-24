@@ -1,18 +1,11 @@
 import { useEffect } from "react";
 import type React from "react";
-import type { WorkspaceFeedback } from "./appState";
 
 type UseDesktopUiEffectsArgs = {
   sidebarAnimating: boolean;
   setSidebarAnimating: React.Dispatch<React.SetStateAction<boolean>>;
   pendingMessageNavigation: { roleId: string; messageKey: string } | null;
   setHighlightedMessageKey: React.Dispatch<React.SetStateAction<string>>;
-  notice: string;
-  setNotice: React.Dispatch<React.SetStateAction<string>>;
-  workspaceFeedback: WorkspaceFeedback | null;
-  setWorkspaceFeedback: React.Dispatch<React.SetStateAction<WorkspaceFeedback | null>>;
-  navBlockedMessage: string;
-  setNavBlockedMessage: React.Dispatch<React.SetStateAction<string>>;
   highlightedMessageKey: string;
   previewIllustrations: string[];
   activeIllustration: string;
@@ -40,18 +33,12 @@ export function shouldWaitForMessageNavigation(
   );
 }
 
-/** Runs UI-only desktop effects such as dismiss timers and message highlight retries. */
+/** Runs UI-only desktop effects such as sidebar timers and message highlight retries. */
 export function useDesktopUiEffects({
   sidebarAnimating,
   setSidebarAnimating,
   pendingMessageNavigation,
   setHighlightedMessageKey,
-  notice,
-  setNotice,
-  workspaceFeedback,
-  setWorkspaceFeedback,
-  navBlockedMessage,
-  setNavBlockedMessage,
   highlightedMessageKey,
   previewIllustrations,
   activeIllustration,
@@ -79,30 +66,6 @@ export function useDesktopUiEffects({
     window.addEventListener("resize", collapseSidebarForNarrowWindow);
     return () => window.removeEventListener("resize", collapseSidebarForNarrowWindow);
   }, [setSidebarAnimating, setSidebarCollapsed, sidebarAutoCollapseWindowWidth]);
-
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(""), 2200);
-    return () => window.clearTimeout(timer);
-  }, [notice, setNotice]);
-
-  useEffect(() => {
-    if (!workspaceFeedback) return;
-    const timer = window.setTimeout(() => setWorkspaceFeedback(null), 2200);
-    return () => window.clearTimeout(timer);
-  }, [setWorkspaceFeedback, workspaceFeedback]);
-
-  // Same lifetime convention as `notice`/`workspaceFeedback` above (a plain
-  // auto-dismiss timeout): a refused nav.page selection is a one-off,
-  // already-stale-in-seconds signal, so reusing the existing pattern avoids
-  // a second lifecycle mechanism (e.g. wiring "clear on next successful
-  // navigation" through every `openXxx` call in useNavigationHistory) for a
-  // case the timeout alone already covers.
-  useEffect(() => {
-    if (!navBlockedMessage) return;
-    const timer = window.setTimeout(() => setNavBlockedMessage(""), 2200);
-    return () => window.clearTimeout(timer);
-  }, [navBlockedMessage, setNavBlockedMessage]);
 
   useEffect(() => {
     if (!highlightedMessageKey) return;

@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { createEmptyNewRoleForm } from "../app/appState";
 import { useRoleCardImport } from "../app/useRoleCardImport";
-import type { RoleCreationControllerArgs } from "../app/roleCreationWorkflow";
 import type { NewRoleFormState } from "../shared/types";
 import { useLatestRef } from "../shared/useLatestRef";
 
 /** Shares role draft and import staging between creation entry points. */
-export function useRoleCreationDraft(setWorkspaceFeedback: RoleCreationControllerArgs["setWorkspaceFeedback"]) {
+export function useRoleCreationDraft(reportImportError: (message: string) => void) {
   const [newRoleForm, setNewRoleForm] = useState(createEmptyNewRoleForm);
   const newRoleFormRef = useLatestRef(newRoleForm);
   function updateNewRoleForm(next: React.SetStateAction<NewRoleFormState>) {
@@ -14,6 +13,6 @@ export function useRoleCreationDraft(setWorkspaceFeedback: RoleCreationControlle
     newRoleFormRef.current = resolved;
     setNewRoleForm(resolved);
   }
-  const imports = useRoleCardImport({ updateNewRoleForm, setWorkspaceFeedback });
+  const imports = useRoleCardImport({ updateNewRoleForm, reportImportError });
   return { newRoleForm, newRoleFormRef, updateNewRoleForm, ...imports };
 }

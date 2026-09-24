@@ -15,7 +15,6 @@ import {
   sidebarMaxWidth,
   sidebarMinWidth,
   type PendingMessageNavigation,
-  type WorkspaceFeedback,
 } from "./app/appState";
 import { useDesktopSessionState } from "./app/useDesktopSessionState";
 import { useDesktopViewSynchronization } from "./app/useDesktopViewSynchronization";
@@ -24,6 +23,7 @@ import { useDesktopUiEffects } from "./app/useDesktopUiEffects";
 import { useChatImageState } from "./app/useChatImageState";
 import { useChatInteractions } from "./app/useChatInteractions";
 import { useNavigationHistory } from "./app/useNavigationHistory";
+import { shouldGuardRoleEditorLeave, useLeaveGuard } from "./app/useLeaveGuard";
 import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleCreationController } from "./app/useRoleCreationController";
 import { useRoleSearch } from "./app/roleSearch";
@@ -31,6 +31,10 @@ import { navigateToRoleSearchResult } from "./app/roleSearchNavigation";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
+import { requestChatModelMenu } from "./chat/chatModelMenuRequests";
+import { chatSendFailureAction } from "./chat/chatSendFailure";
+import { feedback } from "./shared/feedback/feedbackStore";
+import { FeedbackToaster } from "./shared/feedback/FeedbackToaster";
 import type { ChatMessageNavigationScroller } from "./chat/useChatScrollController";
 import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
 import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalDiagnostics";
@@ -44,12 +48,14 @@ import { useRoleFormAdapters } from "./roles/useRoleFormAdapters";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
 import { useSettingsSubsectionMemory } from "./settings/useSettingsSubsectionMemory";
 import { useLatestRef } from "./shared/useLatestRef";
+import { setInFlightChatTurns } from "./shared/chatTurnActivity";
 import { useLeftSidebarState } from "./shared/useLeftSidebarState";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
 import type {
   AppMainView,
   PendingRoleCardAction,
   RoleRecord,
+  RoleSearchResult,
   SessionImageHistoryMessage,
   SessionPayload,
 } from "./shared/types";
@@ -59,11 +65,10 @@ import { OnboardingPage } from "./onboarding/OnboardingPage";
 
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
+  const [bridgeError, setBridgeError] = useState("");
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [activeRoleId, setActiveRoleId] = useState("");
   const [activeSession, setActiveSession] = useState<SessionPayload | null>(null);
-  const [, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [savingRole, setSavingRole] = useState(false);
   const [savingRoleAssets, setSavingRoleAssets] = useState(false);
   const [deletingRole, setDeletingRole] = useState(false);
@@ -73,15 +78,6 @@ function App(): React.ReactElement {
   const [pendingRoleCardAction, setPendingRoleCardAction] = useState<PendingRoleCardAction>(null);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [pendingDeleteRoleId, setPendingDeleteRoleId] = useState("");
-  const [workspaceFeedback, setWorkspaceFeedback] = useState<WorkspaceFeedback | null>(null);
-  // Own lifetime, separate from `workspaceFeedback` on purpose (issue #226
-  // follow-up): that one is gated to the role-workspace view and cleared by
-  // that flow's own state transitions, so relaxing its gate would let a
-  // stale role-workspace message follow the user into an unrelated view. A
-  // refused nav.page selection (`guardedNavPageSelect`) can happen from any
-  // view, so it gets its own slot, auto-cleared the same way `notice`/
-  // `workspaceFeedback` already are (see `useDesktopUiEffects`).
-  const [navBlockedMessage, setNavBlockedMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingMessageNavigation, setPendingMessageNavigation] = useState<PendingMessageNavigation | null>(null);
   const [highlightedMessageKey, setHighlightedMessageKey] = useState("");
@@ -122,6 +118,7 @@ function App(): React.ReactElement {
   const openRoleRequestIdRef = useRef(0);
   const roleAssetSaveRequestIdRef = useRef(0);
   const activeRoleIdRef = useLatestRef(activeRoleId);
+  const healthRef = useLatestRef(health);
   const activeSessionRef = useLatestRef(activeSession);
   const pendingMessageNavigationRef = useLatestRef(pendingMessageNavigation);
   const roleSessionCacheRef = useRef<RoleSessionCache>({});
@@ -267,8 +264,13 @@ function App(): React.ReactElement {
     setRoles,
     setActiveRoleId,
     setActiveSession,
-    setError,
-    setNotice,
+    feedback,
+    reportSendFailure: (failure) => feedback.error(failure.message, {
+      action: chatSendFailureAction(failure, {
+        chooseRoleModel: requestChatModelMenu,
+        openModelSettings: () => openSettingsWorkspace("models"),
+      }),
+    }),
     setUnreadCounts,
     setSelectedAvatarAsset,
     setSelectedChatBackground,
@@ -323,14 +325,18 @@ function App(): React.ReactElement {
     };
   }, [activeSessionKeyForImages, activeSessionUpdatedAtForImages]);
 
+  // Lets actions outside the chat tree (the plugins page relaunch) see running turns.
+  useEffect(() => setInFlightChatTurns(Object.keys(sendingSessions).length), [sendingSessions]);
+
   const bridgeLifecycle = useDesktopBridgeLifecycle({
     activeRoleId,
     activeIllustration,
     setActiveRoleId,
     setActiveIllustration,
     setHealth,
-    setError,
-    setNotice,
+    setBridgeError,
+    feedback,
+    healthRef,
     setWindowMaximized,
     setWindowVisible,
     setUnreadCounts,
@@ -432,15 +438,13 @@ function App(): React.ReactElement {
     updateCommittedActiveSession,
     loadMessagesAround,
     queueMessageNavigation,
-    setError,
-    setNotice,
+    feedback,
   });
 
   const roleCreation = useRoleCreationController({
     activeRoleIdRef,
     setPendingRoleCardAction,
-    setWorkspaceFeedback,
-    setError,
+    feedback,
     setRoles,
     setActiveRoleId,
     openRoleWorkspace,
@@ -471,9 +475,7 @@ function App(): React.ReactElement {
     setSavingRoleAssets,
     setDeletingRole,
     setPendingRoleCardAction,
-    setWorkspaceFeedback,
-    setError,
-    setNotice,
+    feedback,
     setRoles,
     setActiveRoleId,
     setSelectedAvatarAsset,
@@ -506,22 +508,25 @@ function App(): React.ReactElement {
     applyRoleSnapshot,
     openRoleWorkspace,
     openRole,
-    setNotice,
-    setError,
+    feedback,
     setHighlightedMessageKey,
   });
+
+  // Every navigation intent below that can leave the role editor goes through
+  // `guardLeave`, so unsaved role edits are never dropped silently.
+  const leaveGuard = useLeaveGuard({
+    active: shouldGuardRoleEditorLeave(mainView, roleFormDirty),
+    onDiscard: () => {
+      if (detailRole) updateRoleForm(createRoleFormFromRole(detailRole));
+    },
+  });
+  const guardLeave = leaveGuard.guard;
 
   useDesktopUiEffects({
     sidebarAnimating: leftSidebar.animating,
     setSidebarAnimating: leftSidebar.setAnimating,
     pendingMessageNavigation,
     setHighlightedMessageKey,
-    notice,
-    setNotice,
-    workspaceFeedback,
-    setWorkspaceFeedback,
-    navBlockedMessage,
-    setNavBlockedMessage,
     highlightedMessageKey,
     previewIllustrations,
     activeIllustration,
@@ -532,17 +537,36 @@ function App(): React.ReactElement {
     setSidebarCollapsed: leftSidebar.setCollapsed,
   });
 
+  function selectSearchResult(result: RoleSearchResult): void {
+    setShowSearchDialog(false);
+    setSearchQuery("");
+    const messageKey = result.matchedField === "message"
+      ? getMessageKey(result.matchedMessageId)
+      : "";
+    void navigateToRoleSearchResult({
+      result,
+      messageKey,
+      openChatView,
+      isSearchResultSessionActive: (roleId, sessionKey) => (
+        activeRoleIdRef.current === roleId && activeSessionRef.current?.key === sessionKey
+      ),
+      queueMessageNavigation,
+      clearMessageNavigation,
+      openRole: (roleId, options) => openRole(roleId, null, options),
+      loadMessagesAround,
+    });
+  }
+
   async function resetRoleForm(): Promise<void> {
     if (!detailRole) return;
     updateRoleForm(createRoleFormFromRole(detailRole));
-    setNotice("角色表单已重置。");
+    feedback.success("已重置角色表单");
   }
 
   const onboarding = useOnboardingController(openRole, bridgeLifecycle);
   if (onboarding.visible) {
     return <OnboardingPage controller={onboarding} windowMaximized={windowMaximized} />;
   }
-
 
   return (
     <DesktopAppFrame
@@ -552,10 +576,10 @@ function App(): React.ReactElement {
       canGoForward={canGoForward}
       canRefreshSession={mainView.kind === "chat" && Boolean(activeRoleId)}
       onToggleSidebar={leftSidebar.toggle}
-      onGoBack={() => void navigateHistory("back", openRole)}
-      onGoForward={() => void navigateHistory("forward", openRole)}
+      onGoBack={() => guardLeave(() => void navigateHistory("back", openRole))}
+      onGoForward={() => guardLeave(() => void navigateHistory("forward", openRole))}
       onRefreshSession={() => void refreshSession()}
-      onOpenSettings={() => openSettingsWorkspace()}
+      onOpenSettings={() => guardLeave(() => openSettingsWorkspace())}
       shellResizing={leftSidebar.resizing || chatLatestImageSidebar.resizing}
       sidebarState={{
         collapsed: leftSidebar.collapsed,
@@ -568,28 +592,28 @@ function App(): React.ReactElement {
       settingsSection={settingsSection}
       activeSettingsSubsections={settingsSubsectionMemory.activeSubsections}
       onChangeSettingsSubsection={updateSettingsSubsection}
-      onBackToChat={() => openChatView()}
-      onOpenSettingsSection={(section) => openSettingsWorkspace(section)}
+      onBackToChat={() => guardLeave(() => openChatView())}
+      onOpenSettingsSection={(section) => guardLeave(() => openSettingsWorkspace(section))}
       roleWorkspaceViewActive={roleWorkspaceViewActive}
       roleWorkspaceSection={roleWorkspaceSection}
-      onOpenRoleWorkspaceSection={(section) => {
+      onOpenRoleWorkspaceSection={(section) => guardLeave(() => {
         if (section === "role-create") {
           openRoleWorkspace({ kind: "role-create" });
           return;
         }
         openRoleWorkspace({ kind: "roles-list" });
-      }}
+      })}
       roles={roles}
       activeRoleId={activeRoleId}
       unreadCounts={unreadCounts}
       bridgeReady={bridgeReady}
       onOpenSearch={() => setShowSearchDialog(true)}
-      onOpenRolesWorkspace={() => openRoleWorkspace({ kind: "roles-list" })}
-      onOpenPluginPage={(pageId) => openPluginPage(pageId)}
-      navBlockedMessage={navBlockedMessage}
-      onNavigationBlocked={(message) => setNavBlockedMessage(message)}
-      onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
-      workspaceFeedback={workspaceFeedback}
+      onOpenRolesWorkspace={() => guardLeave(() => openRoleWorkspace({ kind: "roles-list" }))}
+      onOpenPluginPage={(pageId) => guardLeave(() => openPluginPage(pageId))}
+      onOpenRole={(roleId) => guardLeave(() => void openRole(roleId, null, { recordHistory: true }))}
+      health={health}
+      bridgeError={bridgeError}
+      onRestartBridge={bridgeLifecycle.restartBridge}
       activeRole={activeRole}
       activeSession={activeSession}
       chatLatestImagePath={resolvedChatImagePath}
@@ -605,7 +629,6 @@ function App(): React.ReactElement {
       headerTitle={headerTitle}
       highlightedMessageKey={highlightedMessageKey}
       onMessageNavigationTargetMounted={handleMessageNavigationTargetMounted}
-      notice={notice}
       isVisibleChatSending={isVisibleChatSending}
       isVisibleChatCancelling={isVisibleChatCancelling}
       visibleIllustrationUrl={visibleIllustrationUrl}
@@ -627,7 +650,7 @@ function App(): React.ReactElement {
       onRequestDeleteRole={setPendingDeleteRoleId}
       creating={roleCreation.creating}
       newRoleForm={roleCreation.newRoleForm}
-      onBackToRoleList={roleCreation.cancelCreateRole}
+      onBackToRoleList={() => guardLeave(roleCreation.cancelCreateRole)}
       onCreateNewRole={() => void roleCreation.createRole()}
       onResetNewRoleForm={roleCreation.resetNewRoleForm}
       onUpdateNewRoleForm={roleCreation.updateNewRoleForm}
@@ -664,25 +687,7 @@ function App(): React.ReactElement {
         setShowSearchDialog(false);
         setSearchQuery("");
       }}
-      onSelectSearchResult={(result) => {
-        setShowSearchDialog(false);
-        setSearchQuery("");
-        const messageKey = result.matchedField === "message"
-          ? getMessageKey(result.matchedMessageId)
-          : "";
-        void navigateToRoleSearchResult({
-          result,
-          messageKey,
-          openChatView,
-          isSearchResultSessionActive: (roleId, sessionKey) => (
-            activeRoleIdRef.current === roleId && activeSessionRef.current?.key === sessionKey
-          ),
-          queueMessageNavigation,
-          clearMessageNavigation,
-          openRole: (roleId, options) => openRole(roleId, null, options),
-          loadMessagesAround,
-        });
-      }}
+      onSelectSearchResult={(result) => guardLeave(() => selectSearchResult(result))}
       onUpdateSearchQuery={setSearchQuery}
       pendingDeleteRole={pendingDeleteRole}
       deletingRole={deletingRole}
@@ -696,7 +701,7 @@ function App(): React.ReactElement {
       canGoToPreviousLightboxImage={selectedChatImageIndex > 0}
       chatImageActions={selectedChatImageEntry ? <PluginChatImageActions
         target={{ ...selectedChatImageEntry, sessionKey: activeSessionKey }}
-        onSessionUpdate={applyPluginImageUpdate} onError={setError} onNotice={setNotice}
+        onSessionUpdate={applyPluginImageUpdate} onError={feedback.error} onNotice={feedback.success}
       /> : null}
       canLocateLightboxMessage={Boolean(activeRoleId && selectedChatImageEntry?.messageId)}
       addingChatImageToAssetLibrary={addingChatImageToAssetLibrary}
@@ -704,6 +709,10 @@ function App(): React.ReactElement {
       onAddSelectedChatImageToAssetLibrary={() => void addSelectedChatImageToAssetLibrary()}
       onCloseSelectedChatImageLightbox={closeSelectedChatImageLightbox}
       onLocateSelectedChatImageMessage={locateSelectedChatImageMessage}
+      leaveConfirmOpen={leaveGuard.confirming}
+      leaveRoleName={detailRole?.name ?? ""}
+      onConfirmLeave={leaveGuard.confirmLeave}
+      onCancelLeave={leaveGuard.cancelLeave}
     />
   );
 }
@@ -714,5 +723,7 @@ initializeRuntimePluginUi();
 createRoot(document.getElementById("root") as HTMLElement).render(
   <DesktopErrorBoundary>
     <App />
+    {/* Outside App so every branch (onboarding, workspace, full-screen plugin pages) shares one outlet. */}
+    <FeedbackToaster />
   </DesktopErrorBoundary>,
 );

@@ -11,7 +11,7 @@ import { onboardingActionClass } from "./onboardingStyles";
 /** Creates the first role while preserving the draft and preventing duplicate submissions. */
 export function OnboardingRoleStep({ onSaved, onBusyChange }: { onSaved: () => Promise<unknown>; onBusyChange: (busy: boolean) => void }) {
   const [feedback, setFeedback] = useState<WorkspaceFeedback | null>(null);
-  const draft = useRoleCreationDraft(setFeedback);
+  const draft = useRoleCreationDraft((message) => setFeedback({ tone: "error", message }));
   const [creating, setCreating] = useState(false);
   const [createdId, setCreatedId] = useState("");
   const pending = useRef(false);

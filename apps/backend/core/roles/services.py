@@ -325,11 +325,14 @@ class RoleAggregateService:
         memory: RoleMemoryService,
         bindings: RoleBindingService,
         on_role_deleted: Callable[[str], None] | None = None,
+        default_dialogue_registration_id: str = "",
     ) -> None:
         self.repository = repository
         self.sessions = sessions
         self.memory = memory
         self.bindings = bindings
+        # 新建角色时默认绑定的对话模型；空串表示不自动绑定（存储层仍会显式写入空绑定）。
+        self._default_dialogue_registration_id = default_dialogue_registration_id
         self._role_deleted_listeners: list[Callable[[str], None]] = []
         if on_role_deleted is not None:
             self.add_role_deleted_listener(on_role_deleted)
@@ -356,6 +359,7 @@ class RoleAggregateService:
         role_store: RoleStore,
         session_manager: SessionManager,
         on_role_deleted: Callable[[str], None] | None = None,
+        default_dialogue_registration_id: str = "",
     ) -> "RoleAggregateService":
         repository = RoleRepository(role_store)
         memory = RoleMemoryService(workspace)
@@ -366,6 +370,7 @@ class RoleAggregateService:
             memory=memory,
             bindings=bindings,
             on_role_deleted=on_role_deleted,
+            default_dialogue_registration_id=default_dialogue_registration_id,
         )
 
     def create_role(
@@ -387,7 +392,7 @@ class RoleAggregateService:
             system_prompt=system_prompt,
             background=background,
             profile=profile,
-            runtime_config=runtime_config,
+            runtime_config=self._with_default_dialogue_model(runtime_config),
             role_id=role_id,
             avatar_source=avatar_source,
             illustration_sources=illustration_sources,
@@ -399,6 +404,19 @@ class RoleAggregateService:
         return RoleAggregate(
             role=role, session=session, memory_root=self.memory.memory_root(role.id)
         )
+
+    def _with_default_dialogue_model(
+        self, runtime_config: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """未显式指定对话模型的新角色默认绑定当前默认模型，避免新角色无法发送消息。"""
+
+        if not self._default_dialogue_registration_id:
+            return runtime_config
+        resolved = dict(runtime_config or {})
+        resolved.setdefault(
+            "dialogue_model_registration_id", self._default_dialogue_registration_id
+        )
+        return resolved
 
     async def create_role_async(
         self,

@@ -9,7 +9,7 @@ import { useRoleCreationDraft } from "../roles/useRoleCreationDraft";
 export function useRoleCreationController(args: RoleCreationControllerArgs) {
   const [creating, setCreating] = useState(false);
   const creatingRef = useLatestRef(creating);
-  const imports = useRoleCreationDraft(args.setWorkspaceFeedback);
+  const imports = useRoleCreationDraft(args.feedback.error);
   const { newRoleForm, newRoleFormRef, updateNewRoleForm } = imports;
   const formActions = { ...args, updateNewRoleForm };
 

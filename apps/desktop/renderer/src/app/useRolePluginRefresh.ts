@@ -5,6 +5,7 @@ import { pluginRoleSettingsRegistry } from "../plugins/pluginFeatureRegistry";
 import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
 import { useLatestRef } from "../shared/useLatestRef";
 import type { RoleFormState, RoleRecord } from "../shared/types";
+import { errorMessage } from "../shared/feedback/feedbackStore";
 
 type RolePluginRefreshArgs = {
   detailRoleId: string;
@@ -12,7 +13,7 @@ type RolePluginRefreshArgs = {
   roleFormRef: React.MutableRefObject<RoleFormState>;
   loadRolesFromBridge: () => Promise<RoleRecord[] | null>;
   updateRoleForm: (next: React.SetStateAction<RoleFormState>) => void;
-  setError: (message: string) => void;
+  reportError: (message: string) => void;
 };
 
 /** Reconciles plugin projections without replacing unrelated or newer draft edits. */
@@ -27,7 +28,7 @@ export function useRolePluginRefresh(args: RolePluginRefreshArgs) {
   useEffect(() => {
     // A cached role may lack projections while disabled. Stable lifecycle keys
     // prevent ordinary roster reloads from resetting an unsaved plugin draft.
-    void refresh(false).catch((error: unknown) => latest.current.setError(error instanceof Error ? error.message : String(error)));
+    void refresh(false).catch((error: unknown) => latest.current.reportError(errorMessage(error)));
     return () => { request.current += 1; };
   }, [args.detailRoleId, lifecycleKey, latest, refresh]);
 
