@@ -85,6 +85,8 @@ type DesktopAppFrameProps = {
   chatLatestImageSidebarCount: number;
   currentMood: string;
   moodIllustrationUrl: string;
+  /** When the session last set the mood (`current_mood_updated_at`). */
+  moodUpdatedAt: string;
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
@@ -224,6 +226,7 @@ export function DesktopAppFrame({
   chatLatestImageSidebarCount,
   currentMood,
   moodIllustrationUrl,
+  moodUpdatedAt,
   roleSelfView,
   relationshipTags,
   lonelinessValue,
@@ -469,6 +472,7 @@ export function DesktopAppFrame({
               chatLatestImageSidebarWidth={chatLatestImageSidebar.width}
               currentMood={currentMood}
               moodIllustrationUrl={moodIllustrationUrl}
+              moodUpdatedAt={moodUpdatedAt}
               roleSelfView={roleSelfView}
               relationshipTags={relationshipTags}
               lonelinessValue={lonelinessValue}

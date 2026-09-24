@@ -56,6 +56,8 @@ type ChatSurfaceProps = {
   chatLatestImageSidebarWidth: number;
   currentMood: string;
   moodIllustrationUrl: string;
+  /** When the session last set the mood (`current_mood_updated_at`). */
+  moodUpdatedAt: string;
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
@@ -108,6 +110,7 @@ export function ChatSurface({
   chatLatestImageSidebarWidth,
   currentMood,
   moodIllustrationUrl,
+  moodUpdatedAt,
   roleSelfView,
   relationshipTags,
   lonelinessValue,
@@ -507,6 +510,8 @@ export function ChatSurface({
                 lonelinessValue={lonelinessValue}
                 mode={sidebarMode}
                 moodIllustrationUrl={moodIllustrationUrl}
+                moodUpdatedAt={moodUpdatedAt}
+                moodScope={`${activeRoleId}|${activeSession?.key ?? ""}`}
                 relationshipTags={relationshipTags}
                 renderHeavyVisuals={renderHeavyVisuals}
                 roleSelfView={roleSelfView}

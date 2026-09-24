@@ -7,7 +7,7 @@ import {
   resolveChatImageSelectionKey,
 } from "../chat/chatImageHistory";
 import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "../chat/chatHeaderState";
-import { resolveCurrentMood, resolveCurrentThought, resolveMoodIllustration, roleSession } from "../roles/roleMoodSelectors";
+import { resolveCurrentMood, resolveCurrentMoodUpdatedAt, resolveCurrentThought, resolveMoodIllustration, roleSession } from "../roles/roleMoodSelectors";
 import { isRoleFormDirty } from "../roles/roleFormState";
 import { toFileUrl } from "../shared/format";
 import type {
@@ -73,6 +73,7 @@ export function buildDesktopViewModel({
     useRoleForm: mainView.kind === "role-detail",
   });
   const moodIllustrationUrl = moodIllustration ? toFileUrl(moodIllustration) : "";
+  const moodUpdatedAt = resolveCurrentMoodUpdatedAt(activeSession, detailRole?.id);
   const roleChatBackground = detailRole?.chat_background_abs ?? "";
   const visibleIllustration = activeIllustration || roleChatBackground;
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
@@ -125,6 +126,7 @@ export function buildDesktopViewModel({
     currentMood,
     moodIllustration,
     moodIllustrationUrl,
+    moodUpdatedAt,
     roleChatBackground,
     visibleIllustrationUrl,
     chatBackgroundUrl,

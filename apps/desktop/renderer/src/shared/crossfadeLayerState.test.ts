@@ -15,7 +15,7 @@ describe("crossfade layers", () => {
     assert.deepEqual(next.map(({ value, phase }) => [value, phase]), [["b.png", "static"]]);
   });
 
-  it("swaps instantly under reduced motion or from nothing", () => {
+  it("swaps instantly for a new subject or from nothing", () => {
     assert.deepEqual(advanceCrossfadeLayers(initialCrossfadeLayers("a.png"), "b.png", true).map((layer) => layer.phase), ["static"]);
     assert.deepEqual(advanceCrossfadeLayers(initialCrossfadeLayers(""), "b.png", false).map((layer) => layer.phase), ["static"]);
   });

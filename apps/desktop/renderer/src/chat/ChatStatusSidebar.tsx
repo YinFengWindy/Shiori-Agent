@@ -1,10 +1,17 @@
-import React from "react";
+import React, { useRef } from "react";
 import { CrossfadeLayers } from "../shared/CrossfadeLayers";
 import { cx } from "../shared/styles";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
+import { moodTone } from "./moodTone";
+import { useMoodChangeCue } from "./useMoodChangeCue";
+import { useMoodChangeMotion } from "./useMoodChangeMotion";
 
 type ChatStatusSidebarProps = {
   currentMood: string;
+  /** The session's `current_mood_updated_at`; gates the mood-change performance. */
+  moodUpdatedAt: string;
+  /** Role + session the mood belongs to; changing it (a role switch) never performs. */
+  moodScope: string;
   moodIllustrationUrl: string;
   roleSelfView: string;
   relationshipTags: string[];
@@ -15,6 +22,8 @@ type ChatStatusSidebarProps = {
 /** Renders the chat status sidebar with the current mood and mapped illustration. */
 export function ChatStatusSidebar({
   currentMood,
+  moodUpdatedAt,
+  moodScope,
   moodIllustrationUrl,
   roleSelfView,
   relationshipTags,
@@ -23,14 +32,22 @@ export function ChatStatusSidebar({
 }: ChatStatusSidebarProps) {
   const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
+  const layerRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const pillRef = useRef<HTMLSpanElement | null>(null);
+  const cue = useMoodChangeCue({ scope: moodScope, mood: currentMood, updatedAt: moodUpdatedAt });
+  // A hidden window skips the performance; the new mood simply shows on return.
+  useMoodChangeMotion({ cue: visualsActive ? cue : null, layerRef, frameRef, pillRef });
   return (
-    <div className={cx(chatSidebarPanelClass, "chat-status-sidebar grid-rows-[minmax(0,1fr)_auto_auto_auto_auto] gap-3")}>
+    <div className={cx(chatSidebarPanelClass, "chat-status-sidebar relative grid-rows-[minmax(0,1fr)_auto_auto_auto_auto] gap-3")}>
       {/* The illustration may shrink to zero; only its own pixels are clipped so text and controls take priority. */}
-      <div className="chat-status-illustration-frame relative min-h-0 overflow-hidden rounded-md">
+      <div ref={frameRef} className="chat-status-illustration-frame relative min-h-0 overflow-hidden rounded-md">
         {shouldRenderIllustration ? (
-          // A mood change crossfades the portrait instead of snapping it.
+          // A mood change brings the new portrait in with a gentle scale and blur; a role switch swaps it outright.
           <CrossfadeLayers
             value={moodIllustrationUrl}
+            variant="focus"
+            resetKey={moodScope}
             render={(url) => (
               <img
                 className="chat-status-illustration-content absolute inset-0 m-auto h-full max-h-52 w-full object-contain"
@@ -49,9 +66,14 @@ export function ChatStatusSidebar({
       {/* Leave room for the sidebar toggle when the illustration row collapses completely. */}
       <div className="flex items-center justify-between gap-3 pr-8">
         <div className="text-body font-semibold text-ink-muted">当前状态</div>
-        <div className="text-body font-semibold text-accent-text">
-          {currentMood || "未生成"}
-        </div>
+        {currentMood ? (
+          <span ref={pillRef} className="mood-pill" data-mood-tone={moodTone(currentMood)} data-testid="chat-mood-pill">
+            <span className="mood-pill-dot" aria-hidden="true" />
+            {currentMood}
+          </span>
+        ) : (
+          <div className="text-body font-semibold text-ink-muted">未生成</div>
+        )}
       </div>
       <div className="grid gap-1 text-left">
         <div className="text-body font-semibold text-ink-muted">当下想法</div>
@@ -86,6 +108,8 @@ export function ChatStatusSidebar({
           />
         </div>
       </div>
+      {/* Mood-change particles fly over the whole panel without catching the pointer. */}
+      <div ref={layerRef} className="mood-burst-layer" aria-hidden="true" />
     </div>
   );
 }

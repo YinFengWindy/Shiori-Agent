@@ -387,6 +387,7 @@ function App(): React.ReactElement {
     previewIllustrations,
     currentMood,
     moodIllustrationUrl,
+    moodUpdatedAt,
     roleSelfView,
     relationshipTags,
     lonelinessValue,
@@ -629,6 +630,7 @@ function App(): React.ReactElement {
       chatLatestImageSidebarCount={chatImageHistory.length}
       currentMood={currentMood}
       moodIllustrationUrl={moodIllustrationUrl}
+      moodUpdatedAt={moodUpdatedAt}
       roleSelfView={roleSelfView}
       relationshipTags={relationshipTags}
       lonelinessValue={lonelinessValue}

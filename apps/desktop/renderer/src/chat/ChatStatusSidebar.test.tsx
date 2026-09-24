@@ -13,6 +13,8 @@ describe("ChatStatusSidebar", () => {
     const markup = renderToStaticMarkup(
       <ChatStatusSidebar
         currentMood="开心"
+        moodUpdatedAt=""
+        moodScope="rin|role:rin"
         moodIllustrationUrl=""
         roleSelfView={thought}
         relationshipTags={["亲近", "安心", "期待见面", "默契"]}
@@ -32,7 +34,7 @@ describe("ChatStatusSidebar", () => {
 
   it("replaces the complete thought and mood on turn updates and role switches", async () => {
     const renderState = (currentMood: string, roleSelfView: string) => (
-      <ChatStatusSidebar currentMood={currentMood} roleSelfView={roleSelfView}
+      <ChatStatusSidebar currentMood={currentMood} roleSelfView={roleSelfView} moodUpdatedAt="" moodScope="rin|role:rin"
         moodIllustrationUrl="" relationshipTags={[]} lonelinessValue={37} />
     );
     const mounted = await mountTestComponent(renderState("平静", "我在等今天的故事。"));
