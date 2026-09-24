@@ -1266,15 +1266,32 @@ button[role="combobox"]:focus-visible {
     animation-name: message-highlight-fade;
   }
 
-  .chat-typing-dots > span {
+  /* Typing sparkles hold still, a little dimmed. */
+  .chat-typing-sparkles > span {
     animation: none;
     opacity: 0.6;
+    transform: none;
   }
 
-  /* CrossfadeLayers already swaps instantly under reduced motion; this covers a preference flip mid-fade. */
+  /* Image swaps keep only their fade: no blur, no zoom. */
   .crossfade-in,
-  .crossfade-out {
+  .crossfade-in-focus {
+    animation: crossfade-in-plain var(--duration-crossfade) var(--ease-in-out-soft) both;
+  }
+
+  .crossfade-out,
+  .crossfade-out-focus {
+    animation: crossfade-out-plain var(--duration-crossfade) var(--ease-in-out-soft) both;
+  }
+
+  /* No ambient background motion (useChatBackdropMotion also stops the parallax). */
+  .chat-backdrop-breathe {
     animation: none;
+  }
+
+  /* Mood change: no particles (useMoodChangeMotion skips them too). */
+  .mood-burst-layer {
+    display: none;
   }
 
   /* Tilt: flat, no glare (TiltedCard also stops writing angles). */
