@@ -1,5 +1,6 @@
 import { CaretRight, Plus } from "@phosphor-icons/react";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
+import { modelEffortLabels } from "../shared/modelEffortLabels";
 
 type ModelRegistrationListProps = {
   registrations: ModelRegistrationFormData[];
@@ -63,7 +64,7 @@ export function ModelRegistrationList({
                   {registration.provider || "未配置 Provider"}
                 </span>
                 <span className="mt-1 block text-[11px] text-ink-faint">
-                  {registration.effort}
+                  {modelEffortLabels[registration.effort]}
                 </span>
               </span>
               <CaretRight className="h-3.5 w-3.5 text-ink-faint transition group-hover:translate-x-0.5 group-hover:text-accent-text" weight="bold" />

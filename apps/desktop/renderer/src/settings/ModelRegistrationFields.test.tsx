@@ -1,17 +1,57 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
+import { act } from "react";
+import type { BridgeRequest, ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
 import { chooseSelectOption } from "../shared/testing/selectTestActions";
 
-it("ModelRegistrationFields changes effort while preserving the registered connection", async () => {
-  const view = await mountTestComponent(null);
+const initial: ModelRegistrationFormData = { id: "test", provider: "openai", model: "test-model", baseUrl: "https://example.test", apiKey: "key", effort: "none" };
+
+async function mountFields(invoke: (request: Omit<BridgeRequest, "id">) => Promise<unknown> = async () => ({})) {
+  const view = await mountTestComponent(null, { windowGlobals: { miraDesktop: { invoke } } });
   const { ModelRegistrationFields } = await import("./ModelRegistrationFields");
-  const initial: ModelRegistrationFormData = { id: "test", provider: "openai", model: "test-model", baseUrl: "https://example.test", apiKey: "key", effort: "none" };
-  let registration = initial;
+  const state = { registration: initial };
+  const render = () => view.render(<ModelRegistrationFields registration={state.registration} onChange={(mutate) => { state.registration = mutate(state.registration); void render(); }} />);
+  await render();
+  return { view, state };
+}
+
+function button(label: string) {
+  const found = Array.from(document.querySelectorAll("button")).find((item) => item.textContent === label);
+  assert.ok(found, `Missing button: ${label}`);
+  return found;
+}
+
+it("ModelRegistrationFields changes effort with Chinese labels while preserving the connection", async () => {
+  const { view, state } = await mountFields();
   try {
-    await view.render(<ModelRegistrationFields registration={registration} onChange={(mutate) => { registration = mutate(registration); }} />);
-    await chooseSelectOption("Effort", "max");
-    assert.deepEqual(registration, { ...initial, effort: "max" });
+    await chooseSelectOption("思考强度", "最高");
+    assert.deepEqual(state.registration, { ...initial, effort: "max" });
+  } finally { await view.cleanup(); }
+});
+
+it("ModelRegistrationFields fills a preset and hides the free-text provider until custom is chosen", async () => {
+  const { view, state } = await mountFields();
+  try {
+    assert.ok(document.querySelector('[aria-label="服务商标识"]'));
+    await chooseSelectOption("服务商", "DeepSeek");
+    assert.deepEqual(state.registration, { ...initial, provider: "deepseek", baseUrl: "https://api.deepseek.com" });
+    assert.equal(document.querySelector('[aria-label="服务商标识"]'), null);
+    await chooseSelectOption("服务商", "自定义");
+    assert.ok(document.querySelector('[aria-label="服务商标识"]'));
+    assert.equal(state.registration.baseUrl, "https://api.deepseek.com");
+  } finally { await view.cleanup(); }
+});
+
+it("ModelRegistrationFields probes the draft and shows the scrubbed failure inline", async () => {
+  const requests: Array<Omit<BridgeRequest, "id">> = [];
+  const { view } = await mountFields(async (request) => {
+    requests.push(request);
+    return { id: "1", type: "response", method: request.method, payload: { ok: false, message: "AuthenticationError: 401" }, error: null };
+  });
+  try {
+    await act(async () => button("测试连接").click());
+    assert.equal(requests[0]?.method, "models.test");
+    assert.match(document.querySelector('[role="status"]')?.textContent ?? "", /AuthenticationError: 401/);
   } finally { await view.cleanup(); }
 });

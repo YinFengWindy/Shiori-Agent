@@ -1,6 +1,7 @@
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
+import { applyProviderPreset } from "./modelProviderPresets";
 
-/** Creates an unsaved model registration with the settings catalog defaults. */
+/** Creates an unsaved model registration, starting from the OpenAI preset. */
 export function createModelRegistration(): ModelRegistrationFormData {
-  return { id: crypto.randomUUID(), provider: "openai", baseUrl: "", apiKey: "", model: "", effort: "none" };
+  return applyProviderPreset({ id: crypto.randomUUID(), provider: "", baseUrl: "", apiKey: "", model: "", effort: "none" }, "openai");
 }

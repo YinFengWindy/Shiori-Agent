@@ -31,6 +31,6 @@ describe("ModelRegistrationDetails", () => {
     assert.match(markup, /value="https:\/\/agent\.example"/);
     assert.match(markup, /value="secret"/);
     assert.match(markup, /role="combobox"/);
-    assert.match(markup, />high<\/span>/);
+    assert.match(markup, />高<\/span>/);
   });
 });
