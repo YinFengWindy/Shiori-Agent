@@ -213,7 +213,7 @@ const exampleUi: PluginUiModule = {
 export default exampleUi;
 ```
 
-`settings.section` 不再是设置侧栏的顶层条目：它注册为内建「插件」区块下的一个子标签（与「已安装」并列），侧栏始终只有模型/频道/记忆/语音/高级/插件/关于七项。manifest 声明了 `config_model` 的插件（如 qqbot）无需手写 `ui/index.tsx` 就能自动获得一个 schema 表单子标签，标签取自后端 `plugins.list` 已实现的回退链：manifest 的 `display_name` → 插件记录名（未声明 `display_name` 时即插件目录名，通常与 `id` 同形）→ `id`；因此不声明 `display_name` 的插件会得到目录名原样大小写的标签（例如目录名 `qqbot` 会显示为 "qqbot" 而非 "QQBot"），manifest 需要显式写出 `display_name` 才能拿到期望的展示大小写。只有需要自定义表单组件、或额外贡献 `navPage`/`roleAssets` 等插槽时才需要手写（如 novelai——它的手写 `settingsSection` 会优先于自动注册，不会重复出现两个子标签）。已使用的插槽还包括 `nav.page`（story）、`role.assets`（desktop_pet）。角色设置与聊天图片动作也有独立贡献契约。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
+`settings.section` 不再是设置侧栏的顶层条目：它注册为内建「插件」区块下的一个子标签（与「已安装」并列），侧栏始终只有模型/记忆/语音/高级/插件/关于六项（「频道」已随渠道插件化移除，#363）。manifest 声明了 `config_model` 的插件（如 qqbot）无需手写 `ui/index.tsx` 就能自动获得一个 schema 表单子标签，标签取自后端 `plugins.list` 已实现的回退链：manifest 的 `display_name` → 插件记录名（未声明 `display_name` 时即插件目录名，通常与 `id` 同形）→ `id`；因此不声明 `display_name` 的插件会得到目录名原样大小写的标签（例如目录名 `qqbot` 会显示为 "qqbot" 而非 "QQBot"），manifest 需要显式写出 `display_name` 才能拿到期望的展示大小写。只有需要自定义表单组件、或额外贡献 `navPage`/`roleAssets` 等插槽时才需要手写（如 novelai——它的手写 `settingsSection` 会优先于自动注册，不会重复出现两个子标签）。已使用的插槽还包括 `nav.page`（story）、`role.assets`（desktop_pet）。角色设置与聊天图片动作也有独立贡献契约。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
 
 `app.background` 在隐藏的 plugin-host renderer 运行，入口是 `background/index.ts` 的 `{ pluginId, setup(ctx) }`。桌宠已通过它拥有控制器、surface、托盘项与订阅。它的 `BackgroundCtx` 不是 Python 上下文：通过自己的 `effect`、`events`、`rpc`、`surfaces`、`tray`、`store` 管理资源。使用 `surface/` 入口渲染独立桌面窗口。
 

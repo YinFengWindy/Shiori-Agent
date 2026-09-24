@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from infra.channels.qq_channel.sdk_runtime import QQSdkRuntime
+from plugins.qq.backend.channel.sdk_runtime import QQSdkRuntime
 
 
 @pytest.mark.asyncio

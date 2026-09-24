@@ -82,8 +82,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
   const content = contentOverride ?? (existsSync(configuredPath) ? readFileSync(configuredPath, "utf-8") : "");
   const parsed = parseToml(content, { integersAsBigInt: "asNeeded" });
   const llm = asRecord(parsed.llm);
-  const channels = asRecord(parsed.channels);
-  const qq = asRecord(channels.qq);
   const memory = asRecord(parsed.memory);
   const embedding = asRecord(memory.embedding);
   const agent = asRecord(parsed.agent);
@@ -100,9 +98,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
       proactiveStrategies: loadProactiveStrategies(proactiveStrategies),
       models: {
         registrations: loadModelRegistrations(llm),
-      },
-      channels: {
-        qqBotUin: String(qq.bot_uin ?? ""),
       },
       memory: {
         enabled: Boolean(memory.enabled),
@@ -205,10 +200,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
     'context = "default"',
     'memory = "default"',
     "toolsets = []",
-    "",
-    "[channels.qq]",
-    `bot_uin = ${quote(formData.channels.qqBotUin)}`,
-    "websocket_open_timeout_seconds = 5",
     "",
     "[memory]",
     `enabled = ${formData.memory.enabled ? "true" : "false"}`,

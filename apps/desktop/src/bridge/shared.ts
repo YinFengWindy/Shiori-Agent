@@ -179,9 +179,6 @@ export type SettingsFormData = {
   models: {
     registrations: ModelRegistrationFormData[];
   };
-  channels: {
-    qqBotUin: string;
-  };
   memory: {
     enabled: boolean;
     engine: string;

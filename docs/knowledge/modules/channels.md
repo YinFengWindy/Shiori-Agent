@@ -9,6 +9,7 @@ source_paths:
   - plugins/qqbot/
   - plugins/feishu/
   - plugins/telegram/
+  - plugins/qq/
   - apps/backend/bootstrap/channels.py
 related:
   - conversations-and-sessions.md
@@ -21,7 +22,7 @@ related:
 
 `apps/backend/infra/channels/contract.py` 定义 Channel 合约与上下文，`apps/backend/core/channels/hub.py` 汇总渠道，bootstrap 负责按配置启动。渠道适配器把外部消息转换为统一入站事件，并把统一出站消息渲染为平台格式。
 
-Telegram 是渠道插件 `plugins/telegram/`（#363 T4）：`backend/channel/` 拆分 lifecycle、inbound、outbound、media、streaming、commands 等职责，`backend/utils/` 负责限流、渲染与 live 编辑；配置在 `[plugins.telegram]`，旧的 `[channels.telegram]` 由 `agent/channel_config_migration.py` 启动时一次性迁移。NcatBot QQ 位于 `apps/backend/infra/channels/qq_channel/`：lifecycle 只装配 SDK 与订阅，inbound、outbound、trace、loop bridge 和兼容 helper 各自拥有单一边界。官方 QQBot 位于 `plugins/qqbot/`：`channel.py` 只保留组合与启停，Gateway、C2C 入站、HTTP/媒体出站和 live stream 分别由对应 mixin 负责。飞书位于 `plugins/feishu/`：lark-oapi 长连接跑在独立线程和私有事件循环上（`ws.py`），事件回调只去重并转交宿主循环；REST 发送在 `api.py`，入站解析在 `inbound.py`，CardKit 流式卡片在 `streaming.py`。各适配器共享 Channel 合约，但不隐藏协议差异。
+Telegram 是渠道插件 `plugins/telegram/`（#363 T4）：`backend/channel/` 拆分 lifecycle、inbound、outbound、media、streaming、commands 等职责，`backend/utils/` 负责限流、渲染与 live 编辑；配置在 `[plugins.telegram]`，旧的 `[channels.telegram]` 由 `agent/channel_config_migration.py` 启动时一次性迁移。NcatBot QQ 是渠道插件 `plugins/qq/`（#363 T5，显示为「QQ（NapCat）」）：`backend/channel/` 的 lifecycle 只装配 SDK 与订阅，inbound、outbound、trace、loop bridge、群聊过滤和兼容 helper 各自拥有单一边界；NapCat 的 ws_uri/ws_token 每次激活都显式写入 NcatBot 的进程级配置（留空恢复 SDK 原值），避免换代串值。`gqq:` 群号规范化仍在核心 `core/common/channel_identifiers.py`，NcatBot 运行目录仍是 `~/.shiori/ncatbot`。官方 QQBot 位于 `plugins/qqbot/`：`channel.py` 只保留组合与启停，Gateway、C2C 入站、HTTP/媒体出站和 live stream 分别由对应 mixin 负责。飞书位于 `plugins/feishu/`：lark-oapi 长连接跑在独立线程和私有事件循环上（`ws.py`），事件回调只去重并转交宿主循环；REST 发送在 `api.py`，入站解析在 `inbound.py`，CardKit 流式卡片在 `streaming.py`。各适配器共享 Channel 合约，但不隐藏协议差异。
 
 ## 标识与投递
 

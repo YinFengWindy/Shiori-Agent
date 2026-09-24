@@ -1,6 +1,6 @@
 """内置渠道配置一次性迁入渠道插件（#363）。
 
-Telegram / QQ 迁为插件后，``[channels.<name>]`` 改写为 ``[plugins.<name>]``，
+Telegram / QQ（NapCat）迁为插件后，``[channels.<name>]`` 改写为 ``[plugins.<name>]``，
 渠道名与插件 id 相同，角色绑定和会话线程都按渠道名做键，所以只迁配置、不迁数据。
 
 规则（与 #180 novelai 迁移同一思路，靠「旧表是否还在」判断是否迁移过）：
@@ -40,6 +40,12 @@ class LegacyChannelTable:
 LEGACY_CHANNEL_TABLES: tuple[LegacyChannelTable, ...] = (
     # channel_name 不再迁移：插件只能注册 manifest 声明的 ``telegram``（#363 Q6）。
     LegacyChannelTable(name="telegram", credential="token", keys=("token",)),
+    # 旧表没有 ws_uri/ws_token；它们是插件新开放的设置（#363 Q9）。
+    LegacyChannelTable(
+        name="qq",
+        credential="bot_uin",
+        keys=("bot_uin", "websocket_open_timeout_seconds"),
+    ),
 )
 
 

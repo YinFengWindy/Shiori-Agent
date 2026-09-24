@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from infra.channels.qq_channel.formatting import (
+from plugins.qq.backend.channel.formatting import (
     _QQTraceLine,
     format_tool_trace_lines,
     summarize_tool_result_preview,

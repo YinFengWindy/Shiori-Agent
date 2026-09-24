@@ -1,3 +1,5 @@
+"""QQChannel（NapCat）行为测试：迁入插件前的内置渠道测试原样搬来（#363 T5）。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -22,6 +24,10 @@ from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleStore
 from conversation.service import LegacySessionDescriptor
 from infra.channels.base import AttachmentStore
+from infra.channels.contract import ChannelContext
+
+_CHANNEL_PACKAGE = "plugins.qq.backend.channel"
+_CHANNEL_DIR = Path(__file__).resolve().parents[1] / "backend" / "channel"
 
 
 class _Bus:
@@ -208,7 +214,12 @@ def _import_qq_channel(monkeypatch: pytest.MonkeyPatch):
         root="",
         check_ncatbot_update=True,
         skip_ncatbot_install_check=False,
-        napcat=SimpleNamespace(remote_mode=False, enable_webui=True),
+        napcat=SimpleNamespace(
+            remote_mode=False,
+            enable_webui=True,
+            ws_uri="ws://localhost:3001",
+            ws_token="NcatBot",
+        ),
         enable_webui_interaction=True,
         plugin=SimpleNamespace(plugins_dir=""),
     )
@@ -220,8 +231,16 @@ def _import_qq_channel(monkeypatch: pytest.MonkeyPatch):
         ncatbot_core_adapter_adapter,
     )
     monkeypatch.setitem(sys.modules, "ncatbot.utils", ncatbot_utils)
-    sys.modules.pop("infra.channels.qq_channel", None)
-    return importlib.import_module("infra.channels.qq_channel")
+    # 测试结束后恢复渠道包原有模块，避免假 SDK 泄漏到其他测试。
+    names = [_CHANNEL_PACKAGE] + [
+        f"{_CHANNEL_PACKAGE}.{path.stem}"
+        for path in _CHANNEL_DIR.glob("*.py")
+        if path.stem != "__init__"
+    ]
+    for name in names:
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+        del sys.modules[name]
+    return importlib.import_module(_CHANNEL_PACKAGE)
 
 
 def test_qq_channel_ws_timeout_patch_is_best_effort(
@@ -231,7 +250,7 @@ def test_qq_channel_ws_timeout_patch_is_best_effort(
     adapter_mod = sys.modules["ncatbot.core.adapter.adapter"]
     original_connect = adapter_mod.websockets.connect
 
-    from infra.channels.qq_channel.compat import patch_ncatbot_ws_open_timeout
+    from plugins.qq.backend.channel.compat import patch_ncatbot_ws_open_timeout
 
     patch_ncatbot_ws_open_timeout(7.5)
 
@@ -248,7 +267,7 @@ def test_qq_channel_ws_timeout_patch_is_best_effort(
 async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     mod = _import_qq_channel(monkeypatch)
     ncatbot_dir = tmp_path / ".shiori" / "ncatbot"
-    lifecycle = importlib.import_module("infra.channels.qq_channel.lifecycle")
+    lifecycle = importlib.import_module("plugins.qq.backend.channel.lifecycle")
     monkeypatch.setattr(lifecycle, "resolve_ncatbot_dir", lambda: ncatbot_dir)
     bus = _Bus()
     session_manager = _SessionManager(tmp_path)
@@ -305,7 +324,7 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert channel._bot is None
     assert channel._is_allowed("1") is True
     assert channel._is_allowed("2") is False
-    from infra.channels.qq_channel.compat import (
+    from plugins.qq.backend.channel.compat import (
         download_to_temp,
         extract_cq_images,
         is_local,
@@ -698,3 +717,96 @@ async def test_qq_channel_records_failed_delivery_status(
         "external_message_id": "",
     }
     await channel.stop()
+
+
+class _PushTool:
+    def __init__(self) -> None:
+        self.registered: list[str] = []
+        self.unregistered: list[str] = []
+
+    def register_channel(self, name: str, **_kwargs: object) -> None:
+        self.registered.append(name)
+
+    def unregister_channel(self, name: str, **_kwargs: object) -> None:
+        self.unregistered.append(name)
+
+
+def _context(bus: _Bus, tmp_path: Path, push_tool: _PushTool, hub: object):
+    return ChannelContext(
+        bus=bus,  # type: ignore[arg-type]
+        session_manager=_SessionManager(tmp_path),  # type: ignore[arg-type]
+        event_bus=EventBus(),
+        push_tool=push_tool,  # type: ignore[arg-type]
+        attachment_store=AttachmentStore(),
+        http_resources=SimpleNamespace(external_default="requester"),  # type: ignore[arg-type]
+        interrupt_controller=None,
+        bot_commands=[],
+        log=MagicMock(),
+        channel_hub=hub,  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugin_channel_takes_runtime_state_from_context(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """插件在 setup 时只有配置；bus、会话、HTTP 与 hub 都来自 ChannelHost 的 ctx。"""
+    mod = _import_qq_channel(monkeypatch)
+    lifecycle = importlib.import_module("plugins.qq.backend.channel.lifecycle")
+    monkeypatch.setattr(
+        lifecycle, "resolve_ncatbot_dir", lambda: tmp_path / ".shiori" / "ncatbot"
+    )
+    channel = mod.QQChannel(bot_uin="42")
+    assert channel.name == "qq"
+    bus = _Bus()
+    push_tool = _PushTool()
+    hub = SimpleNamespace(name="hub")
+
+    await channel.start(_context(bus, tmp_path, push_tool, hub))
+
+    assert channel._channel_hub is hub
+    assert channel._http_requester == "requester"
+    assert channel._workspace == tmp_path
+    assert bus.outbound == [("qq", channel._on_response)]
+    assert push_tool.registered == ["qq"]
+    await channel.stop()
+    assert bus.outbound == []
+    assert push_tool.unregistered == ["qq"]
+
+
+@pytest.mark.asyncio
+async def test_napcat_connection_settings_do_not_leak_across_generations(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """NcatBot 配置是进程级的：新一代留空时必须回到 SDK 原值，而不是沿用上一代。"""
+    mod = _import_qq_channel(monkeypatch)
+    lifecycle = importlib.import_module("plugins.qq.backend.channel.lifecycle")
+    monkeypatch.setattr(
+        lifecycle, "resolve_ncatbot_dir", lambda: tmp_path / ".shiori" / "ncatbot"
+    )
+    napcat = sys.modules["ncatbot.utils"].ncatbot_config.napcat
+    first = mod.QQChannel(
+        bot_uin="42", ws_uri="ws://napcat.lan:3001", ws_token="secret"
+    )
+    await first.start(_context(_Bus(), tmp_path, _PushTool(), None))
+    assert (napcat.ws_uri, napcat.ws_token) == ("ws://napcat.lan:3001", "secret")
+    await first.stop()
+
+    second = mod.QQChannel(bot_uin="43")
+    await second.start(_context(_Bus(), tmp_path, _PushTool(), None))
+    assert (napcat.ws_uri, napcat.ws_token) == ("ws://localhost:3001", "NcatBot")
+    assert sys.modules["ncatbot.utils"].ncatbot_config.bt_uin == "43"
+    await second.stop()
+
+
+def test_configuration_key_covers_every_connection_setting(monkeypatch) -> None:
+    mod = _import_qq_channel(monkeypatch)
+    base = mod.QQChannel(bot_uin="42").configuration_key
+    assert mod.QQChannel(bot_uin="42").configuration_key == base
+    for changed in (
+        mod.QQChannel(bot_uin="43"),
+        mod.QQChannel(bot_uin="42", websocket_open_timeout_seconds=9),
+        mod.QQChannel(bot_uin="42", ws_uri="ws://other:3001"),
+        mod.QQChannel(bot_uin="42", ws_token="t"),
+    ):
+        assert changed.configuration_key != base

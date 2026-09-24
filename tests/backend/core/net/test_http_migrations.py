@@ -1,11 +1,9 @@
 import json
-from pathlib import Path
 
 import httpx
 import pytest
 
 from agent.tools.web_fetch import WebFetchTool
-from infra.channels.qq_channel.compat import download_to_temp
 from core.net.http import (
     HttpRequester,
     RequestBudget,
@@ -64,29 +62,6 @@ async def test_web_fetch_tool_uses_injected_requester():
         assert payload["status"] == 200
         assert payload["text"] == "hello from shared requester"
     finally:
-        await requester.client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_download_to_temp_uses_injected_requester(tmp_path: Path):
-    def _handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            request=request,
-            content=b"fake-image-bytes",
-            headers={"content-type": "image/png"},
-        )
-
-    requester = _build_requester(_handler)
-    try:
-        paths = await download_to_temp(["https://example.com/image.png"], requester)
-        assert len(paths) == 1
-        path = Path(paths[0])
-        assert path.suffix == ".png"
-        assert path.read_bytes() == b"fake-image-bytes"
-    finally:
-        for raw_path in paths if "paths" in locals() else []:
-            Path(raw_path).unlink(missing_ok=True)
         await requester.client.aclose()
 
 

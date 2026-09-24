@@ -8,7 +8,6 @@ import {
   roleBindingChatIdCopy,
   roleBindingContactLabel,
   roleChannelLabel,
-  roleChannelSettingsLocation,
 } from "./roleChannelCatalog";
 
 function channel(name: string, state: ChannelState, overrides: Partial<ChannelSummary> = {}): ChannelSummary {
@@ -62,10 +61,5 @@ describe("roleChannelCatalog", () => {
     assert.equal(roleBindingContactLabel(null), "联系人 ID");
     assert.deepEqual(roleBindingChatIdCopy(qqbot), { label: "私聊 chat_id", placeholder: "c2c:<用户 OpenID>" });
     assert.deepEqual(roleBindingChatIdCopy(null), { label: "会话 / 群组 ID", placeholder: "输入会话或群组 ID" });
-  });
-
-  it("points builtin channels at 频道 settings and plugin channels at 插件 settings", () => {
-    assert.equal(roleChannelSettingsLocation(channel("telegram", "not_configured", { pluginId: null })), "设置 › 频道");
-    assert.equal(roleChannelSettingsLocation(channel("qqbot", "not_configured")), "设置 › 插件");
   });
 });

@@ -231,6 +231,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "story",
     "observe",
     "plugin_undo",
+    "qq",
     "qqbot",
     "screen_perception",
     "setup_helper",

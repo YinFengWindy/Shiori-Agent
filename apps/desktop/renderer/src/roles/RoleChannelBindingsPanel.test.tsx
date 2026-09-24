@@ -55,12 +55,6 @@ describe("RoleChannelBindingsPanel", () => {
     }
   });
 
-  it("sends builtin channels to the 频道 settings section until they become plugins", () => {
-    const markup = renderPanel([{ channel: "telegram", chat_id: "100", allow_from: [] }], [desktop, channel("telegram", "not_configured", { label: "Telegram", pluginId: null })]);
-
-    assert.match(markup, /在 设置 › 频道 中完成配置后生效/);
-  });
-
   it("shows a failed channel's error on its binding", () => {
     const markup = renderPanel([qqbotBinding], [desktop, channel("qqbot", "failed", { ...qqbotDeclaration, error: "网关鉴权失败" })]);
 

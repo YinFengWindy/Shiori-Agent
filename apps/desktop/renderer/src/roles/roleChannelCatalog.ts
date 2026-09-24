@@ -96,8 +96,3 @@ export function roleBindingChatIdCopy(channel: ChannelSummary | null) {
 export function roleBindingContactLabel(channel: ChannelSummary | null): string {
   return channel?.contactLabel ? `联系人 ID（${channel.contactLabel}）` : "联系人 ID";
 }
-
-/** Where a channel's credentials are filled in: plugin settings, or the builtin 频道 section until T4/T5. */
-export function roleChannelSettingsLocation(channel: ChannelSummary): string {
-  return channel.pluginId === null ? "设置 › 频道" : "设置 › 插件";
-}

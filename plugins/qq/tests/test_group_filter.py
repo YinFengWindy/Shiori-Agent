@@ -5,7 +5,10 @@ from typing import Any, cast
 
 import pytest
 
-from infra.channels.group_filter import DefaultGroupFilter, strip_at_segments
+from plugins.qq.backend.channel.group_filter import (
+    DefaultGroupFilter,
+    strip_at_segments,
+)
 
 
 @pytest.mark.asyncio
