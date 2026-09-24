@@ -1,5 +1,7 @@
 api: 2
 id: shell_safety
+display_name: Shell 交互命令拦截
+category: system
 version: '0.1.0'
 desc: 阻止 shell 工具执行容易卡住的交互式命令
 capabilities:

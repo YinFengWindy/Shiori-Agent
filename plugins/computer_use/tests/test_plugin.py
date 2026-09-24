@@ -52,3 +52,10 @@ async def test_disabled_plugin_contributes_nothing(tmp_path):
     )
     await kernel.load_all()
     assert registry.get_tool("computer_list_windows") is None
+
+
+def test_config_schema_labels_fields_for_the_settings_form() -> None:
+    from plugins.computer_use.backend.config import ComputerUseConfig
+
+    timeout = ComputerUseConfig.model_json_schema()["properties"]["timeout_seconds"]
+    assert timeout["title"] == "单次操作超时" and timeout["unit"] == "秒"

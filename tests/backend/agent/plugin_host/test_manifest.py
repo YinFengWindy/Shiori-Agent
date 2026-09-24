@@ -218,3 +218,40 @@ def test_channel_declarations_require_channels_capability(tmp_path):
     )
     with pytest.raises(ManifestError, match="capabilities"):
         load_manifest(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "capabilities, declared, expected",
+    [
+        ("[config]", "", "feature"),
+        ("[channels]", "", "channel"),
+        ("[tool_hooks]", "category: system\n", "system"),
+        ("[channels]", "category: feature\n", "feature"),
+    ],
+)
+def test_manifest_category_defaults_from_capabilities(
+    tmp_path, capabilities, declared, expected
+):
+    (tmp_path / "manifest.yaml").write_text(
+        f"api: 2\ncapabilities: {capabilities}\n{declared}", encoding="utf-8"
+    )
+    assert load_manifest(tmp_path).category == expected
+
+
+@pytest.mark.parametrize("value", ["internal", "3", "[system]"])
+def test_manifest_rejects_unknown_category(tmp_path, value):
+    (tmp_path / "manifest.yaml").write_text(
+        f"api: 2\ncapabilities: []\ncategory: {value}\n", encoding="utf-8"
+    )
+    with pytest.raises(ManifestError, match="category"):
+        load_manifest(tmp_path)
+
+
+def test_builtin_channel_plugins_are_grouped_as_channels():
+    root = Path(__file__).resolve().parents[4] / "plugins"
+    manifests = [load_manifest(path.parent) for path in root.glob("*/manifest.yaml")]
+    assert manifests
+    for manifest in manifests:
+        assert manifest is not None
+        if "channels" in manifest.capabilities:
+            assert manifest.category == "channel", manifest.id

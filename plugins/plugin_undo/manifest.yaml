@@ -1,5 +1,7 @@
 api: 2
 id: plugin_undo
+display_name: 撤销回合
+category: system
 version: '0.1.0'
 desc: 撤销最近被动回合并清理关联记忆来源
 capabilities:

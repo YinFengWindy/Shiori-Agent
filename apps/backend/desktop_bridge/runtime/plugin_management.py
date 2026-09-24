@@ -98,6 +98,8 @@ class RuntimePluginManagement:
                         declaration.to_dict()
                         for declaration in record.manifest.channels
                     ],
+                    # Settings › 插件 groups its rows by this (feature/channel/system).
+                    "category": record.manifest.category,
                     "state": runtime_state,
                     "error": (
                         state["error"]

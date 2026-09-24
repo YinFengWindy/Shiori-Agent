@@ -36,3 +36,6 @@ def test_failed_first_install_is_visible_without_claiming_an_installed_directory
     assert row["state"] == "FAILED" and row["package_installed"] is False
     assert row["package_operation_error"] == "destination is locked"
     assert "pending_operation" not in row
+    # The roster shape stays uniform so the renderer can group every row.
+    assert row["capabilities"] == [] and row["channels"] == []
+    assert row["category"] == "feature"

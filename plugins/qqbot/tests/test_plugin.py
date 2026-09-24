@@ -100,3 +100,12 @@ def test_qqbot_channel_does_not_consume_bot_commands() -> None:
     from plugins.qqbot.backend.channel import QQBotChannel
 
     assert getattr(QQBotChannel, "uses_bot_commands", False) is False
+
+
+def test_config_schema_labels_fields_for_the_settings_form() -> None:
+    properties = QQBotConfigModel.model_json_schema()["properties"]
+    auto_titles = {key: key.replace("_", " ").title() for key in properties}
+    assert all(properties[key]["title"] != auto_titles[key] for key in properties)
+    # allow_from renders as a list editor, not a raw JSON field.
+    assert properties["allow_from"]["type"] == "array"
+    assert properties["allow_from"]["items"] == {"type": "string"}

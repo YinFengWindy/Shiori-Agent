@@ -1,5 +1,7 @@
 api: 2
 id: setup_helper
+display_name: 会话 ID 查询
+category: system
 version: 0.1.0
 desc: 快速查询当前会话 chat_id，用于配置 proactive
 capabilities:
