@@ -88,3 +88,10 @@ def test_config_schema_labels_and_secret_field() -> None:
 def test_timeout_must_be_positive() -> None:
     with pytest.raises(ValidationError):
         QQConfigModel.model_validate({"websocket_open_timeout_seconds": 0})
+
+
+def test_channel_does_not_consume_bot_commands() -> None:
+    # NapCat 不读 ctx.bot_commands，命令列表变化不应重建连接（#363）。
+    from plugins.qq.backend.channel.lifecycle import QQChannel
+
+    assert getattr(QQChannel, "uses_bot_commands", False) is False

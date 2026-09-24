@@ -219,16 +219,6 @@ async def test_reused_connection_stops_the_unused_candidate(tmp_path):
     """同配置的插件渠道跨代复用旧连接，新构造的那份立即 stop，不产生流量。"""
     resources = SharedHttpResources()
 
-    class _Keyed:
-        name = "fake"
-        configuration_key = ("fake", "token")
-
-        def __init__(self) -> None:
-            self.start = AsyncMock()
-            self.stop = AsyncMock()
-            self.pause_intake = Mock()
-            self.resume_intake = Mock()
-
     context = dict(
         bus=MessageBus(),
         session_manager=SessionManager(tmp_path),
@@ -236,7 +226,8 @@ async def test_reused_connection_stops_the_unused_candidate(tmp_path):
         http_resources=resources,
         event_bus=EventBus(),
     )
-    old, new = _Keyed(), _Keyed()
+    old = _KeyedChannel(uses_bot_commands=False)
+    new = _KeyedChannel(uses_bot_commands=False)
     config = Config(provider="", model="", api_key="")
     try:
         active = await start_channels(
