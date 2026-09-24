@@ -200,3 +200,92 @@ def test_reappearing_empty_old_table_is_ignored() -> None:
     )
 
     assert "telegram" not in config.plugins
+
+
+# ── QQ（NapCat）：#363 T5 ─────────────────────────────────────────────
+
+
+def test_qq_table_moves_with_timeout_and_drops_legacy_keys(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        """
+[channels.qq]
+bot_uin = 10001
+websocket_open_timeout_seconds = 9.5
+allow_from = ["42"]
+
+[[channels.qq.groups]]
+group_id = "123"
+""",
+    )
+
+    config = load_config(path)
+
+    persisted = _persisted(path)
+    assert "channels" not in persisted or "qq" not in persisted["channels"]
+    assert persisted["plugins"]["qq"] == {
+        "bot_uin": 10001,
+        "websocket_open_timeout_seconds": 9.5,
+    }
+    assert config.plugins["qq"]["bot_uin"] == 10001
+
+
+def test_both_builtin_tables_migrate_in_one_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("QQ_UIN", "10001")
+    # 旧版桌面端的完整写回：两张表都在，其中 QQ 带 enabled = false。
+    path = _write(
+        tmp_path,
+        """
+[channels.telegram]
+token = "123:abc"
+channel_name = "telegram"
+
+[channels.qq]
+bot_uin = "${QQ_UIN}"
+websocket_open_timeout_seconds = 5
+enabled = false
+""",
+    )
+
+    config = load_config(path)
+
+    persisted = _persisted(path)
+    assert "channels" not in persisted or not persisted["channels"]
+    assert persisted["plugins"]["telegram"] == {"token": "123:abc"}
+    assert persisted["plugins"]["qq"] == {
+        "bot_uin": "${QQ_UIN}",
+        "websocket_open_timeout_seconds": 5,
+        "enabled": False,
+    }
+    assert config.plugins["qq"]["bot_uin"] == "10001"
+
+
+def test_empty_qq_table_written_by_desktop_is_dropped(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        '\n[channels.qq]\nbot_uin = ""\nwebsocket_open_timeout_seconds = 5\n',
+    )
+
+    config = load_config(path)
+
+    persisted = _persisted(path)
+    assert "qq" not in persisted.get("channels", {})
+    assert "qq" not in persisted.get("plugins", {})
+    assert "qq" not in config.plugins
+
+
+def test_qqbot_table_is_not_mistaken_for_qq() -> None:
+    # [channels.qqbot] 早已移除，仍按「已移除」报错，不能被 qq 的迁移吞掉。
+    with pytest.raises(ValueError, match=r"配置项已移除: \[channels.qqbot\]"):
+        load_config_text(_BASE + '\n[channels.qqbot]\napp_id = "x"\n')
+
+
+def test_reappearing_non_empty_qq_table_is_rejected() -> None:
+    with pytest.raises(
+        ValueError, match=r"配置项已迁移: \[channels.qq\] → \[plugins.qq\]"
+    ):
+        load_config_text(_BASE + '\n[channels.qq]\nbot_uin = "10001"\n')
+    config = load_config_text(_BASE + '\n[channels.qq]\nbot_uin = ""\n')
+    assert "qq" not in config.plugins

@@ -17,9 +17,9 @@ class _InboundMixin:
     async def _handle_private(
         self, user_id: str, content: str, img_urls: list[str] | None = None
     ) -> None:
-        await self._identity_index.remember(user_id, user_id)
+        await self._require_identity_index().remember(user_id, user_id)
         media = await download_to_temp(
-            img_urls or [], self._http_requester, self._attachments
+            img_urls or [], self._require_http_requester(), self._attachments
         )
         await self._publish_inbound(
             InboundMessage(
@@ -51,12 +51,13 @@ class _InboundMixin:
         img_urls: list[str] | None = None,
     ) -> None:
         chat_id = normalize_qq_group_chat_id(group_id)
-        session = self._session_manager.get_or_create(f"{CHANNEL}:{chat_id}")
+        sessions = self._require_session_manager()
+        session = sessions.get_or_create(f"{CHANNEL}:{chat_id}")
         if "group_id" not in session.metadata:
             session.metadata["group_id"] = group_id
-            await self._session_manager.save_async(session)
+            await sessions.save_async(session)
         media = await download_to_temp(
-            img_urls or [], self._http_requester, self._attachments
+            img_urls or [], self._require_http_requester(), self._attachments
         )
         await self._publish_inbound(
             InboundMessage(
@@ -90,7 +91,7 @@ class _InboundMixin:
             message = self._channel_hub.route_inbound(message)
         if message.metadata.get("conversation_duplicate"):
             return
-        await self._bus.publish_inbound(message)
+        await self._require_bus().publish_inbound(message)
 
     async def _handle_stop_group(self, group_id: str, user_id: str) -> None:
         chat_id = normalize_qq_group_chat_id(group_id)

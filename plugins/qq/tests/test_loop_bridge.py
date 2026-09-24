@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from infra.channels.qq_channel.loop_bridge import _LoopBridgeMixin
+from plugins.qq.backend.channel.loop_bridge import _LoopBridgeMixin
 
 
 class _Bridge(_LoopBridgeMixin):

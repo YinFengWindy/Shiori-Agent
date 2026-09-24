@@ -2,7 +2,6 @@ import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { PluginManagementSection } from "../plugins/PluginManagementSection";
 import { AboutSettingsPage } from "./AboutSettingsPage";
 import { AdvancedSettingsSection } from "./AdvancedSettingsSection";
-import { ChannelsSettingsSection } from "./ChannelsSettingsSection";
 import { MemorySettingsSection } from "./MemorySettingsSection";
 import { ModelsSettingsSection } from "./ModelsSettingsSection";
 import { VoiceSettingsSection } from "./VoiceSettingsSection";
@@ -15,7 +14,7 @@ function AboutSection() {
 let registered = false;
 
 /**
- * Registers the seven built-in settings domains as ordinary registry
+ * Registers the six built-in settings domains as ordinary registry
  * entries instead of a hand-written switch. This both dynamizes the
  * settings page (a plugin's own settings.section slots into the same list)
  * and gives the slot mechanism a real, always-present consumer. Idempotent
@@ -29,13 +28,6 @@ export function registerBuiltinSettingsSections(): void {
     kind: "editor", slot: "settings.section", id: "models", label: "模型",
     subsections: [{ id: "catalog", label: "模型注册" }],
     Component: ModelsSettingsSection,
-  }, "builtin");
-
-  pluginUiRegistry.registerSettingsSection({
-    kind: "editor", slot: "settings.section", id: "channels", label: "频道",
-    // Telegram 已迁为插件，在 设置 › 插件 中配置（#363 T4）。
-    subsections: [{ id: "qq", label: "QQ" }],
-    Component: ChannelsSettingsSection,
   }, "builtin");
 
   pluginUiRegistry.registerSettingsSection({

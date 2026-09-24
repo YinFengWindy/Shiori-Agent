@@ -65,32 +65,6 @@ async def start_channels(
         if getattr(session_manager, "workspace", None) is not None
         else None
     )
-    if config.channels.qq and config.channels.qq.bot_uin:
-        qq = config.channels.qq
-        existing = previous_host.reusable("qq", qq) if previous_host else None
-        try:
-            from infra.channels.qq_channel import QQChannel
-
-            host.add(
-                existing
-                or QQChannel(
-                    bot_uin=qq.bot_uin,
-                    bus=bus,
-                    session_manager=session_manager,
-                    websocket_open_timeout_seconds=qq.websocket_open_timeout_seconds,
-                    http_requester=http_resources.external_default,
-                    event_bus=event_bus,
-                    interrupt_controller=interrupt_controller,
-                    channel_hub=channel_hub,
-                ),
-                configuration=qq,
-            )
-        except Exception as exc:
-            if strict:
-                raise
-            host.record_failure("qq", phase="construct", error=exc)
-            logger.warning("跳过 QQ 渠道: %s", exc)
-
     for channel in plugin_channels or []:
         # Only independently owned plugin connections opt into reuse. Other
         # channels may retain resources owned by their plugin generation.

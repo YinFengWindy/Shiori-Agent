@@ -26,18 +26,18 @@ describe("useSettingsSubsectionMemory", () => {
   it("remember() is reflected by a later resolve() for the same section", async () => {
     const { view, memory } = await mountHarness();
     try {
-      await act(async () => memory().remember("channels", "qq"));
-      assert.equal(memory().activeSubsections.channels, "qq");
-      assert.equal(memory().resolve("channels"), "qq");
+      await act(async () => memory().remember("memory", "embedding"));
+      assert.equal(memory().activeSubsections.memory, "embedding");
+      assert.equal(memory().resolve("memory"), "embedding");
     } finally { await view.cleanup(); }
   });
 
   it("remember() with the same value already recorded does not create a new record reference (equality guard)", async () => {
     const { view, memory } = await mountHarness();
     try {
-      await act(async () => memory().remember("channels", "qq"));
+      await act(async () => memory().remember("memory", "embedding"));
       const first = memory().activeSubsections;
-      await act(async () => memory().remember("channels", "qq"));
+      await act(async () => memory().remember("memory", "embedding"));
       assert.equal(memory().activeSubsections, first);
     } finally { await view.cleanup(); }
   });

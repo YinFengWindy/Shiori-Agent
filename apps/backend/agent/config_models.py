@@ -10,14 +10,8 @@ from proactive_v2.config import ProactiveConfig, ProactiveStrategiesConfig
 
 
 @dataclass
-class QQChannelConfig:
-    bot_uin: str
-    websocket_open_timeout_seconds: float = 5.0
-
-
-@dataclass
 class ChannelsConfig:
-    qq: QQChannelConfig | None = None
+    """内置渠道已全部迁为插件（#363 T4/T5）；T7 删除这个空壳及 ``Config.channels``。"""
 
 
 @dataclass
@@ -142,6 +136,5 @@ __all__ = [
     "MemoryEmbeddingConfig",
     "Effort",
     "ModelRegistration",
-    "QQChannelConfig",
     "WiringConfig",
 ]

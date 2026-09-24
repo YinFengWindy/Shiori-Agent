@@ -6,6 +6,7 @@ import importlib
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from core.net.http import HttpRequester, RequestBudget
 from infra.channels.base import AttachmentStore
@@ -43,6 +44,22 @@ def patch_ncatbot_ws_open_timeout(timeout_seconds: float) -> None:
             "[qq] patch ncatbot WebSocket open_timeout 失败，沿用 SDK 默认值: %s",
             exc,
         )
+
+
+def apply_napcat_connection(napcat_config: Any, *, ws_uri: str, ws_token: str) -> None:
+    """Writes NapCat's WebSocket address/token into NcatBot's process-global config.
+
+    Empty values restore what NcatBot loaded at import time (its defaults or
+    ``config.yaml``). Those originals are pinned on the SDK object itself, not
+    in this module, because hot reload re-imports the plugin after an earlier
+    generation may already have overwritten the globals.
+    """
+    originals = getattr(napcat_config, "_shiori_original_connection", None)
+    if originals is None:
+        originals = (napcat_config.ws_uri, napcat_config.ws_token)
+        napcat_config._shiori_original_connection = originals
+    napcat_config.ws_uri = ws_uri or originals[0]
+    napcat_config.ws_token = ws_token or originals[1]
 
 
 def extract_cq_images(raw: str) -> tuple[str, list[str]]:

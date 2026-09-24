@@ -17,16 +17,20 @@ from core.net.http import HttpRequester, get_default_http_requester
 from infra.channels.base import AttachmentStore, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
-from infra.channels.group_filter import (
+from session.manager import SessionManager
+
+from .compat import (
+    apply_napcat_connection,
+    extract_cq_images,
+    patch_ncatbot_ws_open_timeout,
+)
+from .formatting import CHANNEL, _QQTraceState
+from .group_filter import (
     DefaultGroupFilter,
     GroupMessageFilter,
     QQGroupFilterConfig,
     strip_at_segments,
 )
-from session.manager import SessionManager
-
-from .compat import extract_cq_images, patch_ncatbot_ws_open_timeout
-from .formatting import CHANNEL, _QQTraceState
 from .inbound import _InboundMixin
 from .loop_bridge import _LoopBridgeMixin
 from .outbound import _OutboundMixin
@@ -44,8 +48,8 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
     def __init__(
         self,
         bot_uin: str,
-        bus: MessageBus,
-        session_manager: SessionManager,
+        bus: MessageBus | None = None,
+        session_manager: SessionManager | None = None,
         allow_from: list[str] | None = None,
         groups: list[QQGroupFilterConfig] | None = None,
         websocket_open_timeout_seconds: float = 5.0,
@@ -54,33 +58,32 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
         event_bus: EventBus | None = None,
         interrupt_controller: InterruptController | None = None,
         channel_hub: ChannelHub | None = None,
+        ws_uri: str = "",
+        ws_token: str = "",
     ) -> None:
-        self._bus = bus
-        self._session_manager = session_manager
+        # bus / session_manager / HTTP 在宿主里由 start(ctx) 注入；构造参数只留给
+        # 不经 ChannelHost 直接驱动渠道的测试。
+        self._bus: MessageBus | None = bus
         self._bot_uin = bot_uin
         allowed_users = [str(user_id) for user_id in (allow_from or [])]
         self._allow_from = set(allowed_users)
         self._websocket_open_timeout_seconds = float(websocket_open_timeout_seconds)
+        # 空值表示沿用 NcatBot 自己的默认值（或其 config.yaml）。
+        self._ws_uri = ws_uri
+        self._ws_token = ws_token
         self._interrupt_controller = interrupt_controller
-        workspace = getattr(session_manager, "workspace", None)
-        self._workspace = Path(workspace) if workspace else None
-        self._attachments = AttachmentStore(
-            Path(workspace) / "uploads" if workspace else None
-        )
         self._channel_hub = channel_hub
-        if self._channel_hub is None and workspace:
-            self._channel_hub = ChannelHub.from_workspace(
-                Path(workspace), session_manager=session_manager
-            )
+        self._session_manager: SessionManager | None = None
+        self._workspace: Path | None = None
+        self._attachments = AttachmentStore()
+        self._identity_index: SessionIdentityIndex | None = None
+        self.user_map: dict[str, str] = {}
+        if session_manager is not None:
+            self._bind_session_manager(session_manager)
         self._trace_actor_name_cache: str | None = None
-        self._identity_index = SessionIdentityIndex(
-            session_manager, channel=CHANNEL, metadata_key="user_id"
-        )
         self._groups = {group.group_id: group for group in groups or []}
         self._group_filter = group_filter or DefaultGroupFilter(bot_uin)
-        self._http_requester = http_requester or get_default_http_requester(
-            "external_default"
-        )
+        self._http_requester = http_requester
         self._event_bus = event_bus
         self._outbound_bound = False
         self._events_bound = False
@@ -99,13 +102,64 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
         self._main_loop: asyncio.AbstractEventLoop | None = None
         self._bot_loop: asyncio.AbstractEventLoop | None = None
 
+    @property
+    def configuration_key(self) -> tuple[str, str, float, str, str]:
+        """Reuses the NcatBot connection across generations while settings hold."""
+        return (
+            "napcat-qq",
+            self._bot_uin,
+            self._websocket_open_timeout_seconds,
+            self._ws_uri,
+            self._ws_token,
+        )
+
+    def _bind_session_manager(self, session_manager: SessionManager) -> None:
+        """Binds workspace-backed state: uploads, SELF.md, user index, fallback hub."""
+        self._session_manager = session_manager
+        workspace = getattr(session_manager, "workspace", None)
+        self._workspace = Path(workspace) if workspace else None
+        self._attachments = AttachmentStore(
+            Path(workspace) / "uploads" if workspace else None
+        )
+        if self._channel_hub is None and workspace:
+            self._channel_hub = ChannelHub.from_workspace(
+                Path(workspace), session_manager=session_manager
+            )
+        self._identity_index = SessionIdentityIndex(
+            session_manager, channel=CHANNEL, metadata_key="user_id"
+        )
         self.user_map = self._identity_index.mapping
+
+    def _require_bus(self) -> MessageBus:
+        if self._bus is None:
+            raise RuntimeError("QQChannel 尚未启动")
+        return self._bus
+
+    def _require_session_manager(self) -> SessionManager:
+        if self._session_manager is None:
+            raise RuntimeError("QQChannel 尚未绑定会话")
+        return self._session_manager
+
+    def _require_identity_index(self) -> SessionIdentityIndex:
+        if self._identity_index is None:
+            raise RuntimeError("QQChannel 尚未绑定会话")
+        return self._identity_index
+
+    def _require_http_requester(self) -> HttpRequester:
+        if self._http_requester is None:
+            self._http_requester = get_default_http_requester("external_default")
+        return self._http_requester
 
     def _configure_sdk(self) -> None:
         # NcatBot configuration is process-global and may only change at activation.
         from ncatbot.utils import ncatbot_config
 
         patch_ncatbot_ws_open_timeout(self._websocket_open_timeout_seconds)
+        # 每次激活都显式写入（含恢复默认值），避免上一代的地址/令牌残留在
+        # 进程级配置里（#363 风险 3）。
+        apply_napcat_connection(
+            ncatbot_config.napcat, ws_uri=self._ws_uri, ws_token=self._ws_token
+        )
         ncatbot_config.bt_uin = self._bot_uin
         ncatbot_config.root = next(iter(self._allow_from), self._bot_uin)
         ncatbot_config.check_ncatbot_update = False
@@ -134,6 +188,12 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
             self._event_bus = ctx.event_bus
             self._interrupt_controller = ctx.interrupt_controller
             self._push_tool = ctx.push_tool
+            if self._http_requester is None:
+                self._http_requester = ctx.http_resources.external_default
+            if ctx.channel_hub is not None:
+                self._channel_hub = ctx.channel_hub
+            if self._session_manager is not ctx.session_manager:
+                self._bind_session_manager(ctx.session_manager)
             ctx.push_tool.register_channel(
                 self.name,
                 text=self.send,
@@ -143,7 +203,7 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
             )
         self._main_loop = asyncio.get_running_loop()
         self._configure_sdk()
-        self._identity_index.rebuild()
+        self._require_identity_index().rebuild()
         self._bind_events()
         self._bind_bot_handlers()
 
@@ -151,7 +211,7 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
         self._api = await self._main_loop.run_in_executor(None, self._bot.run_backend)
         logger.info("[qq] NcatBot 已启动")
         if not self._outbound_bound:
-            self._bus.subscribe_outbound(CHANNEL, self._on_response)
+            self._require_bus().subscribe_outbound(CHANNEL, self._on_response)
             self._outbound_bound = True
 
     def _bind_bot_handlers(self) -> None:
@@ -243,7 +303,7 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
             logger.info("[qq] QQChannel 已停止")
         finally:
             if self._outbound_bound:
-                self._bus.unsubscribe_outbound(CHANNEL, self._on_response)
+                self._require_bus().unsubscribe_outbound(CHANNEL, self._on_response)
                 self._outbound_bound = False
             if self._event_bus is not None and self._events_bound:
                 for binding in self._event_bindings:

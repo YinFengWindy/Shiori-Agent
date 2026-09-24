@@ -507,7 +507,7 @@ enabled = true
         _ = Config.load(cfg_path)
 
 
-def test_config_load_reads_qq_websocket_timeout(tmp_path: Path):
+def test_config_load_migrates_qq_websocket_timeout_into_plugin(tmp_path: Path):
     cfg_path = tmp_path / "config.toml"
     _write_toml(
         cfg_path,
@@ -538,8 +538,10 @@ def test_config_load_reads_qq_websocket_timeout(tmp_path: Path):
 
     cfg = Config.load(cfg_path)
 
-    assert cfg.channels.qq is not None
-    assert cfg.channels.qq.websocket_open_timeout_seconds == 9.5
+    assert cfg.plugins["qq"] == {
+        "bot_uin": "10001",
+        "websocket_open_timeout_seconds": 9.5,
+    }
 
 
 def test_build_registered_tools_respects_toolset_order_and_subset(

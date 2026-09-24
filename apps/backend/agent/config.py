@@ -20,7 +20,6 @@ from agent.config_models import (
     MemoryConfig,
     MemoryEmbeddingConfig,
     ModelRegistration,
-    QQChannelConfig,
     WiringConfig,
 )
 from agent.scene_preferences import load_scene_preferences, migrate_scene_preferences
@@ -53,7 +52,7 @@ def load_config(
 
     Runs the one-time ``[integrations.novelai]`` -> ``[plugins.novelai]``
     migration (issue #180) and the built-in channel table migration
-    (``[channels.telegram]`` -> ``[plugins.telegram]``, issue #363) against
+    (``[channels.telegram|qq]`` -> ``[plugins.telegram|qq]``, issue #363) against
     the real file before parsing, so an upgrading user's existing
     token/settings show up under the plugin's own config channel with no
     action required. ``load_config_text`` deliberately does not run these: it
@@ -242,20 +241,8 @@ def _effort_extra_body(effort: str) -> dict[str, Any]:
 
 
 def _load_channels_config(data: dict) -> ChannelsConfig:
-    channels_data = data.get("channels", {})
-
-    qq = None
-    if qq_data := channels_data.get("qq"):
-        bot_uin = _normalize_optional_config_text(str(qq_data.get("bot_uin", "")))
-        if bool(qq_data.get("enabled", True)) and bot_uin:
-            qq = QQChannelConfig(
-                bot_uin=bot_uin,
-                websocket_open_timeout_seconds=float(
-                    qq_data.get("websocket_open_timeout_seconds", 5.0)
-                ),
-            )
-
-    return ChannelsConfig(qq=qq)
+    # [channels.telegram|qq] 已迁为插件配置，旧表由迁移/拒绝逻辑处理。
+    return ChannelsConfig()
 
 
 def _load_proactive_config(data: dict) -> ProactiveConfig:
@@ -458,7 +445,6 @@ __all__ = [
     "Config",
     "MemoryConfig",
     "MemoryEmbeddingConfig",
-    "QQChannelConfig",
     "_validated_timezone",
     "load_config",
     "load_config_data",

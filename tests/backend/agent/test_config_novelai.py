@@ -207,8 +207,6 @@ allow_from = ["legacy-user"]
 
     config = load_config(config_path)
 
-    # 旧的 allow_from 不随 Telegram 迁入插件表；白名单只看角色绑定。
+    # 旧的 allow_from / groups 不随渠道迁入插件表；白名单只看角色绑定。
     assert config.plugins["telegram"] == {"token": "telegram-token"}
-    assert config.channels.qq is not None
-    assert not hasattr(config.channels.qq, "allow_from")
-    assert not hasattr(config.channels.qq, "groups")
+    assert config.plugins["qq"] == {"bot_uin": "10001"}

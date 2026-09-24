@@ -17,7 +17,6 @@ import {
   roleBindingChatIdCopy,
   roleBindingContactLabel,
   roleChannelLabel,
-  roleChannelSettingsLocation,
   type RoleBindingAvailability,
   type RoleChannelCatalog,
 } from "./roleChannelCatalog";
@@ -55,7 +54,7 @@ function ChannelBindingNotice({ availability }: { availability: RoleBindingAvail
   }
   const channel = availability.channel;
   if (channel?.state === "not_configured") {
-    return <p className={cx(noticeClass, "text-ink-muted")}><Info className={noticeIconClass} weight="bold" aria-hidden="true" />在 {roleChannelSettingsLocation(channel)} 中完成配置后生效</p>;
+    return <p className={cx(noticeClass, "text-ink-muted")}><Info className={noticeIconClass} weight="bold" aria-hidden="true" />在 设置 › 插件 中完成配置后生效</p>;
   }
   if (channel?.state === "failed") {
     return <p className={cx(noticeClass, "text-danger-text")} title={channel.error}><WarningCircle className={noticeIconClass} weight="bold" aria-hidden="true" /><span className="min-w-0 truncate">{channel.error || "渠道异常"}</span></p>;

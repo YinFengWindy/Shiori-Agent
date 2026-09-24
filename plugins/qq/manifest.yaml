@@ -1,0 +1,15 @@
+api: 2
+id: qq
+display_name: QQ（NapCat）
+version: '0.1.0'
+desc: 通过 NapCat（NcatBot 远程模式）接入的 QQ 渠道
+capabilities:
+  - config
+  - channels
+config_model: QQConfigModel
+channels:
+  - name: qq
+    label: QQ（NapCat）
+    contact_label: QQ 号
+    chat_id_label: 会话 / 群组 ID
+    chat_id_hint: 私聊填 QQ 号，群聊填 gqq:<群号>
