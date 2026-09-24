@@ -1,6 +1,8 @@
 import { ArrowsClockwise } from "@phosphor-icons/react";
 import { useState } from "react";
+import { hasInFlightChatTurns } from "../shared/chatTurnActivity";
 import { errorMessage, feedback } from "../shared/feedback/feedbackStore";
+import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { cx } from "../shared/styles";
 import type { PluginSummary } from "./pluginBridgeClient";
 
@@ -16,10 +18,21 @@ export function pluginsAwaitingRestart(plugins: readonly PluginSummary[]): Plugi
 /** Pairs the per-row "待重启" labels with the one action that applies them: relaunching Shiori. */
 export function PluginRestartBanner({ plugins }: { plugins: readonly PluginSummary[] }) {
   const [relaunching, setRelaunching] = useState(false);
+  // Relaunching kills a reply mid-stream, so that case is confirmed first.
+  const [confirmingInterrupt, setConfirmingInterrupt] = useState(false);
   const count = pluginsAwaitingRestart(plugins).length;
   if (count === 0) return null;
 
+  function requestRelaunch() {
+    if (hasInFlightChatTurns()) {
+      setConfirmingInterrupt(true);
+      return;
+    }
+    void relaunch();
+  }
+
   async function relaunch() {
+    setConfirmingInterrupt(false);
     setRelaunching(true);
     try {
       if (!await window.miraDesktop.relaunchApp()) {
@@ -43,10 +56,18 @@ export function PluginRestartBanner({ plugins }: { plugins: readonly PluginSumma
           "disabled:cursor-default disabled:opacity-60",
         )}
         disabled={relaunching}
-        onClick={() => void relaunch()}
+        onClick={requestRelaunch}
       >
         {relaunching ? "正在重启…" : "立即重启"}
       </button>
+      <ConfirmDialog
+        open={confirmingInterrupt}
+        title="重启 Shiori？"
+        description="有对话正在进行，重启会中断它。"
+        confirmLabel="继续重启"
+        onClose={() => setConfirmingInterrupt(false)}
+        onConfirm={() => void relaunch()}
+      />
     </div>
   );
 }

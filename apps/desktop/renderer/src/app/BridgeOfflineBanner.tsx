@@ -1,5 +1,5 @@
 import { ArrowsClockwise, Plugs } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { cx } from "../shared/styles";
 
 type BridgeOfflineBannerProps = {
@@ -22,9 +22,40 @@ export function shouldShowBridgeOfflineBanner(health: string, restarting: boolea
  * (sending, the model menu, role lists, settings) is disabled meanwhile and
  * this is the one place that says why and offers the way back.
  */
+/**
+ * CSS variable holding how much vertical space the banner takes below the
+ * title bar (unset when hidden). `FeedbackToaster` offsets its stack by it so
+ * toasts never cover the banner.
+ */
+export const statusBannerOffsetVariable = "--status-banner-offset";
+
 export function BridgeOfflineBanner({ health, bridgeError, onRestart }: BridgeOfflineBannerProps) {
   const [restarting, setRestarting] = useState(false);
-  if (!shouldShowBridgeOfflineBanner(health, restarting)) return null;
+  const bannerRef = useRef<HTMLDivElement | null>(null);
+  const visible = shouldShowBridgeOfflineBanner(health, restarting);
+
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const banner = bannerRef.current;
+    if (!visible || !banner) {
+      root.style.removeProperty(statusBannerOffsetVariable);
+      return undefined;
+    }
+    // Height plus the strip's bottom margin, kept current if the text wraps.
+    const publish = () => {
+      const marginBottom = Number.parseFloat(getComputedStyle(banner).marginBottom) || 0;
+      root.style.setProperty(statusBannerOffsetVariable, `${banner.offsetHeight + marginBottom}px`);
+    };
+    publish();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(publish);
+    observer?.observe(banner);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty(statusBannerOffsetVariable);
+    };
+  }, [visible]);
+
+  if (!visible) return null;
 
   async function restart() {
     setRestarting(true);
@@ -37,6 +68,7 @@ export function BridgeOfflineBanner({ health, bridgeError, onRestart }: BridgeOf
 
   return (
     <div
+      ref={bannerRef}
       className="mx-3 mb-1.5 flex items-center gap-3 rounded-md bg-warning-soft px-3 py-1.5 text-body-sm text-warning-text"
       role="status"
       data-testid="bridge-offline-banner"

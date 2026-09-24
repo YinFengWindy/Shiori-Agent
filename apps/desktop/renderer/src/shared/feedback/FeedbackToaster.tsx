@@ -79,14 +79,16 @@ function FeedbackToastItem({ toast }: { toast: FeedbackToast }) {
  * The single on-screen outlet for transient feedback (success / info /
  * warning / error). Mounted once at the app root so it is visible on every
  * view, including the onboarding flow and full-screen plugin pages; messages
- * are raised through `feedback.*` in `feedbackStore`.
+ * are raised through `feedback.*` in `feedbackStore`. While a status banner
+ * sits under the title bar (`--status-banner-offset`, set by
+ * `BridgeOfflineBanner`) the stack starts below it instead of covering it.
  */
 export function FeedbackToaster() {
   const toasts = useSyncExternalStore(subscribeFeedback, getFeedbackSnapshot, getFeedbackSnapshot);
   if (toasts.length === 0) return null;
   return (
     <div
-      className="pointer-events-none fixed left-1/2 top-[calc(var(--titlebar-height)+14px)] z-[60] grid w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 gap-2"
+      className="pointer-events-none fixed left-1/2 top-[calc(var(--titlebar-height)+14px+var(--status-banner-offset,0px))] z-[60] grid w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 gap-2"
       aria-live="polite"
     >
       {toasts.map((toast) => <FeedbackToastItem key={toast.id} toast={toast} />)}

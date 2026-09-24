@@ -48,6 +48,7 @@ import { useRoleFormAdapters } from "./roles/useRoleFormAdapters";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
 import { useSettingsSubsectionMemory } from "./settings/useSettingsSubsectionMemory";
 import { useLatestRef } from "./shared/useLatestRef";
+import { setInFlightChatTurns } from "./shared/chatTurnActivity";
 import { useLeftSidebarState } from "./shared/useLeftSidebarState";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
 import type {
@@ -323,6 +324,9 @@ function App(): React.ReactElement {
       cancelled = true;
     };
   }, [activeSessionKeyForImages, activeSessionUpdatedAtForImages]);
+
+  // Lets actions outside the chat tree (the plugins page relaunch) see running turns.
+  useEffect(() => setInFlightChatTurns(Object.keys(sendingSessions).length), [sendingSessions]);
 
   const bridgeLifecycle = useDesktopBridgeLifecycle({
     activeRoleId,

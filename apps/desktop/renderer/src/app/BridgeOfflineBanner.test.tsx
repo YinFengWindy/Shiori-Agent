@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
-import { BridgeOfflineBanner, shouldShowBridgeOfflineBanner } from "./BridgeOfflineBanner";
+import { BridgeOfflineBanner, shouldShowBridgeOfflineBanner, statusBannerOffsetVariable } from "./BridgeOfflineBanner";
 
 describe("shouldShowBridgeOfflineBanner", () => {
   it("stays hidden during the first connect and while online", () => {
@@ -35,6 +35,15 @@ describe("BridgeOfflineBanner", () => {
       assert.match(view.container.textContent ?? "", /正在重新连接/);
       await act(async () => finish());
       assert.equal(button.disabled, false);
+    } finally { await view.cleanup(); }
+  });
+
+  it("publishes its footprint for the toast stack only while it is shown", async () => {
+    const view = await mountTestComponent(<BridgeOfflineBanner health="offline" bridgeError="" onRestart={async () => undefined} />);
+    try {
+      assert.match(document.documentElement.style.getPropertyValue(statusBannerOffsetVariable), /^\d+(\.\d+)?px$/);
+      await view.render(<BridgeOfflineBanner health="online" bridgeError="" onRestart={async () => undefined} />);
+      assert.equal(document.documentElement.style.getPropertyValue(statusBannerOffsetVariable), "");
     } finally { await view.cleanup(); }
   });
 
