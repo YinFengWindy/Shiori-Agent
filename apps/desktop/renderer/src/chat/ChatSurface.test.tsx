@@ -77,6 +77,7 @@ function chatSurfaceElement(
       chatLatestImageSidebarWidth={320}
       currentMood={options.currentMood ?? ""}
       moodIllustrationUrl={options.moodIllustrationUrl ?? ""}
+      moodUpdatedAt=""
       roleSelfView={options.roleSelfView ?? "我最近会不自觉地想起你。"}
       relationshipTags={["亲近", "等你主动"]}
       lonelinessValue={72}

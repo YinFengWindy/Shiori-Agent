@@ -33,6 +33,16 @@ export function resolveCurrentMood({
   return String(runtimeConfig.default_mood ?? "").trim();
 }
 
+/**
+ * When the session's mood was last set (`current_mood_updated_at`), or empty
+ * when the shown mood is not the session's own (a fallback default).
+ */
+export function resolveCurrentMoodUpdatedAt(session: SessionPayload | null, roleId: string | undefined): string {
+  const metadata = roleSession(session, roleId)?.metadata;
+  if (!String(metadata?.current_mood ?? "").trim()) return "";
+  return String(metadata?.current_mood_updated_at ?? "").trim();
+}
+
 /** Ignores a previously selected role's session while a new session is loading. */
 export function roleSession(session: SessionPayload | null, roleId: string | undefined) {
   if (!session || !roleId) return null;

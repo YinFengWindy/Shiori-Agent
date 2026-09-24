@@ -93,6 +93,7 @@ export function RoleSidebar({
             <button
               key={role.id}
               data-testid={`role-card-${role.id}`}
+              data-chat-role-row={role.id}
               className={cx(roleCardClass, active && "active bg-white text-ink shadow-soft")}
               type="button"
               disabled={!bridgeReady}
@@ -101,8 +102,9 @@ export function RoleSidebar({
               <RoleAvatar role={role} />
               <span className="grid min-w-0 gap-1">
                 <span className="flex min-w-0 items-baseline gap-2">
-                  <span className="role-name min-w-0 flex-1 truncate font-semibold leading-tight">{role.name}</span>
-                  {time ? <span className="flex-none text-caption leading-none tabular-nums text-ink-muted">{time}</span> : null}
+                  {/* The name hugs its text (the time is pushed right) so it morphs into the chat header at its own size. */}
+                  <span className="role-name min-w-0 truncate font-semibold leading-tight" data-vt-part="name">{role.name}</span>
+                  {time ? <span className="ml-auto flex-none text-caption leading-none tabular-nums text-ink-muted">{time}</span> : null}
                 </span>
                 {preview || unread ? (
                   <span className="flex min-w-0 items-center gap-2">

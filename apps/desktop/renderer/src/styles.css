@@ -65,6 +65,7 @@
     --blue-150: #dcf0ff;
     --blue-200: #c9e8fe;
     --blue-300: #a6d6f9;
+    --blue-700: #186a98; /* text-only blue: 5.3:1 on blue-100 */
     /* accent-gradient endpoints: white text stays >=4.5:1 across the whole
        blue->pink sweep (endpoints 4.78/5.20, oklab midpoint 4.93) */
     --blue-grad: #1e79ad;
@@ -146,6 +147,45 @@
     --color-danger-solid: var(--danger-600);    /* white text 4.6:1 */
     --color-danger-text: var(--danger-700);     /* 6.0:1 */
 
+    /* ---------- semantic: mood tones (chat/moodTone.ts) ----------
+       Chat status pill per tone: -soft background, -text label (contrast on
+       its own -soft), -dot marker (decorative). --color-particle-* colour
+       the mood-change burst (decorative, no text contrast target). */
+    --color-mood-happy-soft: var(--pink-100);
+    --color-mood-happy-text: var(--pink-700);        /* 5.4:1 on happy-soft */
+    --color-mood-happy-dot: var(--pink-500);
+    --color-mood-shy-soft: var(--pink-150);
+    --color-mood-shy-text: var(--pink-800);          /* 7.4:1 on shy-soft */
+    --color-mood-shy-dot: var(--pink-400);
+    --color-mood-sad-soft: var(--blue-100);
+    --color-mood-sad-text: var(--blue-700);          /* 5.3:1 on sad-soft */
+    --color-mood-sad-dot: var(--blue-300);
+    --color-mood-angry-soft: var(--danger-100);
+    --color-mood-angry-text: var(--danger-700);      /* 5.3:1 on angry-soft */
+    --color-mood-angry-dot: var(--danger-600);
+    --color-mood-calm-soft: var(--lavender-100);
+    --color-mood-calm-text: var(--lavender-700);     /* 5.3:1 on calm-soft */
+    --color-mood-calm-dot: var(--lavender-500);
+    --color-particle-petal-1: var(--pink-300);
+    --color-particle-petal-2: var(--pink-400);
+    --color-particle-petal-3: var(--pink-200);
+    --color-particle-petal-edge: var(--pink-600);
+    --color-particle-heart-1: var(--pink-400);
+    --color-particle-heart-2: var(--pink-500);
+    --color-particle-droplet-1: var(--blue-200);
+    --color-particle-droplet-2: var(--blue-300);
+    --color-particle-droplet-3: var(--blue-150);
+    --color-particle-droplet-edge: color-mix(in oklab, var(--blue-300), var(--blue-700) 60%);
+    --color-particle-spark-1: var(--danger-600);
+    --color-particle-spark-2: color-mix(in oklab, var(--danger-600), var(--warning-300) 45%);
+    --color-particle-sparkle: var(--lavender-500);
+    --color-particle-halo: var(--lavender-300);
+    --color-particle-shadow: color-mix(in srgb, var(--pink-800) 28%, transparent);
+    /* typing sparkles: sky -> pink -> lavender, the brand motif trio (decorative) */
+    --color-typing-1: var(--color-motif-gradient-start);
+    --color-typing-2: var(--pink-500);
+    --color-typing-3: var(--lavender-500);
+
     /* ---------- gradients ---------- */
     /* pastel accent gradient: same blue->pink family as the app base, one
        tint deeper so controls read as controls; pair with ink text (13:1) */
@@ -197,6 +237,11 @@
     --duration-morph: 420ms; /* shared-element view transition (role card <-> detail header), on ease-drawer */
     --duration-page-rise: 380ms; /* the incoming page of a view transition rising in */
     --duration-spring: 700ms; /* tilt spring-back after the pointer leaves (ease-spring) */
+    --duration-mood-focus: 480ms; /* mood portrait settling in from zoom + blur (crossfadeLayerState.ts "focus") */
+    --duration-mood-tint: 260ms; /* mood pill colour change */
+    --duration-typing: 1.2s; /* one cycle of the typing sparkles */
+    --duration-backdrop-in: 560ms; /* role switch: the new chat background settling in */
+    --duration-breathe: 8s; /* one full breath of the chat background (1 -> 1.025 -> 1) */
     /* ease-spring: a damped spring (zeta 0.42, omega 11) sampled into linear()
        where supported; the cubic-bezier is the overshooting fallback. */
     --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -692,26 +737,145 @@ button[role="combobox"]:focus-visible {
   }
 }
 
-/* Header "正在输入…" dots: a slow staggered breathe. */
-.chat-typing-dots {
+/* "正在输入…" (chat/ChatTypingSparkles.tsx): three brand sparkles — sky,
+   pink, lavender — hop and twinkle in turn. */
+.chat-typing-sparkles {
   display: inline-flex;
-  gap: 2px;
+  align-items: flex-end;
+  gap: 1px;
+  height: 11px;
 }
 
-.chat-typing-dots > span {
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: currentColor;
-  animation: chat-typing-dot 1.2s var(--ease-in-out-soft) infinite;
+.chat-typing-sparkles > span {
+  display: block;
+  width: 9px;
+  height: 9px;
+  opacity: 0.45;
+  transform: scale(0.72);
+  animation: chat-typing-hop var(--duration-typing) var(--ease-in-out-soft) infinite;
 }
 
-.chat-typing-dots > span:nth-child(2) { animation-delay: 0.15s; }
-.chat-typing-dots > span:nth-child(3) { animation-delay: 0.3s; }
+.chat-typing-sparkles > span:nth-child(1) { color: var(--color-typing-1); }
+.chat-typing-sparkles > span:nth-child(2) { color: var(--color-typing-2); animation-delay: 0.16s; }
+.chat-typing-sparkles > span:nth-child(3) { color: var(--color-typing-3); animation-delay: 0.32s; }
 
-@keyframes chat-typing-dot {
-  0%, 60%, 100% { opacity: 0.35; }
-  30% { opacity: 1; }
+.chat-typing-sparkles svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+@keyframes chat-typing-hop {
+  0%, 56%, 100% { transform: translateY(0) scale(0.72) rotate(0deg); opacity: 0.45; }
+  20% { transform: translateY(-3px) scale(1.12) rotate(18deg); opacity: 1; }
+  38% { transform: translateY(0) scale(0.9) rotate(30deg); opacity: 0.8; }
+}
+
+/* ---------- mood change (chat/ChatStatusSidebar.tsx) ----------
+   The pill takes its tone's colours (tinting over --duration-mood-tint);
+   chat/useMoodChangeMotion.ts pops or shakes it and bursts particles
+   (chat/moodBurst.ts) into the layer above the panel. */
+.mood-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 9999px;
+  background-color: var(--mood-soft);
+  color: var(--mood-text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-mood-tint) var(--ease-out-soft),
+    color var(--duration-mood-tint) var(--ease-out-soft);
+}
+
+.mood-pill-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 9999px;
+  background-color: var(--mood-dot);
+  transition: background-color var(--duration-mood-tint) var(--ease-out-soft);
+}
+
+.mood-pill[data-mood-tone="happy"] { --mood-soft: var(--color-mood-happy-soft); --mood-text: var(--color-mood-happy-text); --mood-dot: var(--color-mood-happy-dot); }
+.mood-pill[data-mood-tone="shy"] { --mood-soft: var(--color-mood-shy-soft); --mood-text: var(--color-mood-shy-text); --mood-dot: var(--color-mood-shy-dot); }
+.mood-pill[data-mood-tone="sad"] { --mood-soft: var(--color-mood-sad-soft); --mood-text: var(--color-mood-sad-text); --mood-dot: var(--color-mood-sad-dot); }
+.mood-pill[data-mood-tone="angry"] { --mood-soft: var(--color-mood-angry-soft); --mood-text: var(--color-mood-angry-text); --mood-dot: var(--color-mood-angry-dot); }
+.mood-pill[data-mood-tone="calm"] { --mood-soft: var(--color-mood-calm-soft); --mood-text: var(--color-mood-calm-text); --mood-dot: var(--color-mood-calm-dot); }
+
+.mood-burst-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.mood-particle {
+  position: absolute;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.mood-particle svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mood-particle path {
+  fill: currentColor;
+  fill-opacity: 0.95;
+  stroke: var(--particle-edge, none);
+  stroke-width: 1.4;
+  stroke-opacity: 0.7;
+  stroke-linejoin: round;
+}
+
+.mood-particle[data-particle="petal"] { --particle-edge: var(--color-particle-petal-edge); filter: drop-shadow(0 1px 1.5px var(--color-particle-shadow)); }
+.mood-particle[data-particle="petal"][data-shade="0"] { color: var(--color-particle-petal-1); }
+.mood-particle[data-particle="petal"][data-shade="1"] { color: var(--color-particle-petal-2); }
+.mood-particle[data-particle="petal"][data-shade="2"] { color: var(--color-particle-petal-3); }
+.mood-particle[data-particle="heart"] { --particle-edge: var(--color-bg-surface); filter: drop-shadow(0 1px 1.5px var(--color-particle-shadow)); }
+.mood-particle[data-particle="heart"][data-shade="0"] { color: var(--color-particle-heart-1); }
+.mood-particle[data-particle="heart"][data-shade="1"] { color: var(--color-particle-heart-2); }
+.mood-particle[data-particle="droplet"] { --particle-edge: var(--color-particle-droplet-edge); filter: drop-shadow(0 0 3px var(--color-particle-droplet-2)); }
+.mood-particle[data-particle="droplet"][data-shade="0"] { color: var(--color-particle-droplet-1); }
+.mood-particle[data-particle="droplet"][data-shade="1"] { color: var(--color-particle-droplet-2); }
+.mood-particle[data-particle="droplet"][data-shade="2"] { color: var(--color-particle-droplet-3); }
+/* Sparkle shade 0 is the calm twinkle; shades 1-2 are the angry sparks. */
+.mood-particle[data-particle="sparkle"][data-shade="0"] { color: var(--color-particle-sparkle); --particle-edge: var(--color-bg-surface); filter: drop-shadow(0 0 6px var(--color-particle-halo)); }
+.mood-particle[data-particle="sparkle"][data-shade="1"] { color: var(--color-particle-spark-1); filter: drop-shadow(0 0 2px var(--color-mood-angry-soft)); }
+.mood-particle[data-particle="sparkle"][data-shade="2"] { color: var(--color-particle-spark-2); filter: drop-shadow(0 0 2px var(--color-mood-angry-soft)); }
+.mood-particle[data-particle="halo"] {
+  border-radius: 9999px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--color-bg-surface) 85%, transparent), color-mix(in srgb, var(--color-particle-halo) 40%, transparent) 50%, transparent);
+}
+
+/* ---------- chat background ambience (chat/useChatBackdropMotion.ts) ----------
+   The portrait breathes very slowly; the parallax layer is moved from JS
+   (only while the pointer moves, then the loop stops). */
+.chat-backdrop-parallax-live {
+  will-change: transform;
+}
+
+.chat-backdrop-breathe {
+  transform-origin: 50% 45%;
+  animation: chat-backdrop-breathe var(--duration-breathe) var(--ease-in-out-soft) infinite;
+}
+
+.chat-backdrop-breathe[data-paused] {
+  animation-play-state: paused;
+}
+
+@keyframes chat-backdrop-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.025); }
 }
 
 /* shared/CrossfadeLayers.tsx: the outgoing layer fades out over the incoming
@@ -734,6 +898,29 @@ button[role="combobox"]:focus-visible {
   0% { opacity: 1; filter: none; }
   50% { filter: blur(2px); }
   100% { opacity: 0; filter: blur(2px); }
+}
+
+/* The "focus" variant (mood portrait): the new image settles from a slight
+   zoom and blur while the old one fades under it. */
+.crossfade-in-focus {
+  animation: crossfade-in-focus var(--duration-mood-focus) var(--ease-out-soft) both;
+}
+
+.crossfade-out-focus {
+  animation: crossfade-out-plain var(--duration-mood-focus) var(--ease-in-out-soft) both;
+}
+
+@keyframes crossfade-in-focus {
+  0% { opacity: 0; transform: scale(1.04); filter: blur(6px); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes crossfade-in-plain {
+  from { opacity: 0; }
+}
+
+@keyframes crossfade-out-plain {
+  to { opacity: 0; }
 }
 
 /* Code block syntax colours (highlight.js classes) on semantic text tokens. */
@@ -925,6 +1112,99 @@ button[role="combobox"]:focus-visible {
   to { opacity: 0; }
 }
 
+/* Chat role switch (chat/chatRoleSwitchTransition.ts): the list row's avatar
+   and name morph into the header while the old pair shrinks away; the new
+   background settles in from a slight zoom over the old one; the
+   conversation fades out and rises back in. The header bar and the
+   conversation are named so the background layer never covers them; each
+   group clips to the chat pane's rounded left edge. */
+/* Groups stack in the old view's paint order, where the list row comes
+   before the chat pane: lift the morphing pair above the background. */
+::view-transition-group(chat-role-avatar),
+::view-transition-group(chat-role-name) {
+  z-index: 1;
+  animation-duration: var(--duration-morph);
+  animation-timing-function: var(--ease-drawer);
+}
+
+::view-transition-group(chat-role-avatar) {
+  overflow: hidden;
+  border-radius: 9999px;
+}
+
+::view-transition-old(chat-role-avatar),
+::view-transition-new(chat-role-avatar) {
+  height: 100%;
+  object-fit: cover;
+  animation-duration: var(--duration-morph);
+}
+
+::view-transition-old(chat-role-name),
+::view-transition-new(chat-role-name) {
+  width: auto;
+  height: 100%;
+  animation-duration: var(--duration-morph);
+  animation-timing-function: var(--ease-drawer);
+}
+
+::view-transition-old(chat-role-avatar-old),
+::view-transition-old(chat-role-name-old) {
+  animation: view-transition-shrink-out var(--duration-base) ease both;
+}
+
+::view-transition-group(chat-backdrop) {
+  overflow: hidden;
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  animation-duration: 0s;
+}
+
+::view-transition-image-pair(chat-backdrop) {
+  isolation: auto;
+}
+
+/* The old background stays put under the incoming one... */
+::view-transition-old(chat-backdrop) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* ...unless the new role has none, then it just fades. */
+::view-transition-old(chat-backdrop):only-child {
+  animation: view-transition-fade-out var(--duration-base) ease both;
+}
+
+::view-transition-new(chat-backdrop) {
+  mix-blend-mode: normal;
+  animation: view-transition-backdrop-in var(--duration-backdrop-in) var(--ease-out-soft) both;
+}
+
+::view-transition-group(chat-header) {
+  overflow: hidden;
+  border-top-left-radius: var(--radius-lg);
+}
+
+::view-transition-group(chat-conversation) {
+  overflow: hidden;
+  border-bottom-left-radius: var(--radius-lg);
+  animation-duration: 0s;
+}
+
+::view-transition-old(chat-conversation) {
+  animation: view-transition-fade-out var(--duration-fast) ease both;
+}
+
+::view-transition-new(chat-conversation) {
+  animation: view-transition-rise-in var(--duration-page-rise) var(--ease-out-soft) 90ms both;
+}
+
+@keyframes view-transition-shrink-out {
+  to { opacity: 0; transform: scale(0.7); }
+}
+
+@keyframes view-transition-backdrop-in {
+  from { opacity: 0; transform: scale(1.05); }
+}
+
 @keyframes view-transition-rise-in {
   from { opacity: 0; transform: translateY(10px); }
 }
@@ -986,15 +1266,32 @@ button[role="combobox"]:focus-visible {
     animation-name: message-highlight-fade;
   }
 
-  .chat-typing-dots > span {
+  /* Typing sparkles hold still, a little dimmed. */
+  .chat-typing-sparkles > span {
     animation: none;
     opacity: 0.6;
+    transform: none;
   }
 
-  /* CrossfadeLayers already swaps instantly under reduced motion; this covers a preference flip mid-fade. */
+  /* Image swaps keep only their fade: no blur, no zoom. */
   .crossfade-in,
-  .crossfade-out {
+  .crossfade-in-focus {
+    animation: crossfade-in-plain var(--duration-crossfade) var(--ease-in-out-soft) both;
+  }
+
+  .crossfade-out,
+  .crossfade-out-focus {
+    animation: crossfade-out-plain var(--duration-crossfade) var(--ease-in-out-soft) both;
+  }
+
+  /* No ambient background motion (useChatBackdropMotion also stops the parallax). */
+  .chat-backdrop-breathe {
     animation: none;
+  }
+
+  /* Mood change: no particles (useMoodChangeMotion skips them too). */
+  .mood-burst-layer {
+    display: none;
   }
 
   /* Tilt: flat, no glare (TiltedCard also stops writing angles). */

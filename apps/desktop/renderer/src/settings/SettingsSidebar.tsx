@@ -7,20 +7,21 @@ import { registerBuiltinSettingsSections } from "./registerBuiltinSettingsSectio
 registerBuiltinSettingsSections();
 
 /**
- * The six settings.section ids registered by `registerBuiltinSettingsSections`.
+ * The seven settings.section ids registered by `registerBuiltinSettingsSections`.
  * 「频道」随 Telegram / QQ 迁为渠道插件而移除（#363），渠道配置在 设置 › 插件。
  */
 export type BuiltinSettingsSectionId =
   | "models"
   | "memory"
   | "voice"
+  | "appearance"
   | "advanced"
   | "plugins"
   | "about";
 
 /**
  * Identifies a settings.section registry entry — today always one of the
- * six built-ins (issue #230: a plugin's own settings no longer registers
+ * seven built-ins (issue #230: a plugin's own settings no longer registers
  * a top-level section, it nests as a subtab under "plugins" instead, see
  * `pluginUiRegistry`'s `SettingsSubsectionEntry`). This still accepts any
  * string rather than narrowing to `BuiltinSettingsSectionId` because

@@ -2,6 +2,7 @@ import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { PluginManagementSection } from "../plugins/PluginManagementSection";
 import { AboutSettingsPage } from "./AboutSettingsPage";
 import { AdvancedSettingsSection } from "./AdvancedSettingsSection";
+import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
 import { MemorySettingsSection } from "./MemorySettingsSection";
 import { ModelsSettingsSection } from "./ModelsSettingsSection";
 import { VoiceSettingsSection } from "./VoiceSettingsSection";
@@ -14,7 +15,7 @@ function AboutSection() {
 let registered = false;
 
 /**
- * Registers the six built-in settings domains as ordinary registry
+ * Registers the seven built-in settings domains as ordinary registry
  * entries instead of a hand-written switch. This both dynamizes the
  * settings page (a plugin's own settings.section slots into the same list)
  * and gives the slot mechanism a real, always-present consumer. Idempotent
@@ -46,6 +47,12 @@ export function registerBuiltinSettingsSections(): void {
       { id: "input", label: "输入" },
     ],
     Component: VoiceSettingsSection,
+  }, "builtin");
+
+  pluginUiRegistry.registerSettingsSection({
+    kind: "standalone", slot: "settings.section", id: "appearance", label: "外观",
+    subsections: [{ id: "motion", label: "动效" }],
+    Component: AppearanceSettingsSection,
   }, "builtin");
 
   pluginUiRegistry.registerSettingsSection({

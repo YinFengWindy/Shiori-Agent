@@ -5,8 +5,19 @@
  * transitions are testable; `CrossfadeLayers` drives it.
  */
 
-/** Crossfade length; matches `--duration-crossfade` in styles.css. */
-export const crossfadeDurationMs = 320;
+/**
+ * How a new value comes in:
+ * - `soft`: a plain crossfade with a soft blur mid-way (chat background);
+ * - `focus`: the new image also settles from a slight zoom and blur (mood
+ *   portrait), a touch longer so the change registers.
+ */
+export type CrossfadeVariant = "soft" | "focus";
+
+/** Crossfade lengths; match `--duration-crossfade` / `--duration-mood-focus` in styles.css. */
+export const crossfadeDurations: Record<CrossfadeVariant, number> = {
+  soft: 320,
+  focus: 480,
+};
 
 export type CrossfadeLayer = {
   /** Stable React key; every new value gets a new one. */
@@ -23,8 +34,9 @@ export function initialCrossfadeLayers(value: string): CrossfadeLayer[] {
 /**
  * Moves to `value`. The currently shown layer fades out and the new one fades
  * in; layers already fading out are dropped (a rapid second change jumps
- * straight from the newest pair). With `instant` (reduced motion, or no image
- * shown before) the new value simply replaces everything.
+ * straight from the newest pair). With `instant` (a different subject, e.g.
+ * a role switch that a view transition already animates) or with no image
+ * shown before, the new value simply replaces everything.
  */
 export function advanceCrossfadeLayers(
   layers: readonly CrossfadeLayer[],

@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 describe("listSettingsSidebarSections (issue #230 AC 1)", () => {
-  it("stays exactly the six built-ins, even with plugin settings subtabs registered", () => {
+  it("stays exactly the seven built-ins, even with plugin settings subtabs registered", () => {
     pluginUiRegistry.registerSettingsSubsection({
       slot: "settings.subsection", parentId: "plugins", id: "novelai", label: "NovelAI",
       pluginId: "novelai", Component: () => null,
@@ -23,7 +23,7 @@ describe("listSettingsSidebarSections (issue #230 AC 1)", () => {
 
     assert.deepEqual(
       listSettingsSidebarSections().map((section) => section.id),
-      ["models", "memory", "voice", "advanced", "plugins", "about"],
+      ["models", "memory", "voice", "appearance", "advanced", "plugins", "about"],
     );
   });
 });

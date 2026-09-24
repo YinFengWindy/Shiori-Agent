@@ -188,9 +188,18 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
   | `--duration-morph` | 420ms | 共享元素视图过渡（角色卡片 ↔ 详情头部），配 `--ease-drawer`（只 CSS 用） |
   | `--duration-page-rise` | 380ms | 视图过渡里新页面的上浮淡入（只 CSS 用） |
   | `--duration-spring` | 700ms | 倾斜卡片离开后的弹簧回正，配 `--ease-spring`（只 CSS 用） |
+  | `--duration-mood-focus` | 480ms | 心情立绘换图：新图从 1.04 倍 + 模糊落定（`CrossfadeLayers` 的 `focus` 变体，只 CSS 用） |
+  | `--duration-mood-tint` | 260ms | 心情胶囊换色（只 CSS 用） |
+  | `--duration-typing` | 1.2s | 「正在输入…」星芒一轮跳动（只 CSS 用） |
+  | `--duration-backdrop-in` | 560ms | 聊天切换角色时新背景从 1.05 倍落定（只 CSS 用） |
+  | `--duration-breathe` | 8s | 聊天背景一次完整呼吸 1 → 1.025 → 1（只 CSS 用） |
 
 - 弹簧缓动 `--ease-spring`：阻尼弹簧（ζ 0.42、ω 11）采样成 `linear()`，不支持时退回会过冲的 cubic-bezier；只给「松手回弹」这类一次性回正
 - 视图过渡：`shared/viewTransition.ts` 的 `runViewTransition({ update, nameOld, nameNew })` 包一层同文档 View Transition——运行中的过渡先 `skipTransition()` 再开下一段，名字只在上一段 `updateCallbackDone` 之后才分配；过渡期间点到 `<html>` 的点击会先结束过渡再在原处重放。减弱动态效果时不命名任何元素，只剩 140ms 根交叉淡入；没有 API 时直接切换。角色卡片 ↔ 详情用 `roles/roleViewTransition.ts`：元素用 `data-vt-part`（portrait / avatar / name / sub）标记，页面用 `data-role-page`，规则见 styles.css 的 `role-*`
+- 聊天切换角色：`chat/chatRoleSwitchTransition.ts` 的 `openChatRole`（同样走 `runViewTransition`）。列表行（`data-chat-role-row`）的头像和名字（`data-vt-part`）变形进聊天头部，旧头部那一对缩小淡出；背景（`data-chat-backdrop`）新图从 1.05 倍落定、盖在旧图上（新角色没有背景时旧图淡出）；对话区（`data-chat-conversation`）淡出再上浮。头部条和对话区也各自命名，否则背景层会盖住它们；视图过渡的 group 按旧视图的绘制顺序叠放，列表在聊天区之前，所以变形的头像和名字要 `z-index: 1`。规则见 styles.css 的 `chat-*`。同一角色的背景 / 心情立绘换图仍由 `shared/CrossfadeLayers` 负责，它的 `resetKey`（角色）一变就直接换，不和视图过渡打架。只有聊天区在屏且确实换了角色才走过渡；离开守卫仍在最外层
+- 心情变化演出（`chat/ChatStatusSidebar.tsx`）：立绘用 `CrossfadeLayers variant="focus"`；心情胶囊按 `chat/moodTone.ts` 的五种语气（happy / shy / sad / angry / calm，按关键词匹配角色自定义的心情名，认不出的归 calm）换 `--color-mood-*` 配色，并弹一下（生气改为抖动）；再按语气喷一小簇品牌母题粒子（`chat/moodBurst.ts`：樱瓣飘落 / 小心上浮 / 水滴落下并短暂压暗去饱和 / 胶囊迸火花 / 单个星芒闪烁），约 1.2s，同时存活不超过 28 个，结束即移除。粒子关键帧整体用 linear、缓动写在每一段里（整体 ease-out 会把整段飞行挤在头几帧）。只在「看着的时候真的变了」才播：由 `chat/moodChangeCue.ts` 判定——首次加载、切换角色、重新载入都只移动基线，新心情的 `current_mood_updated_at` 必须晚于这个角色进入视野的时刻。颜色 token 见 styles.css 的 `mood tones` 段
+- 星芒打字：「正在输入…」前是三颗品牌星芒（天蓝 / 粉 / 薰衣草，`--color-typing-*`）依次跳动闪烁，组件 `chat/ChatTypingSparkles.tsx`，样式 `.chat-typing-sparkles`
+- 背景呼吸与视差（设置 › 外观，默认开）：`chat/useChatBackdropMotion.ts`。背景立绘极慢地呼吸（`.chat-backdrop-breathe`）；视差由 `chat/backdropParallax.ts` 计算——背景最多反向 12px、对话区同向 3px，帧率无关的 lerp，停稳即停 rAF，不留空转帧。背景层四周多出 12px（`-inset-3`）避免露边。窗口隐藏或失焦时呼吸暂停、视差回中；减弱动态效果时两者都关，设置开关显示为关并锁定。偏好只影响渲染，存在渲染进程 localStorage（`shared/appearancePrefs.ts`，键 `shiori.desktop.appearance`，带版本号），不进 config.toml
 - 倾斜卡片：`shared/ui/reactBits/TiltedCard`（样式 `.tilt-card`），只在鼠标悬停时跟随指针倾斜（最大 8°）并带光带与高光，离开后弹簧回正；触屏、粗指针和减弱动态效果下保持平放。光效层不接收指针，不影响点击、焦点和卡片菜单。目前只用在角色卡片网格
 - 缓动：`--ease-out-soft`（`ease-out-soft`，也是裸 `transition` 的默认值）用于入场、按压、悬停；
   `--ease-drawer`（`ease-drawer`）只给侧栏开合这类抽屉；`--ease-in-out-soft` 只给两端都在屏幕上的对称切换（交叉淡入）
@@ -203,6 +212,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
   只做入场，关闭时直接消失，缩放原点用 Tailwind 的 `origin-*` 指定。右键菜单和命令面板（RoleSearchDialog）刻意不加动效
 - 侧栏开合用 `sidebarTrackMotionClass`（轨道宽度）+ `sidebarContentMotionClass`（内容淡入位移）
 - 展开/收起用 `grid-template-rows: 0fr → 1fr` 的写法（见 `.chat-thinking-content`），不要用 max-height 猜数值
+- 减弱动态效果下：`CrossfadeLayers` 的两个变体都只剩透明度淡入淡出（不模糊、不缩放）；心情变化不喷粒子、胶囊不弹，只换颜色；星芒打字静止；聊天背景不呼吸、无视差
 - **`styles.css` 末尾有统一的 `@media (prefers-reduced-motion: reduce)` 块**（这里不写行号，行号会漂）：新增循环动画或较大位移的过渡时，
   必须同时在这个块里给出降级（`animation: none` 或退化成 opacity 过渡）。
   Tailwind 类就近处理：挂在 `hover:` / `active:` / `group-hover:` 上的位移和缩放写成 `motion-safe:hover:*`
@@ -216,7 +226,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | 来源 | 内容 | 规则 |
 |---|---|---|
 | `shared/icons.tsx` + `@phosphor-icons/react` | 功能图标（保存、删除、上传、发送、关闭……） | **一律复用，不要自绘。** 2026-09 视觉验收时自绘功能图标被逐一打回 |
-| `shared/ui/icons`（`brand.tsx`） | 品牌装饰母题：星芒、恶魔翅膀、蝴蝶结、樱瓣 | 只用于空状态、加载、成就等情绪点缀 |
+| `shared/ui/icons`（`brand.tsx`） | 品牌装饰母题：星芒、恶魔翅膀、蝴蝶结、樱瓣 | 只用于空状态、加载、成就等情绪点缀。几何统一在 `brandMotifPaths`（另含只作粒子用的心形、水滴），心情粒子和打字星芒都从这里取形 |
 
 **导航栏图标**是两者的组合（`shared/ui/icons/navGlyphs.tsx`）：Phosphor **regular** 原图，外轮廓不改，里面嵌**一个**品牌小元素。
 小元素是独立的 `<g class="nav-glyph-motif">`，平时 `--color-motif`（pink-500），选中时换品牌渐变（渐变 id 每个实例用 `useId` 生成）；
