@@ -174,13 +174,13 @@ export function ChatImageLightbox({
   return (
     <div className="chat-image-lightbox fixed inset-0 z-40 flex items-center justify-center px-4 py-6">
       <button
-        className="absolute inset-0 border-0 bg-[rgba(15,23,42,0.56)] p-0 backdrop-blur-[8px]"
+        className="motion-fade-enter absolute inset-0 border-0 bg-[rgba(15,23,42,0.56)] p-0 backdrop-blur-[8px]"
         type="button"
         aria-label="关闭聊天图片预览"
         onClick={onClose}
       />
       <section
-        className="relative z-[1] grid h-full max-h-[min(92vh,980px)] w-full max-w-[min(92vw,1400px)] min-h-0 min-w-0 place-items-center overflow-hidden rounded-xl bg-surface-soft p-5 shadow-pop"
+        className="motion-dialog-enter relative z-[1] grid h-full max-h-[min(92vh,980px)] w-full max-w-[min(92vw,1400px)] min-h-0 min-w-0 place-items-center overflow-hidden rounded-xl bg-surface-soft p-5 shadow-pop"
         role="dialog"
         aria-modal="true"
         aria-label="聊天图片放大预览"

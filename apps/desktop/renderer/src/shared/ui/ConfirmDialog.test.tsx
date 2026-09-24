@@ -49,3 +49,24 @@ test("busy confirmations disable both actions and refuse Escape dismissal", asyn
     assert.equal(confirmed, 0);
   } finally { await view.cleanup(); }
 });
+
+test("closing keeps the last open copy on screen while the exit animation plays", async () => {
+  const view = await mountTestComponent(<ConfirmDialog open title="确认删除角色" description="“Mira” 删除后会移除角色会话。" confirmLabel="确认删除" onClose={() => {}} onConfirm={() => {}} />);
+  // happy-dom runs no CSS animations; hand Base UI one exit animation that
+  // stays pending so the popup is still mounted in its ending state.
+  let finishExit!: () => void;
+  const exit = { finished: new Promise<void>((resolve) => { finishExit = resolve; }) };
+  const elementPrototype = Object.getPrototypeOf(document.createElement("div")) as { getAnimations?: () => unknown[] };
+  const originalGetAnimations = elementPrototype.getAnimations;
+  elementPrototype.getAnimations = () => [exit];
+  try {
+    await view.render(<ConfirmDialog open={false} title="确认删除角色" description="" confirmLabel="确认删除" onClose={() => {}} onConfirm={() => {}} />);
+    const dialog = document.querySelector("[role=\"dialog\"]");
+    assert.ok(dialog, "the popup should still be mounted while its exit runs");
+    assert.match(dialog.textContent ?? "", /Mira/);
+  } finally {
+    finishExit();
+    elementPrototype.getAnimations = originalGetAnimations;
+    await view.cleanup();
+  }
+});

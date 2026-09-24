@@ -69,7 +69,7 @@ export function BridgeOfflineBanner({ health, bridgeError, onRestart }: BridgeOf
   return (
     <div
       ref={bannerRef}
-      className="mx-3 mb-1.5 flex items-center gap-3 rounded-md bg-warning-soft px-3 py-1.5 text-body-sm text-warning-text"
+      className="motion-fade-enter mx-3 mb-1.5 flex items-center gap-3 rounded-md bg-warning-soft px-3 py-1.5 text-body-sm text-warning-text"
       role="status"
       data-testid="bridge-offline-banner"
     >

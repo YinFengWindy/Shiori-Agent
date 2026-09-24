@@ -1,12 +1,12 @@
 import { Dialog } from "@base-ui/react/dialog";
-import type { RefObject } from "react";
+import { useState, type RefObject } from "react";
 import { XIcon } from "@phosphor-icons/react";
 import { dangerGhostButtonClass, ghostButtonClass, iconButtonClass } from "../shared/styles";
 import type { PluginSummary } from "./pluginBridgeClient";
 import { canManagePluginPackage } from "./pluginPackageState";
 
 /** Read-only candidate details with guarded package actions inside the management dialog root. */
-export function PluginDetailsDialog({ plugin, busy, error, popupRef, onUpdate, onUninstall }: {
+export function PluginDetailsDialog({ plugin: currentPlugin, busy, error, popupRef, onUpdate, onUninstall }: {
   plugin: PluginSummary | null;
   busy: boolean;
   error: string;
@@ -14,10 +14,15 @@ export function PluginDetailsDialog({ plugin, busy, error, popupRef, onUpdate, o
   onUpdate: () => void;
   onUninstall: () => void;
 }) {
+  // The owner clears the candidate as it closes; keep the last one rendered
+  // so the exit animation does not play on an emptied dialog.
+  const [lastPlugin, setLastPlugin] = useState(currentPlugin);
+  if (currentPlugin && currentPlugin !== lastPlugin) setLastPlugin(currentPlugin);
+  const plugin = currentPlugin ?? lastPlugin;
   const pendingTrust = plugin?.trustPendingRestart && plugin.diagnostic?.code === "trust_required";
   return <Dialog.Portal>
-    <Dialog.Backdrop className="confirm-dialog-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm" />
-    <Dialog.Popup ref={popupRef} className="confirm-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(40rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-5 rounded-md border border-line bg-surface p-6 shadow-panel">
+    <Dialog.Backdrop className="confirm-dialog-backdrop motion-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm" />
+    <Dialog.Popup ref={popupRef} className="confirm-dialog motion-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(40rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-5 rounded-md border border-line bg-surface p-6 shadow-panel">
       <div className="flex items-start justify-between gap-4">
         <Dialog.Title className="min-w-0 break-words font-display text-title font-semibold text-ink">{plugin?.name}</Dialog.Title>
         <Dialog.Close className={iconButtonClass} aria-label="关闭插件详情" disabled={busy}>
