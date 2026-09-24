@@ -552,9 +552,9 @@ async def test_bot_commands_are_scoped_contributions_only(tmp_path: Path):
     (package / "manifest.yaml").write_text(_V2_BOT_COMMANDS_MANIFEST, encoding="utf-8")
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
-    assert kernel.telegram_bot_commands == [("chatid", "查看我的 chat_id")]
+    assert kernel.bot_commands == [("chatid", "查看我的 chat_id")]
     await kernel.unload("v2cmds")
-    assert kernel.telegram_bot_commands == []
+    assert kernel.bot_commands == []
 
 
 _RPC_PLUGIN = """
@@ -1659,22 +1659,5 @@ async def test_plugins_declaring_one_channel_both_stay_inactive(tmp_path: Path):
         assert {state["diagnostic"]["code"] for state in kernel.states()} == {
             "duplicate_channel"
         }
-    finally:
-        await kernel.terminate_all(force=True)
-
-
-@pytest.mark.asyncio
-async def test_bot_commands_keep_telegram_named_alias(tmp_path: Path):
-    package = tmp_path / "v2cmds"
-    (package / "backend").mkdir(parents=True)
-    (package / "backend/plugin.py").write_text(
-        _V2_BOT_COMMANDS_PLUGIN, encoding="utf-8"
-    )
-    (package / "manifest.yaml").write_text(_V2_BOT_COMMANDS_MANIFEST, encoding="utf-8")
-    kernel = make_kernel([tmp_path], event_bus=EventBus())
-    await kernel.load_all()
-    try:
-        assert kernel.bot_commands == [("chatid", "查看我的 chat_id")]
-        assert kernel.telegram_bot_commands == kernel.bot_commands
     finally:
         await kernel.terminate_all(force=True)
