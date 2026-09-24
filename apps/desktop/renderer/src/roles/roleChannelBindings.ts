@@ -1,13 +1,14 @@
 import type { RoleChannelBinding } from "../shared/types";
+import { desktopChannelName } from "./roleChannelCatalog";
 
 /** Supported directions for editing the proactive fallback order. */
 export type RoleChannelBindingMoveDirection = "up" | "down";
 
 /** Creates an editable channel binding for a role. */
-export function createRoleChannelBinding(roleId: string, channel = "telegram"): RoleChannelBinding {
+export function createRoleChannelBinding(roleId: string, channel: string): RoleChannelBinding {
   return {
     channel,
-    chat_id: channel === "desktop" ? `role:${roleId}` : "",
+    chat_id: channel === desktopChannelName ? `role:${roleId}` : "",
     allow_from: [],
   };
 }
@@ -21,9 +22,9 @@ export function changeRoleBindingChannel(
   return {
     ...binding,
     channel,
-    chat_id: channel === "desktop"
+    chat_id: channel === desktopChannelName
       ? `role:${roleId}`
-      : binding.channel === "desktop"
+      : binding.channel === desktopChannelName
         ? ""
         : binding.chat_id,
   };
@@ -31,7 +32,7 @@ export function changeRoleBindingChannel(
 
 /** Identifies the role-owned desktop transport binding. */
 export function isDesktopRoleBinding(binding: RoleChannelBinding): boolean {
-  return binding.channel === "desktop";
+  return binding.channel === desktopChannelName;
 }
 
 /** Moves a role binding without mutating the form's current binding array. */
@@ -67,27 +68,4 @@ export function buildProactiveTransportSequence(
     ...usableBindings.slice(0, preferredIndex),
     ...usableBindings.slice(preferredIndex + 1),
   ];
-}
-
-/** Returns the display label for a supported role transport. */
-export function roleBindingChannelLabel(channel: string): string {
-  if (channel === "telegram") return "Telegram";
-  if (channel === "qq") return "QQ";
-  if (channel === "qqbot") return "QQBot";
-  if (channel === "desktop") return "桌面端";
-  return channel;
-}
-
-/** Returns the channel-specific label for the role's sole external contact. */
-export function roleBindingAllowFromLabel(channel: string): string {
-  if (channel === "telegram") {
-    return "联系人 ID（Telegram 用户 ID 或用户名）";
-  }
-  if (channel === "qq") {
-    return "联系人 ID（QQ 号）";
-  }
-  if (channel === "qqbot") {
-    return "联系人 ID（QQBot OpenID）";
-  }
-  return "联系人 ID";
 }

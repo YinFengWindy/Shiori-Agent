@@ -5,12 +5,11 @@ import { cx, ghostButtonClass, iconButtonClass } from "../shared/styles";
 import { Magnet } from "../shared/ui/reactBits/Magnet";
 import type { RoleFormState, RoleRecord } from "../shared/types";
 import { RoleCapabilitiesPanel } from "./RoleCapabilitiesPanel";
-import { RoleChannelBindingsPanel } from "./RoleChannelBindingsPanel";
 import { captureRoleDetailScrollTop, restoreRoleDetailScrollTop } from "./roleDetailScrollState";
+import { RoleDeliveryPanels } from "./RoleDeliveryPanels";
 import { RoleDetailTabs, type RoleDetailTabId } from "./RoleDetailTabs";
 import { RoleProfilePanel } from "./RoleProfilePanel";
 import { RoleKnowledgePanel } from "./RoleKnowledgePanel";
-import { RoleProactiveSettingsPanel } from "./RoleProactiveSettingsPanel";
 
 type RoleDetailPageProps = {
   activeIllustration: string;
@@ -70,10 +69,7 @@ export function RoleDetailPage({
   ) : activeTab === "capabilities" ? (
     <RoleCapabilitiesPanel activeRole={activeRole} bridgeReady={bridgeReady} roleForm={roleForm} onUpdate={updateRoleForm} />
   ) : (
-    <div className="grid gap-6">
-      <RoleChannelBindingsPanel activeRoleId={activeRoleId} bindings={roleForm.channelBindings ?? []} onUpdate={updateRoleForm} />
-      <RoleProactiveSettingsPanel bindings={roleForm.channelBindings ?? []} roleForm={roleForm} onUpdate={updateRoleForm} />
-    </div>
+    <RoleDeliveryPanels activeRoleId={activeRoleId} roleForm={roleForm} onUpdate={updateRoleForm} />
   );
 
   return (

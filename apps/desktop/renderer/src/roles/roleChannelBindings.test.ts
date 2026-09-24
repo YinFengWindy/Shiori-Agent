@@ -5,8 +5,6 @@ import {
   changeRoleBindingChannel,
   createRoleChannelBinding,
   moveRoleChannelBinding,
-  roleBindingAllowFromLabel,
-  roleBindingChannelLabel,
 } from "./roleChannelBindings";
 
 describe("roleChannelBindings", () => {
@@ -27,13 +25,6 @@ describe("roleChannelBindings", () => {
       ),
       { channel: "telegram", chat_id: "", allow_from: [] },
     );
-  });
-
-  it("explains each external channel's supported allow-list identity", () => {
-    assert.match(roleBindingAllowFromLabel("telegram"), /用户 ID 或用户名/);
-    assert.match(roleBindingAllowFromLabel("qq"), /QQ 号/);
-    assert.match(roleBindingAllowFromLabel("qqbot"), /OpenID/);
-    assert.equal(roleBindingChannelLabel("qqbot"), "QQBot");
   });
 
   it("moves bindings in either direction without mutating the source array", () => {

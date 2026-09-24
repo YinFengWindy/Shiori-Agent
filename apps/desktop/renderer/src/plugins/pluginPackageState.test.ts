@@ -5,7 +5,7 @@ import { canManagePluginPackage, pluginDetailsCandidate } from "./pluginPackageS
 
 const installed: PluginSummary = {
   id: "demo", candidateId: "workspace/demo", directory: "workspace/demo", source: "workspace", name: "Demo", version: "1.0.0",
-  description: "", enabled: true, canToggle: true, state: "ACTIVE", error: "", diagnostic: null, hasConfigSchema: false, supportsHotUnload: true, pendingRendererKinds: [],
+  description: "", enabled: true, canToggle: true, state: "ACTIVE", error: "", diagnostic: null, hasConfigSchema: false, capabilities: [], channels: [], supportsHotUnload: true, pendingRendererKinds: [],
 };
 
 test("only installed unique external packages without queued changes are manageable", () => {

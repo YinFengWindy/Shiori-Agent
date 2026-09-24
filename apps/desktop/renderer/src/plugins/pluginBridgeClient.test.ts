@@ -8,7 +8,7 @@ it("preserves candidate identity and structured admission diagnostics from the b
     id: "1", type: "response", method, error: null, payload: { plugins: [{
       id: "demo", candidate_id: "workspace/demo", source: "workspace", directory: "C:/workspace/plugins/demo",
       name: "demo", version: "1.0.0", description: "", enabled: true, can_toggle: false,
-      state: "CONFLICT", error: "conflict", diagnostic, has_config_schema: false, supports_hot_unload: true,
+      state: "CONFLICT", error: "conflict", diagnostic, has_config_schema: false, supports_hot_unload: true, capabilities: [], channels: [],
     }] },
   }));
   const [plugin] = await client.listPlugins();
@@ -28,12 +28,47 @@ it("surfaces pendingRendererKinds verbatim when the backend reports them (#262 A
     id: "1", type: "response", method, error: null, payload: { plugins: [{
       id: "demo", candidate_id: "workspace/demo", source: "workspace", directory: "C:/workspace/plugins/demo",
       name: "demo", version: "1.0.0", description: "", enabled: true, can_toggle: true,
-      state: "ACTIVE", error: "", diagnostic: null, has_config_schema: false, supports_hot_unload: true,
+      state: "ACTIVE", error: "", diagnostic: null, has_config_schema: false, supports_hot_unload: true, capabilities: [], channels: [],
       pending_renderer_kinds: ["background", "ui"],
     }] },
   }));
   const [plugin] = await client.listPlugins();
   assert.deepEqual(plugin.pendingRendererKinds, ["background", "ui"]);
+});
+
+it("maps declared capabilities and channel declarations for plugin grouping (#363)", async () => {
+  const client = createPluginBridgeClient(async ({ method }) => ({
+    id: "1", type: "response", method, error: null, payload: { plugins: [{
+      id: "qqbot", candidate_id: "builtin/qqbot", source: "builtin", directory: "plugins/qqbot",
+      name: "QQBot", version: "1.0.0", description: "", enabled: true, can_toggle: true,
+      state: "ACTIVE", error: "", diagnostic: null, has_config_schema: true, supports_hot_unload: true,
+      capabilities: ["channels", "config"],
+      channels: [{ name: "qqbot", label: "QQBot", contact_label: "QQBot 用户 OpenID", chat_id_label: "私聊 chat_id", chat_id_hint: "c2c:<用户 OpenID>" }],
+    }] },
+  }));
+  const [plugin] = await client.listPlugins();
+  assert.deepEqual(plugin.capabilities, ["channels", "config"]);
+  assert.deepEqual(plugin.channels, [{ name: "qqbot", label: "QQBot", contactLabel: "QQBot 用户 OpenID", chatIdLabel: "私聊 chat_id", chatIdHint: "c2c:<用户 OpenID>" }]);
+});
+
+it("lists channels with their provider and runtime state (#363)", async () => {
+  const calls: unknown[] = [];
+  const client = createPluginBridgeClient(async (request) => {
+    calls.push(request);
+    return { id: "1", type: "response", method: request.method, error: null, payload: { channels: [
+      { name: "desktop", label: "桌面端", contact_label: null, chat_id_label: null, chat_id_hint: null, plugin_id: null, plugin_enabled: true, state: "active", error: "", status: null },
+      { name: "qqbot", label: "QQBot", contact_label: "QQBot 用户 OpenID", chat_id_label: "私聊 chat_id", chat_id_hint: "c2c:<用户 OpenID>", plugin_id: "qqbot", plugin_enabled: false, state: "plugin_disabled", error: "", status: null },
+      { name: "demo", label: "Demo", contact_label: null, chat_id_label: null, chat_id_hint: null, plugin_id: "demo", plugin_enabled: true, state: "active", error: "", status: { connected: true, account: "bot" } },
+    ] } };
+  });
+  const channels = await client.listChannels();
+  assert.deepEqual(calls, [{ method: "channels.list", payload: {} }]);
+  assert.deepEqual(channels[1], {
+    name: "qqbot", label: "QQBot", contactLabel: "QQBot 用户 OpenID", chatIdLabel: "私聊 chat_id", chatIdHint: "c2c:<用户 OpenID>",
+    pluginId: "qqbot", pluginEnabled: false, state: "plugin_disabled", error: "", status: null,
+  });
+  assert.equal(channels[0].pluginId, null);
+  assert.deepEqual(channels[2].status, { connected: true, account: "bot" });
 });
 
 describe("reportActivation (#262)", () => {

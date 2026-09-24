@@ -8,6 +8,8 @@ import { menuItemClass, menuItemSelectedClass, menuPanelClass } from "./Menu";
 export interface SelectOption {
   value: string;
   label: string;
+  /** Shorter text for the closed trigger when the list label carries extra annotation. */
+  triggerLabel?: string;
   disabled?: boolean;
 }
 
@@ -28,7 +30,8 @@ export function Select({ value, options, onValueChange, disabled, id, name, clas
   return (
     <SelectPrimitive.Root
       value={value}
-      items={options}
+      // The trigger renders the item label; the list below always renders the full option label.
+      items={options.map((option) => ({ value: option.value, label: option.triggerLabel ?? option.label }))}
       onValueChange={(next) => {
         // Null represents no library selection; empty strings are valid business values.
         if (next !== null && next !== value) onValueChange(next);
