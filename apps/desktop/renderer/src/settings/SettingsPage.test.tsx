@@ -11,7 +11,7 @@ const alwaysVisible = () => true;
 const noopChangeSubsection = () => undefined;
 
 const oneInstalledPlugin = [
-  { id: "installed-demo", name: "Installed Demo", version: "0.1.0", description: "", enabled: true, state: "ACTIVE", error: "", has_config_schema: false },
+  { id: "installed-demo", name: "Installed Demo", version: "0.1.0", description: "", enabled: true, state: "ACTIVE", error: "", has_config_schema: false, capabilities: [], channels: [] },
 ];
 
 function stubPluginsListBridge(plugins: Array<Record<string, unknown>> = oneInstalledPlugin) {
@@ -83,7 +83,7 @@ test("the plugin route places every discovered row inside the settings scroll ar
             plugins: Array.from({ length: 16 }, (_, index) => ({
               id: `plugin-${index}`, name: `Plugin ${index}`, version: "0.1.0",
               description: "", enabled: true, state: "ACTIVE", error: "",
-              has_config_schema: false,
+              has_config_schema: false, capabilities: [], channels: [],
             })),
           },
         };

@@ -16,7 +16,7 @@ function pluginRow(state: string) {
     diagnostic: state === "FAILED"
       ? { code: "renderer_ui_failed", stage: "ui", field: "renderer.ui.entry", reason: "module threw", path: "", state: "FAILED" }
       : null,
-    has_config_schema: false, supports_hot_unload: true,
+    has_config_schema: false, capabilities: [], channels: [], supports_hot_unload: true,
     pending_renderer_kinds: state === "ACTIVE" ? ["ui"] : [],
   };
 }

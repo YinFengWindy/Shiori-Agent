@@ -18,6 +18,62 @@ export type PluginConfigSaveResult = {
   generation: number;
 };
 
+/** One manifest-declared external channel (the `channels:` block of runtime API 2.2). */
+export type PluginChannelDeclaration = {
+  name: string;
+  label: string;
+  /** Describes the binding's sole `allow_from` contact. */
+  contactLabel: string | null;
+  /** Describes the binding's `chat_id`; `chatIdHint` shows its expected format. */
+  chatIdLabel: string | null;
+  chatIdHint: string | null;
+};
+
+/** Wire shape of one channel declaration, shared by `plugins.list` and `channels.list`. */
+type PluginChannelDeclarationPayload = {
+  name: string;
+  label: string;
+  contact_label: string | null;
+  chat_id_label: string | null;
+  chat_id_hint: string | null;
+};
+
+/**
+ * Where one listed channel stands (`channels.list`):
+ * - `active`: registered in the published generation;
+ * - `not_configured`: its provider is enabled but contributed no channel, usually missing credentials;
+ * - `failed`: construction/start/status failed, or the plugin itself could not activate (`error` says why);
+ * - `plugin_disabled`: the providing plugin is disabled in configuration.
+ */
+export type ChannelState = "active" | "not_configured" | "failed" | "plugin_disabled";
+
+/** Optional live transport health a channel may report through `status()`. */
+export type ChannelConnectionStatus = {
+  connected: boolean;
+  account?: string;
+  detail?: string;
+};
+
+/** One row of `channels.list`: a declaration joined with its provider and runtime state. */
+export type ChannelSummary = PluginChannelDeclaration & {
+  /** Null for host-owned channels (`desktop`, and builtin Telegram/QQ until they become plugins). */
+  pluginId: string | null;
+  pluginEnabled: boolean;
+  state: ChannelState;
+  error: string;
+  status: ChannelConnectionStatus | null;
+};
+
+function mapChannelDeclaration(item: PluginChannelDeclarationPayload): PluginChannelDeclaration {
+  return {
+    name: item.name,
+    label: item.label,
+    contactLabel: item.contact_label,
+    chatIdLabel: item.chat_id_label,
+    chatIdHint: item.chat_id_hint,
+  };
+}
+
 /** One row of the plugin management list (`plugins.list`). */
 export type PluginSummary = {
   id: string;
@@ -42,6 +98,10 @@ export type PluginSummary = {
   rendererSurface?: RuntimePluginUi;
   diagnostic: PluginDiagnostic | null;
   hasConfigSchema: boolean;
+  /** Manifest capabilities; `channels` marks a plugin that may contribute channels. */
+  capabilities: string[];
+  /** Static channel declarations, present even while the plugin is inactive. */
+  channels: PluginChannelDeclaration[];
   /** Whether an active plugin can be replaced without restarting the process. */
   supportsHotUnload: boolean;
   /**
@@ -107,6 +167,8 @@ export interface PluginBridgeClient {
     options: { operationId: string },
   ): Promise<PluginConfigSaveResult>;
   listPlugins(): Promise<PluginSummary[]>;
+  /** Lists `desktop`, builtin and plugin-declared channels with their runtime state (`channels.list`). */
+  listChannels(): Promise<ChannelSummary[]>;
   setEnabled(
     pluginId: string,
     enabled: boolean,
@@ -162,6 +224,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         can_trust?: boolean; trust_fingerprint?: string | null; trust_directory?: string; trust_pending_restart?: boolean;
         enabled: boolean; state: string; error: string; has_config_schema: boolean; supports_hot_unload: boolean;
         pending_renderer_kinds?: string[];
+        capabilities: string[]; channels: PluginChannelDeclarationPayload[];
         package_installed?: boolean; pending_operation?: PluginSummary["pendingOperation"]; pending_version?: string; package_operation_error?: string;
       }> }>(resolveInvoke(), "plugins.list", {});
       return payload.plugins.map((item) => ({
@@ -189,8 +252,24 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         packageInstalled: item.package_installed,
         packageOperationError: item.package_operation_error,
         hasConfigSchema: item.has_config_schema,
+        capabilities: item.capabilities,
+        channels: item.channels.map(mapChannelDeclaration),
         supportsHotUnload: item.supports_hot_unload,
         pendingRendererKinds: item.pending_renderer_kinds ?? [],
+      }));
+    },
+    async listChannels() {
+      const payload = await invokePluginPayload<{ channels: Array<PluginChannelDeclarationPayload & {
+        plugin_id: string | null; plugin_enabled: boolean; state: ChannelState; error: string;
+        status: ChannelConnectionStatus | null;
+      }> }>(resolveInvoke(), "channels.list", {});
+      return payload.channels.map((item) => ({
+        ...mapChannelDeclaration(item),
+        pluginId: item.plugin_id,
+        pluginEnabled: item.plugin_enabled,
+        state: item.state,
+        error: item.error,
+        status: item.status,
       }));
     },
     async setEnabled(pluginId, enabled, options) {

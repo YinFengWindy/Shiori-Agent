@@ -18,8 +18,8 @@ describe("PluginManagementSection", () => {
     Object.defineProperty(window, "miraDesktop", { configurable: true, value: {
       onEvent: () => () => undefined,
       invoke: async ({ method }: { method: string }) => ({ id: "r", type: "response", method, error: null, payload: { plugins: [
-        { id: "builtin", candidate_id: "builtin/one", directory: "builtin/one", source: "builtin", name: "Builtin", version: "1.0.0", state: "ACTIVE", enabled: true, can_toggle: true },
-        { id: "external", candidate_id: "workspace/external", directory: "workspace/external", source: "workspace", name: "External", version: "1.0.0", description: "An external plugin", state: "ACTIVE", enabled: true, can_toggle: true },
+        { id: "builtin", candidate_id: "builtin/one", directory: "builtin/one", source: "builtin", name: "Builtin", version: "1.0.0", state: "ACTIVE", enabled: true, can_toggle: true, capabilities: [], channels: [] },
+        { id: "external", candidate_id: "workspace/external", directory: "workspace/external", source: "workspace", name: "External", version: "1.0.0", description: "An external plugin", state: "ACTIVE", enabled: true, can_toggle: true, capabilities: [], channels: [] },
       ] } }),
     } });
     try {
@@ -75,7 +75,7 @@ describe("PluginManagementSection", () => {
               id: "1", type: "response", method, error: null,
               payload: {
                 plugins: [
-                  { id: "hello", candidate_id: "builtin/hello", directory: "builtin/hello", source: "builtin", can_toggle: true, diagnostic: null, name: "hello", version: "0.1", description: "示例插件", enabled: helloEnabled, state: helloEnabled ? "ACTIVE" : "DISABLED", error: "", has_config_schema: false },
+                  { id: "hello", candidate_id: "builtin/hello", directory: "builtin/hello", source: "builtin", can_toggle: true, diagnostic: null, name: "hello", version: "0.1", description: "示例插件", enabled: helloEnabled, state: helloEnabled ? "ACTIVE" : "DISABLED", error: "", has_config_schema: false, capabilities: [], channels: [] },
                 ],
               },
             };
@@ -124,7 +124,7 @@ describe("PluginManagementSection", () => {
           } };
           if (request.method === "plugins.install.confirm" || request.method === "plugins.uninstall") pending = true;
           return { id: "r", type: "response", method: request.method, error: null, payload: { plugins: [
-            { id: "external", candidate_id: "workspace/external", directory: "workspace/external", source: "workspace", name: "External", version: "1.0.0", state: "ACTIVE", enabled: true, can_toggle: !pending, pending_operation: pending ? operation : undefined, pending_version: pending ? "2.0.0" : undefined },
+            { id: "external", candidate_id: "workspace/external", directory: "workspace/external", source: "workspace", name: "External", version: "1.0.0", state: "ACTIVE", enabled: true, can_toggle: !pending, pending_operation: pending ? operation : undefined, pending_version: pending ? "2.0.0" : undefined, capabilities: [], channels: [] },
           ] } };
         },
       } });
@@ -193,7 +193,7 @@ it("keeps the active switch and shows restart guidance after a refused hot toggl
     value: { onEvent: () => () => undefined, invoke: async ({ method }: { method: string }) => {
       calls.push(method);
       if (method === "plugins.list") return { id: "1", type: "response", method, error: null, payload: { plugins: [
-        { id: "unsafe", candidate_id: "builtin/unsafe", directory: "builtin/unsafe", source: "builtin", can_toggle: true, diagnostic: null, name: "unsafe", version: "0.1", description: "", enabled: true, state: "ACTIVE", error: "", has_config_schema: false, supports_hot_unload: false },
+        { id: "unsafe", candidate_id: "builtin/unsafe", directory: "builtin/unsafe", source: "builtin", can_toggle: true, diagnostic: null, name: "unsafe", version: "0.1", description: "", enabled: true, state: "ACTIVE", error: "", has_config_schema: false, capabilities: [], channels: [], supports_hot_unload: false },
       ] } };
       return { id: "2", type: "response", method, payload: {}, error: { code: "plugin_restart_required", message: "本次更改未保存；请退出应用后修改配置，再重新启动。", details: { plugin_ids: ["unsafe"], restart_required: true } } };
     } },
@@ -219,7 +219,7 @@ it("renders each conflicting directory and disables every unsafe candidate", asy
     id: index < 2 ? "duplicate" : `plugin-${index}`, name: "same-name", version: "1.0.0",
     candidate_id: `candidate-${index}`, source: index === 0 ? "builtin" : "workspace",
     directory: `C:/plugins/root-${index}`, description: "", enabled: true, can_toggle: false,
-    state, error: `diagnostic-${index}`, has_config_schema: false, supports_hot_unload: true,
+    state, error: `diagnostic-${index}`, has_config_schema: false, capabilities: [], channels: [], supports_hot_unload: true,
     diagnostic: { code: state.toLowerCase(), stage: "discovery", field: "id", reason: `diagnostic-${index}`, path: "", state },
   }));
   Object.defineProperty(window, "miraDesktop", {
@@ -267,7 +267,7 @@ it("requires explicit trust confirmation and then shows pending restart without 
       return { id: "1", type: "response", method: request.method, error: null, payload: { plugins: [{
         id: "manual", name: "Manual", version: "1.0.0", candidate_id: "C:/workspace/plugins/manual", directory: "C:/workspace/plugins/manual", source: "workspace", description: "",
         state: "UNTRUSTED", enabled: true, can_toggle: false, can_trust: !trusted, trust_fingerprint: "fingerprint", trust_directory: "C:/workspace/plugins/manual", trust_pending_restart: trusted,
-        error: "外部插件尚未获得信任", diagnostic: { code: "trust_required", stage: "trust", field: "source", reason: "外部插件尚未获得信任", path: "", state: "UNTRUSTED" }, has_config_schema: false, supports_hot_unload: true,
+        error: "外部插件尚未获得信任", diagnostic: { code: "trust_required", stage: "trust", field: "source", reason: "外部插件尚未获得信任", path: "", state: "UNTRUSTED" }, has_config_schema: false, capabilities: [], channels: [], supports_hot_unload: true,
       }] } };
     },
   } });
