@@ -225,6 +225,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "context_pressure",
     "default_memory",
     "desktop_pet",
+    "feishu",
     "meme",
     "novelai",
     "story",

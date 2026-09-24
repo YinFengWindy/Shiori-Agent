@@ -5,6 +5,7 @@ html2text>=2025.4.0
 httpx[socks]>=0.28.0
 json_repair>=0.58.0
 jieba>=0.42.1
+lark-oapi>=1.7.3,<2
 lxml>=6.0.0
 ncatbot>=4.4.0
 numpy>=2.4.0

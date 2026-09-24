@@ -123,6 +123,26 @@ effort = "none"
         config.load_config(config_path)
 
 
+def test_load_config_data_accepts_the_feishu_plugin_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """[plugins.feishu] was rejected while the old plugin was removed (#363 T6)."""
+    monkeypatch.setenv("FEISHU_TEST_SECRET", "resolved-secret")
+
+    loaded = config.load_config_data(
+        {
+            "plugins": {
+                "feishu": {"app_id": "cli_app", "app_secret": "${FEISHU_TEST_SECRET}"}
+            }
+        }
+    )
+
+    assert loaded.plugins["feishu"] == {
+        "app_id": "cli_app",
+        "app_secret": "resolved-secret",
+    }
+
+
 def test_load_config_ignores_retired_registration_names(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
