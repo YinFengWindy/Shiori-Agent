@@ -206,6 +206,7 @@ def _register_rpc(ctx: "PluginRuntimeContext", handlers: NovelAIRpcHandlers) -> 
         concurrency=Concurrency.INTEGRATION,
     )
     ctx.rpc.register("history", handlers.history, concurrency=Concurrency.READ_ONLY)
+    ctx.rpc.register("status", handlers.status, concurrency=Concurrency.READ_ONLY)
     ctx.rpc.register(
         "prompt_tags.list",
         handlers.prompt_tags_list,

@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 
+from .failures import call_with_rpc_failures
 from .models import GenerateImageRequest
 from .prompt_tags import PromptTagStore
 from .service import NovelAIService
@@ -75,8 +76,13 @@ class NovelAIRpcHandlers:
             role_id=self._role_id(payload),
             session_key=self._session_key(payload),
         )
-        result = await self._service.generate(request)
+        result = await call_with_rpc_failures(self._service.generate(request))
         return {"result": result.to_public_payload()}
+
+    async def status(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        """``plugin.novelai.status``: whether a usable token is configured."""
+
+        return self._service.token_readiness().to_payload()
 
     async def regenerate_message_media(self, payload: dict[str, Any]) -> dict[str, Any]:
         """``plugin.novelai.regenerateMessageMedia``: replace one message's image in place."""
@@ -100,7 +106,9 @@ class NovelAIRpcHandlers:
             source = self._store.find_generation_source_by_output_path(current_path)
             if source is None:
                 raise ValueError("当前图片不是 NovelAI 生成记录，无法重新生成")
-            result = await self._service.regenerate(source, session_key=session_key)
+            result = await call_with_rpc_failures(
+                self._service.regenerate(source, session_key=session_key)
+            )
             new_path = str(
                 result.output_paths[0] if result.output_paths else ""
             ).strip()

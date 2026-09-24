@@ -17,6 +17,13 @@ from core.common.media import detect_image_mime_from_header
 from core.roles.store import RoleStore
 
 from .client import NovelAIClient
+from .failures import (
+    NovelAINotConfiguredError,
+    NovelAIUpstreamError,
+    TokenReadiness,
+    scrub_secret,
+    token_readiness,
+)
 from .models import (
     GenerateImageRequest,
     GenerateImageResult,
@@ -302,9 +309,16 @@ class NovelAIService:
             role_asset_paths=role_asset_paths,
         )
 
+    def token_readiness(self) -> TokenReadiness:
+        """Whether generation can reach NovelAI at all, without calling it."""
+
+        return token_readiness(self._settings.token)
+
     def _validate_token(self) -> None:
-        if not self._settings.token.strip():
-            raise ValueError("NovelAI token 未配置")
+        # An unexpanded ${VAR} would otherwise be sent upstream as the token.
+        readiness = self.token_readiness()
+        if not readiness.configured:
+            raise NovelAINotConfiguredError(readiness.message())
 
     def _resolve_action(self, mode: str) -> str:
         if mode == "txt2img":
@@ -494,35 +508,40 @@ class NovelAIService:
         exc: httpx.HTTPStatusError,
         *,
         model: str,
-    ) -> ValueError:
+    ) -> NovelAIUpstreamError:
         response = exc.response
-        if response is None:
-            return ValueError(f"NovelAI 请求失败: {exc}")
-        detail = response.text.strip()
-        if response.status_code != 500 or model != self._settings.default_model:
-            return ValueError(
-                f"NovelAI 请求失败: HTTP {response.status_code}"
-                + (f" - {detail}" if detail else "")
+        status = response.status_code
+        # The response body may echo request details; never let the token out.
+        detail = scrub_secret(response.text.strip(), self._settings.token)
+        if status != 500 or model != self._settings.default_model:
+            return NovelAIUpstreamError(
+                f"NovelAI 请求失败: HTTP {status}" + (f" - {detail}" if detail else ""),
+                status_code=status,
             )
         user_data = await self._safe_fetch_user_data()
         if not user_data:
-            return ValueError("NovelAI 上游返回 500，且未能读取账号状态信息。")
+            return NovelAIUpstreamError(
+                "NovelAI 上游返回 500，且未能读取账号状态信息。", status_code=status
+            )
         subscription = user_data.get("subscription")
         information = user_data.get("information")
         if not isinstance(subscription, dict) or not isinstance(information, dict):
-            return ValueError("NovelAI 上游返回 500，且账号状态信息结构异常。")
+            return NovelAIUpstreamError(
+                "NovelAI 上游返回 500，且账号状态信息结构异常。", status_code=status
+            )
         active = bool(subscription.get("active"))
         perks = subscription.get("perks")
         image_generation = (
             bool(perks.get("imageGeneration")) if isinstance(perks, dict) else False
         )
         trial_images_left = int(information.get("trialImagesLeft") or 0)
-        return ValueError(
+        return NovelAIUpstreamError(
             f"NovelAI 上游对模型 {model} 返回 500：{detail or 'Internal Server Error'}。"
             " 诊断信息："
             f"subscription.active={active}, "
             f"perks.imageGeneration={image_generation}, "
-            f"trialImagesLeft={trial_images_left}。"
+            f"trialImagesLeft={trial_images_left}。",
+            status_code=status,
         )
 
     async def _safe_fetch_user_data(self) -> dict[str, Any]:

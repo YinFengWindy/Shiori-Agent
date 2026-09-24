@@ -9,6 +9,10 @@ import httpx
 import pytest
 
 from plugins.novelai.backend.client import NovelAIClient
+from plugins.novelai.backend.failures import (
+    NovelAINotConfiguredError,
+    NovelAIUpstreamError,
+)
 from plugins.novelai.backend.models import (
     GenerateImageRequest,
     GeneratedImageRecord,
@@ -413,3 +417,51 @@ async def test_service_uses_nsfw_model_when_switch_enabled(tmp_path: Path) -> No
     )
 
     assert client.last_generate_kwargs["model"] == "nai-diffusion-4-5-full"
+
+
+@pytest.mark.asyncio
+async def test_service_refuses_unexpanded_env_placeholder_before_any_request(
+    tmp_path: Path,
+) -> None:
+    settings = NovelAISettings(token="${NOVELAI_TOKEN}")
+    client = _FakeClient(_json_response(), settings)
+    service = NovelAIService(
+        settings=settings,
+        client=client,
+        store=NovelAIStore(tmp_path),
+        role_store=RoleStore(tmp_path),
+        workspace=tmp_path,
+    )
+
+    with pytest.raises(NovelAINotConfiguredError, match="NOVELAI_TOKEN 未设置"):
+        await service.generate(GenerateImageRequest(prompt="moonlight portrait"))
+
+    assert client.last_generate_kwargs == {}
+    assert service.token_readiness().state == "placeholder"
+
+
+@pytest.mark.asyncio
+async def test_service_upstream_error_carries_status_and_scrubs_token(
+    tmp_path: Path,
+) -> None:
+    settings = NovelAISettings(token="pst-secret")
+    request = httpx.Request("POST", "https://image.novelai.net/ai/generate-image")
+    response = httpx.Response(
+        401,
+        json={"message": "invalid token pst-secret"},
+        request=request,
+    )
+    service = NovelAIService(
+        settings=settings,
+        client=_FakeClient(response, settings),
+        store=NovelAIStore(tmp_path),
+        role_store=RoleStore(tmp_path),
+        workspace=tmp_path,
+    )
+
+    with pytest.raises(NovelAIUpstreamError) as caught:
+        await service.generate(GenerateImageRequest(prompt="moonlight portrait"))
+
+    assert caught.value.status_code == 401
+    assert "pst-secret" not in str(caught.value)
+    assert "***" in str(caught.value)
