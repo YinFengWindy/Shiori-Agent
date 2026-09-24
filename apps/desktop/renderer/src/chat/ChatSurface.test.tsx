@@ -328,7 +328,7 @@ describe("ChatSurface", () => {
   it("marks a new image with a dot instead of opening the role panel", async () => {
     let toggles = 0;
     const onToggle = () => { toggles += 1; };
-    const fakeDesktop = { invoke: async () => ({ payload: { roles: [] }, error: null }), readSettings: async () => ({ formData: { models: { registrations: [] } } }), localAssetUrl: (path: string) => `shiori-asset://local/${path}` };
+    const fakeDesktop = { invoke: async () => ({ payload: { roles: [] }, error: null }), readSettings: async () => ({ formData: { models: { registrations: [] } } }), localAssetUrl: (path: string) => `shiori-asset://local/${path}`, onEvent: () => () => undefined };
     const view = await mountTestComponent(
       chatSurfaceElement(createRole(), "mira", { chatLatestImageSidebarCount: 0, onToggleChatLatestImageSidebar: onToggle }),
       { windowGlobals: { miraDesktop: fakeDesktop } },

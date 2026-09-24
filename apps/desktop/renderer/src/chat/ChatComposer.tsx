@@ -1,11 +1,12 @@
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Stop } from "@phosphor-icons/react";
+import { ChatComposerAttachments } from "./ChatComposerAttachments";
+import { ChatComposerReplyTarget } from "./ChatComposerReplyTarget";
 import { ChatEmojiPicker } from "./ChatEmojiPicker";
+import { getChatComposerLimits } from "./chatComposerLayout";
 import { canSubmitChatMessage, normalizeChatAttachmentPaths } from "./chatComposerState";
 import { insertEmojiIntoChatDraft } from "./chatEmojiState";
-import { isChatImageAsset } from "./chatImageHistory";
-import { DeleteIcon, DocumentIcon, PlusIcon, SendIcon } from "../shared/icons";
-import { toFileUrl } from "../shared/format";
+import { PlusIcon, SendIcon } from "../shared/icons";
 import type { ChatReplyTarget, ChatSendRequest } from "../shared/types";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { ChatModelMenu } from "./ChatModelMenu";
@@ -17,6 +18,9 @@ const sendButtonClass = cx(
   "send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-gradient-accent p-0 text-ink shadow-soft hover:brightness-105 disabled:cursor-default disabled:opacity-40",
 );
 
+/** Text the surface asks the composer to put in the draft (e.g. an empty-state suggestion); `id` makes repeats distinct. */
+export type ChatComposerDraftRequest = { text: string; id: number };
+
 type ChatComposerProps = {
   activeRoleId: string;
   sessionKey: string;
@@ -24,24 +28,16 @@ type ChatComposerProps = {
   sending: boolean;
   cancelling: boolean;
   replyTarget: ChatReplyTarget | null;
+  /** Height of the chat pane the composer floats in; 0 until measured. */
+  paneHeight?: number;
+  draftRequest?: ChatComposerDraftRequest | null;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
   onCancelChat: () => void;
   onClearReplyTarget: () => void;
   onJumpToMessage: (messageKey: string) => void;
+  /** Reports the composer card's rendered height so the message list can keep clear of it. */
+  onHeightChange?: (height: number) => void;
 };
-
-function getAttachmentName(path: string): string {
-  return path.split(/[\\/]/).pop() || path;
-}
-
-function getAttachmentExtensionLabel(path: string): string {
-  const attachmentName = getAttachmentName(path);
-  const dotIndex = attachmentName.lastIndexOf(".");
-  if (dotIndex < 0 || dotIndex === attachmentName.length - 1) {
-    return "FILE";
-  }
-  return attachmentName.slice(dotIndex + 1).toUpperCase();
-}
 
 /** Owns draft, pending attachments, and reply target rendering for the desktop chat composer. */
 export const ChatComposer = React.memo(function ChatComposer({
@@ -51,11 +47,15 @@ export const ChatComposer = React.memo(function ChatComposer({
   sending,
   cancelling,
   replyTarget,
+  paneHeight = 0,
+  draftRequest = null,
   onSendMessage,
   onCancelChat,
   onClearReplyTarget,
   onJumpToMessage,
+  onHeightChange,
 }: ChatComposerProps) {
+  const composerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
   const [draft, setDraft] = useState("");
@@ -63,7 +63,9 @@ export const ChatComposer = React.memo(function ChatComposer({
   const [pendingAttachments, setPendingAttachments] = useState<string[]>([]);
   const canSubmit = canSubmitChatMessage(draft, pendingAttachments);
   const composerInputDisabled = !activeRoleId || sending || !bridgeReady;
+  const limits = getChatComposerLimits(paneHeight);
   const clearReplyTargetForSessionChange = useEffectEvent(onClearReplyTarget);
+  const reportHeight = useEffectEvent((height: number) => onHeightChange?.(height));
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -82,10 +84,25 @@ export const ChatComposer = React.memo(function ChatComposer({
   }, [activeRoleId, sessionKey]);
 
   useEffect(() => {
+    if (!draftRequest) return;
+    pendingSelectionRef.current = { start: draftRequest.text.length, end: draftRequest.text.length };
+    setDraft(draftRequest.text);
+  }, [draftRequest]);
+
+  useEffect(() => {
     if (sending) {
       setEmojiPickerOpen(false);
     }
   }, [sending]);
+
+  useEffect(() => {
+    const composer = composerRef.current;
+    if (!composer || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => reportHeight(composer.offsetHeight));
+    observer.observe(composer);
+    reportHeight(composer.offsetHeight);
+    return () => observer.disconnect();
+  }, []);
 
   async function pickChatAttachments(): Promise<void> {
     const files = await window.miraDesktop.pickChatAttachments({ multiple: true });
@@ -145,95 +162,32 @@ export const ChatComposer = React.memo(function ChatComposer({
   return (
     <div className="composer-wrap pointer-events-none absolute inset-x-0 bottom-10 z-[2] flex min-w-0 justify-center overflow-visible">
       <div className="pointer-events-auto mx-auto w-full max-w-[700px] px-5 md:px-6">
-        <div className="composer grid w-full flex-none gap-1.5 rounded-lg border border-white/75 bg-white/90 px-3 pb-2 pt-2.5 shadow-panel backdrop-blur-lg">
+        <div
+          ref={composerRef}
+          className="composer grid w-full flex-none gap-1.5 overflow-hidden rounded-lg border border-white/75 bg-white/90 px-3 pb-2 pt-2.5 shadow-panel backdrop-blur-lg"
+          style={{ maxHeight: limits.composerMaxHeight }}
+        >
           {replyTarget ? (
-            <div className="flex min-w-0 items-start gap-2 rounded-md border border-line-soft bg-surface-soft px-2.5 py-2 text-left">
-              {replyTarget.messageId ? (
-                <button
-                  className="min-w-0 flex-1 border-0 bg-transparent p-0 text-left transition hover:opacity-85 focus:outline-none"
-                  type="button"
-                  aria-label="跳转到引用来源消息"
-                  onClick={() => onJumpToMessage(replyTarget.messageId)}
-                >
-                  <div className="border-l-2 border-line-accent pl-2.5">
-                    <div className="truncate text-[11px] font-medium leading-4 text-ink-muted">{replyTarget.sender || "历史消息"}</div>
-                    <div className="line-clamp-2 text-[12px] leading-5 text-ink-secondary">{replyTarget.preview}</div>
-                  </div>
-                </button>
-              ) : (
-                <div className="min-w-0 flex-1 border-l-2 border-line-accent pl-2.5">
-                  <div className="truncate text-[11px] font-medium leading-4 text-ink-muted">{replyTarget.sender || "历史消息"}</div>
-                  <div className="line-clamp-2 text-[12px] leading-5 text-ink-secondary">{replyTarget.preview}</div>
-                </div>
-              )}
-              <button
-                className="grid h-6 w-6 flex-none place-items-center rounded-md border-0 bg-transparent p-0 text-ink-faint transition hover:bg-accent-softer hover:text-ink focus:outline-none disabled:cursor-default disabled:opacity-40"
-                type="button"
-                aria-label="取消引用"
-                onClick={onClearReplyTarget}
-                disabled={sending}
-              >
-                <DeleteIcon className="h-[10px] w-[10px] fill-current" />
-              </button>
-            </div>
+            <ChatComposerReplyTarget
+              replyTarget={replyTarget}
+              disabled={sending}
+              onClear={onClearReplyTarget}
+              onJumpToMessage={onJumpToMessage}
+            />
           ) : null}
-          {pendingAttachments.length ? (
-            <div className="flex flex-wrap gap-2">
-              {pendingAttachments.map((path) => (
-                isChatImageAsset(path) ? (
-                  <span
-                    key={path}
-                    className="relative h-14 w-14 overflow-hidden rounded-md border border-line-soft bg-surface-soft"
-                  >
-                    <img
-                      className="h-full w-full object-cover"
-                      src={toFileUrl(path)}
-                      alt=""
-                    />
-                    <button
-                      className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-white/92 p-0 text-ink-faint shadow-soft transition hover:text-ink focus:outline-none disabled:cursor-default disabled:opacity-40"
-                      type="button"
-                      aria-label="移除图片附件"
-                      onClick={() => removePendingAttachment(path)}
-                      disabled={sending}
-                    >
-                      <DeleteIcon className="h-[10px] w-[10px] fill-current" />
-                    </button>
-                  </span>
-                ) : (
-                  <span
-                    key={path}
-                    className="relative inline-flex max-w-[220px] items-center gap-2 rounded-md border border-line-soft bg-surface-soft px-3 py-2 text-left text-ink-secondary"
-                  >
-                    <span className="grid h-9 w-9 flex-none place-items-center rounded-md bg-white text-ink-muted shadow-[inset_0_0_0_1px_var(--neutral-150)]">
-                      <DocumentIcon className="h-4 w-4 stroke-current" />
-                    </span>
-                    <span className="min-w-0 flex-1 pr-4">
-                      <span className="block truncate text-[12px] font-medium leading-[1.2] text-ink">
-                        {getAttachmentName(path)}
-                      </span>
-                      <span className="mt-1 block text-[11px] leading-none text-ink-faint">
-                        {getAttachmentExtensionLabel(path)}
-                      </span>
-                    </span>
-                    <button
-                      className="absolute right-2 top-2 grid h-4 w-4 place-items-center rounded-full border-0 bg-transparent p-0 text-ink-faint transition hover:text-ink focus:outline-none disabled:cursor-default disabled:opacity-40"
-                      type="button"
-                      aria-label={`移除附件 ${getAttachmentName(path)}`}
-                      onClick={() => removePendingAttachment(path)}
-                      disabled={sending}
-                    >
-                      <DeleteIcon className="h-[10px] w-[10px] fill-current" />
-                    </button>
-                  </span>
-                )
-              ))}
-            </div>
-          ) : null}
+          <ChatComposerAttachments
+            paths={pendingAttachments}
+            disabled={sending}
+            maxHeight={limits.attachmentsMaxHeight}
+            onRemove={removePendingAttachment}
+          />
+          {/* Borderless by design (`ring-0` / `focus:shadow-none`): the card itself is the field. */}
           <AutosizeTextarea
             ref={textareaRef}
-            className="min-h-[24px] w-full border-0 bg-transparent p-0 text-sm leading-6 text-ink outline-none placeholder:text-ink-faint focus:shadow-none"
-            containerClassName="min-h-[24px]"
+            className="min-h-[24px] w-full overflow-y-auto border-0 bg-transparent p-0 text-sm leading-6 text-ink outline-none placeholder:text-ink-faint focus:shadow-none"
+            style={{ maxHeight: limits.textareaMaxHeight }}
+            containerClassName="min-h-[24px] overflow-hidden"
+            containerStyle={{ maxHeight: limits.textareaMaxHeight }}
             mirrorClassName="min-h-[24px] text-sm leading-6"
             rows={1}
             value={draft}
@@ -260,21 +214,19 @@ export const ChatComposer = React.memo(function ChatComposer({
               onSelectEmoji={handleSelectEmoji}
               onToggle={() => setEmojiPickerOpen((current) => !current)}
             />
-            {sending ? (
-              <button
-                className={sendButtonClass}
-                type="button"
-                aria-label="中止回复"
-                onClick={onCancelChat}
-                disabled={cancelling}
-              >
-                <Stop className="h-[15px] w-[15px] fill-current" />
-              </button>
-            ) : (
-              <button className={sendButtonClass} type="button" aria-label="发送消息" onClick={() => void submitMessage()} disabled={!activeRoleId || !canSubmit || !bridgeReady}>
-                <SendIcon className="h-[15px] w-[15px] fill-current" />
-              </button>
-            )}
+            {/* One button whose icon crossfades between send and stop, so focus and press state survive the swap. */}
+            <button
+              className={sendButtonClass}
+              type="button"
+              aria-label={sending ? "中止回复" : "发送消息"}
+              onClick={sending ? onCancelChat : () => void submitMessage()}
+              disabled={sending ? cancelling : !activeRoleId || !canSubmit || !bridgeReady}
+            >
+              <span className="relative grid h-[15px] w-[15px] place-items-center" aria-hidden="true">
+                <SendIcon className={cx("chat-send-icon absolute inset-0 h-[15px] w-[15px] fill-current", sending && "chat-send-icon-hidden")} />
+                <Stop className={cx("chat-send-icon absolute inset-0 h-[15px] w-[15px] fill-current", !sending && "chat-send-icon-hidden")} />
+              </span>
+            </button>
           </div>
         </div>
       </div>

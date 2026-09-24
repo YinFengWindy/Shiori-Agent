@@ -10,30 +10,10 @@ describe("resolveChatHeaderTitle", () => {
   });
 
   it("returns the empty-state title when no role is active", () => {
-    assert.equal(resolveChatHeaderTitle({
-      activeRoleName: null,
-      activeSessionKey: "",
-      sendingSessions: {},
-    }), "选择一个角色");
+    assert.equal(resolveChatHeaderTitle(null), "选择一个角色");
   });
 
-  it("keeps the active role name when another session is sending", () => {
-    assert.equal(resolveChatHeaderTitle({
-      activeRoleName: "Role B",
-      activeSessionKey: "role:role-b",
-      sendingSessions: {
-        "role:role-a": "role-a",
-      },
-    }), "Role B");
-  });
-
-  it("shows the typing title only for the active sending session", () => {
-    assert.equal(resolveChatHeaderTitle({
-      activeRoleName: "Role A",
-      activeSessionKey: "role:role-a",
-      sendingSessions: {
-        "role:role-a": "role-a",
-      },
-    }), "正在输入中...");
+  it("keeps the role name as the title; typing is shown separately", () => {
+    assert.equal(resolveChatHeaderTitle("Role A"), "Role A");
   });
 });

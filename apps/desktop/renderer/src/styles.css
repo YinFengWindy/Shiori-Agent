@@ -182,12 +182,17 @@
        open/close) — fast start, long gentle settle. */
     --ease-out-soft: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    /* ease-in-out-soft: symmetric swaps where both ends are on screen (crossfades). */
+    --ease-in-out-soft: cubic-bezier(0.45, 0, 0.55, 1);
     --duration-fade: 120ms;  /* opacity-only view swaps */
     --duration-fast: 140ms;  /* hover / color changes (Tailwind's bare `transition`) */
     --duration-quick: 160ms; /* press feedback, menus, popovers, tab content */
     --duration-base: 220ms;  /* dialogs, toasts, sidebar content fade */
     --duration-panel: 260ms; /* sidebar width; keep app/appState.ts sidebarAnimationDurationMs in sync */
     --duration-motif: 480ms; /* one-shot nav rail motif flourish */
+    --duration-enter: 240ms; /* a new chat message arriving */
+    --duration-crossfade: 320ms; /* image swaps: mood portrait, chat background (shared/crossfadeLayerState.ts) */
+    --duration-pulse: 600ms; /* one-shot attention pulse (jump-to-message highlight) */
 
     /* ---------- legacy aliases (pre-restyle var names still used
        by tailwind.config + older components; keep pointing at the
@@ -607,6 +612,178 @@ button[role="combobox"]:focus-visible {
   60% { transform: translateY(-3%) skewY(5deg); }
 }
 
+/* ---------- chat (restyle round 2, stage 4) ---------- */
+
+/* A message appended after the conversation was shown rises in once
+   (chat/chatMessageEnterState.ts decides which rows; never on scroll-back,
+   session switch or history paging). The user's own bubble grows from its
+   bottom-right corner, where the composer was. */
+@media (prefers-reduced-motion: no-preference) {
+  .chat-message-enter {
+    animation: chat-message-enter var(--duration-enter) var(--ease-out-soft) both;
+  }
+
+  .chat-message-enter-user {
+    transform-origin: bottom right;
+    animation-name: chat-message-enter-user;
+  }
+}
+
+@keyframes chat-message-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes chat-message-enter-user {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Jump-to-message: one ring pulse that fades out instead of a ring that stays. */
+.message-bubble-highlight {
+  animation: message-highlight-pulse var(--duration-pulse) var(--ease-out-soft) both;
+}
+
+@keyframes message-highlight-pulse {
+  0% { box-shadow: var(--shadow-soft), 0 0 0 0 color-mix(in srgb, var(--color-ring) 55%, transparent); }
+  35% { box-shadow: var(--shadow-soft), 0 0 0 4px color-mix(in srgb, var(--color-ring) 40%, transparent); }
+  100% { box-shadow: var(--shadow-soft), 0 0 0 8px transparent; }
+}
+
+@keyframes message-highlight-fade {
+  0%, 35% { box-shadow: var(--shadow-soft), 0 0 0 3px color-mix(in srgb, var(--color-ring) 45%, transparent); }
+  100% { box-shadow: var(--shadow-soft), 0 0 0 3px transparent; }
+}
+
+/* Send ⇄ stop share one button; the icons crossfade with a little scale and blur. */
+.chat-send-icon {
+  transition:
+    opacity var(--duration-quick) var(--ease-out-soft),
+    scale var(--duration-quick) var(--ease-out-soft),
+    filter var(--duration-quick) var(--ease-out-soft);
+}
+
+.chat-send-icon-hidden {
+  opacity: 0;
+  scale: 0.8;
+  filter: blur(2px);
+}
+
+/* Scroll-to-bottom pops in from 0.9. */
+.chat-scroll-bottom-enter {
+  transition:
+    opacity var(--duration-quick) var(--ease-out-soft),
+    scale var(--duration-quick) var(--ease-out-soft),
+    background-color var(--duration-fast) var(--ease-out-soft),
+    color var(--duration-fast) var(--ease-out-soft);
+}
+
+@starting-style {
+  .chat-scroll-bottom-enter {
+    opacity: 0;
+    scale: 0.9;
+  }
+}
+
+/* Header "正在输入…" dots: a slow staggered breathe. */
+.chat-typing-dots {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.chat-typing-dots > span {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: chat-typing-dot 1.2s var(--ease-in-out-soft) infinite;
+}
+
+.chat-typing-dots > span:nth-child(2) { animation-delay: 0.15s; }
+.chat-typing-dots > span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes chat-typing-dot {
+  0%, 60%, 100% { opacity: 0.35; }
+  30% { opacity: 1; }
+}
+
+/* shared/CrossfadeLayers.tsx: the outgoing layer fades out over the incoming
+   one fading in, both softly blurred at the midpoint. */
+.crossfade-in {
+  animation: crossfade-in var(--duration-crossfade) var(--ease-in-out-soft) both;
+}
+
+.crossfade-out {
+  animation: crossfade-out var(--duration-crossfade) var(--ease-in-out-soft) both;
+}
+
+@keyframes crossfade-in {
+  0% { opacity: 0; filter: blur(2px); }
+  50% { filter: blur(2px); }
+  100% { opacity: 1; filter: none; }
+}
+
+@keyframes crossfade-out {
+  0% { opacity: 1; filter: none; }
+  50% { filter: blur(2px); }
+  100% { opacity: 0; filter: blur(2px); }
+}
+
+/* Code block syntax colours (highlight.js classes) on semantic text tokens. */
+.hljs-comment,
+.hljs-quote,
+.hljs-meta {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag {
+  color: var(--color-text-accent);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-selector-attr {
+  color: var(--color-success-text);
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: var(--color-warning-text);
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-built_in,
+.hljs-type,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--color-text-lavender);
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-params,
+.hljs-property {
+  color: var(--color-text-secondary);
+}
+
+.hljs-deletion {
+  color: var(--color-danger-text);
+}
+
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
+
 @media (prefers-reduced-motion: reduce) {
   .feedback-toast,
   .motion-tab-enter {
@@ -641,5 +818,37 @@ button[role="combobox"]:focus-visible {
   .chat-tool-call-content,
   .chat-tool-call-detail {
     transition: opacity var(--duration-quick) var(--ease-out-soft);
+  }
+
+  /* Chat (stage 4): arrivals and pop-ins keep only their fade. */
+  .chat-message-enter,
+  .chat-message-enter-user {
+    animation: motion-fade-in var(--duration-quick) var(--ease-out-soft) both;
+  }
+
+  .chat-scroll-bottom-enter,
+  .chat-send-icon {
+    transition-property: opacity;
+  }
+
+  .chat-send-icon-hidden {
+    scale: 1;
+    filter: none;
+  }
+
+  /* The ring only changes colour; it does not grow. */
+  .message-bubble-highlight {
+    animation-name: message-highlight-fade;
+  }
+
+  .chat-typing-dots > span {
+    animation: none;
+    opacity: 0.6;
+  }
+
+  /* CrossfadeLayers already swaps instantly under reduced motion; this covers a preference flip mid-fade. */
+  .crossfade-in,
+  .crossfade-out {
+    animation: none;
   }
 }

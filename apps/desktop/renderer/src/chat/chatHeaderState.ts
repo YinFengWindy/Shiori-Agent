@@ -7,22 +7,11 @@ export function resolveVisibleChatSessionKey(activeRoleId: string, activeSession
   return activeSessionKey;
 }
 
-type ResolveChatHeaderTitleOptions = {
-  activeRoleName: string | null;
-  activeSessionKey: string;
-  sendingSessions: Record<string, string>;
-};
-
-/** Resolves the visible chat header title without leaking one role's sending state into another role view. */
-export function resolveChatHeaderTitle({
-  activeRoleName,
-  activeSessionKey,
-  sendingSessions,
-}: ResolveChatHeaderTitleOptions) {
-  if (!activeRoleName) {
-    return "选择一个角色";
-  }
-  return activeSessionKey && sendingSessions[activeSessionKey]
-    ? "正在输入中..."
-    : activeRoleName;
+/**
+ * Resolves the visible chat header title. It stays the role's name while a
+ * reply streams: the typing state is a secondary line in the header, so the
+ * title never flickers away from who the user is talking to.
+ */
+export function resolveChatHeaderTitle(activeRoleName: string | null) {
+  return activeRoleName || "选择一个角色";
 }
