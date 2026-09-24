@@ -3,21 +3,18 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
 import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
-import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import {
-  __getSnapshotForTests,
   backToStudio,
-  clearError,
-  loadHistory,
+  clearFailure,
+  getNovelAiState,
   openPromptTagLibrary,
   openPromptTagWorkspaceSection,
   refreshRoles,
   resetNovelAiPageStoreForTests,
-  selectActiveHistoryRecord,
   selectBlockedReasonForNovelAiPage,
-  setActiveRoleId,
+  selectRecord,
   setPromptTagSection,
-  submitGenerate,
+  updateStudioForm,
   useNovelAiPageStore,
 } from "./novelAiPageStore";
 
@@ -34,54 +31,42 @@ function fakeMiraDesktop(roles: Array<{ id: string; name: string }>) {
   };
 }
 
-/** Mounts two independent sibling components, each subscribing to the shared store — mirrors the host mounting `NovelAIPage` and `NovelAIPageSidebar` as two separate mount points. */
+/** Mounts two independent sibling subscribers — mirrors the host mounting `NovelAIPage` and `NovelAIPageSidebar` separately. */
 async function mountTwoMountPoints() {
   const rendersA: Snapshot[] = [];
   const rendersB: Snapshot[] = [];
-
   function MountPointA() {
-    const state = useNovelAiPageStore();
-    rendersA.push(state);
+    rendersA.push(useNovelAiPageStore());
     return null;
   }
   function MountPointB() {
-    const state = useNovelAiPageStore();
-    rendersB.push(state);
+    rendersB.push(useNovelAiPageStore());
     return null;
   }
-
-  const view = await mountTestComponent(
-    <>
-      <MountPointA />
-      <MountPointB />
-    </>,
-  );
+  const view = await mountTestComponent(<><MountPointA /><MountPointB /></>);
   return { view, rendersA, rendersB };
 }
+
+const failure = { kind: "network", title: "连不上 NovelAI", message: "", opensSettings: false } as const;
 
 describe("novelAiPageStore (issue #226 gap A's 'real complication')", () => {
   it("propagates view/promptTagSection changes to every mount point, whichever one made the change", async () => {
     resetNovelAiPageStoreForTests();
     const { view, rendersA, rendersB } = await mountTwoMountPoints();
     try {
-      assert.equal(rendersA.at(-1)?.view, "studio");
-      assert.equal(rendersB.at(-1)?.view, "studio");
-
-      // Simulates the Sidebar mount point opening the prompt-tag library.
+      // The sidebar opens the library.
       act(() => { openPromptTagLibrary(); });
-      assert.equal(rendersA.at(-1)?.view, "prompt-tags", "the Page mount point must see the Sidebar's navigation");
-      assert.equal(rendersB.at(-1)?.view, "prompt-tags");
-
-      // Simulates the Page mount point's PromptTagLibraryPage navigating to "detail" after opening an entry.
-      act(() => { openPromptTagWorkspaceSection("detail"); });
-      assert.equal(rendersA.at(-1)?.promptTagSection, "detail");
-      assert.equal(rendersB.at(-1)?.promptTagSection, "detail", "the Sidebar mount point must see the Page's navigation");
-
-      // Simulates the Sidebar's own "list"/"create" buttons (no forced view change, already in prompt-tags).
-      act(() => { setPromptTagSection("list"); });
+      assert.equal(rendersA.at(-1)?.view, "prompt-tags", "the page mount point must see the sidebar's navigation");
       assert.equal(rendersB.at(-1)?.promptTagSection, "list");
 
-      // Simulates the Sidebar's "返回生图" button.
+      // The page opens an entry.
+      act(() => { openPromptTagWorkspaceSection("detail"); });
+      assert.equal(rendersB.at(-1)?.promptTagSection, "detail", "the sidebar must see the page's navigation");
+
+      // 提示词库 again from the sidebar lands back on the list.
+      act(() => { openPromptTagLibrary(); });
+      assert.equal(rendersA.at(-1)?.promptTagSection, "list");
+
       act(() => { backToStudio(); });
       assert.equal(rendersA.at(-1)?.view, "studio");
       assert.equal(rendersB.at(-1)?.view, "studio");
@@ -91,76 +76,24 @@ describe("novelAiPageStore (issue #226 gap A's 'real complication')", () => {
     }
   });
 
-  it("openPromptTagWorkspaceSection forces the view to prompt-tags only when the section is 'list'", async () => {
+  it("openPromptTagWorkspaceSection forces the library view only for 'list'", () => {
     resetNovelAiPageStoreForTests();
-    const { view, rendersA } = await mountTwoMountPoints();
-    try {
-      act(() => { backToStudio(); });
-      act(() => { openPromptTagWorkspaceSection("create"); });
-      // "create" does not force the view switch on its own in the original
-      // behaviour — only "list" does (see NovelAIPage's pre-#226 onOpenSection).
-      assert.equal(rendersA.at(-1)?.view, "studio");
-      assert.equal(rendersA.at(-1)?.promptTagSection, "create");
-
-      act(() => { openPromptTagWorkspaceSection("list"); });
-      assert.equal(rendersA.at(-1)?.view, "prompt-tags");
-      assert.equal(rendersA.at(-1)?.promptTagSection, "list");
-    } finally {
-      await view.cleanup();
-      resetNovelAiPageStoreForTests();
-    }
-  });
-
-  it("relays activeRoleId from the page's effect so the sidebar mount point (which the host never gives it directly) can read it", async () => {
-    resetNovelAiPageStoreForTests();
-    const { view, rendersB } = await mountTwoMountPoints();
-    try {
-      act(() => { setActiveRoleId("role-1"); });
-      assert.equal(rendersB.at(-1)?.activeRoleId, "role-1");
-    } finally {
-      await view.cleanup();
-      resetNovelAiPageStoreForTests();
-    }
-  });
-
-  it("setActiveRoleId is a no-op (no new snapshot, no re-render) when the value does not actually change", async () => {
-    resetNovelAiPageStoreForTests();
-    const { view, rendersA } = await mountTwoMountPoints();
-    try {
-      act(() => { setActiveRoleId("role-1"); });
-      const afterFirstSet = rendersA.length;
-      const snapshotBefore = rendersA.at(-1);
-
-      act(() => { setActiveRoleId("role-1"); });
-      assert.equal(rendersA.length, afterFirstSet, "an unchanged activeRoleId must not trigger a re-render");
-      assert.equal(rendersA.at(-1), snapshotBefore, "the snapshot reference must be unchanged too");
-    } finally {
-      await view.cleanup();
-      resetNovelAiPageStoreForTests();
-    }
-  });
-
-  it("setActiveRoleId clears error/latestResult only when the role actually changes", async () => {
-    resetNovelAiPageStoreForTests();
-    const failingClient: PluginRpcClient = { ...createPluginRpcClient("fixture"), call: async () => { throw new Error("boom"); } };
-    await loadHistory(failingClient, "role-1");
-    assert.notEqual(__getSnapshotForTests().error, "");
-
-    // A fresh store's activeRoleId defaults to "", so switching to "role-1"
-    // does count as a change — the reset below is expected to fire.
-    setActiveRoleId("role-1");
-    assert.equal(__getSnapshotForTests().error, "");
+    openPromptTagWorkspaceSection("create");
+    assert.equal(getNovelAiState().view, "studio");
+    assert.equal(getNovelAiState().promptTagSection, "create");
+    openPromptTagWorkspaceSection("list");
+    assert.equal(getNovelAiState().view, "prompt-tags");
+    setPromptTagSection("detail");
+    assert.equal(getNovelAiState().promptTagSection, "detail");
     resetNovelAiPageStoreForTests();
   });
 
-  it("selectBlockedReasonForNovelAiPage fails open (returns null) before the roster has ever loaded, then reflects the real roster once it has", async () => {
+  it("selectBlockedReasonForNovelAiPage fails open before the roster has loaded, then reflects the real roster", async () => {
     resetNovelAiPageStoreForTests();
     const originalWindow = (globalThis as { window?: { miraDesktop?: unknown } }).window;
     try {
       (globalThis as { window?: { miraDesktop?: unknown } }).window = { miraDesktop: fakeMiraDesktop([]) };
       assert.equal(selectBlockedReasonForNovelAiPage(desktopPluginHostServices), null, "must fail open before the roster is known");
-
-      // selectBlockedReasonForNovelAiPage kicks a refresh off in the background; wait for it.
       await refreshRoles(desktopPluginHostServices);
       assert.equal(
         selectBlockedReasonForNovelAiPage(desktopPluginHostServices),
@@ -177,68 +110,44 @@ describe("novelAiPageStore (issue #226 gap A's 'real complication')", () => {
       resetNovelAiPageStoreForTests();
     }
   });
-
-  it("submitGenerate publishes submitting/latestResult/history so both mount points see the same result", async () => {
-    resetNovelAiPageStoreForTests();
-    const client: PluginRpcClient = { ...createPluginRpcClient("fixture"),
-      call: async <T,>(method: string): Promise<T> => {
-        if (method === "generate") {
-          return { result: { record_id: "rec-1", created_at: "", mode: "txt2img", model: "m", seed: null, width: 1, height: 1, output_paths: [], request_path: "", meta_path: "", wrote_back_to_role: false, role_asset_paths: [] } } as T;
-        }
-        if (method === "history") {
-          return { records: [{ id: "rec-1", created_at: "", role_id: "role-1", session_key: "", mode: "txt2img", prompt: "", negative_prompt: "", model: "m", sampler: "", steps: 0, seed: null, width: 1, height: 1, base_image_path: "", output_paths: [], wrote_back_to_role: false, role_asset_paths: [] }] } as T;
-        }
-        throw new Error(`unexpected method ${method}`);
-      },
-    };
-    const { view, rendersA, rendersB } = await mountTwoMountPoints();
-    try {
-      let submitting!: Promise<void>;
-      act(() => { submitting = submitGenerate(client, { role_id: "role-1", prompt: "a cat" }); });
-      assert.equal(rendersA.at(-1)?.submitting, true, "submitting must flip true synchronously before the RPC resolves");
-
-      await act(async () => { await submitting; });
-      assert.equal(rendersA.at(-1)?.submitting, false);
-      assert.equal(rendersA.at(-1)?.latestResult?.record_id, "rec-1");
-      assert.equal(rendersA.at(-1)?.selectedRecordId, "rec-1");
-      assert.equal(rendersB.at(-1)?.history.length, 1, "the other mount point must see the same refreshed history");
-    } finally {
-      await view.cleanup();
-      resetNovelAiPageStoreForTests();
-    }
-  });
 });
 
-describe("novelAiPageStore selectors and error clearing", () => {
-  it("selectActiveHistoryRecord prefers the explicit selection, then the newest, then nothing", () => {
-    const history = [
-      { id: "b", prompt: "newest" },
-      { id: "a", prompt: "older" },
-    ] as unknown as Parameters<typeof selectActiveHistoryRecord>[0];
-    assert.equal(selectActiveHistoryRecord(history, "a")?.id, "a");
-    // No explicit selection falls back to the newest, not to null.
-    assert.equal(selectActiveHistoryRecord(history, "")?.id, "b");
-    // A selection that is no longer in history must not blank the preview.
-    assert.equal(selectActiveHistoryRecord(history, "gone")?.id, "b");
-    assert.equal(selectActiveHistoryRecord([], "a"), null);
+describe("novelAiPageStore form and canvas state", () => {
+  it("keeps the form across view switches and ignores edits that change nothing", () => {
+    resetNovelAiPageStoreForTests();
+    updateStudioForm({ prompt: "1girl, library" });
+    openPromptTagLibrary();
+    backToStudio();
+    assert.equal(getNovelAiState().form.prompt, "1girl, library", "a half-written prompt survives the library round trip");
+
+    const before = getNovelAiState();
+    updateStudioForm({ prompt: "1girl, library" });
+    assert.equal(getNovelAiState(), before, "an unchanged edit must not publish a new snapshot");
+    resetNovelAiPageStoreForTests();
   });
 
-  it("clearError drops the banner, and is a no-op when there is nothing to drop", async () => {
+  it("switching the generation role drops the previous role's failure and fresh result, other edits keep them", () => {
+    resetNovelAiPageStoreForTests({ form: { ...getNovelAiState().form, roleId: "rin" }, failure, revealRecordId: "rec-1" });
+
+    updateStudioForm({ prompt: "smile" });
+    assert.equal(getNovelAiState().failure, failure, "editing the prompt keeps the failure on screen");
+
+    updateStudioForm({ roleId: "natsu" });
+    assert.equal(getNovelAiState().failure, null);
+    assert.equal(getNovelAiState().revealRecordId, "");
     resetNovelAiPageStoreForTests();
-    const before = __getSnapshotForTests();
-    // Nothing to clear: the snapshot identity must not change, or every
-    // subscriber re-renders for nothing.
-    clearError();
-    assert.equal(__getSnapshotForTests(), before, "clearError on a clean store must not produce a new snapshot");
+  });
 
-    const failingClient: PluginRpcClient = { ...createPluginRpcClient("fixture"), call: async () => { throw new Error("boom"); } };
-    await loadHistory(failingClient, "role-1");
-    assert.notEqual(__getSnapshotForTests().error, "");
+  it("clearFailure and selectRecord dismiss the canvas failure; clearFailure is a no-op when clean", () => {
+    resetNovelAiPageStoreForTests();
+    const clean = getNovelAiState();
+    clearFailure();
+    assert.equal(getNovelAiState(), clean, "nothing to clear must not produce a new snapshot");
 
-    // Submitting an emptied prompt takes this path. Losing it was a silent
-    // regression when `useImageStudioState` was dissolved (#226 spec review).
-    clearError();
-    assert.equal(__getSnapshotForTests().error, "");
+    resetNovelAiPageStoreForTests({ failure });
+    selectRecord("rec-2");
+    assert.equal(getNovelAiState().failure, null, "picking a history item brings the picture back");
+    assert.equal(getNovelAiState().selectedRecordId, "rec-2");
     resetNovelAiPageStoreForTests();
   });
 });

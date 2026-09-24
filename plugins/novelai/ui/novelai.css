@@ -1,0 +1,111 @@
+/* NovelAI image studio: canvas surface and the generation/reveal motion.
+   Scoped to `nai-*` classes; colors, radii and timings come from the host's
+   semantic tokens. Every animation has a reduced-motion fallback at the end. */
+
+/* The canvas: a glass stage with a faint brand wash, never a bare white sheet. */
+.nai-stage {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: var(--color-bg-glass);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(16px) saturate(1.2);
+}
+
+.nai-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--gradient-accent-soft);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+/* Generating: a frame in the requested aspect with a slow light sweep. */
+.nai-shimmer {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: var(--gradient-accent-soft);
+  box-shadow: var(--shadow-panel);
+}
+
+.nai-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 25%, rgba(255, 255, 255, 0.75) 50%, transparent 75%);
+  transform: translateX(-100%);
+  animation: nai-sweep 1.8s var(--ease-in-out-soft) infinite;
+}
+
+@keyframes nai-sweep {
+  to { transform: translateX(100%); }
+}
+
+.nai-twinkle {
+  animation: nai-twinkle 1.6s var(--ease-in-out-soft) infinite;
+}
+
+.nai-twinkle-late {
+  animation-delay: 0.53s;
+}
+
+.nai-twinkle-later {
+  animation-delay: 1.06s;
+}
+
+@keyframes nai-twinkle {
+  0%, 100% { opacity: 0.4; transform: scale(0.82); }
+  50% { opacity: 1; transform: scale(1.08) rotate(12deg); }
+}
+
+/* A new result settles in from a soft blur. */
+.nai-reveal {
+  animation: nai-reveal var(--duration-morph) var(--ease-out-soft) both;
+}
+
+@keyframes nai-reveal {
+  from { opacity: 0; transform: scale(0.985); filter: blur(10px) saturate(0.85); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+/* The matching history thumbnail arrives with the same curve. */
+.nai-thumb-enter {
+  animation: nai-thumb-enter var(--duration-morph) var(--ease-out-soft) both;
+}
+
+@keyframes nai-thumb-enter {
+  from { opacity: 0; transform: translateY(6px) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes nai-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nai-shimmer::after,
+  .nai-twinkle {
+    animation: none;
+  }
+
+  .nai-shimmer::after {
+    transform: none;
+    opacity: 0.35;
+  }
+
+  .nai-twinkle {
+    opacity: 0.8;
+  }
+
+  .nai-reveal,
+  .nai-thumb-enter {
+    animation: nai-fade-in var(--duration-base) var(--ease-out-soft) both;
+  }
+}
