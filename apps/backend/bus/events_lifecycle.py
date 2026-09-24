@@ -92,6 +92,18 @@ class TurnCommitted:
 
 
 @dataclass(frozen=True)
+class TurnFailed:
+    """A passive turn failed before any reply was committed.
+
+    `error_summary` is user-safe: exception type plus one scrubbed line (see
+    `core.common.error_summary`), never a traceback.
+    """
+
+    session_key: str
+    error_summary: str
+
+
+@dataclass(frozen=True)
 class RoleDeleted:
     """Signals that role-owned runtime sidecars must discard their state."""
 

@@ -14,6 +14,7 @@ from bus.events_lifecycle import (
     ToolCallCompleted,
     ToolCallStarted,
     TurnCommitted,
+    TurnFailed,
 )
 from desktop_bridge.models import BridgeEvent
 from desktop_bridge.chat_completion import build_chat_terminal_event
@@ -23,6 +24,7 @@ from desktop_bridge.voice.tts_coordinator import TtsTurnCoordinator
 from desktop_bridge.voice.voice_service import VoiceService
 from session.manager import Session, SessionManager
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
+from core.common.error_summary import summarize_exception_for_user
 from core.common.runtime_tasks import create_runtime_task
 
 logger = logging.getLogger("desktop.bridge.chat")
@@ -433,6 +435,7 @@ class DesktopChatService:
         turn_id = turn_id or request_id
         collected: list[BridgeEvent] = []
         committed: TurnCommitted | None = None
+        failure_detail = ""
         tts = self._create_tts_coordinator(
             request_id=request_id,
             session_key=session_key,
@@ -501,6 +504,11 @@ class DesktopChatService:
                 await _announce_voice_reply()
                 tts.push(event.assistant_response)
 
+        async def _on_failed(event: TurnFailed) -> None:
+            nonlocal failure_detail
+            if event.session_key == session_key:
+                failure_detail = event.error_summary
+
         async def _on_tool_started(event: ToolCallStarted) -> None:
             if event.session_key != session_key:
                 return
@@ -557,6 +565,7 @@ class DesktopChatService:
             self._event_bus.on(ToolCallStarted, _on_tool_started)
             self._event_bus.on(ToolCallCompleted, _on_tool_completed)
         self._event_bus.on(TurnCommitted, _on_done)
+        self._event_bus.on(TurnFailed, _on_failed)
         try:
             reply = await self._agent_loop.process_direct(
                 content,
@@ -592,6 +601,7 @@ class DesktopChatService:
                 role_id=role_id,
                 committed=committed,
                 failure_message=reply,
+                failure_detail=failure_detail,
             )
             collected.append(bridge_event)
             if bridge_event.method == "chat.done":
@@ -625,6 +635,7 @@ class DesktopChatService:
                 session_key=session_key,
                 role_id="",
                 failure_message=str(exc),
+                failure_detail=summarize_exception_for_user(exc),
             )
             collected.append(bridge_event)
             await self._emit_payload(emit_event, bridge_event.to_dict())
@@ -635,6 +646,7 @@ class DesktopChatService:
                 self._event_bus.off(ToolCallStarted, _on_tool_started)
                 self._event_bus.off(ToolCallCompleted, _on_tool_completed)
             self._event_bus.off(TurnCommitted, _on_done)
+            self._event_bus.off(TurnFailed, _on_failed)
 
     async def _emit_failed_session_update(
         self,

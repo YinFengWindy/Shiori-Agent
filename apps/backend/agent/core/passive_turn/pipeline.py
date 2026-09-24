@@ -36,7 +36,9 @@ from agent.lifecycle.types import (
 from agent.turns.outbound import OutboundDispatch, OutboundPort
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
+from bus.events_lifecycle import TurnFailed
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
+from core.common.error_summary import summarize_exception_for_user
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
@@ -425,6 +427,14 @@ class PassiveTurnPipeline:
                         duration_ms=int((time.perf_counter() - started) * 1000),
                         error_type=type(exc).__name__,
                         note=str(exc)[:160],
+                    )
+                )
+                # The reply below stays generic; surfaces that can show more
+                # (the desktop's 「详情」) pick up a scrubbed one-line summary.
+                await self._bus.observe(
+                    TurnFailed(
+                        session_key=key,
+                        error_summary=summarize_exception_for_user(exc),
                     )
                 )
                 return await self._control_outbound(

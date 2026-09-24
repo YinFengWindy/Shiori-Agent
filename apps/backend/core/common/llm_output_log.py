@@ -77,7 +77,8 @@ _SECRET_LOG_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
-def _redact_secrets(text: str) -> str:
+def redact_secrets(text: str) -> str:
+    """Best-effort scrub of credential-shaped substrings (see the patterns above)."""
     redacted = text
     for pattern, replacement in _SECRET_LOG_PATTERNS:
         redacted = pattern.sub(replacement, redacted)
@@ -93,10 +94,10 @@ def summarize_llm_output_for_log(
     """
     if not content:
         return "<empty>"
-    text = _redact_secrets(content)
+    text = redact_secrets(content)
     if len(text) <= limit:
         return text
     return f"{text[:limit]}...(+{len(text) - limit} chars)"
 
 
-__all__ = ["summarize_llm_output_for_log"]
+__all__ = ["redact_secrets", "summarize_llm_output_for_log"]

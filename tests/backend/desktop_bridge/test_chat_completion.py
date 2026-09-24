@@ -40,3 +40,18 @@ def test_committed_empty_reply_is_still_a_successful_turn():
     assert event.payload["reply"] == ""
     assert event.payload["tools_used"] == ["message_push"]
     assert event.payload["total_tokens"] == 120
+
+
+def test_uncommitted_turn_carries_a_failure_detail_when_known():
+    event = build_chat_terminal_event(
+        request_id="request-1",
+        turn_id="turn-1",
+        session_key="role:mira",
+        role_id="mira",
+        failure_message="处理消息时出错，请稍后再试。",
+        failure_detail="APIConnectionError: Connection error.",
+    )
+
+    assert event.method == "chat.error"
+    assert event.payload["message"] == "处理消息时出错，请稍后再试。"
+    assert event.payload["detail"] == "APIConnectionError: Connection error."
