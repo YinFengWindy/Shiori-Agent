@@ -1,5 +1,6 @@
 import type React from "react";
 import { findChatMessageElement } from "../chat/chatMessageDom";
+import { prefersReducedMotion } from "../shared/reducedMotion";
 import type { AppMainView, RoleRecord, SessionPayload } from "../shared/types";
 import { errorMessage, type FeedbackReporter } from "../shared/feedback/feedbackStore";
 
@@ -98,7 +99,7 @@ export function useChatInteractions({
     window.requestAnimationFrame(() => {
       setHighlightedMessageKey(normalizedMessageKey);
       const target = findChatMessageElement(normalizedMessageKey);
-      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
     });
   }
 

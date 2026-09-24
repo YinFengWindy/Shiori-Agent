@@ -9,6 +9,7 @@ import {
   rememberChatSessionScrollState,
   type ChatSessionScrollState,
 } from "./chatScrollController";
+import { prefersReducedMotion } from "../shared/reducedMotion";
 
 type UseChatScrollControllerArgs = {
   conversationListRef: React.RefObject<HTMLDivElement | null>;
@@ -107,7 +108,8 @@ export function useChatScrollController({
     stopAnimation(true);
     const startTop = container.scrollTop;
     const distance = Math.max(0, getChatScrollMaxTop(container) - startTop);
-    if (distance <= 1) {
+    // Reduced motion: a "smooth" request lands instantly, like a short hop.
+    if (distance <= 1 || prefersReducedMotion()) {
       expectedScrollTopRef.current = getChatScrollMaxTop(container);
       container.scrollTop = getChatScrollMaxTop(container);
       rememberSessionScroll();
@@ -166,7 +168,7 @@ export function useChatScrollController({
     const startTop = container.scrollTop;
     const initialTargetTop = getTargetScrollTop(container);
     const distance = Math.abs(initialTargetTop - startTop);
-    if (distance <= 1) {
+    if (distance <= 1 || prefersReducedMotion()) {
       container.scrollTop = initialTargetTop;
       onSettled();
       return;

@@ -2,6 +2,7 @@ import { PluginChatImageActions } from "./plugins/PluginChatImageActions";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { MotionConfig } from "motion/react";
 import { DesktopAppFrame } from "./app/DesktopAppFrame";
 import {
   chatLatestImageSidebarDefaultWidth,
@@ -722,8 +723,11 @@ registerRendererGlobalDiagnostics();
 initializeRuntimePluginUi();
 createRoot(document.getElementById("root") as HTMLElement).render(
   <DesktopErrorBoundary>
-    <App />
-    {/* Outside App so every branch (onboarding, workspace, full-screen plugin pages) shares one outlet. */}
-    <FeedbackToaster />
+    {/* reducedMotion="user": every motion/react animation drops its transforms when the OS asks for reduced motion. */}
+    <MotionConfig reducedMotion="user">
+      <App />
+      {/* Outside App so every branch (onboarding, workspace, full-screen plugin pages) shares one outlet. */}
+      <FeedbackToaster />
+    </MotionConfig>
   </DesktopErrorBoundary>,
 );

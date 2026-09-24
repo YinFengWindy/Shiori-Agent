@@ -168,10 +168,29 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 
 ## 动效
 
-- 时长走 `--duration-fast` / `--duration-base`，缓动走 `--ease-out-soft`（Tailwind 里是 `ease-out-soft`）
+- 时长 token（Tailwind 里是 `duration-*`）：
+
+  | token | 值 | 用途 |
+  |---|---|---|
+  | `--duration-fade` | 120ms | 只有透明度的视图切换（主区域换页） |
+  | `--duration-fast` | 140ms | 悬停、颜色变化；裸 `transition` 的默认值 |
+  | `--duration-quick` | 160ms | 按压反馈、菜单/下拉/小弹层、角色详情切 tab |
+  | `--duration-base` | 220ms | 对话框、提示、侧栏内容淡入 |
+  | `--duration-panel` | 260ms | 侧栏宽度（和 `app/appState.ts` 的 `sidebarAnimationDurationMs` 同步，有测试守着） |
+
+- 缓动：`--ease-out-soft`（`ease-out-soft`，也是裸 `transition` 的默认值）用于入场、按压、悬停；
+  `--ease-drawer`（`ease-drawer`）只给侧栏开合这类抽屉
+- 按压反馈用 `shared/styles.ts` 的 `pressableClass`（0.97）/ `compactPressableClass`（30px 及以下的图标按钮，0.96）。
+  它接管元素的整条 transition，不要再和别的 `transition*` 类叠加。共享按钮类已经带上了
+- 弹出层：Base UI 的 Select / Dialog 用 `motion-popup` / `motion-dialog` / `motion-backdrop`，进出场都有；
+  手写弹层用 `motion-popover-enter` / `motion-dialog-enter` / `motion-fade-enter`（`@starting-style`），
+  只做入场，关闭时直接消失，缩放原点用 Tailwind 的 `origin-*` 指定。右键菜单和命令面板（RoleSearchDialog）刻意不加动效
+- 侧栏开合用 `sidebarTrackMotionClass`（轨道宽度）+ `sidebarContentMotionClass`（内容淡入位移）
 - 展开/收起用 `grid-template-rows: 0fr → 1fr` 的写法（见 `.chat-thinking-content`），不要用 max-height 猜数值
-- **`styles.css:425` 有统一的 `prefers-reduced-motion` 块**：新增循环动画或较大位移的过渡时，
-  必须同时在这个块里给出降级（`animation: none` 或退化成 opacity 过渡）
+- **`styles.css` 末尾有统一的 `@media (prefers-reduced-motion: reduce)` 块**（这里不写行号，行号会漂）：新增循环动画或较大位移的过渡时，
+  必须同时在这个块里给出降级（`animation: none` 或退化成 opacity 过渡）。
+  Tailwind 类就近写 `motion-reduce:*`；motion/react 动画由根节点的 `<MotionConfig reducedMotion="user">` 统一去掉位移，
+  需要自己判断的组件用 `useReducedMotion()`；命令式滚动用 `shared/reducedMotion.ts` 的 `prefersReducedMotion()`
 
 ## 图标
 
