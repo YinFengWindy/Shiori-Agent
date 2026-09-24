@@ -151,6 +151,7 @@ an absent hook yields the neutral default. Protocols live in
 | `supports_stream_events(chat_id) -> bool` | turns for this chat publish `StreamDeltaReady` | no stream events |
 | `system_prompt_hint(chat_id) -> str` | Markdown appended after a blank line at the end of the system prompt | nothing appended |
 | `default_chat_type: str` | `chat_type` the hub assigns when inbound metadata has none | `"unknown"` |
+| `uses_bot_commands: bool` | the channel reads `ctx.bot_commands` at start; the host folds the command list into its `configuration_key` reuse check, so a command change rebuilds it | `False`: command changes keep the connection |
 
 `desktop` stays host-owned: role-owned `role:<id>` desktop sessions always
 stream. `MessagePushTool.register_channel(..., description=...)` accepts a short

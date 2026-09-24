@@ -74,3 +74,10 @@ def test_configuration_key_tracks_only_the_token() -> None:
     same = TelegramChannel(token="123:abc").configuration_key
     assert TelegramChannel(token="123:abc").configuration_key == same
     assert TelegramChannel(token="456:def").configuration_key != same
+
+
+def test_channel_opts_into_bot_command_reuse_checks() -> None:
+    # 命令菜单在 start 时注册，命令变化必须重建连接（#363）。
+    from plugins.telegram.backend.channel import TelegramChannel
+
+    assert TelegramChannel.uses_bot_commands is True

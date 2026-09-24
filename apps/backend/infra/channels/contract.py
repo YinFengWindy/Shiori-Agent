@@ -25,6 +25,7 @@ __all__ = [
     "Channel",
     "ChannelContext",
     "ChannelStatus",
+    "SupportsBotCommands",
     "SupportsChannelStatus",
     "SupportsDefaultChatType",
     "SupportsStreamEvents",
@@ -38,8 +39,9 @@ class Channel(Protocol):
     Optional hooks replace channel-name checks in the core; a channel implements
     only those it needs: ``status()`` (:class:`SupportsChannelStatus`),
     ``supports_stream_events(chat_id)`` (:class:`SupportsStreamEvents`),
-    ``system_prompt_hint(chat_id)`` (:class:`SupportsSystemPromptHint`) and the
-    ``default_chat_type`` attribute (:class:`SupportsDefaultChatType`).
+    ``system_prompt_hint(chat_id)`` (:class:`SupportsSystemPromptHint`), the
+    ``default_chat_type`` attribute (:class:`SupportsDefaultChatType`) and the
+    ``uses_bot_commands`` attribute (:class:`SupportsBotCommands`).
     """
 
     name: str
@@ -48,6 +50,18 @@ class Channel(Protocol):
     async def stop(self) -> None: ...
     def pause_intake(self) -> None: ...
     def resume_intake(self) -> None: ...
+
+
+@runtime_checkable
+class SupportsBotCommands(Protocol):
+    """Declares that the channel consumes ``ChannelContext.bot_commands`` at start.
+
+    Only such channels fold the command list into their cross-generation reuse
+    key, so a changed command list rebuilds them; channels without the
+    attribute (default ``False``) keep their connection across command changes.
+    """
+
+    uses_bot_commands: bool
 
 
 class ChannelStatus(TypedDict):

@@ -60,6 +60,8 @@ class TelegramChannel(
     default_chat_type = "private"
 
     name = _CHANNEL
+    # start() registers ctx.bot_commands with BotFather's command menu.
+    uses_bot_commands = True
 
     def __init__(
         self,

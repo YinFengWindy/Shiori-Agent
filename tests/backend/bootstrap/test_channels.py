@@ -133,13 +133,32 @@ async def test_model_only_change_reuses_independently_owned_qqbot_connection(tmp
         await resources.aclose()
 
 
+class _KeyedChannel:
+    """Plugin channel stub with a reuse key; optionally consumes bot commands."""
+
+    name = "fake"
+    configuration_key = ("fake", "token")
+
+    def __init__(self, *, uses_bot_commands: bool) -> None:
+        if uses_bot_commands:
+            self.uses_bot_commands = True
+        self.start = AsyncMock()
+        self.stop = AsyncMock()
+        self.pause_intake = Mock()
+        self.resume_intake = Mock()
+
+
 @pytest.mark.asyncio
-async def test_changed_bot_commands_rebuild_plugin_connection(tmp_path):
+@pytest.mark.parametrize("uses_bot_commands", [True, False])
+async def test_bot_command_changes_rebuild_only_channels_that_use_them(
+    tmp_path, uses_bot_commands
+):
+    """命令列表变化只重建声明 uses_bot_commands 的渠道（如 Telegram）；其余复用。"""
     config = Config(provider="", model="", api_key="")
     resources = SharedHttpResources()
-    old = QQBotChannel("account-A", "secret-A")
-    same = QQBotChannel("account-A", "secret-A")
-    rebuilt = QQBotChannel("account-A", "secret-A")
+    old, same, candidate = (
+        _KeyedChannel(uses_bot_commands=uses_bot_commands) for _ in range(3)
+    )
     context = dict(
         bus=MessageBus(),
         session_manager=SessionManager(tmp_path),
@@ -150,11 +169,11 @@ async def test_changed_bot_commands_rebuild_plugin_connection(tmp_path):
     commands = [("undo", "撤销上一轮对话")]
     try:
         active = await start_channels(
-            config, plugin_channels=[old], bot_commands=commands, **context
+            config, plugin_channels=[cast(Any, old)], bot_commands=commands, **context
         )
         unchanged = await start_channels(
             config,
-            plugin_channels=[same],
+            plugin_channels=[cast(Any, same)],
             bot_commands=list(commands),
             previous_host=active,
             **context,
@@ -162,17 +181,18 @@ async def test_changed_bot_commands_rebuild_plugin_connection(tmp_path):
         assert unchanged.channels == [old]
         changed = await start_channels(
             config,
-            plugin_channels=[rebuilt],
+            plugin_channels=[cast(Any, candidate)],
             bot_commands=[*commands, ("chatid", "查看我的 chat_id")],
             previous_host=active,
             **context,
         )
-        assert changed.channels == [rebuilt]
-        assert active.requires_exclusive_handover(changed)
+        if uses_bot_commands:
+            assert changed.channels == [candidate]
+            assert active.requires_exclusive_handover(changed)
+        else:
+            assert changed.channels == [old]
+            candidate.stop.assert_awaited_once()
     finally:
-        await old.stop()
-        await same.stop()
-        await rebuilt.stop()
         await resources.aclose()
 
 

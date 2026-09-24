@@ -118,7 +118,7 @@ channels:
 - 声明是静态的：插件停用、未信任或还没填凭据时，桌面端也能经 `channels.list` 列出这个渠道。所以凭据不全时 `setup` 可以直接 return，不贡献渠道。
 - `ctx.channels.add(channel)` 只接受本 manifest 声明过的 `channel.name`，否则 setup 失败，插件回滚为 `FAILED`，诊断码 `undeclared_channel`。
 - 两个插件声明同一个渠道名时，两者都是 `CONFLICT`（诊断码 `duplicate_channel`），都不会激活。
-- 渠道的启停和换代由宿主的 ChannelHost 管理，不要用 `background` 自己起连接任务。跨代复用连接时，渠道提供 `configuration_key`，宿主会连同 bot 命令列表一起比较，任一变化都重建连接。
+- 渠道的启停和换代由宿主的 ChannelHost 管理，不要用 `background` 自己起连接任务。跨代复用连接时，渠道提供 `configuration_key`，它变化就重建连接；声明了 `uses_bot_commands = True` 的渠道，宿主还会连同 bot 命令列表一起比较。
 - 渠道可以实现可选的 `status()`，返回 `{"connected": bool, "account": str, "detail": str}`（`account`、`detail` 可省略），`channels.list` 会原样带给桌面端。
 
 ### 渠道钩子（Runtime API 2.3）
@@ -130,6 +130,7 @@ channels:
 | `supports_stream_events(chat_id) -> bool` | 这个会话是否接收 `StreamDeltaReady` 流式事件，用于实时预览 | 不发流式事件，只收到最终回复 |
 | `system_prompt_hint(chat_id) -> str` | 追加在系统提示词末尾（空一行）的渠道规则，例如渲染限制 | 不追加 |
 | `default_chat_type: str`（类属性） | 入站消息没带 `chat_type` 时由路由补上的值 | `"unknown"` |
+| `uses_bot_commands: bool`（类属性） | 渠道在 start 时读取 `ctx.bot_commands`（如 Telegram 的命令菜单）；命令列表变化时宿主会重建它 | `False`，命令变化不重建连接 |
 
 ```python
 class QQBotChannel:
