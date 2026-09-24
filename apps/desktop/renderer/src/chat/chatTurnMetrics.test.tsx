@@ -20,9 +20,9 @@ describe("chat turn metrics", () => {
     );
 
     assert.match(withoutThinking, /思考 6.2 秒/);
-    assert.match(withoutThinking, /2,438 词元/);
+    assert.match(withoutThinking, /2,438 tokens/);
     assert.doesNotMatch(withThinking, /思考 /);
-    assert.match(withThinking, /2,438 词元/);
+    assert.match(withThinking, /2,438 tokens/);
   });
 });
 

@@ -17,7 +17,7 @@ export function formatThinkingDuration(durationMs: number): string {
 
 /** Formats the provider token usage shown beneath a finished reply. */
 export function formatTokenUsage(totalTokens: number): string {
-  return `${totalTokens.toLocaleString()} 词元`;
+  return `${totalTokens.toLocaleString()} tokens`;
 }
 
 function isNonNegativeNumber(value: unknown): value is number {

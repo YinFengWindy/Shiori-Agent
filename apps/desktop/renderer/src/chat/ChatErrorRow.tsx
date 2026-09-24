@@ -5,6 +5,8 @@ import { splitChatErrorContent } from "./chatFailedTurn";
 
 type ChatErrorRowProps = {
   content: string;
+  /** The bridge's scrubbed one-line cause, when it reported one. */
+  detail?: string;
   /** Only the conversation's latest failed turn can be retried. */
   canRetry: boolean;
   onRetry: () => void;
@@ -20,8 +22,8 @@ const inlineButtonClass = cx(
  * of a bubble from the role: it is not something the role said. Long raw
  * errors collapse behind 「详情」; the latest one offers 重试.
  */
-export function ChatErrorRow({ content, canRetry, onRetry }: ChatErrorRowProps) {
-  const { summary, detail } = splitChatErrorContent(content);
+export function ChatErrorRow({ content, detail: reportedDetail = "", canRetry, onRetry }: ChatErrorRowProps) {
+  const { summary, detail } = splitChatErrorContent(content, reportedDetail);
   const [expanded, setExpanded] = React.useState(false);
   return (
     <div className="chat-error-row mx-auto grid w-fit max-w-[82%] gap-1 rounded-lg bg-danger-soft px-3 py-2 text-body-sm text-danger-text shadow-soft" role="alert">

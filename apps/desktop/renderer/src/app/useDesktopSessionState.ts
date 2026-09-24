@@ -6,7 +6,7 @@ import {
 } from "../chat/chatTurnOwnership";
 import { buildOptimisticUserChatMessage, normalizeChatAttachmentPaths } from "../chat/chatComposerState";
 import { ensureChatMessageRenderId, getChatMessageReactKey, reconcileSessionMessageRenderIds } from "../chat/chatMessageIdentity";
-import { buildChatRetryRequest } from "../chat/chatFailedTurn";
+import { findChatRetryTarget } from "../chat/chatFailedTurn";
 import {
   mergeIncomingSessionDuringSend,
   shouldClearPendingUserMessage,
@@ -363,10 +363,12 @@ export function useDesktopSessionState({
     }
   }
 
-  function appendSessionErrorMessage(sessionKey: string, message: string): void {
+  /** Appends the transient error row of a failed turn; `detail` is the bridge's scrubbed cause, shown behind 「详情」. */
+  function appendSessionErrorMessage(sessionKey: string, message: string, detail = ""): void {
     const content = message.trim();
     if (!content) return;
     delete pendingUserMessagesRef.current[sessionKey];
+    const errorDetail = detail.trim();
     updateCommittedActiveSession((current) => {
       if (!current || current.key !== sessionKey) return current;
       return {
@@ -377,6 +379,7 @@ export function useDesktopSessionState({
             role: "error",
             content,
             timestamp: new Date().toISOString(),
+            ...(errorDetail ? { metadata: { error_detail: errorDetail } } : {}),
           }),
         ],
       };
@@ -631,19 +634,47 @@ export function useDesktopSessionState({
   }
 
   /**
-   * Retries the failed turn that ended in error row `errorKey`: the transient
-   * error row is dropped and the same user message goes through `sendMessage`
-   * again. The first attempt stays in the timeline — there is only one.
+   * Retries the failed turn that ended in error row `errorKey` through
+   * `chat.retry`: the backend re-runs the turn on the user message it already
+   * stored, so the timeline gets no duplicate. The transient error row is
+   * dropped while the retry runs and comes back if the retry cannot start.
    */
   async function retryFailedChatTurn(errorKey: string): Promise<boolean> {
     const session = activeSessionRef.current;
-    if (!session) return false;
-    const request = buildChatRetryRequest(session.messages, errorKey);
-    if (!request) return false;
-    updateCommittedActiveSession((current) => current?.key === session.key
+    const roleId = activeRoleIdRef.current;
+    if (!session || !roleId) return false;
+    const sessionKey = session.key;
+    const target = findChatRetryTarget(session.messages, errorKey);
+    if (!target || !canSendSessionState(sendingSessionsRef.current, sessionKey)) return false;
+    const errorRow = session.messages.find((message, index) => getChatMessageReactKey(message, index) === errorKey);
+    const turnId = window.crypto.randomUUID();
+    activeTurnIdsRef.current[sessionKey] = turnId;
+    markSessionSending(sessionKey, roleId);
+    updateCommittedActiveSession((current) => current?.key === sessionKey
       ? { ...current, messages: current.messages.filter((message, index) => getChatMessageReactKey(message, index) !== errorKey) }
       : current);
-    return sendMessage(request);
+    const restoreFailedTurn = (failure: ChatSendFailure) => {
+      clearSessionSending(sessionKey);
+      delete activeTurnIdsRef.current[sessionKey];
+      if (errorRow) {
+        appendSessionErrorMessage(sessionKey, errorRow.content, String(errorRow.metadata?.error_detail ?? ""));
+      }
+      reportSendFailure(failure);
+    };
+    try {
+      const res = await window.miraDesktop.invoke({
+        method: "chat.retry",
+        payload: { role_id: roleId, turn_id: turnId, user_message_id: target.userMessageId },
+      });
+      if (res.error) {
+        restoreFailedTurn(res.error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      restoreFailedTurn({ message: errorMessage(error) });
+      return false;
+    }
   }
 
   async function cancelChatTurn(sessionKey: string, roleId: string): Promise<boolean> {

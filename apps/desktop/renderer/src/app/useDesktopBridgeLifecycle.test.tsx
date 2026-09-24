@@ -41,11 +41,11 @@ async function mountLifecycle({ cancelling = false, health = "online" } = {}) {
     isChatTurnCancelling: () => cancelling,
     commitActiveSession: (session) => { activeSessionRef.current = session; },
     updateCommittedActiveSession: (update) => { activeSessionRef.current = update(activeSessionRef.current); },
-    appendSessionErrorMessage: (_key, message) => {
+    appendSessionErrorMessage: (_key, message, detail) => {
       const current = activeSessionRef.current;
       assert.ok(current);
       statesAtError.push(current);
-      activeSessionRef.current = { ...current, messages: [...current.messages, { role: "error", content: message }] };
+      activeSessionRef.current = { ...current, messages: [...current.messages, { role: "error", content: message, ...(detail ? { metadata: { error_detail: detail } } : {}) }] };
     },
     loadRolesFromBridge: async () => [{ id: "mira" } as never],
     openRole: async (roleId) => { openedRoles.push(roleId); return true; },
@@ -151,6 +151,14 @@ describe("useDesktopBridgeLifecycle", () => {
       assert.deepEqual(view.completions, ["turn-1"]);
       await view.emit("chat.delta", { content_delta: "late" });
       assert.equal(view.activeSessionRef.current?.messages.length, 3);
+    } finally { await view.cleanup(); }
+  });
+
+  it("carries the bridge-reported cause of a failed turn onto its error row", async () => {
+    const view = await mountLifecycle();
+    try {
+      await view.emit("chat.error", { message: "处理消息时出错，请稍后再试。", detail: "APIStatusError: 502 Bad Gateway" });
+      assert.equal(view.activeSessionRef.current?.messages.at(-1)?.metadata?.error_detail, "APIStatusError: 502 Bad Gateway");
     } finally { await view.cleanup(); }
   });
 

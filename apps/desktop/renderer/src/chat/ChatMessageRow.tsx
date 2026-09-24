@@ -107,7 +107,7 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
         className={cx("w-full", animateEnter && "chat-message-enter")}
         onContextMenu={openContextMenu}
       >
-        <ChatErrorRow content={message.content} canRetry={availability.retry} onRetry={retry} />
+        <ChatErrorRow content={message.content} detail={String(message.metadata?.error_detail ?? "")} canRetry={availability.retry} onRetry={retry} />
       </article>
     );
   }

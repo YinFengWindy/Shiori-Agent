@@ -44,7 +44,7 @@ type UseDesktopBridgeLifecycleArgs = {
   isChatTurnCancelling: (sessionKey: string, turnId: string) => boolean;
   commitActiveSession: (nextSession: SessionPayload | null) => void;
   updateCommittedActiveSession: (updater: (current: SessionPayload | null) => SessionPayload | null) => void;
-  appendSessionErrorMessage: (sessionKey: string, message: string) => void;
+  appendSessionErrorMessage: (sessionKey: string, message: string, detail?: string) => void;
   loadRolesFromBridge: () => Promise<RoleRecord[] | null>;
   openRole: (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<boolean>;
   buildNavigationEntry: (view: { kind: "chat" }, roleId?: string) => NavigationEntry;
@@ -347,7 +347,11 @@ export function useDesktopBridgeLifecycle({
               return failChatStream(current);
             });
             // Shown inline as an error bubble in the conversation, not as a toast.
-            callbacks.appendSessionErrorMessage(currentSession.key, String(event.payload.message ?? "对话失败"));
+            callbacks.appendSessionErrorMessage(
+              currentSession.key,
+              String(event.payload.message ?? "对话失败"),
+              String(event.payload.detail ?? ""),
+            );
           }
           callbacks.completeChatTurn(eventSessionKey, eventTurnId);
         }
