@@ -37,11 +37,13 @@ export function RoleDetailHeader({
     <header
       className="relative isolate overflow-hidden rounded-xl border border-white/80 bg-white/70 shadow-soft backdrop-blur-md"
       data-testid="role-detail-header"
+      data-role-detail-header=""
       data-has-portrait={portraitUrl ? "true" : "false"}
     >
       {portraitUrl ? (
         <img
           className="pointer-events-none absolute inset-y-0 right-0 -z-10 h-full w-1/2 object-cover object-top [mask-image:linear-gradient(to_left,rgb(0_0_0)_35%,transparent)]"
+          data-vt-part="portrait"
           src={portraitUrl}
           alt=""
         />
@@ -53,6 +55,7 @@ export function RoleDetailHeader({
           <button
             className="group grid h-28 w-28 place-items-center overflow-hidden rounded-full border-4 border-white/90 bg-gradient-accent-soft shadow-panel"
             data-testid="role-detail-avatar"
+            data-vt-part="avatar"
             type="button"
             onClick={onOpenAssetsPage}
             aria-label="更换形象"
@@ -66,16 +69,18 @@ export function RoleDetailHeader({
           <div className="grid min-w-0 gap-1.5">
             <input
               aria-label="角色名称"
-              className={cx(roleIdentityInputClass, "font-display text-headline text-ink placeholder:text-ink-faint")}
+              className={cx(roleIdentityInputClass, "min-w-[6em] max-w-full font-display text-headline text-ink [field-sizing:content] placeholder:text-ink-faint")}
               data-testid="edit-role-name"
+              data-vt-part="name"
               value={roleForm.name}
               placeholder="未命名角色"
               onChange={(event) => onUpdate((current) => ({ ...current, name: event.target.value }))}
             />
             <input
               aria-label="角色简介"
-              className={cx(roleIdentityInputClass, "text-body text-ink-secondary placeholder:text-ink-faint")}
+              className={cx(roleIdentityInputClass, "min-w-[8em] max-w-full text-body text-ink-secondary [field-sizing:content] placeholder:text-ink-faint")}
               data-testid="edit-role-description"
+              data-vt-part="sub"
               value={roleForm.description}
               placeholder="添加一行角色简介"
               onChange={(event) => onUpdate((current) => ({ ...current, description: event.target.value }))}

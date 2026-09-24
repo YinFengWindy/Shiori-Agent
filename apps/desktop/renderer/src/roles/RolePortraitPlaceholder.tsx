@@ -23,11 +23,12 @@ export function RolePortraitPlaceholder({ avatarPath, initial, name }: RolePortr
         {avatarPath ? (
           <img
             className="h-28 w-28 rounded-full border-4 border-white/85 object-cover shadow-panel"
+            data-vt-part="avatar"
             src={toFileUrl(avatarPath)}
             alt={`${name} 的头像`}
           />
         ) : (
-          <span className="grid h-28 w-28 place-items-center rounded-full border-4 border-white/85 bg-gradient-accent font-display text-display text-ink shadow-panel" aria-hidden="true">
+          <span className="grid h-28 w-28 place-items-center rounded-full border-4 border-white/85 bg-gradient-accent font-display text-display text-ink shadow-panel" data-vt-part="avatar" aria-hidden="true">
             {initial}
           </span>
         )}

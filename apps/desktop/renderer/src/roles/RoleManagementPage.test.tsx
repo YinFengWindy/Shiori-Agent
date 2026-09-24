@@ -39,8 +39,8 @@ describe("RoleManagementPage", () => {
 
   it("draws a portrait card with its scrim, and the designed placeholder without one", () => {
     const markup = render([role("rin", { chat_background_abs: "C:/r/bg.png" }), role("kaede")]);
-    assert.match(markup, /data-testid="role-management-card-rin" data-has-portrait="true"/);
-    assert.match(markup, /data-testid="role-management-card-kaede" data-has-portrait="false"/);
+    assert.match(markup, /data-testid="role-management-card-rin"[^>]*data-has-portrait="true"/);
+    assert.match(markup, /data-testid="role-management-card-kaede"[^>]*data-has-portrait="false"/);
     assert.equal(markup.match(/data-testid="role-portrait-placeholder"/g)?.length, 1);
   });
 

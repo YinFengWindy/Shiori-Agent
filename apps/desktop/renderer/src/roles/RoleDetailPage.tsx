@@ -94,7 +94,7 @@ export function RoleDetailPage({
   );
 
   return (
-    <section ref={pageRef} className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-gradient-app bg-fixed" data-testid="role-detail-page">
+    <section ref={pageRef} className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-gradient-app bg-fixed" data-testid="role-detail-page" data-role-page="">
       <div className="relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-5 pb-10 pt-6 sm:px-8" data-testid="role-detail-info-card">
         <RoleDetailHeader
           activeRole={activeRole}

@@ -45,6 +45,7 @@ import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalD
 import "./plugins/pluginUiModules";
 import { initializeRuntimePluginUi } from "./plugins/runtimePluginUiBootstrap";
 import { createRoleFormFromRole } from "./roles/roleFormState";
+import { closeRoleDetailWithTransition, openRoleDetailWithTransition } from "./roles/roleViewTransition";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { useRoleFormAdapters } from "./roles/useRoleFormAdapters";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
@@ -651,7 +652,7 @@ function App(): React.ReactElement {
       onLoadOlderMessages={loadOlderMessages}
       detailRole={detailRole}
       pendingRoleCardAction={pendingRoleCardAction}
-      onOpenRoleManagementDetail={(roleId) => guardLeave(() => void openRoleDetail(roleId))}
+      onOpenRoleManagementDetail={(roleId) => guardLeave(() => void openRoleDetailWithTransition(roleId, () => void openRoleDetail(roleId)))}
       onGoToRoleChat={(roleId) => guardLeave(() => {
         openChatView({ recordHistory: false });
         void openRole(roleId, null, { recordHistory: true });
@@ -663,7 +664,7 @@ function App(): React.ReactElement {
       onRequestDeleteRole={setPendingDeleteRoleId}
       creating={roleCreation.creating}
       newRoleForm={roleCreation.newRoleForm}
-      onBackToRoleList={() => guardLeave(roleCreation.cancelCreateRole)}
+      onBackToRoleList={() => guardLeave(() => void closeRoleDetailWithTransition(detailRoleId, roleCreation.cancelCreateRole))}
       onCreateNewRole={() => void roleCreation.createRole()}
       onResetNewRoleForm={roleCreation.resetNewRoleForm}
       onUpdateNewRoleForm={roleCreation.updateNewRoleForm}

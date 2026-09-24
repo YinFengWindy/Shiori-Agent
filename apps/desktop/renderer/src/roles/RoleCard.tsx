@@ -20,7 +20,9 @@ type RoleCardProps = {
 /**
  * One role in the management grid. The card is a plain container: the whole
  * face is one stretched 「打开」 button, and the secondary actions live in the
- * corner overflow menu, so no button ever nests inside another.
+ * corner overflow menu, so no button ever nests inside another. Its portrait,
+ * name and intro carry `data-vt-part` so opening the role morphs them into the detail header
+ * (roleViewTransition).
  */
 export function RoleCard({ role, active, bridgeReady, pendingCardAction, onOpen, onGoToChat, onDelete }: RoleCardProps) {
   const view = selectRoleCardView(role, pendingCardAction);
@@ -33,12 +35,14 @@ export function RoleCard({ role, active, bridgeReady, pendingCardAction, onOpen,
         active ? "border-line-accent" : "border-line-soft",
       )}
       data-testid={`role-management-card-${role.id}`}
+      data-role-card={role.id}
       data-has-portrait={view.coverPath ? "true" : "false"}
     >
       {view.coverPath ? (
         <>
           <img
-            className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-panel ease-out-soft motion-safe:group-hover:scale-[1.03]"
+            className="absolute inset-0 h-full w-full object-cover object-top"
+            data-vt-part="portrait"
             src={toFileUrl(view.coverPath)}
             alt=""
           />
@@ -57,8 +61,8 @@ export function RoleCard({ role, active, bridgeReady, pendingCardAction, onOpen,
         aria-label={`打开 ${role.name}`}
       />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] grid gap-1 p-4">
-        <h3 className="m-0 truncate font-display text-title text-ink">{role.name}</h3>
-        {view.description ? <p className="m-0 line-clamp-2 text-body-sm leading-5 text-ink-secondary">{view.description}</p> : null}
+        <h3 className="m-0 w-fit max-w-full truncate font-display text-title text-ink" data-vt-part="name">{role.name}</h3>
+        {view.description ? <p className="m-0 line-clamp-2 w-fit max-w-full text-body-sm leading-5 text-ink-secondary" data-vt-part="sub">{view.description}</p> : null}
       </div>
       <div className="absolute right-3 top-3 z-[3]">
         <ActionMenu

@@ -37,6 +37,7 @@ export function RoleManagementPage({
     <section
       className="role-management-page scrollbar-soft scrollbar-soft-accent h-full overflow-y-auto bg-gradient-app bg-fixed"
       data-testid="role-management-page"
+      data-role-page=""
     >
       <div className="mx-auto flex min-h-full w-full max-w-[1280px] flex-col px-8 pb-10 pt-8">
         {roles.length ? (

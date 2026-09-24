@@ -193,6 +193,8 @@
     --duration-enter: 240ms; /* a new chat message arriving */
     --duration-crossfade: 320ms; /* image swaps: mood portrait, chat background (shared/crossfadeLayerState.ts) */
     --duration-pulse: 600ms; /* one-shot attention pulse (jump-to-message highlight) */
+    --duration-morph: 420ms; /* shared-element view transition (role card <-> detail header), on ease-drawer */
+    --duration-page-rise: 380ms; /* the incoming page of a view transition rising in */
 
     /* ---------- legacy aliases (pre-restyle var names still used
        by tailwind.config + older components; keep pointing at the
@@ -784,6 +786,69 @@ button[role="combobox"]:focus-visible {
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
 
+/* ---------- view transitions (shared/viewTransition.ts) ----------
+   Role card <-> detail (roles/roleViewTransition.ts): the portrait, avatar,
+   name and intro morph on the drawer curve; the page they sit on fades out
+   while the incoming page rises in. Each group clips to its own radius. */
+::view-transition-group(role-portrait),
+::view-transition-group(role-avatar),
+::view-transition-group(role-name),
+::view-transition-group(role-sub) {
+  animation-duration: var(--duration-morph);
+  animation-timing-function: var(--ease-drawer);
+}
+
+::view-transition-group(role-portrait) {
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}
+
+::view-transition-group(role-avatar) {
+  overflow: hidden;
+  border-radius: 9999px;
+}
+
+::view-transition-old(role-portrait),
+::view-transition-new(role-portrait) {
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  animation-duration: var(--duration-morph);
+}
+
+::view-transition-old(role-name),
+::view-transition-new(role-name),
+::view-transition-old(role-sub),
+::view-transition-new(role-sub) {
+  width: auto;
+  height: 100%;
+  animation-duration: var(--duration-morph);
+  animation-timing-function: var(--ease-drawer);
+}
+
+/* Matches the main pane's rounded-l-lg so the page never paints outside it. */
+::view-transition-group(role-page) {
+  overflow: hidden;
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  animation-duration: 0s;
+}
+
+::view-transition-old(role-page) {
+  animation: view-transition-fade-out var(--duration-quick) ease both;
+}
+
+::view-transition-new(role-page) {
+  animation: view-transition-rise-in var(--duration-page-rise) var(--ease-out-soft) 80ms both;
+}
+
+@keyframes view-transition-fade-out {
+  to { opacity: 0; }
+}
+
+@keyframes view-transition-rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .feedback-toast,
   .motion-tab-enter {
@@ -850,5 +915,12 @@ button[role="combobox"]:focus-visible {
   .crossfade-in,
   .crossfade-out {
     animation: none;
+  }
+
+  /* View transitions name nothing under reduced motion (shared/viewTransition.ts);
+     what remains is the root crossfade, kept short. */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: var(--duration-fast);
   }
 }
