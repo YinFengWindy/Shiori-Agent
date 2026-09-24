@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from agent.config_models import Config
 from agent.tools.message_push import MessagePushTool
 from bootstrap.channels import start_channels
 from bus.event_bus import EventBus
@@ -14,10 +13,9 @@ from plugins.qqbot.backend.channel import QQBotChannel
 
 
 @pytest.mark.asyncio
-async def test_model_only_change_reuses_independently_owned_qqbot_connection(tmp_path):
-    from dataclasses import replace
-
-    config = Config(provider="", model="", api_key="")
+async def test_unchanged_credentials_reuse_independently_owned_qqbot_connection(
+    tmp_path,
+):
     resources = SharedHttpResources()
     old = QQBotChannel("account-A", "secret-A")
     new = QQBotChannel("account-A", "secret-A")
@@ -30,9 +28,8 @@ async def test_model_only_change_reuses_independently_owned_qqbot_connection(tmp
         event_bus=EventBus(),
     )
     try:
-        active = await start_channels(config, plugin_channels=[old], **context)
+        active = await start_channels(plugin_channels=[old], **context)
         candidate = await start_channels(
-            replace(config, max_tokens=2048),
             plugin_channels=[new],
             previous_host=active,
             **context,
@@ -41,7 +38,7 @@ async def test_model_only_change_reuses_independently_owned_qqbot_connection(tmp
         assert not active.requires_exclusive_handover(candidate)
         assert new._client.is_closed
         replacement = await start_channels(
-            config, plugin_channels=[changed], previous_host=active, **context
+            plugin_channels=[changed], previous_host=active, **context
         )
         assert replacement.channels == [changed]
         assert active.requires_exclusive_handover(replacement)
@@ -73,7 +70,6 @@ async def test_bot_command_changes_rebuild_only_channels_that_use_them(
     tmp_path, uses_bot_commands
 ):
     """命令列表变化只重建声明 uses_bot_commands 的渠道（如 Telegram）；其余复用。"""
-    config = Config(provider="", model="", api_key="")
     resources = SharedHttpResources()
     old, same, candidate = (
         _KeyedChannel(uses_bot_commands=uses_bot_commands) for _ in range(3)
@@ -88,10 +84,9 @@ async def test_bot_command_changes_rebuild_only_channels_that_use_them(
     commands = [("undo", "撤销上一轮对话")]
     try:
         active = await start_channels(
-            config, plugin_channels=[cast(Any, old)], bot_commands=commands, **context
+            plugin_channels=[cast(Any, old)], bot_commands=commands, **context
         )
         unchanged = await start_channels(
-            config,
             plugin_channels=[cast(Any, same)],
             bot_commands=list(commands),
             previous_host=active,
@@ -99,7 +94,6 @@ async def test_bot_command_changes_rebuild_only_channels_that_use_them(
         )
         assert unchanged.channels == [old]
         changed = await start_channels(
-            config,
             plugin_channels=[cast(Any, candidate)],
             bot_commands=[*commands, ("chatid", "查看我的 chat_id")],
             previous_host=active,
@@ -149,7 +143,6 @@ async def test_start_channels_wires_plugin_channels_with_shared_context(tmp_path
         controller = object()
         plugin_channel = _PluginChannel(starts)
         host = await start_channels(
-            Config(provider="openai", model="m", api_key="k"),
             bus=MessageBus(),
             session_manager=cast(Any, SessionManager(tmp_path)),
             push_tool=cast(Any, _PushTool()),
@@ -178,7 +171,6 @@ async def test_start_channels_without_plugin_channels_starts_nothing(tmp_path):
     resources = SharedHttpResources()
     try:
         host = await start_channels(
-            Config(provider="openai", model="m", api_key="k"),
             bus=MessageBus(),
             session_manager=SessionManager(tmp_path),
             push_tool=MessagePushTool(),
@@ -197,7 +189,6 @@ async def test_start_channels_desktop_mode_skips_message_channels(tmp_path):
     resources = SharedHttpResources()
     try:
         host = await start_channels(
-            Config(provider="openai", model="m", api_key="k"),
             bus=MessageBus(),
             session_manager=SessionManager(tmp_path),
             push_tool=MessagePushTool(),
@@ -228,17 +219,12 @@ async def test_reused_connection_stops_the_unused_candidate(tmp_path):
     )
     old = _KeyedChannel(uses_bot_commands=False)
     new = _KeyedChannel(uses_bot_commands=False)
-    config = Config(provider="", model="", api_key="")
     try:
-        active = await start_channels(
-            config, plugin_channels=[cast(Any, old)], **context
-        )
+        active = await start_channels(plugin_channels=[cast(Any, old)], **context)
         await active.start_all()
         candidate = await start_channels(
-            config,
             plugin_channels=[cast(Any, new)],
             previous_host=active,
-            strict=True,
             **context,
         )
         assert candidate.channels == [old]
