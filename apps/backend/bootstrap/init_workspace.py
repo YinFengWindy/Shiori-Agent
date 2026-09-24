@@ -193,7 +193,7 @@ def init_workspace(
     summary.next_steps = [
         f"1. 编辑 {config_path}，填写以下必填项：",
         '     [[llm.registrations]]  api_key = "sk-..."',
-        '     [channels.telegram]  token = "..."   （或配置 QQ 频道）',
+        '     [plugins.telegram]  token = "..."   （或配置 QQ 频道）',
         '     [memory.embedding]  api_key = "sk-..."',
         "2. 运行 uv run python apps/backend/main.py 启动。",
         "3. 向 bot 发一条消息，确认对话正常后，可在 config.toml 开启 proactive。",
