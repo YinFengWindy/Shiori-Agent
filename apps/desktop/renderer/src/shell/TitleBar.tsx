@@ -1,6 +1,7 @@
 import { ArrowsClockwise, CaretLeft, CaretRight, Minus, X } from "@phosphor-icons/react";
 import type { WindowControlAction } from "../../../src/bridge/shared";
 import { compactPressableClass, cx } from "../shared/styles";
+import { Tooltip } from "../shared/ui/Tooltip";
 
 // Window controls (minimize / maximize / close) deliberately get no press
 // scale: they are flush, edge-to-edge caption buttons like the native ones.
@@ -45,6 +46,7 @@ export function TitleBar({
   return (
     <header className="titlebar [-webkit-app-region:drag] flex h-[calc(var(--titlebar-height)+5px)] select-none items-center justify-between bg-transparent text-ink-muted">
       <div className={cx("titlebar-left flex h-full items-center gap-0 pl-0.5", minimal && "invisible")} aria-hidden={minimal || undefined} inert={minimal || undefined}>
+        <Tooltip label={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"} side="bottom">
         <button
           className={cx("titlebar-icon titlebar-sidebar", titlebarIconClass)}
           type="button"
@@ -62,15 +64,24 @@ export function TitleBar({
             aria-hidden="true"
           />
         </button>
-        <button className={cx("titlebar-icon titlebar-back", titlebarIconClass)} type="button" aria-label="后退" onClick={onGoBack} disabled={!canGoBack}>
-          <CaretLeft className="h-[17px] w-[17px]" weight="bold" aria-hidden="true" />
-        </button>
-        <button className={cx("titlebar-icon titlebar-forward", titlebarIconClass)} type="button" aria-label="前进" onClick={onGoForward} disabled={!canGoForward}>
-          <CaretRight className="h-[17px] w-[17px]" weight="bold" aria-hidden="true" />
-        </button>
-        <button className={cx("titlebar-icon titlebar-refresh", titlebarIconClass)} type="button" aria-label="刷新会话" onClick={onRefreshSession} disabled={!canRefreshSession}>
-          <ArrowsClockwise className="h-[14px] w-[14px]" aria-hidden="true" />
-        </button>
+        </Tooltip>
+        <Tooltip label="后退" side="bottom" disabled={!canGoBack}>
+          <button className={cx("titlebar-icon titlebar-back", titlebarIconClass)} type="button" aria-label="后退" onClick={onGoBack} disabled={!canGoBack}>
+            <CaretLeft className="h-[17px] w-[17px]" weight="bold" aria-hidden="true" />
+          </button>
+        </Tooltip>
+        <Tooltip label="前进" side="bottom" disabled={!canGoForward}>
+          <button className={cx("titlebar-icon titlebar-forward", titlebarIconClass)} type="button" aria-label="前进" onClick={onGoForward} disabled={!canGoForward}>
+            <CaretRight className="h-[17px] w-[17px]" weight="bold" aria-hidden="true" />
+          </button>
+        </Tooltip>
+        {/* One conversation per role, so this reloads *the* conversation: its
+            messages, the role, and — if the local service had stopped — the connection. */}
+        <Tooltip label="重新载入对话 · 重新读取聊天记录与连接" side="bottom" disabled={!canRefreshSession}>
+          <button className={cx("titlebar-icon titlebar-refresh", titlebarIconClass)} type="button" aria-label="重新载入对话" onClick={onRefreshSession} disabled={!canRefreshSession}>
+            <ArrowsClockwise className="h-[14px] w-[14px]" aria-hidden="true" />
+          </button>
+        </Tooltip>
       </div>
       <div className="window-controls ml-auto flex h-full items-center">
         <button className={cx("window-control", windowControlClass)} type="button" aria-label="最小化" onClick={() => controlWindow("minimize")}>
