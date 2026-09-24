@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useFrameTicker } from "../../hooks/useFrameTicker";
-import { usePrefersReducedMotion } from "../../hooks/usePrefersReducedMotion";
+import { useFrameTicker } from "../../../shared/adv/useFrameTicker";
+import { usePrefersReducedMotion } from "../../../shared/usePrefersReducedMotion";
 
 /** Pause on the finished sample before it starts typing again. */
 const HOLD_MS = 1200;

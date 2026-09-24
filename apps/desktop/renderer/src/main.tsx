@@ -63,6 +63,7 @@ import type {
   SessionPayload,
 } from "./shared/types";
 import "./styles.css";
+import "./shared/adv/adv.css";
 import { useOnboardingController } from "./onboarding/useOnboardingController";
 import { OnboardingPage } from "./onboarding/OnboardingPage";
 

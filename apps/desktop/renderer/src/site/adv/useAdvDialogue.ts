@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer } from "react";
-import { useFrameTicker } from "../hooks/useFrameTicker";
+import { useFrameTicker } from "../../shared/adv/useFrameTicker";
 import {
   advChoices,
   advReducer,

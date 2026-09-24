@@ -2,7 +2,8 @@ import { useState } from "react";
 import { CharacterOutfitPicker } from "../components/character/CharacterOutfitPicker";
 import { CharacterPortrait } from "../components/character/CharacterPortrait";
 import { CharacterProfileCard } from "../components/character/CharacterProfileCard";
-import { SiteScene } from "../components/SiteScene";
+import { SceneBackdrop } from "../../shared/scene/SceneBackdrop";
+import { pageLoadScenePhase } from "../scene/pageLoadScenePhase";
 import { SubScreenHeader } from "../components/SubScreenHeader";
 import { CHARACTER_PROFILE } from "../content/characterProfile";
 import { SITE_CHARACTER_COPY } from "../content/siteCopy";
@@ -23,7 +24,7 @@ export function CharacterScreen({ onBack }: CharacterScreenProps) {
 
   return (
     <div className="site-screen site-subscreen relative flex h-dvh min-h-0 flex-col overflow-hidden">
-      <SiteScene />
+      <SceneBackdrop phase={pageLoadScenePhase} />
       <div className="site-subscreen-veil pointer-events-none absolute inset-0" aria-hidden="true" />
       <SubScreenHeader title={SITE_CHARACTER_COPY.title} eyebrow={SITE_CHARACTER_COPY.eyebrow} onBack={onBack} />
       <main className="site-character-layout relative grid min-h-0 flex-1">

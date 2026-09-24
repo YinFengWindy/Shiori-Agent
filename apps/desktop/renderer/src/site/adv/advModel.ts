@@ -10,6 +10,8 @@
  * → phase "ended" (the screen returns to the title).
  */
 
+import { advanceTypewriter, startTypewriter } from "../../shared/adv/typewriter";
+
 /**
  * What fills the stage above the dialogue box while a segment plays: 吟风's
  * standing sprite, or an event CG that takes the sprite's place. `key` names
@@ -102,14 +104,12 @@ function segmentOf<Art extends AdvArt>(ref: AdvSegmentRef, script: AdvScript<Art
 /** Enter `lineIndex` of `segment`: reset typewriter/auto timers, log the line. */
 function startLine(state: AdvState, segment: AdvSegmentRef, lineIndex: number, config: AdvConfig): AdvState {
   const text = segmentOf(segment, config.script).lines[lineIndex];
-  const instant = config.reducedMotion || config.msPerChar <= 0;
   return {
     ...state,
     phase: "line",
     segment,
     lineIndex,
-    shownChars: instant ? text.length : 0,
-    pendingMs: 0,
+    ...startTypewriter(text.length, config),
     autoElapsedMs: 0,
     backlog: [...state.backlog, { kind: "line", text }],
   };
@@ -183,13 +183,7 @@ function advance(state: AdvState, config: AdvConfig): AdvState {
 function tick(state: AdvState, elapsedMs: number, config: AdvConfig): AdvState {
   const line = currentLine(state, config.script);
   if (line === null || elapsedMs <= 0) return state;
-  if (state.shownChars < line.length) {
-    if (config.reducedMotion || config.msPerChar <= 0) return { ...state, shownChars: line.length, pendingMs: 0 };
-    const total = state.pendingMs + elapsedMs;
-    const chars = Math.floor(total / config.msPerChar);
-    const shownChars = Math.min(line.length, state.shownChars + chars);
-    return { ...state, shownChars, pendingMs: shownChars >= line.length ? 0 : total - chars * config.msPerChar };
-  }
+  if (state.shownChars < line.length) return { ...state, ...advanceTypewriter(state, elapsedMs, line.length, config) };
   if (!state.autoMode) return state;
   const autoElapsedMs = state.autoElapsedMs + elapsedMs;
   return autoElapsedMs >= autoAdvanceDelayMs(line) ? advance(state, config) : { ...state, autoElapsedMs };

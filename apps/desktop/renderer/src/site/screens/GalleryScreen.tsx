@@ -1,4 +1,5 @@
-import { SiteScene } from "../components/SiteScene";
+import { SceneBackdrop } from "../../shared/scene/SceneBackdrop";
+import { pageLoadScenePhase } from "../scene/pageLoadScenePhase";
 import { SubScreenHeader } from "../components/SubScreenHeader";
 import { CgGrid } from "../components/gallery/CgGrid";
 import { CgLightbox } from "../components/gallery/CgLightbox";
@@ -25,7 +26,7 @@ export function GalleryScreen({ onBack }: GalleryScreenProps) {
   return (
     <>
       <div className="site-screen site-subscreen relative flex h-dvh min-h-0 flex-col overflow-hidden">
-        <SiteScene />
+        <SceneBackdrop phase={pageLoadScenePhase} />
         <div className="site-subscreen-veil pointer-events-none absolute inset-0" aria-hidden="true" />
         <SubScreenHeader title={SITE_GALLERY_COPY.title} eyebrow={SITE_GALLERY_COPY.eyebrow} onBack={onBack}>
           <p className="site-gallery-count shrink-0 rounded-full">
