@@ -4,6 +4,7 @@ import {
   getPluginEnabledPredicate,
   subscribePluginEnabledState,
 } from "./pluginEnabledStateStore";
+import { errorMessage } from "../shared/feedback/feedbackStore";
 
 /**
  * Subscribes to the shared plugin-enabled cache and triggers its first
@@ -21,7 +22,17 @@ export function usePluginEnabledState(): (pluginId: string) => boolean {
     getPluginEnabledPredicate,
   );
   useEffect(() => {
-    void ensurePluginEnabledStateLoaded();
+    // This mount-time load is a boundary with nothing to show: the user already
+    // sees an unreachable bridge (offline banner / onboarding error), and the
+    // bridge lifecycle refresh reports roster failures as feedback. Record it
+    // as a diagnostic instead of leaving an unhandled rejection.
+    ensurePluginEnabledStateLoaded().catch((error: unknown) => {
+      window.miraDesktop.reportRendererDiagnostic({
+        kind: "error",
+        message: `插件状态加载失败：${errorMessage(error)}`,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    });
   }, []);
   return isPluginEnabled;
 }

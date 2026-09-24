@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { resolve } from "node:path";
-import { _electron } from "playwright";
+import { _electron, type Page } from "playwright";
 
 const output = resolve(".test-tmp-root/onboarding-qa");
 await mkdir(output, { recursive: true });
@@ -15,7 +15,9 @@ async function launch() {
     env: { ...process.env, SHIORI_QA_HOME: home, SHIORI_DESKTOP_USER_DATA_DIR: resolve(isolated, "user-data"),
       SHIORI_RENDERER_DEV_SERVER_URL: process.env.SHIORI_QA_URL ?? "http://127.0.0.1:5187" },
   });
-  const page = await app.firstWindow();
+  // The hidden plugin-host background window may open before the main window.
+  const isMainWindow = (window: Page) => new URL(window.url()).pathname.replace(/\/index\.html$/, "/") === "/";
+  const page = app.windows().find(isMainWindow) ?? await app.waitForEvent("window", { predicate: isMainWindow });
   page.setDefaultTimeout(20_000);
   return { app, page };
 }

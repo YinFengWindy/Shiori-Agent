@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { configureSettingsConfigPath, loadSettingsData } from "../../src/settings";
-import { installOnboardingFakeBridge } from "./fakeBridge";
+import { fakeBridgeOfflineMessage, installOnboardingFakeBridge } from "./fakeBridge";
 
 const url = process.env.SHIORI_QA_URL ?? "http://127.0.0.1:5187";
 const output = resolve(".test-tmp-root/onboarding-qa");
@@ -27,7 +27,7 @@ try {
   await context.route("**/qa-avatar.png", (route) => route.fulfill({ path: resolve("assets/shiori-app-icon.png"), contentType: "image/png" }));
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
-  page.on("pageerror", (error) => { errors.push(error.message); console.error(error.message); });
+  page.on("pageerror", (error) => { errors.push(error.message); console.error(error.stack ?? error.message); });
   await page.goto(url);
   await heading(page, "注册模型");
   await page.screenshot({ path: resolve(output, "model-desktop.png") });
@@ -42,13 +42,18 @@ try {
   await state(page, { sessionId: "launch-2" });
   await heading(page, "注册模型");
   await state(page, { offline: true });
-  await page.getByRole("alert").filter({ hasText: "测试连接失败" }).waitFor();
+  await page.getByRole("alert").filter({ hasText: fakeBridgeOfflineMessage }).waitFor();
   assert.equal(await page.getByRole("button", { name: "保存并继续" }).isEnabled(), false);
   await page.getByRole("button", { name: "模型注册设置" }).click();
   await page.getByRole("button", { name: "返回引导" }).click();
   await state(page, { offline: false, failSave: true });
   await heading(page, "注册模型");
   await page.getByRole("textbox", { name: "模型", exact: true }).fill("qa-model");
+  await page.getByRole("button", { name: "测试连接" }).click();
+  await page.getByRole("status").filter({ hasText: "连接成功" }).waitFor();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("qa:bridge", { detail: { connectionResult: { ok: false, message: "AuthenticationError: 401 Unauthorized" } } })));
+  await page.getByRole("button", { name: "测试连接" }).click();
+  await page.getByRole("status").filter({ hasText: "AuthenticationError: 401" }).waitFor();
   await page.getByRole("button", { name: "保存并继续" }).click();
   await page.getByRole("alert").filter({ hasText: "测试模型保存失败" }).waitFor();
   assert.equal(await page.getByRole("textbox", { name: "模型", exact: true }).inputValue(), "qa-model");
@@ -78,7 +83,7 @@ try {
   await page.getByRole("textbox", { name: "角色设定", exact: true }).fill("安静、细心");
   await page.getByRole("button", { name: "上传头像" }).click();
   await page.getByRole("button", { name: "创建角色", exact: true }).click();
-  await page.getByRole("alert").filter({ hasText: "测试连接失败" }).waitFor();
+  await page.getByRole("alert").filter({ hasText: fakeBridgeOfflineMessage }).waitFor();
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("qa:bridge", { detail: { offline: false } })));
   await page.getByRole("button", { name: "重试连接" }).click();
   await heading(page, "进入工作区");
@@ -99,5 +104,7 @@ try {
   await page.locator(".app-frame").waitFor();
   assert.equal(await page.getByTestId("onboarding-page").count(), 0);
   assert.deepEqual(errors, []);
-  console.log("PASS: first run, skip/reload/relaunch, bridge/settings failure, model save, role/avatar failure and recovery, completion/relaunch, responsive layout");
+  // Every bridge method the renderer called has a real-shaped fake payload.
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.onboarding.bridge")!).unknownMethods), []);
+  console.log("PASS: first run, skip/reload/relaunch, bridge/settings failure, connection test, model save, role/avatar failure and recovery, completion/relaunch, responsive layout");
 } finally { await browser.close(); }

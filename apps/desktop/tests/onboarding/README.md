@@ -15,7 +15,7 @@ pnpm desktop:test:onboarding:electron
 
 The browser test uses a persistent fake bridge and Edge on Windows. Set
 `SHIORI_QA_BROWSER` to another Chromium executable or `SHIORI_QA_URL` to another
-renderer URL when needed. It checks failed reads/writes, retry behavior, temporary
+renderer URL when needed. It checks failed reads/writes, model connection test results, retry behavior, temporary
 dismissal, restart recovery, avatar selection/removal, completion, existing-user
 exemption, and desktop/mobile screenshots.
 
