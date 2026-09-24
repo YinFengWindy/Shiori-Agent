@@ -139,5 +139,5 @@ def test_external_channel_declaration_errors_block_the_package(contract_package)
     assert "desktop" in caught.value.diagnostic.reason
 
 
-def test_host_advertises_runtime_api_with_channel_declarations():
-    assert HostRuntimeContract().runtime_api == "2.2.0"
+def test_host_advertises_runtime_api_with_channel_hooks():
+    assert HostRuntimeContract().runtime_api == "2.3.0"

@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.2.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.3.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -137,6 +137,27 @@ activate; `error` keeps the cause) or `plugin_disabled`. A channel may implement
 an optional `status()` returning `{connected, account?, detail?}`; `status` is
 that value for an active channel and `null` otherwise. Changes follow the existing
 `runtime.applied` broadcast; there is no separate channel event.
+
+## Runtime API 2.3 channel hooks
+
+API 2.3 replaces the host's channel-name checks with optional hooks on the
+channel object. The core resolves a hook by channel name against the published
+connections (a draining, retired connection still answers for its own replies);
+an absent hook yields the neutral default. Protocols live in
+`infra.channels.contract`:
+
+| Hook | Effect | Default |
+| --- | --- | --- |
+| `supports_stream_events(chat_id) -> bool` | turns for this chat publish `StreamDeltaReady` | no stream events |
+| `system_prompt_hint(chat_id) -> str` | Markdown appended after a blank line at the end of the system prompt | nothing appended |
+| `default_chat_type: str` | `chat_type` the hub assigns when inbound metadata has none | `"unknown"` |
+
+`desktop` stays host-owned: role-owned `role:<id>` desktop sessions always
+stream. `MessagePushTool.register_channel(..., description=...)` accepts a short
+identity/`chat_id` format note; the `message_push` tool description lists only
+currently registered, non-retired channels with those notes. Packages using the
+hooks or `description` must require `runtime_api: ">=2.3.0 <3.0.0"`: older hosts
+ignore the hooks and reject the unknown keyword.
 
 ## Renderer artifacts and dependencies
 

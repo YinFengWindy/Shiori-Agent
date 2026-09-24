@@ -121,6 +121,39 @@ channels:
 - 渠道的启停和换代由宿主的 ChannelHost 管理，不要用 `background` 自己起连接任务。跨代复用连接时，渠道提供 `configuration_key`，宿主会连同 bot 命令列表一起比较，任一变化都重建连接。
 - 渠道可以实现可选的 `status()`，返回 `{"connected": bool, "account": str, "detail": str}`（`account`、`detail` 可省略），`channels.list` 会原样带给桌面端。
 
+### 渠道钩子（Runtime API 2.3）
+
+核心不按渠道名写死策略，而是向渠道对象询问下面几个可选钩子；不实现就取中性默认值。协议定义在 `infra.channels.contract`：
+
+| 钩子 | 作用 | 不实现时 |
+| --- | --- | --- |
+| `supports_stream_events(chat_id) -> bool` | 这个会话是否接收 `StreamDeltaReady` 流式事件，用于实时预览 | 不发流式事件，只收到最终回复 |
+| `system_prompt_hint(chat_id) -> str` | 追加在系统提示词末尾（空一行）的渠道规则，例如渲染限制 | 不追加 |
+| `default_chat_type: str`（类属性） | 入站消息没带 `chat_type` 时由路由补上的值 | `"unknown"` |
+
+```python
+class QQBotChannel:
+    name = "qqbot"
+
+    def supports_stream_events(self, chat_id: str) -> bool:
+        return chat_id.startswith("c2c:")  # 群聊只收最终回复
+
+    def system_prompt_hint(self, chat_id: str) -> str:
+        return "## 官方 QQBot 渠道规则（硬性）\n- 发送消息时使用 `channel=qqbot`。"
+
+    async def start(self, ctx):
+        ctx.push_tool.register_channel(
+            self.name,
+            text=self.send,
+            description="官方 QQBot，私聊 chat_id 格式为 c2c:<user_openid>",
+        )
+```
+
+- 钩子按渠道名查询当前已发布的连接；换代中正在排空的旧连接仍按它自己的钩子回答。
+- 开了流式事件就要订阅 `StreamDeltaReady` 并自己节流，最终回复仍经出站消息送达。
+- `register_channel(..., description=...)` 的说明写进 `message_push` 工具描述的「当前可用渠道」列表，用来告诉模型渠道身份和 chat_id 格式。工具描述只列出当前已注册、未停用的渠道。
+- 用到这些钩子或 `description` 参数的包要声明 `runtime_api: ">=2.3.0 <3.0.0"`；旧宿主会忽略钩子，并拒绝未知的 `description` 参数。
+
 ## 阶段与依赖
 
 阶段槽位为 `before_turn`、`before_reasoning`、`prompt_render`、`before_step`、`after_step`、`after_reasoning`、`after_turn`。模块声明唯一 `slot`、所需 `requires` 和导出的 `produces`；宿主核心拥有具体执行顺序与帧语义。
