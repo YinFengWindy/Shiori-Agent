@@ -24,6 +24,7 @@ async function mountImport({
   let replaceForm!: React.Dispatch<React.SetStateAction<ReturnType<typeof createEmptyNewRoleForm>>>;
   let currentForm = createEmptyNewRoleForm();
   const feedbackMessages: string[] = [];
+  const feedbackDetails: Array<string | undefined> = [];
   const requests: Array<Parameters<Window["miraDesktop"]["invoke"]>[0]> = [];
 
   function Harness() {
@@ -32,7 +33,7 @@ async function mountImport({
     replaceForm = setForm;
     controller = useRoleCardImport({
       updateNewRoleForm: setForm,
-      reportImportError: (message) => { feedbackMessages.push(message); },
+      reportImportError: (message, options) => { feedbackMessages.push(message); feedbackDetails.push(options?.detail); },
     });
     return <output>{controller.roleCardImport.status}:{form.name}</output>;
   }
@@ -49,7 +50,7 @@ async function mountImport({
     },
   });
   return {
-    ...view, requests, feedbackMessages,
+    ...view, requests, feedbackMessages, feedbackDetails,
     get controller() { return controller; },
     get form() { return currentForm; },
     async replaceForm(next: React.SetStateAction<ReturnType<typeof createEmptyNewRoleForm>>) {
@@ -131,6 +132,18 @@ describe("useRoleCardImport", () => {
       assert.equal(view.controller.roleCardImport.status, "idle");
       assert.match(view.feedbackMessages.at(-1) ?? "", /Invalid card/);
       assert.equal(view.form.importId, undefined);
+    } finally { await view.cleanup(); }
+  });
+
+  it("reports a card without character data in plain Chinese and keeps the raw cause as detail", async () => {
+    const view = await mountImport({
+      pickRoleCard: async () => "photo.png",
+      invoke: async () => response({}, { code: "invalid_request", message: "角色卡图片缺少 chara 或 ccv3 metadata" }),
+    });
+    try {
+      await act(async () => view.controller.previewRoleCard());
+      assert.equal(view.feedbackMessages.at(-1), "角色导入失败：这张图片里没有找到角色卡数据");
+      assert.equal(view.feedbackDetails.at(-1), "角色卡图片缺少 chara 或 ccv3 metadata");
     } finally { await view.cleanup(); }
   });
 
