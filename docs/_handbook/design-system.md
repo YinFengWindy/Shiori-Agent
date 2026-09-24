@@ -189,7 +189,8 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 - 展开/收起用 `grid-template-rows: 0fr → 1fr` 的写法（见 `.chat-thinking-content`），不要用 max-height 猜数值
 - **`styles.css` 末尾有统一的 `@media (prefers-reduced-motion: reduce)` 块**（这里不写行号，行号会漂）：新增循环动画或较大位移的过渡时，
   必须同时在这个块里给出降级（`animation: none` 或退化成 opacity 过渡）。
-  Tailwind 类就近写 `motion-reduce:*`；motion/react 动画由根节点的 `<MotionConfig reducedMotion="user">` 统一去掉位移，
+  Tailwind 类就近处理：挂在 `hover:` / `active:` / `group-hover:` 上的位移和缩放写成 `motion-safe:hover:*`
+  （`motion-reduce:transform-none` 在 CSS 里排在这些变体前面，盖不住），其余用 `motion-reduce:*`；motion/react 动画由根节点的 `<MotionConfig reducedMotion="user">` 统一去掉位移，
   需要自己判断的组件用 `useReducedMotion()`；命令式滚动用 `shared/reducedMotion.ts` 的 `prefersReducedMotion()`
 
 ## 图标
