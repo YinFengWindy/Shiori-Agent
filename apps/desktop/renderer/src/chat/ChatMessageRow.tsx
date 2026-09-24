@@ -1,25 +1,39 @@
 import React, { useCallback } from "react";
+import { ChatErrorRow } from "./ChatErrorRow";
+import { ChatMessageActionBar } from "./ChatMessageActionBar";
 import { ChatMessageAttachments } from "./ChatMessageAttachments";
-import { ChatMarkdownContent } from "./ChatMarkdownContent";
-import { ChatReplyMetrics } from "./ChatReplyMetrics";
-import { ChatThinkingBlock } from "./ChatThinkingBlock";
-import { ChatToolCalls } from "./ChatToolCalls";
+import { ChatMessageBubbleBody, hasChatMessageBubbleContent } from "./ChatMessageBubbleBody";
 import {
+  getChatMessageActionAvailability,
   getChatMessageSourceLabel,
-  getStoredChatReplyPreview,
 } from "./chatMessageActions";
 import { getChatMessageDomKey } from "./chatMessageIdentity";
-import { getChatMessagePresentation } from "./chatMessagePresentation";
-import { parseChatTurnMetrics } from "./chatTurnMetrics";
+import type { RoleChannelCatalog } from "../roles/roleChannelCatalog";
 import { formatTimestamp, toFileUrl } from "../shared/format";
 import { cx } from "../shared/styles";
 import type { RoleRecord, SessionMessage } from "../shared/types";
 
-type ChatMessageRowProps = {
+/** Per-message actions raised by the hover bar and the error row. */
+export type ChatMessageActionHandlers = {
+  onCopyMessage: (message: SessionMessage) => void;
+  onQuoteMessage: (message: SessionMessage, messageKey: string, sender: string) => void;
+  onRetryMessage: (renderKey: string) => void;
+};
+
+type ChatMessageRowProps = ChatMessageActionHandlers & {
   activeRole: RoleRecord | null;
   index: number;
+  /** Stable render key (see `getChatMessageReactKey`); retry targets it. */
+  renderKey: string;
   isHighlighted: boolean;
   message: SessionMessage;
+  /** The row was appended after this session was shown and plays the enter animation. */
+  animateEnter: boolean;
+  /** A reply is in flight: quoting is locked and retry waits. */
+  sending: boolean;
+  /** This is the latest failed turn and can be retried. */
+  retryable: boolean;
+  channelCatalog: RoleChannelCatalog;
   onBeginAttachmentDrag: (path: string) => void;
   onJumpToMessage: (messageKey: string) => void;
   onMeasureElement?: (message: SessionMessage, index: number, element: HTMLElement | null) => void;
@@ -40,43 +54,63 @@ const assistantMessageBubbleClass =
 const userMessageBubbleClass =
   "message-bubble w-fit max-w-full rounded-lg border border-line-soft bg-white px-3.5 py-2.5 text-left shadow-soft";
 
+function RoleAvatarMark({ role }: { role: RoleRecord | null }) {
+  if (role?.avatar_abs) {
+    return <img className={agentAvatarClass} src={toFileUrl(role.avatar_abs)} alt={`${role.name} 的头像`} />;
+  }
+  return (
+    <span className={cx(agentAvatarClass, "text-xs font-bold text-accent-text")}>
+      {role ? role.name.slice(0, 1).toUpperCase() : "A"}
+    </span>
+  );
+}
+
 /** Renders one independently memoized chat message so unaffected Markdown stays out of updates. */
 export const ChatMessageRow = React.memo(function ChatMessageRow({
   activeRole,
   index,
+  renderKey,
   isHighlighted,
   message,
+  animateEnter,
+  sending,
+  retryable,
+  channelCatalog,
   onBeginAttachmentDrag,
   onJumpToMessage,
   onMeasureElement,
   onOpenContextMenu,
   onOpenImagePreview,
+  onCopyMessage,
+  onQuoteMessage,
+  onRetryMessage,
 }: ChatMessageRowProps) {
   const isUser = message.role === "user";
   const isError = message.role === "error";
-  const isAssistant = message.role === "assistant";
-  const authorLabel = isError ? "系统提示" : (isUser ? "你" : (activeRole?.name || "Agent"));
+  const authorLabel = isError ? "系统提示" : (isUser ? "你" : (activeRole?.name || "角色"));
   const messageDomKey = getChatMessageDomKey(message, index);
-  const sourceLabel = getChatMessageSourceLabel(message);
-  const storedReplyPreview = getStoredChatReplyPreview(message);
-  const isStreaming = Boolean(message.streaming);
-  const presentation = getChatMessagePresentation(message);
-  const thinking = presentation.finalThinking;
-  const turnMetrics = parseChatTurnMetrics(message.metadata?.turn_metrics);
-  const thinkingDurationMs = turnMetrics.thinking_duration_ms;
-  const toolChain = presentation.toolChain;
-  const hasToolCalls = toolChain.some((group) => group.calls.length > 0);
-  const bubbleClass = isError
-    ? "message-bubble w-fit max-w-full rounded-lg border border-[var(--danger-300)] bg-danger-soft px-3.5 py-2.5 text-left text-danger-text shadow-soft"
-    : isUser
-      ? userMessageBubbleClass
-      : assistantMessageBubbleClass;
+  const sourceLabel = getChatMessageSourceLabel(message, channelCatalog);
+  const availability = getChatMessageActionAvailability(message, { sending, retryable });
   const measureElement = useCallback((element: HTMLElement | null) => {
     onMeasureElement?.(message, index, element);
   }, [index, message, onMeasureElement]);
   const openContextMenu = useCallback((event: React.MouseEvent<HTMLElement>) => {
     onOpenContextMenu(event, message, messageDomKey, authorLabel);
   }, [authorLabel, message, messageDomKey, onOpenContextMenu]);
+  const retry = useCallback(() => onRetryMessage(renderKey), [onRetryMessage, renderKey]);
+
+  if (isError) {
+    return (
+      <article
+        ref={measureElement}
+        data-message-key={messageDomKey}
+        className={cx("w-full", animateEnter && "chat-message-enter")}
+        onContextMenu={openContextMenu}
+      >
+        <ChatErrorRow content={message.content} canRetry={availability.retry} onRetry={retry} />
+      </article>
+    );
+  }
 
   return (
     <article
@@ -86,100 +120,35 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
         "group w-full",
         isHighlighted && "message-hit-anchor",
         isUser && "text-right",
+        animateEnter && (isUser ? "chat-message-enter chat-message-enter-user" : "chat-message-enter"),
       )}
       onContextMenu={openContextMenu}
     >
       <div className={cx("message-row flex w-full items-start gap-3", isUser && "flex-row-reverse justify-start")}>
-        {!isUser ? (
-          activeRole?.avatar_abs ? (
-            <img
-              className={agentAvatarClass}
-              src={toFileUrl(activeRole.avatar_abs)}
-              alt={`${activeRole.name} avatar`}
-            />
-          ) : (
-            <span className={cx(agentAvatarClass, "text-xs font-bold text-accent-deep")}>
-              {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "A"}
-            </span>
-          )
-        ) : null}
+        {!isUser ? <RoleAvatarMark role={activeRole} /> : null}
         <div className={cx("message-body flex min-w-0 w-full max-w-[82%] flex-col text-sm leading-6 text-ink", isUser && "ml-auto items-end")}>
           {!isUser ? (
             <div className={cx("message-author mb-1 font-medium leading-none text-ink-faint", chatMinorTextClass)}>
               {authorLabel}
             </div>
           ) : null}
-          <div className={cx(
-            bubbleClass,
-            !message.content
-              && !storedReplyPreview
-              && !isStreaming
-              && !thinking
-              && !hasToolCalls
-              && !presentation.hasIntermediateNarrative
-              && "hidden",
-            isHighlighted && "message-bubble-highlight ring-2 ring-ring-soft",
-          )}>
-            {storedReplyPreview ? (
-              storedReplyPreview.messageId ? (
-                <button
-                  className="mb-2 block max-w-[420px] border-0 bg-transparent p-0 text-left transition hover:opacity-85 focus:outline-none"
-                  type="button"
-                  aria-label="跳转到被引用消息"
-                  onClick={() => onJumpToMessage(storedReplyPreview.messageId)}
-                >
-                  <div className="border-l-2 border-line-accent pl-2.5">
-                    {storedReplyPreview.sender ? (
-                      <div className="truncate text-[11px] font-medium leading-4 text-ink-muted">{storedReplyPreview.sender}</div>
-                    ) : null}
-                    <div className="line-clamp-2 text-[12px] leading-5 text-ink-faint">{storedReplyPreview.preview}</div>
-                  </div>
-                </button>
-              ) : (
-                <div className="mb-2 max-w-[420px] border-l-2 border-line-accent pl-2.5 text-left">
-                  {storedReplyPreview.sender ? (
-                    <div className="truncate text-[11px] font-medium leading-4 text-ink-muted">{storedReplyPreview.sender}</div>
-                  ) : null}
-                  <div className="line-clamp-2 text-[12px] leading-5 text-ink-faint">{storedReplyPreview.preview}</div>
-                </div>
-              )
-            ) : null}
-            {presentation.hasIntermediateNarrative ? (
-              toolChain.map((group, groupIndex) => (
-                <React.Fragment key={`tool-group:${groupIndex}`}>
-                  {group.reasoning_content.trim() ? (
-                    <ChatThinkingBlock content={group.reasoning_content} streaming={false} />
-                  ) : null}
-                  {group.text.trim() ? <ChatMarkdownContent content={group.text} /> : null}
-                  {group.calls.length ? <ChatToolCalls groups={[group]} streaming={isStreaming} /> : null}
-                </React.Fragment>
-              ))
-            ) : (
-              <>
-                {thinking ? <ChatThinkingBlock content={thinking} streaming={isStreaming && !message.content} thinkingDurationMs={thinkingDurationMs} /> : null}
-                {hasToolCalls ? <ChatToolCalls groups={toolChain} streaming={isStreaming} /> : null}
-              </>
-            )}
-            {presentation.hasIntermediateNarrative && thinking ? (
-              <ChatThinkingBlock
-                content={thinking}
-                streaming={isStreaming && !message.content}
-                thinkingDurationMs={thinkingDurationMs}
-              />
-            ) : null}
-            {!isAssistant ? (
-              <div className="message-content whitespace-pre-wrap break-words">
-                {message.content}
-                {isStreaming && (message.content || !thinking) ? <span className="chat-stream-cursor ml-0.5" aria-hidden="true" /> : null}
+          {hasChatMessageBubbleContent(message) ? (
+            <div className={cx("relative max-w-full", isUser ? "self-end" : "self-start")}>
+              <div className={cx(
+                isUser ? userMessageBubbleClass : assistantMessageBubbleClass,
+                isHighlighted && "message-bubble-highlight",
+              )}>
+                <ChatMessageBubbleBody message={message} onJumpToMessage={onJumpToMessage} />
               </div>
-            ) : (
-              <>
-                <ChatMarkdownContent content={message.content} />
-                {isStreaming && (message.content || !thinking) ? <span className="chat-stream-cursor ml-0.5" aria-hidden="true" /> : null}
-              </>
-            )}
-            {!isStreaming ? <ChatReplyMetrics metrics={turnMetrics} hasThinking={Boolean(thinking)} /> : null}
-          </div>
+              <ChatMessageActionBar
+                availability={availability}
+                side={isUser ? "left" : "right"}
+                onCopy={() => onCopyMessage(message)}
+                onQuote={() => onQuoteMessage(message, messageDomKey, authorLabel)}
+                onRetry={retry}
+              />
+            </div>
+          ) : null}
           <ChatMessageAttachments
             messageKey={messageDomKey}
             media={message.media}
@@ -187,9 +156,9 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
             onOpenImagePreview={onOpenImagePreview}
           />
           {message.timestamp || sourceLabel ? (
-            <div className={cx("message-time mt-1 flex items-center gap-2 text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100", chatMinorTextClass)}>
+            <div className={cx("message-time mt-1 flex items-center gap-2 text-ink-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100", chatMinorTextClass)}>
               {message.timestamp ? <span>{formatTimestamp(message.timestamp)}</span> : null}
-              {sourceLabel ? <span>{`from ${sourceLabel.toLowerCase()}`}</span> : null}
+              {sourceLabel ? <span>{`来自${sourceLabel}`}</span> : null}
             </div>
           ) : null}
         </div>

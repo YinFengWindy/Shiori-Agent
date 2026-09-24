@@ -28,7 +28,7 @@ export const ChatThinkingBlock = React.memo(function ChatThinkingBlock({
       >
         <Sparkle size={15} weight="fill" className="text-ink-faint" aria-hidden="true" />
         <span className={cx("chat-thinking-label", streaming && "chat-thinking-label-streaming")}>
-          {streaming || thinkingDurationMs === undefined ? "Thinking" : formatThinkingDuration(thinkingDurationMs)}
+          {streaming || thinkingDurationMs === undefined ? "思考中" : formatThinkingDuration(thinkingDurationMs)}
         </span>
         <CaretDown
           size={14}

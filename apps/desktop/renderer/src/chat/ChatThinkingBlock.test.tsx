@@ -24,6 +24,6 @@ describe("ChatThinkingBlock", () => {
 
     assert.doesNotMatch(markup, /chat-thinking-label-streaming/);
     assert.doesNotMatch(markup, /chat-stream-cursor/);
-    assert.match(markup, /Thought for 6\.2s/);
+    assert.match(markup, /思考 6.2 秒/);
   });
 });

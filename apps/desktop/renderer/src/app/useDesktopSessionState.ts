@@ -5,7 +5,8 @@ import {
   shouldSurfaceChatCancellationFailure,
 } from "../chat/chatTurnOwnership";
 import { buildOptimisticUserChatMessage, normalizeChatAttachmentPaths } from "../chat/chatComposerState";
-import { ensureChatMessageRenderId, reconcileSessionMessageRenderIds } from "../chat/chatMessageIdentity";
+import { ensureChatMessageRenderId, getChatMessageReactKey, reconcileSessionMessageRenderIds } from "../chat/chatMessageIdentity";
+import { buildChatRetryRequest } from "../chat/chatFailedTurn";
 import {
   mergeIncomingSessionDuringSend,
   shouldClearPendingUserMessage,
@@ -629,6 +630,22 @@ export function useDesktopSessionState({
     }
   }
 
+  /**
+   * Retries the failed turn that ended in error row `errorKey`: the transient
+   * error row is dropped and the same user message goes through `sendMessage`
+   * again. The first attempt stays in the timeline — there is only one.
+   */
+  async function retryFailedChatTurn(errorKey: string): Promise<boolean> {
+    const session = activeSessionRef.current;
+    if (!session) return false;
+    const request = buildChatRetryRequest(session.messages, errorKey);
+    if (!request) return false;
+    updateCommittedActiveSession((current) => current?.key === session.key
+      ? { ...current, messages: current.messages.filter((message, index) => getChatMessageReactKey(message, index) !== errorKey) }
+      : current);
+    return sendMessage(request);
+  }
+
   async function cancelChatTurn(sessionKey: string, roleId: string): Promise<boolean> {
     const turnId = activeTurnIdsRef.current[sessionKey] ?? "";
     if (!turnId || !sessionKey) return false;
@@ -684,6 +701,7 @@ export function useDesktopSessionState({
     clearAllSendingSessions,
     clearSessionSending,
     cancelChatTurn,
+    retryFailedChatTurn,
     isCurrentChatTurn,
     isChatTurnCancelling,
     completeChatTurn,

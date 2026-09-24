@@ -109,6 +109,8 @@ type DesktopAppFrameProps = {
   onCopyMessage: (content: string) => void;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
   onCancelChat: () => void;
+  /** Re-sends the user message of the failed turn ending in this error row. */
+  onRetryFailedTurn: (errorKey: string) => void;
   onLoadOlderMessages: (sessionKey: string) => Promise<boolean>;
   detailRole: RoleRecord | null;
   pendingRoleCardAction: PendingRoleCardAction;
@@ -240,6 +242,7 @@ export function DesktopAppFrame({
   onCopyMessage,
   onSendMessage,
   onCancelChat,
+  onRetryFailedTurn,
   onLoadOlderMessages,
   detailRole,
   pendingRoleCardAction,
@@ -479,6 +482,7 @@ export function DesktopAppFrame({
               onCopyMessage={onCopyMessage}
               onSendMessage={onSendMessage}
               onCancelChat={onCancelChat}
+              onRetryFailedTurn={onRetryFailedTurn}
               onLoadOlderMessages={onLoadOlderMessages}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
             />

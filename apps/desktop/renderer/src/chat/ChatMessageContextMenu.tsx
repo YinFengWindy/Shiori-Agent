@@ -1,27 +1,26 @@
 import type React from "react";
-import {
-  getChatMessageCopyText,
-  getChatMessageReplyContent,
-  type MessageContextMenuState,
-} from "./chatMessageActions";
+import { ArrowClockwise } from "@phosphor-icons/react";
+import type { ChatMessageActionAvailability, MessageContextMenuState } from "./chatMessageActions";
 import { CopyIcon, QuoteIcon } from "../shared/icons";
 import { MenuItem, MenuPanel } from "../shared/ui/Menu";
 
 type ChatMessageContextMenuProps = {
   menu: MessageContextMenuState;
   menuRef: React.RefObject<HTMLDivElement | null>;
-  sending: boolean;
+  availability: ChatMessageActionAvailability;
   onCopy: () => void;
   onQuote: () => void;
+  onRetry: () => void;
 };
 
-/** Renders the copy and quote actions for one chat message. */
+/** Renders the right-click actions for one chat message; the same set as its hover bar. */
 export function ChatMessageContextMenu({
   menu,
   menuRef,
-  sending,
+  availability,
   onCopy,
   onQuote,
+  onRetry,
 }: ChatMessageContextMenuProps) {
   return (
     <MenuPanel
@@ -36,11 +35,17 @@ export function ChatMessageContextMenu({
         event.stopPropagation();
       }}
     >
+      {availability.retry ? (
+        <MenuItem data-testid="message-context-menu-retry" role="menuitem" onClick={onRetry}>
+          <ArrowClockwise className="h-[14px] w-[14px]" weight="bold" aria-hidden="true" />
+          <span>重试</span>
+        </MenuItem>
+      ) : null}
       <MenuItem
         data-testid="message-context-menu-copy"
         role="menuitem"
         onClick={onCopy}
-        disabled={!getChatMessageCopyText(menu.message)}
+        disabled={!availability.copy}
       >
         <CopyIcon className="h-[14px] w-[14px] fill-current" />
         <span>复制</span>
@@ -49,7 +54,7 @@ export function ChatMessageContextMenu({
         data-testid="message-context-menu-quote"
         role="menuitem"
         onClick={onQuote}
-        disabled={!getChatMessageReplyContent(menu.message) || sending}
+        disabled={!availability.quote}
       >
         <QuoteIcon className="h-[14px] w-[14px] fill-current" />
         <span>引用</span>

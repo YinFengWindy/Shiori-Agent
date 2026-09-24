@@ -10,8 +10,14 @@ export function parseChatTurnMetrics(value: unknown): ChatTurnMetrics {
   };
 }
 
+/** Formats the persisted thinking time shown on a finished reply, e.g. 「思考 6.2 秒」. */
 export function formatThinkingDuration(durationMs: number): string {
-  return `Thought for ${(durationMs / 1000).toFixed(1)}s`;
+  return `思考 ${(durationMs / 1000).toFixed(1)} 秒`;
+}
+
+/** Formats the provider token usage shown beneath a finished reply. */
+export function formatTokenUsage(totalTokens: number): string {
+  return `${totalTokens.toLocaleString()} 词元`;
 }
 
 function isNonNegativeNumber(value: unknown): value is number {

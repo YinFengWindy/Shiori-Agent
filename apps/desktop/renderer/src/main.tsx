@@ -251,6 +251,7 @@ function App(): React.ReactElement {
     clearAllSendingSessions,
     clearSessionSending,
     cancelChatTurn,
+    retryFailedChatTurn,
     completeChatTurn,
     isCurrentChatTurn,
     isChatTurnCancelling,
@@ -647,6 +648,7 @@ function App(): React.ReactElement {
       onCopyMessage={(content) => void copyChatMessage(content)}
       onSendMessage={sendMessage}
       onCancelChat={() => void cancelChatTurn(activeSessionKey, activeRoleId)}
+      onRetryFailedTurn={(errorKey) => void retryFailedChatTurn(errorKey)}
       onLoadOlderMessages={loadOlderMessages}
       detailRole={detailRole}
       pendingRoleCardAction={pendingRoleCardAction}
