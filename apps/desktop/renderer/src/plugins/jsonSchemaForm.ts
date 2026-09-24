@@ -154,9 +154,9 @@ export function readStringList(value: unknown): string[] {
 
 /**
  * The variable name when a stored text value is a bare `${NAME}` reference.
- * The backend expands a reference whose variable exists when it loads
- * config.toml, so a reference that reaches the form verbatim is one whose
- * variable is not set in Shiori's environment.
+ * `plugin.config.get` returns stored values unexpanded, so a reference reaches
+ * the form verbatim whether or not its variable is set; whether it resolves is
+ * reported separately (`PluginConfigSnapshot.envStatus`).
  */
 export function readEnvReference(value: unknown): string | null {
   if (typeof value !== "string") return null;

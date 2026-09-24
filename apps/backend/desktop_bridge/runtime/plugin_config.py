@@ -12,6 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from agent.config import has_config_reference, resolve_config_references
 from agent.plugin_host.config_schema import (
     format_validation_error,
     validate_against,
@@ -36,7 +37,16 @@ class RuntimePluginConfig:
         self._settings = settings
 
     def get(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Returns a plugin's declared JSON Schema (or None) and current values."""
+        """Returns a plugin's declared JSON Schema (or None) and current values.
+
+        Values come from the committed config text, *not* the runtime's
+        ``AppRuntime.config``: the latter has every ``${NAME}`` reference
+        already expanded, and the renderer round-trips the whole table on save,
+        so handing it resolved values would both leak the secret to the UI and
+        write it back to config.toml as plaintext on the next unrelated edit.
+        ``env_status`` tells the UI, per top-level field holding a reference,
+        whether that reference currently resolves.
+        """
         plugin_id = str(payload.get("plugin_id") or "").strip()
         if not plugin_id:
             raise RuntimeApplyError("runtime_invalid_request", "plugin_id 不能为空")
@@ -44,7 +54,7 @@ class RuntimePluginConfig:
         schema = (
             kernel.config_schemas.schema_for(plugin_id) if kernel is not None else None
         )
-        stored = dict(self._app.config.plugins.get(plugin_id, {}))
+        stored = read_plugin_table(self._settings.config_text, plugin_id)
         # 启停状态归宿主所有，由 plugins.list / plugins.setEnabled 管理；
         # 不要混进配置表单的值里被 renderer 原样回传。
         _ = stored.pop(PLUGIN_ENABLED_CONFIG_KEY, None)
@@ -53,7 +63,12 @@ class RuntimePluginConfig:
         else:
             defaults = kernel.config_schemas.defaults_for(plugin_id) or {}
             values = {**defaults, **stored}
-        return {"plugin_id": plugin_id, "schema": schema, "values": values}
+        return {
+            "plugin_id": plugin_id,
+            "schema": schema,
+            "values": values,
+            "env_status": _env_status(values),
+        }
 
     async def set(
         self,
@@ -62,7 +77,14 @@ class RuntimePluginConfig:
         prepare_service: Callable,
         publish_service: Callable,
     ) -> dict[str, Any]:
-        """Validates, commits and hot-applies one plugin's ``[plugins.<id>]`` table."""
+        """Validates, commits and hot-applies one plugin's ``[plugins.<id>]`` table.
+
+        A submitted value containing a ``${NAME}`` reference is validated in
+        its resolved form (so e.g. an integer field may hold ``${PORT}``) but
+        persisted verbatim; only values without a reference are persisted in
+        their normalized form. The response echoes the persisted values, never
+        resolved secrets.
+        """
         plugin_id = str(payload.get("plugin_id") or "").strip()
         values = payload.get("values")
         operation_id = payload.get("operation_id")
@@ -94,15 +116,19 @@ class RuntimePluginConfig:
                 f"插件 {plugin_id} 未声明配置模型",
             )
         try:
-            normalized = validate_against(model_cls, values)
+            normalized = validate_against(model_cls, _resolved_table(values))
         except ValidationError as exc:
             raise RuntimeApplyError(
                 "plugin_config_invalid",
                 format_validation_error(exc),
                 # details 会被 JSON 序列化写回 renderer：去掉 url 与 ctx，
-                # 后者可能携带异常对象等不可序列化内容。
-                errors=exc.errors(include_url=False, include_context=False),
+                # 后者可能携带异常对象等不可序列化内容；也去掉 input，
+                # 校验的是展开后的值，input 里可能正是环境变量里的密钥。
+                errors=exc.errors(
+                    include_url=False, include_context=False, include_input=False
+                ),
             ) from exc
+        persisted = _persisted_values(values, normalized)
 
         # 复用设置事务：定位-替换式合并 TOML 文本后走既有事务化落盘 + 热更新路径，
         # 不另起一套写盘逻辑（见 desktop_bridge/plugin_config_text.py）。
@@ -114,7 +140,7 @@ class RuntimePluginConfig:
             # 启停状态与插件配置同住一张表，但它归宿主所有、不是配置模型的字段，
             # 校验时会被 pydantic 丢弃。整表替换必须把它显式带回来，否则用户改一次
             # 插件配置就会把停用的插件重新启用。
-            values_to_write = dict(normalized)
+            values_to_write = dict(persisted)
             current = read_plugin_table(current_text, plugin_id)
             if PLUGIN_ENABLED_CONFIG_KEY in current:
                 values_to_write[PLUGIN_ENABLED_CONFIG_KEY] = current[
@@ -155,10 +181,15 @@ class RuntimePluginConfig:
             # runtime_operation_conflict。
             derive=DerivedWrite(
                 build_config_toml=_merge,
-                fingerprint_payload={"plugin_id": plugin_id, "values": normalized},
+                fingerprint_payload={"plugin_id": plugin_id, "values": persisted},
             ),
         )
-        return {"plugin_id": plugin_id, "values": normalized, **result}
+        return {
+            "plugin_id": plugin_id,
+            "values": persisted,
+            "env_status": _env_status(persisted),
+            **result,
+        }
 
     def _plugin_kernel(self) -> "PluginKernel | None":
         """Returns the currently published generation's plugin kernel, if any."""
@@ -193,7 +224,8 @@ class RuntimePluginConfig:
 
         stored = assert_plugin_table_isolated(plugin_id, original_text, merged_text)
         try:
-            reread = validate_against(model_cls, stored)
+            # 落盘的是未展开的引用，读回时与运行时加载一样先展开再校验。
+            reread = validate_against(model_cls, _resolved_table(stored))
         except ValidationError as exc:
             raise RuntimeApplyError(
                 "plugin_config_unrepresentable",
@@ -204,3 +236,43 @@ class RuntimePluginConfig:
                 "plugin_config_unrepresentable",
                 "配置中存在无法用 TOML 表达的值，写入已取消",
             )
+
+
+def _persisted_values(
+    submitted: dict[str, Any], normalized: dict[str, Any]
+) -> dict[str, Any]:
+    """Returns the table to write: normalized values, references kept verbatim.
+
+    ``normalized`` was validated from the *resolved* submission, so any field
+    whose submitted value holds a ``${NAME}`` reference carries the expanded
+    secret there; that field is written back as submitted instead.
+    """
+    return {
+        key: (
+            submitted[key]
+            if key in submitted and has_config_reference(submitted[key])
+            else value
+        )
+        for key, value in normalized.items()
+    }
+
+
+def _env_status(values: dict[str, Any]) -> dict[str, str]:
+    """Maps each top-level field holding a ``${NAME}`` reference to set/unset.
+
+    ``"unset"`` means at least one reference in the field resolves from
+    neither the environment nor the workspace memory file, so the plugin will
+    see the literal placeholder at runtime.
+    """
+    return {
+        key: (
+            "unset" if has_config_reference(resolve_config_references(value)) else "set"
+        )
+        for key, value in values.items()
+        if has_config_reference(value)
+    }
+
+
+def _resolved_table(values: dict[str, Any]) -> dict[str, Any]:
+    """Returns ``values`` with every ``${NAME}`` reference expanded, for validation."""
+    return {key: resolve_config_references(value) for key, value in values.items()}

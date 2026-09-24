@@ -361,7 +361,7 @@ def _load_plugins_config(data: dict) -> dict[str, dict[str, Any]]:
     plugins: dict[str, dict[str, Any]] = {}
     for name, value in plugins_data.items():
         if isinstance(name, str) and isinstance(value, dict):
-            plugins[name] = cast(dict[str, Any], _resolve_config_value(value))
+            plugins[name] = cast(dict[str, Any], resolve_config_references(value))
     return plugins
 
 
@@ -393,22 +393,46 @@ def _as_dict(value: object) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def _resolve_config_value(value: object) -> object:
+_CONFIG_REFERENCE = re.compile(r"\$\{(\w+)\}")
+
+
+def resolve_config_references(value: object) -> object:
+    """Expands every ``${NAME}`` reference in a TOML value, recursing into lists/tables.
+
+    A reference resolves from the process environment, or — when the whole
+    string is a bare reference — from ``<workspace>/memory/<NAME>``; one that
+    resolves from neither stays verbatim. Callers that persist config must
+    write the *unresolved* value back (see ``has_config_reference``), otherwise
+    the secret lands in config.toml as plaintext and the reference is lost.
+    """
     if isinstance(value, str):
         return _resolve(value)
     if isinstance(value, list):
-        return [_resolve_config_value(item) for item in value]
+        return [resolve_config_references(item) for item in value]
     if isinstance(value, dict):
-        return {str(key): _resolve_config_value(item) for key, item in value.items()}
+        return {
+            str(key): resolve_config_references(item) for key, item in value.items()
+        }
     return value
 
 
+def has_config_reference(value: object) -> bool:
+    """Returns whether a TOML value contains a ``${NAME}`` reference anywhere."""
+    if isinstance(value, str):
+        return _CONFIG_REFERENCE.search(value) is not None
+    if isinstance(value, list):
+        return any(has_config_reference(item) for item in value)
+    if isinstance(value, dict):
+        return any(has_config_reference(item) for item in value.values())
+    return False
+
+
 def _resolve(value: str) -> str:
-    resolved = re.sub(
-        r"\$\{(\w+)\}", lambda m: os.environ.get(m.group(1), m.group(0)), value
+    resolved = _CONFIG_REFERENCE.sub(
+        lambda m: os.environ.get(m.group(1), m.group(0)), value
     )
     # 若仍是未展开的占位符，尝试从 workspace/memory/<VAR_NAME> 文件读取
-    m = re.fullmatch(r"\$\{(\w+)\}", resolved)
+    m = _CONFIG_REFERENCE.fullmatch(resolved)
     if m:
         key_file = resolve_default_workspace() / "memory" / m.group(1)
         if key_file.exists():
@@ -437,7 +461,9 @@ __all__ = [
     "MemoryConfig",
     "MemoryEmbeddingConfig",
     "_validated_timezone",
+    "has_config_reference",
     "load_config",
     "load_config_data",
     "load_config_text",
+    "resolve_config_references",
 ]

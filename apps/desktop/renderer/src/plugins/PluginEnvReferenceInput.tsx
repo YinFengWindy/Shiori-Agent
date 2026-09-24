@@ -10,9 +10,11 @@ import { readEnvReference } from "./jsonSchemaForm";
  * a literal value instead. The draft keeps the reference until something is
  * actually typed, so opening the input and leaving it empty changes nothing.
  */
-export function PluginEnvReferenceInput({ value, label, renderInput }: {
+export function PluginEnvReferenceInput({ value, label, resolved, renderInput }: {
   value: unknown;
   label: string;
+  /** Whether the reference resolves in Shiori's environment; only an unresolved one warns. */
+  resolved: boolean;
   /** The ordinary control; `displayValue` is "" while a reference is being replaced. */
   renderInput: (displayValue: string, onBlurEmpty: () => void) => ReactNode;
 }) {
@@ -26,10 +28,12 @@ export function PluginEnvReferenceInput({ value, label, renderInput }: {
         <span className="truncate text-body-sm text-ink">
           引用环境变量 <code className="font-mono text-accent-text">{reference}</code>
         </span>
-        <span className="flex items-center gap-1 text-caption text-warning-text">
-          <WarningCircle className="h-3.5 w-3.5 shrink-0" weight="bold" aria-hidden="true" />
-          当前环境中未设置
-        </span>
+        {resolved ? null : (
+          <span className="flex items-center gap-1 text-caption text-warning-text">
+            <WarningCircle className="h-3.5 w-3.5 shrink-0" weight="bold" aria-hidden="true" />
+            当前环境中未设置
+          </span>
+        )}
       </div>
       <button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} onClick={() => setReplacing(true)}>
         改为直接填写

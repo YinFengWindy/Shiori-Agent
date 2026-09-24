@@ -658,3 +658,168 @@ async def test_illegal_persisted_repeat_limit_fails_load_but_stays_repairable(
     finally:
         await service.aclose()
         await app.shutdown()
+
+
+_QQBOT_SECRET_REFERENCE = "${SHIORI_TEST_QQBOT_SECRET}"
+
+
+def _qqbot_reference_config() -> str:
+    return _config(
+        extra=(
+            "\n[plugins.qqbot]\n"
+            'app_id = "app-old"\n'
+            f'client_secret = "{_QQBOT_SECRET_REFERENCE}"\n'
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_returns_the_unexpanded_reference_and_its_env_status(
+    tmp_path, monkeypatch
+):
+    """get 必须给出 config.toml 里的原始 ``${VAR}``，而不是运行时展开后的密钥。"""
+    monkeypatch.setenv("SHIORI_TEST_QQBOT_SECRET", "resolved-secret-value")
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, _, app = await _start_service(tmp_path, _qqbot_reference_config())
+    try:
+        # 运行时拿到的仍是展开后的值：插件本身照常能用上密钥。
+        assert app.config.plugins["qqbot"]["client_secret"] == "resolved-secret-value"
+
+        response = await _request(service, "plugin.config.get", {"plugin_id": "qqbot"})
+
+        assert response.error is None, response.error
+        assert response.payload["values"]["client_secret"] == _QQBOT_SECRET_REFERENCE
+        assert response.payload["env_status"] == {"client_secret": "set"}
+        assert "resolved-secret-value" not in json.dumps(response.payload)
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_get_reports_a_reference_whose_variable_is_not_set(tmp_path, monkeypatch):
+    monkeypatch.delenv("SHIORI_TEST_QQBOT_SECRET", raising=False)
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, _, app = await _start_service(tmp_path, _qqbot_reference_config())
+    try:
+        response = await _request(service, "plugin.config.get", {"plugin_id": "qqbot"})
+
+        assert response.error is None, response.error
+        assert response.payload["values"]["client_secret"] == _QQBOT_SECRET_REFERENCE
+        assert response.payload["env_status"] == {"client_secret": "unset"}
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_reference_survives_an_unrelated_field_edit(tmp_path, monkeypatch):
+    """渲染端保存时整表回传：改一个无关字段不能把展开后的密钥明文写回文件。"""
+    monkeypatch.setenv("SHIORI_TEST_QQBOT_SECRET", "resolved-secret-value")
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, path, app = await _start_service(tmp_path, _qqbot_reference_config())
+    try:
+        loaded = await _request(service, "plugin.config.get", {"plugin_id": "qqbot"})
+        values = {**loaded.payload["values"], "app_id": "app-new"}
+
+        response = await _request(
+            service,
+            "plugin.config.set",
+            {"plugin_id": "qqbot", "operation_id": "op-edit", "values": values},
+        )
+
+        assert response.error is None, response.error
+        on_disk = path.read_text(encoding="utf-8")
+        assert 'app_id = "app-new"' in on_disk
+        assert _QQBOT_SECRET_REFERENCE in on_disk
+        assert "resolved-secret-value" not in on_disk
+        assert response.payload["values"]["client_secret"] == _QQBOT_SECRET_REFERENCE
+        assert response.payload["env_status"] == {"client_secret": "set"}
+        assert "resolved-secret-value" not in json.dumps(response.payload)
+        # 热应用后的运行时依旧拿到展开后的密钥。
+        assert app.config.plugins["qqbot"]["client_secret"] == "resolved-secret-value"
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_a_typed_literal_replaces_the_reference(tmp_path, monkeypatch):
+    monkeypatch.setenv("SHIORI_TEST_QQBOT_SECRET", "resolved-secret-value")
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, path, app = await _start_service(tmp_path, _qqbot_reference_config())
+    try:
+        response = await _request(
+            service,
+            "plugin.config.set",
+            {
+                "plugin_id": "qqbot",
+                "operation_id": "op-literal",
+                "values": {"app_id": "app-old", "client_secret": "typed-literal"},
+            },
+        )
+
+        assert response.error is None, response.error
+        on_disk = path.read_text(encoding="utf-8")
+        assert 'client_secret = "typed-literal"' in on_disk
+        assert _QQBOT_SECRET_REFERENCE not in on_disk
+        assert response.payload["env_status"] == {}
+        assert app.config.plugins["qqbot"]["client_secret"] == "typed-literal"
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_a_reference_is_type_checked_by_its_resolved_value(tmp_path, monkeypatch):
+    """整数字段里的 ``${VAR}``：按展开值校验，按原始引用落盘；非法时照常报错。"""
+    monkeypatch.setenv("SHIORI_TEST_REPEAT_LIMIT", "5")
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, path, app = await _start_service(
+        tmp_path,
+        _config(
+            extra='\n[plugins.tool_loop_guard]\nrepeat_limit = "${SHIORI_TEST_REPEAT_LIMIT}"\n'
+        ),
+    )
+    try:
+        loaded = await _request(
+            service, "plugin.config.get", {"plugin_id": "tool_loop_guard"}
+        )
+        assert loaded.payload["values"] == {
+            "repeat_limit": "${SHIORI_TEST_REPEAT_LIMIT}"
+        }
+
+        kept = await _request(
+            service,
+            "plugin.config.set",
+            {
+                "plugin_id": "tool_loop_guard",
+                "operation_id": "op-keep",
+                "values": loaded.payload["values"],
+            },
+        )
+        assert kept.error is None, kept.error
+        assert 'repeat_limit = "${SHIORI_TEST_REPEAT_LIMIT}"' in path.read_text(
+            encoding="utf-8"
+        )
+
+        # 展开值不满足模型约束时，校验错误照常冒出来，且不回显展开后的值。
+        monkeypatch.setenv("SHIORI_TEST_REPEAT_LIMIT", "1")
+        before = path.read_text(encoding="utf-8")
+        rejected = await _request(
+            service,
+            "plugin.config.set",
+            {
+                "plugin_id": "tool_loop_guard",
+                "operation_id": "op-invalid-reference",
+                "values": loaded.payload["values"],
+            },
+        )
+        assert rejected.error is not None
+        assert rejected.error.code == "plugin_config_invalid"
+        assert "repeat_limit" in rejected.error.message
+        assert all("input" not in item for item in rejected.error.details["errors"])
+        assert path.read_text(encoding="utf-8") == before
+    finally:
+        await service.aclose()
+        await app.shutdown()

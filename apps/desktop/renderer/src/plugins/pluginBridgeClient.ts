@@ -6,15 +6,28 @@ import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 import { PluginBridgeError } from "./pluginBridgeError";
 export { PluginBridgeError } from "./pluginBridgeError";
 
+/**
+ * Whether a field's `${NAME}` reference resolves in Shiori's environment
+ * (`"set"`) or would reach the plugin as the literal placeholder (`"unset"`).
+ */
+export type PluginConfigEnvStatus = "set" | "unset";
+
+/**
+ * A plugin's config form data. `values` are the stored, unexpanded values —
+ * a `${NAME}` reference arrives as written, never as the secret it resolves
+ * to; `envStatus` covers exactly the top-level fields holding one.
+ */
 export type PluginConfigSnapshot = {
   pluginId: string;
   schema: JsonSchema | null;
   values: Record<string, unknown>;
+  envStatus: Record<string, PluginConfigEnvStatus>;
 };
 
 export type PluginConfigSaveResult = {
   pluginId: string;
   values: Record<string, unknown>;
+  envStatus: Record<string, PluginConfigEnvStatus>;
   generation: number;
 };
 
@@ -207,16 +220,18 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
       await invokePluginPayload(resolveInvoke(), "plugins.trust", { candidate_id: candidateId, fingerprint });
     },
     async getConfig(pluginId) {
-      const payload = await invokePluginPayload<{ plugin_id: string; schema: JsonSchema | null; values: Record<string, unknown> }>(
-        resolveInvoke(), "plugin.config.get", { plugin_id: pluginId },
-      );
-      return { pluginId: payload.plugin_id, schema: payload.schema, values: payload.values };
+      const payload = await invokePluginPayload<{
+        plugin_id: string; schema: JsonSchema | null; values: Record<string, unknown>;
+        env_status: Record<string, PluginConfigEnvStatus>;
+      }>(resolveInvoke(), "plugin.config.get", { plugin_id: pluginId });
+      return { pluginId: payload.plugin_id, schema: payload.schema, values: payload.values, envStatus: payload.env_status };
     },
     async setConfig(pluginId, values, options) {
-      const payload = await invokePluginPayload<{ plugin_id: string; values: Record<string, unknown>; generation: number }>(
-        resolveInvoke(), "plugin.config.set", { plugin_id: pluginId, values, operation_id: options.operationId },
-      );
-      return { pluginId: payload.plugin_id, values: payload.values, generation: payload.generation };
+      const payload = await invokePluginPayload<{
+        plugin_id: string; values: Record<string, unknown>;
+        env_status: Record<string, PluginConfigEnvStatus>; generation: number;
+      }>(resolveInvoke(), "plugin.config.set", { plugin_id: pluginId, values, operation_id: options.operationId });
+      return { pluginId: payload.plugin_id, values: payload.values, envStatus: payload.env_status, generation: payload.generation };
     },
     async listPlugins() {
       const payload = await invokePluginPayload<{ plugins: Array<{

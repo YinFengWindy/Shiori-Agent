@@ -27,7 +27,7 @@ type PluginSchemaSettingsSectionProps = { pluginId: string };
 
 /** Renders and autosaves a plugin's config form, generated from its declared JSON Schema. */
 export function PluginSchemaSettingsSection({ pluginId }: PluginSchemaSettingsSectionProps) {
-  const { schema, draft, loadError, savePhase, statusMessage, updateDraft, retrySave, reloadConfig } =
+  const { schema, envStatus, draft, loadError, savePhase, statusMessage, updateDraft, retrySave, reloadConfig } =
     usePluginConfigController(pluginId);
 
   if (loadError) {
@@ -38,7 +38,7 @@ export function PluginSchemaSettingsSection({ pluginId }: PluginSchemaSettingsSe
       </div>
     );
   }
-  if (!schema || !draft) {
+  if (!schema || !draft || !envStatus) {
     return <div className="text-sm text-ink-muted">正在加载插件配置…</div>;
   }
 
@@ -48,6 +48,7 @@ export function PluginSchemaSettingsSection({ pluginId }: PluginSchemaSettingsSe
       key={field.key}
       field={field}
       value={draft[field.key]}
+      envResolved={envStatus[field.key] === "set"}
       onChange={(value) => updateDraft((current) => ({ ...current, [field.key]: value }))}
     />
   );

@@ -18,8 +18,12 @@ type FieldRowProps = {
   onChange: (value: unknown) => void;
 };
 
-/** Renders one field with the control its schema shape calls for. */
-export function PluginConfigFieldRow({ field, value, onChange }: FieldRowProps) {
+/**
+ * Renders one field with the control its schema shape calls for.
+ * `envResolved` says whether the stored `${NAME}` reference, if any, resolves
+ * in Shiori's environment (from `plugin.config.get`'s `env_status`).
+ */
+export function PluginConfigFieldRow({ field, value, envResolved, onChange }: FieldRowProps & { envResolved: boolean }) {
   switch (field.kind) {
     case "boolean":
       return <SettingsToggleField label={field.label} hint={field.hint} checked={Boolean(value)} onChange={onChange} />;
@@ -41,6 +45,7 @@ export function PluginConfigFieldRow({ field, value, onChange }: FieldRowProps) 
           <PluginEnvReferenceInput
             value={value}
             label={field.label}
+            resolved={envResolved}
             renderInput={(displayValue, onBlurEmpty) => (
               <SettingsSecretInput
                 value={displayValue}
@@ -74,6 +79,7 @@ export function PluginConfigFieldRow({ field, value, onChange }: FieldRowProps) 
           <PluginEnvReferenceInput
             value={value}
             label={field.label}
+            resolved={envResolved}
             renderInput={(displayValue, onBlurEmpty) => (
               <input
                 aria-label={field.label}
