@@ -122,6 +122,11 @@
     --color-border-strong: var(--neutral-400);
     --color-border-accent: var(--pink-300);
     --color-ring: var(--pink-500);              /* 3.1:1 on surface */
+    /* nav rail brand motif (decorative, inside a labelled icon: no text contrast target) */
+    --color-motif: var(--pink-500);
+    --color-motif-gradient-start: color-mix(in oklab, var(--blue-300), var(--blue-grad) 30%);
+    --color-motif-gradient-mid: var(--pink-500);
+    --color-motif-gradient-end: var(--lavender-500);
     --color-ring-soft: rgba(230, 101, 156, 0.22); /* pink-500 @ 22%, halo around focused fields */
 
     /* ---------- semantic: accent ---------- */
@@ -182,6 +187,7 @@
     --duration-quick: 160ms; /* press feedback, menus, popovers, tab content */
     --duration-base: 220ms;  /* dialogs, toasts, sidebar content fade */
     --duration-panel: 260ms; /* sidebar width; keep app/appState.ts sidebarAnimationDurationMs in sync */
+    --duration-motif: 480ms; /* one-shot nav rail motif flourish */
 
     /* ---------- legacy aliases (pre-restyle var names still used
        by tailwind.config + older components; keep pointing at the
@@ -508,6 +514,97 @@ button[role="combobox"]:focus-visible {
 @keyframes motion-tab-enter {
   from { opacity: 0; transform: translateY(6px); filter: blur(4px); }
   to { opacity: 1; transform: none; filter: none; }
+}
+
+/* Nav rail glyphs (shared/ui/icons/navGlyphs.tsx): only the embedded motif
+   changes colour and moves; the Phosphor outline keeps the rail's colours. */
+.nav-glyph-motif {
+  fill: var(--color-motif);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.nav-glyph-motif .nav-glyph-core {
+  fill: var(--color-bg-surface);
+}
+
+[aria-current="page"] .nav-glyph-motif {
+  fill: var(--nav-motif-gradient, var(--color-motif));
+}
+
+.nav-glyph-motif-sparkle,
+.nav-glyph-motif-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.nav-glyph-motif--flutter {
+  transform-origin: top center;
+}
+
+/* One-shot on hover, keyboard focus, and when the entry becomes current.
+   Motion-safe only: reduced motion keeps the colour change alone. */
+@media (prefers-reduced-motion: no-preference) {
+  :is(button:hover, button:focus-visible, [aria-current="page"]) .nav-glyph-motif--twinkle .nav-glyph-motif-sparkle {
+    animation: nav-motif-twinkle var(--duration-motif) var(--ease-out-soft);
+  }
+
+  :is(button:hover, button:focus-visible, [aria-current="page"]) .nav-glyph-motif--twinkle .nav-glyph-motif-dot {
+    animation: nav-motif-dot var(--duration-motif) var(--ease-out-soft);
+  }
+
+  :is(button:hover, button:focus-visible, [aria-current="page"]) .nav-glyph-motif--beat {
+    animation: nav-motif-beat var(--duration-motif) var(--ease-out-soft);
+  }
+
+  :is(button:hover, button:focus-visible, [aria-current="page"]) .nav-glyph-motif--wiggle {
+    animation: nav-motif-wiggle var(--duration-motif) var(--ease-out-soft);
+  }
+
+  :is(button:hover, button:focus-visible, [aria-current="page"]) .nav-glyph-motif--spin {
+    animation: nav-motif-spin var(--duration-motif) var(--ease-out-soft);
+  }
+
+  :is(button:hover, button:focus-visible, [aria-current="page"]) .nav-glyph-motif--flutter {
+    animation: nav-motif-flutter var(--duration-motif) var(--ease-out-soft);
+  }
+}
+
+@keyframes nav-motif-twinkle {
+  0% { transform: scale(1) rotate(0deg); }
+  40% { transform: scale(0.55) rotate(45deg); }
+  75% { transform: scale(1.18) rotate(90deg); }
+  100% { transform: scale(1) rotate(90deg); }
+}
+
+@keyframes nav-motif-dot {
+  0%, 100% { opacity: 1; }
+  45% { opacity: 0; }
+}
+
+@keyframes nav-motif-beat {
+  0%, 100% { transform: scale(1); }
+  30% { transform: scale(1.25); }
+  55% { transform: scale(0.95); }
+  75% { transform: scale(1.12); }
+}
+
+@keyframes nav-motif-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-12deg); }
+  55% { transform: rotate(12deg); }
+  80% { transform: rotate(-5deg); }
+}
+
+@keyframes nav-motif-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(72deg); }
+}
+
+@keyframes nav-motif-flutter {
+  0%, 100% { transform: none; }
+  30% { transform: translateY(6%) skewY(-8deg); }
+  60% { transform: translateY(-3%) skewY(5deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {

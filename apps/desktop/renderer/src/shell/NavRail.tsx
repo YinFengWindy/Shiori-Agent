@@ -1,6 +1,6 @@
 import type React from "react";
-import { Chats, GearSix, MagnifyingGlass, Users } from "@phosphor-icons/react";
 import { cx, pressableClass } from "../shared/styles";
+import { ChatsGlyph, RolesGlyph, SearchGlyph, SettingsGlyph } from "../shared/ui/icons/navGlyphs";
 import { Tooltip } from "../shared/ui/Tooltip";
 import { formatShortcut, viewShortcutLabel } from "./globalShortcuts";
 
@@ -57,8 +57,8 @@ export function buildNavRailViews({
   pluginEntries?: NavRailPluginEntry[];
 }): NavRailView[] {
   const views: Omit<NavRailView, "shortcut">[] = [
-    { id: "messages", label: "消息", icon: Chats, onSelect: onBackToChat, showUnreadBadge: true },
-    { id: "roles", label: "角色", icon: Users, onSelect: onOpenRolesWorkspace },
+    { id: "messages", label: "消息", icon: ChatsGlyph, onSelect: onBackToChat, showUnreadBadge: true },
+    { id: "roles", label: "角色", icon: RolesGlyph, onSelect: onOpenRolesWorkspace },
     ...pluginEntries.map((entry) => ({
       id: pluginNavRailViewId(entry.pageId),
       label: entry.label,
@@ -84,8 +84,12 @@ type NavRailProps = {
 
 const railButtonClass = cx(
   pressableClass,
-  "relative grid h-9 w-9 place-items-center rounded-md text-ink-muted focus-visible:bg-white/70 hover:bg-white/70 hover:text-ink",
+  "relative grid h-9 w-9 place-items-center rounded-md",
 );
+// Idle and active colours are exclusive: with both text colours on one element
+// the stylesheet order, not the state, decided which won (active read as muted).
+const railIdleClass = "text-ink-muted focus-visible:bg-white/70 hover:bg-white/70 hover:text-ink";
+const railActiveClass = "bg-white text-accent shadow-soft";
 
 // Search is an action, not a place: an outlined round button with a divider
 // under it, so it never reads as the first of the view entries below.
@@ -111,11 +115,7 @@ export function NavRail({
     return (
       <Tooltip key={view.id} label={showBadge ? `${view.label} · ${unreadTotal} 条未读` : view.label} shortcut={view.shortcut}>
         <button
-          className={cx(
-            railButtonClass,
-            active
-              && "bg-white text-accent shadow-soft hover:bg-white hover:text-accent",
-          )}
+          className={cx(railButtonClass, active ? railActiveClass : railIdleClass)}
           type="button"
           aria-label={showBadge ? `${view.label}（${unreadTotal} 条未读）` : view.label}
           aria-keyshortcuts={ariaKeyShortcut(view.shortcut)}
@@ -143,13 +143,13 @@ export function NavRail({
           aria-haspopup="dialog"
           onClick={onOpenSearch}
         >
-          <MagnifyingGlass className="h-[17px] w-[17px]" weight="bold" aria-hidden="true" />
+          <SearchGlyph className={railIconClass} />
         </button>
       </Tooltip>
       <span className="my-1.5 h-px w-6 rounded-full bg-line-soft" aria-hidden="true" />
       {views.map(renderView)}
       <div className="mt-auto">
-        {renderView({ id: "settings", label: "设置", icon: GearSix, onSelect: onOpenSettings, shortcut: formatShortcut(",") })}
+        {renderView({ id: "settings", label: "设置", icon: SettingsGlyph, onSelect: onOpenSettings, shortcut: formatShortcut(",") })}
       </div>
     </nav>
   );

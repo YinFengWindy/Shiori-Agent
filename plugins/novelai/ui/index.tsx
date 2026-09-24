@@ -1,20 +1,11 @@
 import type { PluginUiModule } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
+import { ImageStudioGlyph } from "../../../apps/desktop/renderer/src/shared/ui/icons/navGlyphs";
 import { NovelAIPage } from "./NovelAIPage";
 import { NovelAIPageSidebar } from "./NovelAIPageSidebar";
 import { selectBlockedReasonForNovelAiPage } from "./novelAiPageStore";
 
 import { novelAiRoleSettings } from "./roleSettings";
 import { NovelAiChatImageActions } from "./ChatImageActions";
-
-const novelAiLogoDark = new URL(
-  "./assets/novelai-logo-dark.svg",
-  import.meta.url,
-).href;
-
-/** Nav-rail icon: the plugin's own brand mark, kept from before the nav.page migration. */
-function NovelAIIcon({ className }: { className?: string }) {
-  return <img className={className} src={novelAiLogoDark} alt="" />;
-}
 
 /**
  * novelai's plugin UI module (issue #180): Image Studio as a `nav.page`
@@ -36,7 +27,8 @@ const novelAiUiModule: PluginUiModule = {
   chatImageActions: NovelAiChatImageActions,
   navPage: {
     label: "生图",
-    icon: NovelAIIcon,
+    // The host's nav glyph (brush + sparkle) so the rail reads as one icon family.
+    icon: ImageStudioGlyph,
     component: NovelAIPage,
     sidebar: NovelAIPageSidebar,
     selectBlockedReason: selectBlockedReasonForNovelAiPage,
