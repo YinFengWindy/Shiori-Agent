@@ -1,6 +1,6 @@
 import type React from "react";
 import { SidebarResizeHandle } from "../../../apps/desktop/renderer/src/shared/SidebarResizeHandle";
-import { cx, secondarySidebarSurfaceClass, sidebarNavItemClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { cx, secondarySidebarSurfaceClass, sidebarContentMotionClass, sidebarNavItemClass } from "../../../apps/desktop/renderer/src/shared/styles";
 
 export type PromptTagWorkspaceSectionId = "list" | "create" | "detail";
 
@@ -40,7 +40,7 @@ export function PromptTagWorkspaceSidebar({
       className={cx(
         "relative grid h-full min-h-0 min-w-0 content-start gap-1 py-3",
         secondarySidebarSurfaceClass,
-        animating && "transition-[opacity,transform] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+        animating && sidebarContentMotionClass,
         collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
       )}
       aria-hidden={collapsed}

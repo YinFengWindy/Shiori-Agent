@@ -172,9 +172,16 @@
     --font-display: "Segoe UI Variable Display", var(--font-sans);
 
     /* ---------- motion ---------- */
+    /* ease-out-soft: everything that enters, presses or hovers.
+       ease-drawer: panels that travel with the pointer's intent (sidebar
+       open/close) — fast start, long gentle settle. */
     --ease-out-soft: cubic-bezier(0.23, 1, 0.32, 1);
-    --duration-fast: 140ms;
-    --duration-base: 220ms;
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    --duration-fade: 120ms;  /* opacity-only view swaps */
+    --duration-fast: 140ms;  /* hover / color changes (Tailwind's bare `transition`) */
+    --duration-quick: 160ms; /* press feedback, menus, popovers, tab content */
+    --duration-base: 220ms;  /* dialogs, toasts, sidebar content fade */
+    --duration-panel: 260ms; /* sidebar width; keep app/appState.ts sidebarAnimationDurationMs in sync */
 
     /* ---------- legacy aliases (pre-restyle var names still used
        by tailwind.config + older components; keep pointing at the

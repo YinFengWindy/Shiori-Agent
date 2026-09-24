@@ -23,25 +23,64 @@ export const inputClass =
 /** Shared textarea styling for role prompt fields. */
 export const textareaClass = cx(inputClass, "min-h-24 resize-y");
 
+/**
+ * Press feedback: a small scale-down while the pointer is held, released on
+ * the same curve so rapid clicks retarget mid-flight instead of snapping. It
+ * owns the element's whole transition list (colors, shadow, filter, opacity
+ * and transform), so it replaces rather than sits beside other `transition*`
+ * classes. Reduced motion keeps the color feedback and drops the scale.
+ */
+const pressTransitionClass =
+  "transition-[color,background-color,border-color,box-shadow,filter,opacity,transform] duration-quick ease-out-soft motion-reduce:enabled:active:scale-100";
+
+/** Press feedback for buttons and icon buttons larger than 30px. */
+export const pressableClass = cx(pressTransitionClass, "enabled:active:scale-97");
+
+/** Press feedback for compact icon buttons (30px and below), where 0.97 would not read. */
+export const compactPressableClass = cx(pressTransitionClass, "enabled:active:scale-96");
+
+/**
+ * Sidebar open/close. The track animates its width (the only way to push the
+ * main pane over), so it stays short and rides the drawer curve; the content
+ * keeps its own fixed width and only fades/slides, which never relayouts.
+ * Under reduced motion the width jumps and the content only fades.
+ */
+export const sidebarTrackMotionClass =
+  "transition-[width] duration-panel ease-drawer motion-reduce:transition-none";
+
+/** Companion to sidebarTrackMotionClass for the sidebar's own content. */
+export const sidebarContentMotionClass =
+  "transition-[opacity,transform] duration-base ease-out-soft motion-reduce:transition-opacity motion-reduce:transform-none";
+
 /** Shared primary action button styling. */
-export const primaryButtonClass =
-  "cursor-pointer rounded-md border border-white/70 bg-gradient-accent px-[18px] py-3 text-ink shadow-soft transition-[box-shadow,filter] duration-150 hover:brightness-[1.03] hover:shadow-panel active:brightness-[0.97] disabled:cursor-default disabled:opacity-50 disabled:shadow-none";
+export const primaryButtonClass = cx(
+  pressableClass,
+  "cursor-pointer rounded-md border border-white/70 bg-gradient-accent px-[18px] py-3 text-ink shadow-soft hover:brightness-[1.03] hover:shadow-panel active:brightness-[0.97] disabled:cursor-default disabled:opacity-50 disabled:shadow-none",
+);
 
 /** Shared secondary action button styling. */
-export const ghostButtonClass =
-  "cursor-pointer rounded-md border border-line bg-surface px-[18px] py-3 text-ink-secondary transition-colors hover:border-line-accent hover:bg-accent-softer hover:text-accent-text disabled:cursor-default disabled:opacity-50";
+export const ghostButtonClass = cx(
+  pressableClass,
+  "cursor-pointer rounded-md border border-line bg-surface px-[18px] py-3 text-ink-secondary hover:border-line-accent hover:bg-accent-softer hover:text-accent-text disabled:cursor-default disabled:opacity-50",
+);
 
 /** Shared destructive action button styling. */
-export const dangerButtonClass =
-  "cursor-pointer rounded-md border border-transparent bg-danger px-[18px] py-3 text-white transition-[filter] hover:brightness-105 active:brightness-95 disabled:cursor-default disabled:opacity-50";
+export const dangerButtonClass = cx(
+  pressableClass,
+  "cursor-pointer rounded-md border border-transparent bg-danger px-[18px] py-3 text-white hover:brightness-105 active:brightness-95 disabled:cursor-default disabled:opacity-50",
+);
 
 /** Shared quiet destructive styling for inline delete affordances. */
-export const dangerGhostButtonClass =
-  "cursor-pointer rounded-md border border-line bg-surface px-[18px] py-3 text-danger-text transition-colors hover:border-danger/40 hover:bg-danger-soft disabled:cursor-default disabled:opacity-50";
+export const dangerGhostButtonClass = cx(
+  pressableClass,
+  "cursor-pointer rounded-md border border-line bg-surface px-[18px] py-3 text-danger-text hover:border-danger/40 hover:bg-danger-soft disabled:cursor-default disabled:opacity-50",
+);
 
 /** Square icon-only action button (back, reset, tools): the one corner treatment for this role is rounded-md. */
-export const iconButtonClass =
-  "grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-surface text-ink-secondary transition hover:border-line-strong hover:bg-surface-hover disabled:cursor-default disabled:opacity-40";
+export const iconButtonClass = cx(
+  pressableClass,
+  "grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-surface text-ink-secondary hover:border-line-strong hover:bg-surface-hover disabled:cursor-default disabled:opacity-40",
+);
 
 /** Shared focus reset for controls that rely on their existing state styling. */
 export const focusResetClass = "focus:outline-none";

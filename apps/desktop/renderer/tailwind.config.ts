@@ -112,8 +112,26 @@ export default {
         composer: "var(--shadow-soft)",
         editor: "var(--shadow-pop)",
       },
+      // DEFAULT is what every bare `transition` / `transition-colors` /
+      // `transition-[...]` falls back to when no duration or ease class is
+      // given, so un-annotated transitions follow the motion tokens too.
       transitionTimingFunction: {
+        DEFAULT: "var(--ease-out-soft)",
         "out-soft": "var(--ease-out-soft)",
+        drawer: "var(--ease-drawer)",
+      },
+      transitionDuration: {
+        DEFAULT: "var(--duration-fast)",
+        fade: "var(--duration-fade)",
+        fast: "var(--duration-fast)",
+        quick: "var(--duration-quick)",
+        base: "var(--duration-base)",
+        panel: "var(--duration-panel)",
+      },
+      // Press-feedback scales (see pressableClass in shared/styles.ts).
+      scale: {
+        96: "0.96",
+        97: "0.97",
       },
       gridTemplateRows: {
         // title bar · status banner slot (collapses to 0 when empty) · shell
