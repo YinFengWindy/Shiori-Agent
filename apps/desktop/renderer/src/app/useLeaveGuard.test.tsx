@@ -29,7 +29,7 @@ describe("useLeaveGuard", () => {
   it("runs navigation straight through while nothing is unsaved", async () => {
     const harness = await mountGuard(false);
     try {
-      await act(async () => harness.guard.guard((target: string) => { harness.calls.push(target); })("chat"));
+      await act(async () => harness.guard.guard(() => { harness.calls.push("chat"); }));
       assert.deepEqual(harness.calls, ["chat"]);
       assert.equal(harness.guard.confirming, false);
     } finally { await harness.view.cleanup(); }
@@ -38,7 +38,7 @@ describe("useLeaveGuard", () => {
   it("holds navigation back until the user discards, then discards before navigating", async () => {
     const harness = await mountGuard(true);
     try {
-      await act(async () => harness.guard.guard((target: string) => { harness.calls.push(target); })("settings"));
+      await act(async () => harness.guard.guard(() => { harness.calls.push("settings"); }));
       assert.deepEqual(harness.calls, []);
       assert.equal(harness.guard.confirming, true);
       await act(async () => harness.guard.confirmLeave());
@@ -50,7 +50,7 @@ describe("useLeaveGuard", () => {
   it("drops the held navigation when the user keeps editing", async () => {
     const harness = await mountGuard(true);
     try {
-      await act(async () => harness.guard.guard(() => { harness.calls.push("chat"); })());
+      await act(async () => harness.guard.guard(() => { harness.calls.push("chat"); }));
       await act(async () => harness.guard.cancelLeave());
       assert.equal(harness.guard.confirming, false);
       await act(async () => harness.guard.confirmLeave());

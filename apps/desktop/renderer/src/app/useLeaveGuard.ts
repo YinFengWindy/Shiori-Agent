@@ -25,13 +25,14 @@ export function useLeaveGuard({ active, onDiscard }: { active: boolean; onDiscar
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const latest = useLatestRef({ active, onDiscard });
 
-  const guard = useCallback(<Args extends unknown[]>(action: (...args: Args) => void) => (...args: Args) => {
+  /** Runs `action` now, or holds it for confirmation while the guard is active. Call it from event handlers. */
+  const guard = useCallback((action: () => void) => {
     if (!latest.current.active) {
-      action(...args);
+      action();
       return;
     }
     // Stored through the updater form: a bare function would be called as one.
-    setPendingAction(() => () => action(...args));
+    setPendingAction(() => action);
   }, [latest]);
 
   const confirmLeave = useCallback(() => {
