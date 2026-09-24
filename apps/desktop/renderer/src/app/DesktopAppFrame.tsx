@@ -403,7 +403,10 @@ export function DesktopAppFrame({
               aria-hidden="true"
             />
           ) : null}
-          <div className={cx("h-full", sidebarState.compact && "absolute inset-y-0 left-0")}>
+          {/* A closed compact overlay must not keep its footprint clickable: its
+              content is pointer-events-none, so hit-testing would land on this
+              wrapper and swallow clicks meant for the chat underneath. */}
+          <div className={cx("h-full", sidebarState.compact && "absolute inset-y-0 left-0", sidebarState.compact && sidebarState.collapsed && "pointer-events-none")}>
           <SidebarTrackContent
             mainView={mainView}
             sidebarState={sidebarState}
