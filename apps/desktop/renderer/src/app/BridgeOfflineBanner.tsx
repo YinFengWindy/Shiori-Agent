@@ -1,6 +1,7 @@
 import { ArrowsClockwise, Plugs } from "@phosphor-icons/react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { cx } from "../shared/styles";
+import { useBridgeOfflineFeedbackFilter } from "./bridgeOfflineFeedback";
 
 type BridgeOfflineBannerProps = {
   health: string;
@@ -33,6 +34,8 @@ export function BridgeOfflineBanner({ health, bridgeError, onRestart }: BridgeOf
   const [restarting, setRestarting] = useState(false);
   const bannerRef = useRef<HTMLDivElement | null>(null);
   const visible = shouldShowBridgeOfflineBanner(health, restarting);
+  // While this banner explains the outage, toasts that only repeat it are dropped.
+  useBridgeOfflineFeedbackFilter(visible, bridgeError);
 
   useLayoutEffect(() => {
     const root = document.documentElement;

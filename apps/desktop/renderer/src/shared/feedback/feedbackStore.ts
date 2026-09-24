@@ -48,6 +48,25 @@ let toasts: readonly FeedbackToast[] = [];
 let nextId = 1;
 const listeners = new Set<Listener>();
 
+/** A message about to be queued; a filter may rewrite it or drop it (by returning null). */
+export type FeedbackInput = { tone: FeedbackTone; message: string; action?: FeedbackAction };
+/** Installed by the one owner that knows better than a raw message (see `setFeedbackFilter`). */
+export type FeedbackFilter = (input: FeedbackInput) => FeedbackInput | null;
+let filter: FeedbackFilter | null = null;
+
+/**
+ * Installs (or with null removes) the single app-wide message filter. Used
+ * by the bridge-offline banner so failures that only restate "the local
+ * service is down" do not pile toasts on top of the banner that already
+ * says so. Returns a function that removes this filter if it is still installed.
+ */
+export function setFeedbackFilter(next: FeedbackFilter | null): () => void {
+  filter = next;
+  return () => {
+    if (filter === next) filter = null;
+  };
+}
+
 function publish(next: readonly FeedbackToast[]): void {
   toasts = next;
   for (const listener of listeners) listener();
@@ -59,7 +78,9 @@ function publish(next: readonly FeedbackToast[]): void {
  * its timer — repeated failures of the same request read as one message.
  * Returns the queued id, or 0 when the message was empty.
  */
-export function showFeedback(input: { tone: FeedbackTone; message: string; action?: FeedbackAction }): number {
+export function showFeedback(raw: FeedbackInput): number {
+  const input = filter ? filter(raw) : raw;
+  if (!input) return 0;
   const message = input.message.trim();
   if (!message) return 0;
   const toast: FeedbackToast = { id: nextId++, tone: input.tone, message, action: input.action };
@@ -72,6 +93,12 @@ export function showFeedback(input: { tone: FeedbackTone; message: string; actio
 export function dismissFeedback(id: number): void {
   if (!toasts.some((item) => item.id === id)) return;
   publish(toasts.filter((item) => item.id !== id));
+}
+
+/** Removes every queued message matching `predicate` (e.g. ones a newly shown banner now covers). */
+export function dismissFeedbackWhere(predicate: (toast: FeedbackToast) => boolean): void {
+  if (!toasts.some(predicate)) return;
+  publish(toasts.filter((item) => !predicate(item)));
 }
 
 /** Current queue, oldest first. Stable reference between changes (a `useSyncExternalStore` snapshot). */
@@ -87,6 +114,7 @@ export function subscribeFeedback(listener: Listener): () => void {
 
 /** Clears the queue; tests use it to isolate cases sharing this module. */
 export function resetFeedback(): void {
+  filter = null;
   publish([]);
 }
 
