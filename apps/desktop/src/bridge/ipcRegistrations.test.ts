@@ -31,6 +31,7 @@ function setup(overrides: {
 } = {}) {
   const windowCalls: WindowCall[] = [];
   const externalOpened: string[] = [];
+  let relaunches = 0;
   const handlers = new Map<string, (event: never, ...args: never[]) => unknown>();
   const listeners = new Map<string, (event: never, ...args: never[]) => void>();
 
@@ -84,12 +85,14 @@ function setup(overrides: {
     voiceRecorder: {},
     voiceController: {},
     voicePlayback: {},
+    relaunchApp: () => { relaunches += 1; },
   } as unknown as RegisterDesktopIpcOptions);
 
   return {
     windows: { main, other, pet },
     windowCalls,
     externalOpened,
+    get relaunches() { return relaunches; },
     channels: { handled: [...handlers.keys()], listened: [...listeners.keys()] },
     async invokeHandler(channel: string, sender: WebContents, ...args: unknown[]) {
       const handler = handlers.get(channel);
@@ -105,6 +108,15 @@ function setup(overrides: {
 }
 
 describe("desktop ipc window boundaries", () => {
+  it("relaunches the app for the main window but refuses the pet surface", async () => {
+    const ipc = setup();
+
+    assert.equal(await ipc.invokeHandler("desktop:app-relaunch", ipc.windows.pet.webContents), false);
+    assert.equal(ipc.relaunches, 0);
+    assert.equal(await ipc.invokeHandler("desktop:app-relaunch", ipc.windows.main.webContents), true);
+    assert.equal(ipc.relaunches, 1);
+  });
+
   it("controls the window that sent the request, not an arbitrary one", async () => {
     const ipc = setup();
 

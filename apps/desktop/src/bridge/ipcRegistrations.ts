@@ -75,6 +75,13 @@ export type RegisterDesktopIpcOptions = {
   voiceController: DesktopVoiceController;
   voicePlayback: BrowserVoicePlayback;
   onVoiceSettingsChanged?: () => void;
+  /**
+   * Restarts the whole application (quit, then launch again), supplied by
+   * `main.ts`. Exposed so changes that only take effect on the next launch
+   * — plugin installs, updates, uninstalls, trust — can be applied from the
+   * page that announced them.
+   */
+  relaunchApp: () => void;
 };
 
 function assetTransport<T>(value: T, assets: LocalAssetReference[]): LocalAssetTransport<T> {
@@ -113,6 +120,7 @@ export function registerDesktopIpcHandlers(
     voicePlayback,
     onVoiceSettingsChanged,
     onPluginDeactivated,
+    relaunchApp,
   }: RegisterDesktopIpcOptions,
 ): void {
   const applicationSessionId = randomUUID();
@@ -221,6 +229,13 @@ export function registerDesktopIpcHandlers(
         lastError: String(error),
       };
     }
+  });
+  host.handle("desktop:app-relaunch", (event) => {
+    // Plugin surfaces (the pet) share this preload; restarting the app is a
+    // decision for the main window only.
+    if (isPetWindow(host.windowFromWebContents(event.sender))) return false;
+    relaunchApp();
+    return true;
   });
   host.handle("desktop:settings-read", async () => {
     return readRuntimeSettings(bridge);
