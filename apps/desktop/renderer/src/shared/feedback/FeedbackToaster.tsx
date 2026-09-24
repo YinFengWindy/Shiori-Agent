@@ -1,4 +1,4 @@
-import { CheckCircle, Info, Warning, WarningCircle, X, type Icon } from "@phosphor-icons/react";
+import { CaretDown, CheckCircle, Info, Warning, WarningCircle, X, type Icon } from "@phosphor-icons/react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { cx } from "../styles";
 import {
@@ -27,15 +27,17 @@ const toneBadgeClass: Record<FeedbackTone, string> = {
 
 function FeedbackToastItem({ toast }: { toast: FeedbackToast }) {
   const [paused, setPaused] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const Glyph = toneIcon[toast.tone];
 
   // Restarting the full duration after a pause (rather than resuming the
   // remainder) is deliberate: whoever just hovered the message was reading it.
+  // An opened 详情 holds the toast until it is folded again or closed.
   useEffect(() => {
-    if (paused) return undefined;
+    if (paused || detailOpen) return undefined;
     const timer = window.setTimeout(() => dismissFeedback(toast.id), feedbackDurationMs[toast.tone]);
     return () => window.clearTimeout(timer);
-  }, [paused, toast.id, toast.tone]);
+  }, [detailOpen, paused, toast.id, toast.tone]);
 
   return (
     <div
@@ -50,7 +52,25 @@ function FeedbackToastItem({ toast }: { toast: FeedbackToast }) {
       <span className={cx("grid h-6 w-6 shrink-0 place-items-center rounded-full", toneBadgeClass[toast.tone])} aria-hidden="true">
         <Glyph className="h-4 w-4" weight="bold" />
       </span>
-      <span className="min-w-0 flex-1 break-words pt-0.5 leading-5">{toast.message}</span>
+      <span className="grid min-w-0 flex-1 gap-1 pt-0.5">
+        <span className="break-words leading-5">{toast.message}</span>
+        {toast.detail ? (
+          <>
+            <button
+              type="button"
+              className="inline-flex w-fit items-center gap-1 rounded-md text-caption font-medium text-ink-muted transition-colors hover:text-ink"
+              aria-expanded={detailOpen}
+              onClick={() => setDetailOpen((current) => !current)}
+            >
+              详情
+              <CaretDown className={cx("h-3 w-3 transition-transform duration-quick", detailOpen && "rotate-180")} weight="bold" aria-hidden="true" />
+            </button>
+            {detailOpen ? (
+              <pre className="scrollbar-soft m-0 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white/60 p-2 font-mono text-caption text-ink-secondary">{toast.detail}</pre>
+            ) : null}
+          </>
+        ) : null}
+      </span>
       {toast.action ? (
         <button
           type="button"

@@ -13,11 +13,15 @@ export type FeedbackToast = {
   tone: FeedbackTone;
   message: string;
   action?: FeedbackAction;
+  /** Technical cause kept out of the message; the toast folds it behind 「详情」. */
+  detail?: string;
 };
 
 /** Options shared by every `feedback.*` reporter call. */
 export type FeedbackOptions = {
   action?: FeedbackAction;
+  /** Technical cause (e.g. a raw bridge error) shown only once the user opens 「详情」. */
+  detail?: string;
 };
 
 /** The injectable reporter hooks receive instead of owning their own message state. */
@@ -49,7 +53,7 @@ let nextId = 1;
 const listeners = new Set<Listener>();
 
 /** A message about to be queued; a filter may rewrite it or drop it (by returning null). */
-export type FeedbackInput = { tone: FeedbackTone; message: string; action?: FeedbackAction };
+export type FeedbackInput = { tone: FeedbackTone; message: string; action?: FeedbackAction; detail?: string };
 /** Installed by the one owner that knows better than a raw message (see `setFeedbackFilter`). */
 export type FeedbackFilter = (input: FeedbackInput) => FeedbackInput | null;
 let filter: FeedbackFilter | null = null;
@@ -83,7 +87,8 @@ export function showFeedback(raw: FeedbackInput): number {
   if (!input) return 0;
   const message = input.message.trim();
   if (!message) return 0;
-  const toast: FeedbackToast = { id: nextId++, tone: input.tone, message, action: input.action };
+  const detail = input.detail?.trim();
+  const toast: FeedbackToast = { id: nextId++, tone: input.tone, message, action: input.action, ...(detail ? { detail } : {}) };
   const remaining = toasts.filter((item) => item.tone !== toast.tone || item.message !== toast.message);
   publish([...remaining, toast].slice(-maxVisibleFeedback));
   return toast.id;
@@ -119,7 +124,7 @@ export function resetFeedback(): void {
 }
 
 function reporterFor(tone: FeedbackTone) {
-  return (message: string, options?: FeedbackOptions) => { showFeedback({ tone, message, action: options?.action }); };
+  return (message: string, options?: FeedbackOptions) => { showFeedback({ tone, message, action: options?.action, detail: options?.detail }); };
 }
 
 /** The app-wide reporter bound to this store. */
