@@ -47,13 +47,15 @@ export function previewFromRoleLastMessage(lastMessage: RoleLastMessage | null |
 }
 
 /**
- * The chat-list preview from the open conversation: its newest user or
- * assistant message (a streaming reply counts once it has text), so the
- * active role's row follows the chat live without another bridge call.
+ * The chat-list preview from the open conversation: its newest finished user
+ * or assistant message, so the active role's row follows the chat without
+ * another bridge call. A reply still streaming is skipped — the row updates
+ * once it lands, instead of flickering with every token.
  */
 export function previewFromSessionMessages(messages: readonly SessionMessage[]): RoleChatPreview | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]!;
+    if (message.streaming) continue;
     const preview = previewFromMessage(
       message.role,
       message.content,

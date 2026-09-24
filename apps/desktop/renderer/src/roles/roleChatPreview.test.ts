@@ -49,6 +49,13 @@ describe("chat list previews", () => {
     ]), { text: "好的", timestamp: "t1" });
   });
 
+  it("skips a reply that is still streaming", () => {
+    assert.equal(previewFromSessionMessages([
+      { role: "user", content: "在吗", timestamp: "t1" },
+      { role: "assistant", content: "在", streaming: true },
+    ])?.text, "你：在吗");
+  });
+
   it("is null for an empty conversation", () => {
     assert.equal(previewFromSessionMessages([]), null);
     assert.equal(previewFromRoleLastMessage(null), null);

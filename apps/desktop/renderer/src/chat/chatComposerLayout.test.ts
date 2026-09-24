@@ -15,7 +15,7 @@ describe("getChatComposerLimits", () => {
 
   it("keeps the whole composer below the chat header", () => {
     const limits = getChatComposerLimits(500);
-    assert.ok(limits.composerMaxHeight + 40 < 500);
+    assert.ok((limits.composerMaxHeight ?? Infinity) + 40 < 500);
     // Even with every part at its cap, what the composer shows fits in its own cap by scrolling.
     assert.ok(limits.attachmentsMaxHeight <= 128);
   });
@@ -23,6 +23,6 @@ describe("getChatComposerLimits", () => {
   it("falls back to the line cap before the pane is measured", () => {
     const limits = getChatComposerLimits(0);
     assert.equal(limits.textareaMaxHeight, 240);
-    assert.equal(limits.composerMaxHeight, Number.POSITIVE_INFINITY);
+    assert.equal(limits.composerMaxHeight, undefined);
   });
 });

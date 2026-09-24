@@ -23,7 +23,7 @@ export type ChatComposerLimits = {
   textareaMaxHeight: number;
   attachmentsMaxHeight: number;
   /** Cap on the whole composer card so it can never climb under the header. */
-  composerMaxHeight: number;
+  composerMaxHeight: number | undefined;
 };
 
 /**
@@ -35,7 +35,7 @@ export type ChatComposerLimits = {
 export function getChatComposerLimits(paneHeight: number): ChatComposerLimits {
   const lineCap = chatComposerLineHeightPx * chatComposerMaxLines;
   if (paneHeight <= 0) {
-    return { textareaMaxHeight: lineCap, attachmentsMaxHeight: attachmentsMaxHeightPx, composerMaxHeight: Number.POSITIVE_INFINITY };
+    return { textareaMaxHeight: lineCap, attachmentsMaxHeight: attachmentsMaxHeightPx, composerMaxHeight: undefined };
   }
   const minTextarea = chatComposerLineHeightPx * 2;
   return {

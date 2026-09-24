@@ -35,6 +35,8 @@ type ChatMessageListProps = Partial<ChatMessageActionHandlers> & {
 };
 
 const chatBodyClass = "text-sm leading-6";
+/** Widest the message track gets; wider panes leave gutters on both sides. */
+export const chatContentTrackMaxWidthPx = 860;
 const chatContentTrackClass = "mx-auto w-full max-w-[860px] px-5 md:px-6";
 const noEnteringKeys: ReadonlySet<string> = new Set();
 const noop = () => undefined;

@@ -7,7 +7,7 @@ import type { ChatMessageActionAvailability } from "./chatMessageActions";
 
 type ChatMessageActionBarProps = {
   availability: ChatMessageActionAvailability;
-  /** Which side of the bubble the bar hugs: toward the conversation's centre line. */
+  /** Which side of the bubble the bar sits beside (outside it, bottom-aligned): toward the conversation's centre. */
   side: "left" | "right";
   onCopy: () => void;
   onQuote: () => void;
@@ -39,9 +39,9 @@ export function ChatMessageActionBar({ availability, side, onCopy, onQuote, onRe
   return (
     <div
       className={cx(
-        "chat-message-actions surface-glass-strong pointer-events-none absolute -top-4 z-[2] flex items-center gap-0.5 rounded-md p-0.5 opacity-0 transition-opacity duration-quick",
+        "chat-message-actions surface-glass-strong pointer-events-none absolute bottom-0 z-[2] flex items-center gap-0.5 rounded-md p-0.5 opacity-0 transition-opacity duration-quick",
         "group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
-        side === "right" ? "right-2" : "left-2",
+        side === "right" ? "left-full ml-1.5" : "right-full mr-1.5",
       )}
       role="toolbar"
       aria-label="消息操作"
