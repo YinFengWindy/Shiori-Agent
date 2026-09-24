@@ -434,7 +434,7 @@ export function ChatSurface({
         typing={sending}
         onOpenRoleDetail={handleOpenRoleDetail}
       />
-      <section ref={conversationPanelRef} className="conversation-panel relative z-[1] h-full min-h-0 overflow-hidden bg-transparent">
+      <section ref={conversationPanelRef} className="conversation-panel relative z-[1] h-full min-h-0 overflow-hidden bg-transparent" data-chat-conversation="">
         <ChatMessageList
           activeRole={activeRole}
           sessionKey={activeSession?.key ?? ""}

@@ -34,6 +34,7 @@ import { useRolePresentation } from "./app/useRolePresentation";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { requestChatModelMenu } from "./chat/chatModelMenuRequests";
 import { chatSendFailureAction } from "./chat/chatSendFailure";
+import { openChatRole } from "./chat/chatRoleSwitchTransition";
 import { feedback } from "./shared/feedback/feedbackStore";
 import { FeedbackToaster } from "./shared/feedback/FeedbackToaster";
 import { TooltipProvider } from "./shared/ui/Tooltip";
@@ -618,7 +619,12 @@ function App(): React.ReactElement {
       onOpenSearch={() => setShowSearchDialog(true)}
       onOpenRolesWorkspace={() => guardLeave(() => openRoleWorkspace({ kind: "roles-list" }))}
       onOpenPluginPage={(pageId) => guardLeave(() => openPluginPage(pageId))}
-      onOpenRole={(roleId) => guardLeave(() => void openRole(roleId, null, { recordHistory: true }))}
+      onOpenRole={(roleId) => guardLeave(() => void openChatRole({
+        roleId,
+        activeRoleId,
+        chatShown: mainView.kind === "chat",
+        open: () => void openRole(roleId, null, { recordHistory: true }),
+      }))}
       health={health}
       bridgeError={bridgeError}
       onRestartBridge={bridgeLifecycle.restartBridge}

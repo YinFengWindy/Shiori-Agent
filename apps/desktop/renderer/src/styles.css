@@ -1112,6 +1112,99 @@ button[role="combobox"]:focus-visible {
   to { opacity: 0; }
 }
 
+/* Chat role switch (chat/chatRoleSwitchTransition.ts): the list row's avatar
+   and name morph into the header while the old pair shrinks away; the new
+   background settles in from a slight zoom over the old one; the
+   conversation fades out and rises back in. The header bar and the
+   conversation are named so the background layer never covers them; each
+   group clips to the chat pane's rounded left edge. */
+/* Groups stack in the old view's paint order, where the list row comes
+   before the chat pane: lift the morphing pair above the background. */
+::view-transition-group(chat-role-avatar),
+::view-transition-group(chat-role-name) {
+  z-index: 1;
+  animation-duration: var(--duration-morph);
+  animation-timing-function: var(--ease-drawer);
+}
+
+::view-transition-group(chat-role-avatar) {
+  overflow: hidden;
+  border-radius: 9999px;
+}
+
+::view-transition-old(chat-role-avatar),
+::view-transition-new(chat-role-avatar) {
+  height: 100%;
+  object-fit: cover;
+  animation-duration: var(--duration-morph);
+}
+
+::view-transition-old(chat-role-name),
+::view-transition-new(chat-role-name) {
+  width: auto;
+  height: 100%;
+  animation-duration: var(--duration-morph);
+  animation-timing-function: var(--ease-drawer);
+}
+
+::view-transition-old(chat-role-avatar-old),
+::view-transition-old(chat-role-name-old) {
+  animation: view-transition-shrink-out var(--duration-base) ease both;
+}
+
+::view-transition-group(chat-backdrop) {
+  overflow: hidden;
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  animation-duration: 0s;
+}
+
+::view-transition-image-pair(chat-backdrop) {
+  isolation: auto;
+}
+
+/* The old background stays put under the incoming one... */
+::view-transition-old(chat-backdrop) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* ...unless the new role has none, then it just fades. */
+::view-transition-old(chat-backdrop):only-child {
+  animation: view-transition-fade-out var(--duration-base) ease both;
+}
+
+::view-transition-new(chat-backdrop) {
+  mix-blend-mode: normal;
+  animation: view-transition-backdrop-in var(--duration-backdrop-in) var(--ease-out-soft) both;
+}
+
+::view-transition-group(chat-header) {
+  overflow: hidden;
+  border-top-left-radius: var(--radius-lg);
+}
+
+::view-transition-group(chat-conversation) {
+  overflow: hidden;
+  border-bottom-left-radius: var(--radius-lg);
+  animation-duration: 0s;
+}
+
+::view-transition-old(chat-conversation) {
+  animation: view-transition-fade-out var(--duration-fast) ease both;
+}
+
+::view-transition-new(chat-conversation) {
+  animation: view-transition-rise-in var(--duration-page-rise) var(--ease-out-soft) 90ms both;
+}
+
+@keyframes view-transition-shrink-out {
+  to { opacity: 0; transform: scale(0.7); }
+}
+
+@keyframes view-transition-backdrop-in {
+  from { opacity: 0; transform: scale(1.05); }
+}
+
 @keyframes view-transition-rise-in {
   from { opacity: 0; transform: translateY(10px); }
 }
