@@ -80,9 +80,13 @@ search_enabled = true
 # BotFather 给的 bot token，格式：123456789:AAF...
 token = ""
 
-[channels.qq]
-# 填 QQ 号启用 QQ 频道，留空跳过。
+# QQ（NapCat）渠道插件（也可在 设置 › 插件 › QQ（NapCat） 中填写）。
+[plugins.qq]
+# 填 Bot QQ 号启用，留空跳过。
 bot_uin = ""
+# NapCat 正向 WebSocket 地址与令牌；留空沿用 NcatBot 默认值（ws://localhost:3001）。
+# ws_uri = ""
+# ws_token = ""
 websocket_open_timeout_seconds = 5.0
 
 # 可选：QQ 开放平台官方机器人，使用官方 Gateway 和 REST API。
