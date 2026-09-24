@@ -1,8 +1,10 @@
-import { readdir, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { batchByArgumentLength } from "./test-unit-batches.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(here, "..");
@@ -101,23 +103,61 @@ if (options.list) {
 
 const tsxCli = resolve(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
 const rendererTsconfig = resolve(desktopRoot, "renderer", "tsconfig.json");
-const child = spawn(
-  process.execPath,
-  [tsxCli, "--tsconfig", rendererTsconfig, "--test",
-    ...(options["test-name-pattern"] !== undefined
-      ? [`--test-name-pattern=${options["test-name-pattern"]}`] : []),
-    ...testFiles],
-  { cwd: repoRoot, stdio: "inherit" },
-);
+const summaryReporter = pathToFileURL(resolve(here, "test-unit-summary-reporter.mjs")).href;
+// Repository-relative paths (the child runs in repoRoot) keep each argument
+// short; batching keeps the whole command line under Windows' limit.
+const batches = batchByArgumentLength(testFiles.map((path) => relative(repoRoot, path)));
 
-child.on("error", (error) => {
-  throw error;
-});
+/**
+ * Runs one `node --test` batch: spec output goes to the terminal, the summary
+ * reporter writes this batch's counts to `summaryPath`.
+ */
+function runBatch(files, summaryPath) {
+  return new Promise((resolveBatch, rejectBatch) => {
+    const child = spawn(
+      process.execPath,
+      [tsxCli, "--tsconfig", rendererTsconfig, "--test",
+        "--test-reporter=spec", "--test-reporter-destination=stdout",
+        `--test-reporter=${summaryReporter}`, `--test-reporter-destination=${summaryPath}`,
+        ...(options["test-name-pattern"] !== undefined
+          ? [`--test-name-pattern=${options["test-name-pattern"]}`] : []),
+        ...files],
+      { cwd: repoRoot, stdio: "inherit" },
+    );
+    child.on("error", rejectBatch);
+    child.on("exit", (code, signal) => resolveBatch({ code, signal }));
+  });
+}
 
-child.on("exit", (code, signal) => {
-  if (signal) {
-    process.kill(process.pid, signal);
-    return;
+const summaryDir = await mkdtemp(join(tmpdir(), "shiori-desktop-test-"));
+const totals = { tests: 0, passed: 0, failed: 0, skipped: 0, todo: 0 };
+const failedBatches = [];
+const startedAt = Date.now();
+try {
+  for (const [index, files] of batches.entries()) {
+    const label = `batch ${index + 1}/${batches.length}`;
+    if (batches.length > 1) console.log(`\n[desktop:test] ${label}: ${files.length} files`);
+    const summaryPath = join(summaryDir, `batch-${index + 1}.json`);
+    const { code, signal } = await runBatch(files, summaryPath);
+    if (signal) {
+      // Forward an interrupt (e.g. Ctrl+C) instead of starting the next batch.
+      process.kill(process.pid, signal);
+      break;
+    }
+    const counts = JSON.parse(await readFile(summaryPath, "utf-8"));
+    for (const key of Object.keys(totals)) totals[key] += counts[key];
+    // Every batch runs even after a failure, so one run reports all failures.
+    if (code !== 0) failedBatches.push(label);
   }
-  process.exitCode = code ?? 1;
-});
+} finally {
+  await rm(summaryDir, { recursive: true, force: true });
+}
+
+const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+console.log(`\n[desktop:test] ${testFiles.length} files in ${batches.length} batch(es), ${seconds}s: `
+  + `tests ${totals.tests}, pass ${totals.passed}, fail ${totals.failed}, `
+  + `skipped ${totals.skipped}, todo ${totals.todo}`);
+if (failedBatches.length) {
+  console.log(`[desktop:test] failed: ${failedBatches.join(", ")}`);
+  process.exitCode = 1;
+}
