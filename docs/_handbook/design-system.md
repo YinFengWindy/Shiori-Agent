@@ -131,6 +131,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | `ghostButtonClass` | 次级操作 |
 | `dangerButtonClass` / `dangerGhostButtonClass` | 破坏性操作的实心版 / 安静版 |
 | `iconButtonClass` | 纯图标方形按钮（返回、重置、工具），统一 `rounded-md` |
+| `primaryButtonSurfaceClass` / `ghostButtonSurfaceClass` / `dangerGhostButtonSurfaceClass` | 不含尺寸的按钮外观，配 `compactButtonSizeClass`（36px 带文字按钮）或自带尺寸使用 |
 | `cardClass` | 空状态、诊断行等卡片面 |
 | `badgeClass` | 状态与标签胶囊 |
 | `panelHeadClass` / `panelTitleClass` | 面板头部布局与标题 |
@@ -139,7 +140,10 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | `focusResetClass` | 自带状态样式的控件的 focus 复位 |
 
 需要变体时用 `cx(inputClass, "min-h-24 resize-y")` 这种叠加写法（`textareaClass` 本身就是这么来的），
-不要复制粘贴整串再改。
+不要复制粘贴整串再改。**只叠加不冲突的类**：同一属性的两个工具类（如 `px-[18px]` 和 `px-3.5`）都会落到元素上、由样式表顺序决定谁赢，
+要换尺寸就用上面的 `*SurfaceClass` 自己配尺寸。
+
+溢出菜单（「…」）用 `shared/ui/ActionMenu`（Base UI Menu + `Menu.tsx` 的视觉词汇）。
 
 ## 工具类（`styles.css` 的 `@layer utilities`）
 
@@ -181,7 +185,13 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
   | `--duration-enter` | 240ms | 聊天新消息入场（只 CSS 用，没有 Tailwind 类） |
   | `--duration-crossfade` | 320ms | 图片换图的交叉淡入（`shared/CrossfadeLayers`，心情立绘、聊天背景） |
   | `--duration-pulse` | 600ms | 一次性的提示脉冲（跳转到引用消息的光环） |
+  | `--duration-morph` | 420ms | 共享元素视图过渡（角色卡片 ↔ 详情头部），配 `--ease-drawer`（只 CSS 用） |
+  | `--duration-page-rise` | 380ms | 视图过渡里新页面的上浮淡入（只 CSS 用） |
+  | `--duration-spring` | 700ms | 倾斜卡片离开后的弹簧回正，配 `--ease-spring`（只 CSS 用） |
 
+- 弹簧缓动 `--ease-spring`：阻尼弹簧（ζ 0.42、ω 11）采样成 `linear()`，不支持时退回会过冲的 cubic-bezier；只给「松手回弹」这类一次性回正
+- 视图过渡：`shared/viewTransition.ts` 的 `runViewTransition({ update, nameOld, nameNew })` 包一层同文档 View Transition——运行中的过渡先 `skipTransition()` 再开下一段，名字只在上一段 `updateCallbackDone` 之后才分配；过渡期间点到 `<html>` 的点击会先结束过渡再在原处重放。减弱动态效果时不命名任何元素，只剩 140ms 根交叉淡入；没有 API 时直接切换。角色卡片 ↔ 详情用 `roles/roleViewTransition.ts`：元素用 `data-vt-part`（portrait / avatar / name / sub）标记，页面用 `data-role-page`，规则见 styles.css 的 `role-*`
+- 倾斜卡片：`shared/ui/reactBits/TiltedCard`（样式 `.tilt-card`），只在鼠标悬停时跟随指针倾斜（最大 8°）并带光带与高光，离开后弹簧回正；触屏、粗指针和减弱动态效果下保持平放。光效层不接收指针，不影响点击、焦点和卡片菜单。目前只用在角色卡片网格
 - 缓动：`--ease-out-soft`（`ease-out-soft`，也是裸 `transition` 的默认值）用于入场、按压、悬停；
   `--ease-drawer`（`ease-drawer`）只给侧栏开合这类抽屉；`--ease-in-out-soft` 只给两端都在屏幕上的对称切换（交叉淡入）
 - 聊天新消息入场只对「当前会话挂载后追加的消息」播一次，由 `chat/chatMessageEnterState.ts` 判定：

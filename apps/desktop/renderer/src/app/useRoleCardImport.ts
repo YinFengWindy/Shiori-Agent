@@ -3,12 +3,16 @@ import type { NewRoleFormState } from "../shared/types";
 import { useLatestRef } from "../shared/useLatestRef";
 import { createRoleFormFromImport, idleRoleCardImport, readRoleCardImportPreview } from "./roleCardImportState";
 import type { RoleCardImportState } from "./roleCardImportState";
-import { errorMessage } from "../shared/feedback/feedbackStore";
+import { errorMessage, type FeedbackOptions } from "../shared/feedback/feedbackStore";
+import { describeRoleCardImportError } from "../roles/roleCardImportErrors";
 
 type ImportControllerArgs = {
   updateNewRoleForm: (next: React.SetStateAction<NewRoleFormState>) => void;
-  /** Receives the already-prefixed failure message; the caller decides where it is shown. */
-  reportImportError: (message: string) => void;
+  /**
+   * Receives the already-prefixed, user-facing failure message, plus the raw
+   * cause as `detail` when the message rewrote it; the caller decides where it is shown.
+   */
+  reportImportError: (message: string, options?: FeedbackOptions) => void;
 };
 
 async function releasePreview(importId: string) {
@@ -34,7 +38,8 @@ export function useRoleCardImport({ updateNewRoleForm, reportImportError }: Impo
   }
 
   function reportError(error: unknown) {
-    reportImportError(`角色导入失败：${errorMessage(error)}`);
+    const { message, detail } = describeRoleCardImportError(errorMessage(error));
+    reportImportError(message, detail ? { detail } : undefined);
   }
 
   async function previewRoleCard() {

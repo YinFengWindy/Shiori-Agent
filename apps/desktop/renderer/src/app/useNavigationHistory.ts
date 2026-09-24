@@ -150,13 +150,25 @@ export function useNavigationHistory({
     }
   }
 
+  /**
+   * Opens a settings section. `subsectionId` lands on one of its subtabs
+   * (e.g. a plugin's own tab under 「插件」); an id that is not a visible
+   * subtab falls back the way `SettingsPage` resolves any remembered one.
+   */
   function openSettingsWorkspace(
     section: SettingsSectionId = "models",
-    options?: { recordHistory?: boolean },
+    options?: { recordHistory?: boolean; subsectionId?: string },
   ): void {
+    const subsectionId = options?.subsectionId;
+    if (subsectionId) settingsSubsectionMemory.remember(section, subsectionId);
     openSettingsView(section);
     if (options?.recordHistory !== false) {
-      pushNavigationEntry(buildNavigationEntry({ kind: "settings" }, activeRoleIdRef.current, section));
+      pushNavigationEntry(buildNavigationEntry(
+        { kind: "settings" },
+        activeRoleIdRef.current,
+        section,
+        subsectionId || (settingsSubsectionMemory.resolve(section) ?? ""),
+      ));
     }
   }
 

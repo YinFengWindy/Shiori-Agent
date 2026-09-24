@@ -52,17 +52,37 @@ export const sidebarTrackMotionClass =
 export const sidebarContentMotionClass =
   "transition-[opacity,transform] duration-base ease-out-soft motion-reduce:transition-opacity motion-reduce:transform-none";
 
-/** Shared primary action button styling. */
-export const primaryButtonClass = cx(
+/**
+ * Button surfaces without size. The full-size classes below add the default
+ * padding; a compact button composes a surface with `compactButtonSizeClass`
+ * instead of overriding the default padding (an override is unreliable: both
+ * utilities land on the element and the stylesheet order decides).
+ */
+export const primaryButtonSurfaceClass = cx(
   pressableClass,
-  "cursor-pointer rounded-md border border-white/70 bg-gradient-accent px-[18px] py-3 text-ink shadow-soft hover:brightness-[1.03] hover:shadow-panel active:brightness-[0.97] disabled:cursor-default disabled:opacity-50 disabled:shadow-none",
+  "cursor-pointer rounded-md border border-white/70 bg-gradient-accent text-ink shadow-soft hover:brightness-[1.03] hover:shadow-panel active:brightness-[0.97] disabled:cursor-default disabled:opacity-50 disabled:shadow-none",
 );
 
-/** Shared secondary action button styling. */
-export const ghostButtonClass = cx(
+/** Size-free secondary button surface; see `primaryButtonSurfaceClass`. */
+export const ghostButtonSurfaceClass = cx(
   pressableClass,
-  "cursor-pointer rounded-md border border-line bg-surface px-[18px] py-3 text-ink-secondary hover:border-line-accent hover:bg-accent-softer hover:text-accent-text disabled:cursor-default disabled:opacity-50",
+  "cursor-pointer rounded-md border border-line bg-surface text-ink-secondary hover:border-line-accent hover:bg-accent-softer hover:text-accent-text disabled:cursor-default disabled:opacity-50",
 );
+
+/** Size-free quiet destructive surface; see `primaryButtonSurfaceClass`. */
+export const dangerGhostButtonSurfaceClass = cx(
+  pressableClass,
+  "cursor-pointer rounded-md border border-line bg-surface text-danger-text hover:border-danger/40 hover:bg-danger-soft disabled:cursor-default disabled:opacity-50",
+);
+
+/** Height, padding and type of a compact (36px) labeled button; compose it with a surface class. */
+export const compactButtonSizeClass = "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 px-3.5 text-body-sm font-medium";
+
+/** Shared primary action button styling. */
+export const primaryButtonClass = cx(primaryButtonSurfaceClass, "px-[18px] py-3");
+
+/** Shared secondary action button styling. */
+export const ghostButtonClass = cx(ghostButtonSurfaceClass, "px-[18px] py-3");
 
 /** Shared destructive action button styling. */
 export const dangerButtonClass = cx(
@@ -71,10 +91,7 @@ export const dangerButtonClass = cx(
 );
 
 /** Shared quiet destructive styling for inline delete affordances. */
-export const dangerGhostButtonClass = cx(
-  pressableClass,
-  "cursor-pointer rounded-md border border-line bg-surface px-[18px] py-3 text-danger-text hover:border-danger/40 hover:bg-danger-soft disabled:cursor-default disabled:opacity-50",
-);
+export const dangerGhostButtonClass = cx(dangerGhostButtonSurfaceClass, "px-[18px] py-3");
 
 /** Square icon-only action button (back, reset, tools): the one corner treatment for this role is rounded-md. */
 export const iconButtonClass = cx(

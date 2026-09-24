@@ -18,13 +18,13 @@ export function RoleDetailTabs({
   onChange: (tab: RoleDetailTabId) => void;
 }) {
   return (
-    <nav className="flex min-w-0 items-center gap-6 overflow-x-auto" aria-label="角色详情分区">
+    <nav className="-mb-px flex min-w-0 items-center gap-6 overflow-x-auto" aria-label="角色详情分区">
       {tabs.map((tab) => {
         const selected = activeTab === tab.id;
         return (
           <button
             className={cx(
-              "h-10 shrink-0 border-b-2 px-1 text-sm transition-colors focus:outline-none",
+              "h-10 shrink-0 border-b-2 px-1 text-body transition-colors",
               selected ? "border-accent font-medium text-ink" : "border-transparent text-ink-muted hover:text-ink",
             )}
             key={tab.id}

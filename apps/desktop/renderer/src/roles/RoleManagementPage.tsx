@@ -1,115 +1,79 @@
-import { toFileUrl } from "../shared/format";
-import { DeleteIcon, SpinnerIcon } from "../shared/icons";
-import { bodyTextClass, cardClass, cx, focusResetClass } from "../shared/styles";
+import { Plus, UploadSimple } from "@phosphor-icons/react";
+import { cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass } from "../shared/styles";
+import { PetalIcon, RibbonIcon, SparkleIcon } from "../shared/ui/icons";
 import type { PendingRoleCardAction, RoleRecord } from "../shared/types";
+import { RoleCard } from "./RoleCard";
 
 type RoleManagementPageProps = {
   activeRoleId: string;
   bridgeReady: boolean;
+  /** Whether a role card import can start (bridge up, no import already running). */
+  canImportRoleCard: boolean;
   pendingCardAction: PendingRoleCardAction;
   roles: RoleRecord[];
   onOpenRoleDetail: (roleId: string) => void;
+  onGoToChat: (roleId: string) => void;
   onDeleteRole: (roleId: string) => void;
+  onCreateRole: () => void;
+  onImportRoleCard: () => void;
 };
+
+const emptyActionClass = "inline-flex h-11 items-center gap-2 px-5 text-body font-medium";
 
 /** Renders the first-level role management screen with the full role list. */
 export function RoleManagementPage({
   activeRoleId,
   bridgeReady,
+  canImportRoleCard,
   pendingCardAction,
   roles,
   onOpenRoleDetail,
+  onGoToChat,
   onDeleteRole,
+  onCreateRole,
+  onImportRoleCard,
 }: RoleManagementPageProps) {
   return (
     <section
-      className="role-management-page scrollbar-soft scrollbar-soft-accent h-full overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,250,253,0.98)_100%)]"
+      className="role-management-page scrollbar-soft scrollbar-soft-accent h-full overflow-y-auto bg-gradient-app bg-fixed"
       data-testid="role-management-page"
+      data-role-page=""
     >
-      <div className="mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-8 pb-10 pt-10">
+      <div className="mx-auto flex min-h-full w-full max-w-[1280px] flex-col px-8 pb-10 pt-8">
         {roles.length ? (
-          <div className="grid grid-cols-3 gap-5">
-            {roles.map((role) => {
-              const isActive = role.id === activeRoleId;
-              const isPending = pendingCardAction?.roleId === role.id;
-              const isDeleting = isPending && pendingCardAction?.action === "delete";
-              const isCreating = isPending && pendingCardAction?.action === "create";
-              const coverImage = role.chat_background_abs ? toFileUrl(role.chat_background_abs) : "";
-              return (
-                <button
-                  key={role.id}
-                  data-testid={`role-management-card-${role.id}`}
-                  type="button"
-                  disabled={!bridgeReady || isPending}
-                  onClick={() => onOpenRoleDetail(role.id)}
-                  className={cx(
-                    "group relative grid h-[420px] w-full overflow-hidden rounded-xl border border-line-soft bg-surface-soft text-left shadow-soft transition-[transform,box-shadow] duration-base motion-safe:hover:-translate-y-0.5 hover:shadow-pop disabled:cursor-default disabled:opacity-60",
-                    focusResetClass,
-                    isActive && "shadow-pop",
-                  )}
-                  style={coverImage ? { backgroundImage: `url("${coverImage}")`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
-                >
-                  {isPending ? (
-                    <div className="absolute inset-0 z-[3] bg-[rgba(255,255,255,0.24)] backdrop-blur-[2px]" />
-                  ) : null}
-                  {isPending ? (
-                    <span
-                      data-testid={`role-card-spinner-${role.id}`}
-                      className="absolute inset-0 z-[4] grid place-items-center"
-                      aria-label={isDeleting ? "正在删除角色" : isCreating ? "正在创建角色" : "正在处理中"}
-                    >
-                      <span className="grid h-16 w-16 place-items-center rounded-full border border-white/30 bg-[rgba(15,23,42,0.62)] text-white shadow-[0_16px_34px_rgba(15,23,42,0.24)]">
-                        <SpinnerIcon className="h-7 w-7 animate-spin stroke-current" />
-                      </span>
-                    </span>
-                  ) : null}
-                  {coverImage ? null : (
-                    <div className="absolute inset-0 bg-gradient-accent-soft" />
-                  )}
-                  <button
-                    data-testid={`delete-role-card-${role.id}`}
-                    className={cx(
-                      "absolute right-4 top-4 z-[2] grid h-9 w-9 place-items-center rounded-full border border-white/24 bg-[rgba(15,23,42,0.62)] text-lg text-white opacity-0 transition duration-200 hover:bg-[rgba(143,43,24,0.88)] group-hover:opacity-100 focus-visible:opacity-100",
-                      focusResetClass,
-                    )}
-                    type="button"
-                    disabled={isPending}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDeleteRole(role.id);
-                    }}
-                    aria-label={`删除角色 ${role.name}`}
-                  >
-                    <DeleteIcon className="h-[15px] w-[15px] fill-current" />
-                  </button>
-                  <div className="relative z-[1] flex h-full flex-col justify-between p-5">
-                    <div className="flex items-start gap-3">
-                      {role.avatar_abs ? (
-                        <img
-                          className="h-14 w-14 rounded-full border border-[rgba(255,255,255,0.38)] object-cover shadow-[0_4px_16px_rgba(15,23,42,0.18)]"
-                          src={toFileUrl(role.avatar_abs)}
-                          alt={`${role.name} avatar`}
-                        />
-                      ) : (
-                        <span className="grid h-14 w-14 place-items-center rounded-full border border-[rgba(255,255,255,0.38)] bg-white/75 text-lg font-bold text-accent-deep shadow-[0_4px_16px_rgba(15,23,42,0.12)]">
-                          {role.name.slice(0, 1).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="truncate text-[22px] font-semibold leading-none text-ink">{role.name}</div>
-                      <div className={cx(bodyTextClass, "mt-2 line-clamp-2 text-sm leading-6 text-ink-secondary")}>
-                        {role.description || "未填写角色简介"}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(236px,1fr))] gap-5">
+            {roles.map((role) => (
+              <RoleCard
+                key={role.id}
+                role={role}
+                active={role.id === activeRoleId}
+                bridgeReady={bridgeReady}
+                pendingCardAction={pendingCardAction}
+                onOpen={() => onOpenRoleDetail(role.id)}
+                onGoToChat={() => onGoToChat(role.id)}
+                onDelete={() => onDeleteRole(role.id)}
+              />
+            ))}
           </div>
         ) : (
-          <div className={cx(cardClass, "grid min-h-[280px] place-items-center border-dashed p-8 text-center text-sm text-ink-muted")}>
-            暂无角色，先创建一个角色开始管理。
+          <div className="grid flex-1 place-items-center" data-testid="role-management-empty">
+            <div className="grid justify-items-center gap-7">
+              <div className="relative grid h-32 w-32 place-items-center rounded-full bg-gradient-accent-soft shadow-soft" aria-hidden="true">
+                <SparkleIcon className="h-14 w-14 text-accent-text" />
+                <PetalIcon className="absolute -right-1 top-3 h-6 w-6 rotate-12 text-accent-text opacity-60" />
+                <RibbonIcon className="absolute -left-2 bottom-5 h-7 w-7 -rotate-12 text-lavender-text opacity-60" />
+              </div>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button className={cx(primaryButtonSurfaceClass, emptyActionClass)} type="button" disabled={!bridgeReady} onClick={onCreateRole}>
+                  <Plus className="h-4 w-4" weight="bold" aria-hidden="true" />
+                  新建角色
+                </button>
+                <button className={cx(ghostButtonSurfaceClass, emptyActionClass)} type="button" disabled={!canImportRoleCard} onClick={onImportRoleCard}>
+                  <UploadSimple className="h-4 w-4" aria-hidden="true" />
+                  导入角色卡
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

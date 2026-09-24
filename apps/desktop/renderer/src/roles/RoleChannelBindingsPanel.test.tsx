@@ -21,14 +21,13 @@ const qqbotDeclaration = { label: "QQBot", contactLabel: "QQBot 用户 OpenID", 
 const qqbotBinding: RoleChannelBinding = { channel: "qqbot", chat_id: "c2c:ABC", allow_from: ["ABC"] };
 
 function renderPanel(bindings: RoleChannelBinding[], channels: ChannelSummary[] | null) {
-  return renderToStaticMarkup(<RoleChannelBindingsPanel activeRoleId="mira" bindings={bindings} channels={channels} onUpdate={() => undefined} />);
+  return renderToStaticMarkup(<RoleChannelBindingsPanel activeRoleId="mira" bindings={bindings} channels={channels} onUpdate={() => undefined} onOpenPluginSettings={() => undefined} />);
 }
 
 describe("RoleChannelBindingsPanel", () => {
   it("labels an active channel's fields from its declaration without a state marker", () => {
     const markup = renderPanel([qqbotBinding], [desktop, channel("qqbot", "active", qqbotDeclaration)]);
 
-    assert.match(markup, /已配置 1 个投递位置/);
     assert.match(markup, /私聊 chat_id/);
     assert.match(markup, /placeholder="c2c:&lt;用户 OpenID&gt;"/);
     assert.match(markup, /联系人 ID（QQBot 用户 OpenID）/);
@@ -40,12 +39,25 @@ describe("RoleChannelBindingsPanel", () => {
     const markup = renderPanel([qqbotBinding], [desktop, channel("qqbot", "not_configured", qqbotDeclaration)]);
 
     assert.match(markup, />未配置</);
-    assert.match(markup, /在 设置 › 插件 中完成配置后生效/);
+    assert.match(markup, /在<button[^>]*data-testid="role-channel-open-plugin-settings"[^>]*>设置 › 插件<\/button>中完成配置后生效/);
     assert.match(markup, /role="combobox"/);
   });
 
+  it("opens the providing plugin's settings from the unconfigured notice", async () => {
+    const opened: Array<string | null> = [];
+    const view = await mountTestComponent(<RoleChannelBindingsPanel activeRoleId="mira" bindings={[qqbotBinding]} channels={[desktop, channel("qqbot", "not_configured", qqbotDeclaration)]} onUpdate={() => undefined} onOpenPluginSettings={(pluginId) => opened.push(pluginId)} />);
+    try {
+      const link = view.container.querySelector<HTMLButtonElement>("[data-testid=\"role-channel-open-plugin-settings\"]");
+      assert.ok(link);
+      await act(async () => link.click());
+      assert.deepEqual(opened, ["qqbot"]);
+    } finally {
+      await view.cleanup();
+    }
+  });
+
   it("shows the plain label on the closed picker next to the state badge", async () => {
-    const view = await mountTestComponent(<RoleChannelBindingsPanel activeRoleId="mira" bindings={[qqbotBinding]} channels={[desktop, channel("qqbot", "not_configured", qqbotDeclaration)]} onUpdate={() => undefined} />);
+    const view = await mountTestComponent(<RoleChannelBindingsPanel activeRoleId="mira" bindings={[qqbotBinding]} channels={[desktop, channel("qqbot", "not_configured", qqbotDeclaration)]} onUpdate={() => undefined} onOpenPluginSettings={() => undefined} />);
     try {
       const trigger = view.container.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="渠道"]');
       assert.ok(trigger);
@@ -86,7 +98,7 @@ describe("RoleChannelBindingsPanel", () => {
     function Harness() {
       const [form, setForm] = useState<RoleFormState>({ ...createEmptyRoleForm(), channelBindings: [qqbotBinding], proactiveTargetChannel: "qqbot", proactiveTargetChatId: "c2c:ABC" });
       latest = form;
-      return <RoleChannelBindingsPanel activeRoleId="mira" bindings={form.channelBindings ?? []} channels={channels} onUpdate={setForm} />;
+      return <RoleChannelBindingsPanel activeRoleId="mira" bindings={form.channelBindings ?? []} channels={channels} onUpdate={setForm} onOpenPluginSettings={() => undefined} />;
     }
     const view = await mountTestComponent(<Harness />);
     try {

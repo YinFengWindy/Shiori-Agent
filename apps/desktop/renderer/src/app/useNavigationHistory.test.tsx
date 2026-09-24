@@ -76,6 +76,21 @@ describe("useNavigationHistory settings subtab memory (issue #230 AC 4)", () => 
     } finally { await view.cleanup(); }
   });
 
+  it("opens a section directly on a given subtab and records it for back/forward", async () => {
+    const openRole = async () => true;
+    const { view, api } = await mountHarness();
+    try {
+      await act(async () => { api().openSettingsWorkspace("plugins", { subsectionId: "feishu" }); });
+      assert.equal(api().settingsSection, "plugins");
+      assert.equal(api().activeSettingsSubsections.plugins, "feishu");
+
+      await act(async () => { api().updateSettingsSubsection("plugins", "novelai"); });
+      await act(async () => { api().openSettingsWorkspace("about"); });
+      await act(async () => { await api().navigateHistory("back", openRole); });
+      assert.equal(api().activeSettingsSubsections.plugins, "novelai");
+    } finally { await view.cleanup(); }
+  });
+
   it("switches away and back to a different subtab of the same section across two visits", async () => {
     const openRole = async () => true;
     const { view, api } = await mountHarness();

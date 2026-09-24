@@ -3,6 +3,7 @@ import { FileText, UploadSimple } from "@phosphor-icons/react";
 import type React from "react";
 import type { RoleCardImportState } from "../app/roleCardImportState";
 import type { NewRoleFormState } from "../shared/types";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "../shared/styles";
 import { RoleCardImportPreviewDialog } from "./RoleCardImportPreview";
 import { selectRoleCreateState } from "./roleCreateSelectors";
 
@@ -22,12 +23,12 @@ export function RoleImportControls({ imported, form, disabled, onImport, onCance
   return (
     <div className="flex items-center gap-2">
       <button type="button" data-testid="import-role-card-button" disabled={disabled || imported.status !== "idle"}
-        onClick={onImport} className="inline-flex min-h-9 items-center gap-2 rounded-md px-3 text-sm text-ink-secondary hover:bg-surface-hover disabled:opacity-50">
-        <UploadSimple size={18} />{imported.status === "previewing" ? "正在导入角色" : "导入角色"}
+        onClick={onImport} className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)}>
+        <UploadSimple className="h-4 w-4" aria-hidden="true" />{imported.status === "previewing" ? "正在导入…" : "导入角色卡"}
       </button>
       {imported.preview ? <>
         <button type="button" aria-label="查看角色卡预览" title="查看角色卡预览" disabled={disabled}
-          onClick={() => setOpen(true)} className="grid h-9 w-9 place-items-center rounded-md hover:bg-surface-hover"><FileText size={18} /></button>
+          onClick={() => setOpen(true)} className={cx(ghostButtonSurfaceClass, "grid h-9 w-9 shrink-0 place-items-center")}><FileText className="h-4 w-4" aria-hidden="true" /></button>
         <RoleCardImportPreviewDialog open={open} preview={imported.preview} selections={form.emotionSelections ?? {}}
           onSelectEmotion={(name, assetId) => onUpdateForm((current) => ({ ...current, emotionSelections: { ...current.emotionSelections, [name]: assetId } }))}
           sourceUrl={previewImagePath ? window.miraDesktop.localAssetUrl(previewImagePath) : ""}

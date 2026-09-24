@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { roleFieldClass } from "./roleEditorStyles";
+import { roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";
 
 type RoleKeywordInputProps = {
   label: string;
@@ -29,7 +29,7 @@ export function RoleKeywordInput({ label, keywords, onChange }: RoleKeywordInput
   }
 
   return (
-    <label className="grid gap-1.5 text-xs text-ink-muted">
+    <label className={roleFieldLabelClass}>
       <span>{label}</span>
       <input
         className={roleFieldClass}
