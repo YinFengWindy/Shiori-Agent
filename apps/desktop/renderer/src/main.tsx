@@ -36,6 +36,7 @@ import { requestChatModelMenu } from "./chat/chatModelMenuRequests";
 import { chatSendFailureAction } from "./chat/chatSendFailure";
 import { feedback } from "./shared/feedback/feedbackStore";
 import { FeedbackToaster } from "./shared/feedback/FeedbackToaster";
+import { TooltipProvider } from "./shared/ui/Tooltip";
 import type { ChatMessageNavigationScroller } from "./chat/useChatScrollController";
 import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
 import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalDiagnostics";
@@ -725,7 +726,9 @@ createRoot(document.getElementById("root") as HTMLElement).render(
   <DesktopErrorBoundary>
     {/* reducedMotion="user": every motion/react animation drops its transforms when the OS asks for reduced motion. */}
     <MotionConfig reducedMotion="user">
-      <App />
+      <TooltipProvider>
+        <App />
+      </TooltipProvider>
       {/* Outside App so every branch (onboarding, workspace, full-screen plugin pages) shares one outlet. */}
       <FeedbackToaster />
     </MotionConfig>

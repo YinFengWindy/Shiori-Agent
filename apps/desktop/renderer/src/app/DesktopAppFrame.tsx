@@ -17,7 +17,8 @@ import { usePluginUiVisibility } from "./usePluginUiVisibility";
 import { SettingsPage } from "../settings/SettingsPage";
 import { type SettingsSectionId } from "../settings/SettingsSidebar";
 import { cx, sidebarTrackMotionClass } from "../shared/styles";
-import { NavRail, pluginNavRailViewId, type NavRailViewId } from "../shell/NavRail";
+import { buildNavRailViews, NavRail, pluginNavRailViewId, type NavRailViewId } from "../shell/NavRail";
+import { useGlobalShortcuts } from "../shell/useGlobalShortcuts";
 import type {
   AppMainView,
   ChatSendRequest,
@@ -316,8 +317,26 @@ export function DesktopAppFrame({
   const activePluginNavPage = mainView.kind === "plugin-page"
     ? resolveVisibleNavPage(mainView.pageId)
     : undefined;
+  const fullscreenPluginActive = activePluginNavPage?.presentation === "fullscreen";
+  const navRailViews = buildNavRailViews({
+    onBackToChat,
+    onOpenRolesWorkspace,
+    pluginEntries: pluginNavPages.map((page) => ({
+      pageId: page.id,
+      label: page.label,
+      icon: page.icon,
+      onSelect: guardedNavPageSelect(page, () => onOpenPluginPage(page.id), (message) => feedback.warning(message)),
+    })),
+  });
+  // A full-window plugin surface (story) owns its own keys, including leaving.
+  useGlobalShortcuts({
+    enabled: !fullscreenPluginActive,
+    onSearch: onOpenSearch,
+    onSettings: onOpenSettings,
+    views: navRailViews,
+  });
 
-  if (activePluginNavPage?.presentation === "fullscreen") {
+  if (activePluginNavPage && fullscreenPluginActive) {
     return <activePluginNavPage.Component pageId={activePluginNavPage.id} activeRoleId={activeRoleId} onExit={onBackToChat} />;
   }
 
@@ -349,15 +368,8 @@ export function DesktopAppFrame({
         <NavRail
           activeView={navRailActiveView}
           unreadTotal={navRailUnreadTotal}
-          pluginEntries={pluginNavPages.map((page) => ({
-            pageId: page.id,
-            label: page.label,
-            icon: page.icon,
-            onSelect: guardedNavPageSelect(page, () => onOpenPluginPage(page.id), (message) => feedback.warning(message)),
-          }))}
+          views={navRailViews}
           onOpenSearch={onOpenSearch}
-          onBackToChat={onBackToChat}
-          onOpenRolesWorkspace={onOpenRolesWorkspace}
           onOpenSettings={onOpenSettings}
         />
         <div
