@@ -46,7 +46,7 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 | `--success-* / --warning-* / --danger-*` | — | soft / 300 / solid / text 四档 | 状态 |
 
 两个特例：`--blue-grad` / `--pink-grad` / `--lavender-grad` 是**渐变专用端点**，比同族色阶更深，
-目的是让白字在整条渐变扫过时都保持 ≥4.5:1（端点 4.78 / 5.20，oklab 中点 4.93 —— 数值见 `styles.css:50`）。
+目的是让白字在整条渐变扫过时都保持 ≥4.5:1（端点 4.78 / 5.20，oklab 中点 4.93 —— 数值见 `styles.css` 里 `--blue-grad` 定义处的注释）。
 
 ## 第二层：semantic tokens
 
@@ -153,11 +153,11 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 
 焦点样式有**单一来源**，组件里不要重复实现：
 
-1. `styles.css:204` —— `input / textarea / select / button[role="combobox"]` 的 `:focus` 统一给"强调色边框 + 一层柔光晕"。
+1. `styles.css` 的 `:where()` 表单焦点基层规则 —— `input / textarea / select / button[role="combobox"]` 的 `:focus` 统一给"强调色边框 + 一层柔光晕"。
    用 `:where()` 包住让特异性归零，所以刻意无边框的控件（如聊天输入区的 `ring-0`）能用工具类覆盖掉。
-2. `styles.css:343` —— 全局 `:focus-visible` 给 2px 的 `--color-ring` 描边，键盘焦点始终可见；
+2. `styles.css` 的全局 `:focus-visible` 规则 —— 全局 `:focus-visible` 给 2px 的 `--color-ring` 描边，键盘焦点始终可见；
    指针点击不显示描边。
-3. `styles.css:350` —— 表单字段和 `button[role="combobox"]` 单独关掉上面那层全局描边，避免和自己的
+3. `styles.css` 紧随其后的表单字段豁免规则 —— 表单字段和 `button[role="combobox"]` 单独关掉上面那层全局描边，避免和自己的
    边框+光晕叠成双环。
 
 **所以**：组件里出现 `focus:ring-*` / `focus:border-*` / `focus:outline-none` 时，默认是错的。
@@ -222,8 +222,8 @@ Phosphor 在 `vite.config.ts:25` 被单独拆成 `icons-vendor` chunk，按需�
 ## 已知遗留
 
 - **暗色主题尚未实现**：`:root` 固定 `color-scheme: light`，全文件无 `prefers-color-scheme` 分支。
-  设计上已经预留（`styles.css:14`："dark theme later overrides the semantic tier only"），
+  设计上已经预留（`styles.css` 开头 token 分层注释："dark theme later overrides the semantic tier only"），
   但前提是新代码不绕过语义层——每一处写死颜色都是将来暗色主题的一处返工。
-- **`--font-brand` 槽位空着**：MiSans / HarmonyOS Sans SC 还没定，字体栈目前从系统层起步（`styles.css:150`）。
+- **`--font-brand` 槽位空着**：MiSans / HarmonyOS Sans SC 还没定，字体栈目前从系统层起步（`styles.css` 的 `--font-sans` 定义）。
 - **legacy 别名仍在服役**：`tailwind.config.ts` 的 legacy 色名和一批老组件还在用。
 - **story 模块自成一套**：`story-*` 工具类里的玻璃底、描边、阴影都是写死值，没有接入 token。
