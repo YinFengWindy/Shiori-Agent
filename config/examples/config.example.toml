@@ -71,8 +71,8 @@ search_enabled = true
 # toolsets = ["meta_common", "spawn", "schedule", "mcp"]
 
 # =============================================================================
-# 必填：至少配置一个频道（Telegram、NapCat QQ 或官方 QQBot 选其一）
-# token / bot_uin / app_id / client_secret 为空时该频道自动跳过，不会报错。
+# 必填：至少配置一个渠道插件（Telegram、QQ（NapCat）、官方 QQBot 或飞书选其一）
+# 凭据字段为空时该渠道自动跳过，不会报错；也可在 设置 › 插件 中填写。
 # =============================================================================
 
 # Telegram 渠道插件（也可在 设置 › 插件 › Telegram 中填写）。

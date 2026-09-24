@@ -30,7 +30,7 @@ related:
 | Drift | drift state、pipeline、tools、主动互斥、恢复 | `DriftStateStore DriftTurnPipeline` |
 | 自动 CG | phase hook、scene decision、cooldown、scene key、NovelAI、消息同步 | `AutoCgController AutoCgPolicy SceneDecision` |
 | NovelAI 请求 | settings、store、手动工具、自动 CG、桌面图片面板 | `NovelAIService GenerateImageRequest` |
-| Channel 合约 | 所有渠道、hub、bootstrap、bus、会话解析、附件 | `Channel ChannelContext TelegramChannel QQChannel` |
+| Channel 合约 | 所有渠道插件、hub、bootstrap、bus、会话解析、附件 | `Channel ChannelContext supports_stream_events ctx.channels.add` |
 | Tool 契约 / 执行 | registry、search、hook、插件、MCP、事件、提示词 | `ToolRegistry ToolExecutor ToolHook McpServerRegistry` |
 | 生命周期 phase | 所有 phase module、记忆、插件、自动 CG、观测 | `BeforeTurn AfterTurn PhaseModule` |
 | MCP | registry、client pool、工具同步、配置、断线清理 | `McpServerRegistry McpClient ToolRegistry` |
