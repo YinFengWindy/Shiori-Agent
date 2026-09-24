@@ -167,3 +167,45 @@ def test_repeated_identical_roots_do_not_create_a_conflict(contract_package):
     records = _discover([contract_package.parent, contract_package.parent])
     assert len(records) == 1
     assert records[0].admission is None
+
+
+def _channel_plugin(root, directory, plugin_id, *channels):
+    package = root / directory
+    (package / "backend").mkdir(parents=True)
+    (package / "backend/plugin.py").write_text(
+        "async def setup(ctx):\n    pass\n", encoding="utf-8"
+    )
+    declarations = "".join(
+        f"  - {{name: {name}, label: {name}}}\n" for name in channels
+    )
+    (package / "manifest.yaml").write_text(
+        f"api: 2\nid: {plugin_id}\ncapabilities: [channels]\n"
+        + (f"channels:\n{declarations}" if channels else ""),
+        encoding="utf-8",
+    )
+
+
+def test_plugins_declaring_one_channel_name_all_conflict(tmp_path):
+    _channel_plugin(tmp_path, "first", "first", "shared", "own")
+    _channel_plugin(tmp_path, "second", "second", "shared")
+    _channel_plugin(tmp_path, "third", "third", "other")
+    records = {record.manifest.id: record for record in _discover([tmp_path])}
+    for plugin_id in ("first", "second"):
+        admission = records[plugin_id].admission
+        assert admission is not None
+        assert admission.state == "CONFLICT"
+        assert admission.code == "duplicate_channel"
+        assert admission.field == "channels"
+        assert "shared" in admission.reason
+        assert "first" in admission.reason and "second" in admission.reason
+    assert records["third"].admission is None
+
+
+def test_duplicate_plugin_id_keeps_its_id_conflict_over_shared_channel(tmp_path):
+    _channel_plugin(tmp_path, "copy-a", "same", "shared")
+    _channel_plugin(tmp_path, "copy-b", "same", "shared")
+    records = _discover([tmp_path])
+    assert [record.admission.code for record in records] == [
+        "duplicate_id",
+        "duplicate_id",
+    ]

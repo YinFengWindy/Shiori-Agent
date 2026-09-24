@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict, runtime_checkable
 
 from agent.looping.interrupt import InterruptController
 from agent.tools.message_push import MessagePushTool
@@ -25,6 +25,21 @@ class Channel(Protocol):
     async def stop(self) -> None: ...
     def pause_intake(self) -> None: ...
     def resume_intake(self) -> None: ...
+
+
+class ChannelStatus(TypedDict):
+    """Transport health reported by a channel; the host adds no interpretation."""
+
+    connected: bool
+    account: NotRequired[str]
+    detail: NotRequired[str]
+
+
+@runtime_checkable
+class SupportsChannelStatus(Protocol):
+    """Optional ``Channel`` extension exposing live connection status to the desktop."""
+
+    def status(self) -> ChannelStatus: ...
 
 
 @dataclass

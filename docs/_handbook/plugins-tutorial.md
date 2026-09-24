@@ -83,7 +83,7 @@ async def setup(ctx):
 | `lifecycle` | `ctx.lifecycle.contribute(phase, modules)`；登记阶段模块 |
 | `tools` / `tool_hooks` | 注册工具或工具执行前处理器 |
 | `proactive_gates` | 贡献主动行为准入 gate |
-| `channels` / `bot_commands` | 贡献渠道及机器人命令 |
+| `channels` / `bot_commands` | 贡献 manifest 已声明的渠道（见[渠道声明](#渠道声明)）及机器人命令 |
 | `rpc` | 注册 `plugin.<id>.<method>`，发送同命名空间事件 |
 | `background` | `ctx.background.spawn(coro, name=...)`；卸载取消并等待任务 |
 | `kv` | 工作区 `plugin-data/<id>/kv.json` 中的私有状态 |
@@ -98,6 +98,28 @@ async def setup(ctx):
 其它外部资源用 `ctx.effect("label", disposer)` 登记清理；disposer 可同步或异步。Python 插件作用域分两段处置：先停止接收新事件并撤销所有 `ctx.events.on` 订阅，再按登记的逆序（LIFO）清理其余 effect，包括自定义 disposer、后台任务与贡献。订阅和资源的登记先后不影响退订优先规则；其它资源之间仍需按依赖顺序登记，例如先登记 writer，再登记需要向 writer 最终 flush 的采集器，使采集器先清理。
 
 开始处置后拒绝新订阅、后台任务和资源登记；即使总线已选中某个 handler，只要它尚未开始也不会再调用。已经执行中的 handler 不会被强制取消，插件应在 disposer 中取消或等待其持有的任务。`ctx.events.off` 使用原始 handler 的对象身份退订，移除同一 handler 的重复订阅，重复退订安全。一项清理失败不会跳过剩余 effect。初始化抛错使用相同规则撤销已登记贡献；再次启用使用新作用域，不能重复保留旧订阅。
+
+## 渠道声明
+
+贡献外部聊天渠道的插件要在 manifest 里静态声明渠道，并同时声明 `channels` 能力（Runtime API 2.2）：
+
+```yaml
+capabilities: [config, channels]
+config_model: QQBotConfigModel
+channels:
+  - name: qqbot                      # 必填，渠道名
+    label: QQBot                     # 必填，显示名
+    contact_label: QQBot 用户 OpenID  # 可选，角色绑定里的联系人
+    chat_id_label: 私聊 chat_id       # 可选
+    chat_id_hint: c2c:<用户 OpenID>   # 可选，chat_id 格式提示
+```
+
+- 渠道名是角色绑定、会话线程和消息引用的数据键，发布后不要改名。它必须是小写标识（`[a-z][a-z0-9_-]{0,63}`），`desktop` 由宿主保留。
+- 声明是静态的：插件停用、未信任或还没填凭据时，桌面端也能经 `channels.list` 列出这个渠道。所以凭据不全时 `setup` 可以直接 return，不贡献渠道。
+- `ctx.channels.add(channel)` 只接受本 manifest 声明过的 `channel.name`，否则 setup 失败，插件回滚为 `FAILED`，诊断码 `undeclared_channel`。
+- 两个插件声明同一个渠道名时，两者都是 `CONFLICT`（诊断码 `duplicate_channel`），都不会激活。
+- 渠道的启停和换代由宿主的 ChannelHost 管理，不要用 `background` 自己起连接任务。跨代复用连接时，渠道提供 `configuration_key`，宿主会连同 bot 命令列表一起比较，任一变化都重建连接。
+- 渠道可以实现可选的 `status()`，返回 `{"connected": bool, "account": str, "detail": str}`（`account`、`detail` 可省略），`channels.list` 会原样带给桌面端。
 
 ## 阶段与依赖
 

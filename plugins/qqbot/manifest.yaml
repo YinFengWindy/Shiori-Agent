@@ -7,3 +7,9 @@ capabilities:
   - config
   - channels
 config_model: QQBotConfigModel
+channels:
+  - name: qqbot
+    label: QQBot
+    contact_label: QQBot 用户 OpenID
+    chat_id_label: 私聊 chat_id
+    chat_id_hint: c2c:<用户 OpenID>

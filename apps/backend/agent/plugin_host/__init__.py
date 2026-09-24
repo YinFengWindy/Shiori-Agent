@@ -12,6 +12,7 @@ from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
 from agent.plugin_host.kernel import HostServices, PluginKernel
 from agent.plugin_host.manifest import (
     DEFAULT_ENTRY,
+    ChannelDeclaration,
     KNOWN_CAPABILITIES,
     ManifestError,
     PluginManifest,
@@ -27,6 +28,7 @@ from agent.plugin_host.unload import PluginRestartRequired
 
 __all__ = [
     "CapabilityNotGranted",
+    "ChannelDeclaration",
     "ConfigModelError",
     "DEFAULT_ENTRY",
     "EffectScope",

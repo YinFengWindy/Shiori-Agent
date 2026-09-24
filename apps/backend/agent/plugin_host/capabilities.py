@@ -7,6 +7,7 @@ import inspect
 import logging
 from typing import TYPE_CHECKING, Any
 
+from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.tool_hooks import PluginToolHook, build_hook_name
 
@@ -219,15 +220,29 @@ class ProactiveGatesCapability:
 
 
 class ChannelsCapability:
-    """贡献渠道 adapter；渠道宿主接管其生命周期。"""
+    """贡献渠道 adapter；渠道宿主接管其生命周期。
+
+    只接受 manifest ``channels`` 静态声明过的渠道名：绑定面板依据声明列出渠道，
+    未声明的名字会让已落盘的绑定与实际贡献对不上。
+    """
 
     def __init__(
-        self, contributions: PluginContributions, effects: EffectScope
+        self,
+        contributions: PluginContributions,
+        effects: EffectScope,
+        *,
+        plugin_id: str,
+        declared: frozenset[str],
     ) -> None:
         self._contributions = contributions
         self._effects = effects
+        self._plugin_id = plugin_id
+        self._declared = declared
 
     def add(self, channel: "Channel") -> None:
+        name = getattr(channel, "name", None)
+        if name not in self._declared:
+            raise ChannelDeclarationError(self._plugin_id, str(name), self._declared)
         contribute_to_list(
             self._contributions.channels,
             channel,

@@ -12,6 +12,7 @@ from agent.plugin_host.capabilities import PluginContributions
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.manifest import PluginManifest
 from agent.plugin_host.diagnostics import (
+    ChannelDeclarationError,
     PackageContractError,
     PluginDiagnostic,
     RendererActivationError,
@@ -113,6 +114,8 @@ class PluginHandle:
           constructed by ``PluginKernel.fail_renderer_entry`` with a
           diagnostic whose ``state`` already matches the handle's real
           FAILED/RESTART_REQUIRED state, so surfacing it is always accurate.
+          ``ChannelDeclarationError`` follows the same rule: its diagnostic is
+          built with ``state: "FAILED"`` for a setup rollback.
         """
         if self.record.admission is not None:
             return self.record.admission.to_dict()
@@ -123,7 +126,9 @@ class PluginHandle:
         if self.state in {
             PluginState.FAILED,
             PluginState.RESTART_REQUIRED,
-        } and isinstance(self.error, RendererActivationError):
+        } and isinstance(
+            self.error, (RendererActivationError, ChannelDeclarationError)
+        ):
             return self.error.diagnostic.to_dict()
         return None
 

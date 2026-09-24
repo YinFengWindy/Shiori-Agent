@@ -1586,3 +1586,92 @@ async def test_rollback_that_cannot_dispose_every_effect_requires_a_restart(tmp_
     handle = kernel._handles[str(package.absolute())]
     assert handle.state is PluginState.RESTART_REQUIRED
     await kernel.terminate_all(force=True)
+
+
+_CHANNEL_PLUGIN = """
+class _Channel:
+    def __init__(self, name):
+        self.name = name
+
+async def setup(ctx):
+    ctx.channels.add(_Channel("declared"))
+    ctx.channels.add(_Channel({second!r}))
+""".strip()
+
+
+def _write_channel_plugin(root: Path, plugin_id: str, second: str) -> None:
+    package = root / plugin_id
+    (package / "backend").mkdir(parents=True)
+    (package / "backend/plugin.py").write_text(
+        _CHANNEL_PLUGIN.format(second=second), encoding="utf-8"
+    )
+    (package / "manifest.yaml").write_text(
+        f"api: 2\nid: {plugin_id}\ncapabilities: [channels]\nchannels:\n"
+        "  - {name: declared, label: Declared}\n"
+        "  - {name: also_declared, label: Also}\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.asyncio
+async def test_declared_channels_are_contributed(tmp_path: Path):
+    _write_channel_plugin(tmp_path, "chan", "also_declared")
+    kernel = make_kernel([tmp_path], event_bus=EventBus())
+    await kernel.load_all()
+    try:
+        assert [channel.name for channel in kernel.channels] == [
+            "declared",
+            "also_declared",
+        ]
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_undeclared_channel_fails_activation_with_diagnostic(tmp_path: Path):
+    _write_channel_plugin(tmp_path, "chan", "sneaky")
+    kernel = make_kernel([tmp_path], event_bus=EventBus())
+    await kernel.load_all()
+    try:
+        assert kernel.channels == []
+        [state] = kernel.states()
+        assert state["state"] == "FAILED"
+        assert state["diagnostic"]["code"] == "undeclared_channel"
+        assert state["diagnostic"]["state"] == "FAILED"
+        assert "sneaky" in state["diagnostic"]["reason"]
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_plugins_declaring_one_channel_both_stay_inactive(tmp_path: Path):
+    _write_channel_plugin(tmp_path, "first", "also_declared")
+    _write_channel_plugin(tmp_path, "second", "also_declared")
+    kernel = make_kernel([tmp_path], event_bus=EventBus())
+    await kernel.load_all()
+    try:
+        assert kernel.loaded_count == 0
+        assert kernel.channels == []
+        assert {state["state"] for state in kernel.states()} == {"CONFLICT"}
+        assert {state["diagnostic"]["code"] for state in kernel.states()} == {
+            "duplicate_channel"
+        }
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_bot_commands_keep_telegram_named_alias(tmp_path: Path):
+    package = tmp_path / "v2cmds"
+    (package / "backend").mkdir(parents=True)
+    (package / "backend/plugin.py").write_text(
+        _V2_BOT_COMMANDS_PLUGIN, encoding="utf-8"
+    )
+    (package / "manifest.yaml").write_text(_V2_BOT_COMMANDS_MANIFEST, encoding="utf-8")
+    kernel = make_kernel([tmp_path], event_bus=EventBus())
+    await kernel.load_all()
+    try:
+        assert kernel.bot_commands == [("chatid", "查看我的 chat_id")]
+        assert kernel.telegram_bot_commands == kernel.bot_commands
+    finally:
+        await kernel.terminate_all(force=True)

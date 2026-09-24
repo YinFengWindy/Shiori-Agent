@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from shiori_plugin_testkit.packages import stage_plugin_package
 
-from agent.plugin_host import HostServices, PluginKernel
+from agent.plugin_host import HostServices, PluginKernel, load_manifest
 from bus.event_bus import EventBus
 from plugins.qqbot.backend.plugin import QQBotConfigModel
 
@@ -30,6 +30,14 @@ def _load_qqbot_channels(
         asyncio.run(kernel.load_all())
         assert kernel.loaded_count == 1
         return kernel.channels
+
+
+def test_qqbot_manifest_declares_its_channel_for_binding_discovery() -> None:
+    manifest = load_manifest(PLUGIN_DIR)
+    assert manifest is not None
+    assert [item.name for item in manifest.channels] == ["qqbot"]
+    assert manifest.channels[0].label == "QQBot"
+    assert manifest.channels[0].contact_label
 
 
 def test_qqbot_plugin_skips_channel_without_credentials() -> None:

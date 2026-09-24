@@ -122,7 +122,10 @@ async def start_channels(
     for channel in plugin_channels or []:
         # Only independently owned plugin connections opt into reuse. Other
         # channels may retain resources owned by their plugin generation.
-        configuration = getattr(channel, "configuration_key", None)
+        # A started channel captures ctx.bot_commands, so a changed command
+        # list must rebuild the connection just like changed credentials.
+        key = getattr(channel, "configuration_key", None)
+        configuration = (key, tuple(bot_commands or [])) if key is not None else None
         existing = (
             previous_host.reusable(channel.name, configuration)
             if previous_host is not None and configuration is not None

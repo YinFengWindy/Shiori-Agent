@@ -56,3 +56,10 @@ def test_dedicated_handlers_cover_exactly_the_settings_and_role_task_methods():
     assert plugin_config == {"plugin.config.get", "plugin.config.set"}
     assert method_policy("runtime.apply").concurrency is Concurrency.SETTINGS_APPLY
     assert method_policy("plugin.config.set").concurrency is Concurrency.SETTINGS_APPLY
+
+
+def test_channel_listing_is_a_read_only_reload_exempt_query():
+    policy = method_policy("channels.list")
+    assert policy.concurrency is Concurrency.READ_ONLY
+    assert policy.admission_exempt
+    assert policy.handler is Handler.PLUGIN_MANAGEMENT

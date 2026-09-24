@@ -76,7 +76,7 @@ class RuntimeReloadMixin:
                 http_resources=self.http_resources,
                 event_bus=self.event_bus,
                 interrupt_controller=self._dispatcher,
-                bot_commands=plugins.telegram_bot_commands if plugins else None,
+                bot_commands=plugins.bot_commands if plugins else None,
                 plugin_channels=plugins.channels if plugins else None,
                 enable_message_channels=self.features.enable_message_channels,
                 previous_host=self.channel_host,

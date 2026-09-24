@@ -39,9 +39,10 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.1.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.2.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
+| `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
 | `renderer` | no | object with optional `ui`, `background`, `surface` keys |
 | `renderer.<kind>.entry` | per declared kind | package-relative precompiled `.mjs` |
 | `renderer.<kind>.css` | per declared kind | list of `.css` files; `[]` explicitly means no styles |
@@ -94,6 +95,48 @@ for examples and delivery/error semantics. Packages using these additions must
 require `runtime_api: ">=2.1.0 <3.0.0"`; the existing `client.call` signature and
 Python exported dependency API remain compatible. This is cooperation under the
 existing trust model, not a sandbox; the CSP and resource grants are unchanged.
+
+## Runtime API 2.2 channel declarations
+
+API 2.2 adds the optional top-level `channels` list. Each entry declares one
+external chat channel the plugin may contribute through `ctx.channels.add`:
+
+```yaml
+capabilities: [config, channels]
+channels:
+  - name: qqbot                      # required, [a-z][a-z0-9_-]{0,63}
+    label: QQBot                     # required, display name
+    contact_label: QQBot 用户 OpenID  # optional, the role binding's allow_from contact
+    chat_id_label: 私聊 chat_id       # optional
+    chat_id_hint: c2c:<用户 OpenID>   # optional, chat_id format hint
+```
+
+Values must be nonempty strings; unknown keys, duplicate names, the host-owned
+`desktop` name and declarations without the `channels` capability are rejected.
+The declaration is static, so the desktop can list a channel while its plugin is
+disabled, untrusted or still missing credentials. The channel name is a data key
+of role bindings and conversation threads and must stay stable across releases.
+
+At runtime `ctx.channels.add(channel)` only accepts a `channel.name` declared by
+the same manifest. Any other name raises during setup, so the plugin rolls back
+to `FAILED` with diagnostic code `undeclared_channel` (stage `setup`, field
+`channels`). When two plugins declare the same channel name, discovery marks every
+claimant `CONFLICT` (code `duplicate_channel`, field `channels`) and none of them
+activates; candidates that already conflict by plugin ID keep `duplicate_id`.
+Packages using `channels` must require `runtime_api: ">=2.2.0 <3.0.0"`; older
+hosts reject the unknown top-level key.
+
+`plugins.list` rows carry the manifest's `capabilities` and `channels`. The
+read-only bridge method `channels.list` returns `{channels: [...]}`: `desktop`
+first, then the channels still built into the host, then every declared plugin
+channel. Each row has the declaration fields plus `plugin_id` (`null` for host
+channels), `plugin_enabled`, `state`, `error` and `status`. `state` is `active`,
+`not_configured` (enabled but nothing contributed, usually missing credentials),
+`failed` (construction, start or `status()` failed, or the plugin itself did not
+activate; `error` keeps the cause) or `plugin_disabled`. A channel may implement
+an optional `status()` returning `{connected, account?, detail?}`; `status` is
+that value for an active channel and `null` otherwise. Changes follow the existing
+`runtime.applied` broadcast; there is no separate channel event.
 
 ## Renderer artifacts and dependencies
 
@@ -339,7 +382,7 @@ Host state vocabulary extends the existing lifecycle enum:
 | `UNTRUSTED` | manifest inspectable, no code allowed until explicit trust |
 | `BLOCKED` | static contract/runtime/dependency failure, retry after correction |
 | `FAILED` | import/setup or contribution initialization failed; reclaim started resources |
-| `CONFLICT` | multiple candidates claim one ID; select none until resolved |
+| `CONFLICT` | multiple candidates claim one ID or one declared channel name; select none until resolved |
 | `RESTART_REQUIRED` | an accepted code-directory change awaits application restart, **or** (#262) a failed load's rollback could not fully dispose its own effects — retry is unsafe until the next application launch |
 | `DISCOVERED`, `DISABLED`, `LOADING`, `ACTIVE`, `UNLOADING`, `DISPOSED` | existing runtime lifecycle |
 

@@ -57,6 +57,7 @@ def validate_package(
         "runtime_api",
         "entry",
         "capabilities",
+        "channels",
         "desc",
         "author",
         "config_model",

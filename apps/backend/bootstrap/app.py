@@ -180,9 +180,7 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
                 push_tool=self.core.push_tool,
                 http_resources=self.http_resources,
                 event_bus=event_bus,
-                bot_commands=(
-                    plugin_manager.telegram_bot_commands if plugin_manager else None
-                ),
+                bot_commands=plugin_manager.bot_commands if plugin_manager else None,
                 interrupt_controller=self._dispatcher,
                 plugin_channels=plugin_manager.channels if plugin_manager else None,
                 enable_message_channels=self.features.enable_message_channels,

@@ -114,3 +114,30 @@ def test_external_schema_rejects_noninteger_api_and_device_id(
     with pytest.raises(PackageContractError) as caught:
         validate_package(contract_package)
     assert caught.value.diagnostic.field == field
+
+
+def test_external_package_may_declare_channels(contract_package):
+    _change(
+        contract_package,
+        capabilities=["channels"],
+        runtime_api=">=2.2.0 <3.0.0",
+        channels=[{"name": "demo_chat", "label": "Demo"}],
+    )
+    result = validate_package(contract_package)
+    assert [item.name for item in result.manifest.channels] == ["demo_chat"]
+
+
+def test_external_channel_declaration_errors_block_the_package(contract_package):
+    _change(
+        contract_package,
+        capabilities=["channels"],
+        channels=[{"name": "desktop", "label": "Desktop"}],
+    )
+    with pytest.raises(PackageContractError) as caught:
+        validate_package(contract_package)
+    assert caught.value.diagnostic.code == "invalid_manifest"
+    assert "desktop" in caught.value.diagnostic.reason
+
+
+def test_host_advertises_runtime_api_with_channel_declarations():
+    assert HostRuntimeContract().runtime_api == "2.2.0"

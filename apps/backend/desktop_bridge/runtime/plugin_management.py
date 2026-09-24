@@ -1,6 +1,7 @@
 """Plugin management channel: enumerate plugins and hot toggle enablement.
 
-Owns the ``plugins.list``/``plugins.setEnabled`` request bodies so
+Owns the ``plugins.list``/``plugins.setEnabled`` request bodies (and hosts the
+``channels.list`` listing derived from plugin channel declarations) so
 ``ReloadableDesktopService`` only has to dispatch, not implement discovery
 or the enable/disable write path itself.
 
@@ -28,6 +29,7 @@ from typing import Any
 
 from agent.plugin_host.kernel import PLUGIN_ENABLED_CONFIG_KEY, PluginKernel
 from bootstrap.app import AppRuntime
+from desktop_bridge.runtime.channel_listing import RuntimeChannelListing
 from desktop_bridge.runtime.plugin_trust import RuntimePluginTrust
 from desktop_bridge.runtime.plugin_packages import RuntimePluginPackages
 from desktop_bridge.runtime.plugin_package_listing import with_package_operations
@@ -49,6 +51,7 @@ class RuntimePluginManagement:
         self._settings = settings
         self.trust = RuntimePluginTrust(app)
         self.packages = RuntimePluginPackages(self, app.workspace)
+        self.channels = RuntimeChannelListing(app, self._enabled)
 
     def list(self, _payload: dict[str, Any]) -> dict[str, Any]:
         """Returns every discovered plugin with its enabled flag and runtime state."""
@@ -88,6 +91,13 @@ class RuntimePluginManagement:
                     not in {"CONFLICT", "UNTRUSTED", "BLOCKED", "RESTART_REQUIRED"},
                     "supports_hot_unload": record.manifest.supports_hot_unload,
                     "dependencies": list(record.manifest.dependencies),
+                    # Declared capabilities and static channel declarations let
+                    # the desktop group channel plugins without activating them.
+                    "capabilities": list(record.manifest.capabilities),
+                    "channels": [
+                        declaration.to_dict()
+                        for declaration in record.manifest.channels
+                    ],
                     "state": runtime_state,
                     "error": (
                         state["error"]
