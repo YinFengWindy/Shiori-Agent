@@ -246,7 +246,7 @@ class ReloadableDesktopService:
                 error=BridgeError("runtime_reloading", "正在更新渠道配置，请稍后重试"),
             )
         entry = self._owner(policy.owner_routing, payload)
-        if method == "chat.send":
+        if method in ("chat.send", "chat.retry"):
             session_key = f"role:{payload.get('role_id', '')}"
             if any(
                 item.service.chat_service.is_busy(session_key) for item in self._entries

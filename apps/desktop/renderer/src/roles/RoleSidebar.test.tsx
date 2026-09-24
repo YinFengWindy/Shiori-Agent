@@ -42,3 +42,47 @@ describe("RoleSidebar", () => {
     } finally { await view.cleanup(); }
   });
 });
+
+describe("RoleSidebar chat previews", () => {
+  const role = {
+    id: "mira", name: "Mira", description: "", system_prompt: "", runtime_config: {},
+    avatar: null, avatar_abs: null, chat_background: null, chat_background_abs: null,
+    illustrations: [], illustrations_abs: [], asset_categories: [], asset_category_bindings: {},
+    created_at: "", updated_at: "",
+    last_message: { role: "assistant", content: "**早呀**，今天也要加油", timestamp: new Date().toISOString(), has_media: false },
+  };
+
+  function render(activeRoleId: string, unreadCounts: Record<string, number>, activeRolePreview: { text: string; timestamp: string } | null = null) {
+    return mountTestComponent(
+      <RoleSidebar
+        roles={[role]}
+        activeRoleId={activeRoleId}
+        unreadCounts={unreadCounts}
+        activeRolePreview={activeRolePreview}
+        bridgeReady
+        collapsed={false}
+        animating={false}
+        width={260}
+        onOpenRole={() => undefined}
+        onCreateRole={() => undefined}
+        onBeginResize={() => undefined}
+      />,
+    );
+  }
+
+  it("shows the bridge preview flattened to one line, with an unread count", async () => {
+    const view = await render("", { mira: 3 });
+    try {
+      assert.equal(view.container.querySelector('[data-testid="role-preview-mira"]')?.textContent, "早呀，今天也要加油");
+      assert.equal(view.container.querySelector('[data-testid="role-unread-mira"]')?.textContent, "3");
+    } finally { await view.cleanup(); }
+  });
+
+  it("lets the open conversation override the active role's preview", async () => {
+    const view = await render("mira", {}, { text: "你：晚安", timestamp: "" });
+    try {
+      assert.equal(view.container.querySelector('[data-testid="role-preview-mira"]')?.textContent, "你：晚安");
+      assert.equal(view.container.querySelector('[data-testid="role-unread-mira"]'), null);
+    } finally { await view.cleanup(); }
+  });
+});

@@ -210,6 +210,7 @@ async def test_desktop_chat_service_reconciles_persisted_user_before_chat_error(
                 "session_key": "role:mira",
                 "turn_id": "1",
                 "message": "boom",
+                "detail": "RuntimeError: boom",
             },
         }
     ]

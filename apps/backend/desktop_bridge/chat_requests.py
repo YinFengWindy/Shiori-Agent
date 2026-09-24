@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from core.roles import RoleAggregateService
 from infra.channels.reply_context import build_inbound_text_with_reply_context
@@ -11,6 +11,20 @@ from .chat_service import ChatTurnBusyError, DesktopChatService
 from .session_presenter import DesktopSessionPresenter
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
+
+# Metadata that belongs to the original spoken input and must not re-arm voice
+# playback or ASR bookkeeping when the turn is retried.
+_VOICE_METADATA_KEYS = frozenset(
+    {
+        "input_method",
+        "voice_turn_id",
+        "asr_metrics",
+        "asr_provider",
+        "asr_request_id",
+        "asr_duration_ms",
+        "audio_duration_ms",
+    }
+)
 
 
 class DesktopChatRequestHandler:
@@ -64,7 +78,94 @@ class DesktopChatRequestHandler:
                     result.interrupted_message
                 )
             return response
+        if method == "chat.retry":
+            return await self._retry(
+                payload, request_id=request_id, emit_event=emit_event
+            )
         return None
+
+    async def _retry(
+        self,
+        payload: dict[str, Any],
+        *,
+        request_id: str,
+        emit_event: EventEmitter,
+    ) -> dict[str, Any]:
+        """Re-runs the latest failed turn on its already persisted user message.
+
+        A failed desktop turn persists the user message and nothing after it
+        (errors are never stored), so the retryable turn is exactly "the
+        session ends with this user message". Anything else — a reply already
+        followed, or another message arrived — is refused, and the single
+        timeline is never rewritten or given a duplicate user message.
+        """
+        role_id = str(payload.get("role_id") or "").strip()
+        turn_id = str(payload.get("turn_id") or "").strip()
+        user_message_id = str(payload.get("user_message_id") or "").strip()
+        if not turn_id:
+            raise ValueError("turn_id 不能为空")
+        if not user_message_id:
+            raise ValueError("user_message_id 不能为空")
+        aggregate = await self._role_service.open_role_async(role_id)
+        session = aggregate.session
+        if self._chat_service.is_busy(session.key):
+            raise ChatTurnBusyError("当前会话已有正在执行的聊天任务")
+        user_message = session.messages[-1] if session.messages else None
+        if (
+            user_message is None
+            or user_message.get("role") != "user"
+            or str(user_message.get("id") or "") != user_message_id
+        ):
+            raise ValueError("只能重试最近一次失败的回合")
+
+        content = str(user_message.get("content") or "")
+        raw_metadata = user_message.get("metadata")
+        stored_metadata = (
+            cast(dict[str, object], raw_metadata)
+            if isinstance(raw_metadata, dict)
+            else {}
+        )
+        raw_media = user_message.get("media")
+        media = (
+            [str(item) for item in cast(list[object], raw_media)]
+            if isinstance(raw_media, list)
+            else []
+        )
+        metadata: dict[str, object] = {
+            key: value
+            for key, value in stored_metadata.items()
+            # A retry is typed, not spoken: the original voice turn is over.
+            if key not in _VOICE_METADATA_KEYS
+        }
+        metadata.update(
+            {"request_id": request_id, "delivery_key": request_id, "turn_id": turn_id}
+        )
+        reply_to_content = str(metadata.get("reply_to_content") or "").strip()
+        inbound_content = (
+            build_inbound_text_with_reply_context(
+                user_text=content,
+                reply_text=reply_to_content,
+                reply_sender=str(metadata.get("reply_to_sender") or "").strip(),
+            )
+            if reply_to_content
+            else content
+        )
+        self._start_chat_turn(
+            request_id=request_id,
+            turn_id=turn_id,
+            session_key=session.key,
+            content=inbound_content,
+            media=media,
+            metadata=metadata,
+            omit_user_turn=True,
+            emit_event=emit_event,
+        )
+        return {
+            "session": self._session_presenter.serialize_summary(session),
+            "message": self._session_presenter.serialize_message(user_message),
+            "turn_id": turn_id,
+            "events": [],
+        }
 
     async def _send(
         self,

@@ -16,8 +16,10 @@ describe("ChatMarkdownContent", () => {
     assert.match(markup, /<strong>bold<\/strong>/);
     assert.match(markup, /<em>italic<\/em>/);
     assert.match(markup, /<ul[^>]*>/);
-    assert.match(markup, /<table>/);
-    assert.match(markup, /<code class="language-ts">const answer = 42;\n<\/code>/);
+    assert.match(markup, /<table[^>]*>/);
+    assert.match(markup, /data-testid="chat-code-block"/);
+    assert.match(markup, />ts<\/span>/);
+    assert.match(markup, /<code>const answer = 42;<\/code>/);
   });
 
   it("does not render raw HTML or unsafe links", () => {
@@ -52,5 +54,22 @@ describe("ChatMarkdownContent", () => {
     assert.match(markup, /href="https:\/\/example\.com\/docs"/);
     assert.match(markup, /href="mailto:hello@example\.com"/);
     assert.equal(normalizeExternalLink("javascript:alert(1)"), null);
+  });
+
+  it("labels a fence without a language and keeps its text escaped", () => {
+    const markup = renderToStaticMarkup(
+      <ChatMarkdownContent content={"\x60\x60\x60\n<script>alert(1)</script>\n\x60\x60\x60"} />,
+    );
+
+    assert.match(markup, />代码<\/span>/);
+    assert.match(markup, /&lt;script&gt;/);
+    assert.doesNotMatch(markup, /<script>/);
+  });
+
+  it("wraps tables in a bordered scroll container", () => {
+    const markup = renderToStaticMarkup(<ChatMarkdownContent content={"| A | B |\n| --- | --- |\n| 1 | 2 |"} />);
+
+    assert.match(markup, /class="chat-markdown-table[^"]*overflow-x-auto/);
+    assert.match(markup, /<th[^>]*>A<\/th>/);
   });
 });

@@ -12,8 +12,13 @@ def build_chat_terminal_event(
     role_id: str,
     committed: TurnCommitted | None = None,
     failure_message: str = "",
+    failure_detail: str = "",
 ) -> BridgeEvent:
-    """Completes an uncommitted turn as an error without inventing a persisted reply."""
+    """Completes an uncommitted turn as an error without inventing a persisted reply.
+
+    `failure_detail` is an optional user-safe summary of the cause (exception
+    type and one scrubbed line) that the desktop shows behind 「详情」.
+    """
 
     payload = {"session_key": session_key, "turn_id": turn_id}
     if committed is None:
@@ -24,6 +29,7 @@ def build_chat_terminal_event(
             payload={
                 **payload,
                 "message": failure_message or "回合未完成，请重试。",
+                **({"detail": failure_detail} if failure_detail else {}),
             },
         )
     return BridgeEvent(

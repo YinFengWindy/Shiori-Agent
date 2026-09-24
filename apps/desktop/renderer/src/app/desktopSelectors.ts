@@ -81,11 +81,7 @@ export function buildDesktopViewModel({
   const visibleChatSessionKey = resolveVisibleChatSessionKey(activeRoleId, activeSessionKey);
   const isVisibleChatSending = Boolean(visibleChatSessionKey && sendingSessions[visibleChatSessionKey]);
   const isVisibleChatCancelling = Boolean(visibleChatSessionKey && cancellingSessions[visibleChatSessionKey]);
-  const headerTitle = resolveChatHeaderTitle({
-    activeRoleName: activeRole?.name ?? null,
-    activeSessionKey: visibleChatSessionKey,
-    sendingSessions,
-  });
+  const headerTitle = resolveChatHeaderTitle(activeRole?.name ?? null);
   const chatImageHistory = imageHistoryMessages
     ? mergeChatImageHistory(imageHistoryMessages, activeSession?.messages ?? [])
     : collectChatImageHistory(activeSession);

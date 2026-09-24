@@ -163,7 +163,15 @@ class DesktopBridgeService:
             self.conversation_service,
             relationship_runtime,
         )
-        self.role_presenter = DesktopRolePresenter(role_store, relationship_runtime)
+        self.role_presenter = DesktopRolePresenter(
+            role_store,
+            relationship_runtime,
+            last_message_for_role=lambda role_id: (
+                self.session_presenter.last_message_preview(
+                    self.role_service.sessions.derive_session_key(role_id)
+                )
+            ),
+        )
         self.role_card_import_service = (
             card_import_service
             if card_import_service is not None
@@ -622,6 +630,17 @@ class DesktopBridgeService:
     def _sync_desktop_session_thread(self, session: Session, *, role_id: str) -> None:
         self.app_service.sync_desktop_session_thread(session, role_id=role_id)
 
+    def _retry_target_has_media(self, payload: dict[str, Any]) -> bool:
+        """Whether the user message a `chat.retry` re-runs carries media (picks the vision model)."""
+        role_id = str(payload.get("role_id") or "").strip()
+        if not role_id:
+            return False
+        session = self.session_manager.get_or_create(
+            self.role_service.sessions.derive_session_key(role_id)
+        )
+        last = session.messages[-1] if session.messages else None
+        return bool(last and last.get("role") == "user" and last.get("media"))
+
     async def handle(
         self,
         request: dict[str, Any],
@@ -637,8 +656,16 @@ class DesktopBridgeService:
         self.start_background_tasks()
         try:
             with ExitStack() as task_scope:
-                if method == "chat.send" and self.model_resolver is not None:
-                    purpose = "vision" if payload.get("media") else "chat"
+                if (
+                    method in {"chat.send", "chat.retry"}
+                    and self.model_resolver is not None
+                ):
+                    has_media = (
+                        bool(payload.get("media"))
+                        if method == "chat.send"
+                        else self._retry_target_has_media(payload)
+                    )
+                    purpose = "vision" if has_media else "chat"
                     task_scope.enter_context(
                         self.model_resolver.activate(
                             str(payload.get("role_id") or ""),

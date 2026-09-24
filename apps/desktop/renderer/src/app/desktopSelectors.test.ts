@@ -94,7 +94,8 @@ describe("desktopSelectors", () => {
       cancellingSessions: { "role:mira": "mira" },
     });
 
-    assert.equal(viewModel.headerTitle, "正在输入中...");
+    assert.equal(viewModel.headerTitle, "Mira");
+    assert.equal(viewModel.isVisibleChatSending, true);
     assert.equal(viewModel.bridgeReady, true);
     assert.equal(viewModel.isVisibleChatCancelling, true);
   });

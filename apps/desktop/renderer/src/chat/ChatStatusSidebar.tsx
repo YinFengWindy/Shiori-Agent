@@ -1,4 +1,5 @@
 import React from "react";
+import { CrossfadeLayers } from "../shared/CrossfadeLayers";
 import { cx } from "../shared/styles";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
 
@@ -27,11 +28,17 @@ export function ChatStatusSidebar({
       {/* The illustration may shrink to zero; only its own pixels are clipped so text and controls take priority. */}
       <div className="chat-status-illustration-frame relative min-h-0 overflow-hidden rounded-md">
         {shouldRenderIllustration ? (
-          <img
-            className="chat-status-illustration-content absolute inset-0 m-auto h-full max-h-52 w-full object-contain"
-            src={moodIllustrationUrl}
-            alt={currentMood ? `${currentMood} status illustration` : "status illustration"}
-            decoding="async"
+          // A mood change crossfades the portrait instead of snapping it.
+          <CrossfadeLayers
+            value={moodIllustrationUrl}
+            render={(url) => (
+              <img
+                className="chat-status-illustration-content absolute inset-0 m-auto h-full max-h-52 w-full object-contain"
+                src={url}
+                alt={currentMood ? `${currentMood}状态立绘` : "状态立绘"}
+                decoding="async"
+              />
+            )}
           />
         ) : (
           <div className="chat-status-illustration-content absolute inset-0 m-auto grid h-full max-h-52 w-full place-items-center rounded-md bg-accent-softer text-caption text-ink-muted">

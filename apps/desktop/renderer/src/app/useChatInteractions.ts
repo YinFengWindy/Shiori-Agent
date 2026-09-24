@@ -1,6 +1,7 @@
 import type React from "react";
 import { findChatMessageElement } from "../chat/chatMessageDom";
 import { prefersReducedMotion } from "../shared/reducedMotion";
+import { copyTextToClipboard } from "../shared/clipboard";
 import type { AppMainView, RoleRecord, SessionPayload } from "../shared/types";
 import { errorMessage, type FeedbackReporter } from "../shared/feedback/feedbackStore";
 
@@ -70,18 +71,7 @@ export function useChatInteractions({
       return;
     }
     try {
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(normalizedContent);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = normalizedContent;
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        textarea.remove();
-      }
+      await copyTextToClipboard(normalizedContent);
       feedback.success("已复制");
     } catch (error) {
       feedback.error(`复制失败：${errorMessage(error)}`);

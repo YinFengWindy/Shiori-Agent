@@ -1,17 +1,19 @@
-import { forwardRef, type TextareaHTMLAttributes } from "react";
+import { forwardRef, type CSSProperties, type TextareaHTMLAttributes } from "react";
 import { cx } from "./styles";
 
 type AutosizeTextareaProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value"> & {
   value: string;
   containerClassName?: string;
+  /** Inline style for the sizing container, e.g. a `maxHeight` past which the textarea scrolls. */
+  containerStyle?: CSSProperties;
   mirrorClassName?: string;
 };
 
 /** Renders a textarea whose height follows its content without synchronous DOM measurement. */
 export const AutosizeTextarea = forwardRef<HTMLTextAreaElement, AutosizeTextareaProps>(
-  function AutosizeTextarea({ value, className, containerClassName, mirrorClassName, ...textareaProps }, ref) {
+  function AutosizeTextarea({ value, className, containerClassName, containerStyle, mirrorClassName, ...textareaProps }, ref) {
     return (
-      <div className={cx("grid min-w-0", containerClassName)} style={{ contain: "layout" }}>
+      <div className={cx("grid min-w-0", containerClassName)} style={{ contain: "layout", ...containerStyle }}>
         <div
           aria-hidden="true"
           className={cx(

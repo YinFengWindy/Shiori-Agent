@@ -1,13 +1,17 @@
-import React, { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-import { ChatComposer } from "./ChatComposer";
+import React, { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ChatComposer, type ChatComposerDraftRequest } from "./ChatComposer";
+import { chatComposerBottomOffsetPx } from "./chatComposerLayout";
+import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessageContextMenu } from "./ChatMessageContextMenu";
 import { ChatMessageList } from "./ChatMessageList";
 import {
+  getChatMessageActionAvailability,
   getChatMessageCopyText,
   getChatMessageReplyContent,
-  type MessageContextMenuState,
 } from "./chatMessageActions";
+import { findRetryableChatErrorKey } from "./chatFailedTurn";
+import { getChatMessageReactKey } from "./chatMessageIdentity";
 import { ChatRightSidebar, type ChatSidebarMode } from "./ChatRightSidebar";
 import { ChatPanelToggle, ChatPanelSegments } from "./ChatPanelControls";
 import {
@@ -22,13 +26,18 @@ import {
 } from "./chatAutoScroll";
 import { shouldLoadOlderChatMessagesAfterSessionRestore } from "./chatMessagePaginationState";
 import { summarizeChatReplyContent } from "./chatComposerState";
+import { ChatScrollToBottomButton } from "./ChatScrollToBottomButton";
+import { ChatSurfaceBackdrop } from "./ChatSurfaceBackdrop";
 import { useRoleTasks } from "./useRoleTasks";
+import { useChatMessageContextMenu } from "./useChatMessageContextMenu";
+import { useChatMessageEnterKeys } from "./useChatMessageEnterKeys";
 import { useChatMessagePagination } from "./useChatMessagePagination";
 import { useChatBottomFollow } from "./useChatBottomFollow";
 import {
   type ChatMessageNavigationScroller,
   useChatScrollController,
 } from "./useChatScrollController";
+import { useRoleChannelCatalog } from "../roles/useRoleChannelCatalog";
 import { cx, sidebarContentMotionClass, sidebarTrackMotionClass } from "../shared/styles";
 import { useLatestRef } from "../shared/useLatestRef";
 import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
@@ -73,11 +82,16 @@ type ChatSurfaceProps = {
   onCopyMessage: (content: string) => void;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
   onCancelChat: () => void;
+  /** Re-sends the user message of the failed turn ending in this error row (render key). */
+  onRetryFailedTurn?: (errorKey: string) => void;
   onLoadOlderMessages?: (sessionKey: string) => Promise<boolean>;
   onToggleChatLatestImageSidebar: () => void;
 };
 
 const emptySessionMessages: SessionMessage[] = [];
+
+/** Room kept between the composer's top and the newest message when scrolled to the bottom. */
+const composerClearanceGapPx = 24;
 
 /** Renders the active role chat header, conversation messages, and composer. */
 export function ChatSurface({
@@ -116,14 +130,15 @@ export function ChatSurface({
   onCopyMessage,
   onSendMessage,
   onCancelChat,
+  onRetryFailedTurn = () => undefined,
   onLoadOlderMessages = async () => false,
   onToggleChatLatestImageSidebar,
 }: ChatSurfaceProps) {
   const [visualsActive, setVisualsActive] = useState(() => (
     typeof document === "undefined" ? true : !document.hidden
   ));
+  const conversationPanelRef = useRef<HTMLElement | null>(null);
   const conversationListRef = useRef<HTMLDivElement | null>(null);
-  const messageContextMenuRef = useRef<HTMLDivElement | null>(null);
   const previousMessageCountRef = useRef(0);
   const previousLastMessageContentRef = useRef("");
   const previousChatImageCountRef = useRef(0);
@@ -131,8 +146,11 @@ export function ChatSurface({
   const [panelBadges, setPanelBadges] = useState<ChatPanelBadges>(emptyChatPanelBadges);
   const highlightedMessageKeyRef = useLatestRef(highlightedMessageKey);
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
-  const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
+  const messageContextMenu = useChatMessageContextMenu();
   const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
+  const [composerDraftRequest, setComposerDraftRequest] = useState<ChatComposerDraftRequest | null>(null);
+  const [conversationPaneHeight, setConversationPaneHeight] = useState(0);
+  const channelCatalog = useRoleChannelCatalog();
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
   const hasStatusContent = hasStatusIllustration || Boolean(roleSelfView);
   const [sidebarMode, setSidebarMode] = useState<ChatSidebarMode>(
@@ -145,6 +163,8 @@ export function ChatSurface({
   });
   const sessionMessages = activeSession?.messages ?? emptySessionMessages;
   const currentLastMessageContent = sessionMessages.at(-1)?.content ?? "";
+  const enteringMessageKeys = useChatMessageEnterKeys(activeSession?.key ?? "", sessionMessages);
+  const retryableMessageKey = useMemo(() => findRetryableChatErrorKey(sessionMessages), [sessionMessages]);
   const {
     visibleMessageWindow,
     canLoadOlderMessages,
@@ -249,35 +269,16 @@ export function ChatSurface({
     setSidebarMode("images");
   }, [hasStatusContent, sidebarMode]);
 
+  // The composer's max height follows the pane it floats in.
   useEffect(() => {
-    if (!messageContextMenu) return undefined;
-
-    const closeContextMenu = () => setMessageContextMenu(null);
-    const handlePointerDown = (event: PointerEvent) => {
-      const menu = messageContextMenuRef.current;
-      if (menu && event.target instanceof Node && menu.contains(event.target)) {
-        return;
-      }
-      closeContextMenu();
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeContextMenu();
-      }
-    };
-
-    window.addEventListener("pointerdown", handlePointerDown, true);
-    window.addEventListener("scroll", closeContextMenu, true);
-    window.addEventListener("resize", closeContextMenu);
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown, true);
-      window.removeEventListener("scroll", closeContextMenu, true);
-      window.removeEventListener("resize", closeContextMenu);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [messageContextMenu]);
+    const panel = conversationPanelRef.current;
+    if (!panel || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => {
+      setConversationPaneHeight((current) => current === panel.clientHeight ? current : panel.clientHeight);
+    });
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, []);
 
   useLayoutEffect(() => {
     resetConversationForSession();
@@ -305,6 +306,7 @@ export function ChatSurface({
 
   useEffect(() => {
     setComposerReplyTarget(null);
+    setComposerDraftRequest(null);
   }, [activeRoleId, activeSession?.key]);
 
   useEffect(() => {
@@ -335,6 +337,7 @@ export function ChatSurface({
   const canGoToNextChatImage = hasChatImageHistory && chatLatestImagePosition < chatLatestImageSidebarCount;
   const canOpenRoleDetail = Boolean(activeRole && activeRoleId);
   const detailRole = canOpenRoleDetail ? activeRole : null;
+  const showEmptyState = Boolean(activeRole && activeSession && !sessionMessages.length && !canLoadOlderMessages);
 
   const handleScrollToBottom = () => {
     scrollConversationToBottom("smooth");
@@ -355,41 +358,40 @@ export function ChatSurface({
     setComposerReplyTarget(null);
   }, []);
 
-  const openMessageContextMenu = useCallback((
-    event: React.MouseEvent<HTMLElement>,
-    message: SessionMessage,
-    messageKey: string,
-    sender: string,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setMessageContextMenu({
-      x: Math.min(event.clientX, Math.max(12, window.innerWidth - 148)),
-      y: Math.min(event.clientY, Math.max(12, window.innerHeight - 84)),
-      message,
-      messageKey,
+  // The list's bottom spacer and the scroll-to-bottom button track the
+  // composer's live height (it grows with the draft, quote and attachments);
+  // a follower stays pinned to the newest message while it grows.
+  const handleComposerHeightChange = useCallback((height: number) => {
+    const panel = conversationPanelRef.current;
+    if (!panel) return;
+    panel.style.setProperty("--chat-composer-height", `${height}px`);
+    panel.style.setProperty("--chat-composer-clearance", `${height + chatComposerBottomOffsetPx + composerClearanceGapPx}px`);
+    if (stickToBottomRef.current) scrollConversationToBottom("auto");
+  }, [scrollConversationToBottom, stickToBottomRef]);
+
+  const handleCopyMessage = useCallback((message: SessionMessage) => {
+    onCopyMessage(getChatMessageCopyText(message));
+  }, [onCopyMessage]);
+
+  const handleQuoteMessage = useCallback((message: SessionMessage, messageKey: string, sender: string) => {
+    const content = getChatMessageReplyContent(message);
+    if (!content) return;
+    setComposerReplyTarget({
+      messageId: messageKey,
+      content,
       sender,
+      preview: summarizeChatReplyContent(content),
     });
   }, []);
 
-  function copyContextMessage(): void {
-    if (!messageContextMenu) return;
-    onCopyMessage(getChatMessageCopyText(messageContextMenu.message));
-    setMessageContextMenu(null);
-  }
+  const handlePickSuggestion = useCallback((text: string) => {
+    setComposerDraftRequest((current) => ({ text, id: (current?.id ?? 0) + 1 }));
+  }, []);
 
-  function quoteContextMessage(): void {
-    if (!messageContextMenu) return;
-    const content = getChatMessageReplyContent(messageContextMenu.message);
-    if (!content) return;
-    setComposerReplyTarget({
-      messageId: messageContextMenu.messageKey,
-      content,
-      sender: messageContextMenu.sender,
-      preview: summarizeChatReplyContent(content),
-    });
-    setMessageContextMenu(null);
-  }
+  const contextMenuState = messageContextMenu.menu;
+  const contextMenuRenderKey = contextMenuState
+    ? getChatMessageReactKey(contextMenuState.message, sessionMessages.indexOf(contextMenuState.message))
+    : "";
 
   return (
     <section className="chat-surface relative grid h-full min-h-0 grid-cols-[minmax(0,1fr)_auto] overflow-hidden bg-gradient-app bg-fixed">
@@ -398,35 +400,38 @@ export function ChatSurface({
         badged={shouldBadgeChatPanelToggle(panelBadges, panelOpen)}
         onToggle={onToggleChatLatestImageSidebar}
       />
-      {messageContextMenu ? (
+      {contextMenuState ? (
         <ChatMessageContextMenu
-          menu={messageContextMenu}
-          menuRef={messageContextMenuRef}
-          sending={sending}
-          onCopy={copyContextMessage}
-          onQuote={quoteContextMessage}
+          menu={contextMenuState}
+          menuRef={messageContextMenu.menuRef}
+          availability={getChatMessageActionAvailability(contextMenuState.message, {
+            sending,
+            retryable: contextMenuRenderKey === retryableMessageKey,
+          })}
+          onCopy={() => {
+            handleCopyMessage(contextMenuState.message);
+            messageContextMenu.close();
+          }}
+          onQuote={() => {
+            handleQuoteMessage(contextMenuState.message, contextMenuState.messageKey, contextMenuState.sender);
+            messageContextMenu.close();
+          }}
+          onRetry={() => {
+            onRetryFailedTurn(contextMenuRenderKey);
+            messageContextMenu.close();
+          }}
         />
       ) : null}
       <div className="relative grid h-full min-h-0 grid-rows-chat overflow-hidden">
-      {hasIllustration ? (
-        <div
-          className="conversation-illustration pointer-events-none absolute inset-0 z-0 overflow-hidden"
-          aria-hidden="true"
-        >
-          <div
-            className="conversation-illustration-image absolute inset-0 bg-cover bg-center bg-no-repeat opacity-[0.96]"
-            style={{ backgroundImage: `url("${visibleIllustrationUrl}")` }}
-          />
-          <div className="conversation-illustration-fade absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.78)_0%,rgba(255,255,255,0.64)_24%,rgba(255,255,255,0.4)_48%,rgba(255,255,255,0.14)_72%,rgba(255,255,255,0.03)_100%)]" />
-        </div>
-      ) : null}
+      {hasIllustration ? <ChatSurfaceBackdrop url={visibleIllustrationUrl} /> : null}
       <ChatHeader
         activeRole={activeRole}
         detailRole={detailRole}
         title={headerTitle}
+        typing={sending}
         onOpenRoleDetail={handleOpenRoleDetail}
       />
-      <section className="conversation-panel relative z-[1] h-full min-h-0 overflow-hidden bg-transparent">
+      <section ref={conversationPanelRef} className="conversation-panel relative z-[1] h-full min-h-0 overflow-hidden bg-transparent">
         <ChatMessageList
           activeRole={activeRole}
           sessionKey={activeSession?.key ?? ""}
@@ -436,27 +441,23 @@ export function ChatSurface({
           onMessageNavigationTargetMounted={handleMessageNavigationTargetMounted}
           isAutoScrollingRef={isAutoScrollingRef}
           visibleMessageWindow={visibleMessageWindow}
+          enteringKeys={enteringMessageKeys}
+          retryableKey={retryableMessageKey}
+          sending={sending}
+          channelCatalog={channelCatalog}
           onBeginAttachmentDrag={onBeginAttachmentDrag}
           onContentSizeChange={handleChatContentSizeChange}
           onJumpToMessage={onJumpToMessage}
-          onOpenContextMenu={openMessageContextMenu}
+          onOpenContextMenu={messageContextMenu.open}
           onOpenImagePreview={handleOpenChatImagePreview}
+          onCopyMessage={handleCopyMessage}
+          onQuoteMessage={handleQuoteMessage}
+          onRetryMessage={onRetryFailedTurn}
         />
-        {showScrollToBottom ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-[132px] z-[2] flex justify-center">
-            <button
-              className="pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-line-soft bg-[rgba(255,255,255,0.96)] text-ink-secondary shadow-soft transition hover:border-line hover:bg-white hover:text-ink focus:outline-none"
-              type="button"
-              aria-label="滑到最下方"
-              onClick={handleScrollToBottom}
-            >
-              <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 5v14" />
-                <path d="m6 13 6 6 6-6" />
-              </svg>
-            </button>
-          </div>
+        {showEmptyState && activeRole ? (
+          <ChatEmptyState role={activeRole} onPickSuggestion={handlePickSuggestion} />
         ) : null}
+        {showScrollToBottom ? <ChatScrollToBottomButton onClick={handleScrollToBottom} /> : null}
         <ChatComposer
           activeRoleId={activeRoleId}
           sessionKey={activeSession?.key ?? ""}
@@ -464,10 +465,13 @@ export function ChatSurface({
           sending={sending}
           cancelling={cancelling}
           replyTarget={composerReplyTarget}
+          paneHeight={conversationPaneHeight}
+          draftRequest={composerDraftRequest}
           onSendMessage={onSendMessage}
           onCancelChat={onCancelChat}
           onClearReplyTarget={handleClearReplyTarget}
           onJumpToMessage={onJumpToMessage}
+          onHeightChange={handleComposerHeightChange}
         />
       </section>
       </div>

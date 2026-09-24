@@ -32,6 +32,7 @@ const baseProps = {
   roles: [],
   activeRoleId: "",
   unreadCounts: {},
+  activeRolePreview: null,
   bridgeReady: true,
   onOpenRole: () => undefined,
 };

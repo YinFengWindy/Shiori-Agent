@@ -12,6 +12,7 @@ from bus.events_lifecycle import (
     ToolCallCompleted,
     ToolCallStarted,
     TurnCommitted,
+    TurnFailed,
 )
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.voice.voice_service import (
@@ -1090,7 +1091,9 @@ async def test_failure_snapshot_cannot_replace_original_error(failure_stage, cap
         update.side_effect = snapshot_error
 
     async def emit_payload(emit_event, payload):
-        emit_event(payload)
+        result = emit_event(payload)
+        if result is not None:
+            await result
 
     service = DesktopChatService(
         agent_loop=SimpleNamespace(
@@ -1121,6 +1124,107 @@ async def test_failure_snapshot_cannot_replace_original_error(failure_stage, cap
         "session_key": "role:mira",
         "turn_id": "turn-1",
         "message": "provider failed",
+        "detail": "RuntimeError: provider failed",
     }
     assert "snapshot unavailable" in caplog.text
     assert event_bus._handlers == {}
+
+
+@pytest.mark.asyncio
+async def test_generic_turn_failure_reports_its_scrubbed_cause_as_detail():
+    event_bus = EventBus()
+    emitted = []
+
+    async def process_direct(*_args, **_kwargs):
+        # The pipeline swallows the exception, publishes its summary and
+        # returns the generic reply without committing a turn.
+        await event_bus.observe(
+            TurnFailed(session_key="role:other", error_summary="Other: not this turn")
+        )
+        await event_bus.observe(
+            TurnFailed(
+                session_key="role:mira",
+                error_summary="APIStatusError: 502 Bad Gateway",
+            )
+        )
+        return "处理消息时出错，请稍后再试。"
+
+    async def emit_payload(emit_event, payload):
+        result = emit_event(payload)
+        if result is not None:
+            await result
+
+    async def emit_session_updated(*, request_id, session, emit_event):
+        return None
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=process_direct),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(return_value=Session(key="role:mira"))
+        ),
+        role_id_from_session_key=lambda _key: "mira",
+        sync_desktop_session_thread=Mock(),
+        emit_payload=emit_payload,
+        emit_session_updated=emit_session_updated,
+    )
+    service.start_chat_turn(
+        request_id="request-1",
+        turn_id="turn-1",
+        session_key="role:mira",
+        content="hello",
+        media=[],
+        metadata={},
+        omit_user_turn=True,
+        emit_event=emitted.append,
+    )
+    await service.drain()
+
+    terminal = next(event for event in emitted if event["method"] == "chat.error")
+    assert terminal["payload"]["message"] == "处理消息时出错，请稍后再试。"
+    assert terminal["payload"]["detail"] == "APIStatusError: 502 Bad Gateway"
+    assert event_bus._handlers == {}
+
+
+@pytest.mark.asyncio
+async def test_raised_turn_failure_detail_is_scrubbed():
+    event_bus = EventBus()
+    emitted = []
+
+    async def process_direct(*_args, **_kwargs):
+        raise RuntimeError("401 Authorization: Bearer abcdefghijklmnopqrst")
+
+    async def emit_payload(emit_event, payload):
+        result = emit_event(payload)
+        if result is not None:
+            await result
+
+    async def emit_session_updated(*, request_id, session, emit_event):
+        return None
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=process_direct),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(return_value=Session(key="role:mira"))
+        ),
+        role_id_from_session_key=lambda _key: "mira",
+        sync_desktop_session_thread=Mock(),
+        emit_payload=emit_payload,
+        emit_session_updated=emit_session_updated,
+    )
+    service.start_chat_turn(
+        request_id="request-1",
+        turn_id="turn-1",
+        session_key="role:mira",
+        content="hello",
+        media=[],
+        metadata={},
+        omit_user_turn=True,
+        emit_event=emitted.append,
+    )
+    await service.drain()
+
+    terminal = next(event for event in emitted if event["method"] == "chat.error")
+    assert "abcdefghijklmnopqrst" not in terminal["payload"]["detail"]
+    assert terminal["payload"]["detail"].startswith("RuntimeError: 401")

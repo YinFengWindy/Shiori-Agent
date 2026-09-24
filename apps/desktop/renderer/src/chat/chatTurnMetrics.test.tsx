@@ -19,9 +19,20 @@ describe("chat turn metrics", () => {
       <ChatReplyMetrics metrics={{ total_tokens: 2438, thinking_duration_ms: 6200 }} hasThinking />,
     );
 
-    assert.match(withoutThinking, /Thought for 6\.2s/);
+    assert.match(withoutThinking, /思考 6.2 秒/);
     assert.match(withoutThinking, /2,438 tokens/);
-    assert.doesNotMatch(withThinking, /Thought for/);
+    assert.doesNotMatch(withThinking, /思考 /);
     assert.match(withThinking, /2,438 tokens/);
+  });
+});
+
+describe("interrupted reply footer", () => {
+  it("marks a stopped reply even when it carries no metrics", () => {
+    const markup = renderToStaticMarkup(<ChatReplyMetrics metrics={{}} hasThinking={false} interrupted />);
+    assert.match(markup, /已中断/);
+  });
+
+  it("renders nothing for a finished reply without metrics", () => {
+    assert.equal(renderToStaticMarkup(<ChatReplyMetrics metrics={{}} hasThinking={false} />), "");
   });
 });

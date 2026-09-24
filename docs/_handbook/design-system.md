@@ -178,9 +178,14 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
   | `--duration-base` | 220ms | 对话框、提示、侧栏内容淡入 |
   | `--duration-panel` | 260ms | 侧栏宽度（和 `app/appState.ts` 的 `sidebarAnimationDurationMs` 同步，有测试守着） |
   | `--duration-motif` | 480ms | 导航栏图标里品牌小元素的一次性小动画 |
+  | `--duration-enter` | 240ms | 聊天新消息入场（只 CSS 用，没有 Tailwind 类） |
+  | `--duration-crossfade` | 320ms | 图片换图的交叉淡入（`shared/CrossfadeLayers`，心情立绘、聊天背景） |
+  | `--duration-pulse` | 600ms | 一次性的提示脉冲（跳转到引用消息的光环） |
 
 - 缓动：`--ease-out-soft`（`ease-out-soft`，也是裸 `transition` 的默认值）用于入场、按压、悬停；
-  `--ease-drawer`（`ease-drawer`）只给侧栏开合这类抽屉
+  `--ease-drawer`（`ease-drawer`）只给侧栏开合这类抽屉；`--ease-in-out-soft` 只给两端都在屏幕上的对称切换（交叉淡入）
+- 聊天新消息入场只对「当前会话挂载后追加的消息」播一次，由 `chat/chatMessageEnterState.ts` 判定：
+  切会话、翻历史、虚拟化重挂载都不播
 - 按压反馈用 `shared/styles.ts` 的 `pressableClass`（0.97）/ `compactPressableClass`（30px 及以下的图标按钮，0.96）。
   它接管元素的整条 transition，不要再和别的 `transition*` 类叠加。共享按钮类已经带上了
 - 弹出层：Base UI 的 Select / Dialog 用 `motion-popup` / `motion-dialog` / `motion-backdrop`，进出场都有；

@@ -68,9 +68,9 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
         <button className={chatSidebarBackButtonClass} type="button" aria-label="返回" disabled={saving} onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <span className="font-semibold text-ink">{title}</span>
+        <span className="min-w-0 truncate font-semibold text-ink">{title}</span>
       </div>
-      <div className={cx(chatSidebarScrollableClass, "space-y-5 px-1 pb-5")}>
+      <div className={cx(chatSidebarScrollableClass, "min-w-0 space-y-5 overflow-x-hidden px-1 pb-5")}>
         <section className="grid gap-3">
           <h3 className={sectionHeadingClass}>基础信息</h3>
           <label className={roleTaskFieldLabelClass}>
@@ -81,7 +81,7 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
         </section>
         <section className="grid gap-3 border-t border-line-soft pt-4">
           <h3 className={sectionHeadingClass}>执行设置</h3>
-          <div className="grid gap-1.5 text-xs text-ink-muted">
+          <div className="grid min-w-0 gap-1.5 text-xs text-ink-muted">
             <span>执行模式</span>
             <RoleTaskSegmentedControl
               label="执行模式"
@@ -91,7 +91,7 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
               onChange={(tier: ScheduleTaskTier) => setData((current) => ({ ...current, tier }))}
             />
           </div>
-          <div className="grid gap-1.5 text-xs text-ink-muted">
+          <div className="grid min-w-0 gap-1.5 text-xs text-ink-muted">
             <span>触发方式</span>
             <RoleTaskSegmentedControl
               label="触发方式"
