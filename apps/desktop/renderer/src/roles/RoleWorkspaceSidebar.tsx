@@ -1,6 +1,6 @@
 import type React from "react";
 import { SidebarResizeHandle } from "../shared/SidebarResizeHandle";
-import { cx, secondarySidebarSurfaceClass, sidebarNavItemClass } from "../shared/styles";
+import { cx, secondarySidebarSurfaceClass, sidebarContentMotionClass, sidebarNavItemClass } from "../shared/styles";
 
 export type RoleWorkspaceSectionId = "roles-list" | "role-create" | "role-detail" | "role-assets";
 
@@ -34,7 +34,7 @@ export function RoleWorkspaceSidebar({
       className={cx(
         "role-workspace-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] py-3",
         secondarySidebarSurfaceClass,
-        animating && "transition-[opacity,transform] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+        animating && sidebarContentMotionClass,
         collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
       )}
       aria-hidden={collapsed}

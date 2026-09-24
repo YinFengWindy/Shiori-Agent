@@ -172,9 +172,16 @@
     --font-display: "Segoe UI Variable Display", var(--font-sans);
 
     /* ---------- motion ---------- */
+    /* ease-out-soft: everything that enters, presses or hovers.
+       ease-drawer: panels that travel with the pointer's intent (sidebar
+       open/close) — fast start, long gentle settle. */
     --ease-out-soft: cubic-bezier(0.23, 1, 0.32, 1);
-    --duration-fast: 140ms;
-    --duration-base: 220ms;
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    --duration-fade: 120ms;  /* opacity-only view swaps */
+    --duration-fast: 140ms;  /* hover / color changes (Tailwind's bare `transition`) */
+    --duration-quick: 160ms; /* press feedback, menus, popovers, tab content */
+    --duration-base: 220ms;  /* dialogs, toasts, sidebar content fade */
+    --duration-panel: 260ms; /* sidebar width; keep app/appState.ts sidebarAnimationDurationMs in sync */
 
     /* ---------- legacy aliases (pre-restyle var names still used
        by tailwind.config + older components; keep pointing at the
@@ -413,19 +420,119 @@ button[role="combobox"]:focus-visible {
   to { opacity: 1; transform: none; }
 }
 
-@keyframes feedback-fade-in {
+@keyframes motion-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
+/* ---------- overlay enter / exit ----------
+   Base UI popups (Select, Dialog) carry data-starting-style /
+   data-ending-style, so they animate both ways and Base UI waits for the
+   exit before unmounting. Hand-rolled popovers only animate in, through
+   @starting-style, and disappear at once when closed — an exit nobody asked
+   for only delays the next action.
+   The individual `scale` property is used instead of `transform` so it
+   composes with the Tailwind translate that centers the dialogs. */
+.motion-popup {
+  transform-origin: var(--transform-origin, center);
+  transition:
+    opacity var(--duration-quick) var(--ease-out-soft),
+    scale var(--duration-quick) var(--ease-out-soft);
+}
+
+.motion-dialog {
+  transition:
+    opacity var(--duration-base) var(--ease-out-soft),
+    scale var(--duration-base) var(--ease-out-soft);
+}
+
+.motion-popup[data-starting-style],
+.motion-popup[data-ending-style],
+.motion-dialog[data-starting-style],
+.motion-dialog[data-ending-style] {
+  opacity: 0;
+  scale: 0.96;
+}
+
+.motion-backdrop {
+  transition: opacity var(--duration-base) var(--ease-out-soft);
+}
+
+.motion-backdrop[data-starting-style],
+.motion-backdrop[data-ending-style] {
+  opacity: 0;
+}
+
+/* Enter-only counterparts for hand-rolled overlays; pick the origin with a
+   Tailwind `origin-*` class next to it. */
+.motion-popover-enter {
+  transition:
+    opacity var(--duration-quick) var(--ease-out-soft),
+    scale var(--duration-quick) var(--ease-out-soft);
+}
+
+.motion-dialog-enter {
+  transition:
+    opacity var(--duration-base) var(--ease-out-soft),
+    scale var(--duration-base) var(--ease-out-soft);
+}
+
+.motion-fade-enter {
+  transition: opacity var(--duration-base) var(--ease-out-soft);
+}
+
+@starting-style {
+  .motion-popover-enter,
+  .motion-dialog-enter {
+    opacity: 0;
+    scale: 0.96;
+  }
+
+  .motion-fade-enter {
+    opacity: 0;
+  }
+}
+
+/* Main pane view switch (chat / roles / settings / plugin pages): each view
+   root is a fresh element, so a mount animation is a switch animation.
+   Opacity only — the pane itself does not move. */
+.chat-pane > * {
+  animation: motion-fade-in var(--duration-fade) var(--ease-out-soft);
+}
+
+/* Role detail tab content: enter-only, the outgoing tab is gone at once. */
+.motion-tab-enter {
+  animation: motion-tab-enter var(--duration-quick) var(--ease-out-soft);
+}
+
+@keyframes motion-tab-enter {
+  from { opacity: 0; transform: translateY(6px); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .feedback-toast {
-    animation-name: feedback-fade-in;
+  .feedback-toast,
+  .motion-tab-enter {
+    animation-name: motion-fade-in;
+  }
+
+  .motion-popup,
+  .motion-dialog,
+  .motion-popover-enter,
+  .motion-dialog-enter {
+    transition-property: opacity;
+  }
+
+  .motion-popup[data-starting-style],
+  .motion-popup[data-ending-style],
+  .motion-dialog[data-starting-style],
+  .motion-dialog[data-ending-style] {
+    scale: none;
   }
 
   .chat-thinking-content,
   .chat-thinking-content-expanded {
-    transition: opacity 160ms ease;
+    transition: opacity var(--duration-quick) var(--ease-out-soft);
   }
 
   .chat-thinking-label-streaming,
@@ -436,6 +543,6 @@ button[role="combobox"]:focus-visible {
 
   .chat-tool-call-content,
   .chat-tool-call-detail {
-    transition: opacity 160ms ease;
+    transition: opacity var(--duration-quick) var(--ease-out-soft);
   }
 }

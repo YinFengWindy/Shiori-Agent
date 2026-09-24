@@ -46,7 +46,7 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 | `--success-* / --warning-* / --danger-*` | — | soft / 300 / solid / text 四档 | 状态 |
 
 两个特例：`--blue-grad` / `--pink-grad` / `--lavender-grad` 是**渐变专用端点**，比同族色阶更深，
-目的是让白字在整条渐变扫过时都保持 ≥4.5:1（端点 4.78 / 5.20，oklab 中点 4.93 —— 数值见 `styles.css:50`）。
+目的是让白字在整条渐变扫过时都保持 ≥4.5:1（端点 4.78 / 5.20，oklab 中点 4.93 —— 数值见 `styles.css` 里 `--blue-grad` 定义处的注释）。
 
 ## 第二层：semantic tokens
 
@@ -153,11 +153,11 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 
 焦点样式有**单一来源**，组件里不要重复实现：
 
-1. `styles.css:204` —— `input / textarea / select / button[role="combobox"]` 的 `:focus` 统一给"强调色边框 + 一层柔光晕"。
+1. `styles.css` 的 `:where()` 表单焦点基层规则 —— `input / textarea / select / button[role="combobox"]` 的 `:focus` 统一给"强调色边框 + 一层柔光晕"。
    用 `:where()` 包住让特异性归零，所以刻意无边框的控件（如聊天输入区的 `ring-0`）能用工具类覆盖掉。
-2. `styles.css:343` —— 全局 `:focus-visible` 给 2px 的 `--color-ring` 描边，键盘焦点始终可见；
+2. `styles.css` 的全局 `:focus-visible` 规则 —— 全局 `:focus-visible` 给 2px 的 `--color-ring` 描边，键盘焦点始终可见；
    指针点击不显示描边。
-3. `styles.css:350` —— 表单字段和 `button[role="combobox"]` 单独关掉上面那层全局描边，避免和自己的
+3. `styles.css` 紧随其后的表单字段豁免规则 —— 表单字段和 `button[role="combobox"]` 单独关掉上面那层全局描边，避免和自己的
    边框+光晕叠成双环。
 
 **所以**：组件里出现 `focus:ring-*` / `focus:border-*` / `focus:outline-none` 时，默认是错的。
@@ -168,10 +168,30 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 
 ## 动效
 
-- 时长走 `--duration-fast` / `--duration-base`，缓动走 `--ease-out-soft`（Tailwind 里是 `ease-out-soft`）
+- 时长 token（Tailwind 里是 `duration-*`）：
+
+  | token | 值 | 用途 |
+  |---|---|---|
+  | `--duration-fade` | 120ms | 只有透明度的视图切换（主区域换页） |
+  | `--duration-fast` | 140ms | 悬停、颜色变化；裸 `transition` 的默认值 |
+  | `--duration-quick` | 160ms | 按压反馈、菜单/下拉/小弹层、角色详情切 tab |
+  | `--duration-base` | 220ms | 对话框、提示、侧栏内容淡入 |
+  | `--duration-panel` | 260ms | 侧栏宽度（和 `app/appState.ts` 的 `sidebarAnimationDurationMs` 同步，有测试守着） |
+
+- 缓动：`--ease-out-soft`（`ease-out-soft`，也是裸 `transition` 的默认值）用于入场、按压、悬停；
+  `--ease-drawer`（`ease-drawer`）只给侧栏开合这类抽屉
+- 按压反馈用 `shared/styles.ts` 的 `pressableClass`（0.97）/ `compactPressableClass`（30px 及以下的图标按钮，0.96）。
+  它接管元素的整条 transition，不要再和别的 `transition*` 类叠加。共享按钮类已经带上了
+- 弹出层：Base UI 的 Select / Dialog 用 `motion-popup` / `motion-dialog` / `motion-backdrop`，进出场都有；
+  手写弹层用 `motion-popover-enter` / `motion-dialog-enter` / `motion-fade-enter`（`@starting-style`），
+  只做入场，关闭时直接消失，缩放原点用 Tailwind 的 `origin-*` 指定。右键菜单和命令面板（RoleSearchDialog）刻意不加动效
+- 侧栏开合用 `sidebarTrackMotionClass`（轨道宽度）+ `sidebarContentMotionClass`（内容淡入位移）
 - 展开/收起用 `grid-template-rows: 0fr → 1fr` 的写法（见 `.chat-thinking-content`），不要用 max-height 猜数值
-- **`styles.css:425` 有统一的 `prefers-reduced-motion` 块**：新增循环动画或较大位移的过渡时，
-  必须同时在这个块里给出降级（`animation: none` 或退化成 opacity 过渡）
+- **`styles.css` 末尾有统一的 `@media (prefers-reduced-motion: reduce)` 块**（这里不写行号，行号会漂）：新增循环动画或较大位移的过渡时，
+  必须同时在这个块里给出降级（`animation: none` 或退化成 opacity 过渡）。
+  Tailwind 类就近处理：挂在 `hover:` / `active:` / `group-hover:` 上的位移和缩放写成 `motion-safe:hover:*`
+  （`motion-reduce:transform-none` 在 CSS 里排在这些变体前面，盖不住），其余用 `motion-reduce:*`；motion/react 动画由根节点的 `<MotionConfig reducedMotion="user">` 统一去掉位移，
+  需要自己判断的组件用 `useReducedMotion()`；命令式滚动用 `shared/reducedMotion.ts` 的 `prefersReducedMotion()`
 
 ## 图标
 
@@ -202,8 +222,8 @@ Phosphor 在 `vite.config.ts:25` 被单独拆成 `icons-vendor` chunk，按需�
 ## 已知遗留
 
 - **暗色主题尚未实现**：`:root` 固定 `color-scheme: light`，全文件无 `prefers-color-scheme` 分支。
-  设计上已经预留（`styles.css:14`："dark theme later overrides the semantic tier only"），
+  设计上已经预留（`styles.css` 开头 token 分层注释："dark theme later overrides the semantic tier only"），
   但前提是新代码不绕过语义层——每一处写死颜色都是将来暗色主题的一处返工。
-- **`--font-brand` 槽位空着**：MiSans / HarmonyOS Sans SC 还没定，字体栈目前从系统层起步（`styles.css:150`）。
+- **`--font-brand` 槽位空着**：MiSans / HarmonyOS Sans SC 还没定，字体栈目前从系统层起步（`styles.css` 的 `--font-sans` 定义）。
 - **legacy 别名仍在服役**：`tailwind.config.ts` 的 legacy 色名和一批老组件还在用。
 - **story 模块自成一套**：`story-*` 工具类里的玻璃底、描边、阴影都是写死值，没有接入 token。

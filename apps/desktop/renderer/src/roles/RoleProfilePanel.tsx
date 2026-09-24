@@ -47,7 +47,7 @@ export function RoleProfilePanel({
             aria-label="编辑角色形象"
           >
             {previewAvatar ? (
-              <img className="h-full w-full object-cover transition duration-500 group-hover:scale-105" src={toFileUrl(previewAvatar)} alt={`${activeRole?.name || "角色"} avatar`} />
+              <img className="h-full w-full object-cover transition-transform duration-panel motion-safe:group-hover:scale-105" src={toFileUrl(previewAvatar)} alt={`${activeRole?.name || "角色"} avatar`} />
             ) : (
               <span className="grid h-full w-full place-items-center text-4xl font-semibold text-ink-faint">
                 {activeRole?.name.slice(0, 1).toUpperCase() || "R"}

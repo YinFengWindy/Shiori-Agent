@@ -74,4 +74,35 @@ describe("useChatScrollController", () => {
       assert.equal(frames.size, 0);
     } finally { await view.cleanup(); }
   });
+
+  it("lands smooth scrolls instantly when the OS asks for reduced motion", async () => {
+    let controller!: ReturnType<typeof useChatScrollController>;
+    function Harness() {
+      const containerRef = useRef<HTMLDivElement>(null);
+      controller = useChatScrollController({ conversationListRef: containerRef, sessionKey: "role:test" });
+      return <div ref={containerRef}><div data-target="true" /></div>;
+    }
+    const view = await mountTestComponent(<Harness />);
+    let framesRequested = 0;
+    window.requestAnimationFrame = () => ++framesRequested;
+    window.matchMedia = ((query: string) => ({ matches: query.includes("prefers-reduced-motion: reduce"), media: query })) as unknown as typeof window.matchMedia;
+    try {
+      const container = view.container.firstElementChild as HTMLDivElement;
+      const target = container.firstElementChild as HTMLDivElement;
+      Object.defineProperties(container, { clientHeight: { value: 600 }, scrollHeight: { value: 6000 } });
+
+      await act(async () => controller.scrollToBottom("smooth"));
+      assert.equal(container.scrollTop, 5400);
+      assert.equal(controller.isAutoScrollingRef.current, false);
+
+      container.scrollTop = 5400;
+      target.getBoundingClientRect = () => ({ x: 0, y: -3000, top: -3000, bottom: -2900, left: 0, right: 100, width: 100, height: 100, toJSON: () => ({}) });
+      let settled = 0;
+      await act(async () => controller.scrollToMessage(target, () => { settled += 1; }));
+      assert.equal(settled, 1);
+      assert.notEqual(container.scrollTop, 5400);
+      assert.equal(controller.isAutoScrollingRef.current, false);
+      assert.equal(framesRequested, 0);
+    } finally { await view.cleanup(); }
+  });
 });

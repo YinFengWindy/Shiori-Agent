@@ -16,7 +16,7 @@ import { SidebarTrackContent, type SidebarViewState } from "./SidebarTrackConten
 import { usePluginUiVisibility } from "./usePluginUiVisibility";
 import { SettingsPage } from "../settings/SettingsPage";
 import { type SettingsSectionId } from "../settings/SettingsSidebar";
-import { cx } from "../shared/styles";
+import { cx, sidebarTrackMotionClass } from "../shared/styles";
 import { NavRail, pluginNavRailViewId, type NavRailViewId } from "../shell/NavRail";
 import type {
   AppMainView,
@@ -363,7 +363,7 @@ export function DesktopAppFrame({
         <div
           className={cx(
             "sidebar-track relative min-h-0 overflow-hidden",
-            sidebarState.animating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+            sidebarState.animating && sidebarTrackMotionClass,
           )}
           style={{ width: sidebarState.collapsed ? 0 : sidebarState.width }}
         >

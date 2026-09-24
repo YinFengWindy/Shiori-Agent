@@ -68,7 +68,7 @@ export function ChatEmojiPicker({
       </button>
       {open ? (
         <MenuPanel
-          className="absolute bottom-[calc(100%+10px)] right-0 z-[4] w-[232px] p-3"
+          className="motion-popover-enter absolute bottom-[calc(100%+10px)] right-0 z-[4] w-[232px] origin-bottom-right p-3"
           role="dialog"
           aria-label="常用表情面板"
         >

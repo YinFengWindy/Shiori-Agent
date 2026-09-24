@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cx } from "../../../apps/desktop/renderer/src/shared/styles";
+import { cx, sidebarTrackMotionClass } from "../../../apps/desktop/renderer/src/shared/styles";
 import { ImageHistoryPanel } from "./ImageHistoryPanel";
 import { ImagePreviewPanel } from "./ImagePreviewPanel";
 import type {
@@ -70,7 +70,7 @@ export function ImageStudioPage({
           </div>
         </div>
         <div
-          className="relative h-full overflow-hidden border-l border-line-soft bg-gradient-app bg-fixed transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+          className={cx("relative h-full overflow-hidden border-l border-line-soft bg-gradient-app bg-fixed", sidebarTrackMotionClass)}
           style={{ width: historySidebarCollapsed ? 0 : HISTORY_SIDEBAR_WIDTH }}
         >
           {!historySidebarCollapsed ? (

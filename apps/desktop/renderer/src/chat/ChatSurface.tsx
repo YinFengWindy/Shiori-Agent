@@ -21,7 +21,7 @@ import {
   type ChatMessageNavigationScroller,
   useChatScrollController,
 } from "./useChatScrollController";
-import { cx } from "../shared/styles";
+import { cx, sidebarContentMotionClass, sidebarTrackMotionClass } from "../shared/styles";
 import { useLatestRef } from "../shared/useLatestRef";
 import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
 
@@ -495,7 +495,7 @@ export function ChatSurface({
       <div
         className={cx(
           "relative h-full overflow-hidden border-l border-line-soft bg-gradient-app bg-fixed",
-          chatLatestImageSidebarAnimating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+          chatLatestImageSidebarAnimating && sidebarTrackMotionClass,
           chatLatestImageSidebarResizing && !chatLatestImageSidebarAnimating && "transition-[width] duration-100 ease-out",
         )}
         style={{ width: chatLatestImageSidebarCollapsed ? 0 : chatLatestImageSidebarWidth }}
@@ -509,7 +509,8 @@ export function ChatSurface({
         {chatLatestImageSidebarMounted ? (
           <div
             className={cx(
-              "chat-sidebar-density h-full min-h-0 py-2 transition-[opacity,transform] duration-200",
+              "chat-sidebar-density h-full min-h-0 py-2",
+              sidebarContentMotionClass,
               chatLatestImageSidebarWidth <= 200 && "chat-sidebar-narrow",
               chatLatestImageSidebarCollapsed ? "pointer-events-none translate-x-8 pl-0 pr-0 opacity-0" : "translate-x-0 pl-2 pr-2 opacity-100",
             )}

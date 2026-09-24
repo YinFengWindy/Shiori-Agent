@@ -3,7 +3,7 @@ import { ImageFormPanel } from "./ImageFormPanel";
 import type { ImageStudioFormState } from "./types";
 import { PromptLibraryIcon } from "../../../apps/desktop/renderer/src/shared/icons";
 import { SidebarResizeHandle } from "../../../apps/desktop/renderer/src/shared/SidebarResizeHandle";
-import { cx, secondarySidebarSurfaceClass, sidebarNavItemClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { cx, secondarySidebarSurfaceClass, sidebarContentMotionClass, sidebarNavItemClass } from "../../../apps/desktop/renderer/src/shared/styles";
 
 type ImageStudioSidebarProps = {
   bridgeReady: boolean;
@@ -65,7 +65,7 @@ export function ImageStudioSidebar({
       className={cx(
         "image-studio-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] py-3",
         secondarySidebarSurfaceClass,
-        animating && "transition-[opacity,transform] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+        animating && sidebarContentMotionClass,
         collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
       )}
       aria-hidden={collapsed}

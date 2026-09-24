@@ -1,9 +1,13 @@
 import { ArrowsClockwise, CaretLeft, CaretRight, Minus, X } from "@phosphor-icons/react";
 import type { WindowControlAction } from "../../../src/bridge/shared";
-import { cx } from "../shared/styles";
+import { compactPressableClass, cx } from "../shared/styles";
 
-const titlebarIconClass =
-  "[-webkit-app-region:no-drag] m-0 grid h-6 w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-ink-muted transition-colors hover:bg-white/60 hover:text-ink disabled:text-ink-faint/70 disabled:hover:bg-transparent disabled:hover:text-ink-faint/70";
+// Window controls (minimize / maximize / close) deliberately get no press
+// scale: they are flush, edge-to-edge caption buttons like the native ones.
+const titlebarIconClass = cx(
+  compactPressableClass,
+  "[-webkit-app-region:no-drag] m-0 grid h-6 w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-ink-muted hover:bg-white/60 hover:text-ink disabled:text-ink-faint/70 disabled:hover:bg-transparent disabled:hover:text-ink-faint/70",
+);
 const titlebarSidebarIconClass =
   "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 const windowControlClass =

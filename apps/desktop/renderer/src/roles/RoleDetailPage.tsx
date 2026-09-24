@@ -1,4 +1,3 @@
-import { AnimatePresence, motion } from "motion/react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { BackIcon, ResetIcon, SaveIcon } from "../shared/icons";
 import { cx, iconButtonClass } from "../shared/styles";
@@ -47,6 +46,8 @@ export function RoleDetailPage({
   const pageRef = useRef<HTMLElement | null>(null);
   const pendingScrollTopRef = useRef<number | null>(null);
   const [activeTab, setActiveTab] = useState<RoleDetailTabId>("profile");
+  // The first tab appears with the page; only later switches animate in.
+  const [tabSwitched, setTabSwitched] = useState(false);
   const floatingActionClass = cx(iconButtonClass, "shadow-soft disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-ink-faint disabled:opacity-100 disabled:shadow-none");
 
   useLayoutEffect(() => {
@@ -76,18 +77,17 @@ export function RoleDetailPage({
       <div className="relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-5 pb-8 pt-6 sm:px-8">
         <div data-testid="role-detail-info-card">
           <div className="mb-6 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-line-soft pb-4">
-            <button className={cx(floatingActionClass, "hover:-translate-x-0.5")} data-testid="role-detail-back-button" type="button" onClick={onBackToList} aria-label="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>
-            <RoleDetailTabs activeTab={activeTab} onChange={setActiveTab} />
+            <button className={cx(floatingActionClass, "motion-safe:hover:-translate-x-0.5")} data-testid="role-detail-back-button" type="button" onClick={onBackToList} aria-label="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>
+            <RoleDetailTabs activeTab={activeTab} onChange={(tab) => { setTabSwitched(true); setActiveTab(tab); }} />
             <div className="flex items-center gap-2">
               <button className={floatingActionClass} type="button" onClick={onResetRoleForm} disabled={!roleFormDirty} aria-label="重置角色表单"><ResetIcon className="h-[18px] w-[18px] fill-current" /></button>
               <Magnet disabled={savingRole || !roleFormDirty || !bridgeReady} padding={52} strength={9}><button className={cx(floatingActionClass, "border-white/70 bg-gradient-accent hover:shadow-panel")} data-testid="save-role-button" type="button" onClick={onSaveRole} disabled={savingRole || !roleFormDirty || !bridgeReady} aria-label={savingRole ? "正在保存角色" : "保存角色"}><SaveIcon className="h-5 w-5 fill-current" /></button></Magnet>
             </div>
           </div>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={activeTab} initial={{ opacity: 0, y: 10, filter: "blur(4px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -6, filter: "blur(3px)" }} transition={{ duration: 0.2, ease: "easeOut" }}>
-              {content}
-            </motion.div>
-          </AnimatePresence>
+          {/* Enter-only: the outgoing tab leaves at once so switching never waits on an exit. */}
+          <div key={activeTab} className={cx(tabSwitched && "motion-tab-enter")}>
+            {content}
+          </div>
         </div>
       </div>
     </section>

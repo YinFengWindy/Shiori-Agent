@@ -1,12 +1,16 @@
 /// <reference types="node" />
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   cloneView,
   getRoleIdFromSession,
   isProactiveAssistantMessage,
   navigationEntriesEqual,
+  sidebarAnimationDurationMs,
   viewsEqual,
 } from "./appState";
 import type { NavigationEntry } from "./appState";
@@ -101,5 +105,14 @@ describe("appState", () => {
 
     assert.equal(isProactiveAssistantMessage(proactiveSession), true);
     assert.equal(isProactiveAssistantMessage(passiveSession), false);
+  });
+});
+
+describe("sidebarAnimationDurationMs", () => {
+  it("matches the --duration-panel token so the transition class is not dropped mid-animation", () => {
+    const stylesPath = resolve(dirname(fileURLToPath(import.meta.url)), "../styles.css");
+    const token = /--duration-panel:\s*(\d+)ms/.exec(readFileSync(stylesPath, "utf8"));
+    assert.ok(token, "styles.css should define --duration-panel in ms");
+    assert.equal(sidebarAnimationDurationMs, Number(token[1]));
   });
 });

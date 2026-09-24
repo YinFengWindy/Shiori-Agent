@@ -59,7 +59,7 @@ export function Select({ value, options, onValueChange, disabled, id, name, clas
           className="z-[100] w-[var(--anchor-width)] max-w-[var(--available-width)]"
         >
           <SelectPrimitive.Popup
-            className={cx(menuPanelClass, "max-h-[var(--available-height)] overflow-hidden")}
+            className={cx(menuPanelClass, "motion-popup max-h-[var(--available-height)] overflow-hidden")}
             // Portal items belong to this control, including inside an outside-dismissed panel.
             onPointerDown={(event) => event.stopPropagation()}
           >
