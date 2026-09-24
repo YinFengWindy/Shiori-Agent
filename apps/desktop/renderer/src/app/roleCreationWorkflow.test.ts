@@ -143,7 +143,9 @@ describe("runRoleCreation", () => {
     assert.equal(harness.state.snapshots.at(-1)?.id, "new-role");
     assert.equal(harness.state.pendingAction, null);
     assert.deepEqual(harness.state.feedback, { tone: "success", message: "角色已创建", options: undefined });
-    assert.deepEqual(harness.state.views.map((view) => view.kind), ["roles-list", "roles-list"]);
+    // The optimistic card shows on the list, then manual creation lands on the new role's detail like an import.
+    assert.deepEqual(harness.state.views, [{ kind: "roles-list" }, { kind: "role-detail", roleId: "new-role" }]);
+    assert.deepEqual(harness.state.navigationEntries.at(-1)?.view, { kind: "role-detail", roleId: "new-role" });
     assert.equal(harness.state.navigationEntries.at(-1)?.activeRoleId, "new-role");
   });
 

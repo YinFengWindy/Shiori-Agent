@@ -650,7 +650,15 @@ function App(): React.ReactElement {
       onLoadOlderMessages={loadOlderMessages}
       detailRole={detailRole}
       pendingRoleCardAction={pendingRoleCardAction}
-      onOpenRoleManagementDetail={(roleId) => void openRoleDetail(roleId)}
+      onOpenRoleManagementDetail={(roleId) => guardLeave(() => void openRoleDetail(roleId))}
+      onGoToRoleChat={(roleId) => guardLeave(() => {
+        openChatView({ recordHistory: false });
+        void openRole(roleId, null, { recordHistory: true });
+      })}
+      onImportRoleCard={() => guardLeave(() => {
+        openRoleWorkspace({ kind: "role-create" });
+        void roleCreation.previewRoleCard();
+      })}
       onRequestDeleteRole={setPendingDeleteRoleId}
       creating={roleCreation.creating}
       newRoleForm={roleCreation.newRoleForm}

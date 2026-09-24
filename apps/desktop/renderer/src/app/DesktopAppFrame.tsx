@@ -113,6 +113,10 @@ type DesktopAppFrameProps = {
   detailRole: RoleRecord | null;
   pendingRoleCardAction: PendingRoleCardAction;
   onOpenRoleManagementDetail: (roleId: string) => void;
+  /** Leaves role detail for the chat with that role. */
+  onGoToRoleChat: (roleId: string) => void;
+  /** Starts a role card import from the role workspace sidebar. */
+  onImportRoleCard: () => void;
   onRequestDeleteRole: (roleId: string) => void;
   creating: boolean;
   newRoleForm: NewRoleFormState;
@@ -240,6 +244,8 @@ export function DesktopAppFrame({
   detailRole,
   pendingRoleCardAction,
   onOpenRoleManagementDetail,
+  onGoToRoleChat,
+  onImportRoleCard,
   onRequestDeleteRole,
   creating,
   newRoleForm,
@@ -403,6 +409,11 @@ export function DesktopAppFrame({
             roleWorkspaceViewActive={roleWorkspaceViewActive}
             roleWorkspaceSection={roleWorkspaceSection}
             onOpenRoleWorkspaceSection={onOpenRoleWorkspaceSection}
+            roleWorkspaceRoleId={mainView.kind === "role-detail" || mainView.kind === "role-assets" ? mainView.roleId : ""}
+            pendingRoleId={pendingRoleCardAction?.roleId ?? ""}
+            canImportRoleCard={bridgeReady && !creating && roleCardImport.status === "idle"}
+            onOpenRoleDetail={onOpenRoleManagementDetail}
+            onImportRoleCard={onImportRoleCard}
             roles={roles}
             activeRoleId={activeRoleId}
             unreadCounts={unreadCounts}
@@ -508,6 +519,7 @@ export function DesktopAppFrame({
               roleFormDirty={roleFormDirty}
               savingRole={savingRole}
               onBackToList={onBackToRoleList}
+              onGoToChat={() => onGoToRoleChat(detailRoleId)}
               onOpenAssetsPage={onOpenAssetsPage}
               onUpdateRoleForm={onUpdateRoleForm}
               onResetRoleForm={onResetRoleForm}

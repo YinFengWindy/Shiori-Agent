@@ -65,7 +65,8 @@ async function completeRoleCreation(role: RoleRecord, pendingId: string | undefi
   if (!await args.openRole(role.id, resolvedRole, { recordHistory: false })) {
     throw new Error("无法打开已创建的角色会话");
   }
-  const destination: AppMainView = imported ? { kind: "role-detail", roleId: role.id } : { kind: "roles-list" };
+  // Manual creation and card import land in the same place: the new role's detail.
+  const destination: AppMainView = { kind: "role-detail", roleId: role.id };
   args.openRoleWorkspace(destination, { recordHistory: false });
   args.replaceNavigationEntry(args.buildNavigationEntry(destination, role.id));
   args.feedback.success(imported ? "角色卡已导入" : "角色已创建");

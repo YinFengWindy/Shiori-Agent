@@ -24,6 +24,13 @@ type SidebarTrackContentProps = {
   roleWorkspaceViewActive: boolean;
   roleWorkspaceSection: RoleWorkspaceSectionId;
   onOpenRoleWorkspaceSection: (section: RoleWorkspaceSectionId) => void;
+  /** The role open in role detail / assets (empty on the list and create pages). */
+  roleWorkspaceRoleId: string;
+  /** A role card mid create / delete, not yet openable. */
+  pendingRoleId: string;
+  canImportRoleCard: boolean;
+  onOpenRoleDetail: (roleId: string) => void;
+  onImportRoleCard: () => void;
   roles: RoleRecord[];
   activeRoleId: string;
   unreadCounts: Record<string, number>;
@@ -51,6 +58,11 @@ export function SidebarTrackContent({
   roleWorkspaceViewActive,
   roleWorkspaceSection,
   onOpenRoleWorkspaceSection,
+  roleWorkspaceRoleId,
+  pendingRoleId,
+  canImportRoleCard,
+  onOpenRoleDetail,
+  onImportRoleCard,
   roles,
   activeRoleId,
   unreadCounts,
@@ -78,10 +90,17 @@ export function SidebarTrackContent({
     return (
       <RoleWorkspaceSidebar
         activeSection={roleWorkspaceSection}
+        activeRoleId={roleWorkspaceRoleId}
+        roles={roles}
+        pendingRoleId={pendingRoleId}
+        bridgeReady={bridgeReady}
+        canImportRoleCard={canImportRoleCard}
         animating={animating}
         collapsed={sidebarState.collapsed}
         width={sidebarState.width}
         onOpenSection={onOpenRoleWorkspaceSection}
+        onOpenRole={onOpenRoleDetail}
+        onImportRoleCard={onImportRoleCard}
         onBeginResize={sidebarState.onBeginResize}
       />
     );
@@ -110,6 +129,7 @@ export function SidebarTrackContent({
       collapsed={sidebarState.collapsed}
       width={sidebarState.width}
       onOpenRole={onOpenRole}
+      onCreateRole={() => onOpenRoleWorkspaceSection("role-create")}
       onBeginResize={sidebarState.onBeginResize}
     />
   );

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { ChatCircleDots } from "@phosphor-icons/react";
 import { BackIcon, ResetIcon, SaveIcon } from "../shared/icons";
-import { cx, iconButtonClass } from "../shared/styles";
+import { cx, ghostButtonClass, iconButtonClass } from "../shared/styles";
 import { Magnet } from "../shared/ui/reactBits/Magnet";
 import type { RoleFormState, RoleRecord } from "../shared/types";
 import { RoleCapabilitiesPanel } from "./RoleCapabilitiesPanel";
@@ -22,6 +23,8 @@ type RoleDetailPageProps = {
   roleFormDirty: boolean;
   savingRole: boolean;
   onBackToList: () => void;
+  /** Switches to the chat with this role. */
+  onGoToChat: () => void;
   onOpenAssetsPage: () => void;
   onUpdateRoleForm: React.Dispatch<React.SetStateAction<RoleFormState>>;
   onResetRoleForm: () => void;
@@ -38,6 +41,7 @@ export function RoleDetailPage({
   roleFormDirty,
   savingRole,
   onBackToList,
+  onGoToChat,
   onOpenAssetsPage,
   onUpdateRoleForm,
   onResetRoleForm,
@@ -80,6 +84,16 @@ export function RoleDetailPage({
             <button className={cx(floatingActionClass, "motion-safe:hover:-translate-x-0.5")} data-testid="role-detail-back-button" type="button" onClick={onBackToList} aria-label="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>
             <RoleDetailTabs activeTab={activeTab} onChange={(tab) => { setTabSwitched(true); setActiveTab(tab); }} />
             <div className="flex items-center gap-2">
+              <button
+                className={cx(ghostButtonClass, "inline-flex h-10 items-center gap-2 px-3.5 py-0 text-body-sm font-medium shadow-soft")}
+                data-testid="role-detail-go-to-chat"
+                type="button"
+                onClick={onGoToChat}
+                disabled={!bridgeReady || !activeRole}
+              >
+                <ChatCircleDots className="h-[18px] w-[18px]" weight="duotone" aria-hidden="true" />
+                去聊天
+              </button>
               <button className={floatingActionClass} type="button" onClick={onResetRoleForm} disabled={!roleFormDirty} aria-label="重置角色表单"><ResetIcon className="h-[18px] w-[18px] fill-current" /></button>
               <Magnet disabled={savingRole || !roleFormDirty || !bridgeReady} padding={52} strength={9}><button className={cx(floatingActionClass, "border-white/70 bg-gradient-accent hover:shadow-panel")} data-testid="save-role-button" type="button" onClick={onSaveRole} disabled={savingRole || !roleFormDirty || !bridgeReady} aria-label={savingRole ? "正在保存角色" : "保存角色"}><SaveIcon className="h-5 w-5 fill-current" /></button></Magnet>
             </div>

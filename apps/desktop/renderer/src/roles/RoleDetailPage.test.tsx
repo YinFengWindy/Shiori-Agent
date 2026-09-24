@@ -29,6 +29,7 @@ describe("RoleDetailPage", () => {
         roleFormDirty
         savingRole={false}
         onBackToList={() => undefined}
+        onGoToChat={() => undefined}
         onOpenAssetsPage={() => undefined}
         onUpdateRoleForm={() => undefined}
         onResetRoleForm={() => undefined}
@@ -63,6 +64,7 @@ describe("RoleDetailPage", () => {
         roleFormDirty={false}
         savingRole={false}
         onBackToList={() => undefined}
+        onGoToChat={() => undefined}
         onOpenAssetsPage={() => undefined}
         onUpdateRoleForm={() => undefined}
         onResetRoleForm={() => undefined}
@@ -71,5 +73,32 @@ describe("RoleDetailPage", () => {
     );
 
     assert.match(markup, /data-testid="save-role-button"[^>]*disabled=""/);
+  });
+
+  it("offers 去聊天 for a loaded role while the bridge is up", () => {
+    const render = (bridgeReady: boolean, activeRole: Parameters<typeof RoleDetailPage>[0]["activeRole"]) => renderToStaticMarkup(
+      <RoleDetailPage
+        activeIllustration=""
+        activeRole={activeRole}
+        activeRoleId="role-1"
+        bridgeReady={bridgeReady}
+        previewAvatar={null}
+        chatBackgroundUrl=""
+        roleForm={createEmptyRoleForm()}
+        roleFormDirty={false}
+        savingRole={false}
+        onBackToList={() => undefined}
+        onGoToChat={() => undefined}
+        onOpenAssetsPage={() => undefined}
+        onUpdateRoleForm={() => undefined}
+        onResetRoleForm={() => undefined}
+        onSaveRole={() => undefined}
+      />,
+    );
+    const role = { id: "role-1", name: "Mira" } as Parameters<typeof RoleDetailPage>[0]["activeRole"];
+    assert.match(render(true, role), /data-testid="role-detail-go-to-chat"[^>]*>.*去聊天/);
+    assert.doesNotMatch(render(true, role), /data-testid="role-detail-go-to-chat"[^>]*disabled/);
+    assert.match(render(false, role), /data-testid="role-detail-go-to-chat"[^>]*disabled=""/);
+    assert.match(render(true, null), /data-testid="role-detail-go-to-chat"[^>]*disabled=""/);
   });
 });
