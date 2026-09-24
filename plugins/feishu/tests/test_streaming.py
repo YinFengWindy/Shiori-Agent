@@ -32,7 +32,8 @@ async def _turn(harness: Any, make_event: Any) -> Any:
             channel="feishu",
             chat_id=CHAT_ID,
             content=inbound.content,
-            timestamp=datetime.now(),
+            # The agent loop reports the inbound message's own timestamp.
+            timestamp=inbound.timestamp,
         )
     )
     return _stream_sink(harness.channel, harness.event_bus, inbound)
@@ -93,7 +94,10 @@ async def test_deltas_coalesce_into_one_card_finished_in_place(
     assert len(api.bodies("create_card")) == 1
     card = json.loads(api.bodies("create_card")[0]["data"])
     assert card["config"]["streaming_mode"] is True
-    [sent] = api.bodies("send")
+    # The live card answers the user's message as a quoting reply.
+    assert api.bodies("send") == []
+    [(_method, path, sent)] = [c for c in api.calls if c[1].endswith("/reply")]
+    assert path == "/open-apis/im/v1/messages/om_in_1/reply"
     assert json.loads(sent["content"])["data"]["card_id"].startswith("card_")
     assert _stream_updates(api) == [
         ("今天晴，", 1),
@@ -125,6 +129,9 @@ async def test_a_long_final_reply_continues_in_follow_up_cards(
 
     assert _stream_updates(harness.api)[-1][0] == "甲" * (CARD_TEXT_LIMIT - 10) + "\n"
     assert harness.api.sent_texts() == ["乙" * 20]
+    # Only the live card quotes the user; the follow-up part does not.
+    assert harness.api.keys().count("reply") == 1
+    assert harness.api.keys()[-1] == "send"
 
 
 async def test_card_creation_failure_falls_back_to_a_normal_message(
@@ -231,3 +238,29 @@ async def test_stop_cancels_pending_refreshes(harness: Any, make_event: Any) -> 
 
     assert harness.channel._streamer._tasks == {}
     assert [content for content, _seq in _stream_updates(harness.api)] == ["一"]
+
+
+async def test_a_turn_without_an_inbound_message_streams_unquoted(
+    harness: Any, make_event: Any
+) -> None:
+    await harness.start()
+    await harness.event_bus.observe(
+        TurnStarted(
+            session_key=SESSION_KEY,
+            channel="feishu",
+            chat_id=CHAT_ID,
+            content="定时任务",
+            timestamp=datetime.now(),
+        )
+    )
+    inbound = InboundMessage(
+        channel="feishu", sender="ou_user", chat_id=CHAT_ID, content="定时任务"
+    )
+    sink = _stream_sink(harness.channel, harness.event_bus, inbound)
+
+    await sink("提醒")
+    await harness.channel._streamer.drain()
+    await harness.channel._on_response(_final("提醒你喝水"))
+
+    assert "reply" not in harness.api.keys()
+    assert harness.api.keys()[:2] == ["create_card", "send"]

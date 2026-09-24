@@ -6,6 +6,7 @@ import asyncio
 import importlib.util
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,7 @@ from .ws import (
 logger = logging.getLogger(__name__)
 
 STOP_COMMAND = "/stop"
+PENDING_QUOTES_PER_SESSION = 16
 
 
 class FeishuChannel:
@@ -62,7 +64,6 @@ class FeishuChannel:
         app_id: str,
         app_secret: str,
         domain: str,
-        allow_from: list[str] | None = None,
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         connection_factory: ConnectionFactory | None = None,
@@ -70,9 +71,6 @@ class FeishuChannel:
         self._app_id = app_id
         self._app_secret = app_secret
         self._domain = domain
-        self._allow_from = frozenset(
-            item.strip() for item in (allow_from or []) if item.strip()
-        )
         self._api = FeishuApi(app_id, app_secret, domain, transport=transport)
         self._connection_factory = connection_factory or sdk_connection_factory(
             app_id, app_secret, domain
@@ -95,6 +93,9 @@ class FeishuChannel:
         self._push_registered = False
         self._bot_name = ""
         self._last_unbound = ""
+        # Accepted inbound message ids per session, keyed by the inbound
+        # timestamp that the turn's ``TurnStarted`` event carries over.
+        self._pending_quotes: dict[str, dict[datetime, str]] = {}
         self._event_bindings = [
             (TurnStarted, self._on_turn_started),
             (StreamDeltaReady, self._on_stream_delta),
@@ -108,7 +109,6 @@ class FeishuChannel:
             self._app_id,
             self._app_secret,
             self._domain,
-            tuple(sorted(self._allow_from)),
         )
 
     # ── channel hooks ────────────────────────────────────────────────
@@ -280,9 +280,6 @@ class FeishuChannel:
         sender = message.sender_open_id
         if not sender:
             return
-        if self._allow_from and sender not in self._allow_from:
-            logger.warning("[feishu] 拒绝不在白名单的用户 open_id=%s", sender)
-            return
         text = ""
         if message.message_type == "text":
             text = str(message.content.get("text") or "").strip()
@@ -319,7 +316,18 @@ class FeishuChannel:
             message = self._channel_hub.route_inbound(message)
         if message.metadata.get("conversation_duplicate"):
             return
+        self._remember_quote(message)
         await self._require_bus().publish_inbound(message)
+
+    def _remember_quote(self, message: InboundMessage) -> None:
+        """Keeps the user message a reply to this inbound turn should quote."""
+        message_id = str(message.metadata.get("message_id") or "")
+        if not message_id:
+            return
+        pending = self._pending_quotes.setdefault(message.session_key, {})
+        pending[message.timestamp] = message_id
+        while len(pending) > PENDING_QUOTES_PER_SESSION:
+            pending.pop(next(iter(pending)))
 
     def _is_bound(self, chat_id: str, sender: str) -> bool:
         hub = self._channel_hub
@@ -357,8 +365,14 @@ class FeishuChannel:
     # ── streaming ────────────────────────────────────────────────────
 
     async def _on_turn_started(self, event: TurnStarted) -> None:
-        if event.channel == CHANNEL:
-            await self._streamer.begin_turn(event.session_key)
+        if event.channel != CHANNEL:
+            return
+        # Only a turn started by an accepted inbound message quotes it;
+        # proactive and scheduled turns carry no matching timestamp.
+        quote = self._pending_quotes.get(event.session_key, {}).pop(
+            event.timestamp, None
+        )
+        await self._streamer.begin_turn(event.session_key, quote=quote)
 
     async def _on_stream_delta(self, event: StreamDeltaReady) -> None:
         if event.channel == CHANNEL and event.content_delta:
@@ -366,11 +380,10 @@ class FeishuChannel:
                 event.session_key, event.chat_id, event.content_delta
             )
 
-    async def _send_live_card(self, chat_id: str, content: str) -> str:
-        receive_id, receive_id_type = resolve_receive_id(chat_id)
-        return await self._api.send_message(
-            receive_id, receive_id_type, "interactive", content
-        )
+    async def _send_live_card(
+        self, chat_id: str, content: str, quote: str | None
+    ) -> str:
+        return await self._deliver(chat_id, "interactive", content, quote)
 
     # ── outbound ─────────────────────────────────────────────────────
 
@@ -379,7 +392,9 @@ class FeishuChannel:
         try:
             remaining = await self._streamer.finish(session_key, msg.content)
             if remaining is None:
-                await self._send_text(msg.chat_id, msg.content, reply_to=msg.reply_to)
+                await self._send_text(
+                    msg.chat_id, msg.content, reply_to=quoted_message_id(msg)
+                )
             elif remaining.strip():
                 await self._send_text(msg.chat_id, remaining)
             for image in msg.media:
@@ -424,16 +439,33 @@ class FeishuChannel:
     async def _deliver(
         self, chat_id: str, msg_type: str, content: str, reply_to: str | None
     ) -> str:
+        """Sends one message, as a quoting reply when ``reply_to`` is given.
+
+        A reply the API refuses (e.g. the quoted message was recalled) is
+        sent again as a plain message so the content is not lost.
+        """
         receive_id, receive_id_type = resolve_receive_id(chat_id)
 
-        async def call() -> str:
-            if reply_to:
-                return await self._api.reply_message(reply_to, msg_type, content)
+        async def send() -> str:
             return await self._api.send_message(
                 receive_id, receive_id_type, msg_type, content
             )
 
-        return await with_rate_limit_retry(call, label=f"发送{msg_type}消息")
+        label = f"发送{msg_type}消息"
+        if not reply_to:
+            return await with_rate_limit_retry(send, label=label)
+        quoted = reply_to
+
+        async def reply() -> str:
+            return await self._api.reply_message(quoted, msg_type, content)
+
+        try:
+            return await with_rate_limit_retry(reply, label=label)
+        except Exception as error:
+            if is_rate_limited(error):
+                raise
+            logger.warning("[feishu] 引用回复失败，改为普通发送: %s", error)
+            return await with_rate_limit_retry(send, label=label)
 
     async def send_image(self, chat_id: str, image: str) -> None:
         """Uploads and sends an image from a local path or an http(s) URL."""
@@ -459,6 +491,19 @@ class FeishuChannel:
         if self._bus is None:
             raise RuntimeError("FeishuChannel 尚未启动")
         return self._bus
+
+
+def quoted_message_id(msg: OutboundMessage) -> str | None:
+    """Returns the user message a final reply quotes, if it answers one.
+
+    Replies of inbound turns carry the triggering message's metadata; proactive
+    and scheduled outbound messages do not and are sent without a quote.
+    """
+    if msg.reply_to:
+        return msg.reply_to
+    metadata = msg.metadata if isinstance(msg.metadata, dict) else {}
+    message_id = str(metadata.get("message_id") or "").strip()
+    return message_id if message_id.startswith("om_") else None
 
 
 def resolve_receive_id(chat_id: str) -> tuple[str, str]:

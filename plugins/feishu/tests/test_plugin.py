@@ -90,6 +90,6 @@ def test_config_model_normalizes_legacy_domains_and_rejects_others() -> None:
 def test_config_schema_renders_as_a_labelled_form() -> None:
     properties = FeishuConfigModel.model_json_schema()["properties"]
 
-    assert list(properties) == ["app_id", "app_secret", "domain", "allow_from"]
+    assert list(properties) == ["app_id", "app_secret", "domain"]
     assert properties["domain"]["enum"] == ["feishu", "lark"]
     assert all(item.get("title") for item in properties.values())

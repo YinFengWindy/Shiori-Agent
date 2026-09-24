@@ -34,11 +34,6 @@ class FeishuConfigModel(BaseModel):
         title="服务域名",
         description="feishu：飞书（open.feishu.cn）；lark：Lark 国际版（open.larksuite.com）",
     )
-    allow_from: list[str] = Field(
-        default_factory=list,
-        title="额外白名单",
-        description="可选，限定可对话用户的 open_id（ou_…）；留空时只按角色绑定放行",
-    )
 
     @field_validator("app_id", "app_secret", mode="before")
     @classmethod
@@ -69,6 +64,5 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             app_id=config.app_id,
             app_secret=config.app_secret,
             domain=config.base_url,
-            allow_from=config.allow_from,
         )
     )

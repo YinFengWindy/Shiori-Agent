@@ -212,13 +212,11 @@ def test_receive_ids_follow_the_id_prefix() -> None:
 
 
 def test_configuration_key_covers_every_connection_setting() -> None:
-    base = FeishuChannel("a", "s", "https://open.feishu.cn", ["ou_2", "ou_1"])
+    base = FeishuChannel("a", "s", "https://open.feishu.cn")
 
     assert (
         base.configuration_key
-        == FeishuChannel(
-            "a", "s", "https://open.feishu.cn", ["ou_1", "ou_2"]
-        ).configuration_key
+        == FeishuChannel("a", "s", "https://open.feishu.cn").configuration_key
     )
     for other in (
         FeishuChannel("b", "s", "https://open.feishu.cn"),
@@ -226,3 +224,59 @@ def test_configuration_key_covers_every_connection_setting() -> None:
         FeishuChannel("a", "s", "https://open.larksuite.com"),
     ):
         assert other.configuration_key != base.configuration_key
+
+
+def _reply_of(message_id: str, content: str) -> OutboundMessage:
+    """A final reply of an inbound turn: it carries the inbound metadata."""
+    return OutboundMessage(
+        channel="feishu",
+        chat_id=CHAT_ID,
+        content=content,
+        metadata={"message_id": message_id, "role_id": "mira"},
+    )
+
+
+async def test_final_reply_quotes_the_triggering_user_message(harness: Any) -> None:
+    await harness.start()
+
+    await harness.channel._on_response(_reply_of("om_user", "收到"))
+
+    assert harness.api.keys() == ["reply"]
+    [(_method, path, _body)] = [c for c in harness.api.calls if "/reply" in c[1]]
+    assert path == "/open-apis/im/v1/messages/om_user/reply"
+
+
+async def test_only_the_first_part_of_a_long_reply_quotes(harness: Any) -> None:
+    await harness.start()
+    text = "甲" * 3990 + "\n" + "乙" * 3990 + "\n" + "丙" * 10
+
+    await harness.channel._on_response(_reply_of("om_user", text))
+
+    assert harness.api.keys() == ["reply", "send", "send"]
+
+
+async def test_proactive_messages_are_not_quoted(harness: Any) -> None:
+    await harness.start()
+
+    await harness.channel.send(CHAT_ID, "主动推送")
+    await harness.channel._on_response(
+        OutboundMessage(
+            channel="feishu",
+            chat_id=CHAT_ID,
+            content="定时提醒",
+            metadata={"role_id": "mira", "message_id": "not-a-feishu-id"},
+        )
+    )
+
+    assert harness.api.keys() == ["send", "send"]
+
+
+async def test_a_refused_quote_falls_back_to_a_plain_message(harness: Any) -> None:
+    await harness.start()
+    harness.api.fail("reply", (400, 230011))  # the quoted message was recalled
+
+    await harness.channel._on_response(_reply_of("om_gone", "仍然送达"))
+
+    assert harness.api.keys() == ["reply", "send"]
+    assert harness.api.sent_texts()[-1] == "仍然送达"
+    assert harness.hub.deliveries == ["sent"]

@@ -86,7 +86,9 @@ class FakeFeishu:
         return [body for m, p, body in self.calls if _route_key(m, p) == key]
 
     def keys(self) -> list[str]:
-        return [_route_key(method, path) for method, path, _body in self.calls]
+        """Route keys of every call except the background bot-info lookup."""
+        keys = [_route_key(method, path) for method, path, _body in self.calls]
+        return [key for key in keys if key != "bot"]
 
     def sent_texts(self) -> list[str]:
         """Markdown of every static card or text message sent (not live cards)."""
@@ -342,7 +344,7 @@ def message_event(
 
 @pytest.fixture
 async def make_harness(tmp_path: Any) -> AsyncIterator[Any]:
-    """Builds harnesses (``allowed=``, ``allow_from=``, ``fail_first=``) and
+    """Builds harnesses (``allowed=``, ``fail_first=``) and
     stops every channel at teardown."""
     built: list[Harness] = []
 

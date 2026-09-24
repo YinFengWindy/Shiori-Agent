@@ -38,12 +38,14 @@ LIVE_MAX_FAILURES = 3
 # Streaming mode was switched off by Feishu (10 minutes after it was enabled).
 STREAMING_CLOSED_CODES = frozenset({200850, 300309})
 
-SendCard = Callable[[str, str], Awaitable[str]]
+# (chat_id, card content, message id to quote or None) -> sent message id
+SendCard = Callable[[str, str, str | None], Awaitable[str]]
 
 
 @dataclass
 class _LiveCard:
     chat_id: str
+    quote: str | None = None
     card_id: str = ""
     message_id: str = ""
     sequence: int = 0
@@ -77,16 +79,23 @@ class LiveCardStreamer:
         self._tasks: dict[str, set[asyncio.Task[None]]] = {}
         self._inflight: dict[str, asyncio.Future[bool]] = {}
         self._orphans: set[asyncio.Task[None]] = set()
+        self._quotes: dict[str, str] = {}
 
     def has_card(self, session_key: str) -> bool:
         card = self._cards.get(session_key)
         return card is not None and bool(card.message_id)
 
-    async def begin_turn(self, session_key: str) -> None:
-        """Resets a session; a card left open by an unfinished turn is closed."""
+    async def begin_turn(self, session_key: str, *, quote: str | None = None) -> None:
+        """Resets a session; a card left open by an unfinished turn is closed.
+
+        ``quote`` is the user message that started the turn; the live card is
+        sent as a reply to it.
+        """
         await self._cancel(session_key)
         card = self._cards.get(session_key)
         self._reset(session_key)
+        if quote:
+            self._quotes[session_key] = quote
         if card is not None and card.message_id:
             task = asyncio.create_task(self._close_orphan(card))
             self._orphans.add(task)
@@ -98,7 +107,12 @@ class LiveCardStreamer:
             return
         self._buffers[session_key] = self._buffers.get(session_key, "") + delta
         card = self._cards.setdefault(
-            session_key, _LiveCard(chat_id=chat_id, interval=self._min_interval)
+            session_key,
+            _LiveCard(
+                chat_id=chat_id,
+                quote=self._quotes.get(session_key),
+                interval=self._min_interval,
+            ),
         )
         if card.disabled or any(
             not task.done() for task in self._tasks.get(session_key, ())
@@ -133,6 +147,7 @@ class LiveCardStreamer:
         if self._orphans:
             await asyncio.gather(*self._orphans, return_exceptions=True)
         self._cards.clear()
+        self._quotes.clear()
         self._buffers.clear()
         self._next_at.clear()
         self._locks.clear()
@@ -188,7 +203,7 @@ class LiveCardStreamer:
         content = json.dumps(
             {"type": "card", "data": {"card_id": card.card_id}}, ensure_ascii=False
         )
-        card.message_id = await self._send_card(card.chat_id, content)
+        card.message_id = await self._send_card(card.chat_id, content, card.quote)
 
     def _record_failure(
         self, session_key: str, card: _LiveCard, error: Exception
@@ -277,6 +292,7 @@ class LiveCardStreamer:
 
     def _reset(self, session_key: str) -> None:
         self._cards.pop(session_key, None)
+        self._quotes.pop(session_key, None)
         self._buffers.pop(session_key, None)
         self._next_at.pop(session_key, None)
         self._locks.pop(session_key, None)
