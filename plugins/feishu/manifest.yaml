@@ -1,0 +1,15 @@
+api: 2
+id: feishu
+display_name: 飞书
+version: '0.1.0'
+desc: 飞书 / Lark 私聊渠道（长连接收消息，流式卡片回复）
+capabilities:
+  - config
+  - channels
+config_model: FeishuConfigModel
+channels:
+  - name: feishu
+    label: 飞书
+    contact_label: 用户 open_id（ou_…）
+    chat_id_label: 私聊 chat_id
+    chat_id_hint: oc_<私聊会话 ID>
