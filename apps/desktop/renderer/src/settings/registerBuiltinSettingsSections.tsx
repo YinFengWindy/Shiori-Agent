@@ -35,7 +35,7 @@ export function registerBuiltinSettingsSections(): void {
     kind: "editor", slot: "settings.section", id: "memory", label: "记忆",
     subsections: [
       { id: "general", label: "基础" },
-      { id: "embedding", label: "Embedding" },
+      { id: "embedding", label: "向量模型" },
     ],
     Component: MemorySettingsSection,
   }, "builtin");
@@ -43,15 +43,15 @@ export function registerBuiltinSettingsSections(): void {
   pluginUiRegistry.registerSettingsSection({
     kind: "editor", slot: "settings.section", id: "voice", label: "语音",
     subsections: [
-      { id: "provider", label: "供应商" },
-      { id: "input", label: "输入" },
+      { id: "provider", label: "语音服务" },
+      { id: "input", label: "语音输入" },
     ],
     Component: VoiceSettingsSection,
   }, "builtin");
 
   pluginUiRegistry.registerSettingsSection({
-    kind: "standalone", slot: "settings.section", id: "appearance", label: "外观",
-    subsections: [{ id: "motion", label: "动效" }],
+    kind: "editor", slot: "settings.section", id: "appearance", label: "外观",
+    subsections: [{ id: "display", label: "显示" }],
     Component: AppearanceSettingsSection,
   }, "builtin");
 
