@@ -93,6 +93,13 @@ websocket_open_timeout_seconds = 5.0
 # client_secret = ""
 # allow_from = []
 
+# 可选：飞书 / Lark 企业自建应用机器人（长连接收消息，私聊 + 流式卡片）。
+# 开发者后台配置步骤见 plugins/feishu/TESTING.md。
+# [plugins.feishu]
+# app_id = ""
+# app_secret = "${FEISHU_APP_SECRET}"
+# domain = "feishu"  # Lark 国际版填 "lark"
+
 # =============================================================================
 # 语义记忆
 # default memory 的检索阈值在 workspace/plugin-data/default_memory/config.local.toml。
