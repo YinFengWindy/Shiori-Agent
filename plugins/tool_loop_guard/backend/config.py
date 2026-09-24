@@ -17,5 +17,7 @@ class ToolLoopGuardConfig(BaseModel):
     repeat_limit: int = Field(
         default=_DEFAULT_REPEAT_LIMIT,
         ge=2,
-        description="连续重复调用同一工具（含相同参数）达到该次数时截断并进入收尾，最小值为 2",
+        title="重复调用上限",
+        description="以相同参数连续调用同一工具达到该次数时截断并收尾，最小为 2",
+        json_schema_extra={"unit": "次"},
     )

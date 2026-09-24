@@ -119,6 +119,90 @@ describe("PluginSchemaSettingsSection", () => {
     }
   });
 
+  it("edits a list of strings as chips, shows number units, and folds raw-JSON fields under 高级", async () => {
+    const view = await mountTestComponent(null);
+    let stored: Record<string, unknown> = { allow_from: ["alice"], timeout_seconds: 30, groups: [] };
+    Object.defineProperty(window, "miraDesktop", {
+      configurable: true,
+      value: {
+        invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
+          if (method === "plugin.config.get") {
+            return {
+              id: "1", type: "response", method, error: null,
+              payload: {
+                plugin_id: "demo",
+                schema: { properties: {
+                  allow_from: { type: "array", items: { type: "string" }, title: "允许的用户" },
+                  timeout_seconds: { type: "integer", title: "超时", unit: "秒" },
+                  groups: { type: "array", items: { type: "object" }, title: "群聊（旧版）" },
+                } },
+                values: stored,
+              },
+            };
+          }
+          stored = { ...stored, ...(payload.values as Record<string, unknown>) };
+          return { id: "1", type: "response", method, error: null, payload: { plugin_id: "demo", values: stored, generation: 2 } };
+        },
+      },
+    });
+
+    try {
+      await view.render(<PluginSchemaSettingsSection pluginId="demo" />);
+      const text = view.container.textContent ?? "";
+      assert.match(text, /允许的用户/);
+      assert.doesNotMatch(text, /allow_from|Allow From/);
+      assert.match(text, /秒/);
+      assert.equal(view.container.querySelectorAll("textarea").length, 1, "only the object list stays a raw JSON editor");
+      assert.equal(view.container.querySelector('[aria-expanded="false"]')?.textContent, "高级");
+
+      const input = view.container.querySelector<HTMLInputElement>('input[aria-label="输入允许的用户"]')!;
+      await changeInputValue(input, "bob");
+      await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+      assert.deepEqual(stored.allow_from, ["alice", "bob"]);
+
+      await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="移除 alice"]')!.click());
+      assert.deepEqual(stored.allow_from, ["bob"]);
+    } finally {
+      await view.cleanup();
+    }
+  });
+
+  it("shows an unexpanded ${ENV} secret as the reference, not as masked dots, and lets a literal replace it", async () => {
+    const view = await mountTestComponent(null);
+    let stored: Record<string, unknown> = { token: "${NOVELAI_TOKEN}" };
+    Object.defineProperty(window, "miraDesktop", {
+      configurable: true,
+      value: {
+        invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
+          if (method === "plugin.config.get") {
+            return { id: "1", type: "response", method, error: null, payload: {
+              plugin_id: "demo", schema: { properties: { token: { type: "string", title: "API Token" } } }, values: stored,
+            } };
+          }
+          stored = { ...stored, ...(payload.values as Record<string, unknown>) };
+          return { id: "1", type: "response", method, error: null, payload: { plugin_id: "demo", values: stored, generation: 2 } };
+        },
+      },
+    });
+
+    try {
+      await view.render(<PluginSchemaSettingsSection pluginId="demo" />);
+      assert.match(view.container.textContent ?? "", /引用环境变量 NOVELAI_TOKEN/);
+      assert.match(view.container.textContent ?? "", /未设置/);
+      assert.equal(view.container.querySelector('input[type="password"]'), null, "a reference must not look like a filled-in secret");
+
+      const replace = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "改为直接填写")!;
+      await act(async () => replace.click());
+      const input = view.container.querySelector<HTMLInputElement>('input[aria-label="API Token"]')!;
+      assert.equal(input.value, "");
+      assert.equal(stored.token, "${NOVELAI_TOKEN}", "opening the input alone keeps the reference");
+      await changeInputValue(input, "pst-literal");
+      assert.equal(stored.token, "pst-literal");
+    } finally {
+      await view.cleanup();
+    }
+  });
+
   it("shows a load error with a retry action when plugin.config.get fails", async () => {
     const view = await mountTestComponent(null);
     Object.defineProperty(window, "miraDesktop", {

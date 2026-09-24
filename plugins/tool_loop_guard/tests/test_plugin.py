@@ -967,3 +967,10 @@ def test_disabled_plugin_contributes_no_tool_hook(tmp_path):
     assert kernel.loaded_count == 0
     assert kernel.states()[0]["state"] == "DISABLED"
     assert kernel.tool_hooks == []
+
+
+def test_config_schema_labels_fields_for_the_settings_form() -> None:
+    from plugins.tool_loop_guard.backend.config import ToolLoopGuardConfig
+
+    limit = ToolLoopGuardConfig.model_json_schema()["properties"]["repeat_limit"]
+    assert limit["title"] == "重复调用上限" and limit["unit"] == "次"

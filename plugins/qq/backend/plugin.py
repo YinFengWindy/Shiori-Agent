@@ -34,7 +34,8 @@ class QQConfigModel(BaseModel):
     websocket_open_timeout_seconds: float = Field(
         default=5.0,
         gt=0,
-        title="连接超时（秒）",
+        title="连接超时",
+        json_schema_extra={"unit": "秒"},
         description="与 NapCat 建立 WebSocket 连接的握手超时。",
     )
 

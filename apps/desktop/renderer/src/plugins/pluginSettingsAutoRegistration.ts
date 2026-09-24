@@ -1,4 +1,4 @@
-import { createPluginSchemaSettingsSection } from "./PluginSchemaSettingsSection";
+import { createPluginSchemaSettingsSection } from "./pluginSchemaSettingsSectionFactory";
 import type { PluginSummary } from "./pluginBridgeClient";
 import { pluginUiRegistry } from "./pluginUiRegistry";
 

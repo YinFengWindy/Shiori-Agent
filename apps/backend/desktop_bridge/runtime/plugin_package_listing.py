@@ -29,6 +29,11 @@ def with_package_operations(
                 "can_toggle": False,
                 "supports_hot_unload": False,
                 "dependencies": [],
+                # A queued first install has no admitted manifest yet; the row
+                # still carries the list-shaped fields every other row has.
+                "capabilities": [],
+                "channels": [],
+                "category": "feature",
                 "state": (
                     "RESTART_REQUIRED" if operation.status == "pending" else "FAILED"
                 ),

@@ -1,5 +1,6 @@
 api: 2
 id: novelai
+display_name: NovelAI 生图
 version: '0.1.0'
 desc: NovelAI 生图集成——手动生图、提示词标签库、生成历史、消息图片重生成与自动场景 CG
 capabilities:

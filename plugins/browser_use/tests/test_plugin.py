@@ -52,3 +52,12 @@ async def test_disabled_plugin_contributes_nothing(tmp_path):
     )
     await kernel.load_all()
     assert registry.get_tool("agent_browser_open") is None
+
+
+def test_config_schema_labels_fields_for_the_settings_form() -> None:
+    from plugins.browser_use.backend.config import BrowserUseConfig
+
+    properties = BrowserUseConfig.model_json_schema()["properties"]
+    assert properties["headed"]["title"] == "显示浏览器窗口"
+    assert properties["timeout_seconds"]["title"] == "单次操作超时"
+    assert properties["timeout_seconds"]["unit"] == "秒"

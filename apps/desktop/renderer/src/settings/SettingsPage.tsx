@@ -1,12 +1,13 @@
-import { useEffect } from "react";
-import { pluginUiRegistry, type EditorSettingsSectionEntry } from "../plugins/pluginUiRegistry";
+import { Suspense, useEffect } from "react";
+import { pluginUiRegistry, type EditorSettingsSectionEntry, type StandaloneSettingsSectionEntry } from "../plugins/pluginUiRegistry";
 import { SettingsSaveFeedback } from "./SettingsSaveFeedback";
 import { SettingsSavedIndicator } from "./SettingsSavedIndicator";
 import { SettingsPageLayout, settingsPageSurfaceClass } from "./SettingsPageLayout";
 import { SettingsSectionContent } from "./SettingsSectionContent";
+import { SettingsStatus } from "./SettingsStatusSlot";
 import { SettingsSubsectionNav } from "./SettingsSubsectionNav";
 import type { SettingsSectionId } from "./SettingsSidebar";
-import { getSettingsSubsections, resolveSettingsSubsectionId } from "./settingsSectionMetadata";
+import { resolveSettingsSubsectionId } from "./settingsSectionMetadata";
 import type { SettingsSubsection } from "./settingsPageTypes";
 import { useSettingsPageController } from "./useSettingsPageController";
 import { cardClass, cx } from "../shared/styles";
@@ -16,10 +17,10 @@ type SettingsPageProps = {
   section: SettingsSectionId;
   /** Hides a plugin's section immediately once its plugin is disabled (issue #174 AC 3). */
   isSectionVisible: (sectionId: SettingsSectionId) => boolean;
-  /** Filters a plugin-owned subtab the same way (issue #230 AC 3). */
+  /** Filters a plugin-owned nested page the same way (issue #230 AC 3). */
   isPluginEnabled: (pluginId: string) => boolean;
   /**
-   * The last active subtab per section id, lifted to the app shell (issue
+   * The last active subsection per section id, lifted to the app shell (issue
    * #230 AC 4) so it survives switching between sections — including
    * between an "editor" section and a "standalone" one like 「插件」, which
    * unmounts this component's own internal state on every switch. Owned by
@@ -32,13 +33,12 @@ type SettingsPageProps = {
 
 /**
  * Renders the active settings domain and delegates persistence to its
- * controller. A "standalone" section (About, and 「插件」's own subtabs —
- * each owns its data end to end) renders immediately, without waiting on or
- * depending on the shared settings draft; an "editor" section shares the
- * draft/autosave controller mounted below. Both branches render through the
- * same `SettingsSubsectionNav` header/subtab strip, so a standalone section
- * with more than one subtab (「插件」, once a plugin's settings nest under
- * it) gets the same navigation an editor section already had.
+ * controller. A "standalone" section (About, 外观, 「插件」 — each owns its
+ * data end to end) renders immediately, without waiting on or depending on
+ * the shared settings draft; an "editor" section shares the draft/autosave
+ * controller mounted below. Both branches render through the same
+ * `SettingsSubsectionNav` header, whose tab strip lists a section's own
+ * declared subsections.
  */
 export function SettingsPage({
   bridgeReady,
@@ -49,7 +49,6 @@ export function SettingsPage({
   onChangeSubsection,
 }: SettingsPageProps) {
   const entry = isSectionVisible(section) ? pluginUiRegistry.getSettingsSection(section) : undefined;
-  const visibleSubsections = entry ? getSettingsSubsections(entry.id, isPluginEnabled) : [];
   const currentSubsectionId = entry ? resolveSettingsSubsectionId(entry.id, activeSubsections, isPluginEnabled) : null;
 
   // Issue #230 AC 3's fallback commit. `useSettingsSubsectionMemory`'s doc
@@ -65,32 +64,66 @@ export function SettingsPage({
   }, [entry, currentSubsectionId, activeSubsections, onChangeSubsection]);
 
   if (entry?.kind === "standalone") {
-    // A subtab nested under this section (a plugin's own settings, issue
-    // #230) renders its own Component; the section's own Component only
-    // ever backs its own built-in subtab(s) (e.g. 「插件」's "已安装", or
-    // "关于"'s single "updates" subtab).
-    const nested = currentSubsectionId ? pluginUiRegistry.getSettingsSubsection(entry.id, currentSubsectionId) : undefined;
-    const StandaloneComponent = nested?.Component ?? entry.Component;
     return (
-      <SettingsPageLayout>
-        <SettingsSubsectionNav
-          label={entry.label}
-          subsections={visibleSubsections}
-          currentSubsectionId={currentSubsectionId}
-          onSelect={(id) => onChangeSubsection(entry.id, id)}
-        />
-        {currentSubsectionId ? <StandaloneComponent subsectionId={currentSubsectionId} /> : null}
-      </SettingsPageLayout>
+      <StandaloneSettingsPage
+        entry={entry}
+        currentSubsectionId={currentSubsectionId}
+        onSelect={(id) => onChangeSubsection(entry.id, id)}
+      />
     );
   }
   return (
     <EditableSettingsPage
       bridgeReady={bridgeReady}
       currentSectionEntry={entry}
-      visibleSubsections={visibleSubsections}
+      visibleSubsections={entry?.subsections ?? []}
       currentSubsectionId={currentSubsectionId}
       onChangeSubsection={onChangeSubsection}
     />
+  );
+}
+
+/**
+ * A nested subsection (a plugin's own settings, issue #230) is a detail page
+ * reached from the section's own list — never a tab beside it — so its
+ * header carries a way back instead of the section's tab strip.
+ */
+function StandaloneSettingsPage({ entry, currentSubsectionId, onSelect }: {
+  entry: StandaloneSettingsSectionEntry;
+  currentSubsectionId: string | null;
+  onSelect: (subsectionId: string) => void;
+}) {
+  const nested = currentSubsectionId ? pluginUiRegistry.getSettingsSubsection(entry.id, currentSubsectionId) : undefined;
+  const home = entry.subsections[0]?.id;
+  if (nested) {
+    const NestedComponent = nested.Component;
+    return (
+      <SettingsPageLayout>
+        <SettingsSubsectionNav
+          label={nested.label}
+          subsections={[]}
+          currentSubsectionId={nested.id}
+          onSelect={onSelect}
+          back={home ? { label: entry.label, onBack: () => onSelect(home) } : undefined}
+        />
+        {/* Schema-generated plugin pages load on first open (see pluginSchemaSettingsSectionFactory). */}
+        <Suspense fallback={null}>
+          <NestedComponent key={nested.id} subsectionId={nested.id} onSelectSubsection={onSelect} />
+        </Suspense>
+      </SettingsPageLayout>
+    );
+  }
+  const SectionComponent = entry.Component;
+  return (
+    <SettingsPageLayout>
+      <SettingsSubsectionNav
+        label={entry.label}
+        subsections={entry.subsections}
+        currentSubsectionId={currentSubsectionId}
+        onSelect={onSelect}
+      />
+      {currentSubsectionId ? <SectionComponent subsectionId={currentSubsectionId} onSelectSubsection={onSelect} /> : null}
+    </SettingsPageLayout>
   );
 }
 
@@ -131,7 +164,6 @@ function EditableSettingsPage({
 
   return (
     <SettingsPageLayout
-      status={<SettingsSavedIndicator phase={controller.savePhase} />}
       feedback={
         <SettingsSaveFeedback
           phase={controller.savePhase}
@@ -141,6 +173,7 @@ function EditableSettingsPage({
         />
       }
     >
+      <SettingsStatus><SettingsSavedIndicator phase={controller.savePhase} /></SettingsStatus>
       {!currentSectionEntry ? (
         <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-ink-muted")}>
           没有匹配的设置项

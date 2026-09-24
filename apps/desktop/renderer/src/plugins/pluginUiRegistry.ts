@@ -56,8 +56,8 @@ export type SettingsSectionEntry = EditorSettingsSectionEntry | StandaloneSettin
  * A settings.section registered as a subtab of a built-in parent section
  * (issue #230). Today the only parent is `"plugins"`: instead of a plugin's
  * own settings surfacing as a top-level sidebar entry (issue #174's
- * original shape), it becomes one subtab alongside "已安装" inside the
- * 「插件」 section. Nesting is exactly one level — this entry cannot itself
+ * original shape), it becomes a detail page of the 「插件」 section, opened
+ * from that plugin's row (#362) rather than listed as a tab. Nesting is exactly one level — this entry cannot itself
  * have subsections — matching the owner's decision that a second nesting
  * level is out of scope.
  */

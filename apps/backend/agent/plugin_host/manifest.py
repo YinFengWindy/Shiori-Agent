@@ -56,6 +56,11 @@ RESERVED_CHANNEL_NAMES = frozenset({"desktop"})
 _CHANNEL_REQUIRED_FIELDS = ("name", "label")
 _CHANNEL_OPTIONAL_FIELDS = ("contact_label", "chat_id_label", "chat_id_hint")
 
+# 插件管理页的分组：feature 面向用户的功能，channel 外部渠道，system 宿主内部的
+# 护栏与诊断组件（默认折叠）。省略时由 capabilities 推断：声明 channels 即渠道，
+# 否则为功能；system 只能显式声明。
+PLUGIN_CATEGORIES = ("feature", "channel", "system")
+
 
 class ManifestError(Exception):
     """manifest 无法读取、解析，或声明不符合插件契约。"""
@@ -106,6 +111,8 @@ class PluginManifest:
     api: int = 2
     # False forbids replacing a live instance without restarting the process.
     supports_hot_unload: bool = True
+    # 插件管理页分组（PLUGIN_CATEGORIES 之一），解析时已按 capabilities 补全默认值
+    category: str = "feature"
     metadata: dict[str, object] = field(default_factory=dict)
 
 
@@ -170,6 +177,7 @@ def _parse_manifest(
         optional_dependencies=optional_dependencies,
         api=api,
         supports_hot_unload=supports_hot_unload,
+        category=_parse_category(raw, capabilities),
         metadata={k: v for k, v in raw.items() if isinstance(k, str)},
     )
 
@@ -228,6 +236,15 @@ def _parse_channel(item: object, field_name: str) -> ChannelDeclaration:
     if name in RESERVED_CHANNEL_NAMES:
         raise ManifestError(f"{field_name}.name 是宿主保留渠道名: {name}")
     return ChannelDeclaration(**values)
+
+
+def _parse_category(raw: dict[str, object], capabilities: tuple[str, ...]) -> str:
+    value = raw.get("category")
+    if value is None:
+        return "channel" if "channels" in capabilities else "feature"
+    if not isinstance(value, str) or value not in PLUGIN_CATEGORIES:
+        raise ManifestError(f"category 必须是 {' / '.join(PLUGIN_CATEGORIES)} 之一")
+    return value
 
 
 def _optional_str(value: object) -> str | None:

@@ -39,14 +39,22 @@ class QQBotConfigModel(BaseModel):
 
     app_id: str = Field(
         default="",
+        title="App ID",
         validation_alias=AliasChoices("app_id", "appId"),
     )
     client_secret: str = Field(
         default="",
+        title="App Secret",
         validation_alias=AliasChoices("client_secret", "clientSecret"),
     )
-    allow_from: list[str] = Field(default_factory=list)
-    groups: list[QQBotGroupConfigModel] = Field(default_factory=list)
+    allow_from: list[str] = Field(
+        default_factory=list,
+        title="允许的用户",
+        description="QQBot 用户 OpenID；留空则不限制",
+    )
+    groups: list[QQBotGroupConfigModel] = Field(
+        default_factory=list, title="群聊（旧版）"
+    )
 
     @field_validator("app_id", "client_secret", mode="before")
     @classmethod
