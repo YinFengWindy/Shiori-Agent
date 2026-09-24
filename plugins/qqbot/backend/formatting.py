@@ -17,6 +17,14 @@ SUPPORTED_IMAGE_MIME_TYPES = {
     "image/png",
     "image/webp",
 }
+# Keeps the model from confusing the official bot with NapCat QQ (`qq`).
+SYSTEM_PROMPT_HINT = (
+    "## 官方 QQBot 渠道规则（硬性）"
+    "\n- 当前会话是官方 QQBot，向当前用户发送消息时必须使用 `message_push` 的 `channel=qqbot`。"
+    "\n- 不得把官方 QQBot 写成 `channel=qq`；`qq` 仅指 NapCat QQ。"
+    "\n- 当前私聊目标 chat_id 必须保持为 `c2c:<user_openid>`。"
+)
+PUSH_TARGET_HINT = "官方 QQBot，不能写成 qq；私聊 chat_id 格式为 c2c:<user_openid>"
 
 
 def as_dict(value: object) -> dict[str, Any]:

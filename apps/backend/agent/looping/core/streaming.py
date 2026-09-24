@@ -11,7 +11,6 @@ from .helpers import (
     StreamSink,
     StreamSinkFactory,
     _suppresses_stream_events,
-    _supports_stream_events,
 )
 
 
@@ -65,7 +64,7 @@ class _StreamingMixin:
         chat_id = str(getattr(msg, "chat_id", ""))
         if _suppresses_stream_events(msg):
             return None
-        if not _supports_stream_events(channel, chat_id):
+        if not self._channel_directory.supports_stream_events(channel, chat_id):
             return None
         session_key = str(getattr(msg, "session_key", f"{channel}:{chat_id}"))
 

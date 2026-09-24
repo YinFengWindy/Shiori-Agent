@@ -33,6 +33,8 @@ async def test_empty_application_hot_reload_preserves_shared_state_and_old_lease
         assert prepared.core.loop is not original.loop
         assert prepared.core.session_manager is original.session_manager
         assert prepared.core.bus is original.bus
+        assert prepared.core.channel_directory is original.channel_directory
+        assert prepared.core.loop._channel_directory is original.channel_directory
         commits = []
         await app.publish(prepared, commit=lambda: commits.append(app.generation))
         assert commits == [1]

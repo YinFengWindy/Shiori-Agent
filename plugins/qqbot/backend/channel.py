@@ -16,7 +16,7 @@ from core.channels import ChannelHub
 from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
 
-from .formatting import CHANNEL
+from .formatting import CHANNEL, PUSH_TARGET_HINT, SYSTEM_PROMPT_HINT
 from .gateway import _GatewayMixin, _TokenCache
 from .inbound import _InboundMixin
 from .outbound import _OutboundMixin
@@ -90,6 +90,10 @@ class QQBotChannel(
             {key: group.model_dump() for key, group in self._groups.items()},
         )
 
+    def system_prompt_hint(self, chat_id: str) -> str:
+        """Keeps proactive sends on `qqbot` instead of NapCat's `qq`."""
+        return SYSTEM_PROMPT_HINT
+
     async def start(self, ctx: ChannelContext) -> None:
         """Registers runtime hooks and starts the official Gateway loop."""
         self._bus = ctx.bus
@@ -108,6 +112,7 @@ class QQBotChannel(
             text=self.send_proactive,
             stream_text=self.send_stream,
             image=self.send_image,
+            description=PUSH_TARGET_HINT,
         )
         self._stopped.clear()
         self._intake.start(paused=ctx.intake_paused)

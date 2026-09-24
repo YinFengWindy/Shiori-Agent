@@ -16,6 +16,22 @@ _REPLY_LIVE_TAIL = 1100
 _TOOL_PREVIEW_LIMIT = 80
 _LIVE_STREAM_MIN_INTERVAL_S = 2.5
 _LIVE_STREAM_MIN_CHARS = 200
+_RENDERING_PROMPT = (
+    "## Telegram 渲染限制（硬性规则）\n"
+    "Telegram 手机端等宽字体每行约 40 字符。多列表格每行超过 80 字符，必然换行错位、完全不可读。\n"
+    "**无论用户是否主动要求表格，都不得输出 Markdown 表格（`| ... |` 语法）。**\n"
+    "对比多个对象时，改用分组列表格式，例如：\n"
+    "**9800X3D**\n• 核心：8核16线程\n• 功耗：120W\n\n"
+    "**i9-14900KS**\n• 核心：24核32线程\n• 功耗：350W+"
+)
+
+
+def _is_private_chat_id(chat_id: str) -> bool:
+    """Private Telegram chats have positive numeric IDs; groups are negative."""
+    try:
+        return int(chat_id) > 0
+    except ValueError:
+        return False
 
 
 @dataclass

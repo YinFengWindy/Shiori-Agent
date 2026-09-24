@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from agent.tools.message_push import MessagePushTool
@@ -76,15 +78,26 @@ async def test_message_push_resolves_target_before_role_validation() -> None:
     assert sent == [("7602298892", "hello")]
 
 
-def test_message_push_schema_distinguishes_official_qqbot_from_napcat_qq() -> None:
+def test_message_push_description_lists_only_registered_channels() -> None:
     tool = MessagePushTool()
+    send = AsyncMock()
+    tool.register_channel("desktop", text=send, description="桌面端")
+    tool.register_channel("qqbot", text=send, description="官方 QQBot，不能写成 qq")
+    tool.register_channel("plain", text=send)
 
-    assert "qqbot" in tool.description
-    assert "qq（NapCat QQ）" in tool.description
-    assert "不能写成 qq" in tool.description
     assert (
-        "c2c:<user_openid>" in tool.parameters["properties"]["chat_id"]["description"]
+        "当前可用渠道：desktop（桌面端）、qqbot（官方 QQBot，不能写成 qq）、plain。"
+        in (tool.description)
     )
+    assert "telegram" not in tool.description
+    assert tool.to_schema()["function"]["description"] == tool.description
+
+    tool.retire_channel("plain")
+    assert "plain" not in tool.description
+    tool.unregister_channel("qqbot")
+    assert "qqbot" not in tool.description
+    tool.register_channel("qqbot", text=send)
+    assert "qqbot。" in tool.description
 
 
 @pytest.mark.asyncio

@@ -183,23 +183,4 @@ def build_skills_catalog_prompt(skills_summary: str) -> str:
 
 
 def build_current_session_prompt(*, channel: str, chat_id: str) -> str:
-    prompt = f"\n\n## Current Session\nChannel: {channel}\nChat ID: {chat_id}"
-    if channel == "qqbot":
-        prompt += (
-            "\n\n## 官方 QQBot 渠道规则（硬性）"
-            "\n- 当前会话是官方 QQBot，向当前用户发送消息时必须使用 `message_push` 的 `channel=qqbot`。"
-            "\n- 不得把官方 QQBot 写成 `channel=qq`；`qq` 仅指 NapCat QQ。"
-            "\n- 当前私聊目标 chat_id 必须保持为 `c2c:<user_openid>`。"
-        )
-    return prompt
-
-
-def build_telegram_rendering_prompt() -> str:
-    return (
-        "\n\n## Telegram 渲染限制（硬性规则）\n"
-        "Telegram 手机端等宽字体每行约 40 字符。多列表格每行超过 80 字符，必然换行错位、完全不可读。\n"
-        "**无论用户是否主动要求表格，都不得输出 Markdown 表格（`| ... |` 语法）。**\n"
-        "对比多个对象时，改用分组列表格式，例如：\n"
-        "**9800X3D**\n• 核心：8核16线程\n• 功耗：120W\n\n"
-        "**i9-14900KS**\n• 核心：24核32线程\n• 功耗：350W+"
-    )
+    return f"\n\n## Current Session\nChannel: {channel}\nChat ID: {chat_id}"

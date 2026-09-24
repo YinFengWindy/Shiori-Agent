@@ -16,31 +16,6 @@ _MANUAL_CONSOLIDATION_TIMEOUT_SECONDS = 30.0
 StreamDelta: TypeAlias = dict[str, str] | str
 StreamSink: TypeAlias = Callable[[StreamDelta], Awaitable[None]]
 StreamSinkFactory: TypeAlias = Callable[[object], StreamSink | None]
-StreamSupportPolicy: TypeAlias = Callable[[str], bool]
-
-
-def _is_positive_int(value: str) -> bool:
-    try:
-        return int(value) > 0
-    except ValueError:
-        return False
-
-
-def _is_desktop_session(value: str) -> bool:
-    """Accepts role-owned desktop session keys emitted by the bridge."""
-
-    return value.startswith("role:") and len(value) > len("role:")
-
-
-_STREAM_SUPPORT_POLICIES: dict[str, StreamSupportPolicy] = {
-    "desktop": _is_desktop_session,
-    "telegram": _is_positive_int,
-}
-
-
-def _supports_stream_events(channel: str, chat_id: str) -> bool:
-    policy = _STREAM_SUPPORT_POLICIES.get(channel)
-    return bool(policy is not None and policy(chat_id))
 
 
 def _suppresses_stream_events(msg: object) -> bool:

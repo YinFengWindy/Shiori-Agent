@@ -8,6 +8,11 @@ from agent.looping.interrupt import InterruptController
 from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
 from bus.queue import MessageBus
+from core.common.channel_directory import (
+    SupportsDefaultChatType,
+    SupportsStreamEvents,
+    SupportsSystemPromptHint,
+)
 from core.net.http import SharedHttpResources
 from infra.channels.base import AttachmentStore
 from session.manager import SessionManager
@@ -16,8 +21,26 @@ if TYPE_CHECKING:
     from core.channels import ChannelHub
 
 
+__all__ = [
+    "Channel",
+    "ChannelContext",
+    "ChannelStatus",
+    "SupportsChannelStatus",
+    "SupportsDefaultChatType",
+    "SupportsStreamEvents",
+    "SupportsSystemPromptHint",
+]
+
+
 class Channel(Protocol):
-    """A transport whose inbound admission can stop independently of outbound work."""
+    """A transport whose inbound admission can stop independently of outbound work.
+
+    Optional hooks replace channel-name checks in the core; a channel implements
+    only those it needs: ``status()`` (:class:`SupportsChannelStatus`),
+    ``supports_stream_events(chat_id)`` (:class:`SupportsStreamEvents`),
+    ``system_prompt_hint(chat_id)`` (:class:`SupportsSystemPromptHint`) and the
+    ``default_chat_type`` attribute (:class:`SupportsDefaultChatType`).
+    """
 
     name: str
 

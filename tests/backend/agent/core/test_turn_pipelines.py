@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from agent.core.runtime_support import SessionLike, TurnRunResult
-from agent.looping.core import AgentLoop, _supports_stream_events
+from agent.looping.core import AgentLoop
 from agent.looping.interrupt import TurnInterruptState
 from agent.lifecycle.facade import TurnLifecycle
 from agent.looping.ports import AgentLoopConfig, AgentLoopDeps, MemoryServices
@@ -21,7 +21,8 @@ from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
-from bus.events_lifecycle import TurnCommitted
+from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
+from core.common.channel_directory import ChannelDirectory
 from core.memory.engine import MemoryQueryResult
 from core.roles import RoleRepository, RoleStore, RoleRuntimeRegistry
 from bootstrap.wiring import wire_turn_lifecycle
@@ -98,20 +99,56 @@ class _FakeMemoryEngine:
         return None
 
 
-def test_stream_events_support_desktop_and_telegram_private_chat():
-    assert _supports_stream_events("desktop", "role:role-1")
-    assert _supports_stream_events("telegram", "123")
-    assert not _supports_stream_events("telegram", "-1001")
-    assert not _supports_stream_events("telegram", "@alice")
-    assert not _supports_stream_events("desktop", "desktop:direct")
-    assert not _supports_stream_events("feishu", "oc_123")
-    assert not _supports_stream_events("qq", "123")
-    assert not _supports_stream_events("cli", "direct")
+class _StreamingChannel:
+    name = "qqbot"
+
+    def supports_stream_events(self, chat_id: str) -> bool:
+        return chat_id.startswith("c2c:")
+
+
+def _stream_loop(channels: dict[str, object]) -> AgentLoop:
+    loop = object.__new__(AgentLoop)
+    loop._event_bus = EventBus()
+    loop._active_turn_states = {}
+    directory = ChannelDirectory()
+    directory.bind(channels.get)
+    loop._channel_directory = directory
+    return loop
+
+
+@pytest.mark.asyncio
+async def test_stream_event_sink_follows_the_channel_stream_hook():
+    loop = _stream_loop({"qqbot": _StreamingChannel(), "qq": object()})
+    observed: list[StreamDeltaReady] = []
+
+    async def _observe(event: StreamDeltaReady) -> None:
+        observed.append(event)
+
+    loop._event_bus.on(StreamDeltaReady, _observe)
+
+    def _message(channel: str, chat_id: str) -> InboundMessage:
+        return InboundMessage(
+            channel=channel, sender="u", chat_id=chat_id, content="hello"
+        )
+
+    sink = AgentLoop._build_stream_event_sink(loop, _message("qqbot", "c2c:u1"))
+    assert sink is not None
+    await sink("partial")
+    assert [(e.channel, e.chat_id, e.content_delta) for e in observed] == [
+        ("qqbot", "c2c:u1", "partial")
+    ]
+    assert (
+        AgentLoop._build_stream_event_sink(loop, _message("qqbot", "group:g1")) is None
+    )
+    assert AgentLoop._build_stream_event_sink(loop, _message("qq", "123")) is None
+    assert (
+        AgentLoop._build_stream_event_sink(loop, _message("desktop", "role:mira"))
+        is not None
+    )
 
 
 def test_stream_event_sink_respects_suppression_flag():
-    loop = object.__new__(AgentLoop)
-    loop._event_bus = EventBus()
+    loop = _stream_loop({})
     msg = InboundMessage(
         channel="telegram",
         sender="u",

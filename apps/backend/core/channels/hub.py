@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from bus.events import InboundMessage, OutboundMessage
+from core.common.channel_directory import ChannelDirectory
 from core.common.channel_identifiers import chat_ids_equal
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.services import RoleAggregateService
@@ -14,22 +15,35 @@ from core.roles.role_runtime import RoleExecutionContext
 class ChannelHub:
     """Coordinates role-bound channel routing and delivery bookkeeping."""
 
-    def __init__(self, service: RoleAggregateService) -> None:
+    def __init__(
+        self,
+        service: RoleAggregateService,
+        *,
+        channel_directory: ChannelDirectory | None = None,
+    ) -> None:
         self._service = service
+        self._channel_directory = channel_directory or ChannelDirectory()
         self._conversation = ConversationService(
             service.sessions._session_manager,
             binding_resolver=service.bindings.resolve_role_id,
         )
 
     @classmethod
-    def from_workspace(cls, workspace: Path, *, session_manager) -> "ChannelHub":
+    def from_workspace(
+        cls,
+        workspace: Path,
+        *,
+        session_manager,
+        channel_directory: ChannelDirectory | None = None,
+    ) -> "ChannelHub":
         """Builds a hub from the current workspace and shared session manager."""
         return cls(
             RoleAggregateService.from_runtime(
                 workspace=workspace,
                 role_store=RoleStore(workspace),
                 session_manager=session_manager,
-            )
+            ),
+            channel_directory=channel_directory,
         )
 
     def route_inbound(self, message: InboundMessage) -> InboundMessage:
@@ -75,10 +89,10 @@ class ChannelHub:
         metadata.setdefault("transport_channel", message.channel)
         metadata.setdefault("transport_chat_id", message.chat_id)
         metadata.setdefault("sender_id", message.sender)
-        metadata.setdefault(
-            "chat_type",
-            "private" if message.channel == "telegram" else "unknown",
-        )
+        if "chat_type" not in metadata:
+            metadata["chat_type"] = self._channel_directory.default_chat_type(
+                message.channel
+            )
         metadata.setdefault("source", "role_channel_binding")
         context = RoleExecutionContext.create(
             role=role,

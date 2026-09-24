@@ -105,7 +105,9 @@ async def test_qqbot_channel_registers_and_stops_cleanly(
     assert bus.outbound == []
     assert context.event_bus._handlers == {}
     assert push_tool.removed == ["qqbot"]
-    assert push_tool.registrations == [("qqbot", ["image", "stream_text", "text"])]
+    assert push_tool.registrations == [
+        ("qqbot", ["description", "image", "stream_text", "text"])
+    ]
 
 
 @pytest.mark.asyncio

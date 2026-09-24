@@ -81,6 +81,10 @@ class RuntimeReloadMixin:
                 enable_message_channels=self.features.enable_message_channels,
                 previous_host=self.channel_host,
                 strict=True,
+                channel_directory=core.channel_directory,
+            )
+            candidate.channel_names = frozenset(
+                channel.name for channel in candidate.channel_host.channels
             )
         except BaseException:
             self._discard_background(candidate)

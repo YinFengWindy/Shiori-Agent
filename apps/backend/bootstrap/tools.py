@@ -58,6 +58,7 @@ from bootstrap.providers import build_providers
 from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from bus.queue import MessageBus
+from core.common.channel_directory import ChannelDirectory
 from core.common.channel_identifiers import chat_ids_equal
 from core.memory.markdown import MemoryLifecycleBindRequest, MarkdownMemoryMaintenance
 from core.memory.runtime import MemoryRuntime
@@ -105,6 +106,8 @@ class CoreRuntime:
     additional_providers: list[LLMProvider] = field(default_factory=list)
     proactive_motives: list[ProactiveGate] = field(default_factory=list)
     scene_followup_subscription: SceneFollowupSubscription | None = None
+    # Shared by every generation; bound to the long-lived channel host at start.
+    channel_directory: ChannelDirectory = field(default_factory=ChannelDirectory)
 
     async def start(self) -> None:
         self.mcp_registry.start_connect_all_background()
@@ -308,6 +311,7 @@ def _build_loop_deps(
     memory_runtime: MemoryRuntime,
     relationship_runtime: RoleRelationshipRuntimeService,
     role_runtime_registry: RoleRuntimeRegistry | None = None,
+    channel_directory: ChannelDirectory | None = None,
 ) -> AgentLoopDeps:
     wiring = getattr(config, "wiring", WiringConfig())
     context = resolve_context_factory(wiring.context)(
@@ -318,6 +322,8 @@ def _build_loop_deps(
         context.set_media_capabilities(
             multimodal=config.multimodal,
         )
+        if channel_directory is not None:
+            context.set_channel_directory(channel_directory)
     memory_engine = memory_runtime.engine
     light = light_provider or provider
     llm_services = LLMServices(provider=provider, light_provider=light)
@@ -360,6 +366,7 @@ def _build_loop_deps(
         memory_services=memory_services,
         session_services=session_services,
         role_runtime_registry=role_runtime_registry,
+        channel_directory=channel_directory,
     )
 
 
@@ -500,6 +507,9 @@ def build_core_runtime(
                 chat_id=chat_id,
             )
         )
+    channel_directory = (
+        shared.channel_directory if shared is not None else ChannelDirectory()
+    )
     loop_deps = _build_loop_deps(
         config=config,
         workspace=workspace,
@@ -514,6 +524,7 @@ def build_core_runtime(
         memory_runtime=memory_runtime,
         relationship_runtime=relationship_runtime,
         role_runtime_registry=role_runtime_registry,
+        channel_directory=channel_directory,
     )
     loop = AgentLoop(
         loop_deps,
@@ -633,6 +644,7 @@ def build_core_runtime(
         role_runtime_registry=role_runtime_registry,
         plugin_manager=plugin_manager,
         scene_service=scene_service,
+        channel_directory=channel_directory,
         proactive_motives=[
             *(
                 [SceneFollowupStrategy(relationship_runtime)]

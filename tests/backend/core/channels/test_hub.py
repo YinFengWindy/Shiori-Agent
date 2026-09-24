@@ -7,6 +7,7 @@ import pytest
 
 from bus.events import InboundMessage, OutboundMessage
 from core.channels import ChannelHub
+from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleAggregateService, RoleStore
 from session.manager import SessionManager
 
@@ -25,7 +26,7 @@ def test_channel_hub_routes_bound_inbound_to_role_session(tmp_path: Path) -> Non
         system_prompt="you are mira",
     )
     _ = service.bindings.bind("telegram", "123", "mira", contact_id="u1")
-    hub = ChannelHub(service)
+    hub = ChannelHub(service, channel_directory=_directory_with_private_telegram())
 
     routed = hub.route_inbound(
         InboundMessage(
@@ -54,6 +55,51 @@ def test_channel_hub_routes_bound_inbound_to_role_session(tmp_path: Path) -> Non
         & role_session.metadata.keys()
     )
     assert session_manager._store.get_session_meta("thread:mira:telegram:123") is None
+
+
+def _directory_with_private_telegram() -> ChannelDirectory:
+    class _Telegram:
+        default_chat_type = "private"
+
+    directory = ChannelDirectory()
+    directory.bind({"telegram": _Telegram()}.get)
+    return directory
+
+
+def test_channel_hub_chat_type_default_comes_from_the_channel(tmp_path: Path) -> None:
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = service.create_role(role_id="mira", name="Mira", system_prompt="mira")
+    _ = service.bindings.bind("telegram", "123", "mira", contact_id="u1")
+    _ = service.bindings.bind("qqbot", "c2c:u2", "mira", contact_id="u2")
+    hub = ChannelHub(service, channel_directory=_directory_with_private_telegram())
+
+    def _route(channel: str, chat_id: str, sender: str, **metadata: str):
+        return hub.route_inbound(
+            InboundMessage(
+                channel=channel,
+                sender=sender,
+                chat_id=chat_id,
+                content="hello",
+                metadata=dict(metadata),
+            )
+        ).metadata["chat_type"]
+
+    assert _route("telegram", "123", "u1") == "private"
+    assert _route("telegram", "123", "u1", chat_type="group") == "group"
+    assert _route("qqbot", "c2c:u2", "u2") == "unknown"
+    assert (
+        ChannelHub(service)
+        .route_inbound(
+            InboundMessage(channel="telegram", sender="u1", chat_id="123", content="hi")
+        )
+        .metadata["chat_type"]
+        == "unknown"
+    )
 
 
 def test_channel_hub_marks_delivery_by_role_session(tmp_path: Path) -> None:

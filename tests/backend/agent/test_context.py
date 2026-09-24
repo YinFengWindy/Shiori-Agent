@@ -5,6 +5,7 @@ import pytest
 
 from agent.context import ContextBuilder, ContextRequest
 from agent.prompting import SYSTEM_CONTEXT_FRAME_MARKER
+from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleStore
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 
@@ -105,9 +106,6 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     monkeypatch.setattr("agent.context.SkillsLoader", _Skills)
     monkeypatch.setattr(
         "agent.context.build_agent_static_identity_prompt", lambda **_: "identity"
-    )
-    monkeypatch.setattr(
-        "agent.context.build_telegram_rendering_prompt", lambda: "\ntelegram prompt"
     )
     monkeypatch.setattr(
         "agent.context.build_skills_catalog_prompt", lambda text: f"catalog:{text}"
@@ -220,32 +218,29 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert render_result.messages[-2]["content"].startswith(SYSTEM_CONTEXT_FRAME_MARKER)
     assert "pref" in render_result.messages[-2]["content"]
 
-    custom_telegram = builder.render(
-        ContextRequest(
-            history=[],
-            current_message="hello",
-            channel="telegram_work",
-            chat_id="42",
-            message_timestamp=now,
-        ),
-        session_metadata=role_metadata,
-    )
-    assert "telegram prompt" in custom_telegram.messages[0]["content"]
+    class _HintedChannel:
+        def system_prompt_hint(self, chat_id: str) -> str:
+            return f"## Channel rules\nchat={chat_id}\n"
 
-    qqbot = builder.render(
-        ContextRequest(
-            history=[],
-            current_message="hello",
-            channel="qqbot",
-            chat_id="c2c:user-1",
-            message_timestamp=now,
-        ),
-        session_metadata=role_metadata,
-    )
-    assert "## 官方 QQBot 渠道规则（硬性）" in qqbot.messages[0]["content"]
-    assert "必须使用 `message_push` 的 `channel=qqbot`" in qqbot.messages[0]["content"]
-    assert "不得把官方 QQBot 写成 `channel=qq`" in qqbot.messages[0]["content"]
-    assert "c2c:<user_openid>" in qqbot.messages[0]["content"]
+    directory = ChannelDirectory()
+    directory.bind({"telegram_work": _HintedChannel()}.get)
+    builder.set_channel_directory(directory)
+
+    def _system_prompt_for(channel: str) -> str:
+        return builder.render(
+            ContextRequest(
+                history=[],
+                current_message="hello",
+                channel=channel,
+                chat_id="42",
+                message_timestamp=now,
+            ),
+            session_metadata=role_metadata,
+        ).messages[0]["content"]
+
+    hinted = _system_prompt_for("telegram_work")
+    assert hinted.endswith("\n\n## Channel rules\nchat=42")
+    assert "## Channel rules" not in _system_prompt_for("qqbot")
 
     media_only_messages = builder.render(
         ContextRequest(
@@ -396,7 +391,6 @@ def test_context_builder_reproduces_temporal_conflict_baseline(
     monkeypatch.setattr(
         "agent.context.build_agent_static_identity_prompt", lambda **_: "identity"
     )
-    monkeypatch.setattr("agent.context.build_telegram_rendering_prompt", lambda: "")
     monkeypatch.setattr("agent.context.build_skills_catalog_prompt", lambda text: text)
 
     (tmp_path / "memes").mkdir()

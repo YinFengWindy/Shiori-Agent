@@ -4,7 +4,7 @@ import logging
 import mimetypes
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 from agent.core.types import ContextRenderResult, ContextRequest
 from agent.core.prompt_block import (
@@ -32,12 +32,12 @@ from agent.role_prompt import (
     build_role_system_section,
 )
 from agent.skills import SkillsLoader
+from core.common.channel_directory import ChannelDirectory
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 from prompts.agent import (
     build_agent_static_identity_prompt,
     build_current_message_time_envelope,
     build_skills_catalog_prompt,
-    build_telegram_rendering_prompt,
 )
 
 if TYPE_CHECKING:
@@ -48,31 +48,19 @@ logger = logging.getLogger("agent.context")
 _READABLE_TEXT_ATTACHMENT_SUFFIXES = {".md", ".txt"}
 
 
-class ChannelPolicy(Protocol):
-    channel: str
-
-    def augment_system_prompt(self, prompt: str) -> str: ...
-
-
-class TelegramChannelPolicy:
-    channel = "telegram"
-
-    def augment_system_prompt(self, prompt: str) -> str:
-        return prompt + build_telegram_rendering_prompt()
-
-    def matches(self, channel: str) -> bool:
-        return channel == self.channel or channel.startswith(f"{self.channel}_")
-
-
 class MessageEnvelopeBuilder:
     def __init__(
         self,
-        policies: dict[str, ChannelPolicy] | None = None,
+        channel_directory: ChannelDirectory | None = None,
         *,
         multimodal: bool = True,
     ):
-        self._policies = policies or {}
+        self._channel_directory = channel_directory or ChannelDirectory()
         self._multimodal = multimodal
+
+    def set_channel_directory(self, channel_directory: ChannelDirectory) -> None:
+        """Resolves channel prompt hints through the published channel set."""
+        self._channel_directory = channel_directory
 
     def set_media_capabilities(
         self,
@@ -91,12 +79,14 @@ class MessageEnvelopeBuilder:
         channel: str | None,
         message_timestamp: datetime | None,
         media: list[str] | None,
+        chat_id: str | None = None,
     ) -> list[dict[str, Any]]:
         prompt = system_prompt
         if channel:
-            policy = self._resolve_policy(channel)
-            if policy is not None:
-                prompt = policy.augment_system_prompt(prompt)
+            # Channel-specific rules (e.g. rendering limits) come from the channel.
+            hint = self._channel_directory.system_prompt_hint(channel, chat_id or "")
+            if hint:
+                prompt = f"{prompt}\n\n{hint}"
 
         # 顺序是有意设计的：stable system -> history -> context frame -> 当前用户消息。
         messages: list[dict[str, Any]] = [{"role": "system", "content": prompt}]
@@ -212,16 +202,6 @@ class MessageEnvelopeBuilder:
         stamp = build_current_message_time_envelope(message_timestamp=message_timestamp)
         return f"{stamp}\n{text}"
 
-    def _resolve_policy(self, channel: str) -> ChannelPolicy | None:
-        policy = self._policies.get(channel)
-        if policy is not None:
-            return policy
-        for candidate in self._policies.values():
-            matches = getattr(candidate, "matches", None)
-            if callable(matches) and matches(channel):
-                return candidate
-        return None
-
 
 class ContextBuilder:
     def __init__(
@@ -230,6 +210,7 @@ class ContextBuilder:
         memory: "MemoryProfileApi",
         *,
         multimodal: bool = True,
+        channel_directory: ChannelDirectory | None = None,
     ):
         self.workspace = workspace
         self.skills = SkillsLoader(workspace)
@@ -248,7 +229,7 @@ class ContextBuilder:
             ]
         )
         self._envelope_builder = MessageEnvelopeBuilder(
-            policies={TelegramChannelPolicy.channel: TelegramChannelPolicy()},
+            channel_directory,
             multimodal=multimodal,
         )
         self._assembler = PromptAssembler(self)
@@ -256,6 +237,10 @@ class ContextBuilder:
         self._last_assembled_contexts: dict[str, dict[str, str]] = {
             "turn_injection_context": {},
         }
+
+    def set_channel_directory(self, channel_directory: ChannelDirectory) -> None:
+        """Resolves channel prompt hints through the published channel set."""
+        self._envelope_builder.set_channel_directory(channel_directory)
 
     def set_media_capabilities(
         self,

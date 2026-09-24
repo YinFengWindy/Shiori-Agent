@@ -19,6 +19,7 @@ from bus.events_lifecycle import (
     ToolCallStarted,
     TurnStarted,
 )
+from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleStore
 from conversation.service import LegacySessionDescriptor
 from infra.channels.base import AttachmentStore
@@ -1021,6 +1022,39 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         "delivery_status": "sent",
         "external_message_id": "",
     } in session_manager.delivery_updates
+
+
+def test_telegram_hooks_keep_private_streaming_and_rendering_rules(
+    monkeypatch, tmp_path
+):
+    mod = _import_telegram_channel(monkeypatch)
+    channel = mod.TelegramChannel(
+        "token", _Bus(), _SessionManager(tmp_path), channel_name="telegram_work"
+    )
+    directory = ChannelDirectory()
+    directory.bind({"telegram_work": channel}.get)
+
+    assert directory.supports_stream_events("telegram_work", "123")
+    assert not directory.supports_stream_events("telegram_work", "-1001")
+    assert not directory.supports_stream_events("telegram_work", "@alice")
+    assert directory.default_chat_type("telegram_work") == "private"
+    hint = directory.system_prompt_hint("telegram_work", "123")
+    assert hint.startswith("## Telegram 渲染限制（硬性规则）\n")
+    assert "都不得输出 Markdown 表格（`| ... |` 语法）" in hint
+    assert hint.endswith("• 功耗：350W+")
+
+
+def test_napcat_qq_declares_no_stream_or_prompt_hooks(monkeypatch, tmp_path):
+    mod = _import_qq_channel(monkeypatch)
+    channel = mod.QQChannel(
+        "42", _Bus(), _SessionManager(tmp_path), http_requester=SimpleNamespace()
+    )
+    directory = ChannelDirectory()
+    directory.bind({"qq": channel}.get)
+
+    assert not directory.supports_stream_events("qq", "123")
+    assert directory.system_prompt_hint("qq", "123") == ""
+    assert directory.default_chat_type("qq") == "unknown"
 
 
 @pytest.mark.asyncio

@@ -305,6 +305,15 @@ class ChannelHost:
     def channels(self) -> list[Channel]:
         return list(self._channels)
 
+    def get(self, name: str) -> Channel | None:
+        """Returns the published connection for a name, else one still draining.
+
+        A retired transport keeps serving replies its generation accepted, so
+        its optional hooks (stream support, prompt hints) stay in effect.
+        """
+        active = next((item for item in self._channels if item.name == name), None)
+        return active or self._retired_transports.get(name)
+
     def snapshot(self) -> dict[str, ChannelSnapshot]:
         """Returns each registered or failed channel's state, keyed by channel name.
 

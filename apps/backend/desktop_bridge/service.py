@@ -393,6 +393,7 @@ class DesktopBridgeService:
             image_with_metadata=lambda chat_id, image_path, metadata: _emit_session_for_chat(
                 chat_id, media=[image_path], metadata=metadata
             ),
+            description="桌面端，chat_id 使用当前角色会话 ID role:<角色ID>",
         )
 
     async def _apply_desktop_push(

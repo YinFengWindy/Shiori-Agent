@@ -60,6 +60,19 @@ def test_resume_intake_uses_current_connections_after_publication():
     old.resume_intake.assert_not_called()
 
 
+def test_get_prefers_the_published_connection_over_a_draining_one():
+    host = ChannelHost(lambda channel: None)
+    published = connection("telegram")
+    draining = connection("qq")
+    host.add(published)
+    host._retired_transports["telegram"] = connection("telegram")
+    host._retired_transports["qq"] = draining
+
+    assert host.get("telegram") is published
+    assert host.get("qq") is draining
+    assert host.get("qqbot") is None
+
+
 class _StatusChannel:
     def __init__(self, name, status):
         self.name = name
