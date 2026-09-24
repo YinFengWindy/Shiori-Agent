@@ -86,6 +86,8 @@ export type PluginNavPageProps = {
   onExit?: () => void;
   pageId: string;
   activeRoleId?: string;
+  /** Opens this page's own plugin settings tab (e.g. from a "not configured" error). */
+  onOpenPluginSettings?: () => void;
 };
 
 /**
@@ -108,6 +110,12 @@ export type PluginNavPageSidebarProps = {
   collapsed: boolean;
   width: number;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
+  /**
+   * Call after navigating inside the page from the sidebar: host views close
+   * the compact overlay drawer on navigation, but a plugin's own view switch
+   * is invisible to the host.
+   */
+  onNavigate?: () => void;
 };
 
 /**

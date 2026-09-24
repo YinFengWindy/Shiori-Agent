@@ -579,7 +579,11 @@ export function DesktopAppFrame({
             />
           ) : null}
           {mainView.kind === "plugin-page" && activePluginNavPage ? (
-            <activePluginNavPage.Component pageId={mainView.pageId} activeRoleId={activeRoleId} />
+            <activePluginNavPage.Component
+              pageId={mainView.pageId}
+              activeRoleId={activeRoleId}
+              onOpenPluginSettings={() => onOpenPluginSettings(activePluginNavPage.pluginId ?? null)}
+            />
           ) : null}
         </main>
       </div>

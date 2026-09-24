@@ -127,4 +127,28 @@ describe("Select", () => {
       assert.deepEqual(changes, []);
     } finally { await view.cleanup(); }
   });
+
+  it("shows an option's icon in its row and, once selected, in the trigger", async () => {
+    const withIcons: SelectOption[] = [
+      { value: "rin", label: "Rin", icon: <img data-testid="icon-rin" alt="" /> },
+      { value: "kaede", label: "Kaede", icon: <span data-testid="icon-kaede">K</span> },
+    ];
+    const changes: string[] = [];
+    function IconPicker() {
+      const [value, setValue] = useState("rin");
+      return <Select aria-label="Role" value={value} options={withIcons} onValueChange={(next) => { setValue(next); changes.push(next); }} />;
+    }
+    const view = await mountTestComponent(<IconPicker />);
+    try {
+      assert.ok(trigger().querySelector('[data-testid="icon-rin"]'));
+      assert.equal(trigger().textContent, "Rin");
+      await act(async () => trigger().click());
+      const rows = document.querySelectorAll<HTMLElement>('[role="option"]');
+      assert.ok(rows[1].querySelector('[data-testid="icon-kaede"]'));
+      await act(async () => rows[1].click());
+      assert.deepEqual(changes, ["kaede"]);
+      assert.ok(trigger().querySelector('[data-testid="icon-kaede"]'));
+      assert.equal(trigger().querySelector('[data-testid="icon-rin"]'), null);
+    } finally { await view.cleanup(); }
+  });
 });

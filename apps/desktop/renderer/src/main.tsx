@@ -596,6 +596,7 @@ function App(): React.ReactElement {
         animating: leftSidebar.animating,
         resizing: leftSidebar.resizing,
         onBeginResize: leftSidebar.beginResize,
+        onDismissOverlay: dismissSidebarOverlay,
       }}
       mainView={mainView}
       settingsSection={settingsSection}

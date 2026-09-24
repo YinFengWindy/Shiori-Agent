@@ -13,6 +13,7 @@ function sidebarState(overrides: Partial<SidebarViewState> = {}): SidebarViewSta
     animating: false,
     resizing: false,
     onBeginResize: () => undefined,
+    onDismissOverlay: () => undefined,
     ...overrides,
   };
 }
@@ -40,6 +41,7 @@ const baseProps = {
 describe("SidebarTrackContent (issue #226 gap A)", () => {
   it("renders a plugin-page's own Sidebar into the track, wired to the host's resize handle, when the active nav page supplies one", async () => {
     const resizeCalls: unknown[] = [];
+    let dismissals = 0;
     const captured: { props: PluginNavPageSidebarProps | null } = { props: null };
     function DemoSidebar(props: PluginNavPageSidebarProps) {
       captured.props = props;
@@ -55,6 +57,7 @@ describe("SidebarTrackContent (issue #226 gap A)", () => {
     const mainView: AppMainView = { kind: "plugin-page", pageId: "demo" };
     const state = sidebarState({
       onBeginResize: (event) => { resizeCalls.push(event); },
+      onDismissOverlay: () => { dismissals += 1; },
     });
 
     const view = await mountTestComponent(
@@ -76,6 +79,8 @@ describe("SidebarTrackContent (issue #226 gap A)", () => {
       const handle = view.container.querySelector('[data-testid="demo-resize-handle"]') as HTMLElement;
       handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
       assert.equal(resizeCalls.length, 1, "the Sidebar's onBeginResize must be the host's own handler");
+      captured.props?.onNavigate?.();
+      assert.equal(dismissals, 1, "navigating inside the plugin page must close the compact overlay drawer");
     } finally {
       await view.cleanup();
     }
