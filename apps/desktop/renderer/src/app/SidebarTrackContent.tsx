@@ -14,6 +14,8 @@ export type SidebarViewState = {
   animating: boolean;
   resizing: boolean;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
+  /** Closes the compact overlay drawer (no-op otherwise). */
+  onDismissOverlay: () => void;
 };
 
 type SidebarTrackContentProps = {
@@ -119,6 +121,7 @@ export function SidebarTrackContent({
         collapsed={sidebarState.collapsed}
         width={sidebarState.width}
         onBeginResize={sidebarState.onBeginResize}
+        onNavigate={sidebarState.onDismissOverlay}
       />
     );
   }

@@ -1,71 +1,92 @@
 import type { PluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import { useSyncExternalStore } from "react";
-import { novelAiGenerationTimeoutMs } from "./rpcPolicy";
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
+import { errorMessage, feedback } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
 import type { RoleRecord } from "../../../apps/desktop/renderer/src/shared/types";
-import type { PromptTagWorkspaceSectionId } from "./PromptTagWorkspaceSidebar";
-import type { ImageGenerateResult, ImageHistoryRecord } from "./types";
+import type { GenerationFailure, NovelAiReadiness } from "./generationFailure";
+import type { ImageGenerateResult, ImageHistoryRecord, ImageStudioFormState } from "./types";
 
 export type NovelAiView = "studio" | "prompt-tags";
 
-type NovelAiPageState = {
+/** Which part of the prompt-tag workspace is open. */
+export type PromptTagWorkspaceSectionId = "list" | "create" | "detail";
+
+export type NovelAiPageState = {
   view: NovelAiView;
   promptTagSection: PromptTagWorkspaceSectionId;
-  /** Mirrors `PluginNavPageProps.activeRoleId` — relayed here so the Sidebar mount point (which the host does not inject it into) can read it too. */
-  activeRoleId: string;
   roles: RoleRecord[];
   /** Whether `roles` reflects a real fetch yet, vs. the initial empty placeholder. */
   rolesLoaded: boolean;
+  /** The generation form; kept here so a prompt survives switching to the tag library and back. */
+  form: ImageStudioFormState;
+  /** Token readiness from `plugin.novelai.status`; null until known (treated as usable). */
+  readiness: NovelAiReadiness | null;
   submitting: boolean;
   history: ImageHistoryRecord[];
   selectedRecordId: string;
   latestResult: ImageGenerateResult | null;
-  error: string;
+  /** Why the last generation failed, shown in the canvas until dismissed or superseded. */
+  failure: GenerationFailure | null;
+  /** The record the last successful generation produced; it plays the reveal motion once. */
+  revealRecordId: string;
 };
 
-// This plugin's `nav.page` entry now has two mount points that render as
+export const initialStudioForm: ImageStudioFormState = {
+  roleId: "",
+  prompt: "",
+  negativePrompt: "",
+  mode: "txt2img",
+  baseImagePath: "",
+  strength: 0.7,
+  noise: 0.2,
+  sizePreset: "square",
+  customWidth: "",
+  customHeight: "",
+  model: "nai-diffusion-4-5-curated",
+};
+
+// This plugin's `nav.page` entry has two mount points that render as
 // siblings under the host's `DesktopAppFrame` (the page in `<main>`, its
 // Sidebar in the host's resizable track — see issue #226 gap A/B). They are
 // not a React context away from each other (the host owns everything in
-// between), so state either of them can both read and write — which role's
-// generation history is showing, which prompt-tag section is open, the
-// roster of roles used for both the role picker and the nav-rail
-// `selectBlockedReason` guard — has to live outside either component. A module-level
-// store notified via `useSyncExternalStore` is the smallest thing that
-// works for two components the host may mount/unmount independently,
-// without asking the host to plumb cross-slot state (issue #226 explicitly
-// rules that out).
+// between), so state both of them read — which view is open, which
+// prompt-tag section, the role roster used by the nav-rail
+// `selectBlockedReason` guard — has to live outside either component. A
+// module-level store notified via `useSyncExternalStore` is the smallest
+// thing that works for two components the host may mount/unmount
+// independently, without asking the host to plumb cross-slot state.
 //
-// Deliberately NOT shared here: the generation form fields and the NSFW/
-// quality-tag/undesired-content config toggles. Only the Sidebar reads or
-// writes those, so they stay local `useState`/`usePluginConfigController`
-// state inside `NovelAIPageSidebar` — per AGENTS.md, this store only holds
-// what genuinely crosses the two mount points.
+// The generation form lives here too (restyle #362 stage 7 moved it from the
+// sidebar into the page): the page swaps between the studio and the tag
+// library, and a half-written prompt must not be lost on that round trip.
 function initialState(): NovelAiPageState {
   return {
     view: "studio",
     promptTagSection: "list",
-    activeRoleId: "",
     roles: [],
     rolesLoaded: false,
+    form: initialStudioForm,
+    readiness: null,
     submitting: false,
     history: [],
     selectedRecordId: "",
     latestResult: null,
-    error: "",
+    failure: null,
+    revealRecordId: "",
   };
 }
 
 let state: NovelAiPageState = initialState();
 const listeners = new Set<() => void>();
 
-function commit(next: NovelAiPageState): void {
-  state = next;
-  for (const listener of listeners) listener();
+/** Current snapshot, for the sibling action modules of this store. */
+export function getNovelAiState(): NovelAiPageState {
+  return state;
 }
 
-function getSnapshot(): NovelAiPageState {
-  return state;
+/** Publishes a new snapshot; callers return early instead when nothing changed. */
+export function commitNovelAiState(next: NovelAiPageState): void {
+  state = next;
+  for (const listener of listeners) listener();
 }
 
 function subscribe(listener: () => void): () => void {
@@ -75,16 +96,17 @@ function subscribe(listener: () => void): () => void {
 
 /** Subscribes a component to every field of the shared novelai page state. */
 export function useNovelAiPageStore(): NovelAiPageState {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return useSyncExternalStore(subscribe, getNovelAiState, getNovelAiState);
 }
 
 export function setView(view: NovelAiView): void {
   if (state.view === view) return;
-  commit({ ...state, view });
+  commitNovelAiState({ ...state, view });
 }
 
 export function openPromptTagLibrary(): void {
-  setView("prompt-tags");
+  if (state.view === "prompt-tags" && state.promptTagSection === "list") return;
+  commitNovelAiState({ ...state, view: "prompt-tags", promptTagSection: "list" });
 }
 
 export function backToStudio(): void {
@@ -93,53 +115,47 @@ export function backToStudio(): void {
 
 export function setPromptTagSection(section: PromptTagWorkspaceSectionId): void {
   if (state.promptTagSection === section) return;
-  commit({ ...state, promptTagSection: section });
+  commitNovelAiState({ ...state, promptTagSection: section });
 }
 
-/** Used by the main page's content (`PromptTagLibraryPage`), which can also navigate back to "list" from a state where the sidebar isn't showing prompt-tags yet. */
+/** Used by the library page, which can also navigate back to "list" while the studio view is showing. */
 export function openPromptTagWorkspaceSection(section: PromptTagWorkspaceSectionId): void {
   if (section === "list") setView("prompt-tags");
   setPromptTagSection(section);
 }
 
-/** Relays the host's `activeRoleId` prop (only given to the page component) into the shared store so the Sidebar mount point can see it too. */
-export function setActiveRoleId(nextActiveRoleId: string): void {
-  if (state.activeRoleId === nextActiveRoleId) return;
-  commit({
+/**
+ * Applies a partial form edit. Switching the generation role also drops the
+ * previous role's failure and fresh result: they describe someone else's
+ * canvas.
+ */
+export function updateStudioForm(patch: Partial<ImageStudioFormState>): void {
+  const changed = (Object.keys(patch) as Array<keyof ImageStudioFormState>)
+    .some((key) => patch[key] !== state.form[key]);
+  if (!changed) return;
+  const form = { ...state.form, ...patch };
+  const roleChanged = form.roleId !== state.form.roleId;
+  commitNovelAiState({
     ...state,
-    activeRoleId: nextActiveRoleId,
-    error: "",
-    latestResult: null,
+    form,
+    ...(roleChanged ? { failure: null, latestResult: null, revealRecordId: "" } : {}),
   });
 }
 
-/**
- * The history record the preview pane should show: the explicitly selected
- * one, else the most recent. A pure selector rather than an expression in the
- * page's render body, per AGENTS.md's rule about derived view data.
- */
-export function selectActiveHistoryRecord(
-  history: NovelAiPageState["history"],
-  selectedRecordId: string,
-): NovelAiPageState["history"][number] | null {
-  return history.find((item) => item.id === selectedRecordId) ?? history[0] ?? null;
+export function selectRecord(recordId: string): void {
+  if (state.selectedRecordId === recordId && !state.failure) return;
+  commitNovelAiState({ ...state, selectedRecordId: recordId, failure: null });
 }
 
-/**
- * Drops the error banner without touching anything else.
- *
- * Submitting an emptied prompt uses this: the attempt that produced the error
- * has been abandoned, so the message should go with it rather than sit there
- * looking like a fresh failure.
- */
-export function clearError(): void {
-  if (!state.error) return;
-  commit({ ...state, error: "" });
+/** Dismisses the canvas failure (or drops it once the attempt that caused it is abandoned). */
+export function clearFailure(): void {
+  if (!state.failure) return;
+  commitNovelAiState({ ...state, failure: null });
 }
 
-/** Surfaces a failed host request at the plugin page boundary. */
-export function setPageError(error: unknown): void {
-  commit({ ...state, error: error instanceof Error ? error.message : String(error) });
+/** Surfaces a failed host request (roster loading) at the plugin page boundary. */
+export function reportPageError(error: unknown): void {
+  feedback.error("生图页面加载失败", { detail: errorMessage(error) });
 }
 
 let rolesInflight: Promise<void> | null = null;
@@ -150,7 +166,7 @@ export async function refreshRoles(host: PluginHostServices): Promise<void> {
   rolesInflight = (async () => {
     try {
       const roles = await host.listRoles();
-      commit({ ...state, roles, rolesLoaded: true });
+      commitNovelAiState({ ...state, roles, rolesLoaded: true });
     } finally {
       rolesInflight = null;
     }
@@ -160,73 +176,26 @@ export async function refreshRoles(host: PluginHostServices): Promise<void> {
 
 /**
  * The exact string the pre-migration `useNavigationHistory.openImageStudio`
- * passed to `setError` for this same check — kept verbatim now that a
- * refusal is shown again (owner decision: 拦住 + 给提示, not silent).
+ * used for this same check — kept verbatim (owner decision: 拦住 + 给提示);
+ * the host shows it as a warning toast.
  */
 const ZERO_ROLES_BLOCKED_REASON = "请先创建至少一个角色，再进入生图。";
 
 /**
  * Synchronous nav-rail guard (issue #226 gap B): refuses to navigate into
- * this page while zero roles exist, matching the pre-migration
- * `useNavigationHistory.openImageStudio` check and its message.
- * `selectBlockedReason` must return synchronously, so a role fetch already
- * in flight or just kicked off here cannot be awaited; before the roster
- * has ever loaded this fails *open* (returns `null`, permits navigation)
- * rather than closed, because the in-page empty state (`NovelAIPage`) is
- * kept as a safety net for exactly this race — silently letting a
- * zero-role user in once on a cold first click is a harmless one-time
- * flash of that empty state, not a real regression.
+ * this page while zero roles exist. `selectBlockedReason` must return
+ * synchronously, so before the roster has ever loaded this fails *open*
+ * (returns `null`) — the in-page empty state (`NovelAIPage`) is the safety
+ * net for exactly that race.
  */
 export function selectBlockedReasonForNovelAiPage(host: PluginHostServices): string | null {
-  void refreshRoles(host).catch((error: unknown) => {
-    commit({ ...state, error: error instanceof Error ? error.message : String(error) });
-  });
+  void refreshRoles(host).catch(reportPageError);
   if (!state.rolesLoaded || state.roles.length > 0) return null;
   return ZERO_ROLES_BLOCKED_REASON;
 }
 
-export async function loadHistory(client: PluginRpcClient, roleId: string): Promise<void> {
-  try {
-    const payload = await client.call<{ records: ImageHistoryRecord[] }>("history", {
-      role_id: roleId,
-      limit: 24,
-    });
-    const records = Array.isArray(payload.records) ? payload.records : [];
-    const selectedRecordId = records.some((record) => record.id === state.selectedRecordId)
-      ? state.selectedRecordId
-      : (records[0]?.id ?? "");
-    commit({ ...state, history: records, selectedRecordId });
-  } catch (loadError) {
-    commit({ ...state, error: loadError instanceof Error ? loadError.message : String(loadError) });
-  }
-}
-
-/** Submits a generation request already fully resolved by the Sidebar (model/mode/role id etc.), then refreshes history for the same role. */
-export async function submitGenerate(client: PluginRpcClient, payload: Record<string, unknown>): Promise<void> {
-  commit({ ...state, submitting: true, error: "" });
-  try {
-    const response = await client.call<{ result: ImageGenerateResult }>("generate", payload, { timeoutMs: novelAiGenerationTimeoutMs });
-    const result = response.result;
-    commit({ ...state, submitting: false, latestResult: result });
-    await loadHistory(client, String(payload.role_id ?? ""));
-    commit({ ...state, selectedRecordId: result.record_id });
-  } catch (submitError) {
-    commit({ ...state, submitting: false, error: submitError instanceof Error ? submitError.message : String(submitError) });
-  }
-}
-
-export function selectRecord(recordId: string): void {
-  if (state.selectedRecordId === recordId) return;
-  commit({ ...state, selectedRecordId: recordId });
-}
-
-/** Test-only: resets every module-level field so each test starts from a clean store. */
-export function resetNovelAiPageStoreForTests(): void {
-  state = initialState();
+/** Test-only: resets every module-level field (optionally seeding some) so each test starts clean. */
+export function resetNovelAiPageStoreForTests(seed: Partial<NovelAiPageState> = {}): void {
+  state = { ...initialState(), ...seed };
   rolesInflight = null;
-}
-
-/** Test-only: a synchronous read outside React, for assertions between store calls. */
-export function __getSnapshotForTests(): NovelAiPageState {
-  return state;
 }

@@ -114,6 +114,7 @@ def test_plugin_registers_tool_and_rpc_and_both_disappear_on_unload(
         "plugin.novelai.generate",
         "plugin.novelai.regenerateMessageMedia",
         "plugin.novelai.history",
+        "plugin.novelai.status",
         "plugin.novelai.prompt_tags.list",
         "plugin.novelai.prompt_tags.upsert",
         "plugin.novelai.prompt_tags.delete",

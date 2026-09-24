@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from agent.plugin_host.bridge_events import PluginRpcError
+from plugins.novelai.backend.failures import NovelAINotConfiguredError, token_readiness
 from plugins.novelai.backend.models import GenerateImageResult, GeneratedImageRecord
 from plugins.novelai.backend.prompt_tags import PromptTagStore
 from plugins.novelai.backend.rpc import NovelAIRpcHandlers
@@ -309,3 +311,40 @@ async def test_prompt_tags_crud_round_trips_through_the_store(tmp_path: Path) ->
     assert deleted == {}
     listed_after_delete = await handlers.prompt_tags_list({})
     assert listed_after_delete["entries"] == []
+
+
+@pytest.mark.asyncio
+async def test_generate_reports_missing_token_with_a_stable_code(
+    tmp_path: Path,
+) -> None:
+    novelai_service = SimpleNamespace(
+        generate=AsyncMock(
+            side_effect=NovelAINotConfiguredError(
+                "NovelAI token 引用的环境变量 NOVELAI_TOKEN 未设置"
+            )
+        )
+    )
+    handlers = _handlers(tmp_path=tmp_path, novelai_service=novelai_service)
+
+    with pytest.raises(PluginRpcError) as caught:
+        await handlers.generate({"role_id": "mira", "prompt": "portrait"})
+
+    assert caught.value.code == "novelai_not_configured"
+    assert "NOVELAI_TOKEN" in str(caught.value)
+
+
+@pytest.mark.asyncio
+async def test_status_reports_token_readiness_without_calling_upstream(
+    tmp_path: Path,
+) -> None:
+    novelai_service = SimpleNamespace(
+        token_readiness=lambda: token_readiness("${NOVELAI_TOKEN}"),
+        generate=AsyncMock(),
+    )
+    handlers = _handlers(tmp_path=tmp_path, novelai_service=novelai_service)
+
+    payload = await handlers.status({})
+
+    assert payload["configured"] is False
+    assert payload["reason"] == "placeholder"
+    novelai_service.generate.assert_not_awaited()
