@@ -5,6 +5,7 @@ from typing import Any
 
 
 from .chat_requests import DesktopChatRequestHandler
+from .model_connection_probe import probe_model_connection
 from .plugin_requests import DesktopPluginRequestHandler
 from .role_requests import DesktopRoleRequestHandler
 from .session_task_requests import DesktopSessionTaskRequestHandler
@@ -41,6 +42,9 @@ class DesktopBridgeRequestRouter:
     ) -> dict[str, Any] | None:
         if method == "health":
             return {"ok": True}
+        if method == "models.test":
+            # Stateless: probes the unsaved draft without touching runtime state.
+            return await probe_model_connection(payload)
         plugin_result = await self._plugins.handle(method, payload)
         if plugin_result is not None:
             return plugin_result

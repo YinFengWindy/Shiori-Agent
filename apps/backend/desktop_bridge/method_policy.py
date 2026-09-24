@@ -130,6 +130,9 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
         admission_exempt=True,
         handler=Handler.PLUGIN_MANAGEMENT,
     ),
+    # A network probe of an unsaved draft: it must not hold the serial
+    # mutation lane (or a read slot) for up to its 20s deadline.
+    "models.test": MethodPolicy(concurrency=Concurrency.INTEGRATION),
     "roles.tasks.list": MethodPolicy(
         concurrency=Concurrency.READ_ONLY,
         admission_exempt=True,
