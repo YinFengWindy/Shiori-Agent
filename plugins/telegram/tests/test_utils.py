@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from unittest.mock import AsyncMock
 
-from infra.channels.telegram_utils import (
+from plugins.telegram.backend.utils import (
     TelegramLiveEditQueue,
     TelegramLiveTextMessage,
     TelegramOutboundLimiter,
@@ -14,6 +14,12 @@ from infra.channels.telegram_utils import (
     send_markdown,
     send_stream_markdown,
     send_thinking_block,
+)
+
+# 独立运行时用的是真实 python-telegram-bot（宿主测试树会换成桩）；22.2 起
+# 以秒数构造或读取 RetryAfter.retry_after 会发弃用警告，-W error 会把它变成失败。
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*attribute `retry_after` will be of type:DeprecationWarning"
 )
 
 
@@ -57,7 +63,7 @@ async def test_send_markdown_splits_long_code_block_into_multiple_messages():
 
 @pytest.mark.asyncio
 async def test_outbound_limiter_retries_after_cooling_down(monkeypatch):
-    from infra.channels import telegram_utils as mod
+    import plugins.telegram.backend.utils as mod
 
     limiter = TelegramOutboundLimiter(
         send_interval_s=2.0,
@@ -66,7 +72,7 @@ async def test_outbound_limiter_retries_after_cooling_down(monkeypatch):
         max_attempts=2,
     )
     sleep_mock = AsyncMock()
-    monkeypatch.setattr("infra.channels.telegram_utils.asyncio.sleep", sleep_mock)
+    monkeypatch.setattr("plugins.telegram.backend.utils.asyncio.sleep", sleep_mock)
     calls = 0
 
     async def action():
@@ -93,7 +99,7 @@ async def test_outbound_limiter_typing_does_not_delay_send(monkeypatch):
         global_interval_s=0.0,
     )
     sleep_mock = AsyncMock()
-    monkeypatch.setattr("infra.channels.telegram_utils.asyncio.sleep", sleep_mock)
+    monkeypatch.setattr("plugins.telegram.backend.utils.asyncio.sleep", sleep_mock)
 
     await limiter.run(
         123, kind="typing", label="typing", action=AsyncMock(return_value=True)
@@ -141,14 +147,14 @@ async def test_outbound_limiter_global_slot_covers_action():
 
 @pytest.mark.asyncio
 async def test_outbound_limiter_typing_retry_after_sets_cooldown(monkeypatch):
-    from infra.channels import telegram_utils as mod
+    import plugins.telegram.backend.utils as mod
 
     limiter = TelegramOutboundLimiter(
         typing_interval_s=8.0,
         retry_padding_s=1.0,
     )
     sleep_mock = AsyncMock()
-    monkeypatch.setattr("infra.channels.telegram_utils.asyncio.sleep", sleep_mock)
+    monkeypatch.setattr("plugins.telegram.backend.utils.asyncio.sleep", sleep_mock)
 
     with pytest.raises(mod.RetryAfter):
         await limiter.run(
@@ -166,7 +172,7 @@ async def test_outbound_limiter_typing_retry_after_sets_cooldown(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_send_markdown_does_not_fallback_when_send_fails(monkeypatch):
-    from infra.channels import telegram_utils as mod
+    import plugins.telegram.backend.utils as mod
 
     bot = BotStub()
     bot.send_message = AsyncMock(side_effect=mod.TimedOut("x"))
@@ -185,7 +191,7 @@ async def test_send_markdown_falls_back_to_plain_text(monkeypatch):
         raise TypeError("boom")
 
     monkeypatch.setattr(
-        "infra.channels.telegram_utils.convert_with_segments",
+        "plugins.telegram.backend.utils.convert_with_segments",
         fake_convert_with_segments,
     )
 
@@ -245,7 +251,8 @@ async def test_send_stream_markdown_falls_back_to_markdown_on_stream_failure():
     bot = BotStub()
     bot.edit_message_text = AsyncMock(side_effect=RuntimeError("boom"))
 
-    text = "hello world " * 30
+    # 不带尾随空白：真实 telegramify-markdown 会去掉它，宿主桩不会。
+    text = " ".join(["hello world"] * 30)
     await send_stream_markdown(cast(Any, bot), 123, text)
 
     assert len(bot.messages) == 2
@@ -292,7 +299,7 @@ async def test_stream_message_skips_duplicate_truncated_preview():
 @pytest.mark.asyncio
 async def test_stream_message_retry_after_enters_cooldown_without_blocking(monkeypatch):
     bot = BotStub()
-    from infra.channels import telegram_utils as mod
+    import plugins.telegram.backend.utils as mod
 
     values = [10.0, 20.0, 30.0, 70.0, 80.0]
 
@@ -310,9 +317,9 @@ async def test_stream_message_retry_after_enters_cooldown_without_blocking(monke
 
     bot.edit_message_text = limited_edit_message_text
     sleep_mock = AsyncMock()
-    monkeypatch.setattr("infra.channels.telegram_utils.asyncio.sleep", sleep_mock)
+    monkeypatch.setattr("plugins.telegram.backend.utils.asyncio.sleep", sleep_mock)
     monkeypatch.setattr(
-        "infra.channels.telegram_utils.asyncio.get_running_loop",
+        "plugins.telegram.backend.utils.asyncio.get_running_loop",
         lambda: _Loop(),
     )
 
@@ -330,7 +337,7 @@ async def test_stream_message_retry_after_enters_cooldown_without_blocking(monke
 
 @pytest.mark.asyncio
 async def test_live_edit_queue_backoff_and_force_retry(monkeypatch):
-    from infra.channels import telegram_utils as mod
+    import plugins.telegram.backend.utils as mod
 
     class _Loop:
         def __init__(self):
@@ -343,9 +350,9 @@ async def test_live_edit_queue_backoff_and_force_retry(monkeypatch):
     bot = BotStub()
     sleep_mock = AsyncMock()
     loop = _Loop()
-    monkeypatch.setattr("infra.channels.telegram_utils.asyncio.sleep", sleep_mock)
+    monkeypatch.setattr("plugins.telegram.backend.utils.asyncio.sleep", sleep_mock)
     monkeypatch.setattr(
-        "infra.channels.telegram_utils.asyncio.get_running_loop",
+        "plugins.telegram.backend.utils.asyncio.get_running_loop",
         lambda: loop,
     )
     queue = TelegramLiveEditQueue(min_interval_s=1.0)
@@ -373,12 +380,12 @@ async def test_live_edit_queue_backoff_and_force_retry(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_live_edit_queue_with_limiter_skips_retry_after_frame(monkeypatch):
-    from infra.channels import telegram_utils as mod
+    import plugins.telegram.backend.utils as mod
 
     bot = BotStub()
     bot.edit_message_text = AsyncMock(side_effect=mod.RetryAfter(cast(Any, 8.0)))
     sleep_mock = AsyncMock()
-    monkeypatch.setattr("infra.channels.telegram_utils.asyncio.sleep", sleep_mock)
+    monkeypatch.setattr("plugins.telegram.backend.utils.asyncio.sleep", sleep_mock)
     limiter = TelegramOutboundLimiter(
         send_interval_s=0.0,
         edit_interval_s=0.0,

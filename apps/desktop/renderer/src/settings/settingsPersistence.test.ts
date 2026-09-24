@@ -18,7 +18,6 @@ function createSettingsFormData(
       registrations: overrides.registrations ?? [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "gpt-main", apiKey: "", baseUrl: "", effort: "none" }],
     },
     channels: {
-      telegramToken: "",
       qqBotUin: "",
     },
     memory: {
@@ -109,7 +108,7 @@ describe("saveSettingsPageData", () => {
 
     assert.deepEqual(calls, ["saveSettings", "readSettings"]);
     assert.equal(result.snapshot?.formData.models.registrations[0]?.model, "saved-model");
-    assert.equal(result.nextDraft.channels.telegramToken, "");
+    assert.equal(result.nextDraft.memory.engine, "default");
   });
 
   it("commits deferred role reference changes in the same settings request", async () => {
@@ -134,7 +133,7 @@ describe("saveSettingsPageData", () => {
   it("keeps the entire draft and bindings when apply fails without reading stale settings", async () => {
     const draft = createSettingsFormData();
     draft.pendingRoleModelUpdates = [{ roleId: "role-1", runtimeConfig: { dialogue_model_registration_id: "registration-2" } }];
-    draft.channels.telegramToken = "unsaved-token";
+    draft.memory.engine = "unsaved-engine";
     const result = await saveSettingsPageData({
       saveSettings: async () => ({
         ok: false,

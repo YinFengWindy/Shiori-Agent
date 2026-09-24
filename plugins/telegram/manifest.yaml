@@ -1,0 +1,14 @@
+api: 2
+id: telegram
+display_name: Telegram
+version: '0.1.0'
+desc: Telegram Bot 渠道
+capabilities:
+  - config
+  - channels
+config_model: TelegramConfigModel
+channels:
+  - name: telegram
+    label: Telegram
+    contact_label: Telegram 用户 ID 或用户名
+    chat_id_label: 会话 / 群组 ID

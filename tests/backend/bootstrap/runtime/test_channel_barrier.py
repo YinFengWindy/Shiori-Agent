@@ -1,21 +1,40 @@
 import asyncio
 import sys
 from dataclasses import replace
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import Mock
 
 import pytest
 
-from agent.config_models import ChannelsConfig, Config, TelegramChannelConfig
+from agent.config_models import Config
 from bootstrap.app import AppRuntime, RuntimeFeatures
 from bus.events import OutboundMessage
 from core.common.runtime_scope import bind_runtime
 
+# 渠道插件：token 即账号，换 token 就是换账号；Transport 由测试注入，便于记录发送。
+_TRANSPORT_MODULE = "_channel_barrier_transport"
+_PLUGIN_PY = f"""
+import sys
 
-def _install_transport(monkeypatch, sent):
+
+async def setup(ctx):
+    token = ctx.config.as_dict().get("token")
+    if token:
+        ctx.channels.add(sys.modules["{_TRANSPORT_MODULE}"].Transport(token=token))
+""".strip()
+
+
+def _config(account: str) -> dict[str, dict[str, object]]:
+    return {"barrier": {"token": account}}
+
+
+def _install_transport(monkeypatch, sent, tmp_path: Path):
     class Transport:
-        def __init__(self, *, token, channel_name, **kwargs):
-            self.token, self.name = token, channel_name
+        name = "fake"
+
+        def __init__(self, *, token):
+            self.token = token
             self.running = False
             self.paused = False
 
@@ -44,10 +63,19 @@ def _install_transport(monkeypatch, sent):
         def resume_intake(self):
             self.paused = False
 
-    module = ModuleType("infra.channels.telegram_channel")
-    module.TelegramChannel = Transport
-    monkeypatch.setitem(sys.modules, "infra.channels.telegram_channel", module)
-    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])
+    module = ModuleType(_TRANSPORT_MODULE)
+    module.Transport = Transport
+    monkeypatch.setitem(sys.modules, _TRANSPORT_MODULE, module)
+    root = tmp_path / "plugin_dirs"
+    package = root / "barrier"
+    (package / "backend").mkdir(parents=True)
+    (package / "backend" / "plugin.py").write_text(_PLUGIN_PY, encoding="utf-8")
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: barrier\ncapabilities: [config, channels]\nchannels:\n"
+        "  - {name: fake, label: Fake}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [root])
 
 
 def _install_background_work(monkeypatch):
@@ -82,7 +110,7 @@ def _install_background_work(monkeypatch):
 
 
 async def _prepare_account_switch(tmp_path, monkeypatch):
-    _install_transport(monkeypatch, [])
+    _install_transport(monkeypatch, [], tmp_path)
     loops = _install_background_work(monkeypatch)
     config = Config(
         provider="",
@@ -90,16 +118,12 @@ async def _prepare_account_switch(tmp_path, monkeypatch):
         api_key="",
         model_registrations=[],
         memory_optimizer_enabled=False,
-        channels=ChannelsConfig(telegram=TelegramChannelConfig("account-A")),
+        plugins=_config("account-A"),
     )
     app = AppRuntime(config, tmp_path, features=RuntimeFeatures(enable_proactive=False))
     await app.start()
     await asyncio.wait_for(loops[0].started.wait(), 1)
-    candidate = await app.prepare(
-        replace(
-            config, channels=ChannelsConfig(telegram=TelegramChannelConfig("account-B"))
-        )
-    )
+    candidate = await app.prepare(replace(config, plugins=_config("account-B")))
     return app, candidate, loops
 
 
@@ -108,23 +132,19 @@ async def test_credential_change_drains_old_direct_and_queued_replies_before_swi
     tmp_path, monkeypatch
 ):
     sent = []
-    _install_transport(monkeypatch, sent)
+    _install_transport(monkeypatch, sent, tmp_path)
     config = Config(
         provider="",
         model="",
         api_key="",
         model_registrations=[],
         memory_optimizer_enabled=False,
-        channels=ChannelsConfig(telegram=TelegramChannelConfig("account-A")),
+        plugins=_config("account-A"),
     )
     app = AppRuntime(config, tmp_path, features=RuntimeFeatures(enable_proactive=False))
     await app.start()
     accepted = app.acquire()
-    candidate = await app.prepare(
-        replace(
-            config, channels=ChannelsConfig(telegram=TelegramChannelConfig("account-B"))
-        )
-    )
+    candidate = await app.prepare(replace(config, plugins=_config("account-B")))
     publish = asyncio.create_task(app.publish(candidate))
     try:
         for _ in range(10):
@@ -136,10 +156,10 @@ async def test_credential_change_drains_old_direct_and_queued_replies_before_swi
         assert not publish.done()
         with bind_runtime(accepted):
             await accepted.core.push_tool.execute(
-                channel="telegram", chat_id="chat", message="direct old"
+                channel="fake", chat_id="chat", message="direct old"
             )
             await accepted.core.bus.publish_outbound(
-                OutboundMessage("telegram", "chat", "queued old")
+                OutboundMessage("fake", "chat", "queued old")
             )
         await accepted.release()
         await asyncio.wait_for(publish, 3)
@@ -150,7 +170,7 @@ async def test_credential_change_drains_old_direct_and_queued_replies_before_swi
         async with app.acquire() as fresh:
             with bind_runtime(fresh):
                 await fresh.core.push_tool.execute(
-                    channel="telegram", chat_id="chat", message="new"
+                    channel="fake", chat_id="chat", message="new"
                 )
         assert sent[-1] == ("account-B", "new")
     finally:
@@ -164,22 +184,18 @@ async def test_channel_commit_failure_restores_old_transport_and_admission(
     tmp_path, monkeypatch
 ):
     sent = []
-    _install_transport(monkeypatch, sent)
+    _install_transport(monkeypatch, sent, tmp_path)
     config = Config(
         provider="",
         model="",
         api_key="",
         model_registrations=[],
         memory_optimizer_enabled=False,
-        channels=ChannelsConfig(telegram=TelegramChannelConfig("account-A")),
+        plugins=_config("account-A"),
     )
     app = AppRuntime(config, tmp_path, features=RuntimeFeatures(enable_proactive=False))
     await app.start()
-    candidate = await app.prepare(
-        replace(
-            config, channels=ChannelsConfig(telegram=TelegramChannelConfig("account-B"))
-        )
-    )
+    candidate = await app.prepare(replace(config, plugins=_config("account-B")))
 
     def fail():
         raise OSError("commit failed")
@@ -189,9 +205,7 @@ async def test_channel_commit_failure_restores_old_transport_and_admission(
             await app.publish(candidate, commit=fail)
         await app.discard(candidate)
         assert app.generation == 1 and app._generation_manager.admission.is_set()
-        await app.push_tool.execute(
-            channel="telegram", chat_id="chat", message="still A"
-        )
+        await app.push_tool.execute(channel="fake", chat_id="chat", message="still A")
         assert sent == [("account-A", "still A")]
     finally:
         await app.shutdown()

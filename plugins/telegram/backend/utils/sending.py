@@ -9,7 +9,7 @@ from telegramify_markdown.entity import MessageEntity, split_entities
 from .limiter import TelegramOutboundLimiter, _run_outbound
 from .streaming import TelegramStreamMessage, _iter_stream_chunks
 
-logger = logging.getLogger("infra.channels.telegram_utils")
+logger = logging.getLogger("plugins.telegram.utils")
 
 
 def _serialize_entities(entities: list[MessageEntity]) -> list[dict] | None:

@@ -23,14 +23,14 @@ from core.channels import ChannelHub
 from infra.channels.base import AttachmentStore, MessageDeduper, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
-from infra.channels.telegram_utils import (
+from session.manager import SessionManager
+
+from ..utils import (
     TelegramLiveEditQueue,
     TelegramLiveTextMessage,
     TelegramOutboundLimiter,
     TelegramStreamMessage,
 )
-from session.manager import SessionManager
-
 from .commands import _CommandMixin
 from .formatting import (
     _CHANNEL,
@@ -44,7 +44,7 @@ from .media import _MediaMixin
 from .outbound import _OutboundMixin
 from .streaming import _StreamingMixin
 
-logger = logging.getLogger("infra.channels.telegram_channel")
+logger = logging.getLogger("plugins.telegram.channel")
 
 
 class TelegramChannel(
@@ -59,39 +59,34 @@ class TelegramChannel(
     # Inbound handlers always annotate chat_type; this only covers omissions.
     default_chat_type = "private"
 
+    name = _CHANNEL
+
     def __init__(
         self,
         token: str,
-        bus: MessageBus,
-        session_manager: SessionManager,
+        bus: MessageBus | None = None,
+        session_manager: SessionManager | None = None,
         allow_from: list[str] | None = None,
         bot_commands: list[tuple[str, str]] | None = None,
         event_bus: EventBus | None = None,
         interrupt_controller: InterruptController | None = None,
-        channel_name: str = _CHANNEL,
         channel_hub: "ChannelHub | None" = None,
     ) -> None:
-        self._bus = bus
-        self._session_manager = session_manager
+        # bus / session_manager 在宿主里由 start(ctx) 注入；构造参数只留给
+        # 不经 ChannelHost 直接驱动渠道的测试。
+        self._token = token
+        self._bus: MessageBus | None = bus
         self._interrupt_controller = interrupt_controller
-        self._channel = channel_name
-        self.name = channel_name
+        self._channel = _CHANNEL
         self._allow_from: set[str] = set(allow_from) if allow_from else set()
         self._message_deduper = MessageDeduper(_SEEN_MSG_MAXSIZE)
-        ws = getattr(session_manager, "workspace", None)
-        self._attachments = AttachmentStore(Path(ws) / "uploads" if ws else None)
         self._channel_hub = channel_hub
-        if self._channel_hub is None and ws:
-            self._channel_hub = ChannelHub.from_workspace(
-                Path(ws),
-                session_manager=session_manager,
-            )
-        self._identity_index = SessionIdentityIndex(
-            session_manager,
-            channel=channel_name,
-            metadata_key="username",
-            normalizer=lambda value: value.lower(),
-        )
+        self._session_manager: SessionManager | None = None
+        self._attachments = AttachmentStore()
+        self._identity_index: SessionIdentityIndex | None = None
+        self.user_map: dict[str, str] = {}
+        if session_manager is not None:
+            self._bind_session_manager(session_manager)
         self._app = Application.builder().token(token).build()
         self._bot_commands = bot_commands or []
         self._app.add_handler(CommandHandler("stop", self._on_stop_command))
@@ -116,7 +111,6 @@ class TelegramChannel(
             EventBinding(ToolCallStarted, self._on_tool_call_started),
             EventBinding(ToolCallCompleted, self._on_tool_call_completed),
         )
-        self.user_map = self._identity_index.mapping
         self._polling_conflict_task: asyncio.Task[None] | None = None
         self._telegram_outbound_limiter = TelegramOutboundLimiter()
         self._active_streams: dict[str, TelegramStreamMessage] = {}
@@ -144,6 +138,15 @@ class TelegramChannel(
         """Forbids Markdown tables, which Telegram mobile cannot render."""
         return _RENDERING_PROMPT
 
+    @property
+    def configuration_key(self) -> tuple[str, str]:
+        """Reuses the polling connection across generations while the token holds.
+
+        The host adds the bot command list to this key, so changed commands
+        rebuild the connection just like a changed token.
+        """
+        return ("telegram", self._token)
+
     async def start(self, ctx: ChannelContext | None = None) -> None:
         self._intake.start(paused=ctx.intake_paused if ctx is not None else False)
         if ctx is not None:
@@ -151,6 +154,12 @@ class TelegramChannel(
             self._event_bus = ctx.event_bus
             self._interrupt_controller = ctx.interrupt_controller
             self._push_tool = ctx.push_tool
+            # 启动时的命令列表随连接固定；命令变化由宿主的复用键触发重建。
+            self._bot_commands = list(ctx.bot_commands)
+            if ctx.channel_hub is not None:
+                self._channel_hub = ctx.channel_hub
+            if self._session_manager is not ctx.session_manager:
+                self._bind_session_manager(ctx.session_manager)
             ctx.push_tool.register_channel(
                 self.name,
                 text=self.send,
@@ -173,9 +182,37 @@ class TelegramChannel(
         )
         logger.info(f"TelegramChannel 已启动  已知用户: {len(self.user_map)}")
 
+    def _bind_session_manager(self, session_manager: SessionManager) -> None:
+        """Binds workspace-backed state: uploads, username index and fallback hub."""
+        self._session_manager = session_manager
+        ws = getattr(session_manager, "workspace", None)
+        self._attachments = AttachmentStore(Path(ws) / "uploads" if ws else None)
+        if self._channel_hub is None and ws:
+            self._channel_hub = ChannelHub.from_workspace(
+                Path(ws),
+                session_manager=session_manager,
+            )
+        self._identity_index = SessionIdentityIndex(
+            session_manager,
+            channel=self._channel,
+            metadata_key="username",
+            normalizer=lambda value: value.lower(),
+        )
+        self.user_map = self._identity_index.mapping
+
+    def _require_bus(self) -> MessageBus:
+        if self._bus is None:
+            raise RuntimeError("TelegramChannel 尚未启动")
+        return self._bus
+
+    def _require_identity_index(self) -> SessionIdentityIndex:
+        if self._identity_index is None:
+            raise RuntimeError("TelegramChannel 尚未绑定会话")
+        return self._identity_index
+
     def _bind_runtime(self) -> None:
         if not self._outbound_bound:
-            self._bus.subscribe_outbound(self._channel, self._on_response)
+            self._require_bus().subscribe_outbound(self._channel, self._on_response)
             self._outbound_bound = True
         if self._event_bus is not None and not self._events_bound:
             for binding in self._event_bindings:
@@ -200,7 +237,7 @@ class TelegramChannel(
 
     def _unbind_runtime(self) -> None:
         if self._outbound_bound:
-            self._bus.unsubscribe_outbound(self._channel, self._on_response)
+            self._require_bus().unsubscribe_outbound(self._channel, self._on_response)
             self._outbound_bound = False
         if self._event_bus is not None and self._events_bound:
             for binding in self._event_bindings:
@@ -227,7 +264,7 @@ class TelegramChannel(
 
     def _rebuild_user_map(self) -> None:
         """扫描已有 session 文件，从 metadata 重建 username → chat_id 索引。"""
-        self._identity_index.rebuild()
+        self._require_identity_index().rebuild()
         logger.debug(f"[telegram] user_map 重建完成: {self.user_map}")
 
     def _is_allowed(self, user) -> bool:
@@ -251,4 +288,4 @@ class TelegramChannel(
 
     async def _remember_username(self, chat_id: str, username: str | None) -> None:
         if username:
-            await self._identity_index.remember(username, chat_id)
+            await self._require_identity_index().remember(username, chat_id)

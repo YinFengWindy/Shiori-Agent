@@ -14,6 +14,7 @@ from desktop_bridge.runtime.service import ReloadableDesktopService
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 _QQBOT_PLUGIN_DIR = _REPOSITORY_ROOT / "plugins" / "qqbot"
+_TELEGRAM_PLUGIN_DIR = _REPOSITORY_ROOT / "plugins" / "telegram"
 
 # 不联网的渠道插件：配置 fail = true 时启动失败，用来覆盖 active/failed。
 _FAKE_CHANNEL_PLUGIN_PY = """
@@ -67,6 +68,7 @@ async def _list_channels(
 ) -> dict[str, dict]:
     root = tmp_path / "plugin_dirs"
     shutil.copytree(_QQBOT_PLUGIN_DIR, root / "qqbot")
+    shutil.copytree(_TELEGRAM_PLUGIN_DIR, root / "telegram")
     for plugin_id in fake_plugins:
         _write_fake_channel_plugin(root, plugin_id)
     monkeypatch.setattr(
@@ -103,9 +105,13 @@ async def _list_channels(
 @pytest.mark.asyncio
 async def test_lists_desktop_builtins_and_unconfigured_qqbot(tmp_path, monkeypatch):
     rows = await _list_channels(tmp_path, monkeypatch)
-    assert list(rows) == ["desktop", "telegram", "qq", "qqbot"]
+    assert list(rows) == ["desktop", "qq", "qqbot", "telegram"]
     assert rows["desktop"]["state"] == "active"
-    assert rows["telegram"]["plugin_id"] is None
+    assert rows["qq"]["plugin_id"] is None
+    assert rows["qq"]["state"] == "not_configured"
+    # Telegram 已迁为插件：同名渠道由插件声明提供，不再有内置行（#363 T4）。
+    assert rows["telegram"]["plugin_id"] == "telegram"
+    assert rows["telegram"]["label"] == "Telegram"
     assert rows["telegram"]["state"] == "not_configured"
     assert rows["qqbot"] == {
         "name": "qqbot",
@@ -128,6 +134,15 @@ async def test_disabled_plugin_channel_stays_listed(tmp_path, monkeypatch):
     )
     assert rows["qqbot"]["plugin_enabled"] is False
     assert rows["qqbot"]["state"] == "plugin_disabled"
+
+
+@pytest.mark.asyncio
+async def test_disabled_telegram_plugin_keeps_its_channel_listed(tmp_path, monkeypatch):
+    rows = await _list_channels(
+        tmp_path, monkeypatch, "[plugins.telegram]\nenabled = false\n"
+    )
+    assert rows["telegram"]["plugin_id"] == "telegram"
+    assert rows["telegram"]["state"] == "plugin_disabled"
 
 
 @pytest.mark.asyncio

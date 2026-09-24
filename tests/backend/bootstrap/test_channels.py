@@ -6,12 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from agent.config_models import (
-    ChannelsConfig,
-    Config,
-    QQChannelConfig,
-    TelegramChannelConfig,
-)
+from agent.config_models import ChannelsConfig, Config, QQChannelConfig
 from agent.tools.message_push import MessagePushTool
 from bootstrap.channels import start_channels
 from bus.event_bus import EventBus
@@ -27,22 +22,23 @@ async def test_preparation_reuses_unchanged_connection_without_starting_traffic(
 ):
     created = []
 
-    class Telegram:
+    class QQ:
+        name = "qq"
+
         def __init__(self, **kwargs):
-            self.name = kwargs["channel_name"]
             self.start = AsyncMock()
             self.stop = AsyncMock()
             self.resume_intake = Mock()
             created.append(self)
 
-    module = ModuleType("infra.channels.telegram_channel")
-    module.TelegramChannel = Telegram
-    monkeypatch.setitem(sys.modules, "infra.channels.telegram_channel", module)
+    module = ModuleType("infra.channels.qq_channel")
+    module.QQChannel = QQ
+    monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", module)
     config = Config(
         provider="",
         model="",
         api_key="",
-        channels=ChannelsConfig(telegram=TelegramChannelConfig(token="token")),
+        channels=ChannelsConfig(qq=QQChannelConfig(bot_uin="10001")),
     )
     resources = SharedHttpResources()
     context = dict(
@@ -69,18 +65,18 @@ async def test_preparation_reuses_unchanged_connection_without_starting_traffic(
 
 @pytest.mark.asyncio
 async def test_strict_preparation_surfaces_constructor_failure(tmp_path, monkeypatch):
-    class Telegram:
+    class QQ:
         def __init__(self, **kwargs):
             raise ValueError("bad token format")
 
-    module = ModuleType("infra.channels.telegram_channel")
-    module.TelegramChannel = Telegram
-    monkeypatch.setitem(sys.modules, "infra.channels.telegram_channel", module)
+    module = ModuleType("infra.channels.qq_channel")
+    module.QQChannel = QQ
+    monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", module)
     config = Config(
         provider="",
         model="",
         api_key="",
-        channels=ChannelsConfig(telegram=TelegramChannelConfig(token="bad")),
+        channels=ChannelsConfig(qq=QQChannelConfig(bot_uin="10001")),
     )
     resources = SharedHttpResources()
     try:
@@ -181,42 +177,13 @@ async def test_changed_bot_commands_rebuild_plugin_connection(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
+async def test_start_channels_wires_builtin_qq_and_plugin_channels(
+    monkeypatch, tmp_path
+):
     starts: list[str] = []
     registrations: list[tuple[str, list[str]]] = []
 
-    fake_telegram_channel = types.ModuleType("infra.channels.telegram_channel")
     fake_qq_channel = types.ModuleType("infra.channels.qq_channel")
-
-    class _TelegramChannel:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-            self.name = kwargs.get("channel_name", "telegram")
-
-        async def start(self, ctx) -> None:
-            starts.append("telegram")
-            ctx.push_tool.register_channel(
-                self.name,
-                text=self.send,
-                stream_text=self.send_stream,
-                file=self.send_file,
-                image=self.send_image,
-            )
-
-        async def stop(self) -> None:
-            starts.append("telegram.stop")
-
-        async def send(self, *args, **kwargs):
-            return None
-
-        async def send_stream(self, *args, **kwargs):
-            return None
-
-        async def send_file(self, *args, **kwargs):
-            return None
-
-        async def send_image(self, *args, **kwargs):
-            return None
 
     class _QQChannel:
         name = "qq"
@@ -270,11 +237,7 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
         async def send_stream(self, *args, **kwargs):
             return None
 
-    fake_telegram_channel.TelegramChannel = _TelegramChannel  # type: ignore[attr-defined]
     fake_qq_channel.QQChannel = _QQChannel  # type: ignore[attr-defined]
-    monkeypatch.setitem(
-        sys.modules, "infra.channels.telegram_channel", fake_telegram_channel
-    )
     monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", fake_qq_channel)
 
     class _PushTool(MessagePushTool):
@@ -285,10 +248,7 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
         provider="openai",
         model="m",
         api_key="k",
-        channels=ChannelsConfig(
-            telegram=TelegramChannelConfig(token="tg-token"),
-            qq=QQChannelConfig(bot_uin="10001"),
-        ),
+        channels=ChannelsConfig(qq=QQChannelConfig(bot_uin="10001")),
     )
     resources = SharedHttpResources()
     event_bus = EventBus()
@@ -310,42 +270,30 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
     finally:
         await resources.aclose()
 
-    tg, qq, qqbot = host.channels
-    assert starts == ["telegram", "qq", "qqbot"]
+    qq, qqbot = host.channels
+    assert starts == ["qq", "qqbot"]
     assert registrations == [
-        ("telegram", ["file", "image", "stream_text", "text"]),
         ("qq", ["file", "image", "text"]),
         ("qqbot", ["stream_text", "text"]),
     ]
-    assert tg.kwargs["event_bus"] is event_bus
-    assert tg.kwargs["interrupt_controller"] is controller
-    assert tg.kwargs["channel_hub"] is qq.kwargs["channel_hub"]
-    assert tg.kwargs["channel_hub"] is not None
+    assert qq.kwargs["event_bus"] is event_bus
     assert qq.kwargs["interrupt_controller"] is controller
+    assert qq.kwargs["channel_hub"] is not None
     assert qqbot.kwargs["event_bus"] is event_bus
-    assert qqbot.context_hub is tg.kwargs["channel_hub"]
+    assert qqbot.context_hub is qq.kwargs["channel_hub"]
 
 
 @pytest.mark.asyncio
 async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_path):
     starts: list[str] = []
 
-    fake_telegram_channel = types.ModuleType("infra.channels.telegram_channel")
     fake_qq_channel = types.ModuleType("infra.channels.qq_channel")
-
-    class _TelegramChannel:
-        async def start(self) -> None:
-            starts.append("telegram")
 
     class _QQChannel:
         async def start(self) -> None:
             starts.append("qq")
 
-    fake_telegram_channel.TelegramChannel = _TelegramChannel  # type: ignore[attr-defined]
     fake_qq_channel.QQChannel = _QQChannel  # type: ignore[attr-defined]
-    monkeypatch.setitem(
-        sys.modules, "infra.channels.telegram_channel", fake_telegram_channel
-    )
     monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", fake_qq_channel)
 
     class _PushTool(MessagePushTool):
@@ -356,10 +304,7 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
         provider="openai",
         model="m",
         api_key="k",
-        channels=ChannelsConfig(
-            telegram=None,
-            qq=None,
-        ),
+        channels=ChannelsConfig(qq=None),
     )
     resources = SharedHttpResources()
     try:
@@ -380,34 +325,20 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
 
 @pytest.mark.asyncio
 async def test_start_channels_skips_channel_constructor_failures(monkeypatch):
-    fake_telegram_channel = types.ModuleType("infra.channels.telegram_channel")
     fake_qq_channel = types.ModuleType("infra.channels.qq_channel")
 
-    class _TelegramChannel:
-        def __init__(self, **kwargs):
-            raise ValueError("invalid telegram configuration")
-
     class _QQChannel:
-        name = "qq"
-
         def __init__(self, **kwargs):
-            pass
+            raise ValueError("invalid qq configuration")
 
-    fake_telegram_channel.TelegramChannel = _TelegramChannel  # type: ignore[attr-defined]
     fake_qq_channel.QQChannel = _QQChannel  # type: ignore[attr-defined]
-    monkeypatch.setitem(
-        sys.modules, "infra.channels.telegram_channel", fake_telegram_channel
-    )
     monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", fake_qq_channel)
 
     config = Config(
         provider="openai",
         model="m",
         api_key="k",
-        channels=ChannelsConfig(
-            telegram=TelegramChannelConfig(token="tg-token"),
-            qq=QQChannelConfig(bot_uin="10001"),
-        ),
+        channels=ChannelsConfig(qq=QQChannelConfig(bot_uin="10001")),
     )
     resources = SharedHttpResources()
     try:
@@ -422,7 +353,8 @@ async def test_start_channels_skips_channel_constructor_failures(monkeypatch):
     finally:
         await resources.aclose()
 
-    assert [channel.name for channel in host.channels] == ["qq"]
+    assert host.channels == []
+    assert [failure.channel for failure in host.failures] == ["qq"]
 
 
 @pytest.mark.asyncio
@@ -432,32 +364,20 @@ async def test_start_channels_desktop_mode_skips_message_channels(
 ):
     starts: list[str] = []
 
-    fake_telegram_channel = types.ModuleType("infra.channels.telegram_channel")
     fake_qq_channel = types.ModuleType("infra.channels.qq_channel")
-
-    class _TelegramChannel:
-        def __init__(self, **kwargs):
-            starts.append("telegram.init")
 
     class _QQChannel:
         def __init__(self, **kwargs):
             starts.append("qq.init")
 
-    fake_telegram_channel.TelegramChannel = _TelegramChannel  # type: ignore[attr-defined]
     fake_qq_channel.QQChannel = _QQChannel  # type: ignore[attr-defined]
-    monkeypatch.setitem(
-        sys.modules, "infra.channels.telegram_channel", fake_telegram_channel
-    )
     monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", fake_qq_channel)
 
     config = Config(
         provider="openai",
         model="m",
         api_key="k",
-        channels=ChannelsConfig(
-            telegram=TelegramChannelConfig(token="tg-token"),
-            qq=QQChannelConfig(bot_uin="10001"),
-        ),
+        channels=ChannelsConfig(qq=QQChannelConfig(bot_uin="10001")),
     )
     resources = SharedHttpResources()
     try:

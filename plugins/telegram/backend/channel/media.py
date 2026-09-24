@@ -9,7 +9,7 @@ from telegram.ext import ContextTypes
 
 from .formatting import _build_inbound_text_with_reply
 
-logger = logging.getLogger("infra.channels.telegram_channel")
+logger = logging.getLogger("plugins.telegram.channel")
 
 
 class _MediaMixin:

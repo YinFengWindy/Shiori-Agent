@@ -11,15 +11,15 @@ from telegram.ext import ContextTypes
 
 from bus.events import OutboundMessage
 from infra.channels.session_key import resolve_outbound_session_key
-from infra.channels.telegram_utils import TelegramStreamMessage
 
+from ..utils import TelegramStreamMessage
 from .compat import (
     _call_send_markdown,
     _call_send_stream_markdown,
     _call_send_thinking_block,
 )
 
-logger = logging.getLogger("infra.channels.telegram_channel")
+logger = logging.getLogger("plugins.telegram.channel")
 
 
 class _OutboundMixin:
@@ -28,7 +28,7 @@ class _OutboundMixin:
     def _resolve_chat_id(self, chat_id: str) -> str:
         resolved = chat_id.lstrip("@").lower()
         if not resolved.lstrip("-").isdigit():
-            resolved = self._identity_index.resolve(resolved)
+            resolved = self._require_identity_index().resolve(resolved)
             if not resolved:
                 raise ValueError(
                     f"找不到用户 {chat_id!r} 的 chat_id，该用户需先给 bot 发一条消息。"

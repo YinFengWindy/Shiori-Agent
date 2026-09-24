@@ -11,7 +11,7 @@ from bus.events import InboundMessage
 
 from .formatting import _build_inbound_text_with_reply
 
-logger = logging.getLogger("infra.channels.telegram_channel")
+logger = logging.getLogger("plugins.telegram.channel")
 
 
 class _InboundMixin:
@@ -126,7 +126,7 @@ class _InboundMixin:
         routed = self._route_inbound(message)
         if routed.metadata.get("conversation_duplicate"):
             return
-        await self._bus.publish_inbound(routed)
+        await self._require_bus().publish_inbound(routed)
 
     async def _publish_telegram_inbound(
         self,
