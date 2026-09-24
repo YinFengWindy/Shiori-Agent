@@ -136,12 +136,12 @@ export function useChatImageState({
       return;
     }
 
+    // Select the new image, but leave the panel closed: its toggle shows a dot instead.
     if (latestChatGeneratedImageKey && latestChatGeneratedImageKey !== previous.latestKey) {
       setSelectedChatImageKey(latestChatGeneratedImageKey);
-      openChatLatestImageSidebar();
     }
     latestChatImageRef.current = { sessionKey, latestKey: latestChatGeneratedImageKey };
-  }, [activeSessionKey, latestChatGeneratedImageKey, openChatLatestImageSidebar, setSelectedChatImageKey]);
+  }, [activeSessionKey, latestChatGeneratedImageKey, setSelectedChatImageKey]);
 
   useEffect(() => {
     if (resolvedChatImagePath) return;

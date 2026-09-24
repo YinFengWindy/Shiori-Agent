@@ -9,6 +9,14 @@ import {
   type MessageContextMenuState,
 } from "./chatMessageActions";
 import { ChatRightSidebar, type ChatSidebarMode } from "./ChatRightSidebar";
+import { ChatPanelToggle, ChatPanelSegments } from "./ChatPanelControls";
+import {
+  clearViewedChatPanelBadge,
+  emptyChatPanelBadges,
+  markChatPanelUpdates,
+  shouldBadgeChatPanelToggle,
+  type ChatPanelBadges,
+} from "./chatPanelBadges";
 import {
   shouldAutoScrollOnNewMessage,
 } from "./chatAutoScroll";
@@ -70,8 +78,6 @@ type ChatSurfaceProps = {
 };
 
 const emptySessionMessages: SessionMessage[] = [];
-const sidebarModeButtonClass =
-  "grid h-7 w-7 place-items-center rounded-full text-sm transition focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
 
 /** Renders the active role chat header, conversation messages, and composer. */
 export function ChatSurface({
@@ -122,7 +128,7 @@ export function ChatSurface({
   const previousLastMessageContentRef = useRef("");
   const previousChatImageCountRef = useRef(0);
   const previousRoleSelfViewRef = useRef(roleSelfView);
-  const imagePriorityUserMessageCountRef = useRef(-1);
+  const [panelBadges, setPanelBadges] = useState<ChatPanelBadges>(emptyChatPanelBadges);
   const highlightedMessageKeyRef = useLatestRef(highlightedMessageKey);
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
@@ -138,10 +144,6 @@ export function ChatSurface({
     enabled: sidebarMode === "tasks" && !chatLatestImageSidebarCollapsed,
   });
   const sessionMessages = activeSession?.messages ?? emptySessionMessages;
-  const currentUserMessageCount = sessionMessages.reduce(
-    (count, message) => count + (message.role === "user" ? 1 : 0),
-    0,
-  );
   const currentLastMessageContent = sessionMessages.at(-1)?.content ?? "";
   const {
     visibleMessageWindow,
@@ -176,16 +178,13 @@ export function ChatSurface({
     cancelScroll,
     maybeLoadOlderMessages,
   });
-  const sidebarToggleGlyphClass =
-    "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
-
   const resetConversationForSession = useEffectEvent(() => {
     const sessionKey = activeSession?.key ?? "";
     previousMessageCountRef.current = activeSession?.messages.length ?? 0;
     previousLastMessageContentRef.current = activeSession?.messages.at(-1)?.content ?? "";
     previousChatImageCountRef.current = chatLatestImageSidebarCount;
     previousRoleSelfViewRef.current = roleSelfView;
-    imagePriorityUserMessageCountRef.current = -1;
+    setPanelBadges(emptyChatPanelBadges);
     const hasPendingMessageNavigation = Boolean(highlightedMessageKeyRef.current);
     const container = conversationListRef.current;
     if (hasPendingMessageNavigation) {
@@ -284,34 +283,25 @@ export function ChatSurface({
     resetConversationForSession();
   }, [activeSession?.key]);
 
+  // New images / a new thought mark their segment instead of opening the
+  // panel or switching its segment under the user.
+  const panelOpen = !chatLatestImageSidebarCollapsed;
   useEffect(() => {
     const previousImageCount = previousChatImageCountRef.current;
     const previousRoleSelfView = previousRoleSelfViewRef.current;
     previousChatImageCountRef.current = chatLatestImageSidebarCount;
     previousRoleSelfViewRef.current = roleSelfView;
-    const hasNewImage = chatLatestImageSidebarCount > previousImageCount;
-    const hasUpdatedSelfView = Boolean(roleSelfView) && roleSelfView !== previousRoleSelfView;
-    if (!hasNewImage && !hasUpdatedSelfView) {
-      return;
-    }
-    if (hasNewImage) {
-      imagePriorityUserMessageCountRef.current = currentUserMessageCount;
-      setSidebarMode("images");
-    } else if (imagePriorityUserMessageCountRef.current !== currentUserMessageCount) {
-      setSidebarMode("status");
-    } else {
-      return;
-    }
-    if (chatLatestImageSidebarCollapsed) {
-      onToggleChatLatestImageSidebar();
-    }
-  }, [
-    chatLatestImageSidebarCollapsed,
-    chatLatestImageSidebarCount,
-    currentUserMessageCount,
-    onToggleChatLatestImageSidebar,
-    roleSelfView,
-  ]);
+    const update = {
+      newImage: chatLatestImageSidebarCount > previousImageCount,
+      newThought: Boolean(roleSelfView) && roleSelfView !== previousRoleSelfView,
+    };
+    if (!update.newImage && !update.newThought) return;
+    setPanelBadges((current) => markChatPanelUpdates(current, update, { open: panelOpen, mode: sidebarMode }));
+  }, [chatLatestImageSidebarCount, panelOpen, roleSelfView, sidebarMode]);
+
+  useEffect(() => {
+    setPanelBadges((current) => clearViewedChatPanelBadge(current, { open: panelOpen, mode: sidebarMode }));
+  }, [panelOpen, sidebarMode]);
 
   useEffect(() => {
     setComposerReplyTarget(null);
@@ -403,22 +393,11 @@ export function ChatSurface({
 
   return (
     <section className="chat-surface relative grid h-full min-h-0 grid-cols-[minmax(0,1fr)_auto] overflow-hidden bg-gradient-app bg-fixed">
-      <button
-        className="absolute right-4 top-4 z-[5] m-0 grid h-6 w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-ink-muted transition hover:bg-black/5 hover:text-ink-secondary focus:outline-none"
-        type="button"
-        aria-label={chatLatestImageSidebarCollapsed ? "展开最新图片侧栏" : "收起最新图片侧栏"}
-        aria-expanded={!chatLatestImageSidebarCollapsed}
-        onClick={onToggleChatLatestImageSidebar}
-      >
-        <span
-          className={cx(
-            sidebarToggleGlyphClass,
-            chatLatestImageSidebarCollapsed
-              ? "before:bottom-[2.2px] before:right-[0.8px] before:top-[2.2px]"
-              : "before:bottom-0 before:right-[3.3px] before:top-0",
-          )}
-        />
-      </button>
+      <ChatPanelToggle
+        open={panelOpen}
+        badged={shouldBadgeChatPanelToggle(panelBadges, panelOpen)}
+        onToggle={onToggleChatLatestImageSidebar}
+      />
       {messageContextMenu ? (
         <ChatMessageContextMenu
           menu={messageContextMenu}
@@ -538,44 +517,12 @@ export function ChatSurface({
                 onGoToPreviousImage={onGoToPreviousChatImage}
                 onOpenImageLightbox={onOpenChatImageLightbox}
               />
-              <div className="justify-self-center inline-flex w-fit rounded-full border border-line-soft bg-surface-soft p-1">
-                <button
-                  className={cx(
-                    sidebarModeButtonClass,
-                    sidebarMode === "status" ? "bg-gradient-accent text-ink shadow-soft" : "text-ink-secondary hover:text-ink",
-                    !hasStatusContent && "cursor-default opacity-45 hover:text-ink-secondary",
-                  )}
-                  type="button"
-                  aria-label="状态侧栏"
-                  disabled={!hasStatusContent}
-                  onClick={() => setSidebarMode("status")}
-                >
-                  <svg viewBox="0 0 1024 1024" className="h-[14px] w-[14px] fill-current" aria-hidden="true">
-                    <path d="M512 133.567c51.136 0 100.66 10.053 147.327 29.664 45.055 19.114 85.517 46.42 120.27 81.172 34.753 34.753 62.058 75.215 81.172 120.27 19.735 46.668 29.664 96.19 29.664 147.327S880.38 612.66 860.77 659.327c-19.114 45.055-46.42 85.517-81.172 120.27-34.753 34.753-75.215 62.058-120.27 81.172-46.668 19.735-96.19 29.664-147.327 29.664S411.34 880.38 364.673 860.77c-45.055-19.114-85.517-46.42-120.27-81.172-34.753-34.753-62.058-75.215-81.172-120.27-19.735-46.668-29.664-96.19-29.664-147.327s10.053-100.66 29.664-147.327c19.114-45.055 46.42-85.517 81.172-120.27 34.753-34.753 75.215-62.058 120.27-81.172 46.668-19.735 96.19-29.664 147.327-29.664m0-65.783C266.62 67.784 67.784 266.62 67.784 512S266.62 956.216 512 956.216 956.216 757.38 956.216 512 757.38 67.784 512 67.784zM346.8 349.903c-26.065 0-47.165 21.1-47.165 47.164s21.1 47.165 47.165 47.165 47.165-21.1 47.165-47.165-21.1-47.164-47.165-47.164z m330.4 0c-26.065 0-47.165 21.1-47.165 47.164s21.1 47.165 47.165 47.165 47.165-21.1 47.165-47.165-21.1-47.164-47.165-47.164z m11.791 288.448c8.192-15.018 2.483-33.884-12.536-42.075-15.018-8.192-33.884-2.483-42.075 12.535-24.327 45.055-71.368 73.106-122.504 73.106-51.012 0-97.929-27.927-122.38-72.857-8.191-15.019-27.057-20.604-42.075-12.412-15.019 8.192-20.604 27.058-12.412 42.076 35.25 64.913 103.017 105.251 176.867 105.251 74.098 0 141.866-40.462 177.115-105.624z" />
-                  </svg>
-                </button>
-                <button
-                  className={cx(sidebarModeButtonClass, sidebarMode === "tasks" ? "bg-gradient-accent text-ink shadow-soft" : "text-ink-secondary hover:text-ink")}
-                  type="button"
-                  aria-label="任务侧栏"
-                  onClick={() => setSidebarMode("tasks")}
-                >
-                  <svg viewBox="0 0 1024 1024" className="h-[14px] w-[14px] fill-current" aria-hidden="true"><path d="M884.8 1014.4H144c-36.8 0-67.2-30.4-67.2-67.2V209.6c0-36.8 30.4-67.2 67.2-67.2h33.6v100.8c0 36.8 30.4 67.2 67.2 67.2h538.4c36.8 0 67.2-30.4 67.2-67.2V142.4H884c36.8 0 67.2 30.4 67.2 67.2v737.6c.8 36.8-29.6 67.2-66.4 67.2z m-150.4-456c-20-19.2-52-19.2-72 0l-180 171.2-84-80c-20-19.2-52-19.2-72 0s-20 49.6 0 68l120 113.6c20 19.2 52 19.2 72 0l216-204.8c20-18.4 20-48.8 0-68z" /></svg>
-                </button>
-                <button
-                  className={cx(
-                    sidebarModeButtonClass,
-                    sidebarMode === "images" ? "bg-gradient-accent text-ink shadow-soft" : "text-ink-secondary hover:text-ink",
-                  )}
-                  type="button"
-                  aria-label="图片侧栏"
-                  onClick={() => setSidebarMode("images")}
-                >
-                  <svg viewBox="0 0 1024 1024" className="h-[14px] w-[14px] fill-current" aria-hidden="true">
-                    <path d="M356.774 578.668C279.812 528.088 229 440.978 229 342c0-156.297 126.703-283 283-283s283 126.703 283 283c0 98.978-50.812 186.088-127.774 236.668C808.213 638.98 907 778.953 907 942c0 24.3-19.7 44-44 44s-44-19.7-44-44c0-169.551-137.449-307-307-307S205 772.449 205 942c0 24.3-19.7 44-44 44s-44-19.7-44-44c0-163.047 98.787-303.02 239.774-363.332zM512 537c107.696 0 195-87.304 195-195s-87.304-195-195-195-195 87.304-195 195 87.304 195 195 195z" />
-                  </svg>
-                </button>
-              </div>
+              <ChatPanelSegments
+                mode={sidebarMode}
+                badges={panelBadges}
+                statusAvailable={hasStatusContent}
+                onSelect={setSidebarMode}
+              />
             </div>
           </div>
         ) : null}
