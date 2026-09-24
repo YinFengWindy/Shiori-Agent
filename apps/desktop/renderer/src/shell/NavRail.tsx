@@ -1,6 +1,6 @@
 import type React from "react";
 import { Chats, GearSix, MagnifyingGlass, Users } from "@phosphor-icons/react";
-import { cx } from "../shared/styles";
+import { cx, pressableClass } from "../shared/styles";
 
 /** The rail's fixed built-in workspace targets (excludes the "search" action button, which never becomes an active view). */
 export type BuiltinNavRailViewId = "messages" | "roles" | "settings";
@@ -49,8 +49,10 @@ type NavRailProps = {
   onOpenSettings: () => void;
 };
 
-const railButtonClass =
-  "relative grid h-9 w-9 place-items-center rounded-md text-ink-muted transition-colors focus-visible:bg-white/70 hover:bg-white/70 hover:text-ink";
+const railButtonClass = cx(
+  pressableClass,
+  "relative grid h-9 w-9 place-items-center rounded-md text-ink-muted focus-visible:bg-white/70 hover:bg-white/70 hover:text-ink",
+);
 
 /** Renders the primary icon navigation rail shown across every workspace. */
 export function NavRail({
