@@ -13,6 +13,7 @@ import { RoleManagementPage } from "../roles/RoleManagementPage";
 import { RoleSearchDialog } from "../roles/RoleSearchDialog";
 import type { RoleWorkspaceSectionId } from "../roles/RoleWorkspaceSidebar";
 import { SidebarTrackContent, type SidebarViewState } from "./SidebarTrackContent";
+import { previewFromSessionMessages } from "../roles/roleChatPreview";
 import { usePluginUiVisibility } from "./usePluginUiVisibility";
 import { SettingsPage } from "../settings/SettingsPage";
 import { type SettingsSectionId } from "../settings/SettingsSidebar";
@@ -420,6 +421,7 @@ export function DesktopAppFrame({
             roles={roles}
             activeRoleId={activeRoleId}
             unreadCounts={unreadCounts}
+            activeRolePreview={previewFromSessionMessages(activeSession?.messages ?? [])}
             bridgeReady={bridgeReady}
             onOpenRole={onOpenRole}
             activePluginNavPage={activePluginNavPage}

@@ -1,6 +1,7 @@
 import type React from "react";
 import type { NavPageEntry } from "../plugins/pluginUiRegistry";
 import { RoleSidebar } from "../roles/RoleSidebar";
+import type { RoleChatPreview } from "../roles/roleChatPreview";
 import { RoleWorkspaceSidebar, type RoleWorkspaceSectionId } from "../roles/RoleWorkspaceSidebar";
 import { SettingsSidebar, type SettingsSectionId } from "../settings/SettingsSidebar";
 import type { AppMainView, RoleRecord } from "../shared/types";
@@ -34,6 +35,8 @@ type SidebarTrackContentProps = {
   roles: RoleRecord[];
   activeRoleId: string;
   unreadCounts: Record<string, number>;
+  /** Live chat-list preview of the open conversation (see `previewFromSessionMessages`). */
+  activeRolePreview: RoleChatPreview | null;
   bridgeReady: boolean;
   onOpenRole: (roleId: string) => void;
   /** The currently active plugin-page's registry entry, if `mainView.kind === "plugin-page"` and it is still visible. */
@@ -66,6 +69,7 @@ export function SidebarTrackContent({
   roles,
   activeRoleId,
   unreadCounts,
+  activeRolePreview,
   bridgeReady,
   onOpenRole,
   activePluginNavPage,
@@ -124,6 +128,7 @@ export function SidebarTrackContent({
       roles={roles}
       activeRoleId={activeRoleId}
       unreadCounts={unreadCounts}
+      activeRolePreview={activeRolePreview}
       animating={animating}
       bridgeReady={bridgeReady}
       collapsed={sidebarState.collapsed}

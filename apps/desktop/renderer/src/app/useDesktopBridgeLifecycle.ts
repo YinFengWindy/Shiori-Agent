@@ -51,6 +51,9 @@ type UseDesktopBridgeLifecycleArgs = {
   pushNavigationEntry: (entry: NavigationEntry) => void;
 };
 
+/** How long background session updates are batched before the role list (and its previews) is re-read. */
+const rolePreviewRefreshDelayMs = 1000;
+
 /** Owns bridge events, persisted desktop shell state, and first-load refresh flow. */
 export function useDesktopBridgeLifecycle({
   activeRoleId,
@@ -185,7 +188,18 @@ export function useDesktopBridgeLifecycle({
   }, [activeIllustration]);
 
   useEffect(() => {
-    const off = window.miraDesktop.onEvent((event) => {
+    // A background role's conversation moved (proactive message, another
+    // channel): re-read the role list so its chat-list preview follows.
+    // Debounced so a chatty group channel costs one roles.list per second.
+    let rolePreviewRefreshTimer: number | null = null;
+    const scheduleRolePreviewRefresh = () => {
+      if (rolePreviewRefreshTimer !== null) return;
+      rolePreviewRefreshTimer = window.setTimeout(() => {
+        rolePreviewRefreshTimer = null;
+        void callbacksRef.current.loadRolesFromBridge();
+      }, rolePreviewRefreshDelayMs);
+    };
+    const offEvents = window.miraDesktop.onEvent((event) => {
       const callbacks = callbacksRef.current;
       const processEvent = () => {
         if (event.method === "window.state") {
@@ -236,6 +250,7 @@ export function useDesktopBridgeLifecycle({
           );
           const roleId = getRoleIdFromSession(session);
           const isVisibleChat = isActiveSession && currentView.kind === "chat";
+          if (!isActiveSession && roleId) scheduleRolePreviewRefresh();
           if (isActiveSession) {
             if (roleId) {
               callbacks.cacheRoleSession(roleId, session);
@@ -344,7 +359,10 @@ export function useDesktopBridgeLifecycle({
       }
       startTransition(processEvent);
     });
-    return off;
+    return () => {
+      offEvents();
+      if (rolePreviewRefreshTimer !== null) window.clearTimeout(rolePreviewRefreshTimer);
+    };
   }, [
     activeRoleIdRef,
     activeSessionRef,

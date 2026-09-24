@@ -163,7 +163,15 @@ class DesktopBridgeService:
             self.conversation_service,
             relationship_runtime,
         )
-        self.role_presenter = DesktopRolePresenter(role_store, relationship_runtime)
+        self.role_presenter = DesktopRolePresenter(
+            role_store,
+            relationship_runtime,
+            last_message_for_role=lambda role_id: (
+                self.session_presenter.last_message_preview(
+                    self.role_service.sessions.derive_session_key(role_id)
+                )
+            ),
+        )
         self.role_card_import_service = (
             card_import_service
             if card_import_service is not None

@@ -54,8 +54,18 @@ export type RoleRecord = {
   plugin_state?: Record<string, Record<string, unknown>>;
   relationship_snapshot?: RelationshipSnapshot | null;
   loneliness_runtime?: LonelinessRuntime | null;
+  /** Newest message of the role's session, for the chat-list preview; null when the session is empty. */
+  last_message?: RoleLastMessage | null;
   created_at: string;
   updated_at: string;
+};
+
+/** Light preview of a role session's newest message (content capped at 200 chars by the bridge). */
+export type RoleLastMessage = {
+  role: string;
+  content: string;
+  timestamp: string;
+  has_media: boolean;
 };
 
 

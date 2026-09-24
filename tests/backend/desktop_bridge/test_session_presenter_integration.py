@@ -165,3 +165,29 @@ def test_session_presenter_image_history_excludes_chat_content(tmp_path) -> None
             }
         ],
     }
+
+
+def test_session_presenter_last_message_preview_reads_the_newest_row(tmp_path) -> None:
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.add_message("user", "早上好")
+    session.add_message("assistant", "早呀" * 150, media=["photo.png"])
+    manager.save(session)
+    presenter = DesktopSessionPresenter(ConversationService(manager))
+
+    preview = presenter.last_message_preview("role:mira")
+
+    assert preview is not None
+    assert preview["role"] == "assistant"
+    assert preview["content"] == ("早呀" * 150)[:200]
+    assert preview["has_media"] is True
+    assert preview["timestamp"]
+
+
+def test_session_presenter_last_message_preview_is_none_for_empty_sessions(
+    tmp_path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    presenter = DesktopSessionPresenter(ConversationService(manager))
+
+    assert presenter.last_message_preview("role:nobody") is None

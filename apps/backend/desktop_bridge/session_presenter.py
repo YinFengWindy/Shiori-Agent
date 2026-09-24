@@ -5,6 +5,9 @@ from typing import Any
 from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from session.manager import Session
 
+# The chat list shows one line; the renderer strips Markdown from this prefix.
+_PREVIEW_MAX_CHARS = 200
+
 
 class DesktopSessionPresenter:
     """Builds desktop session payloads from formal thread and runtime state."""
@@ -114,6 +117,21 @@ class DesktopSessionPresenter:
         return {
             "session_key": session_key,
             "messages": self._session_store().fetch_image_history(session_key),
+        }
+
+    def last_message_preview(self, session_key: str) -> dict[str, Any] | None:
+        """Returns the newest message of a session as a light chat-list preview."""
+        messages = self._session_store().fetch_messages_page(session_key, limit=1)[
+            "messages"
+        ]
+        if not messages:
+            return None
+        message = messages[-1]
+        return {
+            "role": str(message.get("role") or ""),
+            "content": str(message.get("content") or "")[:_PREVIEW_MAX_CHARS],
+            "timestamp": str(message.get("timestamp") or ""),
+            "has_media": bool(message.get("media")),
         }
 
     def _session_store(self):

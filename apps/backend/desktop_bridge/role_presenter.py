@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 
@@ -7,10 +8,15 @@ class DesktopRolePresenter:
     """Builds desktop-safe role payloads without owning role operations."""
 
     def __init__(
-        self, role_store: Any, relationship_runtime: Any | None = None
+        self,
+        role_store: Any,
+        relationship_runtime: Any | None = None,
+        *,
+        last_message_for_role: Callable[[str], dict[str, Any] | None] | None = None,
     ) -> None:
         self._role_store = role_store
         self._relationship_runtime = relationship_runtime
+        self._last_message_for_role = last_message_for_role
 
     def serialize(self, role: Any) -> dict[str, Any]:
         """Returns role fields plus desktop asset and runtime state views."""
@@ -41,4 +47,7 @@ class DesktopRolePresenter:
                 payload["relationship_snapshot"] = snapshot
             if runtime is not None:
                 payload["loneliness_runtime"] = runtime
+        if self._last_message_for_role is not None:
+            # Chat list preview: the newest message of the role's single session.
+            payload["last_message"] = self._last_message_for_role(role.id)
         return payload

@@ -1,15 +1,18 @@
-import type React from "react";
+import React, { useEffect, useState } from "react";
 import { Plus } from "@phosphor-icons/react";
 import { SidebarResizeHandle } from "../shared/SidebarResizeHandle";
 import { cx, pressableClass, sidebarContentMotionClass, sidebarNavItemClass } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
 import { PetalIcon } from "../shared/ui/icons";
 import { RoleAvatar } from "./RoleAvatar";
+import { formatChatListTime, previewFromRoleLastMessage, type RoleChatPreview } from "./roleChatPreview";
 
 type RoleSidebarProps = {
   roles: RoleRecord[];
   activeRoleId: string;
   unreadCounts: Record<string, number>;
+  /** Live preview of the open conversation; overrides the active role's bridge preview. */
+  activeRolePreview?: RoleChatPreview | null;
   bridgeReady: boolean;
   collapsed: boolean;
   animating: boolean;
@@ -18,6 +21,9 @@ type RoleSidebarProps = {
   onCreateRole: () => void;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
 };
+
+/** The relative times in the list only change by the minute. */
+const clockTickMs = 60_000;
 
 /** Friendly placeholder for a chat list with no roles yet, with the one action that fixes it. */
 function RoleSidebarEmptyState({ onCreateRole }: { onCreateRole: () => void }) {
@@ -42,11 +48,17 @@ function RoleSidebarEmptyState({ onCreateRole }: { onCreateRole: () => void }) {
   );
 }
 
+const roleCardClass = cx(
+  sidebarNavItemClass,
+  "grid min-h-[54px] grid-cols-[32px_minmax(0,1fr)] items-center gap-2.5 px-2 py-2 text-left text-[13px] leading-none text-ink-secondary disabled:cursor-default disabled:opacity-60",
+);
+
 /** Renders the conversation list sidebar and the sidebar resize handle. */
 export function RoleSidebar({
   roles,
   activeRoleId,
   unreadCounts,
+  activeRolePreview = null,
   bridgeReady,
   collapsed,
   animating,
@@ -55,10 +67,11 @@ export function RoleSidebar({
   onCreateRole,
   onBeginResize,
 }: RoleSidebarProps) {
-  const roleCardClass = cx(
-    sidebarNavItemClass,
-    "grid min-h-[42px] grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-2.5 px-2 text-left text-[13px] leading-none text-ink-secondary disabled:cursor-default disabled:opacity-60",
-  );
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), clockTickMs);
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
     <aside
@@ -71,28 +84,46 @@ export function RoleSidebar({
       style={{ width }}
     >
       <div className="role-list scrollbar-soft scrollbar-soft-accent grid min-h-0 content-start gap-1.5 overflow-x-hidden overflow-y-auto pr-0" data-testid="role-list">
-        {roles.length ? roles.map((role) => (
-          <button
-            key={role.id}
-            data-testid={`role-card-${role.id}`}
-            className={cx(roleCardClass, role.id === activeRoleId && "active bg-white text-ink shadow-soft")}
-            type="button"
-            disabled={!bridgeReady}
-            onClick={() => onOpenRole(role.id)}
-          >
-            <RoleAvatar role={role} />
-            <span className="role-name min-w-0 truncate font-semibold leading-none">{role.name}</span>
-            <span className="grid min-h-5 min-w-5 place-items-center">
-              {unreadCounts[role.id] ? (
-                <span
-                  className="h-2.5 w-2.5 rounded-full bg-danger"
-                  aria-label={`${role.name} 有未读主动消息`}
-                  title={`${role.name} 有未读主动消息`}
-                />
-              ) : null}
-            </span>
-          </button>
-        )) : bridgeReady ? (
+        {roles.length ? roles.map((role) => {
+          const active = role.id === activeRoleId;
+          const preview = active && activeRolePreview ? activeRolePreview : previewFromRoleLastMessage(role.last_message);
+          const unread = unreadCounts[role.id] ?? 0;
+          const time = preview ? formatChatListTime(preview.timestamp, now) : "";
+          return (
+            <button
+              key={role.id}
+              data-testid={`role-card-${role.id}`}
+              className={cx(roleCardClass, active && "active bg-white text-ink shadow-soft")}
+              type="button"
+              disabled={!bridgeReady}
+              onClick={() => onOpenRole(role.id)}
+            >
+              <RoleAvatar role={role} />
+              <span className="grid min-w-0 gap-1">
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="role-name min-w-0 flex-1 truncate font-semibold leading-tight">{role.name}</span>
+                  {time ? <span className="flex-none text-caption leading-none tabular-nums text-ink-muted">{time}</span> : null}
+                </span>
+                {preview || unread ? (
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="role-preview min-w-0 flex-1 truncate text-caption leading-tight text-ink-muted" data-testid={`role-preview-${role.id}`}>
+                      {preview?.text ?? ""}
+                    </span>
+                    {unread ? (
+                      <span
+                        className="grid h-[18px] min-w-[18px] flex-none place-items-center rounded-full bg-danger px-1 text-[11px] font-semibold leading-none tabular-nums text-white"
+                        aria-label={`${unread} 条未读主动消息`}
+                        data-testid={`role-unread-${role.id}`}
+                      >
+                        {unread > 99 ? "99+" : unread}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
+              </span>
+            </button>
+          );
+        }) : bridgeReady ? (
           <RoleSidebarEmptyState onCreateRole={onCreateRole} />
         ) : null}
       </div>
