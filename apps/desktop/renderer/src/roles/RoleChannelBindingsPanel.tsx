@@ -147,7 +147,7 @@ function ChannelBindingRow({ activeRoleId, binding, channels, onUpdate, onRemove
  * removals, and a new binding starts with its session type's default.
  */
 export function RoleChannelBindingsPanel({ activeRoleId, bindings, channels, onUpdate, onOpenPluginSettings }: RoleChannelBindingsPanelProps) {
-  function updateEntries(update: (entries: RoleBindingEntry[]) => RoleBindingEntry[]): void {
+  function updateEntries(update: (entries: RoleBindingEntry[]) => RoleBindingEntry[]) {
     onUpdate((current) => ({
       ...current,
       ...splitRoleBindingEntries(update(roleBindingEntries(current.channelBindings ?? [], current.proactiveCandidates ?? []))),

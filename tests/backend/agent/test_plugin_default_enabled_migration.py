@@ -6,6 +6,8 @@ import shutil
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from agent.config import load_config
 from agent.plugin_default_enabled_migration import (
     DEFAULT_DISABLED_PLUGINS,
@@ -14,6 +16,16 @@ from agent.plugin_default_enabled_migration import (
 from bootstrap.paths import REPOSITORY_ROOT
 
 _TEMPLATE = REPOSITORY_ROOT / "config" / "examples" / "config.example.toml"
+
+
+@pytest.fixture(autouse=True)
+def _without_proactive_target_receipt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """本文件只测自己的迁移：停掉全局主动推送目标的升级迁移，免得它写入自己的回执。"""
+    monkeypatch.setattr(
+        "agent.proactive_target_migration.remove_proactive_target",
+        lambda _path, data: data,
+    )
+
 
 _BASE = """
 [llm]

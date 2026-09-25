@@ -265,7 +265,7 @@ class ProactiveTurnPipeline:
         return await _deliver_execute(self, ctx, decision)
 
     def _resolve_target_transport(self) -> tuple[str, str] | None:
-        return _resolve_target_transport(self)
+        return _resolve_target_transport(self._target_transport_fn)
 
     def _finalize_after_drift(self, ctx: AgentTickContext) -> None:
         _finalize_after_drift(self, ctx)

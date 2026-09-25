@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from plugins.feishu.backend.inbound import parse_receive_event
 
 CHAT_ID = "oc_chat"
@@ -240,3 +242,39 @@ async def test_paused_intake_buffers_until_resumed(
     harness.channel.resume_intake()
     await harness.settle()
     assert [item.content for item in harness.bus.inbound] == ["你好"]
+
+
+def _manifest_chat_types() -> Any:
+    from agent.plugin_host.manifest import load_manifest
+
+    manifest = load_manifest(Path(__file__).resolve().parents[1])
+    assert manifest is not None
+    return manifest.channel_chat_types("feishu")
+
+
+@pytest.mark.parametrize(
+    ("allowed", "blocked", "replies"),
+    [
+        # Unbound chats are answered: that is how the chat_id to bind is found.
+        (False, False, [f"会话类型：私聊\n私聊 chat_id：{CHAT_ID}"]),
+        (True, False, [f"会话类型：私聊\n私聊 chat_id：{CHAT_ID}"]),
+        (False, True, []),
+    ],
+    ids=["unbound", "bound", "blacklisted"],
+)
+async def test_chatid_answers_without_entering_the_role(
+    make_harness: Any, make_event: Any, allowed: bool, blocked: bool, replies: list[str]
+) -> None:
+    harness = make_harness(
+        allowed=allowed, blocked=blocked, chat_types=_manifest_chat_types()
+    )
+    connection = await harness.start()
+
+    connection.emit(make_event(content={"text": "/chatid"}))
+    await harness.settle()
+
+    assert harness.api.sent_texts() == replies
+    assert harness.bus.inbound == []
+    assert harness.interrupts.requests == []
+    # Not the unbound-message path: nothing is recorded for the status.
+    assert "chat_id=" not in str(harness.channel.status().get("detail") or "")

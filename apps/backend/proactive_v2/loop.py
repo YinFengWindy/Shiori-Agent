@@ -155,7 +155,7 @@ class ProactiveLoop:
                 outbound=PushToolOutboundPort(
                     self._push,
                     execution_context={
-                        "role_id": str(self._cfg.role_id or "").strip(),
+                        "role_id": self._cfg.role_id,
                     },
                 ),
                 event_bus=self._event_bus,
@@ -184,20 +184,13 @@ class ProactiveLoop:
             target_resolver=self._build_target_resolver(),
         )
 
-    def _build_target_resolver(self) -> ProactiveTargetResolver | None:
-        """Selects each message's target from the role's live candidate sessions.
-
-        Absent without a workspace, conversation store or desktop presence
-        (isolated tests); the sensor then refuses to pick a target. A role loop
-        built by ``build_proactive_runtime`` always has all three.
-        """
-        workspace = getattr(self._sessions, "workspace", None)
-        conversations = getattr(self._sessions, "conversation_store", None)
-        if workspace is None or conversations is None or self._desktop_presence is None:
-            return None
+    def _build_target_resolver(self) -> ProactiveTargetResolver:
+        """Selects each message's target from the role's live candidate sessions."""
+        if self._desktop_presence is None:
+            raise ValueError("desktop_presence required for proactive loop")
         return ProactiveTargetResolver(
-            roles=RoleStore(Path(workspace)),
-            conversations=conversations,
+            roles=RoleStore(Path(self._sessions.workspace)),
+            conversations=self._sessions.conversation_store,
             desktop_presence=self._desktop_presence,
         )
 
@@ -330,7 +323,7 @@ class ProactiveLoop:
                     if trace_type == "proactive_config"
                     else "proactive.rate"
                 )
-                role_id = str(getattr(self._cfg, "role_id", "") or "").strip()
+                role_id = self._cfg.role_id
                 payload = {
                     **build_strategy_trace_envelope(
                         trace_type=trace_type,

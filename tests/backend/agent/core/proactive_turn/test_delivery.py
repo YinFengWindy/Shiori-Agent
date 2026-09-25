@@ -14,11 +14,10 @@ from agent.turns.result import TurnResult
 from proactive_v2.context import AgentTickContext
 
 
-def _pipeline(*, target_transport_fn=None, orchestrator=None):
+def _pipeline(*, orchestrator=None):
     return SimpleNamespace(
         _session_key="role:mira",
         _turn_orchestrator=orchestrator,
-        _target_transport_fn=target_transport_fn,
         _record_tick_log_finish=lambda ctx, **kwargs: None,
     )
 
@@ -29,22 +28,20 @@ def test_target_resolver_failure_propagates() -> None:
 
     # Resolver errors surface to the tick boundary instead of becoming no_target.
     with pytest.raises(RuntimeError, match="binding unavailable"):
-        _ = resolve_target_transport(_pipeline(target_transport_fn=fail))
+        _ = resolve_target_transport(fail)
 
 
 def test_role_without_candidates_has_no_target() -> None:
-    assert resolve_target_transport(_pipeline(target_transport_fn=lambda: None)) is None
+    assert resolve_target_transport(lambda: None) is None
 
 
 def test_incomplete_target_is_rejected() -> None:
     with pytest.raises(ValueError, match="incomplete"):
-        _ = resolve_target_transport(_pipeline(target_transport_fn=lambda: ("qq", "")))
+        _ = resolve_target_transport(lambda: ("qq", ""))
 
 
 def test_selected_target_is_returned_stripped() -> None:
-    pipeline = _pipeline(target_transport_fn=lambda: (" qq ", " gqq:7 "))
-
-    assert resolve_target_transport(pipeline) == ("qq", "gqq:7")
+    assert resolve_target_transport(lambda: (" qq ", " gqq:7 ")) == ("qq", "gqq:7")
 
 
 @pytest.mark.asyncio

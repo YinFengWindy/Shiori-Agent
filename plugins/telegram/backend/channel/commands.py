@@ -7,6 +7,8 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from core.common.channel_chat_types import chat_id_command_reply
+
 from .compat import _call_send_markdown
 
 logger = logging.getLogger("plugins.telegram.channel")
@@ -53,6 +55,24 @@ class _CommandMixin:
             self._app.bot,
             str(chat.id),
             result.message,
+            self._telegram_outbound_limiter,
+        )
+
+    async def _on_chat_id_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Answers ``/chatid`` with what the binding form asks for this chat."""
+        chat = update.effective_chat
+        user = update.effective_user
+        if not chat or not user:
+            return
+        if not self._may_answer_chat_id(chat, user):
+            return
+        chat_type = "private" if chat.type == "private" else "group"
+        await _call_send_markdown(
+            self._app.bot,
+            str(chat.id),
+            chat_id_command_reply(str(chat.id), chat_type, self._chat_types),
             self._telegram_outbound_limiter,
         )
 

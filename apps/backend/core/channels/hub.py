@@ -147,6 +147,26 @@ class ChannelHub:
             alias and any(alias == entry.lower() for entry in config.blocked_senders)
         )
 
+    def is_sender_blocked(
+        self,
+        *,
+        channel: str,
+        chat_id: str,
+        sender_id: str,
+        sender_alias: str = "",
+    ) -> bool:
+        """Whether a bound session's blacklist names this sender.
+
+        Unlike ``is_sender_allowed`` an unbound session blocks nobody: the only
+        caller is ``/chatid``, which must answer before a session is bound.
+        """
+        return self.has_binding(channel, chat_id) and not self.is_sender_allowed(
+            channel=channel,
+            chat_id=chat_id,
+            sender_id=sender_id,
+            sender_alias=sender_alias,
+        )
+
     def has_binding(self, channel: str, chat_id: str) -> bool:
         """Returns whether a channel session belongs to any role."""
         return self._service.bindings.get_binding(channel, chat_id) is not None

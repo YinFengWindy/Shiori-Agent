@@ -154,7 +154,6 @@ async def test_tick_target_error_is_logged_at_loop_boundary_and_loop_continues(
         presence=None,
         rng=None,
     )
-    host = SimpleNamespace(_target_transport_fn=sensor.target_transport)
     ticks = 0
 
     async def run_tick():
@@ -162,7 +161,7 @@ async def test_tick_target_error_is_logged_at_loop_boundary_and_loop_continues(
         ticks += 1
         if ticks == 2:
             loop.stop()
-        return resolve_target_transport(host)
+        return resolve_target_transport(sensor.target_transport)
 
     loop = ProactiveLoop.__new__(ProactiveLoop)
     loop._running = True

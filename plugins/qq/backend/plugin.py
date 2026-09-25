@@ -61,5 +61,6 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             websocket_open_timeout_seconds=config.websocket_open_timeout_seconds,
             ws_uri=config.ws_uri,
             ws_token=config.ws_token,
+            chat_types=ctx.manifest.channel_chat_types("qq"),
         )
     )

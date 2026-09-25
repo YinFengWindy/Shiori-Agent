@@ -64,5 +64,6 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             app_id=config.app_id,
             client_secret=config.client_secret,
             groups=config.groups,
+            chat_types=ctx.manifest.channel_chat_types("qqbot"),
         )
     )

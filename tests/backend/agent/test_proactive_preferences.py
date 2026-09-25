@@ -8,9 +8,13 @@ from agent.proactive_preferences import migrate_proactive_preferences
 
 @pytest.fixture(autouse=True)
 def _without_default_disabled_pinning(monkeypatch):
-    """本文件只测自己的迁移：停掉默认停用插件的升级迁移，免得它改写测试配置。"""
+    """本文件只测自己的迁移：停掉默认停用插件与全局主动推送目标的升级迁移，免得它们改写测试配置。"""
     monkeypatch.setattr(
         "agent.plugin_default_enabled_migration.DEFAULT_DISABLED_PLUGINS", ()
+    )
+    monkeypatch.setattr(
+        "agent.proactive_target_migration.remove_proactive_target",
+        lambda _path, data: data,
     )
 
 

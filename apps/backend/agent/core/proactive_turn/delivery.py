@@ -15,7 +15,6 @@ class ProactiveDeliveryHost(Protocol):
 
     _session_key: str
     _turn_orchestrator: Any
-    _target_transport_fn: Callable[[], tuple[str, str] | None] | None
 
     def _record_tick_log_finish(
         self,
@@ -54,16 +53,17 @@ async def deliver_execute(
 
 
 def resolve_target_transport(
-    pipeline: ProactiveDeliveryHost,
+    target_transport_fn: Callable[[], tuple[str, str] | None] | None,
 ) -> tuple[str, str] | None:
     """解析本轮唯一的目标渠道；``None`` 表示角色当前没有候选会话。
 
-    解析器抛出的配置/绑定错误直接冒泡，由 ProactiveLoop 的 tick 边界记录并继续下一轮。
+    tick 的 gate 阶段与 drift 发消息共用这一处解析。解析器抛出的配置/绑定错误
+    直接冒泡，由 ProactiveLoop 的 tick 边界记录并继续下一轮。
     """
 
-    if pipeline._target_transport_fn is None:
+    if target_transport_fn is None:
         return None
-    target = pipeline._target_transport_fn()
+    target = target_transport_fn()
     if target is None:
         return None
     channel, chat_id = (str(part).strip() for part in target)

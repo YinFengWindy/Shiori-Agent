@@ -13,6 +13,7 @@ from core.common.channel_identifiers import (
     normalize_qq_group_chat_id,
 )
 
+from .models import keeps_proactive_enabled
 from .profile_models import RoleProfile
 
 CURRENT_MANIFEST_VERSION = 9
@@ -283,4 +284,9 @@ def _replace_target_with_candidates(role: dict[str, Any]) -> None:
         if key not in {"target_channel", "target_chat_id"}
     }
     migrated["candidates"] = candidates
+    if "enabled" in migrated:
+        # Same rule as removing a binding: nothing left to send to turns it off.
+        migrated["enabled"] = keeps_proactive_enabled(
+            bool(migrated["enabled"]), candidates
+        )
     role["proactive"] = migrated

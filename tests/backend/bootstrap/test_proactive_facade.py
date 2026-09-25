@@ -42,7 +42,9 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
     tasks, loops = build_proactive_runtime(
         cast(Any, cfg),
         tmp_path,
-        session_manager=cast(Any, SimpleNamespace(workspace=tmp_path)),
+        session_manager=cast(
+            Any, SimpleNamespace(workspace=tmp_path, conversation_store=MagicMock())
+        ),
         provider=cast(Any, SimpleNamespace()),
         light_provider=None,
         push_tool=cast(Any, SimpleNamespace()),
@@ -84,7 +86,7 @@ def test_build_proactive_provider_strips_enable_thinking():
 def test_sensor_requires_role_id_for_memory_reads():
     facade = SimpleNamespace(read_long_term=lambda: "MEMORY")
     sensor = Sensor(
-        cfg=SimpleNamespace(),
+        cfg=SimpleNamespace(role_id=""),
         sessions=cast(Any, SimpleNamespace()),
         state=cast(Any, SimpleNamespace()),
         memory=cast(Any, facade),

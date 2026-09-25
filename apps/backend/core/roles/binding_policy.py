@@ -17,6 +17,7 @@ from .models import (
     RoleProactiveCandidate,
     RoleProactiveConfig,
     RoleRecord,
+    keeps_proactive_enabled,
 )
 
 
@@ -145,7 +146,7 @@ class RoleBindingPolicy:
         return replace(
             proactive,
             candidates=candidates,
-            enabled=proactive.enabled and bool(candidates),
+            enabled=keeps_proactive_enabled(proactive.enabled, candidates),
         )
 
     def _validate_chat_types(

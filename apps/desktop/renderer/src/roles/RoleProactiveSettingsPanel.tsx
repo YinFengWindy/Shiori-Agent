@@ -3,7 +3,7 @@ import { CaretDown } from "@phosphor-icons/react";
 import type React from "react";
 import { useState } from "react";
 import { SettingsToggleCard } from "../settings/SettingsToggleCard";
-import { badgeClass, cardClass, cx } from "../shared/styles";
+import { badgeClass, cardClass, checkboxClass, cx } from "../shared/styles";
 import type { RoleChannelBinding, RoleFormState, RoleProactiveCandidate } from "../shared/types";
 import { RoleCapabilityBadge } from "./RoleCapabilityCard";
 import { roleToggleStatus } from "./roleCapabilityStatus";
@@ -11,7 +11,7 @@ import type { RoleChannelCatalog } from "./roleChannelCatalog";
 import { roleBindingDisplayLabel } from "./roleChatTypes";
 import { roleFieldClass, roleFieldLabelClass, rolePanelGhostButtonClass } from "./roleEditorStyles";
 import { RoleEditorSection } from "./RoleEditorSection";
-import { isRoleProactiveCandidate, selectableProactiveBindings, setRoleProactiveCandidate } from "./roleProactiveCandidates";
+import { isRoleProactiveCandidate, sameSession, selectableProactiveBindings, setRoleProactiveCandidate } from "./roleProactiveCandidates";
 import { RoleProactiveExecutionFields } from "./RoleProactiveExecutionFields";
 import { roleProactiveDefaults } from "./roleProactiveDefaults";
 import { proactiveProfileOptions } from "./roleProactiveOptions";
@@ -50,12 +50,12 @@ export function RoleProactiveSettingsPanel({ bindings, channels, currentTarget, 
           <legend className={cx(roleFieldLabelClass, "mb-1 p-0")}>接收会话</legend>
           {selectableProactiveBindings(bindings).map((binding) => {
             // Only the backend decides which candidate is current; the panel just marks it.
-            const current = currentTarget?.channel === binding.channel && currentTarget.chat_id === binding.chat_id;
+            const current = currentTarget !== null && sameSession(currentTarget, binding);
             return (
               <label className="flex min-w-0 items-center gap-3 border-b border-line-soft py-2 last:border-b-0" key={`${binding.channel}:${binding.chat_id}`}>
                 <input
                   type="checkbox"
-                  className="h-4 w-4 shrink-0 accent-accent"
+                  className={cx(checkboxClass, "shrink-0")}
                   checked={isRoleProactiveCandidate(binding, candidates)}
                   onChange={(event) => {
                     const checked = event.target.checked;

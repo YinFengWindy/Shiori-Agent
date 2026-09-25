@@ -4,6 +4,10 @@ import logging
 from typing import Any
 
 from bus.events import InboundMessage
+from core.common.channel_chat_types import (
+    chat_id_command_reply,
+    is_chat_id_command,
+)
 
 from .formatting import CHANNEL, as_dict
 
@@ -27,10 +31,13 @@ class _InboundMixin:
         if not user_openid:
             return
         chat_id = f"c2c:{user_openid}"
+        content = str(data.get("content") or "").strip()
+        if is_chat_id_command(content):
+            await self._handle_chat_id(chat_id, user_openid)
+            return
         # Admission before any side effect: no reply anchor, no input notify.
         if not self._is_sender_admitted(chat_id, user_openid):
             return
-        content = str(data.get("content") or "").strip()
         message_id = str(data.get("id") or "").strip()
         if message_id:
             self._last_c2c_msg_id[user_openid] = message_id
@@ -66,6 +73,29 @@ class _InboundMixin:
         ):
             return True
         logger.warning("[qqbot] 忽略未绑定渠道的消息 chat_id=%s", chat_id)
+        return False
+
+    async def _handle_chat_id(self, chat_id: str, sender: str) -> None:
+        """Answers ``/chatid`` with what the binding form asks for this chat."""
+        if not self._may_answer_chat_id(chat_id, sender):
+            return
+        await self.send(
+            chat_id, chat_id_command_reply(chat_id, "private", self._chat_types)
+        )
+
+    def _may_answer_chat_id(self, chat_id: str, sender: str) -> bool:
+        """Admission for ``/chatid``: everyone except a bound session's blacklist.
+
+        The one deliberate exception to "a rejected message has no side
+        effect": ``/chatid`` is answered in a chat that is not bound yet,
+        because it is how the user finds the OpenID to bind. A blacklisted
+        sender still gets no reply and causes nothing.
+        """
+        if self._channel_hub is None or not self._channel_hub.is_sender_blocked(
+            channel=CHANNEL, chat_id=chat_id, sender_id=sender
+        ):
+            return True
+        logger.warning("[qqbot] 忽略黑名单成员的 /chatid chat_id=%s", chat_id)
         return False
 
     async def _publish_inbound(self, message: InboundMessage) -> None:

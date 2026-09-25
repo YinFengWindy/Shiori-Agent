@@ -477,3 +477,17 @@ def test_channel_hub_rejects_senders_of_unbound_sessions(tmp_path: Path) -> None
     hub = _hub_with_bindings(tmp_path)
 
     assert not hub.is_sender_allowed(channel="telegram", chat_id="-200", sender_id="8")
+
+
+def test_channel_hub_blocks_only_blacklisted_senders_of_bound_sessions(
+    tmp_path: Path,
+) -> None:
+    # Only /chatid asks this: an unbound session blocks nobody.
+    hub = _hub_with_bindings(tmp_path)
+
+    assert hub.is_sender_blocked(channel="telegram", chat_id="-100", sender_id="7")
+    assert hub.is_sender_blocked(
+        channel="telegram", chat_id="-100", sender_id="9", sender_alias="troll"
+    )
+    assert not hub.is_sender_blocked(channel="telegram", chat_id="-100", sender_id="8")
+    assert not hub.is_sender_blocked(channel="telegram", chat_id="-200", sender_id="7")

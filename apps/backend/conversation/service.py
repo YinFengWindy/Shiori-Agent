@@ -13,6 +13,11 @@ if TYPE_CHECKING:
 _LEGACY_UNRESOLVED_ROLE_ID = "legacy/unresolved"
 
 
+def desktop_chat_id(role_id: str) -> str:
+    """Returns the chat ID of one role's desktop session, as its binding stores it."""
+    return f"role:{role_id}"
+
+
 def desktop_thread_id(role_id: str) -> str:
     """Returns the formal thread ID of one role's desktop session."""
     return f"thread:{role_id}:desktop"

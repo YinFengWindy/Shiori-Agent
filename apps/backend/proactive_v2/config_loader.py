@@ -119,7 +119,7 @@ def _check_forbidden_keys(p: dict[str, Any]) -> None:
     if forbidden:
         raise ProactiveConfigError(
             f"proactive 配置中出现非法的根级键: {', '.join(sorted(forbidden))}。\n"
-            "请使用 profile / profiles / target 等分块方式配置。\n"
+            "请使用 profile / profiles 等分块方式配置。\n"
             f"允许的根级键: {', '.join(sorted(allowed_root_keys))}"
         )
 
@@ -291,7 +291,7 @@ def load_proactive_config(p: dict[str, Any], *, role_id: str = "") -> ProactiveC
     # 构建 ProactiveConfig
     config = ProactiveConfig(
         enabled=enabled,
-        role_id=role_id,
+        role_id=role_id.strip(),
         model=model,
         profile=str(preset_name),
         profiles=copy.deepcopy(user_profiles),

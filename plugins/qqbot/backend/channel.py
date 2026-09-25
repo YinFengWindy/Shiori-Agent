@@ -13,6 +13,7 @@ from agent.looping.interrupt import InterruptController
 from bus.events_lifecycle import StreamDeltaReady, TurnStarted
 from bus.queue import MessageBus
 from core.channels import ChannelHub
+from core.common.channel_chat_types import ChatTypeDeclaration
 from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
 
@@ -43,8 +44,11 @@ class QQBotChannel(
         app_id: str,
         client_secret: str,
         groups: list["QQBotGroupConfigModel"] | None = None,
+        chat_types: tuple[ChatTypeDeclaration, ...] = (),
     ) -> None:
         self._app_id = app_id
+        # The manifest's session types, for answering ``/chatid``.
+        self._chat_types = chat_types
         self._client_secret = client_secret
         self._groups = {str(group.group_openid): group for group in (groups or [])}
         self._bus: MessageBus | None = None

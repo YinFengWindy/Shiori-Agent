@@ -11,6 +11,7 @@ from bus.event_binding import EventBinding
 from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted, TurnStarted
 from bus.queue import MessageBus
 from core.channels import ChannelHub
+from core.common.channel_chat_types import ChatTypeDeclaration, is_chat_id_command
 from core.common.channel_identifiers import normalize_qq_group_chat_id
 from core.common.workspace import resolve_ncatbot_dir
 from core.net.http import HttpRequester, get_default_http_requester
@@ -59,6 +60,7 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
         channel_hub: ChannelHub | None = None,
         ws_uri: str = "",
         ws_token: str = "",
+        chat_types: tuple[ChatTypeDeclaration, ...] = (),
     ) -> None:
         # bus / session_manager / HTTP 在宿主里由 start(ctx) 注入；构造参数只留给
         # 不经 ChannelHost 直接驱动渠道的测试。
@@ -68,6 +70,8 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
         # 空值表示沿用 NcatBot 自己的默认值（或其 config.yaml）。
         self._ws_uri = ws_uri
         self._ws_token = ws_token
+        # The manifest's session types, for answering ``/chatid``.
+        self._chat_types = chat_types
         self._interrupt_controller = interrupt_controller
         self._channel_hub = channel_hub
         self._session_manager: SessionManager | None = None
@@ -221,6 +225,11 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
                 self._bot_loop = asyncio.get_running_loop()
             user_id = str(event.user_id)
             text, image_urls = extract_cq_images(event.raw_message)
+            if is_chat_id_command(text):
+                self._submit_to_main_loop(
+                    self._handle_chat_id(user_id, user_id, "private")
+                )
+                return
             if text.strip() == "/stop":
                 self._submit_to_main_loop(self._handle_stop_private(user_id))
                 return
@@ -239,15 +248,11 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
                 self._bot_loop = asyncio.get_running_loop()
             group_id = str(event.group_id)
             user_id = str(event.user_id)
-            group_config = self._groups.get(group_id)
-            if group_config is None:
-                chat_id = normalize_qq_group_chat_id(group_id)
-                if self._channel_hub is None or not self._channel_hub.has_binding(
-                    CHANNEL, chat_id
-                ):
-                    logger.debug("[qq] 忽略未绑定群 group_id=%s", group_id)
-                    return
-                group_config = QQGroupFilterConfig(group_id=group_id, require_at=True)
+            chat_id = normalize_qq_group_chat_id(group_id)
+            configured = self._groups.get(group_id)
+            group_config = configured or QQGroupFilterConfig(
+                group_id=group_id, require_at=True
+            )
             future = asyncio.run_coroutine_threadsafe(
                 self._group_filter.should_process(event, group_config),
                 self._require_main_loop(),
@@ -255,6 +260,19 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
             if not future.result(timeout=5):
                 return
             text, image_urls = extract_cq_images(strip_at_segments(event.raw_message))
+            # ``/chatid`` also answers in a group not bound yet: that is how
+            # the user finds the number to bind it with.
+            if is_chat_id_command(text):
+                self._submit_to_main_loop(
+                    self._handle_chat_id(chat_id, user_id, "group")
+                )
+                return
+            if configured is None and (
+                self._channel_hub is None
+                or not self._channel_hub.has_binding(CHANNEL, chat_id)
+            ):
+                logger.debug("[qq] 忽略未绑定群 group_id=%s", group_id)
+                return
             if text.strip() == "/stop":
                 self._submit_to_main_loop(self._handle_stop_group(group_id, user_id))
                 return

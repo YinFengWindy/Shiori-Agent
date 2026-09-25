@@ -136,6 +136,13 @@ class PluginManifest:
     default_enabled: bool = True
     metadata: dict[str, object] = field(default_factory=dict)
 
+    def channel_chat_types(self, name: str) -> tuple[ChatTypeDeclaration, ...]:
+        """Returns the session types this plugin declares for channel ``name``."""
+        declaration = next((item for item in self.channels if item.name == name), None)
+        if declaration is None:
+            raise KeyError(f"插件 {self.id} 未声明渠道 {name}")
+        return declaration.chat_types
+
 
 def load_manifest(plugin_dir: Path) -> PluginManifest | None:
     """读取 manifest.yaml；不存在返回 None，格式非法抛 ManifestError。

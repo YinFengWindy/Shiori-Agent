@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sized
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
@@ -105,6 +106,11 @@ class RoleProactiveCandidate:
     def of_binding(cls, binding: RoleChannelBindingConfig) -> "RoleProactiveCandidate":
         """References ``binding`` as a candidate session."""
         return cls(channel=binding.channel, chat_id=binding.chat_id)
+
+
+def keeps_proactive_enabled(enabled: bool, candidates: Sized) -> bool:
+    """Proactive delivery stays on only while it has a candidate session to go to."""
+    return enabled and bool(candidates)
 
 
 @dataclass(frozen=True)

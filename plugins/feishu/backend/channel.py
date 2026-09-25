@@ -19,6 +19,11 @@ from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import StreamDeltaReady, TurnStarted
 from bus.queue import MessageBus
 from core.channels import ChannelHub
+from core.common.channel_chat_types import (
+    ChatTypeDeclaration,
+    chat_id_command_reply,
+    is_chat_id_command,
+)
 from infra.channels.contract import ChannelContext, ChannelStatus
 from infra.channels.intake import ChannelIntake
 from infra.channels.session_key import resolve_outbound_session_key
@@ -67,8 +72,11 @@ class FeishuChannel:
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         connection_factory: ConnectionFactory | None = None,
+        chat_types: tuple[ChatTypeDeclaration, ...] = (),
     ) -> None:
         self._app_id = app_id
+        # The manifest's session types, for answering ``/chatid``.
+        self._chat_types = chat_types
         self._app_secret = app_secret
         self._domain = domain
         self._api = FeishuApi(app_id, app_secret, domain, transport=transport)
@@ -280,12 +288,15 @@ class FeishuChannel:
         sender = message.sender_open_id
         if not sender:
             return
-        # Admission before resolving the payload, which downloads attachments.
-        if not self._is_bound(message.chat_id, sender):
-            return
         text = ""
         if message.message_type == "text":
             text = str(message.content.get("text") or "").strip()
+        if is_chat_id_command(text):
+            await self._handle_chat_id(message.chat_id, sender)
+            return
+        # Admission before resolving the payload, which downloads attachments.
+        if not self._is_bound(message.chat_id, sender):
+            return
         if text == STOP_COMMAND:
             await self._handle_stop(message.chat_id, sender)
             return
@@ -345,6 +356,30 @@ class FeishuChannel:
             chat_id,
             sender,
         )
+        return False
+
+    async def _handle_chat_id(self, chat_id: str, sender: str) -> None:
+        """Answers ``/chatid`` with what the binding form asks for this chat."""
+        if not self._may_answer_chat_id(chat_id, sender):
+            return
+        await self.send(
+            chat_id, chat_id_command_reply(chat_id, "private", self._chat_types)
+        )
+
+    def _may_answer_chat_id(self, chat_id: str, sender: str) -> bool:
+        """Admission for ``/chatid``: everyone except a bound session's blacklist.
+
+        The one deliberate exception to "a rejected message has no side
+        effect": ``/chatid`` is answered in a chat that is not bound yet,
+        because it is how the user finds the chat_id to bind. A blacklisted
+        sender still gets no reply and causes nothing.
+        """
+        hub = self._channel_hub
+        if hub is None or not hub.is_sender_blocked(
+            channel=CHANNEL, chat_id=chat_id, sender_id=sender
+        ):
+            return True
+        logger.warning("[feishu] 忽略黑名单成员的 /chatid chat_id=%s", chat_id)
         return False
 
     async def _handle_stop(self, chat_id: str, sender: str) -> None:

@@ -140,3 +140,4 @@ default_samples = 1
 
 [_migrations]
 plugin_default_disabled = ["browser_use", "computer_use"]
+proactive_target_removed = true

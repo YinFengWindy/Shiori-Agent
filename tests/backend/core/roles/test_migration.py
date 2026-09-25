@@ -406,10 +406,11 @@ def test_v8_target_and_desktop_become_the_candidates() -> None:
                 {
                     "id": "luna",
                     "profile": {},
-                    # A stale target naming no binding is dropped.
+                    # A stale target naming no binding is dropped, and with
+                    # no candidate left proactive delivery is turned off.
                     "channel_bindings": [{"channel": "telegram", "chat_id": "42"}],
                     "proactive": {
-                        "enabled": False,
+                        "enabled": True,
                         "target_channel": "qq",
                         "target_chat_id": "9",
                     },

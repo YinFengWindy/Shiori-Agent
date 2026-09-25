@@ -319,13 +319,14 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     monkeypatch.setattr(mod, "send_stream_markdown", AsyncMock())
     monkeypatch.setattr(mod, "send_thinking_block", AsyncMock())
     await channel.start()
-    assert len(channel._app.handlers) == 5
+    assert len(channel._app.handlers) == 6
     assert [
         cmd.command for cmd in channel._app.bot.set_my_commands.await_args.args[0]
     ] == [
         "memorystatus",
         "kvcache",
         "stop",
+        "chatid",
     ]
     assert bus.outbound[0][0] == "telegram"
 
@@ -999,7 +1000,7 @@ async def test_plugin_channel_takes_runtime_state_and_commands_from_context(
     await channel.start(ctx)
 
     commands = channel._app.bot.set_my_commands.await_args.args[0]
-    assert [cmd.command for cmd in commands] == ["memorystatus", "stop"]
+    assert [cmd.command for cmd in commands] == ["memorystatus", "stop", "chatid"]
     assert channel._channel_hub is hub
     assert channel._attachments.create_path("x_", ".txt").parent == (
         tmp_path / "uploads"
@@ -1009,3 +1010,65 @@ async def test_plugin_channel_takes_runtime_state_and_commands_from_context(
     await channel.stop()
     assert bus.outbound == []
     assert push_tool.unregistered == ["telegram"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_chatid_answers_the_binding_form_fields_without_a_turn(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from agent.plugin_host.manifest import load_manifest
+
+    mod = _import_telegram_channel(monkeypatch)
+    manifest = load_manifest(Path(__file__).resolve().parents[1])
+    assert manifest is not None
+    bus = _Bus()
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
+    role_store.update_role(
+        "mira",
+        channel_bindings=[
+            {
+                "channel": "telegram",
+                "chat_id": "-100",
+                "chat_type": "group",
+                "blocked_senders": ["troll"],
+            }
+        ],
+    )
+    channel = mod.TelegramChannel(
+        token="token",
+        bus=bus,
+        session_manager=_SessionManager(tmp_path),
+        event_bus=EventBus(),
+        chat_types=manifest.channel_chat_types("telegram"),
+    )
+    send = AsyncMock()
+    monkeypatch.setattr(mod, "send_markdown", send)
+    await channel.start()
+    remember = AsyncMock()
+    monkeypatch.setattr(channel, "_remember_username", remember)
+    context = SimpleNamespace(bot=channel._app.bot)
+
+    def _update(chat_id: int, chat_type: str, user_id: int, username: str):
+        return SimpleNamespace(
+            effective_message=SimpleNamespace(text="/chatid", message_id=1),
+            effective_chat=SimpleNamespace(id=chat_id, type=chat_type),
+            effective_user=SimpleNamespace(id=user_id, username=username),
+        )
+
+    # Unbound private chat and unbound group, a bound group member, then a
+    # blacklisted member of the bound group.
+    await channel._on_chat_id_command(_update(42, "private", 42, "me"), context)
+    await channel._on_chat_id_command(_update(-200, "supergroup", 6, "a"), context)
+    await channel._on_chat_id_command(_update(-100, "group", 7, "friend"), context)
+    await channel._on_chat_id_command(_update(-100, "group", 5, "Troll"), context)
+
+    assert [call.args[1:3] for call in send.await_args_list] == [
+        ("42", "会话类型：私聊\n用户 ID：42"),
+        ("-200", "会话类型：群聊\n群组 ID：-200"),
+        ("-100", "会话类型：群聊\n群组 ID：-100"),
+    ]
+    assert bus.inbound == []
+    remember.assert_not_awaited()
+    await channel.stop()

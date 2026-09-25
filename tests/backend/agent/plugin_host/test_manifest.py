@@ -388,3 +388,17 @@ def test_builtin_default_disabled_plugins_match_the_upgrade_migration():
     }
     assert default_disabled == set(DEFAULT_DISABLED_PLUGINS)
     assert default_disabled == {"browser_use", "computer_use"}
+
+
+def test_manifest_looks_up_one_channel_session_types(tmp_path):
+    (tmp_path / "manifest.yaml").write_text(
+        _CHANNEL_MANIFEST
+        + f"  - {{name: demo, label: Demo, chat_types: [{_PRIVATE}]}}\n",
+        encoding="utf-8",
+    )
+    manifest = load_manifest(tmp_path)
+    assert manifest is not None
+
+    assert [item.type for item in manifest.channel_chat_types("demo")] == ["private"]
+    with pytest.raises(KeyError, match="未声明渠道 other"):
+        manifest.channel_chat_types("other")

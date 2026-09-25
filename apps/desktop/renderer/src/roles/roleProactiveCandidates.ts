@@ -7,8 +7,9 @@ export type RoleBindingEntry = {
   candidate: boolean;
 };
 
-function sameSession(binding: RoleChannelBinding, candidate: RoleProactiveCandidate) {
-  return binding.channel === candidate.channel && binding.chat_id === candidate.chat_id;
+/** Whether two references (a binding or a candidate) name the same channel session. */
+export function sameSession(left: RoleProactiveCandidate, right: RoleProactiveCandidate) {
+  return left.channel === right.channel && left.chat_id === right.chat_id;
 }
 
 /** Whether a binding is one of the proactive candidate sessions. */
@@ -26,7 +27,7 @@ export function defaultsToProactiveCandidate(binding: RoleChannelBinding) {
 }
 
 /** Pairs each binding with its candidate flag, so binding edits can carry the flag along. */
-export function roleBindingEntries(bindings: RoleChannelBinding[], candidates: RoleProactiveCandidate[]): RoleBindingEntry[] {
+export function roleBindingEntries(bindings: RoleChannelBinding[], candidates: RoleProactiveCandidate[]) {
   return bindings.map((binding) => ({ binding, candidate: isRoleProactiveCandidate(binding, candidates) }));
 }
 
@@ -41,7 +42,7 @@ export function splitRoleBindingEntries(entries: RoleBindingEntry[]) {
 }
 
 /** A new binding entry, a candidate when its session type defaults to one. */
-export function createRoleBindingEntry(binding: RoleChannelBinding): RoleBindingEntry {
+export function createRoleBindingEntry(binding: RoleChannelBinding) {
   return { binding, candidate: defaultsToProactiveCandidate(binding) };
 }
 
@@ -50,7 +51,7 @@ export function createRoleBindingEntry(binding: RoleChannelBinding): RoleBinding
  * type resets the candidate flag to that type's default; editing the number
  * or the blacklist keeps it.
  */
-export function updateRoleBindingEntry(entry: RoleBindingEntry, update: (binding: RoleChannelBinding) => RoleChannelBinding): RoleBindingEntry {
+export function updateRoleBindingEntry(entry: RoleBindingEntry, update: (binding: RoleChannelBinding) => RoleChannelBinding) {
   const binding = update(entry.binding);
   const retyped = binding.channel !== entry.binding.channel || binding.chat_type !== entry.binding.chat_type;
   return { binding, candidate: retyped ? defaultsToProactiveCandidate(binding) : entry.candidate };
@@ -80,5 +81,5 @@ export function selectableProactiveCandidates(bindings: RoleChannelBinding[], ca
 
 /** Whether two candidate lists name the same sessions in the same order. */
 export function roleProactiveCandidatesEqual(left: RoleProactiveCandidate[], right: RoleProactiveCandidate[]) {
-  return left.length === right.length && left.every((candidate, index) => candidate.channel === right[index].channel && candidate.chat_id === right[index].chat_id);
+  return left.length === right.length && left.every((candidate, index) => sameSession(candidate, right[index]));
 }

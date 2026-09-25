@@ -851,3 +851,75 @@ async def test_qq_rejected_sender_triggers_no_side_effects(
     assert sessions.sessions == {}
     assert sessions.saved == []
     assert bus.inbound == []
+
+
+@pytest.mark.asyncio
+async def test_qq_chatid_answers_the_binding_form_fields_without_a_turn(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from agent.plugin_host.manifest import load_manifest
+
+    mod = _import_qq_channel(monkeypatch)
+    lifecycle = importlib.import_module("plugins.qq.backend.channel.lifecycle")
+    manifest = load_manifest(_CHANNEL_DIR.parents[1])
+    assert manifest is not None
+    bus = _Bus()
+    sessions = _SessionManager(tmp_path)
+    channel = mod.QQChannel(
+        "42",
+        bus,
+        sessions,
+        group_filter=SimpleNamespace(should_process=AsyncMock(return_value=True)),
+        chat_types=manifest.channel_chat_types("qq"),
+    )
+    # "1" is a bound private chat; group 831907794 is not bound yet; member "2"
+    # is blacklisted in the bound group gqq:100.
+    channel._channel_hub = SimpleNamespace(
+        is_sender_blocked=MagicMock(
+            side_effect=lambda **kwargs: kwargs["sender_id"] == "2"
+        ),
+        is_sender_allowed=MagicMock(return_value=True),
+        has_binding=MagicMock(
+            side_effect=lambda _channel, chat_id: chat_id != "gqq:831907794"
+        ),
+    )
+    channel._bot = sys.modules["ncatbot.core"].BotClient()
+    channel._main_loop = asyncio.get_running_loop()
+    channel.send = AsyncMock()
+    remember = AsyncMock()
+    monkeypatch.setattr(
+        channel, "_require_identity_index", lambda: SimpleNamespace(remember=remember)
+    )
+    scheduled = []
+    real_create_task = asyncio.create_task
+
+    def _run_coroutine_threadsafe(coro, loop):
+        scheduled.append(real_create_task(coro))
+        return SimpleNamespace(result=lambda timeout=None: True)
+
+    monkeypatch.setattr(
+        lifecycle.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe
+    )
+    channel._bind_bot_handlers()
+
+    await channel._bot.private_handler(
+        SimpleNamespace(user_id="1", raw_message="/chatid")
+    )
+    await channel._bot.group_handler(
+        SimpleNamespace(
+            group_id="831907794", user_id="7", raw_message="[CQ:at,qq=42] /chatid"
+        )
+    )
+    await channel._bot.group_handler(
+        SimpleNamespace(group_id="100", user_id="2", raw_message="/myid")
+    )
+    await asyncio.gather(*scheduled)
+
+    assert [call.args for call in channel.send.await_args_list] == [
+        ("1", "会话类型：私聊\nQQ 号：1"),
+        ("gqq:831907794", "会话类型：群聊\n群号：831907794"),
+    ]
+    # No turn, no identity, no session: /chatid never reaches the role.
+    assert bus.inbound == []
+    remember.assert_not_awaited()
+    assert sessions.sessions == {}

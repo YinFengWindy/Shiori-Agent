@@ -10,7 +10,7 @@ from agent.provider import LLMProvider
 from agent.tool_hooks import ToolHook
 from agent.core.proactive_turn.gates import ProactiveGate
 from agent.tools.message_push import MessagePushTool
-from conversation.service import desktop_thread_id
+from conversation.service import desktop_chat_id, desktop_thread_id
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.desktop_presence import DesktopPresence
 from core.roles import RoleRecord, RoleStore
@@ -181,7 +181,7 @@ def _build_role_tick_dispatcher(
             role_id=role_id,
             thread_id=desktop_thread_id(role_id),
             transport_channel=DESKTOP_CHANNEL,
-            transport_chat_id=f"role:{role_id}",
+            transport_chat_id=desktop_chat_id(role_id),
             source="proactive",
             work_kind="proactive_tick",
         )

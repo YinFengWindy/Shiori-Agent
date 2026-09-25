@@ -16,6 +16,7 @@ from agent.turns.orchestrator import TurnOrchestrator
 from proactive_v2 import mcp_sources
 from proactive_v2.mcp_sources import McpClientPool
 from agent.core.proactive_turn import ProactiveTurnPipeline, ProactiveTurnPipelineDeps
+from agent.core.proactive_turn.delivery import resolve_target_transport
 from agent.core.proactive_turn.gates import ProactiveGateChain
 from agent.core.drift_turn import DriftTurnPipeline, DriftTurnPipelineDeps
 from proactive_v2.drift_state import DriftStateStore
@@ -108,16 +109,11 @@ class AgentTickFactory:
         )
 
     def _get_session_key(self) -> str:
-        try:
-            session_key = str(self._deps.sense.target_session_key() or "").strip()
-            if session_key.startswith("role:"):
-                return session_key
-        except Exception:
-            pass
-        role_id = str(getattr(self._deps.cfg, "role_id", "") or "").strip()
-        if role_id:
-            return f"role:{role_id}"
-        raise RuntimeError("role_id required for proactive session key")
+        """The role session a proactive tick serves; every runtime is role-scoped."""
+        role_id = self._deps.cfg.role_id
+        if not role_id:
+            raise RuntimeError("role_id required for proactive session key")
+        return f"role:{role_id}"
 
     def _build_llm_fn(self) -> LlmFn:
         provider = self._deps.provider
@@ -311,8 +307,8 @@ class AgentTickFactory:
                     )
                 ],
             )
-            # Drift picks its target when it speaks, by the same rule as a tick.
-            target = self._deps.sense.target_transport()
+            # Drift picks its target when it speaks, through the tick's resolver.
+            target = resolve_target_transport(self._deps.sense.target_transport)
             if target is None:
                 raise RuntimeError("drift message has no candidate session to go to")
             channel, chat_id = target

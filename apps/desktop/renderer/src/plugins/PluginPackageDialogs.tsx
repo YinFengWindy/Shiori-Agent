@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import { confirmPersonaLines } from "../shared/mascot/mascotLines";
+import { checkboxClass } from "../shared/styles";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { pluginTrustDisclosure } from "./pluginTrustDisclosure";
 import type { usePluginPackageController } from "./usePluginPackageController";
@@ -38,7 +39,7 @@ export function PluginPackageDialogs({ controller, error, detailsPopupRef }: {
       <div className="grid gap-2 text-body text-ink-secondary">
         <span>{uninstallCandidate?.name} · {uninstallCandidate?.version}</span>
         <label className="flex items-center gap-2">
-          <input type="checkbox" className="h-4 w-4 accent-accent" checked={deleteData} disabled={busy} onChange={(event) => setDeleteData(event.target.checked)} />
+          <input type="checkbox" className={checkboxClass} checked={deleteData} disabled={busy} onChange={(event) => setDeleteData(event.target.checked)} />
           同时删除插件数据
         </label>
         {deleteData ? <span className="text-danger-text">插件的独立数据和配置将在重启时永久删除。</span> : null}

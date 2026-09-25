@@ -50,7 +50,7 @@ class Sensor:
 
     def target_session_key(self) -> str:
         """The role session this runtime serves; empty without a role."""
-        role_id = str(getattr(self._cfg, "role_id", "") or "").strip()
+        role_id = self._cfg.role_id
         return f"role:{role_id}" if role_id else ""
 
     def target_transport(self) -> tuple[str, str] | None:
@@ -59,7 +59,7 @@ class Sensor:
         Reads the role's saved candidates at call time, so edits apply without
         a restart; ``None`` when the role has no candidate session.
         """
-        role_id = str(getattr(self._cfg, "role_id", "") or "").strip()
+        role_id = self._cfg.role_id
         if not role_id:
             raise RuntimeError("role_id required for proactive target")
         if self._target_resolver is None:
@@ -70,7 +70,7 @@ class Sensor:
     def read_memory_text(self) -> str:
         if not self._memory:
             return ""
-        role_id = str(getattr(self._cfg, "role_id", "") or "").strip()
+        role_id = self._cfg.role_id
         if not role_id:
             raise RuntimeError("role_id required for proactive memory access")
         bind_session_metadata = getattr(self._memory, "bind_session_metadata", None)
