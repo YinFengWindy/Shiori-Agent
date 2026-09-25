@@ -27,7 +27,7 @@ export function ImageFilmstrip({ items, selectedRecordId, revealRecordId, onSele
         <span className="text-body-sm font-medium text-ink">历史</span>
         <span className="text-caption tabular-nums text-ink-muted">{items.length} 张</span>
       </span>
-      <div className="scrollbar-soft flex min-w-0 flex-1 gap-2 overflow-x-auto px-0.5 py-1">
+      <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto px-0.5 py-1">
         {items.map((item) => {
           const selected = item.id === activeId;
           const preview = item.output_paths[0] ?? "";

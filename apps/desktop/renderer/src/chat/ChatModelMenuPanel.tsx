@@ -3,7 +3,7 @@ import React from "react";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { modelEffortOptions } from "../shared/modelEffortLabels";
 import { cx } from "../shared/styles";
-import { MenuItem, MenuPanel, menuLabelClass, menuSeparatorClass } from "../shared/ui/Menu";
+import { MenuItem, MenuPanel, menuLabelClass, menuSeparatorClass, moveMenuFocus } from "../shared/ui/Menu";
 import type { ModelEffort, RoleModelSelection } from "./chatModelSelection";
 import type { RoleModelSelectionChange } from "./useRoleModelSelection";
 
@@ -70,28 +70,15 @@ function ModelRow({ label, selected, onSelect }: { label: string; selected: bool
  */
 export const ChatModelMenuPanel = React.forwardRef<HTMLDivElement, ChatModelMenuPanelProps & { style?: React.CSSProperties }>(
   function ChatModelMenuPanel({ registrations, selection, onSelectModel, onSelectEffort, style }, ref) {
-    function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-      const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(`[${menuItemAttribute}]`));
-      if (!items.length) return;
-      event.preventDefault();
-      const index = items.indexOf(document.activeElement as HTMLElement);
-      const next = event.key === "Home" ? 0
-        : event.key === "End" ? items.length - 1
-          : event.key === "ArrowDown" ? (index + 1) % items.length
-            : (index - 1 + items.length) % items.length;
-      items[next]?.focus();
-    }
-
     return (
       <MenuPanel
         ref={ref}
-        className="scrollbar-soft grid w-[240px] content-start gap-0.5 overflow-y-auto"
+        className="scrollbar-stable grid w-[240px] content-start gap-0.5 overflow-y-auto"
         style={style}
         role="menu"
         aria-label="模型"
         data-testid="chat-model-menu"
-        onKeyDown={handleKeyDown}
+        onKeyDown={(event) => moveMenuFocus(event, `[${menuItemAttribute}]`)}
       >
         <span className={menuLabelClass}>聊天模型</span>
         {registrations.length ? registrations.map((registration) => (

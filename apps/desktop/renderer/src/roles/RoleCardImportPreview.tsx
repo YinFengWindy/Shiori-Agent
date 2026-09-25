@@ -103,7 +103,7 @@ export function RoleCardImportPreviewDialog({
           </button>
         </header>
 
-        <div className="role-card-import-dialog-content scrollbar-soft min-h-0 overflow-y-auto px-6 py-5">
+        <div className="role-card-import-dialog-content scrollbar-stable min-h-0 overflow-y-auto px-6 py-5">
           <div className="grid gap-6">
             <PreviewSection title="角色设定">
               {hasCharacterContent ? (

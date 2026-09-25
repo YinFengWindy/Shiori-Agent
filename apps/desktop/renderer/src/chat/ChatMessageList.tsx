@@ -1,13 +1,13 @@
 import React from "react";
-import { ChatMessageRow, type ChatMessageActionHandlers } from "./ChatMessageRow";
+import { ChatMessageRow, type ChatMessageRowProps } from "./ChatMessageRow";
 import { useChatMessageVirtualization } from "./useChatMessageVirtualization";
 import { getChatMessageDomKey, getChatMessageReactKey } from "./chatMessageIdentity";
 import type { getVisibleChatMessages } from "./chatMessageWindow";
 import type { RoleChannelCatalog } from "../roles/roleChannelCatalog";
 import { cx } from "../shared/styles";
-import type { RoleRecord, SessionMessage } from "../shared/types";
+import type { RoleRecord } from "../shared/types";
 
-type ChatMessageListProps = Partial<ChatMessageActionHandlers> & {
+type ChatMessageListProps = {
   activeRole: RoleRecord | null;
   sessionKey?: string;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
@@ -25,13 +25,10 @@ type ChatMessageListProps = Partial<ChatMessageActionHandlers> & {
   onBeginAttachmentDrag: (path: string) => void;
   onContentSizeChange?: () => void;
   onJumpToMessage: (messageKey: string) => void;
-  onOpenContextMenu: (
-    event: React.MouseEvent<HTMLElement>,
-    message: SessionMessage,
-    messageKey: string,
-    sender: string,
-  ) => void;
+  onOpenContextMenu: ChatMessageRowProps["onOpenContextMenu"];
   onOpenImagePreview: (historyKey: string) => void;
+  /** Retries the failed turn behind an error row (its 重试 button). */
+  onRetryMessage?: ChatMessageRowProps["onRetryMessage"];
 };
 
 const chatBodyClass = "text-sm leading-6";
@@ -60,8 +57,6 @@ export const ChatMessageList = React.memo(function ChatMessageList({
   onJumpToMessage,
   onOpenContextMenu,
   onOpenImagePreview,
-  onCopyMessage = noop,
-  onQuoteMessage = noop,
   onRetryMessage = noop,
 }: ChatMessageListProps) {
   const fallbackAutoScrollingRef = React.useRef(false);
@@ -80,7 +75,7 @@ export const ChatMessageList = React.memo(function ChatMessageList({
     <div
       ref={conversationListRef}
       className={cx(
-        "conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] h-full min-h-0 overflow-auto pb-5 pt-7",
+        "conversation-list scrollbar-stable relative z-[1] h-full min-h-0 overflow-auto pb-5 pt-7",
         chatBodyClass,
       )}
       style={{ overflowAnchor: "none" }}
@@ -110,8 +105,6 @@ export const ChatMessageList = React.memo(function ChatMessageList({
                 onMeasureElement={observeMessageElement}
                 onOpenContextMenu={onOpenContextMenu}
                 onOpenImagePreview={onOpenImagePreview}
-                onCopyMessage={onCopyMessage}
-                onQuoteMessage={onQuoteMessage}
                 onRetryMessage={onRetryMessage}
               />
             );

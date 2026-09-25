@@ -64,7 +64,7 @@ export function PromptPanel({
 
   return (
     <section className="surface-glass-strong grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden rounded-xl" data-testid="novelai-prompt-panel">
-      <div className="scrollbar-soft grid min-h-0 content-start gap-4 overflow-y-auto p-4">
+      <div className="scrollbar-stable grid min-h-0 content-start gap-4 overflow-y-auto p-4">
         <div className="flex min-w-0 items-center gap-2">
           <Select
             aria-label="生成角色"
@@ -79,7 +79,7 @@ export function PromptPanel({
         <div className="grid gap-2">
           <SegmentedControl ariaLabel="提示词类型" size="md" options={promptTabs} value={tab} onChange={(value) => setTab(value as PromptTab)} />
           <textarea
-            className={cx(inputClass, "scrollbar-soft h-[clamp(132px,34vh,440px)] resize-none leading-relaxed")}
+            className={cx(inputClass, "scrollbar-stable h-[clamp(132px,34vh,440px)] resize-none leading-relaxed")}
             aria-label={tab === "prompt" ? "正向提示词" : "负向提示词"}
             placeholder={tab === "prompt" ? "1girl, library, sunset light" : "lowres, bad hands, blurry"}
             value={tab === "prompt" ? form.prompt : form.negativePrompt}

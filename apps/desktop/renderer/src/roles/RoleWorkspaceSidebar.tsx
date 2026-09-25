@@ -108,7 +108,7 @@ export function RoleWorkspaceSidebar({
           <span className="text-caption tabular-nums text-ink-muted">{roles.length}</span>
         </button>
       </div>
-      <div className="role-workspace-role-list scrollbar-soft scrollbar-soft-accent grid min-h-0 content-start gap-1 overflow-y-auto overflow-x-hidden px-2 pb-1" data-testid="role-workspace-role-list">
+      <div className="role-workspace-role-list scrollbar-stable grid min-h-0 content-start gap-1 overflow-y-auto overflow-x-hidden px-2 pb-1" data-testid="role-workspace-role-list">
         {roles.map((role) => {
           const active = role.id === activeRoleId && (activeSection === "role-detail" || activeSection === "role-assets");
           return (

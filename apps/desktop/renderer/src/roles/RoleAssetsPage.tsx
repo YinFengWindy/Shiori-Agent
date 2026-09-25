@@ -83,7 +83,7 @@ export function RoleAssetsPage({
   }
 
   return (
-    <section className="role-assets-page scrollbar-soft scrollbar-soft-accent h-full overflow-y-auto bg-gradient-app bg-fixed" data-testid="role-assets-page">
+    <section className="role-assets-page scrollbar-stable h-full overflow-y-auto bg-gradient-app bg-fixed" data-testid="role-assets-page">
       <div className="mx-auto grid w-full max-w-[1280px] gap-5 px-8 pb-10 pt-6">
         <div className="flex items-center gap-3">
           <button className={cx(iconButtonClass, "shadow-soft")} type="button" aria-label="返回角色详情" title="返回角色详情" onClick={onBackToDetail}>

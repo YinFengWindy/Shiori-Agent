@@ -52,7 +52,7 @@ export const ChatCodeBlock = React.memo(function ChatCodeBlock({ code, language 
           <span>{copied ? "已复制" : "复制"}</span>
         </button>
       </div>
-      <pre className="scrollbar-soft max-w-full overflow-x-auto p-3 font-mono text-[12px] leading-5 text-ink">
+      <pre className="max-w-full overflow-x-auto p-3 font-mono text-[12px] leading-5 text-ink">
         {highlighted === null
           ? <code>{code}</code>
           // highlight.js escapes the code text; the only markup is its own token spans.

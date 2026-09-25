@@ -94,7 +94,7 @@ export function RoleSearchDialog({
               placeholder="搜索角色名或消息内容"
             />
           </div>
-          <div className="role-search-results scrollbar-soft min-h-0 overflow-y-auto px-2.5 pb-2.5 pt-3">
+          <div className="role-search-results scrollbar-stable min-h-0 overflow-y-auto px-2.5 pb-2.5 pt-3">
             {results.length ? (
               <div className="grid gap-1.5">
                 {results.map((result) => (

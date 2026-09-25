@@ -144,14 +144,32 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 要换尺寸就用上面的 `*SurfaceClass` 自己配尺寸。
 
 溢出菜单（「…」）用 `shared/ui/ActionMenu`（Base UI Menu + `Menu.tsx` 的视觉词汇）。
+聊天输入框上的弹层（模型菜单、常用表情面板）用 `chat/useChatComposerPopover`：渲染进 body portal、`position: fixed` 定位在按钮上方，
+高度不超过按钮到窗口顶部的空间、放不下就在面板内滚动。输入框卡片是 `overflow: hidden` 且带 `backdrop-filter`（会成为 fixed 后代的包含块），
+在卡片里面绝对定位的弹层一定会被裁掉。手写菜单的方向键 / Home / End 焦点移动用 `Menu.tsx` 的 `moveMenuFocus`。
 
 ## 工具类（`styles.css` 的 `@layer utilities`）
 
 - `surface-glass` / `surface-glass-strong` —— 玻璃面板（半透明 + 模糊），用在图片或有色背景之上
 - `bg-gradient-accent` / `-soft` / `-strong` / `-medium` / `bg-gradient-app` —— 渐变面
 - `text-gradient-accent` —— 渐变文字（内部用 strong 版，浅色版做文字会看不见）
-- `scrollbar-soft` —— 细滚动条 + `scrollbar-gutter: stable`；`scrollbar-soft-accent` / `-muted` 是 hover 变体
+- `scrollbar-stable` —— 只做 `scrollbar-gutter: stable`（给滚动条预留车道，内容开始滚动时不左右跳），只用在竖向滚动区；滚动条外观见下一节
+- `scrollbar-native` —— 整棵子树退回系统滚动条，目前只有 story 插件的根用（它不在 restyle 范围内）
 - `story-*` —— story 模块专属的玻璃底与文字可读性描边，**尚未 token 化**，别往其他模块搬
+
+## 滚动条
+
+全应用**只有一种滚动条**，由 `styles.css` `@layer base` 里的 `:where(*)` 基层规则统一给出，组件不用加任何类就能拿到：
+细（`scrollbar-width: thin`）、透明轨道、品牌色滑块——平时 `--color-scrollbar-thumb`（pink-300，1.6:1），
+指针停在滚动区上时加深为 `--color-scrollbar-thumb-hover`（pink-500，3.1:1）。竖向和横向（代码块、Markdown 表格、生图历史胶片条、标签栏）是同一套。
+宿主页面和插件界面都走它，官网（`site/`，同样引入 `styles.css`）也一样。
+
+- **只用标准属性**：Chromium 在元素设置了 `scrollbar-color` / `scrollbar-width` 后会忽略 `::-webkit-scrollbar` 伪元素，
+  所以不要再写 `::-webkit-scrollbar*` 规则（以前的 `scrollbar-soft-accent` / `-muted` hover 变体就是这样一直没生效的）。
+- 滚动条悬停色跟着"指针所在的滚动区"走，所以颜色是每个元素各自设置，而不是只在 `:root` 上设一次靠继承。
+- 竖向滚动区想避免内容在出现滚动条时跳动，叠 `scrollbar-stable`；横向滚动区不要加（它预留的是竖向车道）。
+- 确实需要隐藏滚动条的自带样式表面（桌宠气泡的 `scrollbar-width: none`）直接用普通类覆盖即可——基层规则是 `:where()` 零特异性。
+- 不要在组件里另写滚动条颜色、宽度或伪元素样式。
 
 ## focus 与无障碍
 

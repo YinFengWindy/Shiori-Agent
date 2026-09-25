@@ -1,11 +1,11 @@
 import { CaretUp } from "@phosphor-icons/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { modelEffortLabels } from "../shared/modelEffortLabels";
 import { cx } from "../shared/styles";
-import { getChatModelMenuPosition } from "./chatModelMenuLayout";
 import { ChatModelMenuPanel } from "./ChatModelMenuPanel";
 import { subscribeChatModelMenuRequests } from "./chatModelMenuRequests";
+import { useChatComposerPopover } from "./useChatComposerPopover";
 import { useRoleModelSelection } from "./useRoleModelSelection";
 
 type ChatModelMenuProps = {
@@ -21,8 +21,14 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
-  const [menuPosition, setMenuPosition] = useState<ReturnType<typeof getChatModelMenuPosition> | null>(null);
   const { registrations, selection, reload, update } = useRoleModelSelection(activeRoleId, bridgeReady);
+  const menuPosition = useChatComposerPopover({
+    open,
+    onClose: () => setOpen(false),
+    triggerRef: buttonRef,
+    popoverRef: menuRef,
+    width: menuWidth,
+  });
 
   useEffect(() => {
     setOpen(false);
@@ -35,42 +41,6 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
     void reload();
     setOpen(true);
   }), [reload]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      buttonRef.current?.focus();
-    };
-    window.addEventListener("pointerdown", closeOnOutsidePointer, true);
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("pointerdown", closeOnOutsidePointer, true);
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
-  useLayoutEffect(() => {
-    if (!open) return undefined;
-    const updatePosition = () => {
-      const rect = buttonRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setMenuPosition(getChatModelMenuPosition(rect, { width: window.innerWidth, height: window.innerHeight }, menuWidth));
-    };
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [open]);
 
   // Keyboard users land on the current chat model (or the first row).
   useEffect(() => {

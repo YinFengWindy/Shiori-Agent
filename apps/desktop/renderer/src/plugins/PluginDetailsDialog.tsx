@@ -37,7 +37,7 @@ export function PluginDetailsDialog({ plugin: currentPlugin, busy, error, popupR
         </Dialog.Close>
       </div>
       {plugin ? <>
-        <div className="scrollbar-soft grid min-h-0 content-start gap-4 overflow-y-auto overscroll-contain">
+        <div className="scrollbar-stable grid min-h-0 content-start gap-4 overflow-y-auto overscroll-contain">
           {plugin.description ? <p className="m-0 whitespace-pre-wrap break-words text-body text-ink-secondary">{plugin.description}</p> : null}
           {problem ? (
             <p className="m-0 flex items-center gap-1.5 text-body text-danger-text">

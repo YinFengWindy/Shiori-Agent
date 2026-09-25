@@ -25,7 +25,7 @@ export function ChatComposerAttachments({ paths, disabled, maxHeight, onRemove }
   if (!paths.length) return null;
   return (
     <div
-      className="scrollbar-soft flex flex-wrap gap-2 overflow-y-auto"
+      className="scrollbar-stable flex flex-wrap gap-2 overflow-y-auto"
       style={{ maxHeight }}
       data-testid="composer-attachments"
     >
