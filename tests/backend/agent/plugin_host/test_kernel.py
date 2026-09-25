@@ -1645,8 +1645,10 @@ def _write_channel_plugin(root: Path, plugin_id: str, second: str) -> None:
     )
     (package / "manifest.yaml").write_text(
         f"api: 2\nid: {plugin_id}\ncapabilities: [channels]\nchannels:\n"
-        "  - {name: declared, label: Declared}\n"
-        "  - {name: also_declared, label: Also}\n",
+        "  - {name: declared, label: Declared, chat_types:"
+        " [{type: private, label: 私聊, chat_id_label: ID}]}\n"
+        "  - {name: also_declared, label: Also, chat_types:"
+        " [{type: private, label: 私聊, chat_id_label: ID}]}\n",
         encoding="utf-8",
     )
 

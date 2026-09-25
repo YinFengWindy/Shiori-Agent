@@ -9,8 +9,6 @@ export type RoleChannelCatalog = readonly ChannelSummary[] | null;
 export const desktopChannelName = "desktop";
 
 const desktopChannelLabel = "桌面端";
-const defaultChatIdLabel = "会话 / 群组 ID";
-const defaultChatIdPlaceholder = "输入会话或群组 ID";
 
 /**
  * How one existing binding may be edited:
@@ -82,14 +80,6 @@ export function roleBindingChannelOptions(catalog: RoleChannelCatalog, currentCh
 export function defaultRoleBindingChannel(catalog: RoleChannelCatalog): string {
   const external = (catalog ?? []).filter((channel) => channel.name !== desktopChannelName && isSelectableChannel(channel));
   return (external.find((channel) => channel.state === "active") ?? external[0])?.name ?? desktopChannelName;
-}
-
-/** Field copy for a binding's chat id, taken from the channel declaration when it provides one. */
-export function roleBindingChatIdCopy(channel: ChannelSummary | null) {
-  return {
-    label: channel?.chatIdLabel ?? defaultChatIdLabel,
-    placeholder: channel?.chatIdHint ?? defaultChatIdPlaceholder,
-  };
 }
 
 /** Label for the binding's sole external contact, qualified by the channel's declared identity. */

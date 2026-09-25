@@ -5,6 +5,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from core.common.channel_chat_types import ChatTypeDeclarations
+
 from .assets import RoleAssetStore
 from .binding_policy import RoleBindingPolicy
 from .manifest import RoleManifestRepository
@@ -35,6 +37,14 @@ class RoleStore:
         self._assets = RoleAssetStore(self.roles_dir, self.assets_dir)
         self._bindings = RoleBindingPolicy()
         self.extensions = RoleExtensions(self._repository)
+
+    def bind_channel_chat_types(self, declarations: ChatTypeDeclarations) -> None:
+        """Validates future binding saves against these declared session types.
+
+        The host binds the plugin manifests' declarations after discovery; the
+        core itself never imports plugins.
+        """
+        self._bindings.bind_chat_types(declarations)
 
     @property
     def lock(self):

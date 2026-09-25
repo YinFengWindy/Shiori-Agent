@@ -72,7 +72,8 @@ def _install_transport(monkeypatch, sent, tmp_path: Path):
     (package / "backend" / "plugin.py").write_text(_PLUGIN_PY, encoding="utf-8")
     (package / "manifest.yaml").write_text(
         "api: 2\nid: barrier\ncapabilities: [config, channels]\nchannels:\n"
-        "  - {name: fake, label: Fake}\n",
+        "  - {name: fake, label: Fake,"
+        " chat_types: [{type: private, label: 私聊, chat_id_label: ID}]}\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [root])

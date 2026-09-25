@@ -1,32 +1,43 @@
 import type { RoleChannelBinding } from "../shared/types";
-import { desktopChannelName } from "./roleChannelCatalog";
+import { desktopChannelName, findRoleChannel, type RoleChannelCatalog } from "./roleChannelCatalog";
+import { composeRoleBindingChatId, defaultRoleChatType, findRoleChatType, roleBindingNumber } from "./roleChatTypes";
 
 /** Supported directions for editing the proactive fallback order. */
 export type RoleChannelBindingMoveDirection = "up" | "down";
 
-/** Creates an editable channel binding for a role. */
-export function createRoleChannelBinding(roleId: string, channel: string): RoleChannelBinding {
+/** Creates an editable channel binding for a role, typed as the channel's first declared session type. */
+export function createRoleChannelBinding(roleId: string, channel: string, catalog: RoleChannelCatalog): RoleChannelBinding {
   return {
     channel,
     chat_id: channel === desktopChannelName ? `role:${roleId}` : "",
+    chat_type: defaultRoleChatType(findRoleChannel(catalog, channel)),
     allow_from: [],
   };
 }
 
-/** Changes a binding channel while preserving the desktop role-session invariant. */
+/**
+ * Changes a binding channel while preserving the desktop role-session
+ * invariant. The session type resets to the new channel's first declared type;
+ * an entered number is kept without the old type's prefix and re-prefixed for the new one.
+ */
 export function changeRoleBindingChannel(
   binding: RoleChannelBinding,
   channel: string,
   roleId: string,
+  catalog: RoleChannelCatalog,
 ): RoleChannelBinding {
+  const nextChannel = findRoleChannel(catalog, channel);
+  const chatType = defaultRoleChatType(nextChannel);
+  const number = binding.channel === desktopChannelName
+    ? ""
+    : roleBindingNumber(binding.chat_id, findRoleChatType(findRoleChannel(catalog, binding.channel), binding.chat_type));
   return {
     ...binding,
     channel,
     chat_id: channel === desktopChannelName
       ? `role:${roleId}`
-      : binding.channel === desktopChannelName
-        ? ""
-        : binding.chat_id,
+      : composeRoleBindingChatId(number, findRoleChatType(nextChannel, chatType)),
+    chat_type: chatType,
   };
 }
 

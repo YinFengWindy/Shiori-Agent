@@ -76,9 +76,13 @@ export type RoleAssetCategory = {
   allow_role_send: boolean;
 };
 
+/** Session type of a channel binding, chosen when binding; the desktop session is private. */
+export type RoleChatType = "private" | "group";
+
 export type RoleChannelBinding = {
   channel: string;
   chat_id: string;
+  chat_type: RoleChatType;
   allow_from: string[];
 };
 

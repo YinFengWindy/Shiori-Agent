@@ -3,17 +3,34 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from core.common.channel_identifiers import (
-    QQ_GROUP_PREFIX,
-    chat_ids_equal,
-    is_bare_qq_group_chat_id,
+from core.common.channel_chat_types import (
+    CHAT_TYPE_PRIVATE,
+    ChatTypeDeclarations,
+    validate_chat_id_for_type,
 )
+from core.common.channel_directory import DESKTOP_CHANNEL
+from core.common.channel_identifiers import chat_ids_equal
 
 from .models import RoleChannelBindingConfig, RoleProactiveConfig, RoleRecord
 
 
 class RoleBindingPolicy:
-    """Validates role-owned channel contacts and proactive delivery targets."""
+    """Validates role-owned channel contacts and proactive delivery targets.
+
+    Session types are checked against the channels' manifest declarations,
+    which the host binds once plugins are discovered; every plugin channel
+    must declare them. A channel no installed plugin declares (its plugin was
+    uninstalled) only keeps bindings already saved unchanged, so the role stays
+    editable while such a binding is shown read-only. Before the host binds
+    declarations (isolated core use) session types are not checked.
+    """
+
+    def __init__(self) -> None:
+        self._chat_types: ChatTypeDeclarations | None = None
+
+    def bind_chat_types(self, declarations: ChatTypeDeclarations) -> None:
+        """Checks bindings against these declared channel session types from now on."""
+        self._chat_types = declarations
 
     def normalize_for_role(
         self,
@@ -21,7 +38,10 @@ class RoleBindingPolicy:
         role_id: str,
         bindings: list[RoleChannelBindingConfig | dict[str, Any]],
     ) -> list[RoleChannelBindingConfig]:
-        normalized = self.normalize(bindings)
+        previous = next(
+            (role.channel_bindings for role in roles if role.id == role_id), []
+        )
+        normalized = self.normalize(bindings, previous=previous)
         self.validate_desktop(role_id, normalized)
         self.ensure_unique(roles, role_id, normalized)
         return normalized
@@ -29,8 +49,14 @@ class RoleBindingPolicy:
     def normalize(
         self,
         bindings: list[RoleChannelBindingConfig | dict[str, Any]],
+        *,
+        previous: list[RoleChannelBindingConfig] | None = None,
     ) -> list[RoleChannelBindingConfig]:
-        """Normalizes one role's binding list and contact cardinality."""
+        """Normalizes one role's binding list, contact cardinality and session types.
+
+        ``previous`` is the role's saved list; it decides which bindings on a
+        channel without a declaration may be kept.
+        """
         normalized = [
             (
                 item
@@ -47,6 +73,7 @@ class RoleBindingPolicy:
             ):
                 raise ValueError("同一角色不能重复绑定相同渠道会话")
         self._validate_external_contacts(normalized)
+        self._validate_chat_types(normalized, previous or [])
         return normalized
 
     def validate_desktop(
@@ -123,13 +150,31 @@ class RoleBindingPolicy:
         for binding in bindings:
             if binding.channel != "desktop" and len(binding.allow_from) != 1:
                 raise ValueError("外部渠道必须绑定且仅绑定一个联系人")
-            # A bare QQ ID is sent as a private chat, so it must be the contact.
-            if binding.channel == "qq" and is_bare_qq_group_chat_id(
-                binding.chat_id, binding.allow_from
-            ):
+
+    def _validate_chat_types(
+        self,
+        bindings: list[RoleChannelBindingConfig],
+        previous: list[RoleChannelBindingConfig],
+    ) -> None:
+        """Checks session types against the bound manifest declarations.
+
+        Skipping before ``bind_chat_types`` only serves isolated core use (unit
+        tests, scripts); in production ``CoreRuntime.start`` binds the
+        declarations before any bridge request can save a role.
+        """
+        if self._chat_types is None:
+            return
+        for binding in bindings:
+            if binding.channel == DESKTOP_CHANNEL:
+                continue
+            declarations = self._chat_types.get(binding.channel)
+            if declarations is not None:
+                validate_chat_id_for_type(
+                    binding.chat_id, binding.chat_type, declarations
+                )
+            elif binding not in previous:
                 raise ValueError(
-                    "QQ 私聊会话 ID 必须与联系人 QQ 号一致；"
-                    f"群聊请填 {QQ_GROUP_PREFIX}<群号>"
+                    f"渠道 {binding.channel} 没有已安装的插件提供，不能新增或修改其绑定"
                 )
 
     @staticmethod
@@ -147,6 +192,12 @@ class RoleBindingPolicy:
             binding.channel == "desktop" and binding.allow_from for binding in bindings
         ):
             raise ValueError("桌面端渠道不支持允许对象")
+        if any(
+            binding.channel == DESKTOP_CHANNEL
+            and binding.chat_type != CHAT_TYPE_PRIVATE
+            for binding in bindings
+        ):
+            raise ValueError("桌面端渠道的会话类型只能是私聊")
 
     @staticmethod
     def _ensure_unique_across_roles(

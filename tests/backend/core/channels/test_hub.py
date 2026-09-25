@@ -25,7 +25,9 @@ def test_channel_hub_routes_bound_inbound_to_role_session(tmp_path: Path) -> Non
         description="bound role",
         system_prompt="you are mira",
     )
-    _ = service.bindings.bind("telegram", "123", "mira", contact_id="u1")
+    _ = service.bindings.bind(
+        "telegram", "123", "mira", chat_type="private", contact_id="u1"
+    )
     hub = ChannelHub(service, channel_directory=_directory_with_private_telegram())
 
     routed = hub.route_inbound(
@@ -74,8 +76,12 @@ def test_channel_hub_chat_type_default_comes_from_the_channel(tmp_path: Path) ->
         session_manager=session_manager,
     )
     _ = service.create_role(role_id="mira", name="Mira", system_prompt="mira")
-    _ = service.bindings.bind("telegram", "123", "mira", contact_id="u1")
-    _ = service.bindings.bind("qqbot", "c2c:u2", "mira", contact_id="u2")
+    _ = service.bindings.bind(
+        "telegram", "123", "mira", chat_type="private", contact_id="u1"
+    )
+    _ = service.bindings.bind(
+        "qqbot", "c2c:u2", "mira", chat_type="private", contact_id="u2"
+    )
     hub = ChannelHub(service, channel_directory=_directory_with_private_telegram())
 
     def _route(channel: str, chat_id: str, sender: str, **metadata: str):
@@ -115,7 +121,9 @@ def test_channel_hub_marks_delivery_by_role_session(tmp_path: Path) -> None:
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _ = service.bindings.bind("telegram", "123", role.id, contact_id="u1")
+    _ = service.bindings.bind(
+        "telegram", "123", role.id, chat_type="private", contact_id="u1"
+    )
     routed = ChannelHub(service).route_inbound(
         InboundMessage(
             channel="telegram",
@@ -179,7 +187,9 @@ def test_channel_hub_skips_delivery_mark_when_outbound_has_no_committed_message(
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _ = service.bindings.bind("telegram", "123", role.id, contact_id="u1")
+    _ = service.bindings.bind(
+        "telegram", "123", role.id, chat_type="private", contact_id="u1"
+    )
     routed = ChannelHub(service).route_inbound(
         InboundMessage(
             channel="telegram",
@@ -268,7 +278,9 @@ def test_channel_hub_skips_delivery_mark_without_running_thread_validation(
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _ = service.bindings.bind("telegram", "123", role.id, contact_id="u1")
+    _ = service.bindings.bind(
+        "telegram", "123", role.id, chat_type="private", contact_id="u1"
+    )
     hub = ChannelHub(service)
 
     # No committed_message_id and no thread_id metadata at all: a full-blown
@@ -303,7 +315,9 @@ def test_channel_hub_marks_archived_external_messages_as_duplicates(
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _ = service.bindings.bind("telegram", "123", role.id, contact_id="u1")
+    _ = service.bindings.bind(
+        "telegram", "123", role.id, chat_type="private", contact_id="u1"
+    )
     hub = ChannelHub(service)
     first = hub.route_inbound(
         InboundMessage(
@@ -349,7 +363,9 @@ def test_channel_hub_resolves_control_actions_to_role_session(tmp_path: Path) ->
         description="bound role",
         system_prompt="you are mira",
     )
-    _ = service.bindings.bind("telegram", "123", "mira", contact_id="u1")
+    _ = service.bindings.bind(
+        "telegram", "123", "mira", chat_type="private", contact_id="u1"
+    )
     hub = ChannelHub(service)
     _ = hub.route_inbound(
         InboundMessage(
@@ -388,7 +404,9 @@ def test_channel_hub_attaches_complete_role_execution_context(tmp_path: Path) ->
         description="bound role",
         system_prompt="you are mira",
     )
-    _ = service.bindings.bind("telegram", "123", "mira", contact_id="u1")
+    _ = service.bindings.bind(
+        "telegram", "123", "mira", chat_type="private", contact_id="u1"
+    )
 
     routed = ChannelHub(service).route_inbound(
         InboundMessage(
@@ -416,7 +434,9 @@ def test_channel_hub_only_authorizes_the_configured_contact(tmp_path: Path) -> N
         session_manager=SessionManager(tmp_path),
     )
     _ = service.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
-    _ = service.bindings.bind("telegram", "123", "mira", contact_id="owner")
+    _ = service.bindings.bind(
+        "telegram", "123", "mira", chat_type="private", contact_id="owner"
+    )
     hub = ChannelHub(service)
 
     assert hub.is_sender_allowed(channel="telegram", chat_id="123", sender_id="owner")

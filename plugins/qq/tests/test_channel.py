@@ -281,8 +281,18 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     role_store.update_role(
         "mira",
         channel_bindings=[
-            {"channel": "qq", "chat_id": "1", "allow_from": ["1"]},
-            {"channel": "qq", "chat_id": "gqq:100", "allow_from": ["1"]},
+            {
+                "channel": "qq",
+                "chat_id": "1",
+                "chat_type": "private",
+                "allow_from": ["1"],
+            },
+            {
+                "channel": "qq",
+                "chat_id": "gqq:100",
+                "chat_type": "group",
+                "allow_from": ["1"],
+            },
         ],
     )
 

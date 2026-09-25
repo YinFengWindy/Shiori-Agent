@@ -162,8 +162,10 @@ def test_legacy_bare_qq_group_binding_is_rewritten_and_persisted_once(tmp_path):
     assert role.channel_bindings[0].chat_id == "gqq:831907794"
     assert role.proactive.target_chat_id == "gqq:831907794"
     saved = json.loads(repo.manifest_path.read_text(encoding="utf-8"))
-    assert saved["version"] == 6
+    assert saved["version"] == 7
     assert saved["roles"][0]["channel_bindings"][0]["chat_id"] == "gqq:831907794"
+    assert saved["roles"][0]["channel_bindings"][0]["chat_type"] == "group"
+    assert role.channel_bindings[0].chat_type == "group"
     # The rewrite is persisted, so the next load leaves the file untouched.
     before = repo.manifest_path.read_bytes()
     repo.load_payload()

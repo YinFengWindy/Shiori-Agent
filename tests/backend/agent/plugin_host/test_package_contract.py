@@ -120,8 +120,16 @@ def test_external_package_may_declare_channels(contract_package):
     _change(
         contract_package,
         capabilities=["channels"],
-        runtime_api=">=2.2.0 <3.0.0",
-        channels=[{"name": "demo_chat", "label": "Demo"}],
+        runtime_api=">=2.5.0 <3.0.0",
+        channels=[
+            {
+                "name": "demo_chat",
+                "label": "Demo",
+                "chat_types": [
+                    {"type": "private", "label": "私聊", "chat_id_label": "用户 ID"}
+                ],
+            }
+        ],
     )
     result = validate_package(contract_package)
     assert [item.name for item in result.manifest.channels] == ["demo_chat"]
@@ -140,4 +148,4 @@ def test_external_channel_declaration_errors_block_the_package(contract_package)
 
 
 def test_host_advertises_runtime_api_with_channel_hooks():
-    assert HostRuntimeContract().runtime_api == "2.4.0"
+    assert HostRuntimeContract().runtime_api == "2.5.0"

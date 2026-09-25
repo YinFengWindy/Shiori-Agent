@@ -8,7 +8,8 @@ import type { RoleChannelBinding, RoleFormState } from "../shared/types";
 import { RoleCapabilityBadge } from "./RoleCapabilityCard";
 import { roleToggleStatus } from "./roleCapabilityStatus";
 import { buildProactiveTransportSequence } from "./roleChannelBindings";
-import { roleChannelLabel, type RoleChannelCatalog } from "./roleChannelCatalog";
+import type { RoleChannelCatalog } from "./roleChannelCatalog";
+import { roleBindingDisplayLabel } from "./roleChatTypes";
 import { roleFieldClass, roleFieldLabelClass, rolePanelGhostButtonClass } from "./roleEditorStyles";
 import { RoleEditorSection } from "./RoleEditorSection";
 import { RoleProactiveExecutionFields } from "./RoleProactiveExecutionFields";
@@ -35,7 +36,7 @@ export function RoleProactiveSettingsPanel({ bindings, channels, devMode = false
   const selectedBinding = bindings.find((binding) => binding.channel === targetChannel && binding.chat_id === targetChatId);
   const transportSequence = selectedBinding ? buildProactiveTransportSequence(bindings, targetChannel, targetChatId) : [];
   const usableBindings = bindings.filter((binding) => binding.chat_id.trim());
-  const bindingLabel = (binding: RoleChannelBinding) => `${roleChannelLabel(binding.channel, channels)} · ${binding.chat_id}`;
+  const bindingLabel = (binding: RoleChannelBinding) => roleBindingDisplayLabel(binding, channels);
 
   return (
     <RoleEditorSection

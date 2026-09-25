@@ -11,5 +11,8 @@ channels:
   - name: feishu
     label: 飞书
     contact_label: 用户 open_id（ou_…）
-    chat_id_label: 私聊 chat_id
-    chat_id_hint: oc_<私聊会话 ID>
+    chat_types:
+      - type: private
+        label: 私聊
+        chat_id_label: 私聊 chat_id
+        chat_id_hint: oc_<私聊会话 ID>

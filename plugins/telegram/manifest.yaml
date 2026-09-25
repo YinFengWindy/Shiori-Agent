@@ -11,4 +11,12 @@ channels:
   - name: telegram
     label: Telegram
     contact_label: Telegram 用户 ID 或用户名
-    chat_id_label: 会话 / 群组 ID
+    chat_types:
+      - type: private
+        label: 私聊
+        chat_id_label: 用户 ID
+        chat_id_hint: 对方的数字用户 ID
+      - type: group
+        label: 群聊
+        chat_id_label: 群组 ID
+        chat_id_hint: 以 - 开头的群组 ID

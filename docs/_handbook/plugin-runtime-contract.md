@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.4.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.5.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -80,6 +80,7 @@ version whose additions it uses.
 | `2.2.0` | static manifest `channels` declarations and `channels.list` | #363 T1 |
 | `2.3.0` | optional channel hooks, including `uses_bot_commands`, and `register_channel(..., description=)` | #363 T2 (hooks) and T4 (`uses_bot_commands`) |
 | `2.4.0` | renderer host services as an injected `host` prop, with `host.feedback` (host toasts), `host.ui.InlineError` (host inline error block) and `host.ui.ConfirmDialog` (host confirmation), all with an opt-in 看板娘 `persona` (generic or by scene key) | #362 follow-up (看板娘扩展) |
+| `2.5.0` | required `chat_types` session-type declarations on manifest `channels` entries (replacing the channel-level `chat_id_label` / `chat_id_hint`) | #397 |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -121,15 +122,37 @@ external chat channel the plugin may contribute through `ctx.channels.add`:
 ```yaml
 capabilities: [config, channels]
 channels:
-  - name: qqbot                      # required, [a-z][a-z0-9_-]{0,63}
-    label: QQBot                     # required, display name
-    contact_label: QQBot 用户 OpenID  # optional, the role binding's allow_from contact
-    chat_id_label: 私聊 chat_id       # optional
-    chat_id_hint: c2c:<用户 OpenID>   # optional, chat_id format hint
+  - name: qq                         # required, [a-z][a-z0-9_-]{0,63}
+    label: QQ（NapCat）               # required, display name
+    contact_label: QQ 号              # optional, the role binding's allow_from contact
+    chat_types:                      # required since 2.5, nonempty
+      - type: private                # required, private | group, unique per channel
+        label: 私聊                   # required, type picker label
+        chat_id_label: QQ 号          # required, number field label
+        chat_id_hint: 对方的 QQ 号     # optional, number field placeholder
+      - type: group
+        label: 群聊
+        chat_id_label: 群号
+        chat_id_hint: QQ 群号
+        prefix: 'gqq:'               # optional, prepended to the number
 ```
 
 Values must be nonempty strings; unknown keys, duplicate names, the host-owned
 `desktop` name and declarations without the `channels` capability are rejected.
+
+Since API 2.5 every entry must declare `chat_types`; an entry without it is
+rejected, and the 2.2 channel-level `chat_id_label` / `chat_id_hint` keys are no
+longer accepted (the number copy comes from each type). The role binding form
+offers a type picker and a number field and composes the stored `chat_id` as
+`prefix + number`. Prefixes carry no surrounding whitespace, and no prefix may
+start another of the same channel. Saving a binding is rejected when its type is
+not declared, when the type declares a prefix the `chat_id` does not carry
+(followed by a number), or when the `chat_id` carries another type's prefix.
+Every role binding stores its `chat_type`. A saved binding on a channel no
+installed plugin declares (its plugin was uninstalled) is shown read-only and
+kept as is, but cannot be added or changed. Packages declaring `channels` must
+require `runtime_api: ">=2.5.0 <3.0.0"`.
+
 The declaration is static, so the desktop can list a channel while its plugin is
 disabled, untrusted or still missing credentials. The channel name is a data key
 of role bindings and conversation threads and must stay stable across releases.

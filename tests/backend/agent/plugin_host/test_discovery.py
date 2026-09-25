@@ -176,7 +176,9 @@ def _channel_plugin(root, directory, plugin_id, *channels):
         "async def setup(ctx):\n    pass\n", encoding="utf-8"
     )
     declarations = "".join(
-        f"  - {{name: {name}, label: {name}}}\n" for name in channels
+        f"  - {{name: {name}, label: {name},"
+        " chat_types: [{type: private, label: 私聊, chat_id_label: ID}]}\n"
+        for name in channels
     )
     (package / "manifest.yaml").write_text(
         f"api: 2\nid: {plugin_id}\ncapabilities: [channels]\n"
