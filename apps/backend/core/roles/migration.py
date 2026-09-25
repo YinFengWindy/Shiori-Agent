@@ -20,6 +20,7 @@ CURRENT_MANIFEST_VERSION = 7
 _TELEGRAM_GROUP_CHAT_ID = re.compile(r"-\d+")
 # QQBot's private chats are declared as ``c2c:<OpenID>``; very old IDs may carry
 # a ``qqbot:`` marker, which the transport strips.
+_QQBOT_CHANNEL = "qqbot"
 _QQBOT_C2C_PREFIX = "c2c:"
 _LEGACY_QQBOT_MARKER = "qqbot:"
 
@@ -159,7 +160,7 @@ def _prefix_legacy_qqbot_chat_ids(role: dict[str, Any]) -> None:
     bindings: list[Any] = []
     for raw in raw_bindings:
         # Malformed entries are left for RoleRecord loading to reject.
-        if isinstance(raw, dict) and raw.get("channel") == "qqbot":
+        if isinstance(raw, dict) and raw.get("channel") == _QQBOT_CHANNEL:
             chat_id = normalize_chat_id(raw.get("chat_id") or "")
             canonical = _canonical_qqbot_chat_id(chat_id)
             if canonical != chat_id:
@@ -168,7 +169,10 @@ def _prefix_legacy_qqbot_chat_ids(role: dict[str, Any]) -> None:
         bindings.append(raw)
     role["channel_bindings"] = bindings
     proactive = role.get("proactive")
-    if isinstance(proactive, dict) and proactive.get("target_channel") == "qqbot":
+    if (
+        isinstance(proactive, dict)
+        and proactive.get("target_channel") == _QQBOT_CHANNEL
+    ):
         target = normalize_chat_id(proactive.get("target_chat_id") or "")
         if target in renamed:
             role["proactive"] = {**proactive, "target_chat_id": renamed[target]}
@@ -178,6 +182,9 @@ def _canonical_qqbot_chat_id(chat_id: str) -> str:
     value = chat_id.removeprefix(_LEGACY_QQBOT_MARKER)
     if value and ":" not in value:
         return f"{_QQBOT_C2C_PREFIX}{value}"
+    # Another kind (``group:X``) is left untouched: the QQBot transport only
+    # sends C2C, so such a binding never delivered, and rewriting it would hide
+    # that. Save-time validation against the declared ``c2c:`` type exposes it.
     return value if value.startswith(_QQBOT_C2C_PREFIX) else chat_id
 
 

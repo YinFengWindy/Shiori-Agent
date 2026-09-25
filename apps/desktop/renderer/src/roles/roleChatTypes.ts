@@ -54,7 +54,7 @@ export function composeRoleBindingChatId(number: string, chatType: ChannelChatTy
   const prefix = chatType?.prefix;
   const trimmed = number.trim();
   if (!prefix) return trimmed;
-  const bare = (trimmed.startsWith(prefix) ? trimmed.slice(prefix.length) : trimmed).trim();
+  const bare = roleBindingNumber(trimmed, chatType).trim();
   return bare ? `${prefix}${bare}` : "";
 }
 
