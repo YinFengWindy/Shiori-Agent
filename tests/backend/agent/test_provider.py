@@ -605,7 +605,7 @@ async def test_token_plan_strategy_disables_thinking(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
-async def test_deepseek_strategy_strips_image_url_blocks(
+async def test_deepseek_strategy_keeps_image_url_blocks(
     monkeypatch: pytest.MonkeyPatch,
 ):
     fake = _FakeClient([_Response(content="ok")])
@@ -630,10 +630,11 @@ async def test_deepseek_strategy_strips_image_url_blocks(
         max_tokens=10,
     )
 
-    content = fake.calls[-1]["messages"][0]["content"]
-    assert isinstance(content, str)
-    assert "看看这张图" in content
-    assert "image_url" in content
+    # DeepSeek 已支持多模态输入，图片块必须原样透传而不是被降级成文本。
+    assert fake.calls[-1]["messages"][0]["content"] == [
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}},
+        {"type": "text", "text": "看看这张图"},
+    ]
 
 
 @pytest.mark.asyncio
