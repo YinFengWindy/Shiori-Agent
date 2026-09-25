@@ -1,10 +1,9 @@
 import type { RoleFormState, RoleProactiveConfig, RoleRecord } from "../shared/types";
+import { roleProactiveCandidatesEqual } from "./roleProactiveCandidates";
 
 /** Stable defaults for the role-owned proactive editor contract. */
 export const roleProactiveDefaults = Object.freeze({
   enabled: false,
-  targetChannel: "",
-  targetChatId: "",
   profile: "daily",
   agentMaxSteps: 35,
   agentContentLimit: 5,
@@ -17,8 +16,7 @@ export const roleProactiveDefaults = Object.freeze({
 export type RoleProactiveFormState = Pick<
   RoleFormState,
   | "proactiveEnabled"
-  | "proactiveTargetChannel"
-  | "proactiveTargetChatId"
+  | "proactiveCandidates"
   | "proactiveProfile"
   | "proactiveAgentMaxSteps"
   | "proactiveAgentContentLimit"
@@ -32,8 +30,7 @@ export type RoleProactiveFormState = Pick<
 export function createDefaultRoleProactiveForm(): RoleProactiveFormState {
   return {
     proactiveEnabled: roleProactiveDefaults.enabled,
-    proactiveTargetChannel: roleProactiveDefaults.targetChannel,
-    proactiveTargetChatId: roleProactiveDefaults.targetChatId,
+    proactiveCandidates: [],
     proactiveProfile: roleProactiveDefaults.profile,
     proactiveAgentMaxSteps: roleProactiveDefaults.agentMaxSteps,
     proactiveAgentContentLimit: roleProactiveDefaults.agentContentLimit,
@@ -51,8 +48,7 @@ export function readRoleProactiveForm(
   const proactive = role.proactive;
   return {
     proactiveEnabled: proactive?.enabled ?? roleProactiveDefaults.enabled,
-    proactiveTargetChannel: proactive?.target_channel ?? roleProactiveDefaults.targetChannel,
-    proactiveTargetChatId: proactive?.target_chat_id ?? roleProactiveDefaults.targetChatId,
+    proactiveCandidates: proactive?.candidates ?? [],
     proactiveProfile: proactive?.profile ?? roleProactiveDefaults.profile,
     proactiveAgentMaxSteps: proactive?.agent?.max_steps ?? roleProactiveDefaults.agentMaxSteps,
     proactiveAgentContentLimit: proactive?.agent?.content_limit ?? roleProactiveDefaults.agentContentLimit,
@@ -74,8 +70,7 @@ export function buildRoleProactiveConfig(
   return {
     ...persisted,
     enabled: Boolean(roleForm.proactiveEnabled),
-    target_channel: roleForm.proactiveTargetChannel ?? roleProactiveDefaults.targetChannel,
-    target_chat_id: roleForm.proactiveTargetChatId ?? roleProactiveDefaults.targetChatId,
+    candidates: roleForm.proactiveCandidates ?? [],
     profile: roleForm.proactiveProfile ?? roleProactiveDefaults.profile,
     agent: {
       ...persistedAgent,
@@ -103,10 +98,7 @@ export function roleProactiveConfigEqual(
   const persisted = role.proactive;
   return (
     Boolean(roleForm.proactiveEnabled) === Boolean(persisted?.enabled)
-    && (roleForm.proactiveTargetChannel ?? roleProactiveDefaults.targetChannel)
-      === (persisted?.target_channel ?? roleProactiveDefaults.targetChannel)
-    && (roleForm.proactiveTargetChatId ?? roleProactiveDefaults.targetChatId)
-      === (persisted?.target_chat_id ?? roleProactiveDefaults.targetChatId)
+    && roleProactiveCandidatesEqual(roleForm.proactiveCandidates ?? [], persisted?.candidates ?? [])
     && (roleForm.proactiveProfile ?? roleProactiveDefaults.profile)
       === (persisted?.profile ?? roleProactiveDefaults.profile)
     && (roleForm.proactiveAgentMaxSteps ?? roleProactiveDefaults.agentMaxSteps)

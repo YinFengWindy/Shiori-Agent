@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from core.memory.markdown import MemoryProfileApi
 
 from bus.event_bus import EventBus
-from bus.events_lifecycle import TurnStarted
 from core.error_context import current_session_key
 from agent.looping.ports import SessionServices
 from agent.provider import LLMProvider
@@ -37,7 +36,8 @@ from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from conversation.service import ConversationService
 from core.common.strategy_trace import StrategyTraceType, build_strategy_trace_envelope
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
-from core.roles import RoleAggregateService, RoleStore
+from core.desktop_presence import DesktopPresence
+from core.roles import RoleStore
 from core.roles.relationship_runtime import RoleRelationshipRuntimeService
 from proactive_v2.energy import (
     compute_energy,
@@ -50,6 +50,7 @@ from proactive_v2.memory_sampler import sample_memory_chunks
 from proactive_v2.presence import PresenceStore
 from proactive_v2.sensor import Sensor
 from proactive_v2.state import ProactiveStateStore
+from proactive_v2.target_selection import ProactiveTargetResolver
 from session.manager import SessionManager
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,7 @@ class ProactiveLoop:
         tick_dispatcher: Callable[[Callable[[], Any]], Any] | None = None,
         event_bus: EventBus | None = None,
         role_prompt_fn: Callable[[], str] | None = None,
+        desktop_presence: DesktopPresence | None = None,
     ) -> None:
         self._sessions = session_manager
         self._provider = provider
@@ -112,10 +114,10 @@ class ProactiveLoop:
         )
         self._tick_dispatcher = tick_dispatcher
         self._event_bus = event_bus
+        self._desktop_presence = desktop_presence
         if role_prompt_fn is None:
             raise ValueError("role_prompt_fn required for proactive loop")
         self._role_prompt_fn = role_prompt_fn
-        self._turn_started_handler = self._handle_turn_started
         self._workspace_context_mtime_ns: int | None = None
         self._workspace_context_text: str = ""
         self._relationship_runtime = self._build_relationship_runtime()
@@ -172,14 +174,6 @@ class ProactiveLoop:
         )
 
     def _build_sense(self) -> Sensor:
-        role_bindings = None
-        workspace = getattr(self._sessions, "workspace", None)
-        if workspace is not None:
-            role_bindings = RoleAggregateService.from_runtime(
-                workspace=Path(workspace),
-                role_store=RoleStore(Path(workspace)),
-                session_manager=self._sessions,
-            ).bindings
         return Sensor(
             cfg=self._cfg,
             sessions=self._sessions,
@@ -187,7 +181,24 @@ class ProactiveLoop:
             memory=cast("MemoryProfileApi | None", self._memory),
             presence=self._presence,
             rng=self._rng,
-            role_bindings=role_bindings,
+            target_resolver=self._build_target_resolver(),
+        )
+
+    def _build_target_resolver(self) -> ProactiveTargetResolver | None:
+        """Selects each message's target from the role's live candidate sessions.
+
+        Absent without a workspace, conversation store or desktop presence
+        (isolated tests); the sensor then refuses to pick a target. A role loop
+        built by ``build_proactive_runtime`` always has all three.
+        """
+        workspace = getattr(self._sessions, "workspace", None)
+        conversations = getattr(self._sessions, "conversation_store", None)
+        if workspace is None or conversations is None or self._desktop_presence is None:
+            return None
+        return ProactiveTargetResolver(
+            roles=RoleStore(Path(workspace)),
+            conversations=conversations,
+            desktop_presence=self._desktop_presence,
         )
 
     def _build_agent_tick(self):
@@ -238,8 +249,6 @@ class ProactiveLoop:
         self._sense = self._build_sense()
         self._message_deduper = self._build_message_deduper()
         self._proactive_pipeline = self._build_agent_tick()
-        if self._event_bus is not None:
-            self._event_bus.on(TurnStarted, self._turn_started_handler)
         # 4. 启动时把当前 proactive 配置落一份 trace，方便回看。
         self._trace_proactive_config_snapshot()
 
@@ -369,10 +378,7 @@ class ProactiveLoop:
         if self._stop_requested.is_set():
             return
         self._running = True
-        logger.info(
-            f"ProactiveLoop 已启动  "
-            f"目标={self._cfg.default_channel}:{self._cfg.default_chat_id}"
-        )
+        logger.info("ProactiveLoop 已启动  角色=%s", self._cfg.default_role_id)
         if not hasattr(self, "_mcp_pool"):
             from proactive_v2.mcp_sources import McpClientPool
 
@@ -386,23 +392,8 @@ class ProactiveLoop:
             if self._poll_task is not None:
                 await self._poll_task
                 self._poll_task = None
-            cancel_retries = getattr(
-                self._proactive_pipeline,
-                "cancel_pending_retries",
-                None,
-            )
-            if cancel_retries is not None:
-                await cancel_retries()
-            event_bus = getattr(self, "_event_bus", None)
-            if event_bus is not None:
-                event_bus.off(TurnStarted, self._turn_started_handler)
             await self._mcp_pool.disconnect_all()
             logger.info("[proactive] mcp pool 已关闭")
-
-    def _handle_turn_started(self, event: TurnStarted) -> None:
-        """用户开始新回合时，取消当前角色的多渠道重试。"""
-        if event.session_key == self._target_session_key():
-            self._proactive_pipeline.notify_user_reply()
 
     async def _run_loop(self) -> None:
         # 启动时先同步完成首次 feed 轮询,保证首次 tick 能拿到新鲜数据

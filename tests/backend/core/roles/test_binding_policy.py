@@ -6,7 +6,11 @@ import pytest
 
 from core.common.channel_chat_types import ChatTypeDeclaration
 from core.roles.binding_policy import RoleBindingPolicy
-from core.roles.models import RoleChannelBindingConfig, RoleProactiveConfig
+from core.roles.models import (
+    RoleChannelBindingConfig,
+    RoleProactiveCandidate,
+    RoleProactiveConfig,
+)
 
 
 def test_binding_policy_accepts_external_bindings_without_any_contact() -> None:
@@ -48,18 +52,65 @@ def test_binding_policy_rejects_channel_owned_by_another_role() -> None:
         policy.normalize_for_role(roles, "role-b", [existing])
 
 
-def test_binding_policy_disables_removed_proactive_target() -> None:
-    proactive = RoleProactiveConfig(
-        enabled=True,
-        target_channel="telegram",
-        target_chat_id="chat-1",
+_DESKTOP = RoleChannelBindingConfig("desktop", "role:mira", "private")
+_QQ_PRIVATE = RoleChannelBindingConfig("qq", "10001", "private")
+_QQ_GROUP = RoleChannelBindingConfig("qq", "gqq:7", "group")
+
+
+def test_proactive_candidates_are_stored_in_binding_order() -> None:
+    normalized = RoleBindingPolicy.normalize_proactive(
+        {
+            "enabled": True,
+            "candidates": [
+                {"channel": "qq", "chat_id": "gqq:7"},
+                {"channel": "desktop", "chat_id": "role:mira"},
+            ],
+        },
+        [_DESKTOP, _QQ_PRIVATE, _QQ_GROUP],
     )
 
-    normalized = RoleBindingPolicy.disable_missing_proactive_target(proactive, [])
+    assert normalized.candidates == (
+        RoleProactiveCandidate("desktop", "role:mira"),
+        RoleProactiveCandidate("qq", "gqq:7"),
+    )
 
-    assert normalized.enabled is False
-    assert normalized.target_channel == ""
-    assert normalized.target_chat_id == ""
+
+def test_proactive_candidate_must_be_a_bound_session() -> None:
+    # A bare QQ number is a private chat, not the bound gqq: group.
+    with pytest.raises(ValueError, match="已绑定的会话: qq:7"):
+        RoleBindingPolicy.normalize_proactive(
+            {"enabled": True, "candidates": [{"channel": "qq", "chat_id": "7"}]},
+            [_QQ_GROUP],
+        )
+
+
+def test_enabling_proactive_requires_a_candidate() -> None:
+    with pytest.raises(ValueError, match="至少要选择一个接收会话"):
+        RoleBindingPolicy.normalize_proactive(
+            {"enabled": True, "candidates": []}, [_DESKTOP]
+        )
+    disabled = RoleBindingPolicy.normalize_proactive(
+        {"enabled": False, "candidates": []}, [_DESKTOP]
+    )
+    assert disabled.candidates == ()
+
+
+def test_removed_binding_leaves_candidates_and_empty_set_disables() -> None:
+    proactive = RoleProactiveConfig(
+        enabled=True,
+        candidates=(
+            RoleProactiveCandidate("qq", "gqq:7"),
+            RoleProactiveCandidate("desktop", "role:mira"),
+        ),
+    )
+
+    kept = RoleBindingPolicy.prune_proactive_candidates(proactive, [_DESKTOP])
+    emptied = RoleBindingPolicy.prune_proactive_candidates(proactive, [_QQ_PRIVATE])
+
+    assert kept.enabled is True
+    assert kept.candidates == (RoleProactiveCandidate("desktop", "role:mira"),)
+    assert emptied.enabled is False
+    assert emptied.candidates == ()
 
 
 _QQ_TYPES = {

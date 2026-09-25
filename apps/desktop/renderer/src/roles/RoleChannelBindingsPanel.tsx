@@ -1,5 +1,5 @@
 import { Select } from "../shared/ui/Select";
-import { CaretDown, CaretUp, Info, PlugsConnected, Plus, Trash, WarningCircle } from "@phosphor-icons/react";
+import { Info, PlugsConnected, Plus, Trash, WarningCircle } from "@phosphor-icons/react";
 import type { RoleChannelBinding, RoleFormState } from "../shared/types";
 import { cx } from "../shared/styles";
 import { roleFieldClass, roleFieldLabelClass, rolePanelGhostButtonClass, roleRowIconButtonClass } from "./roleEditorStyles";
@@ -7,7 +7,6 @@ import {
   changeRoleBindingChannel,
   createRoleChannelBinding,
   isDesktopRoleBinding,
-  moveRoleChannelBinding,
 } from "./roleChannelBindings";
 import {
   defaultRoleBindingChannel,
@@ -22,6 +21,13 @@ import { RoleChannelBindingChatIdField, RoleChannelBindingChatTypeField } from "
 import { RoleReadOnlyField } from "./RoleReadOnlyField";
 import { changeRoleBindingChatType, isGroupChatType } from "./roleChatTypes";
 import { RoleEditorSection } from "./RoleEditorSection";
+import {
+  createRoleBindingEntry,
+  roleBindingEntries,
+  splitRoleBindingEntries,
+  updateRoleBindingEntry,
+  type RoleBindingEntry,
+} from "./roleProactiveCandidates";
 
 type RoleChannelBindingsPanelProps = {
   activeRoleId: string;
@@ -37,9 +43,8 @@ type ChannelBindingRowProps = {
   activeRoleId: string;
   binding: RoleChannelBinding;
   channels: RoleChannelCatalog;
-  index: number;
-  bindingsCount: number;
-  onUpdateBindings: (update: (current: RoleChannelBinding[]) => RoleChannelBinding[]) => void;
+  onUpdate: (update: (binding: RoleChannelBinding) => RoleChannelBinding) => void;
+  onRemove: () => void;
   onOpenPluginSettings: (pluginId: string | null) => void;
 };
 
@@ -92,73 +97,81 @@ function ChannelStateBadge({ availability }: { availability: RoleBindingAvailabi
 }
 
 /**
- * Renders one ordered delivery destination and its editable access boundary:
+ * Renders one channel session of the role and its editable access boundary:
  * channel and session type on the first line, the number below, and for a
  * group the blacklist of members the role ignores. A binding
  * whose provider is disabled or gone keeps its data read-only; it can still be
- * reordered or removed.
+ * removed.
  */
-function ChannelBindingRow({ activeRoleId, binding, channels, index, bindingsCount, onUpdateBindings, onOpenPluginSettings }: ChannelBindingRowProps) {
+function ChannelBindingRow({ activeRoleId, binding, channels, onUpdate, onRemove, onOpenPluginSettings }: ChannelBindingRowProps) {
   const desktopBinding = isDesktopRoleBinding(binding);
   const availability = roleBindingAvailability(binding, channels);
   const readOnly = availability.kind !== "editable";
   const channel = availability.kind === "missing" ? null : availability.channel;
   const label = roleChannelLabel(binding.channel, channels);
-  const updateThis = (update: (item: RoleChannelBinding) => RoleChannelBinding) =>
-    onUpdateBindings((current) => current.map((item, itemIndex) => itemIndex === index ? update(item) : item));
 
   return (
     <div
-      className={cx("grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 rounded-lg border p-4", readOnly ? "border-dashed border-line bg-surface-soft" : "border-line-soft bg-surface shadow-soft")}
+      className={cx("grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-lg border p-4", readOnly ? "border-dashed border-line bg-surface-soft" : "border-line-soft bg-surface shadow-soft")}
       data-testid="role-channel-binding"
       data-availability={availability.kind}
     >
-      <span className="grid h-8 w-8 place-items-center rounded-md bg-lavender-soft text-caption font-medium text-lavender-text" aria-label={`投递顺序 ${index + 1}`}>{index + 1}</span>
       <div className="grid min-w-0 gap-3">
         <div className="grid gap-3 sm:grid-cols-[168px_136px]">
           <div className={cx(roleFieldLabelClass, "min-w-0")}>
             <span className="flex min-h-5 items-center gap-1.5">渠道<ChannelStateBadge availability={availability} /></span>
             {readOnly
               ? <RoleReadOnlyField label="渠道">{label}</RoleReadOnlyField>
-              : <Select aria-label="渠道" className={roleFieldClass} value={binding.channel} onValueChange={(value) => updateThis((item) => changeRoleBindingChannel(item, value, activeRoleId, channels))} options={roleBindingChannelOptions(channels, binding.channel)} />}
+              : <Select aria-label="渠道" className={roleFieldClass} value={binding.channel} onValueChange={(value) => onUpdate((item) => changeRoleBindingChannel(item, value, activeRoleId, channels))} options={roleBindingChannelOptions(channels, binding.channel)} />}
           </div>
           {!desktopBinding
-            ? <RoleChannelBindingChatTypeField binding={binding} channel={channel} readOnly={readOnly} onChange={(chatType) => updateThis((item) => changeRoleBindingChatType(item, channel, chatType))} />
+            ? <RoleChannelBindingChatTypeField binding={binding} channel={channel} readOnly={readOnly} onChange={(chatType) => onUpdate((item) => changeRoleBindingChatType(item, channel, chatType))} />
             : null}
         </div>
-        <RoleChannelBindingChatIdField binding={binding} channel={channel} readOnly={desktopBinding || readOnly} onChange={(chatId) => updateThis((item) => ({ ...item, chat_id: chatId }))} />
+        <RoleChannelBindingChatIdField binding={binding} channel={channel} readOnly={desktopBinding || readOnly} onChange={(chatId) => onUpdate((item) => ({ ...item, chat_id: chatId }))} />
         {isGroupChatType(binding.chat_type)
-          ? <RoleChannelBindingBlocklistField binding={binding} channel={channel} readOnly={readOnly} onChange={(blockedSenders) => updateThis((item) => ({ ...item, blocked_senders: blockedSenders }))} />
+          ? <RoleChannelBindingBlocklistField binding={binding} channel={channel} readOnly={readOnly} onChange={(blockedSenders) => onUpdate((item) => ({ ...item, blocked_senders: blockedSenders }))} />
           : null}
         <ChannelBindingNotice availability={availability} onOpenPluginSettings={onOpenPluginSettings} />
       </div>
-      <div className="flex items-start gap-0.5 pt-5 sm:pt-6">
-        <button className={roleRowIconButtonClass} type="button" onClick={() => onUpdateBindings((current) => moveRoleChannelBinding(current, index, "up"))} disabled={index === 0} aria-label={`上移${label}绑定`} title="上移"><CaretUp className="h-4 w-4" weight="bold" /></button>
-        <button className={roleRowIconButtonClass} type="button" onClick={() => onUpdateBindings((current) => moveRoleChannelBinding(current, index, "down"))} disabled={index === bindingsCount - 1} aria-label={`下移${label}绑定`} title="下移"><CaretDown className="h-4 w-4" weight="bold" /></button>
-        <button className={roleRowIconButtonClass} type="button" onClick={() => onUpdateBindings((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`移除${label}绑定`} title="移除"><Trash className="h-4 w-4 text-danger-text" weight="bold" /></button>
+      <div className="flex items-start pt-5 sm:pt-6">
+        <button className={roleRowIconButtonClass} type="button" onClick={onRemove} aria-label={`移除${label}绑定`} title="移除"><Trash className="h-4 w-4 text-danger-text" weight="bold" /></button>
       </div>
     </div>
   );
 }
 
-/** Edits the ordered channel destinations owned by the role. */
+/**
+ * Edits the channel sessions owned by the role. Every edit carries each
+ * binding's proactive candidate flag along, so candidates follow renames and
+ * removals, and a new binding starts with its session type's default.
+ */
 export function RoleChannelBindingsPanel({ activeRoleId, bindings, channels, onUpdate, onOpenPluginSettings }: RoleChannelBindingsPanelProps) {
-  function updateBindings(update: (current: RoleChannelBinding[]) => RoleChannelBinding[]): void {
-    onUpdate((current) => {
-      const channelBindings = update(current.channelBindings ?? []);
-      const targetStillBound = channelBindings.some((binding) => binding.channel === current.proactiveTargetChannel && binding.chat_id === current.proactiveTargetChatId);
-      return { ...current, channelBindings, proactiveTargetChannel: targetStillBound ? current.proactiveTargetChannel : "", proactiveTargetChatId: targetStillBound ? current.proactiveTargetChatId : "" };
-    });
+  function updateEntries(update: (entries: RoleBindingEntry[]) => RoleBindingEntry[]): void {
+    onUpdate((current) => ({
+      ...current,
+      ...splitRoleBindingEntries(update(roleBindingEntries(current.channelBindings ?? [], current.proactiveCandidates ?? []))),
+    }));
   }
 
   return (
     <RoleEditorSection
       title="渠道绑定"
       data-testid="role-channel-config"
-      action={<button className={rolePanelGhostButtonClass} type="button" disabled={channels === null} onClick={() => updateBindings((current) => [...current, createRoleChannelBinding(activeRoleId, defaultRoleBindingChannel(channels), channels)])} aria-label="添加渠道绑定"><Plus className="h-4 w-4" weight="bold" />添加</button>}
+      action={<button className={rolePanelGhostButtonClass} type="button" disabled={channels === null} onClick={() => updateEntries((entries) => [...entries, createRoleBindingEntry(createRoleChannelBinding(activeRoleId, defaultRoleBindingChannel(channels), channels))])} aria-label="添加渠道绑定"><Plus className="h-4 w-4" weight="bold" />添加</button>}
     >
       {bindings.length
-        ? <div className="grid gap-3">{bindings.map((binding, index) => <ChannelBindingRow activeRoleId={activeRoleId} binding={binding} channels={channels} index={index} bindingsCount={bindings.length} onUpdateBindings={updateBindings} onOpenPluginSettings={onOpenPluginSettings} key={`${binding.channel}:${binding.chat_id}:${index}`} />)}</div>
+        ? <div className="grid gap-3">{bindings.map((binding, index) => (
+            <ChannelBindingRow
+              activeRoleId={activeRoleId}
+              binding={binding}
+              channels={channels}
+              onUpdate={(update) => updateEntries((entries) => entries.map((entry, entryIndex) => entryIndex === index ? updateRoleBindingEntry(entry, update) : entry))}
+              onRemove={() => updateEntries((entries) => entries.filter((_, entryIndex) => entryIndex !== index))}
+              onOpenPluginSettings={onOpenPluginSettings}
+              key={`${binding.channel}:${binding.chat_id}:${index}`}
+            />
+          ))}</div>
         : <div className="rounded-lg border border-dashed border-line bg-surface-soft py-8 text-center text-caption text-ink-muted">尚未绑定渠道</div>}
     </RoleEditorSection>
   );

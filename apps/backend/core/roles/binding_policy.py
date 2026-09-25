@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
 from typing import Any
 
@@ -11,11 +12,16 @@ from core.common.channel_chat_types import (
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.common.channel_identifiers import chat_ids_equal
 
-from .models import RoleChannelBindingConfig, RoleProactiveConfig, RoleRecord
+from .models import (
+    RoleChannelBindingConfig,
+    RoleProactiveCandidate,
+    RoleProactiveConfig,
+    RoleRecord,
+)
 
 
 class RoleBindingPolicy:
-    """Validates role-owned channel sessions and proactive delivery targets.
+    """Validates role-owned channel sessions and proactive candidate sessions.
 
     Session types are checked against the channels' manifest declarations,
     which the host binds once plugins are discovered; every plugin channel
@@ -98,51 +104,48 @@ class RoleBindingPolicy:
         proactive: RoleProactiveConfig | dict[str, Any],
         bindings: list[RoleChannelBindingConfig],
     ) -> RoleProactiveConfig:
+        """Validates the candidate sessions and stores them in binding order.
+
+        Every candidate must name one of ``bindings``; enabling proactive
+        delivery requires at least one candidate.
+        """
         normalized = (
             proactive
             if isinstance(proactive, RoleProactiveConfig)
             else RoleProactiveConfig.from_dict(proactive)
         )
-        if normalized.enabled and (
-            not normalized.target_channel or not normalized.target_chat_id
-        ):
-            raise ValueError("启用主动推送时必须显式选择一个目标渠道")
-        if (
-            normalized.target_channel
-            and normalized.target_chat_id
-            and not RoleBindingPolicy._contains_target(bindings, normalized)
-        ):
-            raise ValueError("主动推送目标必须是当前角色已绑定的渠道")
+        bound = {RoleProactiveCandidate.of_binding(binding) for binding in bindings}
+        unbound = next(
+            (item for item in normalized.candidates if item not in bound), None
+        )
+        if unbound is not None:
+            raise ValueError(
+                "主动推送候选会话必须是当前角色已绑定的会话: "
+                f"{unbound.channel}:{unbound.chat_id}"
+            )
+        normalized = replace(
+            normalized,
+            candidates=_candidates_in_binding_order(normalized.candidates, bindings),
+        )
+        if normalized.enabled and not normalized.candidates:
+            raise ValueError("启用主动推送时至少要选择一个接收会话")
         return normalized
 
     @staticmethod
-    def disable_missing_proactive_target(
+    def prune_proactive_candidates(
         proactive: RoleProactiveConfig,
         bindings: list[RoleChannelBindingConfig],
     ) -> RoleProactiveConfig:
-        if proactive.enabled and not RoleBindingPolicy._contains_target(
-            bindings, proactive
-        ):
-            return replace(
-                proactive,
-                enabled=False,
-                target_channel="",
-                target_chat_id="",
-            )
-        return proactive
+        """Drops candidates whose binding was removed, keeping binding order.
 
-    @staticmethod
-    def _contains_target(
-        bindings: list[RoleChannelBindingConfig], proactive: RoleProactiveConfig
-    ) -> bool:
-        return any(
-            binding.channel == proactive.target_channel
-            and chat_ids_equal(
-                binding.channel,
-                binding.chat_id,
-                proactive.target_chat_id,
-            )
-            for binding in bindings
+        Proactive delivery that is left without any candidate is disabled, since
+        it has nowhere to send.
+        """
+        candidates = _candidates_in_binding_order(proactive.candidates, bindings)
+        return replace(
+            proactive,
+            candidates=candidates,
+            enabled=proactive.enabled and bool(candidates),
         )
 
     def _validate_chat_types(
@@ -215,3 +218,16 @@ class RoleBindingPolicy:
         )
         if conflict is not None:
             raise ValueError(f"渠道会话已绑定其他角色: {conflict[0]}:{conflict[1]}")
+
+
+def _candidates_in_binding_order(
+    candidates: Iterable[RoleProactiveCandidate],
+    bindings: list[RoleChannelBindingConfig],
+) -> tuple[RoleProactiveCandidate, ...]:
+    """Keeps the candidates that are still bound, ordered like ``bindings``."""
+    selected = set(candidates)
+    return tuple(
+        candidate
+        for candidate in map(RoleProactiveCandidate.of_binding, bindings)
+        if candidate in selected
+    )

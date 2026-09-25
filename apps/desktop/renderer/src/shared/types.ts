@@ -87,10 +87,16 @@ export type RoleChannelBinding = {
   blocked_senders: string[];
 };
 
+/** A bound session that may receive proactive messages, referencing its binding by channel and chat id. */
+export type RoleProactiveCandidate = {
+  channel: string;
+  chat_id: string;
+};
+
 export type RoleProactiveConfig = {
   enabled: boolean;
-  target_channel: string;
-  target_chat_id: string;
+  /** Candidate sessions in binding order; each message goes to the one the backend selects. */
+  candidates: RoleProactiveCandidate[];
   profile?: string;
   overrides?: Record<string, Record<string, number>>;
   agent?: {
@@ -277,8 +283,7 @@ export type RoleFormState = {
   pluginSettings: import("../plugins/pluginRoleSettings").PluginRoleSettingsDraft;
   channelBindings?: RoleChannelBinding[];
   proactiveEnabled?: boolean;
-  proactiveTargetChannel?: string;
-  proactiveTargetChatId?: string;
+  proactiveCandidates?: RoleProactiveCandidate[];
   proactiveProfile?: string;
   proactiveAgentMaxSteps?: number;
   proactiveAgentContentLimit?: number;

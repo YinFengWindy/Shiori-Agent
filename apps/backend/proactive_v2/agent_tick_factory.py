@@ -77,13 +77,11 @@ class AgentTickFactory:
         # 1. 先确定本轮 proactive 要服务哪个 session。
         session_key = self._get_session_key()
         # 2. 再把 tick 运行期依赖逐项组装好：
-        #    最近用户时间 / 工具依赖 / gateway 数据依赖 / 近期主动消息读取函数。
-        last_user_at_fn = self._build_last_user_at_fn(session_key)
+        #    工具依赖 / gateway 数据依赖 / 近期主动消息读取函数。
         tool_deps = self._build_tool_deps(pool)
         gateway_deps = self._build_gateway_deps(tool_deps, pool)
         recent_proactive_fn = self._build_recent_proactive_fn()
         drift_pipeline = self._build_drift_pipeline(tool_deps)
-        target_transports_fn = getattr(self._deps.sense, "target_transports", None)
 
         # 3. 产出 ProactiveTurnPipeline。后续每次 proactive loop 触发时调用 pipeline.run()。
         return ProactiveTurnPipeline(
@@ -92,7 +90,6 @@ class AgentTickFactory:
                 session_key=session_key,
                 state_store=self._deps.state_store,
                 any_action_gate=self._deps.any_action_gate,
-                last_user_at_fn=last_user_at_fn,
                 passive_busy_fn=self._deps.passive_busy_fn,
                 turn_orchestrator=self._deps.turn_orchestrator,
                 deduper=self._deps.deduper,
@@ -105,7 +102,6 @@ class AgentTickFactory:
                 recent_proactive_fn=recent_proactive_fn,
                 drift_pipeline=drift_pipeline,
                 target_transport_fn=self._deps.sense.target_transport,
-                target_transports_fn=target_transports_fn,
                 tool_hooks=self._deps.tool_hooks,
                 proactive_gates=self._deps.proactive_gates,
             )
@@ -124,12 +120,6 @@ class AgentTickFactory:
         if default_role_id:
             return f"role:{default_role_id}"
         raise RuntimeError("default_role_id required for proactive session key")
-
-    def _build_last_user_at_fn(self, session_key: str) -> Callable[[], Any | None]:
-        presence = self._deps.presence
-        if presence is None:
-            return lambda: None
-        return lambda: presence.get_last_user_at(session_key)
 
     def _build_llm_fn(self) -> LlmFn:
         provider = self._deps.provider
@@ -323,11 +313,16 @@ class AgentTickFactory:
                     )
                 ],
             )
+            # Drift picks its target when it speaks, by the same rule as a tick.
+            target = self._deps.sense.target_transport()
+            if target is None:
+                raise RuntimeError("drift message has no candidate session to go to")
+            channel, chat_id = target
             return await orchestrator.handle_proactive_turn(
                 result=result,
                 session_key=session_key,
-                channel=str(self._deps.sense.target_transport()[0] or "").strip(),
-                chat_id=str(self._deps.sense.target_transport()[1] or "").strip(),
+                channel=channel,
+                chat_id=chat_id,
             )
 
         return send_message

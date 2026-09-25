@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { act } from "react";
 
-/** Chooses an option through the visible picker, including a real bubbling pointer event. */
-export async function chooseSelectOption(label: string, optionLabel: string) {
+/**
+ * Chooses an option through the visible picker, including a real bubbling
+ * pointer event. `index` picks among several pickers sharing one label.
+ */
+export async function chooseSelectOption(label: string, optionLabel: string, index = 0) {
   const trigger = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="combobox"]'))
-    .find((element) => element.getAttribute("aria-label") === label);
+    .filter((element) => element.getAttribute("aria-label") === label)[index];
   assert.ok(trigger, `Missing select: ${label}`);
   await act(async () => trigger.click());
   const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))

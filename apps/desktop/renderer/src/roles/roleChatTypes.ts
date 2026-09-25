@@ -1,6 +1,6 @@
 import type { ChannelChatTypeDeclaration, ChannelSummary } from "../plugins/pluginBridgeClient";
 import type { RoleChannelBinding, RoleChatType } from "../shared/types";
-import { findRoleChannel, roleChannelLabel, type RoleChannelCatalog } from "./roleChannelCatalog";
+import { desktopChannelName, findRoleChannel, roleChannelLabel, type RoleChannelCatalog } from "./roleChannelCatalog";
 
 /** Whether a session type is a group chat: only group bindings carry a blacklist. */
 export function isGroupChatType(chatType: RoleChatType) {
@@ -78,9 +78,14 @@ export function changeRoleBindingChatType(binding: RoleChannelBinding, channel: 
   };
 }
 
-/** Label of one binding in pickers, e.g. "QQ（NapCat） · 群聊 831907794"; undeclared types show the raw chat id. */
+/**
+ * Label of one binding in lists, e.g. "QQ（NapCat） · 群聊 831907794"; undeclared
+ * types show the raw chat id. The desktop session is just "桌面端": a role has
+ * only one, and its chat id is internal.
+ */
 export function roleBindingDisplayLabel(binding: RoleChannelBinding, catalog: RoleChannelCatalog) {
   const channelLabel = roleChannelLabel(binding.channel, catalog);
+  if (binding.channel === desktopChannelName) return channelLabel;
   const chatType = findRoleChatType(findRoleChannel(catalog, binding.channel), binding.chat_type);
   return chatType
     ? `${channelLabel} · ${chatType.label} ${roleBindingNumber(binding.chat_id, chatType)}`

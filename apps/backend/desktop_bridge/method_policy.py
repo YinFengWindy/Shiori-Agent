@@ -44,6 +44,7 @@ class Handler(Enum):
     PLUGIN_CONFIG = "plugin_config"
     PLUGIN_MANAGEMENT = "plugin_management"
     DESKTOP_PRESENCE = "desktop_presence"
+    PROACTIVE_TARGET = "proactive_target"
 
 
 class OwnerRouting(Enum):
@@ -137,6 +138,13 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
         concurrency=Concurrency.READ_ONLY,
         admission_exempt=True,
         handler=Handler.DESKTOP_PRESENCE,
+    ),
+    "roles.proactive.target": MethodPolicy(
+        # Reads app-level desktop presence and message history only; the
+        # preview must keep answering while a reload drains the generation.
+        concurrency=Concurrency.READ_ONLY,
+        admission_exempt=True,
+        handler=Handler.PROACTIVE_TARGET,
     ),
     # A network probe of an unsaved draft: it must not hold the serial
     # mutation lane (or a read slot) for up to its 20s deadline.

@@ -1,7 +1,10 @@
+import { useMemo } from "react";
 import type { RoleFormState } from "../shared/types";
 import { RoleChannelBindingsPanel } from "./RoleChannelBindingsPanel";
+import { selectableProactiveCandidates } from "./roleProactiveCandidates";
 import { RoleProactiveSettingsPanel } from "./RoleProactiveSettingsPanel";
 import { useRoleChannelCatalog } from "./useRoleChannelCatalog";
+import { useRoleProactiveTarget } from "./useRoleProactiveTarget";
 import { useSettingsSnapshot } from "./useSettingsSnapshot";
 
 type RoleDeliveryPanelsProps = {
@@ -16,11 +19,17 @@ type RoleDeliveryPanelsProps = {
 export function RoleDeliveryPanels({ activeRoleId, roleForm, onUpdate, onOpenPluginSettings }: RoleDeliveryPanelsProps) {
   const channels = useRoleChannelCatalog();
   const settings = useSettingsSnapshot();
-  const bindings = roleForm.channelBindings ?? [];
+  const { channelBindings, proactiveCandidates } = roleForm;
+  const bindings = channelBindings ?? [];
+  const previewCandidates = useMemo(
+    () => selectableProactiveCandidates(channelBindings ?? [], proactiveCandidates ?? []),
+    [channelBindings, proactiveCandidates],
+  );
+  const currentTarget = useRoleProactiveTarget(activeRoleId, previewCandidates);
   return (
     <div className="grid gap-7">
       <RoleChannelBindingsPanel activeRoleId={activeRoleId} bindings={bindings} channels={channels} onUpdate={onUpdate} onOpenPluginSettings={onOpenPluginSettings} />
-      <RoleProactiveSettingsPanel bindings={bindings} channels={channels} devMode={settings?.advanced.devMode === true} roleForm={roleForm} onUpdate={onUpdate} />
+      <RoleProactiveSettingsPanel bindings={bindings} channels={channels} currentTarget={currentTarget} devMode={settings?.advanced.devMode === true} roleForm={roleForm} onUpdate={onUpdate} />
     </div>
   );
 }

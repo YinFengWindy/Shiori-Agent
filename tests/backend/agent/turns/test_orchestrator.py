@@ -135,63 +135,6 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_proactive_retry_dispatches_without_recommitting_shared_session() -> None:
-    session = SimpleNamespace(
-        key="role:mira",
-        metadata={"role_id": "mira"},
-        messages=[],
-    )
-    session_manager = SimpleNamespace(
-        get_or_create=lambda _key: session,
-        append_messages=AsyncMock(return_value=None),
-    )
-    dispatched: list[OutboundDispatch] = []
-
-    class _Outbound:
-        async def dispatch(self, outbound: OutboundDispatch) -> bool:
-            dispatched.append(outbound)
-            return True
-
-    event_bus = EventBus()
-    committed: list[ProactiveMessageCommitted] = []
-    event_bus.on(ProactiveMessageCommitted, committed.append)
-    orchestrator = TurnOrchestrator(
-        TurnOrchestratorDeps(
-            session=SessionServices(
-                session_manager=cast(Any, session_manager),
-                presence=None,
-            ),
-            outbound=_Outbound(),
-            event_bus=event_bus,
-        )
-    )
-    result = TurnResult(
-        role_reply=RoleReply("跨渠道提醒", "平静", "我想和你聊聊。"),
-        reply_context=RoleReplyContext(("平静",), ""),
-        decision="reply",
-        outbound=TurnOutbound(
-            session_key="role:mira",
-            content="跨渠道提醒",
-            media=["D:\\media\\scene.png"],
-        ),
-    )
-
-    sent = await orchestrator.dispatch_proactive_retry(
-        result=result,
-        session_key="role:mira",
-        channel="telegram",
-        chat_id="123",
-    )
-
-    assert sent is True
-    assert len(dispatched) == 1
-    assert dispatched[0].channel == "telegram"
-    assert dispatched[0].media == ["D:\\media\\scene.png"]
-    session_manager.append_messages.assert_not_awaited()
-    assert committed == []
-
-
-@pytest.mark.asyncio
 async def test_proactive_dispatch_error_is_not_converted_to_false(tmp_path) -> None:
     session = SimpleNamespace(
         key="role:mira",
@@ -417,7 +360,7 @@ async def _send(owner, result):
 
 
 @pytest.mark.asyncio
-async def test_successive_proactive_commits_and_transport_retry_keep_one_state_per_reply(
+async def test_successive_proactive_commits_keep_one_state_per_reply(
     tmp_path,
 ):
     sessions = SessionManager(tmp_path)
@@ -435,9 +378,6 @@ async def test_successive_proactive_commits_and_transport_retry_keep_one_state_p
     assert await _send(owner, second)
     metadata = dict(session.metadata)
     assert metadata["current_mood_updated_at"] != first_stamp
-    await owner.dispatch_proactive_retry(
-        result=first, session_key=session.key, channel="qq", chat_id="group"
-    )
     assert len(session.messages) == 2
     assert session.metadata == metadata
     assert metadata["current_mood"] == "开心"

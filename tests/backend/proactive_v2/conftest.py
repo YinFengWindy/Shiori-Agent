@@ -209,7 +209,6 @@ class FakeLLM:
 
 def cfg_with(**kwargs) -> ProactiveConfig:
     """从默认 ProactiveConfig 创建，只覆盖指定字段。"""
-    kwargs.setdefault("default_chat_id", "test_chat_id")
     return ProactiveConfig(**kwargs)
 
 
@@ -264,7 +263,6 @@ def make_proactive_pipeline(
     session_key: str = "test_session",
     state_store: FakeStateStore | None = None,
     any_action_gate: Any = None,
-    last_user_at_fn: Any = None,
     passive_busy_fn: Any = None,
     sender: Any = None,
     deduper: Any = None,
@@ -275,9 +273,7 @@ def make_proactive_pipeline(
     recent_proactive_fn: Any = None,
     workspace_context_fn: Any = None,
     drift_pipeline: Any = None,
-    target_transport_fn: Any = None,
-    target_transports_fn: Any = None,
-    retry_wait_fn: Any = None,
+    target_transport_fn: Any = lambda: ("telegram", "test_chat_id"),
     proactive_gates: ProactiveGateChain | None = None,
 ):
     from agent.core.proactive_turn import (
@@ -363,7 +359,6 @@ def make_proactive_pipeline(
             session_key=session_key,
             state_store=state_store,
             any_action_gate=any_action_gate,
-            last_user_at_fn=last_user_at_fn or (lambda: None),
             passive_busy_fn=passive_busy_fn,
             turn_orchestrator=orchestrator,
             deduper=deduper,
@@ -376,8 +371,6 @@ def make_proactive_pipeline(
             workspace_context_fn=workspace_context_fn,
             drift_pipeline=drift_pipeline,
             target_transport_fn=target_transport_fn,
-            target_transports_fn=target_transports_fn,
-            retry_wait_fn=retry_wait_fn,
             tool_hooks=None,
             proactive_gates=proactive_gates,
         )

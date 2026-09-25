@@ -11,6 +11,7 @@ from proactive_v2.config import ProactiveConfig
 from proactive_v2.context import AgentTickContext
 from proactive_v2.mcp_sources import McpClientPool
 from bootstrap.proactive import build_proactive_runtime
+from core.desktop_presence import DesktopPresence
 
 
 class _FakeProvider:
@@ -162,6 +163,7 @@ def test_build_proactive_runtime_accepts_light_agent_loop_stub(tmp_path):
         memory_store=None,
         presence=cast(Any, SimpleNamespace()),
         agent_loop=cast(Any, SimpleNamespace(processing_state=None)),
+        desktop_presence=DesktopPresence(),
     )
     assert tasks == []
     assert loops == {}

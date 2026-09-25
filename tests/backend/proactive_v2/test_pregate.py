@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from core.roles.reply_state import RoleReply, RoleReplyContext
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
@@ -33,13 +32,12 @@ from tests.backend.proactive_v2.conftest import (
 
 
 @pytest.mark.asyncio
-async def test_no_target_blocks_when_transport_missing():
-    tick = make_proactive_pipeline(
-        cfg=cfg_with(default_channel="", default_chat_id=""),
-        target_transport_fn=lambda: ("", ""),
-    )
+async def test_no_target_blocks_when_role_has_no_candidate_session():
+    state = FakeStateStore()
+    tick = make_proactive_pipeline(target_transport_fn=lambda: None, state_store=state)
     result = await tick.run()
     assert result is None
+    assert state.tick_log_finishes[0]["gate_exit"] == "no_target"
 
 
 @pytest.mark.asyncio
@@ -78,7 +76,6 @@ async def test_passive_busy_receives_session_key():
 @pytest.mark.asyncio
 async def test_target_transport_allows_role_only_desktop_target():
     tick = make_proactive_pipeline(
-        cfg=cfg_with(default_channel="desktop", default_chat_id=""),
         target_transport_fn=lambda: ("desktop", "role:mira"),
         proactive_gates=relationship_gate_chain(),
     )
@@ -87,168 +84,28 @@ async def test_target_transport_allows_role_only_desktop_target():
 
 
 @pytest.mark.asyncio
-async def test_multi_channel_delivery_retries_transports_without_recommitting():
-    waits: list[float] = []
-
-    async def wait(delay: float) -> None:
-        waits.append(delay)
-
-    tick = make_proactive_pipeline(
-        retry_wait_fn=wait,
-        last_user_at_fn=lambda: None,
-    )
+async def test_gate_selects_one_target_and_delivery_sends_only_there():
+    targets = iter([("qq", "gqq:7"), ("telegram", "42")])
+    tick = make_proactive_pipeline(target_transport_fn=lambda: next(targets))
     orchestrator = AsyncMock()
     orchestrator.handle_proactive_turn = AsyncMock(return_value=True)
-    orchestrator.dispatch_proactive_retry = AsyncMock(return_value=True)
     tick._turn_orchestrator = orchestrator
+    ctx = AgentTickContext(session_key="test_session")
 
+    gate = tick._gate_check(ctx)
     result = TurnResult(
         role_reply=RoleReply("hello", "平静", "我想和你聊聊。"),
         reply_context=RoleReplyContext(("平静",), ""),
         decision="reply",
         outbound=TurnOutbound(session_key="test_session", content="hello"),
     )
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-        session_key="test_session",
-        target_transports=[
-            ("desktop", "role:mira"),
-            ("telegram", "42"),
-            ("qq", "gqq:7"),
-        ],
-    )
-
     await tick._deliver_execute(ctx, ResolveResult(action="send", result=result))
-    assert tick._retry_task is not None
-    await tick._retry_task
 
-    assert waits == [300.0, 300.0]
-    orchestrator.handle_proactive_turn.assert_awaited_once()
-    assert orchestrator.handle_proactive_turn.await_args.kwargs["channel"] == "desktop"
-    assert (
-        orchestrator.handle_proactive_turn.await_args.kwargs["chat_id"] == "role:mira"
-    )
-    assert [
-        call.kwargs["channel"]
-        for call in orchestrator.dispatch_proactive_retry.call_args_list
-    ] == [
-        "telegram",
-        "qq",
-    ]
-    assert [
-        call.kwargs["chat_id"]
-        for call in orchestrator.dispatch_proactive_retry.call_args_list
-    ] == [
-        "42",
-        "gqq:7",
-    ]
-
-
-@pytest.mark.asyncio
-async def test_multi_channel_delivery_stops_when_user_replies():
-    reply_at = None
-
-    async def wait(_delay: float) -> None:
-        nonlocal reply_at
-        reply_at = datetime.max.replace(tzinfo=timezone.utc)
-
-    tick = make_proactive_pipeline(
-        retry_wait_fn=wait,
-        last_user_at_fn=lambda: reply_at,
-    )
-    orchestrator = AsyncMock()
-    orchestrator.handle_proactive_turn = AsyncMock(return_value=True)
-    tick._turn_orchestrator = orchestrator
-
-    result = TurnResult(
-        role_reply=RoleReply("hello", "平静", "我想和你聊聊。"),
-        reply_context=RoleReplyContext(("平静",), ""),
-        decision="reply",
-        outbound=TurnOutbound(session_key="test_session", content="hello"),
-    )
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-        session_key="test_session",
-        target_transports=[("desktop", "role:mira"), ("telegram", "42")],
-    )
-
-    await tick._deliver_execute(ctx, ResolveResult(action="send", result=result))
-    retry_task = tick._retry_task
-    assert retry_task is not None
-    await retry_task
-
-    assert orchestrator.handle_proactive_turn.await_count == 1
-
-
-@pytest.mark.asyncio
-async def test_multi_channel_delivery_returns_before_retry_wait_finishes():
-    retry_started = asyncio.Event()
-    release_retry = asyncio.Event()
-
-    async def wait(_delay: float) -> None:
-        retry_started.set()
-        await release_retry.wait()
-
-    tick = make_proactive_pipeline(retry_wait_fn=wait)
-    orchestrator = AsyncMock()
-    orchestrator.handle_proactive_turn = AsyncMock(return_value=True)
-    tick._turn_orchestrator = orchestrator
-
-    result = TurnResult(
-        role_reply=RoleReply("hello", "平静", "我想和你聊聊。"),
-        reply_context=RoleReplyContext(("平静",), ""),
-        decision="reply",
-        outbound=TurnOutbound(session_key="test_session", content="hello"),
-    )
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-        session_key="test_session",
-        target_transports=[("desktop", "role:mira"), ("qq", "gqq:7")],
-    )
-
-    await tick._deliver_execute(ctx, ResolveResult(action="send", result=result))
-    await retry_started.wait()
-
-    assert orchestrator.handle_proactive_turn.await_count == 1
-
-    release_retry.set()
-    retry_task = tick._retry_task
-    assert retry_task is not None
-    await retry_task
-
-
-@pytest.mark.asyncio
-async def test_multi_channel_delivery_cancels_retry_when_user_replies():
-    retry_started = asyncio.Event()
-    release_retry = asyncio.Event()
-
-    async def wait(_delay: float) -> None:
-        retry_started.set()
-        await release_retry.wait()
-
-    tick = make_proactive_pipeline(retry_wait_fn=wait)
-    orchestrator = AsyncMock()
-    orchestrator.handle_proactive_turn = AsyncMock(return_value=True)
-    tick._turn_orchestrator = orchestrator
-
-    result = TurnResult(
-        role_reply=RoleReply("hello", "平静", "我想和你聊聊。"),
-        reply_context=RoleReplyContext(("平静",), ""),
-        decision="reply",
-        outbound=TurnOutbound(session_key="test_session", content="hello"),
-    )
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-        session_key="test_session",
-        target_transports=[("desktop", "role:mira"), ("qq", "gqq:7")],
-    )
-
-    await tick._deliver_execute(ctx, ResolveResult(action="send", result=result))
-    await retry_started.wait()
-    tick.notify_user_reply()
-    await tick.cancel_pending_retries()
-
-    assert orchestrator.handle_proactive_turn.await_count == 1
+    assert not gate.blocked
+    # Delivery reuses the tick's selection instead of choosing again.
+    assert [call[0] for call in orchestrator.mock_calls] == ["handle_proactive_turn"]
+    kwargs = orchestrator.handle_proactive_turn.await_args.kwargs
+    assert (kwargs["channel"], kwargs["chat_id"]) == ("qq", "gqq:7")
 
 
 @pytest.mark.asyncio

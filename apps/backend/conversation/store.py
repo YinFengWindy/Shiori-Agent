@@ -531,6 +531,25 @@ class ConversationStore:
             for row in rows
         ]
 
+    def last_user_message_at(self, thread_id: str) -> str | None:
+        """Returns the ``ts`` of the newest user message in one thread, if any.
+
+        Timestamps are ISO strings written in the local offset, so the text
+        order is the time order.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT ts
+                FROM messages
+                WHERE thread_id = ? AND role = 'user'
+                ORDER BY ts DESC
+                LIMIT 1
+                """,
+                (thread_id,),
+            ).fetchone()
+        return str(row["ts"]) if row is not None else None
+
     def has_external_message(self, thread_id: str, external_message_id: str) -> bool:
         """Checks whether a channel delivery has already been archived for a thread."""
         clean_external_id = str(external_message_id or "").strip()

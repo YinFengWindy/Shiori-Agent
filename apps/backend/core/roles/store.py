@@ -232,7 +232,7 @@ class RoleStore:
                     role.channel_bindings = self._bindings.normalize_for_role(
                         roles, role.id, channel_bindings
                     )
-                    role.proactive = self._bindings.disable_missing_proactive_target(
+                    role.proactive = self._bindings.prune_proactive_candidates(
                         role.proactive, role.channel_bindings
                     )
                 if proactive is not None:

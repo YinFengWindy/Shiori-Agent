@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import random as _random_module
 import time
@@ -16,14 +15,8 @@ from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import GatewayResult
 
 from .delivery import (
-    cancel_pending_retries as _cancel_pending_retries,
     deliver_execute as _deliver_execute,
-    deliver_retries as _deliver_retries,
-    has_user_replied_since as _has_user_replied_since,
-    notify_user_reply as _notify_user_reply,
     resolve_target_transport as _resolve_target_transport,
-    resolve_target_transports as _resolve_target_transports,
-    wait_for_retry_or_user_reply as _wait_for_retry_or_user_reply,
 )
 from .judge import (
     append_tool_messages as _append_tool_messages,
@@ -90,7 +83,6 @@ class ProactiveTurnPipeline:
         self._session_key = deps.session_key
         self._state_store = deps.state_store
         self._any_action_gate = deps.any_action_gate
-        self._last_user_at_fn = deps.last_user_at_fn
         self._passive_busy_fn = deps.passive_busy_fn
         self._turn_orchestrator = deps.turn_orchestrator
         self._deduper = deps.deduper
@@ -103,12 +95,8 @@ class ProactiveTurnPipeline:
         self._recent_proactive_fn = deps.recent_proactive_fn
         self._drift_pipeline = deps.drift_pipeline
         self._target_transport_fn = deps.target_transport_fn
-        self._target_transports_fn = deps.target_transports_fn
-        self._retry_wait_fn = deps.retry_wait_fn
         self._proactive_gates = deps.proactive_gates or ProactiveGateChain()
         self._tool_executor = ToolExecutor(deps.tool_hooks or [])
-        self._retry_task: asyncio.Task[None] | None = None
-        self._retry_cancel_event = asyncio.Event()
 
         if (
             self._drift_pipeline is not None
@@ -275,39 +263,6 @@ class ProactiveTurnPipeline:
         decision: ResolveResult,
     ) -> float | None:
         return await _deliver_execute(self, ctx, decision)
-
-    async def _deliver_retries(
-        self,
-        *,
-        transports: list[tuple[str, str]],
-        result: TurnResult,
-        sent_at: datetime,
-    ) -> None:
-        await _deliver_retries(
-            self,
-            transports=transports,
-            result=result,
-            sent_at=sent_at,
-        )
-
-    async def _wait_for_retry_or_user_reply(self, delay: float) -> bool:
-        return await _wait_for_retry_or_user_reply(self, delay)
-
-    def notify_user_reply(self) -> None:
-        """取消当前 session 的多渠道后台重试。"""
-
-        _notify_user_reply(self)
-
-    async def cancel_pending_retries(self) -> None:
-        """等待并清理当前 session 的多渠道后台重试任务。"""
-
-        await _cancel_pending_retries(self)
-
-    def _has_user_replied_since(self, sent_at: datetime) -> bool:
-        return _has_user_replied_since(self, sent_at)
-
-    def _resolve_target_transports(self) -> list[tuple[str, str]]:
-        return _resolve_target_transports(self)
 
     def _resolve_target_transport(self) -> tuple[str, str] | None:
         return _resolve_target_transport(self)

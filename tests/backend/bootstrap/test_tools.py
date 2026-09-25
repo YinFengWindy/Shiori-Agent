@@ -168,7 +168,7 @@ def test_actual_runtime_observes_and_follows_scene_without_novelai_package(tmp_p
         async def run():
             roles = RoleStore(workspace)
             roles.create_role(role_id="mira", name="Mira", system_prompt="role")
-            roles.update_role("mira", channel_bindings=[{"channel": "telegram", "chat_id": "chat", "chat_type": "private"}], proactive={"enabled": True, "target_channel": "telegram", "target_chat_id": "chat"})
+            roles.update_role("mira", channel_bindings=[{"channel": "telegram", "chat_id": "chat", "chat_type": "private"}], proactive={"enabled": True, "candidates": [{"channel": "telegram", "chat_id": "chat"}]})
             config = Config(provider="", model="", api_key="", model_registrations=[], memory_optimizer_enabled=False)
             app = AppRuntime(config, workspace, features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False))
             await app.start()
@@ -231,8 +231,7 @@ async def test_published_generation_keeps_before_turn_capture_until_old_after_tu
         ],
         proactive={
             "enabled": True,
-            "target_channel": "telegram",
-            "target_chat_id": "chat",
+            "candidates": [{"channel": "telegram", "chat_id": "chat"}],
         },
     )
     config = Config(
@@ -353,8 +352,7 @@ async def test_core_scene_demand_respects_followup_strategy_and_independent_cons
         ],
         proactive={
             "enabled": role_enabled,
-            "target_channel": "telegram",
-            "target_chat_id": "chat",
+            "candidates": [{"channel": "telegram", "chat_id": "chat"}],
         },
     )
     config = Config(

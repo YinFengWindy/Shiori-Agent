@@ -88,10 +88,6 @@ proactive tick
 enabled = true
 profile = "daily"           # daily / quiet / dev_verify
 
-[proactive.target]
-channel = "telegram"
-chat_id = "7674283004"
-
 [proactive.agent]
 max_steps = 20
 content_limit = 5
@@ -104,6 +100,8 @@ enabled = true
 max_steps = 30
 min_interval_hours = 1
 ```
+
+投递目标不在这里配置：每个角色在「主动推送」里勾选接收会话，每条主动消息只发到其中一个（桌面在场时发桌面，否则发最近对话过的外部会话）。
 
 ### 2. 注册 MCP server（`~/.shiori/workspace/mcp_servers.json`）
 

@@ -3,10 +3,8 @@ import { describe, it } from "node:test";
 import type { ChannelSummary } from "../plugins/pluginBridgeClient";
 import type { RoleChannelBinding } from "../shared/types";
 import {
-  buildProactiveTransportSequence,
   changeRoleBindingChannel,
   createRoleChannelBinding,
-  moveRoleChannelBinding,
 } from "./roleChannelBindings";
 
 function channel(name: string, chatTypes: ChannelSummary["chatTypes"]): ChannelSummary {
@@ -57,42 +55,5 @@ describe("roleChannelBindings", () => {
     assert.deepEqual(changeRoleBindingChannel(group, "telegram", "mira", catalog), {
       channel: "telegram", chat_id: "831907794", chat_type: "private", blocked_senders: [],
     });
-  });
-
-  it("moves bindings in either direction without mutating the source array", () => {
-    const bindings: RoleChannelBinding[] = [
-      { channel: "telegram", chat_id: "100", chat_type: "private", blocked_senders: [] },
-      { channel: "qq", chat_id: "200", chat_type: "private", blocked_senders: [] },
-      { channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] },
-    ];
-
-    assert.deepEqual(moveRoleChannelBinding(bindings, 1, "up"), [bindings[1], bindings[0], bindings[2]]);
-    assert.deepEqual(moveRoleChannelBinding(bindings, 1, "down"), [bindings[0], bindings[2], bindings[1]]);
-    assert.deepEqual(bindings, [
-      { channel: "telegram", chat_id: "100", chat_type: "private", blocked_senders: [] },
-      { channel: "qq", chat_id: "200", chat_type: "private", blocked_senders: [] },
-      { channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] },
-    ]);
-  });
-
-  it("keeps bindings unchanged when moving beyond either end", () => {
-    const bindings: RoleChannelBinding[] = [{ channel: "telegram", chat_id: "100", chat_type: "private", blocked_senders: [] }];
-
-    assert.strictEqual(moveRoleChannelBinding(bindings, 0, "up"), bindings);
-    assert.strictEqual(moveRoleChannelBinding(bindings, 0, "down"), bindings);
-  });
-
-  it("puts the preferred target first and keeps other targets in binding order", () => {
-    const bindings: RoleChannelBinding[] = [
-      { channel: "telegram", chat_id: "100", chat_type: "private", blocked_senders: [] },
-      { channel: "qq", chat_id: "200", chat_type: "private", blocked_senders: [] },
-      { channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] },
-      { channel: "telegram", chat_id: "", chat_type: "private", blocked_senders: [] },
-    ];
-
-    assert.deepEqual(
-      buildProactiveTransportSequence(bindings, "qq", "200").map(({ channel, chat_id }) => `${channel}:${chat_id}`),
-      ["qq:200", "telegram:100", "desktop:role:mira"],
-    );
   });
 });

@@ -172,8 +172,7 @@ export function createPendingRoleRecord(
     channel_bindings: [],
     proactive: {
       enabled: false,
-      target_channel: "",
-      target_chat_id: "",
+      candidates: [],
       profile: "daily",
       agent: {},
       drift: {},

@@ -20,8 +20,7 @@ function createRole(runtime_config: Record<string, unknown> = {}): RoleRecord {
     channel_bindings: [],
     proactive: {
       enabled: false,
-      target_channel: "",
-      target_chat_id: "",
+      candidates: [],
       profile: "quiet",
       overrides: { loneliness: { threshold: 0.7 } },
       agent: { max_steps: 12, content_limit: 3, web_fetch_max_chars: 4000 },

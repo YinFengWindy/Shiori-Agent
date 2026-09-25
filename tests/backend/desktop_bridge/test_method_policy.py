@@ -70,3 +70,10 @@ def test_presence_report_is_app_level_and_never_blocked_by_reload_or_writes():
     assert policy.handler is Handler.DESKTOP_PRESENCE
     assert policy.admission_exempt
     assert policy.concurrency is Concurrency.READ_ONLY
+
+
+def test_proactive_target_preview_is_an_app_level_read():
+    policy = method_policy("roles.proactive.target")
+    assert policy.handler is Handler.PROACTIVE_TARGET
+    assert policy.admission_exempt
+    assert policy.concurrency is Concurrency.READ_ONLY
