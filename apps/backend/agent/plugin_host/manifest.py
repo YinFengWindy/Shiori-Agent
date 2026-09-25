@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import asdict, dataclass, field
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 from pathlib import Path
+
+from core.common.channel_chat_types import (
+    CHAT_TYPES,
+    ChatTypeDeclaration,
+    ChatTypeDeclarations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +62,10 @@ _CHANNEL_NAME = re.compile(r"[a-z][a-z0-9_-]{0,63}")
 RESERVED_CHANNEL_NAMES = frozenset({"desktop"})
 _CHANNEL_REQUIRED_FIELDS = ("name", "label")
 _CHANNEL_OPTIONAL_FIELDS = ("contact_label", "chat_id_label", "chat_id_hint")
+# 声明了会话类型时，号码的标签与提示由各类型给出，渠道级的这两个字段不再适用
+_CHANNEL_CHAT_ID_FIELDS = ("chat_id_label", "chat_id_hint")
+_CHAT_TYPE_REQUIRED_FIELDS = ("type", "label", "chat_id_label")
+_CHAT_TYPE_OPTIONAL_FIELDS = ("chat_id_hint", "prefix")
 
 # 插件管理页的分组：feature 面向用户的功能，channel 外部渠道，system 宿主内部的
 # 护栏与诊断组件（默认折叠）。省略时由 capabilities 推断：声明 channels 即渠道，
@@ -75,6 +86,10 @@ class ChannelDeclaration:
     ``name`` 是插件唯一允许经 ``ctx.channels.add`` 贡献的渠道名；其余字段只供
     桌面端绑定面板展示，``contact_label`` 描述 ``allow_from`` 联系人，
     ``chat_id_label`` / ``chat_id_hint`` 描述会话 ID 及其格式。
+
+    ``chat_types`` 声明渠道支持的会话类型（私聊 / 群聊）及其内部前缀：绑定面板
+    据此让用户选类型、只填号码，保存绑定时宿主据此校验会话 ID 与类型一致。
+    声明了会话类型的渠道不再写渠道级 ``chat_id_label`` / ``chat_id_hint``。
     """
 
     name: str
@@ -82,10 +97,18 @@ class ChannelDeclaration:
     contact_label: str | None = None
     chat_id_label: str | None = None
     chat_id_hint: str | None = None
+    chat_types: tuple[ChatTypeDeclaration, ...] = ()
 
-    def to_dict(self) -> dict[str, str | None]:
+    def to_dict(self) -> dict[str, object]:
         """Returns the JSON-compatible bridge representation."""
-        return asdict(self)
+        return {
+            "name": self.name,
+            "label": self.label,
+            "contact_label": self.contact_label,
+            "chat_id_label": self.chat_id_label,
+            "chat_id_hint": self.chat_id_hint,
+            "chat_types": [item.to_dict() for item in self.chat_types],
+        }
 
 
 @dataclass
@@ -226,8 +249,81 @@ def _parse_channels(
 def _parse_channel(item: object, field_name: str) -> ChannelDeclaration:
     if not isinstance(item, dict) or any(not isinstance(key, str) for key in item):
         raise ManifestError(f"{field_name} 必须是对象")
-    entry: dict[str, object] = item
+    entry: dict[str, object] = dict(item)
+    declares_chat_types = "chat_types" in entry
+    raw_chat_types = entry.pop("chat_types", None)
     allowed = {*_CHANNEL_REQUIRED_FIELDS, *_CHANNEL_OPTIONAL_FIELDS}
+    values = _parse_string_fields(entry, field_name, allowed, _CHANNEL_REQUIRED_FIELDS)
+    name = values["name"]
+    if _CHANNEL_NAME.fullmatch(name) is None:
+        raise ManifestError(f"{field_name}.name 必须是小写可移植标识: {name!r}")
+    if name in RESERVED_CHANNEL_NAMES:
+        raise ManifestError(f"{field_name}.name 是宿主保留渠道名: {name}")
+    chat_types: tuple[ChatTypeDeclaration, ...] = ()
+    if declares_chat_types:
+        if conflicting := sorted(set(values) & set(_CHANNEL_CHAT_ID_FIELDS)):
+            raise ManifestError(
+                f"{field_name} 声明 chat_types 时不能再写 {conflicting}，"
+                "号码标签与提示由各会话类型给出"
+            )
+        chat_types = _parse_chat_types(raw_chat_types, f"{field_name}.chat_types")
+    return ChannelDeclaration(
+        name=name,
+        label=values["label"],
+        contact_label=values.get("contact_label"),
+        chat_id_label=values.get("chat_id_label"),
+        chat_id_hint=values.get("chat_id_hint"),
+        chat_types=chat_types,
+    )
+
+
+def _parse_chat_types(
+    value: object, field_name: str
+) -> tuple[ChatTypeDeclaration, ...]:
+    """Parses a channel's session types; types and prefixes must be unambiguous."""
+    if not isinstance(value, list) or not value:
+        raise ManifestError(f"{field_name} 必须是非空的会话类型列表")
+    items: list[object] = value
+    declarations: list[ChatTypeDeclaration] = []
+    for index, item in enumerate(items):
+        item_field = f"{field_name}[{index}]"
+        if not isinstance(item, dict) or any(not isinstance(key, str) for key in item):
+            raise ManifestError(f"{item_field} 必须是对象")
+        values = _parse_string_fields(
+            item,
+            item_field,
+            {*_CHAT_TYPE_REQUIRED_FIELDS, *_CHAT_TYPE_OPTIONAL_FIELDS},
+            _CHAT_TYPE_REQUIRED_FIELDS,
+        )
+        if values["type"] not in CHAT_TYPES:
+            raise ManifestError(
+                f"{item_field}.type 必须是 {' / '.join(CHAT_TYPES)} 之一"
+            )
+        prefix = values.get("prefix")
+        if prefix is not None and prefix != prefix.strip():
+            raise ManifestError(f"{item_field}.prefix 不能含首尾空白")
+        declarations.append(ChatTypeDeclaration(**values))
+    types = [item.type for item in declarations]
+    if duplicates := sorted({name for name in types if types.count(name) > 1}):
+        raise ManifestError(f"{field_name} 重复声明会话类型 {duplicates}")
+    prefixes = [item.prefix for item in declarations if item.prefix is not None]
+    # 一个前缀若是另一个的开头，带长前缀的会话 ID 就无法判定属于哪种类型
+    for index, prefix in enumerate(prefixes):
+        if any(
+            other.startswith(prefix) or prefix.startswith(other)
+            for other in prefixes[index + 1 :]
+        ):
+            raise ManifestError(f"{field_name} 的前缀互相包含，无法区分会话类型")
+    return tuple(declarations)
+
+
+def _parse_string_fields(
+    entry: dict[str, object],
+    field_name: str,
+    allowed: set[str],
+    required: tuple[str, ...],
+) -> dict[str, str]:
+    """Validates a declaration object whose fields are all non-empty strings."""
     if unknown := sorted(set(entry) - allowed):
         raise ManifestError(f"{field_name} 含未知字段 {unknown}")
     values: dict[str, str] = {}
@@ -235,15 +331,25 @@ def _parse_channel(item: object, field_name: str) -> ChannelDeclaration:
         if not isinstance(value, str) or not value.strip():
             raise ManifestError(f"{field_name}.{key} 必须是非空字符串")
         values[key] = value
-    for key in _CHANNEL_REQUIRED_FIELDS:
+    for key in required:
         if key not in values:
             raise ManifestError(f"{field_name} 缺少 {key}")
-    name = values["name"]
-    if _CHANNEL_NAME.fullmatch(name) is None:
-        raise ManifestError(f"{field_name}.name 必须是小写可移植标识: {name!r}")
-    if name in RESERVED_CHANNEL_NAMES:
-        raise ManifestError(f"{field_name}.name 是宿主保留渠道名: {name}")
-    return ChannelDeclaration(**values)
+    return values
+
+
+def declared_chat_types(manifests: Iterable[PluginManifest]) -> ChatTypeDeclarations:
+    """Collects every declared channel's session types for role binding checks.
+
+    Declarations are static, so disabled or failed plugins still contribute.
+    A channel name claimed twice only occurs between CONFLICT candidates; the
+    first declaration wins, matching ``channels.list``.
+    """
+    result: dict[str, tuple[ChatTypeDeclaration, ...]] = {}
+    for manifest in manifests:
+        for declaration in manifest.channels:
+            if declaration.chat_types:
+                result.setdefault(declaration.name, declaration.chat_types)
+    return result
 
 
 def _parse_category(raw: dict[str, object], capabilities: tuple[str, ...]) -> str:

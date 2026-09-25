@@ -40,6 +40,9 @@ def test_manifest_declares_the_legacy_channel_name_for_bindings() -> None:
     assert [item.name for item in manifest.channels] == ["telegram"]
     assert manifest.channels[0].label == "Telegram"
     assert manifest.channels[0].contact_label
+    # Telegram group IDs are negative numbers without a prefix.
+    types = {item.type: item.prefix for item in manifest.channels[0].chat_types}
+    assert types == {"private": None, "group": None}
 
 
 def test_plugin_skips_channel_without_token() -> None:

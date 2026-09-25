@@ -117,7 +117,9 @@ def test_v5_keeps_private_qq_binding_with_unnormalized_contacts() -> None:
     )
 
     # Contacts normalize like RoleChannelBindingConfig, so these stay private.
-    assert migrated["roles"][0]["channel_bindings"] == bindings
+    assert migrated["roles"][0]["channel_bindings"] == [
+        {**binding, "chat_type": "private"} for binding in bindings
+    ]
 
 
 def test_v5_prefixes_bare_proactive_target_of_existing_gqq_group_binding() -> None:
@@ -161,3 +163,76 @@ def test_v5_prefixes_bare_proactive_target_of_existing_gqq_group_binding() -> No
     assert joye["channel_bindings"][0]["chat_id"] == "gqq:7"
     assert joye["proactive"]["target_chat_id"] == "gqq:7"
     assert mira["proactive"]["target_chat_id"] == "8"
+
+
+def test_v6_fills_chat_type_from_legacy_chat_id_formats() -> None:
+    migrated, changed = migrate_manifest_payload(
+        {
+            "version": 6,
+            "roles": [
+                {
+                    "id": "mira",
+                    "profile": {},
+                    "channel_bindings": [
+                        {"channel": "qq", "chat_id": "gqq:7", "allow_from": ["3"]},
+                        {"channel": "qq", "chat_id": "3", "allow_from": ["3"]},
+                        {
+                            "channel": "telegram",
+                            "chat_id": "-1001",
+                            "allow_from": ["a"],
+                        },
+                        {"channel": "telegram", "chat_id": "42", "allow_from": ["a"]},
+                        {"channel": "qqbot", "chat_id": "c2c:u", "allow_from": ["u"]},
+                        {"channel": "feishu", "chat_id": "oc_1", "allow_from": ["ou"]},
+                        {
+                            "channel": "desktop",
+                            "chat_id": "role:mira",
+                            "allow_from": [],
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert changed is True
+    assert migrated["version"] == CURRENT_MANIFEST_VERSION == 7
+    assert [
+        (item["channel"], item["chat_type"])
+        for item in migrated["roles"][0]["channel_bindings"]
+    ] == [
+        ("qq", "group"),
+        ("qq", "private"),
+        ("telegram", "group"),
+        ("telegram", "private"),
+        ("qqbot", "private"),
+        ("feishu", "private"),
+        ("desktop", "private"),
+    ]
+    assert migrate_manifest_payload(migrated) == (migrated, False)
+
+
+def test_v5_group_rewritten_to_gqq_is_typed_as_group() -> None:
+    migrated, _ = migrate_manifest_payload(
+        {
+            "version": 5,
+            "roles": [
+                {
+                    "id": "joye",
+                    "profile": {},
+                    "channel_bindings": [
+                        {"channel": "qq", "chat_id": "831907794", "allow_from": ["3"]}
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert migrated["roles"][0]["channel_bindings"] == [
+        {
+            "channel": "qq",
+            "chat_id": "gqq:831907794",
+            "allow_from": ["3"],
+            "chat_type": "group",
+        }
+    ]

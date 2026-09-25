@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.4.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.5.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -80,6 +80,7 @@ version whose additions it uses.
 | `2.2.0` | static manifest `channels` declarations and `channels.list` | #363 T1 |
 | `2.3.0` | optional channel hooks, including `uses_bot_commands`, and `register_channel(..., description=)` | #363 T2 (hooks) and T4 (`uses_bot_commands`) |
 | `2.4.0` | renderer host services as an injected `host` prop, with `host.feedback` (host toasts), `host.ui.InlineError` (host inline error block) and `host.ui.ConfirmDialog` (host confirmation), all with an opt-in 看板娘 `persona` (generic or by scene key) | #362 follow-up (看板娘扩展) |
+| `2.5.0` | optional `chat_types` session-type declarations on manifest `channels` entries | #397 |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -130,6 +131,36 @@ channels:
 
 Values must be nonempty strings; unknown keys, duplicate names, the host-owned
 `desktop` name and declarations without the `channels` capability are rejected.
+
+Since API 2.5 an entry may instead declare its session types. The role binding
+form then offers a type picker and a number field, and composes the stored
+`chat_id` as `prefix + number`; saving a binding is rejected when its `chat_id`
+does not match the selected type:
+
+```yaml
+channels:
+  - name: qq
+    label: QQ（NapCat）
+    contact_label: QQ 号
+    chat_types:                      # optional, nonempty when present
+      - type: private                # required, private | group, unique per channel
+        label: 私聊                   # required, type picker label
+        chat_id_label: QQ 号          # required, number field label
+        chat_id_hint: 对方的 QQ 号     # optional, number field placeholder
+      - type: group
+        label: 群聊
+        chat_id_label: 群号
+        chat_id_hint: QQ 群号
+        prefix: 'gqq:'               # optional, prepended to the number
+```
+
+An entry with `chat_types` must not also set `chat_id_label` / `chat_id_hint`.
+Prefixes carry no surrounding whitespace, and no prefix may start another of the
+same channel. A binding whose type declares a prefix must carry it followed by a
+number; a binding carrying another type's prefix is rejected. Every role binding
+stores its `chat_type`; entries without `chat_types` keep the single raw
+`chat_id` input and accept either type. Packages declaring `chat_types` must
+require `runtime_api: ">=2.5.0 <3.0.0"`.
 The declaration is static, so the desktop can list a channel while its plugin is
 disabled, untrusted or still missing credentials. The channel name is a data key
 of role bindings and conversation threads and must stay stable across releases.

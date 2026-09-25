@@ -124,6 +124,7 @@ channels:
 
 - 渠道名是角色绑定、会话线程和消息引用的数据键，发布后不要改名。它必须是小写标识（`[a-z][a-z0-9_-]{0,63}`），`desktop` 由宿主保留。
 - 声明是静态的：插件停用、未信任或还没填凭据时，桌面端也能经 `channels.list` 列出这个渠道。所以凭据不全时 `setup` 可以直接 return，不贡献渠道。
+- 可选的 `chat_types` 声明渠道的会话类型（`private` / `group`，各带标签、号码标签与提示、可选内部前缀，Runtime API 2.5）。声明后绑定面板按类型拼接前缀，保存绑定时宿主按声明校验会话 ID；它与渠道级 `chat_id_label` / `chat_id_hint` 互斥。
 - `ctx.channels.add(channel)` 只接受本 manifest 声明过的 `channel.name`，否则 setup 失败，插件回滚为 `FAILED`，诊断码 `undeclared_channel`。
 - 两个插件声明同一个渠道名时，两者都是 `CONFLICT`（诊断码 `duplicate_channel`），都不会激活。
 - 渠道的启停和换代由宿主的 ChannelHost 管理，不要用 `background` 自己起连接任务。跨代复用连接时，渠道提供 `configuration_key`，它变化就重建连接；声明了 `uses_bot_commands = True` 的渠道，宿主还会连同 bot 命令列表一起比较。

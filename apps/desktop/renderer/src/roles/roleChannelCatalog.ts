@@ -1,4 +1,4 @@
-import type { ChannelSummary } from "../plugins/pluginBridgeClient";
+import type { ChannelChatTypeDeclaration, ChannelSummary } from "../plugins/pluginBridgeClient";
 import type { RoleChannelBinding } from "../shared/types";
 import type { SelectOption } from "../shared/ui/Select";
 
@@ -84,8 +84,12 @@ export function defaultRoleBindingChannel(catalog: RoleChannelCatalog): string {
   return (external.find((channel) => channel.state === "active") ?? external[0])?.name ?? desktopChannelName;
 }
 
-/** Field copy for a binding's chat id, taken from the channel declaration when it provides one. */
-export function roleBindingChatIdCopy(channel: ChannelSummary | null) {
+/**
+ * Field copy for a binding's chat id: the selected session type's number copy
+ * when the channel declares types, else the channel-level declaration.
+ */
+export function roleBindingChatIdCopy(channel: ChannelSummary | null, chatType: ChannelChatTypeDeclaration | null) {
+  if (chatType) return { label: chatType.chatIdLabel, placeholder: chatType.chatIdHint ?? "" };
   return {
     label: channel?.chatIdLabel ?? defaultChatIdLabel,
     placeholder: channel?.chatIdHint ?? defaultChatIdPlaceholder,

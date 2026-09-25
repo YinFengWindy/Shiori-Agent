@@ -44,6 +44,7 @@ channels:
 
 - 插件 id 建议与渠道名相同。渠道名写进 `roles.json` 的绑定和会话线程，**发布后不能改名**，否则历史绑定和线程都会变成孤儿。
 - 声明是静态的：插件停用、未授信或还没填凭据时，桌面端也能通过 `channels.list` 列出这个渠道并标注状态，用户可以先绑定再填凭据。
+- 渠道区分私聊和群聊时，改写 `chat_types` 声明会话类型（Runtime API 2.5，写法见[运行时契约](plugin-runtime-contract.md#runtime-api-22-channel-declarations)）：绑定面板让用户先选类型再填号码，按类型的 `prefix` 拼出存储的 `chat_id`，保存时宿主校验两者一致。声明了 `chat_types` 就不要再写渠道级的 `chat_id_label` / `chat_id_hint`。
 - `ctx.channels.add()` 只接受本 manifest 声明过的名字；两个插件声明同一个名字会同时变成 `CONFLICT`。规则细节见 [渠道声明](plugins-tutorial.md#渠道声明)。
 
 ## 2. 配置模型与自动表单

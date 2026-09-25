@@ -7,6 +7,7 @@ from datetime import datetime
 import pytest
 
 from bus.events import InboundMessage
+from core.common.channel_chat_types import ChatTypeDeclaration
 from core.roles import (
     RoleAggregateService,
     RoleStore,
@@ -211,8 +212,18 @@ def test_role_store_keeps_single_contact_channel_access_and_proactive_target_on_
     updated = store.update_role(
         "mira",
         channel_bindings=[
-            {"channel": "telegram", "chat_id": "42", "allow_from": ["alice"]},
-            {"channel": "qq", "chat_id": "7", "allow_from": ["7"]},
+            {
+                "channel": "telegram",
+                "chat_id": "42",
+                "chat_type": "private",
+                "allow_from": ["alice"],
+            },
+            {
+                "channel": "qq",
+                "chat_id": "7",
+                "chat_type": "private",
+                "allow_from": ["7"],
+            },
         ],
         proactive={"enabled": True, "target_channel": "qq", "target_chat_id": "7"},
     )
@@ -224,17 +235,77 @@ def test_role_store_keeps_single_contact_channel_access_and_proactive_target_on_
     assert luna.channel_bindings == []
 
 
-def test_role_store_rejects_bare_qq_group_number_as_chat_id(tmp_path: Path):
+def _qq_declared_store(tmp_path: Path) -> RoleStore:
     store = RoleStore(tmp_path)
+    store.bind_channel_chat_types(
+        {
+            "qq": (
+                ChatTypeDeclaration("private", "私聊", "QQ 号"),
+                ChatTypeDeclaration("group", "群聊", "群号", prefix="gqq:"),
+            )
+        }
+    )
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    return store
+
+
+def test_role_store_persists_declared_group_binding_with_its_type(tmp_path: Path):
+    store = _qq_declared_store(tmp_path)
+
+    store.update_role(
+        "mira",
+        channel_bindings=[
+            {
+                "channel": "qq",
+                "chat_id": "gqq:831907794",
+                "chat_type": "group",
+                "allow_from": ["7"],
+            },
+            {
+                "channel": "qq",
+                "chat_id": "3174898512",
+                "chat_type": "private",
+                "allow_from": ["7"],
+            },
+        ],
+    )
+
+    reloaded = RoleStore(tmp_path).get_role("mira")
+    assert reloaded is not None
+    assert [(item.chat_id, item.chat_type) for item in reloaded.channel_bindings] == [
+        ("gqq:831907794", "group"),
+        ("3174898512", "private"),
+    ]
+
+
+def test_role_store_rejects_group_binding_without_declared_prefix(tmp_path: Path):
+    store = _qq_declared_store(tmp_path)
 
     # QQ sends a bare ID as a private chat, so a group saved this way is unreachable.
     with pytest.raises(ValueError, match="gqq:<群号>"):
         store.update_role(
             "mira",
             channel_bindings=[
-                {"channel": "qq", "chat_id": "831907794", "allow_from": ["7"]},
+                {
+                    "channel": "qq",
+                    "chat_id": "831907794",
+                    "chat_type": "group",
+                    "allow_from": ["7"],
+                },
             ],
+        )
+    reloaded = store.get_role("mira")
+    assert reloaded is not None
+    assert reloaded.channel_bindings == []
+
+
+def test_role_store_rejects_binding_without_chat_type(tmp_path: Path):
+    store = _qq_declared_store(tmp_path)
+
+    with pytest.raises(ValueError, match="chat_type"):
+        store.update_role(
+            "mira",
+            channel_bindings=[{"channel": "qq", "chat_id": "7", "allow_from": ["7"]}],
         )
 
 
@@ -245,7 +316,14 @@ def test_role_store_rejects_proactive_target_in_other_qq_chat_form(tmp_path: Pat
     with pytest.raises(ValueError, match="已绑定的渠道"):
         store.update_role(
             "mira",
-            channel_bindings=[{"channel": "qq", "chat_id": "7", "allow_from": ["7"]}],
+            channel_bindings=[
+                {
+                    "channel": "qq",
+                    "chat_id": "7",
+                    "chat_type": "private",
+                    "allow_from": ["7"],
+                }
+            ],
             proactive={
                 "enabled": True,
                 "target_channel": "qq",
@@ -281,7 +359,12 @@ def test_role_store_disables_proactive_when_its_target_binding_is_removed(
     store.update_role(
         "mira",
         channel_bindings=[
-            {"channel": "telegram", "chat_id": "42", "allow_from": ["42"]}
+            {
+                "channel": "telegram",
+                "chat_id": "42",
+                "chat_type": "private",
+                "allow_from": ["42"],
+            }
         ],
         proactive={
             "enabled": True,
@@ -304,7 +387,12 @@ def test_role_store_rejects_desktop_binding_for_another_role_session(tmp_path: P
         store.update_role(
             "mira",
             channel_bindings=[
-                {"channel": "desktop", "chat_id": "role:luna", "allow_from": []}
+                {
+                    "channel": "desktop",
+                    "chat_id": "role:luna",
+                    "chat_type": "private",
+                    "allow_from": [],
+                }
             ],
         )
     except ValueError as exc:
@@ -321,7 +409,12 @@ def test_role_store_rejects_allow_list_for_desktop_binding(tmp_path: Path):
         store.update_role(
             "mira",
             channel_bindings=[
-                {"channel": "desktop", "chat_id": "role:mira", "allow_from": ["alice"]}
+                {
+                    "channel": "desktop",
+                    "chat_id": "role:mira",
+                    "chat_type": "private",
+                    "allow_from": ["alice"],
+                }
             ],
         )
     except ValueError as exc:
@@ -345,7 +438,12 @@ def test_role_store_requires_exactly_one_external_contact(
         store.update_role(
             "mira",
             channel_bindings=[
-                {"channel": "telegram", "chat_id": "42", "allow_from": allow_from}
+                {
+                    "channel": "telegram",
+                    "chat_id": "42",
+                    "chat_type": "private",
+                    "allow_from": allow_from,
+                }
             ],
         )
 
@@ -732,6 +830,7 @@ def test_role_binding_service_requires_explicit_binding(tmp_path: Path):
         "telegram",
         "chat-1",
         aggregate.role.id,
+        chat_type="private",
         contact_id="u1",
     )
     opened = service.open_bound_channel(channel="telegram", chat_id="chat-1")
@@ -757,6 +856,7 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
         "telegram",
         "chat-1",
         aggregate.role.id,
+        chat_type="private",
         contact_id="u1",
     )
 

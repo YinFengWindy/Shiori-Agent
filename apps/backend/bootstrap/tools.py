@@ -112,6 +112,16 @@ class CoreRuntime:
     async def start(self) -> None:
         self.mcp_registry.start_connect_all_background()
         if self.plugin_manager is not None:
+            from agent.plugin_host.manifest import declared_chat_types
+
+            # Role binding saves check chat IDs against the channels' declared
+            # session types; declarations are static, so the startup
+            # discovery snapshot every generation shares is authoritative.
+            self.role_runtime_registry.repository.store.bind_channel_chat_types(
+                declared_chat_types(
+                    record.manifest for record in self.plugin_manager.discover()
+                )
+            )
             await self.plugin_manager.load_all()
             logger.info("插件加载完成: %d 个", self.plugin_manager.loaded_count)
             self.loop.add_before_turn_plugin_modules(

@@ -155,7 +155,9 @@ async def test_tick_target_error_is_logged_at_loop_boundary_and_loop_continues(
         session_manager=session_manager,
     )
     _ = roles.create_role(role_id="mira", name="Mira", system_prompt="mira")
-    _ = roles.bindings.bind("qq", "gqq:7", "mira", contact_id="owner")
+    _ = roles.bindings.bind(
+        "qq", "gqq:7", "mira", chat_type="group", contact_id="owner"
+    )
     # config.toml names the bound group by its bare number (a private chat ID).
     cfg = SimpleNamespace(
         default_role_id="mira", default_channel="qq", default_chat_id="7"

@@ -11,6 +11,7 @@ from shiori_plugin_testkit.packages import stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel, load_manifest
 from bus.event_bus import EventBus
+from plugins.qq.backend.channel.formatting import GROUP_PREFIX
 from plugins.qq.backend.plugin import QQConfigModel
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
@@ -41,7 +42,14 @@ def test_manifest_declares_the_legacy_channel_name_for_bindings() -> None:
     assert manifest.display_name == "QQ（NapCat）"
     assert set(manifest.capabilities) == {"config", "channels"}
     assert [item.name for item in manifest.channels] == ["qq"]
-    assert manifest.channels[0].chat_id_hint == "私聊填 QQ 号，群聊填 gqq:<群号>"
+
+
+def test_manifest_group_prefix_matches_the_transport_group_format() -> None:
+    # 绑定面板按声明拼接前缀、宿主按声明校验；前缀必须与发送端识别群聊的格式一致。
+    manifest = load_manifest(PLUGIN_DIR)
+    assert manifest is not None
+    types = {item.type: item.prefix for item in manifest.channels[0].chat_types}
+    assert types == {"private": None, "group": GROUP_PREFIX}
 
 
 def test_plugin_skips_channel_without_bot_uin() -> None:

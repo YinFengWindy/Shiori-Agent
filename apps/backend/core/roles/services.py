@@ -244,9 +244,10 @@ class RoleBindingService:
         chat_id: str,
         role_id: str,
         *,
+        chat_type: str,
         contact_id: str = "",
     ) -> RoleChannelBinding:
-        """Bind one channel session to a role and authorize its sole contact."""
+        """Bind one channel session of ``chat_type`` to a role and authorize its sole contact."""
 
         role = self._repository.get_required(role_id)
         clean_channel = str(channel).strip()
@@ -267,6 +268,7 @@ class RoleBindingService:
             {
                 "channel": clean_channel,
                 "chat_id": clean_chat_id,
+                "chat_type": chat_type,
                 "allow_from": [] if clean_channel == "desktop" else [clean_contact_id],
             }
         )

@@ -21,7 +21,12 @@ def test_qq_group_binding_resolves_only_the_group_chat_id(tmp_path: Path) -> Non
     _ = roles.repository.update_role(
         role.id,
         channel_bindings=[
-            {"channel": "qq", "chat_id": "gqq:831907794", "allow_from": ["owner"]}
+            {
+                "channel": "qq",
+                "chat_id": "gqq:831907794",
+                "chat_type": "group",
+                "allow_from": ["owner"],
+            }
         ],
     )
 

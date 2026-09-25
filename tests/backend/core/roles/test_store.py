@@ -200,7 +200,12 @@ def test_role_store_persists_proactive_policy_and_keeps_it_when_target_is_remove
     store.update_role(
         "mira",
         channel_bindings=[
-            {"channel": "telegram", "chat_id": "42", "allow_from": ["42"]},
+            {
+                "channel": "telegram",
+                "chat_id": "42",
+                "chat_type": "private",
+                "allow_from": ["42"],
+            },
         ],
         proactive={
             "enabled": True,

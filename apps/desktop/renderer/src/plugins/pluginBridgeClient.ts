@@ -2,6 +2,7 @@ import { createPluginCommunicationClient, type PluginCommunicationClient } from 
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 import type { JsonSchema } from "./jsonSchemaForm";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
+import type { RoleChatType } from "../shared/types";
 
 import { PluginBridgeError } from "./pluginBridgeError";
 export { PluginBridgeError } from "./pluginBridgeError";
@@ -31,15 +32,30 @@ export type PluginConfigSaveResult = {
   generation: number;
 };
 
+/**
+ * One session type a channel declares: the binding form shows `label` in the
+ * type picker and `chatIdLabel` / `chatIdHint` on the number field; `prefix`
+ * (e.g. QQ's `gqq:`) is prepended to the number to form the stored `chat_id`.
+ */
+export type ChannelChatTypeDeclaration = {
+  type: RoleChatType;
+  label: string;
+  chatIdLabel: string;
+  chatIdHint: string | null;
+  prefix: string | null;
+};
+
 /** One manifest-declared external channel (the `channels:` block of runtime API 2.2). */
 export type PluginChannelDeclaration = {
   name: string;
   label: string;
   /** Describes the binding's sole `allow_from` contact. */
   contactLabel: string | null;
-  /** Describes the binding's `chat_id`; `chatIdHint` shows its expected format. */
+  /** Describes the binding's `chat_id` when no session types are declared; `chatIdHint` shows its expected format. */
   chatIdLabel: string | null;
   chatIdHint: string | null;
+  /** Declared session types; empty keeps the single raw `chat_id` input. */
+  chatTypes: ChannelChatTypeDeclaration[];
 };
 
 /** Wire shape of one channel declaration, shared by `plugins.list` and `channels.list`. */
@@ -49,6 +65,7 @@ type PluginChannelDeclarationPayload = {
   contact_label: string | null;
   chat_id_label: string | null;
   chat_id_hint: string | null;
+  chat_types: Array<{ type: RoleChatType; label: string; chat_id_label: string; chat_id_hint: string | null; prefix: string | null }>;
 };
 
 /**
@@ -84,6 +101,13 @@ function mapChannelDeclaration(item: PluginChannelDeclarationPayload): PluginCha
     contactLabel: item.contact_label,
     chatIdLabel: item.chat_id_label,
     chatIdHint: item.chat_id_hint,
+    chatTypes: item.chat_types.map((chatType) => ({
+      type: chatType.type,
+      label: chatType.label,
+      chatIdLabel: chatType.chat_id_label,
+      chatIdHint: chatType.chat_id_hint,
+      prefix: chatType.prefix,
+    })),
   };
 }
 

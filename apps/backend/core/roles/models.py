@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
 
+from core.common.channel_chat_types import CHAT_TYPES
 from core.common.channel_identifiers import normalize_contact_ids
 
 from .profile_models import RoleProfile
@@ -31,16 +32,22 @@ def normalize_rel_path(path: str | None) -> str | None:
 
 @dataclass(frozen=True)
 class RoleChannelBindingConfig:
-    """One role-owned channel session and its sole external contact."""
+    """One role-owned channel session and its sole external contact.
+
+    ``chat_type`` (``private`` / ``group``) is chosen when binding; the runtime
+    never infers it from the ``chat_id`` format.
+    """
 
     channel: str
     chat_id: str
+    chat_type: str
     allow_from: list[str]
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "channel": self.channel,
             "chat_id": self.chat_id,
+            "chat_type": self.chat_type,
             "allow_from": list(self.allow_from),
         }
 
@@ -50,12 +57,18 @@ class RoleChannelBindingConfig:
         chat_id = str(payload.get("chat_id") or "").strip()
         if not channel or not chat_id:
             raise ValueError("角色渠道绑定必须包含 channel 和 chat_id")
+        chat_type = payload.get("chat_type")
+        if chat_type not in CHAT_TYPES:
+            raise ValueError(
+                f"角色渠道绑定的 chat_type 必须是 {' / '.join(CHAT_TYPES)} 之一"
+            )
         raw_allow_from = payload.get("allow_from", [])
         if not isinstance(raw_allow_from, list):
             raise ValueError("角色渠道 allow_from 必须是数组")
         return cls(
             channel=channel,
             chat_id=chat_id,
+            chat_type=chat_type,
             allow_from=normalize_contact_ids(raw_allow_from),
         )
 

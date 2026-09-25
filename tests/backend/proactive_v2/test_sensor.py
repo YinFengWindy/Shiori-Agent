@@ -51,7 +51,9 @@ def _sensor(
 
 def test_sensor_prefers_role_session_key_and_bound_transport(tmp_path: Path):
     session_manager, role_service = _role_service(tmp_path)
-    _ = role_service.bindings.bind("telegram", "42", "mira", contact_id="owner")
+    _ = role_service.bindings.bind(
+        "telegram", "42", "mira", chat_type="private", contact_id="owner"
+    )
 
     sensor = _sensor(session_manager, role_service, channel="telegram", chat_id="42")
 
@@ -61,8 +63,12 @@ def test_sensor_prefers_role_session_key_and_bound_transport(tmp_path: Path):
 
 def test_sensor_prefers_configured_transport_when_multiple_bindings(tmp_path: Path):
     session_manager, role_service = _role_service(tmp_path)
-    _ = role_service.bindings.bind("telegram", "42", "mira", contact_id="owner")
-    _ = role_service.bindings.bind("qq", "gqq:7", "mira", contact_id="owner")
+    _ = role_service.bindings.bind(
+        "telegram", "42", "mira", chat_type="private", contact_id="owner"
+    )
+    _ = role_service.bindings.bind(
+        "qq", "gqq:7", "mira", chat_type="group", contact_id="owner"
+    )
 
     sensor = _sensor(session_manager, role_service, channel="qq", chat_id="gqq:7")
 
@@ -81,7 +87,9 @@ def test_sensor_requires_bound_transport(tmp_path: Path):
 
 def test_sensor_rejects_configured_transport_not_bound_to_role(tmp_path: Path):
     session_manager, role_service = _role_service(tmp_path)
-    _ = role_service.bindings.bind("telegram", "42", "mira", contact_id="owner")
+    _ = role_service.bindings.bind(
+        "telegram", "42", "mira", chat_type="private", contact_id="owner"
+    )
 
     sensor = _sensor(session_manager, role_service, channel="qq", chat_id="gqq:7")
 
@@ -94,8 +102,12 @@ def test_sensor_rejects_configured_transport_not_bound_to_role(tmp_path: Path):
 
 def test_sensor_requires_explicit_target_when_multiple_bindings(tmp_path: Path):
     session_manager, role_service = _role_service(tmp_path)
-    _ = role_service.bindings.bind("telegram", "42", "mira", contact_id="owner")
-    _ = role_service.bindings.bind("qq", "gqq:7", "mira", contact_id="owner")
+    _ = role_service.bindings.bind(
+        "telegram", "42", "mira", chat_type="private", contact_id="owner"
+    )
+    _ = role_service.bindings.bind(
+        "qq", "gqq:7", "mira", chat_type="group", contact_id="owner"
+    )
 
     sensor = _sensor(session_manager, role_service, channel="", chat_id="")
 
@@ -119,7 +131,9 @@ def test_sensor_supports_desktop_target_without_binding(tmp_path: Path):
 
 def test_sensor_explains_bare_qq_group_number_in_configured_target(tmp_path: Path):
     session_manager, role_service = _role_service(tmp_path)
-    _ = role_service.bindings.bind("qq", "gqq:7", "mira", contact_id="owner")
+    _ = role_service.bindings.bind(
+        "qq", "gqq:7", "mira", chat_type="group", contact_id="owner"
+    )
 
     sensor = _sensor(session_manager, role_service, channel="qq", chat_id="7")
 
@@ -130,7 +144,9 @@ def test_sensor_explains_bare_qq_group_number_in_configured_target(tmp_path: Pat
 
 def test_sensor_omits_qq_group_hint_when_no_matching_group_is_bound(tmp_path: Path):
     session_manager, role_service = _role_service(tmp_path)
-    _ = role_service.bindings.bind("qq", "gqq:8", "mira", contact_id="owner")
+    _ = role_service.bindings.bind(
+        "qq", "gqq:8", "mira", chat_type="group", contact_id="owner"
+    )
 
     sensor = _sensor(session_manager, role_service, channel="qq", chat_id="7")
 

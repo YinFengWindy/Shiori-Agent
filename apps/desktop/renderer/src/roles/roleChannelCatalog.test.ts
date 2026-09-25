@@ -12,7 +12,7 @@ import {
 
 function channel(name: string, state: ChannelState, overrides: Partial<ChannelSummary> = {}): ChannelSummary {
   return {
-    name, label: name.toUpperCase(), contactLabel: null, chatIdLabel: null, chatIdHint: null,
+    name, label: name.toUpperCase(), contactLabel: null, chatIdLabel: null, chatIdHint: null, chatTypes: [],
     pluginId: name, pluginEnabled: state !== "plugin_disabled", state, error: "", status: null,
     ...overrides,
   };
@@ -38,12 +38,12 @@ describe("roleChannelCatalog", () => {
   it("keeps bindings of disabled or uninstalled providers read-only", () => {
     const disabled = channel("qqbot", "plugin_disabled");
     const catalog = [desktop, disabled, channel("demo", "not_configured")];
-    assert.deepEqual(roleBindingAvailability({ channel: "qqbot", chat_id: "c2c:1", allow_from: [] }, catalog), { kind: "plugin_disabled", channel: disabled });
-    assert.deepEqual(roleBindingAvailability({ channel: "gone", chat_id: "1", allow_from: [] }, catalog), { kind: "missing" });
-    assert.equal(roleBindingAvailability({ channel: "demo", chat_id: "1", allow_from: [] }, catalog).kind, "editable");
-    assert.equal(roleBindingAvailability({ channel: "desktop", chat_id: "role:mira", allow_from: [] }, catalog).kind, "editable");
+    assert.deepEqual(roleBindingAvailability({ channel: "qqbot", chat_id: "c2c:1", chat_type: "private", allow_from: [] }, catalog), { kind: "plugin_disabled", channel: disabled });
+    assert.deepEqual(roleBindingAvailability({ channel: "gone", chat_id: "1", chat_type: "private", allow_from: [] }, catalog), { kind: "missing" });
+    assert.equal(roleBindingAvailability({ channel: "demo", chat_id: "1", chat_type: "private", allow_from: [] }, catalog).kind, "editable");
+    assert.equal(roleBindingAvailability({ channel: "desktop", chat_id: "role:mira", chat_type: "private", allow_from: [] }, catalog).kind, "editable");
     // Nothing is known yet, so nothing may be locked.
-    assert.deepEqual(roleBindingAvailability({ channel: "qqbot", chat_id: "c2c:1", allow_from: [] }, null), { kind: "editable", channel: null });
+    assert.deepEqual(roleBindingAvailability({ channel: "qqbot", chat_id: "c2c:1", chat_type: "private", allow_from: [] }, null), { kind: "editable", channel: null });
   });
 
   it("defaults a new binding to a working external channel, then any enabled one, then desktop", () => {
@@ -59,7 +59,10 @@ describe("roleChannelCatalog", () => {
     assert.equal(roleChannelLabel("gone", [qqbot]), "gone");
     assert.equal(roleBindingContactLabel(qqbot), "联系人 ID（QQBot 用户 OpenID）");
     assert.equal(roleBindingContactLabel(null), "联系人 ID");
-    assert.deepEqual(roleBindingChatIdCopy(qqbot), { label: "私聊 chat_id", placeholder: "c2c:<用户 OpenID>" });
-    assert.deepEqual(roleBindingChatIdCopy(null), { label: "会话 / 群组 ID", placeholder: "输入会话或群组 ID" });
+    assert.deepEqual(roleBindingChatIdCopy(qqbot, null), { label: "私聊 chat_id", placeholder: "c2c:<用户 OpenID>" });
+    assert.deepEqual(roleBindingChatIdCopy(null, null), { label: "会话 / 群组 ID", placeholder: "输入会话或群组 ID" });
+    // A declared session type's number copy replaces the channel-level copy.
+    const group = { type: "group" as const, label: "群聊", chatIdLabel: "群号", chatIdHint: "QQ 群号", prefix: "gqq:" };
+    assert.deepEqual(roleBindingChatIdCopy(qqbot, group), { label: "群号", placeholder: "QQ 群号" });
   });
 });

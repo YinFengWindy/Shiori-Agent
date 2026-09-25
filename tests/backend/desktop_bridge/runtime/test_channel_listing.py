@@ -120,8 +120,17 @@ async def test_lists_desktop_builtins_and_unconfigured_qqbot(tmp_path, monkeypat
         "name": "qqbot",
         "label": "QQBot",
         "contact_label": "QQBot 用户 OpenID",
-        "chat_id_label": "私聊 chat_id",
-        "chat_id_hint": "c2c:<用户 OpenID>",
+        "chat_id_label": None,
+        "chat_id_hint": None,
+        "chat_types": [
+            {
+                "type": "private",
+                "label": "私聊",
+                "chat_id_label": "用户 OpenID",
+                "chat_id_hint": "对方的用户 OpenID",
+                "prefix": "c2c:",
+            }
+        ],
         "plugin_id": "qqbot",
         "plugin_enabled": True,
         "state": "not_configured",

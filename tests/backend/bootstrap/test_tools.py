@@ -74,7 +74,12 @@ def test_role_target_validation_rejects_bare_id_for_bound_qq_group(
     store.update_role(
         role.id,
         channel_bindings=[
-            {"channel": "qq", "chat_id": "gqq:42", "allow_from": ["user-1"]}
+            {
+                "channel": "qq",
+                "chat_id": "gqq:42",
+                "chat_type": "group",
+                "allow_from": ["user-1"],
+            }
         ],
     )
 
@@ -116,6 +121,7 @@ def test_role_target_validation_explains_wrong_channel_for_bound_chat(
             {
                 "channel": "qqbot",
                 "chat_id": "c2c:user-1",
+                "chat_type": "private",
                 "allow_from": ["user-1"],
             }
         ],
@@ -164,7 +170,7 @@ def test_actual_runtime_observes_and_follows_scene_without_novelai_package(tmp_p
         async def run():
             roles = RoleStore(workspace)
             roles.create_role(role_id="mira", name="Mira", system_prompt="role")
-            roles.update_role("mira", channel_bindings=[{"channel": "telegram", "chat_id": "chat", "allow_from": ["user"]}], proactive={"enabled": True, "target_channel": "telegram", "target_chat_id": "chat"})
+            roles.update_role("mira", channel_bindings=[{"channel": "telegram", "chat_id": "chat", "chat_type": "private", "allow_from": ["user"]}], proactive={"enabled": True, "target_channel": "telegram", "target_chat_id": "chat"})
             config = Config(provider="", model="", api_key="", model_registrations=[], memory_optimizer_enabled=False)
             app = AppRuntime(config, workspace, features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False))
             await app.start()
@@ -219,7 +225,12 @@ async def test_published_generation_keeps_before_turn_capture_until_old_after_tu
     roles.update_role(
         "mira",
         channel_bindings=[
-            {"channel": "telegram", "chat_id": "chat", "allow_from": ["user"]}
+            {
+                "channel": "telegram",
+                "chat_id": "chat",
+                "chat_type": "private",
+                "allow_from": ["user"],
+            }
         ],
         proactive={
             "enabled": True,
@@ -337,7 +348,12 @@ async def test_core_scene_demand_respects_followup_strategy_and_independent_cons
     roles.update_role(
         "mira",
         channel_bindings=[
-            {"channel": "telegram", "chat_id": "chat", "allow_from": ["user"]}
+            {
+                "channel": "telegram",
+                "chat_id": "chat",
+                "chat_type": "private",
+                "allow_from": ["user"],
+            }
         ],
         proactive={
             "enabled": role_enabled,
@@ -423,4 +439,53 @@ async def test_core_stop_preflights_before_teardown_and_force_continues_after_fa
         assert core.event_bus._closed
     finally:
         scene_close.side_effect = None
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_started_runtime_checks_role_bindings_against_channel_declarations(
+    tmp_path, monkeypatch
+):
+    import shutil
+
+    from agent.config_models import Config
+    from bootstrap.app import AppRuntime, RuntimeFeatures
+
+    root = tmp_path / "plugin_dirs"
+    shutil.copytree(_REPO_ROOT / "plugins" / "qq", root / "qq")
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [root])
+    config = Config(
+        provider="",
+        model="",
+        api_key="",
+        model_registrations=[],
+        memory_optimizer_enabled=False,
+    )
+    app = AppRuntime(
+        config,
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+    try:
+        store = app.core.role_runtime_registry.repository.store
+        store.create_role(role_id="mira", name="Mira", system_prompt="role")
+
+        def group(chat_id: str) -> list[dict[str, Any]]:
+            return [
+                {
+                    "channel": "qq",
+                    "chat_id": chat_id,
+                    "chat_type": "group",
+                    "allow_from": ["7"],
+                }
+            ]
+
+        # The qq manifest declares groups as gqq:<群号>; core reads that
+        # declaration without importing the plugin.
+        with pytest.raises(ValueError, match="gqq:<群号>"):
+            store.update_role("mira", channel_bindings=group("831907794"))
+        updated = store.update_role("mira", channel_bindings=group("gqq:831907794"))
+        assert updated.channel_bindings[0].chat_type == "group"
+    finally:
         await app.shutdown()

@@ -33,10 +33,11 @@ def normalize_qq_group_chat_id(group_id: str) -> str:
 def is_bare_qq_group_chat_id(chat_id: str, contacts: Iterable[object]) -> bool:
     """Tell whether a ``qq`` binding names a group with a bare (non-``gqq:``) ID.
 
-    A QQ private chat's ID is its sole contact's QQ number, so a bare ID that is
-    not exactly that contact can only be a group. The transport would send such
-    an ID as a private message, so it is never a valid binding: saving rejects
-    it and the v6 manifest migration rewrites legacy ones to ``gqq:``.
+    Before v6 a QQ private chat's ID was its sole contact's QQ number, so a bare
+    ID that is not exactly that contact can only be a legacy group. The
+    transport sends such an ID as a private message; the v6 manifest migration
+    rewrites these to ``gqq:``. Upgrade-only: since v7 bindings carry an
+    explicit ``chat_type`` checked against the channel's declaration.
     """
     clean_chat_id = normalize_chat_id(chat_id)
     return (

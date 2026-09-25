@@ -38,6 +38,9 @@ def test_qqbot_manifest_declares_its_channel_for_binding_discovery() -> None:
     assert [item.name for item in manifest.channels] == ["qqbot"]
     assert manifest.channels[0].label == "QQBot"
     assert manifest.channels[0].contact_label
+    # Inbound C2C messages are addressed ``c2c:<openid>``; there are no group bindings.
+    [private] = manifest.channels[0].chat_types
+    assert (private.type, private.prefix) == ("private", "c2c:")
 
 
 def test_qqbot_plugin_skips_channel_without_credentials() -> None:

@@ -220,7 +220,12 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
     store.update_role(
         "mira",
         channel_bindings=[
-            {"channel": "telegram", "chat_id": "42", "allow_from": ["42"]}
+            {
+                "channel": "telegram",
+                "chat_id": "42",
+                "chat_type": "private",
+                "allow_from": ["42"],
+            }
         ],
         proactive={
             "enabled": True,

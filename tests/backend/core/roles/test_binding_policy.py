@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from core.common.channel_chat_types import ChatTypeDeclaration
 from core.roles.binding_policy import RoleBindingPolicy
 from core.roles.models import RoleChannelBindingConfig, RoleProactiveConfig
 
@@ -17,6 +18,7 @@ def test_binding_policy_rejects_external_channel_without_single_contact() -> Non
                 RoleChannelBindingConfig(
                     channel="qq",
                     chat_id="10001",
+                    chat_type="private",
                     allow_from=[],
                 )
             ]
@@ -28,6 +30,7 @@ def test_binding_policy_rejects_channel_owned_by_another_role() -> None:
     existing = RoleChannelBindingConfig(
         channel="telegram",
         chat_id="chat-1",
+        chat_type="private",
         allow_from=["user-1"],
     )
     roles = [SimpleNamespace(id="role-a", channel_bindings=[existing])]
@@ -50,18 +53,66 @@ def test_binding_policy_disables_removed_proactive_target() -> None:
     assert normalized.target_chat_id == ""
 
 
-def test_binding_policy_rejects_bare_qq_id_that_is_not_its_contact() -> None:
-    # QQ sends a bare ID as a private chat, so a bare group number is unreachable.
-    with pytest.raises(ValueError, match="gqq:<群号>"):
-        RoleBindingPolicy().normalize(
-            [RoleChannelBindingConfig("qq", "831907794", ["3174898512"])]
-        )
+_QQ_TYPES = {
+    "qq": (
+        ChatTypeDeclaration("private", "私聊", "QQ 号"),
+        ChatTypeDeclaration("group", "群聊", "群号", prefix="gqq:"),
+    ),
+    "qqbot": (ChatTypeDeclaration("private", "私聊", "用户 OpenID", prefix="c2c:"),),
+}
 
 
-def test_binding_policy_accepts_qq_private_and_gqq_group_chats() -> None:
+def _declared_policy() -> RoleBindingPolicy:
+    policy = RoleBindingPolicy()
+    policy.bind_chat_types(_QQ_TYPES)
+    return policy
+
+
+def test_binding_policy_accepts_chat_ids_matching_their_declared_type() -> None:
     bindings = [
-        RoleChannelBindingConfig("qq", "3174898512", ["3174898512"]),
-        RoleChannelBindingConfig("qq", "gqq:831907794", ["3174898512"]),
+        # A private QQ chat no longer has to equal its contact (#397).
+        RoleChannelBindingConfig("qq", "831907794", "private", ["3174898512"]),
+        RoleChannelBindingConfig("qq", "gqq:831907794", "group", ["3174898512"]),
+        RoleChannelBindingConfig("qqbot", "c2c:u1", "private", ["u1"]),
     ]
 
-    assert RoleBindingPolicy().normalize(bindings) == bindings
+    assert _declared_policy().normalize(bindings) == bindings
+
+
+@pytest.mark.parametrize(
+    "binding, message",
+    [
+        # Group type without its prefix: QQ would send it as a private chat.
+        (RoleChannelBindingConfig("qq", "831907794", "group", ["3"]), "gqq:<群号>"),
+        (RoleChannelBindingConfig("qq", "gqq:", "group", ["3"]), "gqq:<群号>"),
+        # Private type carrying the group prefix names the other type.
+        (RoleChannelBindingConfig("qq", "gqq:831907794", "private", ["3"]), "群聊格式"),
+        (
+            RoleChannelBindingConfig("qqbot", "u1", "private", ["u1"]),
+            "c2c:<用户 OpenID>",
+        ),
+        # qqbot declares no group chats.
+        (RoleChannelBindingConfig("qqbot", "c2c:u1", "group", ["u1"]), "可选：私聊"),
+    ],
+)
+def test_binding_policy_rejects_chat_id_inconsistent_with_its_type(
+    binding: RoleChannelBindingConfig, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        _declared_policy().normalize([binding])
+
+
+def test_binding_policy_accepts_any_type_for_channels_without_declarations() -> None:
+    bindings = [
+        RoleChannelBindingConfig("custom", "room-1", "group", ["u1"]),
+        RoleChannelBindingConfig("custom", "gqq:1", "private", ["u1"]),
+    ]
+
+    assert _declared_policy().normalize(bindings) == bindings
+
+
+def test_binding_policy_requires_private_desktop_session() -> None:
+    desktop = RoleChannelBindingConfig("desktop", "role:mira", "group", [])
+
+    with pytest.raises(ValueError, match="私聊"):
+        RoleBindingPolicy().normalize_for_role([], "mira", [desktop])
