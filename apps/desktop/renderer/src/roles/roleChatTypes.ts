@@ -2,6 +2,11 @@ import type { ChannelChatTypeDeclaration, ChannelSummary } from "../plugins/plug
 import type { RoleChannelBinding, RoleChatType } from "../shared/types";
 import { findRoleChannel, roleChannelLabel, type RoleChannelCatalog } from "./roleChannelCatalog";
 
+/** Whether a session type is a group chat: only group bindings carry a blacklist. */
+export function isGroupChatType(chatType: RoleChatType) {
+  return chatType === "group";
+}
+
 /** Finds the declared session type a binding selected; null when the channel declares none (or not this one). */
 export function findRoleChatType(channel: ChannelSummary | null, chatType: RoleChatType) {
   return channel?.chatTypes.find((item) => item.type === chatType) ?? null;
@@ -69,7 +74,7 @@ export function changeRoleBindingChatType(binding: RoleChannelBinding, channel: 
     ...binding,
     chat_type: chatType,
     chat_id: composeRoleBindingChatId(number, findRoleChatType(channel, chatType)),
-    blocked_senders: chatType === "group" ? binding.blocked_senders : [],
+    blocked_senders: isGroupChatType(chatType) ? binding.blocked_senders : [],
   };
 }
 

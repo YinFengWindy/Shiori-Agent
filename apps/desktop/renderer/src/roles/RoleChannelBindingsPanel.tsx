@@ -20,7 +20,7 @@ import {
 import { RoleChannelBindingBlocklistField } from "./RoleChannelBindingBlocklistField";
 import { RoleChannelBindingChatIdField, RoleChannelBindingChatTypeField } from "./RoleChannelBindingChatFields";
 import { RoleReadOnlyField } from "./RoleReadOnlyField";
-import { changeRoleBindingChatType } from "./roleChatTypes";
+import { changeRoleBindingChatType, isGroupChatType } from "./roleChatTypes";
 import { RoleEditorSection } from "./RoleEditorSection";
 
 type RoleChannelBindingsPanelProps = {
@@ -127,7 +127,7 @@ function ChannelBindingRow({ activeRoleId, binding, channels, index, bindingsCou
             : null}
         </div>
         <RoleChannelBindingChatIdField binding={binding} channel={channel} readOnly={desktopBinding || readOnly} onChange={(chatId) => updateThis((item) => ({ ...item, chat_id: chatId }))} />
-        {binding.chat_type === "group"
+        {isGroupChatType(binding.chat_type)
           ? <RoleChannelBindingBlocklistField binding={binding} channel={channel} readOnly={readOnly} onChange={(blockedSenders) => updateThis((item) => ({ ...item, blocked_senders: blockedSenders }))} />
           : null}
         <ChannelBindingNotice availability={availability} onOpenPluginSettings={onOpenPluginSettings} />

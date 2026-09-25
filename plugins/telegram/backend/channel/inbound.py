@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -25,6 +26,8 @@ class _InboundMixin:
         user = update.effective_user
 
         if not msg or not msg.text or not chat or not user:
+            return
+        if not self._is_sender_admitted(chat, user, "消息"):
             return
 
         # 去重：同一 (chat_id, message_id) 只处理一次，防止 Telegram 重投
@@ -97,6 +100,26 @@ class _InboundMixin:
                 },
             )
         )
+
+    def _is_sender_admitted(self, chat: Any, user: Any, kind: str) -> bool:
+        """Checks the role binding's admission before any side effect of an update.
+
+        Rejected updates (unbound chat, blacklisted member) must not show
+        typing, remember usernames or download attachments. ``_accept_inbound``
+        repeats the check because paused intake may replay a message after the
+        bindings changed.
+        """
+        if self._channel_hub is None or self._channel_hub.is_sender_allowed(
+            channel=self._channel,
+            chat_id=str(chat.id),
+            sender_id=str(user.id),
+            sender_alias=user.username or "",
+        ):
+            return True
+        logger.warning(
+            f"[telegram] 忽略未绑定渠道或黑名单成员的{kind}  chat_id={chat.id}  id={user.id}"
+        )
+        return False
 
     def _route_inbound(self, message: InboundMessage) -> InboundMessage:
         if self._channel_hub is None:

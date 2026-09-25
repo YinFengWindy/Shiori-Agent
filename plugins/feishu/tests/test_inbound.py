@@ -214,6 +214,19 @@ async def test_unbound_sender_is_rejected_and_shown_in_status(
     assert f"chat_id={CHAT_ID}" in detail and f"open_id={OPEN_ID}" in detail
 
 
+async def test_unbound_sender_attachment_is_not_downloaded(
+    make_harness: Any, make_event: Any
+) -> None:
+    harness = make_harness(allowed=False)
+    connection = await harness.start()
+
+    connection.emit(make_event(message_type="image", content={"image_key": "img_x"}))
+    await harness.settle()
+
+    assert harness.bus.inbound == []
+    assert [call for call in harness.api.calls if "resources" in call[1]] == []
+
+
 async def test_paused_intake_buffers_until_resumed(
     harness: Any, make_event: Any
 ) -> None:

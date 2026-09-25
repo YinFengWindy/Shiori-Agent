@@ -26,11 +26,14 @@ class _InboundMixin:
         ).strip()
         if not user_openid:
             return
+        chat_id = f"c2c:{user_openid}"
+        # Admission before any side effect: no reply anchor, no input notify.
+        if not self._is_sender_admitted(chat_id, user_openid):
+            return
         content = str(data.get("content") or "").strip()
         message_id = str(data.get("id") or "").strip()
         if message_id:
             self._last_c2c_msg_id[user_openid] = message_id
-        chat_id = f"c2c:{user_openid}"
         logger.info(
             "[qqbot] 收到私聊消息 user_openid=%s msg_id=%s",
             user_openid,
@@ -56,6 +59,15 @@ class _InboundMixin:
         if message_id:
             await self._send_input_notify(user_openid, message_id)
 
+    def _is_sender_admitted(self, chat_id: str, sender: str) -> bool:
+        """Checks the role binding's admission; ``_accept_inbound`` repeats it for replays."""
+        if self._channel_hub is None or self._channel_hub.is_sender_allowed(
+            channel=CHANNEL, chat_id=chat_id, sender_id=sender
+        ):
+            return True
+        logger.warning("[qqbot] 忽略未绑定渠道的消息 chat_id=%s", chat_id)
+        return False
+
     async def _publish_inbound(self, message: InboundMessage) -> None:
         await self._intake.submit(message)
 
@@ -77,11 +89,7 @@ class _InboundMixin:
         await self._require_bus().publish_inbound(message)
 
     async def _handle_stop(self, chat_id: str, sender: str) -> None:
-        # /stop follows the same admission as messages: bound and not blacklisted.
-        if self._channel_hub is not None and not self._channel_hub.is_sender_allowed(
-            channel=CHANNEL, chat_id=chat_id, sender_id=sender
-        ):
-            logger.warning("[qqbot] 忽略未绑定渠道的 /stop chat_id=%s", chat_id)
+        if not self._is_sender_admitted(chat_id, sender):
             return
         if self._interrupt_controller is None:
             await self.send(chat_id, "当前未启用中断功能。")

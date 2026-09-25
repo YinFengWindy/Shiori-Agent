@@ -244,6 +244,9 @@ async def test_qqbot_c2c_inbound_requires_role_binding() -> None:
     )
 
     assert bus.inbound == []
+    # No side effect for a rejected sender: no input notify, no reply anchor.
+    channel._send_input_notify.assert_not_awaited()
+    assert channel._last_c2c_msg_id == {}
 
 
 @pytest.mark.asyncio

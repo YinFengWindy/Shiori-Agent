@@ -21,10 +21,11 @@ manifest 的 ``default_enabled: false`` 只决定 ``[plugins.<id>]`` **没有显
 from __future__ import annotations
 
 import logging
-import tomllib
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+
+from agent.config_migration_writer import save_migrated_config
 
 logger = logging.getLogger(__name__)
 
@@ -60,33 +61,20 @@ def migrate_plugin_default_enabled(path: Path, data: dict[str, Any]) -> dict[str
     migrated.setdefault("_migrations", {})[RECEIPT_KEY] = [*receipts, *pending]
 
     # 局部导入：迁移只在升级后的首次启动命中，不让每次加载配置都拉入 TOML 文本编辑模块。
-    from desktop_bridge.plugin_config_text import (
-        PluginTableConflict,
-        merge_plugin_table,
-        merge_table,
-    )
-    from infra.persistence.text_store import atomic_save_text
-    from infra.persistence.toml_store import render_toml
+    from desktop_bridge.plugin_config_text import merge_plugin_table, merge_table
 
-    # 文本编辑保留用户 TOML 的格式和注释；行扫描处理不了（内联表、点号键）或结果
-    # 与结构化版本不一致时整体重写，代价是丢失注释（与渠道配置迁移相同的取舍）。
-    text = path.read_text(encoding="utf-8")
-    try:
+    def splice(text: str) -> str:
         for plugin_id in to_enable:
             text = merge_plugin_table(text, plugin_id, migrated["plugins"][plugin_id])
-        text = merge_table(text, ["_migrations"], migrated["_migrations"])
-        spliced_ok = tomllib.loads(text) == migrated
-    except (PluginTableConflict, ValueError, tomllib.TOMLDecodeError):
-        spliced_ok = False
-    if not spliced_ok:
-        text = render_toml(migrated)
-    atomic_save_text(path, text)
+        return merge_table(text, ["_migrations"], migrated["_migrations"])
+
+    result = save_migrated_config(path, migrated, splice)
     if to_enable:
         logger.info(
             "插件 %s 改为默认停用；已为升级前的配置显式保留启用",
             ", ".join(to_enable),
         )
-    return tomllib.loads(text)
+    return result
 
 
 def _as_dict(value: object) -> dict[str, Any]:

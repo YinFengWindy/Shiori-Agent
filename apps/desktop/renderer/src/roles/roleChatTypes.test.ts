@@ -6,6 +6,7 @@ import {
   composeRoleBindingChatId,
   defaultRoleChatType,
   findRoleChatType,
+  isGroupChatType,
   roleBindingChatIdCopy,
   roleBindingDisplayLabel,
   roleBindingNumber,
@@ -56,6 +57,11 @@ describe("roleChatTypes", () => {
     assert.deepEqual(roleBindingChatIdCopy(group), { label: "群号", placeholder: "" });
     assert.deepEqual(roleBindingChatIdCopy({ ...qq.chatTypes[0], chatIdHint: "对方的 QQ 号" }), { label: "QQ 号", placeholder: "对方的 QQ 号" });
     assert.deepEqual(roleBindingChatIdCopy(null), { label: "会话 ID", placeholder: "" });
+  });
+
+  it("tells group chats apart from private ones", () => {
+    assert.equal(isGroupChatType("group"), true);
+    assert.equal(isGroupChatType("private"), false);
   });
 
   it("re-derives the prefix and drops the blacklist when a group becomes private", () => {

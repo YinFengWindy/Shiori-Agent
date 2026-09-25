@@ -246,7 +246,7 @@ class RoleBindingService:
         role_id: str,
         *,
         chat_type: ChatType,
-        blocked_senders: list[str] | None = None,
+        blocked_senders: Sequence[str] = (),
     ) -> RoleChannelBinding:
         """Bind one channel session of ``chat_type`` to a role.
 
@@ -271,7 +271,7 @@ class RoleBindingService:
                 "channel": clean_channel,
                 "chat_id": clean_chat_id,
                 "chat_type": chat_type,
-                "blocked_senders": list(blocked_senders or []),
+                "blocked_senders": list(blocked_senders),
             }
         )
         updated = self._repository.update_role(role.id, channel_bindings=next_bindings)

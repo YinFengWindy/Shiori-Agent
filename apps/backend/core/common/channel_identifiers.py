@@ -11,13 +11,22 @@ def normalize_chat_id(chat_id: str) -> str:
     return str(chat_id).strip()
 
 
+def normalize_sender_id(raw_sender: object) -> str:
+    """Return one sender ID or alias stripped, without a leading ``@``.
+
+    Users write Telegram usernames as ``@alice``; the platform reports
+    ``alice``, so the marker never takes part in matching.
+    """
+    return str(raw_sender).strip().removeprefix("@").strip()
+
+
 def normalize_sender_ids(raw_senders: Iterable[object]) -> list[str]:
-    """Return sender IDs stripped, non-empty, unique and sorted.
+    """Return sender IDs normalized by ``normalize_sender_id``, non-empty, unique, sorted.
 
     The single normalization of a group binding's ``blocked_senders``, also
     applied to the pre-v8 ``allow_from`` contacts the upgrade rules read.
     """
-    return sorted({str(item).strip() for item in raw_senders if str(item).strip()})
+    return sorted({normalize_sender_id(item) for item in raw_senders} - {""})
 
 
 def normalize_qq_group_chat_id(group_id: str) -> str:

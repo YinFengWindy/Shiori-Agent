@@ -821,3 +821,33 @@ def test_configuration_key_covers_every_connection_setting(monkeypatch) -> None:
         mod.QQChannel(bot_uin="42", ws_token="t"),
     ):
         assert changed.configuration_key != base
+
+
+@pytest.mark.asyncio
+async def test_qq_rejected_sender_triggers_no_side_effects(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    mod = _import_qq_channel(monkeypatch)
+    bus = _Bus()
+    sessions = _SessionManager(tmp_path)
+    requester = SimpleNamespace(get=AsyncMock())
+    channel = mod.QQChannel("42", bus, sessions, http_requester=requester)
+    hub = SimpleNamespace(is_sender_allowed=MagicMock(return_value=False))
+    channel._channel_hub = hub
+    remember = AsyncMock()
+    monkeypatch.setattr(
+        channel, "_require_identity_index", lambda: SimpleNamespace(remember=remember)
+    )
+
+    await channel._handle_private("7", "hi", ["http://x/a.png"])
+    await channel._handle_group("100", "7", "hi", ["http://x/a.png"])
+
+    assert [call.kwargs for call in hub.is_sender_allowed.call_args_list] == [
+        {"channel": "qq", "chat_id": "7", "sender_id": "7"},
+        {"channel": "qq", "chat_id": "gqq:100", "sender_id": "7"},
+    ]
+    remember.assert_not_awaited()
+    requester.get.assert_not_awaited()
+    assert sessions.sessions == {}
+    assert sessions.saved == []
+    assert bus.inbound == []

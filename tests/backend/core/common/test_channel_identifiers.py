@@ -39,6 +39,14 @@ def test_sender_ids_are_stripped_non_empty_unique_and_sorted() -> None:
     assert normalize_sender_ids([" b", "a", "", "b ", 3]) == ["3", "a", "b"]
 
 
+def test_sender_ids_drop_a_leading_at_marker() -> None:
+    assert normalize_sender_ids(["@alice", " @ bob", "alice", "@", "a@b"]) == [
+        "a@b",
+        "alice",
+        "bob",
+    ]
+
+
 def test_bare_qq_id_resolves_to_its_bound_gqq_group() -> None:
     bound = ["gqq:7", "8"]
 

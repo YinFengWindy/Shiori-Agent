@@ -231,7 +231,6 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
                 preview,
                 len(image_urls),
             )
-            self.user_map[user_id] = user_id
             self._submit_to_main_loop(self._handle_private(user_id, text, image_urls))
 
         @cast(Any, self._bot.on_group_message())

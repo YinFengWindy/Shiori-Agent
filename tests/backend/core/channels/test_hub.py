@@ -409,7 +409,9 @@ def test_channel_hub_attaches_complete_role_execution_context(tmp_path: Path) ->
     assert routed.metadata["role_work_kind"] == "passive_turn"
 
 
-def _hub_with_bindings(tmp_path: Path) -> ChannelHub:
+def _hub_with_bindings(
+    tmp_path: Path, blocked: tuple[str, ...] = ("7", "Troll")
+) -> ChannelHub:
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
@@ -418,7 +420,7 @@ def _hub_with_bindings(tmp_path: Path) -> ChannelHub:
     _ = service.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
     _ = service.bindings.bind("telegram", "123", "mira", chat_type="private")
     _ = service.bindings.bind(
-        "telegram", "-100", "mira", chat_type="group", blocked_senders=["7", "Troll"]
+        "telegram", "-100", "mira", chat_type="group", blocked_senders=blocked
     )
     return ChannelHub(service)
 
@@ -452,6 +454,23 @@ def test_channel_hub_matches_blacklisted_alias_case_insensitively(
     )
     # IDs match exactly: a numeric ID never matches by case folding.
     assert hub.is_sender_allowed(channel="telegram", chat_id="-100", sender_id="troll")
+
+
+def test_channel_hub_ignores_at_marker_on_blacklisted_aliases(
+    tmp_path: Path,
+) -> None:
+    # Users type usernames as "@Troll"; the normalizer drops the "@".
+    hub = _hub_with_bindings(tmp_path, blocked=("@Troll",))
+
+    assert not hub.is_sender_allowed(
+        channel="telegram", chat_id="-100", sender_id="9", sender_alias="troll"
+    )
+    assert not hub.is_sender_allowed(
+        channel="telegram", chat_id="-100", sender_id="9", sender_alias="@TROLL"
+    )
+    assert hub.is_sender_allowed(
+        channel="telegram", chat_id="-100", sender_id="9", sender_alias="friend"
+    )
 
 
 def test_channel_hub_rejects_senders_of_unbound_sessions(tmp_path: Path) -> None:

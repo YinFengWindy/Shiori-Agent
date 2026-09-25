@@ -280,6 +280,9 @@ class FeishuChannel:
         sender = message.sender_open_id
         if not sender:
             return
+        # Admission before resolving the payload, which downloads attachments.
+        if not self._is_bound(message.chat_id, sender):
+            return
         text = ""
         if message.message_type == "text":
             text = str(message.content.get("text") or "").strip()
@@ -345,8 +348,6 @@ class FeishuChannel:
         return False
 
     async def _handle_stop(self, chat_id: str, sender: str) -> None:
-        if not self._is_bound(chat_id, sender):
-            return
         if self._interrupt_controller is None:
             await self.send(chat_id, "当前未启用中断功能。")
             return

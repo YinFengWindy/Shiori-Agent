@@ -5,7 +5,7 @@ from typing import Any
 
 from bus.events import InboundMessage, OutboundMessage
 from core.common.channel_directory import ChannelDirectory
-from core.common.channel_identifiers import chat_ids_equal
+from core.common.channel_identifiers import chat_ids_equal, normalize_sender_id
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
@@ -127,7 +127,8 @@ class ChannelHub:
         Unbound sessions are rejected. A private chat's sender is its partner,
         and private bindings carry no blacklist, so they are always admitted.
         A blacklist entry matches the sender ID exactly, or ``sender_alias``
-        (a Telegram username) case-insensitively.
+        (a Telegram username) case-insensitively; a leading ``@`` is ignored
+        on both sides.
         """
         binding = self._service.bindings.get_binding(channel, chat_id)
         if binding is None:
@@ -141,7 +142,7 @@ class ChannelHub:
         )
         if sender_id in config.blocked_senders:
             return False
-        alias = sender_alias.lower()
+        alias = normalize_sender_id(sender_alias).lower()
         return not (
             alias and any(alias == entry.lower() for entry in config.blocked_senders)
         )

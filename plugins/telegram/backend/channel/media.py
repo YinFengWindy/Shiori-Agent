@@ -24,6 +24,8 @@ class _MediaMixin:
 
         if not msg or not msg.photo or not chat or not user:
             return
+        if not self._is_sender_admitted(chat, user, "图片"):
+            return
 
         msg_key = f"{chat.id}:{msg.message_id}"
         if self._message_deduper.seen(msg_key):
@@ -84,6 +86,8 @@ class _MediaMixin:
         user = update.effective_user
 
         if not msg or not msg.document or not chat or not user:
+            return
+        if not self._is_sender_admitted(chat, user, "文件"):
             return
 
         chat_id_str = str(chat.id)

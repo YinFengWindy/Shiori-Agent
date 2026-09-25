@@ -5,17 +5,17 @@
 里的 ``allow_from``（qqbot 旧版群配置 ``groups`` 里的也算）没有任何含义，启动时
 从 ``[plugins.<id>]`` 删除；靠「旧键是否还在」判断是否迁移过，删完即不再命中。
 
-文本编辑保留用户 TOML 的格式和注释；行扫描处理不了（内联表、点号键）或结果与
-结构化版本不一致时整体重写，代价是丢失注释（与渠道配置迁移相同的取舍）。
+写回走 ``agent/config_migration_writer.py``：尽量保留用户 TOML 的格式和注释。
 """
 
 from __future__ import annotations
 
 import logging
-import tomllib
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+
+from agent.config_migration_writer import save_migrated_config
 
 logger = logging.getLogger(__name__)
 
@@ -42,28 +42,19 @@ def remove_channel_allowlists(path: Path, data: dict[str, Any]) -> dict[str, Any
         return data
 
     # 局部导入：迁移只在升级后的首次启动命中，不让每次加载配置都拉入 TOML 文本编辑模块。
-    from desktop_bridge.plugin_config_text import (
-        PluginTableConflict,
-        merge_plugin_table,
-    )
-    from infra.persistence.text_store import atomic_save_text
-    from infra.persistence.toml_store import render_toml
+    from desktop_bridge.plugin_config_text import merge_plugin_table
 
-    text = path.read_text(encoding="utf-8")
-    try:
+    def splice(text: str) -> str:
         for plugin_id in changed:
             text = merge_plugin_table(text, plugin_id, migrated["plugins"][plugin_id])
-        spliced_ok = tomllib.loads(text) == migrated
-    except (PluginTableConflict, ValueError, tomllib.TOMLDecodeError):
-        spliced_ok = False
-    if not spliced_ok:
-        text = render_toml(migrated)
-    atomic_save_text(path, text)
+        return text
+
+    result = save_migrated_config(path, migrated, splice)
     logger.info(
         "已删除插件 %s 配置里的 allow_from 白名单；访问控制改由角色绑定的群黑名单负责",
         ", ".join(changed),
     )
-    return tomllib.loads(text)
+    return result
 
 
 def _without_allowlists(table: dict[str, Any]) -> dict[str, Any]:

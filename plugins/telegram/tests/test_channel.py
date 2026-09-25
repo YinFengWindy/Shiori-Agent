@@ -886,6 +886,79 @@ async def test_telegram_group_admits_members_except_blacklisted(
     await channel.stop()
 
 
+@pytest.mark.asyncio
+async def test_telegram_rejected_sender_triggers_no_side_effects(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    mod = _import_telegram_channel(monkeypatch)
+    bus = _Bus()
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
+    role_store.update_role(
+        "mira",
+        channel_bindings=[
+            {
+                "channel": "telegram",
+                "chat_id": "-100",
+                "chat_type": "group",
+                "blocked_senders": ["@troll"],
+            }
+        ],
+    )
+    channel = mod.TelegramChannel(
+        token="token",
+        bus=bus,
+        session_manager=_SessionManager(tmp_path),
+        event_bus=EventBus(),
+    )
+    await channel.start()
+    typing = AsyncMock()
+    remember = AsyncMock()
+    get_file = AsyncMock()
+    monkeypatch.setattr(channel, "_safe_send_typing", typing)
+    monkeypatch.setattr(channel, "_remember_username", remember)
+    channel._app.bot.get_file = get_file
+    context = SimpleNamespace(bot=channel._app.bot)
+    reply = SimpleNamespace(
+        text="",
+        caption="",
+        photo=[SimpleNamespace(file_id="rp")],
+        document=SimpleNamespace(file_id="rd", file_name="r.txt"),
+        from_user=SimpleNamespace(id=2, username="other"),
+        message_id=8,
+    )
+
+    def _update(chat_id: int, user_id: int, username: str, message_id: int):
+        return SimpleNamespace(
+            effective_message=SimpleNamespace(
+                text="hi",
+                caption="看图",
+                message_id=message_id,
+                reply_to_message=reply,
+                photo=[SimpleNamespace(file_id="p")],
+                document=SimpleNamespace(
+                    file_id="d", file_name="a.txt", mime_type="text/plain"
+                ),
+            ),
+            effective_chat=SimpleNamespace(id=chat_id, type="group"),
+            effective_user=SimpleNamespace(id=user_id, username=username),
+        )
+
+    # A blacklisted member of the bound group, then a sender in an unbound chat.
+    for update in [_update(-100, 5, "Troll", 1), _update(-200, 6, "friend", 2)]:
+        await channel._on_message(update, context)
+        await channel._on_photo(update, context)
+        await channel._on_document(update, context)
+        await channel._on_command(update, context)
+
+    assert bus.inbound == []
+    typing.assert_not_awaited()
+    remember.assert_not_awaited()
+    get_file.assert_not_awaited()
+    await channel.stop()
+
+
 class _PushTool:
     def __init__(self) -> None:
         self.registered: list[str] = []

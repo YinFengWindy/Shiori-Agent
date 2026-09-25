@@ -17,6 +17,8 @@ class _InboundMixin:
     async def _handle_private(
         self, user_id: str, content: str, img_urls: list[str] | None = None
     ) -> None:
+        if not self._is_sender_admitted(user_id, user_id, "消息"):
+            return
         await self._require_identity_index().remember(user_id, user_id)
         media = await download_to_temp(
             img_urls or [], self._require_http_requester(), self._attachments
@@ -33,7 +35,7 @@ class _InboundMixin:
         )
 
     async def _handle_stop_private(self, user_id: str) -> None:
-        if not self._is_stop_admitted(user_id, user_id):
+        if not self._is_sender_admitted(user_id, user_id, "/stop"):
             return
         if self._interrupt_controller is None:
             await self.send(user_id, "当前未启用中断功能。")
@@ -53,6 +55,8 @@ class _InboundMixin:
         img_urls: list[str] | None = None,
     ) -> None:
         chat_id = normalize_qq_group_chat_id(group_id)
+        if not self._is_sender_admitted(chat_id, user_id, "消息"):
+            return
         sessions = self._require_session_manager()
         session = sessions.get_or_create(f"{CHANNEL}:{chat_id}")
         if "group_id" not in session.metadata:
@@ -97,7 +101,7 @@ class _InboundMixin:
 
     async def _handle_stop_group(self, group_id: str, user_id: str) -> None:
         chat_id = normalize_qq_group_chat_id(group_id)
-        if not self._is_stop_admitted(chat_id, user_id):
+        if not self._is_sender_admitted(chat_id, user_id, "/stop"):
             return
         if self._interrupt_controller is None:
             await self.send(chat_id, "当前未启用中断功能。")
@@ -109,13 +113,19 @@ class _InboundMixin:
         )
         await self.send(chat_id, result.message)
 
-    def _is_stop_admitted(self, chat_id: str, user_id: str) -> bool:
-        """``/stop`` follows the same admission as messages: bound and not blacklisted."""
+    def _is_sender_admitted(self, chat_id: str, user_id: str, kind: str) -> bool:
+        """Checks the role binding's admission before any side effect.
+
+        Messages and ``/stop`` from an unbound chat or a blacklisted member
+        must not remember identities, save session metadata or download
+        images. ``_accept_inbound`` repeats the check because paused intake may
+        replay a message after the bindings changed.
+        """
         if self._channel_hub is None or self._channel_hub.is_sender_allowed(
             channel=CHANNEL, chat_id=chat_id, sender_id=user_id
         ):
             return True
-        logger.warning("[qq] 忽略未绑定渠道或黑名单成员的 /stop chat_id=%s", chat_id)
+        logger.warning("[qq] 忽略未绑定渠道或黑名单成员的%s chat_id=%s", kind, chat_id)
         return False
 
     def _resolve_runtime_session_key(self, chat_id: str) -> str:
