@@ -62,40 +62,8 @@ class Session:
         start_index: int | None = None,
     ) -> list[dict[str, Any]]:
         """将 session 消息展开为 LLM 可直接使用的 OpenAI 格式消息列表。"""
-        if start_index is not None:
-            if max_messages <= 0:
-                return []
-            start = max(0, int(start_index))
-            if start >= len(self.messages):
-                return []
-            # 向前回退到最近的 user 边界（保留完整 turn）
-            while (
-                start > 0
-                and self.messages[start].get("role") != "user"
-                and not (
-                    self.messages[start].get("role") == "assistant"
-                    and self.messages[start].get("proactive")
-                )
-            ):
-                start -= 1
-            # start=0 但仍非合法边界时，向后找第一个 user 或 proactive assistant。
-            messages = self.messages[start:]
-            if messages and not (
-                messages[0].get("role") == "user"
-                or (
-                    messages[0].get("role") == "assistant"
-                    and messages[0].get("proactive")
-                )
-            ):
-                messages = _align_to_user_boundary(messages)
-            if not messages:
-                return []
-        elif max_messages <= 0:
-            messages = []
-        else:
-            messages = self.messages[-max_messages:]
         out: list[dict[str, Any]] = []
-        for m in messages:
+        for m in self._history_window(max_messages, start_index):
             role = m.get("role")
 
             if role == "user":
@@ -163,6 +131,65 @@ class Session:
             out.append(assistant_msg)
 
         return out
+
+    def get_history_tool_names(
+        self,
+        max_messages: int = 500,
+        *,
+        start_index: int | None = None,
+    ) -> list[str]:
+        """返回与 get_history 同一窗口内模型调用过或经 tool_search 解锁的工具名。
+
+        按首次出现顺序去重；主动消息的工具链不进入 LLM 历史，因此也不计入。
+        """
+        names: dict[str, None] = {}
+        for m in self._history_window(max_messages, start_index):
+            if m.get("role") != "assistant" or m.get("proactive"):
+                continue
+            for group in m.get("tool_chain") or []:
+                for call in group.get("calls") or []:
+                    names.setdefault(call["name"], None)
+                    for name in call.get("unlocked") or []:
+                        names.setdefault(name, None)
+        return list(names)
+
+    def _history_window(
+        self, max_messages: int, start_index: int | None
+    ) -> list[dict[str, Any]]:
+        """截取历史窗口的原始消息，start_index 会对齐到完整 turn 的起点。"""
+        if start_index is not None:
+            if max_messages <= 0:
+                return []
+            start = max(0, int(start_index))
+            if start >= len(self.messages):
+                return []
+            # 向前回退到最近的 user 边界（保留完整 turn）
+            while (
+                start > 0
+                and self.messages[start].get("role") != "user"
+                and not (
+                    self.messages[start].get("role") == "assistant"
+                    and self.messages[start].get("proactive")
+                )
+            ):
+                start -= 1
+            # start=0 但仍非合法边界时，向后找第一个 user 或 proactive assistant。
+            messages = self.messages[start:]
+            if messages and not (
+                messages[0].get("role") == "user"
+                or (
+                    messages[0].get("role") == "assistant"
+                    and messages[0].get("proactive")
+                )
+            ):
+                messages = _align_to_user_boundary(messages)
+            if not messages:
+                return []
+        elif max_messages <= 0:
+            messages = []
+        else:
+            messages = self.messages[-max_messages:]
+        return messages
 
     def clear(self) -> None:
         self.messages = []

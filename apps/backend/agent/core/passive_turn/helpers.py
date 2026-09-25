@@ -26,6 +26,18 @@ def get_history_since_consolidated(
         return session.get_history(max_messages=memory_window)
 
 
+def get_history_tool_names_since_consolidated(
+    session: "SessionLike",
+    memory_window: int,
+) -> list[str]:
+    """读取与 get_history_since_consolidated 同一窗口内用过或解锁过的工具名。"""
+
+    return session.get_history_tool_names(
+        max_messages=memory_window,
+        start_index=session.last_consolidated,
+    )
+
+
 def get_session_metadata(session: object) -> dict[str, Any]:
     """返回会话 metadata；无有效字典时返回空字典。"""
 
