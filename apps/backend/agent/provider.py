@@ -206,9 +206,7 @@ class DeepSeekStrategy(ProviderStrategy):
     supports_thinking_disable = True
 
     def normalize_messages(self, messages: list[dict]) -> list[dict]:
-        return _strip_image_url_blocks(
-            _normalize_chat_messages(messages, fill_tool_call_content=False)
-        )
+        return _normalize_chat_messages(messages, fill_tool_call_content=False)
 
     def prepare_request(
         self,
@@ -904,33 +902,6 @@ def _normalize_chat_messages(
 def _strip_reasoning_content(messages: list[dict]) -> list[dict]:
     # 非 DeepSeek provider 不应发送 reasoning_content 字段
     return [{k: v for k, v in m.items() if k != "reasoning_content"} for m in messages]
-
-
-def _strip_image_url_blocks(messages: list[dict]) -> list[dict]:
-    normalized: list[dict] = []
-    for msg in messages:
-        item = dict(msg)
-        content = item.get("content")
-        if isinstance(content, list):
-            text_parts: list[str] = []
-            image_count = 0
-            for block in content:
-                if not isinstance(block, dict):
-                    continue
-                block_type = block.get("type")
-                if block_type == "text":
-                    text = block.get("text")
-                    if isinstance(text, str) and text:
-                        text_parts.append(text)
-                elif block_type == "image_url":
-                    image_count += 1
-            if image_count:
-                text_parts.append(
-                    f"[已移除 {image_count} 个 image_url 图片块：DeepSeek 当前接口只接受文本消息。]"
-                )
-            item["content"] = "\n".join(text_parts)
-        normalized.append(item)
-    return normalized
 
 
 def _normalize_openai_base_url(base_url: str | None) -> str | None:
