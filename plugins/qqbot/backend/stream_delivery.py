@@ -8,6 +8,9 @@ from typing import Any
 
 from .formatting import http_status_code
 
+# Session and target scope the originating transport message's stream ownership.
+_LiveTurnKey = tuple[str, str, str]
+
 
 def _definitely_rejected(error: Exception) -> bool:
     # Timeout/server errors do not establish whether QQ accepted the write.

@@ -180,6 +180,9 @@ class _ProcessingMixin:
             if resumed_from_interrupt:
                 self._interrupt_states.pop(key, None)
             return outbound
+        except asyncio.CancelledError:
+            await self._observe_turn_cancelled(msg, key)
+            raise
         finally:
             # 3. 最后无论成功失败都直接释放 busy 状态。
             if self._processing_state:

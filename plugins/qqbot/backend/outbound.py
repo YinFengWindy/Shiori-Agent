@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from bus.events import OutboundMessage
+from bus.errors import NonRetryableDeliveryError
 from core.common.media import detect_image_mime_from_header
 from infra.channels.session_key import resolve_outbound_session_key
 
@@ -21,38 +22,46 @@ class _OutboundMixin:
     """Owns QQBot C2C text, image, stream, and delivery-status output."""
 
     async def _on_response(self, msg: OutboundMessage) -> None:
-        session_key = resolve_outbound_session_key(msg, default_channel=CHANNEL)
+        turn_key = (
+            resolve_outbound_session_key(msg, default_channel=CHANNEL),
+            msg.chat_id,
+            str(msg.metadata.get("external_message_id") or ""),
+        )
         sent_as_stream = False
         try:
-            await self._finish_live_tasks(session_key)
-            if session_key in self._live_states:
+            await self._finish_live_tasks(turn_key)
+            if turn_key in self._live_states:
                 if msg.content.strip():
                     sent_as_stream = bool(
                         await self._finish_stream(
-                            self._live_states[session_key], msg.content
+                            self._live_states[turn_key], msg.content
                         )
                     )
                 else:
                     # An unfinished preview next to the fallback message would
                     # show the reply twice, so withdraw it first.
-                    await self._prepare_stream_fallback(self._live_states[session_key])
+                    await self._prepare_stream_fallback(self._live_states[turn_key])
             if msg.content.strip() and not sent_as_stream:
                 await self.send(msg.chat_id, msg.content)
             for image in msg.media:
                 await self.send_image(msg.chat_id, image)
         except asyncio.CancelledError:
             self._record_delivery_status(msg, "failed")
-            state = self._live_states.get(session_key)
+            state = self._live_states.get(turn_key)
             if state is not None and state.stream_msg_id and not state.completed:
                 await self._delete_message(state.openid, state.stream_msg_id)
             raise
-        except Exception:
+        except Exception as exc:
             self._record_delivery_status(msg, "failed")
-            raise
+            # This boundary has already exhausted safe stream recovery. A bus
+            # replay can duplicate a preview, a fallback, or an earlier image.
+            raise NonRetryableDeliveryError(
+                f"QQBot 投递失败，禁止自动重发：{exc}"
+            ) from exc
         else:
             self._record_delivery_status(msg, "sent")
         finally:
-            self._clear_live_session(session_key)
+            self._clear_live_turn(turn_key)
 
     def _record_delivery_status(self, msg: OutboundMessage, status: str) -> None:
         if self._channel_hub is None:

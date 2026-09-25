@@ -10,7 +10,7 @@ import httpx
 import websockets
 
 from agent.looping.interrupt import InterruptController
-from bus.events_lifecycle import StreamDeltaReady, TurnStarted
+from bus.events_lifecycle import StreamDeltaReady, TurnCancelled, TurnStarted
 from bus.queue import MessageBus
 from core.channels import ChannelHub
 from core.common.channel_chat_types import ChatTypeDeclaration
@@ -21,7 +21,7 @@ from .formatting import CHANNEL, PUSH_TARGET_HINT, SYSTEM_PROMPT_HINT
 from .gateway import _GatewayMixin, _TokenCache
 from .inbound import _InboundMixin
 from .outbound import _OutboundMixin
-from .stream_delivery import _StreamState
+from .stream_delivery import _LiveTurnKey, _StreamState
 from .streaming import _StreamingMixin
 
 if TYPE_CHECKING:
@@ -66,17 +66,18 @@ class QQBotChannel(
         self._event_bindings = [
             (TurnStarted, self._on_turn_started),
             (StreamDeltaReady, self._on_stream_delta),
+            (TurnCancelled, self._on_turn_cancelled),
         ]
         self._outbound_bound = False
         self._events_bound = False
         self._last_c2c_msg_id: dict[str, str] = {}
-        self._live_states: dict[str, _StreamState] = {}
-        self._reply_buffers: dict[str, str] = {}
-        self._live_next_at: dict[str, float] = {}
-        self._live_stop_events: dict[str, asyncio.Event] = {}
-        self._live_locks: dict[str, asyncio.Lock] = {}
+        self._live_states: dict[_LiveTurnKey, _StreamState] = {}
+        self._reply_buffers: dict[_LiveTurnKey, str] = {}
+        self._live_next_at: dict[_LiveTurnKey, float] = {}
+        self._live_stop_events: dict[_LiveTurnKey, asyncio.Event] = {}
+        self._live_locks: dict[_LiveTurnKey, asyncio.Lock] = {}
         self._live_tasks: set[asyncio.Task[None]] = set()
-        self._live_tasks_by_session: dict[str, set[asyncio.Task[None]]] = {}
+        self._live_tasks_by_turn: dict[_LiveTurnKey, set[asyncio.Task[None]]] = {}
 
     @property
     def configuration_key(self):
@@ -139,7 +140,7 @@ class QQBotChannel(
             except asyncio.CancelledError:
                 pass
             self._task = None
-        for session_key in list(self._live_tasks_by_session):
+        for session_key in list(self._live_tasks_by_turn):
             await self._finish_live_tasks(session_key)
         await self._intake.close()
         await self._client.aclose()

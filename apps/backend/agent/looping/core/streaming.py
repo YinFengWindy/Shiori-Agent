@@ -67,6 +67,9 @@ class _StreamingMixin:
         if not self._channel_directory.supports_stream_events(channel, chat_id):
             return None
         session_key = str(getattr(msg, "session_key", f"{channel}:{chat_id}"))
+        external_message_id = str(
+            getattr(msg, "metadata", {}).get("external_message_id") or ""
+        )
 
         async def _push(delta: StreamDelta) -> None:
             if isinstance(delta, str):
@@ -90,6 +93,7 @@ class _StreamingMixin:
                     thinking_delta=(
                         thinking_delta if isinstance(thinking_delta, str) else ""
                     ),
+                    external_message_id=external_message_id,
                 )
             )
 
