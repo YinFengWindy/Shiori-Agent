@@ -27,7 +27,7 @@ related:
 
 ## 模块边界
 
-`RoleStore` 是兼容 facade：`RoleManifestRepository` 负责版本化 JSON 清单的校验、持久化和进程内锁，`RoleAssetStore` 负责素材文件、路径安全与分类，`RoleBindingPolicy` 负责渠道联系人和主动目标不变量，宿主角色数据契约集中在 `models.py`。桌宠插件的 `RolePetStateStore` 负责选择与单启用状态；桌宠和 NovelAI 各自拥有 `roles.json` 的不透明插件命名空间，通过 `RoleExtensions` 和角色字段一起原子保存，宿主业务模型不包含插件字段。`RoleAggregateService` 和相关 service 提供角色聚合业务入口，`RoleRuntimeRegistry` 将持久化角色装配为角色运行时。桌面端、渠道和主动能力应调用这些服务，不应各自读写角色文件。
+`RoleStore` 是兼容 facade：`RoleManifestRepository` 负责版本化 JSON 清单的校验、持久化和进程内锁，`RoleAssetStore` 负责素材文件、路径安全与分类，`RoleBindingPolicy` 负责渠道会话类型和主动目标不变量（群黑名单只允许出现在群聊绑定上，由绑定模型自身校验），宿主角色数据契约集中在 `models.py`。桌宠插件的 `RolePetStateStore` 负责选择与单启用状态；桌宠和 NovelAI 各自拥有 `roles.json` 的不透明插件命名空间，通过 `RoleExtensions` 和角色字段一起原子保存，宿主业务模型不包含插件字段。`RoleAggregateService` 和相关 service 提供角色聚合业务入口，`RoleRuntimeRegistry` 将持久化角色装配为角色运行时。桌面端、渠道和主动能力应调用这些服务，不应各自读写角色文件。
 
 角色能力包含基本设定、渠道绑定、工作区、素材、心情相关配置和运行时关系状态。角色素材既被桌面管理页使用，也可能进入提示词、场景和图片生成流程。
 

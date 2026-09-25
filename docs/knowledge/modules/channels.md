@@ -38,13 +38,13 @@ QQ 群会话的规范 chat_id 是 `gqq:<群号>`，裸号一律是私聊，核�
 
 `session_key.py`、`reply_context.py` 和公共 channel identifier helper 负责稳定定位账号、聊天、线程与回复上下文。群聊过滤和成员隔离必须在入站边界明确处理。typing、流式编辑等辅助动作允许独立失败，但最终消息投递和权威会话写入必须可观测。
 
-外部渠道的角色绑定属于一对一关系：每个渠道会话必须且只能配置一个联系人 ID。入站路由只接受该 ID，或与其匹配的渠道别名；缺失或包含多个联系人的旧配置一律拒绝，避免扩大既有角色可响应的范围。桌面端绑定是应用内会话，不配置外部联系人。
+「谁能和角色说话」只在角色绑定上配置，渠道插件不再有 `allow_from` 白名单（旧键由 `agent/channel_allowlist_migration.py` 启动时删除）。入站准入由 `ChannelHub.is_sender_allowed` 统一判断：会话已绑定，且发送者不在该绑定的 `blocked_senders` 黑名单里即放行。私聊绑定的对方就是会话本身，没有联系人或黑名单字段；群聊绑定默认放行所有成员，黑名单条目按发送者 ID 精确匹配，或按渠道别名（Telegram 用户名）忽略大小写匹配；`/stop` 走同一准入。QQ 群的 `require_at` 仍由插件过滤。群成员暂按同一用户进入角色关系与记忆。v8 角色清单迁移删除旧的单联系人白名单：私聊绑定不再带联系人，群绑定得到空黑名单。桌面端绑定是应用内会话，没有黑名单。
 
 ## 修改影响
 
 - 修改 Channel 合约或钩子：检查全部渠道插件、`start_channels`/ChannelHost、`channel_directory`、消息总线、测试替身，以及 `docs/_handbook/plugin-runtime-contract.md` 的 Runtime API 版本。
 - 修改聊天标识：检查角色绑定、Session/Conversation 键、群聊记忆域和推送目标。
-- 修改角色渠道绑定：检查配置校验、入站身份验证、旧配置迁移和角色编辑界面的联系人字段。
+- 修改角色渠道绑定：检查配置校验、入站准入（群黑名单）、旧配置迁移和角色编辑界面的黑名单字段。
 - 修改附件模型：检查 Telegram 媒体、QQ 适配、桌面桥接、自动 CG 和历史消息展示。
 - 修改 QQ 渠道：NcatBot 需同步检查主 loop/bot loop 桥接、群聊过滤和 CQ 媒体；QQBot 需同步检查 Gateway intent、token/REST、C2C message id 和 live stream 状态。
 - 新增渠道：写成渠道插件（manifest 声明 + 配置模型 + Channel 合约），复用 `ChannelIntake`、会话键解析和输出端口，不复制 Agent 回合逻辑；步骤见 `docs/_handbook/channel-plugins.md`。

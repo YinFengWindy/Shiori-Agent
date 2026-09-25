@@ -4,11 +4,12 @@ import {
   SettingsNumberInput,
   SettingsSecretInput,
   SettingsToggleField,
+  settingsIconButtonClass,
   settingsInputClass,
 } from "../settings/SettingsFieldPrimitives";
-import { SettingsStringListInput } from "../settings/SettingsStringListInput";
 import { cx, textareaClass } from "../shared/styles";
 import { Select } from "../shared/ui/Select";
+import { StringListInput } from "../shared/ui/StringListInput";
 import { readStringList, type PluginConfigField } from "./jsonSchemaForm";
 import { PluginEnvReferenceInput } from "./PluginEnvReferenceInput";
 
@@ -68,7 +69,7 @@ export function PluginConfigFieldRow({ field, value, envResolved, onChange }: Fi
     case "stringList":
       return (
         <SettingsField label={field.label} hint={field.hint}>
-          <SettingsStringListInput ariaLabel={field.label} items={readStringList(value)} onChange={onChange} />
+          <StringListInput ariaLabel={field.label} items={readStringList(value)} onChange={onChange} inputClassName={settingsInputClass} addButtonClassName={settingsIconButtonClass} />
         </SettingsField>
       );
     case "json":

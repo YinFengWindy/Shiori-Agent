@@ -338,7 +338,7 @@ class FeishuChannel:
         # Shown in the channel status so the user can copy the ids to bind.
         self._last_unbound = f"未绑定的私聊：chat_id={chat_id}，open_id={sender}"
         logger.warning(
-            "[feishu] 拒绝未绑定渠道或未授权用户 chat_id=%s open_id=%s",
+            "[feishu] 拒绝未绑定渠道的消息 chat_id=%s open_id=%s",
             chat_id,
             sender,
         )

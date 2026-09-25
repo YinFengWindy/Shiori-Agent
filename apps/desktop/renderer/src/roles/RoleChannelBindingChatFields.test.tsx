@@ -26,7 +26,7 @@ const qqbot: ChannelSummary = {
   ...qq, name: "qqbot", label: "QQBot",
   chatTypes: [{ type: "private", label: "私聊", chatIdLabel: "用户 OpenID", chatIdHint: null, prefix: "c2c:" }],
 };
-const group: RoleChannelBinding = { channel: "qq", chat_id: "gqq:831907794", chat_type: "group", allow_from: [] };
+const group: RoleChannelBinding = { channel: "qq", chat_id: "gqq:831907794", chat_type: "group", blocked_senders: [] };
 
 describe("RoleChannelBindingChatIdField", () => {
   it("shows the number without the type's prefix and writes a pasted internal id back with one prefix", async () => {
@@ -72,7 +72,7 @@ describe("RoleChannelBindingChatTypeField", () => {
   });
 
   it("shows a single declared type, a locked binding or a missing declaration read-only", () => {
-    const binding: RoleChannelBinding = { channel: "qqbot", chat_id: "c2c:ABC", chat_type: "private", allow_from: [] };
+    const binding: RoleChannelBinding = { channel: "qqbot", chat_id: "c2c:ABC", chat_type: "private", blocked_senders: [] };
     const readOnly = /role="textbox" aria-label="类型" aria-readonly="true">([^<]*)</;
 
     assert.match(renderToStaticMarkup(<fields.RoleChannelBindingChatTypeField binding={binding} channel={qqbot} readOnly={false} onChange={() => undefined} />), readOnly);

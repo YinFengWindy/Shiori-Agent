@@ -284,7 +284,6 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
                 "channel": "telegram",
                 "chat_id": "123",
                 "chat_type": "private",
-                "allow_from": ["1"],
             }
         ],
     )
@@ -298,7 +297,6 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
         "token",
         bus,
         session_manager,
-        allow_from=["1", "Alice"],
         bot_commands=[
             ("memorystatus", "查看记忆整理状态"),
             ("kvcache", "查看 KVCache 状态"),
@@ -791,7 +789,6 @@ async def test_telegram_channel_routes_bound_inbound_to_role_session(
                 "channel": "telegram",
                 "chat_id": "123",
                 "chat_type": "private",
-                "allow_from": ["1"],
             }
         ],
     )
@@ -802,7 +799,6 @@ async def test_telegram_channel_routes_bound_inbound_to_role_session(
         token="token",
         bus=bus,
         session_manager=session_manager,
-        allow_from=["1"],
         event_bus=event_bus,
         interrupt_controller=interrupt_controller,
     )
@@ -831,6 +827,62 @@ async def test_telegram_channel_routes_bound_inbound_to_role_session(
     assert bus.inbound[0].metadata["thread_id"] == "thread:mira:telegram:123"
     assert bus.inbound[0].metadata["transport_channel"] == "telegram"
     assert bus.inbound[0].metadata["transport_chat_id"] == "123"
+    await channel.stop()
+
+
+@pytest.mark.asyncio
+async def test_telegram_group_admits_members_except_blacklisted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    mod = _import_telegram_channel(monkeypatch)
+    bus = _Bus()
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
+    role_store.update_role(
+        "mira",
+        channel_bindings=[
+            {
+                "channel": "telegram",
+                "chat_id": "-100",
+                "chat_type": "group",
+                "blocked_senders": ["Troll"],
+            }
+        ],
+    )
+    interrupt_controller = MagicMock()
+    channel = mod.TelegramChannel(
+        token="token",
+        bus=bus,
+        session_manager=_SessionManager(tmp_path),
+        event_bus=EventBus(),
+        interrupt_controller=interrupt_controller,
+    )
+    monkeypatch.setattr(mod, "send_markdown", AsyncMock())
+    await channel.start()
+    context = SimpleNamespace(bot=channel._app.bot)
+
+    def _update(user_id: int, username: str, text: str, message_id: int):
+        return SimpleNamespace(
+            effective_message=SimpleNamespace(
+                text=text,
+                message_id=message_id,
+                reply_to_message=None,
+                photo=None,
+                document=None,
+            ),
+            effective_chat=SimpleNamespace(id=-100, type="group"),
+            effective_user=SimpleNamespace(id=user_id, username=username),
+        )
+
+    # The blacklist entry names a username; it matches case-insensitively.
+    await channel._on_message(_update(5, "troll", "hi", 1), context)
+    await channel._on_stop_command(_update(5, "troll", "/stop", 2), context)
+    await channel._on_message(_update(6, "friend", "hello", 3), context)
+
+    assert [message.sender for message in bus.inbound] == ["6"]
+    assert bus.inbound[0].session_key == "role:mira"
+    interrupt_controller.request_interrupt.assert_not_called()
     await channel.stop()
 
 

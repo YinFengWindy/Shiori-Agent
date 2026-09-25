@@ -437,3 +437,17 @@ async def test_qqbot_stop_uses_bound_role_session() -> None:
         command="/stop",
     )
     channel.send.assert_awaited_once_with("c2c:user-1", "已中断")
+
+
+@pytest.mark.asyncio
+async def test_qqbot_stop_from_unadmitted_sender_is_ignored() -> None:
+    interrupt = SimpleNamespace(request_interrupt=MagicMock())
+    channel = QQBotChannel("app", "secret")
+    channel._channel_hub = _Hub(allowed=False)
+    channel._interrupt_controller = interrupt
+    channel.send = AsyncMock()
+
+    await channel._handle_stop("c2c:user-1", "user-1")
+
+    interrupt.request_interrupt.assert_not_called()
+    channel.send.assert_not_awaited()

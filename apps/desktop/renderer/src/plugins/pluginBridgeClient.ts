@@ -49,7 +49,7 @@ export type ChannelChatTypeDeclaration = {
 export type PluginChannelDeclaration = {
   name: string;
   label: string;
-  /** Describes the binding's sole `allow_from` contact. */
+  /** Names the member IDs a group binding's blacklist holds (e.g. "QQ 号"). */
   contactLabel: string | null;
   /** Declared session types; every plugin channel has at least one, only the host-owned `desktop` has none. */
   chatTypes: ChannelChatTypeDeclaration[];

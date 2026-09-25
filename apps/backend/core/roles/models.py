@@ -4,8 +4,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
 
-from core.common.channel_chat_types import ChatType, parse_chat_type
-from core.common.channel_identifiers import normalize_contact_ids
+from core.common.channel_chat_types import CHAT_TYPE_GROUP, ChatType, parse_chat_type
+from core.common.channel_identifiers import normalize_sender_ids
 
 from .profile_models import RoleProfile
 
@@ -32,23 +32,29 @@ def normalize_rel_path(path: str | None) -> str | None:
 
 @dataclass(frozen=True)
 class RoleChannelBindingConfig:
-    """One role-owned channel session and its sole external contact.
+    """One role-owned channel session and who in it the role ignores.
 
     ``chat_type`` (``private`` / ``group``) is chosen when binding; the runtime
-    never infers it from the ``chat_id`` format.
+    never infers it from the ``chat_id`` format. A private chat's partner is
+    the chat itself, so only group bindings carry ``blocked_senders``: members
+    whose messages never reach the role. Every other member is admitted.
     """
 
     channel: str
     chat_id: str
     chat_type: ChatType
-    allow_from: list[str]
+    blocked_senders: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.blocked_senders and self.chat_type != CHAT_TYPE_GROUP:
+            raise ValueError("只有群聊绑定可以设置黑名单")
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "channel": self.channel,
             "chat_id": self.chat_id,
             "chat_type": self.chat_type,
-            "allow_from": list(self.allow_from),
+            "blocked_senders": list(self.blocked_senders),
         }
 
     @classmethod
@@ -60,14 +66,14 @@ class RoleChannelBindingConfig:
         chat_type = parse_chat_type(
             payload.get("chat_type"), "角色渠道绑定的 chat_type"
         )
-        raw_allow_from = payload.get("allow_from", [])
-        if not isinstance(raw_allow_from, list):
-            raise ValueError("角色渠道 allow_from 必须是数组")
+        raw_blocked = payload.get("blocked_senders", [])
+        if not isinstance(raw_blocked, list):
+            raise ValueError("角色渠道 blocked_senders 必须是数组")
         return cls(
             channel=channel,
             chat_id=chat_id,
             chat_type=chat_type,
-            allow_from=normalize_contact_ids(raw_allow_from),
+            blocked_senders=normalize_sender_ids(raw_blocked),
         )
 
 

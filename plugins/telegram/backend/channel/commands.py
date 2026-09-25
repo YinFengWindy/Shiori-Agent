@@ -24,9 +24,15 @@ class _CommandMixin:
 
         if not msg or not chat or not user:
             return
-        if not self._is_allowed(user):
+        # /stop follows the same admission as messages: bound and not blacklisted.
+        if self._channel_hub is not None and not self._channel_hub.is_sender_allowed(
+            channel=self._channel,
+            chat_id=str(chat.id),
+            sender_id=str(user.id),
+            sender_alias=user.username or "",
+        ):
             logger.warning(
-                f"[telegram] 拒绝未授权 /stop  id={user.id}  username=@{user.username}"
+                f"[telegram] 忽略未绑定渠道或黑名单成员的 /stop  chat_id={chat.id}  id={user.id}"
             )
             return
         if self._interrupt_controller is None:
@@ -67,12 +73,6 @@ class _CommandMixin:
 
         if not msg or not chat or not user:
             return
-        if not self._is_allowed(user):
-            logger.warning(
-                f"[telegram] 拒绝未授权命令  id={user.id}  username=@{user.username}"
-            )
-            return
-
         await self._publish_telegram_inbound(
             sender=str(user.id),
             chat_id=str(chat.id),

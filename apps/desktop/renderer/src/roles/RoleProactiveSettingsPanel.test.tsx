@@ -8,7 +8,7 @@ import { RoleProactiveSettingsPanel } from "./RoleProactiveSettingsPanel";
 
 describe("RoleProactiveSettingsPanel", () => {
   it("keeps execution parameters collapsed while exposing the selected delivery order", () => {
-    const bindings: RoleChannelBinding[] = [{ channel: "telegram", chat_id: "100", chat_type: "private", allow_from: [] }, { channel: "qq", chat_id: "200", chat_type: "private", allow_from: [] }];
+    const bindings: RoleChannelBinding[] = [{ channel: "telegram", chat_id: "100", chat_type: "private", blocked_senders: [] }, { channel: "qq", chat_id: "200", chat_type: "private", blocked_senders: [] }];
     const markup = renderToStaticMarkup(<RoleProactiveSettingsPanel bindings={bindings} channels={null} roleForm={{ ...createEmptyRoleForm(), proactiveEnabled: true, proactiveTargetChannel: "qq", proactiveTargetChatId: "200" }} onUpdate={() => undefined} />);
 
     assert.match(markup, /主动推送/);
@@ -19,7 +19,7 @@ describe("RoleProactiveSettingsPanel", () => {
   });
 
   it("labels delivery targets with the channel catalog's display names", () => {
-    const bindings: RoleChannelBinding[] = [{ channel: "qqbot", chat_id: "c2c:ABC", chat_type: "private", allow_from: [] }];
+    const bindings: RoleChannelBinding[] = [{ channel: "qqbot", chat_id: "c2c:ABC", chat_type: "private", blocked_senders: [] }];
     const channels = [{ name: "qqbot", label: "QQBot", contactLabel: null, chatTypes: [], pluginId: "qqbot", pluginEnabled: true, state: "active" as const, error: "", status: null }];
     const markup = renderToStaticMarkup(<RoleProactiveSettingsPanel bindings={bindings} channels={channels} roleForm={{ ...createEmptyRoleForm(), proactiveEnabled: true, proactiveTargetChannel: "qqbot", proactiveTargetChatId: "c2c:ABC" }} onUpdate={() => undefined} />);
 
@@ -27,7 +27,7 @@ describe("RoleProactiveSettingsPanel", () => {
   });
 
   it("labels a binding by its declared session type and number without the internal prefix", () => {
-    const bindings: RoleChannelBinding[] = [{ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", allow_from: ["3"] }];
+    const bindings: RoleChannelBinding[] = [{ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", blocked_senders: ["3"] }];
     const channels: ChannelSummary[] = [{
       name: "qq", label: "QQ（NapCat）", contactLabel: "QQ 号",
       chatTypes: [

@@ -26,9 +26,6 @@ class _InboundMixin:
         ).strip()
         if not user_openid:
             return
-        if self._allow_from and user_openid not in self._allow_from:
-            logger.warning("[qqbot] 拒绝未授权私聊用户 user_openid=%s", user_openid)
-            return
         content = str(data.get("content") or "").strip()
         message_id = str(data.get("id") or "").strip()
         if message_id:
@@ -70,7 +67,7 @@ class _InboundMixin:
                 sender_id=message.sender,
             ):
                 logger.warning(
-                    "[qqbot] 拒绝未绑定渠道或未授权用户 chat_id=%s",
+                    "[qqbot] 忽略未绑定渠道或黑名单成员的消息 chat_id=%s",
                     message.chat_id,
                 )
                 return
@@ -80,6 +77,12 @@ class _InboundMixin:
         await self._require_bus().publish_inbound(message)
 
     async def _handle_stop(self, chat_id: str, sender: str) -> None:
+        # /stop follows the same admission as messages: bound and not blacklisted.
+        if self._channel_hub is not None and not self._channel_hub.is_sender_allowed(
+            channel=CHANNEL, chat_id=chat_id, sender_id=sender
+        ):
+            logger.warning("[qqbot] 忽略未绑定渠道的 /stop chat_id=%s", chat_id)
+            return
         if self._interrupt_controller is None:
             await self.send(chat_id, "当前未启用中断功能。")
             return

@@ -204,7 +204,6 @@ def test_role_store_persists_proactive_policy_and_keeps_it_when_target_is_remove
                 "channel": "telegram",
                 "chat_id": "42",
                 "chat_type": "private",
-                "allow_from": ["42"],
             },
         ],
         proactive={

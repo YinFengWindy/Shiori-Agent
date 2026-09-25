@@ -11,13 +11,13 @@ def normalize_chat_id(chat_id: str) -> str:
     return str(chat_id).strip()
 
 
-def normalize_contact_ids(raw_contacts: Iterable[object]) -> list[str]:
-    """Return a binding's contact IDs stripped, non-empty, unique and sorted.
+def normalize_sender_ids(raw_senders: Iterable[object]) -> list[str]:
+    """Return sender IDs stripped, non-empty, unique and sorted.
 
-    This is the single normalization of ``allow_from`` shared by the role model
-    and every rule that compares a chat ID against its contacts.
+    The single normalization of a group binding's ``blocked_senders``, also
+    applied to the pre-v8 ``allow_from`` contacts the upgrade rules read.
     """
-    return sorted({str(item).strip() for item in raw_contacts if str(item).strip()})
+    return sorted({str(item).strip() for item in raw_senders if str(item).strip()})
 
 
 def normalize_qq_group_chat_id(group_id: str) -> str:
@@ -43,7 +43,7 @@ def is_bare_qq_group_chat_id(chat_id: str, contacts: Iterable[object]) -> bool:
     return (
         bool(clean_chat_id)
         and not clean_chat_id.startswith(QQ_GROUP_PREFIX)
-        and normalize_contact_ids(contacts) != [clean_chat_id]
+        and normalize_sender_ids(contacts) != [clean_chat_id]
     )
 
 

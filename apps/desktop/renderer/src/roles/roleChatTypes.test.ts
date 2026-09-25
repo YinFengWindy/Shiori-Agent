@@ -58,18 +58,19 @@ describe("roleChatTypes", () => {
     assert.deepEqual(roleBindingChatIdCopy(null), { label: "会话 ID", placeholder: "" });
   });
 
-  it("re-derives the prefix when the session type changes", () => {
-    const binding = { channel: "qq", chat_id: "gqq:831907794", chat_type: "group" as const, allow_from: ["3"] };
+  it("re-derives the prefix and drops the blacklist when a group becomes private", () => {
+    const binding = { channel: "qq", chat_id: "gqq:831907794", chat_type: "group" as const, blocked_senders: ["3"] };
 
-    assert.deepEqual(changeRoleBindingChatType(binding, qq, "private"), { ...binding, chat_id: "831907794", chat_type: "private" });
+    assert.deepEqual(changeRoleBindingChatType(binding, qq, "private"), { ...binding, chat_id: "831907794", chat_type: "private", blocked_senders: [] });
+    assert.deepEqual(changeRoleBindingChatType(binding, qq, "group"), binding);
   });
 
   it("labels bindings by type and number, falling back to the raw chat id", () => {
     const catalog = [qq, desktop];
 
-    assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", allow_from: [] }, catalog), "QQ（NapCat） · 群聊 831907794");
-    assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "3174898512", chat_type: "private", allow_from: [] }, catalog), "QQ（NapCat） · 私聊 3174898512");
-    assert.equal(roleBindingDisplayLabel({ channel: "desktop", chat_id: "role:mira", chat_type: "private", allow_from: [] }, catalog), "桌面端 · role:mira");
-    assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "gqq:1", chat_type: "group", allow_from: [] }, null), "qq · gqq:1");
+    assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", blocked_senders: [] }, catalog), "QQ（NapCat） · 群聊 831907794");
+    assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "3174898512", chat_type: "private", blocked_senders: [] }, catalog), "QQ（NapCat） · 私聊 3174898512");
+    assert.equal(roleBindingDisplayLabel({ channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] }, catalog), "桌面端 · role:mira");
+    assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "gqq:1", chat_type: "group", blocked_senders: [] }, null), "qq · gqq:1");
   });
 });

@@ -37,7 +37,8 @@ def test_qqbot_manifest_declares_its_channel_for_binding_discovery() -> None:
     assert manifest is not None
     assert [item.name for item in manifest.channels] == ["qqbot"]
     assert manifest.channels[0].label == "QQBot"
-    assert manifest.channels[0].contact_label
+    # Private-only: there is no group blacklist whose member IDs need a label.
+    assert manifest.channels[0].contact_label is None
     # Inbound C2C messages are addressed ``c2c:<openid>``; there are no group bindings.
     [private] = manifest.channels[0].chat_types
     assert (private.type, private.prefix) == ("private", "c2c:")
@@ -53,6 +54,7 @@ def test_qqbot_plugin_accepts_legacy_config_aliases() -> None:
             "qqbot": {
                 "appId": "app",
                 "clientSecret": "secret",
+                # Removed by the config migration; a leftover key is ignored.
                 "allow_from": ["user-openid"],
             }
         }
@@ -62,7 +64,7 @@ def test_qqbot_plugin_accepts_legacy_config_aliases() -> None:
     assert channels[0].name == "qqbot"
     assert channels[0]._app_id == "app"
     assert channels[0]._client_secret == "secret"
-    assert channels[0]._allow_from == {"user-openid"}
+    assert not hasattr(channels[0], "_allow_from")
 
 
 def test_qqbot_plugin_skips_channel_when_only_app_id_present() -> None:
@@ -89,8 +91,8 @@ async def test_qqbot_setup_raises_on_invalid_config_and_kernel_rolls_back() -> N
             [Path(tmp)],
             services=HostServices(
                 event_bus=EventBus(),
-                # allow_from 必须是 list[str]；传入非法类型触发 pydantic 校验错误
-                plugin_configs={"qqbot": {"allow_from": {"not": "a list"}}},
+                # groups 必须是数组；传入非法类型触发 pydantic 校验错误
+                plugin_configs={"qqbot": {"groups": {"not": "a list"}}},
             ),
         )
         await kernel.load_all()
@@ -109,6 +111,5 @@ def test_config_schema_labels_fields_for_the_settings_form() -> None:
     properties = QQBotConfigModel.model_json_schema()["properties"]
     auto_titles = {key: key.replace("_", " ").title() for key in properties}
     assert all(properties[key]["title"] != auto_titles[key] for key in properties)
-    # allow_from renders as a list editor, not a raw JSON field.
-    assert properties["allow_from"]["type"] == "array"
-    assert properties["allow_from"]["items"] == {"type": "string"}
+    # Access control lives on role bindings; the plugin has no whitelist (#398).
+    assert "allow_from" not in properties

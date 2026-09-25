@@ -116,9 +116,11 @@ def test_v5_keeps_private_qq_binding_with_unnormalized_contacts() -> None:
         }
     )
 
-    # Contacts normalize like RoleChannelBindingConfig, so these stay private.
+    # Contacts normalize before comparing, so these stay private (and lose
+    # their contact list in the v8 step).
     assert migrated["roles"][0]["channel_bindings"] == [
-        {**binding, "chat_type": "private"} for binding in bindings
+        {"channel": "qq", "chat_id": "123", "chat_type": "private"},
+        {"channel": "qq", "chat_id": "456", "chat_type": "private"},
     ]
 
 
@@ -196,7 +198,7 @@ def test_v6_fills_chat_type_from_legacy_chat_id_formats() -> None:
     )
 
     assert changed is True
-    assert migrated["version"] == CURRENT_MANIFEST_VERSION == 7
+    assert migrated["version"] == CURRENT_MANIFEST_VERSION == 8
     assert [
         (item["channel"], item["chat_type"])
         for item in migrated["roles"][0]["channel_bindings"]
@@ -232,8 +234,8 @@ def test_v5_group_rewritten_to_gqq_is_typed_as_group() -> None:
         {
             "channel": "qq",
             "chat_id": "gqq:831907794",
-            "allow_from": ["3"],
             "chat_type": "group",
+            "blocked_senders": [],
         }
     ]
 
@@ -302,3 +304,74 @@ def test_v6_keeps_proactive_target_of_other_channels_with_the_same_id() -> None:
     )
 
     assert migrated["roles"][0]["proactive"]["target_chat_id"] == "42"
+
+
+def test_v7_replaces_contact_whitelists_with_group_blacklists() -> None:
+    migrated, changed = migrate_manifest_payload(
+        {
+            "version": 7,
+            "roles": [
+                {
+                    "id": "mira",
+                    "profile": {},
+                    "channel_bindings": [
+                        {
+                            "channel": "qq",
+                            "chat_id": "3",
+                            "chat_type": "private",
+                            "allow_from": ["3"],
+                        },
+                        {
+                            "channel": "qq",
+                            "chat_id": "gqq:7",
+                            "chat_type": "group",
+                            "allow_from": ["3"],
+                        },
+                        {
+                            "channel": "desktop",
+                            "chat_id": "role:mira",
+                            "chat_type": "private",
+                            "allow_from": [],
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert changed is True
+    # The old sole contact was the one member let in; it must not become
+    # blacklisted, so every group starts with an empty blacklist.
+    assert migrated["roles"][0]["channel_bindings"] == [
+        {"channel": "qq", "chat_id": "3", "chat_type": "private"},
+        {
+            "channel": "qq",
+            "chat_id": "gqq:7",
+            "chat_type": "group",
+            "blocked_senders": [],
+        },
+        {"channel": "desktop", "chat_id": "role:mira", "chat_type": "private"},
+    ]
+    assert migrate_manifest_payload(migrated) == (migrated, False)
+
+
+def test_v8_manifest_keeps_its_blacklists() -> None:
+    payload = {
+        "version": 8,
+        "roles": [
+            {
+                "id": "mira",
+                "profile": {},
+                "channel_bindings": [
+                    {
+                        "channel": "qq",
+                        "chat_id": "gqq:7",
+                        "chat_type": "group",
+                        "blocked_senders": ["42"],
+                    }
+                ],
+            }
+        ],
+    }
+
+    assert migrate_manifest_payload(payload) == (payload, False)

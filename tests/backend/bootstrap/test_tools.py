@@ -78,7 +78,6 @@ def test_role_target_validation_rejects_bare_id_for_bound_qq_group(
                 "channel": "qq",
                 "chat_id": "gqq:42",
                 "chat_type": "group",
-                "allow_from": ["user-1"],
             }
         ],
     )
@@ -122,7 +121,6 @@ def test_role_target_validation_explains_wrong_channel_for_bound_chat(
                 "channel": "qqbot",
                 "chat_id": "c2c:user-1",
                 "chat_type": "private",
-                "allow_from": ["user-1"],
             }
         ],
     )
@@ -170,7 +168,7 @@ def test_actual_runtime_observes_and_follows_scene_without_novelai_package(tmp_p
         async def run():
             roles = RoleStore(workspace)
             roles.create_role(role_id="mira", name="Mira", system_prompt="role")
-            roles.update_role("mira", channel_bindings=[{"channel": "telegram", "chat_id": "chat", "chat_type": "private", "allow_from": ["user"]}], proactive={"enabled": True, "target_channel": "telegram", "target_chat_id": "chat"})
+            roles.update_role("mira", channel_bindings=[{"channel": "telegram", "chat_id": "chat", "chat_type": "private"}], proactive={"enabled": True, "target_channel": "telegram", "target_chat_id": "chat"})
             config = Config(provider="", model="", api_key="", model_registrations=[], memory_optimizer_enabled=False)
             app = AppRuntime(config, workspace, features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False))
             await app.start()
@@ -229,7 +227,6 @@ async def test_published_generation_keeps_before_turn_capture_until_old_after_tu
                 "channel": "telegram",
                 "chat_id": "chat",
                 "chat_type": "private",
-                "allow_from": ["user"],
             }
         ],
         proactive={
@@ -352,7 +349,6 @@ async def test_core_scene_demand_respects_followup_strategy_and_independent_cons
                 "channel": "telegram",
                 "chat_id": "chat",
                 "chat_type": "private",
-                "allow_from": ["user"],
             }
         ],
         proactive={
@@ -477,7 +473,6 @@ async def test_started_runtime_checks_role_bindings_against_channel_declarations
                     "channel": "qq",
                     "chat_id": chat_id,
                     "chat_type": "group",
-                    "allow_from": ["7"],
                 }
             ]
 

@@ -27,12 +27,6 @@ class _InboundMixin:
         if not msg or not msg.text or not chat or not user:
             return
 
-        if not self._is_allowed(user):
-            logger.warning(
-                f"[telegram] 拒绝未授权用户  id={user.id}  username=@{user.username}"
-            )
-            return
-
         # 去重：同一 (chat_id, message_id) 只处理一次，防止 Telegram 重投
         msg_key = f"{chat.id}:{msg.message_id}"
         if self._message_deduper.seen(msg_key):
@@ -120,7 +114,8 @@ class _InboundMixin:
             sender_alias=str(message.metadata.get("username") or ""),
         ):
             logger.warning(
-                "[telegram] 拒绝未绑定渠道或未授权用户 chat_id=%s", message.chat_id
+                "[telegram] 忽略未绑定渠道或黑名单成员的消息 chat_id=%s",
+                message.chat_id,
             )
             return
         routed = self._route_inbound(message)

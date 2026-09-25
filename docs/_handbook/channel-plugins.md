@@ -37,7 +37,7 @@ config_model: DemoChatConfigModel
 channels:
   - name: demo_chat                 # 渠道名：角色绑定与会话线程的数据键
     label: Demo Chat                # 绑定面板和消息来源里显示的名字
-    contact_label: 用户 ID           # 可选，绑定里「联系人 ID」的说明
+    contact_label: 用户 ID           # 可选，群聊绑定黑名单里成员 ID 的说明
     chat_types:                     # 必填，渠道支持的会话类型
       - type: private               # private / group
         label: 私聊                  # 类型下拉里的名字
@@ -134,7 +134,7 @@ class DemoChatChannel:
 约定：
 
 - **chat_id 是渠道本地的会话标识**，也是用户在角色绑定里填的值，必须稳定、可从平台界面或状态信息里拿到。一个渠道有多种会话类型时用前缀区分，例如 QQBot 的 `c2c:<openid>` / `group:<openid>`、QQ（NapCat）群聊的 `gqq:<群号>`。
-- **联系人 ID（`allow_from`）** 是发送者 id，一个绑定只能有一个。`is_sender_allowed` 支持可选的 `sender_alias`（如 Telegram 用户名）。
+- **访问控制只在角色绑定上**，插件不要自己维护发送者白名单。私聊绑定的对方即会话本身；群聊绑定放行所有成员，只忽略黑名单（`blocked_senders`）里的发送者 id。`is_sender_allowed` 支持可选的 `sender_alias`（如 Telegram 用户名），黑名单条目可以写成别名、忽略大小写匹配。`/stop` 这类控制命令也应先过 `is_sender_allowed`。平台特有的群聊过滤（如 QQ 群必须 @ 机器人）仍由插件负责。
 - **会话键**：绑定后的消息用角色会话 `role:<role_id>`（`route_inbound` 写进 `session_key_override`），未经路由时退回 `<channel>:<chat_id>`。出站处理和流式状态统一用 `infra.channels.session_key.resolve_outbound_session_key(msg, default_channel=self.name)` 计算，与 `TurnStarted` / `StreamDeltaReady` 的 `session_key` 对齐。`/stop` 这类控制命令用 `channel_hub.resolve_runtime_session_key(channel, chat_id)` 找到角色会话，再交给 `interrupt_controller.request_interrupt(...)`。
 - 用户引用了一条历史消息时，用 `infra.channels.reply_context.build_inbound_text_with_reply_context()` 拼进正文，保持各渠道的格式一致。
 

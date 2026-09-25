@@ -117,7 +117,6 @@ config_model: QQBotConfigModel
 channels:
   - name: qqbot                      # 必填，渠道名
     label: QQBot                     # 必填，显示名
-    contact_label: QQBot 用户 OpenID  # 可选，角色绑定里的联系人
     chat_types:                      # 必填，渠道支持的会话类型
       - type: private                # private / group
         label: 私聊

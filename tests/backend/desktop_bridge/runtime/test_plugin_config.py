@@ -81,7 +81,7 @@ async def test_get_returns_schema_and_default_backed_values(tmp_path, monkeypatc
         # 未写入过配置：值来自模型默认值补全
         assert response.payload["values"]["app_id"] == ""
         assert response.payload["values"]["client_secret"] == ""
-        assert response.payload["values"]["allow_from"] == []
+        assert response.payload["values"]["groups"] == []
     finally:
         await service.aclose()
         await app.shutdown()
@@ -148,7 +148,7 @@ async def test_set_rejects_invalid_values_and_writes_nothing(tmp_path, monkeypat
             {
                 "plugin_id": "qqbot",
                 "operation_id": "op-invalid",
-                "values": {"allow_from": 123},
+                "values": {"groups": 123},
             },
         )
 

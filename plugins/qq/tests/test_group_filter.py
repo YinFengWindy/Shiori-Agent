@@ -1,34 +1,39 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, cast
 
 import pytest
 
 from plugins.qq.backend.channel.group_filter import (
     DefaultGroupFilter,
+    QQGroupFilterConfig,
     strip_at_segments,
 )
 
 
 @pytest.mark.asyncio
-async def test_group_filter_accepts_allowed_user_with_required_at():
-    group = SimpleNamespace(group_id="1", allow_from=["42"], require_at=True)
-    event = SimpleNamespace(user_id="42", raw_message="[CQ:at,qq=10001] hi")
+async def test_group_filter_accepts_any_member_who_ats_the_bot():
+    # Who may talk to the role is the binding's blacklist, not this filter (#398).
+    group = QQGroupFilterConfig(group_id="1")
+    event = SimpleNamespace(user_id="9", raw_message="[CQ:at,qq=10001] hi")
 
-    accepted = await DefaultGroupFilter("10001").should_process(event, cast(Any, group))
-
-    assert accepted is True
+    assert await DefaultGroupFilter("10001").should_process(event, group) is True
 
 
 @pytest.mark.asyncio
-async def test_group_filter_rejects_user_outside_allow_list():
-    group = SimpleNamespace(group_id="1", allow_from=["42"], require_at=True)
+async def test_group_filter_ignores_message_that_does_not_at_the_bot():
+    group = QQGroupFilterConfig(group_id="1")
+    event = SimpleNamespace(user_id="9", raw_message="[CQ:at,qq=555] hi")
+
+    assert await DefaultGroupFilter("10001").should_process(event, group) is False
+
+
+@pytest.mark.asyncio
+async def test_group_filter_without_require_at_accepts_plain_messages():
+    group = QQGroupFilterConfig(group_id="1", require_at=False)
     event = SimpleNamespace(user_id="9", raw_message="hi")
 
-    accepted = await DefaultGroupFilter("10001").should_process(event, cast(Any, group))
-
-    assert accepted is False
+    assert await DefaultGroupFilter("10001").should_process(event, group) is True
 
 
 def test_strip_at_segments_removes_cq_at_codes():

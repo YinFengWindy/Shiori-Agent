@@ -42,14 +42,10 @@ class QQBotChannel(
         self,
         app_id: str,
         client_secret: str,
-        allow_from: list[str] | None = None,
         groups: list["QQBotGroupConfigModel"] | None = None,
     ) -> None:
         self._app_id = app_id
         self._client_secret = client_secret
-        self._allow_from = {
-            str(value).strip() for value in (allow_from or []) if str(value).strip()
-        }
         self._groups = {str(group.group_openid): group for group in (groups or [])}
         self._bus: MessageBus | None = None
         self._interrupt_controller: InterruptController | None = None
@@ -85,7 +81,6 @@ class QQBotChannel(
             "official-qqbot",
             self._app_id,
             self._client_secret,
-            tuple(sorted(self._allow_from)),
             {key: group.model_dump() for key, group in self._groups.items()},
         )
 

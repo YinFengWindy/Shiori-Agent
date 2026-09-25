@@ -82,7 +82,7 @@ export function defaultRoleBindingChannel(catalog: RoleChannelCatalog): string {
   return (external.find((channel) => channel.state === "active") ?? external[0])?.name ?? desktopChannelName;
 }
 
-/** Label for the binding's sole external contact, qualified by the channel's declared identity. */
-export function roleBindingContactLabel(channel: ChannelSummary | null): string {
-  return channel?.contactLabel ? `联系人 ID（${channel.contactLabel}）` : "联系人 ID";
+/** Placeholder of a group blacklist's entry input: the channel's declared member ID name, e.g. "QQ 号". */
+export function roleBlockedSenderPlaceholder(channel: ChannelSummary | null) {
+  return channel?.contactLabel ?? "";
 }

@@ -14,7 +14,7 @@ from core.common.channel_identifiers import (
 
 from .profile_models import RoleProfile
 
-CURRENT_MANIFEST_VERSION = 7
+CURRENT_MANIFEST_VERSION = 8
 
 # Telegram addresses groups and channels by negative numeric chat IDs.
 _TELEGRAM_GROUP_CHAT_ID = re.compile(r"-\d+")
@@ -26,7 +26,7 @@ _LEGACY_QQBOT_MARKER = "qqbot:"
 
 
 def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Normalize a legacy role manifest into v7 without dropping role-owned data."""
+    """Normalize a legacy role manifest into v8 without dropping role-owned data."""
 
     version = int(payload.get("version") or 0)
     roles = payload.get("roles")
@@ -46,7 +46,7 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
     )
     if version == CURRENT_MANIFEST_VERSION and not has_legacy_fields:
         return dict(payload), False
-    if version not in {2, 3, 4, 5, 6, CURRENT_MANIFEST_VERSION}:
+    if version not in {2, 3, 4, 5, 6, 7, CURRENT_MANIFEST_VERSION}:
         raise ValueError(
             f"角色清单版本不支持：需要版本 {CURRENT_MANIFEST_VERSION}，实际为 {version}"
         )
@@ -64,6 +64,9 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
         if version < 7:
             _prefix_legacy_qqbot_chat_ids(role)
             _fill_legacy_chat_types(role)
+        if version < 8:
+            # Runs after the v6 step, which still reads the old contacts.
+            _replace_contacts_with_blocklist(role)
         migrated_roles.append(role)
     # Upgrade-only knowledge: capture fields before RoleRecord drops them, even
     # when the plugin is disabled. One atomic manifest replacement contains both
@@ -217,3 +220,27 @@ def _legacy_chat_type(binding: dict[str, Any]) -> ChatType:
     if channel == "telegram" and _TELEGRAM_GROUP_CHAT_ID.fullmatch(chat_id):
         return CHAT_TYPE_GROUP
     return CHAT_TYPE_PRIVATE
+
+
+def _replace_contacts_with_blocklist(role: dict[str, Any]) -> None:
+    """Drops pre-v8 single-contact whitelists; group bindings get an empty blacklist.
+
+    Before v8 each external binding admitted only its one ``allow_from``
+    contact. A private chat's partner is now the chat itself, and a group
+    admits every member not blacklisted, so no old contact carries over: the
+    whitelist is not a blacklist, and turning its member into one would block
+    the very person it let in.
+    """
+
+    raw_bindings = role.get("channel_bindings")
+    if not isinstance(raw_bindings, list):
+        return
+    bindings: list[Any] = []
+    for raw in raw_bindings:
+        # Malformed entries are left for RoleRecord loading to reject.
+        if isinstance(raw, dict):
+            raw = {key: value for key, value in raw.items() if key != "allow_from"}
+            if raw.get("chat_type") == CHAT_TYPE_GROUP:
+                raw["blocked_senders"] = []
+        bindings.append(raw)
+    role["channel_bindings"] = bindings

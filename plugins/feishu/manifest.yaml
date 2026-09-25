@@ -10,7 +10,6 @@ config_model: FeishuConfigModel
 channels:
   - name: feishu
     label: 飞书
-    contact_label: 用户 open_id（ou_…）
     chat_types:
       - type: private
         label: 私聊

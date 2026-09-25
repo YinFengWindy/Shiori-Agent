@@ -33,6 +33,8 @@ class _InboundMixin:
         )
 
     async def _handle_stop_private(self, user_id: str) -> None:
+        if not self._is_stop_admitted(user_id, user_id):
+            return
         if self._interrupt_controller is None:
             await self.send(user_id, "当前未启用中断功能。")
             return
@@ -85,7 +87,7 @@ class _InboundMixin:
                 sender_id=message.sender,
             ):
                 logger.warning(
-                    "[qq] 拒绝未绑定渠道或未授权用户 chat_id=%s", message.chat_id
+                    "[qq] 忽略未绑定渠道或黑名单成员的消息 chat_id=%s", message.chat_id
                 )
                 return
             message = self._channel_hub.route_inbound(message)
@@ -95,6 +97,8 @@ class _InboundMixin:
 
     async def _handle_stop_group(self, group_id: str, user_id: str) -> None:
         chat_id = normalize_qq_group_chat_id(group_id)
+        if not self._is_stop_admitted(chat_id, user_id):
+            return
         if self._interrupt_controller is None:
             await self.send(chat_id, "当前未启用中断功能。")
             return
@@ -104,6 +108,15 @@ class _InboundMixin:
             command="/stop",
         )
         await self.send(chat_id, result.message)
+
+    def _is_stop_admitted(self, chat_id: str, user_id: str) -> bool:
+        """``/stop`` follows the same admission as messages: bound and not blacklisted."""
+        if self._channel_hub is None or self._channel_hub.is_sender_allowed(
+            channel=CHANNEL, chat_id=chat_id, sender_id=user_id
+        ):
+            return True
+        logger.warning("[qq] 忽略未绑定渠道或黑名单成员的 /stop chat_id=%s", chat_id)
+        return False
 
     def _resolve_runtime_session_key(self, chat_id: str) -> str:
         if self._channel_hub is not None:

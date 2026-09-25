@@ -162,11 +162,77 @@ def test_legacy_bare_qq_group_binding_is_rewritten_and_persisted_once(tmp_path):
     assert role.channel_bindings[0].chat_id == "gqq:831907794"
     assert role.proactive.target_chat_id == "gqq:831907794"
     saved = json.loads(repo.manifest_path.read_text(encoding="utf-8"))
-    assert saved["version"] == 7
-    assert saved["roles"][0]["channel_bindings"][0]["chat_id"] == "gqq:831907794"
-    assert saved["roles"][0]["channel_bindings"][0]["chat_type"] == "group"
+    assert saved["version"] == 8
+    assert saved["roles"][0]["channel_bindings"][0] == {
+        "channel": "qq",
+        "chat_id": "gqq:831907794",
+        "chat_type": "group",
+        "blocked_senders": [],
+    }
     assert role.channel_bindings[0].chat_type == "group"
     # The rewrite is persisted, so the next load leaves the file untouched.
+    before = repo.manifest_path.read_bytes()
+    repo.load_payload()
+    assert repo.manifest_path.read_bytes() == before
+
+
+def test_v7_contact_whitelists_become_empty_blacklists_persisted_once(tmp_path):
+    repo = RoleManifestRepository(tmp_path)
+    repo.manifest_path.write_text(
+        json.dumps(
+            {
+                "version": 7,
+                "roles": [
+                    {
+                        "id": "joye",
+                        "name": "Joye",
+                        "system_prompt": "test",
+                        "channel_bindings": [
+                            {
+                                "channel": "qq",
+                                "chat_id": "3174898512",
+                                "chat_type": "private",
+                                "allow_from": ["3174898512"],
+                            },
+                            {
+                                "channel": "qq",
+                                "chat_id": "gqq:831907794",
+                                "chat_type": "group",
+                                "allow_from": ["3174898512"],
+                            },
+                            {
+                                "channel": "desktop",
+                                "chat_id": "role:joye",
+                                "chat_type": "private",
+                                "allow_from": [],
+                            },
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    role = repo.list_roles()[0]
+
+    assert [binding.blocked_senders for binding in role.channel_bindings] == [
+        [],
+        [],
+        [],
+    ]
+    saved = json.loads(repo.manifest_path.read_text(encoding="utf-8"))
+    assert saved["version"] == 8
+    assert saved["roles"][0]["channel_bindings"] == [
+        {"channel": "qq", "chat_id": "3174898512", "chat_type": "private"},
+        {
+            "channel": "qq",
+            "chat_id": "gqq:831907794",
+            "chat_type": "group",
+            "blocked_senders": [],
+        },
+        {"channel": "desktop", "chat_id": "role:joye", "chat_type": "private"},
+    ]
     before = repo.manifest_path.read_bytes()
     repo.load_payload()
     assert repo.manifest_path.read_bytes() == before

@@ -281,17 +281,12 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     role_store.update_role(
         "mira",
         channel_bindings=[
-            {
-                "channel": "qq",
-                "chat_id": "1",
-                "chat_type": "private",
-                "allow_from": ["1"],
-            },
+            {"channel": "qq", "chat_id": "1", "chat_type": "private"},
             {
                 "channel": "qq",
                 "chat_id": "gqq:100",
                 "chat_type": "group",
-                "allow_from": ["1"],
+                "blocked_senders": ["2"],
             },
         ],
     )
@@ -312,7 +307,6 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         "42",
         bus,
         session_manager,
-        allow_from=["1"],
         groups=[group_cfg],
         websocket_open_timeout_seconds=7.5,
         group_filter=group_filter,
@@ -332,8 +326,6 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert adapter_mod._captured_connect_calls[-1]["open_timeout"] == 1
     assert sys.modules["ncatbot.utils"].ncatbot_config.root == ""
     assert channel._bot is None
-    assert channel._is_allowed("1") is True
-    assert channel._is_allowed("2") is False
     from plugins.qq.backend.channel.compat import (
         download_to_temp,
         extract_cq_images,
@@ -362,7 +354,8 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert bus.outbound[0][0] == "qq"
     adapter_mod.websockets.connect("ws://example.invalid", open_timeout=1)
     assert adapter_mod._captured_connect_calls[-1]["open_timeout"] == 7.5
-    assert sys.modules["ncatbot.utils"].ncatbot_config.root == "1"
+    # NcatBot's plugin admin is the bot itself; Shiori loads no NcatBot plugins.
+    assert sys.modules["ncatbot.utils"].ncatbot_config.root == "42"
     assert sys.modules["ncatbot.utils"].ncatbot_config.plugin.plugins_dir == str(
         ncatbot_dir / "plugins"
     )
@@ -392,6 +385,13 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     )
     await channel._bot.group_handler(
         SimpleNamespace(group_id="100", user_id="1", raw_message="/stop")
+    )
+    # Blacklisted member of the bound group: neither messages nor /stop get in.
+    await channel._bot.group_handler(
+        SimpleNamespace(group_id="100", user_id="2", raw_message="blocked")
+    )
+    await channel._bot.group_handler(
+        SimpleNamespace(group_id="100", user_id="2", raw_message="/stop")
     )
     if scheduled:
         await asyncio.gather(*scheduled)
@@ -524,7 +524,6 @@ async def test_qq_private_trace_sends_forward_then_final_and_clears_state(
         "42",
         bus,
         session_manager,
-        allow_from=["1"],
         event_bus=event_bus,
         http_requester=SimpleNamespace(get=AsyncMock()),
     )
@@ -621,7 +620,6 @@ async def test_qq_private_trace_skips_empty_trace(monkeypatch: pytest.MonkeyPatc
         "42",
         bus,
         session_manager,
-        allow_from=["1"],
         event_bus=event_bus,
         http_requester=SimpleNamespace(get=AsyncMock()),
     )
@@ -681,7 +679,6 @@ async def test_qq_channel_records_failed_delivery_status(
         "42",
         bus,
         session_manager,
-        allow_from=["1"],
         event_bus=EventBus(),
         http_requester=SimpleNamespace(get=AsyncMock()),
     )

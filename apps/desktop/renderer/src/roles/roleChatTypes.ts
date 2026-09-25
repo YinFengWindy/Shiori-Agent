@@ -61,10 +61,16 @@ export function composeRoleBindingChatId(number: string, chatType: ChannelChatTy
 /**
  * Switches a binding to another session type, keeping the entered number but
  * re-deriving the prefix, so e.g. `gqq:` never carries into a private chat.
+ * Only group bindings keep a blacklist; a private chat's partner is the chat itself.
  */
 export function changeRoleBindingChatType(binding: RoleChannelBinding, channel: ChannelSummary | null, chatType: RoleChatType) {
   const number = roleBindingNumber(binding.chat_id, findRoleChatType(channel, binding.chat_type));
-  return { ...binding, chat_type: chatType, chat_id: composeRoleBindingChatId(number, findRoleChatType(channel, chatType)) };
+  return {
+    ...binding,
+    chat_type: chatType,
+    chat_id: composeRoleBindingChatId(number, findRoleChatType(channel, chatType)),
+    blocked_senders: chatType === "group" ? binding.blocked_senders : [],
+  };
 }
 
 /** Label of one binding in pickers, e.g. "QQ（NapCat） · 群聊 831907794"; undeclared types show the raw chat id. */

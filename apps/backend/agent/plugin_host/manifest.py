@@ -82,7 +82,7 @@ class ChannelDeclaration:
     """manifest 静态声明的一个外部渠道：插件未激活或未填凭据时也能列出。
 
     ``name`` 是插件唯一允许经 ``ctx.channels.add`` 贡献的渠道名；
-    ``contact_label`` 只供桌面端绑定面板描述 ``allow_from`` 联系人。
+    ``contact_label`` 只供桌面端绑定面板标注群聊黑名单里的成员 ID（如「QQ 号」）。
 
     ``chat_types`` 声明渠道支持的会话类型（私聊 / 群聊）、号码的标签与提示及
     内部前缀：绑定面板据此让用户选类型、只填号码，保存绑定时宿主据此校验会话

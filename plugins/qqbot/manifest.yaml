@@ -10,7 +10,6 @@ config_model: QQBotConfigModel
 channels:
   - name: qqbot
     label: QQBot
-    contact_label: QQBot 用户 OpenID
     chat_types:
       - type: private
         label: 私聊
