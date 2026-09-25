@@ -104,3 +104,36 @@ def validate_chat_id_for_type(
             raise ValueError(
                 f"会话 ID {chat_id} 是{other.label}格式，与所选的{selected.label}不符"
             )
+
+
+# ``/chatid`` (and its old alias ``/myid``) asks a channel which session a chat
+# is, so the user can bind it. Each channel plugin answers it itself.
+CHAT_ID_COMMANDS = frozenset({"/chatid", "/myid"})
+
+
+def is_chat_id_command(text: str) -> bool:
+    """Whether ``text`` is ``/chatid`` or ``/myid`` (a ``@bot`` suffix is allowed)."""
+    words = text.strip().split(maxsplit=1)
+    return bool(words) and words[0].lower().split("@", 1)[0] in CHAT_ID_COMMANDS
+
+
+def chat_id_command_reply(
+    chat_id: str,
+    chat_type: ChatType,
+    declarations: tuple[ChatTypeDeclaration, ...],
+) -> str:
+    """The reply to ``/chatid``: what the binding form asks for this session.
+
+    Names the declared session type and the number the user types, i.e. the
+    chat ID without the type's internal prefix (``gqq:831907794`` answers
+    ``831907794``). Raises ``ValueError`` if the channel does not declare the
+    type.
+    """
+    declaration = next((item for item in declarations if item.type == chat_type), None)
+    if declaration is None:
+        raise ValueError(f"渠道未声明会话类型 {chat_type}")
+    prefix = declaration.prefix
+    number = (
+        chat_id[len(prefix) :] if prefix and chat_id.startswith(prefix) else chat_id
+    )
+    return f"会话类型：{declaration.label}\n{declaration.chat_id_label}：{number}"

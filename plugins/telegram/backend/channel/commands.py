@@ -7,6 +7,8 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from core.channels.chat_id_command import answer_chat_id_command
+
 from .compat import _call_send_markdown
 
 logger = logging.getLogger("plugins.telegram.channel")
@@ -54,6 +56,28 @@ class _CommandMixin:
             str(chat.id),
             result.message,
             self._telegram_outbound_limiter,
+        )
+
+    async def _on_chat_id_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Answers ``/chatid``; the admission exception is documented there."""
+        chat = update.effective_chat
+        user = update.effective_user
+        if not chat or not user:
+            return
+        chat_id = str(chat.id)
+        await answer_chat_id_command(
+            self._channel_hub,
+            channel=self._channel,
+            chat_id=chat_id,
+            chat_type="private" if chat.type == "private" else "group",
+            sender_id=str(user.id),
+            sender_alias=user.username or "",
+            declarations=self._chat_types,
+            send=lambda text: _call_send_markdown(
+                self._app.bot, chat_id, text, self._telegram_outbound_limiter
+            ),
         )
 
     async def _on_command(

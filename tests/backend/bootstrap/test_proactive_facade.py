@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 from bootstrap.proactive import _build_proactive_provider, build_proactive_runtime
 from agent.core.proactive_turn import ProactiveTurnPipeline, ProactiveTurnPipelineDeps
+from core.desktop_presence import DesktopPresence
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import GatewayDeps, GatewayResult
@@ -15,9 +16,7 @@ from proactive_v2.sensor import Sensor
 def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
     proactive_cfg = ProactiveConfig()
     proactive_cfg.enabled = True
-    proactive_cfg.default_channel = "telegram"
-    proactive_cfg.default_chat_id = "1"
-    proactive_cfg.default_role_id = "mira"
+    proactive_cfg.role_id = "mira"
     cfg = SimpleNamespace(
         proactive=proactive_cfg,
         fitbit=SimpleNamespace(enabled=False),
@@ -34,11 +33,7 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
             list_roles=lambda: [
                 SimpleNamespace(
                     id="mira",
-                    proactive=SimpleNamespace(
-                        enabled=True,
-                        target_channel="telegram",
-                        target_chat_id="1",
-                    ),
+                    proactive=SimpleNamespace(enabled=True),
                 )
             ]
         ),
@@ -47,7 +42,14 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
     tasks, loops = build_proactive_runtime(
         cast(Any, cfg),
         tmp_path,
-        session_manager=cast(Any, SimpleNamespace(workspace=tmp_path)),
+        session_manager=cast(
+            Any,
+            SimpleNamespace(
+                workspace=tmp_path,
+                conversation_store=MagicMock(),
+                role_session_key=lambda role_id: f"role:{role_id}",
+            ),
+        ),
         provider=cast(Any, SimpleNamespace()),
         light_provider=None,
         push_tool=cast(Any, SimpleNamespace()),
@@ -60,6 +62,7 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
                 role_runtime_registry=MagicMock(),
             ),
         ),
+        desktop_presence=DesktopPresence(),
     )
 
     assert loops["mira"]._memory is facade
@@ -85,10 +88,10 @@ def test_build_proactive_provider_strips_enable_thinking():
     assert proactive_provider._force_disable_thinking is True
 
 
-def test_sensor_requires_default_role_id_for_memory_reads():
+def test_sensor_requires_role_id_for_memory_reads():
     facade = SimpleNamespace(read_long_term=lambda: "MEMORY")
     sensor = Sensor(
-        cfg=SimpleNamespace(default_channel="telegram", default_chat_id="1"),
+        cfg=SimpleNamespace(role_id=""),
         sessions=cast(Any, SimpleNamespace()),
         state=cast(Any, SimpleNamespace()),
         memory=cast(Any, facade),
@@ -99,12 +102,12 @@ def test_sensor_requires_default_role_id_for_memory_reads():
     import pytest
 
     with pytest.raises(
-        RuntimeError, match="default_role_id required for proactive memory access"
+        RuntimeError, match="role_id required for proactive memory access"
     ):
         _ = sensor.read_memory_text()
 
 
-def test_sensor_reads_role_long_term_from_facade_when_default_role_id_present():
+def test_sensor_reads_role_long_term_from_facade_when_role_id_present():
     calls: list[dict[str, str] | None] = []
 
     def _bind_session_metadata(metadata):
@@ -115,9 +118,7 @@ def test_sensor_reads_role_long_term_from_facade_when_default_role_id_present():
         read_long_term=lambda: "ROLE_MEMORY",
     )
     sensor = Sensor(
-        cfg=SimpleNamespace(
-            default_role_id="mira", default_channel="telegram", default_chat_id="1"
-        ),
+        cfg=SimpleNamespace(role_id="mira"),
         sessions=cast(Any, SimpleNamespace()),
         state=cast(Any, SimpleNamespace()),
         memory=cast(Any, facade),
@@ -136,7 +137,6 @@ def test_agent_tick_prompt_keeps_self_block_with_facade():
             session_key="test",
             state_store=MagicMock(),
             any_action_gate=MagicMock(),
-            last_user_at_fn=lambda: None,
             passive_busy_fn=None,
             turn_orchestrator=None,
             deduper=MagicMock(),
@@ -186,7 +186,6 @@ def test_agent_tick_prompt_binds_role_metadata_for_memory_reads():
             session_key="role:mira",
             state_store=MagicMock(),
             any_action_gate=MagicMock(),
-            last_user_at_fn=lambda: None,
             passive_busy_fn=None,
             turn_orchestrator=None,
             deduper=MagicMock(),

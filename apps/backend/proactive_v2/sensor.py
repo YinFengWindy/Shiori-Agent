@@ -8,34 +8,16 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from agent.prompting import is_context_frame
-from core.common.channel_identifiers import bound_qq_group_for_bare_id, chat_ids_equal
-from core.roles.services import RoleBindingService, RoleChannelBinding
 from proactive_v2.energy import compute_energy, d_recent
 from proactive_v2.presence import PresenceStore
 from proactive_v2.state import ProactiveStateStore
+from proactive_v2.target_selection import ProactiveTargetResolver
 from session.manager import SessionManager
 
 if TYPE_CHECKING:
     from core.memory.markdown import MemoryProfileApi
 
 logger = logging.getLogger(__name__)
-
-
-def _bare_qq_group_target_hint(
-    channel: str, chat_id: str, role_bindings: list[RoleChannelBinding]
-) -> str:
-    """Explains a config target that names a bound QQ group by its bare number.
-
-    A bare QQ ID means a private chat, so it no longer matches the ``gqq:``
-    group binding; the caller still fails instead of rewriting the target.
-    """
-    if channel != "qq":
-        return ""
-    group_chat_id = bound_qq_group_for_bare_id(
-        chat_id,
-        (binding.chat_id for binding in role_bindings if binding.channel == "qq"),
-    )
-    return f"；QQ 群请写成 {group_chat_id}" if group_chat_id is not None else ""
 
 
 @dataclass
@@ -56,7 +38,7 @@ class Sensor:
         memory: "MemoryProfileApi | None",
         presence: PresenceStore | None,
         rng: Any,
-        role_bindings: RoleBindingService | None = None,
+        target_resolver: ProactiveTargetResolver | None = None,
     ) -> None:
         self._cfg = cfg
         self._sessions = sessions
@@ -64,120 +46,40 @@ class Sensor:
         self._memory = memory
         self._presence = presence
         self._rng = rng
-        self._role_bindings = role_bindings
+        self._target_resolver = target_resolver
 
     def target_session_key(self) -> str:
-        default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
-        if default_role_id:
-            return f"role:{default_role_id}"
-        channel = (self._cfg.default_channel or "").strip()
-        chat_id = self._cfg.default_chat_id.strip()
-        return f"{channel}:{chat_id}" if channel and chat_id else ""
+        """The role session this runtime serves; empty without a role.
 
-    def target_transport(self) -> tuple[str, str]:
-        transports = self.target_transports()
-        default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
-        preferred_channel = str(getattr(self._cfg, "default_channel", "") or "").strip()
-        preferred_chat_id = str(getattr(self._cfg, "default_chat_id", "") or "").strip()
-        if (
-            default_role_id
-            and not preferred_channel
-            and not preferred_chat_id
-            and len(transports) > 1
-        ):
-            raise RuntimeError(
-                f"default_role_id 存在多个 transport 绑定，必须显式配置 target.channel/chat_id: {default_role_id}"
-            )
-        if transports:
-            return transports[0]
-        return preferred_channel, preferred_chat_id
+        The single source of the proactive session key: the tick pipeline and
+        the loop both read it here.
+        """
+        role_id = self._cfg.role_id
+        return self._sessions.role_session_key(role_id) if role_id else ""
 
-    def target_transports(self) -> list[tuple[str, str]]:
-        """Returns the preferred target followed by every bound role transport."""
-        default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
-        if default_role_id:
-            preferred_channel = str(
-                getattr(self._cfg, "default_channel", "") or ""
-            ).strip()
-            preferred_chat_id = str(
-                getattr(self._cfg, "default_chat_id", "") or ""
-            ).strip()
-            role_bindings = (
-                [
-                    binding
-                    for binding in self._role_bindings.list_bindings()
-                    if binding.role_id == default_role_id
-                ]
-                if self._role_bindings is not None
-                else []
-            )
-            if not role_bindings and preferred_channel == "desktop":
-                return [
-                    (preferred_channel, preferred_chat_id or f"role:{default_role_id}")
-                ]
-            if self._role_bindings is None:
-                raise RuntimeError(
-                    f"default_role_id 缺少 binding 服务: {default_role_id}"
-                )
-            if not role_bindings:
-                raise KeyError(f"default_role_id 未绑定 transport: {default_role_id}")
+    def target_transport(self) -> tuple[str, str] | None:
+        """Selects the one session the next proactive message goes to.
 
-            transports: list[tuple[str, str]] = []
-
-            def append_unique(channel: str, chat_id: str) -> None:
-                if not channel or not chat_id:
-                    return
-                if any(
-                    item_channel == channel
-                    and chat_ids_equal(channel, item_chat_id, chat_id)
-                    for item_channel, item_chat_id in transports
-                ):
-                    return
-                transports.append((channel, chat_id))
-
-            if preferred_channel and preferred_chat_id:
-                for binding in role_bindings:
-                    if binding.channel == preferred_channel and chat_ids_equal(
-                        preferred_channel, binding.chat_id, preferred_chat_id
-                    ):
-                        append_unique(binding.channel, binding.chat_id)
-                        break
-                else:
-                    if preferred_channel != "desktop":
-                        raise KeyError(
-                            "default_role_id 配置的 target 未绑定到该角色: "
-                            f"{default_role_id} -> {preferred_channel}:{preferred_chat_id}"
-                            + _bare_qq_group_target_hint(
-                                preferred_channel, preferred_chat_id, role_bindings
-                            )
-                        )
-                    append_unique(preferred_channel, preferred_chat_id)
-            elif preferred_channel == "desktop":
-                append_unique(
-                    preferred_channel, preferred_chat_id or f"role:{default_role_id}"
-                )
-            elif preferred_channel or preferred_chat_id:
-                raise KeyError(
-                    "default_role_id 配置的 target 未绑定到该角色: "
-                    f"{default_role_id} -> {preferred_channel}:{preferred_chat_id}"
-                )
-
-            for binding in role_bindings:
-                append_unique(binding.channel, binding.chat_id)
-            return transports
-        channel = str(self._cfg.default_channel or "").strip()
-        chat_id = str(self._cfg.default_chat_id or "").strip()
-        return [(channel, chat_id)] if channel and chat_id else []
+        Reads the role's saved candidates at call time, so edits apply without
+        a restart; ``None`` when the role has no candidate session.
+        """
+        role_id = self._cfg.role_id
+        if not role_id:
+            raise RuntimeError("role_id required for proactive target")
+        if self._target_resolver is None:
+            raise RuntimeError(f"主动推送缺少目标选择服务: {role_id}")
+        target = self._target_resolver.resolve_saved(role_id)
+        return (target.channel, target.chat_id) if target is not None else None
 
     def read_memory_text(self) -> str:
         if not self._memory:
             return ""
-        default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
-        if not default_role_id:
-            raise RuntimeError("default_role_id required for proactive memory access")
+        role_id = self._cfg.role_id
+        if not role_id:
+            raise RuntimeError("role_id required for proactive memory access")
         bind_session_metadata = getattr(self._memory, "bind_session_metadata", None)
         if callable(bind_session_metadata):
-            bind_session_metadata({"role_id": default_role_id})
+            bind_session_metadata({"role_id": role_id})
         return str(self._memory.read_long_term() or "").strip()
 
     def has_role_memory(self) -> bool:

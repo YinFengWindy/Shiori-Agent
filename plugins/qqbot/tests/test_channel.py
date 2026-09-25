@@ -46,12 +46,16 @@ class _PushTool:
 
 
 class _Hub:
-    def __init__(self, *, allowed: bool = True) -> None:
+    def __init__(self, *, allowed: bool = True, blocked: bool = False) -> None:
         self.allowed = allowed
+        self.blocked = blocked
         self.deliveries: list[tuple[str, str]] = []
 
     def is_sender_allowed(self, **kwargs: object) -> bool:
         return self.allowed
+
+    def is_sender_blocked(self, **kwargs: object) -> bool:
+        return self.blocked
 
     def route_inbound(self, message: InboundMessage) -> InboundMessage:
         external_message_id = str(message.metadata.get("external_message_id") or "")
@@ -454,3 +458,40 @@ async def test_qqbot_stop_from_unadmitted_sender_is_ignored() -> None:
 
     interrupt.request_interrupt.assert_not_called()
     channel.send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("hub", "replies"),
+    [
+        # Unbound chats are answered: that is how the OpenID to bind is found.
+        (_Hub(allowed=False), [("c2c:user-1", "会话类型：私聊\n用户 OpenID：user-1")]),
+        (_Hub(), [("c2c:user-1", "会话类型：私聊\n用户 OpenID：user-1")]),
+        (_Hub(allowed=False, blocked=True), []),
+    ],
+    ids=["unbound", "bound", "blacklisted"],
+)
+async def test_qqbot_chatid_answers_without_entering_the_role(
+    hub: _Hub, replies: list[tuple[str, str]]
+) -> None:
+    from agent.plugin_host.manifest import load_manifest
+
+    manifest = load_manifest(Path(qqbot_channel.__file__).resolve().parents[1])
+    assert manifest is not None
+    bus = _Bus()
+    channel = QQBotChannel(
+        "app", "secret", chat_types=manifest.channel_chat_types("qqbot")
+    )
+    channel._bus = bus
+    channel._channel_hub = hub
+    channel._send_input_notify = AsyncMock()
+    channel.send = AsyncMock()
+
+    await channel._handle_c2c(
+        {"id": "message-1", "author": {"user_openid": "user-1"}, "content": "/chatid"}
+    )
+
+    assert [call.args for call in channel.send.await_args_list] == replies
+    assert bus.inbound == []
+    channel._send_input_notify.assert_not_awaited()
+    assert channel._last_c2c_msg_id == {}

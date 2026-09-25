@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from core.common.channel_chat_types import CHAT_TYPE_GROUP, CHAT_TYPE_PRIVATE, ChatType
+from core.common.channel_directory import DESKTOP_CHANNEL
 from core.common.channel_identifiers import (
     QQ_GROUP_PREFIX,
     bound_qq_group_for_bare_id,
@@ -12,9 +13,10 @@ from core.common.channel_identifiers import (
     normalize_qq_group_chat_id,
 )
 
+from .models import keeps_proactive_enabled
 from .profile_models import RoleProfile
 
-CURRENT_MANIFEST_VERSION = 8
+CURRENT_MANIFEST_VERSION = 9
 
 # Telegram addresses groups and channels by negative numeric chat IDs.
 _TELEGRAM_GROUP_CHAT_ID = re.compile(r"-\d+")
@@ -26,7 +28,7 @@ _LEGACY_QQBOT_MARKER = "qqbot:"
 
 
 def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Normalize a legacy role manifest into v8 without dropping role-owned data."""
+    """Normalize a legacy role manifest into v9 without dropping role-owned data."""
 
     version = int(payload.get("version") or 0)
     roles = payload.get("roles")
@@ -46,7 +48,7 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
     )
     if version == CURRENT_MANIFEST_VERSION and not has_legacy_fields:
         return dict(payload), False
-    if version not in {2, 3, 4, 5, 6, 7, CURRENT_MANIFEST_VERSION}:
+    if version not in {2, 3, 4, 5, 6, 7, 8, CURRENT_MANIFEST_VERSION}:
         raise ValueError(
             f"角色清单版本不支持：需要版本 {CURRENT_MANIFEST_VERSION}，实际为 {version}"
         )
@@ -67,6 +69,9 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
         if version < 8:
             # Runs after the v6 step, which still reads the old contacts.
             _replace_contacts_with_blocklist(role)
+        if version < 9:
+            # Runs after the v6/v7 steps, which rewrite the old target's chat ID.
+            _replace_target_with_candidates(role)
         migrated_roles.append(role)
     # Upgrade-only knowledge: capture fields before RoleRecord drops them, even
     # when the plugin is disabled. One atomic manifest replacement contains both
@@ -244,3 +249,44 @@ def _replace_contacts_with_blocklist(role: dict[str, Any]) -> None:
                 raw["blocked_senders"] = []
         bindings.append(raw)
     role["channel_bindings"] = bindings
+
+
+def _replace_target_with_candidates(role: dict[str, Any]) -> None:
+    """Turns the pre-v9 single proactive target into candidate sessions.
+
+    Before v9 a role pushed to one chosen target (and retried the other
+    bindings when unanswered). Candidates are the old target and the desktop
+    session, when bound, in binding order; a target that no longer names a
+    binding is dropped, as save-time validation would reject it.
+    """
+
+    raw_proactive = role.get("proactive")
+    # RoleRecord reads a missing or non-object config as defaults, too.
+    proactive = raw_proactive if isinstance(raw_proactive, dict) else {}
+    target = (
+        str(proactive.get("target_channel") or "").strip(),
+        normalize_chat_id(proactive.get("target_chat_id") or ""),
+    )
+    raw_bindings = role.get("channel_bindings")
+    bindings = raw_bindings if isinstance(raw_bindings, list) else []
+    candidates: list[dict[str, str]] = []
+    for raw in bindings:
+        # Malformed entries are left for RoleRecord loading to reject.
+        if not isinstance(raw, dict):
+            continue
+        channel = str(raw.get("channel") or "").strip()
+        chat_id = normalize_chat_id(raw.get("chat_id") or "")
+        if channel == DESKTOP_CHANNEL or (channel, chat_id) == target:
+            candidates.append({"channel": channel, "chat_id": chat_id})
+    migrated = {
+        key: value
+        for key, value in proactive.items()
+        if key not in {"target_channel", "target_chat_id"}
+    }
+    migrated["candidates"] = candidates
+    if "enabled" in migrated:
+        # Same rule as removing a binding: nothing left to send to turns it off.
+        migrated["enabled"] = keeps_proactive_enabled(
+            bool(migrated["enabled"]), candidates
+        )
+    role["proactive"] = migrated

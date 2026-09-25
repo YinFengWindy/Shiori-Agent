@@ -13,6 +13,21 @@ if TYPE_CHECKING:
 _LEGACY_UNRESOLVED_ROLE_ID = "legacy/unresolved"
 
 
+def desktop_chat_id(role_id: str) -> str:
+    """Returns the chat ID of one role's desktop session, as its binding stores it."""
+    return f"role:{role_id}"
+
+
+def desktop_thread_id(role_id: str) -> str:
+    """Returns the formal thread ID of one role's desktop session."""
+    return f"thread:{role_id}:desktop"
+
+
+def network_thread_id(role_id: str, channel: str, chat_id: str) -> str:
+    """Returns the formal thread ID of one role's external channel session."""
+    return f"thread:{role_id}:{channel}:{chat_id}"
+
+
 @dataclass(frozen=True)
 class LegacySessionDescriptor:
     """Describes a legacy `session_key` that should resolve to a formal thread."""
@@ -238,7 +253,7 @@ class ConversationService:
             metadata={"scope": "desktop"},
         )
         return self._store.upsert_thread(
-            thread_id=f"thread:{role_id}:desktop",
+            thread_id=desktop_thread_id(role_id),
             role_id=role_id,
             contact_id=contact.id,
             channel="desktop",
@@ -272,7 +287,7 @@ class ConversationService:
             display_name=chat_id,
             metadata={"scope": "network"},
         )
-        thread_id = f"thread:{role_id}:{channel}:{chat_id}"
+        thread_id = network_thread_id(role_id, channel, chat_id)
         metadata = {
             "migrated_from_session_key": session_key,
             "source_created_at": created_at,

@@ -39,6 +39,6 @@ class TurnResult:
     success_side_effects: list[Any] = field(default_factory=list)
     # 失败副作用：仅在 outbound 发送失败后执行。
     failure_side_effects: list[Any] = field(default_factory=list)
-    # Only generated proactive replies carry formal state; transport retries reuse it.
+    # Only generated proactive replies carry formal state.
     role_reply: RoleReply | None = None
     reply_context: RoleReplyContext | None = None

@@ -234,7 +234,6 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "qq",
     "qqbot",
     "screen_perception",
-    "setup_helper",
     "shell_restore",
     "shell_safety",
     "status_commands",

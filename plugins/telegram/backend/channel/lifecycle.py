@@ -20,6 +20,7 @@ from bus.events_lifecycle import (
 )
 from bus.queue import MessageBus
 from core.channels import ChannelHub
+from core.common.channel_chat_types import CHAT_ID_COMMANDS, ChatTypeDeclaration
 from infra.channels.base import AttachmentStore, MessageDeduper, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
@@ -72,10 +73,13 @@ class TelegramChannel(
         event_bus: EventBus | None = None,
         interrupt_controller: InterruptController | None = None,
         channel_hub: "ChannelHub | None" = None,
+        chat_types: tuple[ChatTypeDeclaration, ...] = (),
     ) -> None:
         # bus / session_manager 在宿主里由 start(ctx) 注入；构造参数只留给
         # 不经 ChannelHost 直接驱动渠道的测试。
         self._token = token
+        # The manifest's session types, for answering ``/chatid``.
+        self._chat_types = chat_types
         self._bus: MessageBus | None = bus
         self._interrupt_controller = interrupt_controller
         self._channel = _CHANNEL
@@ -90,6 +94,12 @@ class TelegramChannel(
         self._app = Application.builder().token(token).build()
         self._bot_commands = bot_commands or []
         self._app.add_handler(CommandHandler("stop", self._on_stop_command))
+        self._app.add_handler(
+            CommandHandler(
+                sorted(name.removeprefix("/") for name in CHAT_ID_COMMANDS),
+                self._on_chat_id_command,
+            )
+        )
         self._app.add_handler(MessageHandler(filters.COMMAND, self._on_command))
         self._app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self._on_message)
@@ -273,6 +283,7 @@ class TelegramChannel(
             for command, description in [
                 *self._bot_commands,
                 ("stop", "中断当前回复"),
+                ("chatid", "查看本会话的绑定信息"),
             ]
         ]
         await self._app.bot.set_my_commands(commands)

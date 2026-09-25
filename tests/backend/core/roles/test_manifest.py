@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from core.roles.manifest import RoleManifestRepository
-from core.roles.models import RoleRecord
+from core.roles.models import RoleProactiveCandidate, RoleRecord
 
 
 def _legacy(path: Path):
@@ -160,9 +160,9 @@ def test_legacy_bare_qq_group_binding_is_rewritten_and_persisted_once(tmp_path):
     role = repo.list_roles()[0]
 
     assert role.channel_bindings[0].chat_id == "gqq:831907794"
-    assert role.proactive.target_chat_id == "gqq:831907794"
+    assert role.proactive.candidates == (RoleProactiveCandidate("qq", "gqq:831907794"),)
     saved = json.loads(repo.manifest_path.read_text(encoding="utf-8"))
-    assert saved["version"] == 8
+    assert saved["version"] == 9
     assert saved["roles"][0]["channel_bindings"][0] == {
         "channel": "qq",
         "chat_id": "gqq:831907794",
@@ -222,7 +222,7 @@ def test_v7_contact_whitelists_become_empty_blacklists_persisted_once(tmp_path):
         [],
     ]
     saved = json.loads(repo.manifest_path.read_text(encoding="utf-8"))
-    assert saved["version"] == 8
+    assert saved["version"] == 9
     assert saved["roles"][0]["channel_bindings"] == [
         {"channel": "qq", "chat_id": "3174898512", "chat_type": "private"},
         {
@@ -233,6 +233,72 @@ def test_v7_contact_whitelists_become_empty_blacklists_persisted_once(tmp_path):
         },
         {"channel": "desktop", "chat_id": "role:joye", "chat_type": "private"},
     ]
+    before = repo.manifest_path.read_bytes()
+    repo.load_payload()
+    assert repo.manifest_path.read_bytes() == before
+
+
+def test_v8_proactive_target_becomes_candidates_persisted_once(tmp_path):
+    repo = RoleManifestRepository(tmp_path)
+    repo.manifest_path.write_text(
+        json.dumps(
+            {
+                "version": 8,
+                "roles": [
+                    {
+                        "id": "joye",
+                        "name": "Joye",
+                        "system_prompt": "test",
+                        "channel_bindings": [
+                            {
+                                "channel": "qq",
+                                "chat_id": "gqq:831907794",
+                                "chat_type": "group",
+                                "blocked_senders": [],
+                            },
+                            {
+                                "channel": "qq",
+                                "chat_id": "3174898512",
+                                "chat_type": "private",
+                            },
+                            {
+                                "channel": "desktop",
+                                "chat_id": "role:joye",
+                                "chat_type": "private",
+                            },
+                        ],
+                        "proactive": {
+                            "enabled": True,
+                            "target_channel": "qq",
+                            "target_chat_id": "gqq:831907794",
+                            "profile": "daily",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    role = repo.list_roles()[0]
+
+    # The old target and the desktop session, in binding order; other private
+    # bindings are not added by the upgrade.
+    assert role.proactive.candidates == (
+        RoleProactiveCandidate("qq", "gqq:831907794"),
+        RoleProactiveCandidate("desktop", "role:joye"),
+    )
+    assert role.proactive.enabled is True
+    saved = json.loads(repo.manifest_path.read_text(encoding="utf-8"))
+    assert saved["version"] == 9
+    assert saved["roles"][0]["proactive"] == {
+        "enabled": True,
+        "profile": "daily",
+        "candidates": [
+            {"channel": "qq", "chat_id": "gqq:831907794"},
+            {"channel": "desktop", "chat_id": "role:joye"},
+        ],
+    }
     before = repo.manifest_path.read_bytes()
     repo.load_payload()
     assert repo.manifest_path.read_bytes() == before

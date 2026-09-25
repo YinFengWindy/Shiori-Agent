@@ -10,7 +10,7 @@ from agent.turns.outbound import OutboundDispatch, OutboundPort
 from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
-from conversation.service import LegacySessionDescriptor
+from conversation.service import LegacySessionDescriptor, network_thread_id
 from core.roles.reply_state import (
     RoleReplyContext,
     role_mood_catalog,
@@ -156,30 +156,6 @@ class TurnOrchestrator:
 
         return sent
 
-    async def dispatch_proactive_retry(
-        self,
-        *,
-        result: TurnResult,
-        session_key: str,
-        channel: str,
-        chat_id: str,
-    ) -> bool:
-        """Retries an already committed proactive message on another transport."""
-
-        if result.decision != "reply" or result.outbound is None:
-            raise ValueError("proactive retry requires reply outbound")
-        return await self._dispatch_outbound(
-            channel=channel,
-            chat_id=chat_id,
-            content=result.outbound.content,
-            media=list(result.outbound.media or []),
-            metadata={
-                "source": "proactive_retry",
-                "session_key_override": session_key,
-                "pending_commit": True,
-            },
-        )
-
     async def _run_side_effects(self, result: TurnResult) -> None:
         await self._run_effects(result.side_effects)
 
@@ -274,7 +250,7 @@ class TurnOrchestrator:
                     )
                 ).id
         else:
-            thread_id = f"thread:{role_id}:{channel}:{chat_id}"
+            thread_id = network_thread_id(role_id, channel, chat_id)
         metadata.update(
             {
                 "role_id": role_id,

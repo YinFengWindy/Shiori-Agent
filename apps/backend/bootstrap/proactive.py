@@ -10,6 +10,9 @@ from agent.provider import LLMProvider
 from agent.tool_hooks import ToolHook
 from agent.core.proactive_turn.gates import ProactiveGate
 from agent.tools.message_push import MessagePushTool
+from conversation.service import desktop_chat_id, desktop_thread_id
+from core.common.channel_directory import DESKTOP_CHANNEL
+from core.desktop_presence import DesktopPresence
 from core.roles import RoleRecord, RoleStore
 from core.roles.model_runtime import RoleAwareProvider
 from core.roles.role_prompt_compiler import RoleKnowledgeMatcher, RolePromptCompiler
@@ -62,7 +65,13 @@ def build_proactive_runtime(
     proactive_motives: list[ProactiveGate] | None = None,
     event_bus: "EventBus | None" = None,
     provider_consumer: Callable[[LLMProvider], None] | None = None,
+    desktop_presence: DesktopPresence,
 ) -> tuple[list, dict[str, ProactiveLoop]]:
+    """Builds one proactive loop per enabled role.
+
+    ``desktop_presence`` is the app-level report the loops read when choosing
+    where each proactive message goes.
+    """
     tasks: list = []
     roles = [
         role for role in RoleStore(workspace).list_roles() if role.proactive.enabled
@@ -78,7 +87,6 @@ def build_proactive_runtime(
     role_runtime_registry = agent_loop.role_runtime_registry
     role_aware_provider = RoleAwareProvider(proactive_provider)
     for role in roles:
-        target = role.proactive
         proactive_cfg = _build_role_proactive_config(role)
         proactive_state = ProactiveStateStore(
             workspace / "roles" / role.id / "proactive.db"
@@ -108,10 +116,9 @@ def build_proactive_runtime(
             role_prompt_fn=_build_role_prompt_resolver(workspace, role.id),
             tick_dispatcher=_build_role_tick_dispatcher(
                 role_id=role.id,
-                channel=target.target_channel,
-                chat_id=target.target_chat_id,
                 registry=role_runtime_registry,
             ),
+            desktop_presence=desktop_presence,
         )
         loops[role.id] = loop
         tasks.append(loop.run())
@@ -142,41 +149,39 @@ def _build_role_prompt_resolver(workspace: Path, role_id: str):
 
 def _build_role_proactive_config(role: RoleRecord):
     """Builds the runtime proactive config from one authoritative role snapshot."""
-    target = role.proactive
-    agent = dict(getattr(target, "agent", {}) or {})
+    proactive = role.proactive
+    agent = dict(getattr(proactive, "agent", {}) or {})
     agent.pop("model", None)
+    # Delivery targets come from the role's candidate sessions, chosen per
+    # message; the config only names the role it serves.
     return load_proactive_config(
         {
-            "enabled": target.enabled,
-            "profile": str(getattr(target, "profile", "daily") or "daily"),
-            "target": {
-                "role_id": role.id,
-                "channel": target.target_channel,
-                "chat_id": target.target_chat_id,
-            },
-            "overrides": dict(getattr(target, "overrides", {}) or {}),
+            "enabled": proactive.enabled,
+            "profile": str(getattr(proactive, "profile", "daily") or "daily"),
+            "overrides": dict(getattr(proactive, "overrides", {}) or {}),
             "agent": agent,
-            "drift": dict(getattr(target, "drift", {}) or {}),
-        }
+            "drift": dict(getattr(proactive, "drift", {}) or {}),
+        },
+        role_id=role.id,
     )
 
 
 def _build_role_tick_dispatcher(
     *,
     role_id: str,
-    channel: str,
-    chat_id: str,
     registry,
 ):
     if registry is None:
         raise RuntimeError("主动任务需要 RoleRuntimeRegistry")
 
     async def dispatch(operation):
+        # A tick starts before its delivery target is chosen, so it runs under
+        # the role's own session (the desktop thread of ``role:<id>``).
         context = registry.create_context(
             role_id=role_id,
-            thread_id=f"thread:{role_id}:{channel}:{chat_id}",
-            transport_channel=channel,
-            transport_chat_id=chat_id,
+            thread_id=desktop_thread_id(role_id),
+            transport_channel=DESKTOP_CHANNEL,
+            transport_chat_id=desktop_chat_id(role_id),
             source="proactive",
             work_kind="proactive_tick",
         )

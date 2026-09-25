@@ -31,7 +31,7 @@ class ProactivePhaseHost(Protocol):
     _last_gateway_result: GatewayResult | None
     last_ctx: AgentTickContext | None
 
-    def _resolve_target_transports(self) -> list[tuple[str, str]]: ...
+    def _resolve_target_transport(self) -> tuple[str, str] | None: ...
 
     def _allow_relationship_only_fallback(self, ctx: AgentTickContext) -> bool: ...
 
@@ -84,12 +84,12 @@ def _log_content_candidates(gateway_result: GatewayResult) -> None:
 def gate_check(pipeline: ProactivePhaseHost, ctx: AgentTickContext) -> GateResult:
     """逐条件判断本轮是否应该启动主动处理。"""
 
-    transports = pipeline._resolve_target_transports()
-    if not transports:
-        logger.debug("[proactive_v2] gate: no chat_id → blocked")
+    # The one target this tick may deliver to is fixed here, before any gate runs.
+    transport = pipeline._resolve_target_transport()
+    if transport is None:
+        logger.debug("[proactive_v2] gate: no candidate session → blocked")
         return GateResult(blocked=True, reason="no_target", base_score=None)
-    ctx.target_transports = transports
-    ctx.target_channel, ctx.target_chat_id = transports[0]
+    ctx.target_channel, ctx.target_chat_id = transport
 
     if pipeline._passive_busy_fn and pipeline._passive_busy_fn(pipeline._session_key):
         logger.debug("[proactive_v2] gate: passive_busy → blocked")
@@ -100,7 +100,7 @@ def gate_check(pipeline: ProactivePhaseHost, ctx: AgentTickContext) -> GateResul
             tick_id=ctx.tick_id,
             session_key=pipeline._session_key,
             now_utc=ctx.now_utc,
-            target_transports=tuple(transports),
+            target_transport=transport,
         )
     )
     ctx.gate_trace = gate_result.trace

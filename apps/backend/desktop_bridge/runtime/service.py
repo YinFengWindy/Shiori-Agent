@@ -23,12 +23,14 @@ from desktop_bridge.method_policy import (
 from desktop_bridge.models import BridgeError, BridgeResponse
 from desktop_bridge.runtime.apply import RuntimeApplyError, RuntimeSettingsApplication
 from desktop_bridge.runtime.desktop_presence import report_desktop_presence
+from desktop_bridge.runtime.proactive_target import preview_proactive_target
 from desktop_bridge.runtime.factory import build_desktop_service
 from desktop_bridge.runtime.plugin_config import RuntimePluginConfig
 from desktop_bridge.runtime.plugin_management import RuntimePluginManagement
 from desktop_bridge.runtime.role_tasks import RuntimeRoleTasks
 from desktop_bridge.runtime.settings_form import settings_form_write
 from desktop_bridge.service import DesktopBridgeService
+from proactive_v2.target_selection import ProactiveTargetResolver
 
 if TYPE_CHECKING:
     from agent.plugin_host.rpc import PluginRpcRegistry
@@ -223,6 +225,17 @@ class ReloadableDesktopService:
             return await self._respond_or_invalid_request(
                 request_id, method, compute_desktop_presence_result
             )
+        if policy.handler is Handler.PROACTIVE_TARGET:
+            # Desktop presence is app state; history is read from the
+            # published generation's conversation store.
+            async def compute_proactive_target_result():
+                return preview_proactive_target(
+                    self.roles, self._proactive_target_resolver(), payload
+                )
+
+            return await self._respond_or_invalid_request(
+                request_id, method, compute_proactive_target_result
+            )
         if policy.handler is Handler.ROLE_TASKS:
 
             async def compute_role_tasks_result():
@@ -316,8 +329,8 @@ class ReloadableDesktopService:
     async def _respond_or_invalid_request(self, request_id: str, method: str, compute):
         """Runs one app-level handler, mapping rejected input to ``invalid_request``.
 
-        Shared by the ROLE_TASKS and DESKTOP_PRESENCE branches. The role-task
-        branch has always mapped ``KeyError``/``ValueError``/``RuntimeError``;
+        Shared by the ROLE_TASKS, DESKTOP_PRESENCE and PROACTIVE_TARGET
+        branches. The role-task branch has always mapped ``KeyError``/``ValueError``/``RuntimeError``;
         the presence report only ever raises ``ValueError``, for a non-boolean
         ``present``, so the wider set does not change its behavior.
         """
@@ -331,6 +344,17 @@ class ReloadableDesktopService:
                 error=BridgeError("invalid_request", str(error)),
             )
         return BridgeResponse(request_id, "response", method, result)
+
+    def _proactive_target_resolver(self) -> ProactiveTargetResolver:
+        """Builds the delivery target resolver over the published generation."""
+        sessions = self.app.session_manager
+        if sessions is None:
+            raise RuntimeError("会话存储尚未就绪")
+        return ProactiveTargetResolver(
+            roles=self.roles,
+            conversations=sessions.conversation_store,
+            desktop_presence=self.app.desktop_presence,
+        )
 
     def _owner(self, routing: OwnerRouting, payload):
         for entry in self._entries:

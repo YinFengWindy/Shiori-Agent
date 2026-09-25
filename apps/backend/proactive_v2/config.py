@@ -21,9 +21,9 @@ class ProactiveConfig:
 
     # 必填运行信息
     enabled: bool = False
-    default_role_id: str = ""
-    default_channel: str = "telegram"
-    default_chat_id: str = ""
+    # The role a per-role runtime serves; empty for the parsed config.toml
+    # section. Delivery targets come from the role's candidate sessions.
+    role_id: str = ""
     model: str = ""
     profile: str = "daily"
     profiles: dict[str, Any] = field(default_factory=dict)

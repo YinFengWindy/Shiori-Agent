@@ -101,7 +101,3 @@ timeout_ms = 3000
 [proactive]
 enabled = false
 profile = "quiet"
-
-[proactive.target]
-channel = ""
-chat_id = ""

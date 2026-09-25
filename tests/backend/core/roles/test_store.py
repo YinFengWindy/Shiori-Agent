@@ -192,7 +192,7 @@ def test_role_store_rejects_invalid_manifest_shape(tmp_path):
         store.list_roles()
 
 
-def test_role_store_persists_proactive_policy_and_keeps_it_when_target_is_removed(
+def test_role_store_persists_proactive_policy_and_keeps_it_when_candidates_go(
     tmp_path,
 ):
     store = RoleStore(tmp_path)
@@ -208,8 +208,7 @@ def test_role_store_persists_proactive_policy_and_keeps_it_when_target_is_remove
         ],
         proactive={
             "enabled": True,
-            "target_channel": "telegram",
-            "target_chat_id": "42",
+            "candidates": [{"channel": "telegram", "chat_id": "42"}],
             "profile": "quiet",
             "overrides": {"gate": {"judge_send_threshold": 0.8}},
             "agent": {"model": "agent-model", "max_steps": 12},
@@ -221,7 +220,7 @@ def test_role_store_persists_proactive_policy_and_keeps_it_when_target_is_remove
     reloaded = store.get_role("mira")
 
     assert updated.proactive.enabled is False
-    assert updated.proactive.target_channel == ""
+    assert updated.proactive.candidates == ()
     assert reloaded is not None
     assert reloaded.proactive.profile == "quiet"
     assert "model" not in reloaded.proactive.agent

@@ -76,7 +76,7 @@ describe("roleChatTypes", () => {
 
     assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", blocked_senders: [] }, catalog), "QQ（NapCat） · 群聊 831907794");
     assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "3174898512", chat_type: "private", blocked_senders: [] }, catalog), "QQ（NapCat） · 私聊 3174898512");
-    assert.equal(roleBindingDisplayLabel({ channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] }, catalog), "桌面端 · role:mira");
+    assert.equal(roleBindingDisplayLabel({ channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] }, catalog), "桌面端");
     assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "gqq:1", chat_type: "group", blocked_senders: [] }, null), "qq · gqq:1");
   });
 });

@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from agent.config_models import Config
 from bootstrap.proactive import (
     build_memory_optimizer_task,
     build_proactive_runtime,
     _build_role_prompt_resolver,
+    _build_role_tick_dispatcher,
 )
+from core.desktop_presence import DesktopPresence
 from core.roles import RoleStore
 from agent.core.proactive_turn.gates import (
     ProactiveGateAdapter,
@@ -79,15 +83,13 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
             created.append(kwargs)
 
         def run(self):
-            return f"run:{self.config.default_role_id}"
+            return f"run:{self.config.role_id}"
 
     roles = [
         SimpleNamespace(
             id="mira",
             proactive=SimpleNamespace(
                 enabled=True,
-                target_channel="telegram",
-                target_chat_id="1",
                 profile="daily",
                 overrides={},
                 agent={"max_steps": 11},
@@ -98,8 +100,6 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
             id="luna",
             proactive=SimpleNamespace(
                 enabled=True,
-                target_channel="qq",
-                target_chat_id="2",
                 profile="quiet",
                 overrides={},
                 agent={"max_steps": 22},
@@ -124,6 +124,7 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
         api_key="",
     )
     event_bus = object()
+    presence = DesktopPresence()
 
     class _PassGate(ProactiveGateAdapter):
         name = "test.gate"
@@ -155,6 +156,7 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
         proactive_gates=[proactive_gate],
         proactive_motives=[motive],
         event_bus=event_bus,
+        desktop_presence=presence,
     )
 
     assert tasks == ["run:mira", "run:luna"]
@@ -179,6 +181,9 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
     assert created[1]["proactive_gates"] == [proactive_gate]
     assert created[0]["proactive_motives"] == [motive]
     assert created[1]["proactive_motives"] == [motive]
+    # Every loop reads the one app-level desktop presence for target selection.
+    assert created[0]["desktop_presence"] is presence
+    assert created[1]["desktop_presence"] is presence
 
 
 def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
@@ -203,6 +208,7 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
         "memory_store": None,
         "presence": MagicMock(),
         "agent_loop": agent_loop,
+        "desktop_presence": DesktopPresence(),
     }
     tasks, loops = build_proactive_runtime(config, tmp_path, **dependencies)
     assert tasks == [] and loops == {}
@@ -228,8 +234,7 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
         ],
         proactive={
             "enabled": True,
-            "target_channel": "telegram",
-            "target_chat_id": "42",
+            "candidates": [{"channel": "telegram", "chat_id": "42"}],
         },
     )
     proactive_loop = MagicMock()
@@ -270,3 +275,22 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
     )
     assert mem_tasks == [] and optimizer is None
     create_optimizer.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_role_tick_dispatcher_runs_under_the_role_session_before_a_target_exists():
+    registry = MagicMock()
+    runtime = MagicMock()
+    registry.get = AsyncMock(return_value=runtime)
+    registry.dispatch_proactive_tick = AsyncMock(return_value=0.5)
+    dispatch = _build_role_tick_dispatcher(role_id="mira", registry=registry)
+
+    assert await dispatch(AsyncMock(return_value=0.5)) == 0.5
+    registry.create_context.assert_called_once_with(
+        role_id="mira",
+        thread_id="thread:mira:desktop",
+        transport_channel="desktop",
+        transport_chat_id="role:mira",
+        source="proactive",
+        work_kind="proactive_tick",
+    )

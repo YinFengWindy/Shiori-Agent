@@ -100,7 +100,9 @@ def test_v5_prefixes_legacy_bare_qq_group_bindings_and_proactive_target() -> Non
         "3",
         "42",
     ]
-    assert role["proactive"]["target_chat_id"] == "gqq:831907794"
+    assert role["proactive"]["candidates"] == [
+        {"channel": "qq", "chat_id": "gqq:831907794"}
+    ]
     assert migrate_manifest_payload(migrated) == (migrated, False)
 
 
@@ -163,8 +165,8 @@ def test_v5_prefixes_bare_proactive_target_of_existing_gqq_group_binding() -> No
 
     joye, mira = migrated["roles"]
     assert joye["channel_bindings"][0]["chat_id"] == "gqq:7"
-    assert joye["proactive"]["target_chat_id"] == "gqq:7"
-    assert mira["proactive"]["target_chat_id"] == "8"
+    assert joye["proactive"]["candidates"] == [{"channel": "qq", "chat_id": "gqq:7"}]
+    assert mira["proactive"]["candidates"] == [{"channel": "qq", "chat_id": "8"}]
 
 
 def test_v6_fills_chat_type_from_legacy_chat_id_formats() -> None:
@@ -198,7 +200,7 @@ def test_v6_fills_chat_type_from_legacy_chat_id_formats() -> None:
     )
 
     assert changed is True
-    assert migrated["version"] == CURRENT_MANIFEST_VERSION == 8
+    assert migrated["version"] == CURRENT_MANIFEST_VERSION == 9
     assert [
         (item["channel"], item["chat_type"])
         for item in migrated["roles"][0]["channel_bindings"]
@@ -277,7 +279,9 @@ def test_v6_prefixes_bare_qqbot_chat_ids_and_their_proactive_target() -> None:
     assert [
         (item["chat_id"], item["chat_type"]) for item in role["channel_bindings"]
     ] == [("c2c:OPENID", "private"), ("c2c:OLD", "private"), ("c2c:KEEP", "private")]
-    assert role["proactive"]["target_chat_id"] == "c2c:OPENID"
+    assert role["proactive"]["candidates"] == [
+        {"channel": "qqbot", "chat_id": "c2c:OPENID"}
+    ]
     assert migrate_manifest_payload(migrated) == (migrated, False)
 
 
@@ -303,7 +307,9 @@ def test_v6_keeps_proactive_target_of_other_channels_with_the_same_id() -> None:
         }
     )
 
-    assert migrated["roles"][0]["proactive"]["target_chat_id"] == "42"
+    assert migrated["roles"][0]["proactive"]["candidates"] == [
+        {"channel": "telegram", "chat_id": "42"}
+    ]
 
 
 def test_v7_replaces_contact_whitelists_with_group_blacklists() -> None:
@@ -355,9 +361,9 @@ def test_v7_replaces_contact_whitelists_with_group_blacklists() -> None:
     assert migrate_manifest_payload(migrated) == (migrated, False)
 
 
-def test_v8_manifest_keeps_its_blacklists() -> None:
+def test_v9_manifest_is_left_untouched() -> None:
     payload = {
-        "version": 8,
+        "version": 9,
         "roles": [
             {
                 "id": "mira",
@@ -375,3 +381,63 @@ def test_v8_manifest_keeps_its_blacklists() -> None:
     }
 
     assert migrate_manifest_payload(payload) == (payload, False)
+
+
+def test_v8_target_and_desktop_become_the_candidates() -> None:
+    migrated, changed = migrate_manifest_payload(
+        {
+            "version": 8,
+            "roles": [
+                {
+                    "id": "mira",
+                    "profile": {},
+                    "channel_bindings": [
+                        {"channel": "desktop", "chat_id": "role:mira"},
+                        {"channel": "qq", "chat_id": "10001"},
+                        {"channel": "qq", "chat_id": "gqq:7"},
+                    ],
+                    "proactive": {
+                        "enabled": True,
+                        "target_channel": "qq",
+                        "target_chat_id": "gqq:7",
+                        "profile": "quiet",
+                    },
+                },
+                {
+                    "id": "luna",
+                    "profile": {},
+                    # A stale target naming no binding is dropped, and with
+                    # no candidate left proactive delivery is turned off.
+                    "channel_bindings": [{"channel": "telegram", "chat_id": "42"}],
+                    "proactive": {
+                        "enabled": True,
+                        "target_channel": "qq",
+                        "target_chat_id": "9",
+                    },
+                },
+                {
+                    "id": "nova",
+                    "profile": {},
+                    "channel_bindings": [
+                        {"channel": "desktop", "chat_id": "role:nova"}
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert changed is True
+    mira, luna, nova = migrated["roles"]
+    assert mira["proactive"] == {
+        "enabled": True,
+        "profile": "quiet",
+        "candidates": [
+            {"channel": "desktop", "chat_id": "role:mira"},
+            {"channel": "qq", "chat_id": "gqq:7"},
+        ],
+    }
+    assert luna["proactive"] == {"enabled": False, "candidates": []}
+    assert nova["proactive"] == {
+        "candidates": [{"channel": "desktop", "chat_id": "role:nova"}]
+    }
+    assert migrate_manifest_payload(migrated) == (migrated, False)

@@ -19,6 +19,8 @@ from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import StreamDeltaReady, TurnStarted
 from bus.queue import MessageBus
 from core.channels import ChannelHub
+from core.channels.chat_id_command import answer_chat_id_command
+from core.common.channel_chat_types import ChatTypeDeclaration, is_chat_id_command
 from infra.channels.contract import ChannelContext, ChannelStatus
 from infra.channels.intake import ChannelIntake
 from infra.channels.session_key import resolve_outbound_session_key
@@ -67,8 +69,11 @@ class FeishuChannel:
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         connection_factory: ConnectionFactory | None = None,
+        chat_types: tuple[ChatTypeDeclaration, ...] = (),
     ) -> None:
         self._app_id = app_id
+        # The manifest's session types, for answering ``/chatid``.
+        self._chat_types = chat_types
         self._app_secret = app_secret
         self._domain = domain
         self._api = FeishuApi(app_id, app_secret, domain, transport=transport)
@@ -280,12 +285,15 @@ class FeishuChannel:
         sender = message.sender_open_id
         if not sender:
             return
-        # Admission before resolving the payload, which downloads attachments.
-        if not self._is_bound(message.chat_id, sender):
-            return
         text = ""
         if message.message_type == "text":
             text = str(message.content.get("text") or "").strip()
+        if is_chat_id_command(text):
+            await self._handle_chat_id(message.chat_id, sender)
+            return
+        # Admission before resolving the payload, which downloads attachments.
+        if not self._is_bound(message.chat_id, sender):
+            return
         if text == STOP_COMMAND:
             await self._handle_stop(message.chat_id, sender)
             return
@@ -346,6 +354,18 @@ class FeishuChannel:
             sender,
         )
         return False
+
+    async def _handle_chat_id(self, chat_id: str, sender: str) -> None:
+        """Answers ``/chatid``; the admission exception is documented there."""
+        await answer_chat_id_command(
+            self._channel_hub,
+            channel=CHANNEL,
+            chat_id=chat_id,
+            chat_type="private",
+            sender_id=sender,
+            declarations=self._chat_types,
+            send=lambda text: self.send(chat_id, text),
+        )
 
     async def _handle_stop(self, chat_id: str, sender: str) -> None:
         if self._interrupt_controller is None:

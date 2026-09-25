@@ -14,6 +14,7 @@ from core.desktop_presence import DesktopPresence
 from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
 from desktop_bridge.runtime.service import _ServiceGeneration
+from session.manager import SessionManager
 
 _REGISTRATION = "00000000-0000-4000-a000-000000000001"
 
@@ -672,6 +673,38 @@ async def test_presence_report_updates_app_state_even_while_reloading():
     invalid = await report({"present": "no"})
     assert invalid.error.code == "invalid_request"
     assert presence.is_desktop_present() is True
+
+
+@pytest.mark.asyncio
+async def test_proactive_target_preview_reads_app_presence_even_while_reloading(
+    tmp_path,
+):
+    service = object.__new__(ReloadableDesktopService)
+    presence = DesktopPresence()
+    presence.report(False)
+    service.roles = RoleStore(tmp_path)
+    service.roles.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    sessions = SessionManager(tmp_path)
+    service.app = SimpleNamespace(
+        accepting_work=False, desktop_presence=presence, session_manager=sessions
+    )
+    service._owner = lambda *args: pytest.fail("preview never needs a generation")
+
+    async def preview(payload):
+        return await service.handle(
+            {"id": "t", "method": "roles.proactive.target", "payload": payload},
+            emit_event=lambda event: None,
+        )
+
+    candidates = [
+        {"channel": "desktop", "chat_id": "role:mira"},
+        {"channel": "qq", "chat_id": "10001"},
+    ]
+    selected = await preview({"role_id": "mira", "candidates": candidates})
+    assert selected.error is None
+    assert selected.payload == {"target": {"channel": "qq", "chat_id": "10001"}}
+    missing = await preview({"role_id": "luna", "candidates": candidates})
+    assert missing.error.code == "invalid_request"
 
 
 @pytest.mark.asyncio

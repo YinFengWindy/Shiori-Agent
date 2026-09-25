@@ -134,7 +134,7 @@ class DemoChatChannel:
 约定：
 
 - **chat_id 是渠道本地的会话标识**，也是用户在角色绑定里填的值，必须稳定、可从平台界面或状态信息里拿到。一个渠道有多种会话类型时用前缀区分，例如 QQBot 的 `c2c:<openid>` / `group:<openid>`、QQ（NapCat）群聊的 `gqq:<群号>`。
-- **访问控制只在角色绑定上**，插件不要自己维护发送者白名单。私聊绑定的对方即会话本身；群聊绑定放行所有成员，只忽略黑名单（`blocked_senders`）里的发送者 id。`is_sender_allowed` 支持可选的 `sender_alias`（如 Telegram 用户名），黑名单条目可以写成别名、忽略大小写匹配。`/stop` 这类控制命令也应先过 `is_sender_allowed`。平台特有的群聊过滤（如 QQ 群必须 @ 机器人）仍由插件负责。
+- **访问控制只在角色绑定上**，插件不要自己维护发送者白名单。私聊绑定的对方即会话本身；群聊绑定放行所有成员，只忽略黑名单（`blocked_senders`）里的发送者 id。`is_sender_allowed` 支持可选的 `sender_alias`（如 Telegram 用户名），黑名单条目可以写成别名、忽略大小写匹配。`/stop` 这类控制命令也应先过 `is_sender_allowed`。唯一刻意的例外是 `/chatid`（别名 `/myid`）：每个渠道插件在入站处理里自己识别它（`core.common.channel_chat_types.is_chat_id_command`），未绑定的会话也回复会话类型与绑定面板要填的号码（`chat_id_command_reply`，类型声明取自 `ctx.manifest.channel_chat_types(<渠道>)`），只有已绑定会话黑名单里的发送者（`channel_hub.is_sender_blocked`）不回复；它不进入角色对话。平台特有的群聊过滤（如 QQ 群必须 @ 机器人）仍由插件负责。
 - **会话键**：绑定后的消息用角色会话 `role:<role_id>`（`route_inbound` 写进 `session_key_override`），未经路由时退回 `<channel>:<chat_id>`。出站处理和流式状态统一用 `infra.channels.session_key.resolve_outbound_session_key(msg, default_channel=self.name)` 计算，与 `TurnStarted` / `StreamDeltaReady` 的 `session_key` 对齐。`/stop` 这类控制命令用 `channel_hub.resolve_runtime_session_key(channel, chat_id)` 找到角色会话，再交给 `interrupt_controller.request_interrupt(...)`。
 - 用户引用了一条历史消息时，用 `infra.channels.reply_context.build_inbound_text_with_reply_context()` 拼进正文，保持各渠道的格式一致。
 

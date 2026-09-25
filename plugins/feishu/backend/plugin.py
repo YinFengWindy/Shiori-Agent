@@ -64,5 +64,6 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             app_id=config.app_id,
             app_secret=config.app_secret,
             domain=config.base_url,
+            chat_types=ctx.manifest.channel_chat_types("feishu"),
         )
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sized
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
@@ -78,12 +79,51 @@ class RoleChannelBindingConfig:
 
 
 @dataclass(frozen=True)
+class RoleProactiveCandidate:
+    """One bound session of the role that may receive proactive messages.
+
+    A candidate only references a binding by its ``channel`` and ``chat_id``;
+    the binding itself stays the single owner of the session's settings.
+    """
+
+    channel: str
+    chat_id: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"channel": self.channel, "chat_id": self.chat_id}
+
+    @classmethod
+    def from_dict(cls, payload: object) -> "RoleProactiveCandidate":
+        if not isinstance(payload, dict):
+            raise ValueError("主动推送候选会话必须是对象")
+        channel = str(payload.get("channel") or "").strip()
+        chat_id = str(payload.get("chat_id") or "").strip()
+        if not channel or not chat_id:
+            raise ValueError("主动推送候选会话必须包含 channel 和 chat_id")
+        return cls(channel=channel, chat_id=chat_id)
+
+    @classmethod
+    def of_binding(cls, binding: RoleChannelBindingConfig) -> "RoleProactiveCandidate":
+        """References ``binding`` as a candidate session."""
+        return cls(channel=binding.channel, chat_id=binding.chat_id)
+
+
+def keeps_proactive_enabled(enabled: bool, candidates: Sized) -> bool:
+    """Proactive delivery stays on only while it has a candidate session to go to."""
+    return enabled and bool(candidates)
+
+
+@dataclass(frozen=True)
 class RoleProactiveConfig:
-    """角色自己的主动推送目标、策略与执行参数。"""
+    """角色自己的主动推送候选会话、策略与执行参数。
+
+    ``candidates`` lists the bound sessions a proactive message may go to, in
+    binding order; each message is delivered once, to the one candidate the
+    target selection picks at send time.
+    """
 
     enabled: bool = False
-    target_channel: str = ""
-    target_chat_id: str = ""
+    candidates: tuple[RoleProactiveCandidate, ...] = ()
     profile: str = "daily"
     overrides: dict[str, Any] = field(default_factory=dict)
     agent: dict[str, Any] = field(default_factory=dict)
@@ -95,8 +135,7 @@ class RoleProactiveConfig:
         agent.pop("model", None)
         return {
             "enabled": self.enabled,
-            "target_channel": self.target_channel,
-            "target_chat_id": self.target_chat_id,
+            "candidates": [candidate.to_dict() for candidate in self.candidates],
             "profile": self.profile,
             "overrides": dict(self.overrides),
             "agent": agent,
@@ -112,10 +151,14 @@ class RoleProactiveConfig:
             raise ValueError("角色主动推送 profile 不能为空")
         agent = _proactive_dict_field(data, "agent")
         agent.pop("model", None)
+        raw_candidates = data.get("candidates", [])
+        if not isinstance(raw_candidates, list):
+            raise ValueError("角色主动推送 candidates 必须是数组")
         return cls(
             enabled=bool(data.get("enabled", False)),
-            target_channel=str(data.get("target_channel") or "").strip(),
-            target_chat_id=str(data.get("target_chat_id") or "").strip(),
+            candidates=tuple(
+                RoleProactiveCandidate.from_dict(item) for item in raw_candidates
+            ),
             profile=profile,
             overrides=_proactive_dict_field(data, "overrides"),
             agent=agent,
@@ -206,6 +249,7 @@ class RoleRecord:
             for path, category_id in self.asset_category_bindings.items()
             if normalize_rel_path(path)
         }
+        payload["proactive"] = self.proactive.to_dict()
         payload["profile"] = self.profile.to_dict()
         return payload
 

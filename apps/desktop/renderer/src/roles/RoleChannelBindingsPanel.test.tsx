@@ -141,7 +141,7 @@ describe("RoleChannelBindingsPanel", () => {
     let latest: RoleFormState | undefined;
     const channels = [desktop, channel("qqbot", "plugin_disabled", qqbotDeclaration), channel("telegram", "active", telegramDeclaration)];
     function Harness() {
-      const [form, setForm] = useState<RoleFormState>({ ...createEmptyRoleForm(), channelBindings: [qqbotBinding], proactiveTargetChannel: "qqbot", proactiveTargetChatId: "c2c:ABC" });
+      const [form, setForm] = useState<RoleFormState>({ ...createEmptyRoleForm(), channelBindings: [qqbotBinding], proactiveCandidates: [{ channel: "qqbot", chat_id: "c2c:ABC" }] });
       latest = form;
       return <RoleChannelBindingsPanel activeRoleId="mira" bindings={form.channelBindings ?? []} channels={channels} onUpdate={setForm} onOpenPluginSettings={() => undefined} />;
     }
@@ -157,8 +157,8 @@ describe("RoleChannelBindingsPanel", () => {
 
       await act(async () => button("移除QQBot绑定").click());
       assert.deepEqual(latest?.channelBindings, [{ channel: "telegram", chat_id: "", chat_type: "private", blocked_senders: [] }]);
-      // Removing the proactive target's binding clears the dangling target.
-      assert.equal(latest?.proactiveTargetChannel, "");
+      // A removed binding leaves the candidates; the new private one joined them.
+      assert.deepEqual(latest?.proactiveCandidates, [{ channel: "telegram", chat_id: "" }]);
     } finally {
       await view.cleanup();
     }
@@ -175,6 +175,8 @@ describe("RoleChannelBindingsPanel", () => {
       await chooseSelectOption("类型", "群聊");
       await changeInputValue(numberInput("群号"), "831907794");
       assert.deepEqual(state.form?.channelBindings, [{ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", blocked_senders: [] }]);
+      // A group does not receive proactive messages by default.
+      assert.deepEqual(state.form?.proactiveCandidates, []);
     } finally {
       await view.cleanup();
     }
@@ -258,6 +260,31 @@ describe("RoleChannelBindingsPanel", () => {
     assert.match(markup, /role="textbox" aria-label="类型" aria-readonly="true">群聊</);
     assert.match(markup, /<input[^>]*readOnly="" value="gqq:831907794"/);
     assert.doesNotMatch(markup, /role="combobox"/);
+  });
+
+  it("makes new private and desktop bindings candidates and keeps the flag while the number is typed", async () => {
+    const { view, state, numberInput } = await mountEditablePanel([]);
+    try {
+      const add = view.container.querySelector<HTMLButtonElement>('button[aria-label="添加渠道绑定"]');
+      assert.ok(add);
+      await act(async () => add.click());
+      await changeInputValue(numberInput("QQ 号"), "3174898512");
+      await act(async () => add.click());
+      await chooseSelectOption("渠道", "桌面端", 1);
+
+      assert.deepEqual(state.form?.proactiveCandidates, [
+        { channel: "qq", chat_id: "3174898512" },
+        { channel: "desktop", chat_id: "role:mira" },
+      ]);
+    } finally {
+      await view.cleanup();
+    }
+  });
+
+  it("has no delivery order badge or move buttons", () => {
+    const markup = renderPanel([qqbotBinding, { channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] }], typedChannels);
+
+    assert.doesNotMatch(markup, /投递顺序|上移|下移/);
   });
 
   it("shows the desktop session without a type and read-only", () => {

@@ -18,6 +18,7 @@ from .scene_followup_runtime import SceneFollowupRuntime
 from .models import (
     RoleAssetCategory,
     RoleChannelBindingConfig,
+    RoleProactiveCandidate,
     RoleProactiveConfig,
     RoleRecord,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "RoleMemoryService",
     "RoleRelationshipRuntimeService",
     "RoleRecord",
+    "RoleProactiveCandidate",
     "RoleProactiveConfig",
     "RoleRepository",
     "SceneFollowupRuntime",

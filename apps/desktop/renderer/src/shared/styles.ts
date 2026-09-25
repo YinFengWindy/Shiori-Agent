@@ -108,6 +108,9 @@ export const panelHeadClass = "panel-head mb-3 flex items-center justify-between
 /** Reusable display-face panel title. */
 export const panelTitleClass = "m-0 font-display text-title text-ink";
 
+/** Native checkbox tinted with the accent color. */
+export const checkboxClass = "h-4 w-4 accent-accent";
+
 /** Soft pill badge for statuses and tags. */
 export const badgeClass =
   "inline-flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-0.5 text-caption text-accent-text";

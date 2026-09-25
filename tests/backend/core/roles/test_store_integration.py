@@ -10,6 +10,7 @@ from bus.events import InboundMessage
 from core.common.channel_chat_types import ChatTypeDeclaration
 from core.roles import (
     RoleAggregateService,
+    RoleProactiveCandidate,
     RoleStore,
 )
 from core.roles.inbound import route_inbound_by_role
@@ -202,7 +203,7 @@ def test_role_store_persists_runtime_config_updates(tmp_path: Path):
     assert reloaded.runtime_config["nsfw_memory_enabled"] is True
 
 
-def test_role_store_keeps_group_blacklist_and_proactive_target_on_the_role(
+def test_role_store_keeps_group_blacklist_and_proactive_candidates_on_the_role(
     tmp_path: Path,
 ):
     store = RoleStore(tmp_path)
@@ -220,7 +221,7 @@ def test_role_store_keeps_group_blacklist_and_proactive_target_on_the_role(
             },
             {"channel": "qq", "chat_id": "7", "chat_type": "private"},
         ],
-        proactive={"enabled": True, "target_channel": "qq", "target_chat_id": "7"},
+        proactive={"enabled": True, "candidates": [{"channel": "qq", "chat_id": "7"}]},
     )
 
     assert updated.channel_bindings[0].blocked_senders == ["alice", "bob"]
@@ -228,7 +229,7 @@ def test_role_store_keeps_group_blacklist_and_proactive_target_on_the_role(
     reloaded = RoleStore(tmp_path).get_role("mira")
     assert reloaded is not None
     assert reloaded.channel_bindings == updated.channel_bindings
-    assert updated.proactive.target_channel == "qq"
+    assert reloaded.proactive.candidates == (RoleProactiveCandidate("qq", "7"),)
     luna = store.get_role("luna")
     assert luna is not None
     assert luna.channel_bindings == []
@@ -305,11 +306,11 @@ def test_role_store_rejects_binding_without_chat_type(tmp_path: Path):
         )
 
 
-def test_role_store_rejects_proactive_target_in_other_qq_chat_form(tmp_path: Path):
+def test_role_store_rejects_proactive_candidate_in_other_qq_chat_form(tmp_path: Path):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
 
-    with pytest.raises(ValueError, match="已绑定的渠道"):
+    with pytest.raises(ValueError, match="已绑定的会话"):
         store.update_role(
             "mira",
             channel_bindings=[
@@ -321,13 +322,12 @@ def test_role_store_rejects_proactive_target_in_other_qq_chat_form(tmp_path: Pat
             ],
             proactive={
                 "enabled": True,
-                "target_channel": "qq",
-                "target_chat_id": "gqq:7",
+                "candidates": [{"channel": "qq", "chat_id": "gqq:7"}],
             },
         )
 
 
-def test_role_store_rejects_proactive_target_outside_its_bindings(tmp_path: Path):
+def test_role_store_rejects_proactive_candidate_outside_its_bindings(tmp_path: Path):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
 
@@ -336,17 +336,16 @@ def test_role_store_rejects_proactive_target_outside_its_bindings(tmp_path: Path
             "mira",
             proactive={
                 "enabled": True,
-                "target_channel": "telegram",
-                "target_chat_id": "42",
+                "candidates": [{"channel": "telegram", "chat_id": "42"}],
             },
         )
     except ValueError as exc:
         assert "当前角色已绑定" in str(exc)
     else:
-        raise AssertionError("主动推送目标必须属于当前角色")
+        raise AssertionError("主动推送候选会话必须属于当前角色")
 
 
-def test_role_store_disables_proactive_when_its_target_binding_is_removed(
+def test_role_store_disables_proactive_when_its_last_candidate_binding_is_removed(
     tmp_path: Path,
 ):
     store = RoleStore(tmp_path)
@@ -362,15 +361,14 @@ def test_role_store_disables_proactive_when_its_target_binding_is_removed(
         ],
         proactive={
             "enabled": True,
-            "target_channel": "telegram",
-            "target_chat_id": "42",
+            "candidates": [{"channel": "telegram", "chat_id": "42"}],
         },
     )
 
     updated = store.update_role("mira", channel_bindings=[])
 
     assert updated.proactive.enabled is False
-    assert updated.proactive.target_channel == ""
+    assert updated.proactive.candidates == ()
 
 
 def test_role_store_rejects_desktop_binding_for_another_role_session(tmp_path: Path):

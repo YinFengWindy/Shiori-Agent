@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 
 from bus.events import InboundMessage
+from core.channels.chat_id_command import answer_chat_id_command
+from core.common.channel_chat_types import ChatType
 from core.common.channel_identifiers import normalize_qq_group_chat_id
 
 from .compat import download_to_temp
@@ -127,6 +129,20 @@ class _InboundMixin:
             return True
         logger.warning("[qq] 忽略未绑定渠道或黑名单成员的%s chat_id=%s", kind, chat_id)
         return False
+
+    async def _handle_chat_id(
+        self, chat_id: str, user_id: str, chat_type: ChatType
+    ) -> None:
+        """Answers ``/chatid``; the admission exception is documented there."""
+        await answer_chat_id_command(
+            self._channel_hub,
+            channel=CHANNEL,
+            chat_id=chat_id,
+            chat_type=chat_type,
+            sender_id=user_id,
+            declarations=self._chat_types,
+            send=lambda text: self.send(chat_id, text),
+        )
 
     def _resolve_runtime_session_key(self, chat_id: str) -> str:
         if self._channel_hub is not None:

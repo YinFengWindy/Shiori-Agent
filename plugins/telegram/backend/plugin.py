@@ -38,4 +38,9 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     # 未配置时不导入 python-telegram-bot，保持内置时期「有 token 才加载」的启动开销。
     from .channel import TelegramChannel
 
-    ctx.channels.add(TelegramChannel(token=config.token))
+    ctx.channels.add(
+        TelegramChannel(
+            token=config.token,
+            chat_types=ctx.manifest.channel_chat_types("telegram"),
+        )
+    )

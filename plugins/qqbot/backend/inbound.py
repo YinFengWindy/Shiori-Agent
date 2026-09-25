@@ -4,6 +4,8 @@ import logging
 from typing import Any
 
 from bus.events import InboundMessage
+from core.channels.chat_id_command import answer_chat_id_command
+from core.common.channel_chat_types import is_chat_id_command
 
 from .formatting import CHANNEL, as_dict
 
@@ -27,10 +29,13 @@ class _InboundMixin:
         if not user_openid:
             return
         chat_id = f"c2c:{user_openid}"
+        content = str(data.get("content") or "").strip()
+        if is_chat_id_command(content):
+            await self._handle_chat_id(chat_id, user_openid)
+            return
         # Admission before any side effect: no reply anchor, no input notify.
         if not self._is_sender_admitted(chat_id, user_openid):
             return
-        content = str(data.get("content") or "").strip()
         message_id = str(data.get("id") or "").strip()
         if message_id:
             self._last_c2c_msg_id[user_openid] = message_id
@@ -67,6 +72,18 @@ class _InboundMixin:
             return True
         logger.warning("[qqbot] 忽略未绑定渠道的消息 chat_id=%s", chat_id)
         return False
+
+    async def _handle_chat_id(self, chat_id: str, sender: str) -> None:
+        """Answers ``/chatid``; the admission exception is documented there."""
+        await answer_chat_id_command(
+            self._channel_hub,
+            channel=CHANNEL,
+            chat_id=chat_id,
+            chat_type="private",
+            sender_id=sender,
+            declarations=self._chat_types,
+            send=lambda text: self.send(chat_id, text),
+        )
 
     async def _publish_inbound(self, message: InboundMessage) -> None:
         await self._intake.submit(message)

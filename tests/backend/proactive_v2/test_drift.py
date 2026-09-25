@@ -914,11 +914,7 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
     )
     tick = ProactiveTurnPipeline(
         ProactiveTurnPipelineDeps(
-            cfg=cfg_with(
-                drift_enabled=True,
-                default_channel="telegram",
-                default_chat_id="1",
-            ),
+            cfg=cfg_with(drift_enabled=True),
             session_key="test_session",
             state_store=SimpleNamespace(
                 count_deliveries_in_window=lambda *_args: 0,
@@ -932,7 +928,6 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
                 record_tick_step_log=lambda **_kwargs: None,
             ),
             any_action_gate=gate,
-            last_user_at_fn=lambda: None,
             passive_busy_fn=None,
             turn_orchestrator=orchestrator,
             deduper=AsyncMock(),
@@ -957,6 +952,7 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
                 ),
                 max_steps=5,
             ),
+            target_transport_fn=lambda: ("telegram", "1"),
             tool_hooks=None,
         )
     )
@@ -1360,12 +1356,10 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
     deps = AgentTickDeps(
         cfg=cfg_with(
             drift_enabled=True,
-            default_role_id="mira",
-            default_channel="telegram",
-            default_chat_id="1",
+            role_id="mira",
         ),
         sense=SimpleNamespace(
-            target_session_key=lambda: "telegram:1",
+            target_session_key=lambda: "role:mira",
             target_transport=lambda: ("telegram", "1"),
             collect_recent=lambda: [],
             collect_recent_proactive=lambda n: [],
@@ -1433,7 +1427,7 @@ async def test_factory_drift_send_message_uses_bound_transport_from_role(
         path=tmp_path / "proactive_state.json", mark_delivery=MagicMock()
     )
     factory, sender = _build_factory(tmp_path, sender_ok=True, state_store=state)
-    factory._deps.cfg.default_role_id = "mira"
+    factory._deps.cfg.role_id = "mira"
     factory._deps.sense = SimpleNamespace(
         target_session_key=lambda: "role:mira",
         target_transport=lambda: ("qq", "group-42"),

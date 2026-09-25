@@ -232,12 +232,16 @@ class PushTool:
 class Hub:
     """Routes like the real hub: bound chats land on the role session."""
 
-    def __init__(self, *, allowed: bool = True) -> None:
+    def __init__(self, *, allowed: bool = True, blocked: bool = False) -> None:
         self.allowed = allowed
+        self.blocked = blocked
         self.deliveries: list[str] = []
 
     def is_sender_allowed(self, **kwargs: object) -> bool:
         return self.allowed
+
+    def is_sender_blocked(self, **kwargs: object) -> bool:
+        return self.blocked
 
     def route_inbound(self, message: InboundMessage) -> InboundMessage:
         message.metadata.update(
@@ -287,7 +291,9 @@ class Harness:
         await self.channel._intake.drain()
 
 
-def build_harness(tmp_path: Any, *, allowed: bool = True, **channel_kwargs: Any):
+def build_harness(
+    tmp_path: Any, *, allowed: bool = True, blocked: bool = False, **channel_kwargs: Any
+):
     api = FakeFeishu()
     factory = ConnectionFactoryRecorder(fail_first=channel_kwargs.pop("fail_first", 0))
     channel = FeishuChannel(
@@ -298,7 +304,7 @@ def build_harness(tmp_path: Any, *, allowed: bool = True, **channel_kwargs: Any)
         connection_factory=factory,
         **channel_kwargs,
     )
-    bus, push_tool, hub = Bus(), PushTool(), Hub(allowed=allowed)
+    bus, push_tool, hub = Bus(), PushTool(), Hub(allowed=allowed, blocked=blocked)
     event_bus, interrupts = EventBus(), Interrupts()
     context = ChannelContext(
         bus=cast(Any, bus),
@@ -344,7 +350,7 @@ def message_event(
 
 @pytest.fixture
 async def make_harness(tmp_path: Any) -> AsyncIterator[Any]:
-    """Builds harnesses (``allowed=``, ``fail_first=``) and
+    """Builds harnesses (``allowed=``, ``blocked=``, ``fail_first=``) and
     stops every channel at teardown."""
     built: list[Harness] = []
 

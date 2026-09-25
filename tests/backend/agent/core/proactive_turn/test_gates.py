@@ -32,7 +32,7 @@ def _ctx() -> ProactiveGateContext:
         tick_id="tick",
         session_key="role:mira",
         now_utc=datetime.now(timezone.utc),
-        target_transports=(("desktop", "role:mira"),),
+        target_transport=("desktop", "role:mira"),
     )
 
 

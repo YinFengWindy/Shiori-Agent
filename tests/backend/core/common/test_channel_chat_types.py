@@ -5,6 +5,8 @@ import pytest
 from core.common.channel_chat_types import (
     ChatType,
     ChatTypeDeclaration,
+    chat_id_command_reply,
+    is_chat_id_command,
     validate_chat_id_for_type,
 )
 
@@ -71,3 +73,34 @@ def test_rejects_another_types_prefix_after_the_selected_one() -> None:
 
     with pytest.raises(ValueError, match="dm:<用户 ID>"):
         validate_chat_id_for_type("dm:room:1", "private", declarations)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["/chatid", " /chatid ", "/CHATID", "/chatid@shiori_bot", "/myid", "/chatid x"],
+)
+def test_chat_id_command_is_recognized(text: str) -> None:
+    assert is_chat_id_command(text)
+
+
+@pytest.mark.parametrize("text", ["", "chatid", "/stop", "/chatids", "hi /chatid"])
+def test_other_text_is_not_the_chat_id_command(text: str) -> None:
+    assert not is_chat_id_command(text)
+
+
+def test_chat_id_reply_gives_the_binding_form_fields_without_the_prefix() -> None:
+    assert (
+        chat_id_command_reply("gqq:831907794", "group", _QQ)
+        == "会话类型：群聊\n群号：831907794"
+    )
+    assert chat_id_command_reply("3174898512", "private", _QQ) == (
+        "会话类型：私聊\nQQ 号：3174898512"
+    )
+    assert chat_id_command_reply("-100", "group", _TELEGRAM) == (
+        "会话类型：群聊\n群组 ID：-100"
+    )
+
+
+def test_chat_id_reply_requires_a_declared_type() -> None:
+    with pytest.raises(ValueError, match="未声明会话类型 group"):
+        chat_id_command_reply("x", "group", (_QQ[0],))

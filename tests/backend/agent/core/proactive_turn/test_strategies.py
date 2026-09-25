@@ -18,7 +18,7 @@ from agent.core.proactive_turn.strategies import (
 
 def _context():
     return ProactiveGateContext(
-        "tick", "role:mira", datetime.now(timezone.utc), (("desktop", "role:mira"),)
+        "tick", "role:mira", datetime.now(timezone.utc), ("desktop", "role:mira")
     )
 
 

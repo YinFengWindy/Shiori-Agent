@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Awaitable, Callable
+from typing import Any, Callable
 
 from ..drift_turn import DriftTurnPipeline
 from agent.tool_hooks import ToolHook
@@ -55,7 +54,6 @@ class ProactiveTurnPipelineDeps:
     session_key: str
     state_store: Any
     any_action_gate: Any | None
-    last_user_at_fn: Callable[[], datetime | None]
     passive_busy_fn: Callable[[str], bool] | None
     turn_orchestrator: TurnOrchestrator | None
     deduper: Any | None
@@ -67,8 +65,7 @@ class ProactiveTurnPipelineDeps:
     rng: Any | None
     recent_proactive_fn: Callable[[], list] | None
     drift_pipeline: DriftTurnPipeline | None
-    target_transport_fn: Callable[[], tuple[str, str]] | None = None
-    target_transports_fn: Callable[[], list[tuple[str, str]]] | None = None
-    retry_wait_fn: Callable[[float], Awaitable[None]] | None = None
+    # Selects this tick's single delivery target; None means no candidate session.
+    target_transport_fn: Callable[[], tuple[str, str] | None] | None = None
     tool_hooks: list[ToolHook] | None = None
     proactive_gates: ProactiveGateChain | None = None

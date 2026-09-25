@@ -147,3 +147,33 @@ def test_conversation_service_archives_old_role_thread_on_channel_rebind(
     assert archived.legacy_session_key == ""
     assert rebound.id == "thread:yuki:telegram:123"
     assert mapped == rebound
+
+
+def test_last_user_message_at_reads_only_user_rows_of_one_thread(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    legacy = SessionStore(db_path)
+    legacy.create_session(key="role:mira", metadata={"role_id": "mira"})
+    rows = [
+        ("user", "thread:mira:qq:10001", "2026-09-25T09:00:00+08:00"),
+        ("user", "thread:mira:qq:10001", "2026-09-25T10:00:00+08:00"),
+        # A later proactive reply is not the user speaking.
+        ("assistant", "thread:mira:qq:10001", "2026-09-25T11:00:00+08:00"),
+        ("user", "thread:mira:qq:gqq:7", "2026-09-25T12:00:00+08:00"),
+    ]
+    for seq, (role, thread_id, ts) in enumerate(rows):
+        legacy.insert_message(
+            "role:mira", role=role, content="x", ts=ts, seq=seq, thread_id=thread_id
+        )
+    legacy.close()
+
+    store = ConversationStore(db_path)
+    try:
+        assert (
+            store.last_user_message_at("thread:mira:qq:10001")
+            == "2026-09-25T10:00:00+08:00"
+        )
+        assert store.last_user_message_at("thread:mira:telegram:42") is None
+    finally:
+        store.close()

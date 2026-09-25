@@ -23,7 +23,8 @@ class ProactiveGateContext:
     tick_id: str
     session_key: str
     now_utc: datetime
-    target_transports: tuple[tuple[str, str], ...]
+    # The single (channel, chat_id) this tick delivers to.
+    target_transport: tuple[str, str]
 
 
 @dataclass(frozen=True)

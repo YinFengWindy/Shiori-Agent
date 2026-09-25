@@ -1,107 +1,78 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+from agent.core.proactive_turn import ResolveResult
 from agent.core.proactive_turn.delivery import (
+    deliver_execute,
     resolve_target_transport,
-    resolve_target_transports,
 )
+from agent.turns.result import TurnResult
+from proactive_v2.context import AgentTickContext
 
 
-def _pipeline(
-    *,
-    session_key: str,
-    default_role_id: str = "",
-    target_transport_fn=None,
-    target_transports_fn=None,
-):
+def _pipeline(*, orchestrator=None):
     return SimpleNamespace(
-        _session_key=session_key,
-        _cfg=SimpleNamespace(
-            default_role_id=default_role_id,
-            default_channel="telegram",
-            default_chat_id="global-chat",
-        ),
-        _target_transport_fn=target_transport_fn,
-        _target_transports_fn=target_transports_fn,
-        _resolve_target_transport=lambda: resolve_target_transport(
-            SimpleNamespace(
-                _session_key=session_key,
-                _cfg=SimpleNamespace(
-                    default_role_id=default_role_id,
-                    default_channel="telegram",
-                    default_chat_id="global-chat",
-                ),
-                _target_transport_fn=target_transport_fn,
-                _target_transports_fn=None,
-            )
-        ),
+        _session_key="role:mira",
+        _turn_orchestrator=orchestrator,
+        _record_tick_log_finish=lambda ctx, **kwargs: None,
     )
 
 
-def test_role_target_resolver_failure_propagates_without_global_fallback() -> None:
+def test_target_resolver_failure_propagates() -> None:
     def fail() -> tuple[str, str]:
         raise RuntimeError("binding unavailable")
-
-    pipeline = _pipeline(session_key="role:mira", target_transport_fn=fail)
 
     # Resolver errors surface to the tick boundary instead of becoming no_target.
     with pytest.raises(RuntimeError, match="binding unavailable"):
-        _ = resolve_target_transport(pipeline)
+        _ = resolve_target_transport(fail)
 
 
-def test_role_target_resolver_empty_result_does_not_fall_back_to_global_target() -> (
-    None
-):
-    pipeline = _pipeline(
-        session_key="role:mira",
-        target_transport_fn=lambda: ("", ""),
+def test_role_without_candidates_has_no_target() -> None:
+    assert resolve_target_transport(lambda: None) is None
+
+
+def test_incomplete_target_is_rejected() -> None:
+    with pytest.raises(ValueError, match="incomplete"):
+        _ = resolve_target_transport(lambda: ("qq", ""))
+
+
+def test_selected_target_is_returned_stripped() -> None:
+    assert resolve_target_transport(lambda: (" qq ", " gqq:7 ")) == ("qq", "gqq:7")
+
+
+@pytest.mark.asyncio
+async def test_delivery_sends_once_to_the_tick_target() -> None:
+    orchestrator = SimpleNamespace(handle_proactive_turn=AsyncMock(return_value=True))
+    ctx = AgentTickContext(
+        session_key="role:mira", target_channel="qq", target_chat_id="gqq:7"
+    )
+    result = TurnResult(decision="skip", outbound=None)
+
+    await deliver_execute(
+        _pipeline(orchestrator=orchestrator),
+        ctx,
+        ResolveResult(action="send", result=result),
     )
 
-    assert resolve_target_transport(pipeline) is None
-
-
-def test_role_transport_list_failure_propagates_without_global_fallback() -> None:
-    def fail() -> list[tuple[str, str]]:
-        raise RuntimeError("bindings unavailable")
-
-    pipeline = _pipeline(
-        session_key="telegram:global",
-        default_role_id="mira",
-        target_transports_fn=fail,
-        target_transport_fn=lambda: ("telegram", "global-chat"),
+    orchestrator.handle_proactive_turn.assert_awaited_once_with(
+        result=result, session_key="role:mira", channel="qq", chat_id="gqq:7"
     )
 
-    with pytest.raises(RuntimeError, match="bindings unavailable"):
-        _ = resolve_target_transports(pipeline)
 
+@pytest.mark.asyncio
+async def test_delivery_without_a_tick_target_fails() -> None:
+    orchestrator = SimpleNamespace(handle_proactive_turn=AsyncMock(return_value=True))
 
-def test_role_transport_list_empty_result_does_not_fall_back_to_global_target() -> None:
-    pipeline = _pipeline(
-        session_key="telegram:global",
-        default_role_id="mira",
-        target_transports_fn=lambda: [],
-        target_transport_fn=lambda: ("telegram", "global-chat"),
-    )
-
-    assert resolve_target_transports(pipeline) == []
-
-
-def test_global_target_resolver_failure_propagates() -> None:
-    def fail() -> tuple[str, str]:
-        raise RuntimeError("binding unavailable")
-
-    pipeline = _pipeline(session_key="telegram:global", target_transport_fn=fail)
-
-    with pytest.raises(RuntimeError, match="binding unavailable"):
-        _ = resolve_target_transport(pipeline)
-
-
-def test_global_target_resolver_empty_result_uses_global_fallback() -> None:
-    pipeline = _pipeline(
-        session_key="telegram:global", target_transport_fn=lambda: ("", "")
-    )
-
-    assert resolve_target_transport(pipeline) == ("telegram", "global-chat")
+    with pytest.raises(RuntimeError, match="unavailable"):
+        await deliver_execute(
+            _pipeline(orchestrator=orchestrator),
+            AgentTickContext(session_key="role:mira"),
+            ResolveResult(
+                action="send", result=TurnResult(decision="skip", outbound=None)
+            ),
+        )
+    orchestrator.handle_proactive_turn.assert_not_awaited()
