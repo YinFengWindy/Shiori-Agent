@@ -19,7 +19,7 @@ export function FeedbackDetail({ detail, open, onToggle }: { detail: string; ope
         <CaretDown className={cx("h-3 w-3 transition-transform duration-quick", open && "rotate-180")} weight="bold" aria-hidden="true" />
       </button>
       {open ? (
-        <pre className="m-0 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white/60 p-2 text-left font-mono text-caption text-ink-secondary">{detail}</pre>
+        <pre className="scrollbar-stable m-0 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white/60 p-2 text-left font-mono text-caption text-ink-secondary">{detail}</pre>
       ) : null}
     </>
   );

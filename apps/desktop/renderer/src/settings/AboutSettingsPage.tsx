@@ -68,7 +68,7 @@ export function AboutSettingsPage() {
     // 吟风 already stands beside the card: errors on this page stay plain.
     <MascotOnStage active={mascotEnabled}>
       <div className="grid gap-7" data-testid="about-settings">
-        {mascotEnabled ? <AboutMascot phase={state?.phase}>{updateCard}</AboutMascot> : updateCard}
+        {mascotEnabled ? <AboutMascot phase={state?.phase} failed={Boolean(error)}>{updateCard}</AboutMascot> : updateCard}
         <SettingsGroup title="联系">
           <dl className="m-0 grid">
             <div className="grid gap-1 border-b border-line-soft py-4 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center">

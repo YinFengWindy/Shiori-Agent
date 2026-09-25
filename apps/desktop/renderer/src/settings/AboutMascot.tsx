@@ -12,8 +12,13 @@ import { useAboutMascotLine } from "./aboutMascotLine";
  * announced in her line too. Her lines are an owner-approved exception to
  * 「不写叙述文字」. Styles: `.about-mascot*` in styles.css.
  */
-export function AboutMascot({ phase, children }: { phase: DesktopUpdateState["phase"] | undefined; children: ReactNode }) {
-  const { line, next } = useAboutMascotLine(phase);
+export function AboutMascot({ phase, failed = false, children }: {
+  phase: DesktopUpdateState["phase"] | undefined;
+  /** The page's update request just failed (see `useAboutMascotLine`). */
+  failed?: boolean;
+  children: ReactNode;
+}) {
+  const { line, next } = useAboutMascotLine(phase, failed);
   return (
     <div className="about-mascot" data-testid="about-mascot">
       <div className="about-mascot-main">

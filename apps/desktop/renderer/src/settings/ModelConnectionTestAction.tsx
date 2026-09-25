@@ -25,8 +25,8 @@ export function ModelConnectionTestAction({ registration, onTested }: {
           : <PlugsConnected className="h-4 w-4" weight="bold" aria-hidden="true" />}
         {testing ? "正在测试" : "测试连接"}
       </button>
-      {/* A failure (her line + the provider's message) takes its own row under the button. */}
-      <div role="status" className={cx("min-w-0 flex-1 self-center", view.status === "failure" && "basis-full")}>
+      {/* A failure (her line + the provider's message) keeps a readable width: beside the button when it fits, else on its own row. */}
+      <div role="status" className={cx("min-w-0 flex-1 self-center", view.status === "failure" && "min-w-[16rem]")}>
         {view.status === "success" ? (
           <span className="inline-flex items-center gap-1.5 text-body-sm text-success-text">
             <CheckCircle className="h-4 w-4 shrink-0" weight="fill" aria-hidden="true" />连接成功 · {view.latencyMs} ms
