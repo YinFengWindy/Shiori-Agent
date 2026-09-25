@@ -3,27 +3,30 @@ import { cx } from "../shared/styles";
 import type { RoleChannelBinding, RoleChatType } from "../shared/types";
 import { Select } from "../shared/ui/Select";
 import { roleBindingChatIdCopy } from "./roleChannelCatalog";
-import { composeRoleBindingChatId, findRoleChatType, roleBindingNumber, roleChatTypeOptions } from "./roleChatTypes";
+import { composeRoleBindingChatId, findRoleChatType, roleBindingNumber, roleChatTypeLabel, roleChatTypeOptions } from "./roleChatTypes";
 import { roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";
 
 const lockedFieldClass = cx(roleFieldClass, "cursor-default text-ink-muted");
 
 type ChatTypeFieldProps = {
   binding: RoleChannelBinding;
-  /** A channel that declares at least one session type. */
-  channel: ChannelSummary;
+  /** The binding's channel; null when no catalog row declares it (loading, or its plugin is gone). */
+  channel: ChannelSummary | null;
   readOnly: boolean;
   onChange: (chatType: RoleChatType) => void;
 };
 
-/** Session type picker; read-only when the binding is locked or the channel declares a single type. */
+/**
+ * Session type picker. Read-only when the binding is locked, the channel
+ * declares a single type, or no declaration is available (then the stored type shows).
+ */
 export function RoleChannelBindingChatTypeField({ binding, channel, readOnly, onChange }: ChatTypeFieldProps) {
-  const locked = readOnly || channel.chatTypes.length === 1;
+  const locked = readOnly || channel === null || channel.chatTypes.length <= 1;
   return (
     <div className={cx(roleFieldLabelClass, "min-w-0")}>
       <span className="flex min-h-5 items-center">类型</span>
-      {locked
-        ? <span className={cx(lockedFieldClass, "truncate")} role="textbox" aria-label="类型" aria-readonly="true">{findRoleChatType(channel, binding.chat_type)?.label ?? binding.chat_type}</span>
+      {locked || channel === null
+        ? <span className={cx(lockedFieldClass, "truncate")} role="textbox" aria-label="类型" aria-readonly="true">{roleChatTypeLabel(channel, binding.chat_type)}</span>
         : <Select aria-label="类型" className={roleFieldClass} value={binding.chat_type} onValueChange={(value) => {
             const next = channel.chatTypes.find((item) => item.type === value);
             if (next) onChange(next.type);
@@ -40,20 +43,22 @@ type ChatIdFieldProps = {
 };
 
 /**
- * Number input for a binding. With a declared session type it shows the number
- * only and writes back the type's prefix; otherwise it edits the raw chat id.
+ * Number input for a binding: shows the number without the selected type's
+ * prefix and writes the prefix back. Without a declared type (desktop, or a
+ * binding whose plugin is gone) the stored chat id shows read-only.
  */
 export function RoleChannelBindingChatIdField({ binding, channel, readOnly, onChange }: ChatIdFieldProps) {
   const chatType = findRoleChatType(channel, binding.chat_type);
-  const copy = roleBindingChatIdCopy(channel, chatType);
+  const copy = roleBindingChatIdCopy(chatType);
+  const locked = readOnly || chatType === null;
   return (
     <label className={cx(roleFieldLabelClass, "min-w-0")}>
       <span className="flex min-h-5 items-center">{copy.label}</span>
       <input
-        className={readOnly ? lockedFieldClass : roleFieldClass}
+        className={locked ? lockedFieldClass : roleFieldClass}
         value={roleBindingNumber(binding.chat_id, chatType)}
         placeholder={copy.placeholder}
-        readOnly={readOnly}
+        readOnly={locked}
         onChange={(event) => onChange(composeRoleBindingChatId(event.target.value, chatType))}
       />
     </label>

@@ -8,24 +8,30 @@ import {
   findRoleChatType,
   roleBindingDisplayLabel,
   roleBindingNumber,
+  roleChatTypeLabel,
   roleChatTypeOptions,
 } from "./roleChatTypes";
 
 const qq: ChannelSummary = {
-  name: "qq", label: "QQ（NapCat）", contactLabel: "QQ 号", chatIdLabel: null, chatIdHint: null,
+  name: "qq", label: "QQ（NapCat）", contactLabel: "QQ 号",
   chatTypes: [
     { type: "private", label: "私聊", chatIdLabel: "QQ 号", chatIdHint: null, prefix: null },
     { type: "group", label: "群聊", chatIdLabel: "群号", chatIdHint: null, prefix: "gqq:" },
   ],
   pluginId: "qq", pluginEnabled: true, state: "active", error: "", status: null,
 };
-const telegram: ChannelSummary = { ...qq, name: "telegram", label: "Telegram", chatTypes: [] };
+// Only the host-owned desktop channel lists without session types.
+const desktop: ChannelSummary = { ...qq, name: "desktop", label: "桌面端", contactLabel: null, chatTypes: [], pluginId: null };
 const group = findRoleChatType(qq, "group");
 
 describe("roleChatTypes", () => {
   it("finds declared types and defaults new bindings to the first one", () => {
     assert.equal(group?.prefix, "gqq:");
-    assert.equal(findRoleChatType(telegram, "group"), null);
+    assert.equal(findRoleChatType(desktop, "private"), null);
+    assert.equal(findRoleChatType(qq, "group")?.label, "群聊");
+    // A binding without an available declaration shows its stored type generically.
+    assert.equal(roleChatTypeLabel(null, "group"), "群聊");
+    assert.equal(roleChatTypeLabel(qq, "private"), "私聊");
     assert.equal(defaultRoleChatType(qq), "private");
     assert.equal(defaultRoleChatType({ ...qq, chatTypes: [qq.chatTypes[1]] }), "group");
     assert.equal(defaultRoleChatType(null), "private");
@@ -48,11 +54,11 @@ describe("roleChatTypes", () => {
   });
 
   it("labels bindings by type and number, falling back to the raw chat id", () => {
-    const catalog = [qq, telegram];
+    const catalog = [qq, desktop];
 
     assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", allow_from: [] }, catalog), "QQ（NapCat） · 群聊 831907794");
     assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "3174898512", chat_type: "private", allow_from: [] }, catalog), "QQ（NapCat） · 私聊 3174898512");
-    assert.equal(roleBindingDisplayLabel({ channel: "telegram", chat_id: "-1001", chat_type: "group", allow_from: [] }, catalog), "Telegram · -1001");
+    assert.equal(roleBindingDisplayLabel({ channel: "desktop", chat_id: "role:mira", chat_type: "private", allow_from: [] }, catalog), "桌面端 · role:mira");
     assert.equal(roleBindingDisplayLabel({ channel: "qq", chat_id: "gqq:1", chat_type: "group", allow_from: [] }, null), "qq · gqq:1");
   });
 });

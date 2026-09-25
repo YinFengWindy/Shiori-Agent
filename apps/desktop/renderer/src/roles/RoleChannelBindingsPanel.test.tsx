@@ -18,15 +18,25 @@ before(async () => {
 
 function channel(name: string, state: ChannelState, overrides: Partial<ChannelSummary> = {}): ChannelSummary {
   return {
-    name, label: name, contactLabel: null, chatIdLabel: null, chatIdHint: null, chatTypes: [],
+    name, label: name, contactLabel: null, chatTypes: [],
     pluginId: name, pluginEnabled: state !== "plugin_disabled", state, error: "", status: null,
     ...overrides,
   };
 }
 
 const desktop = channel("desktop", "active", { label: "桌面端", pluginId: null });
-const qqbotDeclaration = { label: "QQBot", contactLabel: "QQBot 用户 OpenID", chatIdLabel: "私聊 chat_id", chatIdHint: "c2c:<用户 OpenID>" };
-const qqbotBinding: RoleChannelBinding = { channel: "qqbot", chat_id: "c2c:ABC", chat_type: "private", allow_from: ["ABC"] };
+const qqbotDeclaration: Partial<ChannelSummary> = {
+  label: "QQBot", contactLabel: "QQBot 用户 OpenID",
+  chatTypes: [{ type: "private", label: "私聊", chatIdLabel: "用户 OpenID", chatIdHint: "对方的用户 OpenID", prefix: "c2c:" }],
+};
+const qqbotBinding: RoleChannelBinding = { channel: "qqbot", chat_id: "c2c:ABC", chat_type: "private", allow_from: ["contact-1"] };
+const telegramDeclaration: Partial<ChannelSummary> = {
+  label: "Telegram",
+  chatTypes: [
+    { type: "private", label: "私聊", chatIdLabel: "用户 ID", chatIdHint: null, prefix: null },
+    { type: "group", label: "群聊", chatIdLabel: "群组 ID", chatIdHint: null, prefix: null },
+  ],
+};
 
 const qqDeclaration: Partial<ChannelSummary> = {
   label: "QQ（NapCat）", contactLabel: "QQ 号",
@@ -35,11 +45,7 @@ const qqDeclaration: Partial<ChannelSummary> = {
     { type: "group", label: "群聊", chatIdLabel: "群号", chatIdHint: "QQ 群号", prefix: "gqq:" },
   ],
 };
-const typedQqbotDeclaration: Partial<ChannelSummary> = {
-  label: "QQBot", contactLabel: "QQBot 用户 OpenID",
-  chatTypes: [{ type: "private", label: "私聊", chatIdLabel: "用户 OpenID", chatIdHint: null, prefix: "c2c:" }],
-};
-const typedChannels = [desktop, channel("qq", "active", qqDeclaration), channel("qqbot", "active", typedQqbotDeclaration), channel("telegram", "active", { label: "Telegram" })];
+const typedChannels = [desktop, channel("qq", "active", qqDeclaration), channel("qqbot", "active", qqbotDeclaration), channel("telegram", "active", telegramDeclaration)];
 
 /** Mounts the panel over live form state so edits round-trip through the saved binding shape. */
 async function mountEditablePanel(initial: RoleChannelBinding[]) {
@@ -67,8 +73,8 @@ describe("RoleChannelBindingsPanel", () => {
   it("labels an active channel's fields from its declaration without a state marker", () => {
     const markup = renderPanel([qqbotBinding], [desktop, channel("qqbot", "active", qqbotDeclaration)]);
 
-    assert.match(markup, /私聊 chat_id/);
-    assert.match(markup, /placeholder="c2c:&lt;用户 OpenID&gt;"/);
+    assert.match(markup, />用户 OpenID</);
+    assert.match(markup, /placeholder="对方的用户 OpenID"/);
     assert.match(markup, /联系人 ID（QQBot 用户 OpenID）/);
     assert.match(markup, /data-availability="editable"/);
     assert.doesNotMatch(markup, /未配置|已停用|异常/);
@@ -120,8 +126,8 @@ describe("RoleChannelBindingsPanel", () => {
     assert.match(markup, /data-availability="plugin_disabled"/);
     assert.match(markup, />已停用</);
     assert.match(markup, /提供该渠道的插件已停用/);
-    assert.match(markup, /<input[^>]*readOnly="" value="c2c:ABC"/);
-    assert.match(markup, /<input[^>]*readOnly="" value="ABC"/);
+    assert.match(markup, /<input[^>]*placeholder="对方的用户 OpenID" readOnly="" value="ABC"/);
+    assert.match(markup, /<input[^>]*readOnly="" value="contact-1"/);
     assert.doesNotMatch(markup, /role="combobox"/);
     assert.match(markup, /aria-label="移除QQBot绑定"/);
   });
@@ -133,7 +139,7 @@ describe("RoleChannelBindingsPanel", () => {
 
   it("removes a disabled plugin's binding and adds new bindings on an enabled channel in the saved format", async () => {
     let latest: RoleFormState | undefined;
-    const channels = [desktop, channel("qqbot", "plugin_disabled", qqbotDeclaration), channel("telegram", "active", { label: "Telegram" })];
+    const channels = [desktop, channel("qqbot", "plugin_disabled", qqbotDeclaration), channel("telegram", "active", telegramDeclaration)];
     function Harness() {
       const [form, setForm] = useState<RoleFormState>({ ...createEmptyRoleForm(), channelBindings: [qqbotBinding], proactiveTargetChannel: "qqbot", proactiveTargetChatId: "c2c:ABC" });
       latest = form;
@@ -199,7 +205,7 @@ describe("RoleChannelBindingsPanel", () => {
   });
 
   it("shows a single declared type read-only and hides its prefix from the number", () => {
-    const markup = renderPanel([qqbotBinding], [desktop, channel("qqbot", "active", typedQqbotDeclaration)]);
+    const markup = renderPanel([qqbotBinding], [desktop, channel("qqbot", "active", qqbotDeclaration)]);
 
     assert.match(markup, /role="textbox" aria-label="类型" aria-readonly="true">私聊</);
     assert.match(markup, /用户 OpenID/);
@@ -207,11 +213,19 @@ describe("RoleChannelBindingsPanel", () => {
     assert.doesNotMatch(markup, /value="c2c:ABC"/);
   });
 
-  it("keeps the raw chat id input for channels that declare no session types", () => {
-    const markup = renderPanel([{ channel: "telegram", chat_id: "-1001", chat_type: "group", allow_from: ["1"] }], typedChannels);
+  it("shows a binding whose plugin is gone read-only by its stored type and chat id", () => {
+    const markup = renderPanel([{ channel: "gone", chat_id: "gqq:831907794", chat_type: "group", allow_from: ["1"] }], typedChannels);
+
+    assert.match(markup, /data-availability="missing"/);
+    assert.match(markup, /role="textbox" aria-label="类型" aria-readonly="true">群聊</);
+    assert.match(markup, /<input[^>]*readOnly="" value="gqq:831907794"/);
+    assert.doesNotMatch(markup, /role="combobox"/);
+  });
+
+  it("shows the desktop session without a type and read-only", () => {
+    const markup = renderPanel([{ channel: "desktop", chat_id: "role:mira", chat_type: "private", allow_from: [] }], typedChannels);
 
     assert.doesNotMatch(markup, /aria-label="类型"/);
-    assert.match(markup, /会话 \/ 群组 ID/);
-    assert.match(markup, /<input[^>]*value="-1001"/);
+    assert.match(markup, /<input[^>]*readOnly="" value="role:mira"/);
   });
 });

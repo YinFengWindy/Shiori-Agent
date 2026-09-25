@@ -51,10 +51,7 @@ export type PluginChannelDeclaration = {
   label: string;
   /** Describes the binding's sole `allow_from` contact. */
   contactLabel: string | null;
-  /** Describes the binding's `chat_id` when no session types are declared; `chatIdHint` shows its expected format. */
-  chatIdLabel: string | null;
-  chatIdHint: string | null;
-  /** Declared session types; empty keeps the single raw `chat_id` input. */
+  /** Declared session types; every plugin channel has at least one, only the host-owned `desktop` has none. */
   chatTypes: ChannelChatTypeDeclaration[];
 };
 
@@ -63,8 +60,6 @@ type PluginChannelDeclarationPayload = {
   name: string;
   label: string;
   contact_label: string | null;
-  chat_id_label: string | null;
-  chat_id_hint: string | null;
   chat_types: Array<{ type: RoleChatType; label: string; chat_id_label: string; chat_id_hint: string | null; prefix: string | null }>;
 };
 
@@ -99,8 +94,6 @@ function mapChannelDeclaration(item: PluginChannelDeclarationPayload): PluginCha
     name: item.name,
     label: item.label,
     contactLabel: item.contact_label,
-    chatIdLabel: item.chat_id_label,
-    chatIdHint: item.chat_id_hint,
     chatTypes: item.chat_types.map((chatType) => ({
       type: chatType.type,
       label: chatType.label,

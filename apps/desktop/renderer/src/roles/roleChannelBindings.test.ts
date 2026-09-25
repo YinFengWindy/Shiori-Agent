@@ -10,7 +10,7 @@ import {
 } from "./roleChannelBindings";
 
 function channel(name: string, chatTypes: ChannelSummary["chatTypes"]): ChannelSummary {
-  return { name, label: name, contactLabel: null, chatIdLabel: null, chatIdHint: null, chatTypes, pluginId: name, pluginEnabled: true, state: "active", error: "", status: null };
+  return { name, label: name, contactLabel: null, chatTypes, pluginId: name, pluginEnabled: true, state: "active", error: "", status: null };
 }
 
 const qq = channel("qq", [

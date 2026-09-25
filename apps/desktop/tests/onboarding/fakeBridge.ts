@@ -53,8 +53,8 @@ export function installOnboardingFakeBridge(initial: SettingsSnapshot) {
     "session.imageHistory": (payload) => ({ session_key: payload.session_key, messages: [] }),
     // This fake installs no plugins; the host-owned desktop channel is always listed.
     "plugins.list": () => ({ plugins: [] }),
-    "channels.list": () => ({ channels: [{ name: "desktop", label: "桌面端", contact_label: null, chat_id_label: null,
-      chat_id_hint: null, plugin_id: null, plugin_enabled: true, state: "active", error: "", status: null }] }),
+    "channels.list": () => ({ channels: [{ name: "desktop", label: "桌面端", contact_label: null, chat_types: [],
+      plugin_id: null, plugin_enabled: true, state: "active", error: "", status: null }] }),
     "models.test": () => state.connectionResult,
   };
   Object.defineProperty(window, "miraDesktop", { configurable: true, value: {

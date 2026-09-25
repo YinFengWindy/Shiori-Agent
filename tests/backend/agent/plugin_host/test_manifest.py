@@ -152,34 +152,38 @@ def test_manifest_rejects_nonstring_keys(tmp_path):
 
 
 _CHANNEL_MANIFEST = "api: 2\nid: demo\ncapabilities: [channels]\nchannels:\n"
+_PRIVATE = "{type: private, label: 私聊, chat_id_label: ID}"
 
 
 def test_manifest_parses_static_channel_declarations(tmp_path):
     (tmp_path / "manifest.yaml").write_text(
         _CHANNEL_MANIFEST
         + "  - name: demo_chat\n    label: Demo\n    contact_label: 用户 ID\n"
-        "    chat_id_label: 私聊 chat_id\n    chat_id_hint: dm:<用户 ID>\n"
-        "  - {name: demo_group, label: Demo 群}\n",
+        f"    chat_types: [{_PRIVATE}]\n"
+        f"  - {{name: demo_group, label: Demo 群, chat_types: [{_PRIVATE}]}}\n",
         encoding="utf-8",
     )
     manifest = load_manifest(tmp_path)
     assert manifest is not None
+    private = {
+        "type": "private",
+        "label": "私聊",
+        "chat_id_label": "ID",
+        "chat_id_hint": None,
+        "prefix": None,
+    }
     assert [item.to_dict() for item in manifest.channels] == [
         {
             "name": "demo_chat",
             "label": "Demo",
             "contact_label": "用户 ID",
-            "chat_id_label": "私聊 chat_id",
-            "chat_id_hint": "dm:<用户 ID>",
-            "chat_types": [],
+            "chat_types": [private],
         },
         {
             "name": "demo_group",
             "label": "Demo 群",
             "contact_label": None,
-            "chat_id_label": None,
-            "chat_id_hint": None,
-            "chat_types": [],
+            "chat_types": [private],
         },
     ]
 
@@ -211,9 +215,6 @@ def test_manifest_parses_channel_session_type_declarations(tmp_path):
         },
     ]
     assert declared_chat_types([manifest]) == {"demo": manifest.channels[0].chat_types}
-
-
-_PRIVATE = "{type: private, label: 私聊, chat_id_label: ID}"
 
 
 @pytest.mark.parametrize(
@@ -250,15 +251,24 @@ def test_manifest_rejects_invalid_session_type_declarations(
         load_manifest(tmp_path)
 
 
-def test_manifest_rejects_channel_chat_id_copy_next_to_session_types(tmp_path):
-    # 声明会话类型后号码标签来自各类型，渠道级的同名字段会让两处来源互相矛盾。
+def test_manifest_rejects_channel_without_session_types(tmp_path):
+    # 每个渠道都必须声明会话类型，绑定面板和保存校验都依赖它。
     (tmp_path / "manifest.yaml").write_text(
-        _CHANNEL_MANIFEST + "  - name: demo\n    label: Demo\n"
-        "    chat_id_hint: 输入 ID\n"
+        _CHANNEL_MANIFEST + "  - {name: demo, label: Demo}\n", encoding="utf-8"
+    )
+    with pytest.raises(ManifestError, match="必须声明会话类型"):
+        load_manifest(tmp_path)
+
+
+@pytest.mark.parametrize("field", ["chat_id_label", "chat_id_hint"])
+def test_manifest_rejects_channel_level_chat_id_copy(tmp_path, field):
+    # 号码的标签与提示只由各会话类型给出。
+    (tmp_path / "manifest.yaml").write_text(
+        _CHANNEL_MANIFEST + f"  - name: demo\n    label: Demo\n    {field}: 输入 ID\n"
         f"    chat_types: [{_PRIVATE}]\n",
         encoding="utf-8",
     )
-    with pytest.raises(ManifestError, match="chat_id_hint"):
+    with pytest.raises(ManifestError, match="未知字段"):
         load_manifest(tmp_path)
 
 
@@ -281,7 +291,11 @@ def test_manifest_without_channels_declares_none(tmp_path):
         ("  - {name: Demo, label: Demo}\n", "小写"),
         ("  - {name: desktop, label: 桌面}\n", "保留"),
         ("  - {name: demo, label: Demo, icon: x}\n", "未知字段"),
-        ("  - {name: demo, label: A}\n  - {name: demo, label: B}\n", "重复"),
+        (
+            f"  - {{name: demo, label: A, chat_types: [{_PRIVATE}]}}\n"
+            f"  - {{name: demo, label: B, chat_types: [{_PRIVATE}]}}\n",
+            "重复",
+        ),
     ],
 )
 def test_manifest_rejects_invalid_channel_declarations(tmp_path, declarations, message):

@@ -9,8 +9,8 @@ export type RoleChannelCatalog = readonly ChannelSummary[] | null;
 export const desktopChannelName = "desktop";
 
 const desktopChannelLabel = "桌面端";
-const defaultChatIdLabel = "会话 / 群组 ID";
-const defaultChatIdPlaceholder = "输入会话或群组 ID";
+/** Number copy of a binding without a declared type: the desktop session, or a read-only binding whose plugin is gone. */
+const undeclaredChatIdLabel = "会话 ID";
 
 /**
  * How one existing binding may be edited:
@@ -85,15 +85,13 @@ export function defaultRoleBindingChannel(catalog: RoleChannelCatalog): string {
 }
 
 /**
- * Field copy for a binding's chat id: the selected session type's number copy
- * when the channel declares types, else the channel-level declaration.
+ * Field copy for a binding's number: the selected session type's declared copy;
+ * without a declaration (desktop, or a read-only binding) a plain label.
  */
-export function roleBindingChatIdCopy(channel: ChannelSummary | null, chatType: ChannelChatTypeDeclaration | null) {
-  if (chatType) return { label: chatType.chatIdLabel, placeholder: chatType.chatIdHint ?? "" };
-  return {
-    label: channel?.chatIdLabel ?? defaultChatIdLabel,
-    placeholder: channel?.chatIdHint ?? defaultChatIdPlaceholder,
-  };
+export function roleBindingChatIdCopy(chatType: ChannelChatTypeDeclaration | null) {
+  return chatType
+    ? { label: chatType.chatIdLabel, placeholder: chatType.chatIdHint ?? "" }
+    : { label: undeclaredChatIdLabel, placeholder: "" };
 }
 
 /** Label for the binding's sole external contact, qualified by the channel's declared identity. */

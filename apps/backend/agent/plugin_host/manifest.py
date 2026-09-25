@@ -61,9 +61,7 @@ _CHANNEL_NAME = re.compile(r"[a-z][a-z0-9_-]{0,63}")
 # 宿主自有渠道，插件不能声明
 RESERVED_CHANNEL_NAMES = frozenset({"desktop"})
 _CHANNEL_REQUIRED_FIELDS = ("name", "label")
-_CHANNEL_OPTIONAL_FIELDS = ("contact_label", "chat_id_label", "chat_id_hint")
-# 声明了会话类型时，号码的标签与提示由各类型给出，渠道级的这两个字段不再适用
-_CHANNEL_CHAT_ID_FIELDS = ("chat_id_label", "chat_id_hint")
+_CHANNEL_OPTIONAL_FIELDS = ("contact_label",)
 _CHAT_TYPE_REQUIRED_FIELDS = ("type", "label", "chat_id_label")
 _CHAT_TYPE_OPTIONAL_FIELDS = ("chat_id_hint", "prefix")
 
@@ -83,20 +81,17 @@ class ManifestError(Exception):
 class ChannelDeclaration:
     """manifest 静态声明的一个外部渠道：插件未激活或未填凭据时也能列出。
 
-    ``name`` 是插件唯一允许经 ``ctx.channels.add`` 贡献的渠道名；其余字段只供
-    桌面端绑定面板展示，``contact_label`` 描述 ``allow_from`` 联系人，
-    ``chat_id_label`` / ``chat_id_hint`` 描述会话 ID 及其格式。
+    ``name`` 是插件唯一允许经 ``ctx.channels.add`` 贡献的渠道名；
+    ``contact_label`` 只供桌面端绑定面板描述 ``allow_from`` 联系人。
 
-    ``chat_types`` 声明渠道支持的会话类型（私聊 / 群聊）及其内部前缀：绑定面板
-    据此让用户选类型、只填号码，保存绑定时宿主据此校验会话 ID 与类型一致。
-    声明了会话类型的渠道不再写渠道级 ``chat_id_label`` / ``chat_id_hint``。
+    ``chat_types`` 声明渠道支持的会话类型（私聊 / 群聊）、号码的标签与提示及
+    内部前缀：绑定面板据此让用户选类型、只填号码，保存绑定时宿主据此校验会话
+    ID 与类型一致。插件声明必须提供；只有宿主自有的 ``desktop`` 没有会话类型。
     """
 
     name: str
     label: str
     contact_label: str | None = None
-    chat_id_label: str | None = None
-    chat_id_hint: str | None = None
     chat_types: tuple[ChatTypeDeclaration, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
@@ -105,8 +100,6 @@ class ChannelDeclaration:
             "name": self.name,
             "label": self.label,
             "contact_label": self.contact_label,
-            "chat_id_label": self.chat_id_label,
-            "chat_id_hint": self.chat_id_hint,
             "chat_types": [item.to_dict() for item in self.chat_types],
         }
 
@@ -259,21 +252,15 @@ def _parse_channel(item: object, field_name: str) -> ChannelDeclaration:
         raise ManifestError(f"{field_name}.name 必须是小写可移植标识: {name!r}")
     if name in RESERVED_CHANNEL_NAMES:
         raise ManifestError(f"{field_name}.name 是宿主保留渠道名: {name}")
-    chat_types: tuple[ChatTypeDeclaration, ...] = ()
-    if declares_chat_types:
-        if conflicting := sorted(set(values) & set(_CHANNEL_CHAT_ID_FIELDS)):
-            raise ManifestError(
-                f"{field_name} 声明 chat_types 时不能再写 {conflicting}，"
-                "号码标签与提示由各会话类型给出"
-            )
-        chat_types = _parse_chat_types(raw_chat_types, f"{field_name}.chat_types")
+    if not declares_chat_types:
+        raise ManifestError(
+            f"{field_name} 缺少 chat_types：渠道必须声明会话类型（私聊 / 群聊）"
+        )
     return ChannelDeclaration(
         name=name,
         label=values["label"],
         contact_label=values.get("contact_label"),
-        chat_id_label=values.get("chat_id_label"),
-        chat_id_hint=values.get("chat_id_hint"),
-        chat_types=chat_types,
+        chat_types=_parse_chat_types(raw_chat_types, f"{field_name}.chat_types"),
     )
 
 

@@ -12,7 +12,7 @@ import {
 
 function channel(name: string, state: ChannelState, overrides: Partial<ChannelSummary> = {}): ChannelSummary {
   return {
-    name, label: name.toUpperCase(), contactLabel: null, chatIdLabel: null, chatIdHint: null, chatTypes: [],
+    name, label: name.toUpperCase(), contactLabel: null, chatTypes: [],
     pluginId: name, pluginEnabled: state !== "plugin_disabled", state, error: "", status: null,
     ...overrides,
   };
@@ -53,16 +53,15 @@ describe("roleChannelCatalog", () => {
   });
 
   it("labels fields from the channel declaration", () => {
-    const qqbot = channel("qqbot", "active", { label: "QQBot", contactLabel: "QQBot 用户 OpenID", chatIdLabel: "私聊 chat_id", chatIdHint: "c2c:<用户 OpenID>" });
+    const qqbot = channel("qqbot", "active", { label: "QQBot", contactLabel: "QQBot 用户 OpenID" });
     assert.equal(roleChannelLabel("qqbot", [qqbot]), "QQBot");
     assert.equal(roleChannelLabel("desktop", null), "桌面端");
     assert.equal(roleChannelLabel("gone", [qqbot]), "gone");
     assert.equal(roleBindingContactLabel(qqbot), "联系人 ID（QQBot 用户 OpenID）");
     assert.equal(roleBindingContactLabel(null), "联系人 ID");
-    assert.deepEqual(roleBindingChatIdCopy(qqbot, null), { label: "私聊 chat_id", placeholder: "c2c:<用户 OpenID>" });
-    assert.deepEqual(roleBindingChatIdCopy(null, null), { label: "会话 / 群组 ID", placeholder: "输入会话或群组 ID" });
-    // A declared session type's number copy replaces the channel-level copy.
+    // The number copy comes from the selected session type; without one (desktop, a gone plugin) a plain label.
     const group = { type: "group" as const, label: "群聊", chatIdLabel: "群号", chatIdHint: "QQ 群号", prefix: "gqq:" };
-    assert.deepEqual(roleBindingChatIdCopy(qqbot, group), { label: "群号", placeholder: "QQ 群号" });
+    assert.deepEqual(roleBindingChatIdCopy(group), { label: "群号", placeholder: "QQ 群号" });
+    assert.deepEqual(roleBindingChatIdCopy(null), { label: "会话 ID", placeholder: "" });
   });
 });

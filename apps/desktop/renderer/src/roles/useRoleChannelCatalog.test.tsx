@@ -9,7 +9,7 @@ import type { RoleChannelCatalog } from "./roleChannelCatalog";
 import { useRoleChannelCatalog } from "./useRoleChannelCatalog";
 
 function row(name: string, state: ChannelSummary["state"]): ChannelSummary {
-  return { name, label: name, contactLabel: null, chatIdLabel: null, chatIdHint: null, chatTypes: [], pluginId: name, pluginEnabled: state !== "plugin_disabled", state, error: "", status: null };
+  return { name, label: name, contactLabel: null, chatTypes: [], pluginId: name, pluginEnabled: state !== "plugin_disabled", state, error: "", status: null };
 }
 
 const flush = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });

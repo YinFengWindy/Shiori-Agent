@@ -121,7 +121,7 @@ function ChannelBindingRow({ activeRoleId, binding, channels, index, bindingsCou
               ? <span className={cx(readOnlyFieldClass, "truncate")} role="textbox" aria-label="渠道" aria-readonly="true">{label}</span>
               : <Select aria-label="渠道" className={roleFieldClass} value={binding.channel} onValueChange={(value) => updateThis((item) => changeRoleBindingChannel(item, value, activeRoleId, channels))} options={roleBindingChannelOptions(channels, binding.channel)} />}
           </div>
-          {channel?.chatTypes.length
+          {!desktopBinding
             ? <RoleChannelBindingChatTypeField binding={binding} channel={channel} readOnly={readOnly} onChange={(chatType) => updateThis((item) => changeRoleBindingChatType(item, channel, chatType))} />
             : null}
         </div>

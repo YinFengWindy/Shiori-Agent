@@ -43,13 +43,13 @@ it("maps declared capabilities and channel declarations for plugin grouping (#36
       name: "QQBot", version: "1.0.0", description: "", enabled: true, can_toggle: true,
       state: "ACTIVE", error: "", diagnostic: null, has_config_schema: true, supports_hot_unload: true,
       capabilities: ["channels", "config"],
-      channels: [{ name: "qqbot", label: "QQBot", contact_label: "QQBot 用户 OpenID", chat_id_label: null, chat_id_hint: null, chat_types: [{ type: "private", label: "私聊", chat_id_label: "用户 OpenID", chat_id_hint: null, prefix: "c2c:" }] }],
+      channels: [{ name: "qqbot", label: "QQBot", contact_label: "QQBot 用户 OpenID", chat_types: [{ type: "private", label: "私聊", chat_id_label: "用户 OpenID", chat_id_hint: null, prefix: "c2c:" }] }],
     }] },
   }));
   const [plugin] = await client.listPlugins();
   assert.deepEqual(plugin.capabilities, ["channels", "config"]);
   assert.deepEqual(plugin.channels, [{
-    name: "qqbot", label: "QQBot", contactLabel: "QQBot 用户 OpenID", chatIdLabel: null, chatIdHint: null,
+    name: "qqbot", label: "QQBot", contactLabel: "QQBot 用户 OpenID",
     chatTypes: [{ type: "private", label: "私聊", chatIdLabel: "用户 OpenID", chatIdHint: null, prefix: "c2c:" }],
   }]);
 });
@@ -59,15 +59,15 @@ it("lists channels with their provider and runtime state (#363)", async () => {
   const client = createPluginBridgeClient(async (request) => {
     calls.push(request);
     return { id: "1", type: "response", method: request.method, error: null, payload: { channels: [
-      { name: "desktop", label: "桌面端", contact_label: null, chat_id_label: null, chat_id_hint: null, chat_types: [], plugin_id: null, plugin_enabled: true, state: "active", error: "", status: null },
-      { name: "qqbot", label: "QQBot", contact_label: "QQBot 用户 OpenID", chat_id_label: "私聊 chat_id", chat_id_hint: "c2c:<用户 OpenID>", chat_types: [], plugin_id: "qqbot", plugin_enabled: false, state: "plugin_disabled", error: "", status: null },
-      { name: "demo", label: "Demo", contact_label: null, chat_id_label: null, chat_id_hint: null, chat_types: [], plugin_id: "demo", plugin_enabled: true, state: "active", error: "", status: { connected: true, account: "bot" } },
+      { name: "desktop", label: "桌面端", contact_label: null, chat_types: [], plugin_id: null, plugin_enabled: true, state: "active", error: "", status: null },
+      { name: "qqbot", label: "QQBot", contact_label: "QQBot 用户 OpenID", chat_types: [], plugin_id: "qqbot", plugin_enabled: false, state: "plugin_disabled", error: "", status: null },
+      { name: "demo", label: "Demo", contact_label: null, chat_types: [], plugin_id: "demo", plugin_enabled: true, state: "active", error: "", status: { connected: true, account: "bot" } },
     ] } };
   });
   const channels = await client.listChannels();
   assert.deepEqual(calls, [{ method: "channels.list", payload: {} }]);
   assert.deepEqual(channels[1], {
-    name: "qqbot", label: "QQBot", contactLabel: "QQBot 用户 OpenID", chatIdLabel: "私聊 chat_id", chatIdHint: "c2c:<用户 OpenID>", chatTypes: [],
+    name: "qqbot", label: "QQBot", contactLabel: "QQBot 用户 OpenID", chatTypes: [],
     pluginId: "qqbot", pluginEnabled: false, state: "plugin_disabled", error: "", status: null,
   });
   assert.equal(channels[0].pluginId, null);

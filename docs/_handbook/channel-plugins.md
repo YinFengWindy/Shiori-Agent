@@ -38,13 +38,17 @@ channels:
   - name: demo_chat                 # 渠道名：角色绑定与会话线程的数据键
     label: Demo Chat                # 绑定面板和消息来源里显示的名字
     contact_label: 用户 ID           # 可选，绑定里「联系人 ID」的说明
-    chat_id_label: 私聊 chat_id      # 可选
-    chat_id_hint: dm:<用户 ID>       # 可选，chat_id 格式提示
+    chat_types:                     # 必填，渠道支持的会话类型
+      - type: private               # private / group
+        label: 私聊                  # 类型下拉里的名字
+        chat_id_label: 用户 ID       # 号码输入框的标签
+        chat_id_hint: 对方的用户 ID   # 可选，号码输入框的占位提示
+        prefix: 'dm:'               # 可选，拼在号码前组成存储的 chat_id
 ```
 
 - 插件 id 建议与渠道名相同。渠道名写进 `roles.json` 的绑定和会话线程，**发布后不能改名**，否则历史绑定和线程都会变成孤儿。
 - 声明是静态的：插件停用、未授信或还没填凭据时，桌面端也能通过 `channels.list` 列出这个渠道并标注状态，用户可以先绑定再填凭据。
-- 渠道区分私聊和群聊时，改写 `chat_types` 声明会话类型（Runtime API 2.5，写法见[运行时契约](plugin-runtime-contract.md#runtime-api-22-channel-declarations)）：绑定面板让用户先选类型再填号码，按类型的 `prefix` 拼出存储的 `chat_id`，保存时宿主校验两者一致。声明了 `chat_types` 就不要再写渠道级的 `chat_id_label` / `chat_id_hint`。
+- `chat_types` 必须声明（Runtime API 2.5，规则见[运行时契约](plugin-runtime-contract.md#runtime-api-22-channel-declarations)），缺失时宿主拒绝整个 manifest：绑定面板让用户先选类型再填号码，按类型的 `prefix` 拼出存储的 `chat_id`，保存时宿主校验两者一致。
 - `ctx.channels.add()` 只接受本 manifest 声明过的名字；两个插件声明同一个名字会同时变成 `CONFLICT`。规则细节见 [渠道声明](plugins-tutorial.md#渠道声明)。
 
 ## 2. 配置模型与自动表单

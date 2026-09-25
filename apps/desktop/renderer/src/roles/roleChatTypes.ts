@@ -7,7 +7,15 @@ export function findRoleChatType(channel: ChannelSummary | null, chatType: RoleC
   return channel?.chatTypes.find((item) => item.type === chatType) ?? null;
 }
 
-/** Session type of a new binding on this channel: its first declared type, else private. */
+/** Fallback names when no declaration is available for a stored binding. */
+const storedChatTypeLabels: Record<RoleChatType, string> = { private: "私聊", group: "群聊" };
+
+/** Display name of a binding's session type: the declared label, else the generic name of the stored type. */
+export function roleChatTypeLabel(channel: ChannelSummary | null, chatType: RoleChatType) {
+  return findRoleChatType(channel, chatType)?.label ?? storedChatTypeLabels[chatType];
+}
+
+/** Session type of a new binding on this channel: its first declared type; desktop (no declaration) is private. */
 export function defaultRoleChatType(channel: ChannelSummary | null) {
   return channel?.chatTypes[0]?.type ?? "private";
 }

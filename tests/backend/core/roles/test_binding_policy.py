@@ -102,13 +102,23 @@ def test_binding_policy_rejects_chat_id_inconsistent_with_its_type(
         _declared_policy().normalize([binding])
 
 
-def test_binding_policy_accepts_any_type_for_channels_without_declarations() -> None:
-    bindings = [
-        RoleChannelBindingConfig("custom", "room-1", "group", ["u1"]),
-        RoleChannelBindingConfig("custom", "gqq:1", "private", ["u1"]),
-    ]
+def test_binding_policy_rejects_new_binding_on_channel_no_plugin_declares() -> None:
+    binding = RoleChannelBindingConfig("gone", "room-1", "group", ["u1"])
 
-    assert _declared_policy().normalize(bindings) == bindings
+    with pytest.raises(ValueError, match="没有已安装的插件"):
+        _declared_policy().normalize([binding])
+
+
+def test_binding_policy_keeps_unchanged_binding_of_an_uninstalled_plugin() -> None:
+    # The desktop resends read-only bindings of uninstalled plugins on every save.
+    saved = RoleChannelBindingConfig("gone", "room-1", "group", ["u1"])
+    edited = RoleChannelBindingConfig("gone", "room-2", "group", ["u1"])
+    roles = [SimpleNamespace(id="mira", channel_bindings=[saved])]
+    policy = _declared_policy()
+
+    assert policy.normalize_for_role(roles, "mira", [saved]) == [saved]
+    with pytest.raises(ValueError, match="没有已安装的插件"):
+        policy.normalize_for_role(roles, "mira", [edited])
 
 
 def test_binding_policy_requires_private_desktop_session() -> None:

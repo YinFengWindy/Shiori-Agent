@@ -55,7 +55,8 @@ def _write_fake_channel_plugin(root: Path, plugin_id: str) -> None:
     )
     (package / "manifest.yaml").write_text(
         f"api: 2\nid: {plugin_id}\ncapabilities: [config, channels]\nchannels:\n"
-        "  - {name: fake, label: Fake, contact_label: Fake 用户 ID}\n",
+        "  - {name: fake, label: Fake, contact_label: Fake 用户 ID, chat_types:"
+        " [{type: private, label: 私聊, chat_id_label: 用户 ID}]}\n",
         encoding="utf-8",
     )
 
@@ -120,8 +121,6 @@ async def test_lists_desktop_builtins_and_unconfigured_qqbot(tmp_path, monkeypat
         "name": "qqbot",
         "label": "QQBot",
         "contact_label": "QQBot 用户 OpenID",
-        "chat_id_label": None,
-        "chat_id_hint": None,
         "chat_types": [
             {
                 "type": "private",
