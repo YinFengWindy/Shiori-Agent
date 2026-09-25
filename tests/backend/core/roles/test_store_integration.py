@@ -202,7 +202,7 @@ def test_role_store_persists_runtime_config_updates(tmp_path: Path):
     assert reloaded.runtime_config["nsfw_memory_enabled"] is True
 
 
-def test_role_store_keeps_single_contact_channel_access_and_proactive_target_on_the_role(
+def test_role_store_keeps_group_blacklist_and_proactive_target_on_the_role(
     tmp_path: Path,
 ):
     store = RoleStore(tmp_path)
@@ -214,21 +214,20 @@ def test_role_store_keeps_single_contact_channel_access_and_proactive_target_on_
         channel_bindings=[
             {
                 "channel": "telegram",
-                "chat_id": "42",
-                "chat_type": "private",
-                "allow_from": ["alice"],
+                "chat_id": "-42",
+                "chat_type": "group",
+                "blocked_senders": ["alice", " bob "],
             },
-            {
-                "channel": "qq",
-                "chat_id": "7",
-                "chat_type": "private",
-                "allow_from": ["7"],
-            },
+            {"channel": "qq", "chat_id": "7", "chat_type": "private"},
         ],
         proactive={"enabled": True, "target_channel": "qq", "target_chat_id": "7"},
     )
 
-    assert updated.channel_bindings[0].allow_from == ["alice"]
+    assert updated.channel_bindings[0].blocked_senders == ["alice", "bob"]
+    assert updated.channel_bindings[1].blocked_senders == []
+    reloaded = RoleStore(tmp_path).get_role("mira")
+    assert reloaded is not None
+    assert reloaded.channel_bindings == updated.channel_bindings
     assert updated.proactive.target_channel == "qq"
     luna = store.get_role("luna")
     assert luna is not None
@@ -259,13 +258,11 @@ def test_role_store_persists_declared_group_binding_with_its_type(tmp_path: Path
                 "channel": "qq",
                 "chat_id": "gqq:831907794",
                 "chat_type": "group",
-                "allow_from": ["7"],
             },
             {
                 "channel": "qq",
                 "chat_id": "3174898512",
                 "chat_type": "private",
-                "allow_from": ["7"],
             },
         ],
     )
@@ -290,7 +287,6 @@ def test_role_store_rejects_group_binding_without_declared_prefix(tmp_path: Path
                     "channel": "qq",
                     "chat_id": "831907794",
                     "chat_type": "group",
-                    "allow_from": ["7"],
                 },
             ],
         )
@@ -305,7 +301,7 @@ def test_role_store_rejects_binding_without_chat_type(tmp_path: Path):
     with pytest.raises(ValueError, match="chat_type"):
         store.update_role(
             "mira",
-            channel_bindings=[{"channel": "qq", "chat_id": "7", "allow_from": ["7"]}],
+            channel_bindings=[{"channel": "qq", "chat_id": "7"}],
         )
 
 
@@ -321,7 +317,6 @@ def test_role_store_rejects_proactive_target_in_other_qq_chat_form(tmp_path: Pat
                     "channel": "qq",
                     "chat_id": "7",
                     "chat_type": "private",
-                    "allow_from": ["7"],
                 }
             ],
             proactive={
@@ -363,7 +358,6 @@ def test_role_store_disables_proactive_when_its_target_binding_is_removed(
                 "channel": "telegram",
                 "chat_id": "42",
                 "chat_type": "private",
-                "allow_from": ["42"],
             }
         ],
         proactive={
@@ -391,7 +385,6 @@ def test_role_store_rejects_desktop_binding_for_another_role_session(tmp_path: P
                     "channel": "desktop",
                     "chat_id": "role:luna",
                     "chat_type": "private",
-                    "allow_from": [],
                 }
             ],
         )
@@ -401,51 +394,30 @@ def test_role_store_rejects_desktop_binding_for_another_role_session(tmp_path: P
         raise AssertionError("桌面端绑定不能指向其他角色会话")
 
 
-def test_role_store_rejects_allow_list_for_desktop_binding(tmp_path: Path):
-    store = RoleStore(tmp_path)
-    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
-
-    try:
-        store.update_role(
-            "mira",
-            channel_bindings=[
-                {
-                    "channel": "desktop",
-                    "chat_id": "role:mira",
-                    "chat_type": "private",
-                    "allow_from": ["alice"],
-                }
-            ],
-        )
-    except ValueError as exc:
-        assert "不支持允许对象" in str(exc)
-    else:
-        raise AssertionError("桌面端没有外部 sender，不能配置允许对象")
-
-
 @pytest.mark.parametrize(
-    "allow_from",
-    [[], ["alice", "bob"]],
+    "channel, chat_id", [("desktop", "role:mira"), ("telegram", "42")]
 )
-def test_role_store_requires_exactly_one_external_contact(
-    tmp_path: Path,
-    allow_from: list[str],
+def test_role_store_rejects_blacklist_outside_group_bindings(
+    tmp_path: Path, channel: str, chat_id: str
 ) -> None:
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
 
-    with pytest.raises(ValueError, match="仅绑定一个联系人"):
+    with pytest.raises(ValueError, match="只有群聊绑定可以设置黑名单"):
         store.update_role(
             "mira",
             channel_bindings=[
                 {
-                    "channel": "telegram",
-                    "chat_id": "42",
+                    "channel": channel,
+                    "chat_id": chat_id,
                     "chat_type": "private",
-                    "allow_from": allow_from,
+                    "blocked_senders": ["alice"],
                 }
             ],
         )
+    reloaded = store.get_role("mira")
+    assert reloaded is not None
+    assert reloaded.channel_bindings == []
 
 
 def test_role_store_delete_role_removes_role_runtime_directory(tmp_path: Path):
@@ -831,7 +803,6 @@ def test_role_binding_service_requires_explicit_binding(tmp_path: Path):
         "chat-1",
         aggregate.role.id,
         chat_type="private",
-        contact_id="u1",
     )
     opened = service.open_bound_channel(channel="telegram", chat_id="chat-1")
     assert binding.role_id == aggregate.role.id
@@ -857,7 +828,6 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
         "chat-1",
         aggregate.role.id,
         chat_type="private",
-        contact_id="u1",
     )
 
     routed = route_inbound_by_role(

@@ -26,7 +26,7 @@ describe("roleChannelBindings", () => {
       channel: "desktop",
       chat_id: "role:mira",
       chat_type: "private",
-      allow_from: [],
+      blocked_senders: [],
     });
   });
 
@@ -39,44 +39,44 @@ describe("roleChannelBindings", () => {
   it("clears the desktop session id when changing back to an external channel", () => {
     assert.deepEqual(
       changeRoleBindingChannel(
-        { channel: "desktop", chat_id: "role:mira", chat_type: "private", allow_from: [] },
+        { channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] },
         "telegram",
         "mira",
         catalog,
       ),
-      { channel: "telegram", chat_id: "", chat_type: "private", allow_from: [] },
+      { channel: "telegram", chat_id: "", chat_type: "private", blocked_senders: [] },
     );
   });
 
-  it("keeps the entered number but not the old type's prefix when changing channel", () => {
-    const group: RoleChannelBinding = { channel: "qq", chat_id: "gqq:831907794", chat_type: "group", allow_from: ["3"] };
+  it("keeps the entered number but neither the old type's prefix nor the blacklist when changing channel", () => {
+    const group: RoleChannelBinding = { channel: "qq", chat_id: "gqq:831907794", chat_type: "group", blocked_senders: ["3"] };
 
     assert.deepEqual(changeRoleBindingChannel(group, "qqbot", "mira", catalog), {
-      channel: "qqbot", chat_id: "c2c:831907794", chat_type: "private", allow_from: ["3"],
+      channel: "qqbot", chat_id: "c2c:831907794", chat_type: "private", blocked_senders: [],
     });
     assert.deepEqual(changeRoleBindingChannel(group, "telegram", "mira", catalog), {
-      channel: "telegram", chat_id: "831907794", chat_type: "private", allow_from: ["3"],
+      channel: "telegram", chat_id: "831907794", chat_type: "private", blocked_senders: [],
     });
   });
 
   it("moves bindings in either direction without mutating the source array", () => {
     const bindings: RoleChannelBinding[] = [
-      { channel: "telegram", chat_id: "100", chat_type: "private", allow_from: [] },
-      { channel: "qq", chat_id: "200", chat_type: "private", allow_from: [] },
-      { channel: "desktop", chat_id: "role:mira", chat_type: "private", allow_from: [] },
+      { channel: "telegram", chat_id: "100", chat_type: "private", blocked_senders: [] },
+      { channel: "qq", chat_id: "200", chat_type: "private", blocked_senders: [] },
+      { channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] },
     ];
 
     assert.deepEqual(moveRoleChannelBinding(bindings, 1, "up"), [bindings[1], bindings[0], bindings[2]]);
     assert.deepEqual(moveRoleChannelBinding(bindings, 1, "down"), [bindings[0], bindings[2], bindings[1]]);
     assert.deepEqual(bindings, [
-      { channel: "telegram", chat_id: "100", chat_type: "private", allow_from: [] },
-      { channel: "qq", chat_id: "200", chat_type: "private", allow_from: [] },
-      { channel: "desktop", chat_id: "role:mira", chat_type: "private", allow_from: [] },
+      { channel: "telegram", chat_id: "100", chat_type: "private", blocked_senders: [] },
+      { channel: "qq", chat_id: "200", chat_type: "private", blocked_senders: [] },
+      { channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] },
     ]);
   });
 
   it("keeps bindings unchanged when moving beyond either end", () => {
-    const bindings: RoleChannelBinding[] = [{ channel: "telegram", chat_id: "100", chat_type: "private", allow_from: [] }];
+    const bindings: RoleChannelBinding[] = [{ channel: "telegram", chat_id: "100", chat_type: "private", blocked_senders: [] }];
 
     assert.strictEqual(moveRoleChannelBinding(bindings, 0, "up"), bindings);
     assert.strictEqual(moveRoleChannelBinding(bindings, 0, "down"), bindings);
@@ -84,10 +84,10 @@ describe("roleChannelBindings", () => {
 
   it("puts the preferred target first and keeps other targets in binding order", () => {
     const bindings: RoleChannelBinding[] = [
-      { channel: "telegram", chat_id: "100", chat_type: "private", allow_from: [] },
-      { channel: "qq", chat_id: "200", chat_type: "private", allow_from: [] },
-      { channel: "desktop", chat_id: "role:mira", chat_type: "private", allow_from: [] },
-      { channel: "telegram", chat_id: "", chat_type: "private", allow_from: [] },
+      { channel: "telegram", chat_id: "100", chat_type: "private", blocked_senders: [] },
+      { channel: "qq", chat_id: "200", chat_type: "private", blocked_senders: [] },
+      { channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] },
+      { channel: "telegram", chat_id: "", chat_type: "private", blocked_senders: [] },
     ];
 
     assert.deepEqual(

@@ -51,7 +51,8 @@ def load_config(
 
     Runs the one-time ``[integrations.novelai]`` -> ``[plugins.novelai]``
     migration (issue #180), the built-in channel table migration
-    (``[channels.telegram|qq]`` -> ``[plugins.telegram|qq]``, issue #363) and the
+    (``[channels.telegram|qq]`` -> ``[plugins.telegram|qq]``, issue #363), the
+    removal of channel plugin ``allow_from`` whitelists (issue #398) and the
     default-disabled plugin pinning (``agent/plugin_default_enabled_migration.py``)
     against the real file before parsing, so an upgrading user's existing
     token/settings show up under the plugin's own config channel with no
@@ -73,6 +74,10 @@ def load_config(
         from agent.plugin_config_migration import migrate_plugin_config
 
         data = migrate_plugin_config(resolved_path, data, workspace=workspace)
+    # 放在旧 JSON 插件设置迁入之后：那份 qqbot 设置也可能带着 allow_from。
+    from agent.channel_allowlist_migration import remove_channel_allowlists
+
+    data = remove_channel_allowlists(resolved_path, data)
     from agent.plugin_preferences import migrate_plugin_preferences
 
     data = migrate_plugin_preferences(resolved_path, data)

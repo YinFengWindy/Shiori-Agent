@@ -15,7 +15,7 @@ from .models import RoleChannelBindingConfig, RoleProactiveConfig, RoleRecord
 
 
 class RoleBindingPolicy:
-    """Validates role-owned channel contacts and proactive delivery targets.
+    """Validates role-owned channel sessions and proactive delivery targets.
 
     Session types are checked against the channels' manifest declarations,
     which the host binds once plugins are discovered; every plugin channel
@@ -52,7 +52,10 @@ class RoleBindingPolicy:
         *,
         previous: list[RoleChannelBindingConfig] | None = None,
     ) -> list[RoleChannelBindingConfig]:
-        """Normalizes one role's binding list, contact cardinality and session types.
+        """Normalizes one role's binding list and checks its session types.
+
+        Blacklists are checked by ``RoleChannelBindingConfig`` itself (group
+        bindings only).
 
         ``previous`` is the role's saved list; it decides which bindings on a
         channel without a declaration may be kept.
@@ -72,14 +75,13 @@ class RoleBindingPolicy:
                 for other in normalized[:index]
             ):
                 raise ValueError("同一角色不能重复绑定相同渠道会话")
-        self._validate_external_contacts(normalized)
         self._validate_chat_types(normalized, previous or [])
         return normalized
 
     def validate_desktop(
         self, role_id: str, bindings: list[RoleChannelBindingConfig]
     ) -> None:
-        """Validates the role-derived desktop chat and contact rules."""
+        """Validates the role-derived desktop chat and its private session type."""
         self._validate_desktop(role_id, bindings)
 
     def ensure_unique(
@@ -143,14 +145,6 @@ class RoleBindingPolicy:
             for binding in bindings
         )
 
-    @staticmethod
-    def _validate_external_contacts(
-        bindings: list[RoleChannelBindingConfig],
-    ) -> None:
-        for binding in bindings:
-            if binding.channel != "desktop" and len(binding.allow_from) != 1:
-                raise ValueError("外部渠道必须绑定且仅绑定一个联系人")
-
     def _validate_chat_types(
         self,
         bindings: list[RoleChannelBindingConfig],
@@ -188,10 +182,6 @@ class RoleBindingPolicy:
             for binding in bindings
         ):
             raise ValueError(f"桌面端渠道必须绑定当前角色会话: {expected_chat_id}")
-        if any(
-            binding.channel == "desktop" and binding.allow_from for binding in bindings
-        ):
-            raise ValueError("桌面端渠道不支持允许对象")
         if any(
             binding.channel == DESKTOP_CHANNEL
             and binding.chat_type != CHAT_TYPE_PRIVATE

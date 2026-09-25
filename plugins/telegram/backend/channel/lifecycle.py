@@ -68,7 +68,6 @@ class TelegramChannel(
         token: str,
         bus: MessageBus | None = None,
         session_manager: SessionManager | None = None,
-        allow_from: list[str] | None = None,
         bot_commands: list[tuple[str, str]] | None = None,
         event_bus: EventBus | None = None,
         interrupt_controller: InterruptController | None = None,
@@ -80,7 +79,6 @@ class TelegramChannel(
         self._bus: MessageBus | None = bus
         self._interrupt_controller = interrupt_controller
         self._channel = _CHANNEL
-        self._allow_from: set[str] = set(allow_from) if allow_from else set()
         self._message_deduper = MessageDeduper(_SEEN_MSG_MAXSIZE)
         self._channel_hub = channel_hub
         self._session_manager: SessionManager | None = None
@@ -268,15 +266,6 @@ class TelegramChannel(
         """扫描已有 session 文件，从 metadata 重建 username → chat_id 索引。"""
         self._require_identity_index().rebuild()
         logger.debug(f"[telegram] user_map 重建完成: {self.user_map}")
-
-    def _is_allowed(self, user) -> bool:
-        """检查用户是否在白名单中，白名单为空则允许所有人"""
-        if not self._allow_from:
-            return True
-        return str(user.id) in self._allow_from or (
-            user.username
-            and user.username.lower() in {u.lower() for u in self._allow_from}
-        )
 
     async def _register_bot_commands(self) -> None:
         commands = [

@@ -224,7 +224,6 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
                 "channel": "telegram",
                 "chat_id": "42",
                 "chat_type": "private",
-                "allow_from": ["42"],
             }
         ],
         proactive={

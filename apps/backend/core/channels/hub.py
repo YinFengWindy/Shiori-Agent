@@ -5,7 +5,7 @@ from typing import Any
 
 from bus.events import InboundMessage, OutboundMessage
 from core.common.channel_directory import ChannelDirectory
-from core.common.channel_identifiers import chat_ids_equal
+from core.common.channel_identifiers import chat_ids_equal, normalize_sender_id
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
@@ -122,7 +122,14 @@ class ChannelHub:
         sender_id: str,
         sender_alias: str = "",
     ) -> bool:
-        """Checks the owning role binding's allow-list before inbound handling."""
+        """Admits a sender of a bound session unless its binding blacklists them.
+
+        Unbound sessions are rejected. A private chat's sender is its partner,
+        and private bindings carry no blacklist, so they are always admitted.
+        A blacklist entry matches the sender ID exactly, or ``sender_alias``
+        (a Telegram username) case-insensitively; a leading ``@`` is ignored
+        on both sides.
+        """
         binding = self._service.bindings.get_binding(channel, chat_id)
         if binding is None:
             return False
@@ -133,11 +140,11 @@ class ChannelHub:
             if item.channel == channel
             and chat_ids_equal(channel, item.chat_id, chat_id)
         )
-        if len(config.allow_from) != 1:
+        if sender_id in config.blocked_senders:
             return False
-        contact_id = config.allow_from[0]
-        return sender_id == contact_id or bool(
-            sender_alias and sender_alias.lower() == contact_id.lower()
+        alias = normalize_sender_id(sender_alias).lower()
+        return not (
+            alias and any(alias == entry.lower() for entry in config.blocked_senders)
         )
 
     def has_binding(self, channel: str, chat_id: str) -> bool:

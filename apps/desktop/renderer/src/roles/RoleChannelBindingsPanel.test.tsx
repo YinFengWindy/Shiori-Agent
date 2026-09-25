@@ -29,7 +29,7 @@ const qqbotDeclaration: Partial<ChannelSummary> = {
   label: "QQBot", contactLabel: "QQBot 用户 OpenID",
   chatTypes: [{ type: "private", label: "私聊", chatIdLabel: "用户 OpenID", chatIdHint: "对方的用户 OpenID", prefix: "c2c:" }],
 };
-const qqbotBinding: RoleChannelBinding = { channel: "qqbot", chat_id: "c2c:ABC", chat_type: "private", allow_from: ["contact-1"] };
+const qqbotBinding: RoleChannelBinding = { channel: "qqbot", chat_id: "c2c:ABC", chat_type: "private", blocked_senders: [] };
 const telegramDeclaration: Partial<ChannelSummary> = {
   label: "Telegram",
   chatTypes: [
@@ -75,7 +75,8 @@ describe("RoleChannelBindingsPanel", () => {
 
     assert.match(markup, />用户 OpenID</);
     assert.match(markup, /placeholder="对方的用户 OpenID"/);
-    assert.match(markup, /联系人 ID（QQBot 用户 OpenID）/);
+    // A private chat's partner is the chat itself: no contact or blacklist field.
+    assert.doesNotMatch(markup, /联系人|黑名单/);
     assert.match(markup, /data-availability="editable"/);
     assert.doesNotMatch(markup, /未配置|已停用|异常/);
   });
@@ -127,7 +128,6 @@ describe("RoleChannelBindingsPanel", () => {
     assert.match(markup, />已停用</);
     assert.match(markup, /提供该渠道的插件已停用/);
     assert.match(markup, /<input[^>]*placeholder="对方的用户 OpenID" readOnly="" value="ABC"/);
-    assert.match(markup, /<input[^>]*readOnly="" value="contact-1"/);
     assert.doesNotMatch(markup, /role="combobox"/);
     assert.match(markup, /aria-label="移除QQBot绑定"/);
   });
@@ -153,10 +153,10 @@ describe("RoleChannelBindingsPanel", () => {
         return element;
       };
       await act(async () => button("添加渠道绑定").click());
-      assert.deepEqual(latest?.channelBindings, [qqbotBinding, { channel: "telegram", chat_id: "", chat_type: "private", allow_from: [] }]);
+      assert.deepEqual(latest?.channelBindings, [qqbotBinding, { channel: "telegram", chat_id: "", chat_type: "private", blocked_senders: [] }]);
 
       await act(async () => button("移除QQBot绑定").click());
-      assert.deepEqual(latest?.channelBindings, [{ channel: "telegram", chat_id: "", chat_type: "private", allow_from: [] }]);
+      assert.deepEqual(latest?.channelBindings, [{ channel: "telegram", chat_id: "", chat_type: "private", blocked_senders: [] }]);
       // Removing the proactive target's binding clears the dangling target.
       assert.equal(latest?.proactiveTargetChannel, "");
     } finally {
@@ -170,16 +170,16 @@ describe("RoleChannelBindingsPanel", () => {
       const add = view.container.querySelector<HTMLButtonElement>('button[aria-label="添加渠道绑定"]');
       assert.ok(add);
       await act(async () => add.click());
-      assert.deepEqual(state.form?.channelBindings, [{ channel: "qq", chat_id: "", chat_type: "private", allow_from: [] }]);
+      assert.deepEqual(state.form?.channelBindings, [{ channel: "qq", chat_id: "", chat_type: "private", blocked_senders: [] }]);
 
       await chooseSelectOption("类型", "群聊");
       await changeInputValue(numberInput("群号"), "831907794");
-      assert.deepEqual(state.form?.channelBindings, [{ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", allow_from: [] }]);
+      assert.deepEqual(state.form?.channelBindings, [{ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", blocked_senders: [] }]);
     } finally {
       await view.cleanup();
     }
 
-    const reopened = await mountEditablePanel([{ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", allow_from: ["3"] }]);
+    const reopened = await mountEditablePanel([{ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", blocked_senders: ["3"] }]);
     try {
       const trigger = reopened.view.container.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="类型"]');
       assert.equal(trigger?.textContent, "群聊");
@@ -190,18 +190,53 @@ describe("RoleChannelBindingsPanel", () => {
   });
 
   it("saves a private chat's number as is and re-derives the prefix when the type changes", async () => {
-    const { view, state, numberInput } = await mountEditablePanel([{ channel: "qq", chat_id: "", chat_type: "private", allow_from: [] }]);
+    const { view, state, numberInput } = await mountEditablePanel([{ channel: "qq", chat_id: "", chat_type: "private", blocked_senders: [] }]);
     try {
       await changeInputValue(numberInput("QQ 号"), "3174898512");
-      assert.deepEqual(state.form?.channelBindings, [{ channel: "qq", chat_id: "3174898512", chat_type: "private", allow_from: [] }]);
+      assert.deepEqual(state.form?.channelBindings, [{ channel: "qq", chat_id: "3174898512", chat_type: "private", blocked_senders: [] }]);
 
       await chooseSelectOption("类型", "群聊");
-      assert.deepEqual(state.form?.channelBindings?.[0], { channel: "qq", chat_id: "gqq:3174898512", chat_type: "group", allow_from: [] });
+      assert.deepEqual(state.form?.channelBindings?.[0], { channel: "qq", chat_id: "gqq:3174898512", chat_type: "group", blocked_senders: [] });
       await chooseSelectOption("类型", "私聊");
-      assert.deepEqual(state.form?.channelBindings?.[0], { channel: "qq", chat_id: "3174898512", chat_type: "private", allow_from: [] });
+      assert.deepEqual(state.form?.channelBindings?.[0], { channel: "qq", chat_id: "3174898512", chat_type: "private", blocked_senders: [] });
     } finally {
       await view.cleanup();
     }
+  });
+
+  it("adds and removes blacklisted members of a group binding", async () => {
+    const { view, state } = await mountEditablePanel([{ channel: "qq", chat_id: "gqq:831907794", chat_type: "group", blocked_senders: [] }]);
+    try {
+      const entry = view.container.querySelector<HTMLInputElement>('input[aria-label="输入黑名单"]');
+      assert.ok(entry);
+      assert.equal(entry.placeholder, "QQ 号");
+      for (const member of ["42", " 7 ", "42"]) {
+        await changeInputValue(entry, member);
+        const add = view.container.querySelector<HTMLButtonElement>('button[aria-label="添加黑名单"]');
+        assert.ok(add);
+        await act(async () => add.click());
+      }
+      assert.deepEqual(state.form?.channelBindings?.[0].blocked_senders, ["42", "7"]);
+
+      const remove = view.container.querySelector<HTMLButtonElement>('button[aria-label="移除 42"]');
+      assert.ok(remove);
+      await act(async () => remove.click());
+      assert.deepEqual(state.form?.channelBindings?.[0], { channel: "qq", chat_id: "gqq:831907794", chat_type: "group", blocked_senders: ["7"] });
+
+      // A private chat has no blacklist: switching drops it and hides the editor.
+      await chooseSelectOption("类型", "私聊");
+      assert.deepEqual(state.form?.channelBindings?.[0].blocked_senders, []);
+      assert.equal(view.container.querySelector('[aria-label="黑名单"]'), null);
+    } finally {
+      await view.cleanup();
+    }
+  });
+
+  it("shows an empty blacklist of a read-only group binding as a read-only field", () => {
+    const markup = renderPanel([{ channel: "qq", chat_id: "gqq:1", chat_type: "group", blocked_senders: [] }], [desktop, channel("qq", "plugin_disabled", qqDeclaration)]);
+
+    assert.match(markup, /role="textbox" aria-label="黑名单" aria-readonly="true">无</);
+    assert.doesNotMatch(markup, /aria-label="输入黑名单"/);
   });
 
   it("shows a single declared type read-only and hides its prefix from the number", () => {
@@ -214,16 +249,19 @@ describe("RoleChannelBindingsPanel", () => {
   });
 
   it("shows a binding whose plugin is gone read-only by its stored type and chat id", () => {
-    const markup = renderPanel([{ channel: "gone", chat_id: "gqq:831907794", chat_type: "group", allow_from: ["1"] }], typedChannels);
+    const markup = renderPanel([{ channel: "gone", chat_id: "gqq:831907794", chat_type: "group", blocked_senders: ["1"] }], typedChannels);
 
     assert.match(markup, /data-availability="missing"/);
+    // The blacklist shows its entries without remove or add controls.
+    assert.match(markup, /<span class="truncate font-mono">1<\/span>/);
+    assert.doesNotMatch(markup, /aria-label="移除 1"|aria-label="输入黑名单"/);
     assert.match(markup, /role="textbox" aria-label="类型" aria-readonly="true">群聊</);
     assert.match(markup, /<input[^>]*readOnly="" value="gqq:831907794"/);
     assert.doesNotMatch(markup, /role="combobox"/);
   });
 
   it("shows the desktop session without a type and read-only", () => {
-    const markup = renderPanel([{ channel: "desktop", chat_id: "role:mira", chat_type: "private", allow_from: [] }], typedChannels);
+    const markup = renderPanel([{ channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] }], typedChannels);
 
     assert.doesNotMatch(markup, /aria-label="类型"/);
     assert.match(markup, /<input[^>]*readOnly="" value="role:mira"/);

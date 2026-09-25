@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -26,11 +27,7 @@ class _InboundMixin:
 
         if not msg or not msg.text or not chat or not user:
             return
-
-        if not self._is_allowed(user):
-            logger.warning(
-                f"[telegram] 拒绝未授权用户  id={user.id}  username=@{user.username}"
-            )
+        if not self._is_sender_admitted(chat, user, "消息"):
             return
 
         # 去重：同一 (chat_id, message_id) 只处理一次，防止 Telegram 重投
@@ -104,6 +101,30 @@ class _InboundMixin:
             )
         )
 
+    def _is_sender_admitted(self, chat: Any, user: Any, kind: str) -> bool:
+        """Checks the role binding's admission before any side effect of an update.
+
+        Rejected updates (unbound chat, blacklisted member) must not show
+        typing, remember usernames or download attachments. ``_accept_inbound``
+        repeats the check because paused intake may replay a message after the
+        bindings changed. ``kind`` names what was rejected (``消息``, ``/stop``)
+        for the warning log.
+        """
+        if self._channel_hub is None or self._channel_hub.is_sender_allowed(
+            channel=self._channel,
+            chat_id=str(chat.id),
+            sender_id=str(user.id),
+            sender_alias=user.username or "",
+        ):
+            return True
+        logger.warning(
+            "[telegram] 忽略未绑定渠道或黑名单成员的 %s  chat_id=%s  id=%s",
+            kind,
+            chat.id,
+            user.id,
+        )
+        return False
+
     def _route_inbound(self, message: InboundMessage) -> InboundMessage:
         if self._channel_hub is None:
             return message
@@ -120,7 +141,8 @@ class _InboundMixin:
             sender_alias=str(message.metadata.get("username") or ""),
         ):
             logger.warning(
-                "[telegram] 拒绝未绑定渠道或未授权用户 chat_id=%s", message.chat_id
+                "[telegram] 忽略未绑定渠道或黑名单成员的消息 chat_id=%s",
+                message.chat_id,
             )
             return
         routed = self._route_inbound(message)

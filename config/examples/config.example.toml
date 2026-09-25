@@ -93,7 +93,6 @@ websocket_open_timeout_seconds = 5.0
 # [plugins.qqbot]
 # app_id = ""
 # client_secret = ""
-# allow_from = []
 
 # 可选：飞书 / Lark 企业自建应用机器人（长连接收消息，私聊 + 流式卡片）。
 # 开发者后台配置步骤见 plugins/feishu/TESTING.md。

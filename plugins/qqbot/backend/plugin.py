@@ -20,10 +20,6 @@ class QQBotGroupConfigModel(BaseModel):
         default="",
         validation_alias=AliasChoices("group_openid", "groupOpenid"),
     )
-    allow_from: list[str] = Field(
-        default_factory=list,
-        validation_alias=AliasChoices("allow_from", "allowFrom"),
-    )
     require_at: bool = Field(
         default=True,
         validation_alias=AliasChoices("require_at", "requireAt"),
@@ -47,11 +43,6 @@ class QQBotConfigModel(BaseModel):
         title="App Secret",
         validation_alias=AliasChoices("client_secret", "clientSecret"),
     )
-    allow_from: list[str] = Field(
-        default_factory=list,
-        title="允许的用户",
-        description="QQBot 用户 OpenID；留空则不限制",
-    )
     groups: list[QQBotGroupConfigModel] = Field(
         default_factory=list, title="群聊（旧版）"
     )
@@ -72,7 +63,6 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         QQBotChannel(
             app_id=config.app_id,
             client_secret=config.client_secret,
-            allow_from=config.allow_from,
             groups=config.groups,
         )
     )

@@ -9,18 +9,28 @@ from core.roles.binding_policy import RoleBindingPolicy
 from core.roles.models import RoleChannelBindingConfig, RoleProactiveConfig
 
 
-def test_binding_policy_rejects_external_channel_without_single_contact() -> None:
-    policy = RoleBindingPolicy()
+def test_binding_policy_accepts_external_bindings_without_any_contact() -> None:
+    # A private chat's partner is the chat itself; a group admits every member
+    # not blacklisted (#398).
+    bindings = [
+        RoleChannelBindingConfig("qq", "10001", "private"),
+        RoleChannelBindingConfig("qq", "gqq:7", "group"),
+        RoleChannelBindingConfig("qq", "gqq:8", "group", ["42"]),
+    ]
 
-    with pytest.raises(ValueError, match="仅绑定一个联系人"):
-        policy.normalize(
+    assert RoleBindingPolicy().normalize(bindings) == bindings
+
+
+def test_binding_policy_rejects_blacklist_on_private_binding_payload() -> None:
+    with pytest.raises(ValueError, match="只有群聊绑定可以设置黑名单"):
+        RoleBindingPolicy().normalize(
             [
-                RoleChannelBindingConfig(
-                    channel="qq",
-                    chat_id="10001",
-                    chat_type="private",
-                    allow_from=[],
-                )
+                {
+                    "channel": "qq",
+                    "chat_id": "10001",
+                    "chat_type": "private",
+                    "blocked_senders": ["42"],
+                }
             ]
         )
 
@@ -31,7 +41,6 @@ def test_binding_policy_rejects_channel_owned_by_another_role() -> None:
         channel="telegram",
         chat_id="chat-1",
         chat_type="private",
-        allow_from=["user-1"],
     )
     roles = [SimpleNamespace(id="role-a", channel_bindings=[existing])]
 
@@ -70,10 +79,9 @@ def _declared_policy() -> RoleBindingPolicy:
 
 def test_binding_policy_accepts_chat_ids_matching_their_declared_type() -> None:
     bindings = [
-        # A private QQ chat no longer has to equal its contact (#397).
-        RoleChannelBindingConfig("qq", "831907794", "private", ["3174898512"]),
+        RoleChannelBindingConfig("qq", "831907794", "private"),
         RoleChannelBindingConfig("qq", "gqq:831907794", "group", ["3174898512"]),
-        RoleChannelBindingConfig("qqbot", "c2c:u1", "private", ["u1"]),
+        RoleChannelBindingConfig("qqbot", "c2c:u1", "private"),
     ]
 
     assert _declared_policy().normalize(bindings) == bindings
@@ -83,16 +91,16 @@ def test_binding_policy_accepts_chat_ids_matching_their_declared_type() -> None:
     "binding, message",
     [
         # Group type without its prefix: QQ would send it as a private chat.
-        (RoleChannelBindingConfig("qq", "831907794", "group", ["3"]), "gqq:<群号>"),
-        (RoleChannelBindingConfig("qq", "gqq:", "group", ["3"]), "gqq:<群号>"),
+        (RoleChannelBindingConfig("qq", "831907794", "group"), "gqq:<群号>"),
+        (RoleChannelBindingConfig("qq", "gqq:", "group"), "gqq:<群号>"),
         # Private type carrying the group prefix names the other type.
-        (RoleChannelBindingConfig("qq", "gqq:831907794", "private", ["3"]), "群聊格式"),
+        (RoleChannelBindingConfig("qq", "gqq:831907794", "private"), "群聊格式"),
         (
-            RoleChannelBindingConfig("qqbot", "u1", "private", ["u1"]),
+            RoleChannelBindingConfig("qqbot", "u1", "private"),
             "c2c:<用户 OpenID>",
         ),
         # qqbot declares no group chats.
-        (RoleChannelBindingConfig("qqbot", "c2c:u1", "group", ["u1"]), "可选：私聊"),
+        (RoleChannelBindingConfig("qqbot", "c2c:u1", "group"), "可选：私聊"),
     ],
 )
 def test_binding_policy_rejects_chat_id_inconsistent_with_its_type(
@@ -103,7 +111,7 @@ def test_binding_policy_rejects_chat_id_inconsistent_with_its_type(
 
 
 def test_binding_policy_rejects_new_binding_on_channel_no_plugin_declares() -> None:
-    binding = RoleChannelBindingConfig("gone", "room-1", "group", ["u1"])
+    binding = RoleChannelBindingConfig("gone", "room-1", "group")
 
     with pytest.raises(ValueError, match="没有已安装的插件"):
         _declared_policy().normalize([binding])
@@ -111,8 +119,8 @@ def test_binding_policy_rejects_new_binding_on_channel_no_plugin_declares() -> N
 
 def test_binding_policy_keeps_unchanged_binding_of_an_uninstalled_plugin() -> None:
     # The desktop resends read-only bindings of uninstalled plugins on every save.
-    saved = RoleChannelBindingConfig("gone", "room-1", "group", ["u1"])
-    edited = RoleChannelBindingConfig("gone", "room-2", "group", ["u1"])
+    saved = RoleChannelBindingConfig("gone", "room-1", "group")
+    edited = RoleChannelBindingConfig("gone", "room-2", "group")
     roles = [SimpleNamespace(id="mira", channel_bindings=[saved])]
     policy = _declared_policy()
 
@@ -122,7 +130,7 @@ def test_binding_policy_keeps_unchanged_binding_of_an_uninstalled_plugin() -> No
 
 
 def test_binding_policy_requires_private_desktop_session() -> None:
-    desktop = RoleChannelBindingConfig("desktop", "role:mira", "group", [])
+    desktop = RoleChannelBindingConfig("desktop", "role:mira", "group")
 
     with pytest.raises(ValueError, match="私聊"):
         RoleBindingPolicy().normalize_for_role([], "mira", [desktop])

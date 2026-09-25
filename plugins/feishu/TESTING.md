@@ -43,7 +43,7 @@ uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 
 ## 4. 绑定角色
 
-在飞书里搜索机器人并发一条私聊消息。消息会因未绑定被拒绝，渠道状态和日志会显示 `未绑定的私聊：chat_id=oc_…，open_id=ou_…`。在角色的渠道绑定里选择「飞书」，chat_id 填 `oc_…`，联系人填 `ou_…`，保存后重发。
+在飞书里搜索机器人并发一条私聊消息。消息会因未绑定被拒绝，渠道状态和日志会显示 `未绑定的私聊：chat_id=oc_…，open_id=ou_…`。在角色的渠道绑定里选择「飞书」，类型为私聊，chat_id 填 `oc_…`，保存后重发。
 
 ## 5. 验收清单
 

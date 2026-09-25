@@ -38,7 +38,8 @@ def test_manifest_declares_the_feishu_channel_for_binding_discovery() -> None:
     assert manifest.display_name == "飞书"
     [channel] = manifest.channels
     assert (channel.name, channel.label) == ("feishu", "飞书")
-    assert "open_id" in (channel.contact_label or "")
+    # Private-only: there is no group blacklist whose member IDs need a label.
+    assert channel.contact_label is None
     [private] = channel.chat_types
     assert (private.type, private.prefix) == ("private", None)
     assert (private.chat_id_hint or "").startswith("oc_")

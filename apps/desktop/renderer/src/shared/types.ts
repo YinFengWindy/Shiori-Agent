@@ -83,7 +83,8 @@ export type RoleChannelBinding = {
   channel: string;
   chat_id: string;
   chat_type: RoleChatType;
-  allow_from: string[];
+  /** Group members whose messages the role ignores; always empty for private and desktop bindings. */
+  blocked_senders: string[];
 };
 
 export type RoleProactiveConfig = {

@@ -124,7 +124,7 @@ capabilities: [config, channels]
 channels:
   - name: qq                         # required, [a-z][a-z0-9_-]{0,63}
     label: QQ（NapCat）               # required, display name
-    contact_label: QQ 号              # optional, the role binding's allow_from contact
+    contact_label: QQ 号              # optional, names member IDs in a group binding's blacklist
     chat_types:                      # required since 2.5, nonempty
       - type: private                # required, private | group, unique per channel
         label: 私聊                   # required, type picker label

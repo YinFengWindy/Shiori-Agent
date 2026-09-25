@@ -120,7 +120,7 @@ async def test_lists_desktop_builtins_and_unconfigured_qqbot(tmp_path, monkeypat
     assert rows["qqbot"] == {
         "name": "qqbot",
         "label": "QQBot",
-        "contact_label": "QQBot 用户 OpenID",
+        "contact_label": None,
         "chat_types": [
             {
                 "type": "private",

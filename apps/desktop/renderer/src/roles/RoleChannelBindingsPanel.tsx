@@ -13,14 +13,14 @@ import {
   defaultRoleBindingChannel,
   roleBindingAvailability,
   roleBindingChannelOptions,
-  roleBindingContactLabel,
   roleChannelLabel,
   type RoleBindingAvailability,
   type RoleChannelCatalog,
 } from "./roleChannelCatalog";
+import { RoleChannelBindingBlocklistField } from "./RoleChannelBindingBlocklistField";
 import { RoleChannelBindingChatIdField, RoleChannelBindingChatTypeField } from "./RoleChannelBindingChatFields";
-import { RoleReadOnlyField, roleReadOnlyFieldClass } from "./RoleReadOnlyField";
-import { changeRoleBindingChatType } from "./roleChatTypes";
+import { RoleReadOnlyField } from "./RoleReadOnlyField";
+import { changeRoleBindingChatType, isGroupChatType } from "./roleChatTypes";
 import { RoleEditorSection } from "./RoleEditorSection";
 
 type RoleChannelBindingsPanelProps = {
@@ -93,7 +93,8 @@ function ChannelStateBadge({ availability }: { availability: RoleBindingAvailabi
 
 /**
  * Renders one ordered delivery destination and its editable access boundary:
- * channel and session type on the first line, the number below. A binding
+ * channel and session type on the first line, the number below, and for a
+ * group the blacklist of members the role ignores. A binding
  * whose provider is disabled or gone keeps its data read-only; it can still be
  * reordered or removed.
  */
@@ -103,7 +104,6 @@ function ChannelBindingRow({ activeRoleId, binding, channels, index, bindingsCou
   const readOnly = availability.kind !== "editable";
   const channel = availability.kind === "missing" ? null : availability.channel;
   const label = roleChannelLabel(binding.channel, channels);
-  const contactFieldClass = readOnly ? roleReadOnlyFieldClass : roleFieldClass;
   const updateThis = (update: (item: RoleChannelBinding) => RoleChannelBinding) =>
     onUpdateBindings((current) => current.map((item, itemIndex) => itemIndex === index ? update(item) : item));
 
@@ -127,8 +127,8 @@ function ChannelBindingRow({ activeRoleId, binding, channels, index, bindingsCou
             : null}
         </div>
         <RoleChannelBindingChatIdField binding={binding} channel={channel} readOnly={desktopBinding || readOnly} onChange={(chatId) => updateThis((item) => ({ ...item, chat_id: chatId }))} />
-        {!desktopBinding
-          ? <label className={roleFieldLabelClass}><span>{roleBindingContactLabel(channel)}</span><input className={contactFieldClass} value={binding.allow_from[0] ?? ""} placeholder="输入唯一联系人 ID" readOnly={readOnly} onChange={(event) => updateThis((item) => ({ ...item, allow_from: event.target.value.trim() ? [event.target.value.trim()] : [] }))} /></label>
+        {isGroupChatType(binding.chat_type)
+          ? <RoleChannelBindingBlocklistField binding={binding} channel={channel} readOnly={readOnly} onChange={(blockedSenders) => updateThis((item) => ({ ...item, blocked_senders: blockedSenders }))} />
           : null}
         <ChannelBindingNotice availability={availability} onOpenPluginSettings={onOpenPluginSettings} />
       </div>

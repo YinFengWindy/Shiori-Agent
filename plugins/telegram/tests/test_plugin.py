@@ -39,6 +39,7 @@ def test_manifest_declares_the_legacy_channel_name_for_bindings() -> None:
     assert set(manifest.capabilities) == {"config", "channels"}
     assert [item.name for item in manifest.channels] == ["telegram"]
     assert manifest.channels[0].label == "Telegram"
+    # Labels the member IDs of a group binding's blacklist.
     assert manifest.channels[0].contact_label
     # Telegram group IDs are negative numbers without a prefix.
     types = {item.type: item.prefix for item in manifest.channels[0].chat_types}

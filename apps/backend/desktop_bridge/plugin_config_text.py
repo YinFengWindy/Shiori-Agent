@@ -50,7 +50,16 @@ import toml
 _HEADER_RE = re.compile(r"^(\[{1,2})\s*([^\[\]]+?)\s*(\]{1,2})\s*$")
 
 
-class PluginTableConflict(ValueError):
+class UnlocatableTable(ValueError):
+    """A table exists in the document in a form the line scanner cannot edit.
+
+    Dotted keys and inline tables are valid TOML but have no header line to
+    replace. Callers that can rewrite the whole document catch this and fall
+    back; any other ``ValueError`` from this module is a genuine bug.
+    """
+
+
+class PluginTableConflict(UnlocatableTable):
     """The target plugin's table already exists in a form this module cannot locate.
 
     Raised instead of silently appending a duplicate ``[plugins.<id>]``
@@ -104,7 +113,7 @@ def merge_table(
             for segment in path_segments:
                 current = current.get(segment) if isinstance(current, dict) else None
             if current is not None:
-                raise ValueError(f"Cannot locate table {'.'.join(path_segments)}")
+                raise UnlocatableTable(f"Cannot locate table {'.'.join(path_segments)}")
         return _append_table(config_toml, block)
     # 新表整体写在第一段的位置，其余归属本插件的表段（可能被无关表隔开）一并移除；
     # 只处理第一段会把后面的旧子表留下，生成重复表声明，整份文档随即无法解析。

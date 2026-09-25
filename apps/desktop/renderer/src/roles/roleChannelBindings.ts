@@ -11,7 +11,7 @@ export function createRoleChannelBinding(roleId: string, channel: string, catalo
     channel,
     chat_id: channel === desktopChannelName ? `role:${roleId}` : "",
     chat_type: defaultRoleChatType(findRoleChannel(catalog, channel)),
-    allow_from: [],
+    blocked_senders: [],
   };
 }
 
@@ -19,6 +19,7 @@ export function createRoleChannelBinding(roleId: string, channel: string, catalo
  * Changes a binding channel while preserving the desktop role-session
  * invariant. The session type resets to the new channel's first declared type;
  * an entered number is kept without the old type's prefix and re-prefixed for the new one.
+ * The blacklist is dropped: its member IDs belong to the old channel.
  */
 export function changeRoleBindingChannel(
   binding: RoleChannelBinding,
@@ -38,6 +39,7 @@ export function changeRoleBindingChannel(
       ? `role:${roleId}`
       : composeRoleBindingChatId(number, findRoleChatType(nextChannel, chatType)),
     chat_type: chatType,
+    blocked_senders: [],
   };
 }
 

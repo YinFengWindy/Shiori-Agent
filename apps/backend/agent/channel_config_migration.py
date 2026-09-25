@@ -17,11 +17,12 @@ Telegram / QQ（NapCat）迁为插件后，``[channels.<name>]`` 改写为 ``[pl
 from __future__ import annotations
 
 import logging
-import tomllib
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from agent.config_migration_writer import save_migrated_config
 
 logger = logging.getLogger(__name__)
 
@@ -61,36 +62,36 @@ def migrate_legacy_channel_configs(path: Path, data: dict[str, Any]) -> dict[str
     if not pending:
         return data
     # 局部导入：迁移路径很少命中，不让每次加载配置都拉入 TOML 文本编辑模块。
-    from desktop_bridge.plugin_config_text import (
-        PluginTableConflict,
-        merge_plugin_table,
-        remove_table,
-    )
-    from infra.persistence.text_store import atomic_save_text
-    from infra.persistence.toml_store import render_toml
+    from desktop_bridge.plugin_config_text import merge_plugin_table, remove_table
 
-    # 文本编辑保留用户 TOML 的格式和注释；structural 是同一结果的结构化版本，
-    # 行扫描处理不了（内联表、点号键）时用它整体重写，代价是丢失注释。
-    text: str | None = path.read_text(encoding="utf-8")
+    # structural 是迁移结果的结构化版本；文本拼接失败时由共享写回整体重写。
     structural = deepcopy(data)
+    table_values: dict[str, dict[str, Any] | None] = {}
     for table in pending:
         values = _plugin_values(table, channels[table.name], data)
+        table_values[table.name] = values
         if values is not None:
             structural.setdefault("plugins", {})[table.name] = values
-            if text is not None:
-                try:
-                    text = merge_plugin_table(text, table.name, values)
-                except PluginTableConflict:
-                    text = None
         _as_dict(structural.get("channels")).pop(table.name, None)
-        if text is not None:
+
+    def splice(text: str) -> str:
+        for table in pending:
+            values = table_values[table.name]
+            if values is not None:
+                text = merge_plugin_table(text, table.name, values)
             text = remove_table(text, ["channels", table.name])
-    if text is None or _still_has_legacy(tomllib.loads(text), pending):
-        text = render_toml(structural)
-    atomic_save_text(path, text)
+        return text
+
+    # 空的 [channels] 父表在文本里可能消失，所以只要求旧表确实不在了。
+    result = save_migrated_config(
+        path,
+        structural,
+        splice,
+        is_complete=lambda document: not _still_has_legacy(document, pending),
+    )
     names = ", ".join(table.name for table in pending)
     logger.info("已将 [channels.%s] 一次性迁移至对应渠道插件配置", names)
-    return tomllib.loads(text)
+    return result
 
 
 def reject_migrated_channel_tables(data: dict[str, Any]) -> None:

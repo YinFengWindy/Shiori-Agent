@@ -24,11 +24,7 @@ class _MediaMixin:
 
         if not msg or not msg.photo or not chat or not user:
             return
-
-        if not self._is_allowed(user):
-            logger.warning(
-                f"[telegram] 拒绝未授权用户  id={user.id}  username=@{user.username}"
-            )
+        if not self._is_sender_admitted(chat, user, "图片"):
             return
 
         msg_key = f"{chat.id}:{msg.message_id}"
@@ -91,11 +87,7 @@ class _MediaMixin:
 
         if not msg or not msg.document or not chat or not user:
             return
-
-        if not self._is_allowed(user):
-            logger.warning(
-                f"[telegram] 拒绝未授权用户  id={user.id}  username=@{user.username}"
-            )
+        if not self._is_sender_admitted(chat, user, "文件"):
             return
 
         chat_id_str = str(chat.id)

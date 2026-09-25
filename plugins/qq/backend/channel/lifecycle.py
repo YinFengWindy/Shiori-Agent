@@ -50,7 +50,6 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
         bot_uin: str,
         bus: MessageBus | None = None,
         session_manager: SessionManager | None = None,
-        allow_from: list[str] | None = None,
         groups: list[QQGroupFilterConfig] | None = None,
         websocket_open_timeout_seconds: float = 5.0,
         group_filter: GroupMessageFilter | None = None,
@@ -65,8 +64,6 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
         # 不经 ChannelHost 直接驱动渠道的测试。
         self._bus: MessageBus | None = bus
         self._bot_uin = bot_uin
-        allowed_users = [str(user_id) for user_id in (allow_from or [])]
-        self._allow_from = set(allowed_users)
         self._websocket_open_timeout_seconds = float(websocket_open_timeout_seconds)
         # 空值表示沿用 NcatBot 自己的默认值（或其 config.yaml）。
         self._ws_uri = ws_uri
@@ -161,7 +158,9 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
             ncatbot_config.napcat, ws_uri=self._ws_uri, ws_token=self._ws_token
         )
         ncatbot_config.bt_uin = self._bot_uin
-        ncatbot_config.root = next(iter(self._allow_from), self._bot_uin)
+        # root 是 NcatBot 自带插件体系的管理员；Shiori 不加载 NcatBot 插件，
+        # 谁能和角色说话只由角色绑定决定，这里固定为机器人自己。
+        ncatbot_config.root = self._bot_uin
         ncatbot_config.check_ncatbot_update = False
         ncatbot_config.skip_ncatbot_install_check = True
         ncatbot_config.napcat.remote_mode = True
@@ -171,9 +170,6 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
         ncatbot_dir.mkdir(parents=True, exist_ok=True)
         (ncatbot_dir / "plugins").mkdir(exist_ok=True)
         ncatbot_config.plugin.plugins_dir = str(ncatbot_dir / "plugins")
-
-    def _is_allowed(self, user_id: str) -> bool:
-        return not self._allow_from or user_id in self._allow_from
 
     async def start(self, ctx: ChannelContext | None = None) -> None:
         from ncatbot.core import BotClient
@@ -224,9 +220,6 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
             if self._bot_loop is None:
                 self._bot_loop = asyncio.get_running_loop()
             user_id = str(event.user_id)
-            if not self._is_allowed(user_id):
-                logger.warning("[qq] 拒绝未授权用户 user_id=%s", user_id)
-                return
             text, image_urls = extract_cq_images(event.raw_message)
             if text.strip() == "/stop":
                 self._submit_to_main_loop(self._handle_stop_private(user_id))
@@ -238,7 +231,6 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
                 preview,
                 len(image_urls),
             )
-            self.user_map[user_id] = user_id
             self._submit_to_main_loop(self._handle_private(user_id, text, image_urls))
 
         @cast(Any, self._bot.on_group_message())

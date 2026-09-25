@@ -5,7 +5,7 @@ import {
   defaultRoleBindingChannel,
   roleBindingAvailability,
   roleBindingChannelOptions,
-  roleBindingContactLabel,
+  roleBlockedSenderPlaceholder,
   roleChannelLabel,
 } from "./roleChannelCatalog";
 
@@ -37,12 +37,12 @@ describe("roleChannelCatalog", () => {
   it("keeps bindings of disabled or uninstalled providers read-only", () => {
     const disabled = channel("qqbot", "plugin_disabled");
     const catalog = [desktop, disabled, channel("demo", "not_configured")];
-    assert.deepEqual(roleBindingAvailability({ channel: "qqbot", chat_id: "c2c:1", chat_type: "private", allow_from: [] }, catalog), { kind: "plugin_disabled", channel: disabled });
-    assert.deepEqual(roleBindingAvailability({ channel: "gone", chat_id: "1", chat_type: "private", allow_from: [] }, catalog), { kind: "missing" });
-    assert.equal(roleBindingAvailability({ channel: "demo", chat_id: "1", chat_type: "private", allow_from: [] }, catalog).kind, "editable");
-    assert.equal(roleBindingAvailability({ channel: "desktop", chat_id: "role:mira", chat_type: "private", allow_from: [] }, catalog).kind, "editable");
+    assert.deepEqual(roleBindingAvailability({ channel: "qqbot", chat_id: "c2c:1", chat_type: "private", blocked_senders: [] }, catalog), { kind: "plugin_disabled", channel: disabled });
+    assert.deepEqual(roleBindingAvailability({ channel: "gone", chat_id: "1", chat_type: "private", blocked_senders: [] }, catalog), { kind: "missing" });
+    assert.equal(roleBindingAvailability({ channel: "demo", chat_id: "1", chat_type: "private", blocked_senders: [] }, catalog).kind, "editable");
+    assert.equal(roleBindingAvailability({ channel: "desktop", chat_id: "role:mira", chat_type: "private", blocked_senders: [] }, catalog).kind, "editable");
     // Nothing is known yet, so nothing may be locked.
-    assert.deepEqual(roleBindingAvailability({ channel: "qqbot", chat_id: "c2c:1", chat_type: "private", allow_from: [] }, null), { kind: "editable", channel: null });
+    assert.deepEqual(roleBindingAvailability({ channel: "qqbot", chat_id: "c2c:1", chat_type: "private", blocked_senders: [] }, null), { kind: "editable", channel: null });
   });
 
   it("defaults a new binding to a working external channel, then any enabled one, then desktop", () => {
@@ -56,7 +56,7 @@ describe("roleChannelCatalog", () => {
     assert.equal(roleChannelLabel("qqbot", [qqbot]), "QQBot");
     assert.equal(roleChannelLabel("desktop", null), "桌面端");
     assert.equal(roleChannelLabel("gone", [qqbot]), "gone");
-    assert.equal(roleBindingContactLabel(qqbot), "联系人 ID（QQBot 用户 OpenID）");
-    assert.equal(roleBindingContactLabel(null), "联系人 ID");
+    assert.equal(roleBlockedSenderPlaceholder(qqbot), "QQBot 用户 OpenID");
+    assert.equal(roleBlockedSenderPlaceholder(null), "");
   });
 });

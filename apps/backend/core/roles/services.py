@@ -246,16 +246,17 @@ class RoleBindingService:
         role_id: str,
         *,
         chat_type: ChatType,
-        contact_id: str = "",
+        blocked_senders: Sequence[str] = (),
     ) -> RoleChannelBinding:
-        """Bind one channel session of ``chat_type`` to a role and authorize its sole contact."""
+        """Bind one channel session of ``chat_type`` to a role.
+
+        ``blocked_senders`` is a group binding's blacklist; the model rejects it
+        on any other session type.
+        """
 
         role = self._repository.get_required(role_id)
         clean_channel = str(channel).strip()
         clean_chat_id = normalize_chat_id(chat_id)
-        clean_contact_id = str(contact_id).strip()
-        if clean_channel != "desktop" and not clean_contact_id:
-            raise ValueError("外部渠道绑定必须提供联系人 ID")
         _ = _binding_key(clean_channel, clean_chat_id)
         next_bindings = [
             binding.to_dict()
@@ -270,7 +271,7 @@ class RoleBindingService:
                 "channel": clean_channel,
                 "chat_id": clean_chat_id,
                 "chat_type": chat_type,
-                "allow_from": [] if clean_channel == "desktop" else [clean_contact_id],
+                "blocked_senders": list(blocked_senders),
             }
         )
         updated = self._repository.update_role(role.id, channel_bindings=next_bindings)

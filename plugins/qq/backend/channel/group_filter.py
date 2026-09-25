@@ -2,7 +2,7 @@
 群聊消息过滤层
 
 定义 GroupMessageFilter 协议，作为未来扩展的核心钩子点。
-当前默认实现：检查发送者白名单 + require_at。
+当前默认实现：require_at。谁能和角色说话由角色绑定（群黑名单）决定，不在这里。
 
 未来扩展示例：
     class LLMGroupFilter:
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 
@@ -27,7 +27,6 @@ class QQGroupFilterConfig:
     """Runtime-only QQ group filter settings owned by the channel layer."""
 
     group_id: str
-    allow_from: list[str] = field(default_factory=list)
     require_at: bool = True
 
 
@@ -46,9 +45,7 @@ class GroupMessageFilter(Protocol):
 
 class DefaultGroupFilter:
     """
-    默认过滤器：
-      1. 发送者是否在 allow_from 白名单（空 = 允许所有人）
-      2. require_at=True 时，消息中必须包含 @Bot
+    默认过滤器：require_at=True 时，消息中必须包含 @Bot。
     """
 
     def __init__(self, bot_uin: str) -> None:
@@ -56,12 +53,6 @@ class DefaultGroupFilter:
 
     async def should_process(self, event, group_cfg: QQGroupFilterConfig) -> bool:
         user_id = str(event.user_id)
-
-        if group_cfg.allow_from and user_id not in group_cfg.allow_from:
-            logger.debug(
-                f"[group_filter] 拒绝非白名单用户  user_id={user_id}  group={group_cfg.group_id}"
-            )
-            return False
 
         if group_cfg.require_at and not _is_at_bot(event.raw_message, self._bot_uin):
             logger.debug(
