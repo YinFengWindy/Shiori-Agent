@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.tools.message_push import MessagePushTool
+from agent.tools.message_push import MessagePushTool, PushOutcome
 from core.common.runtime_scope import bind_runtime
 
 
@@ -241,3 +241,46 @@ async def test_message_push_tool_covers_success_failure_and_fallbacks():
 
     tool.register_channel("broken", text=broken)
     assert "发送失败" in await tool.execute(channel="broken", chat_id=1, message="x")
+
+
+@pytest.mark.asyncio
+async def test_push_reports_sender_message_ids_in_send_order():
+    tool = MessagePushTool()
+    tool.register_channel(
+        "qqbot",
+        text=AsyncMock(return_value=" text-id "),
+        image=AsyncMock(return_value="image-id"),
+        file=AsyncMock(return_value=None),
+    )
+
+    outcome = await tool.push(
+        channel="qqbot",
+        chat_id="c2c:user-1",
+        message="hello",
+        file="report.pdf",
+        image="cat.png",
+    )
+
+    assert outcome == PushOutcome(
+        "文本已发送；文件 'report.pdf' 已发送；图片已发送",
+        ("text-id", "image-id"),
+    )
+    # The model-facing tool result stays plain text.
+    text = await tool.execute(channel="qqbot", chat_id="c2c:user-1", message="hi")
+    assert text == "文本已发送"
+
+
+@pytest.mark.asyncio
+async def test_push_failure_reports_no_message_ids():
+    tool = MessagePushTool()
+    tool.register_channel(
+        "qqbot",
+        text=AsyncMock(return_value="text-id"),
+        image=AsyncMock(side_effect=RuntimeError("upload failed")),
+    )
+
+    outcome = await tool.push(
+        channel="qqbot", chat_id="c2c:user-1", message="hello", image="cat.png"
+    )
+
+    assert outcome == PushOutcome("发送失败：upload failed")

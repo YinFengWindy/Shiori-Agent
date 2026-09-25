@@ -495,3 +495,37 @@ async def test_qqbot_chatid_answers_without_entering_the_role(
     assert bus.inbound == []
     channel._send_input_notify.assert_not_awaited()
     assert channel._last_c2c_msg_id == {}
+
+
+@pytest.mark.asyncio
+async def test_qqbot_push_senders_return_the_platform_message_id() -> None:
+    channel = QQBotChannel("app", "secret")
+    channel._get_access_token = AsyncMock(return_value="access-token")
+    channel._api_request = AsyncMock(
+        side_effect=[
+            {"id": "text-id"},
+            {"file_info": "uploaded-file"},
+            {"id": "image-id"},
+            {"id": "stream-id"},
+            {},
+        ]
+    )
+    channel._last_c2c_msg_id["user-1"] = "inbound-1"
+
+    assert await channel.send_proactive("c2c:user-1", "回复") == "text-id"
+    assert (
+        await channel.send_image("c2c:user-1", "https://example.com/a.png")
+        == "image-id"
+    )
+    # The first stream chunk assigns the id; later chunks reuse it.
+    assert await channel.send_stream("c2c:user-1", "x" * 200) == "stream-id"
+
+
+@pytest.mark.asyncio
+async def test_qqbot_stream_fallback_returns_the_plain_message_id() -> None:
+    channel = QQBotChannel("app", "secret")
+    channel._get_access_token = AsyncMock(return_value="access-token")
+    channel._api_request = AsyncMock(return_value={"id": "plain-id"})
+
+    # No inbound message to anchor a stream: sent as a plain message.
+    assert await channel.send_stream("c2c:user-1", "回复") == "plain-id"

@@ -5,6 +5,7 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 
 from agent.tools.base import Tool
@@ -16,6 +17,22 @@ logger = logging.getLogger(__name__)
 
 # Identity is supplied by the host outbound owner, never by model JSON arguments.
 PENDING_TURN_DELIVERY = object()
+
+# A sender may return the platform id of the message it just sent; None means
+# the transport exposes no such id.
+SenderResult = str | None
+
+
+@dataclass(frozen=True)
+class PushOutcome:
+    """Model-facing result text plus the platform ids the senders reported.
+
+    ``external_message_ids`` lists, in send order, every nonblank id a sender
+    returned; channels that cannot report ids contribute nothing.
+    """
+
+    text: str
+    external_message_ids: tuple[str, ...] = ()
 
 
 class MessagePushTool(Tool):
@@ -49,7 +66,7 @@ class MessagePushTool(Tool):
 
     def __init__(self, event_bus: EventBus | None = None) -> None:
         # channel -> {type: sender_fn}
-        self._senders: dict[str, dict[str, Callable[..., Awaitable[None]]]] = {}
+        self._senders: dict[str, dict[str, Callable[..., Awaitable[SenderResult]]]] = {}
         self._descriptions: dict[str, str] = {}
         self._target_resolvers: dict[str, Callable[[str], str]] = {}
         self._role_target_validator: Callable[[str, str, str], bool | str] | None = None
@@ -111,16 +128,16 @@ class MessagePushTool(Tool):
     def register_channel(
         self,
         channel: str,
-        text: Callable[[str, str], Awaitable[None]] | None = None,
-        stream_text: Callable[[str, str], Awaitable[None]] | None = None,
-        file: Callable[[str, str, str | None], Awaitable[None]] | None = None,
-        image: Callable[[str, str], Awaitable[None]] | None = None,
+        text: Callable[[str, str], Awaitable[SenderResult]] | None = None,
+        stream_text: Callable[[str, str], Awaitable[SenderResult]] | None = None,
+        file: Callable[[str, str, str | None], Awaitable[SenderResult]] | None = None,
+        image: Callable[[str, str], Awaitable[SenderResult]] | None = None,
         target_resolver: Callable[[str], str] | None = None,
         text_with_metadata: (
-            Callable[[str, str, dict[str, object]], Awaitable[None]] | None
+            Callable[[str, str, dict[str, object]], Awaitable[SenderResult]] | None
         ) = None,
         image_with_metadata: (
-            Callable[[str, str, dict[str, object]], Awaitable[None]] | None
+            Callable[[str, str, dict[str, object]], Awaitable[SenderResult]] | None
         ) = None,
         description: str = "",
     ) -> None:
@@ -132,6 +149,8 @@ class MessagePushTool(Tool):
         - target_resolver(chat_id) -> canonical chat_id
         - text_with_metadata(chat_id, message, metadata) preserves delivery ownership
         - description: 渠道身份与 chat_id 格式的简短说明，写进工具描述的可用渠道列表
+        每个 sender 可返回平台为本次发送分配的消息 id（str）供投递记录使用；
+        拿不到 id 的渠道返回 None。
         """
         self._senders[channel] = {}
         if description.strip():
@@ -161,6 +180,14 @@ class MessagePushTool(Tool):
 
     async def execute(self, **kwargs: Any) -> str:
         """Sends nonblank payload fields and reports validation or transport errors."""
+        return (await self.push(**kwargs)).text
+
+    async def push(self, **kwargs: Any) -> PushOutcome:
+        """Sends like ``execute`` and also returns the sender-reported message ids.
+
+        Host-owned delivery (formal proactive turns) needs the ids to record
+        delivery on the committed message; the model only ever sees the text.
+        """
         if self._transport_lock is None:
             return await self._execute_send(**kwargs)
         async with self._transport_lock:
@@ -172,12 +199,12 @@ class MessagePushTool(Tool):
         lease = current_runtime_lease()
         return lease is not None and channel in lease.channel_names
 
-    async def _execute_send(self, **kwargs: Any) -> str:
+    async def _execute_send(self, **kwargs: Any) -> PushOutcome:
         channel: str = kwargs["channel"]
         if channel in self._retired_channels and not self._has_retired_transport(
             channel
         ):
-            return f"渠道 {channel!r} 已停用"
+            return PushOutcome(f"渠道 {channel!r} 已停用")
         requested_chat_id = str(kwargs["chat_id"])
         message = _nonblank_payload(kwargs.get("message"))
         file = _nonblank_payload(kwargs.get("file"))
@@ -194,7 +221,7 @@ class MessagePushTool(Tool):
         }
 
         if not message and not file and not image:
-            return "错误：message、file、image 至少提供一个"
+            return PushOutcome("错误：message、file、image 至少提供一个")
 
         try:
             resolver = self._target_resolvers.get(channel)
@@ -207,7 +234,7 @@ class MessagePushTool(Tool):
             logger.error(
                 f"[message_push] 目标解析失败 {channel}:{requested_chat_id}: {e}"
             )
-            return f"发送失败：{e}"
+            return PushOutcome(f"发送失败：{e}")
 
         if role_id and self._role_target_validator is not None:
             validation = self._role_target_validator(role_id, channel, chat_id)
@@ -223,7 +250,9 @@ class MessagePushTool(Tool):
 
         senders = self._senders.get(channel)
         if senders is None:
-            return f"渠道 {channel!r} 未注册，可用渠道：{list(self._senders) or ['（无）']}"
+            return PushOutcome(
+                f"渠道 {channel!r} 未注册，可用渠道：{list(self._senders) or ['（无）']}"
+            )
 
         # Reject unsupported payloads together, before sending any supported part.
         # Otherwise partial success could commit text or media that was never sent.
@@ -237,21 +266,30 @@ class MessagePushTool(Tool):
             if payload and not any(name in senders for name in capabilities)
         ]
         if unsupported:
-            return "发送失败：" + "；".join(unsupported)
+            return PushOutcome("发送失败：" + "；".join(unsupported))
 
         results: list[str] = []
+        external_ids: list[str] = []
+
+        def record_external_id(sent: SenderResult) -> None:
+            # Only a real platform id counts; blank or None means "no id".
+            if isinstance(sent, str) and sent.strip():
+                external_ids.append(sent.strip())
+
         image_sent = False
         try:
             if message:
                 if "text_with_metadata" in senders:
-                    await senders["text_with_metadata"](
-                        chat_id,
-                        message,
-                        delivery_metadata,
+                    record_external_id(
+                        await senders["text_with_metadata"](
+                            chat_id,
+                            message,
+                            delivery_metadata,
+                        )
                     )
                 else:
                     sender_name = "stream_text" if "stream_text" in senders else "text"
-                    await senders[sender_name](chat_id, message)
+                    record_external_id(await senders[sender_name](chat_id, message))
                 preview = message[:60] + "..." if len(message) > 60 else message
                 logger.info(f"[message_push] {channel}:{chat_id} ← text: {preview!r}")
                 results.append("文本已发送")
@@ -260,24 +298,26 @@ class MessagePushTool(Tool):
                 import os
 
                 name = os.path.basename(file)
-                await senders["file"](chat_id, file, name)
+                record_external_id(await senders["file"](chat_id, file, name))
                 logger.info(f"[message_push] {channel}:{chat_id} ← file: {file!r}")
                 results.append(f"文件 {name!r} 已发送")
 
             if image:
                 if "image_with_metadata" in senders:
-                    await senders["image_with_metadata"](
-                        chat_id, image, delivery_metadata
+                    record_external_id(
+                        await senders["image_with_metadata"](
+                            chat_id, image, delivery_metadata
+                        )
                     )
                 else:
-                    await senders["image"](chat_id, image)
+                    record_external_id(await senders["image"](chat_id, image))
                 logger.info(f"[message_push] {channel}:{chat_id} ← image: {image!r}")
                 results.append("图片已发送")
                 image_sent = True
 
         except Exception as e:
             logger.error(f"[message_push] 发送失败 {channel}:{chat_id}: {e}")
-            return f"发送失败：{e}"
+            return PushOutcome(f"发送失败：{e}")
 
         if (
             image_sent
@@ -302,7 +342,10 @@ class MessagePushTool(Tool):
                 )
             )
 
-        return "；".join(results) if results else f"渠道 {channel!r} 没有可用的 sender"
+        return PushOutcome(
+            "；".join(results) if results else f"渠道 {channel!r} 没有可用的 sender",
+            tuple(external_ids),
+        )
 
 
 def _nonblank_payload(value: str | None) -> str | None:

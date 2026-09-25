@@ -43,15 +43,34 @@ class OutboundDispatchError(RuntimeError):
         )
 
 
+@dataclass(frozen=True)
+class DeliveryReceipt:
+    """Proof that a transport accepted an outbound payload.
+
+    ``external_message_id`` is the platform id of the first message the
+    transport sent, or empty when the transport cannot report one.
+    """
+
+    external_message_id: str = ""
+
+
 class OutboundPort(Protocol):
-    async def dispatch(self, outbound: OutboundDispatch) -> bool: ...
+    async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
+        """Sends the payload; returns a receipt, or None when delivery was refused."""
+        ...
 
 
 class BusOutboundPort:
     def __init__(self, bus: Any) -> None:
         self._bus = bus
 
-    async def dispatch(self, outbound: OutboundDispatch) -> bool:
+    async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
+        """Queues the payload on the bus; the channel records delivery itself.
+
+        The receipt only proves the hand-off to the bus, never the platform id:
+        each channel's ``_on_response`` marks the committed message after it
+        actually sends.
+        """
         content = sanitize_user_visible_content(outbound.content)
         maybe = self._bus.publish_outbound(
             OutboundMessage(
@@ -66,7 +85,7 @@ class BusOutboundPort:
         )
         if inspect.isawaitable(maybe):
             await maybe
-        return True
+        return DeliveryReceipt()
 
 
 class PushToolOutboundPort:
@@ -79,14 +98,19 @@ class PushToolOutboundPort:
         self._push = push_tool
         self._execution_context = dict(execution_context or {})
 
-    async def dispatch(self, outbound: OutboundDispatch) -> bool:
+    async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
+        """Sends every payload part through the push tool, all or nothing.
+
+        Returns a receipt carrying the first platform message id any sender
+        reported; None when the target is empty or the role may not use it.
+        """
         message = sanitize_user_visible_content(outbound.content)
         channel = str(outbound.channel or "").strip()
         chat_id = str(outbound.chat_id or "").strip()
         media = [str(item).strip() for item in outbound.media if str(item).strip()]
         if (not message and not media) or not channel or not chat_id:
-            return False
-        result = ""
+            return None
+        external_ids: list[str] = []
         execution_context = {
             **self._execution_context,
             "session_key": str(
@@ -103,24 +127,30 @@ class PushToolOutboundPort:
         }
         try:
             if message or media:
-                result = await self._push.execute(
+                outcome = await self._push.push(
                     channel=channel,
                     chat_id=chat_id,
                     message=message,
                     image=media[0] if media else None,
                     **execution_context,
                 )
-                self._validate_delivery_result(result, channel=channel, chat_id=chat_id)
+                self._validate_delivery_result(
+                    outcome.text, channel=channel, chat_id=chat_id
+                )
+                external_ids.extend(outcome.external_message_ids)
             for image in media[1:]:
-                result = await self._push.execute(
+                outcome = await self._push.push(
                     channel=channel,
                     chat_id=chat_id,
                     image=image,
                     **execution_context,
                 )
-                self._validate_delivery_result(result, channel=channel, chat_id=chat_id)
+                self._validate_delivery_result(
+                    outcome.text, channel=channel, chat_id=chat_id
+                )
+                external_ids.extend(outcome.external_message_ids)
         except PermissionError:
-            return False
+            return None
         except OutboundDispatchError:
             raise
         except Exception as exc:
@@ -130,7 +160,11 @@ class PushToolOutboundPort:
                 detail=exc,
             ) from exc
 
-        return True
+        # One session message may span several platform messages (text, then
+        # images) but has a single external_message_id column: keep the first.
+        return DeliveryReceipt(
+            external_message_id=external_ids[0] if external_ids else ""
+        )
 
     @staticmethod
     def _validate_delivery_result(

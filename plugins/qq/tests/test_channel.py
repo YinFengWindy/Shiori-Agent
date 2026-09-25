@@ -923,3 +923,29 @@ async def test_qq_chatid_answers_the_binding_form_fields_without_a_turn(
     assert bus.inbound == []
     remember.assert_not_awaited()
     assert sessions.sessions == {}
+
+
+@pytest.mark.asyncio
+async def test_qq_push_senders_return_the_napcat_message_id(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    mod = _import_qq_channel(monkeypatch)
+    channel = mod.QQChannel(
+        "42", _Bus(), _SessionManager(tmp_path), http_requester=SimpleNamespace()
+    )
+
+    async def _drain(coro):
+        return await coro
+
+    channel._run_on_bot_loop = AsyncMock(side_effect=_drain)
+    channel._api = SimpleNamespace(
+        send_private_text=AsyncMock(return_value="101"),
+        send_group_text=AsyncMock(return_value=202),
+        send_private_image=AsyncMock(return_value=None),
+    )
+
+    assert await channel.send("1", "pong") == "101"
+    assert await channel.send("gqq:100", "group pong") == "202"
+    # A transport that reports no id yields no id, never the text "None".
+    assert await channel.send_image("1", "https://example.com/a.png") == ""

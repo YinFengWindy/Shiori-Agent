@@ -12,7 +12,11 @@ import pytest
 
 from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
-from agent.turns.outbound import OutboundDispatch, OutboundDispatchError
+from agent.turns.outbound import (
+    DeliveryReceipt,
+    OutboundDispatch,
+    OutboundDispatchError,
+)
 from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
 from session.manager import SessionManager
 from bus.event_bus import EventBus
@@ -69,9 +73,9 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
     dispatched: list[OutboundDispatch] = []
 
     class _Outbound:
-        result = True
+        result: DeliveryReceipt | None = DeliveryReceipt()
 
-        async def dispatch(self, outbound: OutboundDispatch) -> bool:
+        async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
             dispatched.append(outbound)
             return self.result
 
@@ -121,7 +125,7 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
     ]
 
     result.reply_context = orchestrator.capture_reply_context("role:mira")
-    outbound.result = False
+    outbound.result = None
     committed.clear()
     sent = await orchestrator.handle_proactive_turn(
         result=result,
@@ -152,7 +156,7 @@ async def test_proactive_dispatch_error_is_not_converted_to_false(tmp_path) -> N
     session.metadata.update(initial_metadata)
 
     class _Outbound:
-        async def dispatch(self, outbound: OutboundDispatch) -> bool:
+        async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
             raise OutboundDispatchError(
                 channel=outbound.channel,
                 chat_id=outbound.chat_id,
@@ -196,9 +200,9 @@ async def test_orchestrator_skip_runs_side_effects_without_dispatch():
             order.append("side_effect")
 
     class _Outbound:
-        async def dispatch(self, outbound: OutboundDispatch) -> bool:
+        async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
             order.append("dispatch")
-            return True
+            return DeliveryReceipt()
 
     orchestrator = TurnOrchestrator(
         TurnOrchestratorDeps(
@@ -246,10 +250,10 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
             order.append(self._name)
 
     class _Outbound:
-        async def dispatch(self, outbound: OutboundDispatch) -> bool:
+        async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
             order.append("dispatch")
             assert outbound.content == "hello"
-            return True
+            return DeliveryReceipt()
 
     presence = SimpleNamespace(
         record_proactive_sent=lambda _key: order.append("presence")
@@ -307,8 +311,8 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
     calls: list[tuple[str, str]] = []
 
     class _Outbound:
-        async def dispatch(self, outbound: OutboundDispatch) -> bool:
-            return True
+        async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
+            return DeliveryReceipt()
 
     presence = SimpleNamespace(
         record_proactive_sent=lambda _key: calls.append(("session", _key)),
@@ -367,7 +371,7 @@ async def test_successive_proactive_commits_keep_one_state_per_reply(
     sessions.open_role_session(
         "mira", role_name="Mira", role_runtime_config={"mood_catalog": ["平静", "开心"]}
     )
-    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=True))
+    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=DeliveryReceipt()))
     owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
     first = _formal_result(owner)
     assert await _send(owner, first)
@@ -416,7 +420,7 @@ async def test_failed_proactive_delivery_does_not_publish_messages_or_state(
             raise OutboundDispatchError(
                 channel="telegram", chat_id="123", detail="network"
             )
-        return failure != "false"
+        return None if failure == "false" else DeliveryReceipt()
 
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
@@ -464,7 +468,7 @@ async def test_passive_commit_waits_for_delivery_and_stale_generation_cannot_ove
     async def dispatch(_outbound):
         entered.set()
         await release.wait()
-        return True
+        return DeliveryReceipt()
 
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
@@ -599,3 +603,55 @@ async def test_image_only_channel_cannot_commit_requested_text(tmp_path, content
         assert session.messages[0]["content"] == ""
         assert session.messages[0]["media"] == ["/tmp/cat.png"]
         assert session.metadata["current_mood"] == "平静"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("sender_result", "expected_external_id"),
+    [("qqbot-msg-1", "qqbot-msg-1"), (None, None)],
+)
+async def test_proactive_push_records_delivery_on_the_committed_message(
+    tmp_path, sender_result, expected_external_id
+):
+    sessions = SessionManager(tmp_path)
+    session = sessions.open_role_session("mira", role_name="Mira")
+    sessions.save(session)
+    push = MessagePushTool()
+    text_sender = AsyncMock(return_value=sender_result)
+    push.register_channel("qqbot", text=text_sender)
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            SessionServices(sessions),
+            PushToolOutboundPort(push, execution_context={"role_id": "mira"}),
+        )
+    )
+
+    assert await owner.handle_proactive_turn(
+        result=_formal_result(owner),
+        session_key="role:mira",
+        channel="qqbot",
+        chat_id="c2c:user-1",
+    )
+
+    text_sender.assert_awaited_once_with("c2c:user-1", "hello")
+    # The row written by the commit itself carries the delivery facts; a reload
+    # proves they reached the store, not just the in-memory draft.
+    [row] = SessionManager(tmp_path)._store.fetch_session_messages("role:mira")
+    assert row["content"] == "hello"
+    assert row["delivery_status"] == "sent"
+    assert row.get("external_message_id") == expected_external_id
+    assert session.messages[0]["delivery_status"] == "sent"
+
+
+@pytest.mark.asyncio
+async def test_refused_proactive_push_commits_no_delivery_record(tmp_path):
+    sessions = SessionManager(tmp_path)
+    session = sessions.open_role_session("mira", role_name="Mira")
+    sessions.save(session)
+    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=None))
+    owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
+
+    assert await _send(owner, _formal_result(owner)) is False
+
+    assert session.messages == []
+    assert sessions._store.fetch_session_messages("role:mira") == []

@@ -10,7 +10,7 @@ import pytest
 from agent.tools.message_push import MessagePushTool
 from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
-from agent.turns.outbound import PushToolOutboundPort
+from agent.turns.outbound import DeliveryReceipt, PushToolOutboundPort
 from agent.turns.result import TurnResult, TurnOutbound
 from core.roles.reply_state import RoleReply
 from bus.event_bus import EventBus
@@ -594,13 +594,14 @@ async def test_pending_desktop_text_and_images_publish_once_after_formal_commit(
     port = PushToolOutboundPort(push, execution_context={"role_id": "mira"})
 
     async def dispatch(outbound):
-        assert await port.dispatch(outbound)
+        receipt = await port.dispatch(outbound)
+        assert receipt == DeliveryReceipt()
         # The real registered desktop text and image consumers accepted the payload,
         # but neither has saved or announced an uncommitted message.
         assert session.messages == []
         assert sessions._store.fetch_session_messages(session.key) == []
         assert emitted == []
-        return True
+        return receipt
 
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
@@ -621,6 +622,11 @@ async def test_pending_desktop_text_and_images_publish_once_after_formal_commit(
     assert len(session.messages) == 1
     assert session.messages[0]["content"] == content
     assert session.messages[0]["media"] == ["/tmp/one.png", "/tmp/two.png"]
+    # Desktop is not an external transport and keeps recording no delivery.
+    assert "delivery_status" not in session.messages[0]
+    assert (
+        "delivery_status" not in sessions._store.fetch_session_messages(session.key)[0]
+    )
     assert (
         session.messages[0]["metadata"]["thought"]
         == session.metadata["current_thought"]

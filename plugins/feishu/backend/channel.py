@@ -413,13 +413,13 @@ class FeishuChannel:
         try:
             remaining = await self._streamer.finish(session_key, msg.content)
             if remaining is None:
-                await self._send_text(
+                _ = await self._send_text(
                     msg.chat_id, msg.content, reply_to=quoted_message_id(msg)
                 )
             elif remaining.strip():
-                await self._send_text(msg.chat_id, remaining)
+                _ = await self._send_text(msg.chat_id, remaining)
             for image in msg.media:
-                await self.send_image(msg.chat_id, image)
+                _ = await self.send_image(msg.chat_id, image)
         except Exception:
             self._record_delivery_status(msg, "failed")
             raise
@@ -435,27 +435,35 @@ class FeishuChannel:
             external_message_id=str(msg.metadata.get("external_message_id") or ""),
         )
 
-    async def send(self, chat_id: str, message: str) -> None:
-        """Sends Markdown as one or more cards (plain text if a card fails)."""
-        await self._send_text(chat_id, message)
+    async def send(self, chat_id: str, message: str) -> str:
+        """Sends Markdown as one or more cards (plain text if a card fails).
+
+        Returns the platform id of the first message sent, empty for blank text.
+        """
+        return await self._send_text(chat_id, message)
 
     async def _send_text(
         self, chat_id: str, text: str, *, reply_to: str | None = None
-    ) -> None:
+    ) -> str:
         if not text.strip():
-            return
-        for index, chunk in enumerate(split_markdown(text.strip())):
+            return ""
+        message_ids = [
             await self._send_chunk(chat_id, chunk, reply_to if index == 0 else None)
+            for index, chunk in enumerate(split_markdown(text.strip()))
+        ]
+        return message_ids[0] if message_ids else ""
 
-    async def _send_chunk(self, chat_id: str, chunk: str, reply_to: str | None) -> None:
+    async def _send_chunk(self, chat_id: str, chunk: str, reply_to: str | None) -> str:
         try:
-            await self._deliver(chat_id, "interactive", markdown_card(chunk), reply_to)
+            return await self._deliver(
+                chat_id, "interactive", markdown_card(chunk), reply_to
+            )
         except Exception as error:
             if is_rate_limited(error):
                 raise
             logger.warning("[feishu] 卡片发送失败，改发纯文本: %s", error)
             content = json.dumps({"text": chunk}, ensure_ascii=False)
-            await self._deliver(chat_id, "text", content, reply_to)
+            return await self._deliver(chat_id, "text", content, reply_to)
 
     async def _deliver(
         self, chat_id: str, msg_type: str, content: str, reply_to: str | None
@@ -488,15 +496,18 @@ class FeishuChannel:
             logger.warning("[feishu] 引用回复失败，改为普通发送: %s", error)
             return await with_rate_limit_retry(send, label=label)
 
-    async def send_image(self, chat_id: str, image: str) -> None:
-        """Uploads and sends an image from a local path or an http(s) URL."""
+    async def send_image(self, chat_id: str, image: str) -> str:
+        """Uploads and sends an image from a local path or an http(s) URL.
+
+        Returns the platform id of the sent image message.
+        """
         source = image.strip()
         if source.startswith(("http://", "https://")):
             data = await self._api.fetch_url(source)
         else:
             data = Path(source).expanduser().read_bytes()
         image_key = await self._api.upload_image(data)
-        await self._deliver(
+        return await self._deliver(
             chat_id, "image", json.dumps({"image_key": image_key}), None
         )
 

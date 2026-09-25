@@ -40,9 +40,9 @@ class _OutboundMixin:
                     await self._delete_live_preview(session_key)
             self._clear_live_session(session_key)
             if msg.content.strip() and not sent_as_stream:
-                await self.send(msg.chat_id, msg.content)
+                _ = await self.send(msg.chat_id, msg.content)
             for image in msg.media:
-                await self.send_image(msg.chat_id, image)
+                _ = await self.send_image(msg.chat_id, image)
         except Exception:
             send_failed = True
             self._record_delivery_status(msg, "failed")
@@ -61,25 +61,26 @@ class _OutboundMixin:
             external_message_id=str(msg.metadata.get("external_message_id") or ""),
         )
 
-    async def send_proactive(self, chat_id: str, message: str) -> None:
-        """Sends a proactive C2C text message through the official API."""
-        await self.send(chat_id, message)
+    async def send_proactive(self, chat_id: str, message: str) -> str:
+        """Sends a proactive C2C text message; returns the platform message id."""
+        return await self.send(chat_id, message)
 
-    async def send(self, chat_id: str, message: str) -> None:
-        """Sends a normal Markdown message to a C2C target."""
+    async def send(self, chat_id: str, message: str) -> str:
+        """Sends a Markdown message to a C2C target; returns its message id."""
         kind, target = self._parse_chat_id(chat_id)
         if kind != "c2c":
             raise ValueError("当前 QQBotChannel 仅支持私聊 c2c")
         token = await self._get_access_token()
-        await self._api_request(
+        sent = await self._api_request(
             "POST",
             f"/v2/users/{target}/messages",
             self._build_message_body(message),
             token,
         )
+        return _response_message_id(sent)
 
-    async def send_image(self, chat_id: str, image: str) -> None:
-        """Uploads and sends a PNG, JPEG, WebP, or animated GIF to C2C."""
+    async def send_image(self, chat_id: str, image: str) -> str:
+        """Uploads and sends a PNG, JPEG, WebP, or GIF to C2C; returns its id."""
         kind, target = self._parse_chat_id(chat_id)
         if kind != "c2c":
             raise ValueError("当前 QQBotChannel 仅支持私聊 c2c")
@@ -91,7 +92,7 @@ class _OutboundMixin:
         file_info = str(upload.get("file_info") or "").strip()
         if not file_info:
             raise RuntimeError("QQBot 图片上传响应缺少 file_info")
-        await self._api_request(
+        sent = await self._api_request(
             "POST",
             f"/v2/users/{target}/messages",
             {
@@ -101,6 +102,7 @@ class _OutboundMixin:
             },
             token,
         )
+        return _response_message_id(sent)
 
     @staticmethod
     def _build_image_upload_body(image: str) -> dict[str, Any]:
@@ -122,22 +124,25 @@ class _OutboundMixin:
             "srv_send_msg": False,
         }
 
-    async def send_stream(self, chat_id: str, message: str) -> None:
-        """Sends a complete proactive response using the official stream API."""
+    async def send_stream(self, chat_id: str, message: str) -> str:
+        """Sends a complete proactive response using the official stream API.
+
+        Returns the platform id of whichever message actually carried it: the
+        stream message, or the plain message used as fallback.
+        """
         kind, target = self._parse_chat_id(chat_id)
         if kind != "c2c":
             raise ValueError("当前 QQBotChannel 仅支持私聊 c2c")
         msg_id = self._last_c2c_msg_id.get(target)
         if not msg_id:
-            await self.send(chat_id, message)
-            return
+            return await self.send(chat_id, message)
         try:
-            await self._send_stream_c2c(target, msg_id, message)
+            return await self._send_stream_c2c(target, msg_id, message)
         except Exception as exc:
             logger.warning("[qqbot] 私聊流式发送失败，回退普通发送: %s", exc)
-            await self.send(chat_id, message)
+            return await self.send(chat_id, message)
 
-    async def _send_stream_c2c(self, openid: str, msg_id: str, message: str) -> None:
+    async def _send_stream_c2c(self, openid: str, msg_id: str, message: str) -> str:
         token = await self._get_access_token()
         msg_seq = self._next_msg_seq()
         stream_msg_id = ""
@@ -162,6 +167,7 @@ class _OutboundMixin:
                 token,
             )
             stream_msg_id = str(result.get("id") or stream_msg_id)
+        return stream_msg_id
 
     async def _send_input_notify(self, openid: str, msg_id: str) -> None:
         try:
@@ -210,3 +216,8 @@ class _OutboundMixin:
         if kind not in {"c2c", "group"} or not target:
             raise ValueError(f"无效的 QQBot chat_id: {chat_id!r}")
         return kind, target
+
+
+def _response_message_id(response: dict[str, Any]) -> str:
+    """Reads the message id the QQBot send API returns; empty when absent."""
+    return str(response.get("id") or "").strip()

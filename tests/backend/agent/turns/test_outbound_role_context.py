@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from agent.tools.message_push import PushOutcome
 from agent.turns.outbound import (
+    DeliveryReceipt,
     OutboundDispatch,
     OutboundDispatchError,
     PushToolOutboundPort,
@@ -14,16 +16,16 @@ async def test_push_outbound_port_passes_role_context() -> None:
     calls: list[dict[str, object]] = []
 
     class PushTool:
-        async def execute(self, **kwargs):
+        async def push(self, **kwargs):
             calls.append(kwargs)
-            return "文本已发送"
+            return PushOutcome("文本已发送")
 
     port = PushToolOutboundPort(PushTool(), execution_context={"role_id": "mira"})
     sent = await port.dispatch(
         OutboundDispatch(channel="telegram", chat_id="123", content="hello")
     )
 
-    assert sent is True
+    assert sent == DeliveryReceipt()
     assert calls[0]["role_id"] == "mira"
 
 
@@ -32,9 +34,9 @@ async def test_push_outbound_port_removes_internal_citation_markers() -> None:
     calls: list[dict[str, object]] = []
 
     class PushTool:
-        async def execute(self, **kwargs):
+        async def push(self, **kwargs):
             calls.append(kwargs)
-            return "文本已发送"
+            return PushOutcome("文本已发送")
 
     port = PushToolOutboundPort(PushTool(), execution_context={"role_id": "mira"})
     sent = await port.dispatch(
@@ -45,7 +47,7 @@ async def test_push_outbound_port_removes_internal_citation_markers() -> None:
         )
     )
 
-    assert sent is True
+    assert sent == DeliveryReceipt()
     assert calls[0]["message"] == "我记得这件事"
 
 
@@ -54,7 +56,7 @@ async def test_push_outbound_port_keeps_explicit_permission_rejection_as_false()
     None
 ):
     class PushTool:
-        async def execute(self, **kwargs):
+        async def push(self, **kwargs):
             raise PermissionError("role is not bound")
 
     port = PushToolOutboundPort(PushTool())
@@ -63,13 +65,13 @@ async def test_push_outbound_port_keeps_explicit_permission_rejection_as_false()
         OutboundDispatch(channel="telegram", chat_id="123", content="hello")
     )
 
-    assert sent is False
+    assert sent is None
 
 
 @pytest.mark.asyncio
 async def test_push_outbound_port_surfaces_transport_failure() -> None:
     class PushTool:
-        async def execute(self, **kwargs):
+        async def push(self, **kwargs):
             raise ConnectionError("network unavailable")
 
     port = PushToolOutboundPort(PushTool())
@@ -87,8 +89,8 @@ async def test_push_outbound_port_surfaces_transport_failure() -> None:
 @pytest.mark.asyncio
 async def test_push_outbound_port_surfaces_unregistered_channel_result() -> None:
     class PushTool:
-        async def execute(self, **kwargs):
-            return "渠道 'telegram' 未注册，可用渠道：['（无）']"
+        async def push(self, **kwargs):
+            return PushOutcome("渠道 'telegram' 未注册，可用渠道：['（无）']")
 
     port = PushToolOutboundPort(PushTool())
 
@@ -106,9 +108,9 @@ async def test_partial_media_failure_cannot_be_hidden_by_later_image_success(res
     calls = []
 
     class PushTool:
-        async def execute(self, **kwargs):
+        async def push(self, **kwargs):
             calls.append(kwargs)
-            return result if len(calls) == 1 else "图片已发送"
+            return PushOutcome(result if len(calls) == 1 else "图片已发送")
 
     port = PushToolOutboundPort(PushTool())
     with pytest.raises(OutboundDispatchError):
@@ -121,3 +123,24 @@ async def test_partial_media_failure_cannot_be_hidden_by_later_image_success(res
             )
         )
     assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_push_outbound_port_receipt_keeps_first_reported_message_id():
+    ids = iter([(), ("image-2",)])
+
+    class PushTool:
+        async def push(self, **kwargs):
+            return PushOutcome("文本已发送；图片已发送", next(ids))
+
+    port = PushToolOutboundPort(PushTool())
+    receipt = await port.dispatch(
+        OutboundDispatch(
+            channel="qqbot",
+            chat_id="c2c:user-1",
+            content="hello",
+            media=["one.png", "two.png"],
+        )
+    )
+
+    assert receipt == DeliveryReceipt(external_message_id="image-2")
