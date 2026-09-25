@@ -254,7 +254,11 @@ class MessagePushTool(Tool):
                     await senders[sender_name](chat_id, message)
                 preview = message[:60] + "..." if len(message) > 60 else message
                 logger.info(f"[message_push] {channel}:{chat_id} ← text: {preview!r}")
-                results.append("文本已发送")
+                results.append(
+                    "文本已排队，回合成功后发送"
+                    if delivery_metadata.get("queued")
+                    else "文本已发送"
+                )
 
             if file:
                 import os
@@ -272,7 +276,11 @@ class MessagePushTool(Tool):
                 else:
                     await senders["image"](chat_id, image)
                 logger.info(f"[message_push] {channel}:{chat_id} ← image: {image!r}")
-                results.append("图片已发送")
+                results.append(
+                    "图片已排队，回合成功后发送"
+                    if delivery_metadata.get("queued")
+                    else "图片已发送"
+                )
                 image_sent = True
 
         except Exception as e:

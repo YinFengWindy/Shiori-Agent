@@ -8,6 +8,7 @@ from agent.prompting.assembler import PromptSectionRender
 from bus.events import InboundMessage, OutboundMessage
 
 if TYPE_CHECKING:
+    from agent.turns.desktop_pushes import DesktopPushDrafts
     from agent.core.response_parser import ResponseMetadata
     from agent.core.runtime_support import SessionLike, TurnRunResult
 
@@ -32,6 +33,8 @@ class TurnState:
     dispatch_outbound: bool
     session: SessionLike | None = None
     extra_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
+    desktop_pushes: DesktopPushDrafts | None = None
+    committed_message_ids: tuple[str, ...] = ()
 
 
 @dataclass

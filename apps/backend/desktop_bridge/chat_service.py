@@ -18,6 +18,7 @@ from bus.events_lifecycle import (
 )
 from desktop_bridge.models import BridgeEvent
 from desktop_bridge.chat_completion import build_chat_terminal_event
+from desktop_bridge.turn_messages import committed_turn_messages
 from desktop_bridge.voice.role_tts_settings import resolve_role_tts_settings
 from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from desktop_bridge.voice.tts_coordinator import TtsTurnCoordinator
@@ -47,6 +48,7 @@ class EmitSessionUpdated(Protocol):
         request_id: str,
         session: Session,
         emit_event: EventEmitter,
+        messages: list[dict[str, Any]] | None = None,
     ) -> None: ...
 
 
@@ -593,6 +595,7 @@ class DesktopChatService:
                 request_id=request_id,
                 session=session,
                 emit_event=session_events.append,
+                messages=committed_turn_messages(session, committed),
             )
             bridge_event = build_chat_terminal_event(
                 request_id=request_id,

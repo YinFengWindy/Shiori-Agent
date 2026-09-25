@@ -54,6 +54,67 @@ class _VoiceService:
         )
 
 
+async def test_desktop_chat_update_includes_ordered_intermediate_tool_pushes():
+    bus = EventBus()
+    session = Session(key="role:mira")
+    for message_id, role, content in [
+        ("old", "assistant", "old"),
+        ("user", "user", "request"),
+        ("push", "assistant", "push"),
+        ("reply", "assistant", "reply"),
+    ]:
+        session.add_message(role, content, id=message_id)
+
+    async def process_direct(*_args, **_kwargs):
+        await bus.fanout(
+            TurnCommitted(
+                session_key=session.key,
+                channel="desktop",
+                chat_id=session.key,
+                input_message="request",
+                persisted_user_message="request",
+                assistant_response="reply",
+                tools_used=["message_push"],
+                extra={"committed_message_ids": ["user", "push", "reply"]},
+            )
+        )
+        return "reply"
+
+    async def emit_payload(emit_event, payload):
+        emit_event(payload)
+
+    async def emit_session_updated(*, request_id, session, emit_event, messages=None):
+        assert messages is not None
+        emit_event({"method": "session.updated", "payload": {"messages": messages}})
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=process_direct),
+        event_bus=bus,
+        session_manager=SimpleNamespace(get_or_create=Mock(return_value=session)),
+        role_id_from_session_key=lambda _key: "mira",
+        sync_desktop_session_thread=Mock(),
+        emit_payload=emit_payload,
+        emit_session_updated=emit_session_updated,
+    )
+    emitted = []
+    await service.run_chat_turn(
+        request_id="request",
+        turn_id="turn",
+        session_key=session.key,
+        content="request",
+        media=[],
+        metadata={},
+        omit_user_turn=False,
+        emit_event=emitted.append,
+    )
+    update = next(event for event in emitted if event["method"] == "session.updated")
+    assert [message["id"] for message in update["payload"]["messages"]] == [
+        "user",
+        "push",
+        "reply",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_chat_service_bridges_tool_call_lifecycle_for_current_session() -> None:
     event_bus = EventBus()
@@ -1023,7 +1084,7 @@ async def test_chat_terminal_waits_for_turn_and_session_work(failure_stage):
             raise RuntimeError("after_commit failed")
         return "answer"
 
-    async def emit_session_updated(*, request_id, session, emit_event):
+    async def emit_session_updated(*, request_id, session, emit_event, messages=None):
         assert emitted == []
         if failure_stage == "session_update":
             raise RuntimeError("session_update failed")
@@ -1154,7 +1215,7 @@ async def test_generic_turn_failure_reports_its_scrubbed_cause_as_detail():
         if result is not None:
             await result
 
-    async def emit_session_updated(*, request_id, session, emit_event):
+    async def emit_session_updated(*, request_id, session, emit_event, messages=None):
         return None
 
     service = DesktopChatService(
@@ -1199,7 +1260,7 @@ async def test_raised_turn_failure_detail_is_scrubbed():
         if result is not None:
             await result
 
-    async def emit_session_updated(*, request_id, session, emit_event):
+    async def emit_session_updated(*, request_id, session, emit_event, messages=None):
         return None
 
     service = DesktopChatService(
