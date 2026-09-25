@@ -1,7 +1,8 @@
-import { CaretDown, CheckCircle, Info, Warning, WarningCircle, X, type Icon } from "@phosphor-icons/react";
+import { CheckCircle, Info, Warning, WarningCircle, X, type Icon } from "@phosphor-icons/react";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { FeedbackDetail } from "./FeedbackDetail";
 import { MascotFaceAvatar } from "../mascot/MascotFigure";
-import { feedbackPersonaLines } from "../mascot/mascotLines";
+import { feedbackPersonaCue } from "../mascot/mascotFeedback";
 import { useMascotEnabled } from "../mascot/useMascotEnabled";
 import { cx } from "../styles";
 import {
@@ -33,7 +34,8 @@ function FeedbackToastItem({ toast }: { toast: FeedbackToast }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const Glyph = toneIcon[toast.tone];
   // 吟风 fronts a persona toast only while the 看板娘 is on; off, it is a plain toast.
-  const persona = useMascotEnabled() && toast.persona ? feedbackPersonaLines[toast.persona] : null;
+  // Her face replaces the tone badge; a cue with a line also leads the text.
+  const persona = useMascotEnabled() ? feedbackPersonaCue(toast) : null;
 
   // Restarting the full duration after a pause (rather than resuming the
   // remainder) is deliberate: whoever just hovered the message was reading it.
@@ -64,24 +66,9 @@ function FeedbackToastItem({ toast }: { toast: FeedbackToast }) {
       )}
       <span className="grid min-w-0 flex-1 gap-1 pt-0.5">
         {/* Her line is the first sentence; the original message follows it. */}
-        {persona ? <span className="break-words font-medium leading-5" data-testid="feedback-persona-line">{persona.text}</span> : null}
-        <span className={cx("break-words leading-5", persona && "text-body-sm text-ink-secondary")}>{toast.message}</span>
-        {toast.detail ? (
-          <>
-            <button
-              type="button"
-              className="inline-flex w-fit items-center gap-1 rounded-md text-caption font-medium text-ink-muted transition-colors hover:text-ink"
-              aria-expanded={detailOpen}
-              onClick={() => setDetailOpen((current) => !current)}
-            >
-              详情
-              <CaretDown className={cx("h-3 w-3 transition-transform duration-quick", detailOpen && "rotate-180")} weight="bold" aria-hidden="true" />
-            </button>
-            {detailOpen ? (
-              <pre className="scrollbar-soft m-0 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white/60 p-2 font-mono text-caption text-ink-secondary">{toast.detail}</pre>
-            ) : null}
-          </>
-        ) : null}
+        {persona?.text ? <span className="break-words font-medium leading-5" data-testid="feedback-persona-line">{persona.text}</span> : null}
+        <span className={cx("break-words leading-5", persona?.text && "text-body-sm text-ink-secondary")}>{toast.message}</span>
+        {toast.detail ? <FeedbackDetail detail={toast.detail} open={detailOpen} onToggle={() => setDetailOpen((current) => !current)} /> : null}
       </span>
       {toast.action ? (
         <button

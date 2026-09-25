@@ -6,6 +6,7 @@ import { guardedNavPageSelect } from "../plugins/pluginUiRegistry";
 import { BridgeOfflineBanner } from "./BridgeOfflineBanner";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
+import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { RoleAssetsPage } from "../roles/RoleAssetsPage";
 import { RoleCreatePage } from "../roles/RoleCreatePage";
 import { RoleDetailPage } from "../roles/RoleDetailPage";
@@ -599,6 +600,7 @@ export function DesktopAppFrame({
       <ConfirmDialog
         open={Boolean(pendingDeleteRole)}
         title="确认删除角色"
+        persona={confirmPersonaLines.deleteRole}
         description={pendingDeleteRole ? `“${pendingDeleteRole.name}” 删除后会移除角色会话与相关素材。` : ""}
         confirmLabel="确认删除"
         busy={deletingRole}
@@ -608,6 +610,7 @@ export function DesktopAppFrame({
       <ConfirmDialog
         open={leaveConfirmOpen}
         title="放弃未保存的修改？"
+        persona={confirmPersonaLines.discardChanges}
         description={`对“${leaveRoleName || "角色"}”的修改还没有保存，离开后会丢失。`}
         confirmLabel="放弃修改"
         cancelLabel="继续编辑"

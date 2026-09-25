@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Key, WarningCircle, X } from "@phosphor-icons/react";
-import { compactButtonSizeClass, compactPressableClass, cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { Key, WarningCircle } from "@phosphor-icons/react";
+import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass } from "../../../apps/desktop/renderer/src/shared/styles";
 import { PetalIcon, SparkleIcon } from "../../../apps/desktop/renderer/src/shared/ui/icons";
 import type { GenerationFailure } from "./generationFailure";
 
@@ -59,42 +60,37 @@ type StageFailureProps = {
   onDismiss?: () => void;
 };
 
-/** A failed (or impossible) generation, with the one action that fixes it when there is one. */
+/**
+ * A failed (or impossible) generation, with the one action that fixes it
+ * when there is one. Drawn by the host's inline error card
+ * (`host.ui.InlineError`, runtime API 2.4.0) with `persona`, so 吟风 fronts
+ * it while the 看板娘 is on; off, it is the plain card with the key /
+ * warning glyph.
+ */
 export function StageFailure({ failure, onOpenSettings, onDismiss }: StageFailureProps) {
+  const { ui } = usePluginHostServices();
   const tokenProblem = failure.kind === "not-configured" || failure.kind === "unauthorized";
+  const action = failure.opensSettings && onOpenSettings ? (
+    <button className={cx(primaryButtonSurfaceClass, compactButtonSizeClass)} type="button" onClick={onOpenSettings}>
+      去设置
+    </button>
+  ) : onDismiss ? (
+    <button className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} type="button" onClick={onDismiss}>
+      知道了
+    </button>
+  ) : undefined;
   return (
-    <div className="motion-fade-enter grid h-full place-items-center p-6" data-testid="novelai-stage-failure" role="alert">
-      <div className="surface-glass-strong relative grid w-full max-w-[420px] justify-items-center gap-3 rounded-xl px-6 py-7 text-center">
-        {onDismiss ? (
-          <button
-            className={cx(compactPressableClass, "absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-md text-ink-muted hover:bg-surface-hover hover:text-ink")}
-            type="button"
-            aria-label="关闭"
-            onClick={onDismiss}
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        ) : null}
-        <span className={cx(
-          "grid h-12 w-12 place-items-center rounded-full",
-          tokenProblem ? "bg-accent-softer text-accent-text" : "bg-danger-soft text-danger-text",
-        )}>
-          {tokenProblem ? <Key className="h-6 w-6" weight="duotone" aria-hidden="true" /> : <WarningCircle className="h-6 w-6" weight="duotone" aria-hidden="true" />}
-        </span>
-        <span className="font-display text-title-sm text-ink">{failure.title}</span>
-        {failure.message ? (
-          <span className="max-h-28 overflow-y-auto break-words text-body-sm text-ink-muted [overflow-wrap:anywhere]">{failure.message}</span>
-        ) : null}
-        {failure.opensSettings && onOpenSettings ? (
-          <button className={cx(primaryButtonSurfaceClass, compactButtonSizeClass, "mt-1")} type="button" onClick={onOpenSettings}>
-            去设置
-          </button>
-        ) : onDismiss ? (
-          <button className={cx(ghostButtonSurfaceClass, compactButtonSizeClass, "mt-1")} type="button" onClick={onDismiss}>
-            知道了
-          </button>
-        ) : null}
-      </div>
+    <div className="motion-fade-enter grid h-full place-items-center p-6" data-testid="novelai-stage-failure">
+      <ui.InlineError
+        layout="card"
+        persona
+        title={failure.title}
+        message={failure.message}
+        glyph={tokenProblem ? Key : WarningCircle}
+        glyphTone={tokenProblem ? "accent" : "danger"}
+        actions={action}
+        onDismiss={onDismiss}
+      />
     </div>
   );
 }

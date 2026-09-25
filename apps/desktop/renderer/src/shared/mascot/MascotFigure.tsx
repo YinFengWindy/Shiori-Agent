@@ -66,11 +66,13 @@ export function MascotMediumFigure({ expression, className }: { expression: Masc
 
 /**
  * Small round face of the given expression — the same framing as her name
- * plate avatar in the first-run guide. Used in error toasts and banners.
+ * plate avatar in the first-run guide. `sm` (`--mascot-face-size`) fronts
+ * toasts, banners and inline errors; `lg` (`--mascot-face-size-lg`) fronts
+ * confirmation dialogs and centred error cards.
  */
-export function MascotFaceAvatar({ expression, className }: { expression: MascotExpression; className?: string }) {
+export function MascotFaceAvatar({ expression, size = "sm", className }: { expression: MascotExpression; size?: "sm" | "lg"; className?: string }) {
   return (
-    <span className={cx("mascot-face", className)} aria-hidden="true" data-testid="mascot-face" data-expression={expression}>
+    <span className={cx("mascot-face", className)} aria-hidden="true" data-testid="mascot-face" data-expression={expression} data-size={size}>
       <img src={mascotSprites[expression]} alt="" draggable={false} />
     </span>
   );

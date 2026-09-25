@@ -11,12 +11,14 @@ const updateReady = (phase: UpdatePhase | undefined) => phase === "downloading" 
  * keep her current line. A found update is announced however the page
  * learns of it (also on first load); 「已是最新」 only once a check the page
  * saw starting finishes, so reopening 关于 after an earlier check still opens
- * with a random line.
+ * with a random line. A failed update (phase `error`) gets her worried line.
  */
 export function aboutLineForPhaseChange(previous: UpdatePhase | undefined, next: UpdatePhase | undefined): MascotLine | null {
   if (previous === next) return null;
   if (updateReady(next) && !updateReady(previous)) return aboutUpdateLines.available;
   if (next === "current" && previous !== undefined) return aboutUpdateLines.current;
+  // She is on stage here, so the failure is hers to say (the inline error below stays plain).
+  if (next === "error") return aboutUpdateLines.failed;
   return null;
 }
 

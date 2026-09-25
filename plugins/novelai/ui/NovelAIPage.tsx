@@ -23,7 +23,7 @@ export function NovelAIPage({ client, activeRoleId, onOpenPluginSettings }: Plug
   const store = useNovelAiPageStore();
 
   useEffect(() => {
-    void refreshRoles(host).catch(reportPageError);
+    void refreshRoles(host).catch((error: unknown) => reportPageError(host.feedback, error));
   }, [host]);
 
   if (store.rolesLoaded && store.roles.length === 0) {

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
 import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { feedback } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
+import type { PluginHostFeedback } from "../../../apps/desktop/renderer/src/plugins/pluginHostFeedback";
 import type { GenerationFailure } from "./generationFailure";
 import { loadHistory, refreshReadiness, submitGenerate } from "./novelAiGeneration";
 import { clearFailure, updateStudioForm, useNovelAiPageStore } from "./novelAiPageStore";
@@ -9,9 +9,13 @@ import { buildGeneratePayload, canSubmitStudioForm, resolveStudioRoleId, validat
 import { selectGenerationBlocked, selectStageView } from "./studioSelectors";
 import { useNovelAiPromptSettings } from "./useNovelAiPromptSettings";
 
-/** Raises the toast for a failed generation; token problems carry a jump to the plugin's settings. */
-export function reportGenerationFailure(failure: GenerationFailure, onOpenSettings?: () => void): void {
-  feedback.error(failure.title, {
+/**
+ * Raises the toast for a failed generation through the host queue, fronted by
+ * 吟风 (`persona: true`); token problems carry a jump to the plugin's settings.
+ */
+export function reportGenerationFailure(report: PluginHostFeedback, failure: GenerationFailure, onOpenSettings?: () => void): void {
+  report.error(failure.title, {
+    persona: true,
     detail: failure.message || undefined,
     action: failure.opensSettings && onOpenSettings ? { label: "去设置", onSelect: onOpenSettings } : undefined,
   });
@@ -40,8 +44,8 @@ export function useImageStudio(client: PluginRpcClient, activeRoleId: string, on
 
   useEffect(() => {
     if (!rolesLoaded) return;
-    void loadHistory(client, form.roleId);
-  }, [client, form.roleId, rolesLoaded]);
+    void loadHistory(client, host.feedback, form.roleId);
+  }, [client, form.roleId, host.feedback, rolesLoaded]);
 
   const blocked = selectGenerationBlocked(store.readiness);
 
@@ -52,8 +56,8 @@ export function useImageStudio(client: PluginRpcClient, activeRoleId: string, on
       return;
     }
     if (!canSubmitStudioForm(form) || blocked || store.submitting) return;
-    const failure = await submitGenerate(client, buildGeneratePayload(form, settings.model));
-    if (failure) reportGenerationFailure(failure, onOpenSettings);
+    const failure = await submitGenerate(client, host.feedback, buildGeneratePayload(form, settings.model));
+    if (failure) reportGenerationFailure(host.feedback, failure, onOpenSettings);
   }
 
   async function pickBaseImage(): Promise<void> {

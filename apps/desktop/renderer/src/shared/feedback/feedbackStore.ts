@@ -18,9 +18,11 @@ export type FeedbackToast = {
   /** Technical cause kept out of the message; the toast folds it behind 「详情」. */
   detail?: string;
   /**
-   * 吟风 fronts the message (#362 stage 10): with the 看板娘 on, the toaster
-   * shows her face and this persona's line as the first sentence, then the
-   * message. Off, the toast renders exactly as without a persona.
+   * 吟风 fronts the message (#362): with the 看板娘 on, the toaster shows
+   * her face instead of the tone badge and, when this persona has a line,
+   * that line as the first sentence before the message (see
+   * `feedbackPersonaLines` for which do). Off, the toast renders exactly as
+   * without a persona.
    */
   persona?: FeedbackPersona;
 };
@@ -154,8 +156,9 @@ export function createFeedbackReporter(defaults: Partial<Record<FeedbackTone, Fe
 }
 
 /**
- * The plain reporter bound to this store. Plugin UIs use it; host code
- * reports through `mascotFeedback`, whose errors 吟风 fronts.
+ * The plain reporter bound to this store (no persona). Host code reports
+ * through `mascotFeedback` (吟风 fronts every tone by its rule); plugin UIs
+ * through their injected `host.feedback` (she appears only on `persona: true`).
  */
 export const feedback: FeedbackReporter = createFeedbackReporter();
 

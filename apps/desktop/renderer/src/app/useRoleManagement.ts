@@ -243,7 +243,7 @@ export function useRoleManagement({
       setActiveIllustration("");
     }
     removeCachedRoleSession(roleId);
-    feedback.success("角色已删除");
+    feedback.success("角色已删除", { persona: "roleDeleted" });
     if (nextRoles[0]) {
       await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
       navigateToRolesList(nextRoles[0].id);

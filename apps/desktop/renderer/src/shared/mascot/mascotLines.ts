@@ -56,19 +56,99 @@ export const emptyStateLines = {
 export const bridgeOfflineLine = line("sad", "和后台断开了……点一下「重启连接」试试？");
 
 /**
- * Error toasts 吟风 fronts (see `FeedbackToast.persona`): her line becomes
- * the toast's first sentence, the original message follows it and the
- * technical cause stays folded behind 「详情」.
+ * A face 吟风 makes, with or without a line. A cue without `text` shows only
+ * her face (frequent success / info toasts, where a sentence every time
+ * would be spam).
+ */
+export type MascotCue = {
+  readonly expression: MascotExpression;
+  readonly text?: string;
+};
+
+const face = (expression: MascotExpression): MascotCue => ({ expression });
+
+/**
+ * Toasts 吟风 fronts (see `FeedbackToast.persona`). The rule for when she
+ * speaks (docs/_handbook/design-system.md 「看板娘」):
+ *
+ * - error / warning: always a line — something went wrong, she says so
+ *   first; the original message follows and the cause stays behind 「详情」.
+ * - success / info: only her face by default (`success`, `info` below): these
+ *   are the frequent ones (已复制, 已保存, 已加入素材库…).
+ * - A line on a success toast is reserved for rare milestones (a role
+ *   created, imported or deleted, the connection back); the call site asks
+ *   for it by name.
  */
 export const feedbackPersonaLines = {
-  /** Any host error without a more specific line. */
+  /** Any host error without a more specific line, when a 详情 cause follows. */
   generic: line("confused", "出了点状况……详情我放在下面了。"),
+  /** `generic` for an error without a 详情 cause (the line must not promise one). */
+  genericBrief: line("confused", "唔，出了点状况……"),
+  /** Any warning without a more specific line. */
+  warning: line("confused", "嗯？这里好像有点不对劲。"),
   /** Sending failed because the role has no usable model. */
   modelMissing: line("pout", "还没给我接模型呢，先去选一个！"),
-} satisfies Record<string, MascotLine>;
+  /** A role card could not be imported. */
+  roleImportFailed: line("confused", "这张角色卡我读不懂……换一张试试？"),
+  /** Success default: her face only. */
+  success: face("laugh"),
+  /** Info default: her face only. */
+  info: face("neutral"),
+  /** A new role was created (milestone). */
+  roleCreated: line("laugh", "新朋友来啦！要好好相处哦。"),
+  /** A role card was imported (milestone). */
+  roleImported: line("smug", "角色卡读好了，快去打个招呼吧。"),
+  /** A role was deleted (milestone). */
+  roleDeleted: line("sad", "删掉了……才、才没有舍不得呢。"),
+  /** The bridge came back after a disconnect (milestone). */
+  bridgeRecovered: line("laugh", "连上了！刚才可吓我一跳。"),
+} satisfies Record<string, MascotCue>;
 
 /** Which of `feedbackPersonaLines` fronts a toast. */
 export type FeedbackPersona = keyof typeof feedbackPersonaLines;
+
+/**
+ * Confirmation dialogs (`ConfirmDialog`'s `persona`): her line leads the
+ * dialog, the factual consequence text follows it unchanged. The face
+ * follows the intent: deleting → 担心, discarding edits → 鼓脸, restarting →
+ * 惊讶, trusting / installing → 疑惑 / 普通.
+ */
+export const confirmPersonaLines = {
+  /** Any destructive confirmation without a more specific line. */
+  destructive: line("sad", "删掉就回不来了哦，想好了吗？"),
+  /** Any other confirmation without a more specific line. */
+  confirm: line("neutral", "要继续吗？我等你一句话。"),
+  deleteRole: line("sad", "真的要删掉 TA 吗？我会有点……舍不得。"),
+  deleteModel: line("sad", "这个模型要删掉吗？想好了哦。"),
+  deleteAsset: line("sad", "这张图要删掉吗？明明挺好看的……"),
+  deleteAssetCategory: line("sad", "整个分类都不要了？好可惜……"),
+  deleteKnowledgeEntry: line("confused", "这条要从知识库里划掉吗？"),
+  discardChanges: line("pout", "改了半天，就这样不要了？"),
+  restartDuringTurn: line("surprised", "诶？还在聊着呢，现在就重启？"),
+  trustPlugin: line("confused", "陌生的插件……你真的信得过它？"),
+  installPlugin: line("neutral", "要来新伙伴了？先确认它可靠哦。"),
+  updatePlugin: line("neutral", "插件要更新啦，确认一下来源吧。"),
+  uninstallPlugin: line("sad", "要和这个插件说再见了吗？"),
+} satisfies Record<string, MascotLine>;
+
+/**
+ * In-page error blocks (`InlineError`'s `persona`): her face and line first,
+ * the original message after it, the cause behind 「详情」.
+ */
+export const inlineErrorLines = {
+  /** Any in-page error without a more specific line. */
+  generic: line("confused", "唔，这里出了点问题……"),
+  settingsSaveFailed: line("sad", "没保存上……要再试一次吗？"),
+  settingsLoadFailed: line("sad", "设置没读出来……先别急着改哦。"),
+  pluginsLoadFailed: line("sad", "插件列表没读出来……"),
+  pluginConfigLoadFailed: line("sad", "这个插件的配置没读出来……"),
+  connectionTestFailed: line("confused", "连不上呢……地址和密钥再对一下？"),
+  microphoneTestFailed: line("confused", "我没听到声音……麦克风还好吗？"),
+  chatTurnFailed: line("sad", "这句没能送到……"),
+} satisfies Record<string, MascotLine>;
+
+/** Which of `inlineErrorLines` fronts an in-page error. */
+export type InlineErrorPersona = keyof typeof inlineErrorLines;
 
 /** 设置 › 关于: lines drawn on open and on every click on her sprite. */
 export const aboutIdleLines: MascotLinePool = [
@@ -81,6 +161,7 @@ export const aboutIdleLines: MascotLinePool = [
 export const aboutUpdateLines = {
   available: line("surprised", "有新版本了！要不要现在更新？"),
   current: line("neutral", "已经是最新的啦，放心吧。"),
+  failed: line("confused", "更新没弄成……待会儿再试试？"),
 } satisfies Record<string, MascotLine>;
 
 /**

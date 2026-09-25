@@ -257,6 +257,7 @@
     --mascot-medium-width: clamp(11.25rem, 18vw, 15rem);
     --mascot-compact-width: 8.75rem;
     --mascot-face-size: 2rem;
+    --mascot-face-size-lg: 3rem; /* confirmation dialogs, centred error cards */
     --mascot-drop-shadow: drop-shadow(0 14px 28px rgb(119 84 166 / 20%)); /* lavender-700 */
     --mascot-bubble-edge: rgb(255 184 209 / 45%); /* pink-300 hairline */
     --mascot-enter-rise: 10px; /* her entrance: fade + this rise, on --duration-stage */

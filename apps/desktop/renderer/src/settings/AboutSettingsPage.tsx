@@ -1,6 +1,8 @@
 import { ArrowClockwise, ArrowSquareOut, Envelope, GithubLogo } from "@phosphor-icons/react";
 import { badgeClass, cardClass, compactButtonSizeClass, cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass } from "../shared/styles";
 import { DesktopExternalLink } from "../shared/DesktopExternalLink";
+import { InlineError } from "../shared/feedback/InlineError";
+import { MascotOnStage } from "../shared/mascot/MascotOnStage";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
 import { AboutMascot } from "./AboutMascot";
 import { SettingsGroup } from "./SettingsFieldPrimitives";
@@ -57,26 +59,29 @@ export function AboutSettingsPage() {
             <span className="w-12 text-right text-body-sm tabular-nums text-ink-secondary">{Math.floor(state.progress)}%</span>
           </div>
         ) : null}
-        {error ? <p role="alert" className="m-0 break-words text-body-sm text-danger-text">{error}</p> : null}
+        {error ? <InlineError message={error} /> : null}
       </div>
     </section>
   );
 
   return (
-    <div className="grid gap-7" data-testid="about-settings">
-      {mascotEnabled ? <AboutMascot phase={state?.phase}>{updateCard}</AboutMascot> : updateCard}
-      <SettingsGroup title="联系">
-        <dl className="m-0 grid">
-          <div className="grid gap-1 border-b border-line-soft py-4 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center">
-            <dt className="flex items-center gap-2 text-body-sm text-ink-secondary"><GithubLogo size={16} aria-hidden="true" />GitHub</dt>
-            <dd className="m-0 min-w-0"><DesktopExternalLink href="https://github.com/YinFengWindy/Shiori-Agent" className={linkClass}>YinFengWindy/Shiori-Agent</DesktopExternalLink></dd>
-          </div>
-          <div className="grid gap-1 py-4 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center">
-            <dt className="flex items-center gap-2 text-body-sm text-ink-secondary"><Envelope size={16} aria-hidden="true" />联系作者</dt>
-            <dd className="m-0 min-w-0"><DesktopExternalLink href="mailto:3174898512@qq.com" className={linkClass}>3174898512@qq.com</DesktopExternalLink></dd>
-          </div>
-        </dl>
-      </SettingsGroup>
-    </div>
+    // 吟风 already stands beside the card: errors on this page stay plain.
+    <MascotOnStage active={mascotEnabled}>
+      <div className="grid gap-7" data-testid="about-settings">
+        {mascotEnabled ? <AboutMascot phase={state?.phase}>{updateCard}</AboutMascot> : updateCard}
+        <SettingsGroup title="联系">
+          <dl className="m-0 grid">
+            <div className="grid gap-1 border-b border-line-soft py-4 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center">
+              <dt className="flex items-center gap-2 text-body-sm text-ink-secondary"><GithubLogo size={16} aria-hidden="true" />GitHub</dt>
+              <dd className="m-0 min-w-0"><DesktopExternalLink href="https://github.com/YinFengWindy/Shiori-Agent" className={linkClass}>YinFengWindy/Shiori-Agent</DesktopExternalLink></dd>
+            </div>
+            <div className="grid gap-1 py-4 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center">
+              <dt className="flex items-center gap-2 text-body-sm text-ink-secondary"><Envelope size={16} aria-hidden="true" />联系作者</dt>
+              <dd className="m-0 min-w-0"><DesktopExternalLink href="mailto:3174898512@qq.com" className={linkClass}>3174898512@qq.com</DesktopExternalLink></dd>
+            </div>
+          </dl>
+        </SettingsGroup>
+      </div>
+    </MascotOnStage>
   );
 }

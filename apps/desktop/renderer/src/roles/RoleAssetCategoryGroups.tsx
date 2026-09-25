@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FolderSimplePlus } from "@phosphor-icons/react";
 import type { RoleAssetCategory, RoleRecord } from "../shared/types";
+import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import {
   deleteRoleAssetCategory,
@@ -190,6 +191,7 @@ export function RoleAssetCategoryGroups({
       <ConfirmDialog
         open={Boolean(pendingDeleteCategory)}
         title="确认删除分类"
+        persona={confirmPersonaLines.deleteAssetCategory}
         description={pendingDeleteCategory
           ? `“${pendingDeleteCategory.name}” 删除后会同时移除其中 ${groupedAssets.get(pendingDeleteCategory.id)?.length ?? 0} 张素材。`
           : ""}

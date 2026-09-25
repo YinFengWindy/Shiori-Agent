@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { settingsGroupStackClass } from "../settings/SettingsFieldPrimitives";
 import type { StandaloneSettingsSectionProps } from "../settings/settingsPageTypes";
-import { cardClass, cx, ghostButtonClass } from "../shared/styles";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "../shared/styles";
+import { InlineError } from "../shared/feedback/InlineError";
 import { usePluginManagementController } from "./usePluginManagementController";
 import { PluginTrustDialog } from "./PluginTrustDialog";
 import { PluginRow } from "./PluginRow";
@@ -35,10 +36,11 @@ export function PluginManagementSection({ onSelectSubsection }: Partial<Standalo
 
   if (error && !plugins) {
     return (
-      <div className={cx(cardClass, "p-6 text-sm leading-6 text-danger-text")}>
-        插件列表加载失败：{error}
-        <button type="button" className={cx(ghostButtonClass, "ml-3")} onClick={() => void reload()}>重新加载</button>
-      </div>
+      <InlineError
+        persona="pluginsLoadFailed"
+        message={`插件列表加载失败：${error}`}
+        actions={<button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} onClick={() => void reload()}>重新加载</button>}
+      />
     );
   }
   if (!plugins) {
@@ -54,7 +56,7 @@ export function PluginManagementSection({ onSelectSubsection }: Partial<Standalo
     <Dialog.Root open={details !== null} onOpenChange={(open) => { if (!open && !busy) setDetailsCandidateId(null); }}>
     <PluginRestartBanner plugins={plugins} />
     <PluginPackageToolbar busy={busy} onInstall={() => void packages.pickPackage()} />
-    {error ? <div role="alert" className="mb-4 rounded-md bg-danger-soft px-4 py-2.5 text-body-sm text-danger-text">{error}</div> : null}
+    {error ? <InlineError className="mb-4" message={error} /> : null}
     <div className={settingsGroupStackClass}>
       {groupPlugins(plugins).map((group) => (
         <PluginGroupSection key={group.category} group={group} problemCount={group.plugins.filter((plugin) => pluginProblem(plugin)).length}>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { errorMessage, feedback } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
+import { errorMessage } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
+import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
 import type { PromptTagWorkspaceSectionId } from "./novelAiPageStore";
 import type { PromptTagEntry } from "./types";
 
@@ -31,6 +32,7 @@ export function usePromptTagLibrary(
   section: PromptTagWorkspaceSectionId,
   onOpenSection: (section: PromptTagWorkspaceSectionId) => void,
 ) {
+  const host = usePluginHostServices();
   const [entries, setEntries] = useState<PromptTagEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState("");
@@ -48,8 +50,8 @@ export function usePromptTagLibrary(
 
   useEffect(() => {
     if (!bridgeReady) return;
-    loadEntries().catch((loadError: unknown) => feedback.error("提示词库加载失败", { detail: errorMessage(loadError) }));
-  }, [bridgeReady, loadEntries]);
+    loadEntries().catch((loadError: unknown) => host.feedback.error("提示词库加载失败", { detail: errorMessage(loadError), persona: true }));
+  }, [bridgeReady, host.feedback, loadEntries]);
 
   // Entering "create" (from the list's button) always starts from a blank draft.
   useEffect(() => {
@@ -76,7 +78,8 @@ export function usePromptTagLibrary(
       setDraft(payload);
       onOpenSection("detail");
       await loadEntries();
-      feedback.success("提示词已保存");
+      // A frequent success: with persona, 吟风 shows only her face (the host rule).
+      host.feedback.success("提示词已保存", { persona: true });
     } catch (saveError) {
       setError(errorMessage(saveError));
     } finally {

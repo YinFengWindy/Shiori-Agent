@@ -1,6 +1,7 @@
 import type { PluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import { useSyncExternalStore } from "react";
-import { errorMessage, feedback } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
+import { errorMessage } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
+import type { PluginHostFeedback } from "../../../apps/desktop/renderer/src/plugins/pluginHostFeedback";
 import type { RoleRecord } from "../../../apps/desktop/renderer/src/shared/types";
 import type { GenerationFailure, NovelAiReadiness } from "./generationFailure";
 import type { ImageGenerateResult, ImageHistoryRecord, ImageStudioFormState } from "./types";
@@ -153,9 +154,9 @@ export function clearFailure(): void {
   commitNovelAiState({ ...state, failure: null });
 }
 
-/** Surfaces a failed host request (roster loading) at the plugin page boundary. */
-export function reportPageError(error: unknown): void {
-  feedback.error("生图页面加载失败", { detail: errorMessage(error) });
+/** Surfaces a failed host request (roster loading) at the plugin page boundary, fronted by 吟风. */
+export function reportPageError(report: PluginHostFeedback, error: unknown): void {
+  report.error("生图页面加载失败", { detail: errorMessage(error), persona: true });
 }
 
 let rolesInflight: Promise<void> | null = null;
@@ -189,7 +190,7 @@ const ZERO_ROLES_BLOCKED_REASON = "请先创建至少一个角色，再进入生
  * net for exactly that race.
  */
 export function selectBlockedReasonForNovelAiPage(host: PluginHostServices): string | null {
-  void refreshRoles(host).catch(reportPageError);
+  void refreshRoles(host).catch((error: unknown) => reportPageError(host.feedback, error));
   if (!state.rolesLoaded || state.roles.length > 0) return null;
   return ZERO_ROLES_BLOCKED_REASON;
 }

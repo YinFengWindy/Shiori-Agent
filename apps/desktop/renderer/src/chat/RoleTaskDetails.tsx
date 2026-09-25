@@ -1,4 +1,5 @@
 import { ArrowLeft, PencilSimple, Trash } from "@phosphor-icons/react";
+import { InlineError } from "../shared/feedback/InlineError";
 import { formatTimestamp } from "../shared/format";
 import type { RoleTask } from "../shared/types";
 import { cx, focusResetClass } from "../shared/styles";
@@ -57,7 +58,7 @@ export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onB
       </div>
       <div className="grid gap-2 pt-3">
         {task.kind === "schedule" && !task.editable ? <div className="text-xs text-warning-text">任务运行期间不可编辑</div> : null}
-        {error ? <div className="text-xs text-danger-text">{error}</div> : null}
+        {error ? <InlineError message={error} /> : null}
         {confirmingCancel ? (
           <div className="flex items-center justify-end gap-2 rounded-md p-2">
             <span className="mr-auto text-xs text-ink-muted">确认取消此任务？</span>

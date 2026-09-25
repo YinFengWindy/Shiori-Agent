@@ -4,8 +4,8 @@ import { cx } from "../../../apps/desktop/renderer/src/shared/styles";
 import type { PluginRoleAssetsComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
 import { usePetPackages } from "./usePetPackages";
 
-/** The plugin's package library, mounted through the role.assets contribution. */
-export function RolePetPackagesPanel({ roleId, disabled, client, onRoleDataChanged }: PluginRoleAssetsComponentProps) {
+/** The plugin's package library, mounted through the role.assets contribution (it needs no host services). */
+export function RolePetPackagesPanel({ roleId, disabled, client, onRoleDataChanged }: Omit<PluginRoleAssetsComponentProps, "host">) {
   const { state, busy, error, onImport, onRemove, onSelect } = usePetPackages({ roleId, disabled, client, onRoleDataChanged });
 
   // No role open: guessing one would let a click act on somebody else's packages.

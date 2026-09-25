@@ -14,23 +14,32 @@ import {
 } from "./pluginUiRegistry";
 
 /**
- * Props a plugin-authored nav.page component receives: the base slot props
- * plus its injected, namespace-scoped RPC client.
+ * What the host injects into every bound plugin component (nav.page and its
+ * sidebar, a custom settings.section, role.assets): its namespace-scoped RPC
+ * client and, since runtime API 2.4.0, the host services as a prop — so a
+ * precompiled external package, which cannot import the host's React
+ * context, reaches `host.feedback` and `host.ui.InlineError` too.
  */
-export type PluginNavPageComponentProps = PluginNavPageProps & { client: PluginRpcClient };
+export type PluginInjectedProps = { client: PluginRpcClient; host: PluginHostServices };
+
+/**
+ * Props a plugin-authored nav.page component receives: the base slot props
+ * plus the injected client and host services.
+ */
+export type PluginNavPageComponentProps = PluginNavPageProps & PluginInjectedProps;
 
 /**
  * Props a plugin-authored nav.page sidebar receives: the base slot props
  * (see `PluginNavPageSidebarProps`) plus its injected, namespace-scoped RPC
  * client — same treatment as the page component itself.
  */
-export type PluginNavPageSidebarComponentProps = PluginNavPageSidebarProps & { client: PluginRpcClient };
+export type PluginNavPageSidebarComponentProps = PluginNavPageSidebarProps & PluginInjectedProps;
 
 /**
  * Props a plugin-authored custom settings.section component receives: the
  * base slot props plus its injected, namespace-scoped RPC client.
  */
-export type PluginSettingsSectionComponentProps = StandaloneSettingsSectionProps & { client: PluginRpcClient };
+export type PluginSettingsSectionComponentProps = StandaloneSettingsSectionProps & PluginInjectedProps;
 
 /**
  * One plugin's settings.section contribution: either a schema auto-form or
@@ -47,7 +56,7 @@ export type PluginSettingsSectionContribution =
  * its injected, namespace-scoped RPC client — the same treatment the other two
  * slots get, and the only way such a panel can reach any data at all.
  */
-export type PluginRoleAssetsComponentProps = PluginRoleAssetsProps & { client: PluginRpcClient };
+export type PluginRoleAssetsComponentProps = PluginRoleAssetsProps & PluginInjectedProps;
 
 /** One plugin's panel inside the role asset page. */
 export type PluginRoleAssetsContribution = {
@@ -93,12 +102,12 @@ function isPluginUiModule(value: unknown): value is PluginUiModule {
  */
 function bindPluginClient<TBaseProps extends object>(
   pluginId: string,
-  Component: React.ComponentType<TBaseProps & { client: PluginRpcClient }>,
+  Component: React.ComponentType<TBaseProps & PluginInjectedProps>,
 ): React.ComponentType<TBaseProps> {
   return function PluginClientBoundComponent(props: TBaseProps) {
     const client = usePluginRpcClient(pluginId);
     return <PluginHostServicesProvider services={desktopPluginHostServices}>
-      <Component {...props} client={client} />
+      <Component {...props} client={client} host={desktopPluginHostServices} />
     </PluginHostServicesProvider>;
   };
 }

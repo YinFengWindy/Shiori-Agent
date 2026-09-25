@@ -2,6 +2,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { useState, type RefObject } from "react";
 import { CaretRight, WarningCircle, XIcon } from "@phosphor-icons/react";
 import { dangerGhostButtonClass, ghostButtonClass, iconButtonClass } from "../shared/styles";
+import { InlineError } from "../shared/feedback/InlineError";
 import type { PluginSummary } from "./pluginBridgeClient";
 import { canManagePluginPackage } from "./pluginPackageState";
 import { pluginDisplayName, pluginProblem } from "./pluginPresentation";
@@ -47,7 +48,7 @@ export function PluginDetailsDialog({ plugin: currentPlugin, busy, error, popupR
           ) : null}
           {plugin.pendingOperation === "update" ? <p className="m-0 text-body text-ink-secondary">{plugin.version} → {plugin.pendingVersion}</p> : null}
           {plugin.pendingOperation || plugin.trustPendingRestart ? <p className="m-0 text-body text-ink-secondary">待重启 · 重启 Shiori 后生效。</p> : null}
-          {error ? <p role="alert" className="m-0 break-words text-body text-danger-text">{error}</p> : null}
+          {error ? <InlineError message={error} /> : null}
           <details className="group rounded-md border border-line-soft bg-surface-soft">
             <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-body-sm font-medium text-ink-secondary [&::-webkit-details-marker]:hidden">
               <CaretRight className="h-3.5 w-3.5 text-ink-muted transition-transform duration-quick ease-out-soft group-open:rotate-90" weight="bold" aria-hidden="true" />

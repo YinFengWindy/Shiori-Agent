@@ -157,7 +157,7 @@ export function useDesktopBridgeLifecycle({
       feedback.error("重新连接失败，请稍后再试");
       return;
     }
-    if (await refreshBridge()) feedback.success("连接已恢复");
+    if (await refreshBridge()) feedback.success("连接已恢复", { persona: "bridgeRecovered" });
   }, [feedback, refreshBridge, setBridgeError, setHealth]);
 
   useEffect(() => {
@@ -223,7 +223,7 @@ export function useDesktopBridgeLifecycle({
         if (event.method === "bridge.ready") {
           if (healthRef.current !== "offline") return;
           void refreshBridge().then((recovered) => {
-            if (recovered) feedback.success("连接已恢复");
+            if (recovered) feedback.success("连接已恢复", { persona: "bridgeRecovered" });
           });
           return;
         }

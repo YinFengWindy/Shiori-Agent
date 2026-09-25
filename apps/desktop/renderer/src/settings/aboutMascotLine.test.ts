@@ -20,10 +20,14 @@ describe("aboutLineForPhaseChange", () => {
     assert.equal(aboutLineForPhaseChange(undefined, "current"), null);
   });
 
+  it("worries when the update fails, also on opening the page after a failure", () => {
+    assert.equal(aboutLineForPhaseChange("checking", "error"), aboutUpdateLines.failed);
+    assert.equal(aboutLineForPhaseChange(undefined, "error"), aboutUpdateLines.failed);
+  });
+
   it("keeps her line for everything else", () => {
     assert.equal(aboutLineForPhaseChange(undefined, "idle"), null);
     assert.equal(aboutLineForPhaseChange("idle", "checking"), null);
-    assert.equal(aboutLineForPhaseChange("checking", "error"), null);
     assert.equal(aboutLineForPhaseChange("current", "current"), null);
   });
 });
