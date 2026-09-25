@@ -8,7 +8,11 @@ import {
 } from "./desktopPresence.js";
 
 function harness() {
-  const state = { idle: "active" as DesktopIdleState, canReport: true, fail: false };
+  const state: { idle: DesktopIdleState; canReport: boolean; fail: boolean } = {
+    idle: "active",
+    canReport: true,
+    fail: false,
+  };
   const reports: boolean[] = [];
   const failures: unknown[] = [];
   const tracker = new DesktopPresenceTracker({
@@ -27,7 +31,7 @@ function harness() {
 function heldHarness() {
   const reports: boolean[] = [];
   let release: () => void = () => {};
-  const idle = { state: "active" as DesktopIdleState };
+  const idle: { state: DesktopIdleState } = { state: "active" };
   const tracker = new DesktopPresenceTracker({
     readIdleState: () => idle.state,
     canReport: () => true,
@@ -38,6 +42,42 @@ function heldHarness() {
     onReportFailed: () => assert.fail("no failure expected"),
   });
   return { reports, idle, tracker, release: () => release() };
+}
+
+/**
+ * A tracker whose reports each wait until `land(i)` writes them into a modelled
+ * backend, the way a request queued behind bridge startup lands late.
+ */
+function backendHarness() {
+  const backend: { value: boolean } = { value: true };
+  const idle: { state: DesktopIdleState } = { state: "active" };
+  const pending: Array<{ present: boolean; resolve: () => void; landed: boolean }> = [];
+  const tracker = new DesktopPresenceTracker({
+    readIdleState: () => idle.state,
+    canReport: () => true,
+    report: (present) =>
+      new Promise<void>((resolve) => {
+        pending.push({ present, resolve, landed: false });
+      }),
+    onReportFailed: () => assert.fail("no failure expected"),
+  });
+  const flush = () => new Promise<void>((done) => setImmediate(done));
+  /** Writes report `index` into the backend, then lets the tracker react. */
+  const land = async (index: number) => {
+    const report = pending[index];
+    assert.ok(report && !report.landed, `report ${index} is in flight`);
+    report.landed = true;
+    backend.value = report.present;
+    report.resolve();
+    await flush();
+  };
+  /** Lands every report that follow-up syncs issue, in order, until none is left. */
+  const settle = async () => {
+    for (let index = pending.findIndex((item) => !item.landed); index >= 0; index = pending.findIndex((item) => !item.landed)) {
+      await land(index);
+    }
+  };
+  return { backend, idle, pending, tracker, flush, land, settle };
 }
 
 describe("presenceFromIdleState", () => {
@@ -140,10 +180,10 @@ describe("DesktopPresenceTracker", () => {
     assert.deepEqual(reports, [false, false]);
   });
 
-  it("does not report to a freshly ready backend while the user is present", async () => {
+  it("reports the current state to a freshly ready backend even when present", async () => {
     const { reports, tracker } = harness();
     await tracker.backendReady();
-    assert.deepEqual(reports, []);
+    assert.deepEqual(reports, [true], "what a new backend holds is unknown, so it is always told");
   });
 
   it("delivers a change observed during an in-flight report once it lands", async () => {
@@ -156,30 +196,53 @@ describe("DesktopPresenceTracker", () => {
     assert.deepEqual(reports, [false, true]);
   });
 
-  it("ignores a report that lands after the backend was replaced", async () => {
-    const { reports, idle, tracker, release } = heldHarness();
-    const stale = tracker.setLocked(true);
-    idle.state = "locked";
-    await tracker.backendReady();
-    assert.deepEqual(reports, [false, false], "the new backend gets its own report without waiting");
-    release();
-    await stale;
-    idle.state = "active";
-    await tracker.setLocked(false);
-    assert.deepEqual(reports, [false, false, true], "the stale landing did not corrupt the mirror");
+  it("a report issued during startup that lands on the new backend first is overwritten by the current state", async () => {
+    const { backend, pending, tracker, flush, land, settle } = backendHarness();
+    // Locked during startup: report A waits for readiness inside the bridge client.
+    const a = tracker.setLocked(true);
+    // Unlocked before ready: A is still in flight, so nothing new is sent yet.
+    const unlocked = tracker.setLocked(false);
+    const ready = tracker.backendReady();
+    await flush();
+    assert.deepEqual(pending.map((item) => item.present), [false, true], "ready re-sends even the default value");
+    await land(0);
+    assert.equal(backend.value, false, "A reached the new backend");
+    await settle();
+    await Promise.all([a, unlocked, ready]);
+    assert.equal(backend.value, true, "the backend ends at the real state");
   });
 
-  it("does not let a stale landing mark the new backend as already away", async () => {
-    const { reports, idle, tracker, release } = heldHarness();
-    const stale = tracker.setLocked(true);
-    // The user came back before the restart: nothing to tell the new backend yet.
-    await tracker.setLocked(false);
+  it("a report issued during startup that lands on the new backend last triggers a re-sync", async () => {
+    const { backend, pending, tracker, flush, land, settle } = backendHarness();
+    const a = tracker.setLocked(true);
+    const unlocked = tracker.setLocked(false);
+    const ready = tracker.backendReady();
+    await flush();
+    await land(1);
+    // A overwrites the new backend with away after the current report landed.
+    await land(0);
+    assert.equal(backend.value, false);
+    await settle();
+    await Promise.all([a, unlocked, ready]);
+    assert.equal(backend.value, true, "the stale landing re-sent the real state");
+    assert.deepEqual(pending.map((item) => item.present), [false, true, true]);
+  });
+
+  it("after a stale landing the next change is still reported", async () => {
+    const { backend, idle, tracker, flush, land, settle } = backendHarness();
+    const a = tracker.setLocked(true);
+    idle.state = "locked";
+    const ready = tracker.backendReady();
+    await flush();
+    await land(0);
+    await settle();
+    await Promise.all([a, ready]);
+    assert.equal(backend.value, false);
     idle.state = "active";
-    await tracker.backendReady();
-    release();
-    await stale;
-    idle.state = "idle";
-    await tracker.poll();
-    assert.deepEqual(reports, [false, false], "away is still reported to the new backend");
+    const unlocked = tracker.setLocked(false);
+    await flush();
+    await settle();
+    await unlocked;
+    assert.equal(backend.value, true);
   });
 });

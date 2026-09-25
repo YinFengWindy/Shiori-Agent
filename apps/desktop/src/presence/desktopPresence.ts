@@ -29,14 +29,16 @@ export type DesktopPresenceTrackerOptions = {
  * Mirrors what the backend believes about desktop presence and reports only changes.
  *
  * The mirror starts at "present" because that is the backend's value before any
- * report; every freshly ready backend puts it back there (see {@link backendReady}).
+ * report. A freshly ready backend makes it unknown (see {@link backendReady}):
+ * a report issued while that backend was starting may still land on it.
  */
 export class DesktopPresenceTracker {
   /** Lock state from lock-screen / unlock-screen events; overrides an `active` idle read. */
   private lockedByEvent = false;
   /** Last known presence from the OS idle state (`unknown` leaves it untouched). */
   private idlePresent = true;
-  private backendPresent = true;
+  /** What the backend holds; null when unknown, which always differs from the current state. */
+  private backendPresent: boolean | null = true;
   private reporting = false;
   /** Bumped per backend session so a report sent to a previous one never updates the mirror. */
   private backendSession = 0;
@@ -58,10 +60,12 @@ export class DesktopPresenceTracker {
     await this.sync();
   }
 
-  /** A newly ready backend holds its default again, so the current state is synced to it right away. */
+  /** Syncs the current state to a newly ready backend right away, whatever it may hold. */
   async backendReady() {
     this.backendSession += 1;
-    this.backendPresent = true;
+    // Not simply its default: a report issued while it was starting waits for
+    // readiness and lands on it after this, carrying a possibly outdated value.
+    this.backendPresent = null;
     // A report still in flight belongs to the previous backend; it must not
     // block the first report to this one.
     this.reporting = false;
@@ -87,8 +91,14 @@ export class DesktopPresenceTracker {
     } finally {
       if (session === this.backendSession) this.reporting = false;
     }
-    // The backend was replaced while this was in flight; it no longer holds this value.
-    if (session !== this.backendSession) return;
+    if (session !== this.backendSession) {
+      // Issued to an earlier session but may have landed on the current backend,
+      // overwriting it; forget what it holds and re-sync unless a current
+      // report is still in flight (its landing overrides this one).
+      this.backendPresent = null;
+      await this.sync();
+      return;
+    }
     this.backendPresent = present;
     await this.sync();
   }

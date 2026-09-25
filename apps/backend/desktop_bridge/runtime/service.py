@@ -316,8 +316,10 @@ class ReloadableDesktopService:
     async def _respond_or_invalid_request(self, request_id: str, method: str, compute):
         """Runs one app-level handler, mapping rejected input to ``invalid_request``.
 
-        Shared by the ROLE_TASKS and DESKTOP_PRESENCE branches, whose handlers
-        signal bad requests with ``KeyError``/``ValueError``/``RuntimeError``.
+        Shared by the ROLE_TASKS and DESKTOP_PRESENCE branches. The role-task
+        branch has always mapped ``KeyError``/``ValueError``/``RuntimeError``;
+        the presence report only ever raises ``ValueError``, for a non-boolean
+        ``present``, so the wider set does not change its behavior.
         """
         try:
             result = await compute()
