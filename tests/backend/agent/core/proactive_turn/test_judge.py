@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 from core.roles.reply_state import InvalidRoleReply, RoleReply, reply_state_metadata
 from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
+from agent.turns.outbound import DeliveryReceipt
 from session.manager import SessionManager
 from session.manager.models import build_session_message
 from types import SimpleNamespace
@@ -139,7 +140,7 @@ async def test_tick_captures_state_before_generation_and_does_not_send_stale_rep
 ):
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
-    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=True))
+    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=DeliveryReceipt.sent()))
     owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
     calls = 0
 
@@ -185,7 +186,7 @@ async def test_tick_captures_state_before_generation_and_does_not_send_stale_rep
 async def test_normal_tick_corrects_state_without_replaying_earlier_tool(tmp_path):
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
-    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=True))
+    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=DeliveryReceipt.sent()))
     owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
     llm = _ScriptedLlm(
         [

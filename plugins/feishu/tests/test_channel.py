@@ -280,3 +280,24 @@ async def test_a_refused_quote_falls_back_to_a_plain_message(harness: Any) -> No
     assert harness.api.keys() == ["reply", "send"]
     assert harness.api.sent_texts()[-1] == "仍然送达"
     assert harness.hub.deliveries == ["sent"]
+
+
+async def test_push_senders_return_the_first_platform_message_id(
+    harness: Any, tmp_path: Path
+) -> None:
+    await harness.start()
+    image = tmp_path / "a.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\n")
+    # The fake numbers every answered request, so ids follow request order.
+    before = harness.api.counter
+
+    first_id = await harness.channel.send(CHAT_ID, "\n".join(["段落" * 1000] * 3))
+    cards = len(harness.api.bodies("send"))
+    image_id = await harness.channel.send_image(CHAT_ID, str(image))
+
+    # A multi-card text is identified by its first card, not its last.
+    assert cards > 1
+    assert first_id == f"om_{before + 1}"
+    # After the text cards come the image upload and then the image message.
+    assert image_id == f"om_{before + cards + 2}"
+    assert await harness.channel.send(CHAT_ID, "  ") is None

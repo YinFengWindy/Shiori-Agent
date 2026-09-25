@@ -12,7 +12,7 @@ from telegram.ext import ContextTypes
 from bus.events import OutboundMessage
 from infra.channels.session_key import resolve_outbound_session_key
 
-from ..utils import TelegramStreamMessage
+from ..utils import TelegramStreamMessage, sent_message_id
 from .compat import (
     _call_send_markdown,
     _call_send_stream_markdown,
@@ -36,18 +36,18 @@ class _OutboundMixin:
                 )
         return resolved
 
-    async def send(self, chat_id: str, message: str) -> None:
-        """发送文本消息（供 MessagePushTool 调用）"""
-        await _call_send_markdown(
+    async def send(self, chat_id: str, message: str) -> str | None:
+        """发送文本消息（供 MessagePushTool 调用），返回首条消息 id。"""
+        return await _call_send_markdown(
             self._app.bot,
             self._resolve_chat_id(chat_id),
             message,
             self._telegram_outbound_limiter,
         )
 
-    async def send_stream(self, chat_id: str, message: str) -> None:
-        """发送流式文本消息（私聊优先 draft，其他场景降级普通发送）"""
-        await _call_send_stream_markdown(
+    async def send_stream(self, chat_id: str, message: str) -> str | None:
+        """发送流式文本消息（私聊优先 draft，其他场景降级普通发送），返回消息 id。"""
+        return await _call_send_stream_markdown(
             self._app.bot,
             self._resolve_chat_id(chat_id),
             message,
@@ -75,33 +75,35 @@ class _OutboundMixin:
         file_path: str,
         name: str | None = None,
         caption: str | None = None,
-    ) -> None:
-        """发送文件，可附带说明文字"""
+    ) -> str | None:
+        """发送文件，可附带说明文字；返回消息 id。"""
         cid = int(self._resolve_chat_id(chat_id))
-        await self._telegram_outbound_limiter.run(
+        sent = await self._telegram_outbound_limiter.run(
             cid,
             kind="send",
             label="send_document",
             action=lambda: self._send_document_file(cid, file_path, name, caption),
         )
+        return sent_message_id(sent)
 
-    async def send_image(self, chat_id: str, image: str) -> None:
-        """发送图片（本地路径或 URL）"""
+    async def send_image(self, chat_id: str, image: str) -> str | None:
+        """发送图片（本地路径或 URL），返回消息 id。"""
         cid = int(self._resolve_chat_id(chat_id))
         if image.startswith(("http://", "https://")):
-            await self._telegram_outbound_limiter.run(
+            sent = await self._telegram_outbound_limiter.run(
                 cid,
                 kind="send",
                 label="send_photo",
                 action=lambda: self._app.bot.send_photo(chat_id=cid, photo=image),
             )
         else:
-            await self._telegram_outbound_limiter.run(
+            sent = await self._telegram_outbound_limiter.run(
                 cid,
                 kind="send",
                 label="send_photo",
                 action=lambda: self._send_photo_file(cid, image),
             )
+        return sent_message_id(sent)
 
     async def _send_document_file(
         self,
@@ -182,7 +184,7 @@ class _OutboundMixin:
             self._reply_buffers.pop(session_key, None)
             self._thinking_buffers.pop(session_key, None)
             for image in msg.media or []:
-                await self.send_image(str(msg.chat_id), image)
+                _ = await self.send_image(str(msg.chat_id), image)
         except Exception:
             send_failed = True
             self._record_delivery_status(msg, delivery_status="failed")

@@ -57,6 +57,11 @@ class TelegramStreamMessage:
     # public API
     # ------------------------------------------------------------------
 
+    @property
+    def message_id(self) -> str | None:
+        """Id of the single message this stream sends and edits, once sent."""
+        return str(self._message_id) if self._message_id is not None else None
+
     async def push_delta(
         self,
         delta: str | dict[str, str],
