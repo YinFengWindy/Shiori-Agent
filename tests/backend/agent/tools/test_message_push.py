@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.tools.message_push import MessagePushTool
+from agent.tools.message_push import MessagePushTool, PushOutcome
 from core.common.runtime_scope import bind_runtime
 
 
@@ -20,7 +20,7 @@ from core.common.runtime_scope import bind_runtime
 )
 async def test_blank_payload_is_rejected_before_resolving_or_sending(payload):
     tool = MessagePushTool()
-    send = AsyncMock()
+    send = AsyncMock(return_value=None)
 
     def resolve(_chat_id):
         raise AssertionError("empty payload must not resolve its target")
@@ -50,7 +50,9 @@ async def test_blank_payload_is_rejected_before_resolving_or_sending(payload):
 )
 async def test_only_nonblank_fields_are_sent_without_changing_content(field, value):
     tool = MessagePushTool()
-    senders = {name: AsyncMock() for name in ("message", "file", "image")}
+    senders = {
+        name: AsyncMock(return_value=None) for name in ("message", "file", "image")
+    }
     tool.register_channel(
         "desktop",
         text=senders["message"],
@@ -74,7 +76,7 @@ async def test_only_nonblank_fields_are_sent_without_changing_content(field, val
 @pytest.mark.asyncio
 async def test_retired_transport_only_sends_for_previously_accepted_generation():
     tool = MessagePushTool()
-    send = AsyncMock()
+    send = AsyncMock(return_value=None)
     tool.register_channel("telegram", text=send)
     tool.retire_channel("telegram")
     old = SimpleNamespace(channel_names=frozenset({"telegram", "qq"}))
@@ -91,7 +93,7 @@ async def test_retired_transport_only_sends_for_previously_accepted_generation()
 @pytest.mark.parametrize("sender_name", ["text", "stream_text"])
 async def test_delivery_metadata_keeps_legacy_senders_compatible(sender_name):
     tool = MessagePushTool()
-    sender = AsyncMock()
+    sender = AsyncMock(return_value=None)
     tool.register_channel("telegram", **{sender_name: sender})
 
     result = await tool.execute(
@@ -108,7 +110,7 @@ async def test_delivery_metadata_keeps_legacy_senders_compatible(sender_name):
 
 async def test_metadata_sender_uses_push_identity_not_shared_turn_identity():
     tool = MessagePushTool()
-    sender = AsyncMock()
+    sender = AsyncMock(return_value=None)
     tool.register_channel("desktop", text_with_metadata=sender)
 
     await tool.execute(
@@ -147,7 +149,7 @@ async def test_metadata_sender_uses_push_identity_not_shared_turn_identity():
 
 async def test_model_json_cannot_impersonate_pending_turn_delivery():
     tool = MessagePushTool()
-    sender = AsyncMock()
+    sender = AsyncMock(return_value=None)
     tool.register_channel("desktop", text_with_metadata=sender)
     await tool.execute(
         channel="desktop",
@@ -164,7 +166,7 @@ async def test_unsupported_payload_rejects_all_requested_sends_before_delivery(
     unsupported,
 ):
     tool = MessagePushTool()
-    senders = {name: AsyncMock() for name in ("text", "file", "image")}
+    senders = {name: AsyncMock(return_value=None) for name in ("text", "file", "image")}
     tool.register_channel(
         "limited",
         **{name: sender for name, sender in senders.items() if name != unsupported},
@@ -241,3 +243,47 @@ async def test_message_push_tool_covers_success_failure_and_fallbacks():
 
     tool.register_channel("broken", text=broken)
     assert "发送失败" in await tool.execute(channel="broken", chat_id=1, message="x")
+
+
+@pytest.mark.asyncio
+async def test_push_reports_sender_message_ids_in_send_order():
+    tool = MessagePushTool()
+    tool.register_channel(
+        "qqbot",
+        text=AsyncMock(return_value=" text-id "),
+        image=AsyncMock(return_value="image-id"),
+        # A blank id is the same as no id.
+        file=AsyncMock(return_value="   "),
+    )
+
+    outcome = await tool.push(
+        channel="qqbot",
+        chat_id="c2c:user-1",
+        message="hello",
+        file="report.pdf",
+        image="cat.png",
+    )
+
+    assert outcome == PushOutcome(
+        "文本已发送；文件 'report.pdf' 已发送；图片已发送",
+        ("text-id", "image-id"),
+    )
+    # The model-facing tool result stays plain text.
+    text = await tool.execute(channel="qqbot", chat_id="c2c:user-1", message="hi")
+    assert text == "文本已发送"
+
+
+@pytest.mark.asyncio
+async def test_push_failure_reports_no_message_ids():
+    tool = MessagePushTool()
+    tool.register_channel(
+        "qqbot",
+        text=AsyncMock(return_value="text-id"),
+        image=AsyncMock(side_effect=RuntimeError("upload failed")),
+    )
+
+    outcome = await tool.push(
+        channel="qqbot", chat_id="c2c:user-1", message="hello", image="cat.png"
+    )
+
+    assert outcome == PushOutcome("发送失败：upload failed")

@@ -12,6 +12,12 @@ from .streaming import TelegramStreamMessage, _iter_stream_chunks
 logger = logging.getLogger("plugins.telegram.utils")
 
 
+def sent_message_id(sent: object) -> str | None:
+    """Reads the id of the PTB ``Message`` a send call returned, if any."""
+    message_id = getattr(sent, "message_id", None)
+    return str(message_id) if message_id is not None else None
+
+
 def _serialize_entities(entities: list[MessageEntity]) -> list[dict] | None:
     return [entity.to_dict() for entity in entities] if entities else None
 
@@ -60,8 +66,10 @@ async def send_markdown(
     chat_id: int | str,
     text: str,
     limiter: TelegramOutboundLimiter | None = None,
-) -> None:
+) -> str | None:
+    """Sends Markdown in as many messages as needed; returns the first one's id."""
     cid = int(chat_id)
+    first_id: str | None = None
     try:
         from . import convert_with_segments
 
@@ -70,19 +78,20 @@ async def send_markdown(
     except Exception as e:
         logger.warning(f"[telegram] Markdown 转换失败，降级纯文本: {e}")
         for chunk in _split_text(text, 4090):
-            await _run_outbound(
+            sent = await _run_outbound(
                 limiter,
                 cid,
                 kind="send",
                 action=lambda: bot.send_message(chat_id=cid, text=chunk),
                 label="send_message(plain)",
             )
-        return
+            first_id = first_id or sent_message_id(sent)
+        return first_id
     for chunk_text, chunk_entities in chunks:
         chunk_text, chunk_entities = _strip_chunk(chunk_text, chunk_entities)
         if not chunk_text:
             continue
-        await _run_outbound(
+        sent = await _run_outbound(
             limiter,
             cid,
             kind="send",
@@ -93,6 +102,8 @@ async def send_markdown(
             ),
             label="send_message(markdown)",
         )
+        first_id = first_id or sent_message_id(sent)
+    return first_id
 
 
 def _split_text(text: str, limit: int) -> list[str]:
@@ -201,12 +212,15 @@ async def send_stream_markdown(
     chat_id: int | str,
     text: str,
     limiter: TelegramOutboundLimiter | None = None,
-) -> None:
-    """主动推送场景的简化流式展示。"""
+) -> str | None:
+    """主动推送场景的简化流式展示；返回承载内容的那条消息 id。
+
+    私聊走单条消息的流式编辑，id 即该消息；降级为普通发送时取首条消息 id。
+    """
     cid = int(chat_id)
     stripped = text.strip()
     if not stripped:
-        return
+        return None
 
     if cid > 0:
         try:
@@ -214,9 +228,9 @@ async def send_stream_markdown(
             for chunk in _iter_stream_chunks(stripped):
                 await stream.push_delta(chunk, force=True)
             await stream.finalize(text)
+            return stream.message_id
         except Exception as e:
             logger.warning("[telegram] stream edit 失败，降级普通发送: %s", e)
-            await send_markdown(bot, cid, text, limiter)
+            return await send_markdown(bot, cid, text, limiter)
 
-    else:
-        await send_markdown(bot, cid, text, limiter)
+    return await send_markdown(bot, cid, text, limiter)

@@ -191,7 +191,7 @@ async def test_pipeline_discards_push_drafts_on_failure_or_cancellation(
 async def test_pipeline_keeps_background_other_role_and_external_sends_independent(
     runtime,
 ):
-    external = AsyncMock()
+    external = AsyncMock(return_value=None)
     runtime.push.register_channel("external", text=external)
 
     async def reasoning(**_kwargs):

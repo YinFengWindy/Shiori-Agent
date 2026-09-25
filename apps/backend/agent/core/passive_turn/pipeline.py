@@ -33,8 +33,8 @@ from agent.lifecycle.types import (
     TurnSnapshot,
     TurnState,
 )
-from agent.turns.outbound import OutboundDispatch, OutboundPort
 from agent.turns.desktop_pushes import DesktopPushDrafts
+from agent.turns.outbound import DeliveryReceipt, OutboundDispatch, OutboundPort
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import TurnFailed
@@ -56,8 +56,8 @@ def _turn_log_id(key: str, msg: InboundMessage) -> str:
 
 
 class _NoopOutboundPort:
-    async def dispatch(self, outbound: OutboundDispatch) -> bool:
-        return False
+    async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
+        return None
 
 
 @dataclass

@@ -14,7 +14,7 @@ from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
 from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
-from agent.turns.outbound import OutboundDispatch
+from agent.turns.outbound import DeliveryReceipt, OutboundDispatch
 from agent.core.proactive_turn.gates import (
     ProactiveGateAdapter,
     ProactiveGateChain,
@@ -343,8 +343,9 @@ def make_proactive_pipeline(
     )
 
     class _Outbound:
-        async def dispatch(self, outbound: OutboundDispatch) -> bool:
-            return await sender.send(outbound.content)
+        async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
+            sent = await sender.send(outbound.content)
+            return DeliveryReceipt.sent() if sent else None
 
     orchestrator = TurnOrchestrator(
         TurnOrchestratorDeps(

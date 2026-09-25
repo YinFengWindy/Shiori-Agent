@@ -68,7 +68,7 @@ from agent.lifecycle.phases.prompt_render import (
     default_prompt_render_modules,
 )
 from agent.prompting import PromptSectionRender
-from agent.turns.outbound import OutboundDispatch
+from agent.turns.outbound import DeliveryReceipt, OutboundDispatch
 from session.manager import SessionManager
 
 _observe_db = importlib.import_module("plugins.observe.backend.db")
@@ -114,8 +114,8 @@ class _MemoryStatusPluginModule:
 
 
 class _DummyOutbound:
-    async def dispatch(self, outbound: OutboundDispatch) -> bool:
-        return True
+    async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt:
+        return DeliveryReceipt.queued()
 
 
 class _KVCachePluginModule:

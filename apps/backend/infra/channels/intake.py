@@ -20,7 +20,8 @@ class ChannelIntake:
     def __init__(
         self,
         accept: Callable[[InboundMessage], Awaitable[None]],
-        send: Callable[[str, str], Awaitable[None]],
+        # Senders may return a platform message id; notices ignore it.
+        send: Callable[[str, str], Awaitable[str | None]],
         *,
         capacity: int = 256,
     ) -> None:
@@ -83,7 +84,7 @@ class ChannelIntake:
                     logger.exception("Channel retry notice could not be delivered")
 
     async def _reject(self, message: InboundMessage) -> None:
-        await self._send(message.chat_id, _RETRY_MESSAGE)
+        _ = await self._send(message.chat_id, _RETRY_MESSAGE)
 
     async def drain(self) -> None:
         """Waits for scheduled admission and reports any asynchronous failure."""
