@@ -34,12 +34,13 @@ describe("PluginSchemaSettingsSection", () => {
                   },
                 },
                 values: stored,
+                env_status: {},
               },
             };
           }
           if (method === "plugin.config.set") {
             stored = { ...stored, ...(payload.values as Record<string, unknown>) };
-            return { id: "1", type: "response", method, error: null, payload: { plugin_id: "demo", values: stored, generation: 2 } };
+            return { id: "1", type: "response", method, error: null, payload: { plugin_id: "demo", values: stored, env_status: {}, generation: 2 } };
           }
           throw new Error(`unexpected method ${method}`);
         },
@@ -74,6 +75,7 @@ describe("PluginSchemaSettingsSection", () => {
                 plugin_id: "demo",
                 schema: { title: "DemoConfig", properties: { tags: { type: "array" } } },
                 values: stored,
+                env_status: {},
               },
             };
           }
@@ -85,7 +87,7 @@ describe("PluginSchemaSettingsSection", () => {
               };
             }
             stored = { ...stored, ...(payload.values as Record<string, unknown>) };
-            return { id: "1", type: "response", method, error: null, payload: { plugin_id: "demo", values: stored, generation: 2 } };
+            return { id: "1", type: "response", method, error: null, payload: { plugin_id: "demo", values: stored, env_status: {}, generation: 2 } };
           }
           throw new Error(`unexpected method ${method}`);
         },
@@ -137,11 +139,12 @@ describe("PluginSchemaSettingsSection", () => {
                   groups: { type: "array", items: { type: "object" }, title: "群聊（旧版）" },
                 } },
                 values: stored,
+                env_status: {},
               },
             };
           }
           stored = { ...stored, ...(payload.values as Record<string, unknown>) };
-          return { id: "1", type: "response", method, error: null, payload: { plugin_id: "demo", values: stored, generation: 2 } };
+          return { id: "1", type: "response", method, error: null, payload: { plugin_id: "demo", values: stored, env_status: {}, generation: 2 } };
         },
       },
     });
@@ -167,37 +170,60 @@ describe("PluginSchemaSettingsSection", () => {
     }
   });
 
-  it("shows an unexpanded ${ENV} secret as the reference, not as masked dots, and lets a literal replace it", async () => {
-    const view = await mountTestComponent(null);
-    let stored: Record<string, unknown> = { token: "${NOVELAI_TOKEN}" };
+  /** Mounts a one-field form whose stored `token` is `stored`, reporting `envStatus` for it. */
+  function mockEnvReferencePlugin(initial: Record<string, unknown>, tokenStatus: "set" | "unset") {
+    const state = { stored: initial };
+    const envStatus = () => (typeof state.stored.token === "string" && state.stored.token.includes("${") ? { token: tokenStatus } : {});
     Object.defineProperty(window, "miraDesktop", {
       configurable: true,
       value: {
         invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
           if (method === "plugin.config.get") {
             return { id: "1", type: "response", method, error: null, payload: {
-              plugin_id: "demo", schema: { properties: { token: { type: "string", title: "API Token" } } }, values: stored,
+              plugin_id: "demo", schema: { properties: { token: { type: "string", title: "API Token" } } },
+              values: state.stored, env_status: envStatus(),
             } };
           }
-          stored = { ...stored, ...(payload.values as Record<string, unknown>) };
-          return { id: "1", type: "response", method, error: null, payload: { plugin_id: "demo", values: stored, generation: 2 } };
+          state.stored = { ...state.stored, ...(payload.values as Record<string, unknown>) };
+          return { id: "1", type: "response", method, error: null, payload: {
+            plugin_id: "demo", values: state.stored, env_status: envStatus(), generation: 2,
+          } };
         },
       },
     });
+    return state;
+  }
+
+  it("shows an unexpanded ${ENV} secret as the reference, not as masked dots, and lets a literal replace it", async () => {
+    const view = await mountTestComponent(null);
+    const state = mockEnvReferencePlugin({ token: "${NOVELAI_TOKEN}" }, "unset");
 
     try {
       await view.render(<PluginSchemaSettingsSection pluginId="demo" />);
       assert.match(view.container.textContent ?? "", /引用环境变量 NOVELAI_TOKEN/);
-      assert.match(view.container.textContent ?? "", /未设置/);
+      assert.match(view.container.textContent ?? "", /当前环境中未设置/);
       assert.equal(view.container.querySelector('input[type="password"]'), null, "a reference must not look like a filled-in secret");
 
       const replace = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "改为直接填写")!;
       await act(async () => replace.click());
       const input = view.container.querySelector<HTMLInputElement>('input[aria-label="API Token"]')!;
       assert.equal(input.value, "");
-      assert.equal(stored.token, "${NOVELAI_TOKEN}", "opening the input alone keeps the reference");
+      assert.equal(state.stored.token, "${NOVELAI_TOKEN}", "opening the input alone keeps the reference");
       await changeInputValue(input, "pst-literal");
-      assert.equal(stored.token, "pst-literal");
+      assert.equal(state.stored.token, "pst-literal");
+    } finally {
+      await view.cleanup();
+    }
+  });
+
+  it("shows a reference whose variable is set without the unset warning", async () => {
+    const view = await mountTestComponent(null);
+    mockEnvReferencePlugin({ token: "${NOVELAI_TOKEN}" }, "set");
+
+    try {
+      await view.render(<PluginSchemaSettingsSection pluginId="demo" />);
+      assert.match(view.container.textContent ?? "", /引用环境变量 NOVELAI_TOKEN/);
+      assert.doesNotMatch(view.container.textContent ?? "", /未设置/);
     } finally {
       await view.cleanup();
     }

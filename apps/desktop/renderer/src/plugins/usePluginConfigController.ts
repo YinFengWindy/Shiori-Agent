@@ -55,7 +55,7 @@ export function usePluginConfigController(pluginId: string) {
       }
     },
     onApplied: (result) => {
-      setSnapshot((current) => (current ? { ...current, values: result.values } : current));
+      setSnapshot((current) => (current ? { ...current, values: result.values, envStatus: result.envStatus } : current));
       setDraft(cloneValues(result.values));
     },
     onStatus: (phase, message) => {
@@ -97,6 +97,7 @@ export function usePluginConfigController(pluginId: string) {
 
   return {
     schema: snapshot?.schema ?? null,
+    envStatus: snapshot?.envStatus ?? null,
     draft,
     loadError,
     savePhase,

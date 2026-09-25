@@ -75,7 +75,7 @@ async def setup(ctx):
 
 自动表单按 JSON Schema 渲染：字段标签取 Pydantic `Field(title=...)`，说明取 `description`（不写 `title` 时 Pydantic 会生成 "Timeout Seconds" 这类英文标题，请为每个字段写中文 `title`）；数字字段可用 `json_schema_extra={"unit": "秒"}` 声明单位，`ge`/`le` 会作为取值范围；`list[str]` 渲染为可增删的标签列表；`SecretStr` 或名称含 secret/token/password/api_key 的字符串按密钥遮挡；对象、对象列表等其余形状放进「高级」折叠区，以 JSON 编辑。
 
-运行配置来自 `[plugins.example]`。`enabled` 是宿主拥有的启停字段，不应放进插件模型。插件自己在 `setup` 校验读取值；宿主配置 schema 注册表为 `plugin.config.get/set` 提供 schema、默认值和写入校验。没有配置模型的插件不会得到自动表单。
+运行配置来自 `[plugins.example]`。`enabled` 是宿主拥有的启停字段，不应放进插件模型。插件自己在 `setup` 校验读取值；宿主配置 schema 注册表为 `plugin.config.get/set` 提供 schema、默认值和写入校验。没有配置模型的插件不会得到自动表单。配置值可以写成 `${NAME}` 引用环境变量（整值为引用时也可来自 `workspace/memory/<NAME>` 文件）：插件运行时拿到展开后的值；`plugin.config.get` 返回未展开的原值，并用 `env_status` 标出每个含引用的字段当前是否可解析（`set` / `unset`）；`plugin.config.set` 对含引用的值按展开后的值校验、按原引用落盘，密钥不会以明文写回 config.toml。
 
 桌面普通设置草稿不携带插件配置快照。保存时后端在同一配置事务锁内保留当前插件表，因此不会覆盖其它窗口刚完成的插件设置或启停更改。原始 `runtime.apply` 仍是整份配置替换；普通表单通过 `preserve_plugins: true` 明确选择保留语义。
 
