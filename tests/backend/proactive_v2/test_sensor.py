@@ -115,3 +115,25 @@ def test_sensor_supports_desktop_target_without_binding(tmp_path: Path):
     sensor = _sensor(session_manager, role_service, channel="desktop", chat_id="")
 
     assert sensor.target_transport() == ("desktop", "role:mira")
+
+
+def test_sensor_explains_bare_qq_group_number_in_configured_target(tmp_path: Path):
+    session_manager, role_service = _role_service(tmp_path)
+    _ = role_service.bindings.bind("qq", "gqq:7", "mira", contact_id="owner")
+
+    sensor = _sensor(session_manager, role_service, channel="qq", chat_id="7")
+
+    # A bare number is a private chat; config must name the group as gqq:.
+    with pytest.raises(KeyError, match="QQ 群请写成 gqq:7"):
+        _ = sensor.target_transports()
+
+
+def test_sensor_omits_qq_group_hint_when_no_matching_group_is_bound(tmp_path: Path):
+    session_manager, role_service = _role_service(tmp_path)
+    _ = role_service.bindings.bind("qq", "gqq:8", "mira", contact_id="owner")
+
+    sensor = _sensor(session_manager, role_service, channel="qq", chat_id="7")
+
+    with pytest.raises(KeyError) as exc_info:
+        _ = sensor.target_transports()
+    assert "gqq:" not in str(exc_info.value)

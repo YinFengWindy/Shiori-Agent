@@ -102,3 +102,62 @@ def test_v5_prefixes_legacy_bare_qq_group_bindings_and_proactive_target() -> Non
     ]
     assert role["proactive"]["target_chat_id"] == "gqq:831907794"
     assert migrate_manifest_payload(migrated) == (migrated, False)
+
+
+def test_v5_keeps_private_qq_binding_with_unnormalized_contacts() -> None:
+    bindings = [
+        {"channel": "qq", "chat_id": "123", "allow_from": ["123", "123"]},
+        {"channel": "qq", "chat_id": "456", "allow_from": [" 456", ""]},
+    ]
+    migrated, _ = migrate_manifest_payload(
+        {
+            "version": 5,
+            "roles": [{"id": "mira", "profile": {}, "channel_bindings": bindings}],
+        }
+    )
+
+    # Contacts normalize like RoleChannelBindingConfig, so these stay private.
+    assert migrated["roles"][0]["channel_bindings"] == bindings
+
+
+def test_v5_prefixes_bare_proactive_target_of_existing_gqq_group_binding() -> None:
+    migrated, _ = migrate_manifest_payload(
+        {
+            "version": 5,
+            "roles": [
+                {
+                    "id": "joye",
+                    "profile": {},
+                    # The old bare==gqq equivalence let this pair be saved.
+                    "channel_bindings": [
+                        {"channel": "qq", "chat_id": "gqq:7", "allow_from": ["3"]},
+                        {"channel": "qq", "chat_id": "8", "allow_from": ["8"]},
+                    ],
+                    "proactive": {
+                        "enabled": True,
+                        "target_channel": "qq",
+                        "target_chat_id": "7",
+                    },
+                },
+                {
+                    "id": "mira",
+                    "profile": {},
+                    # A bare target that is itself a bound private chat stays.
+                    "channel_bindings": [
+                        {"channel": "qq", "chat_id": "gqq:8", "allow_from": ["8"]},
+                        {"channel": "qq", "chat_id": "8", "allow_from": ["8"]},
+                    ],
+                    "proactive": {
+                        "enabled": True,
+                        "target_channel": "qq",
+                        "target_chat_id": "8",
+                    },
+                },
+            ],
+        }
+    )
+
+    joye, mira = migrated["roles"]
+    assert joye["channel_bindings"][0]["chat_id"] == "gqq:7"
+    assert joye["proactive"]["target_chat_id"] == "gqq:7"
+    assert mira["proactive"]["target_chat_id"] == "8"

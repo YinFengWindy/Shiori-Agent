@@ -4,8 +4,11 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.common.channel_identifiers import QQ_GROUP_PREFIX
+
 CHANNEL = "qq"
-GROUP_PREFIX = "gqq:"
+# 群聊 chat_id 前缀以核心定义为唯一来源，出站按它区分群聊与私聊。
+GROUP_PREFIX = QQ_GROUP_PREFIX
 # message_push 工具描述里的渠道身份与 chat_id 格式。
 PUSH_TARGET_HINT = (
     f"NapCat QQ，不能写成 qqbot；私聊 chat_id 为 QQ 号，群聊为 {GROUP_PREFIX}<群号>"

@@ -4,6 +4,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
 
+from core.common.channel_identifiers import normalize_contact_ids
+
 from .profile_models import RoleProfile
 
 DEFAULT_ASSET_CATEGORY_ID = "default"
@@ -54,9 +56,7 @@ class RoleChannelBindingConfig:
         return cls(
             channel=channel,
             chat_id=chat_id,
-            allow_from=sorted(
-                {str(item).strip() for item in raw_allow_from if str(item).strip()}
-            ),
+            allow_from=normalize_contact_ids(raw_allow_from),
         )
 
 

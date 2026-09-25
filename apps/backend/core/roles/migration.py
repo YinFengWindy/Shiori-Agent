@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.common.channel_identifiers import QQ_GROUP_PREFIX
+from core.common.channel_identifiers import QQ_GROUP_PREFIX, is_bare_qq_group_chat_id
 
 from .profile_models import RoleProfile
 
@@ -82,30 +82,50 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
 def _prefix_legacy_qq_group_chat_ids(role: dict[str, Any]) -> None:
     """Rewrites pre-v6 bare QQ group IDs to ``gqq:`` in bindings and proactive target.
 
-    A QQ private chat's ID is its sole contact's QQ number, so a bare ID that
-    differs from that contact can only be a group. The transport sends bare IDs
-    as private messages, so these groups were unreachable before the rewrite.
+    The transport sends bare IDs as private messages, so these groups were
+    unreachable before the rewrite. Group detection is shared with save-time
+    validation through ``is_bare_qq_group_chat_id``.
     """
 
-    renamed: dict[str, str] = {}
+    raw_bindings = role.get("channel_bindings") or []
     bindings: list[Any] = []
-    for raw in role.get("channel_bindings") or []:
+    renamed = False
+    for raw in raw_bindings:
         binding = dict(raw) if isinstance(raw, dict) else raw
-        if isinstance(binding, dict) and binding.get("channel") == "qq":
-            chat_id = str(binding.get("chat_id") or "").strip()
-            contacts = [str(item).strip() for item in binding.get("allow_from") or []]
-            if (
-                chat_id
-                and not chat_id.startswith(QQ_GROUP_PREFIX)
-                and contacts != [chat_id]
-            ):
-                renamed[chat_id] = binding["chat_id"] = f"{QQ_GROUP_PREFIX}{chat_id}"
+        # Malformed entries are left for RoleRecord loading to reject.
+        if (
+            isinstance(binding, dict)
+            and binding.get("channel") == "qq"
+            and isinstance(binding.get("allow_from", []), list)
+            and is_bare_qq_group_chat_id(
+                str(binding.get("chat_id") or ""), binding.get("allow_from", [])
+            )
+        ):
+            chat_id = str(binding["chat_id"]).strip()
+            binding["chat_id"] = f"{QQ_GROUP_PREFIX}{chat_id}"
+            renamed = True
         bindings.append(binding)
-    if not renamed:
-        return
-    role["channel_bindings"] = bindings
+    if renamed:
+        role["channel_bindings"] = bindings
+    qq_chat_ids = {
+        str(binding.get("chat_id") or "").strip()
+        for binding in bindings
+        if isinstance(binding, dict) and binding.get("channel") == "qq"
+    }
     proactive = role.get("proactive")
-    if isinstance(proactive, dict) and proactive.get("target_channel") == "qq":
-        target = str(proactive.get("target_chat_id") or "").strip()
-        if target in renamed:
-            role["proactive"] = {**proactive, "target_chat_id": renamed[target]}
+    if not isinstance(proactive, dict) or proactive.get("target_channel") != "qq":
+        return
+    target = str(proactive.get("target_chat_id") or "").strip()
+    # The old bare==gqq equivalence let a bare target point at a group binding,
+    # whether that binding was just renamed or was already stored as ``gqq:``.
+    # A bare target that is itself a bound private chat stays private.
+    if (
+        target
+        and not target.startswith(QQ_GROUP_PREFIX)
+        and target not in qq_chat_ids
+        and f"{QQ_GROUP_PREFIX}{target}" in qq_chat_ids
+    ):
+        role["proactive"] = {
+            **proactive,
+            "target_chat_id": f"{QQ_GROUP_PREFIX}{target}",
+        }
