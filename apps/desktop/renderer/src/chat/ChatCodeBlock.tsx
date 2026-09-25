@@ -1,7 +1,8 @@
 import React from "react";
 import { Check, Copy } from "@phosphor-icons/react";
 import { copyTextToClipboard } from "../shared/clipboard";
-import { errorMessage, feedback } from "../shared/feedback/feedbackStore";
+import { errorMessage } from "../shared/feedback/feedbackStore";
+import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import { compactPressableClass, cx } from "../shared/styles";
 import { useHighlightedChatCode } from "./chatCodeHighlight";
 

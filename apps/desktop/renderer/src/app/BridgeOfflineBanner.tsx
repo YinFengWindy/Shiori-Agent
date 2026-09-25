@@ -1,5 +1,8 @@
 import { ArrowsClockwise, Plugs } from "@phosphor-icons/react";
 import { useLayoutEffect, useRef, useState } from "react";
+import { MascotFaceAvatar } from "../shared/mascot/MascotFigure";
+import { bridgeOfflineLine } from "../shared/mascot/mascotLines";
+import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
 import { cx } from "../shared/styles";
 import { useBridgeOfflineFeedbackFilter } from "./bridgeOfflineFeedback";
 
@@ -34,6 +37,7 @@ export function BridgeOfflineBanner({ health, bridgeError, onRestart }: BridgeOf
   const [restarting, setRestarting] = useState(false);
   const bannerRef = useRef<HTMLDivElement | null>(null);
   const visible = shouldShowBridgeOfflineBanner(health, restarting);
+  const mascotEnabled = useMascotEnabled();
   // While this banner explains the outage, toasts that only repeat it are dropped.
   useBridgeOfflineFeedbackFilter(visible, bridgeError);
 
@@ -76,9 +80,17 @@ export function BridgeOfflineBanner({ health, bridgeError, onRestart }: BridgeOf
       role="status"
       data-testid="bridge-offline-banner"
     >
-      <Plugs className="h-4 w-4 shrink-0" weight="bold" aria-hidden="true" />
+      {/* With the 看板娘 on, 吟风 says the first sentence (an owner-approved line, #362 stage 10). */}
+      {mascotEnabled ? (
+        <MascotFaceAvatar expression={bridgeOfflineLine.expression} className="-my-0.5" />
+      ) : (
+        <Plugs className="h-4 w-4 shrink-0" weight="bold" aria-hidden="true" />
+      )}
       <span className="min-w-0 flex-1 truncate" title={bridgeError.split("\n", 1)[0] || undefined}>
-        {restarting ? "正在重新连接本地服务…" : "与本地服务的连接已断开，聊天、角色与设置暂时无法使用。"}
+        {mascotEnabled ? <span className="font-medium" data-testid="bridge-offline-mascot-line">{bridgeOfflineLine.text} </span> : null}
+        <span className={cx(mascotEnabled && "opacity-80")}>
+          {restarting ? "正在重新连接本地服务…" : "与本地服务的连接已断开，聊天、角色与设置暂时无法使用。"}
+        </span>
       </span>
       <button
         type="button"

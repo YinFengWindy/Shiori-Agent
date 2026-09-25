@@ -1,6 +1,6 @@
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { useRoleModelSelection, type RoleModelSelectionChange } from "../chat/useRoleModelSelection";
-import { feedback } from "../shared/feedback/feedbackStore";
+import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import { modelEffortOptions } from "../shared/modelEffortLabels";
 import { Select, type SelectOption } from "../shared/ui/Select";
 import { roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { chatSendFailureAction, modelConfigurationRemedy } from "./chatSendFailure";
+import { chatSendFailureAction, chatSendFailurePersona, modelConfigurationRemedy } from "./chatSendFailure";
 
 const modelError = (reason: string) => ({
   code: "model_configuration_required",
@@ -40,5 +40,13 @@ describe("chatSendFailureAction", () => {
     settings?.onSelect();
     assert.deepEqual(calls, ["menu", "settings"]);
     assert.equal(chatSendFailureAction({ message: "x" }, remedies), undefined);
+  });
+});
+
+describe("chatSendFailurePersona", () => {
+  it("has 吟风 ask for a model when the model configuration blocked the send, and fall back to her generic line", () => {
+    assert.equal(chatSendFailurePersona(modelError("role_unbound")), "modelMissing");
+    assert.equal(chatSendFailurePersona(modelError("no_models")), "modelMissing");
+    assert.equal(chatSendFailurePersona({ code: "chat_busy", message: "busy" }), "generic");
   });
 });

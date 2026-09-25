@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPluginBridgeClient, type ChannelSummary, type PluginBridgeClient } from "../plugins/pluginBridgeClient";
 import { pluginRuntimeChanged } from "../plugins/pluginRuntimeChanged";
-import { errorMessage, feedback } from "../shared/feedback/feedbackStore";
+import { errorMessage } from "../shared/feedback/feedbackStore";
+import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import type { RoleChannelCatalog } from "./roleChannelCatalog";
 
 // Lazy about window.miraDesktop, so one module-level instance is safe to build at import time.

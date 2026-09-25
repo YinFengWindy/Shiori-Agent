@@ -1,5 +1,6 @@
 import type { BridgeResponse } from "../../../src/bridge/shared";
 import type { FeedbackAction } from "../shared/feedback/feedbackStore";
+import type { FeedbackPersona } from "../shared/mascot/mascotLines";
 
 /** The bridge error shape a failed `chat.send` reports (or a thrown transport error). */
 export type ChatSendFailure = Pick<NonNullable<BridgeResponse["error"]>, "message"> & Partial<NonNullable<BridgeResponse["error"]>>;
@@ -30,4 +31,12 @@ export function chatSendFailureAction(
   if (remedy === "choose-role-model") return { label: "选择模型", onSelect: remedies.chooseRoleModel };
   if (remedy === "open-model-settings") return { label: "模型设置", onSelect: remedies.openModelSettings };
   return undefined;
+}
+
+/**
+ * Who fronts a failed send's toast: a model configuration problem gets
+ * 吟风's 「还没给我接模型呢」 line, anything else her generic one.
+ */
+export function chatSendFailurePersona(failure: ChatSendFailure): FeedbackPersona {
+  return modelConfigurationRemedy(failure) ? "modelMissing" : "generic";
 }

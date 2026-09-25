@@ -2,10 +2,16 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { act } from "react";
 import { mountTestComponent } from "../testing/domTestHarness";
+import { appearancePrefsStorageKey } from "../appearancePrefs";
+import { mascotFeedback } from "../mascot/mascotFeedback";
+import { resetAppearancePrefsCache } from "../useAppearancePrefs";
 import { FeedbackToaster } from "./FeedbackToaster";
 import { feedback, getFeedbackSnapshot, resetFeedback } from "./feedbackStore";
 
-afterEach(() => resetFeedback());
+afterEach(() => {
+  resetFeedback();
+  resetAppearancePrefsCache();
+});
 
 describe("FeedbackToaster", () => {
   it("renders nothing until a message is queued", async () => {
@@ -57,6 +63,37 @@ describe("FeedbackToaster", () => {
       await act(async () => feedback.success("已保存"));
       await act(async () => { await new Promise((resolve) => setTimeout(resolve, 2600)); });
       assert.deepEqual(getFeedbackSnapshot(), []);
+    } finally { await view.cleanup(); }
+  });
+
+  it("lets 吟风 front a persona error: her face, her line first, the message after it, the cause in 详情", async () => {
+    resetAppearancePrefsCache();
+    const view = await mountTestComponent(<FeedbackToaster />);
+    try {
+      await act(async () => mascotFeedback.error("角色保存失败", { detail: "Traceback …" }));
+      const toast = view.container.querySelector('[data-tone="error"]');
+      assert.equal(toast?.getAttribute("data-persona"), "generic");
+      assert.equal(toast?.querySelector('[data-testid="mascot-face"]')?.getAttribute("data-expression"), "confused");
+      assert.equal(toast?.querySelector(".bg-danger-soft"), null);
+      const text = toast?.textContent ?? "";
+      assert.ok(text.indexOf("出了点状况") < text.indexOf("角色保存失败"), text);
+      assert.doesNotMatch(text, /Traceback/);
+      assert.match(text, /详情/);
+    } finally { await view.cleanup(); }
+  });
+
+  it("renders a persona toast as a plain one with the 看板娘 off", async () => {
+    resetAppearancePrefsCache();
+    const view = await mountTestComponent(<div />);
+    try {
+      window.localStorage.setItem(appearancePrefsStorageKey, JSON.stringify({ version: 1, backdropMotion: true, mascot: false }));
+      await view.render(<FeedbackToaster />);
+      await act(async () => mascotFeedback.error("缺少模型", { persona: "modelMissing" }));
+      const toast = view.container.querySelector('[data-tone="error"]');
+      assert.equal(toast?.getAttribute("data-persona"), null);
+      assert.equal(toast?.querySelector('[data-testid="mascot-face"]'), null);
+      assert.match(toast?.innerHTML ?? "", /bg-danger-soft/);
+      assert.equal(toast?.textContent?.includes("还没给我接模型"), false);
     } finally { await view.cleanup(); }
   });
 });

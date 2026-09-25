@@ -1,3 +1,5 @@
+import type { FeedbackPersona } from "../mascot/mascotLines";
+
 /** Visual and semantic weight of one transient feedback message. */
 export type FeedbackTone = "success" | "info" | "warning" | "error";
 
@@ -15,6 +17,12 @@ export type FeedbackToast = {
   action?: FeedbackAction;
   /** Technical cause kept out of the message; the toast folds it behind 「详情」. */
   detail?: string;
+  /**
+   * 吟风 fronts the message (#362 stage 10): with the 看板娘 on, the toaster
+   * shows her face and this persona's line as the first sentence, then the
+   * message. Off, the toast renders exactly as without a persona.
+   */
+  persona?: FeedbackPersona;
 };
 
 /** Options shared by every `feedback.*` reporter call. */
@@ -22,6 +30,8 @@ export type FeedbackOptions = {
   action?: FeedbackAction;
   /** Technical cause (e.g. a raw bridge error) shown only once the user opens 「详情」. */
   detail?: string;
+  /** Who fronts the message (see `FeedbackToast.persona`). */
+  persona?: FeedbackPersona;
 };
 
 /** The injectable reporter hooks receive instead of owning their own message state. */
@@ -53,7 +63,7 @@ let nextId = 1;
 const listeners = new Set<Listener>();
 
 /** A message about to be queued; a filter may rewrite it or drop it (by returning null). */
-export type FeedbackInput = { tone: FeedbackTone; message: string; action?: FeedbackAction; detail?: string };
+export type FeedbackInput = { tone: FeedbackTone; message: string; action?: FeedbackAction; detail?: string; persona?: FeedbackPersona };
 /** Installed by the one owner that knows better than a raw message (see `setFeedbackFilter`). */
 export type FeedbackFilter = (input: FeedbackInput) => FeedbackInput | null;
 let filter: FeedbackFilter | null = null;
@@ -88,7 +98,9 @@ export function showFeedback(raw: FeedbackInput): number {
   const message = input.message.trim();
   if (!message) return 0;
   const detail = input.detail?.trim();
-  const toast: FeedbackToast = { id: nextId++, tone: input.tone, message, action: input.action, ...(detail ? { detail } : {}) };
+  const toast: FeedbackToast = {
+    id: nextId++, tone: input.tone, message, action: input.action, ...(detail ? { detail } : {}), ...(input.persona ? { persona: input.persona } : {}),
+  };
   const remaining = toasts.filter((item) => item.tone !== toast.tone || item.message !== toast.message);
   publish([...remaining, toast].slice(-maxVisibleFeedback));
   return toast.id;
@@ -123,17 +135,29 @@ export function resetFeedback(): void {
   publish([]);
 }
 
-function reporterFor(tone: FeedbackTone) {
-  return (message: string, options?: FeedbackOptions) => { showFeedback({ tone, message, action: options?.action, detail: options?.detail }); };
+/**
+ * A reporter bound to this store whose calls start from `defaults` per tone
+ * (a call's own options win). The host's 看板娘 reporter is one of these
+ * (`shared/mascot/mascotFeedback.ts`); `feedback` below has no defaults.
+ */
+export function createFeedbackReporter(defaults: Partial<Record<FeedbackTone, FeedbackOptions>> = {}): FeedbackReporter {
+  const reporterFor = (tone: FeedbackTone) => (message: string, options?: FeedbackOptions) => {
+    const merged = { ...defaults[tone], ...options };
+    showFeedback({ tone, message, action: merged.action, detail: merged.detail, persona: merged.persona });
+  };
+  return {
+    success: reporterFor("success"),
+    info: reporterFor("info"),
+    warning: reporterFor("warning"),
+    error: reporterFor("error"),
+  };
 }
 
-/** The app-wide reporter bound to this store. */
-export const feedback: FeedbackReporter = {
-  success: reporterFor("success"),
-  info: reporterFor("info"),
-  warning: reporterFor("warning"),
-  error: reporterFor("error"),
-};
+/**
+ * The plain reporter bound to this store. Plugin UIs use it; host code
+ * reports through `mascotFeedback`, whose errors 吟风 fronts.
+ */
+export const feedback: FeedbackReporter = createFeedbackReporter();
 
 /** Normalizes a thrown value into the message the error toast shows. */
 export function errorMessage(error: unknown): string {

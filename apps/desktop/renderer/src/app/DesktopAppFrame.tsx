@@ -4,7 +4,7 @@ import { ChatSurface } from "../chat/ChatSurface";
 import type { ChatMessageNavigationScroller } from "../chat/useChatScrollController";
 import { guardedNavPageSelect } from "../plugins/pluginUiRegistry";
 import { BridgeOfflineBanner } from "./BridgeOfflineBanner";
-import { feedback } from "../shared/feedback/feedbackStore";
+import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { RoleAssetsPage } from "../roles/RoleAssetsPage";
 import { RoleCreatePage } from "../roles/RoleCreatePage";

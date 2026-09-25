@@ -10,7 +10,8 @@ import {
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 import { useModelRegistrationDraft } from "./useModelRegistrationDraft";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
-import { errorMessage, feedback } from "../shared/feedback/feedbackStore";
+import { errorMessage } from "../shared/feedback/feedbackStore";
+import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 
 /** Renders the model registration catalog as list and detail views. */
 export function ModelsSettingsSection({

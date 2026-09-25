@@ -33,9 +33,9 @@ import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { requestChatModelMenu } from "./chat/chatModelMenuRequests";
-import { chatSendFailureAction } from "./chat/chatSendFailure";
+import { chatSendFailureAction, chatSendFailurePersona } from "./chat/chatSendFailure";
 import { openChatRole } from "./chat/chatRoleSwitchTransition";
-import { feedback } from "./shared/feedback/feedbackStore";
+import { mascotFeedback as feedback } from "./shared/mascot/mascotFeedback";
 import { FeedbackToaster } from "./shared/feedback/FeedbackToaster";
 import { TooltipProvider } from "./shared/ui/Tooltip";
 import type { ChatMessageNavigationScroller } from "./chat/useChatScrollController";
@@ -65,6 +65,7 @@ import type {
 } from "./shared/types";
 import "./styles.css";
 import "./shared/adv/adv.css";
+import "./shared/mascot/mascot.css";
 import "./shared/mascot/mascot.css";
 import "./onboarding/onboarding.css";
 import { useOnboardingController } from "./onboarding/useOnboardingController";
@@ -277,6 +278,7 @@ function App(): React.ReactElement {
         chooseRoleModel: requestChatModelMenu,
         openModelSettings: () => openSettingsWorkspace("models"),
       }),
+      persona: chatSendFailurePersona(failure),
     }),
     setUnreadCounts,
     setSelectedAvatarAsset,
