@@ -16,7 +16,7 @@ from .memory_service import RoleMemoryService as RoleMemoryService
 
 def _binding_key(channel: str, chat_id: str) -> str:
     clean_channel = str(channel).strip()
-    clean_chat_id = normalize_chat_id(clean_channel, chat_id)
+    clean_chat_id = normalize_chat_id(chat_id)
     if not clean_channel:
         raise ValueError("channel 不能为空")
     if not clean_chat_id:
@@ -250,7 +250,7 @@ class RoleBindingService:
 
         role = self._repository.get_required(role_id)
         clean_channel = str(channel).strip()
-        clean_chat_id = normalize_chat_id(clean_channel, chat_id)
+        clean_chat_id = normalize_chat_id(chat_id)
         clean_contact_id = str(contact_id).strip()
         if clean_channel != "desktop" and not clean_contact_id:
             raise ValueError("外部渠道绑定必须提供联系人 ID")
@@ -281,7 +281,7 @@ class RoleBindingService:
 
     def unbind(self, channel: str, chat_id: str) -> bool:
         clean_channel = str(channel).strip()
-        clean_chat_id = normalize_chat_id(clean_channel, chat_id)
+        clean_chat_id = normalize_chat_id(chat_id)
         _ = _binding_key(clean_channel, clean_chat_id)
         binding = self.get_binding(clean_channel, clean_chat_id)
         if binding is None:

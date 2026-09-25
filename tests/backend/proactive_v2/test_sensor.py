@@ -62,12 +62,12 @@ def test_sensor_prefers_role_session_key_and_bound_transport(tmp_path: Path):
 def test_sensor_prefers_configured_transport_when_multiple_bindings(tmp_path: Path):
     session_manager, role_service = _role_service(tmp_path)
     _ = role_service.bindings.bind("telegram", "42", "mira", contact_id="owner")
-    _ = role_service.bindings.bind("qq", "group-7", "mira", contact_id="owner")
+    _ = role_service.bindings.bind("qq", "gqq:7", "mira", contact_id="owner")
 
-    sensor = _sensor(session_manager, role_service, channel="qq", chat_id="group-7")
+    sensor = _sensor(session_manager, role_service, channel="qq", chat_id="gqq:7")
 
-    assert sensor.target_transport() == ("qq", "group-7")
-    assert sensor.target_transports() == [("qq", "group-7"), ("telegram", "42")]
+    assert sensor.target_transport() == ("qq", "gqq:7")
+    assert sensor.target_transports() == [("qq", "gqq:7"), ("telegram", "42")]
 
 
 def test_sensor_requires_bound_transport(tmp_path: Path):
@@ -83,11 +83,11 @@ def test_sensor_rejects_configured_transport_not_bound_to_role(tmp_path: Path):
     session_manager, role_service = _role_service(tmp_path)
     _ = role_service.bindings.bind("telegram", "42", "mira", contact_id="owner")
 
-    sensor = _sensor(session_manager, role_service, channel="qq", chat_id="group-7")
+    sensor = _sensor(session_manager, role_service, channel="qq", chat_id="gqq:7")
 
     with pytest.raises(
         KeyError,
-        match="default_role_id 配置的 target 未绑定到该角色: mira -> qq:group-7",
+        match="default_role_id 配置的 target 未绑定到该角色: mira -> qq:gqq:7",
     ):
         _ = sensor.target_transport()
 
@@ -95,7 +95,7 @@ def test_sensor_rejects_configured_transport_not_bound_to_role(tmp_path: Path):
 def test_sensor_requires_explicit_target_when_multiple_bindings(tmp_path: Path):
     session_manager, role_service = _role_service(tmp_path)
     _ = role_service.bindings.bind("telegram", "42", "mira", contact_id="owner")
-    _ = role_service.bindings.bind("qq", "group-7", "mira", contact_id="owner")
+    _ = role_service.bindings.bind("qq", "gqq:7", "mira", contact_id="owner")
 
     sensor = _sensor(session_manager, role_service, channel="", chat_id="")
 

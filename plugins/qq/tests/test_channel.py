@@ -723,9 +723,11 @@ class _PushTool:
     def __init__(self) -> None:
         self.registered: list[str] = []
         self.unregistered: list[str] = []
+        self.descriptions: dict[str, object] = {}
 
-    def register_channel(self, name: str, **_kwargs: object) -> None:
+    def register_channel(self, name: str, **kwargs: object) -> None:
         self.registered.append(name)
+        self.descriptions[name] = kwargs.get("description")
 
     def unregister_channel(self, name: str, **_kwargs: object) -> None:
         self.unregistered.append(name)
@@ -769,6 +771,8 @@ async def test_plugin_channel_takes_runtime_state_from_context(
     assert channel._workspace == tmp_path
     assert bus.outbound == [("qq", channel._on_response)]
     assert push_tool.registered == ["qq"]
+    # The model can only reach a group if the tool tells it the gqq: format.
+    assert "gqq:<群号>" in str(push_tool.descriptions["qq"])
     await channel.stop()
     assert bus.outbound == []
     assert push_tool.unregistered == ["qq"]

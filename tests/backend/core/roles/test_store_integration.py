@@ -214,7 +214,7 @@ def test_role_store_keeps_single_contact_channel_access_and_proactive_target_on_
             {"channel": "telegram", "chat_id": "42", "allow_from": ["alice"]},
             {"channel": "qq", "chat_id": "7", "allow_from": ["7"]},
         ],
-        proactive={"enabled": True, "target_channel": "qq", "target_chat_id": "gqq:7"},
+        proactive={"enabled": True, "target_channel": "qq", "target_chat_id": "7"},
     )
 
     assert updated.channel_bindings[0].allow_from == ["alice"]
@@ -224,22 +224,34 @@ def test_role_store_keeps_single_contact_channel_access_and_proactive_target_on_
     assert luna.channel_bindings == []
 
 
-def test_role_store_rejects_duplicate_qq_group_binding_formats(tmp_path: Path):
+def test_role_store_rejects_bare_qq_group_number_as_chat_id(tmp_path: Path):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
 
-    try:
+    # QQ sends a bare ID as a private chat, so a group saved this way is unreachable.
+    with pytest.raises(ValueError, match="gqq:<群号>"):
         store.update_role(
             "mira",
             channel_bindings=[
-                {"channel": "qq", "chat_id": "7", "allow_from": ["7"]},
-                {"channel": "qq", "chat_id": "gqq:7", "allow_from": ["7"]},
+                {"channel": "qq", "chat_id": "831907794", "allow_from": ["7"]},
             ],
         )
-    except ValueError as exc:
-        assert "重复绑定" in str(exc)
-    else:
-        raise AssertionError("QQ 裸群号和 gqq: 前缀不应重复绑定")
+
+
+def test_role_store_rejects_proactive_target_in_other_qq_chat_form(tmp_path: Path):
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+
+    with pytest.raises(ValueError, match="已绑定的渠道"):
+        store.update_role(
+            "mira",
+            channel_bindings=[{"channel": "qq", "chat_id": "7", "allow_from": ["7"]}],
+            proactive={
+                "enabled": True,
+                "target_channel": "qq",
+                "target_chat_id": "gqq:7",
+            },
+        )
 
 
 def test_role_store_rejects_proactive_target_outside_its_bindings(tmp_path: Path):

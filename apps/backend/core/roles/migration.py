@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.common.channel_identifiers import QQ_GROUP_PREFIX
+
 from .profile_models import RoleProfile
 
-CURRENT_MANIFEST_VERSION = 5
+CURRENT_MANIFEST_VERSION = 6
 
 
 def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Normalize a legacy role manifest into v5 without dropping role-owned data."""
+    """Normalize a legacy role manifest into v6 without dropping role-owned data."""
 
     version = int(payload.get("version") or 0)
     roles = payload.get("roles")
@@ -28,7 +30,7 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
     )
     if version == CURRENT_MANIFEST_VERSION and not has_legacy_fields:
         return dict(payload), False
-    if version not in {2, 3, 4, CURRENT_MANIFEST_VERSION}:
+    if version not in {2, 3, 4, 5, CURRENT_MANIFEST_VERSION}:
         raise ValueError(
             f"角色清单版本不支持：需要版本 {CURRENT_MANIFEST_VERSION}，实际为 {version}"
         )
@@ -41,6 +43,8 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
                 system_prompt=str(role.get("system_prompt") or ""),
                 background=str(role.get("background") or ""),
             ).to_dict()
+        if version < 6:
+            _prefix_legacy_qq_group_chat_ids(role)
         migrated_roles.append(role)
     # Upgrade-only knowledge: capture fields before RoleRecord drops them, even
     # when the plugin is disabled. One atomic manifest replacement contains both
@@ -73,3 +77,35 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
         "roles": migrated_roles,
         "plugin_data": plugin_data,
     }, True
+
+
+def _prefix_legacy_qq_group_chat_ids(role: dict[str, Any]) -> None:
+    """Rewrites pre-v6 bare QQ group IDs to ``gqq:`` in bindings and proactive target.
+
+    A QQ private chat's ID is its sole contact's QQ number, so a bare ID that
+    differs from that contact can only be a group. The transport sends bare IDs
+    as private messages, so these groups were unreachable before the rewrite.
+    """
+
+    renamed: dict[str, str] = {}
+    bindings: list[Any] = []
+    for raw in role.get("channel_bindings") or []:
+        binding = dict(raw) if isinstance(raw, dict) else raw
+        if isinstance(binding, dict) and binding.get("channel") == "qq":
+            chat_id = str(binding.get("chat_id") or "").strip()
+            contacts = [str(item).strip() for item in binding.get("allow_from") or []]
+            if (
+                chat_id
+                and not chat_id.startswith(QQ_GROUP_PREFIX)
+                and contacts != [chat_id]
+            ):
+                renamed[chat_id] = binding["chat_id"] = f"{QQ_GROUP_PREFIX}{chat_id}"
+        bindings.append(binding)
+    if not renamed:
+        return
+    role["channel_bindings"] = bindings
+    proactive = role.get("proactive")
+    if isinstance(proactive, dict) and proactive.get("target_channel") == "qq":
+        target = str(proactive.get("target_chat_id") or "").strip()
+        if target in renamed:
+            role["proactive"] = {**proactive, "target_chat_id": renamed[target]}

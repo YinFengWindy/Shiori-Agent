@@ -125,3 +125,46 @@ def test_disabled_novelai_upgrade_survives_ordinary_role_save(tmp_path, enabled)
     saved = json.loads(roles.manifest_path.read_text(encoding="utf-8"))
     assert saved["plugin_data"]["novelai"]["mira"]["auto_scene_cg_enabled"] is enabled
     assert "auto_scene_cg_enabled" not in saved["roles"][0]["runtime_config"]
+
+
+def test_legacy_bare_qq_group_binding_is_rewritten_and_persisted_once(tmp_path):
+    repo = RoleManifestRepository(tmp_path)
+    repo.manifest_path.write_text(
+        json.dumps(
+            {
+                "version": 5,
+                "roles": [
+                    {
+                        "id": "joye",
+                        "name": "Joye",
+                        "system_prompt": "test",
+                        "channel_bindings": [
+                            {
+                                "channel": "qq",
+                                "chat_id": "831907794",
+                                "allow_from": ["3174898512"],
+                            }
+                        ],
+                        "proactive": {
+                            "enabled": True,
+                            "target_channel": "qq",
+                            "target_chat_id": "831907794",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    role = repo.list_roles()[0]
+
+    assert role.channel_bindings[0].chat_id == "gqq:831907794"
+    assert role.proactive.target_chat_id == "gqq:831907794"
+    saved = json.loads(repo.manifest_path.read_text(encoding="utf-8"))
+    assert saved["version"] == 6
+    assert saved["roles"][0]["channel_bindings"][0]["chat_id"] == "gqq:831907794"
+    # The rewrite is persisted, so the next load leaves the file untouched.
+    before = repo.manifest_path.read_bytes()
+    repo.load_payload()
+    assert repo.manifest_path.read_bytes() == before
