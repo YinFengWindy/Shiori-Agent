@@ -22,6 +22,7 @@ from desktop_bridge.method_policy import (
 )
 from desktop_bridge.models import BridgeError, BridgeResponse
 from desktop_bridge.runtime.apply import RuntimeApplyError, RuntimeSettingsApplication
+from desktop_bridge.runtime.desktop_presence import report_desktop_presence
 from desktop_bridge.runtime.factory import build_desktop_service
 from desktop_bridge.runtime.plugin_config import RuntimePluginConfig
 from desktop_bridge.runtime.plugin_management import RuntimePluginManagement
@@ -213,6 +214,19 @@ class ReloadableDesktopService:
             return await self._respond_or_apply_error(
                 request_id, method, compute_plugin_management_result
             )
+        if policy.handler is Handler.DESKTOP_PRESENCE:
+            # App-level state, not a generation's: a settings reload must not
+            # reset what the host last reported.
+            try:
+                result = report_desktop_presence(self.app.desktop_presence, payload)
+            except ValueError as error:
+                return BridgeResponse(
+                    request_id,
+                    "response",
+                    method,
+                    error=BridgeError("invalid_request", str(error)),
+                )
+            return BridgeResponse(request_id, "response", method, result)
         if policy.handler is Handler.ROLE_TASKS:
             role_id = str(payload.get("role_id") or "")
             try:

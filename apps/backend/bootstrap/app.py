@@ -20,6 +20,7 @@ from bootstrap.runtime.shutdown import RuntimeShutdownMixin
 from bootstrap.runtime.construction import prepare_core_runtime
 from bus.event_bus import EventBus
 from core.common.workspace import resolve_default_workspace
+from core.desktop_presence import DesktopPresence
 from core.roles import (
     LonelinessHeartbeatLoop,
 )
@@ -89,6 +90,9 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
         self.core: CoreRuntime | None = None
         self.event_bus: EventBus | None = None
         self.proactive_loops = {}
+        # Process-wide so it survives settings reloads; the desktop bridge writes
+        # it and proactive delivery reads it to pick where to reach the user.
+        self.desktop_presence = DesktopPresence()
         self._background_tasks: list[asyncio.Task[None]] = []
         self._memory_optimizer = None
         self._shutdown = False

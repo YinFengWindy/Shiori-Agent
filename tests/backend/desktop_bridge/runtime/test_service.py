@@ -10,6 +10,7 @@ import pytest
 from agent.config import load_config_text
 from agent.provider import LLMProvider, LLMResponse
 from bootstrap.app import AppRuntime, RuntimeFeatures
+from core.desktop_presence import DesktopPresence
 from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
 from desktop_bridge.runtime.service import _ServiceGeneration
@@ -645,3 +646,29 @@ async def test_restart_required_refuses_all_hot_write_routes_before_candidate_or
         await service.aclose()
         await app.shutdown()
     assert state == ["started", "closed"]
+
+
+@pytest.mark.asyncio
+async def test_presence_report_updates_app_state_even_while_reloading():
+    service = object.__new__(ReloadableDesktopService)
+    presence = DesktopPresence()
+    service.app = SimpleNamespace(accepting_work=False, desktop_presence=presence)
+    service._owner = lambda *args: pytest.fail(
+        "presence is app state, never a generation's"
+    )
+
+    async def report(payload):
+        return await service.handle(
+            {"id": "p", "method": "desktop.presence.report", "payload": payload},
+            emit_event=lambda event: None,
+        )
+
+    away = await report({"present": False})
+    assert away.error is None
+    assert away.payload == {"present": False}
+    assert presence.is_desktop_present() is False
+    assert (await report({"present": True})).payload == {"present": True}
+    assert presence.is_desktop_present() is True
+    invalid = await report({"present": "no"})
+    assert invalid.error.code == "invalid_request"
+    assert presence.is_desktop_present() is True
