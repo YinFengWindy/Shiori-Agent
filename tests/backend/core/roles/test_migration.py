@@ -236,3 +236,69 @@ def test_v5_group_rewritten_to_gqq_is_typed_as_group() -> None:
             "chat_type": "group",
         }
     ]
+
+
+def test_v6_prefixes_bare_qqbot_chat_ids_and_their_proactive_target() -> None:
+    migrated, changed = migrate_manifest_payload(
+        {
+            "version": 6,
+            "roles": [
+                {
+                    "id": "mira",
+                    "profile": {},
+                    "channel_bindings": [
+                        # The transport read a kind-less ID as C2C.
+                        {"channel": "qqbot", "chat_id": "OPENID", "allow_from": ["u"]},
+                        {
+                            "channel": "qqbot",
+                            "chat_id": "qqbot:OLD",
+                            "allow_from": ["u"],
+                        },
+                        {
+                            "channel": "qqbot",
+                            "chat_id": "c2c:KEEP",
+                            "allow_from": ["u"],
+                        },
+                    ],
+                    "proactive": {
+                        "enabled": True,
+                        "target_channel": "qqbot",
+                        "target_chat_id": "OPENID",
+                    },
+                }
+            ],
+        }
+    )
+
+    assert changed is True
+    role = migrated["roles"][0]
+    assert [
+        (item["chat_id"], item["chat_type"]) for item in role["channel_bindings"]
+    ] == [("c2c:OPENID", "private"), ("c2c:OLD", "private"), ("c2c:KEEP", "private")]
+    assert role["proactive"]["target_chat_id"] == "c2c:OPENID"
+    assert migrate_manifest_payload(migrated) == (migrated, False)
+
+
+def test_v6_keeps_proactive_target_of_other_channels_with_the_same_id() -> None:
+    migrated, _ = migrate_manifest_payload(
+        {
+            "version": 6,
+            "roles": [
+                {
+                    "id": "mira",
+                    "profile": {},
+                    "channel_bindings": [
+                        {"channel": "qqbot", "chat_id": "42", "allow_from": ["u"]},
+                        {"channel": "telegram", "chat_id": "42", "allow_from": ["u"]},
+                    ],
+                    "proactive": {
+                        "enabled": True,
+                        "target_channel": "telegram",
+                        "target_chat_id": "42",
+                    },
+                }
+            ],
+        }
+    )
+
+    assert migrated["roles"][0]["proactive"]["target_chat_id"] == "42"

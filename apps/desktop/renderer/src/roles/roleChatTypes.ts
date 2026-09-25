@@ -7,6 +7,19 @@ export function findRoleChatType(channel: ChannelSummary | null, chatType: RoleC
   return channel?.chatTypes.find((item) => item.type === chatType) ?? null;
 }
 
+/** Number copy of a binding without a declared type: the desktop session, or a read-only binding whose plugin is gone. */
+const undeclaredChatIdLabel = "会话 ID";
+
+/**
+ * Field copy for a binding's number: the selected session type's declared copy;
+ * without a declaration (desktop, or a read-only binding) a plain label.
+ */
+export function roleBindingChatIdCopy(chatType: ChannelChatTypeDeclaration | null) {
+  return chatType
+    ? { label: chatType.chatIdLabel, placeholder: chatType.chatIdHint ?? "" }
+    : { label: undeclaredChatIdLabel, placeholder: "" };
+}
+
 /** Fallback names when no declaration is available for a stored binding. */
 const storedChatTypeLabels: Record<RoleChatType, string> = { private: "私聊", group: "群聊" };
 
@@ -32,14 +45,17 @@ export function roleBindingNumber(chatId: string, chatType: ChannelChatTypeDecla
 }
 
 /**
- * The stored chat id for a typed number: the selected type's prefix plus the
- * trimmed number. An empty number stays empty so a bare prefix is never saved.
+ * The stored chat id for a typed number: the trimmed number behind the
+ * selected type's prefix. A pasted internal id that already carries the prefix
+ * (`gqq:123`) is not prefixed twice, and an empty number stays empty so a bare
+ * prefix is never saved.
  */
 export function composeRoleBindingChatId(number: string, chatType: ChannelChatTypeDeclaration | null) {
   const prefix = chatType?.prefix;
-  if (!prefix) return number;
   const trimmed = number.trim();
-  return trimmed ? `${prefix}${trimmed}` : "";
+  if (!prefix) return trimmed;
+  const bare = (trimmed.startsWith(prefix) ? trimmed.slice(prefix.length) : trimmed).trim();
+  return bare ? `${prefix}${bare}` : "";
 }
 
 /**

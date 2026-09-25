@@ -2,11 +2,9 @@ import type { ChannelSummary } from "../plugins/pluginBridgeClient";
 import { cx } from "../shared/styles";
 import type { RoleChannelBinding, RoleChatType } from "../shared/types";
 import { Select } from "../shared/ui/Select";
-import { roleBindingChatIdCopy } from "./roleChannelCatalog";
-import { composeRoleBindingChatId, findRoleChatType, roleBindingNumber, roleChatTypeLabel, roleChatTypeOptions } from "./roleChatTypes";
+import { composeRoleBindingChatId, findRoleChatType, roleBindingChatIdCopy, roleBindingNumber, roleChatTypeLabel, roleChatTypeOptions } from "./roleChatTypes";
 import { roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";
-
-const lockedFieldClass = cx(roleFieldClass, "cursor-default text-ink-muted");
+import { RoleReadOnlyField, roleReadOnlyFieldClass } from "./RoleReadOnlyField";
 
 type ChatTypeFieldProps = {
   binding: RoleChannelBinding;
@@ -21,16 +19,16 @@ type ChatTypeFieldProps = {
  * declares a single type, or no declaration is available (then the stored type shows).
  */
 export function RoleChannelBindingChatTypeField({ binding, channel, readOnly, onChange }: ChatTypeFieldProps) {
-  const locked = readOnly || channel === null || channel.chatTypes.length <= 1;
+  const pickable = !readOnly && channel !== null && channel.chatTypes.length > 1 ? channel : null;
   return (
     <div className={cx(roleFieldLabelClass, "min-w-0")}>
       <span className="flex min-h-5 items-center">类型</span>
-      {locked || channel === null
-        ? <span className={cx(lockedFieldClass, "truncate")} role="textbox" aria-label="类型" aria-readonly="true">{roleChatTypeLabel(channel, binding.chat_type)}</span>
-        : <Select aria-label="类型" className={roleFieldClass} value={binding.chat_type} onValueChange={(value) => {
-            const next = channel.chatTypes.find((item) => item.type === value);
+      {pickable
+        ? <Select aria-label="类型" className={roleFieldClass} value={binding.chat_type} onValueChange={(value) => {
+            const next = pickable.chatTypes.find((item) => item.type === value);
             if (next) onChange(next.type);
-          }} options={roleChatTypeOptions(channel)} />}
+          }} options={roleChatTypeOptions(pickable)} />
+        : <RoleReadOnlyField label="类型">{roleChatTypeLabel(channel, binding.chat_type)}</RoleReadOnlyField>}
     </div>
   );
 }
@@ -55,7 +53,7 @@ export function RoleChannelBindingChatIdField({ binding, channel, readOnly, onCh
     <label className={cx(roleFieldLabelClass, "min-w-0")}>
       <span className="flex min-h-5 items-center">{copy.label}</span>
       <input
-        className={locked ? lockedFieldClass : roleFieldClass}
+        className={locked ? roleReadOnlyFieldClass : roleFieldClass}
         value={roleBindingNumber(binding.chat_id, chatType)}
         placeholder={copy.placeholder}
         readOnly={locked}

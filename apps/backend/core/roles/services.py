@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.common.channel_chat_types import ChatType
 from core.common.channel_identifiers import chat_ids_equal, normalize_chat_id
 from session.manager import Session, SessionManager
 
@@ -244,7 +245,7 @@ class RoleBindingService:
         chat_id: str,
         role_id: str,
         *,
-        chat_type: str,
+        chat_type: ChatType,
         contact_id: str = "",
     ) -> RoleChannelBinding:
         """Bind one channel session of ``chat_type`` to a role and authorize its sole contact."""

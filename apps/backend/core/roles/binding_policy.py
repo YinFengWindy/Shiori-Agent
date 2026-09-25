@@ -156,6 +156,12 @@ class RoleBindingPolicy:
         bindings: list[RoleChannelBindingConfig],
         previous: list[RoleChannelBindingConfig],
     ) -> None:
+        """Checks session types against the bound manifest declarations.
+
+        Skipping before ``bind_chat_types`` only serves isolated core use (unit
+        tests, scripts); in production ``CoreRuntime.start`` binds the
+        declarations before any bridge request can save a role.
+        """
         if self._chat_types is None:
             return
         for binding in bindings:
@@ -187,7 +193,8 @@ class RoleBindingPolicy:
         ):
             raise ValueError("桌面端渠道不支持允许对象")
         if any(
-            binding.channel == "desktop" and binding.chat_type != CHAT_TYPE_PRIVATE
+            binding.channel == DESKTOP_CHANNEL
+            and binding.chat_type != CHAT_TYPE_PRIVATE
             for binding in bindings
         ):
             raise ValueError("桌面端渠道的会话类型只能是私聊")

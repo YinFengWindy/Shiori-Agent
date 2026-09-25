@@ -19,6 +19,7 @@ import {
   type RoleChannelCatalog,
 } from "./roleChannelCatalog";
 import { RoleChannelBindingChatIdField, RoleChannelBindingChatTypeField } from "./RoleChannelBindingChatFields";
+import { RoleReadOnlyField, roleReadOnlyFieldClass } from "./RoleReadOnlyField";
 import { changeRoleBindingChatType } from "./roleChatTypes";
 import { RoleEditorSection } from "./RoleEditorSection";
 
@@ -102,7 +103,7 @@ function ChannelBindingRow({ activeRoleId, binding, channels, index, bindingsCou
   const readOnly = availability.kind !== "editable";
   const channel = availability.kind === "missing" ? null : availability.channel;
   const label = roleChannelLabel(binding.channel, channels);
-  const readOnlyFieldClass = cx(roleFieldClass, readOnly && "cursor-default text-ink-muted");
+  const contactFieldClass = readOnly ? roleReadOnlyFieldClass : roleFieldClass;
   const updateThis = (update: (item: RoleChannelBinding) => RoleChannelBinding) =>
     onUpdateBindings((current) => current.map((item, itemIndex) => itemIndex === index ? update(item) : item));
 
@@ -118,7 +119,7 @@ function ChannelBindingRow({ activeRoleId, binding, channels, index, bindingsCou
           <div className={cx(roleFieldLabelClass, "min-w-0")}>
             <span className="flex min-h-5 items-center gap-1.5">渠道<ChannelStateBadge availability={availability} /></span>
             {readOnly
-              ? <span className={cx(readOnlyFieldClass, "truncate")} role="textbox" aria-label="渠道" aria-readonly="true">{label}</span>
+              ? <RoleReadOnlyField label="渠道">{label}</RoleReadOnlyField>
               : <Select aria-label="渠道" className={roleFieldClass} value={binding.channel} onValueChange={(value) => updateThis((item) => changeRoleBindingChannel(item, value, activeRoleId, channels))} options={roleBindingChannelOptions(channels, binding.channel)} />}
           </div>
           {!desktopBinding
@@ -127,7 +128,7 @@ function ChannelBindingRow({ activeRoleId, binding, channels, index, bindingsCou
         </div>
         <RoleChannelBindingChatIdField binding={binding} channel={channel} readOnly={desktopBinding || readOnly} onChange={(chatId) => updateThis((item) => ({ ...item, chat_id: chatId }))} />
         {!desktopBinding
-          ? <label className={roleFieldLabelClass}><span>{roleBindingContactLabel(channel)}</span><input className={readOnlyFieldClass} value={binding.allow_from[0] ?? ""} placeholder="输入唯一联系人 ID" readOnly={readOnly} onChange={(event) => updateThis((item) => ({ ...item, allow_from: event.target.value.trim() ? [event.target.value.trim()] : [] }))} /></label>
+          ? <label className={roleFieldLabelClass}><span>{roleBindingContactLabel(channel)}</span><input className={contactFieldClass} value={binding.allow_from[0] ?? ""} placeholder="输入唯一联系人 ID" readOnly={readOnly} onChange={(event) => updateThis((item) => ({ ...item, allow_from: event.target.value.trim() ? [event.target.value.trim()] : [] }))} /></label>
           : null}
         <ChannelBindingNotice availability={availability} onOpenPluginSettings={onOpenPluginSettings} />
       </div>

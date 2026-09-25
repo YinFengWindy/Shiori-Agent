@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from core.common.channel_chat_types import CHAT_TYPE_GROUP, CHAT_TYPE_PRIVATE
+from core.common.channel_chat_types import CHAT_TYPE_GROUP, CHAT_TYPE_PRIVATE, ChatType
 from core.common.channel_identifiers import (
     QQ_GROUP_PREFIX,
     bound_qq_group_for_bare_id,
@@ -18,6 +18,10 @@ CURRENT_MANIFEST_VERSION = 7
 
 # Telegram addresses groups and channels by negative numeric chat IDs.
 _TELEGRAM_GROUP_CHAT_ID = re.compile(r"-\d+")
+# QQBot's private chats are declared as ``c2c:<OpenID>``; very old IDs may carry
+# a ``qqbot:`` marker, which the transport strips.
+_QQBOT_C2C_PREFIX = "c2c:"
+_LEGACY_QQBOT_MARKER = "qqbot:"
 
 
 def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
@@ -57,6 +61,7 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
         if version < 6:
             _prefix_legacy_qq_group_chat_ids(role)
         if version < 7:
+            _prefix_legacy_qqbot_chat_ids(role)
             _fill_legacy_chat_types(role)
         migrated_roles.append(role)
     # Upgrade-only knowledge: capture fields before RoleRecord drops them, even
@@ -137,6 +142,45 @@ def _prefix_legacy_qq_group_chat_ids(role: dict[str, Any]) -> None:
         role["proactive"] = {**proactive, "target_chat_id": group_chat_id}
 
 
+def _prefix_legacy_qqbot_chat_ids(role: dict[str, Any]) -> None:
+    """Rewrites pre-v7 ``qqbot`` chat IDs to the declared ``c2c:<OpenID>`` form.
+
+    The QQBot transport reads an ID without a kind (optionally behind the old
+    ``qqbot:`` marker) as a C2C chat, so these bindings delivered fine; v7
+    validates bindings against the declared ``c2c:`` prefix, and an unprefixed
+    one would block every later save of the role. A proactive target naming
+    the old ID follows the rewrite. Upgrade-only knowledge of that transport.
+    """
+
+    raw_bindings = role.get("channel_bindings")
+    if not isinstance(raw_bindings, list):
+        return
+    renamed: dict[str, str] = {}
+    bindings: list[Any] = []
+    for raw in raw_bindings:
+        # Malformed entries are left for RoleRecord loading to reject.
+        if isinstance(raw, dict) and raw.get("channel") == "qqbot":
+            chat_id = normalize_chat_id(raw.get("chat_id") or "")
+            canonical = _canonical_qqbot_chat_id(chat_id)
+            if canonical != chat_id:
+                renamed[chat_id] = canonical
+                raw = {**raw, "chat_id": canonical}
+        bindings.append(raw)
+    role["channel_bindings"] = bindings
+    proactive = role.get("proactive")
+    if isinstance(proactive, dict) and proactive.get("target_channel") == "qqbot":
+        target = normalize_chat_id(proactive.get("target_chat_id") or "")
+        if target in renamed:
+            role["proactive"] = {**proactive, "target_chat_id": renamed[target]}
+
+
+def _canonical_qqbot_chat_id(chat_id: str) -> str:
+    value = chat_id.removeprefix(_LEGACY_QQBOT_MARKER)
+    if value and ":" not in value:
+        return f"{_QQBOT_C2C_PREFIX}{value}"
+    return value if value.startswith(_QQBOT_C2C_PREFIX) else chat_id
+
+
 def _fill_legacy_chat_types(role: dict[str, Any]) -> None:
     """Records the session type pre-v7 bindings left implicit in their chat ID.
 
@@ -158,7 +202,7 @@ def _fill_legacy_chat_types(role: dict[str, Any]) -> None:
     role["channel_bindings"] = bindings
 
 
-def _legacy_chat_type(binding: dict[str, Any]) -> str:
+def _legacy_chat_type(binding: dict[str, Any]) -> ChatType:
     channel = binding.get("channel")
     chat_id = normalize_chat_id(binding.get("chat_id") or "")
     if channel == "qq" and chat_id.startswith(QQ_GROUP_PREFIX):

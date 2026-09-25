@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from core.common.channel_chat_types import (
-    CHAT_TYPES,
     ChatTypeDeclaration,
     ChatTypeDeclarations,
+    parse_chat_type,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,13 +86,14 @@ class ChannelDeclaration:
 
     ``chat_types`` 声明渠道支持的会话类型（私聊 / 群聊）、号码的标签与提示及
     内部前缀：绑定面板据此让用户选类型、只填号码，保存绑定时宿主据此校验会话
-    ID 与类型一致。插件声明必须提供；只有宿主自有的 ``desktop`` 没有会话类型。
+    ID 与类型一致。插件声明必须提供（解析时缺失即拒绝）；只有宿主自有的
+    ``desktop`` 行显式传空元组。
     """
 
     name: str
     label: str
+    chat_types: tuple[ChatTypeDeclaration, ...]
     contact_label: str | None = None
-    chat_types: tuple[ChatTypeDeclaration, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         """Returns the JSON-compatible bridge representation."""
@@ -282,14 +283,22 @@ def _parse_chat_types(
             {*_CHAT_TYPE_REQUIRED_FIELDS, *_CHAT_TYPE_OPTIONAL_FIELDS},
             _CHAT_TYPE_REQUIRED_FIELDS,
         )
-        if values["type"] not in CHAT_TYPES:
-            raise ManifestError(
-                f"{item_field}.type 必须是 {' / '.join(CHAT_TYPES)} 之一"
-            )
+        try:
+            chat_type = parse_chat_type(values.pop("type"), f"{item_field}.type")
+        except ValueError as exc:
+            raise ManifestError(str(exc)) from exc
         prefix = values.get("prefix")
         if prefix is not None and prefix != prefix.strip():
             raise ManifestError(f"{item_field}.prefix 不能含首尾空白")
-        declarations.append(ChatTypeDeclaration(**values))
+        declarations.append(
+            ChatTypeDeclaration(
+                type=chat_type,
+                label=values["label"],
+                chat_id_label=values["chat_id_label"],
+                chat_id_hint=values.get("chat_id_hint"),
+                prefix=prefix,
+            )
+        )
     types = [item.type for item in declarations]
     if duplicates := sorted({name for name in types if types.count(name) > 1}):
         raise ManifestError(f"{field_name} 重复声明会话类型 {duplicates}")
@@ -334,8 +343,7 @@ def declared_chat_types(manifests: Iterable[PluginManifest]) -> ChatTypeDeclarat
     result: dict[str, tuple[ChatTypeDeclaration, ...]] = {}
     for manifest in manifests:
         for declaration in manifest.channels:
-            if declaration.chat_types:
-                result.setdefault(declaration.name, declaration.chat_types)
+            result.setdefault(declaration.name, declaration.chat_types)
     return result
 
 

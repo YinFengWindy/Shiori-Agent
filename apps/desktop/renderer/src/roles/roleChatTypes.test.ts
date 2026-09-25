@@ -6,6 +6,7 @@ import {
   composeRoleBindingChatId,
   defaultRoleChatType,
   findRoleChatType,
+  roleBindingChatIdCopy,
   roleBindingDisplayLabel,
   roleBindingNumber,
   roleChatTypeLabel,
@@ -44,7 +45,17 @@ describe("roleChatTypes", () => {
     assert.equal(composeRoleBindingChatId(" 831907794 ", group), "gqq:831907794");
     // Clearing the number must not leave a bare prefix behind.
     assert.equal(composeRoleBindingChatId("  ", group), "");
-    assert.equal(composeRoleBindingChatId("-1001", null), "-1001");
+    assert.equal(composeRoleBindingChatId(" -1001 ", null), "-1001");
+    // A pasted internal id keeps a single prefix.
+    assert.equal(composeRoleBindingChatId("gqq:123", group), "gqq:123");
+    assert.equal(composeRoleBindingChatId(" gqq: 123 ", group), "gqq:123");
+    assert.equal(composeRoleBindingChatId("gqq:", group), "");
+  });
+
+  it("takes the number copy from the selected type, or a plain label without one", () => {
+    assert.deepEqual(roleBindingChatIdCopy(group), { label: "群号", placeholder: "" });
+    assert.deepEqual(roleBindingChatIdCopy({ ...qq.chatTypes[0], chatIdHint: "对方的 QQ 号" }), { label: "QQ 号", placeholder: "对方的 QQ 号" });
+    assert.deepEqual(roleBindingChatIdCopy(null), { label: "会话 ID", placeholder: "" });
   });
 
   it("re-derives the prefix when the session type changes", () => {

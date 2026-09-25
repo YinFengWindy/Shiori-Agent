@@ -5,7 +5,6 @@ import {
   defaultRoleBindingChannel,
   roleBindingAvailability,
   roleBindingChannelOptions,
-  roleBindingChatIdCopy,
   roleBindingContactLabel,
   roleChannelLabel,
 } from "./roleChannelCatalog";
@@ -59,9 +58,5 @@ describe("roleChannelCatalog", () => {
     assert.equal(roleChannelLabel("gone", [qqbot]), "gone");
     assert.equal(roleBindingContactLabel(qqbot), "联系人 ID（QQBot 用户 OpenID）");
     assert.equal(roleBindingContactLabel(null), "联系人 ID");
-    // The number copy comes from the selected session type; without one (desktop, a gone plugin) a plain label.
-    const group = { type: "group" as const, label: "群聊", chatIdLabel: "群号", chatIdHint: "QQ 群号", prefix: "gqq:" };
-    assert.deepEqual(roleBindingChatIdCopy(group), { label: "群号", placeholder: "QQ 群号" });
-    assert.deepEqual(roleBindingChatIdCopy(null), { label: "会话 ID", placeholder: "" });
   });
 });

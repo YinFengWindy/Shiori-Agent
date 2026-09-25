@@ -11,11 +11,24 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Literal
 
 # Every role binding names one of these; the host-owned desktop session is private.
-CHAT_TYPE_PRIVATE = "private"
-CHAT_TYPE_GROUP = "group"
-CHAT_TYPES = (CHAT_TYPE_PRIVATE, CHAT_TYPE_GROUP)
+ChatType = Literal["private", "group"]
+CHAT_TYPE_PRIVATE: ChatType = "private"
+CHAT_TYPE_GROUP: ChatType = "group"
+CHAT_TYPES: tuple[ChatType, ...] = (CHAT_TYPE_PRIVATE, CHAT_TYPE_GROUP)
+
+
+def parse_chat_type(value: object, field_name: str) -> ChatType:
+    """Returns ``value`` as a session type; raises ``ValueError`` naming ``field_name``.
+
+    The single check shared by manifest declarations and role bindings.
+    """
+    for chat_type in CHAT_TYPES:
+        if value == chat_type:
+            return chat_type
+    raise ValueError(f"{field_name} 必须是 {' / '.join(CHAT_TYPES)} 之一")
 
 
 @dataclass(frozen=True)
@@ -27,7 +40,7 @@ class ChatTypeDeclaration:
     ``chat_id_label`` / ``chat_id_hint`` only feed the binding form.
     """
 
-    type: str
+    type: ChatType
     label: str
     chat_id_label: str
     chat_id_hint: str | None = None
@@ -50,25 +63,35 @@ ChatTypeDeclarations = Mapping[str, tuple[ChatTypeDeclaration, ...]]
 
 def validate_chat_id_for_type(
     chat_id: str,
-    chat_type: str,
+    chat_type: ChatType,
     declarations: tuple[ChatTypeDeclaration, ...],
 ) -> None:
     """Rejects a chat ID that does not match its binding's declared session type.
 
-    The selected type must be declared; a declared prefix must lead the chat ID
-    and be followed by a number; a chat ID carrying another declared type's
-    prefix names that other type. ``chat_id`` is already stripped. Raises
-    ``ValueError`` with the expected form.
+    The selected type must be declared. A declared prefix must lead the chat ID
+    exactly once and be followed by a non-empty remainder (an ID in whatever
+    form the channel uses, not necessarily digits) that itself carries no
+    declared prefix, so a pasted ``gqq:gqq:123`` is refused. A chat ID carrying
+    another declared type's prefix names that other type. ``chat_id`` is
+    already stripped. Raises ``ValueError`` with the expected form.
     """
     selected = next((item for item in declarations if item.type == chat_type), None)
     if selected is None:
         supported = "、".join(item.label for item in declarations)
         raise ValueError(f"该渠道不支持此会话类型，可选：{supported}")
     if selected.prefix is not None:
-        number = chat_id[len(selected.prefix) :]
-        if not chat_id.startswith(selected.prefix) or not number.strip():
+        remainder = chat_id[len(selected.prefix) :].strip()
+        if (
+            not chat_id.startswith(selected.prefix)
+            or not remainder
+            or any(
+                item.prefix is not None and remainder.startswith(item.prefix)
+                for item in declarations
+            )
+        ):
             raise ValueError(
                 f"{selected.label}会话 ID 必须是 {selected.prefix}<{selected.chat_id_label}>"
+                "，前缀只写一次"
             )
     # Manifest parsing rejects prefixes nested in one another, so a match here
     # can only mean the chat ID names the other type.

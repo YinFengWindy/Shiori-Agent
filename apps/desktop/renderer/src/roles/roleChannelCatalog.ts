@@ -1,4 +1,4 @@
-import type { ChannelChatTypeDeclaration, ChannelSummary } from "../plugins/pluginBridgeClient";
+import type { ChannelSummary } from "../plugins/pluginBridgeClient";
 import type { RoleChannelBinding } from "../shared/types";
 import type { SelectOption } from "../shared/ui/Select";
 
@@ -9,8 +9,6 @@ export type RoleChannelCatalog = readonly ChannelSummary[] | null;
 export const desktopChannelName = "desktop";
 
 const desktopChannelLabel = "桌面端";
-/** Number copy of a binding without a declared type: the desktop session, or a read-only binding whose plugin is gone. */
-const undeclaredChatIdLabel = "会话 ID";
 
 /**
  * How one existing binding may be edited:
@@ -82,16 +80,6 @@ export function roleBindingChannelOptions(catalog: RoleChannelCatalog, currentCh
 export function defaultRoleBindingChannel(catalog: RoleChannelCatalog): string {
   const external = (catalog ?? []).filter((channel) => channel.name !== desktopChannelName && isSelectableChannel(channel));
   return (external.find((channel) => channel.state === "active") ?? external[0])?.name ?? desktopChannelName;
-}
-
-/**
- * Field copy for a binding's number: the selected session type's declared copy;
- * without a declaration (desktop, or a read-only binding) a plain label.
- */
-export function roleBindingChatIdCopy(chatType: ChannelChatTypeDeclaration | null) {
-  return chatType
-    ? { label: chatType.chatIdLabel, placeholder: chatType.chatIdHint ?? "" }
-    : { label: undeclaredChatIdLabel, placeholder: "" };
 }
 
 /** Label for the binding's sole external contact, qualified by the channel's declared identity. */

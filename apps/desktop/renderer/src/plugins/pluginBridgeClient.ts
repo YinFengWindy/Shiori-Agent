@@ -60,7 +60,16 @@ type PluginChannelDeclarationPayload = {
   name: string;
   label: string;
   contact_label: string | null;
-  chat_types: Array<{ type: RoleChatType; label: string; chat_id_label: string; chat_id_hint: string | null; prefix: string | null }>;
+  chat_types: ChannelChatTypeDeclarationPayload[];
+};
+
+/** Wire shape of one declared session type (`chat_types` entry). */
+type ChannelChatTypeDeclarationPayload = {
+  type: RoleChatType;
+  label: string;
+  chat_id_label: string;
+  chat_id_hint: string | null;
+  prefix: string | null;
 };
 
 /**

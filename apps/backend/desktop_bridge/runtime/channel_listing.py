@@ -23,7 +23,8 @@ from agent.plugin_host.manifest import ChannelDeclaration, PluginManifest
 from bootstrap.app import AppRuntime
 from bootstrap.channel_host import ChannelSnapshot
 
-DESKTOP_CHANNEL = ChannelDeclaration(name="desktop", label="桌面端")
+# The host-owned desktop session has no selectable session types.
+DESKTOP_CHANNEL = ChannelDeclaration(name="desktop", label="桌面端", chat_types=())
 
 
 class RuntimeChannelListing:
