@@ -10,6 +10,15 @@ import pytest
 
 from agent.config import load_config, load_config_text
 
+
+@pytest.fixture(autouse=True)
+def _without_default_disabled_pinning(monkeypatch):
+    """本文件只测自己的迁移：停掉默认停用插件的升级迁移，免得它改写测试配置。"""
+    monkeypatch.setattr(
+        "agent.plugin_default_enabled_migration.DEFAULT_DISABLED_PLUGINS", ()
+    )
+
+
 _BASE = """
 [llm]
 registrations = []

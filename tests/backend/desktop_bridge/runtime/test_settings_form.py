@@ -28,6 +28,23 @@ def test_form_preserves_plugin_values_and_retains_ordinary_candidate_semantics(p
     assert derive.fingerprint_payload["config_toml"] == candidate
 
 
+def test_form_preserves_host_migration_receipts():
+    """普通设置保存不能丢掉迁移回执，否则一次性迁移会在下次启动时重跑。"""
+    current = (
+        "[agent]\nmax_tokens = 100\n"
+        '[_migrations]\nplugin_default_disabled = ["browser_use", "computer_use"]\n'
+    )
+    derive = settings_form_write(
+        {"config_toml": "[agent]\nmax_tokens = 200\n", "preserve_plugins": True}
+    )
+    assert derive is not None
+    result = tomllib.loads(derive.build_config_toml(current))
+    assert result == {
+        "agent": {"max_tokens": 200},
+        "_migrations": {"plugin_default_disabled": ["browser_use", "computer_use"]},
+    }
+
+
 def test_raw_apply_keeps_full_document_ownership():
     assert (
         settings_form_write({"config_toml": "[plugins.demo]\nenabled = false\n"})
@@ -42,6 +59,7 @@ def test_raw_apply_keeps_full_document_ownership():
         {"preserve_plugins": True},
         {"preserve_plugins": True, "config_toml": "not valid TOML"},
         {"preserve_plugins": True, "config_toml": "[plugins.demo]\nenabled = true\n"},
+        {"preserve_plugins": True, "config_toml": "[_migrations]\nreceipt = []\n"},
     ],
 )
 def test_ambiguous_or_invalid_form_draft_is_rejected(payload):

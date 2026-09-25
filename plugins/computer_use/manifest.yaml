@@ -7,4 +7,6 @@ capabilities:
   - tools
   - workspace
   - config
+# 新安装默认停用；升级用户由 agent/plugin_default_enabled_migration.py 保留启用。
+default_enabled: false
 config_model: "config:ComputerUseConfig"

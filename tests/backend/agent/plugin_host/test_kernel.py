@@ -487,6 +487,41 @@ async def test_config_enabled_defaults_to_true_when_absent(tmp_path: Path):
     assert kernel.loaded_count == 1
 
 
+def _stage_default_disabled_hello(root: Path) -> None:
+    stage_plugin_package(PLUGIN_FIXTURES / "hello", root / "hello")
+    manifest = root / "hello" / "manifest.yaml"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8") + "default_enabled: false\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.asyncio
+async def test_manifest_default_disabled_applies_when_config_has_no_flag(
+    tmp_path: Path,
+):
+    _stage_default_disabled_hello(tmp_path)
+    kernel = make_kernel([tmp_path], event_bus=EventBus())
+    await kernel.load_all()
+
+    assert kernel.loaded_count == 0
+    assert [item["state"] for item in kernel.states()] == [PluginState.DISABLED.name]
+
+
+@pytest.mark.asyncio
+async def test_explicit_enabled_overrides_manifest_default_disabled(tmp_path: Path):
+    _stage_default_disabled_hello(tmp_path)
+    kernel = make_kernel(
+        [tmp_path],
+        event_bus=EventBus(),
+        plugin_configs={"hello": {"enabled": True}},
+    )
+    await kernel.load_all()
+
+    assert kernel.loaded_count == 1
+    await kernel.terminate_all()
+
+
 @pytest.mark.asyncio
 async def test_repeated_discovery_root_is_scanned_once(tmp_path: Path):
     _ = stage_plugin_package(PLUGIN_FIXTURES / "hello", tmp_path / "hello")

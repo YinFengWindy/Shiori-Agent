@@ -12,6 +12,14 @@ from agent.config import load_config, load_config_text
 from infra.persistence.toml_store import render_toml
 
 
+@pytest.fixture(autouse=True)
+def _without_default_disabled_pinning(monkeypatch):
+    """本文件只测自己的迁移：停掉默认停用插件的升级迁移，免得它改写测试配置。"""
+    monkeypatch.setattr(
+        "agent.plugin_default_enabled_migration.DEFAULT_DISABLED_PLUGINS", ()
+    )
+
+
 def _environment(tmp_path, monkeypatch, text=""):
     workspace = tmp_path / "workspace"
     packages = tmp_path / "checkout/plugins"
@@ -136,7 +144,9 @@ def test_settings_form_save_then_raw_removal_cannot_revive_legacy_json(
     )
     assert derive is not None
     ordinary = derive.build_config_toml(path.read_text(encoding="utf-8"))
-    assert "_migrations" not in tomllib.loads(ordinary)
+    # The form save keeps host-owned receipts; only a raw full-document write
+    # (below) can drop them, which the workspace marker must survive.
+    assert tomllib.loads(ordinary)["_migrations"]["plugin_config_json"] == ["demo"]
     path.write_text(ordinary, encoding="utf-8")
     assert load_config(path, workspace=workspace).plugins["demo"]["secret"] == "legacy"
     # Raw apply owns the entire document, including intentional table removal.
@@ -469,7 +479,8 @@ def test_committed_receipt_survives_conflict_settings_save_and_table_deletion(
     path.write_text(
         derive.build_config_toml(path.read_text(encoding="utf-8")), encoding="utf-8"
     )
-    assert "_migrations" not in tomllib.loads(path.read_text(encoding="utf-8"))
+    receipts = tomllib.loads(path.read_text(encoding="utf-8"))["_migrations"]
+    assert receipts["plugin_config_json"] == ["demo"]
     # A subsequent raw settings edit intentionally removes the entire table.
     path.write_text("max_tokens = 200\n", encoding="utf-8")
     conflicting.unlink()
