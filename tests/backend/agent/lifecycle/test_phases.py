@@ -115,7 +115,7 @@ class _MemoryStatusPluginModule:
 
 class _DummyOutbound:
     async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt:
-        return DeliveryReceipt()
+        return DeliveryReceipt.queued()
 
 
 class _KVCachePluginModule:

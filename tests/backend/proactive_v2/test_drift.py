@@ -856,7 +856,7 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
 
     class _Outbound:
         async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
-            return DeliveryReceipt() if await sender(outbound.content) else None
+            return DeliveryReceipt.sent() if await sender(outbound.content) else None
 
     orchestrator = TurnOrchestrator(
         TurnOrchestratorDeps(
@@ -1337,7 +1337,7 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
     class _Outbound:
         async def dispatch(self, outbound) -> DeliveryReceipt | None:
             sent = await sender.send(outbound.content)
-            return DeliveryReceipt() if sent else None
+            return DeliveryReceipt.sent() if sent else None
 
     from agent.looping.ports import SessionServices
     from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
@@ -1438,7 +1438,7 @@ async def test_factory_drift_send_message_uses_bound_transport_from_role(
     async def _dispatch(outbound):
         captured["channel"] = outbound.channel
         captured["chat_id"] = outbound.chat_id
-        return DeliveryReceipt() if await sender.send(outbound.content) else None
+        return DeliveryReceipt.sent() if await sender.send(outbound.content) else None
 
     factory._deps.turn_orchestrator._outbound.dispatch = _dispatch  # type: ignore[attr-defined]
     send_message = factory._build_drift_send_message_fn()

@@ -435,23 +435,23 @@ class FeishuChannel:
             external_message_id=str(msg.metadata.get("external_message_id") or ""),
         )
 
-    async def send(self, chat_id: str, message: str) -> str:
+    async def send(self, chat_id: str, message: str) -> str | None:
         """Sends Markdown as one or more cards (plain text if a card fails).
 
-        Returns the platform id of the first message sent, empty for blank text.
+        Returns the platform id of the first message sent, None for blank text.
         """
         return await self._send_text(chat_id, message)
 
     async def _send_text(
         self, chat_id: str, text: str, *, reply_to: str | None = None
-    ) -> str:
+    ) -> str | None:
         if not text.strip():
-            return ""
+            return None
         message_ids = [
             await self._send_chunk(chat_id, chunk, reply_to if index == 0 else None)
             for index, chunk in enumerate(split_markdown(text.strip()))
         ]
-        return message_ids[0] if message_ids else ""
+        return message_ids[0] if message_ids else None
 
     async def _send_chunk(self, chat_id: str, chunk: str, reply_to: str | None) -> str:
         try:

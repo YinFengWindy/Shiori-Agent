@@ -21,7 +21,7 @@ class ChannelIntake:
         self,
         accept: Callable[[InboundMessage], Awaitable[None]],
         # Senders may return a platform message id; notices ignore it.
-        send: Callable[[str, str], Awaitable[object]],
+        send: Callable[[str, str], Awaitable[str | None]],
         *,
         capacity: int = 256,
     ) -> None:

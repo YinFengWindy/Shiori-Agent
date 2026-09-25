@@ -67,7 +67,7 @@ class _OutboundMixin:
             self._record_delivery_status(msg, delivery_status="sent")
         self._trace_states.pop(session_key, None)
 
-    async def send(self, chat_id: str, message: str) -> str:
+    async def send(self, chat_id: str, message: str) -> str | None:
         """发送文本消息，自动区分私聊/群聊；返回 NapCat 分配的消息 id。"""
         api = self._require_api()
         if chat_id.startswith(GROUP_PREFIX):
@@ -93,7 +93,7 @@ class _OutboundMixin:
         else:
             await self._run_on_bot_loop(api.send_private_file(int(chat_id), uri, name))
 
-    async def send_image(self, chat_id: str, image: str) -> str:
+    async def send_image(self, chat_id: str, image: str) -> str | None:
         """发送图片，自动区分私聊/群聊；返回 NapCat 分配的消息 id。"""
         api = self._require_api()
         uri = local_to_base64(image) if is_local(image) else image
@@ -123,6 +123,6 @@ class _OutboundMixin:
             )
 
 
-def _sent_message_id(sent: object) -> str:
-    """NcatBot send APIs return the message id; anything else means no id."""
-    return str(sent).strip() if isinstance(sent, (str, int)) else ""
+def _sent_message_id(sent: object) -> str | None:
+    """NcatBot send APIs return the message id; None means it reported none."""
+    return str(sent) if sent is not None else None

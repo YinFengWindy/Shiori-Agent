@@ -300,4 +300,4 @@ async def test_push_senders_return_the_first_platform_message_id(
     assert first_id == f"om_{before + 1}"
     # After the text cards come the image upload and then the image message.
     assert image_id == f"om_{before + cards + 2}"
-    assert await harness.channel.send(CHAT_ID, "  ") == ""
+    assert await harness.channel.send(CHAT_ID, "  ") is None

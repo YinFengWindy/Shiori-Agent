@@ -4,6 +4,7 @@ import pytest
 
 from agent.tools.message_push import PushOutcome
 from agent.turns.outbound import (
+    BusOutboundPort,
     DeliveryReceipt,
     OutboundDispatch,
     OutboundDispatchError,
@@ -25,7 +26,7 @@ async def test_push_outbound_port_passes_role_context() -> None:
         OutboundDispatch(channel="telegram", chat_id="123", content="hello")
     )
 
-    assert sent == DeliveryReceipt()
+    assert sent == DeliveryReceipt.sent()
     assert calls[0]["role_id"] == "mira"
 
 
@@ -47,7 +48,7 @@ async def test_push_outbound_port_removes_internal_citation_markers() -> None:
         )
     )
 
-    assert sent == DeliveryReceipt()
+    assert sent == DeliveryReceipt.sent()
     assert calls[0]["message"] == "我记得这件事"
 
 
@@ -143,4 +144,21 @@ async def test_push_outbound_port_receipt_keeps_first_reported_message_id():
         )
     )
 
-    assert receipt == DeliveryReceipt(external_message_id="image-2")
+    assert receipt == DeliveryReceipt.sent("image-2")
+
+
+@pytest.mark.asyncio
+async def test_bus_outbound_port_receipt_is_only_queued():
+    published = []
+
+    class Bus:
+        async def publish_outbound(self, message):
+            published.append(message)
+
+    receipt = await BusOutboundPort(Bus()).dispatch(
+        OutboundDispatch(channel="qqbot", chat_id="c2c:user-1", content="hello")
+    )
+
+    assert len(published) == 1
+    assert receipt == DeliveryReceipt.queued()
+    assert receipt.delivered is False

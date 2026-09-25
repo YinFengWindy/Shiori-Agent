@@ -61,11 +61,11 @@ class _OutboundMixin:
             external_message_id=str(msg.metadata.get("external_message_id") or ""),
         )
 
-    async def send_proactive(self, chat_id: str, message: str) -> str:
+    async def send_proactive(self, chat_id: str, message: str) -> str | None:
         """Sends a proactive C2C text message; returns the platform message id."""
         return await self.send(chat_id, message)
 
-    async def send(self, chat_id: str, message: str) -> str:
+    async def send(self, chat_id: str, message: str) -> str | None:
         """Sends a Markdown message to a C2C target; returns its message id."""
         kind, target = self._parse_chat_id(chat_id)
         if kind != "c2c":
@@ -79,7 +79,7 @@ class _OutboundMixin:
         )
         return _response_message_id(sent)
 
-    async def send_image(self, chat_id: str, image: str) -> str:
+    async def send_image(self, chat_id: str, image: str) -> str | None:
         """Uploads and sends a PNG, JPEG, WebP, or GIF to C2C; returns its id."""
         kind, target = self._parse_chat_id(chat_id)
         if kind != "c2c":
@@ -124,7 +124,7 @@ class _OutboundMixin:
             "srv_send_msg": False,
         }
 
-    async def send_stream(self, chat_id: str, message: str) -> str:
+    async def send_stream(self, chat_id: str, message: str) -> str | None:
         """Sends a complete proactive response using the official stream API.
 
         Returns the platform id of whichever message actually carried it: the
@@ -142,7 +142,9 @@ class _OutboundMixin:
             logger.warning("[qqbot] 私聊流式发送失败，回退普通发送: %s", exc)
             return await self.send(chat_id, message)
 
-    async def _send_stream_c2c(self, openid: str, msg_id: str, message: str) -> str:
+    async def _send_stream_c2c(
+        self, openid: str, msg_id: str, message: str
+    ) -> str | None:
         token = await self._get_access_token()
         msg_seq = self._next_msg_seq()
         stream_msg_id = ""
@@ -167,7 +169,7 @@ class _OutboundMixin:
                 token,
             )
             stream_msg_id = str(result.get("id") or stream_msg_id)
-        return stream_msg_id
+        return stream_msg_id or None
 
     async def _send_input_notify(self, openid: str, msg_id: str) -> None:
         try:
@@ -218,6 +220,7 @@ class _OutboundMixin:
         return kind, target
 
 
-def _response_message_id(response: dict[str, Any]) -> str:
-    """Reads the message id the QQBot send API returns; empty when absent."""
-    return str(response.get("id") or "").strip()
+def _response_message_id(response: dict[str, Any]) -> str | None:
+    """Reads the message id the QQBot send API returns; None when absent."""
+    message_id = response.get("id")
+    return str(message_id) if message_id else None

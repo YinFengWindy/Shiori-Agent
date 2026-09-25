@@ -140,7 +140,7 @@ async def test_tick_captures_state_before_generation_and_does_not_send_stale_rep
 ):
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
-    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=DeliveryReceipt()))
+    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=DeliveryReceipt.sent()))
     owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
     calls = 0
 
@@ -186,7 +186,7 @@ async def test_tick_captures_state_before_generation_and_does_not_send_stale_rep
 async def test_normal_tick_corrects_state_without_replaying_earlier_tool(tmp_path):
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
-    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=DeliveryReceipt()))
+    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=DeliveryReceipt.sent()))
     owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
     llm = _ScriptedLlm(
         [

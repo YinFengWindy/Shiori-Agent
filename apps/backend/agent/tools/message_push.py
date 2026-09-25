@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 # Identity is supplied by the host outbound owner, never by model JSON arguments.
 PENDING_TURN_DELIVERY = object()
 
-# A sender may return the platform id of the message it just sent; None means
-# the transport exposes no such id.
+# A sender returns the platform id of the message it just sent, or None when the
+# transport exposes no such id. Blank ids are normalized to None on receipt.
 SenderResult = str | None
 
 
@@ -272,9 +272,9 @@ class MessagePushTool(Tool):
         external_ids: list[str] = []
 
         def record_external_id(sent: SenderResult) -> None:
-            # Only a real platform id counts; blank or None means "no id".
-            if isinstance(sent, str) and sent.strip():
-                external_ids.append(sent.strip())
+            message_id = _normalize_message_id(sent)
+            if message_id is not None:
+                external_ids.append(message_id)
 
         image_sent = False
         try:
@@ -346,6 +346,11 @@ class MessagePushTool(Tool):
             "；".join(results) if results else f"渠道 {channel!r} 没有可用的 sender",
             tuple(external_ids),
         )
+
+
+def _normalize_message_id(sent: SenderResult) -> str | None:
+    """The single place a sender result becomes an id: blank means no id."""
+    return (sent.strip() or None) if sent is not None else None
 
 
 def _nonblank_payload(value: str | None) -> str | None:

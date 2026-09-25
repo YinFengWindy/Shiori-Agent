@@ -345,7 +345,7 @@ def make_proactive_pipeline(
     class _Outbound:
         async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
             sent = await sender.send(outbound.content)
-            return DeliveryReceipt() if sent else None
+            return DeliveryReceipt.sent() if sent else None
 
     orchestrator = TurnOrchestrator(
         TurnOrchestratorDeps(

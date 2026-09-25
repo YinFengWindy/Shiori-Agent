@@ -45,13 +45,27 @@ class OutboundDispatchError(RuntimeError):
 
 @dataclass(frozen=True)
 class DeliveryReceipt:
-    """Proof that a transport accepted an outbound payload.
+    """What a transport did with an accepted outbound payload.
 
-    ``external_message_id`` is the platform id of the first message the
-    transport sent, or empty when the transport cannot report one.
+    ``delivered`` is True only when the platform itself accepted the message;
+    a payload merely queued for a later sender is not delivered, and its
+    delivery must be recorded by whoever eventually sends it.
+    ``external_message_id`` is the platform id of the first message sent, or
+    None when the transport cannot report one.
     """
 
-    external_message_id: str = ""
+    delivered: bool
+    external_message_id: str | None = None
+
+    @classmethod
+    def queued(cls) -> DeliveryReceipt:
+        """The payload was handed to a queue; nothing reached the platform yet."""
+        return cls(delivered=False)
+
+    @classmethod
+    def sent(cls, external_message_id: str | None = None) -> DeliveryReceipt:
+        """The platform accepted the payload, optionally reporting its id."""
+        return cls(delivered=True, external_message_id=external_message_id)
 
 
 class OutboundPort(Protocol):
@@ -67,9 +81,8 @@ class BusOutboundPort:
     async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
         """Queues the payload on the bus; the channel records delivery itself.
 
-        The receipt only proves the hand-off to the bus, never the platform id:
-        each channel's ``_on_response`` marks the committed message after it
-        actually sends.
+        The receipt is always ``queued``: each channel's ``_on_response`` marks
+        the committed message only after it actually sends.
         """
         content = sanitize_user_visible_content(outbound.content)
         maybe = self._bus.publish_outbound(
@@ -85,7 +98,7 @@ class BusOutboundPort:
         )
         if inspect.isawaitable(maybe):
             await maybe
-        return DeliveryReceipt()
+        return DeliveryReceipt.queued()
 
 
 class PushToolOutboundPort:
@@ -101,8 +114,9 @@ class PushToolOutboundPort:
     async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
         """Sends every payload part through the push tool, all or nothing.
 
-        Returns a receipt carrying the first platform message id any sender
-        reported; None when the target is empty or the role may not use it.
+        Returns a ``sent`` receipt carrying the first platform message id any
+        sender reported; None when the target is empty or the role may not
+        use it.
         """
         message = sanitize_user_visible_content(outbound.content)
         channel = str(outbound.channel or "").strip()
@@ -111,7 +125,7 @@ class PushToolOutboundPort:
         if (not message and not media) or not channel or not chat_id:
             return None
         external_ids: list[str] = []
-        execution_context = {
+        execution_context: dict[str, Any] = {
             **self._execution_context,
             "session_key": str(
                 outbound.metadata.get("session_key_override") or ""
@@ -125,30 +139,21 @@ class PushToolOutboundPort:
                 else {}
             ),
         }
+
+        async def push_part(**payload: Any) -> None:
+            # Each part must succeed before the next one; its ids are kept in order.
+            outcome = await self._push.push(
+                channel=channel, chat_id=chat_id, **payload, **execution_context
+            )
+            self._validate_delivery_result(
+                outcome.text, channel=channel, chat_id=chat_id
+            )
+            external_ids.extend(outcome.external_message_ids)
+
         try:
-            if message or media:
-                outcome = await self._push.push(
-                    channel=channel,
-                    chat_id=chat_id,
-                    message=message,
-                    image=media[0] if media else None,
-                    **execution_context,
-                )
-                self._validate_delivery_result(
-                    outcome.text, channel=channel, chat_id=chat_id
-                )
-                external_ids.extend(outcome.external_message_ids)
+            await push_part(message=message, image=media[0] if media else None)
             for image in media[1:]:
-                outcome = await self._push.push(
-                    channel=channel,
-                    chat_id=chat_id,
-                    image=image,
-                    **execution_context,
-                )
-                self._validate_delivery_result(
-                    outcome.text, channel=channel, chat_id=chat_id
-                )
-                external_ids.extend(outcome.external_message_ids)
+                await push_part(image=image)
         except PermissionError:
             return None
         except OutboundDispatchError:
@@ -162,9 +167,7 @@ class PushToolOutboundPort:
 
         # One session message may span several platform messages (text, then
         # images) but has a single external_message_id column: keep the first.
-        return DeliveryReceipt(
-            external_message_id=external_ids[0] if external_ids else ""
-        )
+        return DeliveryReceipt.sent(external_ids[0] if external_ids else None)
 
     @staticmethod
     def _validate_delivery_result(

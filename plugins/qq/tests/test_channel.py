@@ -948,4 +948,4 @@ async def test_qq_push_senders_return_the_napcat_message_id(
     assert await channel.send("1", "pong") == "101"
     assert await channel.send("gqq:100", "group pong") == "202"
     # A transport that reports no id yields no id, never the text "None".
-    assert await channel.send_image("1", "https://example.com/a.png") == ""
+    assert await channel.send_image("1", "https://example.com/a.png") is None

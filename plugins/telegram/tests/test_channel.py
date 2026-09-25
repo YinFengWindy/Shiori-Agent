@@ -450,8 +450,14 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     await channel.send_stream("123", "stream hi")
     sample = tmp_path / "doc.txt"
     sample.write_text("x", encoding="utf-8")
-    await channel.send_file("123", str(sample), name="doc.txt", caption="cap")
-    await channel.send_image("123", "https://example.com/img.jpg")
+    # Push senders hand back the id of the message Telegram created.
+    channel._app.bot.send_document.return_value = SimpleNamespace(message_id=8)
+    channel._app.bot.send_photo.return_value = SimpleNamespace(message_id=7)
+    assert (
+        await channel.send_file("123", str(sample), name="doc.txt", caption="cap")
+        == "8"
+    )
+    assert await channel.send_image("123", "https://example.com/img.jpg") == "7"
     await channel.send_image("123", str(sample))
     await channel._on_response(
         OutboundMessage(

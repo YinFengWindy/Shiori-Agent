@@ -595,7 +595,7 @@ async def test_pending_desktop_text_and_images_publish_once_after_formal_commit(
 
     async def dispatch(outbound):
         receipt = await port.dispatch(outbound)
-        assert receipt == DeliveryReceipt()
+        assert receipt == DeliveryReceipt.sent()
         # The real registered desktop text and image consumers accepted the payload,
         # but neither has saved or announced an uncommitted message.
         assert session.messages == []
