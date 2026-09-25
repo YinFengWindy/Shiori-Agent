@@ -61,7 +61,7 @@ def test_resolve_plugin_dirs_uses_meipass_when_frozen(
     assert dirs == [tmp_path / "plugins", tmp_path / "plugins"]
 
 
-def test_role_target_validation_uses_canonical_chat_id_comparison(
+def test_role_target_validation_rejects_bare_id_for_bound_qq_group(
     tmp_path: Path,
 ) -> None:
     store = RoleStore(tmp_path)
@@ -78,11 +78,25 @@ def test_role_target_validation_uses_canonical_chat_id_comparison(
         ],
     )
 
+    repository = RoleRepository(store)
+    # A bare ID would be sent to private user 42, not the bound group.
+    assert not _role_owns_channel_target(
+        repository, role_id=role.id, channel="qq", chat_id="42"
+    )
     assert _role_owns_channel_target(
-        RoleRepository(store),
-        role_id=role.id,
-        channel="qq",
-        chat_id="42",
+        repository, role_id=role.id, channel="qq", chat_id="gqq:42"
+    )
+    # message_push's role-target validator must refuse the bare ID outright,
+    # not explain it away as a channel mismatch.
+    assert (
+        _validate_role_target(repository, role_id=role.id, channel="qq", chat_id="42")
+        is False
+    )
+    assert (
+        _validate_role_target(
+            repository, role_id=role.id, channel="qq", chat_id="gqq:42"
+        )
+        is True
     )
 
 

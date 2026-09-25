@@ -2,13 +2,20 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.common.channel_identifiers import (
+    bound_qq_group_for_bare_id,
+    is_bare_qq_group_chat_id,
+    normalize_chat_id,
+    normalize_qq_group_chat_id,
+)
+
 from .profile_models import RoleProfile
 
-CURRENT_MANIFEST_VERSION = 5
+CURRENT_MANIFEST_VERSION = 6
 
 
 def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Normalize a legacy role manifest into v5 without dropping role-owned data."""
+    """Normalize a legacy role manifest into v6 without dropping role-owned data."""
 
     version = int(payload.get("version") or 0)
     roles = payload.get("roles")
@@ -28,7 +35,7 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
     )
     if version == CURRENT_MANIFEST_VERSION and not has_legacy_fields:
         return dict(payload), False
-    if version not in {2, 3, 4, CURRENT_MANIFEST_VERSION}:
+    if version not in {2, 3, 4, 5, CURRENT_MANIFEST_VERSION}:
         raise ValueError(
             f"角色清单版本不支持：需要版本 {CURRENT_MANIFEST_VERSION}，实际为 {version}"
         )
@@ -41,6 +48,8 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
                 system_prompt=str(role.get("system_prompt") or ""),
                 background=str(role.get("background") or ""),
             ).to_dict()
+        if version < 6:
+            _prefix_legacy_qq_group_chat_ids(role)
         migrated_roles.append(role)
     # Upgrade-only knowledge: capture fields before RoleRecord drops them, even
     # when the plugin is disabled. One atomic manifest replacement contains both
@@ -73,3 +82,48 @@ def migrate_manifest_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], b
         "roles": migrated_roles,
         "plugin_data": plugin_data,
     }, True
+
+
+def _prefix_legacy_qq_group_chat_ids(role: dict[str, Any]) -> None:
+    """Rewrites pre-v6 bare QQ group IDs to ``gqq:`` in bindings and proactive target.
+
+    The transport sends bare IDs as private messages, so these groups were
+    unreachable before the rewrite. Group detection is shared with save-time
+    validation through ``is_bare_qq_group_chat_id``.
+    """
+
+    raw_bindings = role.get("channel_bindings") or []
+    bindings: list[Any] = []
+    renamed = False
+    for raw in raw_bindings:
+        binding = dict(raw) if isinstance(raw, dict) else raw
+        # Malformed entries are left for RoleRecord loading to reject.
+        if (
+            isinstance(binding, dict)
+            and binding.get("channel") == "qq"
+            and isinstance(binding.get("allow_from", []), list)
+            and is_bare_qq_group_chat_id(
+                str(binding.get("chat_id") or ""), binding.get("allow_from", [])
+            )
+        ):
+            # normalize_qq_group_chat_id strips before adding the prefix.
+            binding["chat_id"] = normalize_qq_group_chat_id(binding["chat_id"])
+            renamed = True
+        bindings.append(binding)
+    if renamed:
+        role["channel_bindings"] = bindings
+    qq_chat_ids = {
+        normalize_chat_id(binding.get("chat_id") or "")
+        for binding in bindings
+        if isinstance(binding, dict) and binding.get("channel") == "qq"
+    }
+    proactive = role.get("proactive")
+    if not isinstance(proactive, dict) or proactive.get("target_channel") != "qq":
+        return
+    target = normalize_chat_id(proactive.get("target_chat_id") or "")
+    # The old bare==gqq equivalence let a bare target point at a group binding,
+    # whether that binding was just renamed or was already stored as ``gqq:``.
+    # A bare target that is itself a bound private chat stays private.
+    group_chat_id = bound_qq_group_for_bare_id(target, qq_chat_ids)
+    if group_chat_id is not None and target not in qq_chat_ids:
+        role["proactive"] = {**proactive, "target_chat_id": group_chat_id}

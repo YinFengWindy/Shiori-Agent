@@ -137,3 +137,69 @@ def test_sample_random_memory_reads_long_term_and_workspace_guide(tmp_path: Path
     (tmp_path / "AGENTS.md").write_text("guide", encoding="utf-8")
 
     assert loop._sample_random_memory(1)
+
+
+@pytest.mark.asyncio
+async def test_tick_target_error_is_logged_at_loop_boundary_and_loop_continues(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    from agent.core.proactive_turn.delivery import resolve_target_transports
+    from core.roles import RoleAggregateService, RoleStore
+    from proactive_v2.sensor import Sensor
+    from session.manager import SessionManager
+
+    session_manager = SessionManager(tmp_path)
+    roles = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = roles.create_role(role_id="mira", name="Mira", system_prompt="mira")
+    _ = roles.bindings.bind("qq", "gqq:7", "mira", contact_id="owner")
+    # config.toml names the bound group by its bare number (a private chat ID).
+    cfg = SimpleNamespace(
+        default_role_id="mira", default_channel="qq", default_chat_id="7"
+    )
+    sensor = Sensor(
+        cfg=cfg,
+        sessions=session_manager,
+        state=SimpleNamespace(),
+        memory=None,
+        presence=None,
+        rng=None,
+        role_bindings=roles.bindings,
+    )
+    host = SimpleNamespace(
+        _session_key="role:mira",
+        _cfg=cfg,
+        _target_transports_fn=sensor.target_transports,
+        _resolve_target_transport=lambda: None,
+    )
+    ticks = 0
+
+    async def run_tick():
+        nonlocal ticks
+        ticks += 1
+        if ticks == 2:
+            loop.stop()
+        return resolve_target_transports(host)
+
+    loop = ProactiveLoop.__new__(ProactiveLoop)
+    loop._running = True
+    loop._poll_feeds_once = AsyncMock(return_value=None)
+    loop._poll_loop = AsyncMock(return_value=None)
+    loop._next_interval = lambda base_score=None: 0
+    loop._wait_interval = AsyncMock(return_value=None)
+    loop._run_tick = run_tick
+
+    with caplog.at_level("INFO", logger="proactive_v2.loop"):
+        await loop._run_loop()
+    assert loop._poll_task is not None
+    await loop._poll_task
+
+    # Both ticks ran: the first failure did not end the loop.
+    assert ticks == 2
+    failures = [r for r in caplog.records if r.message == "ProactiveLoop tick 异常"]
+    assert len(failures) == 2
+    assert all(r.levelname == "ERROR" and r.exc_info for r in failures)
+    assert "QQ 群请写成 gqq:7" in caplog.text

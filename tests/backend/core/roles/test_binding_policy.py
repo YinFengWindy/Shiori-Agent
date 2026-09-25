@@ -48,3 +48,20 @@ def test_binding_policy_disables_removed_proactive_target() -> None:
     assert normalized.enabled is False
     assert normalized.target_channel == ""
     assert normalized.target_chat_id == ""
+
+
+def test_binding_policy_rejects_bare_qq_id_that_is_not_its_contact() -> None:
+    # QQ sends a bare ID as a private chat, so a bare group number is unreachable.
+    with pytest.raises(ValueError, match="gqq:<群号>"):
+        RoleBindingPolicy().normalize(
+            [RoleChannelBindingConfig("qq", "831907794", ["3174898512"])]
+        )
+
+
+def test_binding_policy_accepts_qq_private_and_gqq_group_chats() -> None:
+    bindings = [
+        RoleChannelBindingConfig("qq", "3174898512", ["3174898512"]),
+        RoleChannelBindingConfig("qq", "gqq:831907794", ["3174898512"]),
+    ]
+
+    assert RoleBindingPolicy().normalize(bindings) == bindings

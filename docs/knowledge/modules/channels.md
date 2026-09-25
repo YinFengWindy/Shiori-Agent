@@ -32,7 +32,7 @@ related:
 | `plugins/qqbot/` | `qqbot` | `channel.py` 只做组合与启停，Gateway、C2C 入站、HTTP/媒体出站、live stream 分属各 mixin |
 | `plugins/feishu/` | `feishu` | lark-oapi 长连接跑在独立线程和私有事件循环（`ws.py`），回调只去重并交回宿主循环；REST 在 `api.py`，入站解析在 `inbound.py`，CardKit 流式卡片在 `streaming.py` |
 
-`gqq:` 群号规范化作为数据兼容层留在核心 `core/common/channel_identifiers.py`。旧版的 `[channels.telegram]` / `[channels.qq]` 由 `agent/channel_config_migration.py` 在启动时一次性迁到 `[plugins.telegram]` / `[plugins.qq]`，该迁移长期保留；迁移后仍出现的非空旧表直接报错。新增渠道的写法见 `docs/_handbook/channel-plugins.md`。
+QQ 群会话的规范 chat_id 是 `gqq:<群号>`，裸号一律是私聊，核心 `core/common/channel_identifiers.py` 严格比较、不再把裸号视同群；旧角色清单里的裸群号由 `core/roles/migration.py`（v6）一次性改写为 `gqq:`。旧版的 `[channels.telegram]` / `[channels.qq]` 由 `agent/channel_config_migration.py` 在启动时一次性迁到 `[plugins.telegram]` / `[plugins.qq]`，该迁移长期保留；迁移后仍出现的非空旧表直接报错。新增渠道的写法见 `docs/_handbook/channel-plugins.md`。
 
 ## 标识与投递
 

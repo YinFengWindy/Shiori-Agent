@@ -24,7 +24,7 @@ from .compat import (
     extract_cq_images,
     patch_ncatbot_ws_open_timeout,
 )
-from .formatting import CHANNEL, _QQTraceState
+from .formatting import CHANNEL, PUSH_TARGET_HINT, _QQTraceState
 from .group_filter import (
     DefaultGroupFilter,
     GroupMessageFilter,
@@ -199,7 +199,7 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
                 text=self.send,
                 file=self.send_file,
                 image=self.send_image,
-                description="NapCat QQ",
+                description=PUSH_TARGET_HINT,
             )
         self._main_loop = asyncio.get_running_loop()
         self._configure_sdk()

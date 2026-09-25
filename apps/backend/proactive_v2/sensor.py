@@ -8,8 +8,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from agent.prompting import is_context_frame
-from core.common.channel_identifiers import chat_ids_equal
-from core.roles.services import RoleBindingService
+from core.common.channel_identifiers import bound_qq_group_for_bare_id, chat_ids_equal
+from core.roles.services import RoleBindingService, RoleChannelBinding
 from proactive_v2.energy import compute_energy, d_recent
 from proactive_v2.presence import PresenceStore
 from proactive_v2.state import ProactiveStateStore
@@ -19,6 +19,23 @@ if TYPE_CHECKING:
     from core.memory.markdown import MemoryProfileApi
 
 logger = logging.getLogger(__name__)
+
+
+def _bare_qq_group_target_hint(
+    channel: str, chat_id: str, role_bindings: list[RoleChannelBinding]
+) -> str:
+    """Explains a config target that names a bound QQ group by its bare number.
+
+    A bare QQ ID means a private chat, so it no longer matches the ``gqq:``
+    group binding; the caller still fails instead of rewriting the target.
+    """
+    if channel != "qq":
+        return ""
+    group_chat_id = bound_qq_group_for_bare_id(
+        chat_id,
+        (binding.chat_id for binding in role_bindings if binding.channel == "qq"),
+    )
+    return f"；QQ 群请写成 {group_chat_id}" if group_chat_id is not None else ""
 
 
 @dataclass
@@ -130,6 +147,9 @@ class Sensor:
                         raise KeyError(
                             "default_role_id 配置的 target 未绑定到该角色: "
                             f"{default_role_id} -> {preferred_channel}:{preferred_chat_id}"
+                            + _bare_qq_group_target_hint(
+                                preferred_channel, preferred_chat_id, role_bindings
+                            )
                         )
                     append_unique(preferred_channel, preferred_chat_id)
             elif preferred_channel == "desktop":

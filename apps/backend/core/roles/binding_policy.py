@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from core.common.channel_identifiers import chat_ids_equal
+from core.common.channel_identifiers import (
+    QQ_GROUP_PREFIX,
+    chat_ids_equal,
+    is_bare_qq_group_chat_id,
+)
 
 from .models import RoleChannelBindingConfig, RoleProactiveConfig, RoleRecord
 
@@ -119,6 +123,14 @@ class RoleBindingPolicy:
         for binding in bindings:
             if binding.channel != "desktop" and len(binding.allow_from) != 1:
                 raise ValueError("外部渠道必须绑定且仅绑定一个联系人")
+            # A bare QQ ID is sent as a private chat, so it must be the contact.
+            if binding.channel == "qq" and is_bare_qq_group_chat_id(
+                binding.chat_id, binding.allow_from
+            ):
+                raise ValueError(
+                    "QQ 私聊会话 ID 必须与联系人 QQ 号一致；"
+                    f"群聊请填 {QQ_GROUP_PREFIX}<群号>"
+                )
 
     @staticmethod
     def _validate_desktop(
