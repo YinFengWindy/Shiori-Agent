@@ -49,7 +49,12 @@ class _OutboundMixin:
             self._record_delivery_status(msg, "failed")
             state = self._live_states.get(turn_key)
             if state is not None and state.stream_msg_id and not state.completed:
-                await self._delete_message(state.openid, state.stream_msg_id)
+                try:
+                    await self._delete_message(state.openid, state.stream_msg_id)
+                except Exception:
+                    # Keep cancellation terminal: a recall error must not turn
+                    # this interrupted delivery into a retryable bus failure.
+                    logger.exception("[qqbot] 取消投递后撤回流式预览失败")
             raise
         except Exception as exc:
             self._record_delivery_status(msg, "failed")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,6 +11,8 @@ from .formatting import http_status_code
 
 # Session and target scope the originating transport message's stream ownership.
 _LiveTurnKey = tuple[str, str, str]
+
+logger = logging.getLogger(__name__)
 
 
 def _definitely_rejected(error: Exception) -> bool:
@@ -35,6 +38,7 @@ class _StreamDeliveryMixin:
     async def _update_stream(
         self, state: _StreamState, text: str, *, terminal: bool
     ) -> str:
+        cancellation = None
         try:
             token = await self._get_access_token()
             body: dict[str, Any] = {
@@ -54,7 +58,6 @@ class _StreamDeliveryMixin:
                     "POST", f"/v2/users/{state.openid}/stream_messages", body, token
                 )
             )
-            cancellation = None
             try:
                 result = await asyncio.shield(request)
             except asyncio.CancelledError as exc:
@@ -67,6 +70,9 @@ class _StreamDeliveryMixin:
                 raise RuntimeError("QQBot 流式响应缺少消息 ID，发送结果不确定")
         except Exception as exc:
             state.error = exc
+            if cancellation is not None:
+                logger.exception("[qqbot] 取消流式投递后等待发送回执失败")
+                raise cancellation from exc
             raise
         state.stream_msg_id = message_id
         state.index += 1

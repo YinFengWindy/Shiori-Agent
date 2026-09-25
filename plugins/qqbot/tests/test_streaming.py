@@ -630,3 +630,65 @@ async def test_cancelled_turn_cleans_only_abandoned_preview(
         with suppress(asyncio.CancelledError):
             await dispatcher
         await channel.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_terminal", [False, True])
+@pytest.mark.parametrize("request_fails", [False, True])
+async def test_bus_cancelled_delivery_with_failed_recall_never_replays(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    cancel_terminal: bool,
+    request_fails: bool,
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = _QQApi()
+    channel, event_bus, hub, inbound = await _started_channel(api)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        result = api.handler(request)
+        if request.url.path == STREAM_PATH:
+            terminal = json.loads(request.content)["input_state"] == 10
+            if terminal == cancel_terminal:
+                entered.set()
+                await release.wait()
+                if request_fails:
+                    return httpx.Response(500)
+        if request.method == "DELETE":
+            return httpx.Response(500)
+        return result
+
+    await channel._client.aclose()
+    channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    sink = _stream_sink(channel, event_bus, inbound)
+    assert sink is not None
+    bus = MessageBus()
+    bus.subscribe_outbound("qqbot", channel._on_response)
+    await sink("取消前的预览")
+    if cancel_terminal:
+        await channel._drain_live_tasks()
+    dispatch = asyncio.create_task(bus._dispatch_message(_final_reply("完整回复")))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        await asyncio.sleep(0)
+        dispatch.cancel()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(dispatch, 3)
+        assert api.markdown_messages() == []
+        assert hub.deliveries == ["failed"]
+        recall_attempted = cancel_terminal == request_fails
+        assert sum(method == "DELETE" for method, _, _ in api.calls) == int(
+            recall_attempted
+        )
+        if recall_attempted:
+            assert "取消投递后撤回流式预览失败" in caplog.text
+        if cancel_terminal and request_fails:
+            assert "取消流式投递后等待发送回执失败" in caplog.text
+        assert channel._live_states == {}
+        assert channel._live_tasks == set()
+    finally:
+        release.set()
+        await channel.stop()
