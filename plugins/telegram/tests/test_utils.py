@@ -429,3 +429,58 @@ async def test_send_thinking_block_short_content_single_message():
     await send_thinking_block(cast(Any, bot), 123, "短思考")
     assert len(bot.messages) == 1
     assert "短思考" in bot.messages[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_send_markdown_returns_the_first_chunk_message_id():
+    bot = BotStub()
+    code = "print('x')\n" * 800
+
+    first_id = await send_markdown(cast(Any, bot), "123", f"```python\n{code}```")
+
+    assert len(bot.messages) >= 2
+    assert first_id == "1"
+
+
+@pytest.mark.asyncio
+async def test_plain_text_fallback_returns_the_first_message_id(monkeypatch):
+    bot = BotStub()
+
+    def fake_convert_with_segments(text):
+        raise TypeError("boom")
+
+    monkeypatch.setattr(
+        "plugins.telegram.backend.utils.convert_with_segments",
+        fake_convert_with_segments,
+    )
+
+    assert await send_markdown(cast(Any, bot), 456, "line1\nline2") == "1"
+
+
+@pytest.mark.asyncio
+async def test_send_stream_markdown_returns_the_streamed_message_id():
+    bot = BotStub()
+    text = " ".join(["hello world"] * 30)
+
+    # A private chat streams by editing one message: that message is the id.
+    assert await send_stream_markdown(cast(Any, bot), 123, text) == "1"
+    assert len(bot.messages) == 1
+    assert bot.edits
+
+
+@pytest.mark.asyncio
+async def test_send_stream_markdown_fallback_returns_the_resent_message_id():
+    bot = BotStub()
+    bot.edit_message_text = AsyncMock(side_effect=RuntimeError("boom"))
+    text = " ".join(["hello world"] * 30)
+
+    # The broken preview (message 1) is not the delivered message; the resend is.
+    assert await send_stream_markdown(cast(Any, bot), 123, text) == "2"
+
+
+@pytest.mark.asyncio
+async def test_send_stream_markdown_in_groups_returns_the_markdown_message_id():
+    bot = BotStub()
+
+    assert await send_stream_markdown(cast(Any, bot), -100, "hello") == "1"
+    assert await send_stream_markdown(cast(Any, bot), -100, "   ") is None

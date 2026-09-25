@@ -11,6 +11,7 @@ from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
 from conversation.service import LegacySessionDescriptor, network_thread_id
+from core.common.channel_directory import DESKTOP_CHANNEL
 from core.roles.reply_state import (
     RoleReplyContext,
     role_mood_catalog,
@@ -112,7 +113,8 @@ class TurnOrchestrator:
                     reply,
                     updated_at=datetime.now(timezone.utc).isoformat(),
                 ),
-                before_commit=lambda: self._dispatch_outbound(
+                before_commit=lambda: self._deliver_before_commit(
+                    message,
                     channel=channel,
                     chat_id=chat_id,
                     content=content,
@@ -168,8 +170,9 @@ class TurnOrchestrator:
             except Exception as e:
                 logger.warning("turn side effect failed: %s", e)
 
-    async def _dispatch_outbound(
+    async def _deliver_before_commit(
         self,
+        message: dict[str, Any],
         *,
         channel: str,
         chat_id: str,
@@ -177,7 +180,17 @@ class TurnOrchestrator:
         media: list[str],
         metadata: dict[str, Any],
     ) -> bool:
-        return await self._outbound.dispatch(
+        """Sends the pending message and stamps its delivery facts before commit.
+
+        The draft has no committed id yet, so instead of marking it afterwards
+        the delivery_status / external_message_id fields ride on the draft and
+        are written by the same insert that commits it (the session store
+        persists both as message columns). Only a receipt for a message the
+        platform actually accepted is stamped ``sent``; a merely queued one
+        commits without delivery facts. A refused or failed send commits
+        nothing, exactly as before.
+        """
+        receipt = await self._outbound.dispatch(
             OutboundDispatch(
                 channel=channel,
                 chat_id=chat_id,
@@ -186,6 +199,15 @@ class TurnOrchestrator:
                 media=media,
             )
         )
+        if receipt is None:
+            return False
+        # Desktop is not an external transport: its replies never carry a
+        # delivery status, so its proactive messages keep that semantics.
+        if receipt.delivered and channel != DESKTOP_CHANNEL:
+            message["delivery_status"] = "sent"
+            if receipt.external_message_id:
+                message["external_message_id"] = receipt.external_message_id
+        return True
 
     def _build_proactive_message(
         self,

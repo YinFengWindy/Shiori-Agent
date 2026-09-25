@@ -39,6 +39,7 @@ from .sending import (
     send_markdown,
     send_stream_markdown,
     send_thinking_block,
+    sent_message_id,
 )
 from .streaming import (
     TelegramStreamMessage,
@@ -57,4 +58,5 @@ __all__ = [
     "send_markdown",
     "send_stream_markdown",
     "send_thinking_block",
+    "sent_message_id",
 ]

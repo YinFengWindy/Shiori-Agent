@@ -52,7 +52,7 @@ class _OutboundMixin:
                 raise
         for image in msg.media or []:
             try:
-                await self.send_image(msg.chat_id, image)
+                _ = await self.send_image(msg.chat_id, image)
             except Exception as exc:
                 send_failed = True
                 self._record_delivery_status(msg, delivery_status="failed")
@@ -67,15 +67,18 @@ class _OutboundMixin:
             self._record_delivery_status(msg, delivery_status="sent")
         self._trace_states.pop(session_key, None)
 
-    async def send(self, chat_id: str, message: str) -> None:
-        """发送文本消息，自动区分私聊/群聊。"""
+    async def send(self, chat_id: str, message: str) -> str | None:
+        """发送文本消息，自动区分私聊/群聊；返回 NapCat 分配的消息 id。"""
         api = self._require_api()
         if chat_id.startswith(GROUP_PREFIX):
-            await self._run_on_bot_loop(
+            sent = await self._run_on_bot_loop(
                 api.send_group_text(int(chat_id[len(GROUP_PREFIX) :]), message)
             )
         else:
-            await self._run_on_bot_loop(api.send_private_text(int(chat_id), message))
+            sent = await self._run_on_bot_loop(
+                api.send_private_text(int(chat_id), message)
+            )
+        return _sent_message_id(sent)
 
     async def send_file(
         self, chat_id: str, file_path: str, name: str | None = None
@@ -90,16 +93,19 @@ class _OutboundMixin:
         else:
             await self._run_on_bot_loop(api.send_private_file(int(chat_id), uri, name))
 
-    async def send_image(self, chat_id: str, image: str) -> None:
-        """发送图片，自动区分私聊/群聊。"""
+    async def send_image(self, chat_id: str, image: str) -> str | None:
+        """发送图片，自动区分私聊/群聊；返回 NapCat 分配的消息 id。"""
         api = self._require_api()
         uri = local_to_base64(image) if is_local(image) else image
         if chat_id.startswith(GROUP_PREFIX):
-            await self._run_on_bot_loop(
+            sent = await self._run_on_bot_loop(
                 api.send_group_image(int(chat_id[len(GROUP_PREFIX) :]), uri)
             )
         else:
-            await self._run_on_bot_loop(api.send_private_image(int(chat_id), uri))
+            sent = await self._run_on_bot_loop(
+                api.send_private_image(int(chat_id), uri)
+            )
+        return _sent_message_id(sent)
 
     def _require_api(self):
         if self._api is None:
@@ -115,3 +121,16 @@ class _OutboundMixin:
                 default_channel=CHANNEL,
                 delivery_status=delivery_status,
             )
+
+
+def _sent_message_id(sent: object) -> str | None:
+    """NcatBot send APIs return the message id; None means it reported none.
+
+    Any other shape is an unexpected API contract change: fail instead of
+    storing a stringified object as the platform id.
+    """
+    if sent is None:
+        return None
+    if isinstance(sent, (str, int)) and not isinstance(sent, bool):
+        return str(sent)
+    raise TypeError(f"NcatBot 返回了无法识别的消息 id: {sent!r}")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,23 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 import main as app_main
+
+
+@pytest.fixture(autouse=True)
+def _restore_root_logging():
+    """Undoes the process-wide logging setup that ``main``/``serve_bridge`` do.
+
+    Both point the root logger at whatever ``sys.stderr`` is at call time. Run
+    in-process, that is pytest's session-wide capture stream: the handler would
+    outlive the test, and every later log record — including those emitted by
+    background threads of unrelated tests — would be written into the stream
+    pytest is concurrently snapshotting and truncating.
+    """
+    root = logging.getLogger()
+    handlers, level = list(root.handlers), root.level
+    yield
+    root.handlers[:] = handlers
+    root.setLevel(level)
 
 
 @pytest.mark.parametrize("initial_encoding", ["utf-8", "cp936"])
@@ -230,8 +248,10 @@ async def test_inspect_modules_prints_result(
 
 @pytest.mark.asyncio
 async def test_bridge_loads_plugin_settings_using_explicit_workspace(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, capsys: pytest.CaptureFixture[str]
 ):
+    # serve_bridge reconfigures sys.stderr to strict UTF-8; capsys keeps that on
+    # this test's own stream instead of pytest's session-wide capture file.
     workspace = tmp_path / "workspace"
     package = tmp_path / "packages/demo"
     package.mkdir(parents=True)

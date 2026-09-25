@@ -1,5 +1,6 @@
 from agent.turns.outbound import (
     BusOutboundPort,
+    DeliveryReceipt,
     OutboundDispatch,
     OutboundDispatchError,
     OutboundPort,
@@ -10,6 +11,7 @@ from agent.turns.result import TurnOutbound, TurnResult, TurnSideEffect, TurnTra
 
 __all__ = [
     "BusOutboundPort",
+    "DeliveryReceipt",
     "OutboundDispatch",
     "OutboundDispatchError",
     "OutboundPort",
