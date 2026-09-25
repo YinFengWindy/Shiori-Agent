@@ -207,3 +207,10 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
     assert app.core.plugin_manager.states() == []
     assert app.core.event_bus._closed
     assert app.http_resources._closed
+
+
+def test_desktop_presence_is_app_owned_and_present_before_any_report(
+    tmp_path, empty_config
+):
+    app = AppRuntime(empty_config, tmp_path, features=DESKTOP_RUNTIME_FEATURES)
+    assert app.desktop_presence.is_desktop_present() is True

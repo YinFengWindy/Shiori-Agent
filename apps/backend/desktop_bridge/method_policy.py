@@ -43,6 +43,7 @@ class Handler(Enum):
     ROLE_TASKS = "role_tasks"
     PLUGIN_CONFIG = "plugin_config"
     PLUGIN_MANAGEMENT = "plugin_management"
+    DESKTOP_PRESENCE = "desktop_presence"
 
 
 class OwnerRouting(Enum):
@@ -129,6 +130,13 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
         concurrency=Concurrency.MUTATION,
         admission_exempt=True,
         handler=Handler.PLUGIN_MANAGEMENT,
+    ),
+    "desktop.presence.report": MethodPolicy(
+        # A single in-memory overwrite that shares no state with the serial
+        # write lane; it must not queue behind long mutations or a reload.
+        concurrency=Concurrency.READ_ONLY,
+        admission_exempt=True,
+        handler=Handler.DESKTOP_PRESENCE,
     ),
     # A network probe of an unsaved draft: it must not hold the serial
     # mutation lane (or a read slot) for up to its 20s deadline.
