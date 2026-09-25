@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.common.channel_identifiers import QQ_GROUP_PREFIX, is_bare_qq_group_chat_id
+from core.common.channel_identifiers import (
+    bound_qq_group_for_bare_id,
+    is_bare_qq_group_chat_id,
+    normalize_chat_id,
+    normalize_qq_group_chat_id,
+)
 
 from .profile_models import RoleProfile
 
@@ -101,31 +106,24 @@ def _prefix_legacy_qq_group_chat_ids(role: dict[str, Any]) -> None:
                 str(binding.get("chat_id") or ""), binding.get("allow_from", [])
             )
         ):
-            chat_id = str(binding["chat_id"]).strip()
-            binding["chat_id"] = f"{QQ_GROUP_PREFIX}{chat_id}"
+            # normalize_qq_group_chat_id strips before adding the prefix.
+            binding["chat_id"] = normalize_qq_group_chat_id(binding["chat_id"])
             renamed = True
         bindings.append(binding)
     if renamed:
         role["channel_bindings"] = bindings
     qq_chat_ids = {
-        str(binding.get("chat_id") or "").strip()
+        normalize_chat_id(binding.get("chat_id") or "")
         for binding in bindings
         if isinstance(binding, dict) and binding.get("channel") == "qq"
     }
     proactive = role.get("proactive")
     if not isinstance(proactive, dict) or proactive.get("target_channel") != "qq":
         return
-    target = str(proactive.get("target_chat_id") or "").strip()
+    target = normalize_chat_id(proactive.get("target_chat_id") or "")
     # The old bare==gqq equivalence let a bare target point at a group binding,
     # whether that binding was just renamed or was already stored as ``gqq:``.
     # A bare target that is itself a bound private chat stays private.
-    if (
-        target
-        and not target.startswith(QQ_GROUP_PREFIX)
-        and target not in qq_chat_ids
-        and f"{QQ_GROUP_PREFIX}{target}" in qq_chat_ids
-    ):
-        role["proactive"] = {
-            **proactive,
-            "target_chat_id": f"{QQ_GROUP_PREFIX}{target}",
-        }
+    group_chat_id = bound_qq_group_for_bare_id(target, qq_chat_ids)
+    if group_chat_id is not None and target not in qq_chat_ids:
+        role["proactive"] = {**proactive, "target_chat_id": group_chat_id}

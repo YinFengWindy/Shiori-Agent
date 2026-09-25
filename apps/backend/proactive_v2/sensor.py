@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from agent.prompting import is_context_frame
-from core.common.channel_identifiers import QQ_GROUP_PREFIX, chat_ids_equal
+from core.common.channel_identifiers import bound_qq_group_for_bare_id, chat_ids_equal
 from core.roles.services import RoleBindingService, RoleChannelBinding
 from proactive_v2.energy import compute_energy, d_recent
 from proactive_v2.presence import PresenceStore
@@ -29,17 +29,13 @@ def _bare_qq_group_target_hint(
     A bare QQ ID means a private chat, so it no longer matches the ``gqq:``
     group binding; the caller still fails instead of rewriting the target.
     """
-    group_chat_id = f"{QQ_GROUP_PREFIX}{chat_id}"
-    if (
-        channel == "qq"
-        and not chat_id.startswith(QQ_GROUP_PREFIX)
-        and any(
-            binding.channel == "qq" and binding.chat_id == group_chat_id
-            for binding in role_bindings
-        )
-    ):
-        return f"；QQ 群请写成 {group_chat_id}"
-    return ""
+    if channel != "qq":
+        return ""
+    group_chat_id = bound_qq_group_for_bare_id(
+        chat_id,
+        (binding.chat_id for binding in role_bindings if binding.channel == "qq"),
+    )
+    return f"；QQ 群请写成 {group_chat_id}" if group_chat_id is not None else ""
 
 
 @dataclass

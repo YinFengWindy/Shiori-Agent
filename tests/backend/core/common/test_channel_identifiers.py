@@ -1,4 +1,5 @@
 from core.common.channel_identifiers import (
+    bound_qq_group_for_bare_id,
     chat_ids_equal,
     is_bare_qq_group_chat_id,
     normalize_contact_ids,
@@ -36,3 +37,16 @@ def test_qq_private_and_prefixed_group_ids_are_not_bare_groups() -> None:
 
 def test_contact_ids_are_stripped_non_empty_unique_and_sorted() -> None:
     assert normalize_contact_ids([" b", "a", "", "b ", 3]) == ["3", "a", "b"]
+
+
+def test_bare_qq_id_resolves_to_its_bound_gqq_group() -> None:
+    bound = ["gqq:7", "8"]
+
+    assert bound_qq_group_for_bare_id(" 7 ", bound) == "gqq:7"
+
+
+def test_bare_qq_id_without_bound_group_resolves_to_nothing() -> None:
+    # Only a bare ID whose gqq: form is bound counts; prefixed/empty IDs never do.
+    assert bound_qq_group_for_bare_id("8", ["gqq:7", "8"]) is None
+    assert bound_qq_group_for_bare_id("gqq:7", ["gqq:7"]) is None
+    assert bound_qq_group_for_bare_id("", ["gqq:"]) is None

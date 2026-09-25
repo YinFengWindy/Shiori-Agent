@@ -46,6 +46,23 @@ def is_bare_qq_group_chat_id(chat_id: str, contacts: Iterable[object]) -> bool:
     )
 
 
+def bound_qq_group_for_bare_id(chat_id: str, qq_chat_ids: Iterable[str]) -> str | None:
+    """Return the bound ``gqq:`` group a bare QQ ID was meant to name, if any.
+
+    Before v6 a bare number compared equal to its ``gqq:`` group, so config and
+    proactive targets may still name a bound group by its bare number. Returns
+    ``gqq:<id>`` when ``chat_id`` is bare and that group is among the role's
+    ``qq`` binding chat IDs; otherwise ``None``. Callers decide whether a bare
+    ID that is also a bound private chat should still count.
+    """
+    clean_chat_id = normalize_chat_id(chat_id)
+    if not clean_chat_id or clean_chat_id.startswith(QQ_GROUP_PREFIX):
+        return None
+    group_chat_id = normalize_qq_group_chat_id(clean_chat_id)
+    bound = {normalize_chat_id(item) for item in qq_chat_ids}
+    return group_chat_id if group_chat_id in bound else None
+
+
 def chat_ids_equal(channel: str, left: str, right: str) -> bool:
     """Compare role and runtime chat IDs exactly within ``channel``.
 
