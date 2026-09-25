@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 import json
-import logging
-from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
 from core.roles.reply_state import RoleReply
-
-logger = logging.getLogger("agent.tool_discovery")
 
 
 @dataclass
@@ -31,14 +27,11 @@ class MemoryServices:
 
 @dataclass
 class ToolDiscoveryState:
-    _unlocked: dict[str, OrderedDict[str, None]] = field(default_factory=dict)
-    capacity: int = 5
+    """解析 tool_search 结果中的解锁名单。
 
-    def get_preloaded(self, session_key: str) -> set[str]:
-        return set(self._unlocked.get(session_key, {}).keys())
-
-    def get_preloaded_ordered(self, session_key: str) -> list[str]:
-        return list(self._unlocked.get(session_key, {}).keys())
+    跨轮可见性不在这里维护：会话历史的 tool_chain 记录了调用与解锁过的工具，
+    每轮由 Session.get_history_tool_names 推导。
+    """
 
     def unlock_names_from_result(self, result_json: str) -> list[str]:
         try:
@@ -72,36 +65,6 @@ class ToolDiscoveryState:
         """
         return set(self.unlock_names_from_result(result_json))
 
-    def update(
-        self, session_key: str, tools_used: list[str], always_on: set[str]
-    ) -> None:
-        skip = always_on | {"tool_search"}
-        lru: OrderedDict[str, None] = self._unlocked.setdefault(
-            session_key,
-            OrderedDict(),
-        )
-        newly_added: list[str] = []
-        for name in tools_used:
-            if name in skip:
-                continue
-            if name in lru:
-                lru.move_to_end(name)
-            else:
-                lru[name] = None
-                newly_added.append(name)
-            while len(lru) > self.capacity:
-                evicted, _ = lru.popitem(last=False)
-                logger.info(
-                    "[LRU驱逐] session=%s 移除最旧工具: %s", session_key, evicted
-                )
-        if newly_added:
-            logger.info(
-                "[LRU更新] session=%s 新增工具: %s，当前LRU: %s",
-                session_key,
-                newly_added,
-                list(lru.keys()),
-            )
-
 
 class SessionLike(Protocol):
     key: str
@@ -115,6 +78,12 @@ class SessionLike(Protocol):
         *,
         start_index: int | None = None,
     ) -> list[dict]: ...
+    def get_history_tool_names(
+        self,
+        max_messages: int = 500,
+        *,
+        start_index: int | None = None,
+    ) -> list[str]: ...
     def add_message(self, role: str, content: str, media=None, **kwargs) -> None: ...
 
 

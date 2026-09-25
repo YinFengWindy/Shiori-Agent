@@ -6,29 +6,6 @@ from agent.core.runtime_support import (
 )
 
 
-def test_tool_discovery_state_evicts_oldest_tool_beyond_capacity():
-    state = ToolDiscoveryState(capacity=2)
-    state.update("cli:1", ["tool_a", "tool_b"], {"always"})
-    assert state.get_preloaded("cli:1") == {"tool_a", "tool_b"}
-    assert state.get_preloaded_ordered("cli:1") == ["tool_a", "tool_b"]
-
-    state.update("cli:1", ["tool_a"], {"always"})
-    state.update("cli:1", ["tool_c"], {"always"})
-
-    assert state.get_preloaded("cli:1") == {"tool_a", "tool_c"}
-    assert state.get_preloaded_ordered("cli:1") == ["tool_a", "tool_c"]
-    assert "tool_b" not in state.get_preloaded("cli:1")
-
-
-def test_tool_discovery_state_skips_always_on_and_tool_search():
-    state = ToolDiscoveryState()
-    state.update(
-        "cli:1", ["always_tool", "tool_search", "hidden_tool"], {"always_tool"}
-    )
-
-    assert state.get_preloaded("cli:1") == {"hidden_tool"}
-
-
 def test_unlock_from_result_extracts_matched_names():
     state = ToolDiscoveryState()
 

@@ -1,6 +1,5 @@
 from typing import Any, cast
 import asyncio
-from collections import OrderedDict
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -40,6 +39,11 @@ def _session():
         get_history=lambda max_messages: [
             {"role": "user", "content": str(i)} for i in range(6)
         ],
+        get_history_tool_names=lambda max_messages, start_index: [
+            "always",
+            "x",
+            "uninstalled",
+        ],
         last_consolidated=3,
     )
 
@@ -47,6 +51,7 @@ def _session():
 def _tools():
     return SimpleNamespace(
         get_always_on_names=lambda: {"always"},
+        has_tool=lambda name: name != "uninstalled",
         get_schemas=lambda names=None: [],
         get_tool=lambda name: None,
         get_context=lambda: {},
@@ -88,10 +93,8 @@ def _make_reasoner(*, discovery: ToolDiscoveryState, tool_search_enabled: bool):
     )
 
 
-def test_reasoner_run_turn_retries_and_updates_discovery():
-    discovery = ToolDiscoveryState()
-    discovery._unlocked = {"s:1": OrderedDict({"old": None})}
-    reasoner = _make_reasoner(discovery=discovery, tool_search_enabled=True)
+def test_reasoner_run_turn_retries_and_preloads_history_tools():
+    reasoner = _make_reasoner(discovery=ToolDiscoveryState(), tool_search_enabled=True)
     reasoner.run = AsyncMock(
         side_effect=[
             ContentSafetyError("blocked"),
@@ -109,7 +112,10 @@ def test_reasoner_run_turn_retries_and_updates_discovery():
     assert result.tool_chain == []
     assert result.thinking is None
     assert result.context_retry["selected_plan"] == "trim_skills_catalog"
-    assert "x" in discovery._unlocked["s:1"]
+    # 历史里的 always_on 与已卸载工具不进入预加载，每次重试都带同一集合。
+    for call in reasoner.run.await_args_list:
+        assert call.kwargs["preloaded_tools"] == {"x"}
+        assert call.kwargs["preloaded_tool_order"] == ["x"]
 
 
 def test_reasoner_run_turn_context_length_all_fail_returns_fallback():

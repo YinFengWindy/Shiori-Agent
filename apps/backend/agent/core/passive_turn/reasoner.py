@@ -15,6 +15,7 @@ from .helpers import (
     build_turn_injection_prompt,
     extract_model_facing_turn,
     get_history_since_consolidated,
+    get_history_tool_names_since_consolidated,
     get_session_metadata,
 )
 from .reasoning_loop import _PassiveReasoningLoopMixin
@@ -314,10 +315,18 @@ class DefaultReasoner(
         preloaded: set[str] | None = None
         preloaded_order: list[str] = []
         if self._tool_search_enabled:
-            preloaded_order = self._discovery.get_preloaded_ordered(session.key)
+            # 历史窗口里用过或解锁过的工具继续可见，直到随记忆整理移出窗口。
+            always_on = self._tools.get_always_on_names()
+            preloaded_order = [
+                name
+                for name in get_history_tool_names_since_consolidated(
+                    session, self._memory_window
+                )
+                if name not in always_on and self._tools.has_tool(name)
+            ]
             preloaded = set(preloaded_order)
             logger.info(
-                "[tool_search] LRU preloaded=%s",
+                "[tool_search] history preloaded=%s",
                 preloaded_order if preloaded_order else "[]",
             )
         stream_sink = (
@@ -478,7 +487,6 @@ class DefaultReasoner(
                     previous_thought=str(role_metadata.get("current_thought") or ""),
                 )
                 tools_used = list(result.metadata.get("tools_used") or [])
-                tools_unlocked = list(result.metadata.get("tools_unlocked") or [])
                 tool_chain = list(result.metadata.get("tool_chain") or [])
                 retry_trace["selected_plan"] = plan["name"]
                 retry_trace["trimmed_sections"] = sorted(plan["disabled_sections"])
@@ -490,12 +498,6 @@ class DefaultReasoner(
                         sorted(plan["disabled_sections"]),
                     )
 
-                if self._tool_search_enabled and (tools_used or tools_unlocked):
-                    self._discovery.update(
-                        session.key,
-                        [*tools_unlocked, *tools_used],
-                        self._tools.get_always_on_names(),
-                    )
                 if isinstance(llm_user_content, (str, list)):
                     retry_trace["llm_user_content"] = llm_user_content
                 if isinstance(llm_context_frame, str) and llm_context_frame.strip():

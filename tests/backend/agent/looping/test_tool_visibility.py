@@ -1,13 +1,11 @@
 """
-tool_search 可见性机制 + LRU 回归测试。
+tool_search 可见性机制回归测试。
 
 覆盖场景：
 - tool_search_enabled=True 时非存在工具被拦截
 - tool_search_enabled=True 时存在但不可见的工具自动解锁
 - tool_search 调用结果正确扩展 visible_names
-- LRU 容量上限 5，超出时淘汰最久未用
-- 最近使用的工具刷新 LRU 顺序（不被淘汰）
-- always_on 工具不写入 LRU
+- tool_search 解锁名单写入 tool_chain，供后续轮次从历史恢复
 - preloaded 工具在下一请求中直接可见
 """
 
@@ -270,133 +268,67 @@ class TestVisibilityGuard:
         assert "当前工具状态" not in second_call_text
 
 
-# ── LRU 测试 ──────────────────────────────────────────────────────────────────
+# ── 跨轮可见性 ────────────────────────────────────────────────────────────────
 
 
-class TestLRUCache:
-    def _make_loop_for_lru(self, tmp_path: Path) -> AgentLoop:
+class TestCrossTurnVisibility:
+    def test_tool_search_records_unlocked_names_in_tool_chain(self, tmp_path):
+        """解锁后本轮未调用的工具也要落进 tool_chain，下一轮才能从历史恢复。"""
         reg = _base_registry()
-        # 注册 10 个非核心工具
-        for i in range(10):
-            reg.register(_DummyTool(f"tool_{i}"))
-        return _make_loop(tmp_path, cast(Any, _FakeProvider([])), reg)
+        reg.register(_DummyTool("target_tool"))
+        provider = _FakeProvider(
+            [
+                LLMResponse(
+                    content="",
+                    tool_calls=[
+                        ToolCall("s1", "tool_search", {"query": "select:target_tool"})
+                    ],
+                ),
+                LLMResponse(content="要现在执行吗？", tool_calls=[]),
+            ]
+        )
+        loop = _make_loop(tmp_path, provider, reg)
 
-    def test_lru_capacity_5(self, tmp_path):
-        """写入 6 个工具后，LRU 只保留最新 5 个。"""
-        loop = self._make_loop_for_lru(tmp_path)
-        loop._tool_discovery.update(
-            "s1", [f"tool_{i}" for i in range(6)], loop.tools.get_always_on_names()
+        _, _, tool_chain, _, _ = asyncio.run(
+            loop._run_agent_loop([{"role": "user", "content": "use target"}])
         )
 
-        lru = loop._tool_discovery._unlocked["s1"]
-        assert len(lru) == 5
-        # tool_0 是最早写入的，应被淘汰
-        assert "tool_0" not in lru
-        assert "tool_5" in lru
+        search_call = tool_chain[0]["calls"][0]
+        assert search_call["name"] == "tool_search"
+        assert search_call["unlocked"] == ["target_tool"]
 
-    def test_lru_evicts_oldest_first(self, tmp_path):
-        """容量满后，最久未使用的工具先被淘汰。"""
-        loop = self._make_loop_for_lru(tmp_path)
-        # 写入 5 个（满）
-        loop._tool_discovery.update(
-            "s1",
-            ["tool_0", "tool_1", "tool_2", "tool_3", "tool_4"],
-            loop.tools.get_always_on_names(),
-        )
-        # 再加 1 个 → tool_0 应被淘汰
-        loop._tool_discovery.update("s1", ["tool_5"], loop.tools.get_always_on_names())
-
-        lru = loop._tool_discovery._unlocked["s1"]
-        assert "tool_0" not in lru
-        assert "tool_5" in lru
-
-    def test_lru_refresh_on_reuse(self, tmp_path):
-        """重复使用某工具会刷新其在 LRU 中的位置，不被淘汰。"""
-        loop = self._make_loop_for_lru(tmp_path)
-        # 写入 5 个（满）
-        loop._tool_discovery.update(
-            "s1",
-            ["tool_0", "tool_1", "tool_2", "tool_3", "tool_4"],
-            loop.tools.get_always_on_names(),
-        )
-        # 重新使用 tool_0（刷到末尾）
-        loop._tool_discovery.update("s1", ["tool_0"], loop.tools.get_always_on_names())
-        # 再加 1 个 → tool_1（最久未用）应被淘汰，而非 tool_0
-        loop._tool_discovery.update("s1", ["tool_5"], loop.tools.get_always_on_names())
-
-        lru = loop._tool_discovery._unlocked["s1"]
-        assert "tool_0" in lru  # 刚被刷新，安全
-        assert "tool_1" not in lru  # 最久未用，被淘汰
-        assert "tool_5" in lru
-
-    def test_always_on_tools_not_in_lru(self, tmp_path):
-        """always_on 工具不应写入 LRU。"""
-        reg = _base_registry()
-        reg.register(_DummyTool("always_tool"), always_on=True)
-        reg.register(_DummyTool("normal_tool"))
-        loop = _make_loop(tmp_path, cast(Any, _FakeProvider([])), reg)
-
-        loop._tool_discovery.update(
-            "s1",
-            ["always_tool", "tool_search", "normal_tool"],
-            loop.tools.get_always_on_names(),
-        )
-
-        lru = loop._tool_discovery._unlocked.get("s1", {})
-        assert "always_tool" not in lru
-        assert "tool_search" not in lru
-        assert "normal_tool" in lru
-
-    def test_lru_preloaded_on_next_request(self, tmp_path):
-        """上一请求写入 LRU 的工具，下一请求应出现在 preloaded 中。"""
+    def test_preloaded_tool_visible_on_first_request(self, tmp_path):
+        """从历史推导出的 preloaded 工具在下一请求首轮即可见并可直接调用。"""
         reg = _base_registry()
         target = _DummyTool("remembered_tool")
         reg.register(target)
+        schemas_seen: list[list[str]] = []
 
-        # 第一请求：调用 remembered_tool（触发 auto-unlock + LRU 写入）
-        provider1 = _FakeProvider(
+        class _CapturingProvider(_FakeProvider):
+            async def chat(self, **kwargs: Any) -> LLMResponse:
+                schemas_seen.append(
+                    [t["function"]["name"] for t in (kwargs.get("tools") or [])]
+                )
+                return await super().chat(**kwargs)
+
+        provider = _CapturingProvider(
             [
                 LLMResponse(
                     content="", tool_calls=[ToolCall("c1", "remembered_tool", {})]
                 ),
-                LLMResponse(content="done1", tool_calls=[]),
+                LLMResponse(content="done", tool_calls=[]),
             ]
         )
-        loop = _make_loop(tmp_path, provider1, reg)
+        loop = _make_loop(tmp_path, provider, reg)
 
-        asyncio.run(
+        final, tools_used, _, _, _ = asyncio.run(
             loop._run_agent_loop(
-                [{"role": "user", "content": "first"}],
-                preloaded_tools=set(),
+                [{"role": "user", "content": "again"}],
+                preloaded_tools={"remembered_tool"},
             )
         )
-        # 手动模拟 _run_with_safety_retry 的 LRU 写入
-        loop._tool_discovery.update(
-            "session1", ["remembered_tool"], loop.tools.get_always_on_names()
-        )
 
-        # 验证 LRU 已记录
-        assert "remembered_tool" in loop._tool_discovery._unlocked.get("session1", {})
-
-        # 第二请求：preloaded 应包含该工具
-        preloaded = set(loop._tool_discovery._unlocked["session1"].keys())
-        assert "remembered_tool" in preloaded
-
-    def test_lru_independent_per_session(self, tmp_path):
-        """不同 session_key 的 LRU 互相独立。"""
-        loop = self._make_loop_for_lru(tmp_path)
-        loop._tool_discovery.update(
-            "session_a", ["tool_0", "tool_1"], loop.tools.get_always_on_names()
-        )
-        loop._tool_discovery.update(
-            "session_b", ["tool_2", "tool_3"], loop.tools.get_always_on_names()
-        )
-
-        assert set(loop._tool_discovery._unlocked["session_a"].keys()) == {
-            "tool_0",
-            "tool_1",
-        }
-        assert set(loop._tool_discovery._unlocked["session_b"].keys()) == {
-            "tool_2",
-            "tool_3",
-        }
+        assert final == "done"
+        assert schemas_seen[0] == ["tool_search", "remembered_tool"]
+        assert "remembered_tool" in tools_used
+        assert len(target.calls) == 1

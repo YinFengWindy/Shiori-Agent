@@ -528,6 +528,7 @@ class _PassiveReasoningLoopMixin:
                     )
 
                     # 6.3 tool_search 的结果会扩展下一轮可见工具。
+                    _newly_unlocked: list[str] = []
                     if (
                         exec_result.status == "success"
                         and tool_call.name == "tool_search"
@@ -557,22 +558,25 @@ class _PassiveReasoningLoopMixin:
                             logger.info("[工具解锁] tool_search 未解锁新工具")
                     # tool_chain 持久化的是“执行后的事实”：
                     # 最终参数、hook trace、结果预览，供后续回放与 session 复原。
-                    iter_calls.append(
-                        {
-                            "call_id": tool_call.id,
-                            "name": tool_call.name,
-                            "status": exec_result.status,
-                            "arguments": tool_call.arguments,
-                            "final_arguments": exec_result.final_arguments,
-                            "pre_hook_trace": [
-                                item.to_dict() for item in exec_result.pre_hook_trace
-                            ],
-                            "post_hook_trace": [
-                                item.to_dict() for item in exec_result.post_hook_trace
-                            ],
-                            "result": normalized.preview(),
-                        }
-                    )
+                    call_record: dict[str, Any] = {
+                        "call_id": tool_call.id,
+                        "name": tool_call.name,
+                        "status": exec_result.status,
+                        "arguments": tool_call.arguments,
+                        "final_arguments": exec_result.final_arguments,
+                        "pre_hook_trace": [
+                            item.to_dict() for item in exec_result.pre_hook_trace
+                        ],
+                        "post_hook_trace": [
+                            item.to_dict() for item in exec_result.post_hook_trace
+                        ],
+                        "result": normalized.preview(),
+                    }
+                    # 解锁名单单独落盘：后续轮次据此从历史恢复可见工具，
+                    # 不依赖可能被截断的 tool_search 结果文本。
+                    if _newly_unlocked:
+                        call_record["unlocked"] = list(_newly_unlocked)
+                    iter_calls.append(call_record)
                     if is_finalize_denial(exec_result):
                         logger.warning(
                             "[插件收尾] hook 截断重复工具调用，进入收尾 (iteration=%d, tool=%s)",
