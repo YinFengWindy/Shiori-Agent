@@ -25,7 +25,7 @@ class _CommandMixin:
         if not msg or not chat or not user:
             return
         # /stop follows the same admission as messages: bound and not blacklisted.
-        if not self._is_sender_admitted(chat, user, " /stop"):
+        if not self._is_sender_admitted(chat, user, "/stop"):
             return
         if self._interrupt_controller is None:
             await _call_send_markdown(

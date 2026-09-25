@@ -107,7 +107,8 @@ class _InboundMixin:
         Rejected updates (unbound chat, blacklisted member) must not show
         typing, remember usernames or download attachments. ``_accept_inbound``
         repeats the check because paused intake may replay a message after the
-        bindings changed.
+        bindings changed. ``kind`` names what was rejected (``消息``, ``/stop``)
+        for the warning log.
         """
         if self._channel_hub is None or self._channel_hub.is_sender_allowed(
             channel=self._channel,
@@ -117,7 +118,10 @@ class _InboundMixin:
         ):
             return True
         logger.warning(
-            f"[telegram] 忽略未绑定渠道或黑名单成员的{kind}  chat_id={chat.id}  id={user.id}"
+            "[telegram] 忽略未绑定渠道或黑名单成员的 %s  chat_id=%s  id=%s",
+            kind,
+            chat.id,
+            user.id,
         )
         return False
 
