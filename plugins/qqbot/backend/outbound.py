@@ -47,14 +47,7 @@ class _OutboundMixin:
                 await self.send_image(msg.chat_id, image)
         except asyncio.CancelledError:
             self._record_delivery_status(msg, "failed")
-            state = self._live_states.get(turn_key)
-            if state is not None and state.stream_msg_id and not state.completed:
-                try:
-                    await self._delete_message(state.openid, state.stream_msg_id)
-                except Exception:
-                    # Keep cancellation terminal: a recall error must not turn
-                    # this interrupted delivery into a retryable bus failure.
-                    logger.exception("[qqbot] 取消投递后撤回流式预览失败")
+            await self._cleanup_cancelled_stream(self._live_states.get(turn_key))
             raise
         except Exception as exc:
             self._record_delivery_status(msg, "failed")
@@ -155,13 +148,17 @@ class _OutboundMixin:
         state = _StreamState(openid=openid, msg_id=msg_id, msg_seq=self._next_msg_seq())
         chunks = iter_stream_chunks(message)
         try:
-            for content in chunks[:-1]:
-                await self._update_stream(state, content, terminal=False)
-        except Exception:
-            # A rejected continuation may still accept an in-place terminal
-            # update. The same recovery rules apply to live replies and pushes.
+            try:
+                for content in chunks[:-1]:
+                    await self._update_stream(state, content, terminal=False)
+            except Exception:
+                # A rejected continuation may still accept an in-place terminal
+                # update. Live replies and pushes share the same recovery.
+                return await self._finish_stream(state, message)
             return await self._finish_stream(state, message)
-        return await self._finish_stream(state, message)
+        except asyncio.CancelledError:
+            await self._cleanup_cancelled_stream(state)
+            raise
 
     async def _send_input_notify(self, openid: str, msg_id: str) -> None:
         try:

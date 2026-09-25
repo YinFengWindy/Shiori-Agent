@@ -90,6 +90,17 @@ class _StreamDeliveryMixin:
         if state.stream_msg_id:
             await self._delete_message(state.openid, state.stream_msg_id)
 
+    async def _cleanup_cancelled_stream(self, state: _StreamState | None) -> None:
+        """Recalls an acknowledged partial stream without masking cancellation."""
+        if state is None or not state.stream_msg_id or state.completed:
+            return
+        try:
+            await self._delete_message(state.openid, state.stream_msg_id)
+        except Exception:
+            # A failed recall must not convert cancellation into a retryable
+            # delivery error. The caller still propagates its original cancel.
+            logger.exception("[qqbot] 取消投递后撤回流式预览失败")
+
     async def _finish_stream(self, state: _StreamState, text: str) -> str:
         """Terminates the same message, or clears it before a safe replacement."""
         if state.error is not None:
