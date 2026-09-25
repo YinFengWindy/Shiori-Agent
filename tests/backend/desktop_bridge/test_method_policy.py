@@ -63,3 +63,10 @@ def test_channel_listing_is_a_read_only_reload_exempt_query():
     assert policy.concurrency is Concurrency.READ_ONLY
     assert policy.admission_exempt
     assert policy.handler is Handler.PLUGIN_MANAGEMENT
+
+
+def test_presence_report_is_app_level_and_never_blocked_by_reload_or_writes():
+    policy = method_policy("desktop.presence.report")
+    assert policy.handler is Handler.DESKTOP_PRESENCE
+    assert policy.admission_exempt
+    assert policy.concurrency is Concurrency.READ_ONLY

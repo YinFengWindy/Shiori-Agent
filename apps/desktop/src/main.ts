@@ -46,6 +46,7 @@ import {
   readDesktopPetPresence,
   type DesktopPetPresence,
 } from "./pluginCoupling/desktopPet.js";
+import { startDesktopPresenceReporting } from "./presence/reporter.js";
 import { createVoiceCaptureWindow } from "./voice/window.js";
 import { BrowserVoiceRecorder } from "./voice/recorder.js";
 import { DesktopVoiceController } from "./voice/controller.js";
@@ -99,6 +100,7 @@ let voiceController: DesktopVoiceController | null = null;
 let voicePlayback: BrowserVoicePlayback | null = null;
 let voiceHotkey: VoiceHotkeyController | null = null;
 let voiceSettings: SettingsFormData["voice"];
+let desktopPresenceReporting: ReturnType<typeof startDesktopPresenceReporting> | null = null;
 let isQuitting = false;
 let bridgeShutdownStarted = false;
 
@@ -468,6 +470,13 @@ void app.whenReady().then(async () => {
   // The host reports OS availability; plugins own their presentation and behavior.
   powerMonitor.on("lock-screen", () => publishDesktopEvent("system.lock-state", { locked: true }));
   powerMonitor.on("unlock-screen", () => publishDesktopEvent("system.lock-state", { locked: false }));
+  desktopPresenceReporting = startDesktopPresenceReporting({
+    monitor: powerMonitor,
+    bridge,
+    onReportFailed: (error) => {
+      logDesktopDiagnostic({ scope: "main", event: "desktop-presence.report.failed", payload: { error } });
+    },
+  });
   registerDesktopIpc({
     bridge,
     pluginUiResources,
@@ -554,6 +563,8 @@ app.on("before-quit", (event) => {
     pluginHostWindow.destroy();
   }
   pluginHostWindow = null;
+  desktopPresenceReporting?.dispose();
+  desktopPresenceReporting = null;
   voiceHotkey?.stop();
   voiceController?.dispose();
   voicePlayback?.dispose();

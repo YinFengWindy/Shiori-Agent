@@ -1,3 +1,4 @@
+import { invokeBridgeOrThrow } from "../bridge/bridgeRequest.js";
 import type { BridgeEvent } from "../bridge/shared.js";
 import type { VoiceBridge } from "./controller.js";
 import type { VoicePlaybackCallbacks, VoicePlaybackItem } from "./playback.js";
@@ -60,13 +61,10 @@ export async function selectVoiceTurn(
 
 /** Cancels one backend voice turn after its local playback ownership is retired. */
 export async function cancelVoiceTurn(bridge: VoiceBridge, turnId: string): Promise<void> {
-  const response = await bridge.invoke({
+  await invokeBridgeOrThrow(bridge, {
     method: "voice.turn.cancel",
     payload: { voice_turn_id: turnId },
   });
-  if (response.error) {
-    throw new Error(response.error.message);
-  }
 }
 
 /** Routes current-turn voice events and ignores every late event from retired turns. */
