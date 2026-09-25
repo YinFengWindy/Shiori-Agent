@@ -672,3 +672,34 @@ async def test_presence_report_updates_app_state_even_while_reloading():
     invalid = await report({"present": "no"})
     assert invalid.error.code == "invalid_request"
     assert presence.is_desktop_present() is True
+
+
+@pytest.mark.asyncio
+async def test_role_task_routes_answer_results_and_map_rejections_to_invalid_request():
+    service = object.__new__(ReloadableDesktopService)
+    service.app = SimpleNamespace(accepting_work=True)
+    events = []
+
+    async def publish(event):
+        events.append(event)
+
+    async def cancel_task(role_id, task_id):
+        raise KeyError(f"{role_id}/{task_id}")
+
+    service.publish_event = publish
+    service.role_tasks = SimpleNamespace(
+        list_tasks=lambda role_id: [{"role": role_id}], cancel_task=cancel_task
+    )
+
+    async def request(method, payload):
+        return await service.handle(
+            {"id": "t", "method": method, "payload": payload},
+            emit_event=lambda event: None,
+        )
+
+    listed = await request("roles.tasks.list", {"role_id": "mira"})
+    assert listed.error is None
+    assert listed.payload == {"tasks": [{"role": "mira"}]}
+    rejected = await request("roles.tasks.cancel", {"role_id": "mira", "task_id": "x"})
+    assert rejected.error.code == "invalid_request"
+    assert events == []

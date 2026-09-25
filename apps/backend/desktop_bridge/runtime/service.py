@@ -217,41 +217,34 @@ class ReloadableDesktopService:
         if policy.handler is Handler.DESKTOP_PRESENCE:
             # App-level state, not a generation's: a settings reload must not
             # reset what the host last reported.
-            try:
-                result = report_desktop_presence(self.app.desktop_presence, payload)
-            except ValueError as error:
-                return BridgeResponse(
-                    request_id,
-                    "response",
-                    method,
-                    error=BridgeError("invalid_request", str(error)),
-                )
-            return BridgeResponse(request_id, "response", method, result)
+            async def compute_desktop_presence_result():
+                return report_desktop_presence(self.app.desktop_presence, payload)
+
+            return await self._respond_or_invalid_request(
+                request_id, method, compute_desktop_presence_result
+            )
         if policy.handler is Handler.ROLE_TASKS:
-            role_id = str(payload.get("role_id") or "")
-            try:
+
+            async def compute_role_tasks_result():
+                role_id = str(payload.get("role_id") or "")
                 if method == "roles.tasks.list":
-                    tasks = self.role_tasks.list_tasks(role_id)
-                else:
-                    tasks = await self.role_tasks.cancel_task(
-                        role_id, str(payload.get("task_id") or "")
-                    )
-                    await self.publish_event(
-                        {
-                            "id": request_id,
-                            "type": "event",
-                            "method": "roles.tasks.updated",
-                            "payload": {"role_id": role_id},
-                        }
-                    )
-                return BridgeResponse(request_id, "response", method, {"tasks": tasks})
-            except (KeyError, ValueError, RuntimeError) as error:
-                return BridgeResponse(
-                    request_id,
-                    "response",
-                    method,
-                    error=BridgeError("invalid_request", str(error)),
+                    return {"tasks": self.role_tasks.list_tasks(role_id)}
+                tasks = await self.role_tasks.cancel_task(
+                    role_id, str(payload.get("task_id") or "")
                 )
+                await self.publish_event(
+                    {
+                        "id": request_id,
+                        "type": "event",
+                        "method": "roles.tasks.updated",
+                        "payload": {"role_id": role_id},
+                    }
+                )
+                return {"tasks": tasks}
+
+            return await self._respond_or_invalid_request(
+                request_id, method, compute_role_tasks_result
+            )
         if not policy.admission_exempt and not self.app.accepting_work:
             return BridgeResponse(
                 request_id,
@@ -319,6 +312,23 @@ class ReloadableDesktopService:
                 method,
                 error=BridgeError(exc.code, str(exc), exc.details),
             )
+
+    async def _respond_or_invalid_request(self, request_id: str, method: str, compute):
+        """Runs one app-level handler, mapping rejected input to ``invalid_request``.
+
+        Shared by the ROLE_TASKS and DESKTOP_PRESENCE branches, whose handlers
+        signal bad requests with ``KeyError``/``ValueError``/``RuntimeError``.
+        """
+        try:
+            result = await compute()
+        except (KeyError, ValueError, RuntimeError) as error:
+            return BridgeResponse(
+                request_id,
+                "response",
+                method,
+                error=BridgeError("invalid_request", str(error)),
+            )
+        return BridgeResponse(request_id, "response", method, result)
 
     def _owner(self, routing: OwnerRouting, payload):
         for entry in self._entries:

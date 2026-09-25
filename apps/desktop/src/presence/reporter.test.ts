@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
 import type { BridgeResponse } from "../bridge/shared.js";
+import type { DesktopIdleState } from "./desktopPresence.js";
 import {
   desktopPresencePollIntervalMs,
   desktopPresenceReportMethod,
@@ -10,9 +11,11 @@ import {
 } from "./reporter.js";
 
 class FakeMonitor extends EventEmitter implements DesktopPresenceMonitor {
-  idleSeconds = 0;
-  getSystemIdleTime(): number {
-    return this.idleSeconds;
+  idleState: DesktopIdleState = "active";
+  thresholds: number[] = [];
+  getSystemIdleState(idleThreshold: number) {
+    this.thresholds.push(idleThreshold);
+    return this.idleState;
   }
 }
 
@@ -20,12 +23,16 @@ class FakeBridge extends EventEmitter {
   running = true;
   requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
   error: BridgeResponse["error"] = null;
-  isRunning(): boolean {
+  isRunning() {
     return this.running;
   }
   async invoke(request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse> {
     this.requests.push(request);
     return { id: "r", type: "response", method: request.method, payload: {}, error: this.error };
+  }
+  /** What the real client emits once each new session passes its health check. */
+  ready() {
+    this.emit("event", { id: "bridge-ready", type: "event", method: "bridge.ready", payload: {} });
   }
 }
 
@@ -36,6 +43,8 @@ function setup() {
   let tick: (() => void) | null = null;
   let interval = 0;
   let cleared = false;
+  const handle = setInterval(() => {}, 1 << 30);
+  clearInterval(handle);
   const reporting = startDesktopPresenceReporting({
     monitor,
     bridge,
@@ -44,10 +53,10 @@ function setup() {
       setInterval: (callback, ms) => {
         tick = callback;
         interval = ms;
-        return 1;
+        return handle;
       },
-      clearInterval: () => {
-        cleared = true;
+      clearInterval: (cleaning) => {
+        cleared = cleaning === handle;
       },
     },
   });
@@ -73,21 +82,23 @@ test("lock and unlock events report through the bridge method", async () => {
   ]);
 });
 
-test("polling notices idle crossing the threshold and resumed activity", async () => {
+test("polling reads the idle state at the fixed threshold and reports crossings", async () => {
   const { monitor, bridge, poll, interval } = setup();
   assert.equal(interval(), desktopPresencePollIntervalMs);
   await poll();
-  monitor.idleSeconds = 600;
+  monitor.idleState = "idle";
   await poll();
   await poll();
-  monitor.idleSeconds = 1;
+  monitor.idleState = "active";
   await poll();
   assert.deepEqual(presents(bridge), [false, true]);
+  assert.deepEqual(new Set(monitor.thresholds), new Set([600]));
 });
 
 test("never starts a stopped bridge and reports once it runs again", async () => {
   const { monitor, bridge, poll } = setup();
   bridge.running = false;
+  monitor.idleState = "locked";
   monitor.emit("lock-screen");
   await poll();
   assert.deepEqual(bridge.requests, []);
@@ -99,6 +110,7 @@ test("never starts a stopped bridge and reports once it runs again", async () =>
 test("a backend error response is surfaced and retried", async () => {
   const { monitor, bridge, failures, poll } = setup();
   bridge.error = { code: "internal_error", message: "boom" };
+  monitor.idleState = "locked";
   monitor.emit("lock-screen");
   await poll();
   assert.equal(failures.length, 1);
@@ -108,13 +120,24 @@ test("a backend error response is surfaced and retried", async () => {
   assert.equal(failures.length, 1);
 });
 
-test("a bridge exit makes the next poll re-send away to the fresh backend", async () => {
-  const { monitor, bridge, poll } = setup();
+test("a graceful restart (ready without exit) re-sends away to the new backend at once", async () => {
+  const { monitor, bridge, flush } = setup();
+  monitor.idleState = "locked";
   monitor.emit("lock-screen");
-  await poll();
-  bridge.emit("exit", "bridge stopped");
-  await poll();
+  await flush();
+  // desktop:bridge-restart stops the old session cleanly: no "exit" is emitted,
+  // only the new session's bridge.ready.
+  bridge.ready();
+  await flush();
   assert.deepEqual(presents(bridge), [false, false]);
+});
+
+test("the first ready of an app launched while locked reports away without waiting for a poll", async () => {
+  const { monitor, bridge, flush } = setup();
+  monitor.idleState = "locked";
+  bridge.ready();
+  await flush();
+  assert.deepEqual(presents(bridge), [false]);
 });
 
 test("dispose stops polling and detaches every listener", async () => {
@@ -123,8 +146,9 @@ test("dispose stops polling and detaches every listener", async () => {
   assert.equal(cleared(), true);
   assert.equal(monitor.listenerCount("lock-screen"), 0);
   assert.equal(monitor.listenerCount("unlock-screen"), 0);
-  assert.equal(bridge.listenerCount("exit"), 0);
+  assert.equal(bridge.listenerCount("event"), 0);
   monitor.emit("lock-screen");
+  bridge.ready();
   await flush();
   assert.deepEqual(bridge.requests, []);
 });

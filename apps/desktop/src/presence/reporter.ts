@@ -1,13 +1,16 @@
-import type { BridgeResponse } from "../bridge/shared.js";
-import { DesktopPresenceTracker } from "./desktopPresence.js";
+import { invokeBridgeOrThrow, type BridgeInvoker } from "../bridge/bridgeRequest.js";
+import type { BridgeEvent } from "../bridge/shared.js";
+import {
+  DesktopPresenceTracker,
+  desktopPresenceIdleThresholdSeconds,
+  type DesktopIdleState,
+} from "./desktopPresence.js";
 
-/** How often idle time is re-read; there is no OS idle event to listen to. */
+/** How often idle state is re-read; there is no OS idle event to listen to. */
 export const desktopPresencePollIntervalMs = 30_000;
 
 /** Bridge method that stores the latest desktop presence in the backend. */
 export const desktopPresenceReportMethod = "desktop.presence.report";
-
-type LockEvent = "lock-screen" | "unlock-screen";
 
 /** The part of Electron's `powerMonitor` that presence reads. */
 export interface DesktopPresenceMonitor {
@@ -15,32 +18,35 @@ export interface DesktopPresenceMonitor {
   on(event: "unlock-screen", listener: () => void): unknown;
   removeListener(event: "lock-screen", listener: () => void): unknown;
   removeListener(event: "unlock-screen", listener: () => void): unknown;
-  getSystemIdleTime(): number;
+  getSystemIdleState(idleThreshold: number): DesktopIdleState;
 }
 
 /** The part of the desktop bridge client that presence reporting uses. */
-export interface DesktopPresenceBridge {
-  invoke(request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse>;
+export interface DesktopPresenceBridge extends BridgeInvoker {
   isRunning(): boolean;
-  on(event: "exit", listener: () => void): unknown;
-  off(event: "exit", listener: () => void): unknown;
+  on(event: "event", listener: (event: BridgeEvent) => void): unknown;
+  off(event: "event", listener: (event: BridgeEvent) => void): unknown;
 }
+
+type IntervalHandle = ReturnType<typeof setInterval>;
 
 /** Timer seam so tests can drive polling by hand. */
 export type DesktopPresenceTimers = {
-  setInterval: (callback: () => void, ms: number) => unknown;
-  clearInterval: (handle: unknown) => void;
+  setInterval: (callback: () => void, ms: number) => IntervalHandle;
+  clearInterval: (handle: IntervalHandle) => void;
 };
 
 const nodeTimers: DesktopPresenceTimers = {
   setInterval: (callback, ms) => setInterval(callback, ms),
-  clearInterval: (handle) => clearInterval(handle as NodeJS.Timeout),
+  clearInterval: (handle) => clearInterval(handle),
 };
 
 /**
  * Keeps the backend informed of desktop presence until disposed.
  *
- * Lock transitions report immediately; idle crossings are noticed by polling.
+ * Lock transitions report immediately; idle crossings (and a lock that was
+ * already in place or missed) are picked up by polling. Every `bridge.ready`
+ * marks a fresh backend, including a graceful restart that emits no `exit`.
  * Reports are skipped while the bridge is down so a report never starts it.
  */
 export function startDesktopPresenceReporting(options: {
@@ -48,32 +54,31 @@ export function startDesktopPresenceReporting(options: {
   bridge: DesktopPresenceBridge;
   onReportFailed: (error: unknown) => void;
   timers?: DesktopPresenceTimers;
-}): { dispose(): void } {
+}) {
   const { monitor, bridge, onReportFailed, timers = nodeTimers } = options;
   const tracker = new DesktopPresenceTracker({
-    readIdleSeconds: () => monitor.getSystemIdleTime(),
+    readIdleState: () => monitor.getSystemIdleState(desktopPresenceIdleThresholdSeconds),
     canReport: () => bridge.isRunning(),
     report: async (present) => {
-      const response = await bridge.invoke({ method: desktopPresenceReportMethod, payload: { present } });
-      if (response.error) throw new Error(response.error.message);
+      await invokeBridgeOrThrow(bridge, { method: desktopPresenceReportMethod, payload: { present } });
     },
     onReportFailed,
   });
-  const lockListeners: Record<LockEvent, () => void> = {
-    "lock-screen": () => void tracker.setLocked(true),
-    "unlock-screen": () => void tracker.setLocked(false),
+  const onLock = () => void tracker.setLocked(true);
+  const onUnlock = () => void tracker.setLocked(false);
+  const onBridgeEvent = (event: BridgeEvent) => {
+    if (event.method === "bridge.ready") void tracker.backendReady();
   };
-  const onBridgeExit = () => tracker.backendRestarted();
-  monitor.on("lock-screen", lockListeners["lock-screen"]);
-  monitor.on("unlock-screen", lockListeners["unlock-screen"]);
-  bridge.on("exit", onBridgeExit);
+  monitor.on("lock-screen", onLock);
+  monitor.on("unlock-screen", onUnlock);
+  bridge.on("event", onBridgeEvent);
   const timer = timers.setInterval(() => void tracker.poll(), desktopPresencePollIntervalMs);
   return {
     dispose() {
       timers.clearInterval(timer);
-      monitor.removeListener("lock-screen", lockListeners["lock-screen"]);
-      monitor.removeListener("unlock-screen", lockListeners["unlock-screen"]);
-      bridge.off("exit", onBridgeExit);
+      monitor.removeListener("lock-screen", onLock);
+      monitor.removeListener("unlock-screen", onUnlock);
+      bridge.off("event", onBridgeEvent);
     },
   };
 }

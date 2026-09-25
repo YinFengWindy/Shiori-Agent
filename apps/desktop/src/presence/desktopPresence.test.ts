@@ -3,15 +3,16 @@ import { describe, it } from "node:test";
 import {
   DesktopPresenceTracker,
   desktopPresenceIdleThresholdSeconds,
-  isDesktopPresent,
+  presenceFromIdleState,
+  type DesktopIdleState,
 } from "./desktopPresence.js";
 
 function harness() {
-  const state = { idleSeconds: 0, canReport: true, fail: false };
+  const state = { idle: "active" as DesktopIdleState, canReport: true, fail: false };
   const reports: boolean[] = [];
   const failures: unknown[] = [];
   const tracker = new DesktopPresenceTracker({
-    readIdleSeconds: () => state.idleSeconds,
+    readIdleState: () => state.idle,
     canReport: () => state.canReport,
     report: async (present) => {
       if (state.fail) throw new Error("bridge_exit");
@@ -22,13 +23,30 @@ function harness() {
   return { state, reports, failures, tracker };
 }
 
-describe("isDesktopPresent", () => {
-  it("is present only while unlocked and idle below ten minutes", () => {
+/** A tracker whose first report stays in flight until `release` is called. */
+function heldHarness() {
+  const reports: boolean[] = [];
+  let release: () => void = () => {};
+  const idle = { state: "active" as DesktopIdleState };
+  const tracker = new DesktopPresenceTracker({
+    readIdleState: () => idle.state,
+    canReport: () => true,
+    report: async (present) => {
+      reports.push(present);
+      if (reports.length === 1) await new Promise<void>((resolve) => { release = resolve; });
+    },
+    onReportFailed: () => assert.fail("no failure expected"),
+  });
+  return { reports, idle, tracker, release: () => release() };
+}
+
+describe("presenceFromIdleState", () => {
+  it("is present only while active; locked or idle past the threshold is away", () => {
     assert.equal(desktopPresenceIdleThresholdSeconds, 600);
-    assert.equal(isDesktopPresent({ locked: false, idleSeconds: 0 }), true);
-    assert.equal(isDesktopPresent({ locked: false, idleSeconds: 599 }), true);
-    assert.equal(isDesktopPresent({ locked: false, idleSeconds: 600 }), false, "reaching the threshold is away");
-    assert.equal(isDesktopPresent({ locked: true, idleSeconds: 0 }), false, "a locked screen is away");
+    assert.equal(presenceFromIdleState("active"), true);
+    assert.equal(presenceFromIdleState("idle"), false);
+    assert.equal(presenceFromIdleState("locked"), false);
+    assert.equal(presenceFromIdleState("unknown"), null, "an unknown OS answer invents no presence");
   });
 });
 
@@ -42,14 +60,47 @@ describe("DesktopPresenceTracker", () => {
 
   it("reports idle crossing the threshold and resumed activity on poll", async () => {
     const { state, reports, tracker } = harness();
-    state.idleSeconds = 599;
     await tracker.poll();
-    assert.deepEqual(reports, [], "still present, the backend default");
-    state.idleSeconds = 600;
+    assert.deepEqual(reports, [], "active is the backend default");
+    state.idle = "idle";
     await tracker.poll();
-    state.idleSeconds = 3;
+    state.idle = "active";
     await tracker.poll();
     assert.deepEqual(reports, [false, true]);
+  });
+
+  it("corrects a lock that was already in place or whose event was missed", async () => {
+    const { state, reports, tracker } = harness();
+    state.idle = "locked";
+    await tracker.poll();
+    assert.deepEqual(reports, [false]);
+  });
+
+  it("stays away after a lock event even if a poll still reads active, until unlock", async () => {
+    const { state, reports, tracker } = harness();
+    await tracker.setLocked(true);
+    state.idle = "active";
+    await tracker.poll();
+    assert.deepEqual(reports, [false], "an active read between lock and unlock is ignored");
+    await tracker.setLocked(false);
+    assert.deepEqual(reports, [false, true]);
+  });
+
+  it("unlock restores presence even after a poll read locked", async () => {
+    const { state, reports, tracker } = harness();
+    state.idle = "locked";
+    await tracker.setLocked(true);
+    await tracker.poll();
+    await tracker.setLocked(false);
+    assert.deepEqual(reports, [false, true]);
+  });
+
+  it("keeps the last known state when the OS answers unknown", async () => {
+    const { state, reports, tracker } = harness();
+    await tracker.setLocked(true);
+    state.idle = "unknown";
+    await tracker.poll();
+    assert.deepEqual(reports, [false]);
   });
 
   it("does not re-report an unchanged state", async () => {
@@ -58,22 +109,17 @@ describe("DesktopPresenceTracker", () => {
     await tracker.setLocked(false);
     assert.deepEqual(reports, [], "present equals the backend's pre-report default");
     await tracker.setLocked(true);
-    state.idleSeconds = 900;
+    state.idle = "locked";
+    await tracker.poll();
+    state.idle = "idle";
     await tracker.poll();
     await tracker.setLocked(true);
     assert.deepEqual(reports, [false], "lock then idle is still one away state");
   });
 
-  it("stays away while locked even when idle time resets", async () => {
-    const { state, reports, tracker } = harness();
-    await tracker.setLocked(true);
-    state.idleSeconds = 0;
-    await tracker.poll();
-    assert.deepEqual(reports, [false]);
-  });
-
   it("retries a failed or skipped report on the next sync", async () => {
     const { state, reports, failures, tracker } = harness();
+    state.idle = "locked";
     state.canReport = false;
     await tracker.setLocked(true);
     assert.deepEqual(reports, []);
@@ -86,31 +132,54 @@ describe("DesktopPresenceTracker", () => {
     assert.deepEqual(reports, [false]);
   });
 
-  it("re-sends away after a backend restart resets it to present", async () => {
-    const { reports, tracker } = harness();
+  it("syncs the current away state to a freshly ready backend at once", async () => {
+    const { state, reports, tracker } = harness();
+    state.idle = "locked";
     await tracker.setLocked(true);
-    tracker.backendRestarted();
-    await tracker.poll();
+    await tracker.backendReady();
     assert.deepEqual(reports, [false, false]);
   });
 
+  it("does not report to a freshly ready backend while the user is present", async () => {
+    const { reports, tracker } = harness();
+    await tracker.backendReady();
+    assert.deepEqual(reports, []);
+  });
+
   it("delivers a change observed during an in-flight report once it lands", async () => {
-    let release: () => void = () => {};
-    const reports: boolean[] = [];
-    const tracker = new DesktopPresenceTracker({
-      readIdleSeconds: () => 0,
-      canReport: () => true,
-      report: async (present) => {
-        reports.push(present);
-        if (reports.length === 1) await new Promise<void>((resolve) => { release = resolve; });
-      },
-      onReportFailed: () => assert.fail("no failure expected"),
-    });
+    const { reports, tracker, release } = heldHarness();
     const first = tracker.setLocked(true);
     await tracker.setLocked(false);
     assert.deepEqual(reports, [false], "one report at a time");
     release();
     await first;
     assert.deepEqual(reports, [false, true]);
+  });
+
+  it("ignores a report that lands after the backend was replaced", async () => {
+    const { reports, idle, tracker, release } = heldHarness();
+    const stale = tracker.setLocked(true);
+    idle.state = "locked";
+    await tracker.backendReady();
+    assert.deepEqual(reports, [false, false], "the new backend gets its own report without waiting");
+    release();
+    await stale;
+    idle.state = "active";
+    await tracker.setLocked(false);
+    assert.deepEqual(reports, [false, false, true], "the stale landing did not corrupt the mirror");
+  });
+
+  it("does not let a stale landing mark the new backend as already away", async () => {
+    const { reports, idle, tracker, release } = heldHarness();
+    const stale = tracker.setLocked(true);
+    // The user came back before the restart: nothing to tell the new backend yet.
+    await tracker.setLocked(false);
+    idle.state = "active";
+    await tracker.backendReady();
+    release();
+    await stale;
+    idle.state = "idle";
+    await tracker.poll();
+    assert.deepEqual(reports, [false, false], "away is still reported to the new backend");
   });
 });

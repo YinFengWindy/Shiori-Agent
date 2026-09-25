@@ -1,20 +1,23 @@
 /** System idle time (seconds) at which the user counts as away from the desktop. Fixed by design. */
 export const desktopPresenceIdleThresholdSeconds = 10 * 60;
 
-/** OS signals that decide desktop presence. */
-export type DesktopPresenceSignals = {
-  locked: boolean;
-  idleSeconds: number;
-};
+/** What Electron's `powerMonitor.getSystemIdleState(threshold)` answers. */
+export type DesktopIdleState = "active" | "idle" | "locked" | "unknown";
 
-/** The user is present only while the screen is unlocked and input is recent. */
-export function isDesktopPresent({ locked, idleSeconds }: DesktopPresenceSignals): boolean {
-  return !locked && idleSeconds < desktopPresenceIdleThresholdSeconds;
+/**
+ * Maps the OS idle state to presence: a locked screen or input older than the
+ * threshold is away. `unknown` yields null — the OS could not tell, so no
+ * presence is invented and the last known state stands.
+ */
+export function presenceFromIdleState(state: DesktopIdleState) {
+  if (state === "unknown") return null;
+  return state === "active";
 }
 
-/** Injected OS reads and backend delivery used by {@link DesktopPresenceTracker}. */
+/** Injected OS read and backend delivery used by {@link DesktopPresenceTracker}. */
 export type DesktopPresenceTrackerOptions = {
-  readIdleSeconds: () => number;
+  /** Reads the idle state against {@link desktopPresenceIdleThresholdSeconds}. */
+  readIdleState: () => DesktopIdleState;
   /** False while the backend cannot take a report; the next sync retries. */
   canReport: () => boolean;
   /** Delivers one presence value to the backend, rejecting when it was not accepted. */
@@ -26,40 +29,54 @@ export type DesktopPresenceTrackerOptions = {
  * Mirrors what the backend believes about desktop presence and reports only changes.
  *
  * The mirror starts at "present" because that is the backend's value before any
- * report; a backend restart puts it back there (see {@link backendRestarted}).
+ * report; every freshly ready backend puts it back there (see {@link backendReady}).
  */
 export class DesktopPresenceTracker {
-  private locked = false;
+  /** Lock state from lock-screen / unlock-screen events; overrides an `active` idle read. */
+  private lockedByEvent = false;
+  /** Last known presence from the OS idle state (`unknown` leaves it untouched). */
+  private idlePresent = true;
   private backendPresent = true;
   private reporting = false;
+  /** Bumped per backend session so a report sent to a previous one never updates the mirror. */
+  private backendSession = 0;
 
   constructor(private readonly options: DesktopPresenceTrackerOptions) {}
 
   /** Records a lock-screen / unlock-screen transition and reports any resulting change. */
-  async setLocked(locked: boolean): Promise<void> {
-    this.locked = locked;
+  async setLocked(locked: boolean) {
+    this.lockedByEvent = locked;
+    // Unlocking takes user input, so any earlier idle/locked read is stale.
+    if (!locked) this.idlePresent = true;
     await this.sync();
   }
 
-  /** Re-reads idle time; called periodically because the OS has no idle event. */
-  async poll(): Promise<void> {
+  /** Re-reads the OS idle state; called periodically because the OS has no idle event. */
+  async poll() {
+    const present = presenceFromIdleState(this.options.readIdleState());
+    if (present !== null) this.idlePresent = present;
     await this.sync();
   }
 
-  /** A fresh backend process holds its default again, so the next differing state must be re-sent. */
-  backendRestarted(): void {
+  /** A newly ready backend holds its default again, so the current state is synced to it right away. */
+  async backendReady() {
+    this.backendSession += 1;
     this.backendPresent = true;
+    // A report still in flight belongs to the previous backend; it must not
+    // block the first report to this one.
+    this.reporting = false;
+    await this.poll();
   }
 
-  private async sync(): Promise<void> {
-    // One report at a time; the running one re-syncs when it lands, so a change
-    // observed meanwhile is not lost and reports stay ordered.
+  private async sync() {
+    // One report at a time per backend session; the running one re-syncs when
+    // it lands, so a change observed meanwhile is not lost and reports stay ordered.
     if (this.reporting) return;
-    const present = isDesktopPresent({
-      locked: this.locked,
-      idleSeconds: this.options.readIdleSeconds(),
-    });
+    // Between a lock event and its unlock, an `active` read (the OS may lag in
+    // reporting the lock) must not flip the user back to present.
+    const present = !this.lockedByEvent && this.idlePresent;
     if (present === this.backendPresent || !this.options.canReport()) return;
+    const session = this.backendSession;
     this.reporting = true;
     try {
       await this.options.report(present);
@@ -68,8 +85,10 @@ export class DesktopPresenceTracker {
       this.options.onReportFailed(error);
       return;
     } finally {
-      this.reporting = false;
+      if (session === this.backendSession) this.reporting = false;
     }
+    // The backend was replaced while this was in flight; it no longer holds this value.
+    if (session !== this.backendSession) return;
     this.backendPresent = present;
     await this.sync();
   }
