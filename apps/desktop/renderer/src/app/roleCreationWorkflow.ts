@@ -69,7 +69,8 @@ async function completeRoleCreation(role: RoleRecord, pendingId: string | undefi
   const destination: AppMainView = { kind: "role-detail", roleId: role.id };
   args.openRoleWorkspace(destination, { recordHistory: false });
   args.replaceNavigationEntry(args.buildNavigationEntry(destination, role.id));
-  args.feedback.success(imported ? "角色卡已导入" : "角色已创建");
+  // A milestone: 吟风 says a line (frequent successes only show her face).
+  args.feedback.success(imported ? "角色卡已导入" : "角色已创建", { persona: imported ? "roleImported" : "roleCreated" });
 }
 
 function startOptimisticCreation(form: NewRoleFormState, pendingId: string, args: RoleCreationWorkflowArgs) {
@@ -122,7 +123,7 @@ export async function runRoleCreation(form: NewRoleFormState, args: RoleCreation
       return true;
     }
     if (pendingId) restoreFailedCreation(pendingId, previousRoleId, args);
-    args.feedback.error(`${imported ? "角色卡导入" : "角色创建"}失败：${message}`);
+    args.feedback.error(`${imported ? "角色卡导入" : "角色创建"}失败：${message}`, imported ? { persona: "roleImportFailed" } : undefined);
     return false;
   } finally {
     args.setCreating(false);

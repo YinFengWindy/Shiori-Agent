@@ -7,6 +7,7 @@ import { rolePanelGhostButtonClass } from "./roleEditorStyles";
 import { RoleEditorSection } from "./RoleEditorSection";
 import { RoleKnowledgeEntryRow } from "./RoleKnowledgeEntryRow";
 import { knowledgeEntryHasContent, knowledgeEntryLabel } from "./roleKnowledgeEntries";
+import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 
 type RoleKnowledgePanelProps = {
@@ -130,6 +131,7 @@ export function RoleKnowledgePanel({ roleForm, onUpdate }: RoleKnowledgePanelPro
       <ConfirmDialog
         open={pendingRemoveIndex !== null && Boolean(entries[pendingRemoveIndex])}
         title="删除条目"
+        persona={confirmPersonaLines.deleteKnowledgeEntry}
         description={pendingRemoveIndex !== null && entries[pendingRemoveIndex]
           ? `“${knowledgeEntryLabel(entries[pendingRemoveIndex], pendingRemoveIndex)}” 会从知识库中移除，保存角色后生效。`
           : ""}

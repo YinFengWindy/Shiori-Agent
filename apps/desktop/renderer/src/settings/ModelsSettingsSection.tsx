@@ -9,6 +9,7 @@ import {
 } from "./modelRegistrationRemoval";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 import { useModelRegistrationDraft } from "./useModelRegistrationDraft";
+import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { errorMessage } from "../shared/feedback/feedbackStore";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
@@ -76,6 +77,7 @@ export function ModelsSettingsSection({
     <ConfirmDialog
       open={pendingRemoval !== null}
       title="删除模型"
+      persona={confirmPersonaLines.deleteModel}
       description={pendingRemoval ? describeModelRegistrationRemoval(pendingRemoval) : ""}
       confirmLabel="删除"
       onClose={() => setPendingRemoval(null)}

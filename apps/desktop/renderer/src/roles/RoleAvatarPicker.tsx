@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Camera } from "@phosphor-icons/react";
+import { InlineError } from "../shared/feedback/InlineError";
 
 /** Selects and previews an optional avatar before a role is persisted. */
 export function RoleAvatarPicker({ source, disabled, onChange }: {
@@ -38,7 +39,7 @@ export function RoleAvatarPicker({ source, disabled, onChange }: {
         ? <button type="button" aria-label="移除头像" disabled={disabled || picking} onClick={() => onChange("")}
           className="rounded-md px-1.5 text-caption text-ink-muted transition-colors hover:text-danger-text disabled:opacity-50">移除</button>
         : <span className="text-caption text-ink-muted">头像（选填）</span>}
-      {error ? <p role="alert" className="m-0 text-body-sm text-danger-text">{error}</p> : null}
+      {error ? <InlineError message={error} /> : null}
     </div>
   );
 }

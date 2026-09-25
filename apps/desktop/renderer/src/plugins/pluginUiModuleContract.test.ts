@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { applyPluginUiModules, type PluginUiModule } from "./pluginUiModuleContract.js";
 import { PluginUiRegistry } from "./pluginUiRegistry.js";
 import type { PluginRpcClient } from "./pluginBridgeClient.js";
+import { desktopPluginHostServices } from "./pluginHostServices.js";
 
 /**
  * Invokes a function component directly and returns the React element it
@@ -110,6 +111,10 @@ describe("applyPluginUiModules", () => {
     const navClient = navProps.client as PluginRpcClient;
     assert.equal(typeof sectionClient.call, "function");
     assert.equal(typeof navClient.call, "function");
+    // Runtime API 2.4.0: the host services come as a prop too, so a
+    // precompiled package reaches host.feedback / host.ui without the context.
+    assert.equal(sectionProps.host, desktopPluginHostServices);
+    assert.equal(navProps.host, desktopPluginHostServices);
 
     const calls: string[] = [];
     const originalWindow = (globalThis as { window?: unknown }).window;

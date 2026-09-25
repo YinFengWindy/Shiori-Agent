@@ -45,4 +45,14 @@ describe("AboutMascot", () => {
       await view.cleanup();
     }
   });
+
+  it("worries when the page's update request fails, as the plain error below leaves the talking to her", async () => {
+    const view = await mountTestComponent(<AboutMascot phase="idle"><div /></AboutMascot>);
+    try {
+      await view.render(<AboutMascot phase="idle" failed><div /></AboutMascot>);
+      assert.deepEqual(said(view.container), aboutUpdateLines.failed);
+    } finally {
+      await view.cleanup();
+    }
+  });
 });

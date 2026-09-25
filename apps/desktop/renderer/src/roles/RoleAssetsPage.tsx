@@ -3,6 +3,7 @@ import { toFileUrl } from "../shared/format";
 import { BackIcon } from "../shared/icons";
 import { cx, iconButtonClass } from "../shared/styles";
 import type { RoleAssetCategory, RoleFormState, RoleRecord } from "../shared/types";
+import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { useRoleAssetsPanels } from "../plugins/useRoleAssetsPanels";
 import { RoleAssetCategoryGroups } from "./RoleAssetCategoryGroups";
@@ -131,6 +132,7 @@ export function RoleAssetsPage({
       <ConfirmDialog
         open={pendingRemoveAbsPath !== ""}
         title="删除素材"
+        persona={confirmPersonaLines.deleteAsset}
         description="删除后这张图片会从角色素材库中移除，无法恢复。"
         confirmLabel="删除"
         onClose={() => setPendingRemoveAssetPath("")}

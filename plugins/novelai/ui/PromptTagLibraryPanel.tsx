@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import { errorMessage } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
-import { ConfirmDialog } from "../../../apps/desktop/renderer/src/shared/ui/ConfirmDialog";
+import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
 import type { PromptTagWorkspaceSectionId } from "./novelAiPageStore";
 import { PromptTagEntryEditor } from "./PromptTagEntryEditor";
 import { PromptTagGrid } from "./PromptTagGrid";
@@ -17,6 +17,7 @@ type PromptTagLibraryPanelProps = {
 
 /** Routes the prompt-tag workspace between its card list and the entry editor; deletes ask first. */
 export function PromptTagLibraryPanel({ client, bridgeReady, section, onOpenSection }: PromptTagLibraryPanelProps) {
+  const { ui } = usePluginHostServices();
   const library = usePromptTagLibrary(client, bridgeReady, section, onOpenSection);
   const [pendingDelete, setPendingDelete] = useState<PromptTagEntry | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -62,8 +63,10 @@ export function PromptTagLibraryPanel({ client, bridgeReady, section, onOpenSect
           />
         )}
       </div>
-      <ConfirmDialog
+      {/* The host dialog (runtime API 2.4.0); 吟风 leads it with the host's line for a deletion. */}
+      <ui.ConfirmDialog
         open={Boolean(pendingDelete)}
+        persona="destructive"
         title="删除提示词"
         description={pendingDelete ? `“${pendingDelete.name}” 删除后无法恢复。` : ""}
         confirmLabel="删除"

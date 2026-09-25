@@ -3,13 +3,14 @@ import { test } from "node:test";
 import { act } from "react";
 import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
 import { PluginHostServicesProvider } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
-import type { PluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { desktopPluginHostServices, type PluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import { useStoryGalleryRefresh } from "./useStoryGalleryRefresh";
 
 test("Story gallery refresh follows plugin events and releases its subscription when closed", async () => {
   type Listener = Parameters<PluginHostServices["onEvent"]>[0];
   const listeners = new Set<Listener>();
   const host: PluginHostServices = {
+    ...desktopPluginHostServices,
     listRoles: async () => [], pickImages: async () => [], pickFiles: async () => [],
     onEvent: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };

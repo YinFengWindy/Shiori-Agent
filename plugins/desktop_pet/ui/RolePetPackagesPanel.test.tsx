@@ -8,7 +8,7 @@ import type { PluginRoleAssetsComponentProps } from "../../../apps/desktop/rende
 import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
 import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 
-function RolePetPackagesPanel({ pickFiles = async () => [], ...props }: PluginRoleAssetsComponentProps & { pickFiles?: PluginHostServices["pickFiles"] }) {
+function RolePetPackagesPanel({ pickFiles = async () => [], ...props }: Omit<PluginRoleAssetsComponentProps, "host"> & { pickFiles?: PluginHostServices["pickFiles"] }) {
   return <PluginHostServicesProvider services={{ ...desktopPluginHostServices, pickFiles }}>
     <PetPackagesPanel {...props} />
   </PluginHostServicesProvider>;

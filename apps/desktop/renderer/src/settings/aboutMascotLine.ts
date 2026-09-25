@@ -11,27 +11,31 @@ const updateReady = (phase: UpdatePhase | undefined) => phase === "downloading" 
  * keep her current line. A found update is announced however the page
  * learns of it (also on first load); 「已是最新」 only once a check the page
  * saw starting finishes, so reopening 关于 after an earlier check still opens
- * with a random line.
+ * with a random line. A failed update (phase `error`) gets her worried line.
  */
 export function aboutLineForPhaseChange(previous: UpdatePhase | undefined, next: UpdatePhase | undefined): MascotLine | null {
   if (previous === next) return null;
   if (updateReady(next) && !updateReady(previous)) return aboutUpdateLines.available;
   if (next === "current" && previous !== undefined) return aboutUpdateLines.current;
+  // She is on stage here, so the failure is hers to say (the inline error below stays plain).
+  if (next === "error") return aboutUpdateLines.failed;
   return null;
 }
 
 /**
  * 吟风's line on 设置 › 关于: a random idle line on open, another one (never
  * the same twice in a row) with every click on her, and the update check's
- * outcome when it changes.
+ * outcome when it changes. `failed` is the page's own request error (a check
+ * or install call that threw): when one appears she says the failed line too,
+ * since the plain error block under the card leaves the talking to her.
  */
-export function useAboutMascotLine(phase: UpdatePhase | undefined) {
+export function useAboutMascotLine(phase: UpdatePhase | undefined, failed = false) {
   const [line, setLine] = useState(() => pickMascotLine(aboutIdleLines));
   // Previous-prop pattern: react to the phase change during render, no effect round-trip.
-  const [seenPhase, setSeenPhase] = useState(phase);
-  if (phase !== seenPhase) {
-    setSeenPhase(phase);
-    const said = aboutLineForPhaseChange(seenPhase, phase);
+  const [seen, setSeen] = useState({ phase, failed });
+  if (phase !== seen.phase || failed !== seen.failed) {
+    setSeen({ phase, failed });
+    const said = failed && !seen.failed ? aboutUpdateLines.failed : aboutLineForPhaseChange(seen.phase, phase);
     if (said) setLine(said);
   }
   return {

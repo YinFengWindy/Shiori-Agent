@@ -4,7 +4,8 @@ import { SettingsSectionCard } from "../settings/SettingsFieldPrimitives";
 import { SettingsSaveFeedback } from "../settings/SettingsSaveFeedback";
 import { SettingsSavedIndicator } from "../settings/SettingsSavedIndicator";
 import { SettingsStatus } from "../settings/SettingsStatusSlot";
-import { cardClass, cx, ghostButtonClass } from "../shared/styles";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "../shared/styles";
+import { InlineError } from "../shared/feedback/InlineError";
 import { describePluginConfigFields, partitionPluginConfigFields, type PluginConfigField } from "./jsonSchemaForm";
 import { PluginConfigFieldRow } from "./PluginConfigFieldRow";
 import { usePluginConfigController } from "./usePluginConfigController";
@@ -32,10 +33,11 @@ export function PluginSchemaSettingsSection({ pluginId }: PluginSchemaSettingsSe
 
   if (loadError) {
     return (
-      <div className={cx(cardClass, "p-6 text-sm leading-6 text-danger-text")}>
-        插件配置加载失败：{loadError}
-        <button type="button" className={cx(ghostButtonClass, "ml-3")} onClick={reloadConfig}>重新加载</button>
-      </div>
+      <InlineError
+        persona="pluginConfigLoadFailed"
+        message={`插件配置加载失败：${loadError}`}
+        actions={<button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} onClick={reloadConfig}>重新加载</button>}
+      />
     );
   }
   if (!schema || !draft || !envStatus) {

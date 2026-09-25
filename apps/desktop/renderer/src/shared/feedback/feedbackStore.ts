@@ -1,4 +1,7 @@
-import type { FeedbackPersona } from "../mascot/mascotLines";
+import type { FeedbackPersona, PersonaSceneKey } from "../mascot/mascotLines";
+
+/** Who fronts a toast: one of the host's toast personas, or a plugin-named scene (runtime API 2.4.0). */
+export type ToastPersona = FeedbackPersona | PersonaSceneKey;
 
 /** Visual and semantic weight of one transient feedback message. */
 export type FeedbackTone = "success" | "info" | "warning" | "error";
@@ -18,11 +21,18 @@ export type FeedbackToast = {
   /** Technical cause kept out of the message; the toast folds it behind 「详情」. */
   detail?: string;
   /**
-   * 吟风 fronts the message (#362 stage 10): with the 看板娘 on, the toaster
-   * shows her face and this persona's line as the first sentence, then the
-   * message. Off, the toast renders exactly as without a persona.
+   * 吟风 fronts the message (#362): with the 看板娘 on, the toaster shows
+   * her face instead of the tone badge and, when this persona has a line,
+   * that line as the first sentence before the message (see
+   * `feedbackPersonaLines` for which do). Off, the toast renders exactly as
+   * without a persona.
    */
-  persona?: FeedbackPersona;
+  persona?: ToastPersona;
+  /**
+   * Only her face, even when the persona has a line: the same line is
+   * already on screen (e.g. a plugin's failure card said it).
+   */
+  personaQuiet?: boolean;
 };
 
 /** Options shared by every `feedback.*` reporter call. */
@@ -31,7 +41,9 @@ export type FeedbackOptions = {
   /** Technical cause (e.g. a raw bridge error) shown only once the user opens 「详情」. */
   detail?: string;
   /** Who fronts the message (see `FeedbackToast.persona`). */
-  persona?: FeedbackPersona;
+  persona?: ToastPersona;
+  /** Her face without her line (see `FeedbackToast.personaQuiet`). */
+  personaQuiet?: boolean;
 };
 
 /** The injectable reporter hooks receive instead of owning their own message state. */
@@ -63,7 +75,7 @@ let nextId = 1;
 const listeners = new Set<Listener>();
 
 /** A message about to be queued; a filter may rewrite it or drop it (by returning null). */
-export type FeedbackInput = { tone: FeedbackTone; message: string; action?: FeedbackAction; detail?: string; persona?: FeedbackPersona };
+export type FeedbackInput = { tone: FeedbackTone; message: string; action?: FeedbackAction; detail?: string; persona?: ToastPersona; personaQuiet?: boolean };
 /** Installed by the one owner that knows better than a raw message (see `setFeedbackFilter`). */
 export type FeedbackFilter = (input: FeedbackInput) => FeedbackInput | null;
 let filter: FeedbackFilter | null = null;
@@ -100,6 +112,7 @@ export function showFeedback(raw: FeedbackInput): number {
   const detail = input.detail?.trim();
   const toast: FeedbackToast = {
     id: nextId++, tone: input.tone, message, action: input.action, ...(detail ? { detail } : {}), ...(input.persona ? { persona: input.persona } : {}),
+    ...(input.persona && input.personaQuiet ? { personaQuiet: true } : {}),
   };
   const remaining = toasts.filter((item) => item.tone !== toast.tone || item.message !== toast.message);
   publish([...remaining, toast].slice(-maxVisibleFeedback));
@@ -143,7 +156,7 @@ export function resetFeedback(): void {
 export function createFeedbackReporter(defaults: Partial<Record<FeedbackTone, FeedbackOptions>> = {}): FeedbackReporter {
   const reporterFor = (tone: FeedbackTone) => (message: string, options?: FeedbackOptions) => {
     const merged = { ...defaults[tone], ...options };
-    showFeedback({ tone, message, action: merged.action, detail: merged.detail, persona: merged.persona });
+    showFeedback({ tone, message, action: merged.action, detail: merged.detail, persona: merged.persona, personaQuiet: merged.personaQuiet });
   };
   return {
     success: reporterFor("success"),
@@ -154,8 +167,9 @@ export function createFeedbackReporter(defaults: Partial<Record<FeedbackTone, Fe
 }
 
 /**
- * The plain reporter bound to this store. Plugin UIs use it; host code
- * reports through `mascotFeedback`, whose errors 吟风 fronts.
+ * The plain reporter bound to this store (no persona). Host code reports
+ * through `mascotFeedback` (吟风 fronts every tone by its rule); plugin UIs
+ * through their injected `host.feedback` (she appears only on `persona: true`).
  */
 export const feedback: FeedbackReporter = createFeedbackReporter();
 

@@ -5,7 +5,7 @@ import { noPetPackages, readPetPackages, type PetPackages } from "./petPackages"
 import { pickPetPackageFile } from "./petPackagePicker";
 
 /** Loads and mutates this role's packages, then refreshes both form and pet projections. */
-export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: PluginRoleAssetsComponentProps) {
+export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: Omit<PluginRoleAssetsComponentProps, "host">) {
   const { pickFiles } = usePluginHostServices();
   const [state, setState] = useState<PetPackages>(noPetPackages);
   const [busy, setBusy] = useState(false);

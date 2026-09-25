@@ -272,22 +272,33 @@ Phosphor 在 `vite.config.ts:25` 被单独拆成 `icons-vendor` chunk，按需�
 
 ## 看板娘（吟风）
 
-吟风是 Shiori 的看板娘（#362 阶段 10）。首次引导之外，她只出现在下面这些位置，别的地方不要随手加：
+吟风是 Shiori 的看板娘（#362 阶段 10，之后扩展到确认弹窗、全部提示和页面内报错）。首次引导之外，她只出现在下面这些位置，别的地方不要随手加：
 
 | 位置 | 呈现 | 组件 |
 |---|---|---|
 | 启动画面（后端启动超过 400ms 才出现，超过 8 秒换一句，启动失败给「重启连接」） | 半身立绘 + 台词气泡 + 星芒加载，时间段风景背景 | `app/StartupSplash.tsx`，时机在 `app/startupSplashPhase.ts` |
 | 空状态：没有角色（聊天侧栏、角色页）、搜索没有结果 | 中尺寸立绘 + 台词气泡 + 该处原有的操作按钮 | `shared/mascot/MascotSpeech` 的 `MascotEmptyState` |
-| 连接断开横幅、宿主的报错提示 | 小头像 + 她的一句话作第一句，原文跟在后面，技术细节仍在「详情」 | 横幅在 `app/BridgeOfflineBanner.tsx`；提示走 `feedbackStore` 的 `persona` |
+| 连接断开横幅 | 小头像 + 她的一句话作第一句，原来的说明在后 | `app/BridgeOfflineBanner.tsx` |
+| 全部提示（toast） | 小头像替换语气图标；报错 / 警告她先说一句，原文在后，技术细节仍在「详情」；成功 / 普通提示只露脸（规则见下） | `feedbackStore` 的 `persona`，宿主出口 `shared/mascot/mascotFeedback.ts` |
+| 确认弹窗 | 标题下一行：大号小头像 `lg` + 台词气泡作弹窗的第一句，表情按意图（删除 → 担心，放弃修改 → 鼓脸，重启 → 惊讶，信任 / 安装 → 疑惑 / 普通）；原来的事实说明（删什么、何时生效）照旧在后 | `shared/ui/ConfirmDialog` 的 `persona`（传 `confirmPersonaLines` 里的一句） |
+| 页面内报错 | 小头像 + 她的一句 + 原文 + 可选「详情」/ 操作按钮；三种版式 `row`（表单、列表里的块）、`strip`（贴在卡片边上的一条）、`card`（占住空区域的居中卡片，大号头像 + 气泡） | `shared/feedback/InlineError`（`persona` 取 `inlineErrorLines` 的键） |
 | 设置 › 关于 | 右侧半身立绘，版本卡片下面一句台词；点她换一句（连带换表情） | `settings/AboutMascot.tsx` |
 
 规则：
 
 - **台词只写在 `shared/mascot/mascotLines.ts`**，每句不超过 40 字（有测试守着），带一个表情。同一场景多句时用 `pickMascotLine` 随机取、不和上一句重复。她的台词是 owner 认可的「不写叙述文字」例外，只限这张表里的场景。
-- **三种尺寸**（`shared/mascot/MascotFigure`，样式 `shared/mascot/mascot.css`）：半身 `MascotHalfFigure`（按 `--mascot-half-crop` 裁在腰下并渐隐，带表情交叉淡入）、中尺寸 `MascotMediumFigure`（`--mascot-medium-width` 180–240px，窄处用 `--mascot-compact-width`）、小头像 `MascotFaceAvatar`（`--mascot-face-size`，圆形取脸）。立绘阴影 `--mascot-drop-shadow` 挂在裁切框外层，挂在带遮罩的那层会被裁成一个矩形。
+- **三种尺寸**（`shared/mascot/MascotFigure`，样式 `shared/mascot/mascot.css`）：半身 `MascotHalfFigure`（按 `--mascot-half-crop` 裁在腰下并渐隐，带表情交叉淡入）、中尺寸 `MascotMediumFigure`（`--mascot-medium-width` 180–240px，窄处用 `--mascot-compact-width`）、小头像 `MascotFaceAvatar`（`--mascot-face-size` 2rem，圆形取脸；`size="lg"` 用 `--mascot-face-size-lg` 3rem，给确认弹窗和报错卡片）。立绘阴影 `--mascot-drop-shadow` 挂在裁切框外层，挂在带遮罩的那层会被裁成一个矩形。
 - **动效**：出场是淡入 + 上浮 `--mascot-enter-rise`（`.mascot-enter`，`--duration-stage`）；换表情是 `--duration-quick`（160ms）的叠层交叉淡入（`MascotExpressionStack`，首次引导同一套）。减弱动态效果时出场只剩淡入，换表情照旧淡入。
 - **开关**：设置 › 外观 ›「看板娘」（`appearancePrefs.mascot`，默认开）。组件用 `useMascotEnabled()` 判断，关掉时渲染原来那套不带她的样式，不留空位；启动画面整个不出现，启动失败交回离线横幅。
-- **报错提示**：宿主代码用 `shared/mascot/mascotFeedback.ts` 的 `mascotFeedback`（和 `feedback` 同一个队列，只是 error 默认带通用人设），需要更具体的一句时传 `persona`（如未选模型的 `modelMissing`）。**插件界面继续用普通的 `feedback`**，也不要在插件里引用宿主的看板娘（生图插件的空状态保留阶段 7 的品牌母题）。
+- **提示（toast）什么时候带她的一句**：宿主代码用 `mascotFeedback`，每种语气都有默认人设（`feedbackTonePersona`）：
+  - 报错 / 警告：**一定带一句**（`generic` / `warning`；没有「详情」的报错用 `genericBrief`，不许诺并不存在的详情），出了事她先开口。
+  - 成功 / 普通提示：**只露脸不说话**（`success` 大笑、`info` 普通）。这些是高频提示（已复制、已保存、已加入素材库、角色已保存…），每次一句会刷屏。
+  - 成功提示带一句只留给少见的节点：新建角色、导入角色卡、删除角色、连接恢复，由调用处按名字传（`roleCreated` / `roleImported` / `roleDeleted` / `bridgeRecovered`）。新加一句前先问：它会不会一小时出现好几次？会就只露脸。
+  - 更具体的报错传具体的键（未选模型 `modelMissing`、角色卡读不了 `roleImportFailed`）。
+- **确认弹窗**：宿主的每个 `ConfirmDialog` 都传 `persona`；没有专属台词时用通用的 `destructive` / `confirm`。不传就是不带她的弹窗（插件的弹窗默认如此）。弹窗里的报错不再加她（她已经在弹窗里了）。
+- **页面内报错**：一律用 `InlineError`，不要再手写 `bg-danger-soft` + `text-danger-text` 的报错块；字段级的校验提示（输入框下面的一行小字）不算，照旧。
+- **她已经在场时不重复出现**：`MascotOnStage` 标记「她本人已经站在这里」的子树（首次引导、设置 › 关于、带她的确认弹窗），里面的 `InlineError` 只留原文和警告图标。首次引导里的报错由她在对话框里回应，关于页的更新失败由她的台词说（`aboutUpdateLines.failed`）。
+- **插件**（runtime API 2.4.0）：插件通过注入的 `host` 服务用 `host.feedback.*`、`host.ui.InlineError`、`host.ui.ConfirmDialog`，传 `persona` 才让她出面：`true` 是该处的通用台词，场景键（`personaSceneLines`：`not_configured` / `unauthorized` / `quota` / `network` / `upstream` / `destructive` / `discard` / `confirm`）是宿主为该场景写的台词。插件只能选场景、不能替她写台词，也不要直接引用 `shared/mascot`；新场景要加在宿主这张表里。开关关掉时插件那边也一律不带她。生图插件的失败卡片和报错提示按错误码选场景，提示词库的删除确认用 `host.ui.ConfirmDialog`；它的空状态仍保留阶段 7 的品牌母题。契约见 `plugin-runtime-contract.md`「Runtime API 2.4」。
 - 素材用 `new URL(…, import.meta.url)` 引用，不用 `import x from "*.webp"`：Node 单测没有 webp 加载器，这样显示她的组件才能直接在单测里挂载。
 
 ## 动手前的检查清单

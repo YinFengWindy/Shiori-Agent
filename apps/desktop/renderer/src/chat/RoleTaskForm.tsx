@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import type { ScheduleTaskFormData, ScheduleTaskTier, ScheduleTaskTrigger } from "../shared/types";
 import { cx, focusResetClass } from "../shared/styles";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
+import { InlineError } from "../shared/feedback/InlineError";
 import {
   buildRecurringScheduleRule,
   parseRecurringScheduleRule,
@@ -127,7 +128,7 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
             <RoleTaskFieldError message={errors.content} />
           </label>
         </section>
-        {error ? <div className="text-xs text-danger-text">{error}</div> : null}
+        {error ? <InlineError message={error} /> : null}
       </div>
       <div className="pt-3">
         <button className={cx("flex h-10 w-full items-center justify-center rounded-md bg-gradient-accent px-4 text-xs font-medium text-ink shadow-soft transition-[filter] hover:brightness-105 disabled:opacity-50", focusResetClass)} type="submit" disabled={saving}>{saving ? "保存中…" : "保存"}</button>

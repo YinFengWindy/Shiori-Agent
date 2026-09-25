@@ -39,7 +39,8 @@ export function useRoleCardImport({ updateNewRoleForm, reportImportError }: Impo
 
   function reportError(error: unknown) {
     const { message, detail } = describeRoleCardImportError(errorMessage(error));
-    reportImportError(message, detail ? { detail } : undefined);
+    // 吟风 has her own line for an unreadable card (the host reporter shows it when she is on).
+    reportImportError(message, { persona: "roleImportFailed", ...(detail ? { detail } : {}) });
   }
 
   async function previewRoleCard() {

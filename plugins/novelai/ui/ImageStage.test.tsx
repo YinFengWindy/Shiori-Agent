@@ -3,16 +3,26 @@ import { describe, it } from "node:test";
 import type React from "react";
 import { act } from "react";
 import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
+import { PluginHostServicesProvider } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
+import { desktopPluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { appearancePrefsStorageKey } from "../../../apps/desktop/renderer/src/shared/appearancePrefs";
+import { resetAppearancePrefsCache } from "../../../apps/desktop/renderer/src/shared/useAppearancePrefs";
 import { ImageStage } from "./ImageStage";
 import type { StageView } from "./studioSelectors";
 
 const notConfigured = { kind: "not-configured", title: "NovelAI 未配置", message: "NovelAI token 引用的环境变量 NOVELAI_TOKEN 未设置", opensSettings: true } as const;
 
-/** Mounts inside a DOM whose bridge can turn file paths into asset URLs. */
-async function mountStage(element: React.ReactElement) {
+/**
+ * Mounts inside a DOM whose bridge can turn file paths into asset URLs, under
+ * the host services a bound plugin component gets. `mascot` sets 设置 › 外观 ›
+ * 看板娘 before the first render.
+ */
+async function mountStage(element: React.ReactElement, { mascot = true } = {}) {
   const view = await mountTestComponent(null);
   Object.defineProperty(window, "miraDesktop", { configurable: true, value: { localAssetUrl: (path: string) => `asset://${path}` } });
-  await view.render(element);
+  resetAppearancePrefsCache();
+  window.localStorage.setItem(appearancePrefsStorageKey, JSON.stringify({ version: 1, backdropMotion: true, mascot }));
+  await view.render(<PluginHostServicesProvider services={desktopPluginHostServices}>{element}</PluginHostServicesProvider>);
   return view;
 }
 
@@ -35,6 +45,27 @@ describe("ImageStage", () => {
       await act(async () => view.container.querySelector<HTMLButtonElement>('[aria-label="关闭"]')?.click());
       assert.equal(dismissed, 1);
     } finally { await view.cleanup(); }
+  });
+
+  it("lets 吟风 front the failure card through the host inline error, and drops her when the 看板娘 is off", async () => {
+    const failure = { kind: "network", title: "连不上 NovelAI", message: "timeout", opensSettings: false } as const;
+    const on = await mountStage(<ImageStage view={{ kind: "failure", failure }} onReusePrompt={() => undefined} />);
+    try {
+      const card = on.container.querySelector("[data-testid=\"novelai-stage-failure\"] [role=\"alert\"]");
+      // The failure kind picks the host persona scene: 「连不上」 → network.
+      assert.equal(card?.getAttribute("data-persona"), "network");
+      assert.ok(card?.querySelector("[data-testid=\"mascot-face\"]"));
+      assert.match(card?.textContent ?? "", /吟风/);
+      assert.match(card?.textContent ?? "", /timeout/);
+    } finally { await on.cleanup(); }
+    const off = await mountStage(<ImageStage view={{ kind: "failure", failure }} onReusePrompt={() => undefined} />, { mascot: false });
+    try {
+      const card = off.container.querySelector("[data-testid=\"novelai-stage-failure\"] [role=\"alert\"]");
+      assert.equal(card?.getAttribute("data-persona"), null);
+      assert.equal(card?.querySelector("[data-testid=\"mascot-face\"]"), null);
+      assert.doesNotMatch(card?.textContent ?? "", /吟风/);
+      assert.match(card?.textContent ?? "", /连不上 NovelAI/);
+    } finally { await off.cleanup(); resetAppearancePrefsCache(); }
   });
 
   it("a failure settings cannot fix offers only dismissal", async () => {

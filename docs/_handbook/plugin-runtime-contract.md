@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.3.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.4.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -79,6 +79,7 @@ version whose additions it uses.
 | `2.1.0` | renderer communication (`client.events`, `client.dependency`, `client.background`) | #218; first released in v0.3.0 |
 | `2.2.0` | static manifest `channels` declarations and `channels.list` | #363 T1 |
 | `2.3.0` | optional channel hooks, including `uses_bot_commands`, and `register_channel(..., description=)` | #363 T2 (hooks) and T4 (`uses_bot_commands`) |
+| `2.4.0` | renderer host services as an injected `host` prop, with `host.feedback` (host toasts), `host.ui.InlineError` (host inline error block) and `host.ui.ConfirmDialog` (host confirmation), all with an opt-in 看板娘 `persona` (generic or by scene key) | #362 follow-up (看板娘扩展) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -175,6 +176,65 @@ identity/`chat_id` format note; the `message_push` tool description lists only
 currently registered, non-retired channels with those notes. Packages using the
 hooks or `description` must require `runtime_api: ">=2.3.0 <3.0.0"`: older hosts
 ignore the hooks and reject the unknown keyword.
+
+## Runtime API 2.4 host feedback and inline errors
+
+API 2.4 opens two host presentation pieces to plugin UIs, so a plugin's
+failures read like the host's and can be fronted by the host mascot 吟风:
+
+- Every bound component (`navPage.component` and `sidebar`, a custom
+  `settingsSection.component`, `roleAssets.component`) now receives the host
+  services as a `host` prop next to `client` (`PluginInjectedProps` in
+  `pluginUiModuleContract.tsx`). Bundled source plugins may keep using the
+  `usePluginHostServices()` context; a precompiled external package, which
+  cannot import the host's React context, uses the prop.
+- `host.feedback.{success,info,warning,error}(message, options?)` queues a
+  toast in the host's single toaster. `options` is `{ detail?, action?,
+  persona?, personaQuiet? }`: `detail` folds behind 「详情」, `action` is
+  `{ label, onSelect }`, and `personaQuiet: true` shows only her face (with the
+  persona's expression) when the plugin already shows the same line on screen —
+  NovelAI sets it while its failure card is visible.
+- `host.ui.ConfirmDialog` is the host's confirmation dialog: the same props as
+  the host's own (`open`, `title`, `description`, `confirmLabel`, `children?`,
+  `busy?`, `busyLabel?`, `cancelLabel?`, `error?`, `destructive?`,
+  `finalFocus?`, `onClose`, `onConfirm`) plus `persona?`.
+- `host.ui.InlineError` is the host's in-page error block. Props:
+  `message` (required), `title?`, `detail?`, `actions?` (React nodes),
+  `layout?: "row" | "strip" | "card"`, `glyph?` / `glyphTone?: "danger" |
+  "accent"` (the plain glyph), `role?: "alert" | "status"`, `onDismiss?`,
+  `persona?`, `className?`, `testId?`.
+
+`persona` is `boolean | "generic" | PersonaSceneKey` and defaults to `false`: a
+plugin opts in per call. `true` / `"generic"` select the surface's own generic
+line and face (toast: error / warning a line, success / info only her face;
+inline error: the generic inline-error line; confirmation: the generic line for
+a destructive or an ordinary confirmation). A scene key selects the host's line
+for that scene: `not_configured`, `unauthorized`, `quota`, `network`,
+`upstream` (failures), `destructive`, `discard`, `confirm` (confirmations);
+the table is `personaSceneLines` in `shared/mascot/mascotLines.ts`, and an
+unknown key is a type error. The lines are always host-written: a plugin picks
+a scene, never a sentence. The user's 设置 › 外观 › 看板娘 switch always
+wins — with it off, opted-in toasts and blocks render plain, exactly like
+`persona: false`. Nothing else about toasts changes: the queue, durations,
+deduplication and the bridge-offline filter are shared with the host.
+
+```tsx
+function Page({ client, host }: PluginNavPageComponentProps) {
+  const [error, setError] = useState("");
+  const load = () => client.call("list").catch((cause: unknown) => {
+    host.feedback.error("加载失败", { detail: String(cause), persona: true });
+    setError(String(cause));
+  });
+  return error ? <host.ui.InlineError persona message={error} actions={<button onClick={load}>重试</button>} /> : null;
+}
+```
+
+Packages that use `host` must require `runtime_api: ">=2.4.0 <3.0.0"`; older
+hosts do not inject it. The bundled NovelAI studio uses all three: its
+generation failure card and error toasts pick the scene from the backend's
+stable error codes (`novelai_not_configured` → `not_configured`, …), and its
+prompt-library delete confirmation is `host.ui.ConfirmDialog` with
+`persona="destructive"`.
 
 ## Renderer artifacts and dependencies
 

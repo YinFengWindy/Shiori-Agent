@@ -3,6 +3,7 @@ import { useState } from "react";
 import { hasInFlightChatTurns } from "../shared/chatTurnActivity";
 import { errorMessage } from "../shared/feedback/feedbackStore";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
+import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { cx } from "../shared/styles";
 import type { PluginSummary } from "./pluginBridgeClient";
@@ -64,6 +65,7 @@ export function PluginRestartBanner({ plugins }: { plugins: readonly PluginSumma
       <ConfirmDialog
         open={confirmingInterrupt}
         title="重启 Shiori？"
+        persona={confirmPersonaLines.restartDuringTurn}
         description="有对话正在进行，重启会中断它。"
         confirmLabel="继续重启"
         onClose={() => setConfirmingInterrupt(false)}

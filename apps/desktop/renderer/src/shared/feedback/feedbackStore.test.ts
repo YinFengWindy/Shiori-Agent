@@ -88,14 +88,16 @@ describe("feedbackStore", () => {
     ]);
   });
 
-  it("has 吟风 front host errors only: the plain reporter and other tones carry no persona", () => {
+  it("has 吟风 front every host tone with its default persona; the plain reporter carries none", () => {
+    const personas = () => getFeedbackSnapshot().map(({ message, persona }) => [message, persona]);
     mascotFeedback.error("宿主报错");
+    mascotFeedback.warning("宿主警告");
     mascotFeedback.success("已保存");
+    assert.deepEqual(personas(), [["宿主报错", "generic"], ["宿主警告", "warning"], ["已保存", "success"]]);
+    resetFeedback();
+    mascotFeedback.info("已在素材库");
+    mascotFeedback.success("角色已删除", { persona: "roleDeleted" });
     feedback.error("插件报错");
-    assert.deepEqual(getFeedbackSnapshot().map(({ message, persona }) => [message, persona]), [
-      ["宿主报错", "generic"],
-      ["已保存", undefined],
-      ["插件报错", undefined],
-    ]);
+    assert.deepEqual(personas(), [["已在素材库", "info"], ["角色已删除", "roleDeleted"], ["插件报错", undefined]]);
   });
 });

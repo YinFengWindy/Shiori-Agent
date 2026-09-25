@@ -1,17 +1,28 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
 import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { feedback } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
-import type { GenerationFailure } from "./generationFailure";
+import type { PluginHostFeedback } from "../../../apps/desktop/renderer/src/plugins/pluginHostFeedback";
+import { failurePersona, type GenerationFailure } from "./generationFailure";
 import { loadHistory, refreshReadiness, submitGenerate } from "./novelAiGeneration";
-import { clearFailure, updateStudioForm, useNovelAiPageStore } from "./novelAiPageStore";
+import { clearFailure, getNovelAiState, updateStudioForm, useNovelAiPageStore } from "./novelAiPageStore";
 import { buildGeneratePayload, canSubmitStudioForm, resolveStudioRoleId, validateStudioForm } from "./studioForm";
 import { selectGenerationBlocked, selectStageView } from "./studioSelectors";
 import { useNovelAiPromptSettings } from "./useNovelAiPromptSettings";
 
-/** Raises the toast for a failed generation; token problems carry a jump to the plugin's settings. */
-export function reportGenerationFailure(failure: GenerationFailure, onOpenSettings?: () => void): void {
-  feedback.error(failure.title, {
+/**
+ * Raises the toast for a failed generation through the host queue, fronted by
+ * 吟风 with the scene of its failure kind (`failurePersona`); token problems
+ * carry a jump to the plugin's settings. While the failure card is on screen
+ * it already says her line, so the toast shows only her face then.
+ */
+export function reportGenerationFailure(report: PluginHostFeedback, failure: GenerationFailure, { onOpenSettings, cardOnScreen = false }: {
+  onOpenSettings?: () => void;
+  /** The stage shows this failure's card (with her line) right now. */
+  cardOnScreen?: boolean;
+} = {}): void {
+  report.error(failure.title, {
+    persona: failurePersona(failure),
+    personaQuiet: cardOnScreen,
     detail: failure.message || undefined,
     action: failure.opensSettings && onOpenSettings ? { label: "去设置", onSelect: onOpenSettings } : undefined,
   });
@@ -28,6 +39,12 @@ export function useImageStudio(client: PluginRpcClient, activeRoleId: string, on
   const store = useNovelAiPageStore();
   const settings = useNovelAiPromptSettings();
   const { form, roles, rolesLoaded } = store;
+  // Read after the generate call resolves: the user may have left the studio meanwhile.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   useEffect(() => {
     void refreshReadiness(client);
@@ -40,8 +57,8 @@ export function useImageStudio(client: PluginRpcClient, activeRoleId: string, on
 
   useEffect(() => {
     if (!rolesLoaded) return;
-    void loadHistory(client, form.roleId);
-  }, [client, form.roleId, rolesLoaded]);
+    void loadHistory(client, host.feedback, form.roleId);
+  }, [client, form.roleId, host.feedback, rolesLoaded]);
 
   const blocked = selectGenerationBlocked(store.readiness);
 
@@ -52,8 +69,10 @@ export function useImageStudio(client: PluginRpcClient, activeRoleId: string, on
       return;
     }
     if (!canSubmitStudioForm(form) || blocked || store.submitting) return;
-    const failure = await submitGenerate(client, buildGeneratePayload(form, settings.model));
-    if (failure) reportGenerationFailure(failure, onOpenSettings);
+    const failure = await submitGenerate(client, host.feedback, buildGeneratePayload(form, settings.model));
+    // The card is on screen only if the studio is still mounted and the stage shows the failure.
+    const cardOnScreen = mounted.current && selectStageView(getNovelAiState()).kind === "failure";
+    if (failure) reportGenerationFailure(host.feedback, failure, { onOpenSettings, cardOnScreen });
   }
 
   async function pickBaseImage(): Promise<void> {

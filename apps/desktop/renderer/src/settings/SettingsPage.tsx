@@ -11,6 +11,7 @@ import { resolveSettingsSubsectionId } from "./settingsSectionMetadata";
 import type { SettingsSubsection } from "./settingsPageTypes";
 import { useSettingsPageController } from "./useSettingsPageController";
 import { cardClass, cx } from "../shared/styles";
+import { InlineError } from "../shared/feedback/InlineError";
 
 type SettingsPageProps = {
   bridgeReady: boolean;
@@ -147,9 +148,7 @@ function EditableSettingsPage({
   if (controller.loadError) {
     return (
       <section className={cx(settingsPageSurfaceClass, "grid h-full place-items-center")} data-testid="settings-page">
-        <div className={cx(cardClass, "mx-8 max-w-[680px] p-6 text-sm leading-6 text-danger-text")}>
-          设置加载失败：{controller.loadError}
-        </div>
+        <InlineError layout="card" className="mx-8" persona="settingsLoadFailed" title="设置加载失败" message={controller.loadError} />
       </section>
     );
   }

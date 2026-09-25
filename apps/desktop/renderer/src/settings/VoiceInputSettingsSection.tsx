@@ -1,6 +1,7 @@
 import { Select } from "../shared/ui/Select";
 import { useEffect, useRef, useState } from "react";
 import { Microphone, Stop } from "@phosphor-icons/react";
+import { InlineError } from "../shared/feedback/InlineError";
 import type { VoiceInputDevice } from "../../../src/bridge/shared.js";
 import { SettingsField as Field } from "./SettingsField";
 import {
@@ -104,7 +105,7 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
           </button>
         </div>
       </Field>
-      {testError ? <div role="alert" className="pb-4 text-caption text-danger-text">{testError}</div> : null}
+      {testError ? <InlineError className="mb-4" persona="microphoneTestFailed" message={testError} /> : null}
     </SettingsSectionCard>
   );
 }

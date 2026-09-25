@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { pluginTrustDisclosure } from "./pluginTrustDisclosure";
 import type { usePluginPackageController } from "./usePluginPackageController";
@@ -20,6 +21,7 @@ export function PluginPackageDialogs({ controller, error, detailsPopupRef }: {
   };
   return <>
     <ConfirmDialog busyLabel="处理中…" destructive={false} open={preview !== null} title={updating ? "更新插件" : "安装插件"}
+      persona={updating ? confirmPersonaLines.updatePlugin : confirmPersonaLines.installPlugin}
       description={pluginTrustDisclosure} confirmLabel={updating ? "信任并更新" : "信任并安装"}
       busy={busy} error={error} finalFocus={() => restoreDetailsFocus("update")} onClose={() => void controller.cancel()} onConfirm={() => void controller.confirm()}>
       <div className="grid gap-1 break-all text-body text-ink-secondary">
@@ -30,7 +32,7 @@ export function PluginPackageDialogs({ controller, error, detailsPopupRef }: {
         <span>重启 Shiori 后生效。</span>
       </div>
     </ConfirmDialog>
-    <ConfirmDialog busyLabel="处理中…" destructive open={uninstallCandidate !== null} title="卸载插件" confirmLabel="卸载"
+    <ConfirmDialog busyLabel="处理中…" destructive open={uninstallCandidate !== null} title="卸载插件" confirmLabel="卸载" persona={confirmPersonaLines.uninstallPlugin}
       description="重启 Shiori 后完成卸载。默认保留插件数据和配置。"
       busy={busy} error={error} finalFocus={() => restoreDetailsFocus("uninstall")} onClose={controller.closeUninstall} onConfirm={() => void controller.uninstall()}>
       <div className="grid gap-2 text-body text-ink-secondary">

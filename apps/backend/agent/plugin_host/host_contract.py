@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from importlib import metadata
 
-RUNTIME_API_VERSION = "2.3.0"
+RUNTIME_API_VERSION = "2.4.0"
 # This is the renderer ABI's guaranteed minimum, not a probe of the developer's npm tree.
 REACT_API_VERSION = "19.2.0"
 

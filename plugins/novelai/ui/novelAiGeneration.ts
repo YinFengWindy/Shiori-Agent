@@ -1,4 +1,5 @@
-import { errorMessage, feedback } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
+import { errorMessage } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
+import type { PluginHostFeedback } from "../../../apps/desktop/renderer/src/plugins/pluginHostFeedback";
 import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import { describeGenerationFailure, type GenerationFailure, type NovelAiReadiness } from "./generationFailure";
 import { commitNovelAiState, getNovelAiState } from "./novelAiPageStore";
@@ -8,8 +9,12 @@ import type { ImageGenerateResult, ImageHistoryRecord } from "./types";
 /** How many recent records the filmstrip keeps for one role. */
 const historyLimit = 24;
 
-/** Loads one role's recent generations; keeps the selection when it is still present. */
-export async function loadHistory(client: PluginRpcClient, roleId: string): Promise<void> {
+/**
+ * Loads one role's recent generations; keeps the selection when it is still
+ * present. A failure goes to the host toast queue (`report`, the injected
+ * `host.feedback`), fronted by 吟风 when the 看板娘 is on.
+ */
+export async function loadHistory(client: PluginRpcClient, report: PluginHostFeedback, roleId: string): Promise<void> {
   try {
     const payload = await client.call<{ records: ImageHistoryRecord[] }>("history", {
       role_id: roleId,
@@ -22,7 +27,7 @@ export async function loadHistory(client: PluginRpcClient, roleId: string): Prom
       : (records[0]?.id ?? "");
     commitNovelAiState({ ...state, history: records, selectedRecordId });
   } catch (loadError) {
-    feedback.error("生图历史加载失败", { detail: errorMessage(loadError) });
+    report.error("生图历史加载失败", { detail: errorMessage(loadError), persona: true });
   }
 }
 
@@ -56,6 +61,7 @@ function sameReadiness(a: NovelAiReadiness | null, b: NovelAiReadiness | null): 
  */
 export async function submitGenerate(
   client: PluginRpcClient,
+  report: PluginHostFeedback,
   payload: Record<string, unknown>,
 ): Promise<GenerationFailure | null> {
   commitNovelAiState({ ...getNovelAiState(), submitting: true, failure: null });
@@ -86,6 +92,6 @@ export async function submitGenerate(
     revealRecordId: result.record_id,
     selectedRecordId: result.record_id,
   });
-  await loadHistory(client, String(payload.role_id ?? ""));
+  await loadHistory(client, report, String(payload.role_id ?? ""));
   return null;
 }

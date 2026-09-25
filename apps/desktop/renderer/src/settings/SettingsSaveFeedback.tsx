@@ -1,9 +1,11 @@
 import type { SettingsSavePhase } from "./settingsPageTypes";
 import { shouldShowSettingsFeedback } from "./settingsSaveState";
-import { cx } from "../shared/styles";
+import { InlineError } from "../shared/feedback/InlineError";
 import { ArrowClockwise, ArrowsClockwise } from "@phosphor-icons/react";
 
-/** Renders terminal settings save feedback above the page content. */
+const iconButtonClass = "shrink-0 rounded-md p-1 text-danger-text hover:bg-white/70";
+
+/** Renders terminal settings save feedback above the page content (吟风 fronts it when the 看板娘 is on). */
 export function SettingsSaveFeedback({
   phase,
   message,
@@ -16,18 +18,19 @@ export function SettingsSaveFeedback({
   onReload?: () => void;
 }) {
   if (!shouldShowSettingsFeedback(phase, message)) return null;
+  const actions = onRetry || onReload ? (
+    <>
+      {onRetry ? <button className={iconButtonClass} type="button" aria-label="重试保存" title="重试保存" onClick={onRetry}><ArrowClockwise size={18} /></button> : null}
+      {onReload ? <button className={iconButtonClass} type="button" aria-label="放弃草稿并重新加载" title="放弃草稿并重新加载" onClick={onReload}><ArrowsClockwise size={18} /></button> : null}
+    </>
+  ) : undefined;
   return (
-    <div
-      className={cx(
-        "mx-auto mt-4 flex w-[calc(100%-2rem)] max-w-[560px] items-start gap-2 rounded-md border px-4 py-2.5 text-sm leading-6",
-        "border-[var(--danger-300)] bg-danger-soft text-danger-text",
-      )}
+    <InlineError
+      className="mx-auto mt-4 w-[calc(100%-2rem)] max-w-[560px]"
       role="status"
-      aria-live="polite"
-    >
-      <span className="min-w-0 flex-1 break-words">{message}</span>
-      {onRetry ? <button className="shrink-0 rounded-md p-1 hover:bg-danger-soft" type="button" aria-label="重试保存" title="重试保存" onClick={onRetry}><ArrowClockwise size={18} /></button> : null}
-      {onReload ? <button className="shrink-0 rounded-md p-1 hover:bg-danger-soft" type="button" aria-label="放弃草稿并重新加载" title="放弃草稿并重新加载" onClick={onReload}><ArrowsClockwise size={18} /></button> : null}
-    </div>
+      persona="settingsSaveFailed"
+      message={message}
+      actions={actions}
+    />
   );
 }
