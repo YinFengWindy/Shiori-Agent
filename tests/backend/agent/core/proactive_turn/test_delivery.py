@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from agent.core.proactive_turn.delivery import (
     resolve_target_transport,
     resolve_target_transports,
@@ -39,13 +41,15 @@ def _pipeline(
     )
 
 
-def test_role_target_resolver_failure_does_not_fall_back_to_global_target() -> None:
+def test_role_target_resolver_failure_propagates_without_global_fallback() -> None:
     def fail() -> tuple[str, str]:
         raise RuntimeError("binding unavailable")
 
     pipeline = _pipeline(session_key="role:mira", target_transport_fn=fail)
 
-    assert resolve_target_transport(pipeline) is None
+    # Resolver errors surface to the tick boundary instead of becoming no_target.
+    with pytest.raises(RuntimeError, match="binding unavailable"):
+        _ = resolve_target_transport(pipeline)
 
 
 def test_role_target_resolver_empty_result_does_not_fall_back_to_global_target() -> (
@@ -59,7 +63,7 @@ def test_role_target_resolver_empty_result_does_not_fall_back_to_global_target()
     assert resolve_target_transport(pipeline) is None
 
 
-def test_role_transport_list_failure_does_not_fall_back_to_global_target() -> None:
+def test_role_transport_list_failure_propagates_without_global_fallback() -> None:
     def fail() -> list[tuple[str, str]]:
         raise RuntimeError("bindings unavailable")
 
@@ -70,13 +74,34 @@ def test_role_transport_list_failure_does_not_fall_back_to_global_target() -> No
         target_transport_fn=lambda: ("telegram", "global-chat"),
     )
 
+    with pytest.raises(RuntimeError, match="bindings unavailable"):
+        _ = resolve_target_transports(pipeline)
+
+
+def test_role_transport_list_empty_result_does_not_fall_back_to_global_target() -> None:
+    pipeline = _pipeline(
+        session_key="telegram:global",
+        default_role_id="mira",
+        target_transports_fn=lambda: [],
+        target_transport_fn=lambda: ("telegram", "global-chat"),
+    )
+
     assert resolve_target_transports(pipeline) == []
 
 
-def test_global_target_resolver_failure_can_use_global_fallback() -> None:
+def test_global_target_resolver_failure_propagates() -> None:
     def fail() -> tuple[str, str]:
         raise RuntimeError("binding unavailable")
 
     pipeline = _pipeline(session_key="telegram:global", target_transport_fn=fail)
+
+    with pytest.raises(RuntimeError, match="binding unavailable"):
+        _ = resolve_target_transport(pipeline)
+
+
+def test_global_target_resolver_empty_result_uses_global_fallback() -> None:
+    pipeline = _pipeline(
+        session_key="telegram:global", target_transport_fn=lambda: ("", "")
+    )
 
     assert resolve_target_transport(pipeline) == ("telegram", "global-chat")

@@ -217,21 +217,19 @@ def has_user_replied_since(
 def resolve_target_transports(
     pipeline: ProactiveDeliveryHost,
 ) -> list[tuple[str, str]]:
-    """解析全部目标渠道；角色任务不回退到全局目标。"""
+    """解析全部目标渠道；角色任务不回退到全局目标。
+
+    解析器抛出的配置/绑定错误直接冒泡，由 ProactiveLoop 的 tick 边界记录并继续下一轮。
+    """
 
     if pipeline._target_transports_fn is not None:
-        try:
-            raw_transports = pipeline._target_transports_fn()
-        except Exception as exc:
-            logger.debug("[proactive_v2] target_transports unavailable: %s", exc)
-        else:
-            transports = [
-                (str(channel).strip(), str(chat_id).strip())
-                for channel, chat_id in raw_transports
-                if str(channel).strip() and str(chat_id).strip()
-            ]
-            if transports:
-                return transports
+        transports = [
+            (str(channel).strip(), str(chat_id).strip())
+            for channel, chat_id in pipeline._target_transports_fn()
+            if str(channel).strip() and str(chat_id).strip()
+        ]
+        if transports:
+            return transports
         if _is_role_scoped(pipeline):
             return []
     transport = pipeline._resolve_target_transport()
@@ -241,18 +239,17 @@ def resolve_target_transports(
 def resolve_target_transport(
     pipeline: ProactiveDeliveryHost,
 ) -> tuple[str, str] | None:
-    """解析单个目标渠道；角色任务不回退到全局目标。"""
+    """解析单个目标渠道；角色任务不回退到全局目标。
+
+    解析器抛出的错误直接冒泡；只有解析结果为空时才走下面的跳过或全局兜底。
+    """
 
     if pipeline._target_transport_fn is not None:
-        try:
-            channel, chat_id = pipeline._target_transport_fn()
-        except Exception as exc:
-            logger.debug("[proactive_v2] target_transport unavailable: %s", exc)
-        else:
-            resolved_channel = str(channel or "").strip()
-            resolved_chat_id = str(chat_id or "").strip()
-            if resolved_channel and resolved_chat_id:
-                return resolved_channel, resolved_chat_id
+        channel, chat_id = pipeline._target_transport_fn()
+        resolved_channel = str(channel or "").strip()
+        resolved_chat_id = str(chat_id or "").strip()
+        if resolved_channel and resolved_chat_id:
+            return resolved_channel, resolved_chat_id
     if _is_role_scoped(pipeline):
         return None
     fallback_channel = str(pipeline._cfg.default_channel or "").strip()
