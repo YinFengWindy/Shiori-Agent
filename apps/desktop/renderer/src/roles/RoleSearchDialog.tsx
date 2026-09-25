@@ -1,5 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useRef } from "react";
 import { formatTimestamp, toFileUrl } from "../shared/format";
+import { emptyStateLines } from "../shared/mascot/mascotLines";
+import { MascotEmptyState } from "../shared/mascot/MascotSpeech";
+import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
 import { cx } from "../shared/styles";
 import type { RoleSearchResult } from "../shared/types";
 
@@ -25,6 +28,8 @@ export function RoleSearchDialog({
 }: RoleSearchDialogProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const deferredQuery = useDeferredValue(query);
+  const mascotEnabled = useMascotEnabled();
+  const noResults = Boolean(deferredQuery.trim()) && !searching;
   const emptyMessage = useMemo(() => {
     if (!deferredQuery.trim()) return "搜索角色名或消息内容";
     if (searching) return "正在整理搜索结果...";
@@ -130,8 +135,13 @@ export function RoleSearchDialog({
                   </button>
                 ))}
               </div>
+            ) : noResults && mascotEnabled ? (
+              // 吟风 says 「没找到」 (an owner-approved line, #362 stage 10).
+              <div className="grid min-h-[200px] place-items-center px-4 pt-2">
+                <MascotEmptyState line={emptyStateLines.noSearchResults} layout="side" size="compact" testId="role-search-empty" />
+              </div>
             ) : (
-              <div className="grid min-h-[200px] place-items-center px-4 text-center text-[13px] text-ink-faint">
+              <div className="grid min-h-[200px] place-items-center px-4 text-center text-[13px] text-ink-faint" data-testid="role-search-empty">
                 {emptyMessage}
               </div>
             )}

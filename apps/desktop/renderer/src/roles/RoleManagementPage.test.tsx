@@ -63,4 +63,10 @@ describe("RoleManagementPage", () => {
     assert.match(markup, />新建角色</);
     assert.match(markup, />导入角色卡</);
   });
+
+  it("has 吟风 front the empty list (static renders see the default: 看板娘 on)", () => {
+    const markup = render([]);
+    assert.match(markup, /data-testid="mascot-medium"/);
+    assert.match(markup, /一个角色都没有/);
+  });
 });

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { act } from "react";
 import type { DesktopUpdateApi, DesktopUpdateState } from "../../../src/updateContract.js";
+import { appearancePrefsStorageKey } from "../shared/appearancePrefs";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { resetAppearancePrefsCache } from "../shared/useAppearancePrefs";
 import { AboutSettingsPage } from "./AboutSettingsPage";
 
 test("the visible update action checks, reports progress and installs only a ready update", async () => {
@@ -90,4 +92,37 @@ test("failed status loading remains retryable", async () => {
     assert.equal(view.container.querySelector('[role="alert"]'), null);
     assert.match(view.container.textContent ?? "", /已是最新版本/);
   } finally { await view.cleanup(); }
+});
+
+test("puts 吟风 beside the version card with the 看板娘 on, and leaves the page plain with it off", async () => {
+  resetAppearancePrefsCache();
+  const view = await mountTestComponent(null);
+  const api: DesktopUpdateApi = {
+    getState: async () => ({ revision: 0, currentVersion: "0.2.0", phase: "idle", latestVersion: null, progress: 0, error: null }),
+    check: async () => ({ revision: 1, currentVersion: "0.2.0", phase: "current", latestVersion: null, progress: 0, error: null }),
+    install: async () => undefined,
+    onState: () => () => undefined,
+  };
+  Object.defineProperty(window, "miraDesktop", { configurable: true, value: { updates: api } });
+  try {
+    await view.render(<AboutSettingsPage />);
+    const mascot = view.container.querySelector('[data-testid="about-mascot"]');
+    assert.ok(mascot?.querySelector('[aria-label="应用更新"]'), "the version card sits inside her layout");
+    // A check she sees finish gets her 「已是最新」 line.
+    await act(async () => view.container.querySelector<HTMLButtonElement>("button")?.click());
+    assert.match(mascot?.textContent ?? "", /已经是最新的啦/);
+  } finally { await view.cleanup(); }
+
+  resetAppearancePrefsCache();
+  const plain = await mountTestComponent(null);
+  Object.defineProperty(window, "miraDesktop", { configurable: true, value: { updates: api } });
+  window.localStorage.setItem(appearancePrefsStorageKey, JSON.stringify({ version: 1, backdropMotion: true, mascot: false }));
+  try {
+    await plain.render(<AboutSettingsPage />);
+    assert.equal(plain.container.querySelector('[data-testid="about-mascot"]'), null);
+    assert.ok(plain.container.querySelector('[aria-label="应用更新"]'));
+  } finally {
+    await plain.cleanup();
+    resetAppearancePrefsCache();
+  }
 });

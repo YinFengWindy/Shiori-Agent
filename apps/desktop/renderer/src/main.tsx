@@ -33,9 +33,9 @@ import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { requestChatModelMenu } from "./chat/chatModelMenuRequests";
-import { chatSendFailureAction } from "./chat/chatSendFailure";
+import { chatSendFailureAction, chatSendFailurePersona } from "./chat/chatSendFailure";
 import { openChatRole } from "./chat/chatRoleSwitchTransition";
-import { feedback } from "./shared/feedback/feedbackStore";
+import { mascotFeedback as feedback } from "./shared/mascot/mascotFeedback";
 import { FeedbackToaster } from "./shared/feedback/FeedbackToaster";
 import { TooltipProvider } from "./shared/ui/Tooltip";
 import type { ChatMessageNavigationScroller } from "./chat/useChatScrollController";
@@ -65,12 +65,17 @@ import type {
 } from "./shared/types";
 import "./styles.css";
 import "./shared/adv/adv.css";
+import "./shared/mascot/mascot.css";
 import "./onboarding/onboarding.css";
 import { useOnboardingController } from "./onboarding/useOnboardingController";
+import { StartupSplash } from "./app/StartupSplash";
+import { useStartupSplash } from "./app/useStartupSplash";
+import { useMascotEnabled } from "./shared/mascot/useMascotEnabled";
 import { OnboardingPage } from "./onboarding/OnboardingPage";
 
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
+  const mascotEnabled = useMascotEnabled();
   const [bridgeError, setBridgeError] = useState("");
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [activeRoleId, setActiveRoleId] = useState("");
@@ -276,6 +281,7 @@ function App(): React.ReactElement {
         chooseRoleModel: requestChatModelMenu,
         openModelSettings: () => openSettingsWorkspace("models"),
       }),
+      persona: chatSendFailurePersona(failure),
     }),
     setUnreadCounts,
     setSelectedAvatarAsset,
@@ -572,173 +578,180 @@ function App(): React.ReactElement {
   }
 
   const onboarding = useOnboardingController(openRole, bridgeLifecycle);
+  // The startup splash is the workspace's; the first-run guide has its own scene.
+  const startupSplash = useStartupSplash(health, mascotEnabled && !onboarding.visible);
   if (onboarding.visible) {
     return <OnboardingPage controller={onboarding} windowMaximized={windowMaximized} />;
   }
 
   return (
-    <DesktopAppFrame
-      sidebarCollapsed={leftSidebar.collapsed}
-      windowMaximized={windowMaximized}
-      canGoBack={canGoBack}
-      canGoForward={canGoForward}
-      canRefreshSession={mainView.kind === "chat" && Boolean(activeRoleId)}
-      onToggleSidebar={leftSidebar.toggle}
-      onGoBack={() => guardLeave(() => void navigateHistory("back", openRole))}
-      onGoForward={() => guardLeave(() => void navigateHistory("forward", openRole))}
-      onRefreshSession={() => void refreshSession()}
-      onOpenSettings={() => guardLeave(() => openSettingsWorkspace())}
-      shellResizing={leftSidebar.resizing || chatLatestImageSidebar.resizing}
-      sidebarState={{
-        collapsed: leftSidebar.collapsed,
-        compact: leftSidebar.compact,
-        width: leftSidebar.width,
-        animating: leftSidebar.animating,
-        resizing: leftSidebar.resizing,
-        onBeginResize: leftSidebar.beginResize,
-        onDismissOverlay: dismissSidebarOverlay,
-      }}
-      mainView={mainView}
-      settingsSection={settingsSection}
-      activeSettingsSubsections={settingsSubsectionMemory.activeSubsections}
-      onChangeSettingsSubsection={updateSettingsSubsection}
-      onBackToChat={() => guardLeave(() => openChatView())}
-      onOpenSettingsSection={(section) => guardLeave(() => openSettingsWorkspace(section))}
-      roleWorkspaceViewActive={roleWorkspaceViewActive}
-      roleWorkspaceSection={roleWorkspaceSection}
-      onOpenRoleWorkspaceSection={(section) => guardLeave(() => {
-        if (section === "role-create") {
+    <>
+      <DesktopAppFrame
+        sidebarCollapsed={leftSidebar.collapsed}
+        windowMaximized={windowMaximized}
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        canRefreshSession={mainView.kind === "chat" && Boolean(activeRoleId)}
+        onToggleSidebar={leftSidebar.toggle}
+        onGoBack={() => guardLeave(() => void navigateHistory("back", openRole))}
+        onGoForward={() => guardLeave(() => void navigateHistory("forward", openRole))}
+        onRefreshSession={() => void refreshSession()}
+        onOpenSettings={() => guardLeave(() => openSettingsWorkspace())}
+        shellResizing={leftSidebar.resizing || chatLatestImageSidebar.resizing}
+        sidebarState={{
+          collapsed: leftSidebar.collapsed,
+          compact: leftSidebar.compact,
+          width: leftSidebar.width,
+          animating: leftSidebar.animating,
+          resizing: leftSidebar.resizing,
+          onBeginResize: leftSidebar.beginResize,
+          onDismissOverlay: dismissSidebarOverlay,
+        }}
+        mainView={mainView}
+        settingsSection={settingsSection}
+        activeSettingsSubsections={settingsSubsectionMemory.activeSubsections}
+        onChangeSettingsSubsection={updateSettingsSubsection}
+        onBackToChat={() => guardLeave(() => openChatView())}
+        onOpenSettingsSection={(section) => guardLeave(() => openSettingsWorkspace(section))}
+        roleWorkspaceViewActive={roleWorkspaceViewActive}
+        roleWorkspaceSection={roleWorkspaceSection}
+        onOpenRoleWorkspaceSection={(section) => guardLeave(() => {
+          if (section === "role-create") {
+            openRoleWorkspace({ kind: "role-create" });
+            return;
+          }
+          openRoleWorkspace({ kind: "roles-list" });
+        })}
+        roles={roles}
+        activeRoleId={activeRoleId}
+        unreadCounts={unreadCounts}
+        bridgeReady={bridgeReady}
+        onOpenSearch={() => setShowSearchDialog(true)}
+        onOpenRolesWorkspace={() => guardLeave(() => openRoleWorkspace({ kind: "roles-list" }))}
+        onOpenPluginPage={(pageId) => guardLeave(() => openPluginPage(pageId))}
+        onOpenRole={(roleId) => guardLeave(() => void openChatRole({
+          roleId,
+          activeRoleId,
+          chatShown: mainView.kind === "chat",
+          open: () => void openRole(roleId, null, { recordHistory: true }),
+        }))}
+        health={health}
+        bridgeError={bridgeError}
+        onRestartBridge={bridgeLifecycle.restartBridge}
+        activeRole={activeRole}
+        activeSession={activeSession}
+        chatLatestImagePath={resolvedChatImagePath}
+        chatLatestImagePosition={selectedChatImagePosition}
+        chatLatestImageSidebar={chatLatestImageSidebar}
+        chatLatestImageSidebarCount={chatImageHistory.length}
+        currentMood={currentMood}
+        moodIllustrationUrl={moodIllustrationUrl}
+        moodUpdatedAt={moodUpdatedAt}
+        roleSelfView={roleSelfView}
+        relationshipTags={relationshipTags}
+        lonelinessValue={lonelinessValue}
+        conversationEndRef={conversationEndRef}
+        headerTitle={headerTitle}
+        highlightedMessageKey={highlightedMessageKey}
+        onMessageNavigationTargetMounted={handleMessageNavigationTargetMounted}
+        isVisibleChatSending={isVisibleChatSending}
+        isVisibleChatCancelling={isVisibleChatCancelling}
+        visibleIllustrationUrl={visibleIllustrationUrl}
+        windowVisible={windowVisible}
+        onGoToNextChatImage={selectNextChatImage}
+        onGoToPreviousChatImage={selectPreviousChatImage}
+        onOpenChatImageLightbox={openSelectedChatImageLightbox}
+        onOpenChatImagePreview={openChatImagePreview}
+        onOpenRoleDetail={() => void openRoleDetail(activeRoleId)}
+        onJumpToMessage={jumpToChatMessage}
+        onBeginAttachmentDrag={beginAttachmentDrag}
+        onCopyMessage={(content) => void copyChatMessage(content)}
+        onSendMessage={sendMessage}
+        onCancelChat={() => void cancelChatTurn(activeSessionKey, activeRoleId)}
+        onRetryFailedTurn={(errorKey) => void retryFailedChatTurn(errorKey)}
+        onLoadOlderMessages={loadOlderMessages}
+        detailRole={detailRole}
+        pendingRoleCardAction={pendingRoleCardAction}
+        onOpenRoleManagementDetail={(roleId) => guardLeave(() => void openRoleDetailWithTransition(roleId, () => void openRoleDetail(roleId)))}
+        onGoToRoleChat={(roleId) => guardLeave(() => {
+          openChatView({ recordHistory: false });
+          void openRole(roleId, null, { recordHistory: true });
+        })}
+        onImportRoleCard={() => guardLeave(() => {
           openRoleWorkspace({ kind: "role-create" });
-          return;
-        }
-        openRoleWorkspace({ kind: "roles-list" });
-      })}
-      roles={roles}
-      activeRoleId={activeRoleId}
-      unreadCounts={unreadCounts}
-      bridgeReady={bridgeReady}
-      onOpenSearch={() => setShowSearchDialog(true)}
-      onOpenRolesWorkspace={() => guardLeave(() => openRoleWorkspace({ kind: "roles-list" }))}
-      onOpenPluginPage={(pageId) => guardLeave(() => openPluginPage(pageId))}
-      onOpenRole={(roleId) => guardLeave(() => void openChatRole({
-        roleId,
-        activeRoleId,
-        chatShown: mainView.kind === "chat",
-        open: () => void openRole(roleId, null, { recordHistory: true }),
-      }))}
-      health={health}
-      bridgeError={bridgeError}
-      onRestartBridge={bridgeLifecycle.restartBridge}
-      activeRole={activeRole}
-      activeSession={activeSession}
-      chatLatestImagePath={resolvedChatImagePath}
-      chatLatestImagePosition={selectedChatImagePosition}
-      chatLatestImageSidebar={chatLatestImageSidebar}
-      chatLatestImageSidebarCount={chatImageHistory.length}
-      currentMood={currentMood}
-      moodIllustrationUrl={moodIllustrationUrl}
-      moodUpdatedAt={moodUpdatedAt}
-      roleSelfView={roleSelfView}
-      relationshipTags={relationshipTags}
-      lonelinessValue={lonelinessValue}
-      conversationEndRef={conversationEndRef}
-      headerTitle={headerTitle}
-      highlightedMessageKey={highlightedMessageKey}
-      onMessageNavigationTargetMounted={handleMessageNavigationTargetMounted}
-      isVisibleChatSending={isVisibleChatSending}
-      isVisibleChatCancelling={isVisibleChatCancelling}
-      visibleIllustrationUrl={visibleIllustrationUrl}
-      windowVisible={windowVisible}
-      onGoToNextChatImage={selectNextChatImage}
-      onGoToPreviousChatImage={selectPreviousChatImage}
-      onOpenChatImageLightbox={openSelectedChatImageLightbox}
-      onOpenChatImagePreview={openChatImagePreview}
-      onOpenRoleDetail={() => void openRoleDetail(activeRoleId)}
-      onJumpToMessage={jumpToChatMessage}
-      onBeginAttachmentDrag={beginAttachmentDrag}
-      onCopyMessage={(content) => void copyChatMessage(content)}
-      onSendMessage={sendMessage}
-      onCancelChat={() => void cancelChatTurn(activeSessionKey, activeRoleId)}
-      onRetryFailedTurn={(errorKey) => void retryFailedChatTurn(errorKey)}
-      onLoadOlderMessages={loadOlderMessages}
-      detailRole={detailRole}
-      pendingRoleCardAction={pendingRoleCardAction}
-      onOpenRoleManagementDetail={(roleId) => guardLeave(() => void openRoleDetailWithTransition(roleId, () => void openRoleDetail(roleId)))}
-      onGoToRoleChat={(roleId) => guardLeave(() => {
-        openChatView({ recordHistory: false });
-        void openRole(roleId, null, { recordHistory: true });
-      })}
-      onImportRoleCard={() => guardLeave(() => {
-        openRoleWorkspace({ kind: "role-create" });
-        void roleCreation.previewRoleCard();
-      })}
-      onRequestDeleteRole={setPendingDeleteRoleId}
-      creating={roleCreation.creating}
-      newRoleForm={roleCreation.newRoleForm}
-      onBackToRoleList={() => guardLeave(() => void closeRoleDetailWithTransition(detailRoleId, roleCreation.cancelCreateRole))}
-      onCreateNewRole={() => void roleCreation.createRole()}
-      onResetNewRoleForm={roleCreation.resetNewRoleForm}
-      onUpdateNewRoleForm={roleCreation.updateNewRoleForm}
-      roleCardImport={roleCreation.roleCardImport}
-      onPreviewRoleCard={() => void roleCreation.previewRoleCard()}
-      onCancelRoleCardImport={() => void roleCreation.cancelRoleCardImport()}
-      detailRoleId={detailRoleId}
-      previewAvatar={previewAvatar}
-      roleForm={roleForm}
-      roleFormDirty={roleFormDirty}
-      savingRole={savingRole}
-      onOpenAssetsPage={() => void openRoleAssets(detailRoleId)}
-      onOpenPluginSettings={(pluginId) => guardLeave(() => openSettingsWorkspace("plugins", { subsectionId: pluginId ?? undefined }))}
-      onRoleModelChanged={() => void loadRolesFromBridge()}
-      onUpdateRoleForm={updateRoleForm}
-      onResetRoleForm={resetRoleForm}
-      onSaveRole={() => void saveRole()}
-      savingRoleAssets={savingRoleAssets}
-      selectedAvatarAsset={selectedAvatarAsset}
-      selectedChatBackground={selectedChatBackground}
-      onBackToRoleDetail={() => openRoleWorkspace({ kind: "role-detail", roleId: detailRoleId })}
-      onPickRoleAssets={(categoryId) => void pickRoleAssets(categoryId)}
-      onUpdateRoleAssetOrganization={(categories, bindings, removedIllustrations) => updateRoleAssetOrganization(categories, bindings, removedIllustrations)}
-      onRemoveRoleAsset={(path) => void removeRoleAsset(path)}
-      onPluginRoleDataChanged={() => void refreshDetailRoleForPlugins()}
-      onSelectAvatarAsset={setSelectedAvatarAsset}
-      onSelectChatBackground={setSelectedChatBackground}
-      onSaveRoleAssets={(nextSelection) => void saveRoleAssets(nextSelection)}
-      showSearchDialog={showSearchDialog}
-      searchQuery={searchQuery}
-      searchingSessions={searchingSessions}
-      searchResults={searchResults}
-      onCloseSearchDialog={() => {
-        setShowSearchDialog(false);
-        setSearchQuery("");
-      }}
-      onSelectSearchResult={(result) => guardLeave(() => selectSearchResult(result))}
-      onUpdateSearchQuery={setSearchQuery}
-      pendingDeleteRole={pendingDeleteRole}
-      deletingRole={deletingRole}
-      onCloseDeleteDialog={() => {
-        if (deletingRole) return;
-        setPendingDeleteRoleId("");
-      }}
-      onConfirmDeleteRole={() => void confirmDeleteRole(pendingDeleteRoleId, () => setPendingDeleteRoleId(""))}
-      canAddToAssetLibrary={Boolean(activeRoleId && resolvedChatImagePath)}
-      canGoToNextLightboxImage={selectedChatImageIndex >= 0 && selectedChatImageIndex < chatImageHistory.length - 1}
-      canGoToPreviousLightboxImage={selectedChatImageIndex > 0}
-      chatImageActions={selectedChatImageEntry ? <PluginChatImageActions
-        target={{ ...selectedChatImageEntry, sessionKey: activeSessionKey }}
-        onSessionUpdate={applyPluginImageUpdate} onError={feedback.error} onNotice={feedback.success}
-      /> : null}
-      canLocateLightboxMessage={Boolean(activeRoleId && selectedChatImageEntry?.messageId)}
-      addingChatImageToAssetLibrary={addingChatImageToAssetLibrary}
-      chatImageLightboxOpen={chatImageLightboxOpen}
-      onAddSelectedChatImageToAssetLibrary={() => void addSelectedChatImageToAssetLibrary()}
-      onCloseSelectedChatImageLightbox={closeSelectedChatImageLightbox}
-      onLocateSelectedChatImageMessage={locateSelectedChatImageMessage}
-      leaveConfirmOpen={leaveGuard.confirming}
-      leaveRoleName={detailRole?.name ?? ""}
-      onConfirmLeave={leaveGuard.confirmLeave}
-      onCancelLeave={leaveGuard.cancelLeave}
-    />
+          void roleCreation.previewRoleCard();
+        })}
+        onRequestDeleteRole={setPendingDeleteRoleId}
+        creating={roleCreation.creating}
+        newRoleForm={roleCreation.newRoleForm}
+        onBackToRoleList={() => guardLeave(() => void closeRoleDetailWithTransition(detailRoleId, roleCreation.cancelCreateRole))}
+        onCreateNewRole={() => void roleCreation.createRole()}
+        onResetNewRoleForm={roleCreation.resetNewRoleForm}
+        onUpdateNewRoleForm={roleCreation.updateNewRoleForm}
+        roleCardImport={roleCreation.roleCardImport}
+        onPreviewRoleCard={() => void roleCreation.previewRoleCard()}
+        onCancelRoleCardImport={() => void roleCreation.cancelRoleCardImport()}
+        detailRoleId={detailRoleId}
+        previewAvatar={previewAvatar}
+        roleForm={roleForm}
+        roleFormDirty={roleFormDirty}
+        savingRole={savingRole}
+        onOpenAssetsPage={() => void openRoleAssets(detailRoleId)}
+        onOpenPluginSettings={(pluginId) => guardLeave(() => openSettingsWorkspace("plugins", { subsectionId: pluginId ?? undefined }))}
+        onRoleModelChanged={() => void loadRolesFromBridge()}
+        onUpdateRoleForm={updateRoleForm}
+        onResetRoleForm={resetRoleForm}
+        onSaveRole={() => void saveRole()}
+        savingRoleAssets={savingRoleAssets}
+        selectedAvatarAsset={selectedAvatarAsset}
+        selectedChatBackground={selectedChatBackground}
+        onBackToRoleDetail={() => openRoleWorkspace({ kind: "role-detail", roleId: detailRoleId })}
+        onPickRoleAssets={(categoryId) => void pickRoleAssets(categoryId)}
+        onUpdateRoleAssetOrganization={(categories, bindings, removedIllustrations) => updateRoleAssetOrganization(categories, bindings, removedIllustrations)}
+        onRemoveRoleAsset={(path) => void removeRoleAsset(path)}
+        onPluginRoleDataChanged={() => void refreshDetailRoleForPlugins()}
+        onSelectAvatarAsset={setSelectedAvatarAsset}
+        onSelectChatBackground={setSelectedChatBackground}
+        onSaveRoleAssets={(nextSelection) => void saveRoleAssets(nextSelection)}
+        showSearchDialog={showSearchDialog}
+        searchQuery={searchQuery}
+        searchingSessions={searchingSessions}
+        searchResults={searchResults}
+        onCloseSearchDialog={() => {
+          setShowSearchDialog(false);
+          setSearchQuery("");
+        }}
+        onSelectSearchResult={(result) => guardLeave(() => selectSearchResult(result))}
+        onUpdateSearchQuery={setSearchQuery}
+        pendingDeleteRole={pendingDeleteRole}
+        deletingRole={deletingRole}
+        onCloseDeleteDialog={() => {
+          if (deletingRole) return;
+          setPendingDeleteRoleId("");
+        }}
+        onConfirmDeleteRole={() => void confirmDeleteRole(pendingDeleteRoleId, () => setPendingDeleteRoleId(""))}
+        canAddToAssetLibrary={Boolean(activeRoleId && resolvedChatImagePath)}
+        canGoToNextLightboxImage={selectedChatImageIndex >= 0 && selectedChatImageIndex < chatImageHistory.length - 1}
+        canGoToPreviousLightboxImage={selectedChatImageIndex > 0}
+        chatImageActions={selectedChatImageEntry ? <PluginChatImageActions
+          target={{ ...selectedChatImageEntry, sessionKey: activeSessionKey }}
+          onSessionUpdate={applyPluginImageUpdate} onError={feedback.error} onNotice={feedback.success}
+        /> : null}
+        canLocateLightboxMessage={Boolean(activeRoleId && selectedChatImageEntry?.messageId)}
+        addingChatImageToAssetLibrary={addingChatImageToAssetLibrary}
+        chatImageLightboxOpen={chatImageLightboxOpen}
+        onAddSelectedChatImageToAssetLibrary={() => void addSelectedChatImageToAssetLibrary()}
+        onCloseSelectedChatImageLightbox={closeSelectedChatImageLightbox}
+        onLocateSelectedChatImageMessage={locateSelectedChatImageMessage}
+        leaveConfirmOpen={leaveGuard.confirming}
+        leaveRoleName={detailRole?.name ?? ""}
+        onConfirmLeave={leaveGuard.confirmLeave}
+        onCancelLeave={leaveGuard.cancelLeave}
+      />
+      {startupSplash.phase ? (
+        <StartupSplash phase={startupSplash.phase} leaving={startupSplash.leaving} windowMaximized={windowMaximized} onRestart={bridgeLifecycle.restartBridge} />
+      ) : null}
+    </>
   );
 }
 

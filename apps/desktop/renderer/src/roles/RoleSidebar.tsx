@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Plus } from "@phosphor-icons/react";
+import { emptyStateLines } from "../shared/mascot/mascotLines";
+import { MascotEmptyState } from "../shared/mascot/MascotSpeech";
+import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
 import { SidebarResizeHandle } from "../shared/SidebarResizeHandle";
 import { cx, pressableClass, sidebarContentMotionClass, sidebarNavItemClass } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
@@ -25,25 +28,37 @@ type RoleSidebarProps = {
 /** The relative times in the list only change by the minute. */
 const clockTickMs = 60_000;
 
-/** Friendly placeholder for a chat list with no roles yet, with the one action that fixes it. */
+const createRoleButtonClass = cx(
+  pressableClass,
+  "inline-flex h-8 items-center gap-1.5 rounded-md border border-white/70 bg-gradient-accent px-3 text-body-sm text-ink shadow-soft hover:brightness-[1.03]",
+);
+
+/**
+ * Friendly placeholder for a chat list with no roles yet, with the one
+ * action that fixes it. With the 看板娘 on, 吟风 says it (her line is an
+ * owner-approved exception to 「不写叙述文字」, #362 stage 10).
+ */
 function RoleSidebarEmptyState({ onCreateRole }: { onCreateRole: () => void }) {
+  const createButton = (
+    <button className={createRoleButtonClass} type="button" onClick={onCreateRole}>
+      <Plus className="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
+      新建角色
+    </button>
+  );
+  if (useMascotEnabled()) {
+    return (
+      <MascotEmptyState line={emptyStateLines.noRoles} layout="stack" className="px-1 pt-6" testId="role-list-empty">
+        {createButton}
+      </MascotEmptyState>
+    );
+  }
   return (
     <div className="grid justify-items-center gap-3 px-2 pt-10 text-center" data-testid="role-list-empty">
       <span className="grid h-11 w-11 place-items-center rounded-full bg-accent-softer text-accent">
         <PetalIcon className="h-5 w-5" />
       </span>
       <span className="text-body-sm text-ink-muted">还没有角色</span>
-      <button
-        className={cx(
-          pressableClass,
-          "inline-flex h-8 items-center gap-1.5 rounded-md border border-white/70 bg-gradient-accent px-3 text-body-sm text-ink shadow-soft hover:brightness-[1.03]",
-        )}
-        type="button"
-        onClick={onCreateRole}
-      >
-        <Plus className="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
-        新建角色
-      </button>
+      {createButton}
     </div>
   );
 }

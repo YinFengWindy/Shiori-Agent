@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
+import { mascotFeedback } from "../mascot/mascotFeedback";
 import {
+  createFeedbackReporter,
   dismissFeedback,
   feedback,
   getFeedbackSnapshot,
@@ -72,5 +74,28 @@ describe("feedbackStore", () => {
     const onSelect = () => undefined;
     feedback.error("缺少模型", { action: { label: "选择模型", onSelect } });
     assert.equal(getFeedbackSnapshot()[0]?.action?.onSelect, onSelect);
+  });
+
+  it("starts each call from the reporter's per-tone defaults, which the call's own options override", () => {
+    const reporter = createFeedbackReporter({ error: { persona: "generic", detail: "默认详情" } });
+    reporter.error("一");
+    reporter.error("二", { persona: "modelMissing" });
+    reporter.warning("三");
+    assert.deepEqual(getFeedbackSnapshot().map(({ message, persona, detail }) => [message, persona, detail]), [
+      ["一", "generic", "默认详情"],
+      ["二", "modelMissing", "默认详情"],
+      ["三", undefined, undefined],
+    ]);
+  });
+
+  it("has 吟风 front host errors only: the plain reporter and other tones carry no persona", () => {
+    mascotFeedback.error("宿主报错");
+    mascotFeedback.success("已保存");
+    feedback.error("插件报错");
+    assert.deepEqual(getFeedbackSnapshot().map(({ message, persona }) => [message, persona]), [
+      ["宿主报错", "generic"],
+      ["已保存", undefined],
+      ["插件报错", undefined],
+    ]);
   });
 });

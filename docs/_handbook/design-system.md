@@ -252,6 +252,26 @@ duotone 副形用 `fill="currentColor"` + `opacity={0.15}`、颜色只用 `curre
 
 Phosphor 在 `vite.config.ts:25` 被单独拆成 `icons-vendor` chunk，按需引入即可，不必担心体积。
 
+## 看板娘（吟风）
+
+吟风是 Shiori 的看板娘（#362 阶段 10）。首次引导之外，她只出现在下面这些位置，别的地方不要随手加：
+
+| 位置 | 呈现 | 组件 |
+|---|---|---|
+| 启动画面（后端启动超过 400ms 才出现，超过 8 秒换一句，启动失败给「重启连接」） | 半身立绘 + 台词气泡 + 星芒加载，时间段风景背景 | `app/StartupSplash.tsx`，时机在 `app/startupSplashPhase.ts` |
+| 空状态：没有角色（聊天侧栏、角色页）、搜索没有结果 | 中尺寸立绘 + 台词气泡 + 该处原有的操作按钮 | `shared/mascot/MascotSpeech` 的 `MascotEmptyState` |
+| 连接断开横幅、宿主的报错提示 | 小头像 + 她的一句话作第一句，原文跟在后面，技术细节仍在「详情」 | 横幅在 `app/BridgeOfflineBanner.tsx`；提示走 `feedbackStore` 的 `persona` |
+| 设置 › 关于 | 右侧半身立绘，版本卡片下面一句台词；点她换一句（连带换表情） | `settings/AboutMascot.tsx` |
+
+规则：
+
+- **台词只写在 `shared/mascot/mascotLines.ts`**，每句不超过 40 字（有测试守着），带一个表情。同一场景多句时用 `pickMascotLine` 随机取、不和上一句重复。她的台词是 owner 认可的「不写叙述文字」例外，只限这张表里的场景。
+- **三种尺寸**（`shared/mascot/MascotFigure`，样式 `shared/mascot/mascot.css`）：半身 `MascotHalfFigure`（按 `--mascot-half-crop` 裁在腰下并渐隐，带表情交叉淡入）、中尺寸 `MascotMediumFigure`（`--mascot-medium-width` 180–240px，窄处用 `--mascot-compact-width`）、小头像 `MascotFaceAvatar`（`--mascot-face-size`，圆形取脸）。立绘阴影 `--mascot-drop-shadow` 挂在裁切框外层，挂在带遮罩的那层会被裁成一个矩形。
+- **动效**：出场是淡入 + 上浮 `--mascot-enter-rise`（`.mascot-enter`，`--duration-stage`）；换表情是 `--duration-quick`（160ms）的叠层交叉淡入（`MascotExpressionStack`，首次引导同一套）。减弱动态效果时出场只剩淡入，换表情照旧淡入。
+- **开关**：设置 › 外观 ›「看板娘」（`appearancePrefs.mascot`，默认开）。组件用 `useMascotEnabled()` 判断，关掉时渲染原来那套不带她的样式，不留空位；启动画面整个不出现，启动失败交回离线横幅。
+- **报错提示**：宿主代码用 `shared/mascot/mascotFeedback.ts` 的 `mascotFeedback`（和 `feedback` 同一个队列，只是 error 默认带通用人设），需要更具体的一句时传 `persona`（如未选模型的 `modelMissing`）。**插件界面继续用普通的 `feedback`**，也不要在插件里引用宿主的看板娘（生图插件的空状态保留阶段 7 的品牌母题）。
+- 素材用 `new URL(…, import.meta.url)` 引用，不用 `import x from "*.webp"`：Node 单测没有 webp 加载器，这样显示她的组件才能直接在单测里挂载。
+
 ## 动手前的检查清单
 
 - [ ] 颜色 / 圆角 / 阴影 / 时长是不是都走了 token 或语义类？有没有漏下的写死值？

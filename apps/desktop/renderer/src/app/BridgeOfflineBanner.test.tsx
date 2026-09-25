@@ -53,4 +53,14 @@ describe("BridgeOfflineBanner", () => {
       assert.equal(view.container.innerHTML, "");
     } finally { await view.cleanup(); }
   });
+
+  it("has 吟风 say the first sentence, in front of the original one", async () => {
+    const view = await mountTestComponent(<BridgeOfflineBanner health="offline" bridgeError="" onRestart={async () => undefined} />);
+    try {
+      const banner = view.container.querySelector('[data-testid="bridge-offline-banner"]');
+      assert.equal(banner?.querySelector('[data-testid="mascot-face"]')?.getAttribute("data-expression"), "sad");
+      const text = banner?.textContent ?? "";
+      assert.ok(text.indexOf("和后台断开了") < text.indexOf("与本地服务的连接已断开"), text);
+    } finally { await view.cleanup(); }
+  });
 });

@@ -1,5 +1,8 @@
 import { CaretDown, CheckCircle, Info, Warning, WarningCircle, X, type Icon } from "@phosphor-icons/react";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { MascotFaceAvatar } from "../mascot/MascotFigure";
+import { feedbackPersonaLines } from "../mascot/mascotLines";
+import { useMascotEnabled } from "../mascot/useMascotEnabled";
 import { cx } from "../styles";
 import {
   dismissFeedback,
@@ -29,6 +32,8 @@ function FeedbackToastItem({ toast }: { toast: FeedbackToast }) {
   const [paused, setPaused] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const Glyph = toneIcon[toast.tone];
+  // 吟风 fronts a persona toast only while the 看板娘 is on; off, it is a plain toast.
+  const persona = useMascotEnabled() && toast.persona ? feedbackPersonaLines[toast.persona] : null;
 
   // Restarting the full duration after a pause (rather than resuming the
   // remainder) is deliberate: whoever just hovered the message was reading it.
@@ -44,16 +49,23 @@ function FeedbackToastItem({ toast }: { toast: FeedbackToast }) {
       className="feedback-toast surface-glass-strong pointer-events-auto flex w-full items-start gap-2.5 rounded-lg py-2.5 pl-2.5 pr-2 text-body text-ink"
       role={toast.tone === "error" ? "alert" : "status"}
       data-tone={toast.tone}
+      data-persona={persona ? toast.persona : undefined}
       onPointerEnter={() => setPaused(true)}
       onPointerLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
     >
-      <span className={cx("grid h-6 w-6 shrink-0 place-items-center rounded-full", toneBadgeClass[toast.tone])} aria-hidden="true">
-        <Glyph className="h-4 w-4" weight="bold" />
-      </span>
+      {persona ? (
+        <MascotFaceAvatar expression={persona.expression} className="-my-0.5" />
+      ) : (
+        <span className={cx("grid h-6 w-6 shrink-0 place-items-center rounded-full", toneBadgeClass[toast.tone])} aria-hidden="true">
+          <Glyph className="h-4 w-4" weight="bold" />
+        </span>
+      )}
       <span className="grid min-w-0 flex-1 gap-1 pt-0.5">
-        <span className="break-words leading-5">{toast.message}</span>
+        {/* Her line is the first sentence; the original message follows it. */}
+        {persona ? <span className="break-words font-medium leading-5" data-testid="feedback-persona-line">{persona.text}</span> : null}
+        <span className={cx("break-words leading-5", persona && "text-body-sm text-ink-secondary")}>{toast.message}</span>
         {toast.detail ? (
           <>
             <button

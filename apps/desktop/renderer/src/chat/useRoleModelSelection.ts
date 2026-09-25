@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import type { RoleRecord } from "../shared/types";
-import { errorMessage, feedback } from "../shared/feedback/feedbackStore";
+import { errorMessage } from "../shared/feedback/feedbackStore";
+import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import {
   runtimeConfigForSelection,
   selectionFromRole,

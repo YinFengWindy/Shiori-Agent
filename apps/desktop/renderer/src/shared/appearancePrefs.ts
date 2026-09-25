@@ -11,6 +11,8 @@
 export type AppearancePrefs = {
   /** Slow breathing + pointer parallax of the chat background portrait. */
   readonly backdropMotion: boolean;
+  /** 吟风 (the 看板娘) on the startup splash, empty states, error toasts and 关于. */
+  readonly mascot: boolean;
 };
 
 /** The subset of `Storage` the prefs need (injectable for tests). */
@@ -21,6 +23,7 @@ const appearancePrefsVersion = 1;
 
 export const defaultAppearancePrefs: AppearancePrefs = {
   backdropMotion: true,
+  mascot: true,
 };
 
 /** Normalises a stored value into valid prefs, keeping each valid field. */
@@ -37,6 +40,8 @@ export function parseAppearancePrefs(raw: string | null): AppearancePrefs {
   if (record.version !== appearancePrefsVersion) return defaultAppearancePrefs;
   return {
     backdropMotion: typeof record.backdropMotion === "boolean" ? record.backdropMotion : defaultAppearancePrefs.backdropMotion,
+    // Added after v1 shipped: a stored v1 value without it keeps the default (on).
+    mascot: typeof record.mascot === "boolean" ? record.mascot : defaultAppearancePrefs.mascot,
   };
 }
 

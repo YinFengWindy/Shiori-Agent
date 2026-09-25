@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { SettingsFormData } from "../../../src/bridge/shared";
-import { errorMessage, feedback } from "../shared/feedback/feedbackStore";
+import { errorMessage } from "../shared/feedback/feedbackStore";
+import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 
 /**
  * Reads the saved desktop settings once per mount, for role panels whose

@@ -26,7 +26,22 @@ describe("AppearanceSettingsSection", () => {
       assert.equal(toggle.getAttribute("aria-checked"), "true");
       await act(async () => toggle.click());
       assert.equal(toggle.getAttribute("aria-checked"), "false");
-      assert.deepEqual(JSON.parse(window.localStorage.getItem(appearancePrefsStorageKey)!), { version: 1, backdropMotion: false });
+      assert.deepEqual(JSON.parse(window.localStorage.getItem(appearancePrefsStorageKey)!), { version: 1, backdropMotion: false, mascot: true });
+    } finally {
+      await view.cleanup();
+    }
+  });
+
+  it("shows 看板娘 on by default and persists turning it off", async () => {
+    resetAppearancePrefsCache();
+    const view = await mountTestComponent(renderSection());
+    try {
+      const toggle = view.container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="看板娘"]');
+      assert.ok(toggle);
+      assert.equal(toggle.getAttribute("aria-checked"), "true");
+      await act(async () => toggle.click());
+      assert.equal(toggle.getAttribute("aria-checked"), "false");
+      assert.deepEqual(JSON.parse(window.localStorage.getItem(appearancePrefsStorageKey)!), { version: 1, backdropMotion: true, mascot: false });
     } finally {
       await view.cleanup();
     }

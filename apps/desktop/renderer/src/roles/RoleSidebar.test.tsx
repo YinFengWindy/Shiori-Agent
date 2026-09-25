@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
+import { appearancePrefsStorageKey } from "../shared/appearancePrefs";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { resetAppearancePrefsCache } from "../shared/useAppearancePrefs";
 import { RoleSidebar } from "./RoleSidebar";
 
-function renderEmpty(bridgeReady: boolean, onCreateRole: () => void) {
-  return mountTestComponent(
+function emptySidebar(bridgeReady: boolean, onCreateRole: () => void) {
+  return (
     <RoleSidebar
       roles={[]}
       activeRoleId=""
@@ -17,8 +19,13 @@ function renderEmpty(bridgeReady: boolean, onCreateRole: () => void) {
       onOpenRole={() => undefined}
       onCreateRole={onCreateRole}
       onBeginResize={() => undefined}
-    />,
+    />
   );
+}
+
+function renderEmpty(bridgeReady: boolean, onCreateRole: () => void) {
+  resetAppearancePrefsCache();
+  return mountTestComponent(emptySidebar(bridgeReady, onCreateRole));
 }
 
 describe("RoleSidebar", () => {
@@ -84,5 +91,30 @@ describe("RoleSidebar chat previews", () => {
       assert.equal(view.container.querySelector('[data-testid="role-preview-mira"]')?.textContent, "你：晚安");
       assert.equal(view.container.querySelector('[data-testid="role-unread-mira"]'), null);
     } finally { await view.cleanup(); }
+  });
+
+  it("has 吟风 say the empty state with the 看板娘 on (the default)", async () => {
+    const view = await renderEmpty(true, () => undefined);
+    try {
+      const empty = view.container.querySelector('[data-testid="role-list-empty"]');
+      assert.equal(empty?.querySelector('[data-testid="mascot-medium"]')?.getAttribute("data-expression"), "pout");
+      assert.match(empty?.textContent ?? "", /一个角色都没有/);
+    } finally { await view.cleanup(); }
+  });
+
+  it("keeps the plain empty state with the 看板娘 off", async () => {
+    resetAppearancePrefsCache();
+    const view = await mountTestComponent(<div />);
+    try {
+      window.localStorage.setItem(appearancePrefsStorageKey, JSON.stringify({ version: 1, backdropMotion: true, mascot: false }));
+      await view.render(emptySidebar(true, () => undefined));
+      const empty = view.container.querySelector('[data-testid="role-list-empty"]');
+      assert.equal(empty?.querySelector('[data-testid="mascot-medium"]'), null);
+      assert.match(empty?.textContent ?? "", /还没有角色/);
+      assert.equal(empty?.querySelector("button")?.textContent, "新建角色");
+    } finally {
+      await view.cleanup();
+      resetAppearancePrefsCache();
+    }
   });
 });
