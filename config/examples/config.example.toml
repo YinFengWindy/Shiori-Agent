@@ -132,3 +132,12 @@ auto_writeback_role_assets = false
 max_pixels = 1048576
 max_steps = 28
 default_samples = 1
+
+# =============================================================================
+# 配置升级记录（由程序维护，请勿修改）
+# 这里列出的插件已按当前的默认启停状态初始化：Browser Use、Computer Use 新安装时
+# 默认停用，可在 设置 › 插件 中开启。
+# =============================================================================
+
+[_migrations]
+plugin_default_disabled = ["browser_use", "computer_use"]

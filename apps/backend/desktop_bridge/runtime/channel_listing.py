@@ -19,7 +19,7 @@ from collections.abc import Callable
 from typing import Any
 
 from agent.plugin_host.kernel import PluginKernel
-from agent.plugin_host.manifest import ChannelDeclaration
+from agent.plugin_host.manifest import ChannelDeclaration, PluginManifest
 from bootstrap.app import AppRuntime
 from bootstrap.channel_host import ChannelSnapshot
 
@@ -29,7 +29,9 @@ DESKTOP_CHANNEL = ChannelDeclaration(name="desktop", label="桌面端")
 class RuntimeChannelListing:
     """Joins static channel declarations with the published generation's host state."""
 
-    def __init__(self, app: AppRuntime, enabled: Callable[[str], bool]) -> None:
+    def __init__(
+        self, app: AppRuntime, enabled: Callable[[PluginManifest], bool]
+    ) -> None:
         self._app = app
         self._enabled = enabled
 
@@ -54,7 +56,7 @@ class RuntimeChannelListing:
         seen: set[str] = set()
         for record in kernel.discover():
             plugin_id = record.manifest.id
-            enabled = self._enabled(plugin_id)
+            enabled = self._enabled(record.manifest)
             state = states.get(record.candidate_id)
             plugin_state = (
                 state["state"]

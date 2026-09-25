@@ -27,7 +27,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from agent.plugin_host.kernel import PLUGIN_ENABLED_CONFIG_KEY, PluginKernel
+from agent.plugin_host.kernel import (
+    PLUGIN_ENABLED_CONFIG_KEY,
+    PluginKernel,
+    plugin_enabled,
+)
+from agent.plugin_host.manifest import PluginManifest
 from bootstrap.app import AppRuntime
 from desktop_bridge.runtime.channel_listing import RuntimeChannelListing
 from desktop_bridge.runtime.plugin_trust import RuntimePluginTrust
@@ -86,7 +91,7 @@ class RuntimePluginManagement:
                     # never establish a newer baseline during their first request.
                     "content_fingerprint": record.fingerprint,
                     "content_hashes": record.content_hashes,
-                    "enabled": self._enabled(plugin_id),
+                    "enabled": self._enabled(record.manifest),
                     "can_toggle": runtime_state
                     not in {"CONFLICT", "UNTRUSTED", "BLOCKED", "RESTART_REQUIRED"},
                     "supports_hot_unload": record.manifest.supports_hot_unload,
@@ -220,9 +225,9 @@ class RuntimePluginManagement:
                 )
         return {"plugin_id": plugin_id, "kind": kind, "changed": changed}
 
-    def _enabled(self, plugin_id: str) -> bool:
-        stored = self._app.config.plugins.get(plugin_id, {})
-        return bool(stored.get(PLUGIN_ENABLED_CONFIG_KEY, True))
+    def _enabled(self, manifest: PluginManifest) -> bool:
+        """Reports the effective enable flag, honouring the manifest default."""
+        return plugin_enabled(manifest, self._app.config.plugins.get(manifest.id, {}))
 
     def _plugin_kernel(self) -> "PluginKernel | None":
         """Returns the currently published generation's plugin kernel, if any."""

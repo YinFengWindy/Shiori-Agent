@@ -1005,3 +1005,43 @@ async def test_workspace_directory_changes_wait_for_application_restart(
     finally:
         await restarted.aclose()
         await restarted_app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_list_reflects_a_manifest_default_disabled_plugin_and_can_enable_it(
+    tmp_path, monkeypatch
+):
+    """manifest default_enabled: false：列表显示停用，打开开关后写显式 enabled 并加载。"""
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    manifest = tmp_path / "plugin_dirs" / "hello" / "manifest.yaml"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8") + "default_enabled: false\n",
+        encoding="utf-8",
+    )
+    service, path, app = await _start_service(tmp_path)
+    try:
+        listed = await _request(service, "plugins.list")
+        assert listed.error is None, listed.error
+        hello = next(
+            item for item in listed.payload["plugins"] if item["id"] == "hello"
+        )
+        assert hello["enabled"] is False
+        assert hello["state"] == PluginState.DISABLED.name
+
+        enabled = await _request(
+            service,
+            "plugins.setEnabled",
+            {"plugin_id": "hello", "enabled": True, "operation_id": "op-enable"},
+        )
+        assert enabled.error is None, enabled.error
+        assert "[plugins.hello]\nenabled = true" in path.read_text(encoding="utf-8")
+
+        relisted = await _request(service, "plugins.list")
+        hello = next(
+            item for item in relisted.payload["plugins"] if item["id"] == "hello"
+        )
+        assert hello["enabled"] is True
+        assert hello["state"] == PluginState.ACTIVE.name
+    finally:
+        await service.aclose()
+        await app.shutdown()

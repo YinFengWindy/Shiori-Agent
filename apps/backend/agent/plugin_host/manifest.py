@@ -113,6 +113,10 @@ class PluginManifest:
     supports_hot_unload: bool = True
     # 插件管理页分组（PLUGIN_CATEGORIES 之一），解析时已按 capabilities 补全默认值
     category: str = "feature"
+    # ``[plugins.<id>]`` 没有显式 ``enabled`` 时是否启用；显式值始终优先。
+    # 新增 ``false`` 的内置插件要同时登记到 agent/plugin_default_enabled_migration.py，
+    # 否则升级用户的插件会被悄悄停用。
+    default_enabled: bool = True
     metadata: dict[str, object] = field(default_factory=dict)
 
 
@@ -155,6 +159,9 @@ def _parse_manifest(
     supports_hot_unload = raw.get("supports_hot_unload", True)
     if not isinstance(supports_hot_unload, bool):
         raise ManifestError("supports_hot_unload 必须是布尔值")
+    default_enabled = raw.get("default_enabled", True)
+    if not isinstance(default_enabled, bool):
+        raise ManifestError("default_enabled 必须是布尔值")
     capabilities = _parse_capabilities(raw, manifest_path)
     channels = _parse_channels(raw, capabilities)
     dependencies = _parse_dependencies(raw, "dependencies")
@@ -178,6 +185,7 @@ def _parse_manifest(
         api=api,
         supports_hot_unload=supports_hot_unload,
         category=_parse_category(raw, capabilities),
+        default_enabled=default_enabled,
         metadata={k: v for k, v in raw.items() if isinstance(k, str)},
     )
 

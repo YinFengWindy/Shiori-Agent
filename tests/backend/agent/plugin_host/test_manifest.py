@@ -255,3 +255,41 @@ def test_builtin_channel_plugins_are_grouped_as_channels():
         assert manifest is not None
         if "channels" in manifest.capabilities:
             assert manifest.category == "channel", manifest.id
+
+
+def test_manifest_default_enabled_defaults_to_true(tmp_path):
+    (tmp_path / "manifest.yaml").write_text(
+        "api: 2\ncapabilities: []\n", encoding="utf-8"
+    )
+    assert load_manifest(tmp_path).default_enabled is True
+
+
+def test_manifest_accepts_default_enabled_false(tmp_path):
+    (tmp_path / "manifest.yaml").write_text(
+        "api: 2\ncapabilities: []\ndefault_enabled: false\n", encoding="utf-8"
+    )
+    assert load_manifest(tmp_path).default_enabled is False
+
+
+@pytest.mark.parametrize("value", ["'false'", "0", "[]", "null"])
+def test_manifest_rejects_non_boolean_default_enabled(tmp_path, value):
+    (tmp_path / "manifest.yaml").write_text(
+        f"api: 2\ncapabilities: []\ndefault_enabled: {value}\n", encoding="utf-8"
+    )
+    with pytest.raises(ManifestError, match="default_enabled"):
+        load_manifest(tmp_path)
+
+
+def test_builtin_default_disabled_plugins_match_the_upgrade_migration():
+    """manifest 里默认停用的内置插件必须登记在升级迁移里，否则升级用户会被悄悄停用。"""
+    from agent.plugin_default_enabled_migration import DEFAULT_DISABLED_PLUGINS
+
+    root = Path(__file__).resolve().parents[4] / "plugins"
+    manifests = [load_manifest(path.parent) for path in root.glob("*/manifest.yaml")]
+    default_disabled = {
+        manifest.id
+        for manifest in manifests
+        if manifest and not manifest.default_enabled
+    }
+    assert default_disabled == set(DEFAULT_DISABLED_PLUGINS)
+    assert default_disabled == {"browser_use", "computer_use"}

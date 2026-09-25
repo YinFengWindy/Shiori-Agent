@@ -50,9 +50,10 @@ def load_config(
     """Loads and validates the persisted TOML configuration.
 
     Runs the one-time ``[integrations.novelai]`` -> ``[plugins.novelai]``
-    migration (issue #180) and the built-in channel table migration
-    (``[channels.telegram|qq]`` -> ``[plugins.telegram|qq]``, issue #363) against
-    the real file before parsing, so an upgrading user's existing
+    migration (issue #180), the built-in channel table migration
+    (``[channels.telegram|qq]`` -> ``[plugins.telegram|qq]``, issue #363) and the
+    default-disabled plugin pinning (``agent/plugin_default_enabled_migration.py``)
+    against the real file before parsing, so an upgrading user's existing
     token/settings show up under the plugin's own config channel with no
     action required. ``load_config_text`` deliberately does not run these: it
     promises never to touch the persisted file, and rejects a non-empty
@@ -75,6 +76,11 @@ def load_config(
     from agent.plugin_preferences import migrate_plugin_preferences
 
     data = migrate_plugin_preferences(resolved_path, data)
+    # 放在 plugin.disabled 标记迁移之后：标记已写成显式 enabled = false 的插件
+    # 不会再被这里改成启用。
+    from agent.plugin_default_enabled_migration import migrate_plugin_default_enabled
+
+    data = migrate_plugin_default_enabled(resolved_path, data)
     return load_config_data(data)
 
 

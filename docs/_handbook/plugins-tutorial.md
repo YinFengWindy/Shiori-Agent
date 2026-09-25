@@ -43,6 +43,8 @@ supports_hot_unload: true
 
 `display_name` 是设置 › 插件里显示的名称（省略时显示 ID）。可选的 `category` 决定插件在列表中的分组：`feature`（功能）、`channel`（渠道）、`system`（系统组件，默认折叠，用于宿主内部护栏、诊断命令这类用户不需要日常操作的插件）。省略时声明了 `channels` capability 的插件归入渠道，其余归入功能；`system` 只能显式声明。取值不在这三者之内时 manifest 被拒绝。Package Contract v1 的外部包目前不接受 `display_name` 与 `category`，因此外部插件不能把自己归入默认折叠的系统组件。
 
+可选的 `default_enabled`（严格布尔值，省略为 `true`）决定 `[plugins.<id>]` 没有显式 `enabled` 时插件是否启用；显式的 `enabled` 始终优先，设置 › 插件的开关写的就是显式值。目前 `browser_use`、`computer_use` 声明为 `false`，新安装默认停用。把内置插件改为 `false` 时必须同时把 ID 追加到 `agent/plugin_default_enabled_migration.py` 的 `DEFAULT_DISABLED_PLUGINS` 和 `config/examples/config.example.toml` 的 `[_migrations] plugin_default_disabled` 回执：升级用户的旧配置在首次启动时被显式写成 `enabled = true`，保持升级前的状态；模板带回执，新安装不受迁移影响（`test_manifest.py` 会校验 manifest 与迁移清单一致）。Package Contract v1 的外部包不接受 `default_enabled`。
+
 ## setup 与配置
 
 ```python

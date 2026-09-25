@@ -12,7 +12,7 @@ from importlib.abc import Loader
 import itertools
 import logging
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -47,6 +47,7 @@ from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.discovery import discover_plugins
 from agent.plugin_host.manifest import (
     ManifestError,
+    PluginManifest,
 )
 from agent.plugin_host.plugin_data import (
     open_plugin_kv,
@@ -69,6 +70,17 @@ logger = logging.getLogger(__name__)
 # 启停状态与插件自己的配置同住 [plugins.<id>] 表，但它归宿主所有、不是插件配置
 # 模型的字段。凡是整表读写这张表的地方都必须认得这个键，否则会互相覆盖。
 PLUGIN_ENABLED_CONFIG_KEY = "enabled"
+
+
+def plugin_enabled(manifest: PluginManifest, stored: Mapping[str, Any]) -> bool:
+    """Returns whether a plugin is enabled given its ``[plugins.<id>]`` table.
+
+    An explicit ``enabled`` always wins; without one the manifest's
+    ``default_enabled`` decides. Shared by the kernel's load gate and the
+    desktop plugin/channel listings so they can never disagree.
+    """
+    return bool(stored.get(PLUGIN_ENABLED_CONFIG_KEY, manifest.default_enabled))
+
 
 # 每个内核代际都需要独立的包命名空间。使用进程内序号而不是发现根目录
 # 名称，避免插件从仓库搬到任意目录后改变 import 名称，也避免两个发现根
@@ -238,7 +250,7 @@ class PluginKernel:
                 "插件循环依赖: " + " -> ".join((*trail, plugin_id))
             )
         # A disabled plugin must not load its dependencies as a side effect.
-        if self._config_enabled(plugin_id):
+        if self._config_enabled(record.manifest):
             for index, dependency in enumerate(record.manifest.dependencies):
                 target = records.get(dependency)
                 try:
@@ -296,7 +308,7 @@ class PluginKernel:
             return
         handle = PluginHandle(record=record, effects=EffectScope(record.manifest.id))
         self._handles[record.candidate_id] = handle
-        if not self._config_enabled(record.manifest.id):
+        if not self._config_enabled(record.manifest):
             handle.state = PluginState.DISABLED
             logger.info("插件已禁用（配置状态）: %s", record.name)
             return
@@ -362,10 +374,11 @@ class PluginKernel:
         handle.activation_token = uuid4().hex
         logger.info("插件已加载: %s", record.name)
 
-    def _config_enabled(self, plugin_id: str) -> bool:
-        """Reads the authoritative enable flag; absent means enabled."""
-        stored = self._services.plugin_configs.get(plugin_id, {})
-        return bool(stored.get(PLUGIN_ENABLED_CONFIG_KEY, True))
+    def _config_enabled(self, manifest: PluginManifest) -> bool:
+        """Reads the authoritative enable flag; absent falls back to the manifest."""
+        return plugin_enabled(
+            manifest, self._services.plugin_configs.get(manifest.id, {})
+        )
 
     def _import_entry(
         self, handle: PluginHandle, content: PackageContent | None = None

@@ -20,6 +20,7 @@ async def test_lazy_registration_disable_and_reenable(tmp_path):
             workspace=tmp_path / "workspace",
             tool_registry=registry,
             event_bus=EventBus(),
+            plugin_configs={"browser_use": {"enabled": True}},
         ),
     )
     await kernel.load_all()
@@ -35,6 +36,25 @@ async def test_lazy_registration_disable_and_reenable(tmp_path):
     await kernel.load_all()
     assert registry.get_tool("agent_browser_snapshot") is not old_tool
     await kernel.unload("browser_use")
+
+
+async def test_new_installs_leave_the_plugin_disabled(tmp_path):
+    """manifest default_enabled: false —— 没有显式 enabled 时不加载、不贡献工具。"""
+    roots = tmp_path / "plugins"
+    stage_plugin_package(Path(__file__).resolve().parents[1], roots / "browser_use")
+    registry = ToolRegistry()
+    kernel = PluginKernel(
+        [roots],
+        services=HostServices(
+            workspace=tmp_path,
+            tool_registry=registry,
+            event_bus=EventBus(),
+        ),
+    )
+    await kernel.load_all()
+    assert kernel.loaded_count == 0
+    assert [item["state"] for item in kernel.states()] == ["DISABLED"]
+    assert registry.get_tool("agent_browser_snapshot") is None
 
 
 async def test_disabled_plugin_contributes_nothing(tmp_path):
