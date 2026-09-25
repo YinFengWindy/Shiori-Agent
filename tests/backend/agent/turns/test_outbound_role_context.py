@@ -162,3 +162,10 @@ async def test_bus_outbound_port_receipt_is_only_queued():
     assert len(published) == 1
     assert receipt == DeliveryReceipt.queued()
     assert receipt.delivered is False
+
+
+def test_undelivered_receipt_cannot_carry_a_platform_id():
+    with pytest.raises(ValueError, match="外部消息 id"):
+        DeliveryReceipt(delivered=False, external_message_id="msg-1")
+    assert DeliveryReceipt.queued().external_message_id is None
+    assert DeliveryReceipt.sent("msg-1").external_message_id == "msg-1"

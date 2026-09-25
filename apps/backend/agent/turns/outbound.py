@@ -57,6 +57,11 @@ class DeliveryReceipt:
     delivered: bool
     external_message_id: str | None = None
 
+    def __post_init__(self) -> None:
+        # Only a message the platform accepted can have a platform id.
+        if not self.delivered and self.external_message_id is not None:
+            raise ValueError("未送达的回执不能带外部消息 id")
+
     @classmethod
     def queued(cls) -> DeliveryReceipt:
         """The payload was handed to a queue; nothing reached the platform yet."""

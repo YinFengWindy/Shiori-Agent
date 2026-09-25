@@ -124,5 +124,13 @@ class _OutboundMixin:
 
 
 def _sent_message_id(sent: object) -> str | None:
-    """NcatBot send APIs return the message id; None means it reported none."""
-    return str(sent) if sent is not None else None
+    """NcatBot send APIs return the message id; None means it reported none.
+
+    Any other shape is an unexpected API contract change: fail instead of
+    storing a stringified object as the platform id.
+    """
+    if sent is None:
+        return None
+    if isinstance(sent, (str, int)) and not isinstance(sent, bool):
+        return str(sent)
+    raise TypeError(f"NcatBot 返回了无法识别的消息 id: {sent!r}")

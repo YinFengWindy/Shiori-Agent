@@ -949,3 +949,26 @@ async def test_qq_push_senders_return_the_napcat_message_id(
     assert await channel.send("gqq:100", "group pong") == "202"
     # A transport that reports no id yields no id, never the text "None".
     assert await channel.send_image("1", "https://example.com/a.png") is None
+
+
+@pytest.mark.asyncio
+async def test_qq_sender_rejects_an_unrecognized_message_id_shape(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    mod = _import_qq_channel(monkeypatch)
+    channel = mod.QQChannel(
+        "42", _Bus(), _SessionManager(tmp_path), http_requester=SimpleNamespace()
+    )
+
+    async def _drain(coro):
+        return await coro
+
+    channel._run_on_bot_loop = AsyncMock(side_effect=_drain)
+    channel._api = SimpleNamespace(
+        send_private_text=AsyncMock(return_value={"message_id": 101}),
+    )
+
+    # A dict is not an id; storing str(dict) would corrupt external_message_id.
+    with pytest.raises(TypeError, match="无法识别的消息 id"):
+        await channel.send("1", "pong")
