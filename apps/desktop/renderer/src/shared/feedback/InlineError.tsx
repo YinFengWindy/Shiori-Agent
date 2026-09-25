@@ -33,8 +33,11 @@ export type InlineErrorProps = {
   glyph?: Icon;
   /** Tint of the plain glyph: `accent` for a problem the user fixes in settings rather than a failure. */
   glyphTone?: "danger" | "accent";
-  /** `alert` interrupts assistive tech (default); `status` for results the user just asked for. */
-  role?: "alert" | "status";
+  /**
+   * `alert` interrupts assistive tech (default); `status` for results the
+   * user just asked for; `false` inside a container that already is a live region.
+   */
+  role?: "alert" | "status" | false;
   /** Adds a close button (cards). */
   onDismiss?: () => void;
   className?: string;
@@ -97,17 +100,21 @@ export function InlineError({
 
   if (layout === "card") {
     return (
-      <div className={cx(layoutClass.card, className)} role={role} data-testid={testId} data-persona={line ? persona : undefined}>
+      <div className={cx(layoutClass.card, className)} role={role || undefined} data-testid={testId} data-persona={line ? persona : undefined}>
         {dismiss}
-        {line ? (
-          <MascotFaceAvatar expression={line.expression} size="lg" />
-        ) : (
+        {/* Plain: the glyph badge heads the card. With her: title first, then she speaks beside her face (as in ConfirmDialog). */}
+        {line ? null : (
           <span className={cx("grid h-12 w-12 place-items-center rounded-full", cardGlyphBadgeClass[glyphTone])} aria-hidden="true">
             <Glyph className="h-6 w-6" weight="duotone" />
           </span>
         )}
-        {title ? <span className="font-display text-title-sm text-ink">{title}</span> : null}
-        {line ? <MascotSpeechBubble line={line} tail="top" /> : null}
+        {title ? <span className={cx("font-display text-title-sm text-ink", line && "px-6")}>{title}</span> : null}
+        {line ? (
+          <div className="flex w-full items-start gap-3 text-left">
+            <MascotFaceAvatar expression={line.expression} size="lg" />
+            <MascotSpeechBubble line={line} tail="left" className="min-w-0 flex-1" />
+          </div>
+        ) : null}
         {message ? <span className="max-h-28 overflow-y-auto break-words text-body-sm text-ink-muted [overflow-wrap:anywhere]">{message}</span> : null}
         {detailFold ? <span className="grid w-full justify-items-center gap-1">{detailFold}</span> : null}
         {actions ? <div className="mt-1 flex flex-wrap justify-center gap-2">{actions}</div> : null}
@@ -116,7 +123,7 @@ export function InlineError({
   }
 
   return (
-    <div className={cx(layoutClass[layout], className)} role={role} data-testid={testId} data-persona={line ? persona : undefined}>
+    <div className={cx(layoutClass[layout], className)} role={role || undefined} data-testid={testId} data-persona={line ? persona : undefined}>
       {line ? (
         <MascotFaceAvatar expression={line.expression} className="-my-0.5" />
       ) : (

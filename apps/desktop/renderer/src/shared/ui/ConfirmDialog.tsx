@@ -40,7 +40,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel, children
         <Dialog.Title className="font-display text-title font-semibold text-ink">{content.title}</Dialog.Title>
         {lead ? (
           // Her line is the dialog's lead sentence; the facts follow below.
-          <div className="flex items-center gap-3" data-testid="confirm-persona" data-expression={lead.expression}>
+          <div className="flex items-start gap-3" data-testid="confirm-persona" data-expression={lead.expression}>
             <MascotFaceAvatar expression={lead.expression} size="lg" />
             <MascotSpeechBubble line={lead} tail="left" className="min-w-0 flex-1" />
           </div>
