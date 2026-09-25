@@ -19,11 +19,8 @@ from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import StreamDeltaReady, TurnStarted
 from bus.queue import MessageBus
 from core.channels import ChannelHub
-from core.common.channel_chat_types import (
-    ChatTypeDeclaration,
-    chat_id_command_reply,
-    is_chat_id_command,
-)
+from core.channels.chat_id_command import answer_chat_id_command
+from core.common.channel_chat_types import ChatTypeDeclaration, is_chat_id_command
 from infra.channels.contract import ChannelContext, ChannelStatus
 from infra.channels.intake import ChannelIntake
 from infra.channels.session_key import resolve_outbound_session_key
@@ -359,28 +356,16 @@ class FeishuChannel:
         return False
 
     async def _handle_chat_id(self, chat_id: str, sender: str) -> None:
-        """Answers ``/chatid`` with what the binding form asks for this chat."""
-        if not self._may_answer_chat_id(chat_id, sender):
-            return
-        await self.send(
-            chat_id, chat_id_command_reply(chat_id, "private", self._chat_types)
+        """Answers ``/chatid``; the admission exception is documented there."""
+        await answer_chat_id_command(
+            self._channel_hub,
+            channel=CHANNEL,
+            chat_id=chat_id,
+            chat_type="private",
+            sender_id=sender,
+            declarations=self._chat_types,
+            send=lambda text: self.send(chat_id, text),
         )
-
-    def _may_answer_chat_id(self, chat_id: str, sender: str) -> bool:
-        """Admission for ``/chatid``: everyone except a bound session's blacklist.
-
-        The one deliberate exception to "a rejected message has no side
-        effect": ``/chatid`` is answered in a chat that is not bound yet,
-        because it is how the user finds the chat_id to bind. A blacklisted
-        sender still gets no reply and causes nothing.
-        """
-        hub = self._channel_hub
-        if hub is None or not hub.is_sender_blocked(
-            channel=CHANNEL, chat_id=chat_id, sender_id=sender
-        ):
-            return True
-        logger.warning("[feishu] 忽略黑名单成员的 /chatid chat_id=%s", chat_id)
-        return False
 
     async def _handle_stop(self, chat_id: str, sender: str) -> None:
         if self._interrupt_controller is None:

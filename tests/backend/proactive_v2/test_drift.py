@@ -1359,7 +1359,7 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
             role_id="mira",
         ),
         sense=SimpleNamespace(
-            target_session_key=lambda: "telegram:1",
+            target_session_key=lambda: "role:mira",
             target_transport=lambda: ("telegram", "1"),
             collect_recent=lambda: [],
             collect_recent_proactive=lambda n: [],

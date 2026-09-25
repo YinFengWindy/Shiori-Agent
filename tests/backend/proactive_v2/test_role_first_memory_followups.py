@@ -59,7 +59,7 @@ def test_agent_tick_factory_requires_role_id() -> None:
             "Sense",
             (),
             {
-                "target_session_key": staticmethod(lambda: "telegram:1"),
+                "target_session_key": staticmethod(lambda: ""),
                 "target_transport": staticmethod(lambda: ("telegram", "1")),
                 "collect_recent": staticmethod(lambda: []),
                 "collect_recent_proactive": staticmethod(lambda n: []),

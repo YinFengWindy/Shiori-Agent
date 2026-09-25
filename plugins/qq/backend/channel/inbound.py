@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 
 from bus.events import InboundMessage
-from core.common.channel_chat_types import ChatType, chat_id_command_reply
+from core.channels.chat_id_command import answer_chat_id_command
+from core.common.channel_chat_types import ChatType
 from core.common.channel_identifiers import normalize_qq_group_chat_id
 
 from .compat import download_to_temp
@@ -132,27 +133,16 @@ class _InboundMixin:
     async def _handle_chat_id(
         self, chat_id: str, user_id: str, chat_type: ChatType
     ) -> None:
-        """Answers ``/chatid`` with what the binding form asks for this chat."""
-        if not self._may_answer_chat_id(chat_id, user_id):
-            return
-        await self.send(
-            chat_id, chat_id_command_reply(chat_id, chat_type, self._chat_types)
+        """Answers ``/chatid``; the admission exception is documented there."""
+        await answer_chat_id_command(
+            self._channel_hub,
+            channel=CHANNEL,
+            chat_id=chat_id,
+            chat_type=chat_type,
+            sender_id=user_id,
+            declarations=self._chat_types,
+            send=lambda text: self.send(chat_id, text),
         )
-
-    def _may_answer_chat_id(self, chat_id: str, user_id: str) -> bool:
-        """Admission for ``/chatid``: everyone except a bound group's blacklist.
-
-        The one deliberate exception to "a rejected message has no side
-        effect": ``/chatid`` is answered in a chat that is not bound yet,
-        because it is how the user finds the number to bind. A blacklisted
-        member of a bound group still gets no reply and causes nothing.
-        """
-        if self._channel_hub is None or not self._channel_hub.is_sender_blocked(
-            channel=CHANNEL, chat_id=chat_id, sender_id=user_id
-        ):
-            return True
-        logger.warning("[qq] 忽略黑名单成员的 /chatid chat_id=%s", chat_id)
-        return False
 
     def _resolve_runtime_session_key(self, chat_id: str) -> str:
         if self._channel_hub is not None:

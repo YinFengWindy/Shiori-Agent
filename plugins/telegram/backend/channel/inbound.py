@@ -125,26 +125,6 @@ class _InboundMixin:
         )
         return False
 
-    def _may_answer_chat_id(self, chat: Any, user: Any) -> bool:
-        """Admission for ``/chatid``: everyone except a bound group's blacklist.
-
-        The one deliberate exception to "a rejected update has no side
-        effect": ``/chatid`` is answered in a chat that is not bound yet,
-        because it is how the user finds the ID to bind. A blacklisted member
-        of a bound group still gets no reply and causes nothing.
-        """
-        if self._channel_hub is None or not self._channel_hub.is_sender_blocked(
-            channel=self._channel,
-            chat_id=str(chat.id),
-            sender_id=str(user.id),
-            sender_alias=user.username or "",
-        ):
-            return True
-        logger.warning(
-            "[telegram] 忽略黑名单成员的 /chatid  chat_id=%s  id=%s", chat.id, user.id
-        )
-        return False
-
     def _route_inbound(self, message: InboundMessage) -> InboundMessage:
         if self._channel_hub is None:
             return message

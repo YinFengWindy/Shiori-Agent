@@ -43,7 +43,12 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
         cast(Any, cfg),
         tmp_path,
         session_manager=cast(
-            Any, SimpleNamespace(workspace=tmp_path, conversation_store=MagicMock())
+            Any,
+            SimpleNamespace(
+                workspace=tmp_path,
+                conversation_store=MagicMock(),
+                role_session_key=lambda role_id: f"role:{role_id}",
+            ),
         ),
         provider=cast(Any, SimpleNamespace()),
         light_provider=None,

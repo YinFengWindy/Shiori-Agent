@@ -110,10 +110,10 @@ class AgentTickFactory:
 
     def _get_session_key(self) -> str:
         """The role session a proactive tick serves; every runtime is role-scoped."""
-        role_id = self._deps.cfg.role_id
-        if not role_id:
+        session_key = self._deps.sense.target_session_key()
+        if not session_key:
             raise RuntimeError("role_id required for proactive session key")
-        return f"role:{role_id}"
+        return session_key
 
     def _build_llm_fn(self) -> LlmFn:
         provider = self._deps.provider

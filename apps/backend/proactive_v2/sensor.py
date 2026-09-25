@@ -49,9 +49,13 @@ class Sensor:
         self._target_resolver = target_resolver
 
     def target_session_key(self) -> str:
-        """The role session this runtime serves; empty without a role."""
+        """The role session this runtime serves; empty without a role.
+
+        The single source of the proactive session key: the tick pipeline and
+        the loop both read it here.
+        """
         role_id = self._cfg.role_id
-        return f"role:{role_id}" if role_id else ""
+        return self._sessions.role_session_key(role_id) if role_id else ""
 
     def target_transport(self) -> tuple[str, str] | None:
         """Selects the one session the next proactive message goes to.

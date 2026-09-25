@@ -4,10 +4,8 @@ import logging
 from typing import Any
 
 from bus.events import InboundMessage
-from core.common.channel_chat_types import (
-    chat_id_command_reply,
-    is_chat_id_command,
-)
+from core.channels.chat_id_command import answer_chat_id_command
+from core.common.channel_chat_types import is_chat_id_command
 
 from .formatting import CHANNEL, as_dict
 
@@ -76,27 +74,16 @@ class _InboundMixin:
         return False
 
     async def _handle_chat_id(self, chat_id: str, sender: str) -> None:
-        """Answers ``/chatid`` with what the binding form asks for this chat."""
-        if not self._may_answer_chat_id(chat_id, sender):
-            return
-        await self.send(
-            chat_id, chat_id_command_reply(chat_id, "private", self._chat_types)
+        """Answers ``/chatid``; the admission exception is documented there."""
+        await answer_chat_id_command(
+            self._channel_hub,
+            channel=CHANNEL,
+            chat_id=chat_id,
+            chat_type="private",
+            sender_id=sender,
+            declarations=self._chat_types,
+            send=lambda text: self.send(chat_id, text),
         )
-
-    def _may_answer_chat_id(self, chat_id: str, sender: str) -> bool:
-        """Admission for ``/chatid``: everyone except a bound session's blacklist.
-
-        The one deliberate exception to "a rejected message has no side
-        effect": ``/chatid`` is answered in a chat that is not bound yet,
-        because it is how the user finds the OpenID to bind. A blacklisted
-        sender still gets no reply and causes nothing.
-        """
-        if self._channel_hub is None or not self._channel_hub.is_sender_blocked(
-            channel=CHANNEL, chat_id=chat_id, sender_id=sender
-        ):
-            return True
-        logger.warning("[qqbot] 忽略黑名单成员的 /chatid chat_id=%s", chat_id)
-        return False
 
     async def _publish_inbound(self, message: InboundMessage) -> None:
         await self._intake.submit(message)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BridgeEvent } from "../../../src/bridge/shared";
 import { errorMessage } from "./feedback/feedbackStore";
+import { useLatestRef } from "./useLatestRef";
 
 type BridgeRefreshedValueOptions<T> = {
   /** Loads and refreshes only while enabled; the last value is kept when disabled. */
@@ -27,12 +28,9 @@ export function useBridgeRefreshedValue<T>({ enabled, load, refreshEvents, failO
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const requestRef = useRef(0);
-  const failOnRef = useRef(failOn);
-  const onErrorRef = useRef(onError);
-  useEffect(() => {
-    failOnRef.current = failOn;
-    onErrorRef.current = onError;
-  }, [failOn, onError]);
+  // Callbacks only read inside event handlers, so a new identity must not resubscribe.
+  const failOnRef = useLatestRef(failOn);
+  const onErrorRef = useLatestRef(onError);
 
   const refresh = useCallback(async () => {
     const request = ++requestRef.current;
@@ -40,19 +38,18 @@ export function useBridgeRefreshedValue<T>({ enabled, load, refreshEvents, failO
     setError("");
     try {
       const loaded = await load();
-      if (request !== requestRef.current) return undefined;
+      if (request !== requestRef.current) return;
       setValue(loaded);
       return loaded;
     } catch (loadError) {
-      if (request !== requestRef.current) return undefined;
+      if (request !== requestRef.current) return;
       setValue(null);
       setError(errorMessage(loadError));
       onErrorRef.current?.(loadError);
-      return undefined;
     } finally {
       if (request === requestRef.current) setLoading(false);
     }
-  }, [load]);
+  }, [load, onErrorRef]);
 
   /** Drops any in-flight load and shows `message` instead of a value. */
   const fail = useCallback((message: string) => {
@@ -84,7 +81,7 @@ export function useBridgeRefreshedValue<T>({ enabled, load, refreshEvents, failO
       offEvents();
       window.removeEventListener("focus", handleFocus);
     };
-  }, [enabled, refresh, refreshEvents, fail]);
+  }, [enabled, refresh, refreshEvents, fail, failOnRef]);
 
   return { value, error, loading, refresh, fail, markPending };
 }

@@ -29,13 +29,16 @@ def _build_deps(*, with_pool: bool):
         agent_tick_web_fetch_max_chars=4000,
         message_dedupe_recent_n=3,
     )
+    # Like Sensor: the session key follows whichever config the test installs.
     sense = SimpleNamespace(
-        target_session_key=lambda: "role:mira" if cfg.role_id else "telegram:1",
+        target_session_key=lambda: (
+            f"role:{deps.cfg.role_id}" if deps.cfg.role_id else ""
+        ),
         target_transport=lambda: ("telegram", "1"),
         collect_recent=lambda: [],
         collect_recent_proactive=lambda n: [],
     )
-    return AgentTickDeps(
+    deps = AgentTickDeps(
         cfg=cfg,
         sense=sense,
         presence=SimpleNamespace(get_last_user_at=lambda _: None),
@@ -52,6 +55,7 @@ def _build_deps(*, with_pool: bool):
         role_prompt_fn=lambda: "测试角色提示词",
         pool=McpClientPool() if with_pool else None,
     )
+    return deps
 
 
 def test_agent_tick_factory_build_requires_pool():
