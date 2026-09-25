@@ -1,4 +1,7 @@
-import type { FeedbackPersona } from "../mascot/mascotLines";
+import type { FeedbackPersona, PersonaSceneKey } from "../mascot/mascotLines";
+
+/** Who fronts a toast: one of the host's toast personas, or a plugin-named scene (runtime API 2.4.0). */
+export type ToastPersona = FeedbackPersona | PersonaSceneKey;
 
 /** Visual and semantic weight of one transient feedback message. */
 export type FeedbackTone = "success" | "info" | "warning" | "error";
@@ -24,7 +27,7 @@ export type FeedbackToast = {
    * `feedbackPersonaLines` for which do). Off, the toast renders exactly as
    * without a persona.
    */
-  persona?: FeedbackPersona;
+  persona?: ToastPersona;
 };
 
 /** Options shared by every `feedback.*` reporter call. */
@@ -33,7 +36,7 @@ export type FeedbackOptions = {
   /** Technical cause (e.g. a raw bridge error) shown only once the user opens 「详情」. */
   detail?: string;
   /** Who fronts the message (see `FeedbackToast.persona`). */
-  persona?: FeedbackPersona;
+  persona?: ToastPersona;
 };
 
 /** The injectable reporter hooks receive instead of owning their own message state. */
@@ -65,7 +68,7 @@ let nextId = 1;
 const listeners = new Set<Listener>();
 
 /** A message about to be queued; a filter may rewrite it or drop it (by returning null). */
-export type FeedbackInput = { tone: FeedbackTone; message: string; action?: FeedbackAction; detail?: string; persona?: FeedbackPersona };
+export type FeedbackInput = { tone: FeedbackTone; message: string; action?: FeedbackAction; detail?: string; persona?: ToastPersona };
 /** Installed by the one owner that knows better than a raw message (see `setFeedbackFilter`). */
 export type FeedbackFilter = (input: FeedbackInput) => FeedbackInput | null;
 let filter: FeedbackFilter | null = null;

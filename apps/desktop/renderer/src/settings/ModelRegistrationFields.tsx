@@ -42,8 +42,9 @@ export function ModelRegistrationFields({ registration, onChange, compact = fals
           <input aria-label="服务商标识" className={inputClass} placeholder="openai" value={registration.provider} onChange={(event) => onChange((current) => ({ ...current, provider: event.target.value }))} />
         </SettingsField>
       )}
-      <SettingsField {...fieldLayout} label="Base URL">
-        <input aria-label="Base URL" className={inputClass} placeholder="https://example.com/v1" value={registration.baseUrl} onChange={(event) => onChange((current) => ({ ...current, baseUrl: event.target.value }))} />
+      {/* 「Base URL」 stays as the muted secondary line: it is what provider docs call the field. */}
+      <SettingsField {...fieldLayout} label="服务地址" hint="Base URL">
+        <input aria-label="服务地址" className={inputClass} placeholder="https://example.com/v1" value={registration.baseUrl} onChange={(event) => onChange((current) => ({ ...current, baseUrl: event.target.value }))} />
       </SettingsField>
       <SettingsField {...fieldLayout} label="API Key">
         <SettingsSecretInput ariaLabel="API Key" value={registration.apiKey} onChange={(value) => onChange((current) => ({ ...current, apiKey: value }))} />

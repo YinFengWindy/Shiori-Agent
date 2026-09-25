@@ -52,7 +52,8 @@ describe("ImageStage", () => {
     const on = await mountStage(<ImageStage view={{ kind: "failure", failure }} onReusePrompt={() => undefined} />);
     try {
       const card = on.container.querySelector("[data-testid=\"novelai-stage-failure\"] [role=\"alert\"]");
-      assert.equal(card?.getAttribute("data-persona"), "generic");
+      // The failure kind picks the host persona scene: 「连不上」 → network.
+      assert.equal(card?.getAttribute("data-persona"), "network");
       assert.ok(card?.querySelector("[data-testid=\"mascot-face\"]"));
       assert.match(card?.textContent ?? "", /吟风/);
       assert.match(card?.textContent ?? "", /timeout/);

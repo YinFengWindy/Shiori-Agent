@@ -150,6 +150,40 @@ export const inlineErrorLines = {
 /** Which of `inlineErrorLines` fronts an in-page error. */
 export type InlineErrorPersona = keyof typeof inlineErrorLines;
 
+/**
+ * Scenes a plugin may name when it asks 吟风 to front something (runtime
+ * API 2.4.0: `persona: "network"` on `host.feedback`, `host.ui.InlineError`,
+ * `host.ui.ConfirmDialog`). The words stay the host's: a plugin picks a
+ * scene, never a sentence. `generic` is not a key here — `persona: true` /
+ * `"generic"` means the surface's own generic line.
+ */
+export const personaSceneLines = {
+  /** A service the plugin needs has not been set up yet. */
+  not_configured: line("pout", "还没配置好呢，先去设置里填一下吧。"),
+  /** The credentials were refused. */
+  unauthorized: line("confused", "钥匙好像不对……去设置里换一个？"),
+  /** The account ran out of quota / credits. */
+  quota: line("sad", "额度见底了……先歇一会儿吧。"),
+  /** The remote service could not be reached. */
+  network: line("sad", "连不上那边……网络还好吗？"),
+  /** The remote service answered with an error of its own. */
+  upstream: line("confused", "那边出了点岔子，不是你的错哦。"),
+  /** Confirming something that cannot be undone (usually a deletion). */
+  destructive: confirmPersonaLines.destructive,
+  /** Confirming that unsaved edits are thrown away. */
+  discard: confirmPersonaLines.discardChanges,
+  /** Any other confirmation. */
+  confirm: confirmPersonaLines.confirm,
+} satisfies Record<string, MascotLine>;
+
+/** A scene a plugin may name for 吟风 (see `personaSceneLines`). */
+export type PersonaSceneKey = keyof typeof personaSceneLines;
+
+/** Whether `value` names one of the plugin persona scenes. */
+export function isPersonaSceneKey(value: string): value is PersonaSceneKey {
+  return Object.hasOwn(personaSceneLines, value);
+}
+
 /** 设置 › 关于: lines drawn on open and on every click on her sprite. */
 export const aboutIdleLines: MascotLinePool = [
   line("smug", "有什么想知道的？我心情好就告诉你。"),

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { BridgeError } from "../../../apps/desktop/renderer/src/shared/bridgeInvoke";
-import { describeGenerationFailure, failureFromReadiness, scrubSecrets } from "./generationFailure";
+import { describeGenerationFailure, failurePersona, failureFromReadiness, scrubSecrets } from "./generationFailure";
 
 describe("describeGenerationFailure", () => {
   it("maps the backend's stable codes to a kind, a title and whether settings fix it", () => {
@@ -52,5 +52,23 @@ describe("failureFromReadiness", () => {
   it("has nothing to say when configured or still unknown", () => {
     assert.equal(failureFromReadiness({ configured: true, reason: "", message: "" }), null);
     assert.equal(failureFromReadiness(null), null);
+  });
+});
+
+describe("failurePersona", () => {
+  it("names the host persona scene for each stable backend code, and the generic line otherwise", () => {
+    const cases: Array<[string, unknown]> = [
+      ["novelai_not_configured", "not_configured"],
+      ["novelai_unauthorized", "unauthorized"],
+      ["novelai_quota", "quota"],
+      ["novelai_network", "network"],
+      ["novelai_upstream", "upstream"],
+      ["invalid_request", true],
+      ["plugin_unavailable", true],
+      ["something_else", true],
+    ];
+    for (const [code, persona] of cases) {
+      assert.equal(failurePersona(describeGenerationFailure(new BridgeError("x", code))), persona, code);
+    }
   });
 });

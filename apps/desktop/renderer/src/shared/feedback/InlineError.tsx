@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { MascotFaceAvatar } from "../mascot/MascotFigure";
 import { useMascotCameoAllowed } from "../mascot/MascotOnStage";
 import { MascotSpeechBubble } from "../mascot/MascotSpeech";
-import { inlineErrorLines, type InlineErrorPersona } from "../mascot/mascotLines";
+import { inlineErrorLines, isPersonaSceneKey, personaSceneLines, type InlineErrorPersona, type PersonaSceneKey } from "../mascot/mascotLines";
 import { compactPressableClass, cx } from "../styles";
 import { FeedbackDetail } from "./FeedbackDetail";
 
@@ -19,10 +19,10 @@ export type InlineErrorProps = {
   actions?: ReactNode;
   /**
    * Which of 吟风's inline-error lines fronts the block (default `generic`),
-   * or `false` for a plain block. She also stays out when the 看板娘 is off
+   * a plugin-named scene (`personaSceneLines`), or `false` for a plain block. She also stays out when the 看板娘 is off
    * or she already stands in this subtree (`MascotOnStage`).
    */
-  persona?: InlineErrorPersona | false;
+  persona?: InlineErrorPersona | PersonaSceneKey | false;
   /**
    * `row`: a compact bordered block inside a form or list. `strip`: a
    * full-width band pinned to a container's edge (a card footer). `card`:
@@ -85,7 +85,7 @@ export function InlineError({
 }: InlineErrorProps) {
   const [detailOpen, setDetailOpen] = useState(false);
   const cameo = useMascotCameoAllowed();
-  const line = cameo && persona ? inlineErrorLines[persona] : null;
+  const line = !cameo || !persona ? null : isPersonaSceneKey(persona) ? personaSceneLines[persona] : inlineErrorLines[persona];
   const detailFold = detail ? <FeedbackDetail detail={detail} open={detailOpen} onToggle={() => setDetailOpen((current) => !current)} /> : null;
   const dismiss = onDismiss ? (
     <button

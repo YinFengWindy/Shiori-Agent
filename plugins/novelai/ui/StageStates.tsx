@@ -3,7 +3,7 @@ import { Key, WarningCircle } from "@phosphor-icons/react";
 import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
 import { compactButtonSizeClass, cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass } from "../../../apps/desktop/renderer/src/shared/styles";
 import { PetalIcon, SparkleIcon } from "../../../apps/desktop/renderer/src/shared/ui/icons";
-import type { GenerationFailure } from "./generationFailure";
+import { failurePersona, type GenerationFailure } from "./generationFailure";
 
 /** Nothing generated yet for this role: the brand motif on the glass stage. */
 export function StageEmpty() {
@@ -63,7 +63,8 @@ type StageFailureProps = {
 /**
  * A failed (or impossible) generation, with the one action that fixes it
  * when there is one. Drawn by the host's inline error card
- * (`host.ui.InlineError`, runtime API 2.4.0) with `persona`, so 吟风 fronts
+ * (`host.ui.InlineError`, runtime API 2.4.0) with the persona scene of its
+ * failure kind (`failurePersona`), so 吟风 fronts
  * it while the 看板娘 is on; off, it is the plain card with the key /
  * warning glyph.
  */
@@ -83,7 +84,7 @@ export function StageFailure({ failure, onOpenSettings, onDismiss }: StageFailur
     <div className="motion-fade-enter grid h-full place-items-center p-6" data-testid="novelai-stage-failure">
       <ui.InlineError
         layout="card"
-        persona
+        persona={failurePersona(failure)}
         title={failure.title}
         message={failure.message}
         glyph={tokenProblem ? Key : WarningCircle}

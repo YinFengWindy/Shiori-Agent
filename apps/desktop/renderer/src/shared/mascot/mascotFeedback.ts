@@ -1,5 +1,5 @@
 import { createFeedbackReporter, type FeedbackOptions, type FeedbackToast, type FeedbackTone } from "../feedback/feedbackStore";
-import { feedbackPersonaLines, type FeedbackPersona, type MascotCue } from "./mascotLines";
+import { feedbackPersonaLines, isPersonaSceneKey, personaSceneLines, type FeedbackPersona, type MascotCue } from "./mascotLines";
 
 /**
  * The persona each tone gets when nobody asks for a specific one: errors
@@ -31,12 +31,13 @@ const toneDefaults: Record<FeedbackTone, FeedbackOptions> = {
 export const mascotFeedback = createFeedbackReporter(toneDefaults);
 
 /**
- * What 吟风 shows on a toast: its persona's cue, or null for a plain toast.
- * The generic error line promises a 「详情」, so without a cause it falls
- * back to the brief one.
+ * What 吟风 shows on a toast: its persona's cue (a host toast persona or a
+ * plugin-named scene), or null for a plain toast. The generic error line
+ * promises a 「详情」, so without a cause it falls back to the brief one.
  */
 export function feedbackPersonaCue(toast: Pick<FeedbackToast, "persona" | "detail">): MascotCue | null {
   if (!toast.persona) return null;
+  if (isPersonaSceneKey(toast.persona)) return personaSceneLines[toast.persona];
   if (toast.persona === "generic" && !toast.detail) return feedbackPersonaLines.genericBrief;
   return feedbackPersonaLines[toast.persona];
 }

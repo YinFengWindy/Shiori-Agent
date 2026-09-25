@@ -1,4 +1,5 @@
 import { BridgeError } from "../../../apps/desktop/renderer/src/shared/bridgeInvoke";
+import type { PluginPersona } from "../../../apps/desktop/renderer/src/plugins/pluginHostFeedback";
 
 /** Which kind of problem stopped a generation; decides copy and the offered next step. */
 export type GenerationFailureKind =
@@ -86,4 +87,25 @@ export function failureFromReadiness(readiness: NovelAiReadiness | null): Genera
     message: readiness.message === titleByKind["not-configured"] ? "" : readiness.message,
     opensSettings: true,
   };
+}
+
+/**
+ * Which host persona scene fronts a failure (runtime API 2.4.0): the kinds
+ * that come from the backend's stable error codes name their scene, the
+ * rest take the generic line. The words themselves are the host's.
+ */
+const personaByKind: Record<GenerationFailureKind, PluginPersona> = {
+  "not-configured": "not_configured",
+  unauthorized: "unauthorized",
+  quota: "quota",
+  network: "network",
+  upstream: "upstream",
+  invalid: true,
+  unavailable: true,
+  unknown: true,
+};
+
+/** The `persona` a failure's card and toast ask the host for. */
+export function failurePersona(failure: GenerationFailure): PluginPersona {
+  return personaByKind[failure.kind];
 }

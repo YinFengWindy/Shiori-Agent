@@ -298,7 +298,7 @@ Phosphor 在 `vite.config.ts:25` 被单独拆成 `icons-vendor` chunk，按需�
 - **确认弹窗**：宿主的每个 `ConfirmDialog` 都传 `persona`；没有专属台词时用通用的 `destructive` / `confirm`。不传就是不带她的弹窗（插件的弹窗默认如此）。弹窗里的报错不再加她（她已经在弹窗里了）。
 - **页面内报错**：一律用 `InlineError`，不要再手写 `bg-danger-soft` + `text-danger-text` 的报错块；字段级的校验提示（输入框下面的一行小字）不算，照旧。
 - **她已经在场时不重复出现**：`MascotOnStage` 标记「她本人已经站在这里」的子树（首次引导、设置 › 关于、带她的确认弹窗），里面的 `InlineError` 只留原文和警告图标。首次引导里的报错由她在对话框里回应，关于页的更新失败由她的台词说（`aboutUpdateLines.failed`）。
-- **插件**（runtime API 2.4.0）：插件通过注入的 `host` 服务用 `host.feedback.*` 和 `host.ui.InlineError`，传 `persona: true` 才让她出面，而且只用宿主的通用台词；插件不能替她写台词，也不要直接引用 `shared/mascot`。开关关掉时插件那边也一律不带她。生图插件的失败卡片和报错提示已经接上；它的空状态仍保留阶段 7 的品牌母题。契约见 `plugin-runtime-contract.md`「Runtime API 2.4」。
+- **插件**（runtime API 2.4.0）：插件通过注入的 `host` 服务用 `host.feedback.*`、`host.ui.InlineError`、`host.ui.ConfirmDialog`，传 `persona` 才让她出面：`true` 是该处的通用台词，场景键（`personaSceneLines`：`not_configured` / `unauthorized` / `quota` / `network` / `upstream` / `destructive` / `discard` / `confirm`）是宿主为该场景写的台词。插件只能选场景、不能替她写台词，也不要直接引用 `shared/mascot`；新场景要加在宿主这张表里。开关关掉时插件那边也一律不带她。生图插件的失败卡片和报错提示按错误码选场景，提示词库的删除确认用 `host.ui.ConfirmDialog`；它的空状态仍保留阶段 7 的品牌母题。契约见 `plugin-runtime-contract.md`「Runtime API 2.4」。
 - 素材用 `new URL(…, import.meta.url)` 引用，不用 `import x from "*.webp"`：Node 单测没有 webp 加载器，这样显示她的组件才能直接在单测里挂载。
 
 ## 动手前的检查清单

@@ -41,7 +41,7 @@ try {
   current = await launch();
   await reveal(current.page, "注册模型");
   await current.page.getByRole("textbox", { name: "模型", exact: true }).fill("onboarding-qa");
-  await current.page.getByRole("textbox", { name: "Base URL", exact: true }).fill("http://127.0.0.1:9/v1");
+  await current.page.getByRole("textbox", { name: "服务地址", exact: true }).fill("http://127.0.0.1:9/v1");
   await current.page.getByLabel("API Key", { exact: true }).fill("local-test-only");
   await current.page.getByRole("button", { name: "保存并继续" }).click();
   await reveal(current.page, "创建角色");

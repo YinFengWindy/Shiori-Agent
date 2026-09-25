@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
 import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import type { PluginHostFeedback } from "../../../apps/desktop/renderer/src/plugins/pluginHostFeedback";
-import type { GenerationFailure } from "./generationFailure";
+import { failurePersona, type GenerationFailure } from "./generationFailure";
 import { loadHistory, refreshReadiness, submitGenerate } from "./novelAiGeneration";
 import { clearFailure, updateStudioForm, useNovelAiPageStore } from "./novelAiPageStore";
 import { buildGeneratePayload, canSubmitStudioForm, resolveStudioRoleId, validateStudioForm } from "./studioForm";
@@ -11,11 +11,11 @@ import { useNovelAiPromptSettings } from "./useNovelAiPromptSettings";
 
 /**
  * Raises the toast for a failed generation through the host queue, fronted by
- * 吟风 (`persona: true`); token problems carry a jump to the plugin's settings.
+ * 吟风 with the scene of its failure kind (`failurePersona`); token problems carry a jump to the plugin's settings.
  */
 export function reportGenerationFailure(report: PluginHostFeedback, failure: GenerationFailure, onOpenSettings?: () => void): void {
   report.error(failure.title, {
-    persona: true,
+    persona: failurePersona(failure),
     detail: failure.message || undefined,
     action: failure.opensSettings && onOpenSettings ? { label: "去设置", onSelect: onOpenSettings } : undefined,
   });
