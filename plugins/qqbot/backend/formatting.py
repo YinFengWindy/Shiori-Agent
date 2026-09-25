@@ -8,7 +8,6 @@ CHANNEL = "qqbot"
 API_BASE = "https://api.sgroup.qq.com"
 TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken"
 LIVE_STREAM_MIN_INTERVAL_S = 1.5
-LIVE_MAX_FAILURES = 3
 REPLY_LIVE_TAIL = 900
 SUPPORTED_IMAGE_MIME_TYPES = {
     "image/gif",

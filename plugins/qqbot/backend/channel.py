@@ -21,7 +21,8 @@ from .formatting import CHANNEL, PUSH_TARGET_HINT, SYSTEM_PROMPT_HINT
 from .gateway import _GatewayMixin, _TokenCache
 from .inbound import _InboundMixin
 from .outbound import _OutboundMixin
-from .streaming import _LiveStreamState, _StreamingMixin
+from .stream_delivery import _StreamState
+from .streaming import _StreamingMixin
 
 if TYPE_CHECKING:
     from .plugin import QQBotGroupConfigModel
@@ -69,11 +70,10 @@ class QQBotChannel(
         self._outbound_bound = False
         self._events_bound = False
         self._last_c2c_msg_id: dict[str, str] = {}
-        self._live_states: dict[str, _LiveStreamState] = {}
+        self._live_states: dict[str, _StreamState] = {}
         self._reply_buffers: dict[str, str] = {}
         self._live_next_at: dict[str, float] = {}
-        self._live_failures: dict[str, int] = {}
-        self._live_disabled: set[str] = set()
+        self._live_stop_events: dict[str, asyncio.Event] = {}
         self._live_locks: dict[str, asyncio.Lock] = {}
         self._live_tasks: set[asyncio.Task[None]] = set()
         self._live_tasks_by_session: dict[str, set[asyncio.Task[None]]] = {}
@@ -139,7 +139,8 @@ class QQBotChannel(
             except asyncio.CancelledError:
                 pass
             self._task = None
-        await self._drain_live_tasks()
+        for session_key in list(self._live_tasks_by_session):
+            await self._finish_live_tasks(session_key)
         await self._intake.close()
         await self._client.aclose()
         if self._bus is not None and self._outbound_bound:

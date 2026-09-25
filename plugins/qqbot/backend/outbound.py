@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import time
@@ -11,6 +12,7 @@ from core.common.media import detect_image_mime_from_header
 from infra.channels.session_key import resolve_outbound_session_key
 
 from .formatting import CHANNEL, SUPPORTED_IMAGE_MIME_TYPES, iter_stream_chunks
+from .stream_delivery import _StreamState
 
 logger = logging.getLogger(__name__)
 
@@ -21,35 +23,36 @@ class _OutboundMixin:
     async def _on_response(self, msg: OutboundMessage) -> None:
         session_key = resolve_outbound_session_key(msg, default_channel=CHANNEL)
         sent_as_stream = False
-        send_failed = False
         try:
-            # A throttled refresh may still be waiting to create the preview;
-            # it must not start one after the final reply.
-            await self._cancel_live_tasks(session_key)
+            await self._finish_live_tasks(session_key)
             if session_key in self._live_states:
                 if msg.content.strip():
-                    sent_as_stream = await self._send_live_stream(
-                        session_key,
-                        msg.chat_id,
-                        msg.content,
-                        terminal=True,
+                    sent_as_stream = bool(
+                        await self._finish_stream(
+                            self._live_states[session_key], msg.content
+                        )
                     )
-                if not sent_as_stream:
+                else:
                     # An unfinished preview next to the fallback message would
                     # show the reply twice, so withdraw it first.
-                    await self._delete_live_preview(session_key)
-            self._clear_live_session(session_key)
+                    await self._prepare_stream_fallback(self._live_states[session_key])
             if msg.content.strip() and not sent_as_stream:
                 await self.send(msg.chat_id, msg.content)
             for image in msg.media:
                 await self.send_image(msg.chat_id, image)
+        except asyncio.CancelledError:
+            self._record_delivery_status(msg, "failed")
+            state = self._live_states.get(session_key)
+            if state is not None and state.stream_msg_id and not state.completed:
+                await self._delete_message(state.openid, state.stream_msg_id)
+            raise
         except Exception:
-            send_failed = True
             self._record_delivery_status(msg, "failed")
             raise
+        else:
+            self._record_delivery_status(msg, "sent")
         finally:
-            if not send_failed:
-                self._record_delivery_status(msg, "sent")
+            self._clear_live_session(session_key)
 
     def _record_delivery_status(self, msg: OutboundMessage, status: str) -> None:
         if self._channel_hub is None:
@@ -131,37 +134,20 @@ class _OutboundMixin:
         if not msg_id:
             await self.send(chat_id, message)
             return
-        try:
-            await self._send_stream_c2c(target, msg_id, message)
-        except Exception as exc:
-            logger.warning("[qqbot] 私聊流式发送失败，回退普通发送: %s", exc)
+        if not await self._send_stream_c2c(target, msg_id, message):
             await self.send(chat_id, message)
 
-    async def _send_stream_c2c(self, openid: str, msg_id: str, message: str) -> None:
-        token = await self._get_access_token()
-        msg_seq = self._next_msg_seq()
-        stream_msg_id = ""
+    async def _send_stream_c2c(self, openid: str, msg_id: str, message: str) -> str:
+        state = _StreamState(openid=openid, msg_id=msg_id, msg_seq=self._next_msg_seq())
         chunks = iter_stream_chunks(message)
-        for index, content in enumerate(chunks):
-            body: dict[str, Any] = {
-                "input_mode": "replace",
-                "input_state": 10 if index == len(chunks) - 1 else 1,
-                "content_type": "markdown",
-                "content_raw": content,
-                "event_id": msg_id,
-                "msg_id": msg_id,
-                "msg_seq": msg_seq,
-                "index": index,
-            }
-            if stream_msg_id:
-                body["stream_msg_id"] = stream_msg_id
-            result = await self._api_request(
-                "POST",
-                f"/v2/users/{openid}/stream_messages",
-                body,
-                token,
-            )
-            stream_msg_id = str(result.get("id") or stream_msg_id)
+        try:
+            for content in chunks[:-1]:
+                await self._update_stream(state, content, terminal=False)
+        except Exception:
+            # A rejected continuation may still accept an in-place terminal
+            # update. The same recovery rules apply to live replies and pushes.
+            return await self._finish_stream(state, message)
+        return await self._finish_stream(state, message)
 
     async def _send_input_notify(self, openid: str, msg_id: str) -> None:
         try:
