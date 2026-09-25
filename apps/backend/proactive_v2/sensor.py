@@ -49,12 +49,9 @@ class Sensor:
         self._target_resolver = target_resolver
 
     def target_session_key(self) -> str:
-        default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
-        if default_role_id:
-            return f"role:{default_role_id}"
-        channel = (self._cfg.default_channel or "").strip()
-        chat_id = self._cfg.default_chat_id.strip()
-        return f"{channel}:{chat_id}" if channel and chat_id else ""
+        """The role session this runtime serves; empty without a role."""
+        role_id = str(getattr(self._cfg, "role_id", "") or "").strip()
+        return f"role:{role_id}" if role_id else ""
 
     def target_transport(self) -> tuple[str, str] | None:
         """Selects the one session the next proactive message goes to.
@@ -62,9 +59,9 @@ class Sensor:
         Reads the role's saved candidates at call time, so edits apply without
         a restart; ``None`` when the role has no candidate session.
         """
-        role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
+        role_id = str(getattr(self._cfg, "role_id", "") or "").strip()
         if not role_id:
-            raise RuntimeError("default_role_id required for proactive target")
+            raise RuntimeError("role_id required for proactive target")
         if self._target_resolver is None:
             raise RuntimeError(f"主动推送缺少目标选择服务: {role_id}")
         target = self._target_resolver.resolve_saved(role_id)
@@ -73,12 +70,12 @@ class Sensor:
     def read_memory_text(self) -> str:
         if not self._memory:
             return ""
-        default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
-        if not default_role_id:
-            raise RuntimeError("default_role_id required for proactive memory access")
+        role_id = str(getattr(self._cfg, "role_id", "") or "").strip()
+        if not role_id:
+            raise RuntimeError("role_id required for proactive memory access")
         bind_session_metadata = getattr(self._memory, "bind_session_metadata", None)
         if callable(bind_session_metadata):
-            bind_session_metadata({"role_id": default_role_id})
+            bind_session_metadata({"role_id": role_id})
         return str(self._memory.read_long_term() or "").strip()
 
     def has_role_memory(self) -> bool:

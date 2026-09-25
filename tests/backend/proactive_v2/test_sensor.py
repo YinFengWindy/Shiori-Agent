@@ -21,7 +21,7 @@ def _sensor(
         role_id="mira", name="Mira", description="", system_prompt="you are mira"
     )
     sensor = Sensor(
-        cfg=SimpleNamespace(default_role_id="mira", recent_chat_messages=5),
+        cfg=SimpleNamespace(role_id="mira", recent_chat_messages=5),
         sessions=session_manager,
         state=SimpleNamespace(),
         memory=None,

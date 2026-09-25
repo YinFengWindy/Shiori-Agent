@@ -39,7 +39,7 @@ related:
 
 角色的主动推送配置保存一组接收会话（`RoleProactiveConfig.candidates`，引用角色自己的绑定，顺序即绑定顺序）。新增私聊与桌面绑定默认进入候选、群聊默认不进入，这一默认只在渲染端 `roleProactiveCandidates.ts` 决定；后端只校验候选必须是已绑定会话、启用时至少一个候选，删除绑定时同步移除候选（候选清空则关闭主动推送）。清单 v9 迁移把旧的单一目标与桌面绑定转为候选。
 
-每轮 tick 在 gate 阶段由 `proactive_v2/target_selection.py` 选出唯一目标，发送阶段只投递这一处，不再换渠道重发：桌面为候选且桌面在场（`AppRuntime.desktop_presence`，由 `build_proactive_runtime` 显式传入）→ 桌面；否则 → 最近有用户消息的非桌面候选（读 `messages` 表中该候选线程 `thread:<role>:<channel>:<chat_id>` 的最后一条用户消息）；都没有记录 → 第一个非桌面候选；没有非桌面候选 → 桌面。候选每轮从角色清单实时读取。桌面端「当前」标记通过 `roles.proactive.target` 调用同一 resolver，渲染端不重复实现规则。`config.toml` 的 `[proactive.target]` 渠道与会话不参与投递。
+每轮 tick 在 gate 阶段由 `proactive_v2/target_selection.py` 选出唯一目标，发送阶段只投递这一处，不再换渠道重发：桌面为候选且桌面在场（`AppRuntime.desktop_presence`，由 `build_proactive_runtime` 显式传入）→ 桌面；否则 → 最近有用户消息的非桌面候选（读 `messages` 表中该候选线程 `thread:<role>:<channel>:<chat_id>` 的最后一条用户消息）；都没有记录 → 第一个非桌面候选；没有非桌面候选 → 桌面。候选每轮从角色清单实时读取。桌面端「当前」标记通过 `roles.proactive.target` 调用同一 resolver，渲染端不重复实现规则。`config.toml` 不再有全局投递目标：`[proactive.target]` 与 `[proactive]` 根级 `default_channel` / `default_chat_id` / `default_role_id` 在启动时由 `agent/proactive_target_migration.py` 一次性删除，之后再出现会被配置加载拒绝；按角色构建的运行时用 `ProactiveConfig.role_id` 标明所服务的角色。
 
 主动行为不是绕开会话的单独机器人：成功输出应写入权威角色会话，并复用统一工具、消息推送和渠道投递。生成与评分使用不同提示词边界：生成链路显式使用角色身份，评分器保持中性，并保留完整的 1-5 分标尺与领域判分规则。
 

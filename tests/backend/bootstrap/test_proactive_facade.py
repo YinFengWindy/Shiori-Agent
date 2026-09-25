@@ -16,7 +16,7 @@ from proactive_v2.sensor import Sensor
 def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
     proactive_cfg = ProactiveConfig()
     proactive_cfg.enabled = True
-    proactive_cfg.default_role_id = "mira"
+    proactive_cfg.role_id = "mira"
     cfg = SimpleNamespace(
         proactive=proactive_cfg,
         fitbit=SimpleNamespace(enabled=False),
@@ -81,7 +81,7 @@ def test_build_proactive_provider_strips_enable_thinking():
     assert proactive_provider._force_disable_thinking is True
 
 
-def test_sensor_requires_default_role_id_for_memory_reads():
+def test_sensor_requires_role_id_for_memory_reads():
     facade = SimpleNamespace(read_long_term=lambda: "MEMORY")
     sensor = Sensor(
         cfg=SimpleNamespace(),
@@ -95,12 +95,12 @@ def test_sensor_requires_default_role_id_for_memory_reads():
     import pytest
 
     with pytest.raises(
-        RuntimeError, match="default_role_id required for proactive memory access"
+        RuntimeError, match="role_id required for proactive memory access"
     ):
         _ = sensor.read_memory_text()
 
 
-def test_sensor_reads_role_long_term_from_facade_when_default_role_id_present():
+def test_sensor_reads_role_long_term_from_facade_when_role_id_present():
     calls: list[dict[str, str] | None] = []
 
     def _bind_session_metadata(metadata):
@@ -111,7 +111,7 @@ def test_sensor_reads_role_long_term_from_facade_when_default_role_id_present():
         read_long_term=lambda: "ROLE_MEMORY",
     )
     sensor = Sensor(
-        cfg=SimpleNamespace(default_role_id="mira"),
+        cfg=SimpleNamespace(role_id="mira"),
         sessions=cast(Any, SimpleNamespace()),
         state=cast(Any, SimpleNamespace()),
         memory=cast(Any, facade),

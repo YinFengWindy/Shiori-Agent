@@ -83,7 +83,7 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
             created.append(kwargs)
 
         def run(self):
-            return f"run:{self.config.default_role_id}"
+            return f"run:{self.config.role_id}"
 
     roles = [
         SimpleNamespace(

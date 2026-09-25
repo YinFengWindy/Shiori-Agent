@@ -114,12 +114,10 @@ class AgentTickFactory:
                 return session_key
         except Exception:
             pass
-        default_role_id = str(
-            getattr(self._deps.cfg, "default_role_id", "") or ""
-        ).strip()
-        if default_role_id:
-            return f"role:{default_role_id}"
-        raise RuntimeError("default_role_id required for proactive session key")
+        role_id = str(getattr(self._deps.cfg, "role_id", "") or "").strip()
+        if role_id:
+            return f"role:{role_id}"
+        raise RuntimeError("role_id required for proactive session key")
 
     def _build_llm_fn(self) -> LlmFn:
         provider = self._deps.provider

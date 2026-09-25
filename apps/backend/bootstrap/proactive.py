@@ -152,17 +152,17 @@ def _build_role_proactive_config(role: RoleRecord):
     proactive = role.proactive
     agent = dict(getattr(proactive, "agent", {}) or {})
     agent.pop("model", None)
+    # Delivery targets come from the role's candidate sessions, chosen per
+    # message; the config only names the role it serves.
     return load_proactive_config(
         {
             "enabled": proactive.enabled,
             "profile": str(getattr(proactive, "profile", "daily") or "daily"),
-            # Delivery targets come from the role's candidate sessions, chosen
-            # per message; the config only names the role.
-            "target": {"role_id": role.id},
             "overrides": dict(getattr(proactive, "overrides", {}) or {}),
             "agent": agent,
             "drift": dict(getattr(proactive, "drift", {}) or {}),
-        }
+        },
+        role_id=role.id,
     )
 
 

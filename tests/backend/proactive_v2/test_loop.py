@@ -17,7 +17,7 @@ class _ProactiveTraceLoop(ProactiveLoop):
         self._sessions = SimpleNamespace(workspace=workspace)
         self._cfg = SimpleNamespace(
             enabled=True,
-            default_role_id=role_id,
+            role_id=role_id,
             score_llm_threshold=0.6,
             tick_interval_s0=30,
             tick_interval_s1=60,
@@ -59,8 +59,6 @@ async def test_proactive_loop_wrapper_methods_cover_paths(tmp_path: Path):
         tick_interval_s1=3,
         tick_interval_s0=4,
         tick_jitter=0.0,
-        default_channel="telegram",
-        default_chat_id="42",
     )
     loop._trace_proactive_rate_decision = MagicMock()
     loop._presence = SimpleNamespace(
@@ -149,7 +147,7 @@ async def test_tick_target_error_is_logged_at_loop_boundary_and_loop_continues(
 
     # Without a target resolver every tick fails when it picks its target.
     sensor = Sensor(
-        cfg=SimpleNamespace(default_role_id="mira"),
+        cfg=SimpleNamespace(role_id="mira"),
         sessions=SessionManager(tmp_path),
         state=SimpleNamespace(),
         memory=None,

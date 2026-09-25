@@ -52,7 +52,8 @@ def load_config(
     Runs the one-time ``[integrations.novelai]`` -> ``[plugins.novelai]``
     migration (issue #180), the built-in channel table migration
     (``[channels.telegram|qq]`` -> ``[plugins.telegram|qq]``, issue #363), the
-    removal of channel plugin ``allow_from`` whitelists (issue #398) and the
+    removal of channel plugin ``allow_from`` whitelists (issue #398), the
+    removal of the global ``[proactive]`` delivery target (issue #399) and the
     default-disabled plugin pinning (``agent/plugin_default_enabled_migration.py``)
     against the real file before parsing, so an upgrading user's existing
     token/settings show up under the plugin's own config channel with no
@@ -69,6 +70,9 @@ def load_config(
     from agent.proactive_preferences import migrate_proactive_preferences
 
     data = migrate_proactive_preferences(resolved_path, data)
+    from agent.proactive_target_migration import remove_proactive_target
+
+    data = remove_proactive_target(resolved_path, data)
     data = migrate_scene_preferences(resolved_path, data)
     if workspace is not None:
         from agent.plugin_config_migration import migrate_plugin_config

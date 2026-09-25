@@ -155,7 +155,7 @@ class ProactiveLoop:
                 outbound=PushToolOutboundPort(
                     self._push,
                     execution_context={
-                        "role_id": str(self._cfg.default_role_id or "").strip(),
+                        "role_id": str(self._cfg.role_id or "").strip(),
                     },
                 ),
                 event_bus=self._event_bus,
@@ -330,7 +330,7 @@ class ProactiveLoop:
                     if trace_type == "proactive_config"
                     else "proactive.rate"
                 )
-                role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
+                role_id = str(getattr(self._cfg, "role_id", "") or "").strip()
                 payload = {
                     **build_strategy_trace_envelope(
                         trace_type=trace_type,
@@ -378,7 +378,7 @@ class ProactiveLoop:
         if self._stop_requested.is_set():
             return
         self._running = True
-        logger.info("ProactiveLoop 已启动  角色=%s", self._cfg.default_role_id)
+        logger.info("ProactiveLoop 已启动  角色=%s", self._cfg.role_id)
         if not hasattr(self, "_mcp_pool"):
             from proactive_v2.mcp_sources import McpClientPool
 

@@ -25,13 +25,12 @@ class _FakeProvider:
 
 def _build_deps(*, with_pool: bool):
     cfg = SimpleNamespace(
-        default_role_id="",
-        default_chat_id="cid",
+        role_id="",
         agent_tick_web_fetch_max_chars=4000,
         message_dedupe_recent_n=3,
     )
     sense = SimpleNamespace(
-        target_session_key=lambda: "role:mira" if cfg.default_role_id else "telegram:1",
+        target_session_key=lambda: "role:mira" if cfg.role_id else "telegram:1",
         target_transport=lambda: ("telegram", "1"),
         collect_recent=lambda: [],
         collect_recent_proactive=lambda n: [],
@@ -66,14 +65,14 @@ def test_agent_tick_factory_build_requires_pool():
 
 def test_agent_tick_factory_build_returns_tick():
     deps = _build_deps(with_pool=True)
-    deps.cfg.default_role_id = "mira"
+    deps.cfg.role_id = "mira"
     tick = AgentTickFactory(deps).build()
     assert tick is not None
 
 
-def test_agent_tick_factory_prefers_role_session_key_when_default_role_id_present():
+def test_agent_tick_factory_prefers_role_session_key_when_role_id_present():
     deps = _build_deps(with_pool=True)
-    deps.cfg.default_role_id = "mira"
+    deps.cfg.role_id = "mira"
     tick = AgentTickFactory(deps).build()
     assert tick._session_key == "role:mira"
 
@@ -81,8 +80,7 @@ def test_agent_tick_factory_prefers_role_session_key_when_default_role_id_presen
 def test_agent_tick_factory_builds_drift_pipeline_when_enabled(tmp_path):
     deps = _build_deps(with_pool=True)
     deps.cfg = ProactiveConfig(
-        default_role_id="mira",
-        default_chat_id="cid",
+        role_id="mira",
         drift_enabled=True,
     )
     deps.state_store = SimpleNamespace(workspace_dir=tmp_path)
@@ -95,8 +93,7 @@ def test_agent_tick_factory_builds_drift_pipeline_when_enabled(tmp_path):
 def test_agent_tick_factory_binds_drift_step_recorder_to_tick_store(tmp_path):
     deps = _build_deps(with_pool=True)
     deps.cfg = ProactiveConfig(
-        default_role_id="mira",
-        default_chat_id="cid",
+        role_id="mira",
         drift_enabled=True,
     )
     state_store = SimpleNamespace(
@@ -132,13 +129,13 @@ def test_agent_tick_factory_binds_drift_step_recorder_to_tick_store(tmp_path):
     assert kwargs["tool_name"] == "read_file"
 
 
-def test_agent_tick_factory_requires_default_role_id():
+def test_agent_tick_factory_requires_role_id():
     deps = _build_deps(with_pool=True)
     try:
         AgentTickFactory(deps).build()
         assert False, "expected RuntimeError"
     except RuntimeError as e:
-        assert "default_role_id required for proactive session key" in str(e)
+        assert "role_id required for proactive session key" in str(e)
 
 
 def test_build_proactive_runtime_accepts_light_agent_loop_stub(tmp_path):
@@ -171,7 +168,7 @@ def test_build_proactive_runtime_accepts_light_agent_loop_stub(tmp_path):
 
 async def test_agent_tick_factory_llm_fn_forces_disable_thinking():
     deps = _build_deps(with_pool=True)
-    deps.cfg.default_role_id = "mira"
+    deps.cfg.role_id = "mira"
     provider = deps.provider
     tick = AgentTickFactory(deps).build()
 
@@ -187,7 +184,7 @@ async def test_agent_tick_factory_llm_fn_forces_disable_thinking():
 
 async def test_agent_tick_factory_llm_fn_honors_disable_thinking_without_schemas():
     deps = _build_deps(with_pool=True)
-    deps.cfg.default_role_id = "mira"
+    deps.cfg.role_id = "mira"
     provider = deps.provider
     tick = AgentTickFactory(deps).build()
 

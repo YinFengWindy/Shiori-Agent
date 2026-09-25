@@ -146,7 +146,7 @@ max_tokens = 4096
     assert config.max_tokens == 4096
 
 
-def test_load_config_preserves_proactive_base_config_without_role_target(
+def test_load_config_preserves_proactive_base_config_without_a_role(
     tmp_path: Path,
 ) -> None:
     config_path = tmp_path / "config.toml"
@@ -163,11 +163,6 @@ effort = "none"
 [proactive]
 enabled = true
 profile = "daily"
-
-[proactive.target]
-channel = "telegram"
-chat_id = "1"
-role_id = ""
 """.strip(),
         encoding="utf-8",
     )
@@ -175,7 +170,7 @@ role_id = ""
     config = load_config(config_path)
 
     assert config.proactive.enabled is True
-    assert config.proactive.default_role_id == ""
+    assert config.proactive.role_id == ""
 
 
 def test_load_config_keeps_channel_permissions_in_role_bindings(tmp_path: Path) -> None:

@@ -77,6 +77,27 @@ def _validate_ranges(config: dict[str, Any]) -> None:
             )
 
 
+# Global delivery-target keys, removed once proactive delivery moved to each
+# role's candidate sessions (#399); startup migration deletes them from
+# config.toml (``agent/proactive_target_migration.py``).
+REMOVED_TARGET_KEYS: tuple[str, ...] = (
+    "target",
+    "default_role_id",
+    "default_channel",
+    "default_chat_id",
+)
+
+
+def reject_removed_target_keys(p: dict[str, Any]) -> None:
+    """Rejects a global proactive target that re-appeared after the migration."""
+    present = [key for key in REMOVED_TARGET_KEYS if key in p]
+    if present:
+        raise ProactiveConfigError(
+            f"配置项已移除: {', '.join(present)}；"
+            "主动推送的接收会话改在角色的「主动推送」里勾选"
+        )
+
+
 def _check_forbidden_keys(p: dict[str, Any]) -> None:
     """检查是否有旧的平铺键直接出现在 proactive 根下"""
     # 允许的根级键
@@ -84,13 +105,9 @@ def _check_forbidden_keys(p: dict[str, Any]) -> None:
         "enabled",
         "profile",
         "profiles",
-        "target",
-        "default_role_id",
         "feed",
         "agent",
         "drift",
-        "default_channel",
-        "default_chat_id",
         "model",
         "preset",
         "features",
@@ -185,11 +202,12 @@ def _as_float(value: Any, field_name: str) -> float:
     return float(value)
 
 
-def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
+def load_proactive_config(p: dict[str, Any], *, role_id: str = "") -> ProactiveConfig:
     """从配置字典加载 ProactiveConfig
 
     Args:
         p: proactive 配置字典
+        role_id: 按角色构建运行时时服务的角色；config.toml 的配置段为空
 
     Returns:
         ProactiveConfig 实例
@@ -197,17 +215,12 @@ def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
     Raises:
         ProactiveConfigError: 配置错误时抛出
     """
-    # 检查是否有非法的根级键
+    # 已移除的全局目标键给出明确提示，其余非法根级键统一拒绝
+    reject_removed_target_keys(p)
     _check_forbidden_keys(p)
 
     # 必填字段
     enabled = p.get("enabled", False)
-    target = p.get("target", {}) or {}
-    if not isinstance(target, dict):
-        raise ProactiveConfigError("proactive.target 必须是字典")
-    default_channel = str(target.get("channel", p.get("default_channel", "telegram")))
-    default_chat_id = str(target.get("chat_id", p.get("default_chat_id", "")))
-    default_role_id = str(target.get("role_id", p.get("default_role_id", "")))
     model = p.get("model", "")
 
     # 预设名称（必填）
@@ -264,11 +277,8 @@ def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
     # 移除已经显式设置的键，避免冲突
     explicit_keys = {
         "enabled",
-        "default_channel",
-        "default_chat_id",
         "profile",
         "profiles",
-        "target",
         "feed",
         "agent",
         "drift",
@@ -281,9 +291,7 @@ def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
     # 构建 ProactiveConfig
     config = ProactiveConfig(
         enabled=enabled,
-        default_channel=default_channel,
-        default_chat_id=default_chat_id,
-        default_role_id=default_role_id,
+        role_id=role_id,
         model=model,
         profile=str(preset_name),
         profiles=copy.deepcopy(user_profiles),

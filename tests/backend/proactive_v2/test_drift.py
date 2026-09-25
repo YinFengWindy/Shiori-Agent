@@ -1356,9 +1356,7 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
     deps = AgentTickDeps(
         cfg=cfg_with(
             drift_enabled=True,
-            default_role_id="mira",
-            default_channel="telegram",
-            default_chat_id="1",
+            role_id="mira",
         ),
         sense=SimpleNamespace(
             target_session_key=lambda: "telegram:1",
@@ -1429,7 +1427,7 @@ async def test_factory_drift_send_message_uses_bound_transport_from_role(
         path=tmp_path / "proactive_state.json", mark_delivery=MagicMock()
     )
     factory, sender = _build_factory(tmp_path, sender_ok=True, state_store=state)
-    factory._deps.cfg.default_role_id = "mira"
+    factory._deps.cfg.role_id = "mira"
     factory._deps.sense = SimpleNamespace(
         target_session_key=lambda: "role:mira",
         target_transport=lambda: ("qq", "group-42"),
