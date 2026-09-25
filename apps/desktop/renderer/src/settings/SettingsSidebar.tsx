@@ -93,7 +93,7 @@ export function SettingsSidebar({
       aria-hidden={collapsed}
       style={{ width }}
     >
-      <nav className="scrollbar-soft grid min-h-0 content-start gap-1 overflow-y-auto px-2 pr-0">
+      <nav className="scrollbar-stable grid min-h-0 content-start gap-1 overflow-y-auto px-2 pr-0">
         <div className="grid gap-1">
           {sections.map((section) => {
             const SectionIcon = sectionIcons[section.id];

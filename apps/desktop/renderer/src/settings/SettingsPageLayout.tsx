@@ -23,7 +23,7 @@ export function SettingsPageLayout({ children, feedback }: SettingsPageLayoutPro
       <section className={cx(settingsPageSurfaceClass, "relative grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden")} data-testid="settings-page">
         <div ref={setStatusSlot} className="pointer-events-none absolute right-5 top-4 z-[1]" />
         <div>{feedback}</div>
-        <div className="relative scrollbar-soft min-h-0 overflow-y-auto px-4 py-8 sm:px-10 lg:px-16 lg:py-10">
+        <div className="relative scrollbar-stable min-h-0 overflow-y-auto px-4 py-8 sm:px-10 lg:px-16 lg:py-10">
           <div className="mx-auto w-full max-w-[840px]">
             {children}
           </div>

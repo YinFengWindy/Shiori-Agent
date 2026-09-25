@@ -40,7 +40,7 @@ const markdownComponents: Components = {
   },
   table({ children }) {
     return (
-      <div className="chat-markdown-table scrollbar-soft my-2 max-w-full overflow-x-auto rounded-md border border-line-soft bg-white/60">
+      <div className="chat-markdown-table my-2 max-w-full overflow-x-auto rounded-md border border-line-soft bg-white/60">
         <table className="w-full border-collapse text-[13px] leading-5">{children}</table>
       </div>
     );

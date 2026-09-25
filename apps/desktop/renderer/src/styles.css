@@ -129,6 +129,9 @@
     --color-motif-gradient-mid: var(--pink-500);
     --color-motif-gradient-end: var(--lavender-500);
     --color-ring-soft: rgba(230, 101, 156, 0.22); /* pink-500 @ 22%, halo around focused fields */
+    /* scrollbar thumb on a transparent track (non-text UI) */
+    --color-scrollbar-thumb: var(--pink-300);       /* 1.6:1 on surface, quiet at rest */
+    --color-scrollbar-thumb-hover: var(--pink-500); /* 3.1:1 on surface, while the scroll area is hovered */
 
     /* ---------- semantic: accent ---------- */
     --color-accent-solid: var(--pink-600);      /* white text 4.6:1 */
@@ -321,38 +324,40 @@
     background: var(--pink-200);
     color: var(--neutral-950);
   }
+
+  /* The one scrollbar of the renderer (host pages and plugin UIs, vertical
+     and horizontal alike): thin, brand-tinted thumb on a transparent track,
+     deepening while the pointer is over the scroll area. Standard properties
+     only — once scrollbar-color is set Chromium ignores ::-webkit-scrollbar,
+     so per-component pseudo-element styling would be dead code. Set on every
+     element (not just inherited from :root) because the hover colour has to
+     follow the scroller under the pointer. :where() keeps both at zero
+     specificity so a surface with its own chrome (e.g. the pet bubble, which
+     hides its bar) wins with a plain class. */
+  :where(*) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  }
+
+  :where(*:hover) {
+    scrollbar-color: var(--color-scrollbar-thumb-hover) transparent;
+  }
 }
 
 @layer utilities {
-  .scrollbar-soft {
-    scrollbar-color: var(--pink-200) transparent;
+  /* Reserves the scrollbar lane so a vertical scroll area's content does
+     not shift sideways when it starts to scroll. Layout only — the look
+     comes from the base rule above. Not for horizontal scrollers. */
+  .scrollbar-stable {
     scrollbar-gutter: stable;
-    scrollbar-width: thin;
   }
 
-  .scrollbar-soft::-webkit-scrollbar {
-    width: 10px;
-  }
-
-  .scrollbar-soft::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .scrollbar-soft::-webkit-scrollbar-thumb {
-    border: 3px solid transparent;
-    border-radius: 999px;
-    background: var(--pink-200);
-    background-clip: padding-box;
-  }
-
-  .scrollbar-soft-accent::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in srgb, var(--color-accent-solid) 68%, transparent);
-    background-clip: padding-box;
-  }
-
-  .scrollbar-soft-muted::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in srgb, var(--pink-700) 60%, transparent);
-    background-clip: padding-box;
+  /* Keeps the platform scrollbar for a whole subtree. Only the story plugin
+     uses it: it sits outside the restyle and keeps its own chrome. */
+  .scrollbar-native,
+  .scrollbar-native * {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
   }
 
   /* Glass panel: translucent surface + blur; use over image/tinted backdrops. */

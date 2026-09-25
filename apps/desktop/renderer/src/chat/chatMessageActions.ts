@@ -10,9 +10,11 @@ export type MessageContextMenuState = {
   message: SessionMessage;
   messageKey: string;
   sender: string;
+  /** Opened from the keyboard (menu key / Shift+F10): the menu takes focus and gives it back on close. */
+  fromKeyboard: boolean;
 };
 
-/** Which per-message actions (hover bar and context menu) one message offers right now. */
+/** Which per-message actions (context menu, error row retry) one message offers right now. */
 export type ChatMessageActionAvailability = {
   copy: boolean;
   quote: boolean;

@@ -43,6 +43,15 @@ describe("ChatMessageList", () => {
     );
   }
 
+  it("leaves message actions to the context menu: no hover action bar, and every row is focusable for the keyboard menu", () => {
+    const markup = renderMessage({ id: "assistant-reply", role: "assistant", content: "早上好" });
+
+    assert.doesNotMatch(markup, /role="toolbar"/);
+    assert.doesNotMatch(markup, /aria-label="(复制|引用)"/);
+    assert.match(markup, /<article[^>]*tabindex="0"/);
+    assert.match(markup, /<article[^>]*aria-keyshortcuts="Shift\+F10 ContextMenu"/);
+  });
+
   it("renders assistant Markdown while preserving user message text", () => {
     const assistantMarkup = renderMessage({
       id: "assistant-markdown",

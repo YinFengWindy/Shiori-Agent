@@ -10,7 +10,7 @@ export const chatSidebarHeaderClass =
 
 /** Shared scroll container for task-sidebar content. */
 export const chatSidebarScrollableClass =
-  "scrollbar-soft min-h-0 overflow-y-auto py-3";
+  "scrollbar-stable min-h-0 overflow-y-auto py-3";
 
 /** Shared back-navigation control for nested task views. */
 export const chatSidebarBackButtonClass = cx(

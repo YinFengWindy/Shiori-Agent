@@ -37,6 +37,27 @@ type MenuItemProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   selected?: boolean;
 };
 
+/** Keys `moveMenuFocus` handles. */
+const menuNavigationKeys = new Set(["ArrowDown", "ArrowUp", "Home", "End"]);
+
+/**
+ * Roving keyboard focus for a hand-rolled menu panel: ArrowDown / ArrowUp move
+ * between the rows matched by `itemSelector` (wrapping), Home / End jump to
+ * the ends. Call from the panel's onKeyDown; other keys pass through.
+ */
+export function moveMenuFocus(event: React.KeyboardEvent<HTMLElement>, itemSelector: string): void {
+  if (!menuNavigationKeys.has(event.key)) return;
+  const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(itemSelector));
+  if (!items.length) return;
+  event.preventDefault();
+  const index = items.indexOf(document.activeElement as HTMLElement);
+  const next = event.key === "Home" ? 0
+    : event.key === "End" ? items.length - 1
+      : event.key === "ArrowDown" ? (index + 1) % items.length
+        : (index - 1 + items.length) % items.length;
+  items[next]?.focus();
+}
+
 /** Renders one menu row; `selected` switches to the accent treatment. */
 export function MenuItem({ className, selected, type, ...rest }: MenuItemProps) {
   return (

@@ -406,6 +406,7 @@ export function ChatSurface({
             onRetryFailedTurn(contextMenuRenderKey);
             messageContextMenu.close();
           }}
+          onClose={messageContextMenu.close}
         />
       ) : null}
       <div ref={chatColumnRef} className="relative grid h-full min-h-0 grid-rows-chat overflow-hidden">
@@ -444,8 +445,6 @@ export function ChatSurface({
           onJumpToMessage={onJumpToMessage}
           onOpenContextMenu={messageContextMenu.open}
           onOpenImagePreview={handleOpenChatImagePreview}
-          onCopyMessage={handleCopyMessage}
-          onQuoteMessage={handleQuoteMessage}
           onRetryMessage={onRetryFailedTurn}
         />
         {showEmptyState && activeRole ? (

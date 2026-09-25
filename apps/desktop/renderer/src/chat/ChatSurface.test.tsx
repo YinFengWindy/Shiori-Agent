@@ -232,7 +232,7 @@ describe("ChatSurface", () => {
 
     const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
 
-    assert.match(markup, /class="group w-full"/);
+    assert.match(markup, /class="group w-full rounded-md"/);
     assert.match(markup, /message-row flex w-full items-start gap-3/);
     assert.match(markup, /message-body flex min-w-0 w-full max-w-\[82%\] flex-col text-sm leading-6 text-ink/);
     assert.match(markup, /ml-auto items-end/);

@@ -98,7 +98,7 @@ export function RoleSidebar({
       aria-hidden={collapsed}
       style={{ width }}
     >
-      <div className="role-list scrollbar-soft scrollbar-soft-accent grid min-h-0 content-start gap-1.5 overflow-x-hidden overflow-y-auto pr-0" data-testid="role-list">
+      <div className="role-list scrollbar-stable grid min-h-0 content-start gap-1.5 overflow-x-hidden overflow-y-auto pr-0" data-testid="role-list">
         {roles.length ? roles.map((role) => {
           const active = role.id === activeRoleId;
           const preview = active && activeRolePreview ? activeRolePreview : previewFromRoleLastMessage(role.last_message);

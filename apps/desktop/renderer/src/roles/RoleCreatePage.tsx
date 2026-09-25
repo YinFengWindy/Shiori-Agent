@@ -26,7 +26,7 @@ export function RoleCreatePage({ bridgeReady, creating, form, onBackToList, onCr
   const { formDirty, needsEmotionChoice, previewImagePath } = selectRoleCreateState(form, roleCardImport);
   const canCreate = !creating && bridgeReady && roleCardImport.status !== "previewing" && !needsEmotionChoice;
   return (
-    <section className="role-create-page scrollbar-soft relative h-full overflow-y-auto bg-gradient-app bg-fixed" data-testid="role-create-page">
+    <section className="role-create-page scrollbar-stable relative h-full overflow-y-auto bg-gradient-app bg-fixed" data-testid="role-create-page">
       <div className="mx-auto flex min-h-full w-full max-w-[1120px] flex-col gap-6 px-5 pb-10 pt-6 sm:px-8">
         <div className="flex items-center justify-between gap-3">
           <button className={cx(iconButtonClass, "shadow-soft")} type="button" onClick={onBackToList} disabled={creating} aria-label="返回角色列表" title="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>

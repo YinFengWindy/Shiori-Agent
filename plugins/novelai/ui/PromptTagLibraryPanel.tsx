@@ -37,7 +37,7 @@ export function PromptTagLibraryPanel({ client, bridgeReady, section, onOpenSect
   }
 
   return (
-    <section className="scrollbar-soft h-full overflow-y-auto px-6 py-6" data-testid="prompt-tag-library">
+    <section className="scrollbar-stable h-full overflow-y-auto px-6 py-6" data-testid="prompt-tag-library">
       <div className="mx-auto w-full max-w-[1120px]">
         {section === "list" ? (
           <PromptTagGrid

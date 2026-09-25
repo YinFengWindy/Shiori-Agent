@@ -1,26 +1,22 @@
 import React, { useCallback } from "react";
 import { ChatErrorRow } from "./ChatErrorRow";
-import { ChatMessageActionBar } from "./ChatMessageActionBar";
 import { ChatMessageAttachments } from "./ChatMessageAttachments";
 import { ChatMessageBubbleBody, hasChatMessageBubbleContent } from "./ChatMessageBubbleBody";
 import {
   getChatMessageActionAvailability,
   getChatMessageSourceLabel,
 } from "./chatMessageActions";
+import {
+  chatMessageContextMenuKeyShortcuts,
+  isChatMessageContextMenuKey,
+} from "./chatMessageContextMenuPlacement";
 import { getChatMessageDomKey } from "./chatMessageIdentity";
 import type { RoleChannelCatalog } from "../roles/roleChannelCatalog";
 import { formatTimestamp, toFileUrl } from "../shared/format";
 import { cx } from "../shared/styles";
 import type { RoleRecord, SessionMessage } from "../shared/types";
 
-/** Per-message actions raised by the hover bar and the error row. */
-export type ChatMessageActionHandlers = {
-  onCopyMessage: (message: SessionMessage) => void;
-  onQuoteMessage: (message: SessionMessage, messageKey: string, sender: string) => void;
-  onRetryMessage: (renderKey: string) => void;
-};
-
-type ChatMessageRowProps = ChatMessageActionHandlers & {
+export type ChatMessageRowProps = {
   activeRole: RoleRecord | null;
   index: number;
   /** Stable render key (see `getChatMessageReactKey`); retry targets it. */
@@ -37,13 +33,19 @@ type ChatMessageRowProps = ChatMessageActionHandlers & {
   onBeginAttachmentDrag: (path: string) => void;
   onJumpToMessage: (messageKey: string) => void;
   onMeasureElement?: (message: SessionMessage, index: number, element: HTMLElement | null) => void;
+  /**
+   * Opens the message's context menu (复制 / 引用 / 重试): from a right-click,
+   * or from the keyboard on the focused message (menu key / Shift+F10).
+   */
   onOpenContextMenu: (
-    event: React.MouseEvent<HTMLElement>,
+    event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>,
     message: SessionMessage,
     messageKey: string,
     sender: string,
   ) => void;
   onOpenImagePreview: (historyKey: string) => void;
+  /** Retries the failed turn behind an error row (its 重试 button). */
+  onRetryMessage: (renderKey: string) => void;
 };
 
 const agentAvatarClass =
@@ -81,8 +83,6 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
   onMeasureElement,
   onOpenContextMenu,
   onOpenImagePreview,
-  onCopyMessage,
-  onQuoteMessage,
   onRetryMessage,
 }: ChatMessageRowProps) {
   const isUser = message.role === "user";
@@ -94,9 +94,15 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
   const measureElement = useCallback((element: HTMLElement | null) => {
     onMeasureElement?.(message, index, element);
   }, [index, message, onMeasureElement]);
-  const openContextMenu = useCallback((event: React.MouseEvent<HTMLElement>) => {
+  const openContextMenu = useCallback((event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => {
     onOpenContextMenu(event, message, messageDomKey, authorLabel);
   }, [authorLabel, message, messageDomKey, onOpenContextMenu]);
+  // Messages are focusable so keyboard users reach the same actions as the
+  // right-click menu: the menu key or Shift+F10 opens it on the focused message.
+  const openContextMenuFromKeyboard = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.defaultPrevented || !isChatMessageContextMenuKey(event)) return;
+    openContextMenu(event);
+  }, [openContextMenu]);
   const retry = useCallback(() => onRetryMessage(renderKey), [onRetryMessage, renderKey]);
 
   if (isError) {
@@ -104,8 +110,11 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
       <article
         ref={measureElement}
         data-message-key={messageDomKey}
-        className={cx("w-full", animateEnter && "chat-message-enter")}
+        className={cx("w-full rounded-md", animateEnter && "chat-message-enter")}
+        tabIndex={0}
+        aria-keyshortcuts={chatMessageContextMenuKeyShortcuts}
         onContextMenu={openContextMenu}
+        onKeyDown={openContextMenuFromKeyboard}
       >
         <ChatErrorRow content={message.content} detail={String(message.metadata?.error_detail ?? "")} canRetry={availability.retry} onRetry={retry} />
       </article>
@@ -117,12 +126,15 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
       ref={measureElement}
       data-message-key={messageDomKey}
       className={cx(
-        "group w-full",
+        "group w-full rounded-md",
         isHighlighted && "message-hit-anchor",
         isUser && "text-right",
         animateEnter && (isUser ? "chat-message-enter chat-message-enter-user" : "chat-message-enter"),
       )}
+      tabIndex={0}
+      aria-keyshortcuts={chatMessageContextMenuKeyShortcuts}
       onContextMenu={openContextMenu}
+      onKeyDown={openContextMenuFromKeyboard}
     >
       <div className={cx("message-row flex w-full items-start gap-3", isUser && "flex-row-reverse justify-start")}>
         {!isUser ? <RoleAvatarMark role={activeRole} /> : null}
@@ -133,20 +145,12 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
             </div>
           ) : null}
           {hasChatMessageBubbleContent(message) ? (
-            <div className={cx("relative max-w-full", isUser ? "self-end" : "self-start")}>
-              <div className={cx(
-                isUser ? userMessageBubbleClass : assistantMessageBubbleClass,
-                isHighlighted && "message-bubble-highlight",
-              )}>
-                <ChatMessageBubbleBody message={message} onJumpToMessage={onJumpToMessage} />
-              </div>
-              <ChatMessageActionBar
-                availability={availability}
-                side={isUser ? "left" : "right"}
-                onCopy={() => onCopyMessage(message)}
-                onQuote={() => onQuoteMessage(message, messageDomKey, authorLabel)}
-                onRetry={retry}
-              />
+            <div className={cx(
+              isUser ? userMessageBubbleClass : assistantMessageBubbleClass,
+              isUser ? "self-end" : "self-start",
+              isHighlighted && "message-bubble-highlight",
+            )}>
+              <ChatMessageBubbleBody message={message} onJumpToMessage={onJumpToMessage} />
             </div>
           ) : null}
           <ChatMessageAttachments

@@ -26,7 +26,7 @@ export function OnboardingCard({ title, headerAction, footer, error, children, o
           {headerAction}
         </header>
       ) : null}
-      <div className={cx("scrollbar-soft min-h-0 flex-1 overflow-y-auto px-5", !title && "pt-5")}>{children}</div>
+      <div className={cx("scrollbar-stable min-h-0 flex-1 overflow-y-auto px-5", !title && "pt-5")}>{children}</div>
       {error ? <p role="alert" className="m-0 shrink-0 break-words border-t border-line-soft bg-danger-soft/60 px-5 py-2 text-body-sm text-danger-text">{error}</p> : null}
       <footer className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-line-soft px-5 py-3">{footer}</footer>
     </>

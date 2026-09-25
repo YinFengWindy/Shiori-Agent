@@ -51,7 +51,7 @@ export function RoleManagementPage({
   );
   return (
     <section
-      className="role-management-page scrollbar-soft scrollbar-soft-accent h-full overflow-y-auto bg-gradient-app bg-fixed"
+      className="role-management-page scrollbar-stable h-full overflow-y-auto bg-gradient-app bg-fixed"
       data-testid="role-management-page"
       data-role-page=""
     >
