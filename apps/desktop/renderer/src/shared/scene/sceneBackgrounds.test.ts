@@ -16,5 +16,5 @@ describeWebpAssetHygiene("scene background hygiene", {
   dir: resolve(here, "../assets/scene"),
   maxEdge: () => 2560,
   alphaRequired: () => false,
-  manifest: { path: resolve(here, "sceneBackgrounds.ts"), importPattern: /from "\.\.\/assets\/scene\/([^"]+\.webp)"/g },
+  manifest: { path: resolve(here, "sceneBackgrounds.ts"), importPattern: /new URL\("\.\.\/assets\/scene\/([^"]+\.webp)"/g },
 });

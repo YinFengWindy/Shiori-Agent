@@ -65,6 +65,7 @@ import type {
 } from "./shared/types";
 import "./styles.css";
 import "./shared/adv/adv.css";
+import "./shared/mascot/mascot.css";
 import "./onboarding/onboarding.css";
 import { useOnboardingController } from "./onboarding/useOnboardingController";
 import { OnboardingPage } from "./onboarding/OnboardingPage";

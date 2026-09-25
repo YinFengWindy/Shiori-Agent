@@ -246,6 +246,18 @@
        where supported; the cubic-bezier is the overshooting fallback. */
     --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
+    /* ---------- 看板娘 (shared/mascot/mascot.css) ---------- */
+    /* 吟风's framings: the half-body cut keeps this fraction of the sprite's
+       height (just below the waist); medium = empty states (180–240px),
+       compact = the same in narrow columns; face = toasts and banners. */
+    --mascot-half-crop: 0.62;
+    --mascot-medium-width: clamp(11.25rem, 18vw, 15rem);
+    --mascot-compact-width: 8.75rem;
+    --mascot-face-size: 2rem;
+    --mascot-drop-shadow: drop-shadow(0 14px 28px rgb(119 84 166 / 20%)); /* lavender-700 */
+    --mascot-bubble-edge: rgb(255 184 209 / 45%); /* pink-300 hairline */
+    --mascot-enter-rise: 10px; /* her entrance: fade + this rise, on --duration-stage */
+
     /* ---------- legacy aliases (pre-restyle var names still used
        by tailwind.config + older components; keep pointing at the
        semantic tier so both routes render identically) ---------- */

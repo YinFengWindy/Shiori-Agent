@@ -1,0 +1,233 @@
+/*
+ * 吟风 around the app (#362 stage 10): the expression stack, the half-body /
+ * medium / face framings, her speech bubble, the mascot empty state and the
+ * enter motion. Components live in shared/mascot/ (MascotFigure,
+ * MascotSpeech); the renderer entry imports this file. Tokens
+ * (--mascot-*) are defined in styles.css; usage rules in
+ * docs/_handbook/design-system.md 「看板娘」.
+ */
+
+/* ------------------------------------------------------ expression stack -- */
+/* Every expression stacked; the new face fades in over the old one, which
+   stays opaque beneath it (all eight share one silhouette). */
+
+.mascot-stack {
+  position: relative;
+}
+
+.mascot-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: 50% 100%;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.mascot-layer[data-layer="current"] {
+  z-index: 2;
+  opacity: 1;
+  transition: opacity var(--duration-quick) var(--ease-in-out-soft);
+}
+
+.mascot-layer[data-layer="previous"] {
+  z-index: 1;
+  opacity: 1;
+}
+
+.mascot-layer[data-layer="hidden"] {
+  opacity: 0;
+}
+
+/* ------------------------------------------------------------ half body -- */
+/* The sprite (826×1213) cut at --mascot-half-crop of its height, just below
+   the waist, fading out over the last stretch instead of a hard edge. The
+   shadow sits on the outer box so it follows her silhouette; on the masked
+   crop it would be clipped into a visible rectangle. */
+
+.mascot-half {
+  position: relative;
+  aspect-ratio: 826 / calc(1213 * var(--mascot-half-crop));
+  filter: var(--mascot-drop-shadow);
+  pointer-events: none;
+}
+
+.mascot-half-crop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 82%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 82%, transparent 100%);
+}
+
+.mascot-half-stack {
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 826 / 1213;
+}
+
+.mascot-single {
+  object-fit: contain;
+  object-position: 50% 0;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Medium sprite for empty states: 180–240px wide. */
+.mascot-medium {
+  width: var(--mascot-medium-width);
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------ face -- */
+/* Round face crop: the sprite scaled so her face (centred near 47% / 24.7%
+   of the 826×1213 image) fills the circle. Tighter than the first-run
+   guide's name plate, which is larger and can show her shoulders. */
+
+.mascot-face {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  width: var(--mascot-face-size);
+  height: var(--mascot-face-size);
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 1.5px solid var(--pink-100);
+  background: var(--pink-100);
+  box-shadow: 0 2px 6px rgb(197 70 127 / 18%);
+}
+
+.mascot-face img {
+  position: absolute;
+  left: -86%;
+  top: -52%;
+  width: 290%;
+  max-width: none;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* --------------------------------------------------------------- bubble -- */
+/* Her line: a small glass bubble with her name above the text; the tail
+   points at her figure. */
+
+.mascot-bubble {
+  position: relative;
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0.55rem 0.85rem 0.6rem;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-glass-strong);
+  border: 1px solid rgb(255 255 255 / 85%);
+  box-shadow: var(--shadow-soft), 0 0 0 1px var(--mascot-bubble-edge);
+  color: var(--color-text-primary);
+  text-align: left;
+  backdrop-filter: blur(12px);
+}
+
+.mascot-bubble::before {
+  content: "";
+  position: absolute;
+  width: 0.7rem;
+  height: 0.7rem;
+  background: inherit;
+  border: inherit;
+  border-width: 0 0 1px 1px;
+  backdrop-filter: none;
+}
+
+.mascot-bubble[data-tail="left"]::before {
+  left: -0.4rem;
+  top: 1.1rem;
+  transform: rotate(45deg);
+}
+
+.mascot-bubble[data-tail="right"]::before {
+  right: -0.4rem;
+  top: 1.1rem;
+  transform: rotate(-135deg);
+}
+
+.mascot-bubble[data-tail="top"]::before {
+  left: calc(50% - 0.35rem);
+  top: -0.4rem;
+  transform: rotate(135deg);
+}
+
+.mascot-bubble-name {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--color-text-accent);
+}
+
+.mascot-bubble-text {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+/* ---------------------------------------------------------- empty state -- */
+
+.mascot-empty {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.mascot-empty[data-layout="side"] .mascot-empty-body {
+  align-self: center;
+  max-width: 20rem;
+}
+
+.mascot-empty[data-layout="stack"] {
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.mascot-empty[data-size="compact"] .mascot-medium {
+  width: var(--mascot-compact-width);
+}
+
+.mascot-empty[data-layout="stack"] .mascot-empty-body {
+  justify-items: center;
+}
+
+.mascot-empty-body {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.mascot-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.mascot-empty[data-layout="stack"] .mascot-empty-actions {
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------- enter -- */
+/* She arrives with a fade and a slight rise; reduced motion keeps the fade. */
+
+.mascot-enter {
+  animation: mascot-enter var(--duration-stage) var(--ease-out-soft) both;
+}
+
+@keyframes mascot-enter {
+  from { opacity: 0; transform: translateY(var(--mascot-enter-rise)); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot-enter {
+    animation-name: motion-fade-in;
+  }
+}
