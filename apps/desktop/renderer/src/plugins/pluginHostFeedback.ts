@@ -27,6 +27,12 @@ export type PluginFeedbackOptions = {
    * info); a scene key uses that scene's line. Default false.
    */
   persona?: PluginPersona;
+  /**
+   * With `persona`: show only her face (with the persona's expression), not
+   * her line — for when the plugin already shows the same line on screen
+   * (e.g. a failure card fronted by the same scene). Default false.
+   */
+  personaQuiet?: boolean;
 };
 
 /** A plugin's reporter into the host toast queue, one method per tone. */
@@ -39,7 +45,7 @@ function toastPersona(tone: FeedbackTone, persona: PluginPersona | undefined) {
 }
 
 const reporterFor = (tone: FeedbackTone) => (message: string, options: PluginFeedbackOptions = {}) => {
-  showFeedback({ tone, message, action: options.action, detail: options.detail, persona: toastPersona(tone, options.persona) });
+  showFeedback({ tone, message, action: options.action, detail: options.detail, persona: toastPersona(tone, options.persona), personaQuiet: options.personaQuiet });
 };
 
 /** The host implementation of `PluginHostServices.feedback`. */

@@ -28,6 +28,11 @@ export type FeedbackToast = {
    * without a persona.
    */
   persona?: ToastPersona;
+  /**
+   * Only her face, even when the persona has a line: the same line is
+   * already on screen (e.g. a plugin's failure card said it).
+   */
+  personaQuiet?: boolean;
 };
 
 /** Options shared by every `feedback.*` reporter call. */
@@ -37,6 +42,8 @@ export type FeedbackOptions = {
   detail?: string;
   /** Who fronts the message (see `FeedbackToast.persona`). */
   persona?: ToastPersona;
+  /** Her face without her line (see `FeedbackToast.personaQuiet`). */
+  personaQuiet?: boolean;
 };
 
 /** The injectable reporter hooks receive instead of owning their own message state. */
@@ -68,7 +75,7 @@ let nextId = 1;
 const listeners = new Set<Listener>();
 
 /** A message about to be queued; a filter may rewrite it or drop it (by returning null). */
-export type FeedbackInput = { tone: FeedbackTone; message: string; action?: FeedbackAction; detail?: string; persona?: ToastPersona };
+export type FeedbackInput = { tone: FeedbackTone; message: string; action?: FeedbackAction; detail?: string; persona?: ToastPersona; personaQuiet?: boolean };
 /** Installed by the one owner that knows better than a raw message (see `setFeedbackFilter`). */
 export type FeedbackFilter = (input: FeedbackInput) => FeedbackInput | null;
 let filter: FeedbackFilter | null = null;
@@ -105,6 +112,7 @@ export function showFeedback(raw: FeedbackInput): number {
   const detail = input.detail?.trim();
   const toast: FeedbackToast = {
     id: nextId++, tone: input.tone, message, action: input.action, ...(detail ? { detail } : {}), ...(input.persona ? { persona: input.persona } : {}),
+    ...(input.persona && input.personaQuiet ? { personaQuiet: true } : {}),
   };
   const remaining = toasts.filter((item) => item.tone !== toast.tone || item.message !== toast.message);
   publish([...remaining, toast].slice(-maxVisibleFeedback));
@@ -148,7 +156,7 @@ export function resetFeedback(): void {
 export function createFeedbackReporter(defaults: Partial<Record<FeedbackTone, FeedbackOptions>> = {}): FeedbackReporter {
   const reporterFor = (tone: FeedbackTone) => (message: string, options?: FeedbackOptions) => {
     const merged = { ...defaults[tone], ...options };
-    showFeedback({ tone, message, action: merged.action, detail: merged.detail, persona: merged.persona });
+    showFeedback({ tone, message, action: merged.action, detail: merged.detail, persona: merged.persona, personaQuiet: merged.personaQuiet });
   };
   return {
     success: reporterFor("success"),

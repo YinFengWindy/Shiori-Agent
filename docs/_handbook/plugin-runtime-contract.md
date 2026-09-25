@@ -190,7 +190,10 @@ failures read like the host's and can be fronted by the host mascot 吟风:
   cannot import the host's React context, uses the prop.
 - `host.feedback.{success,info,warning,error}(message, options?)` queues a
   toast in the host's single toaster. `options` is `{ detail?, action?,
-  persona? }`: `detail` folds behind 「详情」, `action` is `{ label, onSelect }`.
+  persona?, personaQuiet? }`: `detail` folds behind 「详情」, `action` is
+  `{ label, onSelect }`, and `personaQuiet: true` shows only her face (with the
+  persona's expression) when the plugin already shows the same line on screen —
+  NovelAI sets it while its failure card is visible.
 - `host.ui.ConfirmDialog` is the host's confirmation dialog: the same props as
   the host's own (`open`, `title`, `description`, `confirmLabel`, `children?`,
   `busy?`, `busyLabel?`, `cancelLabel?`, `error?`, `destructive?`,

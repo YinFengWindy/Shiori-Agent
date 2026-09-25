@@ -58,6 +58,12 @@ describe("plugin host feedback (runtime API 2.4.0)", () => {
     assert.deepEqual(feedbackPersonaCue(network), personaSceneLines.network);
   });
 
+  it("passes personaQuiet through, and drops it on a toast without persona", () => {
+    pluginHostFeedback.error("连不上 NovelAI", { persona: "network", personaQuiet: true });
+    pluginHostFeedback.error("插件报错", { personaQuiet: true });
+    assert.deepEqual(getFeedbackSnapshot().map(({ persona, personaQuiet }) => [persona, personaQuiet]), [["network", true], [undefined, undefined]]);
+  });
+
   it("shows her on an opted-in plugin toast, and nothing of her with the 看板娘 off", async () => {
     const on = await mountWithMascot(true);
     try {

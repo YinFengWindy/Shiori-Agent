@@ -1,4 +1,4 @@
-import { createFeedbackReporter, type FeedbackOptions, type FeedbackToast, type FeedbackTone } from "../feedback/feedbackStore";
+import { createFeedbackReporter, type FeedbackOptions, type FeedbackToast, type FeedbackTone, type ToastPersona } from "../feedback/feedbackStore";
 import { feedbackPersonaLines, isPersonaSceneKey, personaSceneLines, type FeedbackPersona, type MascotCue } from "./mascotLines";
 
 /**
@@ -35,9 +35,15 @@ export const mascotFeedback = createFeedbackReporter(toneDefaults);
  * plugin-named scene), or null for a plain toast. The generic error line
  * promises a 「详情」, so without a cause it falls back to the brief one.
  */
-export function feedbackPersonaCue(toast: Pick<FeedbackToast, "persona" | "detail">): MascotCue | null {
+export function feedbackPersonaCue(toast: Pick<FeedbackToast, "persona" | "detail" | "personaQuiet">): MascotCue | null {
   if (!toast.persona) return null;
-  if (isPersonaSceneKey(toast.persona)) return personaSceneLines[toast.persona];
-  if (toast.persona === "generic" && !toast.detail) return feedbackPersonaLines.genericBrief;
-  return feedbackPersonaLines[toast.persona];
+  const cue = personaCue(toast.persona, Boolean(toast.detail));
+  // Quiet: the same line is already on screen, so only her face (with that line's expression).
+  return toast.personaQuiet ? { expression: cue.expression } : cue;
+}
+
+function personaCue(persona: ToastPersona, hasDetail: boolean): MascotCue {
+  if (isPersonaSceneKey(persona)) return personaSceneLines[persona];
+  if (persona === "generic" && !hasDetail) return feedbackPersonaLines.genericBrief;
+  return feedbackPersonaLines[persona];
 }

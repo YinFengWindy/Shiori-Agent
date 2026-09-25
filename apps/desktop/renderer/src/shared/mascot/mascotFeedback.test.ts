@@ -38,6 +38,12 @@ describe("toast persona rule", () => {
     assert.doesNotMatch(feedbackPersonaLines.genericBrief.text, /详情/);
   });
 
+  it("shows only the face, with the line's expression, on a quiet persona", () => {
+    assert.deepEqual(feedbackPersonaCue({ persona: "network", personaQuiet: true }), { expression: "sad" });
+    assert.deepEqual(feedbackPersonaCue({ persona: "generic", detail: "x", personaQuiet: true }), { expression: "confused" });
+    assert.equal(feedbackPersonaCue({ persona: undefined, personaQuiet: true }), null);
+  });
+
   it("leaves a toast without persona plain, and maps every tone to its default", () => {
     assert.equal(feedbackPersonaCue({ persona: undefined }), null);
     assert.deepEqual(feedbackTonePersona, { success: "success", info: "info", warning: "warning", error: "generic" });
