@@ -14,6 +14,7 @@ from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
 from agent.tools.tool_search import ToolSearchTool
 from bus.event_bus import EventBus
+from bus.events import InboundMessage
 from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted
 import plugins.context_pressure.backend.plugin as context_pressure_plugin
 from plugins.context_pressure.backend.plugin import ContextPressureStopModule
@@ -206,8 +207,9 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot():
         get_history=lambda max_messages=500, start_index=None: [],
         messages=[],
     )
-    msg = SimpleNamespace(
+    msg = InboundMessage(
         channel="telegram",
+        sender="user",
         chat_id="123",
         content="hi",
         media=[],
@@ -500,10 +502,11 @@ def test_default_reasoner_observes_tool_lifecycle_events():
         get_history=lambda max_messages=40: [],
         last_consolidated=0,
     )
-    msg = SimpleNamespace(
+    msg = InboundMessage(
         content="hi",
         media=[],
         channel="telegram",
+        sender="user",
         chat_id="123",
         timestamp=datetime(2026, 4, 5, 12, 0, 0),
     )
@@ -796,10 +799,11 @@ def test_default_reasoner_run_turn_uses_context_render():
         get_history=lambda max_messages=40: [{"role": "assistant", "content": "old"}],
         last_consolidated=0,
     )
-    msg = SimpleNamespace(
+    msg = InboundMessage(
         content="hi",
         media=[],
         channel="cli",
+        sender="user",
         chat_id="1",
         timestamp=datetime(2026, 4, 5, 12, 0, 0),
     )
@@ -843,10 +847,11 @@ def test_default_reasoner_run_turn_reports_llm_timeout():
         get_history=lambda max_messages=40: [],
         last_consolidated=0,
     )
-    msg = SimpleNamespace(
+    msg = InboundMessage(
         content="hi",
         media=[],
         channel="cli",
+        sender="user",
         chat_id="1",
         timestamp=datetime(2026, 4, 5, 12, 0, 0),
     )

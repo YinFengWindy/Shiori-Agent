@@ -12,6 +12,7 @@ from agent.core.types import ContextRequest
 from agent.core.types import ReasonerResult
 from agent.looping.ports import LLMConfig
 from agent.provider import ContentSafetyError, ContextLengthError
+from bus.events import InboundMessage
 
 
 def _stub_turn_injection_context(
@@ -23,10 +24,11 @@ def _stub_turn_injection_context(
 
 
 def _msg():
-    return SimpleNamespace(
+    return InboundMessage(
         content="hello",
         media=[],
         channel="cli",
+        sender="user",
         chat_id="1",
         timestamp=datetime.now(timezone.utc),
     )
