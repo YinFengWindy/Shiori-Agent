@@ -6,9 +6,13 @@ desc: Telegram Bot 渠道
 capabilities:
   - config
   - channels
+  - accounts
+  - kv
+  - rpc
 config_model: TelegramConfigModel
 channels:
   - name: telegram
+    instance_prefix: telegram_
     label: Telegram
     contact_label: Telegram 用户 ID 或用户名
     chat_types:

@@ -133,6 +133,9 @@ def _import_telegram_channel(monkeypatch: pytest.MonkeyPatch):
     class Conflict(TelegramError):
         pass
 
+    class InvalidToken(TelegramError):
+        pass
+
     class BadRequest(TelegramError):
         pass
 
@@ -232,6 +235,7 @@ def _import_telegram_channel(monkeypatch: pytest.MonkeyPatch):
     telegram.Update = Update
     telegram_constants.ChatAction = SimpleNamespace(TYPING="typing")
     telegram_error.Conflict = Conflict
+    telegram_error.InvalidToken = InvalidToken
     telegram_error.BadRequest = BadRequest
     telegram_error.NetworkError = NetworkError
     telegram_error.RetryAfter = RetryAfter
@@ -430,6 +434,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
             document=SimpleNamespace(
                 file_id="doc1", file_name="a.md", mime_type="text/plain"
             ),
+            message_id=3,
             caption="",
             reply_to_message=None,
         ),
@@ -986,7 +991,7 @@ async def test_plugin_channel_takes_runtime_state_and_commands_from_context(
     mod = _import_telegram_channel(monkeypatch)
     channel = mod.TelegramChannel(token="token")
     assert channel.name == "telegram"
-    assert channel.configuration_key == ("telegram", "token")
+    assert channel.configuration_key is None
     bus = _Bus()
     push_tool = _PushTool()
     hub = SimpleNamespace(name="hub")

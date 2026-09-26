@@ -276,6 +276,23 @@ def test_channels_capability_rejects_undeclared_channel_without_registering():
     assert scope.labels == []
 
 
+def test_channels_capability_allows_only_valid_declared_instances():
+    contributions = PluginContributions()
+    scope = EffectScope("demo")
+    capability = ChannelsCapability(
+        contributions,
+        scope,
+        plugin_id="demo",
+        declared=frozenset({"telegram"}),
+        instance_prefixes=("telegram_",),
+    )
+    capability.add(_Named("telegram_first"))  # type: ignore[arg-type]
+    for name in ("telegram_", "telegram.not_allowed", "qq_second"):
+        with pytest.raises(ChannelDeclarationError):
+            capability.add(_Named(name))  # type: ignore[arg-type]
+    assert [item.name for item in contributions.channels] == ["telegram_first"]
+
+
 def test_channels_capability_accepts_account_instance_of_declared_provider():
     contributions = PluginContributions()
     scope = EffectScope("demo")

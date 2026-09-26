@@ -5,7 +5,7 @@ import { createAccountClient } from "./accountClient";
 test("account client maps host snapshots and sends only explicit rule mutations", async () => {
   const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
   const row = {
-    id: "a", plugin_id: "demo", platform: "demo", platform_account_id: "101",
+    id: "a", plugin_id: "demo", platform: "demo", platform_account_id: "101", config_ref: "private-a",
     display_name: "Account", avatar_url: "", role_id: null,
     plugin_enabled: true, runtime_active: true, connection: "online", capabilities: [], known_capabilities: ["groups"], error: "",
     response_rules: { private_enabled: true, group_enabled: true, require_mention: true,
@@ -21,6 +21,7 @@ test("account client maps host snapshots and sends only explicit rule mutations"
   assert.equal(account.responseRules.groupRules[0].chatId, "group-1");
   assert.equal(account.responseRules.groupRules[0].blockedSenderIds[0], "sender-1");
   assert.deepEqual(account.knownCapabilities, ["groups"]);
+  assert.equal(account.configRef, "private-a");
   assert.deepEqual(calls.map(({ method }) => method), ["accounts.list"]);
   await client.assign("a", "role-1");
   await client.setRules("a", account.responseRules);

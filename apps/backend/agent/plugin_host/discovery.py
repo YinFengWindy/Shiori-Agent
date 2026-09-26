@@ -96,6 +96,55 @@ def _check_channel_conflicts(records: list[PluginRecord]) -> None:
                 str(record.plugin_dir),
                 "CONFLICT",
             )
+    for index, left in enumerate(records):
+        for right in records[index + 1 :]:
+            if left.manifest.id == right.manifest.id:
+                continue
+            collision = next(
+                (
+                    (first, second)
+                    for first in left.manifest.channels
+                    for second in right.manifest.channels
+                    if (
+                        (
+                            first.instance_prefix
+                            and second.name.startswith(first.instance_prefix)
+                        )
+                        or (
+                            second.instance_prefix
+                            and first.name.startswith(second.instance_prefix)
+                        )
+                        or (
+                            first.instance_prefix
+                            and second.instance_prefix
+                            and (
+                                first.instance_prefix.startswith(second.instance_prefix)
+                                or second.instance_prefix.startswith(
+                                    first.instance_prefix
+                                )
+                            )
+                        )
+                    )
+                ),
+                None,
+            )
+            if collision is None:
+                continue
+            first, second = collision
+            for record in (left, right):
+                if (
+                    record.admission is not None
+                    and record.admission.code == "duplicate_id"
+                ):
+                    continue
+                record.admission = PluginDiagnostic(
+                    "duplicate_channel",
+                    "discovery",
+                    "channels",
+                    f"渠道实例前缀冲突：{left.manifest.id}:{first.name}、{right.manifest.id}:{second.name}",
+                    str(record.plugin_dir),
+                    "CONFLICT",
+                )
 
 
 def _check_external_dependencies(

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from telegram import BotCommand, Update
+from telegram.error import InvalidToken
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from agent.looping.interrupt import InterruptController
@@ -47,6 +50,11 @@ from .streaming import _StreamingMixin
 
 logger = logging.getLogger("plugins.telegram.channel")
 
+if TYPE_CHECKING:
+    from agent.plugin_host.capabilities import AccountsCapability
+    from agent.plugin_host.kv import PluginKVStore
+    from core.accounts import ConnectionState
+
 
 class TelegramChannel(
     _InboundMixin,
@@ -74,15 +82,26 @@ class TelegramChannel(
         interrupt_controller: InterruptController | None = None,
         channel_hub: "ChannelHub | None" = None,
         chat_types: tuple[ChatTypeDeclaration, ...] = (),
+        name: str = _CHANNEL,
+        config_ref: str = "legacy",
+        accounts: "AccountsCapability | None" = None,
+        known_store: "PluginKVStore | None" = None,
     ) -> None:
         # bus / session_manager 在宿主里由 start(ctx) 注入；构造参数只留给
         # 不经 ChannelHost 直接驱动渠道的测试。
         self._token = token
+        self.name = name
+        self._config_ref = config_ref
+        self._accounts = accounts
+        self._account_id: str | None = None
+        self._known_store = known_store
+        self._online = False
+        self._bot_username = ""
         # The manifest's session types, for answering ``/chatid``.
         self._chat_types = chat_types
         self._bus: MessageBus | None = bus
         self._interrupt_controller = interrupt_controller
-        self._channel = _CHANNEL
+        self._channel = name
         self._message_deduper = MessageDeduper(_SEEN_MSG_MAXSIZE)
         self._channel_hub = channel_hub
         self._session_manager: SessionManager | None = None
@@ -91,7 +110,14 @@ class TelegramChannel(
         self.user_map: dict[str, str] = {}
         if session_manager is not None:
             self._bind_session_manager(session_manager)
-        self._app = Application.builder().token(token).build()
+        if accounts is None:
+            self._app = Application.builder().token(token).build()
+        else:
+            from .polling import ObservedBot
+
+            self._app = (
+                Application.builder().bot(ObservedBot(token, self.mark_online)).build()
+            )
         self._bot_commands = bot_commands or []
         self._app.add_handler(CommandHandler("stop", self._on_stop_command))
         self._app.add_handler(
@@ -149,15 +175,22 @@ class TelegramChannel(
         return _RENDERING_PROMPT
 
     @property
-    def configuration_key(self) -> tuple[str, str]:
-        """Reuses the polling connection across generations while the token holds.
-
-        The host adds the bot command list to this key, so changed commands
-        rebuild the connection just like a changed token.
-        """
-        return ("telegram", self._token)
+    def configuration_key(self) -> None:
+        """Registration owns one runtime generation, so it cannot be reused."""
+        return None
 
     async def start(self, ctx: ChannelContext | None = None) -> None:
+        if self._accounts is not None and self._account_id is None:
+            candidate_id = self._token.split(":", 1)[0]
+            account = self._accounts.register(
+                platform="telegram",
+                platform_account_id=candidate_id,
+                config_ref=self._config_ref,
+            )
+            self._account_id = account.record.id
+        if self._accounts is not None:
+            candidate_id = self._token.split(":", 1)[0]
+            self._report_account("connecting")
         self._intake.start(paused=ctx.intake_paused if ctx is not None else False)
         if ctx is not None:
             self._bus = ctx.bus
@@ -180,17 +213,88 @@ class TelegramChannel(
             )
         self._bind_runtime()
         self._rebuild_user_map()
-        await self._app.initialize()
-        await self._app.start()
-        await self._register_bot_commands()
-        updater = self._app.updater
-        if updater is None:
-            raise RuntimeError("Telegram updater 未初始化")
-        await updater.start_polling(
-            allowed_updates=Update.ALL_TYPES,
-            error_callback=self._on_polling_error,
-        )
+        try:
+            await self._app.initialize()
+            if self._accounts is not None:
+                identity = await self._app.bot.get_me()
+                self._bot_username = identity.username or ""
+                if str(identity.id) != candidate_id:
+                    raise ValueError("Bot Token identity does not match its account")
+                if self._known_store is not None:
+                    self._known_store.set(
+                        f"identity:{self._config_ref}",
+                        {
+                            "bot_id": str(identity.id),
+                            "name": identity.full_name,
+                            "username": self._bot_username,
+                        },
+                    )
+                self._accounts.register(
+                    platform="telegram",
+                    platform_account_id=str(identity.id),
+                    config_ref=self._config_ref,
+                    display_name=identity.full_name,
+                )
+            await self._app.start()
+            await self._register_bot_commands()
+            updater = self._app.updater
+            if updater is None:
+                raise RuntimeError("Telegram updater 未初始化")
+            await updater.start_polling(
+                allowed_updates=Update.ALL_TYPES,
+                error_callback=self._on_polling_error,
+            )
+        except Exception as exc:
+            self._report_account(
+                "login_required" if isinstance(exc, InvalidToken) else "error",
+                str(exc).replace(self._token, "[redacted]"),
+            )
+            try:
+                await self._stop_connection()
+            except Exception:
+                logger.exception("Telegram Bot 启动失败后的清理未完成")
+            self._unbind_runtime()
+            raise
+        self._online = True
+        self._report_account("online")
         logger.info(f"TelegramChannel 已启动  已知用户: {len(self.user_map)}")
+
+    def _report_account(self, connection: ConnectionState, error: str = "") -> None:
+        if self._accounts is not None and self._account_id is not None:
+            self._accounts.report(
+                self._account_id,
+                connection=connection,
+                capabilities=frozenset(
+                    {"known_conversations", "member_lookup", "target_send"}
+                ),
+                error=error,
+            )
+
+    def status(self) -> dict[str, object]:
+        """Expose polling health separately from mere channel registration."""
+        return {
+            "connected": self._online,
+            "account": f"@{self._bot_username}" if self._bot_username else "",
+            "detail": "Bot privacy mode may limit ordinary group messages",
+        }
+
+    def can_send(self) -> bool:
+        """Allow a send probe while a transient polling error is retrying."""
+        updater = self._app.updater
+        return self._online or (updater is not None and updater.running)
+
+    def mark_online(self) -> None:
+        """A successful platform call confirms this Bot is reachable again."""
+        updater = self._app.updater
+        if (
+            updater is None
+            or not updater.running
+            or self._polling_conflict_task is not None
+        ):
+            return
+        if not self._online:
+            self._online = True
+            self._report_account("online")
 
     def _bind_session_manager(self, session_manager: SessionManager) -> None:
         """Binds workspace-backed state: uploads, username index and fallback hub."""
@@ -237,6 +341,35 @@ class TelegramChannel(
             await self._stop_connection()
         finally:
             self._unbind_runtime()
+            self._online = False
+            self._report_account("offline")
+
+    def _remember_chat(self, chat: object, user: object, message: object) -> None:
+        """Record an observed conversation without retaining message or member data."""
+        if self._known_store is None:
+            return
+        key = f"known_chats:{self._config_ref}"
+        known = dict(self._known_store.get(key, {}))
+        chat_id = str(getattr(chat, "id"))
+        chat_type = str(getattr(chat, "type", "unknown") or "unknown")
+        previous = known.get(chat_id, {})
+        topics = list(previous.get("topics", []))
+        topic = getattr(message, "message_thread_id", None)
+        if isinstance(topic, int) and topic > 0 and topic not in topics:
+            topics.append(topic)
+        known[chat_id] = {
+            "chat_id": chat_id,
+            "chat_type": chat_type,
+            "title": str(getattr(chat, "title", "") or ""),
+            "username": (
+                str(getattr(user, "username", "") or "")
+                if chat_type == "private"
+                else ""
+            ),
+            "topics": topics,
+            "last_seen": datetime.now(timezone.utc).isoformat(),
+        }
+        self._known_store.set(key, known)
 
     def pause_intake(self) -> None:
         """Buffers new incoming turns while keeping accepted replies deliverable."""

@@ -70,7 +70,7 @@ it("disconnects an online app through the explicit account control", async () =>
   };
   const client = createPluginRpcClient("feishu", invoke);
   const account: AccountSnapshot = {
-    id: "account-a", pluginId: "feishu", platform: "feishu", platformAccountId: "feishu:cli_a",
+    id: "account-a", pluginId: "feishu", platform: "feishu", platformAccountId: "feishu:cli_a", configRef: "feishu:cli_a",
     displayName: "A", avatarUrl: "", roleId: null, pluginEnabled: true, runtimeActive: true,
     connection: "online", capabilities: ["private"], knownCapabilities: ["private"], error: "",
     responseRules: { privateEnabled: true, groupEnabled: false, requireMention: false, blockedSenderIds: [], groupRules: [] },
