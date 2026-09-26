@@ -10,7 +10,13 @@ from urllib.parse import urlsplit
 
 from infra.channels.intake import ChannelIntake
 
-from .accounts_store import QQAccountsStore, QQConnectionConfig, QQPendingConnection
+from .accounts_store import (
+    QQAccountsStore,
+    QQConnectionConfig,
+    QQConnectionMode,
+    QQPendingConnection,
+)
+from .napcat_installer import managed_available
 from .onebot import OneBotSocket
 
 
@@ -45,12 +51,16 @@ class QQAccountSettings:
         """Returns safe editable fields without returning an access token."""
         if account_id is None and ref is None:
             return {
+                "managed_available": managed_available(),
                 "accounts": [
                     self._public_config(key, row) for key, row in self._configs.items()
-                ]
+                ],
             }
         selected = self._ref_for(account_id) if account_id else str(ref)
-        return {"account": self._public_config(selected, self._configs[selected])}
+        return {
+            "account": self._public_config(selected, self._configs[selected]),
+            "managed_available": managed_available(),
+        }
 
     def _public_config(self, ref: str, config: QQConnectionConfig) -> dict[str, Any]:
         connection, error = self._states.get(ref, ("offline", ""))
@@ -72,12 +82,32 @@ class QQAccountSettings:
         if not account_id and supplied_ref and self._configs[ref].verified:
             raise PermissionError("已验证 QQ 账号必须按账号 ID 编辑")
         old = self._configs.get(ref)
-        uri = validate_endpoint(str(payload.get("ws_uri") or "").strip())
+        requested_mode = str(payload.get("mode") or (old.mode if old else "external"))
+        if requested_mode not in {"external", "managed"}:
+            raise ValueError("QQ 连接模式无效")
+        mode: QQConnectionMode = (
+            "managed" if requested_mode == "managed" else "external"
+        )
+        if mode == "managed" and not managed_available():
+            raise RuntimeError("托管 NapCat 仅支持 Windows x64")
+        if old is not None and old.verified and mode != old.mode:
+            raise ValueError("已验证账号不能切换 NapCat 连接模式")
+        if mode == "managed":
+            uri, managed_token = self._managed.endpoint(ref)
+        else:
+            uri = validate_endpoint(str(payload.get("ws_uri") or "").strip())
+            managed_token = ""
         editable = (old.pending or old) if old else None
         token = (
-            ""
-            if payload.get("clear_token") is True
-            else str(payload.get("ws_token") or (editable.ws_token if editable else ""))
+            managed_token
+            if mode == "managed"
+            else (
+                ""
+                if payload.get("clear_token") is True
+                else str(
+                    payload.get("ws_token") or (editable.ws_token if editable else "")
+                )
+            )
         )
         timeout = float(payload.get("timeout_seconds", 5.0))
         if not isfinite(timeout) or timeout <= 0:
@@ -93,6 +123,7 @@ class QQAccountSettings:
                 display_name=old.display_name if old else "",
                 timeout_seconds=timeout,
                 auto_connect=False,
+                mode=mode,
             )
         )
         async with self._locks.setdefault(ref, asyncio.Lock()):
@@ -102,6 +133,9 @@ class QQAccountSettings:
                 task = self._tasks.pop(ref, None)
                 if task is not None:
                     task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                if old is not None and old.mode == "managed":
+                    await self._managed.stop(ref)
                 if ref in self._ids:
                     self._accounts.report(self._ids[ref], connection="offline")
                 self._states[ref] = ("offline", "")
@@ -114,6 +148,8 @@ class QQAccountSettings:
             raise PermissionError("旧 QQ 配置仍在宿主设置中，不能删除迁移记录")
         if config.verified or config.auto_connect or ref in self._sockets:
             raise PermissionError("已验证或运行中的 QQ 账号不能作为草稿删除")
+        if config.mode == "managed":
+            await self._managed.stop(ref)
         self._store.save({key: row for key, row in self._configs.items() if key != ref})
         del self._configs[ref]
         self._states.pop(ref, None)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from plugins.qq.backend.accounts_store import (
     QQAccountsStore,
     QQConnectionConfig,
@@ -43,6 +45,18 @@ def test_private_store_rejects_duplicate_references(tmp_path):
         assert "重复" in str(error)
     else:
         raise AssertionError("duplicate references must fail")
+
+
+def test_private_store_rejects_unknown_connection_mode(tmp_path):
+    store = QQAccountsStore(tmp_path)
+    store.path.parent.mkdir(parents=True)
+    store.path.write_text(
+        '{"version":1,"accounts":[{"ref":"a","ws_uri":"ws://a",'
+        '"ws_token":"","mode":"unknown"}]}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="连接模式"):
+        store.load()
 
 
 def test_migration_does_not_duplicate_an_existing_qq_identity(tmp_path):

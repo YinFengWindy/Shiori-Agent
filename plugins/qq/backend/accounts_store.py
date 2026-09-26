@@ -5,10 +5,14 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from agent.plugin_host.plugin_data import plugin_data_dir
 from infra.persistence.json_store import atomic_save_json
+
+# Transport values persisted in each QQ account's private settings.
+QQConnectionMode = Literal["external", "managed"]
 
 
 @dataclass(frozen=True)
@@ -33,6 +37,7 @@ class QQConnectionConfig:
     auto_connect: bool = True
     verified: bool = False
     pending: QQPendingConnection | None = None
+    mode: QQConnectionMode = "external"
 
     def public_dict(self) -> dict[str, str | float | bool]:
         """Projects editable settings without exposing the access token."""
@@ -47,6 +52,7 @@ class QQConnectionConfig:
             "auto_connect": self.auto_connect,
             "verified": self.verified,
             "pending": self.pending is not None,
+            "mode": self.mode,
         }
 
 
@@ -69,6 +75,8 @@ class QQAccountsStore:
         for row in document["accounts"]:
             if not isinstance(row, dict):
                 raise ValueError("QQ 账号配置条目无效")
+            if row.get("mode", "external") not in {"external", "managed"}:
+                raise ValueError("QQ 连接模式无效")
             pending = row.get("pending")
             if pending is not None and not isinstance(pending, dict):
                 raise ValueError("QQ 待连接配置无效")

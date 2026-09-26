@@ -16,6 +16,7 @@ from .accounts_inbound_adapter import QQInboundAdapter
 from .accounts_outbound_adapter import QQOutboundAdapter
 from .accounts_settings import QQAccountSettings, validate_endpoint
 from .accounts_store import QQAccountsStore, QQConnectionConfig
+from .managed_napcat import ManagedNapCat
 from .channel.formatting import PUSH_TARGET_HINT
 from .onebot import OneBotAuthError, OneBotError, OneBotSocket
 
@@ -29,6 +30,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
 
     def __init__(self, store: QQAccountsStore, accounts: Any) -> None:
         self._store = store
+        self._managed = ManagedNapCat(store.path.parent)
         self._accounts = accounts
         self._generation_key = uuid4().hex
         self._configs = store.load()
@@ -88,6 +90,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._tasks.clear()
         self._sockets.clear()
         self._intakes.clear()
+        await self._managed.stop_all()
         if self._ctx is not None:
             self._ctx.bus.unsubscribe_outbound(self.name, self._on_response)
             self._ctx.push_tool.unregister_channel(self.name)
@@ -117,6 +120,13 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
             self._states[ref] = ("connecting", "")
             try:
                 async with self._locks.setdefault(ref, asyncio.Lock()):
+                    if self._configs[ref].mode == "managed":
+                        await self._managed.start(ref, self._configs[ref].expected_uin)
+                        login = await self._managed.login_status(ref)
+                        if login["phase"] != "online":
+                            raise OneBotAuthError(
+                                login.get("error") or "等待 QQ 扫码登录"
+                            )
                     socket, identity = await self._verified_socket(
                         ref, self._configs[ref]
                     )
@@ -218,6 +228,14 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         """Verifies a saved draft, then atomically replaces that account's socket."""
         if ref not in self._configs:
             raise KeyError("QQ 配置引用不存在")
+        if self._configs[ref].mode == "managed":
+            config = self._configs[ref]
+            if not config.auto_connect:
+                config = replace(config, auto_connect=True)
+                self._store.save({**self._configs, ref: config})
+                self._configs[ref] = config
+            self._schedule(ref)
+            return {"ref": ref, "account_id": self._ids.get(ref, "")}
         async with self._locks.setdefault(ref, asyncio.Lock()):
             config = self._configs[ref]
             pending = config.pending
@@ -302,8 +320,52 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         socket = self._sockets.pop(ref, None)
         if socket is not None:
             await socket.close()
+        if config.mode == "managed":
+            await self._managed.stop(ref)
         self._states[ref] = ("offline", "")
         self._accounts.report(account_id, connection="offline")
+
+    async def disconnect_draft(self, ref: str) -> None:
+        """Stops an unverified managed instance before it has a host account ID."""
+        config = self._configs[ref]
+        if config.mode != "managed" or config.verified:
+            raise ValueError("仅未验证的托管 QQ 配置可按引用停止")
+        stopped = replace(config, auto_connect=False)
+        self._store.save({**self._configs, ref: stopped})
+        self._configs[ref] = stopped
+        task = self._tasks.pop(ref, None)
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        await self._managed.stop(ref)
+        self._states[ref] = ("offline", "")
+
+    async def logout(self, account_id: str) -> None:
+        """Removes a managed QQ session while retaining identity and ownership."""
+        ref = self._ref_for(account_id)
+        if self._configs[ref].mode != "managed":
+            raise ValueError("外部 NapCat 的退出登录须由外部实例执行")
+        await self.disconnect(account_id)
+        await self._managed.logout(ref)
+        self._states[ref] = ("login_required", "")
+        self._accounts.report(account_id, connection="login_required")
+
+    async def managed_status(self, ref: str) -> dict[str, Any]:
+        """Returns installer and authentication progress for QQ account UI."""
+        if ref not in self._configs or self._configs[ref].mode != "managed":
+            raise KeyError("托管 QQ 配置引用不存在")
+        return {
+            "preparation": self._managed.preparation(),
+            "login": await self._managed.login_status(ref),
+            "connection": self._states.get(ref, ("offline", ""))[0],
+            "error": self._states.get(ref, ("offline", ""))[1],
+        }
+
+    async def refresh_qrcode(self, ref: str) -> dict[str, Any]:
+        """Refreshes the official NapCat login QR for this account."""
+        if ref not in self._configs or self._configs[ref].mode != "managed":
+            raise KeyError("托管 QQ 配置引用不存在")
+        return await self._managed.refresh_qrcode(ref)
 
     def _socket_for(self, account_id: str) -> OneBotSocket:
         ref = self._ref_for(account_id)

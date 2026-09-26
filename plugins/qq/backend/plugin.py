@@ -84,6 +84,20 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         "accounts.disconnect", lambda payload: _disconnect(runtime, payload)
     )
     ctx.rpc.register(
+        "accounts.disconnect_draft",
+        lambda payload: _disconnect_draft(runtime, payload),
+    )
+    ctx.rpc.register("accounts.logout", lambda payload: _logout(runtime, payload))
+    ctx.rpc.register(
+        "accounts.managed_status",
+        lambda payload: runtime.managed_status(str(payload["ref"])),
+        concurrency=Concurrency.READ_ONLY,
+    )
+    ctx.rpc.register(
+        "accounts.refresh_qrcode",
+        lambda payload: runtime.refresh_qrcode(str(payload["ref"])),
+    )
+    ctx.rpc.register(
         "accounts.remove_draft", lambda payload: _remove_draft(runtime, payload)
     )
     ctx.rpc.register(
@@ -111,6 +125,16 @@ async def _settings(runtime, payload: dict) -> dict:
 
 async def _disconnect(runtime, payload: dict) -> dict:
     await runtime.disconnect(str(payload["account_id"]))
+    return {"ok": True}
+
+
+async def _disconnect_draft(runtime, payload: dict) -> dict:
+    await runtime.disconnect_draft(str(payload["ref"]))
+    return {"ok": True}
+
+
+async def _logout(runtime, payload: dict) -> dict:
+    await runtime.logout(str(payload["account_id"]))
     return {"ok": True}
 
 
