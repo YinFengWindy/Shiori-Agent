@@ -39,6 +39,7 @@ export function validateRuntimePluginUi(value: unknown, pluginId: string) {
   }
   if (module.roleAssets !== undefined) component(object(module.roleAssets).component, "roleAssets");
   if (module.roleMemory !== undefined) component(object(module.roleMemory).component, "roleMemory");
+  if (module.accountDetail !== undefined) component(object(module.accountDetail).component, "accountDetail");
   if (module.chatImageActions !== undefined) component(module.chatImageActions, "chatImageActions");
   if (module.roleSettings !== undefined) {
     const settings = object(module.roleSettings);

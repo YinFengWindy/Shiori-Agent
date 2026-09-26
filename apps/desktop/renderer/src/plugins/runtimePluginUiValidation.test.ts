@@ -16,9 +16,11 @@ test("identity and all contribution shapes are validated, including wrapped Reac
     { settingsSection: { label: "Settings", kind: "invalid" } },
     { chatImageActions: {} },
     { roleMemory: { component: 1 } },
+    { accountDetail: { component: 1 } },
     { roleSettings: { Component: component, read: () => ({}), pluginId: "other" } },
     { roleSettings: { Component: component, read: () => ({}), storage: "runtime" } },
   ]) assert.throws(() => validateRuntimePluginUi({ pluginId: "demo", ...contribution }, "demo"));
   assert.doesNotThrow(() => validateRuntimePluginUi({ pluginId: "demo", roleSettings: { Component: component, read: () => ({}), storage: "plugin" } }, "demo"));
   assert.doesNotThrow(() => validateRuntimePluginUi({ pluginId: "demo", roleMemory: { component } }, "demo"));
+  assert.doesNotThrow(() => validateRuntimePluginUi({ pluginId: "demo", accountDetail: { component } }, "demo"));
 });

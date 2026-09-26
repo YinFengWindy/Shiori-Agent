@@ -28,6 +28,24 @@ function renderElement<TProps>(
 }
 
 describe("applyPluginUiModules", () => {
+  it("binds and unloads account.detail for its provider", () => {
+    const registry = new PluginUiRegistry();
+    function AccountControls() { return null; }
+    applyPluginUiModules({
+      "/plugins/demo/ui/index.tsx": {
+        default: { pluginId: "demo", accountDetail: { component: AccountControls } },
+      },
+    }, registry);
+    const entry = registry.getAccountDetail("demo", () => true);
+    assert.ok(entry);
+    assert.equal(registry.getAccountDetail("demo", () => false), undefined);
+    const props = renderElement(entry.Component as never, { account: null, onChanged: () => undefined }).props;
+    assert.equal(props.account, null);
+    assert.equal(typeof (props.client as PluginRpcClient).call, "function");
+    registry.unregisterPlugin("demo");
+    assert.equal(registry.getAccountDetail("demo", () => true), undefined);
+  });
+
   it("registers a schema-driven settings.section as a subtab of the built-in 'plugins' section, not a top-level entry", () => {
     const registry = new PluginUiRegistry();
     const modules: Record<string, { default: PluginUiModule }> = {

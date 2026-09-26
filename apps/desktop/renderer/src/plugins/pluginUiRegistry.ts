@@ -1,4 +1,5 @@
 import type React from "react";
+import type { AccountSnapshot } from "../accounts/accountClient";
 import type {
   SettingsSectionEditorProps,
   SettingsSubsection,
@@ -14,7 +15,20 @@ import type {
  * own a page of its own — which is the condition #174's scope note named
  * ("等有真实插件需求再开") rather than a slot invented ahead of a use.
  */
-export type PluginUiSlot = "settings.section" | "nav.page" | "role.assets" | "role.memory";
+export type PluginUiSlot = "settings.section" | "nav.page" | "role.assets" | "role.memory" | "account.detail";
+
+/** Account null requests a plugin-owned new-account draft; existing accounts open the same detail surface. */
+export type PluginAccountDetailProps = {
+  account: AccountSnapshot | null;
+  onChanged: () => void;
+};
+
+/** Platform connection, credential, and login controls owned by one plugin. */
+export type AccountDetailEntry = {
+  slot: "account.detail";
+  pluginId: string;
+  Component: React.ComponentType<PluginAccountDetailProps>;
+};
 
 /**
  * A settings section backed by the shared settings draft (`SettingsFormData`)
@@ -240,6 +254,7 @@ class PluginUiRegistry {
   private readonly navPages = new Map<string, { origin: Origin; entry: NavPageEntry }>();
   private readonly roleAssetsPanels = new Map<string, { origin: Origin; entry: RoleAssetsPanelEntry }>();
   private readonly roleMemoryPanels = new Map<string, { origin: Origin; entry: RoleMemoryPanelEntry }>();
+  private readonly accountDetails = new Map<string, { origin: Origin; entry: AccountDetailEntry }>();
 
   /** Registers a settings.section entry; a duplicate id is warned about and skipped. */
   registerSettingsSection(entry: SettingsSectionEntry, origin: Origin = "plugin"): void {
@@ -305,6 +320,15 @@ class PluginUiRegistry {
     this.roleMemoryPanels.set(entry.id, { origin, entry });
   }
 
+  /** Registers a plugin's connection and credential controls for shared account details. */
+  registerAccountDetail(entry: AccountDetailEntry, origin: Origin = "plugin"): void {
+    if (this.accountDetails.has(entry.pluginId)) {
+      console.warn(`[pluginUiRegistry] account.detail id 重复，已跳过: ${entry.pluginId}`);
+      return;
+    }
+    this.accountDetails.set(entry.pluginId, { origin, entry });
+  }
+
   /** Removes every contribution owned by one plugin (used by tests and hot-toggle cleanup). */
   unregisterPlugin(pluginId: string): void {
     for (const [id, { entry }] of this.settingsSections) {
@@ -324,6 +348,7 @@ class PluginUiRegistry {
     for (const [id, { entry }] of this.roleMemoryPanels) {
       if (entry.pluginId === pluginId) this.roleMemoryPanels.delete(id);
     }
+    this.accountDetails.delete(pluginId);
   }
 
   /**
@@ -350,6 +375,11 @@ class PluginUiRegistry {
     if (!isPluginEnabled(pluginId)) return undefined;
     const entry = this.roleMemoryPanels.get(pluginId)?.entry;
     return entry?.pluginId === pluginId ? entry : undefined;
+  }
+
+  /** Returns platform controls only while their plugin is enabled. */
+  getAccountDetail(pluginId: string, isPluginEnabled: (pluginId: string) => boolean): AccountDetailEntry | undefined {
+    return isPluginEnabled(pluginId) ? this.accountDetails.get(pluginId)?.entry : undefined;
   }
 
   /** Lists a parent settings.section's registered subtabs, built-in-first, filtered the same way as any other slot. */

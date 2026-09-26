@@ -12,6 +12,7 @@ import type { SettingsSubsection } from "./settingsPageTypes";
 import { useSettingsPageController } from "./useSettingsPageController";
 import { cardClass, cx } from "../shared/styles";
 import { InlineError } from "../shared/feedback/InlineError";
+import { PluginAccountsSection } from "../accounts/PluginAccountsSection";
 
 type SettingsPageProps = {
   bridgeReady: boolean;
@@ -109,7 +110,10 @@ function StandaloneSettingsPage({ entry, currentSubsectionId, onSelect }: {
         />
         {/* Schema-generated plugin pages load on first open (see pluginSchemaSettingsSectionFactory). */}
         <Suspense fallback={null}>
-          <NestedComponent key={nested.id} subsectionId={nested.id} onSelectSubsection={onSelect} />
+          <div className="grid gap-6">
+            {nested.pluginId ? <PluginAccountsSection pluginId={nested.pluginId} /> : null}
+            <NestedComponent key={nested.id} subsectionId={nested.id} onSelectSubsection={onSelect} />
+          </div>
         </Suspense>
       </SettingsPageLayout>
     );
