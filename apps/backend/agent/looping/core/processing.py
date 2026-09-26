@@ -266,7 +266,7 @@ class _ProcessingMixin:
             merged_metadata["disabled_tools"] = list(disabled_tools)
         msg = InboundMessage(
             channel=channel,
-            sender="user",
+            sender=str(merged_metadata.get("sender_id") or "user"),
             chat_id=chat_id,
             content=content,
             media=list(media or []),
