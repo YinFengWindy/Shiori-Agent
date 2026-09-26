@@ -2,16 +2,15 @@ import { useEffect, useState } from "react";
 import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
 import { createPluginBridgeClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import { createAccountClient } from "../../../apps/desktop/renderer/src/accounts/accountClient";
-import { InlineError } from "../../../apps/desktop/renderer/src/shared/feedback/InlineError";
-import { inputClass, primaryButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { ghostButtonClass, inputClass, primaryButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
 import { Select } from "../../../apps/desktop/renderer/src/shared/ui/Select";
-import { configuredApps, withSavedApp, type FeishuApp } from "./accountConfig";
+import { configuredApps, withConnection, withSavedApp, type FeishuApp } from "./accountConfig";
 
 const settings = createPluginBridgeClient();
 const accounts = createAccountClient();
 
 /** Plugin-owned credentials and observed private targets in the shared account detail. */
-export function FeishuAccountDetail({ account, onChanged, client }: PluginAccountDetailComponentProps) {
+export function FeishuAccountDetail({ account, onChanged, client, host }: PluginAccountDetailComponentProps) {
   const accountRef = account?.platformAccountId;
   const [values, setValues] = useState<Record<string, unknown> | null>(null);
   const [domain, setDomain] = useState<FeishuApp["domain"]>("feishu");
@@ -54,9 +53,10 @@ export function FeishuAccountDetail({ account, onChanged, client }: PluginAccoun
       if (!current || secret.trim()) {
         await client.call("accounts.verify", { domain, app_id: appId.trim(), app_secret: appSecret });
       }
-      await settings.setConfig("feishu", withSavedApp(latest, { domain, app_id: appId.trim(), app_secret: appSecret }), {
+      const result = await settings.setConfig("feishu", withSavedApp(latest, { domain, app_id: appId.trim(), app_secret: appSecret }), {
         operationId: crypto.randomUUID(),
       });
+      setValues(result.values);
       setSecret("");
       const refreshed = await accounts.list();
       onChanged(refreshed.find((item) => item.pluginId === "feishu" && item.platformAccountId === `${domain}:${appId.trim()}`)?.id);
@@ -67,8 +67,27 @@ export function FeishuAccountDetail({ account, onChanged, client }: PluginAccoun
     }
   }
 
+  async function disconnect() {
+    if (!accountRef) return;
+    setBusy(true);
+    setError("");
+    try {
+      const latest = (await settings.getConfig("feishu")).values;
+      const result = await settings.setConfig("feishu", withConnection(latest, accountRef, false), {
+        operationId: crypto.randomUUID(),
+      });
+      setValues(result.values);
+      onChanged();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <div className="grid gap-4">
-    {error ? <InlineError message={error} /> : null}
+    {error ? <host.ui.InlineError message={error} /> : null}
+    {account?.connection === "login_required" && account.error ? <host.ui.InlineError message={account.error} /> : null}
     <label className="grid gap-2 text-body-sm text-ink-secondary">区域
       <Select aria-label="区域" value={domain} disabled={busy || Boolean(account)} options={[
         { value: "feishu", label: "飞书" }, { value: "lark", label: "Lark" },
@@ -80,7 +99,12 @@ export function FeishuAccountDetail({ account, onChanged, client }: PluginAccoun
     <label className="grid gap-2 text-body-sm text-ink-secondary">App Secret
       <input className={inputClass} type="password" value={secret} disabled={busy} onChange={(event) => setSecret(event.target.value)} autoComplete="new-password" placeholder={account ? "已保存" : ""} />
     </label>
-    <button type="button" className={primaryButtonClass} disabled={busy || !values || !appId.trim()} onClick={() => void save()}>保存并连接</button>
+    <div className="flex flex-wrap gap-2">
+      <button type="button" className={primaryButtonClass} disabled={busy || !values || !appId.trim()} onClick={() => void save()}>保存并连接</button>
+      {account ? <button type="button" className={ghostButtonClass} disabled={busy || !values} onClick={() => void (
+        account.connection === "online" || account.connection === "connecting" ? disconnect() : save()
+      )}>{account.connection === "online" || account.connection === "connecting" ? "断开连接" : "重新连接"}</button> : null}
+    </div>
     {profile?.identity.open_id ? <p className="m-0 break-all text-body-sm text-ink-muted">机器人 open_id（本应用） · {profile.identity.open_id}</p> : null}
     {profile?.targets.length ? <div className="grid gap-2 border-t border-line-soft pt-4 text-body-sm">
       <h3 className="m-0 font-medium text-ink">已交互私聊（本应用）</h3>

@@ -10,6 +10,7 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+import httpx
 
 from bus.events import OutboundMessage
 from plugins.feishu.backend import api as feishu_api
@@ -45,6 +46,36 @@ async def test_bot_identity_failure_distinguishes_auth_from_capability(
         for call in accounts.report.call_args_list
     )
     assert harness.channel.status()["connected"] is True
+
+
+async def test_bare_http_401_identity_response_requires_login(
+    make_harness: Any,
+) -> None:
+    accounts = Mock()
+    harness = make_harness(
+        account_id="account-a",
+        profile_ref="feishu:cli_a",
+        accounts=accounts,
+    )
+
+    async def response(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("tenant_access_token/internal"):
+            return httpx.Response(200, json={"code": 0, "tenant_access_token": "token"})
+        return httpx.Response(401, json={"code": 0})
+
+    harness.channel._api._transport = httpx.MockTransport(response)
+    await harness.start()
+    for _ in range(100):
+        if any(
+            call.kwargs.get("connection") == "login_required"
+            for call in accounts.report.call_args_list
+        ):
+            break
+        await asyncio.sleep(0.01)
+    assert any(
+        call.kwargs.get("connection") == "login_required"
+        for call in accounts.report.call_args_list
+    )
 
 
 async def test_two_account_channels_isolate_inbound_targets_and_receipts(
@@ -83,6 +114,12 @@ async def test_two_account_channels_isolate_inbound_targets_and_receipts(
     receipt = await second.channel.send(CHAT_ID, "reply")
     assert receipt in second.api.sent_ids
     assert not first.api.sent_ids
+    before = len(second.api.sent_ids)
+    with pytest.raises(ValueError, match="已交互的私聊"):
+        await second.channel.send("oc_unknown_group", "must not send")
+    with pytest.raises(ValueError, match="已交互的私聊"):
+        await second.channel.send("ou_unknown", "must not send")
+    assert len(second.api.sent_ids) == before
 
 
 @pytest.mark.parametrize("normal_reply", [False, True])

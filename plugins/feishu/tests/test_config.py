@@ -45,7 +45,13 @@ def test_config_model_normalizes_legacy_domains_and_rejects_others() -> None:
 
 def test_config_schema_renders_as_a_labelled_form() -> None:
     properties = FeishuConfigModel.model_json_schema()["properties"]
-    assert list(properties) == ["app_id", "app_secret", "domain", "accounts"]
+    assert list(properties) == [
+        "app_id",
+        "app_secret",
+        "domain",
+        "accounts",
+        "legacy_channel_ref",
+    ]
     assert properties["domain"]["enum"] == ["feishu", "lark"]
     assert all(item.get("title") for item in properties.values())
 
@@ -67,3 +73,16 @@ def test_unresolved_secret_keeps_other_applications_available() -> None:
         ("feishu:cli_ready", "ready"),
         ("lark:cli_missing", ""),
     ]
+
+
+def test_legacy_channel_alias_remains_bound_to_its_original_app() -> None:
+    config = FeishuConfigModel.model_validate(
+        {
+            "legacy_channel_ref": "lark:cli_old",
+            "accounts": [
+                {"app_id": "cli_new", "app_secret": "new", "domain": "feishu"},
+                {"app_id": "cli_old", "app_secret": "old", "domain": "lark"},
+            ],
+        }
+    )
+    assert config.channel_alias_ref == "lark:cli_old"

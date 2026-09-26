@@ -81,12 +81,14 @@ class FeishuChannel:
         accounts: "AccountsCapability | None" = None,
         profile_store: "PluginKVStore | None" = None,
         profile_ref: str = "",
+        connection_revision: int = 0,
     ) -> None:
         self.name = name
         self.account_id = account_id
         self._accounts = accounts
         self._profile_store = profile_store
         self._profile_ref = profile_ref
+        self._connection_revision = connection_revision
         self._app_id = app_id
         # The manifest's session types, for answering ``/chatid``.
         self._chat_types = chat_types
@@ -143,6 +145,7 @@ class FeishuChannel:
             self._app_id,
             self._app_secret,
             self._domain,
+            self._connection_revision,
         )
 
     def adopt_runtime(self, candidate: "FeishuChannel") -> None:
@@ -315,10 +318,25 @@ class FeishuChannel:
                 self._report("connecting")
                 self._spawn_bot_info()
         else:
-            self._report(
-                "error" if state.detail.startswith("连接失败") else "offline",
-                state.detail,
+            connection = (
+                "login_required"
+                if state.error_kind == "auth"
+                else (
+                    "error"
+                    if state.error_kind in {"capability", "transport"}
+                    else "offline"
+                )
             )
+            detail = (
+                f"认证失败：{state.detail}"
+                if state.error_kind == "auth"
+                else (
+                    f"能力不足：{state.detail}"
+                    if state.error_kind == "capability"
+                    else state.detail
+                )
+            )
+            self._report(connection, detail)
 
     def _report(self, connection: "AccountConnectionState", error: str = "") -> None:
         if self._accounts is not None and self.account_id:
@@ -353,10 +371,24 @@ class FeishuChannel:
         try:
             info = await self._api.bot_info()
         except (FeishuApiError, httpx.HTTPError, RuntimeError) as error:
-            self._identity_error = f"机器人身份验证失败：{error}"
-            auth = isinstance(error, FeishuApiError) and (
-                error.http_status == 401 or error.code in {10003, 10014}
+            status = (
+                error.http_status
+                if isinstance(error, FeishuApiError)
+                else (
+                    error.response.status_code
+                    if isinstance(error, httpx.HTTPStatusError)
+                    else None
+                )
             )
+            auth = status == 401 or (
+                isinstance(error, FeishuApiError) and error.code in {10003, 10014}
+            )
+            label = (
+                "机器人认证失败"
+                if auth
+                else "机器人权限不足" if status == 403 else "机器人身份查询失败"
+            )
+            self._identity_error = f"{label}：{error}"
             self._report("login_required" if auth else "error", self._identity_error)
             return
         self._bot_name = str(info.get("app_name") or "")
@@ -578,6 +610,7 @@ class FeishuChannel:
     ) -> str | None:
         if not text.strip():
             return None
+        self._require_private_target(chat_id)
         first_id: str | None = None
         for index, chunk in enumerate(split_markdown(text.strip())):
             message_id = await self._send_chunk(
@@ -608,6 +641,7 @@ class FeishuChannel:
         A reply the API refuses (e.g. the quoted message was recalled) is
         sent again as a plain message so the content is not lost.
         """
+        self._require_private_target(chat_id)
         receive_id, receive_id_type = resolve_receive_id(chat_id)
 
         async def send() -> str:
@@ -631,11 +665,23 @@ class FeishuChannel:
             logger.warning("[feishu] 引用回复失败，改为普通发送: %s", error)
             return await with_rate_limit_retry(send, label=label)
 
+    def _require_private_target(self, chat_id: str) -> None:
+        """Account sends are limited to private chats observed by this app."""
+        if not self.account_id:
+            return
+        receive_id, receive_type = resolve_receive_id(chat_id)
+        known = (receive_type == "chat_id" and receive_id in self._known_targets) or (
+            receive_type == "open_id" and receive_id in self._known_targets.values()
+        )
+        if not known:
+            raise ValueError("目标不是该飞书应用已交互的私聊")
+
     async def send_image(self, chat_id: str, image: str) -> str:
         """Uploads and sends an image from a local path or an http(s) URL.
 
         Returns the platform id of the sent image message.
         """
+        self._require_private_target(chat_id)
         source = image.strip()
         if source.startswith(("http://", "https://")):
             data = await self._api.fetch_url(source)
@@ -650,6 +696,7 @@ class FeishuChannel:
         self, chat_id: str, file_path: str, name: str | None = None
     ) -> str:
         """Uploads a local file and returns the platform message receipt."""
+        self._require_private_target(chat_id)
         path = Path(file_path).expanduser()
         file_key = await self._api.upload_file(path.read_bytes(), name or path.name)
         return await self._deliver(

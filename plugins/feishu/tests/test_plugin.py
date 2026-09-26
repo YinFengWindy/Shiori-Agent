@@ -11,27 +11,37 @@ from shiori_plugin_testkit.bridge import plugin_bridge_request
 
 from agent.plugin_host import HostServices, PluginKernel, load_manifest
 from bus.event_bus import EventBus
+from core.accounts import AccountSnapshot
 from core.roles.store import RoleStore
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 
-def _load_feishu_channels(
+def _load_feishu_state(
     plugin_configs: dict[str, dict[str, Any]] | None = None,
-) -> tuple[int, list[Any]]:
+) -> tuple[int, list[Any], list[AccountSnapshot]]:
     with tempfile.TemporaryDirectory() as tmp:
-        stage_plugin_package(PLUGIN_DIR, Path(tmp) / "feishu")
+        root = Path(tmp)
+        stage_plugin_package(PLUGIN_DIR, root / "feishu")
+        roles = RoleStore(root)
         kernel = PluginKernel(
-            [Path(tmp)],
+            [root],
             services=HostServices(
                 event_bus=EventBus(),
                 plugin_configs=plugin_configs or {},
-                workspace=Path(tmp),
-                role_store=RoleStore(Path(tmp)),
+                workspace=root,
+                role_store=roles,
             ),
         )
         asyncio.run(kernel.load_all())
-        return kernel.loaded_count, kernel.channels
+        return kernel.loaded_count, kernel.channels, roles.accounts.list()
+
+
+def _load_feishu_channels(
+    plugin_configs: dict[str, dict[str, Any]] | None = None,
+) -> tuple[int, list[Any]]:
+    count, channels, _ = _load_feishu_state(plugin_configs)
+    return count, channels
 
 
 def test_manifest_declares_the_feishu_channel_for_binding_discovery() -> None:
@@ -75,46 +85,46 @@ def test_plugin_contributes_the_channel_with_credentials() -> None:
 
 
 def test_two_regional_apps_register_distinct_accounts_and_channels() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        stage_plugin_package(PLUGIN_DIR, root / "feishu")
-        roles = RoleStore(root)
-        kernel = PluginKernel(
-            [root],
-            services=HostServices(
-                event_bus=EventBus(),
-                workspace=root,
-                role_store=roles,
-                plugin_configs={
-                    "feishu": {
-                        "accounts": [
-                            {
-                                "app_id": "cli_a",
-                                "app_secret": "first",
-                                "domain": "feishu",
-                            },
-                            {
-                                "app_id": "cli_b",
-                                "app_secret": "second",
-                                "domain": "lark",
-                            },
-                        ]
-                    }
-                },
-            ),
-        )
-        asyncio.run(kernel.load_all())
-
-        assert [channel.name for channel in kernel.channels] == [
-            "feishu",
-            "feishu:lark:cli_b",
-        ]
-        assert {row.record.platform_account_id for row in roles.accounts.list()} == {
-            "feishu:cli_a",
-            "lark:cli_b",
+    loaded, channels, accounts = _load_feishu_state(
+        {
+            "feishu": {
+                "accounts": [
+                    {"app_id": "cli_a", "app_secret": "first", "domain": "feishu"},
+                    {"app_id": "cli_b", "app_secret": "second", "domain": "lark"},
+                ]
+            }
         }
-        assert all(row.connection == "connecting" for row in roles.accounts.list())
-        assert all("secret" not in str(row) for row in roles.accounts.list())
+    )
+    assert loaded == 1
+    assert [channel.name for channel in channels] == [
+        "feishu:feishu:cli_a",
+        "feishu:lark:cli_b",
+    ]
+    assert {row.record.platform_account_id for row in accounts} == {
+        "feishu:cli_a",
+        "lark:cli_b",
+    }
+    assert all(row.connection == "connecting" for row in accounts)
+    assert all("secret" not in str(row) for row in accounts)
+
+
+def test_reordering_accounts_keeps_the_legacy_channel_alias_stable() -> None:
+    old = {"app_id": "cli_old", "app_secret": "old", "domain": "lark"}
+    new = {"app_id": "cli_new", "app_secret": "new", "domain": "feishu"}
+    for order in ([old, new], [new, old]):
+        loaded, channels = _load_feishu_channels(
+            {
+                "feishu": {
+                    "legacy_channel_ref": "lark:cli_old",
+                    "accounts": order,
+                }
+            }
+        )
+        assert loaded == 1
+        assert {channel.configuration_key[2]: channel.name for channel in channels} == {
+            "cli_old": "feishu",
+            "cli_new": "feishu:feishu:cli_new",
+        }
 
 
 def test_invalid_config_fails_the_plugin_and_rolls_back() -> None:
@@ -126,45 +136,50 @@ def test_invalid_config_fails_the_plugin_and_rolls_back() -> None:
 
 
 def test_one_unresolved_secret_does_not_disable_another_account() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        stage_plugin_package(PLUGIN_DIR, root / "feishu")
-        roles = RoleStore(root)
-        kernel = PluginKernel(
-            [root],
-            services=HostServices(
-                event_bus=EventBus(),
-                workspace=root,
-                role_store=roles,
-                plugin_configs={
-                    "feishu": {
-                        "accounts": [
-                            {
-                                "app_id": "cli_ready",
-                                "app_secret": "ready",
-                                "domain": "feishu",
-                            },
-                            {
-                                "app_id": "cli_missing",
-                                "app_secret": "${MISSING_SECRET}",
-                                "domain": "lark",
-                            },
-                        ]
-                    }
-                },
-            ),
-        )
-        asyncio.run(kernel.load_all())
-        assert kernel.loaded_count == 1
-        assert [channel.name for channel in kernel.channels] == ["feishu"]
-        states = {
-            row.record.platform_account_id: row.connection
-            for row in roles.accounts.list()
+    loaded, channels, accounts = _load_feishu_state(
+        {
+            "feishu": {
+                "accounts": [
+                    {"app_id": "cli_ready", "app_secret": "ready", "domain": "feishu"},
+                    {
+                        "app_id": "cli_missing",
+                        "app_secret": "${MISSING_SECRET}",
+                        "domain": "lark",
+                    },
+                ]
+            }
         }
-        assert states == {
-            "feishu:cli_ready": "connecting",
-            "lark:cli_missing": "login_required",
+    )
+    assert loaded == 1
+    assert [channel.name for channel in channels] == ["feishu:feishu:cli_ready"]
+    assert {row.record.platform_account_id: row.connection for row in accounts} == {
+        "feishu:cli_ready": "connecting",
+        "lark:cli_missing": "login_required",
+    }
+
+
+def test_disconnected_app_keeps_identity_while_other_channel_runs() -> None:
+    loaded, channels, accounts = _load_feishu_state(
+        {
+            "feishu": {
+                "accounts": [
+                    {
+                        "app_id": "cli_off",
+                        "app_secret": "off",
+                        "domain": "feishu",
+                        "connection_enabled": False,
+                    },
+                    {"app_id": "cli_on", "app_secret": "on", "domain": "lark"},
+                ]
+            }
         }
+    )
+    assert loaded == 1
+    assert [channel.name for channel in channels] == ["feishu:lark:cli_on"]
+    assert {row.record.platform_account_id: row.connection for row in accounts} == {
+        "feishu:cli_off": "offline",
+        "lark:cli_on": "connecting",
+    }
 
 
 @pytest.mark.asyncio
@@ -189,6 +204,7 @@ async def test_config_transaction_migrates_legacy_app_without_changing_account_i
                     "app_id": "",
                     "app_secret": "",
                     "domain": "feishu",
+                    "legacy_channel_ref": "lark:cli_old",
                     "accounts": [
                         {"app_id": "cli_old", "app_secret": "old", "domain": "lark"},
                         {"app_id": "cli_new", "app_secret": "new", "domain": "feishu"},
@@ -211,3 +227,41 @@ async def test_config_transaction_migrates_legacy_app_without_changing_account_i
             == old["id"]
         )
         assert 'app_secret = "old"' in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_disconnect_and_reconnect_keep_the_saved_account(plugin_runtime) -> None:
+    initial = '\n[plugins.feishu]\n[[plugins.feishu.accounts]]\napp_id = "cli_a"\napp_secret = "secret"\ndomain = "feishu"\n'
+    async with plugin_runtime(("feishu",), initial) as (service, _path):
+        before = await plugin_bridge_request(service, "accounts.list")
+        [original] = before.payload["accounts"]
+        for operation, enabled, expected in (
+            ("disconnect-feishu", False, "offline"),
+            ("reconnect-feishu", True, "connecting"),
+        ):
+            saved = await plugin_bridge_request(
+                service,
+                "plugin.config.set",
+                {
+                    "plugin_id": "feishu",
+                    "operation_id": operation,
+                    "values": {
+                        "app_id": "",
+                        "app_secret": "",
+                        "domain": "feishu",
+                        "accounts": [
+                            {
+                                "app_id": "cli_a",
+                                "app_secret": "secret",
+                                "domain": "feishu",
+                                "connection_enabled": enabled,
+                            }
+                        ],
+                    },
+                },
+            )
+            assert saved.error is None, saved.error
+            listed = await plugin_bridge_request(service, "accounts.list")
+            [account] = listed.payload["accounts"]
+            assert account["id"] == original["id"]
+            assert account["connection"] == expected

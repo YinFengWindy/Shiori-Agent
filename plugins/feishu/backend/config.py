@@ -45,6 +45,13 @@ class FeishuAppConfig(BaseModel):
         return DOMAINS[self.domain]
 
 
+class FeishuAccountConfig(FeishuAppConfig):
+    """Persisted connection intent for one configured application."""
+
+    connection_enabled: bool = True
+    connection_revision: int = Field(default=0, ge=0)
+
+
 class FeishuConfigModel(FeishuAppConfig):
     """Application list plus the old single-app fields retained for migration."""
 
@@ -63,7 +70,8 @@ class FeishuConfigModel(FeishuAppConfig):
         title="服务域名",
         description="feishu：飞书（open.feishu.cn）；lark：Lark 国际版（open.larksuite.com）",
     )
-    accounts: list[FeishuAppConfig] = Field(default_factory=list)
+    accounts: list[FeishuAccountConfig] = Field(default_factory=list)
+    legacy_channel_ref: str = ""
 
     @model_validator(mode="after")
     def _unique_accounts(self) -> "FeishuConfigModel":
@@ -75,16 +83,21 @@ class FeishuConfigModel(FeishuAppConfig):
         return self
 
     @property
-    def applications(self) -> list[FeishuAppConfig]:
+    def applications(self) -> list[FeishuAccountConfig]:
         """Includes the old app once until a settings save migrates it."""
         accounts = list(self.accounts)
         if self.app_id and not any(account.ref == self.ref for account in accounts):
             accounts.insert(
                 0,
-                FeishuAppConfig(
+                FeishuAccountConfig(
                     app_id=self.app_id,
                     app_secret=self.app_secret,
                     domain=self.domain,
                 ),
             )
         return [account for account in accounts if account.app_id]
+
+    @property
+    def channel_alias_ref(self) -> str:
+        """Keeps the old bare channel bound to its original application."""
+        return self.legacy_channel_ref or (self.ref if self.app_id else "")

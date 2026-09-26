@@ -42,7 +42,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         return {"name": identity["name"], "open_id": identity["open_id"]}
 
     ctx.rpc.register("accounts.verify", verify, concurrency=Concurrency.INTEGRATION)
-    for index, app in enumerate(config.applications):
+    for app in config.applications:
         profile = ctx.kv.get(f"profile:{app.ref}", {})
         snapshot = ctx.accounts.register(
             platform="feishu",
@@ -52,6 +52,9 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             avatar_url=str(profile.get("avatar_url") or ""),
         )
         account_id = snapshot.record.id
+        if not app.connection_enabled:
+            ctx.accounts.report(account_id, connection="offline")
+            continue
         if not app.app_secret:
             ctx.accounts.report(
                 account_id,
@@ -65,11 +68,16 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
                 app_id=app.app_id,
                 app_secret=app.app_secret,
                 domain=app.base_url,
-                name="feishu" if index == 0 else f"feishu:{app.ref}",
+                name=(
+                    "feishu"
+                    if app.ref == config.channel_alias_ref
+                    else f"feishu:{app.ref}"
+                ),
                 account_id=account_id,
                 accounts=ctx.accounts,
                 profile_store=ctx.kv,
                 profile_ref=app.ref,
+                connection_revision=app.connection_revision,
                 chat_types=ctx.manifest.channel_chat_types("feishu"),
             )
         )
