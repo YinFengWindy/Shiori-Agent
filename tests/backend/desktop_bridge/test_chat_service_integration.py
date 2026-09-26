@@ -78,7 +78,7 @@ async def test_pipeline_early_exit_emits_one_error_and_releases_desktop_turn(
         if result is not None:
             await result
 
-    async def emit_session_updated(*, request_id, session, emit_event):
+    async def emit_session_updated(*, request_id, session, emit_event, messages=None):
         await emit_payload(
             emit_event,
             {
@@ -161,6 +161,7 @@ async def test_desktop_chat_service_reconciles_persisted_user_before_chat_error(
         request_id: str,
         session,
         emit_event,
+        messages=None,
     ) -> None:
         await _emit_payload(
             emit_event,

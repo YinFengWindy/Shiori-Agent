@@ -141,7 +141,14 @@ class _BuildTurnCommittedModule:
             timestamp=msg.timestamp,
             post_reply_budget=dict(cast(dict[str, int], frame.slots[_BUDGET_SLOT])),
             react_stats=dict(cast(dict[str, int], frame.slots[_REACT_STATS_SLOT])),
-            extra=dict(cast(dict[str, object], frame.slots[_EXTRA_SLOT])),
+            extra={
+                **dict(cast(dict[str, object], frame.slots[_EXTRA_SLOT])),
+                **(
+                    {"committed_message_ids": list(state.committed_message_ids)}
+                    if state.committed_message_ids
+                    else {}
+                ),
+            },
             role_id=role_id,
             request_id=str((msg.metadata or {}).get("request_id") or "").strip(),
             thread_id=str((msg.metadata or {}).get("thread_id") or "").strip(),

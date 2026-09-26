@@ -33,6 +33,7 @@ from agent.lifecycle.types import (
     TurnSnapshot,
     TurnState,
 )
+from agent.turns.desktop_pushes import DesktopPushDrafts
 from agent.turns.outbound import DeliveryReceipt, OutboundDispatch, OutboundPort
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
@@ -290,6 +291,7 @@ class PassiveTurnPipeline:
             msg=msg,
             session_key=key,
             dispatch_outbound=dispatch_outbound,
+            desktop_pushes=DesktopPushDrafts(key),
         )
         with diagnostic_context(session=key, flow="passive", turn=turn_id):
             logger.info(
@@ -390,7 +392,11 @@ class PassiveTurnPipeline:
                 session = state.session
                 if session is None:
                     raise RuntimeError("Passive turn requires TurnState.session")
-                with diagnostic_context(phase="reasoner"):
+                assert state.desktop_pushes is not None
+                with (
+                    diagnostic_context(phase="reasoner"),
+                    state.desktop_pushes.collect(),
+                ):
                     turn_result = await self._reasoner.run_turn(
                         msg=msg,
                         skill_names=list(before_reasoning.skill_names) or None,

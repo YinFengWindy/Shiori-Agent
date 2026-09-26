@@ -5,6 +5,7 @@ from typing import Any
 from conversation.service import ConversationService
 from core.roles import RoleAggregateService, RoleRelationshipRuntimeService
 from session.manager import Session, SessionManager
+from session.manager.models import build_session_message
 
 
 class DesktopAppService:
@@ -76,19 +77,13 @@ class DesktopAppService:
             return session
         original_length = len(session.messages)
         original_updated_at = session.updated_at
-        message_metadata = self.build_desktop_user_message_metadata(
-            {"delivery_key": delivery_key} if delivery_key else None,
-            role_id=role_id,
-            chat_id=session.key,
+        draft = self.build_desktop_push_message(
+            session.key,
+            message=normalized_message,
+            media=normalized_media,
+            delivery_key=delivery_key,
         )
-        session.add_message(
-            "assistant",
-            normalized_message,
-            media=normalized_media or None,
-            proactive=True,
-            tools_used=["message_push"],
-            metadata=message_metadata,
-        )
+        session.add_message(**draft)
         try:
             await self.session_manager.save_async(session)
         except Exception:
@@ -101,6 +96,35 @@ class DesktopAppService:
         """Accept a turn-owned desktop delivery without exposing pending messages."""
         session_key = self.normalize_desktop_session_key(chat_id)
         self.role_id_from_desktop_session_key(session_key)
+
+    def build_desktop_push_message(
+        self,
+        session_key: str,
+        *,
+        message: str = "",
+        media: list[str] | None = None,
+        delivery_key: str = "",
+    ) -> dict[str, Any]:
+        """Builds the same private desktop message for immediate and turn commits."""
+        return build_session_message(
+            "assistant",
+            message,
+            media=media,
+            proactive=True,
+            tools_used=["message_push"],
+            metadata=self.build_desktop_user_message_metadata(
+                {"delivery_key": delivery_key} if delivery_key else None,
+                role_id=self.role_id_from_desktop_session_key(session_key),
+                chat_id=session_key,
+            ),
+        )
+
+    async def finish_queued_desktop_push(self, session_key: str) -> None:
+        """Runs desktop presence/projection effects after a passive turn commit."""
+        await self._finish_desktop_push(
+            self.session_manager.get_or_create(session_key),
+            role_id=self.role_id_from_desktop_session_key(session_key),
+        )
 
     async def _finish_desktop_push(self, session: Session, *, role_id: str) -> Session:
         self.sync_desktop_session_thread(session, role_id=role_id)

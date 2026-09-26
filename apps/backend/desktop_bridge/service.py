@@ -13,6 +13,7 @@ from typing import Any
 from agent.looping.core import AgentLoop
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.tools.message_push import MessagePushTool
+from agent.turns.desktop_pushes import current_desktop_pushes
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
     ProactiveMessageCommitted,
@@ -40,6 +41,7 @@ from desktop_bridge.role_presenter import DesktopRolePresenter
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_task_requests import DesktopSessionTaskRequestHandler
 from desktop_bridge.session_presenter import DesktopSessionPresenter
+from desktop_bridge.turn_messages import committed_turn_messages
 from desktop_bridge.voice.voice_handler import DesktopVoiceHandler
 from agent.voice_config import VoiceConfig
 from desktop_bridge.voice.voice_service import VoiceService, VoiceServiceError
@@ -376,6 +378,28 @@ class DesktopBridgeService:
                 # The turn owner will publish the complete message and state together.
                 self.app_service.validate_desktop_push_target(chat_id)
                 return
+            session_key = self.app_service.normalize_desktop_session_key(chat_id)
+            drafts = current_desktop_pushes(session_key)
+            if (
+                drafts is not None
+                and metadata is not None
+                and metadata.get("already_persisted") is not True
+            ):
+                self.app_service.validate_desktop_push_target(chat_id)
+                drafts.append(
+                    self.app_service.build_desktop_push_message(
+                        session_key,
+                        message=message,
+                        media=media,
+                        delivery_key=str(metadata.get("delivery_key") or ""),
+                    ),
+                    owner=self,
+                    after_commit=lambda: self.app_service.finish_queued_desktop_push(
+                        session_key
+                    ),
+                )
+                metadata["queued"] = True
+                return
             session = await self.app_service.apply_desktop_push(
                 chat_id,
                 message=message,
@@ -586,7 +610,10 @@ class DesktopBridgeService:
         session: Session,
         event: TurnCommitted,
     ) -> list[dict[str, Any]]:
-        """Returns the persisted user/assistant pair belonging to one external turn."""
+        """Returns the exact ordered turn when commit identity is available."""
+        messages = committed_turn_messages(session, event)
+        if messages is not None:
+            return messages
         assistant_index = next(
             (
                 index

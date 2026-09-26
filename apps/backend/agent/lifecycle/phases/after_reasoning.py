@@ -130,6 +130,9 @@ class _BuildAfterReasoningCtxModule:
         if session is not None:
             frame.slots["reply:previous_metadata"] = dict(session.metadata)
             frame.slots["reply:messages"] = []
+            frame.slots["reply:private"] = "reply:state" in frame.slots or bool(
+                input.state.desktop_pushes and input.state.desktop_pushes.messages
+            )
         raw_turn_metrics = turn_result.context_retry.get("turn_metrics")
         turn_metrics = (
             {
@@ -216,6 +219,8 @@ class _PersistUserMessageModule:
         if isinstance(llm_context_frame, str) and llm_context_frame.strip():
             user_kwargs["llm_context_frame"] = llm_context_frame
         user_kwargs.update(_collect_persist_user_slots(frame.slots))
+        # Message time records receipt, not the eventual successful commit time.
+        user_kwargs["timestamp"] = msg.timestamp.astimezone().isoformat()
         user_kwargs.update(
             _copy_conversation_message_fields(
                 metadata=cast(dict[str, Any] | None, msg.metadata),
@@ -228,7 +233,7 @@ class _PersistUserMessageModule:
             if isinstance(persisted_user_content, str)
             else msg.content
         )
-        if "reply:state" in frame.slots:
+        if frame.slots["reply:private"]:
             frame.slots["reply:messages"].append(
                 build_session_message(
                     "user",
@@ -258,6 +263,9 @@ class _PersistAssistantMessageModule:
         if raw_session is None:
             raise RuntimeError("AfterReasoning requires TurnState.session")
         session = cast("Session", raw_session)
+        drafts = frame.input.state.desktop_pushes
+        if drafts is not None:
+            frame.slots["reply:messages"].extend(drafts.messages)
         assistant_kwargs: dict[str, Any] = {
             "tools_used": list(ctx.tools_used) if ctx.tools_used else None,
             "tool_chain": list(ctx.tool_chain) if ctx.tool_chain else None,
@@ -283,7 +291,7 @@ class _PersistAssistantMessageModule:
                 session=session,
             )
         )
-        if "reply:state" in frame.slots:
+        if frame.slots["reply:private"]:
             frame.slots["reply:messages"].append(
                 build_session_message("assistant", ctx.reply, **assistant_kwargs)
             )
@@ -306,7 +314,7 @@ class _UpdateSessionMetadataModule:
         if raw_session is None:
             raise RuntimeError("AfterReasoning requires TurnState.session")
         session = cast("Session", raw_session)
-        if "reply:state" in frame.slots:
+        if frame.slots["reply:private"]:
             frame.slots["reply:metadata_updates"] = build_session_runtime_metadata(
                 tools_used=list(ctx.tools_used),
                 tool_chain=list(ctx.tool_chain),
@@ -343,12 +351,25 @@ class _AppendMessagesModule:
         session = cast("Session", raw_session)
         owned_messages = frame.slots["reply:messages"]
         reply = frame.slots.get("reply:state")
-        state_kwargs = {}
+        relationship_runtime = getattr(
+            self._session_services, "relationship_runtime", None
+        )
+        state_kwargs = (
+            {
+                "metadata_updates": frame.slots["reply:metadata_updates"],
+                "pending_messages": True,
+                "removed_metadata_keys": (INTERRUPTED_TURN_METADATA_KEY,),
+                "metadata_enricher": (
+                    relationship_runtime.enrich_session_metadata
+                    if relationship_runtime is not None
+                    else None
+                ),
+            }
+            if frame.slots["reply:private"]
+            else {}
+        )
         if reply is not None:
             pending_metadata = frame.slots["reply:metadata_updates"]
-            relationship_runtime = getattr(
-                self._session_services, "relationship_runtime", None
-            )
             # Only a freshly fetched mood/thought bumps session mood state; a
             # degraded reply (mood call failed) leaves last turn's mood and
             # thought untouched instead of overwriting them with copies.
@@ -386,12 +407,12 @@ class _AppendMessagesModule:
                 owned_messages,
                 **state_kwargs,
             )
-            if reply is not None:
+            if frame.slots["reply:private"]:
                 state.session = self._session_services.session_manager.get_or_create(
                     session.key
                 )
         except BaseException:
-            if reply is not None:
+            if frame.slots["reply:private"]:
                 # Drafts were private; cancellation before lock acquisition publishes nothing.
                 raise
             # Only remove this turn's objects; unrelated concurrent messages remain.
@@ -413,6 +434,11 @@ class _AppendMessagesModule:
                     else:
                         session.metadata.pop(key, None)
             raise
+        state.committed_message_ids = tuple(
+            str(message["id"]) for message in owned_messages if message.get("id")
+        )
+        if state.desktop_pushes is not None:
+            await state.desktop_pushes.committed()
         return frame
 
 
