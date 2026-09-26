@@ -123,10 +123,11 @@ async def test_event_notice_can_receive_action_reply_on_the_same_socket(monkeypa
     ws.send = send_with_reply
     monkeypatch.setattr("plugins.qq.backend.onebot.connect", connect)
     delivered = asyncio.Event()
-    socket = None
+    socket: OneBotSocket | None = None
 
     async def on_event(_event):
         # ChannelIntake's overflow/retry notice follows this same call path.
+        assert socket is not None
         assert await socket.call(
             "send_private_msg", {"user_id": 9, "message": "retry"}
         ) == {"message_id": 101}
