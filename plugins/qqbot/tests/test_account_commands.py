@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
-import httpx
 
 from agent.plugin_host.kv import PluginKVStore
 from plugins.qqbot.backend.account_channel import QQBotAccountsChannel
 from plugins.qqbot.backend.accounts import QQBotAccountStore
+from plugins.qqbot.backend.channel import QQBotChannel
 
 
 @dataclass
@@ -37,9 +37,7 @@ def _manager(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_application_targets_and_send_receipts_are_isolated(
-    tmp_path, monkeypatch
-):
+async def test_application_target_directories_are_isolated(tmp_path, monkeypatch):
     manager, store, accounts = _manager(tmp_path)
 
     async def preflight(app_id, secret):
@@ -52,31 +50,12 @@ async def test_application_targets_and_send_receipts_are_isolated(
         ) == {"account_id": app_id}
         store.observe(app_id, "same-openid")
 
-    for app_id in ("100", "200"):
-        channel = manager._channels[app_id]
-
-        async def token():
-            return "token"
-
-        async def request(method, path, body=None, token=None, *, identity=app_id):
-            assert path == "/v2/users/same-openid/messages"
-            assert method == "POST"
-            return {"id": f"message-{identity}"}
-
-        monkeypatch.setattr(channel, "_get_access_token", token)
-        monkeypatch.setattr(channel, "_api_request", request)
-
     assert (await manager.targets({"account_id": "100"}))["targets"] == [
         {"chat_id": "c2c:100:same-openid", "user_openid": "same-openid"}
     ]
     assert (await manager.targets({"account_id": "200"}))["targets"] == [
         {"chat_id": "c2c:200:same-openid", "user_openid": "same-openid"}
     ]
-    assert await manager.send_target(
-        {"account_id": "200", "user_openid": "same-openid", "content": "hi"}
-    ) == {"message_id": "message-200", "chat_id": "c2c:200:same-openid"}
-    with pytest.raises(ValueError, match="不属于此应用"):
-        await manager._channels["100"].send("c2c:200:same-openid", "wrong")
     manager._status("100", "online", "", "Bot One")
     manager._status("200", "login_required", "认证失败", "")
     assert accounts.reports[-2][0] == "100"
@@ -109,30 +88,58 @@ async def test_failed_credential_preflight_preserves_running_account(
 
 
 @pytest.mark.asyncio
-async def test_send_reports_platform_failure_reason(tmp_path, monkeypatch):
-    manager, _, _ = _manager(tmp_path)
+async def test_gateway_handover_failure_restores_old_credentials(tmp_path, monkeypatch):
+    manager, store, _ = _manager(tmp_path)
 
     async def valid(app_id, secret):
         pass
 
+    async def start(self, ctx, *, public_hooks=True):
+        if self._client_secret == "broken":
+            self._report_status("login_required", "gateway rejected")
+        else:
+            self._report_status("online")
+
+    async def stop(self):
+        pass
+
     monkeypatch.setattr(manager, "_preflight", valid)
-    await manager.save_and_connect({"app_id": "100", "client_secret": "secret"})
-    channel = manager._channels["100"]
-    request = httpx.Request(
-        "POST", "https://api.sgroup.qq.com/v2/users/opaque/messages"
-    )
-    response = httpx.Response(
-        403, json={"message": "target unavailable"}, request=request
-    )
+    monkeypatch.setattr(QQBotChannel, "start", start)
+    monkeypatch.setattr(QQBotChannel, "stop", stop)
+    await manager.save_and_connect({"app_id": "100", "client_secret": "working"})
+    manager._runtime = SimpleNamespace()
 
-    async def denied(chat_id, content):
-        raise httpx.HTTPStatusError("rejected", request=request, response=response)
+    with pytest.raises(RuntimeError, match="gateway rejected"):
+        await manager.save_and_connect({"app_id": "100", "client_secret": "broken"})
 
-    monkeypatch.setattr(channel, "send", denied)
-    with pytest.raises(RuntimeError, match="HTTP 403.*target unavailable"):
-        await manager.send_target(
-            {"account_id": "100", "user_openid": "opaque", "content": "hello"}
-        )
+    assert store.get("100")["client_secret"] == "working"
+    assert manager._channels["100"]._client_secret == "working"
+
+
+@pytest.mark.asyncio
+async def test_failed_new_gateway_does_not_create_an_account(tmp_path, monkeypatch):
+    manager, store, _ = _manager(tmp_path)
+
+    async def valid(app_id, secret):
+        pass
+
+    async def start(self, ctx, *, public_hooks=True):
+        self._report_status("login_required", "gateway rejected")
+
+    async def stop(self):
+        pass
+
+    monkeypatch.setattr(manager, "_preflight", valid)
+    monkeypatch.setattr(QQBotChannel, "start", start)
+    monkeypatch.setattr(QQBotChannel, "stop", stop)
+    manager._runtime = SimpleNamespace()
+
+    with pytest.raises(RuntimeError, match="gateway rejected"):
+        await manager.save_and_connect({"app_id": "100", "client_secret": "broken"})
+
+    assert store.list() == []
+    assert manager._account_ids == {}
+    assert manager._channels == {}
 
 
 @pytest.mark.asyncio

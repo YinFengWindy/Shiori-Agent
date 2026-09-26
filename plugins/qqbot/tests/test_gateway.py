@@ -30,6 +30,15 @@ def test_gateway_rejection_is_authentication_not_network_failure():
 
 
 @pytest.mark.asyncio
+async def test_ready_followed_by_immediate_disconnect_fails_handover():
+    channel = QQBotChannel("app", "secret")
+    channel._report_status("online")
+    channel._report_status("offline", "gateway closed")
+    with pytest.raises(RuntimeError, match="网关未就绪"):
+        await channel.wait_ready()
+
+
+@pytest.mark.asyncio
 async def test_gateway_disconnect_reports_retry_state(monkeypatch):
     states = []
     channel = QQBotChannel(

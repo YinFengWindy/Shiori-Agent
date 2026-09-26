@@ -1,6 +1,6 @@
 """plugins.list/plugins.setEnabled：插件管理列表与热启停，覆盖验收标准 3。
 
-沿用 test_plugin_config.py 的真实插件夹具（qqbot 有配置模型，hello 没有），
+沿用 test_plugin_config.py 的插件夹具（config_fixture 有配置模型），
 证明启停通道对存量插件立即可用，而不是只能造假插件验证。
 """
 
@@ -20,6 +20,9 @@ from desktop_bridge.runtime.service import ReloadableDesktopService
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 _QQBOT_PLUGIN_DIR = _REPOSITORY_ROOT / "plugins" / "qqbot"
+_CONFIG_FIXTURE_DIR = (
+    _REPOSITORY_ROOT / "tests" / "fixtures" / "plugins" / "config_fixture"
+)
 _HELLO_FIXTURE_DIR = _REPOSITORY_ROOT / "tests" / "fixtures" / "plugins" / "hello"
 
 # A scoped RPC fixture exercises the public bridge registration.
@@ -122,10 +125,16 @@ async def test_list_reports_every_discovered_plugin_enabled_by_default(
         assert set(by_id) == {"qqbot", "hello"}
         assert by_id["qqbot"]["enabled"] is True
         assert by_id["qqbot"]["state"] == PluginState.ACTIVE.name
-        assert by_id["qqbot"]["has_config_schema"] is True
+        assert by_id["qqbot"]["has_config_schema"] is False
         assert by_id["hello"]["has_config_schema"] is False
         assert by_id["hello"]["renderer"] == {}
-        assert by_id["qqbot"]["capabilities"] == ["config", "channels"]
+        assert set(by_id["qqbot"]["capabilities"]) == {
+            "config",
+            "channels",
+            "kv",
+            "accounts",
+            "rpc",
+        }
         assert [item["name"] for item in by_id["qqbot"]["channels"]] == ["qqbot"]
         assert by_id["qqbot"]["channels"][0]["label"] == "QQBot"
         assert by_id["hello"]["channels"] == []
@@ -725,6 +734,9 @@ async def test_writing_plugin_config_preserves_the_enabled_flag(tmp_path, monkey
     默认会丢弃它。若不显式保留，用户改一次插件配置就会把这个标志冲掉。
     """
     _stage_plugin_dirs(tmp_path, monkeypatch)
+    _ = stage_plugin_package(
+        _CONFIG_FIXTURE_DIR, tmp_path / "plugin_dirs" / "config_fixture"
+    )
     service, path, app = await _start_service(tmp_path)
     try:
         # 先停用再启用，让 enabled 以显式形式落进配置表
@@ -733,16 +745,16 @@ async def test_writing_plugin_config_preserves_the_enabled_flag(tmp_path, monkey
                 service,
                 "plugins.setEnabled",
                 {
-                    "plugin_id": "qqbot",
+                    "plugin_id": "config_fixture",
                     "enabled": flag,
                     "operation_id": f"op-toggle-{index}",
                 },
             )
             assert toggled.error is None, toggled.error
         assert (
-            load_config_text(path.read_text(encoding="utf-8")).plugins["qqbot"][
-                "enabled"
-            ]
+            load_config_text(path.read_text(encoding="utf-8")).plugins[
+                "config_fixture"
+            ]["enabled"]
             is True
         )
 
@@ -750,7 +762,7 @@ async def test_writing_plugin_config_preserves_the_enabled_flag(tmp_path, monkey
             service,
             "plugin.config.set",
             {
-                "plugin_id": "qqbot",
+                "plugin_id": "config_fixture",
                 "operation_id": "op-config",
                 "values": {"app_id": "app-123", "client_secret": "secret-xyz"},
             },
@@ -761,8 +773,10 @@ async def test_writing_plugin_config_preserves_the_enabled_flag(tmp_path, monkey
         await app.shutdown()
 
     restarted = load_config_text(path.read_text(encoding="utf-8"))
-    assert restarted.plugins["qqbot"]["app_id"] == "app-123"
-    assert restarted.plugins["qqbot"]["enabled"] is True, "写配置把启停状态抹掉了"
+    assert restarted.plugins["config_fixture"]["app_id"] == "app-123"
+    assert (
+        restarted.plugins["config_fixture"]["enabled"] is True
+    ), "写配置把启停状态抹掉了"
 
 
 @pytest.mark.asyncio

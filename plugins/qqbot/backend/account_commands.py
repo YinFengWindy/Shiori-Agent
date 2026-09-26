@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
-
 from .accounts import resolve_secret
 from .channel import QQBotChannel
 
@@ -49,18 +47,40 @@ class _AccountCommandsMixin:
             "bot_id": previous.get("bot_id", "") if previous else "",
             "bot_name": previous.get("bot_name", "") if previous else "",
         }
-        account_id = self._register(row)
+        if previous is not None:
+            self._register(row)
+        self._handoffs.add(app_id)
         old = self._channels.pop(app_id, None)
-        if old is not None:
-            await old.stop()
+        old_stopped = False
         try:
-            await self._connect(row)
+            if old is not None:
+                await old.stop()
+                old_stopped = True
+            candidate = await self._connect(row)
+            if self._runtime is not None and candidate is not None:
+                await candidate.wait_ready()
+            name, bot_id = self._pending_identity.pop(app_id, ("", ""))
+            if name or bot_id:
+                row = {**row, "bot_name": name, "bot_id": bot_id}
+            account_id = self._register(row)
+            self._store.save(row)
         except Exception:
-            if previous is not None and previous.get("connected", True):
+            failed = self._channels.pop(app_id, None)
+            if failed is not None:
+                await failed.stop()
+            self._pending_identity.pop(app_id, None)
+            self._handoffs.discard(app_id)
+            if old is not None and not old_stopped:
+                self._channels[app_id] = old
+            elif previous is not None and previous.get("connected", True):
                 await self._connect(previous)
             raise
-        self._store.save(row)
-        self._status(app_id, "connecting", "", "")
+        self._handoffs.discard(app_id)
+        if candidate is not None:
+            candidate._account_id = account_id
+        self._status(
+            app_id, "online" if self._runtime is not None else "connecting", "", ""
+        )
         return {"account_id": account_id}
 
     async def disconnect(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -113,34 +133,3 @@ class _AccountCommandsMixin:
                 for openid in row.get("targets", [])
             ],
         }
-
-    async def send_target(self, payload: dict[str, Any]) -> dict[str, Any]:
-        app_id = self._app_for_account(payload)
-        channel = self._channels.get(app_id)
-        if channel is None:
-            raise RuntimeError("QQBot 应用账号未连接")
-        openid = str(payload.get("user_openid") or "").strip()
-        if not openid or ":" in openid:
-            raise ValueError("无效的 QQBot 用户 OpenID")
-        content = str(payload.get("content") or "").strip()
-        if not content:
-            raise ValueError("发送内容不能为空")
-        try:
-            receipt = await channel.send(channel._chat_id(openid), content)
-        except httpx.HTTPStatusError as exc:
-            try:
-                body = exc.response.json()
-            except ValueError:
-                body = {}
-            reason = (
-                str(body.get("message") or body.get("msg") or "").strip()
-                if isinstance(body, dict)
-                else ""
-            )
-            raise RuntimeError(
-                f"QQBot 平台拒绝发送 (HTTP {exc.response.status_code})"
-                + (f": {reason}" if reason else "")
-            ) from exc
-        if not receipt:
-            raise RuntimeError("QQBot 平台未返回消息 ID，发送结果不确定")
-        return {"message_id": receipt, "chat_id": channel._chat_id(openid)}

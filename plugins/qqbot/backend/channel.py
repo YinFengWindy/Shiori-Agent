@@ -65,6 +65,9 @@ class QQBotChannel(
         self._token: _TokenCache | None = None
         self._task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
+        self._ready = asyncio.Event()
+        self._first_gateway_result: tuple[str, str] = ("", "")
+        self._connection_state = "unknown"
         self._intake = ChannelIntake(self._accept_inbound, self.send)
         self._event_bus = None
         self._push_tool = None

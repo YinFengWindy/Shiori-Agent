@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from .accounts import QQBotAccountStore, resolve_secret
 from .account_commands import _AccountCommandsMixin
+from .account_sending import _AccountSendingMixin
 from .channel import QQBotChannel
 from .formatting import CHANNEL, PUSH_TARGET_HINT, SYSTEM_PROMPT_HINT
 
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
 _CAPABILITIES = frozenset({"private", "c2c", "known_targets", "send"})
 
 
-class QQBotAccountsChannel(_AccountCommandsMixin):
+class QQBotAccountsChannel(_AccountCommandsMixin, _AccountSendingMixin):
     """Route host events by application while each child owns its gateway/token."""
 
     name = CHANNEL
@@ -33,6 +34,8 @@ class QQBotAccountsChannel(_AccountCommandsMixin):
         self._chat_types = chat_types
         self._channels: dict[str, QQBotChannel] = {}
         self._account_ids: dict[str, str] = {}
+        self._pending_identity: dict[str, tuple[str, str]] = {}
+        self._handoffs: set[str] = set()
         self._runtime: ChannelContext | None = None
         for row in store.list():
             self._register(row)
@@ -56,6 +59,17 @@ class QQBotAccountsChannel(_AccountCommandsMixin):
     def _status(
         self, app_id: str, state: str, error: str, name: str, bot_id: str = ""
     ) -> None:
+        if app_id in self._handoffs or app_id not in self._account_ids:
+            if name or bot_id:
+                self._pending_identity[app_id] = (name, bot_id)
+            if app_id in self._account_ids:
+                self._ctx.accounts.report(
+                    self._account_ids[app_id],
+                    connection=state,
+                    capabilities=_CAPABILITIES if state == "online" else frozenset(),
+                    error=error,
+                )
+            return
         if name or bot_id:
             row = self._store.get(app_id)
             self._store.save(
@@ -80,7 +94,7 @@ class QQBotAccountsChannel(_AccountCommandsMixin):
             resolve_secret(row["client_secret"]),
             self._chat_types,
             scoped=not row.get("legacy", False),
-            account_id=self._account_ids[app_id],
+            account_id=self._account_ids.get(app_id, ""),
             on_status=lambda state, error, name, bot_id: self._status(
                 app_id, state, error, name, bot_id
             ),
@@ -134,22 +148,25 @@ class QQBotAccountsChannel(_AccountCommandsMixin):
             self._ctx.accounts.unregister(account_id)
 
     def pause_intake(self) -> None:
+        """Pause every application before a host settings handover."""
         for channel in self._channels.values():
             channel.pause_intake()
 
     def resume_intake(self) -> None:
+        """Resume all application intakes after a rejected handover."""
         for channel in self._channels.values():
             channel.resume_intake()
 
-    async def _connect(self, row: dict[str, Any]) -> None:
+    async def _connect(self, row: dict[str, Any]) -> QQBotChannel | None:
         app_id = row["app_id"]
         if not resolve_secret(row["client_secret"]):
             self._status(app_id, "login_required", "App Secret 环境变量未设置", "")
-            return
+            return None
         channel = self._make_channel(row)
         self._channels[app_id] = channel
         if self._runtime is not None:
             await channel.start(self._runtime, public_hooks=False)
+        return channel
 
     def _for_chat(self, chat_id: str) -> QQBotChannel:
         kind, target = QQBotChannel._split_chat_id(chat_id)
@@ -167,24 +184,30 @@ class QQBotAccountsChannel(_AccountCommandsMixin):
         raise ValueError("QQBot 目标缺少有效应用账号作用域")
 
     async def send(self, chat_id: str, message: str) -> str | None:
+        """Route a host C2C send to its application gateway."""
         return await self._for_chat(chat_id).send(chat_id, message)
 
     async def send_proactive(self, chat_id: str, message: str) -> str | None:
+        """Send proactive text through the application named by chat ID."""
         return await self.send(chat_id, message)
 
     async def send_image(self, chat_id: str, image: str) -> str | None:
+        """Send an image without crossing application target scopes."""
         return await self._for_chat(chat_id).send_image(chat_id, image)
 
     async def send_stream(self, chat_id: str, message: str) -> str | None:
+        """Send a completed stream through its owning application."""
         return await self._for_chat(chat_id).send_stream(chat_id, message)
 
     def supports_stream_events(self, chat_id: str) -> bool:
+        """Report live preview support only for connected C2C targets."""
         try:
             return self._for_chat(chat_id).supports_stream_events(chat_id)
         except (RuntimeError, ValueError):
             return False
 
     def system_prompt_hint(self, chat_id: str) -> str:
+        """Keep official QQBot targets distinct from NapCat QQ targets."""
         return SYSTEM_PROMPT_HINT
 
     async def _on_response(self, message: Any) -> None:

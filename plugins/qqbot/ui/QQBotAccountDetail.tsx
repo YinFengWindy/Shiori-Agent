@@ -7,7 +7,7 @@ type Detail = { app_id: string; has_secret: boolean; secret_reference: string; c
 type Targets = { coverage: "observed_c2c_only"; targets: Array<{ chat_id: string; user_openid: string }> };
 
 /** QQBot-owned application credentials, C2C targets, and connection commands. */
-export function QQBotAccountDetail({ account, onChanged, client }: PluginAccountDetailComponentProps) {
+export function QQBotAccountDetail({ account, onChanged, client, host }: PluginAccountDetailComponentProps) {
   const accountId = account?.id;
   const [appId, setAppId] = useState(account?.platformAccountId ?? "");
   const [secret, setSecret] = useState("");
@@ -77,7 +77,7 @@ export function QQBotAccountDetail({ account, onChanged, client }: PluginAccount
         </button>
       </span>
     </label>
-    {error ? <p role="alert" className="m-0 break-words text-danger-text">{error}</p> : null}
+    {error ? <host.ui.InlineError message={error} /> : null}
     <div className="flex flex-wrap gap-2">
       <button type="button" className={primaryButtonClass} disabled={busy || !appId.trim() || (!secret.trim() && !detail?.has_secret)} onClick={() => void save()}>{busy ? "连接中" : "保存并连接"}</button>
       {account && detail?.connected ? <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => void disconnect()}>断开连接</button> : null}

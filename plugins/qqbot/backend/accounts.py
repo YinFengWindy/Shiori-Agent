@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import re
 from typing import Any
 
 from agent.plugin_host.kv import PluginKVStore
+from agent.config import resolve_config_references
 
 _ENV = re.compile(r"^\$\{([A-Za-z_][A-Za-z_0-9]*)\}$")
 _KEY = "application_accounts"
@@ -14,8 +14,10 @@ _KEY = "application_accounts"
 
 def resolve_secret(value: str) -> str:
     """Resolve a stored environment reference only at connection time."""
-    match = _ENV.fullmatch(value)
-    return os.environ.get(match.group(1), "") if match else value
+    if not _ENV.fullmatch(value):
+        return value
+    resolved = str(resolve_config_references(value))
+    return "" if resolved == value else resolved
 
 
 class QQBotAccountStore:

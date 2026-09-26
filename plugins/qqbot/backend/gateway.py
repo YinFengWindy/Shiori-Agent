@@ -143,8 +143,22 @@ class _GatewayMixin:
     def _report_status(
         self, state: str, error: str = "", name: str = "", bot_id: str = ""
     ) -> None:
+        self._connection_state = state
+        if (
+            state in {"online", "offline", "login_required", "error"}
+            and not self._ready.is_set()
+        ):
+            self._first_gateway_result = (state, error)
+            self._ready.set()
         if self._on_status is not None:
             self._on_status(state, error, name, bot_id)
+
+    async def wait_ready(self, timeout: float = 15.0) -> None:
+        """Wait for the first gateway result before committing credential handover."""
+        await asyncio.wait_for(self._ready.wait(), timeout)
+        state, error = self._first_gateway_result
+        if state != "online" or self._connection_state != "online":
+            raise RuntimeError(error or f"QQBot 网关未就绪: {self._connection_state}")
 
     @staticmethod
     def _is_auth_error(error: Exception) -> bool:

@@ -11,6 +11,19 @@ before(async () => {
 });
 
 describe("PluginSchemaSettingsSection", () => {
+  it("renders no schema form for an account-only plugin", async () => {
+    const view = await mountTestComponent(null, { windowGlobals: { miraDesktop: {
+      invoke: async ({ method }: { method: string }) => ({
+        id: "1", type: "response", method, error: null,
+        payload: { plugin_id: "account-only", schema: null, values: {}, env_status: {} },
+      }),
+    } } });
+    try {
+      await view.render(<PluginSchemaSettingsSection pluginId="account-only" />);
+      assert.equal(view.container.textContent, "");
+    } finally { await view.cleanup(); }
+  });
+
   it("renders a field per schema property and autosaves an edit through plugin.config.set", async () => {
     const view = await mountTestComponent(null);
     const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
