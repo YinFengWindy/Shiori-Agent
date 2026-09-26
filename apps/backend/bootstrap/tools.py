@@ -614,6 +614,7 @@ def build_core_runtime(
             light_provider=plugin_light_provider,
             light_model=plugin_light_model,
             plugin_configs=config.plugins,
+            raw_plugin_configs=config.raw_plugin_configs,
             relationship_runtime=relationship_runtime,
             legacy_plugin_root=_legacy_plugin_root(),
             role_runtime_registry=role_runtime_registry,

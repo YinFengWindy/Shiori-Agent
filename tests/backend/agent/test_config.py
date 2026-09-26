@@ -5,6 +5,15 @@ import pytest
 from agent import config
 
 
+def test_plugin_config_retains_raw_reference_alongside_resolved_value(monkeypatch):
+    monkeypatch.setenv("QQBOT_SECRET", "resolved-secret")
+    loaded = config.load_config_data(
+        {"plugins": {"qqbot": {"client_secret": "${QQBOT_SECRET}"}}}
+    )
+    assert loaded.plugins["qqbot"]["client_secret"] == "resolved-secret"
+    assert loaded.raw_plugin_configs["qqbot"]["client_secret"] == "${QQBOT_SECRET}"
+
+
 @pytest.mark.parametrize("content", ["", "[llm]\nregistrations = []"])
 def test_load_config_accepts_empty_model_registry(tmp_path, content):
     path = tmp_path / "config.toml"

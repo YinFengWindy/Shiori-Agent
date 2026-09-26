@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
-from .channel import QQBotChannel
+from .account_channel import QQBotAccountsChannel
+from .accounts import QQBotAccountStore
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
@@ -13,25 +14,8 @@ if TYPE_CHECKING:
 _UNRESOLVED_ENV_RE = re.compile(r"^\$\{\w+\}$")
 
 
-class QQBotGroupConfigModel(BaseModel):
-    """Compatibility schema for the historical, currently disabled group mode."""
-
-    group_openid: str = Field(
-        default="",
-        validation_alias=AliasChoices("group_openid", "groupOpenid"),
-    )
-    require_at: bool = Field(
-        default=True,
-        validation_alias=AliasChoices("require_at", "requireAt"),
-    )
-    allow_proactive: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("allow_proactive", "allowProactive"),
-    )
-
-
 class QQBotConfigModel(BaseModel):
-    """Configuration for the official QQBot application credentials."""
+    """Legacy single-application credentials accepted during migration."""
 
     app_id: str = Field(
         default="",
@@ -43,9 +27,6 @@ class QQBotConfigModel(BaseModel):
         title="App Secret",
         validation_alias=AliasChoices("client_secret", "clientSecret"),
     )
-    groups: list[QQBotGroupConfigModel] = Field(
-        default_factory=list, title="群聊（旧版）"
-    )
 
     @field_validator("app_id", "client_secret", mode="before")
     @classmethod
@@ -55,15 +36,25 @@ class QQBotConfigModel(BaseModel):
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
-    """校验配置，凭据齐备时贡献 QQBot 渠道；校验失败由内核回滚。"""
+    """Migrate legacy credentials and contribute one multi-application channel."""
+    from desktop_bridge.method_policy import Concurrency
+
     config = QQBotConfigModel.model_validate(ctx.config.as_dict())
-    if not config.app_id or not config.client_secret:
-        return
-    ctx.channels.add(
-        QQBotChannel(
-            app_id=config.app_id,
-            client_secret=config.client_secret,
-            groups=config.groups,
-            chat_types=ctx.manifest.channel_chat_types("qqbot"),
-        )
+    store = QQBotAccountStore(ctx.kv)
+    raw = ctx.config.raw_as_dict()
+    raw_secret = raw.get("client_secret", raw.get("clientSecret"))
+    store.migrate_legacy(
+        config.app_id,
+        str(raw_secret).strip() if raw_secret else config.client_secret,
     )
+    channel = QQBotAccountsChannel(ctx, store, ctx.manifest.channel_chat_types("qqbot"))
+    ctx.channels.add(channel)
+    ctx.rpc.register(
+        "account.detail", channel.detail, concurrency=Concurrency.READ_ONLY
+    )
+    ctx.rpc.register(
+        "account.targets", channel.targets, concurrency=Concurrency.READ_ONLY
+    )
+    ctx.rpc.register("account.save", channel.save_and_connect)
+    ctx.rpc.register("account.disconnect", channel.disconnect)
+    ctx.rpc.register("account.send", channel.send_target)

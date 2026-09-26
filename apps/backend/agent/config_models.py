@@ -91,6 +91,7 @@ class Config:
     wiring: WiringConfig = field(default_factory=WiringConfig)
     scene_observation_enabled: bool = True
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
+    raw_plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     model_registrations: list[ModelRegistration] = field(
         default_factory=lambda: _UNSET_MODEL_REGISTRATIONS
     )

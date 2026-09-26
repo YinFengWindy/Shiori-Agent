@@ -208,7 +208,7 @@ class _OutboundMixin:
         return int(time.time() * 1000) % 65536
 
     @staticmethod
-    def _parse_chat_id(chat_id: str) -> tuple[str, str]:
+    def _split_chat_id(chat_id: str) -> tuple[str, str]:
         value = chat_id.strip()
         if value.startswith("qqbot:"):
             value = value[len("qqbot:") :]
