@@ -6,6 +6,7 @@ import asyncio
 import importlib.util
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -411,11 +412,15 @@ class FeishuChannel:
     async def _on_response(self, msg: OutboundMessage) -> None:
         session_key = resolve_outbound_session_key(msg, default_channel=CHANNEL)
         first_id: str | None = None
+        receipts: list[str] = []
         try:
             finished = await self._streamer.finish(session_key, msg.content)
             if finished is None:
                 first_id = await self._send_text(
-                    msg.chat_id, msg.content, reply_to=quoted_message_id(msg)
+                    msg.chat_id,
+                    msg.content,
+                    reply_to=quoted_message_id(msg),
+                    on_receipt=receipts.append,
                 )
             else:
                 first_id, remaining = finished
@@ -425,6 +430,8 @@ class FeishuChannel:
                 image_id = await self.send_image(msg.chat_id, image)
                 first_id = first_id or image_id
         except BaseException:
+            # Keep the first acknowledged chunk when a later chunk fails.
+            first_id = first_id or next(iter(receipts), None)
             self._record_delivery_status(msg, "failed", first_id)
             raise
         self._record_delivery_status(msg, "sent", first_id)
@@ -449,14 +456,23 @@ class FeishuChannel:
         return await self._send_text(chat_id, message)
 
     async def _send_text(
-        self, chat_id: str, text: str, *, reply_to: str | None = None
+        self,
+        chat_id: str,
+        text: str,
+        *,
+        reply_to: str | None = None,
+        on_receipt: Callable[[str], None] | None = None,
     ) -> str | None:
         if not text.strip():
             return None
-        message_ids = [
-            await self._send_chunk(chat_id, chunk, reply_to if index == 0 else None)
-            for index, chunk in enumerate(split_markdown(text.strip()))
-        ]
+        message_ids: list[str] = []
+        for index, chunk in enumerate(split_markdown(text.strip())):
+            message_id = await self._send_chunk(
+                chat_id, chunk, reply_to if index == 0 else None
+            )
+            if message_id and on_receipt is not None:
+                on_receipt(message_id)
+            message_ids.append(message_id)
         return message_ids[0] if message_ids else None
 
     async def _send_chunk(self, chat_id: str, chunk: str, reply_to: str | None) -> str:

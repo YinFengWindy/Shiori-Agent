@@ -161,26 +161,22 @@ class _OutboundMixin:
             await self._send_final_tool_snapshot(session_key, msg.chat_id)
         streamed_reply = bool((msg.metadata or {}).get("streamed_reply"))
         first_id: str | None = None
+        receipts: list[str] = []
+        stream = None
         try:
             if msg.content.strip():
                 if streamed_reply:
                     stream = self._active_streams.pop(str(msg.chat_id), None)
-                    if stream is not None:
-                        await stream.finalize(msg.content)
-                        first_id = stream.message_id
-                    else:
-                        first_id = await _call_send_markdown(
-                            self._app.bot,
-                            msg.chat_id,
-                            msg.content,
-                            self._telegram_outbound_limiter,
-                        )
+                if stream is not None:
+                    await stream.finalize(msg.content)
+                    first_id = stream.message_id
                 else:
                     first_id = await _call_send_markdown(
                         self._app.bot,
                         msg.chat_id,
                         msg.content,
                         self._telegram_outbound_limiter,
+                        on_receipt=receipts.append,
                     )
             if final_thinking and not had_live:
                 await self._send_final_thinking(cid, msg.chat_id, final_thinking)
@@ -190,6 +186,9 @@ class _OutboundMixin:
                 image_id = await self.send_image(str(msg.chat_id), image)
                 first_id = first_id or image_id
         except BaseException:
+            # A later chunk/edit can fail after an earlier message was accepted.
+            first_id = first_id or (stream.message_id if stream is not None else None)
+            first_id = first_id or next(iter(receipts), None)
             self._record_delivery_status(
                 msg, delivery_status="failed", external_message_id=first_id
             )

@@ -18,6 +18,33 @@ from plugins.feishu.backend.channel import FeishuChannel, resolve_receive_id
 CHAT_ID = "oc_chat"
 
 
+async def test_partial_chunk_failure_retains_first_receipt(harness: Any) -> None:
+    from plugins.feishu.backend.formatting import CARD_TEXT_LIMIT
+
+    await harness.start()
+    harness.hub.mark_delivery = Mock()
+    # The first chunk quotes the inbound message; the second chunk and its
+    # existing plain-text fallback both fail on the ordinary send endpoint.
+    harness.api.fail("send", (400, 99991672), (400, 99991672))
+    message = OutboundMessage(
+        channel="feishu",
+        chat_id=CHAT_ID,
+        content="甲" * (CARD_TEXT_LIMIT - 10) + "\n" + "乙" * 20,
+        metadata={"external_message_id": "om_incoming", "message_id": "om_incoming"},
+        committed_message_id="committed",
+    )
+    with pytest.raises(feishu_api.FeishuApiError):
+        await harness.channel._on_response(message)
+    assert len(harness.api.sent_ids) == 1
+    assert len(harness.api.bodies("send")) == 2
+    harness.hub.mark_delivery.assert_called_once_with(
+        message,
+        default_channel="feishu",
+        delivery_status="failed",
+        external_message_id=harness.api.sent_ids[0],
+    )
+
+
 @pytest.mark.parametrize(
     "mode",
     [

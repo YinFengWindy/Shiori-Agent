@@ -114,3 +114,59 @@ async def test_failed_or_cancelled_send_is_never_marked_sent(failure):
         delivery_status="failed",
         external_message_id="",
     )
+
+
+@pytest.mark.parametrize("plain_fallback", [False, True])
+@pytest.mark.parametrize(
+    "failure", [RuntimeError("second chunk failed"), asyncio.CancelledError()]
+)
+async def test_partial_chunk_failure_retains_first_receipt(
+    monkeypatch, plain_fallback, failure
+):
+    channel = reply_channel(None)
+    channel._app.bot.send_message.side_effect = [
+        SimpleNamespace(message_id=301),
+        failure,
+    ]
+    if plain_fallback:
+        monkeypatch.setattr(
+            "plugins.telegram.backend.utils.convert_with_segments",
+            Mock(side_effect=ValueError("invalid markdown")),
+        )
+    message = OutboundMessage(
+        channel="telegram",
+        chat_id="123",
+        content="a" * 4090 + "\n" + "b" * 30,
+        metadata={"external_message_id": "incoming"},
+        committed_message_id="committed",
+    )
+    with pytest.raises(type(failure)):
+        await channel._on_response(message)
+    assert channel._app.bot.send_message.await_count == 2
+    channel._channel_hub.mark_delivery.assert_called_once_with(
+        message,
+        default_channel="telegram",
+        delivery_status="failed",
+        external_message_id="301",
+    )
+
+
+async def test_failed_stream_finalization_retains_acknowledged_message():
+    channel = reply_channel(SimpleNamespace(message_id=301))
+    sender = channel.create_stream_sender("123")
+    await sender("preview")
+    channel._app.bot.edit_message_text.side_effect = RuntimeError("edit failed")
+    message = OutboundMessage(
+        channel="telegram",
+        chat_id="123",
+        content="final",
+        metadata={"external_message_id": "incoming", "streamed_reply": True},
+    )
+    with pytest.raises(RuntimeError, match="edit failed"):
+        await channel._on_response(message)
+    channel._channel_hub.mark_delivery.assert_called_once_with(
+        message,
+        default_channel="telegram",
+        delivery_status="failed",
+        external_message_id="301",
+    )

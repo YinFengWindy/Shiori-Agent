@@ -1,6 +1,7 @@
 """Telegram Markdown、thinking 与主动流式发送入口。"""
 
 import logging
+from collections.abc import Callable
 from typing import Any, cast
 
 from telegram import Bot, MessageEntity as TgEntity
@@ -66,8 +67,14 @@ async def send_markdown(
     chat_id: int | str,
     text: str,
     limiter: TelegramOutboundLimiter | None = None,
+    *,
+    on_receipt: Callable[[str], None] | None = None,
 ) -> str | None:
-    """Sends Markdown in as many messages as needed; returns the first one's id."""
+    """Sends Markdown chunks and returns the first acknowledged message ID.
+
+    ``on_receipt`` observes each acknowledgement before the next chunk starts,
+    so callers can retain delivery evidence even if a later send raises.
+    """
     cid = int(chat_id)
     first_id: str | None = None
     try:
@@ -85,7 +92,10 @@ async def send_markdown(
                 action=lambda: bot.send_message(chat_id=cid, text=chunk),
                 label="send_message(plain)",
             )
-            first_id = first_id or sent_message_id(sent)
+            message_id = sent_message_id(sent)
+            if message_id and on_receipt is not None:
+                on_receipt(message_id)
+            first_id = first_id or message_id
         return first_id
     for chunk_text, chunk_entities in chunks:
         chunk_text, chunk_entities = _strip_chunk(chunk_text, chunk_entities)
@@ -102,7 +112,10 @@ async def send_markdown(
             ),
             label="send_message(markdown)",
         )
-        first_id = first_id or sent_message_id(sent)
+        message_id = sent_message_id(sent)
+        if message_id and on_receipt is not None:
+            on_receipt(message_id)
+        first_id = first_id or message_id
     return first_id
 
 

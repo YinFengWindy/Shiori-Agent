@@ -45,8 +45,13 @@ class _OutboundMixin:
                 image_id = await self.send_image(msg.chat_id, image)
                 first_id = first_id or image_id
         except asyncio.CancelledError:
+            state = self._live_states.get(turn_key)
+            # The shielded terminal write can acknowledge before propagating
+            # cancellation. Completed streams are retained; partial ones are recalled.
+            if state is not None and state.completed:
+                first_id = first_id or state.stream_msg_id
             self._record_delivery_status(msg, "failed", first_id)
-            await self._cleanup_cancelled_stream(self._live_states.get(turn_key))
+            await self._cleanup_cancelled_stream(state)
             raise
         except Exception as exc:
             self._record_delivery_status(msg, "failed", first_id)

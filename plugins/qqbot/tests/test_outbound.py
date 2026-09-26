@@ -15,6 +15,74 @@ from bus.events import OutboundMessage
 from bus.errors import NonRetryableDeliveryError
 
 
+@pytest.mark.parametrize("terminal", [False, True])
+async def test_cancelled_delivery_retains_only_completed_receipt(terminal):
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    recalls = []
+
+    async def handler(request):
+        if request.url.path == "/app/getAppAccessToken":
+            return httpx.Response(200, json={"access_token": "tok", "expires_in": 7200})
+        if request.method == "DELETE":
+            recalls.append(request.url.path)
+            return httpx.Response(200, json={})
+        assert request.url.path.endswith("/stream_messages")
+        entered.set()
+        await release.wait()
+        return httpx.Response(200, json={"id": "outgoing-stream"})
+
+    channel = QQBotChannel("app", "secret")
+    await channel._client.aclose()
+    channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    channel._channel_hub = Mock()
+    key = ("role:mira", "c2c:user", "incoming")
+    if terminal:
+        channel._live_states[key] = _StreamState(
+            openid="user", msg_id="incoming", msg_seq=1
+        )
+    else:
+
+        async def preview():
+            await channel._send_live_stream(key, "c2c:user", "preview")
+
+        channel._start_live_task(key, preview())
+        await entered.wait()
+    message = OutboundMessage(
+        channel="qqbot",
+        chat_id="c2c:user",
+        content="final",
+        metadata={
+            "session_key_override": "role:mira",
+            "external_message_id": "incoming",
+        },
+        committed_message_id="committed",
+    )
+    delivery = asyncio.create_task(channel._on_response(message))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        await asyncio.sleep(0)
+        delivery.cancel()
+        await asyncio.sleep(0)
+        assert not delivery.done()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await delivery
+        channel._channel_hub.mark_delivery.assert_called_once_with(
+            message,
+            default_channel="qqbot",
+            delivery_status="failed",
+            external_message_id="outgoing-stream" if terminal else "",
+        )
+        assert recalls == (
+            [] if terminal else ["/v2/users/user/messages/outgoing-stream"]
+        )
+        assert not channel._live_states
+    finally:
+        release.set()
+        await channel._client.aclose()
+
+
 @pytest.mark.parametrize(
     "mode", ["text", "images", "text_images", "stream", "fallback", "missing", "failed"]
 )
