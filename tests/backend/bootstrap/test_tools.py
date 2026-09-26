@@ -83,21 +83,22 @@ def test_role_target_validation_rejects_bare_id_for_bound_qq_group(
     )
 
     repository = RoleRepository(store)
-    # A bare ID would be sent to private user 42, not the bound group.
+    # Neither a private ID nor an old bound group authorizes external push.
     assert not _role_owns_channel_target(
         repository, role_id=role.id, channel="qq", chat_id="42"
     )
     assert not _role_owns_channel_target(
         repository, role_id=role.id, channel="qq", chat_id="gqq:42"
     )
-    # message_push's role-target validator must refuse the bare ID outright,
-    # not explain it away as a channel mismatch.
-    assert "account_send" in _validate_role_target(
+    # message_push directs both external targets to account-owned delivery.
+    private_result = _validate_role_target(
         repository, role_id=role.id, channel="qq", chat_id="42"
     )
-    assert "account_send" in _validate_role_target(
+    group_result = _validate_role_target(
         repository, role_id=role.id, channel="qq", chat_id="gqq:42"
     )
+    assert isinstance(private_result, str) and "account_send" in private_result
+    assert isinstance(group_result, str) and "account_send" in group_result
     assert (
         _validate_role_target(
             repository, role_id=role.id, channel="desktop", chat_id="role:mira"
