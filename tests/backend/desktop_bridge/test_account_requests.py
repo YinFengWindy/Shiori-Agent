@@ -36,6 +36,7 @@ async def test_list_and_assignment_use_live_account_snapshot(tmp_path):
     assert assigned["account"]["runtime_active"]
     assert assigned["account"]["connection"] == "online"
     assert assigned["account"]["capabilities"] == ["contacts"]
+    assert assigned["account"]["known_capabilities"] == ["contacts"]
     assert assigned["account"]["response_rules"] == {
         "private_enabled": True,
         "group_enabled": True,

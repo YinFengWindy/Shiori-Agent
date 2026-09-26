@@ -45,6 +45,7 @@ class AccountRecord:
     role_id: str | None = None
     ownership_version: int = 0
     response_rules: AccountResponseRules = AccountResponseRules()
+    known_capabilities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

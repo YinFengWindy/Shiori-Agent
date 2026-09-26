@@ -19,7 +19,7 @@ export function RoleAccountsPanel({ roleId, onOpenPluginSettings }: {
   const owned = accounts?.filter((item) => item.roleId === roleId) ?? null;
   const unclaimed = accounts?.filter((item) => item.roleId === null) ?? [];
   return <div className="grid gap-3">
-    <AccountList title="账号" accounts={owned} error={error} onRefresh={() => void reload()} onAdd={() => { if (unclaimed.length === 0) onOpenPluginSettings(null); else setClaiming(true); }} emptyLabel="暂无账号" />
+    <AccountList title="账号" accounts={owned} error={error} onRefresh={() => void reload()} onAdd={() => { if (unclaimed.length === 0) onOpenPluginSettings(null); else setClaiming(true); }} emptyLabel="暂无账号" showConnectionAction />
     {claiming ? <div className="grid gap-3 border-t border-line-soft pt-3">
       {claimError ? <InlineError message={claimError} /> : null}
       {unclaimed.map((account) => <div key={account.id} className="flex items-center justify-between gap-3 text-body-sm">

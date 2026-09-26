@@ -24,7 +24,7 @@ test("mounted account views poll fresh runtime status and stop polling on unmoun
         return { id: "response", type: "response", method, error: null, payload: { accounts: [{
           id: "a", plugin_id: "demo", platform: "demo", platform_account_id: "1", display_name: "",
           avatar_url: "", role_id: null, plugin_enabled: true, runtime_active: true, connection,
-          capabilities: [], error: "", response_rules: { private_enabled: true, group_enabled: true,
+          capabilities: [], known_capabilities: [], error: "", response_rules: { private_enabled: true, group_enabled: true,
             require_mention: true, blocked_sender_ids: [], group_rules: [] },
         }] } };
       },

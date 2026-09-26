@@ -8,7 +8,7 @@ import type { AccountSnapshot } from "./accountClient";
 const account: AccountSnapshot = {
   id: "a", pluginId: "demo", platform: "demo", platformAccountId: "101",
   displayName: "", avatarUrl: "", roleId: null, pluginEnabled: true,
-  runtimeActive: true, connection: "online", capabilities: [], error: "",
+  runtimeActive: true, connection: "online", capabilities: [], knownCapabilities: [], error: "",
   responseRules: { privateEnabled: true, groupEnabled: true, requireMention: true,
     blockedSenderIds: [], groupRules: [{ chatId: "group-1", enabled: true,
       requireMention: true, blockedSenderIds: [] }] },
@@ -24,7 +24,7 @@ test("group response changes stay in draft until explicit save and retain raw ch
       return { id: "response", type: "response", method, error: null, payload: { account: {
         id: "a", plugin_id: "demo", platform: "demo", platform_account_id: "101",
         display_name: "", avatar_url: "", role_id: null, plugin_enabled: true,
-        runtime_active: true, connection: "online", capabilities: [], error: "",
+        runtime_active: true, connection: "online", capabilities: [], known_capabilities: [], error: "",
         response_rules: payload.response_rules,
       } } };
     } } } },
@@ -61,5 +61,10 @@ test("private-only accounts hide group controls but retained group rules stay av
     assert.match(view.container.textContent ?? "", /群聊需要 @/);
     const mention = Array.from(view.container.querySelectorAll("label")).find((label) => label.textContent?.includes("群聊需要 @"));
     assert.equal(mention?.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked, false);
+    await view.render(<AccountResponseRulesEditor key="offline-known" account={{ ...account,
+      pluginEnabled: false, runtimeActive: false, capabilities: [], knownCapabilities: ["groups"],
+      responseRules: { ...account.responseRules, groupRules: [] },
+    }} onChanged={() => undefined} />);
+    assert.match(view.container.textContent ?? "", /群聊启用|群规则/);
   } finally { await view.cleanup(); }
 });

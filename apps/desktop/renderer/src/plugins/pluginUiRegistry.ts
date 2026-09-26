@@ -20,7 +20,8 @@ export type PluginUiSlot = "settings.section" | "nav.page" | "role.assets" | "ro
 /** Account null requests a plugin-owned new-account draft; existing accounts open the same detail surface. */
 export type PluginAccountDetailProps = {
   account: AccountSnapshot | null;
-  onChanged: () => void;
+  /** Refreshes host identity; a created account ID switches the current detail to that record. */
+  onChanged: (accountId?: string) => void;
 };
 
 /** Platform connection, credential, and login controls owned by one plugin. */

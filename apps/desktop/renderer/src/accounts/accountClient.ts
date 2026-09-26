@@ -31,6 +31,8 @@ export type AccountSnapshot = {
   connection: "unknown" | "connecting" | "online" | "offline" | "login_required" | "error";
   /** `groups` means this account can receive group conversations; other capabilities remain plugin-defined. */
   capabilities: string[];
+  /** Last non-empty plugin capability report, retained for settings while the plugin is stopped. */
+  knownCapabilities: string[];
   error: string;
   responseRules: AccountResponseRules;
 };
@@ -39,7 +41,7 @@ type AccountPayload = {
   id: string; plugin_id: string; platform: string; platform_account_id: string;
   display_name: string; avatar_url: string; role_id: string | null;
   plugin_enabled: boolean; runtime_active: boolean; connection: AccountSnapshot["connection"];
-  capabilities: string[]; error: string;
+  capabilities: string[]; known_capabilities: string[]; error: string;
   response_rules: { private_enabled: boolean; group_enabled: boolean; require_mention: boolean; blocked_sender_ids: string[];
     group_rules: Array<{ chat_id: string; enabled: boolean; require_mention: boolean; blocked_sender_ids: string[] }> };
 };
@@ -51,6 +53,7 @@ function mapAccount(row: AccountPayload): AccountSnapshot {
     avatarUrl: row.avatar_url, roleId: row.role_id, pluginEnabled: row.plugin_enabled,
     runtimeActive: row.runtime_active, connection: row.connection,
     capabilities: row.capabilities, error: row.error,
+    knownCapabilities: row.known_capabilities,
     responseRules: {
       privateEnabled: row.response_rules.private_enabled,
       groupEnabled: row.response_rules.group_enabled,

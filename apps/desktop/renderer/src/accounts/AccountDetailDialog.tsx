@@ -18,7 +18,7 @@ export function AccountDetailDialog({ account, pluginId, onClose, onChanged }: {
   account: AccountSnapshot | null;
   pluginId: string;
   onClose: () => void;
-  onChanged: () => void;
+  onChanged: (accountId?: string) => void;
 }) {
   const [roles, setRoles] = useState<Pick<RoleRecord, "id" | "name">[]>([]);
   const [busy, setBusy] = useState(false);

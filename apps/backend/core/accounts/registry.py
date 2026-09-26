@@ -191,6 +191,15 @@ class AccountRegistry:
             )
             if row is None:
                 raise KeyError(account_id)
+            if capabilities and row.known_capabilities != tuple(sorted(capabilities)):
+                row = replace(row, known_capabilities=tuple(sorted(capabilities)))
+                if generation in {
+                    DIRECT_GENERATION,
+                    self._runtime.published_generation,
+                }:
+                    self._save({**self._records, account_id: row})
+                else:
+                    self._staged_records.setdefault(generation, {})[account_id] = row
             return self._runtime.snapshot(row, generation=generation)
 
     def unregister(

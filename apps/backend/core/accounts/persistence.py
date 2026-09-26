@@ -29,6 +29,8 @@ def load_accounts(
     records: dict[str, AccountRecord] = {}
     stale_owner = False
     for raw in rows:
+        if "known_capabilities" in raw:
+            raw = {**raw, "known_capabilities": tuple(raw["known_capabilities"])}
         if "response_rules" in raw:
             rules = raw["response_rules"]
             raw = {

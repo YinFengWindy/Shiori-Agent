@@ -7,7 +7,7 @@ import type { AccountSnapshot } from "./accountClient";
 import { accountStatus } from "./accountPresentation";
 
 /** Reusable identity list; new-account navigation is supplied by its owner. */
-export function AccountList({ title, accounts, error, onRefresh, onAdd, emptyLabel, showOwner = false }: {
+export function AccountList({ title, accounts, error, onRefresh, onAdd, emptyLabel, showOwner = false, showConnectionAction = false }: {
   title: string;
   accounts: AccountSnapshot[] | null;
   error: string;
@@ -15,6 +15,7 @@ export function AccountList({ title, accounts, error, onRefresh, onAdd, emptyLab
   onAdd?: () => void;
   emptyLabel: string;
   showOwner?: boolean;
+  showConnectionAction?: boolean;
 }) {
   const [selected, setSelected] = useState<AccountSnapshot | null>(null);
   return <section className="grid gap-3" aria-label={title}>
@@ -24,13 +25,19 @@ export function AccountList({ title, accounts, error, onRefresh, onAdd, emptyLab
     </div>
     {error ? <InlineError message={error} /> : null}
     {accounts?.length === 0 ? <p className="m-0 text-body-sm text-ink-muted">{emptyLabel}</p> : null}
-    {accounts?.map((account) => <button key={account.id} type="button" className="flex w-full items-center justify-between gap-3 border-b border-line-soft py-3 text-left last:border-b-0 hover:text-accent-text" onClick={() => setSelected(account)}>
-      <span className="grid min-w-0 gap-0.5"><span className="truncate text-body font-medium text-ink">{account.platform} · {account.displayName || account.platformAccountId}</span><span className="truncate text-body-sm text-ink-muted">{account.platformAccountId}</span></span>
-      <span className="grid shrink-0 gap-0.5 text-right text-body-sm text-ink-secondary">
-        <span>{accountStatus(account)}</span>
-        {showOwner ? <span className="text-ink-muted">{account.roleId ?? "未分配"}</span> : null}
-      </span>
-    </button>)}
+    {accounts?.map((account) => <div key={account.id} className="flex items-center gap-3 border-b border-line-soft py-3 last:border-b-0">
+      <button type="button" className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left hover:text-accent-text" onClick={() => setSelected(account)}>
+        <span className="grid min-w-0 gap-0.5"><span className="truncate text-body font-medium text-ink">{account.platform} · {account.displayName || account.platformAccountId}</span><span className="truncate text-body-sm text-ink-muted">{account.platformAccountId}</span></span>
+        <span className="grid shrink-0 gap-0.5 text-right text-body-sm text-ink-secondary">
+          <span>{accountStatus(account)}</span>
+          {showOwner ? <span className="text-ink-muted">{account.roleId ?? "未分配"}</span> : null}
+        </span>
+      </button>
+      {showConnectionAction ? <button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)}
+        disabled={!account.pluginEnabled}
+        aria-label={`${account.connection === "online" ? "断开连接" : "连接"} ${account.displayName || account.platformAccountId}`}
+        onClick={() => setSelected(account)}>{account.connection === "online" ? "断开连接" : "连接"}</button> : null}
+    </div>)}
     {selected ? <AccountDetailDialog key={selected.id} account={accounts?.find((item) => item.id === selected.id) ?? selected} pluginId={selected.pluginId} onClose={() => setSelected(null)} onChanged={onRefresh} /> : null}
   </section>;
 }

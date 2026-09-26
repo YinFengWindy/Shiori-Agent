@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { InlineError } from "../shared/feedback/InlineError";
-import { ghostButtonClass, inputClass, primaryButtonClass } from "../shared/styles";
+import { compactButtonSizeClass, cx, dangerGhostButtonSurfaceClass, ghostButtonClass, inputClass, primaryButtonClass, textareaClass } from "../shared/styles";
 import { createAccountClient, type AccountResponseRules, type AccountSnapshot } from "./accountClient";
 
 const client = createAccountClient();
@@ -12,8 +12,16 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-  const showGroups = account.capabilities.includes("groups") || rules.groupRules.length > 0 ||
+  const showGroups = account.knownCapabilities.includes("groups") || rules.groupRules.length > 0 ||
     !rules.groupEnabled || !rules.requireMention || rules.blockedSenderIds.length > 0;
+
+  function updateGroup(index: number, patch: Partial<AccountResponseRules["groupRules"][number]>) {
+    setSaved(false);
+    setRules((current) => ({
+      ...current,
+      groupRules: current.groupRules.map((group, position) => position === index ? { ...group, ...patch } : group),
+    }));
+  }
 
   async function save() {
     setBusy(true);
@@ -46,20 +54,20 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
         <input type="checkbox" checked={rules.requireMention} disabled={!rules.groupEnabled} onChange={(event) => { setSaved(false); setRules((current) => ({ ...current, requireMention: event.target.checked })); }} />群聊需要 @
       </label>
       <label className="grid gap-2 text-body-sm text-ink-secondary">黑名单成员 ID
-        <textarea className={inputClass} rows={3} value={blockedText} onChange={(event) => { setSaved(false); setBlockedText(event.target.value); }} />
+        <textarea className={textareaClass} rows={3} value={blockedText} onChange={(event) => { setSaved(false); setBlockedText(event.target.value); }} />
       </label>
       <div className="grid gap-3 border-t border-line-soft pt-3">
       <div className="flex items-center justify-between gap-2"><h4 className="m-0 text-body-sm font-medium text-ink">群规则</h4>
         <button type="button" className={ghostButtonClass} onClick={() => { setSaved(false); setRules((current) => ({ ...current, groupRules: [...current.groupRules, { chatId: "", enabled: true, requireMention: true, blockedSenderIds: [] }] })); }}>添加群</button>
       </div>
       {rules.groupRules.map((group, index) => <div key={index} className="grid gap-2 border-b border-line-soft pb-3 last:border-b-0">
-        <input aria-label={`群 ${index + 1} 会话 ID`} className={inputClass} placeholder="会话 ID" value={group.chatId} onChange={(event) => { setSaved(false); setRules((current) => ({ ...current, groupRules: current.groupRules.map((item, position) => position === index ? { ...item, chatId: event.target.value } : item) })); }} />
+        <input aria-label={`群 ${index + 1} 会话 ID`} className={inputClass} placeholder="会话 ID" value={group.chatId} onChange={(event) => updateGroup(index, { chatId: event.target.value })} />
         <div className="flex flex-wrap items-center gap-4 text-body-sm text-ink-secondary">
-          <label><input type="checkbox" checked={group.enabled} onChange={(event) => { setSaved(false); setRules((current) => ({ ...current, groupRules: current.groupRules.map((item, position) => position === index ? { ...item, enabled: event.target.checked } : item) })); }} /> 启用</label>
-          <label><input type="checkbox" checked={group.requireMention} onChange={(event) => { setSaved(false); setRules((current) => ({ ...current, groupRules: current.groupRules.map((item, position) => position === index ? { ...item, requireMention: event.target.checked } : item) })); }} /> 需要 @</label>
-          <button type="button" className="text-danger-text" onClick={() => { setSaved(false); setRules((current) => ({ ...current, groupRules: current.groupRules.filter((_, position) => position !== index) })); }}>移除</button>
+          <label><input type="checkbox" checked={group.enabled} onChange={(event) => updateGroup(index, { enabled: event.target.checked })} /> 启用</label>
+          <label><input type="checkbox" checked={group.requireMention} onChange={(event) => updateGroup(index, { requireMention: event.target.checked })} /> 需要 @</label>
+          <button type="button" className={cx(dangerGhostButtonSurfaceClass, compactButtonSizeClass)} onClick={() => { setSaved(false); setRules((current) => ({ ...current, groupRules: current.groupRules.filter((_, position) => position !== index) })); }}>移除</button>
         </div>
-        <textarea aria-label={`群 ${index + 1} 黑名单成员 ID`} className={inputClass} rows={2} value={group.blockedSenderIds.join("\n")} onChange={(event) => { setSaved(false); setRules((current) => ({ ...current, groupRules: current.groupRules.map((item, position) => position === index ? { ...item, blockedSenderIds: event.target.value.split(/\r?\n/) } : item) })); }} />
+        <textarea aria-label={`群 ${index + 1} 黑名单成员 ID`} className={textareaClass} rows={2} value={group.blockedSenderIds.join("\n")} onChange={(event) => updateGroup(index, { blockedSenderIds: event.target.value.split(/\r?\n/) })} />
       </div>)}
       </div>
     </> : null}
