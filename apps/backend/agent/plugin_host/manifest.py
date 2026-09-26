@@ -62,7 +62,7 @@ _CHANNEL_NAME = re.compile(r"[a-z][a-z0-9_-]{0,63}")
 # 宿主自有渠道，插件不能声明
 RESERVED_CHANNEL_NAMES = frozenset({"desktop"})
 _CHANNEL_REQUIRED_FIELDS = ("name", "label")
-_CHANNEL_OPTIONAL_FIELDS = ("contact_label",)
+_CHANNEL_OPTIONAL_FIELDS = ("contact_label", "instance_prefix")
 _CHAT_TYPE_REQUIRED_FIELDS = ("type", "label", "chat_id_label")
 _CHAT_TYPE_OPTIONAL_FIELDS = ("chat_id_hint", "prefix")
 
@@ -95,6 +95,7 @@ class ChannelDeclaration:
     label: str
     chat_types: tuple[ChatTypeDeclaration, ...]
     contact_label: str | None = None
+    instance_prefix: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """Returns the JSON-compatible bridge representation."""
@@ -102,6 +103,11 @@ class ChannelDeclaration:
             "name": self.name,
             "label": self.label,
             "contact_label": self.contact_label,
+            **(
+                {"instance_prefix": self.instance_prefix}
+                if self.instance_prefix
+                else {}
+            ),
             "chat_types": [item.to_dict() for item in self.chat_types],
         }
 
@@ -139,7 +145,20 @@ class PluginManifest:
 
     def channel_chat_types(self, name: str) -> tuple[ChatTypeDeclaration, ...]:
         """Returns the session types this plugin declares for channel ``name``."""
-        declaration = next((item for item in self.channels if item.name == name), None)
+        declaration = next(
+            (
+                item
+                for item in self.channels
+                if item.name == name
+                or (
+                    item.instance_prefix
+                    and name.startswith(item.instance_prefix)
+                    and len(name) > len(item.instance_prefix)
+                    and _CHANNEL_NAME.fullmatch(name)
+                )
+            ),
+            None,
+        )
         if declaration is None:
             raise KeyError(f"插件 {self.id} 未声明渠道 {name}")
         return declaration.chat_types
@@ -261,6 +280,12 @@ def _parse_channel(item: object, field_name: str) -> ChannelDeclaration:
         raise ManifestError(f"{field_name}.name 必须是小写可移植标识: {name!r}")
     if name in RESERVED_CHANNEL_NAMES:
         raise ManifestError(f"{field_name}.name 是宿主保留渠道名: {name}")
+    instance_prefix = values.get("instance_prefix")
+    if instance_prefix and (
+        not instance_prefix.startswith(f"{name}_")
+        or _CHANNEL_NAME.fullmatch(instance_prefix + "a") is None
+    ):
+        raise ManifestError(f"{field_name}.instance_prefix 必须是渠道名下的有效前缀")
     if not declares_chat_types:
         raise ManifestError(
             f"{field_name} 缺少 chat_types：渠道必须声明会话类型（私聊 / 群聊）"
@@ -269,6 +294,7 @@ def _parse_channel(item: object, field_name: str) -> ChannelDeclaration:
         name=name,
         label=values["label"],
         contact_label=values.get("contact_label"),
+        instance_prefix=instance_prefix,
         chat_types=_parse_chat_types(raw_chat_types, f"{field_name}.chat_types"),
     )
 
@@ -349,10 +375,43 @@ def declared_chat_types(manifests: Iterable[PluginManifest]) -> ChatTypeDeclarat
     first declaration wins, matching ``channels.list``.
     """
     result: dict[str, tuple[ChatTypeDeclaration, ...]] = {}
+    prefixes: list[tuple[str, tuple[ChatTypeDeclaration, ...]]] = []
     for manifest in manifests:
         for declaration in manifest.channels:
             result.setdefault(declaration.name, declaration.chat_types)
-    return result
+            if declaration.instance_prefix:
+                prefixes.append((declaration.instance_prefix, declaration.chat_types))
+    return _DeclaredChatTypes(result, prefixes)
+
+
+class _DeclaredChatTypes(dict[str, tuple[ChatTypeDeclaration, ...]]):
+    """Keep static listings while validating generated instance names."""
+
+    def __init__(
+        self,
+        exact: dict[str, tuple[ChatTypeDeclaration, ...]],
+        prefixes: list[tuple[str, tuple[ChatTypeDeclaration, ...]]],
+    ) -> None:
+        super().__init__(exact)
+        self._prefixes = prefixes
+
+    def __missing__(self, name: str) -> tuple[ChatTypeDeclaration, ...]:
+        for prefix, chat_types in self._prefixes:
+            if (
+                name.startswith(prefix)
+                and len(name) > len(prefix)
+                and _CHANNEL_NAME.fullmatch(name)
+            ):
+                return chat_types
+        raise KeyError(name)
+
+    def get(
+        self, name: str, default: tuple[ChatTypeDeclaration, ...] | None = None
+    ) -> tuple[ChatTypeDeclaration, ...] | None:
+        try:
+            return self[name]
+        except KeyError:
+            return default
 
 
 def _parse_category(raw: dict[str, object], capabilities: tuple[str, ...]) -> str:

@@ -171,6 +171,52 @@ async def test_active_plugin_channel_reports_its_status(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_dynamic_channel_instance_is_listed_for_binding(tmp_path, monkeypatch):
+    root = tmp_path / "plugin_dirs" / "fake"
+    _write_fake_channel_plugin(root.parent, "fake")
+    manifest = root / "manifest.yaml"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            "name: fake,", "name: fake, instance_prefix: fake_,"
+        ),
+        encoding="utf-8",
+    )
+    entry = root / "backend" / "plugin.py"
+    entry.write_text(
+        entry.read_text(encoding="utf-8").replace('name = "fake"', 'name = "fake_one"'),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs", lambda workspace: [root.parent]
+    )
+    text = "[llm]\nregistrations = []\n\n[agent.maintenance]\nmemory_optimizer_enabled = false\n"
+    path = tmp_path / "config.toml"
+    path.write_text(text, encoding="utf-8")
+    app = AppRuntime(
+        load_config_text(text),
+        tmp_path,
+        features=RuntimeFeatures(
+            enable_message_channels=True,
+            enable_proactive=False,
+        ),
+    )
+    await app.start()
+    service = ReloadableDesktopService(app, path, RoleStore(tmp_path))
+    try:
+        response = await service.handle(
+            {"id": "channels", "method": "channels.list", "payload": {}},
+            emit_event=lambda event: None,
+        )
+        assert response.error is None
+        rows = {row["name"]: row for row in response.payload["channels"]}
+        assert rows["fake"]["state"] == "not_configured"
+        assert rows["fake_one"]["state"] == "active"
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_channel_start_failure_is_exposed(tmp_path, monkeypatch):
     rows = await _list_channels(
         tmp_path, monkeypatch, "[plugins.fake]\nfail = true\n", fake_plugins=("fake",)

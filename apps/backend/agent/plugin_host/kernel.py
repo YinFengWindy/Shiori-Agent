@@ -493,6 +493,11 @@ class PluginKernel:
                 declared=frozenset(
                     declaration.name for declaration in handle.record.manifest.channels
                 ),
+                instance_prefixes=tuple(
+                    declaration.instance_prefix
+                    for declaration in handle.record.manifest.channels
+                    if declaration.instance_prefix
+                ),
             ),
             "accounts": lambda: AccountsCapability(
                 services.role_store.accounts,

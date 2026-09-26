@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -235,15 +236,23 @@ class ChannelsCapability:
         *,
         plugin_id: str,
         declared: frozenset[str],
+        instance_prefixes: tuple[str, ...] = (),
     ) -> None:
         self._contributions = contributions
         self._effects = effects
         self._plugin_id = plugin_id
         self._declared = declared
+        self._instance_prefixes = instance_prefixes
 
     def add(self, channel: "Channel") -> None:
         name = getattr(channel, "name", None)
-        if name not in self._declared:
+        if name not in self._declared and not any(
+            isinstance(name, str)
+            and name.startswith(prefix)
+            and len(name) > len(prefix)
+            and re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", name)
+            for prefix in self._instance_prefixes
+        ):
             raise ChannelDeclarationError(self._plugin_id, str(name), self._declared)
         contribute_to_list(
             self._contributions.channels,

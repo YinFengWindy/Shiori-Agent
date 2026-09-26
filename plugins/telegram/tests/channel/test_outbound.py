@@ -94,6 +94,19 @@ async def test_response_records_first_retained_receipt(
         assert channel._app.bot.send_message.await_count > 1
 
 
+async def test_reply_uses_original_forum_topic() -> None:
+    channel = reply_channel(SimpleNamespace(message_id=301))
+    message = OutboundMessage(
+        channel="telegram",
+        chat_id="-1001",
+        content="reply",
+        metadata={"message_thread_id": 42},
+        committed_message_id="committed",
+    )
+    await channel._on_response(message)
+    assert channel._app.bot.send_message.await_args.kwargs["message_thread_id"] == 42
+
+
 @pytest.mark.parametrize(
     "failure", [RuntimeError("send failed"), asyncio.CancelledError()]
 )

@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from agent.plugin_host.kernel import PluginKernel
@@ -99,6 +100,29 @@ class RuntimeChannelListing:
                             status=entry.get("status"),
                         )
                     )
+                if enabled and plugin_state == "ACTIVE" and declaration.instance_prefix:
+                    for instance_name, entry in snapshot.items():
+                        if (
+                            instance_name in seen
+                            or not instance_name.startswith(declaration.instance_prefix)
+                            or len(instance_name) <= len(declaration.instance_prefix)
+                        ):
+                            continue
+                        seen.add(instance_name)
+                        rows.append(
+                            _row(
+                                replace(
+                                    declaration,
+                                    name=instance_name,
+                                    instance_prefix=None,
+                                ),
+                                plugin_id,
+                                True,
+                                entry["state"],
+                                error=entry["error"],
+                                status=entry.get("status"),
+                            )
+                        )
         return rows
 
     def _plugin_kernel(self) -> PluginKernel | None:

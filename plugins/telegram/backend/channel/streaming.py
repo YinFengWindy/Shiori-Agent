@@ -212,6 +212,7 @@ class _StreamingMixin:
         chat_id: int,
         original_chat_id: str,
         thinking: str,
+        message_thread_id: int | None = None,
     ) -> None:
         if not thinking:
             return
@@ -220,6 +221,7 @@ class _StreamingMixin:
             original_chat_id,
             thinking,
             self._telegram_outbound_limiter,
+            **({"message_thread_id": message_thread_id} if message_thread_id else {}),
         )
 
     async def _send_final_tool_snapshot(

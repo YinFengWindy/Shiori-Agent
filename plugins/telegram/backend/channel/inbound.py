@@ -11,6 +11,7 @@ from telegram.ext import ContextTypes
 from bus.events import InboundMessage
 
 from .formatting import _build_inbound_text_with_reply
+from .identity import message_subject, message_topic_metadata
 
 logger = logging.getLogger("plugins.telegram.channel")
 
@@ -23,11 +24,14 @@ class _InboundMixin:
     ) -> None:
         msg = update.effective_message
         chat = update.effective_chat
-        user = update.effective_user
+        user, sender_id, sender_kind = (
+            message_subject(msg, update.effective_user) if msg else (None, "", "user")
+        )
 
         if not msg or not msg.text or not chat or not user:
             return
-        if not self._is_sender_admitted(chat, user, "消息"):
+        self._remember_chat(chat, user, msg)
+        if not self._is_sender_admitted(chat, user, "消息", sender_id=sender_id):
             return
 
         # 去重：同一 (chat_id, message_id) 只处理一次，防止 Telegram 重投
@@ -47,7 +51,9 @@ class _InboundMixin:
         chat_id_str = str(chat.id)
         await self._remember_username(chat_id_str, user.username)
 
-        await self._safe_send_typing(context, chat.id)
+        await self._safe_send_typing(
+            context, chat.id, getattr(msg, "message_thread_id", None)
+        )
 
         inbound_text, reply_meta = _build_inbound_text_with_reply(
             msg.text, msg.reply_to_message
@@ -88,24 +94,29 @@ class _InboundMixin:
         await self._publish_inbound(
             InboundMessage(
                 channel=self._channel,
-                sender=str(user.id),
+                sender=sender_id,
                 chat_id=str(chat.id),
                 content=inbound_text,
                 media=reply_media,
                 metadata={
                     "username": user.username or "",
+                    "sender_kind": sender_kind,
                     "chat_type": str(getattr(chat, "type", "private") or "private"),
                     "external_message_id": str(msg.message_id),
+                    "chat_title": str(getattr(chat, "title", "") or ""),
+                    **message_topic_metadata(msg),
                     **reply_meta,
                 },
             )
         )
 
-    def _is_sender_admitted(self, chat: Any, user: Any, kind: str) -> bool:
+    def _is_sender_admitted(
+        self, chat: Any, user: Any, kind: str, *, sender_id: str | None = None
+    ) -> bool:
         """Checks the role binding's admission before any side effect of an update.
 
         Rejected updates (unbound chat, blacklisted member) must not show
-        typing, remember usernames or download attachments. ``_accept_inbound``
+        typing, remember member usernames or download attachments. ``_accept_inbound``
         repeats the check because paused intake may replay a message after the
         bindings changed. ``kind`` names what was rejected (``消息``, ``/stop``)
         for the warning log.
@@ -113,7 +124,7 @@ class _InboundMixin:
         if self._channel_hub is None or self._channel_hub.is_sender_allowed(
             channel=self._channel,
             chat_id=str(chat.id),
-            sender_id=str(user.id),
+            sender_id=sender_id or str(user.id),
             sender_alias=user.username or "",
         ):
             return True
@@ -121,7 +132,7 @@ class _InboundMixin:
             "[telegram] 忽略未绑定渠道或黑名单成员的 %s  chat_id=%s  id=%s",
             kind,
             chat.id,
-            user.id,
+            sender_id or user.id,
         )
         return False
 
@@ -134,6 +145,9 @@ class _InboundMixin:
         await self._intake.submit(message)
 
     async def _accept_inbound(self, message: InboundMessage) -> None:
+        if not self._online:
+            self._online = True
+            self._report_account("online")
         if self._channel_hub is not None and not self._channel_hub.is_sender_allowed(
             channel=message.channel,
             chat_id=message.chat_id,
