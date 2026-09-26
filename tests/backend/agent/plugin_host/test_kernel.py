@@ -13,6 +13,7 @@ from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
 from agent.plugin_host.plugin_data import plugin_data_dir
+from core.roles.store import RoleStore
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 import sys
@@ -24,6 +25,125 @@ from tests.backend.agent.plugin_host.conftest import (
     stage_plugin_package,
     PLUGIN_FIXTURES,
 )
+
+
+@pytest.mark.asyncio
+async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
+    package = tmp_path / "account_demo"
+    (package / "backend").mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: account_demo\ncapabilities: [accounts]\n",
+        encoding="utf-8",
+    )
+    (package / "backend/plugin.py").write_text(
+        "async def setup(ctx):\n"
+        "    first = ctx.accounts.register(platform='demo', "
+        "platform_account_id='101', config_ref='one', display_name='One')\n"
+        "    second = ctx.accounts.register(platform='demo', "
+        "platform_account_id='102', config_ref='two', display_name='Two')\n"
+        "    ctx.accounts.report(first.record.id, connection='online', "
+        "capabilities=frozenset({'contacts'}))\n"
+        "    ctx.accounts.report(second.record.id, connection='login_required')\n"
+        "    ctx.accounts.unregister(second.record.id)\n"
+        "    second = ctx.accounts.register(platform='demo', "
+        "platform_account_id='102', config_ref='two', display_name='Two')\n"
+        "    ctx.accounts.report(second.record.id, connection='login_required')\n"
+        "    ctx.expose((first.record.id, second.record.id))\n",
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "workspace"
+    role_store = RoleStore(workspace)
+    first_kernel = PluginKernel(
+        [tmp_path],
+        services=HostServices(
+            event_bus=EventBus(), workspace=workspace, role_store=role_store
+        ),
+    )
+    await first_kernel.load_all()
+    assert first_kernel.loaded_count == 1
+    first, second = first_kernel._dependency_api("account_demo")
+    assert role_store.accounts.get(first).connection == "online"
+    assert role_store.accounts.get(first).capabilities == frozenset({"contacts"})
+    assert role_store.accounts.get(second).connection == "login_required"
+
+    discarded = PluginKernel(
+        [tmp_path],
+        services=HostServices(
+            event_bus=EventBus(),
+            workspace=workspace,
+            role_store=role_store,
+            plugin_configs={"account_demo": {"enabled": False}},
+            is_reload=True,
+        ),
+    )
+    await discarded.load_all()
+    assert role_store.accounts.get(first).plugin_enabled
+    assert role_store.accounts.get(first).connection == "online"
+    await discarded.terminate_all(force=True)
+    assert role_store.accounts.get(first).connection == "online"
+
+    replacement = PluginKernel(
+        [tmp_path],
+        services=HostServices(
+            event_bus=EventBus(),
+            workspace=workspace,
+            role_store=role_store,
+            is_reload=True,
+        ),
+    )
+    await replacement.load_all()
+    assert replacement._dependency_api("account_demo") == (first, second)
+    assert role_store.accounts.get(first).connection == "online"
+    assert role_store.accounts.get(first).runtime_active
+    replacement.publish_accounts()
+    await first_kernel.terminate_all(force=True)
+    assert role_store.accounts.get(first).runtime_active
+    await replacement.terminate_all(force=True)
+    assert not role_store.accounts.get(first).plugin_enabled
+    assert not role_store.accounts.get(first).runtime_active
+    assert role_store.accounts.get(first).connection == "unknown"
+
+    disabled = PluginKernel(
+        [tmp_path],
+        services=HostServices(
+            event_bus=EventBus(),
+            workspace=workspace,
+            role_store=role_store,
+            plugin_configs={"account_demo": {"enabled": False}},
+        ),
+    )
+    await disabled.load_all()
+    assert not role_store.accounts.get(first).plugin_enabled
+    assert not role_store.accounts.get(first).runtime_active
+
+
+@pytest.mark.asyncio
+async def test_failed_account_plugin_setup_discards_unpublished_identity(tmp_path):
+    package = tmp_path / "failed_account_demo"
+    (package / "backend").mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: failed_account_demo\ncapabilities: [accounts]\n",
+        encoding="utf-8",
+    )
+    (package / "backend/plugin.py").write_text(
+        "async def setup(ctx):\n"
+        "    ctx.accounts.register(platform='demo', "
+        "platform_account_id='101', config_ref='one')\n"
+        "    raise RuntimeError('setup failed')\n",
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "workspace"
+    role_store = RoleStore(workspace)
+    kernel = PluginKernel(
+        [tmp_path],
+        services=HostServices(
+            event_bus=EventBus(), workspace=workspace, role_store=role_store
+        ),
+    )
+    await kernel.load_all()
+    assert kernel.loaded_count == 0
+    assert role_store.accounts.list() == []
+    assert RoleStore(workspace).accounts.list() == []
 
 
 @pytest.mark.asyncio

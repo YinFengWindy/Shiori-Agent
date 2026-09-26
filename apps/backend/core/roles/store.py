@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from core.accounts import AccountRegistry
 from core.common.channel_chat_types import ChatTypeDeclarations
 
 from .assets import RoleAssetStore
@@ -37,6 +38,11 @@ class RoleStore:
         self._assets = RoleAssetStore(self.roles_dir, self.assets_dir)
         self._bindings = RoleBindingPolicy()
         self.extensions = RoleExtensions(self._repository)
+        self.accounts = AccountRegistry(
+            workspace,
+            lambda role_id: self.get_role(role_id) is not None,
+            lock=self._lock,
+        )
 
     def bind_channel_chat_types(self, declarations: ChatTypeDeclarations) -> None:
         """Validates future binding saves against these declared session types.
@@ -270,6 +276,7 @@ class RoleStore:
             if len(kept) == len(roles):
                 return False
             self._save_roles(kept)
+            self.accounts.unassign_role(role_id)
             self._assets.delete_role_data(role_id, remove_assets=remove_assets)
             return True
 

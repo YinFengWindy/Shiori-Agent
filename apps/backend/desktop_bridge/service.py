@@ -29,6 +29,7 @@ from core.roles import (
 from core.roles.role_runtime import RoleRuntimeRegistry
 from core.roles.model_runtime import ModelConfigurationError, RoleModelRuntime
 from desktop_bridge.app_service import DesktopAppService
+from desktop_bridge.account_requests import DesktopAccountRequestHandler
 from desktop_bridge.chat_requests import DesktopChatRequestHandler
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.method_policy import MethodPolicy, resolve_plugin_method_policy
@@ -211,6 +212,7 @@ class DesktopBridgeService:
         self.voice_assets = self.voice_handler.assets
         self.plugin_rpc_registry = plugin_rpc_registry
         self.request_router = DesktopBridgeRequestRouter(
+            accounts=DesktopAccountRequestHandler(role_store.accounts),
             roles=DesktopRoleRequestHandler(
                 role_service=self.role_service,
                 role_presenter=self.role_presenter,

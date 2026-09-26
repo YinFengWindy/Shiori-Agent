@@ -142,6 +142,8 @@ class RuntimeReloadMixin:
         validate_memory_transition(self.config, candidate.config, self.workspace)
         if commit is not None:
             commit()
+        if candidate.core.plugin_manager is not None:
+            candidate.core.plugin_manager.publish_accounts()
         previous = self._generation_manager.publish(candidate)
         self.config = candidate.config
         self.core = candidate.core

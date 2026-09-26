@@ -21,6 +21,7 @@ from uuid import uuid4
 
 from agent.plugin_host.capabilities import (
     BackgroundCapability,
+    AccountsCapability,
     BotCommandsCapability,
     ChannelsCapability,
     LifecycleCapability,
@@ -146,6 +147,7 @@ class PluginKernel:
         self._dirs = plugin_dirs
         self._external_dirs = external_plugin_dirs or []
         self._services = services
+        self._account_generation = uuid4().hex
         self._namespace = namespace or f"g{next(_KERNEL_NAMESPACE_COUNTER)}"
         # Settings generations retain the application's startup admission, but
         # own independent descriptors and import namespaces. Only a fresh app
@@ -212,6 +214,15 @@ class PluginKernel:
         records = self._records_by_id()
         for record in self.discover():
             await self._load_dependencies(record, records, ())
+        if not self._services.is_reload:
+            self.publish_accounts()
+
+    def publish_accounts(self) -> None:
+        """Makes this prepared generation's account reports authoritative."""
+        if self._services.role_store is not None:
+            self._services.role_store.accounts.publish_generation(
+                self._account_generation
+            )
 
     def _records_by_id(self) -> dict[str, PluginRecord]:
         # Conflicts remain visible as separate handles, but cannot be resolved
@@ -228,6 +239,12 @@ class PluginKernel:
         records: dict[str, PluginRecord],
         trail: tuple[str, ...],
     ) -> None:
+        if self._services.role_store is not None:
+            self._services.role_store.accounts.set_plugin_enabled(
+                record.manifest.id,
+                self._config_enabled(record.manifest),
+                generation=self._account_generation,
+            )
         existing = self._handles.get(record.candidate_id)
         if existing is not None and existing.state in {
             PluginState.ACTIVE,
@@ -299,6 +316,8 @@ class PluginKernel:
         if record is None:
             return False
         await self._load_dependencies(record, self._records_by_id(), ())
+        if not self._services.is_reload:
+            self.publish_accounts()
         handle = self._handles.get(record.candidate_id)
         return handle is not None and handle.state is PluginState.ACTIVE
 
@@ -474,6 +493,12 @@ class PluginKernel:
                 declared=frozenset(
                     declaration.name for declaration in handle.record.manifest.channels
                 ),
+            ),
+            "accounts": lambda: AccountsCapability(
+                services.role_store.accounts,
+                handle.effects,
+                handle.plugin_id,
+                self._account_generation,
             ),
             "background": lambda: BackgroundCapability(
                 handle.effects, handle.plugin_id
@@ -682,6 +707,8 @@ class PluginKernel:
         # Failed/interrupted loads may own effects without an active-order entry.
         for handle in reversed(list(self._handles.values())):
             errors.extend(await self._dispose_handle(handle))
+        if self._services.role_store is not None:
+            self._services.role_store.accounts.drop_generation(self._account_generation)
         if errors:
             raise ExceptionGroup("Plugin cleanup failed", errors)
 

@@ -9,6 +9,22 @@ from core.roles import RoleStore
 from core.roles import assets as assets_module
 
 
+def test_role_deletion_unassigns_without_removing_account(tmp_path):
+    store = RoleStore(tmp_path)
+    role = store.create_role(name="Owner", system_prompt="Owner")
+    account = store.accounts.register(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="101",
+        config_ref="one",
+        token="generation",
+    )
+    store.accounts.assign(account.record.id, role.id)
+    assert store.delete_role(role.id)
+    assert store.accounts.get(account.record.id).record.role_id is None
+    assert RoleStore(tmp_path).accounts.get(account.record.id).record.role_id is None
+
+
 def test_new_unbound_role_remains_unbound_when_models_are_added(tmp_path):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")

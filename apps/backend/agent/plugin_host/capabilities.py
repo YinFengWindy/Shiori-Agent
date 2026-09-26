@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import logging
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.effects import EffectScope
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
     from agent.tool_hooks.base import ToolHook
     from desktop_bridge.method_policy import Concurrency
     from infra.channels.contract import Channel
+    from core.accounts import AccountRegistry, AccountSnapshot, ConnectionState
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +251,84 @@ class ChannelsCapability:
             effects=self._effects,
             label=f"channel:{getattr(channel, 'name', channel)}",
         )
+
+
+class AccountsCapability:
+    """Plugin-scoped registration and reporting for communication accounts."""
+
+    def __init__(
+        self,
+        registry: "AccountRegistry",
+        effects: EffectScope,
+        plugin_id: str,
+        generation: str,
+    ) -> None:
+        self._registry = registry
+        self._effects = effects
+        self._plugin_id = plugin_id
+        self._generation = generation
+        self._token = uuid4().hex
+        self._registered: set[str] = set()
+
+    def register(
+        self,
+        *,
+        platform: str,
+        platform_account_id: str,
+        config_ref: str,
+        display_name: str | None = None,
+        avatar_url: str | None = None,
+    ) -> "AccountSnapshot":
+        """Registers verified identity; None keeps display snapshots, empty clears."""
+        self._effects.ensure_active("account:register")
+        snapshot = self._registry.register(
+            plugin_id=self._plugin_id,
+            platform=platform,
+            platform_account_id=platform_account_id,
+            config_ref=config_ref,
+            token=self._token,
+            generation=self._generation,
+            display_name=display_name,
+            avatar_url=avatar_url,
+        )
+        account_id = snapshot.record.id
+        if account_id not in self._registered:
+            self._registered.add(account_id)
+            self._effects.add(
+                f"account:{account_id}",
+                lambda: self._registry.release(
+                    account_id, self._token, generation=self._generation
+                ),
+            )
+        return snapshot
+
+    def report(
+        self,
+        account_id: str,
+        *,
+        connection: "ConnectionState",
+        capabilities: frozenset[str] = frozenset(),
+        error: str = "",
+    ) -> "AccountSnapshot":
+        """Reports connection, authentication, capability, or failure changes."""
+        self._effects.ensure_active(f"account:{account_id}:report")
+        if account_id not in self._registered:
+            raise PermissionError("Account was not registered by this plugin instance")
+        return self._registry.report(
+            account_id,
+            self._token,
+            generation=self._generation,
+            connection=connection,
+            capabilities=capabilities,
+            error=error,
+        )
+
+    def unregister(self, account_id: str) -> None:
+        """Stops one account while retaining its saved identity and assignment."""
+        self._effects.ensure_active(f"account:{account_id}:unregister")
+        if account_id not in self._registered:
+            raise PermissionError("Account was not registered by this plugin instance")
+        self._registry.unregister(account_id, self._token, generation=self._generation)
 
 
 class BotCommandsCapability:
