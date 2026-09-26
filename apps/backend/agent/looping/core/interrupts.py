@@ -14,6 +14,7 @@ from bus.events import (
     SpawnCompletionItem,
 )
 from bus.events_lifecycle import (
+    TurnCancelled,
     TurnStarted,
 )
 
@@ -157,5 +158,20 @@ class _InterruptMixin:
                 chat_id=msg.chat_id,
                 content=_item_content(msg),
                 timestamp=msg.timestamp,
+                external_message_id=str(
+                    getattr(msg, "metadata", {}).get("external_message_id") or ""
+                ),
+            )
+        )
+
+    async def _observe_turn_cancelled(self, msg: InboundItem, key: str) -> None:
+        await self._event_bus.observe(
+            TurnCancelled(
+                session_key=key,
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                external_message_id=str(
+                    getattr(msg, "metadata", {}).get("external_message_id") or ""
+                ),
             )
         )

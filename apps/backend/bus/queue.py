@@ -3,6 +3,7 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from bus.events import InboundItem, OutboundMessage
+from bus.errors import NonRetryableDeliveryError
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,7 @@ class MessageBus:
     def __init__(self) -> None:
         self._inbound: asyncio.Queue[InboundItem] = asyncio.Queue()
         self._outbound: asyncio.Queue[OutboundMessage] = asyncio.Queue()
+        self._pending_outbound: dict[tuple[str, str, str], int] = {}
         self._subscribers: dict[
             str, list[Callable[[OutboundMessage], Awaitable[None]]]
         ] = {}
@@ -51,7 +53,25 @@ class MessageBus:
 
     async def publish_outbound(self, msg: OutboundMessage) -> None:
         """agent → channel"""
+        key = self._outbound_key(msg)
+        self._pending_outbound[key] = self._pending_outbound.get(key, 0) + 1
         await self._outbound.put(msg)
+
+    @staticmethod
+    def _outbound_key(msg: OutboundMessage) -> tuple[str, str, str]:
+        return (
+            msg.channel,
+            msg.chat_id,
+            str(msg.metadata.get("external_message_id") or ""),
+        )
+
+    def has_pending_outbound(
+        self, channel: str, chat_id: str, external_message_id: str
+    ) -> bool:
+        """Whether this originating message has a queued or dispatching reply."""
+        return (
+            self._pending_outbound.get((channel, chat_id, external_message_id), 0) > 0
+        )
 
     def subscribe_outbound(
         self,
@@ -77,16 +97,23 @@ class MessageBus:
     async def dispatch_outbound(self) -> None:
         """后台任务：将出站消息分发给对应 channel 的订阅者。
 
-        发送失败时退避 2s 重试一次；仍失败则向用户发送降级错误通知，不静默丢弃。
+        可重试的失败退避 2s 重试一次；仍失败则发送降级错误通知。
+        渠道明确禁止重试时仅记录错误，避免重复发送已被接收的消息。
         """
         self._running = True
         while self._running:
             try:
                 msg = await asyncio.wait_for(self._outbound.get(), timeout=1.0)
+                key = self._outbound_key(msg)
                 try:
                     async with self.transport_lock:
                         await self._dispatch_message(msg)
                 finally:
+                    remaining = self._pending_outbound[key] - 1
+                    if remaining:
+                        self._pending_outbound[key] = remaining
+                    else:
+                        self._pending_outbound.pop(key)
                     self._outbound.task_done()
             except asyncio.TimeoutError:
                 continue
@@ -95,6 +122,13 @@ class MessageBus:
         for cb in tuple(self._subscribers.get(msg.channel, [])):
             try:
                 await cb(msg)
+            except NonRetryableDeliveryError as exc:
+                logger.error(
+                    "分发消息失败，渠道禁止重试或替换 channel=%s chat_id=%s: %s",
+                    msg.channel,
+                    msg.chat_id,
+                    exc,
+                )
             except Exception as first_err:
                 logger.warning(
                     "分发消息到 %s 首次失败，2s 后重试: %s", msg.channel, first_err
@@ -102,6 +136,13 @@ class MessageBus:
                 await asyncio.sleep(2)
                 try:
                     await cb(msg)
+                except NonRetryableDeliveryError as exc:
+                    logger.error(
+                        "重试分发失败，渠道禁止再次重试或替换 channel=%s chat_id=%s: %s",
+                        msg.channel,
+                        msg.chat_id,
+                        exc,
+                    )
                 except Exception as second_err:
                     logger.error(
                         "分发消息到 %s 重试仍失败，发送降级通知: %s",

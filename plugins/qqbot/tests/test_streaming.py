@@ -7,8 +7,10 @@ stream sink are the real ones.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from contextlib import suppress
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, cast
@@ -19,7 +21,8 @@ import pytest
 from agent.looping.core import AgentLoop
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
-from bus.events_lifecycle import TurnStarted
+from bus.events_lifecycle import TurnCancelled, TurnStarted
+from bus.queue import MessageBus
 from core.common.channel_directory import ChannelDirectory
 from infra.channels.base import AttachmentStore
 from infra.channels.contract import ChannelContext
@@ -144,6 +147,7 @@ async def _started_channel(
             chat_id=CHAT_ID,
             content=inbound.content,
             timestamp=datetime.now(),
+            external_message_id="msg-1",
         )
     )
     return channel, event_bus, hub, inbound
@@ -165,7 +169,11 @@ def _final_reply(content: str) -> OutboundMessage:
         channel="qqbot",
         chat_id=CHAT_ID,
         content=content,
-        metadata={"role_id": "mira", "session_key_override": SESSION_KEY},
+        metadata={
+            "role_id": "mira",
+            "session_key_override": SESSION_KEY,
+            "external_message_id": "msg-1",
+        },
     )
 
 
@@ -233,7 +241,8 @@ async def test_qqbot_final_reply_cancels_a_throttled_refresh(
     await sink("第一段")
     await channel._drain_live_tasks()
     await sink("第二段")  # waits for the 60 s interval
-    await channel._on_response(_final_reply("第一段第二段"))
+    await asyncio.sleep(0)  # let the refresh enter its throttled wait
+    await asyncio.wait_for(channel._on_response(_final_reply("第一段第二段")), 1)
     await channel._drain_live_tasks()
 
     assert [(b["index"], b["input_state"]) for b in api.stream_bodies()] == [
@@ -242,6 +251,145 @@ async def test_qqbot_final_reply_cancels_a_throttled_refresh(
     ]
     assert channel._live_tasks == set()
     await channel.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blocked_index", [0, 1])
+async def test_final_reply_waits_for_inflight_stream_id_and_index(
+    monkeypatch: pytest.MonkeyPatch, blocked_index: int
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = _QQApi()
+    channel, event_bus, hub, inbound = await _started_channel(api)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        result = api.handler(request)
+        if request.url.path == STREAM_PATH:
+            body = json.loads(request.content)
+            if body["index"] == blocked_index and body["input_state"] == 1:
+                entered.set()
+                await release.wait()
+        return result
+
+    await channel._client.aclose()
+    channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    sink = _stream_sink(channel, event_bus, inbound)
+    assert sink is not None
+    if blocked_index:
+        await sink("第一段")
+        await channel._drain_live_tasks()
+    await sink("第二段")
+    await asyncio.wait_for(entered.wait(), 1)
+    final = asyncio.create_task(channel._on_response(_final_reply("完整回复")))
+    try:
+        await asyncio.sleep(0)
+        assert not final.done()
+        release.set()
+        await asyncio.wait_for(final, 1)
+        bodies = api.stream_bodies()
+        assert [body["index"] for body in bodies] == list(range(blocked_index + 2))
+        assert [body.get("stream_msg_id") for body in bodies] == [None] + [
+            "stream-1"
+        ] * (blocked_index + 1)
+        assert bodies[-1]["input_state"] == 10
+        assert bodies[-1]["content_raw"] == "完整回复"
+        assert api.markdown_messages() == []
+        assert hub.deliveries == ["sent"]
+    finally:
+        release.set()
+        await final
+        await channel.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["timeout", "server", "missing_id", "recall"])
+async def test_uncertain_stream_or_failed_recall_never_resends_or_marks_sent(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = _QQApi()
+    channel, event_bus, hub, inbound = await _started_channel(api)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        result = api.handler(request)
+        if request.url.path == STREAM_PATH:
+            if failure == "timeout":
+                raise httpx.ReadTimeout("response lost", request=request)
+            if failure == "server":
+                return httpx.Response(500)
+            if failure == "missing_id":
+                return httpx.Response(200, json={})
+            if json.loads(request.content)["input_state"] == 10:
+                return httpx.Response(400)
+        if request.method == "DELETE":
+            return httpx.Response(500)
+        return result
+
+    await channel._client.aclose()
+    channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    sink = _stream_sink(channel, event_bus, inbound)
+    assert sink is not None
+    try:
+        await sink("半句")
+        await channel._drain_live_tasks()
+        with pytest.raises((httpx.HTTPError, RuntimeError)):
+            await channel._on_response(_final_reply("半句话。"))
+        assert api.markdown_messages() == []
+        assert hub.deliveries == ["failed"]
+        assert channel._live_states == {}
+        assert channel._live_tasks == set()
+    finally:
+        await channel.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_terminal", [False, True])
+async def test_cancelled_final_delivery_waits_for_receipt_and_never_marks_sent(
+    monkeypatch: pytest.MonkeyPatch, cancel_terminal: bool
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = _QQApi()
+    channel, event_bus, hub, inbound = await _started_channel(api)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        result = api.handler(request)
+        if request.url.path == STREAM_PATH:
+            terminal = json.loads(request.content)["input_state"] == 10
+            if terminal == cancel_terminal:
+                entered.set()
+                await release.wait()
+        return result
+
+    await channel._client.aclose()
+    channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    sink = _stream_sink(channel, event_bus, inbound)
+    assert sink is not None
+    await sink("半句")
+    if cancel_terminal:
+        await channel._drain_live_tasks()
+    final = asyncio.create_task(channel._on_response(_final_reply("半句话。")))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        await asyncio.sleep(0)
+        final.cancel()
+        await asyncio.sleep(0)
+        assert not final.done()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await final
+        assert hub.deliveries == ["failed"]
+        assert api.markdown_messages() == []
+        assert channel._live_tasks == set()
+        assert channel._live_states == {}
+        if not cancel_terminal:
+            assert api.calls[-1][:2] == ("DELETE", "/v2/users/user-1/messages/stream-1")
+    finally:
+        release.set()
+        await channel.stop()
 
 
 @pytest.mark.asyncio
@@ -265,7 +413,7 @@ async def test_qqbot_withdraws_a_broken_preview_before_the_fallback_message(
         ("DELETE", "/v2/users/user-1/messages/stream-1"),
         ("POST", MESSAGE_PATH),
     ]
-    assert len(api.stream_bodies()) == 2
+    assert len(api.stream_bodies()) == 3
     assert api.markdown_messages() == ["半句话。"]
     assert hub.deliveries == ["sent"]
     await channel.stop()
@@ -279,3 +427,268 @@ async def test_qqbot_group_chats_do_not_get_stream_events() -> None:
     )
 
     assert _stream_sink(channel, EventBus(), group) is None
+
+
+@pytest.mark.asyncio
+async def test_rejected_first_preview_safely_falls_back_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = _QQApi()
+    api.fail_stream_from = 0
+    channel, event_bus, hub, inbound = await _started_channel(api)
+    sink = _stream_sink(channel, event_bus, inbound)
+    assert sink is not None
+    try:
+        await sink("半句")
+        await channel._drain_live_tasks()
+        await channel._on_response(_final_reply("半句话。"))
+        assert len(api.stream_bodies()) == 1
+        assert api.markdown_messages() == ["半句话。"]
+        assert not any(method == "DELETE" for method, _, _ in api.calls)
+        assert hub.deliveries == ["sent"]
+    finally:
+        await channel.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["timeout", "recall", "fallback_timeout", "image"])
+async def test_bus_dispatch_does_not_replay_uncertain_or_partial_qq_delivery(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = _QQApi()
+    channel, event_bus, hub, inbound = await _started_channel(api)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        result = api.handler(request)
+        if request.url.path == STREAM_PATH:
+            if failure == "timeout":
+                raise httpx.ReadTimeout("stream receipt lost", request=request)
+            if failure == "fallback_timeout":
+                return httpx.Response(400)
+            if failure == "recall" and json.loads(request.content)["input_state"] == 10:
+                return httpx.Response(400)
+        if request.method == "DELETE":
+            return httpx.Response(500)
+        if request.url.path == MESSAGE_PATH and "markdown" in json.loads(
+            request.content
+        ):
+            if failure == "fallback_timeout":
+                raise httpx.ReadTimeout("plain receipt lost", request=request)
+        if request.url.path.endswith("/files"):
+            return httpx.Response(500)
+        return result
+
+    await channel._client.aclose()
+    channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    sink = _stream_sink(channel, event_bus, inbound)
+    assert sink is not None
+    bus = MessageBus()
+    bus.subscribe_outbound("qqbot", channel._on_response)
+    try:
+        await sink("半句")
+        await channel._drain_live_tasks()
+        reply = _final_reply("半句话。")
+        if failure == "image":
+            reply.media = ["https://example.invalid/image.png"]
+        await bus._dispatch_message(reply)
+        assert api.markdown_messages() == (
+            ["半句话。"] if failure == "fallback_timeout" else []
+        )
+        assert hub.deliveries == ["failed"]
+        assert channel._live_states == {}
+        assert channel._live_tasks == set()
+    finally:
+        await channel.stop()
+
+
+@pytest.mark.asyncio
+async def test_delayed_old_final_preserves_both_turns_stream_ownership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = _QQApi()
+    channel, event_bus, hub, first = await _started_channel(api)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        result = api.handler(request)
+        if request.url.path == STREAM_PATH:
+            body = json.loads(request.content)
+            return httpx.Response(200, json={"id": f"stream-{body['msg_id']}"})
+        return result
+
+    await channel._client.aclose()
+    channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    # A newer inbound can change the channel's latest anchor before the old
+    # turn even emits its first delta. Event ownership must retain msg-1.
+    channel._last_c2c_msg_id["user-1"] = "msg-2"
+    second = InboundMessage(
+        channel="qqbot",
+        sender="user-1",
+        chat_id=CHAT_ID,
+        content="第二问",
+        metadata={**first.metadata, "external_message_id": "msg-2"},
+    )
+    first_sink = _stream_sink(channel, event_bus, first)
+    second_sink = _stream_sink(channel, event_bus, second)
+    assert first_sink is not None and second_sink is not None
+    bus = MessageBus()
+    bus.subscribe_outbound("qqbot", channel._on_response)
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        async with bus.transport_lock:
+            await first_sink("第一轮预览")
+            await channel._drain_live_tasks()
+            await bus.publish_outbound(_final_reply("第一轮完整回复"))
+            loop = object.__new__(AgentLoop)
+            loop._event_bus = event_bus
+            await loop._observe_turn_started(second, SESSION_KEY)
+            await second_sink("第二轮预览")
+            await channel._drain_live_tasks()
+        await asyncio.wait_for(bus.drain_outbound(), 1)
+        assert len(channel._live_states) == 1
+        second_reply = _final_reply("第二轮完整回复")
+        second_reply.metadata["external_message_id"] = "msg-2"
+        await bus.publish_outbound(second_reply)
+        await asyncio.wait_for(bus.drain_outbound(), 1)
+        bodies = api.stream_bodies()
+        assert [
+            (
+                body["msg_id"],
+                body["index"],
+                body["input_state"],
+                body.get("stream_msg_id"),
+            )
+            for body in bodies
+        ] == [
+            ("msg-1", 0, 1, None),
+            ("msg-2", 0, 1, None),
+            ("msg-1", 1, 10, "stream-msg-1"),
+            ("msg-2", 1, 10, "stream-msg-2"),
+        ]
+        assert api.markdown_messages() == []
+        assert hub.deliveries == ["sent", "sent"]
+        assert channel._live_states == {}
+        assert channel._live_tasks == set()
+    finally:
+        bus.stop()
+        dispatcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatcher
+        await channel.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("final_queued", [False, True])
+async def test_cancelled_turn_cleans_only_abandoned_preview(
+    monkeypatch: pytest.MonkeyPatch, final_queued: bool
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = _QQApi()
+    channel, event_bus, hub, inbound = await _started_channel(api)
+    bus = MessageBus()
+    channel._bus = bus
+    bus.subscribe_outbound("qqbot", channel._on_response)
+    sink = _stream_sink(channel, event_bus, inbound)
+    assert sink is not None
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        async with bus.transport_lock:
+            await sink("取消前的预览")
+            await channel._drain_live_tasks()
+            if final_queued:
+                await bus.publish_outbound(_final_reply("已经提交的完整回复"))
+            await event_bus.observe(
+                TurnCancelled(SESSION_KEY, "qqbot", CHAT_ID, "msg-1")
+            )
+            assert bool(channel._live_states) is final_queued
+            if not final_queued:
+                assert api.calls[-1][:2] == (
+                    "DELETE",
+                    "/v2/users/user-1/messages/stream-1",
+                )
+                assert channel._reply_buffers == {}
+                assert channel._live_stop_events == {}
+            await event_bus.observe(
+                TurnStarted(
+                    SESSION_KEY,
+                    "qqbot",
+                    CHAT_ID,
+                    "新问题",
+                    datetime.now(),
+                    external_message_id="msg-2",
+                )
+            )
+        await asyncio.wait_for(bus.drain_outbound(), 1)
+        assert channel._live_states == {}
+        assert api.markdown_messages() == []
+        assert hub.deliveries == (["sent"] if final_queued else [])
+    finally:
+        bus.stop()
+        dispatcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatcher
+        await channel.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_terminal", [False, True])
+@pytest.mark.parametrize("request_fails", [False, True])
+async def test_bus_cancelled_delivery_with_failed_recall_never_replays(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    cancel_terminal: bool,
+    request_fails: bool,
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = _QQApi()
+    channel, event_bus, hub, inbound = await _started_channel(api)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        result = api.handler(request)
+        if request.url.path == STREAM_PATH:
+            terminal = json.loads(request.content)["input_state"] == 10
+            if terminal == cancel_terminal:
+                entered.set()
+                await release.wait()
+                if request_fails:
+                    return httpx.Response(500)
+        if request.method == "DELETE":
+            return httpx.Response(500)
+        return result
+
+    await channel._client.aclose()
+    channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    sink = _stream_sink(channel, event_bus, inbound)
+    assert sink is not None
+    bus = MessageBus()
+    bus.subscribe_outbound("qqbot", channel._on_response)
+    await sink("取消前的预览")
+    if cancel_terminal:
+        await channel._drain_live_tasks()
+    dispatch = asyncio.create_task(bus._dispatch_message(_final_reply("完整回复")))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        await asyncio.sleep(0)
+        dispatch.cancel()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(dispatch, 3)
+        assert api.markdown_messages() == []
+        assert hub.deliveries == ["failed"]
+        recall_attempted = cancel_terminal == request_fails
+        assert sum(method == "DELETE" for method, _, _ in api.calls) == int(
+            recall_attempted
+        )
+        if recall_attempted:
+            assert "取消投递后撤回流式预览失败" in caplog.text
+        if cancel_terminal and request_fails:
+            assert "取消流式投递后等待发送回执失败" in caplog.text
+        assert channel._live_states == {}
+        assert channel._live_tasks == set()
+    finally:
+        release.set()
+        await channel.stop()
