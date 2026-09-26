@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { bridgeTimeoutPolicy } from "../../../src/bridge/bridgeTimeoutPolicy";
 import { errorMessage } from "../shared/feedback/feedbackStore";
 
 type Selection = { status: "loading" | "ready" | "error"; pluginId: string; error: string };
-const settingsReadTimeoutMs = 15_000;
+/** The bridge gets its full request deadline; IPC delivery and UI scheduling get 5s more. */
+export const settingsReadTimeoutMs = bridgeTimeoutPolicy.defaultRequest + 5_000;
 
 /** Maps the saved memory engine to the plugin that owns its Dashboard. */
 export function memoryPluginId(engine: string): string {
