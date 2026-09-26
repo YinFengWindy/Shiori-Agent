@@ -1,4 +1,4 @@
-"""真实 qqbot schema 与显式 v2 fixture 的插件配置通道回归。"""
+"""Generic plugin config transaction with an explicit v2 schema fixture."""
 
 from __future__ import annotations
 
@@ -15,7 +15,9 @@ from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
-_QQBOT_PLUGIN_DIR = _REPOSITORY_ROOT / "plugins" / "qqbot"
+_CONFIG_FIXTURE_DIR = (
+    _REPOSITORY_ROOT / "tests" / "fixtures" / "plugins" / "config_fixture"
+)
 _TOOL_LOOP_GUARD_PLUGIN_DIR = _REPOSITORY_ROOT / "plugins" / "tool_loop_guard"
 _HELLO_FIXTURE_DIR = _REPOSITORY_ROOT / "tests" / "fixtures" / "plugins" / "hello"
 _NULLABLE_FIXTURE_DIR = (
@@ -32,10 +34,10 @@ def _config(*, extra: str = "") -> str:
 
 
 def _stage_plugin_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stages qqbot (has ConfigModel), tool_loop_guard (has ConfigModel), hello (has
+    """Stages config_fixture (has ConfigModel), tool_loop_guard (has ConfigModel), hello (has
     none) and a nullable-default model."""
     root = tmp_path / "plugin_dirs"
-    shutil.copytree(_QQBOT_PLUGIN_DIR, root / "qqbot")
+    shutil.copytree(_CONFIG_FIXTURE_DIR, root / "config_fixture")
     _ = stage_plugin_package(_TOOL_LOOP_GUARD_PLUGIN_DIR, root / "tool_loop_guard")
     _ = stage_plugin_package(_HELLO_FIXTURE_DIR, root / "hello")
     _ = stage_plugin_package(_NULLABLE_FIXTURE_DIR, root / "nullable_config")
@@ -73,11 +75,13 @@ async def test_get_returns_schema_and_default_backed_values(tmp_path, monkeypatc
     _stage_plugin_dirs(tmp_path, monkeypatch)
     service, _, app = await _start_service(tmp_path)
     try:
-        response = await _request(service, "plugin.config.get", {"plugin_id": "qqbot"})
+        response = await _request(
+            service, "plugin.config.get", {"plugin_id": "config_fixture"}
+        )
 
         assert response.error is None, response.error
-        assert response.payload["plugin_id"] == "qqbot"
-        assert response.payload["schema"]["title"] == "QQBotConfigModel"
+        assert response.payload["plugin_id"] == "config_fixture"
+        assert response.payload["schema"]["title"] == "ConfigFixtureModel"
         # 未写入过配置：值来自模型默认值补全
         assert response.payload["values"]["app_id"] == ""
         assert response.payload["values"]["client_secret"] == ""
@@ -146,7 +150,7 @@ async def test_set_rejects_invalid_values_and_writes_nothing(tmp_path, monkeypat
             service,
             "plugin.config.set",
             {
-                "plugin_id": "qqbot",
+                "plugin_id": "config_fixture",
                 "operation_id": "op-invalid",
                 "values": {"groups": 123},
             },
@@ -170,14 +174,14 @@ async def test_set_validates_commits_and_survives_a_restart(tmp_path, monkeypatc
             service,
             "plugin.config.set",
             {
-                "plugin_id": "qqbot",
+                "plugin_id": "config_fixture",
                 "operation_id": "op-valid",
                 "values": {"app_id": "app-123", "client_secret": "secret-xyz"},
             },
         )
 
         assert response.error is None, response.error
-        assert response.payload["plugin_id"] == "qqbot"
+        assert response.payload["plugin_id"] == "config_fixture"
         assert response.payload["values"]["app_id"] == "app-123"
         assert response.payload["values"]["client_secret"] == "secret-xyz"
         assert "generation" in response.payload
@@ -188,7 +192,9 @@ async def test_set_validates_commits_and_survives_a_restart(tmp_path, monkeypatc
         assert "secret-xyz" in on_disk
 
         # 同一 generation 内立即读回一致
-        after = await _request(service, "plugin.config.get", {"plugin_id": "qqbot"})
+        after = await _request(
+            service, "plugin.config.get", {"plugin_id": "config_fixture"}
+        )
         assert after.payload["values"]["app_id"] == "app-123"
     finally:
         await service.aclose()
@@ -196,8 +202,8 @@ async def test_set_validates_commits_and_survives_a_restart(tmp_path, monkeypatc
 
     # 模拟进程重启：脱离当前运行时，从磁盘文件重新解析配置
     restarted = load_config_text(path.read_text(encoding="utf-8"))
-    assert restarted.plugins["qqbot"]["app_id"] == "app-123"
-    assert restarted.plugins["qqbot"]["client_secret"] == "secret-xyz"
+    assert restarted.plugins["config_fixture"]["app_id"] == "app-123"
+    assert restarted.plugins["config_fixture"]["client_secret"] == "secret-xyz"
 
     # 只证明磁盘文件正确还不够：验收标准要求"写入成功后事务化应用并在重启后
     # 保持"，真正需要证明的是重启后的运行时能读回新值，而不只是磁盘字节正确。
@@ -216,7 +222,7 @@ async def test_set_validates_commits_and_survives_a_restart(tmp_path, monkeypatc
         response_after_restart = await _request(
             restarted_service,
             "plugin.config.get",
-            {"plugin_id": "qqbot"},
+            {"plugin_id": "config_fixture"},
         )
         assert response_after_restart.error is None, response_after_restart.error
         assert response_after_restart.payload["values"]["app_id"] == "app-123"
@@ -291,7 +297,7 @@ async def test_set_rejects_a_merge_that_corrupts_an_unrelated_table(
             service,
             "plugin.config.set",
             {
-                "plugin_id": "qqbot",
+                "plugin_id": "config_fixture",
                 "operation_id": "op-corrupt",
                 "values": {"app_id": "app-1", "client_secret": "secret-1"},
             },
@@ -326,7 +332,7 @@ async def test_set_requires_plugin_id_and_operation_id(tmp_path, monkeypatch):
             service,
             "plugin.config.set",
             {
-                "plugin_id": "qqbot",
+                "plugin_id": "config_fixture",
                 "values": {},
             },
         )
@@ -384,7 +390,7 @@ async def test_set_survives_the_kernel_generation_being_replaced(tmp_path, monke
 
         async def _apply_with_disposed_kernel(*args, **kwargs):
             # 模拟旧代被处置：schema 注册表已清空
-            kernel.config_schemas.unregister("qqbot")
+            kernel.config_schemas.unregister("config_fixture")
             return await original_merge(*args, **kwargs)
 
         monkeypatch.setattr(
@@ -395,7 +401,7 @@ async def test_set_survives_the_kernel_generation_being_replaced(tmp_path, monke
             service,
             "plugin.config.set",
             {
-                "plugin_id": "qqbot",
+                "plugin_id": "config_fixture",
                 "operation_id": "op-stale",
                 "values": {"app_id": "app-1", "client_secret": "s-1"},
             },
@@ -422,7 +428,7 @@ async def test_identical_retry_is_idempotent_after_unrelated_config_changes(
     service, path, app = await _start_service(tmp_path)
     try:
         payload = {
-            "plugin_id": "qqbot",
+            "plugin_id": "config_fixture",
             "operation_id": "op-retry",
             "values": {"app_id": "app-1", "client_secret": "s-1"},
         }
@@ -460,7 +466,7 @@ async def test_identical_retry_hits_memo_even_when_re_deriving_would_now_fail_th
     service, path, app = await _start_service(tmp_path)
     try:
         payload = {
-            "plugin_id": "qqbot",
+            "plugin_id": "config_fixture",
             "operation_id": "op-retry-guard",
             "values": {"app_id": "app-1", "client_secret": "s-1"},
         }
@@ -484,8 +490,8 @@ async def test_identical_retry_hits_memo_even_when_re_deriving_would_now_fail_th
 async def test_set_rejects_a_dotted_key_form_it_cannot_locate(tmp_path, monkeypatch):
     """``[plugins]`` 下用点分键写目标插件（合法 TOML）时必须被明确拒绝。
 
-    定位器只认独立的表头行；``[plugins]`` 表下 ``qqbot.app_id = "existing"``
-    这类点分键合法但定位不到，若照常走追加分支会生成 ``plugins.qqbot`` 的重复
+    定位器只认独立的表头行；``[plugins]`` 表下 ``config_fixture.app_id = "existing"``
+    这类点分键合法但定位不到，若照常走追加分支会生成 ``plugins.config_fixture`` 的重复
     表声明，解析失败后被守卫报出一个跟真实原因（点分键）毫无关系的
     plugin_config_unrepresentable 文案；用户永远存不上，也看不懂问题在哪。
 
@@ -499,14 +505,14 @@ async def test_set_rejects_a_dotted_key_form_it_cannot_locate(tmp_path, monkeypa
     try:
         before = path.read_text(encoding="utf-8")
         service.settings.config_text = (
-            before + '\n[plugins]\nqqbot.app_id = "existing"\n'
+            before + '\n[plugins]\nconfig_fixture.app_id = "existing"\n'
         )
 
         response = await _request(
             service,
             "plugin.config.set",
             {
-                "plugin_id": "qqbot",
+                "plugin_id": "config_fixture",
                 "operation_id": "op-dotted",
                 "values": {"app_id": "app-1", "client_secret": "secret-1"},
             },
@@ -586,7 +592,7 @@ async def test_illegal_persisted_repeat_limit_fails_load_but_stays_repairable(
     plugin_config_unsupported——用户唯一的出路是手改 config.toml，而这正是
     AC5（plugin.config.get/set 可读写、校验 repeat_limit）这条验收标准要保证
     永远可用的通道。这个洞不是 tool_loop_guard 独有的：任何在 setup() 里校验
-    自己 config_model 的插件（novelai、qqbot）今天都有同样的问题。
+    自己 config_model 的插件（novelai、config_fixture）今天都有同样的问题。
     """
     _stage_plugin_dirs(tmp_path, monkeypatch)
     service, path, app = await _start_service(
@@ -660,15 +666,15 @@ async def test_illegal_persisted_repeat_limit_fails_load_but_stays_repairable(
         await app.shutdown()
 
 
-_QQBOT_SECRET_REFERENCE = "${SHIORI_TEST_QQBOT_SECRET}"
+_CONFIG_SECRET_REFERENCE = "${SHIORI_TEST_CONFIG_SECRET}"
 
 
-def _qqbot_reference_config() -> str:
+def _config_fixture_reference_config() -> str:
     return _config(
         extra=(
-            "\n[plugins.qqbot]\n"
+            "\n[plugins.config_fixture]\n"
             'app_id = "app-old"\n'
-            f'client_secret = "{_QQBOT_SECRET_REFERENCE}"\n'
+            f'client_secret = "{_CONFIG_SECRET_REFERENCE}"\n'
         )
     )
 
@@ -678,17 +684,22 @@ async def test_get_returns_the_unexpanded_reference_and_its_env_status(
     tmp_path, monkeypatch
 ):
     """get 必须给出 config.toml 里的原始 ``${VAR}``，而不是运行时展开后的密钥。"""
-    monkeypatch.setenv("SHIORI_TEST_QQBOT_SECRET", "resolved-secret-value")
+    monkeypatch.setenv("SHIORI_TEST_CONFIG_SECRET", "resolved-secret-value")
     _stage_plugin_dirs(tmp_path, monkeypatch)
-    service, _, app = await _start_service(tmp_path, _qqbot_reference_config())
+    service, _, app = await _start_service(tmp_path, _config_fixture_reference_config())
     try:
         # 运行时拿到的仍是展开后的值：插件本身照常能用上密钥。
-        assert app.config.plugins["qqbot"]["client_secret"] == "resolved-secret-value"
+        assert (
+            app.config.plugins["config_fixture"]["client_secret"]
+            == "resolved-secret-value"
+        )
 
-        response = await _request(service, "plugin.config.get", {"plugin_id": "qqbot"})
+        response = await _request(
+            service, "plugin.config.get", {"plugin_id": "config_fixture"}
+        )
 
         assert response.error is None, response.error
-        assert response.payload["values"]["client_secret"] == _QQBOT_SECRET_REFERENCE
+        assert response.payload["values"]["client_secret"] == _CONFIG_SECRET_REFERENCE
         assert response.payload["env_status"] == {"client_secret": "set"}
         assert "resolved-secret-value" not in json.dumps(response.payload)
     finally:
@@ -698,14 +709,16 @@ async def test_get_returns_the_unexpanded_reference_and_its_env_status(
 
 @pytest.mark.asyncio
 async def test_get_reports_a_reference_whose_variable_is_not_set(tmp_path, monkeypatch):
-    monkeypatch.delenv("SHIORI_TEST_QQBOT_SECRET", raising=False)
+    monkeypatch.delenv("SHIORI_TEST_CONFIG_SECRET", raising=False)
     _stage_plugin_dirs(tmp_path, monkeypatch)
-    service, _, app = await _start_service(tmp_path, _qqbot_reference_config())
+    service, _, app = await _start_service(tmp_path, _config_fixture_reference_config())
     try:
-        response = await _request(service, "plugin.config.get", {"plugin_id": "qqbot"})
+        response = await _request(
+            service, "plugin.config.get", {"plugin_id": "config_fixture"}
+        )
 
         assert response.error is None, response.error
-        assert response.payload["values"]["client_secret"] == _QQBOT_SECRET_REFERENCE
+        assert response.payload["values"]["client_secret"] == _CONFIG_SECRET_REFERENCE
         assert response.payload["env_status"] == {"client_secret": "unset"}
     finally:
         await service.aclose()
@@ -715,29 +728,40 @@ async def test_get_reports_a_reference_whose_variable_is_not_set(tmp_path, monke
 @pytest.mark.asyncio
 async def test_reference_survives_an_unrelated_field_edit(tmp_path, monkeypatch):
     """渲染端保存时整表回传：改一个无关字段不能把展开后的密钥明文写回文件。"""
-    monkeypatch.setenv("SHIORI_TEST_QQBOT_SECRET", "resolved-secret-value")
+    monkeypatch.setenv("SHIORI_TEST_CONFIG_SECRET", "resolved-secret-value")
     _stage_plugin_dirs(tmp_path, monkeypatch)
-    service, path, app = await _start_service(tmp_path, _qqbot_reference_config())
+    service, path, app = await _start_service(
+        tmp_path, _config_fixture_reference_config()
+    )
     try:
-        loaded = await _request(service, "plugin.config.get", {"plugin_id": "qqbot"})
+        loaded = await _request(
+            service, "plugin.config.get", {"plugin_id": "config_fixture"}
+        )
         values = {**loaded.payload["values"], "app_id": "app-new"}
 
         response = await _request(
             service,
             "plugin.config.set",
-            {"plugin_id": "qqbot", "operation_id": "op-edit", "values": values},
+            {
+                "plugin_id": "config_fixture",
+                "operation_id": "op-edit",
+                "values": values,
+            },
         )
 
         assert response.error is None, response.error
         on_disk = path.read_text(encoding="utf-8")
         assert 'app_id = "app-new"' in on_disk
-        assert _QQBOT_SECRET_REFERENCE in on_disk
+        assert _CONFIG_SECRET_REFERENCE in on_disk
         assert "resolved-secret-value" not in on_disk
-        assert response.payload["values"]["client_secret"] == _QQBOT_SECRET_REFERENCE
+        assert response.payload["values"]["client_secret"] == _CONFIG_SECRET_REFERENCE
         assert response.payload["env_status"] == {"client_secret": "set"}
         assert "resolved-secret-value" not in json.dumps(response.payload)
         # 热应用后的运行时依旧拿到展开后的密钥。
-        assert app.config.plugins["qqbot"]["client_secret"] == "resolved-secret-value"
+        assert (
+            app.config.plugins["config_fixture"]["client_secret"]
+            == "resolved-secret-value"
+        )
     finally:
         await service.aclose()
         await app.shutdown()
@@ -745,15 +769,17 @@ async def test_reference_survives_an_unrelated_field_edit(tmp_path, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_a_typed_literal_replaces_the_reference(tmp_path, monkeypatch):
-    monkeypatch.setenv("SHIORI_TEST_QQBOT_SECRET", "resolved-secret-value")
+    monkeypatch.setenv("SHIORI_TEST_CONFIG_SECRET", "resolved-secret-value")
     _stage_plugin_dirs(tmp_path, monkeypatch)
-    service, path, app = await _start_service(tmp_path, _qqbot_reference_config())
+    service, path, app = await _start_service(
+        tmp_path, _config_fixture_reference_config()
+    )
     try:
         response = await _request(
             service,
             "plugin.config.set",
             {
-                "plugin_id": "qqbot",
+                "plugin_id": "config_fixture",
                 "operation_id": "op-literal",
                 "values": {"app_id": "app-old", "client_secret": "typed-literal"},
             },
@@ -762,9 +788,9 @@ async def test_a_typed_literal_replaces_the_reference(tmp_path, monkeypatch):
         assert response.error is None, response.error
         on_disk = path.read_text(encoding="utf-8")
         assert 'client_secret = "typed-literal"' in on_disk
-        assert _QQBOT_SECRET_REFERENCE not in on_disk
+        assert _CONFIG_SECRET_REFERENCE not in on_disk
         assert response.payload["env_status"] == {}
-        assert app.config.plugins["qqbot"]["client_secret"] == "typed-literal"
+        assert app.config.plugins["config_fixture"]["client_secret"] == "typed-literal"
     finally:
         await service.aclose()
         await app.shutdown()

@@ -106,7 +106,7 @@ async def _list_channels(
 
 
 @pytest.mark.asyncio
-async def test_lists_desktop_builtins_and_unconfigured_qqbot(tmp_path, monkeypatch):
+async def test_lists_desktop_builtins_and_account_ready_qqbot(tmp_path, monkeypatch):
     rows = await _list_channels(tmp_path, monkeypatch)
     assert list(rows) == ["desktop", "qq", "qqbot", "telegram"]
     assert rows["desktop"]["state"] == "active"
@@ -134,7 +134,7 @@ async def test_lists_desktop_builtins_and_unconfigured_qqbot(tmp_path, monkeypat
         ],
         "plugin_id": "qqbot",
         "plugin_enabled": True,
-        "state": "not_configured",
+        "state": "active",
         "error": "",
         "status": None,
     }

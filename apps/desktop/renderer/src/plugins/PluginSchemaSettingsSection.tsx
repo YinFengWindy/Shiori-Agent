@@ -40,9 +40,10 @@ export function PluginSchemaSettingsSection({ pluginId }: PluginSchemaSettingsSe
       />
     );
   }
-  if (!schema || !draft || !envStatus) {
+  if (!draft || !envStatus) {
     return <div className="text-sm text-ink-muted">正在加载插件配置…</div>;
   }
+  if (!schema) return null;
 
   const { primary, advanced } = partitionPluginConfigFields(describePluginConfigFields(schema));
   const row = (field: PluginConfigField) => (

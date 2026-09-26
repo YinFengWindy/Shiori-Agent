@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import Callable
 
 import httpx
 import websockets
@@ -24,9 +24,6 @@ from .outbound import _OutboundMixin
 from .stream_delivery import _LiveTurnKey, _StreamState
 from .streaming import _StreamingMixin
 
-if TYPE_CHECKING:
-    from .plugin import QQBotGroupConfigModel
-
 logger = logging.getLogger(__name__)
 
 
@@ -44,14 +41,22 @@ class QQBotChannel(
         self,
         app_id: str,
         client_secret: str,
-        groups: list["QQBotGroupConfigModel"] | None = None,
         chat_types: tuple[ChatTypeDeclaration, ...] = (),
+        *,
+        scoped: bool = False,
+        account_id: str = "",
+        on_status: Callable[[str, str, str, str], None] | None = None,
+        on_target: Callable[[str], None] | None = None,
     ) -> None:
         self._app_id = app_id
         # The manifest's session types, for answering ``/chatid``.
         self._chat_types = chat_types
         self._client_secret = client_secret
-        self._groups = {str(group.group_openid): group for group in (groups or [])}
+        self._scoped = scoped
+        self._account_id = account_id
+        self._on_status = on_status
+        self._on_target = on_target
+        self._public_hooks = False
         self._bus: MessageBus | None = None
         self._interrupt_controller: InterruptController | None = None
         self._channel_hub: ChannelHub | None = None
@@ -60,6 +65,9 @@ class QQBotChannel(
         self._token: _TokenCache | None = None
         self._task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
+        self._ready = asyncio.Event()
+        self._first_gateway_result: tuple[str, str] = ("", "")
+        self._connection_state = "unknown"
         self._intake = ChannelIntake(self._accept_inbound, self.send)
         self._event_bus = None
         self._push_tool = None
@@ -86,7 +94,7 @@ class QQBotChannel(
             "official-qqbot",
             self._app_id,
             self._client_secret,
-            {key: group.model_dump() for key, group in self._groups.items()},
+            self._scoped,
         )
 
     def supports_stream_events(self, chat_id: str) -> bool:
@@ -101,7 +109,7 @@ class QQBotChannel(
         """Keeps proactive sends on `qqbot` instead of NapCat's `qq`."""
         return SYSTEM_PROMPT_HINT
 
-    async def start(self, ctx: ChannelContext) -> None:
+    async def start(self, ctx: ChannelContext, *, public_hooks: bool = True) -> None:
         """Registers runtime hooks and starts the official Gateway loop."""
         self._bus = ctx.bus
         self._interrupt_controller = ctx.interrupt_controller
@@ -110,21 +118,23 @@ class QQBotChannel(
         self._push_tool = ctx.push_tool
         if self._client.is_closed:
             self._client = httpx.AsyncClient(timeout=30.0)
-        if not self._events_bound:
+        self._public_hooks = public_hooks
+        if public_hooks and not self._events_bound:
             for event_type, handler in self._event_bindings:
                 ctx.event_bus.on(event_type, handler)
             self._events_bound = True
-        ctx.push_tool.register_channel(
-            self.name,
-            text=self.send_proactive,
-            stream_text=self.send_stream,
-            image=self.send_image,
-            description=PUSH_TARGET_HINT,
-        )
+        if public_hooks:
+            ctx.push_tool.register_channel(
+                self.name,
+                text=self.send_proactive,
+                stream_text=self.send_stream,
+                image=self.send_image,
+                description=PUSH_TARGET_HINT,
+            )
         self._stopped.clear()
         self._intake.start(paused=ctx.intake_paused)
         self._task = asyncio.create_task(self._gateway_loop(), name="qqbot_gateway")
-        if not self._outbound_bound:
+        if public_hooks and not self._outbound_bound:
             ctx.bus.subscribe_outbound(CHANNEL, self._on_response)
             self._outbound_bound = True
         logger.info("[qqbot] 官方 QQBot 通道已启动")
@@ -151,7 +161,7 @@ class QQBotChannel(
             for event_type, handler in self._event_bindings:
                 self._event_bus.off(event_type, handler)
             self._events_bound = False
-        if self._push_tool is not None:
+        if self._push_tool is not None and self._public_hooks:
             self._push_tool.unregister_channel(self.name, text=self.send_proactive)
         logger.info("[qqbot] 官方 QQBot 通道已停止")
 
@@ -167,3 +177,15 @@ class QQBotChannel(
         if self._bus is None:
             raise RuntimeError("QQBotChannel 尚未启动")
         return self._bus
+
+    def _chat_id(self, openid: str) -> str:
+        return f"c2c:{self._app_id}:{openid}" if self._scoped else f"c2c:{openid}"
+
+    def _parse_chat_id(self, chat_id: str) -> tuple[str, str]:
+        kind, target = self._split_chat_id(chat_id)
+        if self._scoped:
+            prefix = f"{self._app_id}:"
+            if not target.startswith(prefix):
+                raise ValueError("QQBot 目标不属于此应用账号")
+            target = target[len(prefix) :]
+        return kind, target

@@ -9,7 +9,10 @@ import pytest
 from shiori_plugin_testkit.packages import stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel, load_manifest
+from agent.plugin_host.kv import PluginKVStore
 from bus.event_bus import EventBus
+from core.roles.store import RoleStore
+from plugins.qqbot.backend.accounts import QQBotAccountStore
 from plugins.qqbot.backend.plugin import QQBotConfigModel
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
@@ -24,7 +27,10 @@ def _load_qqbot_channels(
         kernel = PluginKernel(
             [Path(tmp)],
             services=HostServices(
-                event_bus=EventBus(), plugin_configs=plugin_configs or {}
+                event_bus=EventBus(),
+                plugin_configs=plugin_configs or {},
+                workspace=Path(tmp),
+                role_store=RoleStore(Path(tmp)),
             ),
         )
         asyncio.run(kernel.load_all())
@@ -44,8 +50,11 @@ def test_qqbot_manifest_declares_its_channel_for_binding_discovery() -> None:
     assert (private.type, private.prefix) == ("private", "c2c:")
 
 
-def test_qqbot_plugin_skips_channel_without_credentials() -> None:
-    assert _load_qqbot_channels() == []
+def test_qqbot_plugin_exposes_an_empty_account_channel() -> None:
+    channels = _load_qqbot_channels()
+    assert len(channels) == 1
+    assert channels[0].name == "qqbot"
+    assert channels[0]._channels == {}
 
 
 def test_qqbot_plugin_accepts_legacy_config_aliases() -> None:
@@ -62,13 +71,39 @@ def test_qqbot_plugin_accepts_legacy_config_aliases() -> None:
 
     assert len(channels) == 1
     assert channels[0].name == "qqbot"
-    assert channels[0]._app_id == "app"
-    assert channels[0]._client_secret == "secret"
-    assert not hasattr(channels[0], "_allow_from")
+    assert channels[0]._identity.account_id("app")
 
 
-def test_qqbot_plugin_skips_channel_when_only_app_id_present() -> None:
-    assert _load_qqbot_channels({"qqbot": {"app_id": "app"}}) == []
+def test_qqbot_plugin_migrates_original_secret_reference() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        workspace = Path(tmp)
+        plugin_dir = workspace / "qqbot"
+        stage_plugin_package(PLUGIN_DIR, plugin_dir)
+        kernel = PluginKernel(
+            [workspace],
+            services=HostServices(
+                event_bus=EventBus(),
+                workspace=workspace,
+                role_store=RoleStore(workspace),
+                plugin_configs={
+                    "qqbot": {"app_id": "100", "client_secret": "expanded"}
+                },
+                raw_plugin_configs={
+                    "qqbot": {"app_id": "100", "client_secret": "${QQBOT_SECRET}"}
+                },
+            ),
+        )
+        asyncio.run(kernel.load_all())
+        assert kernel.loaded_count == 1
+        store = QQBotAccountStore(
+            PluginKVStore(workspace / "plugin-data" / "qqbot" / "kv.json")
+        )
+        assert store.get("100")["client_secret"] == "${QQBOT_SECRET}"
+
+
+def test_qqbot_plugin_does_not_migrate_incomplete_legacy_credentials() -> None:
+    [channel] = _load_qqbot_channels({"qqbot": {"app_id": "app"}})
+    assert channel._identity.account_id("app") == ""
 
 
 def test_qqbot_config_model_validates_directly() -> None:
@@ -82,8 +117,8 @@ def test_qqbot_config_model_validates_directly() -> None:
 
 
 @pytest.mark.asyncio
-async def test_qqbot_setup_raises_on_invalid_config_and_kernel_rolls_back() -> None:
-    """配置校验失败时插件加载失败并回滚，行为对齐旧 _load_plugin_config。"""
+async def test_qqbot_setup_ignores_removed_group_settings() -> None:
+    """A leftover legacy group field cannot block a C2C account migration."""
     with tempfile.TemporaryDirectory() as tmp:
         plugin_dir = Path(tmp) / "qqbot"
         stage_plugin_package(PLUGIN_DIR, plugin_dir)
@@ -91,13 +126,14 @@ async def test_qqbot_setup_raises_on_invalid_config_and_kernel_rolls_back() -> N
             [Path(tmp)],
             services=HostServices(
                 event_bus=EventBus(),
-                # groups 必须是数组；传入非法类型触发 pydantic 校验错误
                 plugin_configs={"qqbot": {"groups": {"not": "a list"}}},
+                workspace=Path(tmp),
+                role_store=RoleStore(Path(tmp)),
             ),
         )
         await kernel.load_all()
 
-        assert kernel.loaded_count == 0
+        assert kernel.loaded_count == 1
 
 
 def test_qqbot_channel_does_not_consume_bot_commands() -> None:
@@ -111,5 +147,5 @@ def test_config_schema_labels_fields_for_the_settings_form() -> None:
     properties = QQBotConfigModel.model_json_schema()["properties"]
     auto_titles = {key: key.replace("_", " ").title() for key in properties}
     assert all(properties[key]["title"] != auto_titles[key] for key in properties)
-    # Access control lives on role bindings; the plugin has no whitelist (#398).
+    assert "groups" not in properties
     assert "allow_from" not in properties

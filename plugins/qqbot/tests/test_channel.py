@@ -170,6 +170,13 @@ async def test_qqbot_gateway_sends_identify_payload(
             self._messages = iter(
                 [
                     json.dumps({"op": 10, "d": {"heartbeat_interval": 60_000}}),
+                    json.dumps(
+                        {
+                            "op": 0,
+                            "t": "READY",
+                            "d": {"user": {"id": "bot-id", "username": "Bot One"}},
+                        }
+                    ),
                     json.dumps({"op": 7, "d": {}}),
                 ]
             )
@@ -195,7 +202,10 @@ async def test_qqbot_gateway_sends_identify_payload(
     websocket = _WebSocket()
     monkeypatch.setattr(qqbot_channel.websockets, "connect", lambda _url: websocket)
 
-    await QQBotChannel("app", "secret")._run_gateway("wss://gateway.invalid", "token")
+    statuses: list[tuple[str, str, str, str]] = []
+    await QQBotChannel(
+        "app", "secret", on_status=lambda *status: statuses.append(status)
+    )._run_gateway("wss://gateway.invalid", "token")
 
     assert websocket.sent == [
         {
@@ -207,6 +217,7 @@ async def test_qqbot_gateway_sends_identify_payload(
             },
         }
     ]
+    assert statuses == [("online", "", "Bot One", "bot-id")]
 
 
 @pytest.mark.asyncio
@@ -229,6 +240,23 @@ async def test_qqbot_c2c_inbound_is_role_routed_and_deduplicated() -> None:
     assert bus.inbound[0].chat_id == "c2c:user-1"
     assert bus.inbound[0].metadata["role_id"] == "mira"
     assert channel._send_input_notify.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_scoped_c2c_inbound_records_application_account() -> None:
+    bus = _Bus()
+    channel = QQBotChannel("app-1", "secret", scoped=True, account_id="account-1")
+    channel._bus = bus
+    channel._channel_hub = _Hub()
+    channel._send_input_notify = AsyncMock()
+
+    await channel._handle_c2c(
+        {"id": "message-1", "author": {"user_openid": "opaque-user"}, "content": "hi"}
+    )
+
+    assert bus.inbound[0].chat_id == "c2c:app-1:opaque-user"
+    assert bus.inbound[0].metadata["account_id"] == "account-1"
+    assert bus.inbound[0].metadata["qqbot_app_id"] == "app-1"
 
 
 @pytest.mark.asyncio

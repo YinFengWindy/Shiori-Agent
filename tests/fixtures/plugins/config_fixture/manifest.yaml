@@ -1,0 +1,5 @@
+api: 2
+id: config_fixture
+version: "0.1.0"
+capabilities: [config]
+config_model: ConfigFixtureModel
