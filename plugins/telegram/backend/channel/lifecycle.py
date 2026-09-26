@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from telegram import BotCommand, Update
-from telegram.error import InvalidToken, TelegramError
+from telegram.error import InvalidToken
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from agent.looping.interrupt import InterruptController
@@ -141,8 +141,6 @@ class TelegramChannel(
             EventBinding(ToolCallCompleted, self._on_tool_call_completed),
         )
         self._polling_conflict_task: asyncio.Task[None] | None = None
-        self._polling_recovery_task: asyncio.Task[None] | None = None
-        self._polling_retryable = False
         self._telegram_outbound_limiter = TelegramOutboundLimiter()
         self._active_streams: dict[str, TelegramStreamMessage] = {}
         self._live_edit_queue = TelegramLiveEditQueue(
@@ -280,9 +278,15 @@ class TelegramChannel(
 
     def mark_online(self) -> None:
         """A successful platform call confirms this Bot is reachable again."""
+        updater = self._app.updater
+        if (
+            updater is None
+            or not updater.running
+            or self._polling_conflict_task is not None
+        ):
+            return
         if not self._online:
             self._online = True
-            self._polling_retryable = False
             self._report_account("online")
 
     def _bind_session_manager(self, session_manager: SessionManager) -> None:
@@ -380,14 +384,6 @@ class TelegramChannel(
             self._push_tool.unregister_channel(self.name, text=self.send)
 
     async def _stop_connection(self) -> None:
-        self._polling_retryable = False
-        if self._polling_recovery_task and not self._polling_recovery_task.done():
-            self._polling_recovery_task.cancel()
-            try:
-                await self._polling_recovery_task
-            except asyncio.CancelledError:
-                pass
-        self._polling_recovery_task = None
         if self._polling_conflict_task and not self._polling_conflict_task.done():
             await self._polling_conflict_task
         if self._live_tasks:
@@ -400,23 +396,6 @@ class TelegramChannel(
         await self._intake.close()
         await self._app.shutdown()
         logger.info("TelegramChannel 已停止")
-
-    async def _probe_polling_recovery(self) -> None:
-        """Reconfirm connectivity after transient polling errors without new updates."""
-        delay = 5.0
-        updater = self._app.updater
-        while updater is not None and updater.running and self._polling_retryable:
-            await asyncio.sleep(delay)
-            if not self._polling_retryable:
-                return
-            try:
-                await self._app.bot.get_me()
-            except TelegramError:
-                delay = min(delay * 2, 30.0)
-                continue
-            if updater.running:
-                self.mark_online()
-            return
 
     # ── 私有方法 ──────────────────────────────────────────────────
 

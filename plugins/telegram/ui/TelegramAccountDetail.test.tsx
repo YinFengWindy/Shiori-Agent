@@ -94,3 +94,44 @@ test("new-account form repairs an invalid legacy Token in place", async () => {
     await view.cleanup();
   }
 });
+
+test("adding a second Bot preserves an already registered legacy account", async () => {
+  const submissions: Record<string, unknown>[] = [];
+  const legacyAccount = {
+    id: "legacy-account", plugin_id: "telegram", platform: "telegram", platform_account_id: "123", config_ref: "legacy",
+    display_name: "First Bot", avatar_url: "", role_id: null, plugin_enabled: true,
+    runtime_active: true, connection: "online", capabilities: [], known_capabilities: [], error: "",
+    response_rules: { private_enabled: true, group_enabled: true, require_mention: true,
+      blocked_sender_ids: [], group_rules: [] },
+  };
+  const client = { call: async (name: string) => {
+    assert.equal(name, "token.verify");
+    return { bot_id: "456" };
+  } } as PluginRpcClient;
+  const view = await mountTestComponent(
+    <TelegramAccountDetail account={null} onChanged={() => undefined} client={client} host={desktopPluginHostServices} />,
+    { windowGlobals: { miraDesktop: { invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
+      if (method === "plugin.config.set") submissions.push(payload.values as Record<string, unknown>);
+      return { id: "response", type: "response", method, error: null, payload:
+        method === "plugin.config.get" ? { plugin_id: "telegram", schema: null,
+          values: { token: "123:old", bots: [] }, env_status: {} }
+          : method === "accounts.list" ? { accounts: [legacyAccount] }
+            : { plugin_id: "telegram", values: submissions.at(-1), env_status: {}, generation: 2 } };
+    } } } },
+  );
+  try {
+    const input = view.container.querySelector<HTMLInputElement>('input[type="password"]');
+    assert.ok(input);
+    await changeInputValue(input, "456:new");
+    const save = Array.from(view.container.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "保存并连接");
+    await act(async () => save?.click());
+    const bots = submissions[0]?.bots as Array<{ ref: string; token: string }>;
+    assert.equal(bots[0]?.ref, "legacy");
+    assert.equal(bots[0]?.token, "123:old");
+    assert.equal(bots[1]?.token, "456:new");
+    assert.notEqual(bots[1]?.ref, "legacy");
+  } finally {
+    await view.cleanup();
+  }
+});

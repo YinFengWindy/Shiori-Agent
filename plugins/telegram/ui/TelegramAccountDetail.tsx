@@ -1,4 +1,4 @@
-import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react";
+import { EyeIcon, EyeSlashIcon, InfoIcon } from "@phosphor-icons/react";
 import { useEffect, useId, useState } from "react";
 import { createPluginBridgeClient, type PluginConfigSnapshot } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import { createAccountClient } from "../../../apps/desktop/renderer/src/accounts/accountClient";
@@ -43,17 +43,23 @@ export function TelegramAccountDetail({ account, onChanged, client, host }: Plug
     setError("");
     try {
       let identity: { bot_id: string } | undefined;
+      let existingAccounts: Awaited<ReturnType<typeof accountsClient.list>> | undefined;
       if (token.trim()) {
         identity = await client.call<{ bot_id: string }>("token.verify", { token: token.trim() });
         const botId = identity.bot_id;
         if (account && botId !== account.platformAccountId) {
           throw new Error("新 Token 属于另一个 Bot，请添加新账号");
         }
-        if (!account && (await accountsClient.list()).some((item) => item.pluginId === "telegram" && item.platformAccountId === botId)) {
+        if (!account) existingAccounts = await accountsClient.list();
+        if (!account && existingAccounts?.some((item) => item.pluginId === "telegram" && item.platformAccountId === botId)) {
           throw new Error("此 Bot 已添加");
         }
       }
-      const ref = account?.configRef ?? legacyRefToRepair(config) ?? crypto.randomUUID().replaceAll("-", "");
+      const repairRef = legacyRefToRepair(config);
+      const canRepairLegacy = repairRef && !existingAccounts?.some(
+        (item) => item.pluginId === "telegram" && item.configRef === repairRef,
+      );
+      const ref = account?.configRef ?? (canRepairLegacy ? repairRef : null) ?? crypto.randomUUID().replaceAll("-", "");
       const values = withTelegramBot(config, ref, token.trim() || undefined, enabled);
       const result = await configClient.setConfig("telegram", values, { operationId: crypto.randomUUID() });
       setConfig({ ...config, values: result.values, envStatus: result.envStatus });
@@ -91,14 +97,18 @@ export function TelegramAccountDetail({ account, onChanged, client, host }: Plug
         onClick={() => void save(true)}>重新连接</button>}
     </div>
     {account && <section className="grid gap-2 border-t border-line-soft pt-4">
-      <h3 className="m-0 text-body font-semibold text-ink">已知会话</h3>
+      <h3 className="m-0 flex items-center gap-2 text-body font-semibold text-ink">
+        已知会话
+        <span role="note" aria-label="Telegram 隐私模式可能限制普通群消息接收" title="Telegram 隐私模式可能限制普通群消息接收">
+          <InfoIcon className="h-4 w-4 text-ink-muted" />
+        </span>
+      </h3>
       <ul className="m-0 grid gap-1 p-0 text-body-sm text-ink-secondary">
         {known.map((chat) => <li key={chat.chat_id} className="flex justify-between gap-3">
           <span className="truncate">{chat.title || (chat.username ? `@${chat.username}` : chat.chat_id)}</span>
           <span className="shrink-0 text-ink-muted">{chat.chat_type} · {chat.chat_id}{chat.topics?.length ? ` · ${chat.topics.join(", ")}` : ""}</span>
         </li>)}
       </ul>
-      <p className="m-0 text-body-xs text-ink-muted">Telegram 隐私模式可能限制普通群消息接收。</p>
     </section>}
   </div>;
 }

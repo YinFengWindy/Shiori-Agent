@@ -120,7 +120,7 @@ async def test_auth_failure_reports_only_this_account_and_cleans_up():
 
 
 @pytest.mark.asyncio
-async def test_transient_polling_error_recovers_without_an_inbound_update(monkeypatch):
+async def test_transient_polling_error_waits_for_actual_inbound_recovery():
     channel = TelegramChannel("123:abc", name="telegram_first", config_ref="first")
     channel._accounts = Mock()
     channel._account_id = "account-1"
@@ -129,21 +129,17 @@ async def test_transient_polling_error_recovers_without_an_inbound_update(monkey
         updater=SimpleNamespace(running=True),
         bot=SimpleNamespace(get_me=AsyncMock(return_value=SimpleNamespace(id=123))),
     )
-    monkeypatch.setattr(
-        "plugins.telegram.backend.channel.lifecycle.asyncio.sleep", AsyncMock()
-    )
     channel._on_polling_error(NetworkError("temporary"))
     assert channel._online is False
     assert channel.can_send() is True
-    assert channel._polling_recovery_task is not None
-    await channel._polling_recovery_task
-    assert channel._online is True
-    assert [
-        call.kwargs["connection"] for call in channel._accounts.report.call_args_list
-    ] == [
-        "connecting",
-        "online",
-    ]
+    assert channel._accounts.report.call_args.kwargs["connection"] == "connecting"
     channel._on_polling_error(TelegramError("permanent polling failure"))
     assert channel._online is False
     assert channel._accounts.report.call_args.kwargs["connection"] == "error"
+    channel.mark_online()
+    assert channel._online is True
+    assert channel._accounts.report.call_args.kwargs["connection"] == "online"
+    channel._polling_conflict_task = Mock()
+    channel._on_polling_error(TelegramError("another failure"))
+    channel.mark_online()
+    assert channel._online is False

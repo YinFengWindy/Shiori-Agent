@@ -260,7 +260,6 @@ class _OutboundMixin:
         """处理 Telegram polling 异常，避免 Conflict 场景下持续刷屏。"""
         if isinstance(exc, Conflict):
             self._online = False
-            self._polling_retryable = False
             self._report_account("error", "Telegram getUpdates conflict")
             if self._polling_conflict_task is None:
                 logger.error(
@@ -273,28 +272,14 @@ class _OutboundMixin:
             return
         if isinstance(exc, InvalidToken):
             self._online = False
-            self._polling_retryable = False
             self._report_account("login_required", "Invalid Bot Token")
             return
         self._online = False
         retryable = isinstance(exc, (NetworkError, TimedOut))
-        self._polling_retryable = retryable
         self._report_account(
             "connecting" if retryable else "error",
             str(exc).replace(self._token, "[redacted]"),
         )
-        if (
-            retryable
-            and self._app.updater is not None
-            and self._app.updater.running
-            and (
-                self._polling_recovery_task is None
-                or self._polling_recovery_task.done()
-            )
-        ):
-            self._polling_recovery_task = asyncio.create_task(
-                self._probe_polling_recovery()
-            )
         logger.warning("[telegram] polling 异常，框架将自动重试: %s", exc)
 
     async def _disable_polling_on_conflict(self) -> None:
