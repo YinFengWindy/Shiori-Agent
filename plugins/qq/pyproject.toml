@@ -25,7 +25,7 @@ packages = [
 package-dir = {"plugins.qq" = "."}
 
 [tool.setuptools.package-data]
-"plugins.qq" = ["manifest.yaml", "TESTING.md", "backend/**/*.json", "backend/**/*.yaml", "backend/**/*.md"]
+"plugins.qq" = ["manifest.yaml", "TESTING.md", "NAPCAT-NOTICE.md", "backend/**/*.json", "backend/**/*.yaml", "backend/**/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

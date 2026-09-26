@@ -33,6 +33,7 @@ class QQConnectionConfig:
     auto_connect: bool = True
     verified: bool = False
     pending: QQPendingConnection | None = None
+    mode: str = "external"
 
     def public_dict(self) -> dict[str, str | float | bool]:
         """Projects editable settings without exposing the access token."""
@@ -47,6 +48,7 @@ class QQConnectionConfig:
             "auto_connect": self.auto_connect,
             "verified": self.verified,
             "pending": self.pending is not None,
+            "mode": self.mode,
         }
 
 

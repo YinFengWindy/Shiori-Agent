@@ -3,13 +3,14 @@ import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins
 
 type ConnectionSettings = {
   ref: string;
+  mode: "external" | "managed";
   ws_uri: string;
   timeout_seconds: number;
   has_token: boolean;
 };
 
-type Fields = { uri: string; token: string; timeout: string; clearToken: boolean };
-const emptyFields: Fields = { uri: "", token: "", timeout: "5", clearToken: false };
+type Fields = { mode: "external" | "managed"; uri: string; token: string; timeout: string; clearToken: boolean };
+const emptyFields: Fields = { mode: "external", uri: "", token: "", timeout: "5", clearToken: false };
 
 type FormOptions = {
   accountId?: string;
@@ -21,7 +22,8 @@ type FormOptions = {
 /** Owns QQ connection form loading, a saved baseline, and explicit commands. */
 export function useQQAccountForm({ accountId, draftRef, client, onChanged }: FormOptions) {
   const [fields, setFields] = useState<Fields>(emptyFields);
-  const [saved, setSaved] = useState({ ref: "", uri: "", timeout: "5", hasToken: false });
+  const [saved, setSaved] = useState({ ref: "", mode: "external" as Fields["mode"], uri: "", timeout: "5", hasToken: false });
+  const [managedAvailable, setManagedAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -31,25 +33,30 @@ export function useQQAccountForm({ accountId, draftRef, client, onChanged }: For
     setError("");
     if (!accountId && !draftRef) {
       setFields(emptyFields);
-      setSaved({ ref: "", uri: "", timeout: "5", hasToken: false });
+      setSaved({ ref: "", mode: "external", uri: "", timeout: "5", hasToken: false });
+      void client.call<{ managed_available: boolean }>("accounts.settings")
+        .then((result) => { if (current) setManagedAvailable(result.managed_available); })
+        .catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
       setLoading(false);
       return;
     }
     setLoading(true);
-    void client.call<{ account: ConnectionSettings }>("accounts.settings", accountId ? { account_id: accountId } : { ref: draftRef })
-      .then(({ account: settings }) => {
+    void client.call<{ account: ConnectionSettings; managed_available: boolean }>("accounts.settings", accountId ? { account_id: accountId } : { ref: draftRef })
+      .then(({ account: settings, managed_available: available }) => {
         if (!current) return;
+        setManagedAvailable(available);
         const timeout = String(settings.timeout_seconds);
-        setFields({ uri: settings.ws_uri, token: "", timeout, clearToken: false });
-        setSaved({ ref: settings.ref, uri: settings.ws_uri, timeout, hasToken: settings.has_token });
+        const mode = settings.mode ?? "external";
+        setFields({ mode, uri: settings.ws_uri, token: "", timeout, clearToken: false });
+        setSaved({ ref: settings.ref, mode, uri: settings.ws_uri, timeout, hasToken: settings.has_token });
       })
       .catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
   }, [accountId, draftRef, client]);
 
-  const dirty = fields.uri !== saved.uri || fields.timeout !== saved.timeout
-    || Boolean(fields.token) || fields.clearToken;
+  const dirty = fields.mode !== saved.mode || (fields.mode === "external" && (fields.uri !== saved.uri || fields.timeout !== saved.timeout
+    || Boolean(fields.token) || fields.clearToken));
   const ref = saved.ref || draftRef;
   const setField = <K extends keyof Fields>(key: K, value: Fields[K]) =>
     setFields((current) => ({ ...current, [key]: value }));
@@ -65,25 +72,26 @@ export function useQQAccountForm({ accountId, draftRef, client, onChanged }: For
   const save = () => run(async () => {
     const uri = fields.uri.trim();
     const result = await client.call<{ ref: string }>("accounts.save", {
-      account_id: accountId ?? "", ref, ws_uri: uri, ws_token: fields.token,
+      account_id: accountId ?? "", ref, mode: fields.mode, ws_uri: uri, ws_token: fields.token,
       clear_token: fields.clearToken, timeout_seconds: Number(fields.timeout),
     });
     const hasToken = !fields.clearToken && (saved.hasToken || Boolean(fields.token));
-    setFields({ uri, token: "", timeout: fields.timeout, clearToken: false });
-    setSaved({ ref: result.ref, uri, timeout: fields.timeout, hasToken });
+    setFields({ mode: fields.mode, uri, token: "", timeout: fields.timeout, clearToken: false });
+    setSaved({ ref: result.ref, mode: fields.mode, uri, timeout: fields.timeout, hasToken });
   });
   const connect = () => run(async () => {
     const result = await client.call<{ account_id: string }>("accounts.connect", { ref });
-    onChanged(result.account_id);
+    if (result.account_id) onChanged(result.account_id);
   });
   const disconnect = () => run(async () => {
-    if (!accountId) return;
-    await client.call("accounts.disconnect", { account_id: accountId });
+    if (accountId) await client.call("accounts.disconnect", { account_id: accountId });
+    else if (fields.mode === "managed" && ref) await client.call("accounts.disconnect_draft", { ref });
+    else return;
     onChanged();
   });
 
   return {
-    fields, setField, hasToken: saved.hasToken, ref, dirty, busy, loading, error,
+    fields, setField, hasToken: saved.hasToken, ref, dirty, busy, loading, error, managedAvailable, client,
     save, connect, disconnect,
   };
 }

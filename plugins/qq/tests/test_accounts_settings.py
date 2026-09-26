@@ -67,3 +67,21 @@ async def test_edited_legacy_draft_cannot_reappear_after_remove(tmp_path):
         timeout_seconds=5,
     )
     assert store.load()["legacy"].ws_uri == "ws://localhost:3002"
+
+
+@pytest.mark.asyncio
+async def test_managed_draft_uses_private_endpoint_without_external_fields(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        "plugins.qq.backend.accounts_settings.managed_available", lambda: True
+    )
+    store = QQAccountsStore(tmp_path)
+    runtime = QQAccountsRuntime(store, object())
+    ref = (await runtime.save_draft({"mode": "managed"}))["ref"]
+    saved = store.load()[ref]
+    assert saved.mode == "managed"
+    assert saved.ws_uri.startswith("ws://127.0.0.1:")
+    assert saved.ws_token
+    assert runtime.settings(ref=ref)["account"]["mode"] == "managed"
+    assert saved.ws_token not in str(runtime.settings(ref=ref))

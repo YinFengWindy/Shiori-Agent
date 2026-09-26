@@ -702,3 +702,125 @@ async def test_platform_failure_and_missing_receipt_are_not_reported_as_success(
     with pytest.raises(ValueError, match="目标 ID"):
         await runtime.send_target(account_id, "group", "gqq:777", "hello")
     await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_managed_connect_waits_for_auth_without_registering_fake_identity(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        "plugins.qq.backend.accounts_settings.managed_available", lambda: True
+    )
+    accounts = _Accounts()
+    runtime = QQAccountsRuntime(QQAccountsStore(tmp_path), accounts)
+    start = AsyncMock()
+    status = AsyncMock(
+        return_value={
+            "phase": "login_required",
+            "qrcode": "data:image/png;base64,QR",
+            "error": "",
+        }
+    )
+    monkeypatch.setattr(runtime._managed, "start", start)
+    monkeypatch.setattr(runtime._managed, "login_status", status)
+    ref = (await runtime.save_draft({"mode": "managed"}))["ref"]
+    result = await runtime.connect_saved(ref)
+    assert result == {"ref": ref, "account_id": ""}
+    for _ in range(20):
+        if runtime._states.get(ref, ("", ""))[0] == "login_required":
+            break
+        await asyncio.sleep(0)
+    assert runtime._states[ref][0] == "login_required"
+    assert accounts.rows == {}
+    assert (await runtime.managed_status(ref))["login"]["qrcode"].startswith(
+        "data:image"
+    )
+    start.assert_awaited_once_with(ref, "")
+    stop = AsyncMock()
+    monkeypatch.setattr(runtime._managed, "stop", stop)
+    await runtime.disconnect_draft(ref)
+    stop.assert_awaited_once_with(ref)
+    assert runtime._configs[ref].auto_connect is False
+    await runtime.remove_draft(ref)
+    assert ref not in runtime._configs
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_managed_qr_login_registers_only_after_verified_onebot_identity(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        "plugins.qq.backend.accounts_settings.managed_available", lambda: True
+    )
+    store = QQAccountsStore(tmp_path)
+    accounts = _Accounts()
+    runtime = QQAccountsRuntime(store, accounts)
+    start = AsyncMock()
+    login_status = AsyncMock(
+        side_effect=[
+            {
+                "phase": "login_required",
+                "qrcode": "data:image/png;base64,QR",
+                "error": "",
+            },
+            {"phase": "online", "qrcode": "", "error": ""},
+        ]
+    )
+    socket = _Socket("101")
+    socket.open = AsyncMock()
+    monkeypatch.setattr(runtime._managed, "start", start)
+    monkeypatch.setattr(runtime._managed, "login_status", login_status)
+    monkeypatch.setattr(
+        "plugins.qq.backend.accounts_runtime.OneBotSocket", lambda *_args: socket
+    )
+    ref = (await runtime.save_draft({"mode": "managed"}))["ref"]
+    assert (await runtime.connect_saved(ref))["account_id"] == ""
+    for _ in range(20):
+        if runtime._states.get(ref, ("", ""))[0] == "login_required":
+            break
+        await asyncio.sleep(0)
+    assert accounts.rows == {}
+    assert socket.open.await_count == 0
+    for _ in range(100):
+        if accounts.states.get("qq-101") == "online":
+            break
+        await asyncio.sleep(0.02)
+
+    assert login_status.await_count == 2
+    assert socket.open.await_count == 1
+    assert socket.calls[:2] == [("get_login_info", {}), ("get_status", {})]
+    assert accounts.states["qq-101"] == "online"
+    assert accounts.rows["qq-101"].config_ref == ref
+    assert runtime._sockets[ref] is socket
+    assert store.load()[ref].expected_uin == "101"
+    assert store.load()[ref].verified is True
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_managed_logout_preserves_saved_identity_but_clears_login(
+    monkeypatch, tmp_path
+):
+    store = QQAccountsStore(tmp_path)
+    config = QQConnectionConfig(
+        "known",
+        "ws://127.0.0.1:3001",
+        "secret",
+        expected_uin="101",
+        verified=True,
+        mode="managed",
+    )
+    store.save({"known": config})
+    accounts = _Accounts()
+    runtime = QQAccountsRuntime(store, accounts)
+    stop = AsyncMock()
+    logout = AsyncMock()
+    monkeypatch.setattr(runtime._managed, "stop", stop)
+    monkeypatch.setattr(runtime._managed, "logout", logout)
+    await runtime.logout("qq-101")
+    stop.assert_awaited_once_with("known")
+    logout.assert_awaited_once_with("known")
+    assert store.load()["known"].expected_uin == "101"
+    assert store.load()["known"].auto_connect is False
+    assert accounts.states["qq-101"] == "login_required"
