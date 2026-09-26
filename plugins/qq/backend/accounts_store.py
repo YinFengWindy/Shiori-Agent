@@ -9,6 +9,7 @@ from typing import Literal
 from uuid import uuid4
 
 from agent.plugin_host.plugin_data import plugin_data_dir
+from agent.legacy_config_receipt import legacy_config_digest
 from infra.persistence.json_store import atomic_save_json
 
 # Transport values persisted in each QQ account's private settings.
@@ -61,6 +62,7 @@ class QQAccountsStore:
 
     def __init__(self, workspace: Path) -> None:
         self.path = plugin_data_dir(workspace, "qq") / "accounts.json"
+        self.legacy_receipt = self.path.with_name("legacy-host-config.migrated.json")
 
     def load(self) -> dict[str, QQConnectionConfig]:
         """Loads saved references; malformed private data fails visibly."""
@@ -114,11 +116,30 @@ class QQAccountsStore:
     ) -> dict[str, QQConnectionConfig]:
         """Copies the old single connection exactly once into a stable reference."""
         accounts = self.load()
+        source_hash = legacy_config_digest(
+            {
+                "bot_uin": bot_uin,
+                "ws_uri": ws_uri,
+                "ws_token": ws_token,
+                "websocket_open_timeout_seconds": timeout_seconds,
+            }
+        )
         if (
             not bot_uin
             or "legacy" in accounts
             or any(row.expected_uin == bot_uin for row in accounts.values())
         ):
+            if bot_uin and any(
+                row.expected_uin == bot_uin
+                and row.mode == "external"
+                and row.ws_uri == (ws_uri or "ws://localhost:3001")
+                and row.ws_token == ws_token
+                and row.timeout_seconds == timeout_seconds
+                for row in accounts.values()
+            ):
+                atomic_save_json(
+                    self.legacy_receipt, {"version": 1, "source_hash": source_hash}
+                )
             return accounts
         accounts["legacy"] = QQConnectionConfig(
             ref="legacy",
@@ -128,6 +149,9 @@ class QQAccountsStore:
             timeout_seconds=timeout_seconds,
         )
         self.save(accounts)
+        atomic_save_json(
+            self.legacy_receipt, {"version": 1, "source_hash": source_hash}
+        )
         return accounts
 
     @staticmethod

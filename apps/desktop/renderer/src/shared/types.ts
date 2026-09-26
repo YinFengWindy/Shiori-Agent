@@ -280,9 +280,7 @@ export type RoleFormState = {
   nsfwMemoryEnabled: boolean;
   /** Draft values owned by registered role-setting plugins. */
   pluginSettings: import("../plugins/pluginRoleSettings").PluginRoleSettingsDraft;
-  channelBindings?: RoleChannelBinding[];
   proactiveEnabled?: boolean;
-  proactiveCandidates?: RoleProactiveCandidate[];
   proactiveProfile?: string;
   proactiveAgentMaxSteps?: number;
   proactiveAgentContentLimit?: number;

@@ -5,7 +5,7 @@ from typing import Any
 
 from bus.events import InboundMessage, OutboundMessage
 from core.common.channel_directory import ChannelDirectory
-from core.common.channel_identifiers import chat_ids_equal, normalize_sender_id
+from core.common.channel_identifiers import normalize_sender_id
 from core.accounts import AccountRegistry, AccountSnapshot
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.services import RoleAggregateService
@@ -14,7 +14,7 @@ from core.roles.role_runtime import RoleExecutionContext
 
 
 class ChannelHub:
-    """Coordinates role-bound channel routing and delivery bookkeeping."""
+    """Coordinates account-owned channel routing and delivery bookkeeping."""
 
     def __init__(
         self,
@@ -28,7 +28,7 @@ class ChannelHub:
         self._accounts = accounts or service.repository.store.accounts
         self._conversation = ConversationService(
             service.sessions._session_manager,
-            binding_resolver=service.bindings.resolve_role_id,
+            binding_resolver=service.repository.store.resolve_legacy_session_owner,
         )
 
     @classmethod
@@ -51,27 +51,13 @@ class ChannelHub:
         )
 
     def route_inbound(self, message: InboundMessage) -> InboundMessage:
-        """Maps a bound channel message onto the role session and source thread."""
-        metadata = dict(message.metadata or {})
+        """Maps an account message onto its owner's session and source thread."""
         if message.channel == "desktop":
             return message
-        if "account_id" in metadata:
-            routed = self.route_account_inbound(message)
-            if routed is None:
-                raise PermissionError("接收账号未授权此消息")
-            return routed
-        if not str(message.sender or "").strip():
-            raise ValueError("渠道消息缺少 sender_id")
-
-        resolved_role_id = self._service.bindings.resolve_role_id(
-            message.channel,
-            message.chat_id,
-        )
-        role_id = str(metadata.get("role_id") or "").strip()
-        if role_id and role_id != resolved_role_id:
-            raise ValueError("渠道消息角色与绑定角色不匹配")
-        role_id = resolved_role_id
-        return self._route_for_role(message, role_id, metadata)
+        routed = self.route_account_inbound(message)
+        if routed is None:
+            raise PermissionError("接收账号未授权此消息")
+        return routed
 
     def route_account_inbound(self, message: InboundMessage) -> InboundMessage | None:
         """Admits only an owned, live receiving account under its response rules."""
@@ -93,9 +79,7 @@ class ChannelHub:
                 (item for item in rules.group_rules if item.chat_id == message.chat_id),
                 None,
             )
-            if not rules.group_enabled or (
-                override is not None and not override.enabled
-            ):
+            if not (override.enabled if override is not None else rules.group_enabled):
                 return None
             require_mention = (
                 override.require_mention
@@ -208,7 +192,7 @@ class ChannelHub:
             metadata["chat_type"] = self._channel_directory.default_chat_type(
                 message.channel
             )
-        metadata.setdefault("source", "role_channel_binding")
+        metadata.setdefault("source", "role_account")
         context = RoleExecutionContext.create(
             role=role,
             thread_id=thread.id,
@@ -238,14 +222,7 @@ class ChannelHub:
         sender_alias: str = "",
         account_id: str = "",
     ) -> bool:
-        """Admits a sender of a bound session unless its binding blacklists them.
-
-        Unbound sessions are rejected. A private chat's sender is its partner,
-        and private bindings carry no blacklist, so they are always admitted.
-        A blacklist entry matches the sender ID exactly, or ``sender_alias``
-        (a Telegram username) case-insensitively; a leading ``@`` is ignored
-        on both sides.
-        """
+        """Admits a sender through a live owned account and its response rules."""
         if account_id:
             account = self._live_owned_account(account_id, channel)
             return account is not None and not self._account_sender_blocked(
@@ -254,19 +231,7 @@ class ChannelHub:
                 sender_id=sender_id,
                 sender_alias=sender_alias,
             )
-        binding = self._service.bindings.get_binding(channel, chat_id)
-        if binding is None:
-            return False
-        role = self._service.repository.get_required(binding.role_id)
-        config = next(
-            item
-            for item in role.channel_bindings
-            if item.channel == channel
-            and chat_ids_equal(channel, item.chat_id, chat_id)
-        )
-        return not self._sender_blocked(
-            sender_id, sender_alias, tuple(config.blocked_senders)
-        )
+        return False
 
     def is_sender_blocked(
         self,
@@ -276,27 +241,16 @@ class ChannelHub:
         sender_id: str,
         sender_alias: str = "",
     ) -> bool:
-        """Whether a bound session's blacklist names this sender.
-
-        Unlike ``is_sender_allowed`` an unbound session blocks nobody: the only
-        caller is ``/chatid``, which must answer before a session is bound.
-        """
-        return self.has_binding(channel, chat_id) and not self.is_sender_allowed(
-            channel=channel,
-            chat_id=chat_id,
-            sender_id=sender_id,
-            sender_alias=sender_alias,
-        )
+        """The legacy chat-id command has no binding blacklist to apply."""
+        return False
 
     def has_binding(self, channel: str, chat_id: str) -> bool:
-        """Returns whether a channel session belongs to any role."""
-        return self._service.bindings.get_binding(channel, chat_id) is not None
+        """Legacy session bindings no longer authorize channel traffic."""
+        return False
 
     def resolve_runtime_session_key(self, channel: str, chat_id: str) -> str:
-        """Resolves a channel control action to its bound role session."""
-
-        role_id = self._service.bindings.resolve_role_id(channel, chat_id)
-        return self._service.sessions.derive_session_key(role_id)
+        """Legacy channel control actions require an account identifier."""
+        raise PermissionError("渠道控制操作需要接收账号")
 
     def resolve_account_runtime_session_key(self, account_id: str) -> str:
         """Resolves account control actions through the current live owner."""
@@ -332,13 +286,7 @@ class ChannelHub:
         metadata = message.metadata if isinstance(message.metadata, dict) else {}
         role_id = str(metadata.get("role_id") or "").strip()
         if not role_id:
-            try:
-                role_id = self._service.bindings.resolve_role_id(
-                    default_channel,
-                    message.chat_id,
-                )
-            except KeyError:
-                return None
+            return None
         session_key = self._service.sessions.derive_session_key(role_id)
         override = str(metadata.get("session_key_override") or "").strip()
         if override and override != session_key:

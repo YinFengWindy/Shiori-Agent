@@ -71,16 +71,13 @@ class ProactiveTargetResolver:
         self._desktop_presence = desktop_presence
 
     def resolve_saved(self, role_id: str) -> RoleProactiveCandidate | None:
-        """Selects among the role's saved candidates; ``None`` when it has none."""
+        """Starts proactive turns in the role's desktop session."""
         role = self._roles.get_role(role_id)
         if role is None:
             raise KeyError(f"角色不存在: {role_id}")
-        candidates = role.proactive.candidates
-        if role.proactive.enabled and not candidates:
-            candidates = (
-                RoleProactiveCandidate(DESKTOP_CHANNEL, desktop_chat_id(role_id)),
-            )
-        return self.resolve(role_id, candidates) if candidates else None
+        if not role.proactive.enabled:
+            return None
+        return RoleProactiveCandidate(DESKTOP_CHANNEL, desktop_chat_id(role_id))
 
     def resolve(
         self, role_id: str, candidates: Sequence[RoleProactiveCandidate]

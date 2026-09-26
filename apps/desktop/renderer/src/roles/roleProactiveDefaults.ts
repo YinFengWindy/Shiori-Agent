@@ -1,5 +1,4 @@
 import type { RoleFormState, RoleProactiveConfig, RoleRecord } from "../shared/types";
-import { roleProactiveCandidatesEqual } from "./roleProactiveCandidates";
 
 /** Stable defaults for the role-owned proactive editor contract. */
 export const roleProactiveDefaults = Object.freeze({
@@ -16,7 +15,6 @@ export const roleProactiveDefaults = Object.freeze({
 export type RoleProactiveFormState = Pick<
   RoleFormState,
   | "proactiveEnabled"
-  | "proactiveCandidates"
   | "proactiveProfile"
   | "proactiveAgentMaxSteps"
   | "proactiveAgentContentLimit"
@@ -30,7 +28,6 @@ export type RoleProactiveFormState = Pick<
 export function createDefaultRoleProactiveForm(): RoleProactiveFormState {
   return {
     proactiveEnabled: roleProactiveDefaults.enabled,
-    proactiveCandidates: [],
     proactiveProfile: roleProactiveDefaults.profile,
     proactiveAgentMaxSteps: roleProactiveDefaults.agentMaxSteps,
     proactiveAgentContentLimit: roleProactiveDefaults.agentContentLimit,
@@ -48,7 +45,6 @@ export function readRoleProactiveForm(
   const proactive = role.proactive;
   return {
     proactiveEnabled: proactive?.enabled ?? roleProactiveDefaults.enabled,
-    proactiveCandidates: proactive?.candidates ?? [],
     proactiveProfile: proactive?.profile ?? roleProactiveDefaults.profile,
     proactiveAgentMaxSteps: proactive?.agent?.max_steps ?? roleProactiveDefaults.agentMaxSteps,
     proactiveAgentContentLimit: proactive?.agent?.content_limit ?? roleProactiveDefaults.agentContentLimit,
@@ -70,7 +66,7 @@ export function buildRoleProactiveConfig(
   return {
     ...persisted,
     enabled: Boolean(roleForm.proactiveEnabled),
-    candidates: roleForm.proactiveCandidates ?? [],
+    candidates: [],
     profile: roleForm.proactiveProfile ?? roleProactiveDefaults.profile,
     agent: {
       ...persistedAgent,
@@ -98,7 +94,6 @@ export function roleProactiveConfigEqual(
   const persisted = role.proactive;
   return (
     Boolean(roleForm.proactiveEnabled) === Boolean(persisted?.enabled)
-    && roleProactiveCandidatesEqual(roleForm.proactiveCandidates ?? [], persisted?.candidates ?? [])
     && (roleForm.proactiveProfile ?? roleProactiveDefaults.profile)
       === (persisted?.profile ?? roleProactiveDefaults.profile)
     && (roleForm.proactiveAgentMaxSteps ?? roleProactiveDefaults.agentMaxSteps)

@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from core.accounts import AccountRegistry
+from core.roles.store import RoleStore
+from shiori_plugin_testkit.legacy_roles import seed_legacy_bindings
 
 
 def test_independent_accounts_ownership_and_recovery(tmp_path):
@@ -88,6 +90,214 @@ def test_independent_accounts_ownership_and_recovery(tmp_path):
         for row in restored.list()
     )
     assert restored.get(first.record.id).record.display_name == "First"
+
+
+def test_legacy_bindings_migrate_one_account_with_group_rules_once(tmp_path):
+    store = RoleStore(tmp_path)
+    store.create_role(role_id="mira", name="Mira", system_prompt="Mira")
+    role = store.get_role("mira")
+    assert role is not None
+    seed_legacy_bindings(
+        tmp_path,
+        role.id,
+        [
+            {
+                "channel": "qq",
+                "chat_id": "gqq:42",
+                "chat_type": "group",
+                "blocked_senders": ["bad"],
+            }
+        ],
+    )
+    account = store.accounts.register(
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="100",
+        config_ref="legacy",
+        token="first",
+    )
+    row = account.record
+    assert row.role_id == "mira"
+    assert row.response_rules.group_enabled is False
+    assert row.response_rules.group_rules[0].chat_id == "gqq:42"
+    assert row.response_rules.group_rules[0].require_mention is False
+    assert row.response_rules.group_rules[0].blocked_sender_ids == ("bad",)
+    assert row.legacy_owner_candidates == ()
+    version = row.ownership_version
+
+    restored = RoleStore(tmp_path)
+    restored.accounts.migrate_legacy_bindings()
+    again = restored.accounts.get(row.id).record
+    assert again.ownership_version == version
+    assert again.response_rules == row.response_rules
+    assert restored.get_role("mira").channel_bindings == []
+    second = restored.accounts.register(
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="200",
+        config_ref="new",
+        token="second",
+    ).record
+    assert second.role_id is None
+    assert second.response_rules.group_rules == ()
+
+
+def test_conflicting_legacy_owners_require_explicit_assignment(tmp_path):
+    store = RoleStore(tmp_path)
+    for role_id, chat_id in (("mira", "gqq:42"), ("other", "gqq:43")):
+        store.create_role(role_id=role_id, name=role_id, system_prompt=role_id)
+        seed_legacy_bindings(
+            tmp_path,
+            role_id,
+            [
+                {
+                    "channel": "qq",
+                    "chat_id": chat_id,
+                    "chat_type": "group",
+                    "blocked_senders": [],
+                }
+            ],
+        )
+    row = store.accounts.register(
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="100",
+        config_ref="legacy",
+        token="first",
+    ).record
+    assert row.role_id is None
+    assert row.legacy_owner_candidates == ("mira", "other")
+    assert row.response_rules.group_rules == ()
+    with pytest.raises(PermissionError):
+        store.accounts.authorize(row.id, "mira")
+
+    restarted = RoleStore(tmp_path)
+    assert restarted.accounts.get(row.id).record.legacy_owner_candidates == (
+        "mira",
+        "other",
+    )
+    assert all(not role.channel_bindings for role in restarted.list_roles())
+    assigned = restarted.accounts.assign(row.id, "other").record
+    assert assigned.role_id == "other"
+    assert assigned.legacy_owner_candidates == ()
+    assert {rule.chat_id for rule in assigned.response_rules.group_rules} == {
+        "gqq:43",
+    }
+    restarted.accounts.migrate_legacy_bindings()
+    assert restarted.accounts.get(row.id).record == assigned
+
+
+def test_multi_account_legacy_conflict_keeps_rules_for_chosen_owner(tmp_path):
+    store = RoleStore(tmp_path)
+    for role_id, chat_id in (("mira", "gqq:42"), ("other", "gqq:43")):
+        store.create_role(role_id=role_id, name=role_id, system_prompt=role_id)
+        seed_legacy_bindings(
+            tmp_path,
+            role_id,
+            [
+                {
+                    "channel": "qq",
+                    "chat_id": chat_id,
+                    "chat_type": "group",
+                    "blocked_senders": [role_id],
+                }
+            ],
+        )
+    for uin in ("100", "200"):
+        store.accounts.register(
+            plugin_id="qq",
+            platform="qq",
+            platform_account_id=uin,
+            config_ref=uin,
+            token=uin,
+            generation="prepared",
+        )
+    store.accounts.publish_generation("prepared")
+    rows = store.accounts.list()
+    assert all(row.record.role_id is None for row in rows)
+    assert all(row.record.response_rules.group_rules == () for row in rows)
+    assert all(not role.channel_bindings for role in store.list_roles())
+
+    restarted = RoleStore(tmp_path)
+    chosen = restarted.accounts.assign(rows[0].record.id, "other").record
+    assert [rule.chat_id for rule in chosen.response_rules.group_rules] == ["gqq:43"]
+    assert chosen.response_rules.group_rules[0].blocked_sender_ids == ("other",)
+    assert chosen.response_rules.group_rules[0].require_mention is False
+    assert restarted.accounts.get(rows[1].record.id).record.role_id is None
+
+
+def test_existing_account_owner_keeps_assignment_and_imports_its_rules(tmp_path):
+    store = RoleStore(tmp_path)
+    for role_id, chat_id in (("mira", "gqq:42"), ("other", "gqq:43")):
+        store.create_role(role_id=role_id, name=role_id, system_prompt=role_id)
+        seed_legacy_bindings(
+            tmp_path,
+            role_id,
+            [
+                {
+                    "channel": "qq",
+                    "chat_id": chat_id,
+                    "chat_type": "group",
+                    "blocked_senders": [],
+                }
+            ],
+        )
+    old_registry = AccountRegistry(
+        tmp_path, lambda role_id: role_id in {"mira", "other"}
+    )
+    account = old_registry.register(
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="100",
+        config_ref="legacy",
+        token="live",
+    )
+    old_registry.assign(account.record.id, "mira")
+    upgraded = RoleStore(tmp_path)
+    upgraded.accounts.migrate_legacy_bindings()
+    row = upgraded.accounts.get(account.record.id).record
+    assert row.role_id == "mira"
+    assert [rule.chat_id for rule in row.response_rules.group_rules] == ["gqq:42"]
+
+
+def test_account_save_before_binding_retirement_recovers_on_restart(
+    tmp_path, monkeypatch
+):
+    store = RoleStore(tmp_path)
+    store.create_role(role_id="mira", name="Mira", system_prompt="Mira")
+    seed_legacy_bindings(
+        tmp_path,
+        "mira",
+        [
+            {
+                "channel": "qq",
+                "chat_id": "gqq:42",
+                "chat_type": "group",
+                "blocked_senders": [],
+            }
+        ],
+    )
+
+    def fail_retirement(_platforms):
+        raise OSError("interrupted after account save")
+
+    monkeypatch.setattr(store.accounts, "_retire_legacy_bindings", fail_retirement)
+    with pytest.raises(OSError, match="interrupted"):
+        store.accounts.register(
+            plugin_id="qq",
+            platform="qq",
+            platform_account_id="100",
+            config_ref="legacy",
+            token="live",
+        )
+    assert store.get_role("mira").channel_bindings
+
+    restarted = RoleStore(tmp_path)
+    restarted.accounts.migrate_legacy_bindings()
+    row = restarted.accounts.list()[0].record
+    assert row.role_id == "mira"
+    assert row.response_rules.group_rules[0].chat_id == "gqq:42"
+    assert restarted.get_role("mira").channel_bindings == []
 
 
 def test_live_generation_fence_and_error_report(tmp_path):

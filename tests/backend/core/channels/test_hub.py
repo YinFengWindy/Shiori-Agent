@@ -11,9 +11,37 @@ from core.accounts.models import AccountResponseRules, GroupResponseRule
 from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleAggregateService, RoleStore
 from session.manager import SessionManager
+from shiori_plugin_testkit.legacy_roles import seed_legacy_bindings
 
 
-def test_channel_hub_routes_bound_inbound_to_role_session(tmp_path: Path) -> None:
+def _seed_binding(
+    service: RoleAggregateService,
+    channel: str,
+    chat_id: str,
+    role_id: str,
+    *,
+    chat_type: str,
+    blocked_senders: tuple[str, ...] = (),
+) -> None:
+    store = service.repository.store
+    role = store.get_role(role_id)
+    assert role is not None
+    seed_legacy_bindings(
+        store.workspace,
+        role_id,
+        [
+            *(item.to_dict() for item in role.channel_bindings),
+            {
+                "channel": channel,
+                "chat_id": chat_id,
+                "chat_type": chat_type,
+                "blocked_senders": list(blocked_senders),
+            },
+        ],
+    )
+
+
+def test_channel_hub_routes_owned_inbound_to_role_session(tmp_path: Path) -> None:
     session_manager = SessionManager(tmp_path)
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
@@ -26,7 +54,8 @@ def test_channel_hub_routes_bound_inbound_to_role_session(tmp_path: Path) -> Non
         description="bound role",
         system_prompt="you are mira",
     )
-    _ = service.bindings.bind("telegram", "123", "mira", chat_type="private")
+    _seed_binding(service, "telegram", "123", "mira", chat_type="private")
+    account_id = _live_account(service, "telegram")
     hub = ChannelHub(service, channel_directory=_directory_with_private_telegram())
 
     routed = hub.route_inbound(
@@ -36,6 +65,7 @@ def test_channel_hub_routes_bound_inbound_to_role_session(tmp_path: Path) -> Non
             chat_id="123",
             content="hello",
             timestamp=datetime.now(),
+            metadata={"account_id": account_id},
         )
     )
 
@@ -67,6 +97,20 @@ def _directory_with_private_telegram() -> ChannelDirectory:
     return directory
 
 
+def _live_account(service: RoleAggregateService, platform: str) -> str:
+    accounts = service.repository.store.accounts
+    accounts.set_plugin_enabled(platform, True)
+    account = accounts.register(
+        plugin_id=platform,
+        platform=platform,
+        platform_account_id="self",
+        config_ref="legacy",
+        token="live",
+    )
+    accounts.report(account.record.id, "live", connection="online")
+    return account.record.id
+
+
 def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
     tmp_path: Path,
 ) -> None:
@@ -77,7 +121,7 @@ def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
     )
     service.create_role(role_id="mira", name="Mira", system_prompt="mira")
     service.create_role(role_id="other", name="Other", system_prompt="other")
-    service.bindings.bind("qq", "gqq:42", "other", chat_type="group")
+    _seed_binding(service, "qq", "gqq:42", "other", chat_type="group")
     accounts = store.accounts
     accounts.set_plugin_enabled("qq", True)
     account = accounts.register(
@@ -89,6 +133,7 @@ def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
     )
     account_id = account.record.id
     accounts.report(account_id, "live", connection="online")
+    accounts.assign(account_id, None)
     hub = ChannelHub(service)
     message = InboundMessage(
         channel="qq",
@@ -120,7 +165,7 @@ def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
                 metadata={**message.metadata, "mentioned": False},
             )
         )
-        is None
+        is not None
     )
     routed = hub.route_account_inbound(message)
     assert routed is not None
@@ -148,6 +193,36 @@ def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
     assert hub.route_account_inbound(message) is None
     accounts.set_plugin_enabled("qq", False)
     assert hub.route_account_inbound(message) is None
+
+
+def test_migrated_group_override_admits_only_the_old_group(tmp_path: Path) -> None:
+    sessions = SessionManager(tmp_path)
+    store = RoleStore(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path, role_store=store, session_manager=sessions
+    )
+    service.create_role(role_id="mira", name="Mira", system_prompt="Mira")
+    _seed_binding(
+        service, "qq", "gqq:42", "mira", chat_type="group", blocked_senders=("blocked",)
+    )
+    account_id = _live_account(service, "qq")
+    hub = ChannelHub(service)
+
+    def inbound(chat_id: str, sender: str) -> InboundMessage:
+        return InboundMessage(
+            channel="qq",
+            sender=sender,
+            chat_id=chat_id,
+            content="hello",
+            metadata={
+                "account_id": account_id,
+                "chat_type": "group",
+            },
+        )
+
+    assert hub.route_account_inbound(inbound("gqq:42", "friend")) is not None
+    assert hub.route_account_inbound(inbound("gqq:42", "blocked")) is None
+    assert hub.route_account_inbound(inbound("gqq:43", "friend")) is None
 
 
 def test_account_inbound_accepts_telegram_instance_channel_name(tmp_path: Path) -> None:
@@ -190,8 +265,11 @@ def test_channel_hub_chat_type_default_comes_from_the_channel(tmp_path: Path) ->
         session_manager=session_manager,
     )
     _ = service.create_role(role_id="mira", name="Mira", system_prompt="mira")
-    _ = service.bindings.bind("telegram", "123", "mira", chat_type="private")
-    _ = service.bindings.bind("qqbot", "c2c:u2", "mira", chat_type="private")
+    _seed_binding(service, "telegram", "123", "mira", chat_type="private")
+    _seed_binding(service, "qqbot", "c2c:u2", "mira", chat_type="private")
+    account_ids = {
+        channel: _live_account(service, channel) for channel in ("telegram", "qqbot")
+    }
     hub = ChannelHub(service, channel_directory=_directory_with_private_telegram())
 
     def _route(channel: str, chat_id: str, sender: str, **metadata: str):
@@ -201,7 +279,11 @@ def test_channel_hub_chat_type_default_comes_from_the_channel(tmp_path: Path) ->
                 sender=sender,
                 chat_id=chat_id,
                 content="hello",
-                metadata=dict(metadata),
+                metadata={
+                    "account_id": account_ids[channel],
+                    "mentioned": True,
+                    **metadata,
+                },
             )
         ).metadata["chat_type"]
 
@@ -211,7 +293,13 @@ def test_channel_hub_chat_type_default_comes_from_the_channel(tmp_path: Path) ->
     assert (
         ChannelHub(service)
         .route_inbound(
-            InboundMessage(channel="telegram", sender="u1", chat_id="123", content="hi")
+            InboundMessage(
+                channel="telegram",
+                sender="u1",
+                chat_id="123",
+                content="hi",
+                metadata={"account_id": account_ids["telegram"]},
+            )
         )
         .metadata["chat_type"]
         == "unknown"
@@ -231,13 +319,15 @@ def test_channel_hub_marks_delivery_by_role_session(tmp_path: Path) -> None:
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _ = service.bindings.bind("telegram", "123", role.id, chat_type="private")
+    _seed_binding(service, "telegram", "123", role.id, chat_type="private")
+    account_id = _live_account(service, "telegram")
     routed = ChannelHub(service).route_inbound(
         InboundMessage(
             channel="telegram",
             sender="u1",
             chat_id="123",
             content="hello",
+            metadata={"account_id": account_id},
         )
     )
     session = session_manager.get_or_create(routed.session_key)
@@ -295,13 +385,15 @@ def test_channel_hub_skips_delivery_mark_when_outbound_has_no_committed_message(
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _ = service.bindings.bind("telegram", "123", role.id, chat_type="private")
+    _seed_binding(service, "telegram", "123", role.id, chat_type="private")
+    account_id = _live_account(service, "telegram")
     routed = ChannelHub(service).route_inbound(
         InboundMessage(
             channel="telegram",
             sender="u1",
             chat_id="123",
             content="hello",
+            metadata={"account_id": account_id},
         )
     )
     thread_id = str(routed.metadata["thread_id"])
@@ -384,7 +476,7 @@ def test_channel_hub_skips_delivery_mark_without_running_thread_validation(
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _ = service.bindings.bind("telegram", "123", role.id, chat_type="private")
+    _seed_binding(service, "telegram", "123", role.id, chat_type="private")
     hub = ChannelHub(service)
 
     # No committed_message_id and no thread_id metadata at all: a full-blown
@@ -419,7 +511,8 @@ def test_channel_hub_marks_archived_external_messages_as_duplicates(
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _ = service.bindings.bind("telegram", "123", role.id, chat_type="private")
+    _seed_binding(service, "telegram", "123", role.id, chat_type="private")
+    account_id = _live_account(service, "telegram")
     hub = ChannelHub(service)
     first = hub.route_inbound(
         InboundMessage(
@@ -427,7 +520,7 @@ def test_channel_hub_marks_archived_external_messages_as_duplicates(
             sender="u1",
             chat_id="123",
             content="hello",
-            metadata={"external_message_id": "message-1"},
+            metadata={"account_id": account_id, "external_message_id": "message-1"},
         )
     )
     session = session_manager.get_or_create(first.session_key)
@@ -445,14 +538,16 @@ def test_channel_hub_marks_archived_external_messages_as_duplicates(
             sender="u1",
             chat_id="123",
             content="hello",
-            metadata={"external_message_id": "message-1"},
+            metadata={"account_id": account_id, "external_message_id": "message-1"},
         )
     )
 
     assert duplicate.metadata["conversation_duplicate"] is True
 
 
-def test_channel_hub_resolves_control_actions_to_role_session(tmp_path: Path) -> None:
+def test_channel_hub_resolves_account_control_actions_to_role_session(
+    tmp_path: Path,
+) -> None:
     session_manager = SessionManager(tmp_path)
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
@@ -465,7 +560,8 @@ def test_channel_hub_resolves_control_actions_to_role_session(tmp_path: Path) ->
         description="bound role",
         system_prompt="you are mira",
     )
-    _ = service.bindings.bind("telegram", "123", "mira", chat_type="private")
+    _seed_binding(service, "telegram", "123", "mira", chat_type="private")
+    account_id = _live_account(service, "telegram")
     hub = ChannelHub(service)
     _ = hub.route_inbound(
         InboundMessage(
@@ -473,10 +569,13 @@ def test_channel_hub_resolves_control_actions_to_role_session(tmp_path: Path) ->
             sender="u1",
             chat_id="123",
             content="hello",
+            metadata={"account_id": account_id},
         )
     )
 
-    assert hub.resolve_runtime_session_key("telegram", "123") == "role:mira"
+    assert hub.resolve_account_runtime_session_key(account_id) == "role:mira"
+    with pytest.raises(PermissionError):
+        hub.resolve_runtime_session_key("telegram", "123")
 
 
 def test_channel_hub_rejects_unbound_control_actions(tmp_path: Path) -> None:
@@ -487,7 +586,7 @@ def test_channel_hub_rejects_unbound_control_actions(tmp_path: Path) -> None:
         session_manager=session_manager,
     )
 
-    with pytest.raises(KeyError):
+    with pytest.raises(PermissionError):
         ChannelHub(service).resolve_runtime_session_key("telegram", "123")
 
 
@@ -504,7 +603,8 @@ def test_channel_hub_attaches_complete_role_execution_context(tmp_path: Path) ->
         description="bound role",
         system_prompt="you are mira",
     )
-    _ = service.bindings.bind("telegram", "123", "mira", chat_type="private")
+    _seed_binding(service, "telegram", "123", "mira", chat_type="private")
+    account_id = _live_account(service, "telegram")
 
     routed = ChannelHub(service).route_inbound(
         InboundMessage(
@@ -512,7 +612,7 @@ def test_channel_hub_attaches_complete_role_execution_context(tmp_path: Path) ->
             sender="u1",
             chat_id="123",
             content="hello",
-            metadata={"external_message_id": "message-1"},
+            metadata={"account_id": account_id, "external_message_id": "message-1"},
         )
     )
 
@@ -527,70 +627,98 @@ def test_channel_hub_attaches_complete_role_execution_context(tmp_path: Path) ->
 
 def _hub_with_bindings(
     tmp_path: Path, blocked: tuple[str, ...] = ("7", "Troll")
-) -> ChannelHub:
+) -> tuple[ChannelHub, str]:
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
         session_manager=SessionManager(tmp_path),
     )
     _ = service.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
-    _ = service.bindings.bind("telegram", "123", "mira", chat_type="private")
-    _ = service.bindings.bind(
-        "telegram", "-100", "mira", chat_type="group", blocked_senders=blocked
+    _seed_binding(service, "telegram", "123", "mira", chat_type="private")
+    _seed_binding(
+        service, "telegram", "-100", "mira", chat_type="group", blocked_senders=blocked
     )
-    return ChannelHub(service)
+    return ChannelHub(service), _live_account(service, "telegram")
 
 
 def test_channel_hub_admits_any_sender_of_a_bound_private_chat(
     tmp_path: Path,
 ) -> None:
     # The private chat itself is the partner; no contact is configured (#398).
-    hub = _hub_with_bindings(tmp_path)
+    hub, account_id = _hub_with_bindings(tmp_path)
 
-    assert hub.is_sender_allowed(channel="telegram", chat_id="123", sender_id="u1")
+    assert hub.is_sender_allowed(
+        channel="telegram", chat_id="123", sender_id="u1", account_id=account_id
+    )
 
 
 def test_channel_hub_admits_group_members_except_blacklisted(tmp_path: Path) -> None:
-    hub = _hub_with_bindings(tmp_path)
+    hub, account_id = _hub_with_bindings(tmp_path)
 
-    assert hub.is_sender_allowed(channel="telegram", chat_id="-100", sender_id="8")
-    assert not hub.is_sender_allowed(channel="telegram", chat_id="-100", sender_id="7")
+    assert hub.is_sender_allowed(
+        channel="telegram", chat_id="-100", sender_id="8", account_id=account_id
+    )
+    assert not hub.is_sender_allowed(
+        channel="telegram", chat_id="-100", sender_id="7", account_id=account_id
+    )
 
 
 def test_channel_hub_matches_blacklisted_alias_case_insensitively(
     tmp_path: Path,
 ) -> None:
-    hub = _hub_with_bindings(tmp_path)
+    hub, account_id = _hub_with_bindings(tmp_path)
 
     assert not hub.is_sender_allowed(
-        channel="telegram", chat_id="-100", sender_id="9", sender_alias="troll"
+        channel="telegram",
+        chat_id="-100",
+        sender_id="9",
+        sender_alias="troll",
+        account_id=account_id,
     )
     assert hub.is_sender_allowed(
-        channel="telegram", chat_id="-100", sender_id="9", sender_alias="friend"
+        channel="telegram",
+        chat_id="-100",
+        sender_id="9",
+        sender_alias="friend",
+        account_id=account_id,
     )
     # IDs match exactly: a numeric ID never matches by case folding.
-    assert hub.is_sender_allowed(channel="telegram", chat_id="-100", sender_id="troll")
+    assert hub.is_sender_allowed(
+        channel="telegram", chat_id="-100", sender_id="troll", account_id=account_id
+    )
 
 
 def test_channel_hub_ignores_at_marker_on_blacklisted_aliases(
     tmp_path: Path,
 ) -> None:
     # Users type usernames as "@Troll"; the normalizer drops the "@".
-    hub = _hub_with_bindings(tmp_path, blocked=("@Troll",))
+    hub, account_id = _hub_with_bindings(tmp_path, blocked=("@Troll",))
 
     assert not hub.is_sender_allowed(
-        channel="telegram", chat_id="-100", sender_id="9", sender_alias="troll"
+        channel="telegram",
+        chat_id="-100",
+        sender_id="9",
+        sender_alias="troll",
+        account_id=account_id,
     )
     assert not hub.is_sender_allowed(
-        channel="telegram", chat_id="-100", sender_id="9", sender_alias="@TROLL"
+        channel="telegram",
+        chat_id="-100",
+        sender_id="9",
+        sender_alias="@TROLL",
+        account_id=account_id,
     )
     assert hub.is_sender_allowed(
-        channel="telegram", chat_id="-100", sender_id="9", sender_alias="friend"
+        channel="telegram",
+        chat_id="-100",
+        sender_id="9",
+        sender_alias="friend",
+        account_id=account_id,
     )
 
 
 def test_channel_hub_rejects_senders_of_unbound_sessions(tmp_path: Path) -> None:
-    hub = _hub_with_bindings(tmp_path)
+    hub, _ = _hub_with_bindings(tmp_path)
 
     assert not hub.is_sender_allowed(channel="telegram", chat_id="-200", sender_id="8")
 
@@ -599,10 +727,10 @@ def test_channel_hub_blocks_only_blacklisted_senders_of_bound_sessions(
     tmp_path: Path,
 ) -> None:
     # Only /chatid asks this: an unbound session blocks nobody.
-    hub = _hub_with_bindings(tmp_path)
+    hub, _ = _hub_with_bindings(tmp_path)
 
-    assert hub.is_sender_blocked(channel="telegram", chat_id="-100", sender_id="7")
-    assert hub.is_sender_blocked(
+    assert not hub.is_sender_blocked(channel="telegram", chat_id="-100", sender_id="7")
+    assert not hub.is_sender_blocked(
         channel="telegram", chat_id="-100", sender_id="9", sender_alias="troll"
     )
     assert not hub.is_sender_blocked(channel="telegram", chat_id="-100", sender_id="8")

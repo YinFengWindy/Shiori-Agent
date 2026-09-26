@@ -223,13 +223,6 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
     store.create_role(name="Mira", role_id="mira", system_prompt="Role prompt")
     store.update_role(
         "mira",
-        channel_bindings=[
-            {
-                "channel": "telegram",
-                "chat_id": "42",
-                "chat_type": "private",
-            }
-        ],
         proactive={
             "enabled": True,
             "candidates": [{"channel": "telegram", "chat_id": "42"}],

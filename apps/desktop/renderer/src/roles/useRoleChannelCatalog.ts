@@ -9,7 +9,7 @@ import type { RoleChannelCatalog } from "./roleChannelCatalog";
 const defaultClient = createPluginBridgeClient();
 
 /**
- * Loads `channels.list` for the role delivery panels and reloads it whenever
+ * Loads `channels.list` for chat source labels and reloads it whenever
  * the runtime changes: a plugin toggle, plugin config save or settings save
  * publishes a new generation (`runtime.applied`), and a bridge restart
  * (`bridge.ready`) may change every channel's state. A failed load keeps the

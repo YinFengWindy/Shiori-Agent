@@ -8,7 +8,14 @@ import httpx
 import pytest
 
 from core.net.http import HttpRequester, RequestBudget, RetryPolicy
-from plugins.qq.backend.channel.compat import download_to_temp
+from plugins.qq.backend.channel.compat import download_to_temp, extract_cq_images
+
+
+def test_extract_cq_images_preserves_text_and_urls():
+    assert extract_cq_images("hello [CQ:image,url=http://x/a.jpg]") == (
+        "hello",
+        ["http://x/a.jpg"],
+    )
 
 
 def _build_requester(handler) -> HttpRequester:

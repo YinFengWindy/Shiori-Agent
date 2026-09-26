@@ -66,7 +66,6 @@ from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from bus.queue import MessageBus
 from core.common.channel_directory import ChannelDirectory
-from core.common.channel_identifiers import chat_ids_equal
 from core.memory.markdown import MemoryLifecycleBindRequest, MarkdownMemoryMaintenance
 from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
@@ -119,16 +118,6 @@ class CoreRuntime:
     async def start(self) -> None:
         self.mcp_registry.start_connect_all_background()
         if self.plugin_manager is not None:
-            from agent.plugin_host.manifest import declared_chat_types
-
-            # Role binding saves check chat IDs against the channels' declared
-            # session types; declarations are static, so the startup
-            # discovery snapshot every generation shares is authoritative.
-            self.role_runtime_registry.repository.store.bind_channel_chat_types(
-                declared_chat_types(
-                    record.manifest for record in self.plugin_manager.discover()
-                )
-            )
             await self.plugin_manager.load_all()
             logger.info("插件加载完成: %d 个", self.plugin_manager.loaded_count)
             self.loop.add_before_turn_plugin_modules(
@@ -712,14 +701,8 @@ def _role_owns_channel_target(
     channel: str,
     chat_id: str,
 ) -> bool:
-    clean_channel = str(channel).strip()
-    clean_chat_id = str(chat_id).strip()
-    role = repository.get_required(role_id)
-    return any(
-        binding.channel == clean_channel
-        and chat_ids_equal(clean_channel, binding.chat_id, clean_chat_id)
-        for binding in role.channel_bindings
-    )
+    repository.get_required(role_id)
+    return channel == "desktop" and chat_id == f"role:{role_id}"
 
 
 def _validate_role_target(
@@ -729,7 +712,7 @@ def _validate_role_target(
     channel: str,
     chat_id: str,
 ) -> bool | str:
-    """Validates a role-scoped push and explains channel mismatches."""
+    """Allows local role pushes; external delivery uses owned account tools."""
 
     if _role_owns_channel_target(
         repository,
@@ -739,18 +722,4 @@ def _validate_role_target(
     ):
         return True
 
-    role = repository.get_required(role_id)
-    matching_binding = next(
-        (
-            binding
-            for binding in role.channel_bindings
-            if chat_ids_equal(binding.channel, binding.chat_id, chat_id)
-        ),
-        None,
-    )
-    if matching_binding is not None:
-        return (
-            f"角色 {role_id} 未绑定目标渠道: {channel}:{chat_id}；"
-            f"该会话已绑定渠道 {matching_binding.channel}，请使用 channel={matching_binding.channel}"
-        )
-    return False
+    return "外部发送请使用 account_send，并选择当前角色拥有的账号"

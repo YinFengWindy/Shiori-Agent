@@ -17,7 +17,6 @@ from .accounts_outbound_adapter import QQOutboundAdapter
 from .accounts_settings import QQAccountSettings, validate_endpoint
 from .accounts_store import QQAccountsStore, QQConnectionConfig
 from .managed_napcat import ManagedNapCat
-from .channel.formatting import PUSH_TARGET_HINT
 from .onebot import OneBotAuthError, OneBotError, OneBotSocket
 
 logger = logging.getLogger(__name__)
@@ -67,9 +66,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         ctx.bus.subscribe_outbound(self.name, self._on_response)
         ctx.push_tool.register_channel(
             self.name,
-            text=self._send_legacy,
             text_with_metadata=self._send_with_metadata,
-            description=PUSH_TARGET_HINT,
         )
         for ref, config in self._configs.items():
             if config.auto_connect:

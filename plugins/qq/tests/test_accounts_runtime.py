@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from agent.tools.message_push import MessagePushTool
 from core.accounts.target_contract import UncertainDeliveryError
 from plugins.qq.backend.accounts_runtime import QQAccountsRuntime
 from plugins.qq.backend.accounts_store import QQAccountsStore, QQConnectionConfig
@@ -110,8 +112,13 @@ async def test_two_accounts_keep_identity_discovery_send_and_events_isolated(
 
     monkeypatch.setattr(runtime, "_verified_socket", verified)
     bus = _Bus()
+    registered: dict[str, Any] = {}
+
+    def register_channel(_name, **senders):
+        registered.update(senders)
+
     push_tool = SimpleNamespace(
-        register_channel=lambda *_a, **_k: None,
+        register_channel=register_channel,
         unregister_channel=lambda *_a, **_k: None,
     )
     await runtime.start(
@@ -142,8 +149,11 @@ async def test_two_accounts_keep_identity_discovery_send_and_events_isolated(
     assert (await runtime.send_target(b, "group", "777", "hello")) == {
         "message_id": "202"
     }
+    assert "text" not in registered
     assert (
-        await runtime._send_with_metadata("901", "account B only", {"account_id": b})
+        await registered["text_with_metadata"](
+            "901", "account B only", {"account_id": b}
+        )
         == "202"
     )
     assert ("send_group_msg", {"group_id": 777, "message": "hello"}) in sockets[
@@ -197,8 +207,36 @@ async def test_two_accounts_keep_identity_discovery_send_and_events_isolated(
     assert accounts.states[b] == "online"
     assert not sockets["202"].closed
     with pytest.raises(OneBotError, match="明确指定账号"):
-        await runtime._send_legacy("901", "must not use account B")
+        await runtime._send_with_metadata("901", "must not use account B", {})
     await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_single_online_account_still_rejects_send_without_account_id(tmp_path):
+    runtime = QQAccountsRuntime(QQAccountsStore(tmp_path), _Accounts())
+    socket = _Socket("101")
+    runtime._sockets["one"] = socket
+    runtime._ids["one"] = "account-101"
+
+    with pytest.raises(OneBotError, match="明确指定账号"):
+        await runtime._send_with_metadata("901", "unowned", {})
+    assert not any(action.startswith("send_") for action, _ in socket.calls)
+
+
+@pytest.mark.asyncio
+async def test_qq_account_channel_rejects_unowned_message_push(tmp_path):
+    runtime = QQAccountsRuntime(QQAccountsStore(tmp_path), _Accounts())
+    push_tool = MessagePushTool()
+    await runtime.start(
+        SimpleNamespace(
+            bus=_Bus(), push_tool=push_tool, intake_paused=False, channel_hub=None
+        )
+    )
+    try:
+        result = await push_tool.execute(channel="qq", chat_id="901", message="hi")
+        assert "明确指定账号" in result
+    finally:
+        await runtime.stop()
 
 
 @pytest.mark.asyncio

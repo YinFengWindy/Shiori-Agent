@@ -21,6 +21,26 @@ def _write_image(path: Path, color: tuple[int, int, int]) -> None:
 
 
 @pytest.mark.asyncio
+async def test_old_role_update_cannot_recreate_channel_bindings() -> None:
+    handler = DesktopRoleRequestHandler(
+        role_service=SimpleNamespace(),
+        role_presenter=SimpleNamespace(),
+        voice_handler=SimpleNamespace(),
+        publish_event=AsyncMock(),
+    )
+    with pytest.raises(ValueError, match="账号归属"):
+        await handler.handle(
+            "roles.update",
+            {
+                "role_id": "mira",
+                "channel_bindings": [
+                    {"channel": "qq", "chat_id": "gqq:42", "chat_type": "group"}
+                ],
+            },
+        )
+
+
+@pytest.mark.asyncio
 async def test_role_card_preview_forwards_the_full_payload_to_its_service() -> None:
     card_import = SimpleNamespace(
         preview=AsyncMock(return_value={"import_id": "preview-1"})

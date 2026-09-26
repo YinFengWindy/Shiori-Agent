@@ -43,10 +43,6 @@ def _sensor(
 def _save_candidates(roles: RoleStore, *candidates: dict[str, str]) -> None:
     _ = roles.update_role(
         "mira",
-        channel_bindings=[
-            {"channel": "desktop", "chat_id": "role:mira", "chat_type": "private"},
-            {"channel": "telegram", "chat_id": "42", "chat_type": "private"},
-        ],
         proactive={"enabled": bool(candidates), "candidates": list(candidates)},
     )
 
@@ -63,7 +59,7 @@ def test_sensor_selects_among_the_saved_candidates_at_call_time(tmp_path: Path):
     assert sensor.target_session_key() == "role:mira"
     assert sensor.target_transport() == ("desktop", "role:mira")
     presence.report(False)
-    assert sensor.target_transport() == ("telegram", "42")
+    assert sensor.target_transport() == ("desktop", "role:mira")
     # Candidate edits apply to the next selection without rebuilding the loop.
     _save_candidates(roles, {"channel": "desktop", "chat_id": "role:mira"})
     assert sensor.target_transport() == ("desktop", "role:mira")

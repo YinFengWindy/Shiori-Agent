@@ -71,34 +71,27 @@ def test_role_target_validation_rejects_bare_id_for_bound_qq_group(
         description="",
         system_prompt="You are Mira.",
     )
-    store.update_role(
-        role.id,
-        channel_bindings=[
-            {
-                "channel": "qq",
-                "chat_id": "gqq:42",
-                "chat_type": "group",
-            }
-        ],
-    )
 
     repository = RoleRepository(store)
-    # A bare ID would be sent to private user 42, not the bound group.
+    # Neither a private ID nor an old bound group authorizes external push.
     assert not _role_owns_channel_target(
         repository, role_id=role.id, channel="qq", chat_id="42"
     )
-    assert _role_owns_channel_target(
+    assert not _role_owns_channel_target(
         repository, role_id=role.id, channel="qq", chat_id="gqq:42"
     )
-    # message_push's role-target validator must refuse the bare ID outright,
-    # not explain it away as a channel mismatch.
-    assert (
-        _validate_role_target(repository, role_id=role.id, channel="qq", chat_id="42")
-        is False
+    # message_push directs both external targets to account-owned delivery.
+    private_result = _validate_role_target(
+        repository, role_id=role.id, channel="qq", chat_id="42"
     )
+    group_result = _validate_role_target(
+        repository, role_id=role.id, channel="qq", chat_id="gqq:42"
+    )
+    assert isinstance(private_result, str) and "account_send" in private_result
+    assert isinstance(group_result, str) and "account_send" in group_result
     assert (
         _validate_role_target(
-            repository, role_id=role.id, channel="qq", chat_id="gqq:42"
+            repository, role_id=role.id, channel="desktop", chat_id="role:mira"
         )
         is True
     )
@@ -114,16 +107,6 @@ def test_role_target_validation_explains_wrong_channel_for_bound_chat(
         description="",
         system_prompt="You are Mira.",
     )
-    store.update_role(
-        role.id,
-        channel_bindings=[
-            {
-                "channel": "qqbot",
-                "chat_id": "c2c:user-1",
-                "chat_type": "private",
-            }
-        ],
-    )
 
     result = _validate_role_target(
         RoleRepository(store),
@@ -133,8 +116,7 @@ def test_role_target_validation_explains_wrong_channel_for_bound_chat(
     )
 
     assert isinstance(result, str)
-    assert "已绑定渠道 qqbot" in result
-    assert "请使用 channel=qqbot" in result
+    assert "account_send" in result
 
 
 def test_actual_runtime_observes_and_follows_scene_without_novelai_package(tmp_path):
@@ -168,7 +150,7 @@ def test_actual_runtime_observes_and_follows_scene_without_novelai_package(tmp_p
         async def run():
             roles = RoleStore(workspace)
             roles.create_role(role_id="mira", name="Mira", system_prompt="role")
-            roles.update_role("mira", channel_bindings=[{"channel": "telegram", "chat_id": "chat", "chat_type": "private"}], proactive={"enabled": True, "candidates": [{"channel": "telegram", "chat_id": "chat"}]})
+            roles.update_role("mira", proactive={"enabled": True, "candidates": [{"channel": "telegram", "chat_id": "chat"}]})
             config = Config(provider="", model="", api_key="", model_registrations=[], memory_optimizer_enabled=False)
             app = AppRuntime(config, workspace, features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False))
             await app.start()
@@ -222,13 +204,6 @@ async def test_published_generation_keeps_before_turn_capture_until_old_after_tu
     roles.create_role(role_id="mira", name="Mira", system_prompt="role")
     roles.update_role(
         "mira",
-        channel_bindings=[
-            {
-                "channel": "telegram",
-                "chat_id": "chat",
-                "chat_type": "private",
-            }
-        ],
         proactive={
             "enabled": True,
             "candidates": [{"channel": "telegram", "chat_id": "chat"}],
@@ -343,13 +318,6 @@ async def test_core_scene_demand_respects_followup_strategy_and_independent_cons
     roles.create_role(role_id="mira", name="Mira", system_prompt="role")
     roles.update_role(
         "mira",
-        channel_bindings=[
-            {
-                "channel": "telegram",
-                "chat_id": "chat",
-                "chat_type": "private",
-            }
-        ],
         proactive={
             "enabled": role_enabled,
             "candidates": [{"channel": "telegram", "chat_id": "chat"}],
@@ -433,52 +401,4 @@ async def test_core_stop_preflights_before_teardown_and_force_continues_after_fa
         assert core.event_bus._closed
     finally:
         scene_close.side_effect = None
-        await app.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_started_runtime_checks_role_bindings_against_channel_declarations(
-    tmp_path, monkeypatch
-):
-    import shutil
-
-    from agent.config_models import Config
-    from bootstrap.app import AppRuntime, RuntimeFeatures
-
-    root = tmp_path / "plugin_dirs"
-    shutil.copytree(_REPO_ROOT / "plugins" / "qq", root / "qq")
-    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [root])
-    config = Config(
-        provider="",
-        model="",
-        api_key="",
-        model_registrations=[],
-        memory_optimizer_enabled=False,
-    )
-    app = AppRuntime(
-        config,
-        tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
-    )
-    await app.start()
-    try:
-        store = app.core.role_runtime_registry.repository.store
-        store.create_role(role_id="mira", name="Mira", system_prompt="role")
-
-        def group(chat_id: str) -> list[dict[str, Any]]:
-            return [
-                {
-                    "channel": "qq",
-                    "chat_id": chat_id,
-                    "chat_type": "group",
-                }
-            ]
-
-        # The qq manifest declares groups as gqq:<群号>; core reads that
-        # declaration without importing the plugin.
-        with pytest.raises(ValueError, match="gqq:<群号>"):
-            store.update_role("mira", channel_bindings=group("831907794"))
-        updated = store.update_role("mira", channel_bindings=group("gqq:831907794"))
-        assert updated.channel_bindings[0].chat_type == "group"
-    finally:
         await app.shutdown()
