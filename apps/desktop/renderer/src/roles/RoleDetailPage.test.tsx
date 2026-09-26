@@ -59,7 +59,8 @@ describe("RoleDetailPage", () => {
     assert.match(markup, /记忆/);
     assert.doesNotMatch(markup, /知识库/);
     assert.match(markup, /能力/);
-    assert.match(markup, /渠道与主动推送/);
+    assert.match(markup, /主动推送/);
+    assert.doesNotMatch(markup, /渠道绑定/);
     assert.match(markup, /aria-current="page"[^>]*>.*资料/);
     assert.match(markup, /角色设定/);
     assert.match(markup, /性格与规则/);

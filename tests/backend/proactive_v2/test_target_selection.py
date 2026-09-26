@@ -158,7 +158,7 @@ def test_resolver_reads_user_messages_per_candidate_thread(tmp_path: Path) -> No
 
     assert resolver.resolve_saved("mira") == DESKTOP
     presence.report(False)
-    assert resolver.resolve_saved("mira") == QQ_GROUP
+    assert resolver.resolve_saved("mira") == DESKTOP
     # An unsaved candidate list is resolved by the same rule.
     assert resolver.resolve("mira", [DESKTOP, QQ_PRIVATE]) == QQ_PRIVATE
 
@@ -169,7 +169,7 @@ def test_resolver_uses_first_external_candidate_without_history(
     presence = DesktopPresence()
     presence.report(False)
 
-    assert _resolver(tmp_path, presence).resolve_saved("mira") == QQ_PRIVATE
+    assert _resolver(tmp_path, presence).resolve_saved("mira") == DESKTOP
 
 
 def test_resolver_has_no_target_for_a_role_without_candidates(tmp_path: Path) -> None:

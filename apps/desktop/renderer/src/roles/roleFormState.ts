@@ -27,7 +27,7 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     profile: role.profile,
     nsfwMemoryEnabled: Boolean(role.runtime_config?.nsfw_memory_enabled),
     pluginSettings: readPluginRoleSettings(role.runtime_config, role.plugin_state),
-    channelBindings: role.channel_bindings ?? [],
+    channelBindings: [],
     ...readRoleProactiveForm(role),
     avatarSource: "",
     illustrationSources: [],
@@ -59,7 +59,6 @@ export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null
         || JSON.stringify(roleForm.profile ?? {}) !== JSON.stringify(role.profile ?? {})
         || roleForm.nsfwMemoryEnabled !== Boolean(role.runtime_config?.nsfw_memory_enabled)
         || pluginRoleSettingsDirty(roleForm.pluginSettings, role.runtime_config, role.plugin_state)
-        || JSON.stringify(roleForm.channelBindings ?? []) !== JSON.stringify(role.channel_bindings ?? [])
         || !roleProactiveConfigEqual(roleForm, role)
         || !roleMoodConfigEqual(roleForm, persistedMoodConfig)
         || !roleVoiceConfigEqual(roleForm, persistedVoiceConfig)

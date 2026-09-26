@@ -1,5 +1,4 @@
 import type { RoleFormState, RoleProactiveConfig, RoleRecord } from "../shared/types";
-import { roleProactiveCandidatesEqual } from "./roleProactiveCandidates";
 
 /** Stable defaults for the role-owned proactive editor contract. */
 export const roleProactiveDefaults = Object.freeze({
@@ -48,7 +47,7 @@ export function readRoleProactiveForm(
   const proactive = role.proactive;
   return {
     proactiveEnabled: proactive?.enabled ?? roleProactiveDefaults.enabled,
-    proactiveCandidates: proactive?.candidates ?? [],
+    proactiveCandidates: [],
     proactiveProfile: proactive?.profile ?? roleProactiveDefaults.profile,
     proactiveAgentMaxSteps: proactive?.agent?.max_steps ?? roleProactiveDefaults.agentMaxSteps,
     proactiveAgentContentLimit: proactive?.agent?.content_limit ?? roleProactiveDefaults.agentContentLimit,
@@ -70,7 +69,7 @@ export function buildRoleProactiveConfig(
   return {
     ...persisted,
     enabled: Boolean(roleForm.proactiveEnabled),
-    candidates: roleForm.proactiveCandidates ?? [],
+    candidates: [],
     profile: roleForm.proactiveProfile ?? roleProactiveDefaults.profile,
     agent: {
       ...persistedAgent,
@@ -98,7 +97,6 @@ export function roleProactiveConfigEqual(
   const persisted = role.proactive;
   return (
     Boolean(roleForm.proactiveEnabled) === Boolean(persisted?.enabled)
-    && roleProactiveCandidatesEqual(roleForm.proactiveCandidates ?? [], persisted?.candidates ?? [])
     && (roleForm.proactiveProfile ?? roleProactiveDefaults.profile)
       === (persisted?.profile ?? roleProactiveDefaults.profile)
     && (roleForm.proactiveAgentMaxSteps ?? roleProactiveDefaults.agentMaxSteps)

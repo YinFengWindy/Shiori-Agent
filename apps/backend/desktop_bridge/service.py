@@ -144,7 +144,7 @@ class DesktopBridgeService:
         self.role_service.add_role_deleted_listener(self._role_deleted_listener)
         self.conversation_service = ConversationService(
             session_manager,
-            binding_resolver=self.role_service.bindings.resolve_role_id,
+            binding_resolver=self.role_service.repository.store.resolve_legacy_session_owner,
         )
         self.relationship_runtime = relationship_runtime
         self.presence = presence

@@ -87,18 +87,20 @@ def test_role_target_validation_rejects_bare_id_for_bound_qq_group(
     assert not _role_owns_channel_target(
         repository, role_id=role.id, channel="qq", chat_id="42"
     )
-    assert _role_owns_channel_target(
+    assert not _role_owns_channel_target(
         repository, role_id=role.id, channel="qq", chat_id="gqq:42"
     )
     # message_push's role-target validator must refuse the bare ID outright,
     # not explain it away as a channel mismatch.
-    assert (
-        _validate_role_target(repository, role_id=role.id, channel="qq", chat_id="42")
-        is False
+    assert "account_send" in _validate_role_target(
+        repository, role_id=role.id, channel="qq", chat_id="42"
+    )
+    assert "account_send" in _validate_role_target(
+        repository, role_id=role.id, channel="qq", chat_id="gqq:42"
     )
     assert (
         _validate_role_target(
-            repository, role_id=role.id, channel="qq", chat_id="gqq:42"
+            repository, role_id=role.id, channel="desktop", chat_id="role:mira"
         )
         is True
     )
@@ -133,8 +135,7 @@ def test_role_target_validation_explains_wrong_channel_for_bound_chat(
     )
 
     assert isinstance(result, str)
-    assert "已绑定渠道 qqbot" in result
-    assert "请使用 channel=qqbot" in result
+    assert "account_send" in result
 
 
 def test_actual_runtime_observes_and_follows_scene_without_novelai_package(tmp_path):

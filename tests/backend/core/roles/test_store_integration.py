@@ -10,7 +10,6 @@ from bus.events import InboundMessage
 from core.common.channel_chat_types import ChatTypeDeclaration
 from core.roles import (
     RoleAggregateService,
-    RoleProactiveCandidate,
     RoleStore,
 )
 from core.roles.inbound import route_inbound_by_role
@@ -229,7 +228,7 @@ def test_role_store_keeps_group_blacklist_and_proactive_candidates_on_the_role(
     reloaded = RoleStore(tmp_path).get_role("mira")
     assert reloaded is not None
     assert reloaded.channel_bindings == updated.channel_bindings
-    assert reloaded.proactive.candidates == (RoleProactiveCandidate("qq", "7"),)
+    assert reloaded.proactive.candidates == ()
     luna = store.get_role("luna")
     assert luna is not None
     assert luna.channel_bindings == []
@@ -306,43 +305,41 @@ def test_role_store_rejects_binding_without_chat_type(tmp_path: Path):
         )
 
 
-def test_role_store_rejects_proactive_candidate_in_other_qq_chat_form(tmp_path: Path):
+def test_role_store_drops_proactive_candidate_in_other_qq_chat_form(tmp_path: Path):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
 
-    with pytest.raises(ValueError, match="已绑定的会话"):
-        store.update_role(
-            "mira",
-            channel_bindings=[
-                {
-                    "channel": "qq",
-                    "chat_id": "7",
-                    "chat_type": "private",
-                }
-            ],
-            proactive={
-                "enabled": True,
-                "candidates": [{"channel": "qq", "chat_id": "gqq:7"}],
-            },
-        )
+    updated = store.update_role(
+        "mira",
+        channel_bindings=[
+            {
+                "channel": "qq",
+                "chat_id": "7",
+                "chat_type": "private",
+            }
+        ],
+        proactive={
+            "enabled": True,
+            "candidates": [{"channel": "qq", "chat_id": "gqq:7"}],
+        },
+    )
+    assert updated.proactive.enabled is True
+    assert updated.proactive.candidates == ()
 
 
-def test_role_store_rejects_proactive_candidate_outside_its_bindings(tmp_path: Path):
+def test_role_store_drops_proactive_candidate_outside_its_bindings(tmp_path: Path):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
 
-    try:
-        store.update_role(
-            "mira",
-            proactive={
-                "enabled": True,
-                "candidates": [{"channel": "telegram", "chat_id": "42"}],
-            },
-        )
-    except ValueError as exc:
-        assert "当前角色已绑定" in str(exc)
-    else:
-        raise AssertionError("主动推送候选会话必须属于当前角色")
+    updated = store.update_role(
+        "mira",
+        proactive={
+            "enabled": True,
+            "candidates": [{"channel": "telegram", "chat_id": "42"}],
+        },
+    )
+    assert updated.proactive.enabled is True
+    assert updated.proactive.candidates == ()
 
 
 def test_role_store_keeps_proactive_enabled_when_last_binding_is_removed(
@@ -808,7 +805,7 @@ def test_role_binding_service_requires_explicit_binding(tmp_path: Path):
     assert opened.session.key == f"role:{aggregate.role.id}"
 
 
-def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path: Path):
+def test_route_inbound_by_role_uses_account_owner_session(tmp_path: Path):
     session_manager = SessionManager(tmp_path)
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
@@ -827,6 +824,16 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
         aggregate.role.id,
         chat_type="private",
     )
+    accounts = service.repository.store.accounts
+    accounts.set_plugin_enabled("telegram", True)
+    account = accounts.register(
+        plugin_id="telegram",
+        platform="telegram",
+        platform_account_id="self",
+        config_ref="legacy",
+        token="live",
+    )
+    accounts.report(account.record.id, "live", connection="online")
 
     routed = route_inbound_by_role(
         service,
@@ -836,7 +843,7 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
             chat_id="chat-1",
             content="hello",
             timestamp=datetime.now(),
-            metadata={"chat_type": "private"},
+            metadata={"account_id": account.record.id, "chat_type": "private"},
         ),
     )
 
@@ -875,5 +882,5 @@ def test_route_inbound_by_role_rejects_unbound_channel(tmp_path: Path):
         timestamp=datetime.now(),
     )
 
-    with pytest.raises(KeyError, match="渠道未绑定角色"):
+    with pytest.raises(PermissionError, match="接收账号"):
         route_inbound_by_role(service, original)

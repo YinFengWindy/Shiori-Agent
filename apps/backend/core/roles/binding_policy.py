@@ -17,7 +17,6 @@ from .models import (
     RoleProactiveCandidate,
     RoleProactiveConfig,
     RoleRecord,
-    keeps_proactive_enabled,
 )
 
 
@@ -105,30 +104,13 @@ class RoleBindingPolicy:
         proactive: RoleProactiveConfig | dict[str, Any],
         bindings: list[RoleChannelBindingConfig],
     ) -> RoleProactiveConfig:
-        """Validates the candidate sessions and stores them in binding order.
-
-        Every saved legacy candidate must name one of ``bindings``. An empty
-        candidate list uses the role desktop session as its default target.
-        """
+        """Stores proactive settings without retired session candidates."""
         normalized = (
             proactive
             if isinstance(proactive, RoleProactiveConfig)
             else RoleProactiveConfig.from_dict(proactive)
         )
-        bound = {RoleProactiveCandidate.of_binding(binding) for binding in bindings}
-        unbound = next(
-            (item for item in normalized.candidates if item not in bound), None
-        )
-        if unbound is not None:
-            raise ValueError(
-                "主动推送候选会话必须是当前角色已绑定的会话: "
-                f"{unbound.channel}:{unbound.chat_id}"
-            )
-        normalized = replace(
-            normalized,
-            candidates=_candidates_in_binding_order(normalized.candidates, bindings),
-        )
-        return normalized
+        return replace(normalized, candidates=())
 
     @staticmethod
     def prune_proactive_candidates(
@@ -140,12 +122,7 @@ class RoleBindingPolicy:
         An enabled role without a legacy candidate can use its desktop default
         or explicitly select an owned account during the turn.
         """
-        candidates = _candidates_in_binding_order(proactive.candidates, bindings)
-        return replace(
-            proactive,
-            candidates=candidates,
-            enabled=keeps_proactive_enabled(proactive.enabled, candidates),
-        )
+        return replace(proactive, candidates=())
 
     def _validate_chat_types(
         self,

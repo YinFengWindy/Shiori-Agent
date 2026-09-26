@@ -32,6 +32,14 @@ class AccountResponseRules:
 
 
 @dataclass(frozen=True)
+class LegacyOwnerRules:
+    """Group overrides retained while an ambiguous old owner is chosen."""
+
+    role_id: str
+    group_rules: tuple[GroupResponseRule, ...] = ()
+
+
+@dataclass(frozen=True)
 class AccountRecord:
     """Persisted identity; config_ref names plugin-private data, never a secret."""
 
@@ -46,6 +54,9 @@ class AccountRecord:
     ownership_version: int = 0
     response_rules: AccountResponseRules = AccountResponseRules()
     known_capabilities: tuple[str, ...] = ()
+    legacy_owner_candidates: tuple[str, ...] = ()
+    legacy_owner_rules: tuple[LegacyOwnerRules, ...] = ()
+    legacy_migrated: bool = False
 
 
 @dataclass(frozen=True)

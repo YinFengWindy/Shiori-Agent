@@ -59,6 +59,7 @@ export function AccountDetailDialog({ account, pluginId, onClose, onChanged }: {
           {error ? <InlineError message={error} /> : null}
           {account?.error && account.connection === "error" ? <InlineError message={account.error} /> : null}
           {account ? <>
+            {(account.legacyOwnerCandidates?.length ?? 0) > 0 ? <p className="m-0 text-body-sm text-ink-secondary">旧渠道归属待确认：{account.legacyOwnerCandidates?.map((id) => roles.find((role) => role.id === id)?.name ?? id).join("、")}</p> : null}
             <label className="grid gap-2 text-body-sm text-ink-secondary">
               所属角色
               <Select aria-label="所属角色" value={account.roleId ?? ""} disabled={busy} options={[

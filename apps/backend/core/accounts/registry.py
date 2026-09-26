@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 from threading import RLock
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
 
 from .models import (
@@ -14,9 +14,14 @@ from .models import (
     AccountResponseRules,
     AccountSnapshot,
     ConnectionState,
+    GroupResponseRule,
+    LegacyOwnerRules,
 )
 from .persistence import ensure_unique, load_accounts, save_accounts
 from .runtime_state import AccountRuntimeState, DIRECT_GENERATION
+
+if TYPE_CHECKING:
+    from core.roles.models import RoleRecord
 
 
 class AccountRegistry:
@@ -28,9 +33,13 @@ class AccountRegistry:
         role_exists: Callable[[str], bool],
         *,
         lock: RLock | None = None,
+        legacy_roles: Callable[[], list[RoleRecord]] | None = None,
+        retire_legacy_bindings: Callable[[set[str]], None] | None = None,
     ) -> None:
         self._path = workspace / "accounts.json"
         self._role_exists = role_exists
+        self._legacy_roles = legacy_roles
+        self._retire_legacy_bindings = retire_legacy_bindings
         self._lock = lock or RLock()
         self._runtime = AccountRuntimeState()
         self._records = load_accounts(self._path, role_exists)
@@ -63,6 +72,7 @@ class AccountRegistry:
                 self._save(updated)
                 del self._staged_records[generation]
             self._runtime.publish(generation)
+            self.migrate_legacy_bindings()
 
     def drop_generation(self, generation: str) -> None:
         """Discards unpublished identity data and retired runtime state."""
@@ -169,7 +179,97 @@ class AccountRegistry:
                 else:
                     self._staged_records.setdefault(generation, {})[row.id] = row
             self._runtime.register(row.id, token, generation)
+            if generation == DIRECT_GENERATION:
+                self.migrate_legacy_bindings()
+                row = self._records[row.id]
             return self._runtime.snapshot(row, generation=generation)
+
+    def migrate_legacy_bindings(self) -> None:
+        """Import saved role ownership and group policy after accounts are known."""
+        if self._legacy_roles is None:
+            return
+        with self._lock:
+            roles = self._legacy_roles()
+            updated = dict(self._records)
+            migrated_platforms: set[str] = set()
+            for row in self._records.values():
+                platform_accounts = [
+                    item
+                    for item in self._records.values()
+                    if item.platform == row.platform
+                ]
+                bindings = [
+                    (role.id, binding)
+                    for role in roles
+                    for binding in role.channel_bindings
+                    if binding.channel == row.platform
+                ]
+                if not bindings:
+                    continue
+                if row.legacy_migrated:
+                    migrated_platforms.add(row.platform)
+                    continue
+                candidates = tuple(sorted({role_id for role_id, _ in bindings}))
+                choices = tuple(
+                    LegacyOwnerRules(
+                        role_id=role_id,
+                        group_rules=tuple(
+                            GroupResponseRule(
+                                chat_id=binding.chat_id,
+                                require_mention=False,
+                                blocked_sender_ids=tuple(binding.blocked_senders),
+                            )
+                            for owner, binding in bindings
+                            if owner == role_id and binding.chat_type == "group"
+                        ),
+                    )
+                    for role_id in candidates
+                )
+                # Old bindings named a channel, not an account. Multiple new
+                # accounts of that platform require an explicit user decision.
+                unique_owner = (
+                    row.role_id is None
+                    and len(candidates) == len(platform_accounts) == 1
+                )
+                selected = next(
+                    (choice for choice in choices if choice.role_id == row.role_id),
+                    None,
+                )
+                group_rules = (
+                    selected.group_rules
+                    if selected is not None
+                    else choices[0].group_rules if unique_owner else ()
+                )
+                rules = row.response_rules
+                if group_rules and rules == AccountResponseRules():
+                    rules = replace(
+                        rules,
+                        group_enabled=False,
+                        group_rules=group_rules,
+                    )
+                updated[row.id] = replace(
+                    row,
+                    role_id=(
+                        candidates[0]
+                        if unique_owner and row.role_id is None
+                        else row.role_id
+                    ),
+                    ownership_version=row.ownership_version
+                    + int(unique_owner and row.role_id is None),
+                    response_rules=rules,
+                    legacy_owner_candidates=(
+                        () if unique_owner or row.role_id is not None else candidates
+                    ),
+                    legacy_owner_rules=(
+                        () if unique_owner or row.role_id is not None else choices
+                    ),
+                    legacy_migrated=True,
+                )
+                migrated_platforms.add(row.platform)
+            if updated != self._records:
+                self._save(updated)
+            if migrated_platforms and self._retire_legacy_bindings is not None:
+                self._retire_legacy_bindings(migrated_platforms)
 
     def report(
         self,
@@ -228,8 +328,28 @@ class AccountRegistry:
                 raise KeyError(f"role does not exist: {role_id}")
             row = self._records[account_id]
             if row.role_id != role_id:
+                rules = row.response_rules
+                if (
+                    role_id in row.legacy_owner_candidates
+                    and rules == AccountResponseRules()
+                ):
+                    groups = next(
+                        (
+                            choice.group_rules
+                            for choice in row.legacy_owner_rules
+                            if choice.role_id == role_id
+                        ),
+                        (),
+                    )
+                    if groups:
+                        rules = replace(rules, group_enabled=False, group_rules=groups)
                 row = replace(
-                    row, role_id=role_id, ownership_version=row.ownership_version + 1
+                    row,
+                    role_id=role_id,
+                    ownership_version=row.ownership_version + 1,
+                    legacy_owner_candidates=(),
+                    legacy_owner_rules=(),
+                    response_rules=rules,
                 )
                 self._save({**self._records, account_id: row})
             return self._runtime.snapshot(row)

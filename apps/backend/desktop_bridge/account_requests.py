@@ -20,6 +20,7 @@ def _serialize(snapshot: AccountSnapshot) -> dict[str, Any]:
         "display_name": row.display_name,
         "avatar_url": row.avatar_url,
         "role_id": row.role_id,
+        "legacy_owner_candidates": list(row.legacy_owner_candidates),
         "plugin_enabled": snapshot.plugin_enabled,
         "runtime_active": snapshot.runtime_active,
         "connection": snapshot.connection,

@@ -30,6 +30,7 @@ export function AccountList({ title, accounts, error, onRefresh, onAdd, emptyLab
         <span className="grid min-w-0 gap-0.5"><span className="truncate text-body font-medium text-ink">{account.platform} · {account.displayName || account.platformAccountId}</span><span className="truncate text-body-sm text-ink-muted">{account.platformAccountId}</span></span>
         <span className="grid shrink-0 gap-0.5 text-right text-body-sm text-ink-secondary">
           <span>{accountStatus(account)}</span>
+          {(account.legacyOwnerCandidates?.length ?? 0) > 0 ? <span className="text-ink-muted">待选择归属</span> : null}
           {showOwner ? <span className="text-ink-muted">{account.roleId ?? "未分配"}</span> : null}
         </span>
       </button>

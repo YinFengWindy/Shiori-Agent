@@ -101,6 +101,8 @@ class DesktopRoleRequestHandler:
                 }
             return result
         if method == "roles.update":
+            if "channel_bindings" in payload:
+                raise ValueError("角色渠道绑定已迁移到账号归属与响应规则")
             role_id = str(payload.get("role_id") or "")
             previous = self._role_service.repository.get_required(role_id)
             update_kwargs: dict[str, Any] = {
@@ -118,7 +120,6 @@ class DesktopRoleRequestHandler:
             aggregate = await self._role_service.update_role_async(
                 role_id,
                 **update_kwargs,
-                channel_bindings=self._list_payload(payload, "channel_bindings"),
                 proactive=self._dict_payload(payload, "proactive"),
                 avatar_source=str(payload.get("avatar_source") or "").strip() or None,
                 avatar_asset=str(payload.get("avatar_asset") or "").strip() or None,

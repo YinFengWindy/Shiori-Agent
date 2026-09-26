@@ -8,7 +8,12 @@ from typing import Callable
 
 from infra.persistence.json_store import atomic_save_json, load_json
 
-from .models import AccountRecord, AccountResponseRules, GroupResponseRule
+from .models import (
+    AccountRecord,
+    AccountResponseRules,
+    GroupResponseRule,
+    LegacyOwnerRules,
+)
 
 
 def ensure_unique(records: dict[str, AccountRecord]) -> None:
@@ -31,6 +36,30 @@ def load_accounts(
     for raw in rows:
         if "known_capabilities" in raw:
             raw = {**raw, "known_capabilities": tuple(raw["known_capabilities"])}
+        if "legacy_owner_candidates" in raw:
+            raw = {
+                **raw,
+                "legacy_owner_candidates": tuple(raw["legacy_owner_candidates"]),
+            }
+        if "legacy_owner_rules" in raw:
+            raw = {
+                **raw,
+                "legacy_owner_rules": tuple(
+                    LegacyOwnerRules(
+                        role_id=item["role_id"],
+                        group_rules=tuple(
+                            GroupResponseRule(
+                                chat_id=group["chat_id"],
+                                enabled=group["enabled"],
+                                require_mention=group["require_mention"],
+                                blocked_sender_ids=tuple(group["blocked_sender_ids"]),
+                            )
+                            for group in item["group_rules"]
+                        ),
+                    )
+                    for item in raw["legacy_owner_rules"]
+                ),
+            }
         if "response_rules" in raw:
             rules = raw["response_rules"]
             raw = {

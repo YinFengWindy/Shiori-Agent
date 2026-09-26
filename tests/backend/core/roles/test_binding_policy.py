@@ -57,7 +57,7 @@ _QQ_PRIVATE = RoleChannelBindingConfig("qq", "10001", "private")
 _QQ_GROUP = RoleChannelBindingConfig("qq", "gqq:7", "group")
 
 
-def test_proactive_candidates_are_stored_in_binding_order() -> None:
+def test_proactive_candidates_are_retired_on_save() -> None:
     normalized = RoleBindingPolicy.normalize_proactive(
         {
             "enabled": True,
@@ -69,19 +69,17 @@ def test_proactive_candidates_are_stored_in_binding_order() -> None:
         [_DESKTOP, _QQ_PRIVATE, _QQ_GROUP],
     )
 
-    assert normalized.candidates == (
-        RoleProactiveCandidate("desktop", "role:mira"),
-        RoleProactiveCandidate("qq", "gqq:7"),
+    assert normalized.enabled is True
+    assert normalized.candidates == ()
+
+
+def test_proactive_candidate_does_not_restore_a_target_binding() -> None:
+    normalized = RoleBindingPolicy.normalize_proactive(
+        {"enabled": True, "candidates": [{"channel": "qq", "chat_id": "7"}]},
+        [_QQ_GROUP],
     )
-
-
-def test_proactive_candidate_must_be_a_bound_session() -> None:
-    # A bare QQ number is a private chat, not the bound gqq: group.
-    with pytest.raises(ValueError, match="已绑定的会话: qq:7"):
-        RoleBindingPolicy.normalize_proactive(
-            {"enabled": True, "candidates": [{"channel": "qq", "chat_id": "7"}]},
-            [_QQ_GROUP],
-        )
+    assert normalized.enabled is True
+    assert normalized.candidates == ()
 
 
 def test_enabling_proactive_without_legacy_candidate_keeps_setting() -> None:
@@ -109,7 +107,7 @@ def test_removed_binding_leaves_candidates_and_preserves_enabled_setting() -> No
     emptied = RoleBindingPolicy.prune_proactive_candidates(proactive, [_QQ_PRIVATE])
 
     assert kept.enabled is True
-    assert kept.candidates == (RoleProactiveCandidate("desktop", "role:mira"),)
+    assert kept.candidates == ()
     assert emptied.enabled is True
     assert emptied.candidates == ()
 

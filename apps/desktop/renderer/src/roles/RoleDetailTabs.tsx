@@ -6,7 +6,7 @@ const tabs: Array<{ id: RoleDetailTabId; label: string }> = [
   { id: "profile", label: "资料" },
   { id: "memory", label: "记忆" },
   { id: "capabilities", label: "能力" },
-  { id: "delivery", label: "渠道与主动推送" },
+  { id: "delivery", label: "主动推送" },
 ];
 
 /** Renders the role-editor's task-focused navigation without adding another sidebar. */

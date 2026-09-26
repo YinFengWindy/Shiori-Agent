@@ -78,6 +78,9 @@ def load_config(
         from agent.plugin_config_migration import migrate_plugin_config
 
         data = migrate_plugin_config(resolved_path, data, workspace=workspace)
+        from agent.qq_host_config_migration import retire_copied_qq_config
+
+        data = retire_copied_qq_config(resolved_path, data, workspace=workspace)
     # 放在旧 JSON 插件设置迁入之后：那份 qqbot 设置也可能带着 allow_from。
     from agent.channel_allowlist_migration import remove_channel_allowlists
 

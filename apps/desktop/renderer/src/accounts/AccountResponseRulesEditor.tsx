@@ -48,7 +48,7 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
     </label>
     {showGroups ? <>
       <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
-        <input type="checkbox" checked={rules.groupEnabled} onChange={(event) => { setSaved(false); setRules((current) => ({ ...current, groupEnabled: event.target.checked })); }} />群聊启用
+        <input type="checkbox" checked={rules.groupEnabled} onChange={(event) => { setSaved(false); setRules((current) => ({ ...current, groupEnabled: event.target.checked })); }} />其他群聊启用
       </label>
       <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
         <input type="checkbox" checked={rules.requireMention} disabled={!rules.groupEnabled} onChange={(event) => { setSaved(false); setRules((current) => ({ ...current, requireMention: event.target.checked })); }} />群聊需要 @

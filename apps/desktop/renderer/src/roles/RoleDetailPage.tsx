@@ -94,7 +94,7 @@ export function RoleDetailPage({
   ) : activeTab === "capabilities" ? (
     <RoleCapabilitiesPanel activeRole={activeRole} bridgeReady={bridgeReady} roleForm={roleForm} onUpdate={updateRoleForm} />
   ) : (
-    <RoleDeliveryPanels activeRoleId={activeRoleId} roleForm={roleForm} onUpdate={updateRoleForm} onOpenPluginSettings={onOpenPluginSettings} />
+    <RoleDeliveryPanels roleForm={roleForm} onUpdate={updateRoleForm} />
   );
 
   return (

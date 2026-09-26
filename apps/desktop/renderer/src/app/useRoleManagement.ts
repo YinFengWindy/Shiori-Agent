@@ -122,7 +122,6 @@ export function useRoleManagement({
           ),
           nextRoleForm,
         ),
-        channel_bindings: nextRoleForm.channelBindings ?? [],
         proactive: buildRoleProactiveConfig(detailRole, nextRoleForm),
         plugin_drafts: buildPluginRoleDraftUpdates(nextRoleForm.pluginSettings, detailRole?.plugin_state),
         avatar_source: nextRoleForm.avatarSource || undefined,
