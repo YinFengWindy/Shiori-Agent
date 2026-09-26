@@ -5,12 +5,16 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
-from telegram.error import TelegramError
+from telegram.error import NetworkError, TelegramError
 
 from desktop_bridge.method_policy import Concurrency
 
 from .credentials import verify_bot_token
-from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
+from core.accounts.target_contract import (
+    ACCOUNT_SEND_METHOD,
+    ACCOUNT_TARGETS_METHOD,
+    UncertainDeliveryError,
+)
 
 if TYPE_CHECKING:
     from agent.plugin_host.capabilities import RpcCapability
@@ -168,5 +172,10 @@ class TelegramAccountApi:
             not isinstance(topic, int) or topic <= 0 or not chat_id.startswith("-")
         ):
             raise ValueError("A group topic requires a positive message_thread_id")
-        receipt = await channel.send(chat_id, text, message_thread_id=topic)
+        try:
+            receipt = await channel.send(chat_id, text, message_thread_id=topic)
+        except NetworkError as exc:
+            raise UncertainDeliveryError("Telegram 发送连接中断，结果不确定") from exc
+        if not receipt:
+            raise UncertainDeliveryError("Telegram 发送未返回消息 ID")
         return {"chat_id": chat_id, "message_thread_id": topic, "message_id": receipt}

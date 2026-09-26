@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import httpx
+from core.accounts.target_contract import UncertainDeliveryError
 
 if TYPE_CHECKING:
     from .account_identity import QQBotAccountIdentity
@@ -47,6 +48,8 @@ class _AccountSendingMixin:
             raise ValueError("发送内容不能为空")
         try:
             receipt = await channel.send(channel._chat_id(openid), content)
+        except httpx.TransportError as exc:
+            raise UncertainDeliveryError("QQBot 发送连接中断，结果不确定") from exc
         except httpx.HTTPStatusError as exc:
             try:
                 body = exc.response.json()
@@ -62,5 +65,5 @@ class _AccountSendingMixin:
                 + (f": {reason}" if reason else "")
             ) from exc
         if not receipt:
-            raise RuntimeError("QQBot 平台未返回消息 ID，发送结果不确定")
+            raise UncertainDeliveryError("QQBot 平台未返回消息 ID，发送结果不确定")
         return {"message_id": receipt, "chat_id": channel._chat_id(openid)}

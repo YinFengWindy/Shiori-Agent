@@ -4,9 +4,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from telegram.error import Forbidden
+from telegram.error import Forbidden, TimedOut
 
 from plugins.telegram.backend.account_api import TelegramAccountApi
+from core.accounts.target_contract import UncertainDeliveryError
 
 
 @pytest.fixture
@@ -110,6 +111,36 @@ async def test_shared_account_contract_preserves_bot_and_topic(account_api):
                 "account_id": "account-first",
                 "target_kind": "private",
                 "target_id": "-1001",
+                "message": "hello",
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_missing_telegram_receipt_is_uncertain(account_api):
+    api, first = account_api
+    first.send.return_value = None
+    with pytest.raises(UncertainDeliveryError):
+        await api.account_send(
+            {
+                "account_id": "account-first",
+                "target_kind": "private",
+                "target_id": "123",
+                "message": "hello",
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_telegram_network_error_is_uncertain(account_api):
+    api, first = account_api
+    first.send.side_effect = TimedOut("reply lost")
+    with pytest.raises(UncertainDeliveryError):
+        await api.account_send(
+            {
+                "account_id": "account-first",
+                "target_kind": "private",
+                "target_id": "123",
                 "message": "hello",
             }
         )

@@ -8,12 +8,14 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+import httpx
 from shiori_plugin_testkit.packages import stage_plugin_package
 from shiori_plugin_testkit.bridge import plugin_bridge_request
 
 from agent.plugin_host import HostServices, PluginKernel, load_manifest
 from bus.event_bus import EventBus
 from core.accounts import AccountSnapshot
+from core.accounts.target_contract import UncertainDeliveryError
 from core.roles.store import RoleStore
 from plugins.feishu.backend.plugin import setup
 
@@ -63,6 +65,26 @@ async def test_shared_account_rpc_uses_selected_private_application() -> None:
         }
     ) == {"message_id": "om_9"}
     channels[0].send.assert_awaited_once_with("oc_chat", "hello")
+    channels[0].send.return_value = None
+    with pytest.raises(UncertainDeliveryError):
+        await handlers["account.send"](
+            {
+                "account_id": "account-a",
+                "target_kind": "private",
+                "target_id": "oc_chat",
+                "message": "hello",
+            }
+        )
+    channels[0].send.side_effect = httpx.ReadTimeout("reply lost")
+    with pytest.raises(UncertainDeliveryError):
+        await handlers["account.send"](
+            {
+                "account_id": "account-a",
+                "target_kind": "private",
+                "target_id": "oc_chat",
+                "message": "hello",
+            }
+        )
     with pytest.raises(ValueError, match="私聊"):
         await handlers["account.send"](
             {"account_id": "account-a", "target_kind": "group"}

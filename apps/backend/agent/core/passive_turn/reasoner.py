@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from core.common.message_source import MessageSource
 from agent.tools.turn_scope import tool_turn
-from agent.tools.account_delivery import account_delivery_scope
+from agent.account_delivery.turn_state import account_delivery_scope
 
 from core.roles.reply_state import role_mood_catalog
 

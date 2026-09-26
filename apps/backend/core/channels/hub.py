@@ -6,7 +6,7 @@ from typing import Any
 from bus.events import InboundMessage, OutboundMessage
 from core.common.channel_directory import ChannelDirectory
 from core.common.channel_identifiers import chat_ids_equal, normalize_sender_id
-from core.accounts import AccountRegistry
+from core.accounts import AccountRegistry, AccountSnapshot
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
@@ -79,18 +79,11 @@ class ChannelHub:
         account_id = str(metadata.get("account_id") or "").strip()
         if not account_id or not str(message.sender or "").strip():
             return None
-        try:
-            account = self._accounts.get(account_id)
-        except KeyError:
+        account = self._live_owned_account(account_id, message.channel)
+        if account is None:
             return None
         role_id = account.record.role_id
-        if (
-            not role_id
-            or not account.plugin_enabled
-            or not account.runtime_active
-            or account.connection != "online"
-            or account.record.platform != message.channel.split(":", 1)[0]
-        ):
+        if role_id is None:
             return None
         rules = account.record.response_rules
         chat_type = str(metadata.get("chat_type") or "private").lower()
@@ -109,19 +102,16 @@ class ChannelHub:
                 if override is not None
                 else rules.require_mention
             )
-            blocked = rules.blocked_sender_ids + (
-                override.blocked_sender_ids if override is not None else ()
-            )
             if require_mention and not metadata.get("mentioned"):
                 return None
         else:
             if not rules.private_enabled:
                 return None
-            blocked = rules.blocked_sender_ids
-        alias = normalize_sender_id(str(metadata.get("username") or "")).lower()
-        if message.sender in blocked or (
-            alias
-            and any(alias == normalize_sender_id(item).lower() for item in blocked)
+        if self._account_sender_blocked(
+            account,
+            chat_id=message.chat_id,
+            sender_id=message.sender,
+            sender_alias=str(metadata.get("username") or ""),
         ):
             return None
         claimed_role = str(metadata.get("role_id") or "").strip()
@@ -129,6 +119,60 @@ class ChannelHub:
             return None
         metadata["source"] = "role_account"
         return self._route_for_role(message, role_id, metadata)
+
+    def _live_owned_account(
+        self, account_id: str, channel: str = ""
+    ) -> AccountSnapshot | None:
+        """Share the live ownership gate across intake and account commands."""
+        if not account_id:
+            return None
+        try:
+            account = self._accounts.get(account_id)
+        except KeyError:
+            return None
+        if (
+            not account.record.role_id
+            or not account.plugin_enabled
+            or not account.runtime_active
+            or account.connection != "online"
+            or (
+                channel
+                and channel != account.record.platform
+                and not channel.startswith(f"{account.record.platform}:")
+                and not channel.startswith(f"{account.record.platform}_")
+            )
+        ):
+            return None
+        return account
+
+    @staticmethod
+    def _sender_blocked(
+        sender_id: str, sender_alias: str, blocked_senders: tuple[str, ...]
+    ) -> bool:
+        alias = normalize_sender_id(sender_alias).lower()
+        return sender_id in blocked_senders or bool(
+            alias
+            and any(
+                alias == normalize_sender_id(item).lower() for item in blocked_senders
+            )
+        )
+
+    def _account_sender_blocked(
+        self,
+        account: AccountSnapshot,
+        *,
+        chat_id: str,
+        sender_id: str,
+        sender_alias: str,
+    ) -> bool:
+        rules = account.record.response_rules
+        group = next(
+            (item for item in rules.group_rules if item.chat_id == chat_id), None
+        )
+        blocked = rules.blocked_sender_ids + (
+            group.blocked_sender_ids if group is not None else ()
+        )
+        return self._sender_blocked(sender_id, sender_alias, blocked)
 
     def _route_for_role(
         self, message: InboundMessage, role_id: str, metadata: dict[str, Any]
@@ -203,26 +247,12 @@ class ChannelHub:
         on both sides.
         """
         if account_id:
-            try:
-                account = self._accounts.get(account_id)
-            except KeyError:
-                return False
-            if (
-                not account.record.role_id
-                or not account.plugin_enabled
-                or not account.runtime_active
-                or account.connection != "online"
-                or account.record.platform != channel.split(":", 1)[0]
-            ):
-                return False
-            rules = account.record.response_rules
-            alias = normalize_sender_id(sender_alias).lower()
-            return sender_id not in rules.blocked_sender_ids and not (
-                alias
-                and any(
-                    alias == normalize_sender_id(item).lower()
-                    for item in rules.blocked_sender_ids
-                )
+            account = self._live_owned_account(account_id, channel)
+            return account is not None and not self._account_sender_blocked(
+                account,
+                chat_id=chat_id,
+                sender_id=sender_id,
+                sender_alias=sender_alias,
             )
         binding = self._service.bindings.get_binding(channel, chat_id)
         if binding is None:
@@ -234,11 +264,8 @@ class ChannelHub:
             if item.channel == channel
             and chat_ids_equal(channel, item.chat_id, chat_id)
         )
-        if sender_id in config.blocked_senders:
-            return False
-        alias = normalize_sender_id(sender_alias).lower()
-        return not (
-            alias and any(alias == entry.lower() for entry in config.blocked_senders)
+        return not self._sender_blocked(
+            sender_id, sender_alias, tuple(config.blocked_senders)
         )
 
     def is_sender_blocked(
@@ -273,16 +300,10 @@ class ChannelHub:
 
     def resolve_account_runtime_session_key(self, account_id: str) -> str:
         """Resolves account control actions through the current live owner."""
-        account = self._accounts.get(account_id)
-        role_id = account.record.role_id
-        if (
-            not role_id
-            or not account.plugin_enabled
-            or not account.runtime_active
-            or account.connection != "online"
-        ):
+        account = self._live_owned_account(account_id)
+        if account is None or account.record.role_id is None:
             raise PermissionError("接收账号未授权控制会话")
-        return self._service.sessions.derive_session_key(role_id)
+        return self._service.sessions.derive_session_key(account.record.role_id)
 
     def mark_delivery(
         self,

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import inspect
-import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from agent.turns.outbound import OutboundDispatch, OutboundPort
-from agent.tools.account_delivery import AccountSendTool
+from agent.account_delivery import AccountDelivery
 from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
@@ -34,7 +33,7 @@ class TurnOrchestratorDeps:
     session: SessionServices
     outbound: OutboundPort
     event_bus: EventBus | None = None
-    account_send_tool: AccountSendTool | None = None
+    account_delivery: AccountDelivery | None = None
 
 
 class TurnOrchestrator:
@@ -42,7 +41,7 @@ class TurnOrchestrator:
         self._session = deps.session
         self._outbound = deps.outbound
         self._event_bus = deps.event_bus
-        self._account_send_tool = deps.account_send_tool
+        self._account_delivery = deps.account_delivery
 
     def capture_reply_context(self, session_key: str) -> RoleReplyContext:
         """Capture role output constraints and the successful-state stamp per tick."""
@@ -202,26 +201,28 @@ class TurnOrchestrator:
         nothing, exactly as before.
         """
         if isinstance(account_target, dict):
-            if self._account_send_tool is None or media:
-                raise RuntimeError("账号目标发送仅支持已配置的文本投递")
-            raw_receipt = await self._account_send_tool.execute(
-                account_id=account_target["account_id"],
-                role_id=metadata["role_id"],
-                target_kind=account_target["target_kind"],
-                target_id=account_target["target_id"],
-                message=content,
-                message_thread_id=account_target.get("message_thread_id"),
+            if self._account_delivery is None:
+                raise RuntimeError("账号目标发送服务不可用")
+            receipt = await self._account_delivery.send(
+                str(account_target.get("account_id") or ""),
+                str(metadata.get("role_id") or ""),
+                str(account_target.get("target_kind") or ""),
+                str(account_target.get("target_id") or ""),
+                content,
+                account_target.get("message_thread_id"),
+                source="proactive",
+                media=media,
             )
-            result = json.loads(raw_receipt)
             message["metadata"].update(
                 {
-                    "delivery_account_id": result["account_id"],
-                    "delivery_target_kind": result["target_kind"],
-                    "delivery_target_id": result["target_id"],
+                    "delivery_attempt_id": receipt.attempt_id,
+                    "delivery_account_id": receipt.account_id,
+                    "delivery_target_kind": receipt.target_kind,
+                    "delivery_target_id": receipt.target_id,
                 }
             )
             message["delivery_status"] = "sent"
-            message["external_message_id"] = result["platform_message_id"]
+            message["external_message_id"] = receipt.platform_message_id
             return True
         receipt = await self._outbound.dispatch(
             OutboundDispatch(

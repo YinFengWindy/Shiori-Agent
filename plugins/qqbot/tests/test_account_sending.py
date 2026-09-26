@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from plugins.qqbot.backend.account_sending import _AccountSendingMixin
+from core.accounts.target_contract import UncertainDeliveryError
 
 
 class _Sending(_AccountSendingMixin):
@@ -73,4 +74,32 @@ async def test_send_reports_platform_failure_reason():
     with pytest.raises(RuntimeError, match="HTTP 403.*target unavailable"):
         await _Sending(channel).send_target(
             {"account_id": "account-100", "user_openid": "opaque", "content": "hello"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_missing_qqbot_receipt_is_uncertain():
+    async def no_receipt(chat_id, content):
+        return None
+
+    channel = SimpleNamespace(
+        _chat_id=lambda openid: f"c2c:100:{openid}", send=no_receipt
+    )
+    with pytest.raises(UncertainDeliveryError):
+        await _Sending(channel).send_target(
+            {"account_id": "account-100", "user_openid": "opaque", "content": "hi"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_qqbot_transport_error_is_uncertain():
+    async def disconnected(chat_id, content):
+        raise httpx.ConnectError("connection lost")
+
+    channel = SimpleNamespace(
+        _chat_id=lambda openid: f"c2c:100:{openid}", send=disconnected
+    )
+    with pytest.raises(UncertainDeliveryError):
+        await _Sending(channel).send_target(
+            {"account_id": "account-100", "user_openid": "opaque", "content": "hi"}
         )

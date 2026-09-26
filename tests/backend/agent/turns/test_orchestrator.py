@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 from core.roles.reply_state import RoleReply, RoleReplyContext
 
@@ -23,7 +22,9 @@ from session.manager import SessionManager
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
 from agent.tools.message_push import MessagePushTool
-from agent.tools.account_delivery import AccountSendTool
+from agent.account_delivery import AccountDelivery, AccountSendReceipt
+from core.accounts import AccountRegistry
+from core.accounts.delivery_ledger import AccountDeliveryLedger
 from agent.turns.outbound import PushToolOutboundPort
 from conversation.push_sync import ExternalImageSyncService
 from session.manager.models import build_session_message
@@ -54,13 +55,13 @@ async def test_explicit_proactive_account_target_records_receipt_without_default
 ) -> None:
     sender = SimpleNamespace(
         send=AsyncMock(
-            return_value=json.dumps(
-                {
-                    "account_id": "account-1",
-                    "target_kind": "private",
-                    "target_id": "user-1",
-                    "platform_message_id": "platform-9",
-                }
+            return_value=AccountSendReceipt(
+                attempt_id="attempt-1",
+                account_id="account-1",
+                target_kind="private",
+                target_id="user-1",
+                platform_message_id="platform-9",
+                ownership_current=True,
             )
         )
     )
@@ -69,7 +70,7 @@ async def test_explicit_proactive_account_target_records_receipt_without_default
         TurnOrchestratorDeps(
             session=SessionServices(session_manager=SessionManager(tmp_path)),
             outbound=default,
-            account_send_tool=AccountSendTool(sender),
+            account_delivery=sender,
         )
     )
     message: dict[str, Any] = {"metadata": {}}
@@ -90,6 +91,62 @@ async def test_explicit_proactive_account_target_records_receipt_without_default
     assert message["delivery_status"] == "sent"
     assert message["external_message_id"] == "platform-9"
     assert message["metadata"]["delivery_account_id"] == "account-1"
+    assert message["metadata"]["delivery_attempt_id"] == "attempt-1"
+    default.dispatch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_failed_proactive_target_remains_durable_without_turn_commit(
+    tmp_path,
+) -> None:
+    accounts = AccountRegistry(tmp_path, lambda role_id: role_id == "mira")
+    accounts.set_plugin_enabled("chat", True)
+    account = accounts.register(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="bot",
+        config_ref="bot",
+        token="live",
+    )
+    account_id = account.record.id
+    accounts.assign(account_id, "mira")
+    accounts.report(account_id, "live", connection="online")
+
+    async def rejected(payload):
+        raise ValueError("target rejected")
+
+    rpc = SimpleNamespace(resolve=lambda name: ("chat", rejected))
+    ledger = AccountDeliveryLedger(tmp_path)
+    delivery = AccountDelivery(accounts, rpc, ledger)
+    default = SimpleNamespace(dispatch=AsyncMock())
+    orchestrator = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            session=SessionServices(session_manager=SessionManager(tmp_path)),
+            outbound=default,
+            account_delivery=delivery,
+        )
+    )
+    with pytest.raises(ValueError, match="target rejected"):
+        await orchestrator._deliver_before_commit(
+            {"metadata": {}},
+            channel="desktop",
+            chat_id="role:mira",
+            content="hello",
+            media=[],
+            metadata={"role_id": "mira"},
+            account_target={
+                "account_id": account_id,
+                "target_kind": "private",
+                "target_id": "opaque-user",
+            },
+        )
+    [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
+    assert (attempt.account_id, attempt.target_id, attempt.source) == (
+        account_id,
+        "opaque-user",
+        "proactive",
+    )
+    assert (attempt.status, attempt.error) == ("failed", "ValueError")
     default.dispatch.assert_not_awaited()
 
 

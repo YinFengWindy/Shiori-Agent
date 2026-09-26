@@ -150,6 +150,38 @@ def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
     assert hub.route_account_inbound(message) is None
 
 
+def test_account_inbound_accepts_telegram_instance_channel_name(tmp_path: Path) -> None:
+    sessions = SessionManager(tmp_path)
+    store = RoleStore(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path, role_store=store, session_manager=sessions
+    )
+    service.create_role(role_id="mira", name="Mira", system_prompt="mira")
+    accounts = store.accounts
+    accounts.set_plugin_enabled("telegram", True)
+    account = accounts.register(
+        plugin_id="telegram",
+        platform="telegram",
+        platform_account_id="123",
+        config_ref="second",
+        token="live",
+    )
+    accounts.assign(account.record.id, "mira")
+    accounts.report(account.record.id, "live", connection="online")
+
+    routed = ChannelHub(service).route_account_inbound(
+        InboundMessage(
+            channel="telegram_second",
+            sender="42",
+            chat_id="42",
+            content="hello",
+            metadata={"account_id": account.record.id, "chat_type": "private"},
+        )
+    )
+    assert routed is not None
+    assert routed.session_key == "role:mira"
+
+
 def test_channel_hub_chat_type_default_comes_from_the_channel(tmp_path: Path) -> None:
     session_manager = SessionManager(tmp_path)
     service = RoleAggregateService.from_runtime(

@@ -166,8 +166,10 @@ class ProactiveLoop:
                     },
                 ),
                 event_bus=self._event_bus,
-                account_send_tool=(
-                    account_send if isinstance(account_send, AccountSendTool) else None
+                account_delivery=(
+                    account_send.delivery
+                    if isinstance(account_send, AccountSendTool)
+                    else None
                 ),
             )
         )

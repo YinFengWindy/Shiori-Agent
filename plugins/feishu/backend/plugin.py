@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import httpx
+
 from .channel import FeishuChannel
 from .config import FeishuAppConfig, FeishuConfigModel
 from .identity import verify_app
-from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
+from core.accounts.target_contract import (
+    ACCOUNT_SEND_METHOD,
+    ACCOUNT_TARGETS_METHOD,
+    UncertainDeliveryError,
+)
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
@@ -57,11 +63,14 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         channel = channels.get(ref)
         if channel is None:
             raise RuntimeError("飞书账号未连接")
-        message_id = await channel.send(
-            str(payload.get("chat_id") or ""), str(payload.get("message") or "")
-        )
+        try:
+            message_id = await channel.send(
+                str(payload.get("chat_id") or ""), str(payload.get("message") or "")
+            )
+        except httpx.TransportError as exc:
+            raise UncertainDeliveryError("飞书发送连接中断，结果不确定") from exc
         if not message_id:
-            raise RuntimeError("飞书平台未返回消息回执")
+            raise UncertainDeliveryError("飞书平台未返回消息回执")
         return {"message_id": message_id}
 
     ctx.rpc.register("accounts.send", send_target)
