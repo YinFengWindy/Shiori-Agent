@@ -103,6 +103,13 @@ class QQInboundAdapter:
             and not message.metadata.get("mentioned")
         ):
             return
+        if isinstance(hub, AccountInboundRouter):
+            routed = hub.route_account_inbound(message)
+            if routed is None:
+                return
+            message = routed
+            if message.metadata.get("conversation_duplicate"):
+                return
         raw = (
             strip_at_segments(message.content)
             if message.metadata.get("chat_type") == "group"
@@ -117,12 +124,7 @@ class QQInboundAdapter:
             else []
         )
         message = replace(message, content=text, media=media)
-        if isinstance(hub, AccountInboundRouter):
-            routed = hub.route_account_inbound(message)
-            if routed is None:
-                return
-            message = routed
-        elif hub is not None:
+        if hub is not None and not isinstance(hub, AccountInboundRouter):
             message = hub.route_inbound(message)
         if not message.metadata.get("conversation_duplicate"):
             await ctx.bus.publish_inbound(message)

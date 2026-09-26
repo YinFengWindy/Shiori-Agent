@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+import plugins.qq.backend.accounts_inbound_adapter as inbound_adapter
 from plugins.qq.backend.accounts_inbound import inbound_message
 from plugins.qq.backend.accounts_inbound_adapter import QQInboundAdapter
 
@@ -93,4 +94,30 @@ async def test_account_router_can_reject_unmentioned_group():
         attachment_store=SimpleNamespace(),
     )
     await adapter._accept_inbound(_group_message(False))
+    bus.publish_inbound.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_account_router_rejection_fetches_no_image(monkeypatch):
+    adapter = QQInboundAdapter()
+    bus = SimpleNamespace(publish_inbound=AsyncMock())
+    download = AsyncMock()
+    monkeypatch.setattr(inbound_adapter, "download_to_temp", download)
+
+    class AccountRouter:
+        def route_account_inbound(self, message):
+            assert message.metadata["account_id"] == "account-b"
+            assert message.metadata["mentioned"] is False
+            return None
+
+    adapter._ctx = SimpleNamespace(
+        bus=bus,
+        channel_hub=AccountRouter(),
+        http_resources=SimpleNamespace(),
+        attachment_store=SimpleNamespace(),
+    )
+    message = _group_message(False)
+    message.content = "[CQ:image,url=https://example.com/private.png]"
+    await adapter._accept_inbound(message)
+    download.assert_not_awaited()
     bus.publish_inbound.assert_not_awaited()
