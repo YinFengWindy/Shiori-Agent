@@ -9,6 +9,7 @@ from telegramify_markdown.entity import MessageEntity, split_entities
 
 from .limiter import TelegramOutboundLimiter, _run_outbound
 from .streaming import TelegramStreamMessage, _iter_stream_chunks
+from .topic import telegram_topic_kwargs
 
 logger = logging.getLogger("plugins.telegram.utils")
 
@@ -69,6 +70,7 @@ async def send_markdown(
     limiter: TelegramOutboundLimiter | None = None,
     *,
     on_receipt: Callable[[str], None] | None = None,
+    message_thread_id: int | None = None,
 ) -> str | None:
     """Sends Markdown chunks and returns the first acknowledged message ID.
 
@@ -89,7 +91,11 @@ async def send_markdown(
                 limiter,
                 cid,
                 kind="send",
-                action=lambda: bot.send_message(chat_id=cid, text=chunk),
+                action=lambda: bot.send_message(
+                    chat_id=cid,
+                    text=chunk,
+                    **telegram_topic_kwargs(message_thread_id),
+                ),
                 label="send_message(plain)",
             )
             message_id = sent_message_id(sent)
@@ -109,6 +115,7 @@ async def send_markdown(
                 chat_id=cid,
                 text=chunk_text,
                 entities=cast(Any, _serialize_entities(chunk_entities)),
+                **telegram_topic_kwargs(message_thread_id),
             ),
             label="send_message(markdown)",
         )
@@ -143,6 +150,8 @@ async def send_thinking_block(
     chat_id: int | str,
     thinking: str,
     limiter: TelegramOutboundLimiter | None = None,
+    *,
+    message_thread_id: int | None = None,
 ) -> None:
     """Send thinking content as expandable blockquote message(s).
 
@@ -169,6 +178,7 @@ async def send_thinking_block(
                     chat_id=cid,
                     text=text,
                     entities=[entity],
+                    **telegram_topic_kwargs(message_thread_id),
                 ),
                 label="send_message(thinking_block)",
             )

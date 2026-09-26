@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from .account_channel import QQBotAccountsChannel
+from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 from .accounts import QQBotAccountStore
 
 if TYPE_CHECKING:
@@ -53,8 +54,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         "account.detail", channel.detail, concurrency=Concurrency.READ_ONLY
     )
     ctx.rpc.register(
-        "account.targets", channel.targets, concurrency=Concurrency.READ_ONLY
+        ACCOUNT_TARGETS_METHOD, channel.targets, concurrency=Concurrency.READ_ONLY
     )
     ctx.rpc.register("account.save", channel.save_and_connect)
     ctx.rpc.register("account.disconnect", channel.disconnect)
-    ctx.rpc.register("account.send", channel.send_target)
+    ctx.rpc.register(ACCOUNT_SEND_METHOD, channel.account_send)

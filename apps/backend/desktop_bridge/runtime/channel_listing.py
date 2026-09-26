@@ -16,10 +16,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from agent.plugin_host.kernel import PluginKernel
-from agent.plugin_host.manifest import ChannelDeclaration, PluginManifest
+from agent.plugin_host.manifest import (
+    ChannelDeclaration,
+    PluginManifest,
+    matches_channel_instance,
+)
 from bootstrap.app import AppRuntime
 from bootstrap.channel_host import ChannelSnapshot
 
@@ -99,6 +104,27 @@ class RuntimeChannelListing:
                             status=entry.get("status"),
                         )
                     )
+                if enabled and plugin_state == "ACTIVE" and declaration.instance_prefix:
+                    for instance_name, entry in snapshot.items():
+                        if instance_name in seen or not matches_channel_instance(
+                            instance_name, declaration.instance_prefix
+                        ):
+                            continue
+                        seen.add(instance_name)
+                        rows.append(
+                            _row(
+                                replace(
+                                    declaration,
+                                    name=instance_name,
+                                    instance_prefix=None,
+                                ),
+                                plugin_id,
+                                True,
+                                entry["state"],
+                                error=entry["error"],
+                                status=entry.get("status"),
+                            )
+                        )
         return rows
 
     def _plugin_kernel(self) -> PluginKernel | None:

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.accounts.target_contract import UncertainDeliveryError
 from plugins.qq.backend.accounts_runtime import QQAccountsRuntime
 from plugins.qq.backend.accounts_store import QQAccountsStore, QQConnectionConfig
 from plugins.qq.backend.onebot import OneBotAuthError, OneBotError
@@ -697,7 +698,7 @@ async def test_platform_failure_and_missing_receipt_are_not_reported_as_success(
         return {}
 
     socket.call = AsyncMock(side_effect=missing_receipt)
-    with pytest.raises(ValueError, match="消息回执"):
+    with pytest.raises(UncertainDeliveryError, match="有效回执"):
         await runtime.send_target(account_id, "private", "901", "hello")
     with pytest.raises(ValueError, match="目标 ID"):
         await runtime.send_target(account_id, "group", "gqq:777", "hello")

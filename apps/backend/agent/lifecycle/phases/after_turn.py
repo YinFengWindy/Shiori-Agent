@@ -265,7 +265,9 @@ class _DispatchOutboundModule:
     async def run(self, frame: AfterTurnFrame) -> AfterTurnFrame:
         snap = frame.input
         outbound = snap.outbound
-        if snap.state.dispatch_outbound:
+        if snap.state.dispatch_outbound and not outbound.metadata.get(
+            "account_delivery_sent"
+        ):
             _ = await self._outbound.dispatch(
                 OutboundDispatch(
                     channel=outbound.channel,

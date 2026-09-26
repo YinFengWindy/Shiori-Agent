@@ -71,7 +71,10 @@ class _InboundMixin:
     def _is_sender_admitted(self, chat_id: str, sender: str) -> bool:
         """Checks the role binding's admission; ``_accept_inbound`` repeats it for replays."""
         if self._channel_hub is None or self._channel_hub.is_sender_allowed(
-            channel=CHANNEL, chat_id=chat_id, sender_id=sender
+            channel=CHANNEL,
+            chat_id=chat_id,
+            sender_id=sender,
+            account_id=self._account_id,
         ):
             return True
         logger.warning("[qqbot] 忽略未绑定渠道的消息 chat_id=%s", chat_id)
@@ -98,13 +101,22 @@ class _InboundMixin:
                 channel=message.channel,
                 chat_id=message.chat_id,
                 sender_id=message.sender,
+                account_id=str(message.metadata.get("account_id") or ""),
             ):
                 logger.warning(
                     "[qqbot] 忽略未绑定渠道或黑名单成员的消息 chat_id=%s",
                     message.chat_id,
                 )
                 return
-            message = self._channel_hub.route_inbound(message)
+            if "account_id" in message.metadata and callable(
+                getattr(self._channel_hub, "route_account_inbound", None)
+            ):
+                routed = self._channel_hub.route_account_inbound(message)
+                if routed is None:
+                    return
+                message = routed
+            else:
+                message = self._channel_hub.route_inbound(message)
         if message.metadata.get("conversation_duplicate"):
             return
         await self._require_bus().publish_inbound(message)
@@ -116,9 +128,16 @@ class _InboundMixin:
             await self.send(chat_id, "当前未启用中断功能。")
             return
         session_key = (
-            self._channel_hub.resolve_runtime_session_key(CHANNEL, chat_id)
-            if self._channel_hub is not None
-            else f"{CHANNEL}:{chat_id}"
+            self._channel_hub.resolve_account_runtime_session_key(self._account_id)
+            if self._account_id
+            and callable(
+                getattr(self._channel_hub, "resolve_account_runtime_session_key", None)
+            )
+            else (
+                self._channel_hub.resolve_runtime_session_key(CHANNEL, chat_id)
+                if self._channel_hub is not None
+                else f"{CHANNEL}:{chat_id}"
+            )
         )
         result = self._interrupt_controller.request_interrupt(
             session_key=session_key,

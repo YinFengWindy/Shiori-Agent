@@ -8,6 +8,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from .formatting import _build_inbound_text_with_reply
+from .identity import message_mentioned_bot, message_subject, message_topic_metadata
 
 logger = logging.getLogger("plugins.telegram.channel")
 
@@ -20,11 +21,14 @@ class _MediaMixin:
     ) -> None:
         msg = update.effective_message
         chat = update.effective_chat
-        user = update.effective_user
+        user, sender_id, sender_kind = (
+            message_subject(msg, update.effective_user) if msg else (None, "", "user")
+        )
 
         if not msg or not msg.photo or not chat or not user:
             return
-        if not self._is_sender_admitted(chat, user, "图片"):
+        self._remember_chat(chat, user, msg)
+        if not self._is_sender_admitted(chat, user, "图片", sender_id=sender_id):
             return
 
         msg_key = f"{chat.id}:{msg.message_id}"
@@ -37,7 +41,9 @@ class _MediaMixin:
         chat_id_str = str(chat.id)
         await self._remember_username(chat_id_str, user.username)
 
-        await self._safe_send_typing(context, chat.id)
+        await self._safe_send_typing(
+            context, chat.id, getattr(msg, "message_thread_id", None)
+        )
 
         # 下载最高分辨率的图片到持久化目录
         tg_file = await context.bot.get_file(msg.photo[-1].file_id)
@@ -67,13 +73,18 @@ class _MediaMixin:
                     f"[telegram] 被回复图片下载失败  chat_id={chat.id}  err={e}"
                 )
         await self._publish_telegram_inbound(
-            sender=str(user.id),
+            sender=sender_id,
             chat_id=str(chat.id),
             content=inbound_text,
             media=media,
             metadata={
                 "username": user.username or "",
+                "mentioned": message_mentioned_bot(msg, self._bot_username),
+                "sender_kind": sender_kind,
                 "chat_type": str(getattr(chat, "type", "private") or "private"),
+                "chat_title": str(getattr(chat, "title", "") or ""),
+                "external_message_id": str(msg.message_id),
+                **message_topic_metadata(msg),
                 **reply_meta,
             },
         )
@@ -83,17 +94,22 @@ class _MediaMixin:
     ) -> None:
         msg = update.effective_message
         chat = update.effective_chat
-        user = update.effective_user
+        user, sender_id, sender_kind = (
+            message_subject(msg, update.effective_user) if msg else (None, "", "user")
+        )
 
         if not msg or not msg.document or not chat or not user:
             return
-        if not self._is_sender_admitted(chat, user, "文件"):
+        self._remember_chat(chat, user, msg)
+        if not self._is_sender_admitted(chat, user, "文件", sender_id=sender_id):
             return
 
         chat_id_str = str(chat.id)
         await self._remember_username(chat_id_str, user.username)
 
-        await self._safe_send_typing(context, chat.id)
+        await self._safe_send_typing(
+            context, chat.id, getattr(msg, "message_thread_id", None)
+        )
 
         doc = msg.document
         suffix = ""
@@ -114,13 +130,18 @@ class _MediaMixin:
         if doc.file_name:
             inbound_text = f"[文件: {doc.file_name}]\n{inbound_text}".strip()
         await self._publish_telegram_inbound(
-            sender=str(user.id),
+            sender=sender_id,
             chat_id=str(chat.id),
             content=inbound_text,
             media=[str(tmp)],
             metadata={
                 "username": user.username or "",
+                "mentioned": message_mentioned_bot(msg, self._bot_username),
+                "sender_kind": sender_kind,
                 "chat_type": str(getattr(chat, "type", "private") or "private"),
+                "chat_title": str(getattr(chat, "title", "") or ""),
+                "external_message_id": str(msg.message_id),
+                **message_topic_metadata(msg),
                 "document_filename": doc.file_name or "",
                 "document_mime_type": doc.mime_type or "",
                 **reply_meta,

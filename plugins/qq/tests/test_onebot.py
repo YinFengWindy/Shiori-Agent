@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from plugins.qq.backend.onebot import OneBotError, OneBotSocket
+from plugins.qq.backend.onebot import OneBotDisconnected, OneBotError, OneBotSocket
 
 
 class _WebSocket:
@@ -97,6 +97,28 @@ async def test_onebot_correlates_action_replies_and_delivers_events(monkeypatch)
         }
     ]
     await socket.close()
+
+
+@pytest.mark.asyncio
+async def test_in_flight_action_disconnect_has_uncertain_receipt(monkeypatch):
+    ws = _WebSocket()
+
+    async def connect(_uri, **_kwargs):
+        return ws
+
+    monkeypatch.setattr("plugins.qq.backend.onebot.connect", connect)
+    socket = OneBotSocket("ws://localhost:3001", "", 1, lambda _event: asyncio.sleep(0))
+    await socket.open()
+    send = asyncio.create_task(
+        socket.call("send_private_msg", {"user_id": 9, "message": "hello"})
+    )
+    await asyncio.sleep(0)
+    assert ws.sent[0]["action"] == "send_private_msg"
+    await ws.incoming.put(None)
+
+    with pytest.raises(OneBotDisconnected, match="已断开"):
+        await send
+    await socket.wait_closed()
 
 
 @pytest.mark.asyncio

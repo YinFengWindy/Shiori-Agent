@@ -203,6 +203,21 @@ def test_plugins_declaring_one_channel_name_all_conflict(tmp_path):
     assert records["third"].admission is None
 
 
+def test_instance_prefix_conflicts_with_another_plugins_static_name(tmp_path):
+    _channel_plugin(tmp_path, "owner", "owner", "telegram")
+    manifest = tmp_path / "owner" / "manifest.yaml"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            "name: telegram,", "name: telegram, instance_prefix: telegram_,"
+        ),
+        encoding="utf-8",
+    )
+    _channel_plugin(tmp_path, "other", "other", "telegram_other")
+    records = {record.manifest.id: record for record in _discover([tmp_path])}
+    assert records["owner"].admission.code == "duplicate_channel"
+    assert records["other"].admission.code == "duplicate_channel"
+
+
 def test_duplicate_plugin_id_keeps_its_id_conflict_over_shared_channel(tmp_path):
     _channel_plugin(tmp_path, "copy-a", "same", "shared")
     _channel_plugin(tmp_path, "copy-b", "same", "shared")

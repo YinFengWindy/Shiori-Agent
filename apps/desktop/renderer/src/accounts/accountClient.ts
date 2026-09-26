@@ -23,6 +23,7 @@ export type AccountSnapshot = {
   pluginId: string;
   platform: string;
   platformAccountId: string;
+  configRef: string;
   displayName: string;
   avatarUrl: string;
   roleId: string | null;
@@ -38,7 +39,7 @@ export type AccountSnapshot = {
 };
 
 type AccountPayload = {
-  id: string; plugin_id: string; platform: string; platform_account_id: string;
+  id: string; plugin_id: string; platform: string; platform_account_id: string; config_ref: string;
   display_name: string; avatar_url: string; role_id: string | null;
   plugin_enabled: boolean; runtime_active: boolean; connection: AccountSnapshot["connection"];
   capabilities: string[]; known_capabilities: string[]; error: string;
@@ -49,7 +50,7 @@ type AccountPayload = {
 function mapAccount(row: AccountPayload): AccountSnapshot {
   return {
     id: row.id, pluginId: row.plugin_id, platform: row.platform,
-    platformAccountId: row.platform_account_id, displayName: row.display_name,
+    platformAccountId: row.platform_account_id, configRef: row.config_ref, displayName: row.display_name,
     avatarUrl: row.avatar_url, roleId: row.role_id, pluginEnabled: row.plugin_enabled,
     runtimeActive: row.runtime_active, connection: row.connection,
     capabilities: row.capabilities, error: row.error,

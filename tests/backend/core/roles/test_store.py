@@ -252,7 +252,7 @@ def test_role_store_persists_proactive_policy_and_keeps_it_when_candidates_go(
     updated = store.update_role("mira", channel_bindings=[])
     reloaded = store.get_role("mira")
 
-    assert updated.proactive.enabled is False
+    assert updated.proactive.enabled is True
     assert updated.proactive.candidates == ()
     assert reloaded is not None
     assert reloaded.proactive.profile == "quiet"

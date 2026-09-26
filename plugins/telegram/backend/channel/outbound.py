@@ -6,13 +6,14 @@ import asyncio
 import logging
 
 from telegram.constants import ChatAction
-from telegram.error import Conflict, TelegramError
+from telegram.error import Conflict, InvalidToken, NetworkError, TelegramError, TimedOut
 from telegram.ext import ContextTypes
 
 from bus.events import OutboundMessage
 from infra.channels.session_key import resolve_outbound_session_key
 
 from ..utils import TelegramStreamMessage, sent_message_id
+from ..utils.topic import telegram_topic_kwargs
 from .compat import (
     _call_send_markdown,
     _call_send_stream_markdown,
@@ -36,13 +37,16 @@ class _OutboundMixin:
                 )
         return resolved
 
-    async def send(self, chat_id: str, message: str) -> str | None:
+    async def send(
+        self, chat_id: str, message: str, *, message_thread_id: int | None = None
+    ) -> str | None:
         """发送文本消息（供 MessagePushTool 调用），返回首条消息 id。"""
         return await _call_send_markdown(
             self._app.bot,
             self._resolve_chat_id(chat_id),
             message,
             self._telegram_outbound_limiter,
+            **telegram_topic_kwargs(message_thread_id),
         )
 
     async def send_stream(self, chat_id: str, message: str) -> str | None:
@@ -75,6 +79,8 @@ class _OutboundMixin:
         file_path: str,
         name: str | None = None,
         caption: str | None = None,
+        *,
+        message_thread_id: int | None = None,
     ) -> str | None:
         """发送文件，可附带说明文字；返回消息 id。"""
         cid = int(self._resolve_chat_id(chat_id))
@@ -82,11 +88,15 @@ class _OutboundMixin:
             cid,
             kind="send",
             label="send_document",
-            action=lambda: self._send_document_file(cid, file_path, name, caption),
+            action=lambda: self._send_document_file(
+                cid, file_path, name, caption, message_thread_id
+            ),
         )
         return sent_message_id(sent)
 
-    async def send_image(self, chat_id: str, image: str) -> str | None:
+    async def send_image(
+        self, chat_id: str, image: str, *, message_thread_id: int | None = None
+    ) -> str | None:
         """发送图片（本地路径或 URL），返回消息 id。"""
         cid = int(self._resolve_chat_id(chat_id))
         if image.startswith(("http://", "https://")):
@@ -94,14 +104,18 @@ class _OutboundMixin:
                 cid,
                 kind="send",
                 label="send_photo",
-                action=lambda: self._app.bot.send_photo(chat_id=cid, photo=image),
+                action=lambda: self._app.bot.send_photo(
+                    chat_id=cid,
+                    photo=image,
+                    **telegram_topic_kwargs(message_thread_id),
+                ),
             )
         else:
             sent = await self._telegram_outbound_limiter.run(
                 cid,
                 kind="send",
                 label="send_photo",
-                action=lambda: self._send_photo_file(cid, image),
+                action=lambda: self._send_photo_file(cid, image, message_thread_id),
             )
         return sent_message_id(sent)
 
@@ -111,15 +125,26 @@ class _OutboundMixin:
         file_path: str,
         name: str | None,
         caption: str | None,
+        message_thread_id: int | None,
     ) -> object:
         with open(file_path, "rb") as f:
             return await self._app.bot.send_document(
-                chat_id=chat_id, document=f, filename=name, caption=caption
+                chat_id=chat_id,
+                document=f,
+                filename=name,
+                caption=caption,
+                **telegram_topic_kwargs(message_thread_id),
             )
 
-    async def _send_photo_file(self, chat_id: int, image: str) -> object:
+    async def _send_photo_file(
+        self, chat_id: int, image: str, message_thread_id: int | None
+    ) -> object:
         with open(image, "rb") as f:
-            return await self._app.bot.send_photo(chat_id=chat_id, photo=f)
+            return await self._app.bot.send_photo(
+                chat_id=chat_id,
+                photo=f,
+                **telegram_topic_kwargs(message_thread_id),
+            )
 
     def _record_delivery_status(
         self,
@@ -141,6 +166,8 @@ class _OutboundMixin:
         preview = msg.content[:60] + "..." if len(msg.content) > 60 else msg.content
         logger.info(f"[telegram] 发送回复  chat_id={msg.chat_id}  内容: {preview!r}")
         cid = int(self._resolve_chat_id(msg.chat_id))
+        topic = (msg.metadata or {}).get("message_thread_id")
+        message_thread_id = topic if isinstance(topic, int) and topic > 0 else None
         session_key = resolve_outbound_session_key(
             msg,
             default_channel=self._channel,
@@ -157,6 +184,7 @@ class _OutboundMixin:
                     msg.chat_id,
                     final_thinking,
                     self._telegram_outbound_limiter,
+                    **telegram_topic_kwargs(message_thread_id),
                 )
             await self._send_final_tool_snapshot(session_key, msg.chat_id)
         streamed_reply = bool((msg.metadata or {}).get("streamed_reply"))
@@ -177,13 +205,18 @@ class _OutboundMixin:
                         msg.content,
                         self._telegram_outbound_limiter,
                         on_receipt=receipts.append,
+                        **telegram_topic_kwargs(message_thread_id),
                     )
             if final_thinking and not had_live:
-                await self._send_final_thinking(cid, msg.chat_id, final_thinking)
+                await self._send_final_thinking(
+                    cid, msg.chat_id, final_thinking, message_thread_id
+                )
             self._reply_buffers.pop(session_key, None)
             self._thinking_buffers.pop(session_key, None)
             for image in msg.media or []:
-                image_id = await self.send_image(str(msg.chat_id), image)
+                image_id = await self.send_image(
+                    str(msg.chat_id), image, message_thread_id=message_thread_id
+                )
                 first_id = first_id or image_id
         except BaseException:
             # A later chunk/edit can fail after an earlier message was accepted.
@@ -199,7 +232,10 @@ class _OutboundMixin:
             )
 
     async def _safe_send_typing(
-        self, context: ContextTypes.DEFAULT_TYPE, chat_id: int
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        chat_id: int,
+        message_thread_id: int | None = None,
     ) -> None:
         """发送 typing 状态；失败时指数退避重试，不影响消息主流程。"""
         try:
@@ -208,7 +244,9 @@ class _OutboundMixin:
                 kind="typing",
                 label="send_chat_action",
                 action=lambda: context.bot.send_chat_action(
-                    chat_id=chat_id, action=ChatAction.TYPING
+                    chat_id=chat_id,
+                    action=ChatAction.TYPING,
+                    **telegram_topic_kwargs(message_thread_id),
                 ),
             )
         except Exception as e:
@@ -221,6 +259,8 @@ class _OutboundMixin:
     def _on_polling_error(self, exc: TelegramError) -> None:
         """处理 Telegram polling 异常，避免 Conflict 场景下持续刷屏。"""
         if isinstance(exc, Conflict):
+            self._online = False
+            self._report_account("error", "Telegram getUpdates conflict")
             if self._polling_conflict_task is None:
                 logger.error(
                     "[telegram] 检测到 getUpdates 冲突，已暂停 Telegram 接收。"
@@ -230,6 +270,16 @@ class _OutboundMixin:
                     self._disable_polling_on_conflict()
                 )
             return
+        if isinstance(exc, InvalidToken):
+            self._online = False
+            self._report_account("login_required", "Invalid Bot Token")
+            return
+        self._online = False
+        retryable = isinstance(exc, (NetworkError, TimedOut))
+        self._report_account(
+            "connecting" if retryable else "error",
+            str(exc).replace(self._token, "[redacted]"),
+        )
         logger.warning("[telegram] polling 异常，框架将自动重试: %s", exc)
 
     async def _disable_polling_on_conflict(self) -> None:

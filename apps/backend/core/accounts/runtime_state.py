@@ -127,7 +127,14 @@ class AccountRuntimeState:
     def authorize(self, row: AccountRecord, role_id: str) -> AccountAccess:
         """Captures an online, owned account for a later operation."""
         live = self._live.get(self.published_generation, {}).get(row.id)
-        if row.role_id != role_id or live is None or live.connection != "online":
+        if (
+            row.role_id != role_id
+            or not self._enabled.get(self.published_generation, {}).get(
+                row.plugin_id, False
+            )
+            or live is None
+            or live.connection != "online"
+        ):
             raise PermissionError("Account is not owned and online for this role")
         return AccountAccess(row.id, role_id, row.ownership_version, live.token)
 
@@ -137,6 +144,9 @@ class AccountRuntimeState:
         return bool(
             row
             and live
+            and self._enabled.get(self.published_generation, {}).get(
+                row.plugin_id, False
+            )
             and row.role_id == access.role_id
             and row.ownership_version == access.ownership_version
             and live.token == access.runtime_token

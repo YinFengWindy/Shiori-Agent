@@ -2,9 +2,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import httpx
+
 from .channel import FeishuChannel
 from .config import FeishuAppConfig, FeishuConfigModel
 from .identity import verify_app
+from core.accounts.target_contract import (
+    ACCOUNT_SEND_METHOD,
+    ACCOUNT_TARGETS_METHOD,
+    UncertainDeliveryError,
+)
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
@@ -32,6 +39,57 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
     ctx.rpc.register("accounts.profile", profile, concurrency=Concurrency.READ_ONLY)
 
+    channels: dict[str, FeishuChannel] = {}
+    account_refs: dict[str, str] = {}
+
+    def ref_for_account(payload: dict[str, object]) -> str:
+        account_id = str(payload.get("account_id") or "")
+        try:
+            return account_refs[account_id]
+        except KeyError as exc:
+            raise ValueError("飞书账号不存在") from exc
+
+    async def account_targets(payload: dict[str, object]) -> dict[str, object]:
+        if str(payload.get("kind") or "") != "known":
+            raise ValueError("飞书仅支持已交互的私聊目标")
+        return await profile({"ref": ref_for_account(payload)})
+
+    ctx.rpc.register(
+        ACCOUNT_TARGETS_METHOD, account_targets, concurrency=Concurrency.READ_ONLY
+    )
+
+    async def send_target(payload: dict[str, object]) -> dict[str, object]:
+        ref = str(payload.get("ref") or "")
+        channel = channels.get(ref)
+        if channel is None:
+            raise RuntimeError("飞书账号未连接")
+        try:
+            message_id = await channel.send(
+                str(payload.get("chat_id") or ""), str(payload.get("message") or "")
+            )
+        except httpx.TransportError as exc:
+            raise UncertainDeliveryError("飞书发送连接中断，结果不确定") from exc
+        if not message_id:
+            raise UncertainDeliveryError("飞书平台未返回消息回执")
+        return {"message_id": message_id}
+
+    ctx.rpc.register("accounts.send", send_target)
+
+    async def account_send(payload: dict[str, object]) -> dict[str, object]:
+        if str(payload.get("target_kind") or "") != "private":
+            raise ValueError("飞书仅支持私聊发送")
+        if payload.get("message_thread_id") is not None:
+            raise ValueError("飞书不支持群话题")
+        return await send_target(
+            {
+                "ref": ref_for_account(payload),
+                "chat_id": payload.get("target_id"),
+                "message": payload.get("message"),
+            }
+        )
+
+    ctx.rpc.register(ACCOUNT_SEND_METHOD, account_send)
+
     async def verify(payload: dict[str, object]) -> dict[str, object]:
         app = FeishuAppConfig.model_validate(payload)
         identity = await verify_app(app)
@@ -43,15 +101,16 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
     ctx.rpc.register("accounts.verify", verify, concurrency=Concurrency.INTEGRATION)
     for app in config.applications:
-        profile = ctx.kv.get(f"profile:{app.ref}", {})
+        profile_data = ctx.kv.get(f"profile:{app.ref}", {})
         snapshot = ctx.accounts.register(
             platform="feishu",
             platform_account_id=app.ref,
             config_ref=app.ref,
-            display_name=str(profile.get("name") or ""),
-            avatar_url=str(profile.get("avatar_url") or ""),
+            display_name=str(profile_data.get("name") or ""),
+            avatar_url=str(profile_data.get("avatar_url") or ""),
         )
         account_id = snapshot.record.id
+        account_refs[account_id] = app.ref
         if not app.connection_enabled:
             ctx.accounts.report(account_id, connection="offline")
             continue
@@ -63,21 +122,19 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             )
             continue
         ctx.accounts.report(account_id, connection="connecting")
-        ctx.channels.add(
-            FeishuChannel(
-                app_id=app.app_id,
-                app_secret=app.app_secret,
-                domain=app.base_url,
-                name=(
-                    "feishu"
-                    if app.ref == config.channel_alias_ref
-                    else f"feishu:{app.ref}"
-                ),
-                account_id=account_id,
-                accounts=ctx.accounts,
-                profile_store=ctx.kv,
-                profile_ref=app.ref,
-                connection_revision=app.connection_revision,
-                chat_types=ctx.manifest.channel_chat_types("feishu"),
-            )
+        channel = FeishuChannel(
+            app_id=app.app_id,
+            app_secret=app.app_secret,
+            domain=app.base_url,
+            name=(
+                "feishu" if app.ref == config.channel_alias_ref else f"feishu:{app.ref}"
+            ),
+            account_id=account_id,
+            accounts=ctx.accounts,
+            profile_store=ctx.kv,
+            profile_ref=app.ref,
+            connection_revision=app.connection_revision,
+            chat_types=ctx.manifest.channel_chat_types("feishu"),
         )
+        channels[app.ref] = channel
+        ctx.channels.add(channel)

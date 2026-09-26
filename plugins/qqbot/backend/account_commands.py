@@ -119,6 +119,8 @@ class _AccountCommandsMixin:
         }
 
     async def targets(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if str(payload.get("kind") or "known") != "known":
+            raise ValueError("QQBot 仅支持已交互的私聊目标")
         app_id = self._identity.app_for_account(payload)
         row = self._store.get(app_id)
         return {

@@ -4,7 +4,7 @@ import { accountStatus } from "./accountPresentation";
 import type { AccountSnapshot } from "./accountClient";
 
 const account: AccountSnapshot = {
-  id: "a", pluginId: "demo", platform: "demo", platformAccountId: "101",
+  id: "a", pluginId: "demo", platform: "demo", platformAccountId: "101", configRef: "demo",
   displayName: "Demo", avatarUrl: "", roleId: null, pluginEnabled: true,
   runtimeActive: true, connection: "online", capabilities: [], knownCapabilities: [], error: "",
   responseRules: { privateEnabled: true, groupEnabled: true, requireMention: true, blockedSenderIds: [], groupRules: [] },

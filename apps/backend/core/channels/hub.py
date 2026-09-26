@@ -6,6 +6,7 @@ from typing import Any
 from bus.events import InboundMessage, OutboundMessage
 from core.common.channel_directory import ChannelDirectory
 from core.common.channel_identifiers import chat_ids_equal, normalize_sender_id
+from core.accounts import AccountRegistry, AccountSnapshot
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
@@ -20,9 +21,11 @@ class ChannelHub:
         service: RoleAggregateService,
         *,
         channel_directory: ChannelDirectory | None = None,
+        accounts: AccountRegistry | None = None,
     ) -> None:
         self._service = service
         self._channel_directory = channel_directory or ChannelDirectory()
+        self._accounts = accounts or service.repository.store.accounts
         self._conversation = ConversationService(
             service.sessions._session_manager,
             binding_resolver=service.bindings.resolve_role_id,
@@ -35,12 +38,13 @@ class ChannelHub:
         *,
         session_manager,
         channel_directory: ChannelDirectory | None = None,
+        role_store: RoleStore | None = None,
     ) -> "ChannelHub":
         """Builds a hub from the current workspace and shared session manager."""
         return cls(
             RoleAggregateService.from_runtime(
                 workspace=workspace,
-                role_store=RoleStore(workspace),
+                role_store=role_store or RoleStore(workspace),
                 session_manager=session_manager,
             ),
             channel_directory=channel_directory,
@@ -51,6 +55,11 @@ class ChannelHub:
         metadata = dict(message.metadata or {})
         if message.channel == "desktop":
             return message
+        if "account_id" in metadata:
+            routed = self.route_account_inbound(message)
+            if routed is None:
+                raise PermissionError("接收账号未授权此消息")
+            return routed
         if not str(message.sender or "").strip():
             raise ValueError("渠道消息缺少 sender_id")
 
@@ -62,6 +71,112 @@ class ChannelHub:
         if role_id and role_id != resolved_role_id:
             raise ValueError("渠道消息角色与绑定角色不匹配")
         role_id = resolved_role_id
+        return self._route_for_role(message, role_id, metadata)
+
+    def route_account_inbound(self, message: InboundMessage) -> InboundMessage | None:
+        """Admits only an owned, live receiving account under its response rules."""
+        metadata = dict(message.metadata or {})
+        account_id = str(metadata.get("account_id") or "").strip()
+        if not account_id or not str(message.sender or "").strip():
+            return None
+        account = self._live_owned_account(account_id, message.channel)
+        if account is None:
+            return None
+        role_id = account.record.role_id
+        if role_id is None:
+            return None
+        rules = account.record.response_rules
+        chat_type = str(metadata.get("chat_type") or "private").lower()
+        group = chat_type in {"group", "supergroup"}
+        if group:
+            override = next(
+                (item for item in rules.group_rules if item.chat_id == message.chat_id),
+                None,
+            )
+            if not rules.group_enabled or (
+                override is not None and not override.enabled
+            ):
+                return None
+            require_mention = (
+                override.require_mention
+                if override is not None
+                else rules.require_mention
+            )
+            if require_mention and not metadata.get("mentioned"):
+                return None
+        else:
+            if not rules.private_enabled:
+                return None
+        if self._account_sender_blocked(
+            account,
+            chat_id=message.chat_id,
+            sender_id=message.sender,
+            sender_alias=str(metadata.get("username") or ""),
+        ):
+            return None
+        claimed_role = str(metadata.get("role_id") or "").strip()
+        if claimed_role and claimed_role != role_id:
+            return None
+        metadata["source"] = "role_account"
+        return self._route_for_role(message, role_id, metadata)
+
+    def _live_owned_account(
+        self, account_id: str, channel: str = ""
+    ) -> AccountSnapshot | None:
+        """Share the live ownership gate across intake and account commands."""
+        if not account_id:
+            return None
+        try:
+            account = self._accounts.get(account_id)
+        except KeyError:
+            return None
+        if (
+            not account.record.role_id
+            or not account.plugin_enabled
+            or not account.runtime_active
+            or account.connection != "online"
+            or (
+                channel
+                and channel != account.record.platform
+                and not channel.startswith(f"{account.record.platform}:")
+                and not channel.startswith(f"{account.record.platform}_")
+            )
+        ):
+            return None
+        return account
+
+    @staticmethod
+    def _sender_blocked(
+        sender_id: str, sender_alias: str, blocked_senders: tuple[str, ...]
+    ) -> bool:
+        alias = normalize_sender_id(sender_alias).lower()
+        return sender_id in blocked_senders or bool(
+            alias
+            and any(
+                alias == normalize_sender_id(item).lower() for item in blocked_senders
+            )
+        )
+
+    def _account_sender_blocked(
+        self,
+        account: AccountSnapshot,
+        *,
+        chat_id: str,
+        sender_id: str,
+        sender_alias: str,
+    ) -> bool:
+        rules = account.record.response_rules
+        group = next(
+            (item for item in rules.group_rules if item.chat_id == chat_id), None
+        )
+        blocked = rules.blocked_sender_ids + (
+            group.blocked_sender_ids if group is not None else ()
+        )
+        return self._sender_blocked(sender_id, sender_alias, blocked)
+
+    def _route_for_role(
+        self, message: InboundMessage, role_id: str, metadata: dict[str, Any]
+    ) -> InboundMessage:
         role = self._service.repository.get_required(role_id)
         thread = self._conversation.ensure_thread_for_session(
             LegacySessionDescriptor(
@@ -121,6 +236,7 @@ class ChannelHub:
         chat_id: str,
         sender_id: str,
         sender_alias: str = "",
+        account_id: str = "",
     ) -> bool:
         """Admits a sender of a bound session unless its binding blacklists them.
 
@@ -130,6 +246,14 @@ class ChannelHub:
         (a Telegram username) case-insensitively; a leading ``@`` is ignored
         on both sides.
         """
+        if account_id:
+            account = self._live_owned_account(account_id, channel)
+            return account is not None and not self._account_sender_blocked(
+                account,
+                chat_id=chat_id,
+                sender_id=sender_id,
+                sender_alias=sender_alias,
+            )
         binding = self._service.bindings.get_binding(channel, chat_id)
         if binding is None:
             return False
@@ -140,11 +264,8 @@ class ChannelHub:
             if item.channel == channel
             and chat_ids_equal(channel, item.chat_id, chat_id)
         )
-        if sender_id in config.blocked_senders:
-            return False
-        alias = normalize_sender_id(sender_alias).lower()
-        return not (
-            alias and any(alias == entry.lower() for entry in config.blocked_senders)
+        return not self._sender_blocked(
+            sender_id, sender_alias, tuple(config.blocked_senders)
         )
 
     def is_sender_blocked(
@@ -176,6 +297,13 @@ class ChannelHub:
 
         role_id = self._service.bindings.resolve_role_id(channel, chat_id)
         return self._service.sessions.derive_session_key(role_id)
+
+    def resolve_account_runtime_session_key(self, account_id: str) -> str:
+        """Resolves account control actions through the current live owner."""
+        account = self._live_owned_account(account_id)
+        if account is None or account.record.role_id is None:
+            raise PermissionError("接收账号未授权控制会话")
+        return self._service.sessions.derive_session_key(account.record.role_id)
 
     def mark_delivery(
         self,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -79,6 +80,20 @@ def test_desktop_only_candidates_keep_the_desktop_while_away() -> None:
 def test_no_candidate_is_an_error() -> None:
     with pytest.raises(ValueError, match="没有可用的接收会话"):
         _ = select_proactive_target([], desktop_present=True, last_user_at={})
+
+
+def test_enabled_role_without_legacy_candidate_can_choose_account_target(
+    tmp_path: Path,
+) -> None:
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="mira")
+    roles.update_role("mira", proactive={"enabled": True, "candidates": []})
+    resolver = ProactiveTargetResolver(
+        roles=roles,
+        conversations=SimpleNamespace(last_user_message_at=lambda thread_id: None),
+        desktop_presence=SimpleNamespace(is_desktop_present=lambda: False),
+    )
+    assert resolver.resolve_saved("mira") == DESKTOP
 
 
 def _write_user_message(db: Path, *, seq: int, thread_id: str, ts: str) -> None:

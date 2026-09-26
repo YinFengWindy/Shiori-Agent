@@ -220,6 +220,7 @@ class AgentTickFactory:
             ack_fn=self._build_ack_fn(pool),
             alert_ack_fn=self._build_alert_ack_fn(pool),
             max_chars=self._deps.cfg.agent_tick_web_fetch_max_chars,
+            shared_tools=self._deps.shared_tools,
         )
 
     def _build_gateway_deps(

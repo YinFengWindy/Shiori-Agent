@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import httpx
+from core.accounts.target_contract import UncertainDeliveryError
 
 if TYPE_CHECKING:
     from .account_identity import QQBotAccountIdentity
@@ -16,6 +17,22 @@ class _AccountSendingMixin:
 
     _identity: QQBotAccountIdentity
     _channels: dict[str, QQBotChannel]
+
+    async def account_send(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Adapt the shared account contract to QQBot's C2C OpenID send."""
+        if "target_kind" not in payload and "user_openid" in payload:
+            return await self.send_target(payload)
+        if str(payload.get("target_kind") or "") != "private":
+            raise ValueError("QQBot 仅支持私聊发送")
+        if payload.get("message_thread_id") is not None:
+            raise ValueError("QQBot 不支持群话题")
+        return await self.send_target(
+            {
+                "account_id": payload.get("account_id"),
+                "user_openid": payload.get("target_id"),
+                "content": payload.get("message"),
+            }
+        )
 
     async def send_target(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Send C2C content through the selected application account."""
@@ -31,6 +48,8 @@ class _AccountSendingMixin:
             raise ValueError("发送内容不能为空")
         try:
             receipt = await channel.send(channel._chat_id(openid), content)
+        except httpx.TransportError as exc:
+            raise UncertainDeliveryError("QQBot 发送连接中断，结果不确定") from exc
         except httpx.HTTPStatusError as exc:
             try:
                 body = exc.response.json()
@@ -46,5 +65,5 @@ class _AccountSendingMixin:
                 + (f": {reason}" if reason else "")
             ) from exc
         if not receipt:
-            raise RuntimeError("QQBot 平台未返回消息 ID，发送结果不确定")
+            raise UncertainDeliveryError("QQBot 平台未返回消息 ID，发送结果不确定")
         return {"message_id": receipt, "chat_id": channel._chat_id(openid)}

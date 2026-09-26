@@ -7,6 +7,7 @@ import pytest
 
 from bus.events import InboundMessage, OutboundMessage
 from core.channels import ChannelHub
+from core.accounts.models import AccountResponseRules, GroupResponseRule
 from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleAggregateService, RoleStore
 from session.manager import SessionManager
@@ -64,6 +65,121 @@ def _directory_with_private_telegram() -> ChannelDirectory:
     directory = ChannelDirectory()
     directory.bind({"telegram": _Telegram()}.get)
     return directory
+
+
+def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
+    tmp_path: Path,
+) -> None:
+    sessions = SessionManager(tmp_path)
+    store = RoleStore(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path, role_store=store, session_manager=sessions
+    )
+    service.create_role(role_id="mira", name="Mira", system_prompt="mira")
+    service.create_role(role_id="other", name="Other", system_prompt="other")
+    service.bindings.bind("qq", "gqq:42", "other", chat_type="group")
+    accounts = store.accounts
+    accounts.set_plugin_enabled("qq", True)
+    account = accounts.register(
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="100",
+        config_ref="one",
+        token="live",
+    )
+    account_id = account.record.id
+    accounts.report(account_id, "live", connection="online")
+    hub = ChannelHub(service)
+    message = InboundMessage(
+        channel="qq",
+        sender="user",
+        chat_id="gqq:42",
+        content="hello",
+        metadata={"account_id": account_id, "chat_type": "group", "mentioned": True},
+    )
+
+    assert hub.route_account_inbound(message) is None
+    with pytest.raises(PermissionError):
+        hub.route_inbound(
+            InboundMessage(
+                channel="qq",
+                sender="user",
+                chat_id="gqq:42",
+                content="hello",
+                metadata={"account_id": ""},
+            )
+        )
+    accounts.assign(account_id, "mira")
+    assert (
+        hub.route_account_inbound(
+            InboundMessage(
+                channel=message.channel,
+                sender=message.sender,
+                chat_id=message.chat_id,
+                content=message.content,
+                metadata={**message.metadata, "mentioned": False},
+            )
+        )
+        is None
+    )
+    routed = hub.route_account_inbound(message)
+    assert routed is not None
+    assert routed.session_key == "role:mira"
+    assert routed.metadata["source"] == "role_account"
+    assert hub.resolve_account_runtime_session_key(account_id) == "role:mira"
+    accounts.set_response_rules(account_id, AccountResponseRules(group_enabled=False))
+    assert hub.route_account_inbound(message) is None
+    accounts.set_response_rules(
+        account_id,
+        AccountResponseRules(
+            blocked_sender_ids=("user",),
+            group_rules=(GroupResponseRule(chat_id="gqq:42", blocked_sender_ids=()),),
+        ),
+    )
+    assert hub.route_account_inbound(message) is None
+    accounts.set_response_rules(
+        account_id,
+        AccountResponseRules(
+            group_rules=(
+                GroupResponseRule(chat_id="gqq:42", blocked_sender_ids=("user",)),
+            ),
+        ),
+    )
+    assert hub.route_account_inbound(message) is None
+    accounts.set_plugin_enabled("qq", False)
+    assert hub.route_account_inbound(message) is None
+
+
+def test_account_inbound_accepts_telegram_instance_channel_name(tmp_path: Path) -> None:
+    sessions = SessionManager(tmp_path)
+    store = RoleStore(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path, role_store=store, session_manager=sessions
+    )
+    service.create_role(role_id="mira", name="Mira", system_prompt="mira")
+    accounts = store.accounts
+    accounts.set_plugin_enabled("telegram", True)
+    account = accounts.register(
+        plugin_id="telegram",
+        platform="telegram",
+        platform_account_id="123",
+        config_ref="second",
+        token="live",
+    )
+    accounts.assign(account.record.id, "mira")
+    accounts.report(account.record.id, "live", connection="online")
+
+    routed = ChannelHub(service).route_account_inbound(
+        InboundMessage(
+            channel="telegram_second",
+            sender="42",
+            chat_id="42",
+            content="hello",
+            metadata={"account_id": account.record.id, "chat_type": "private"},
+        )
+    )
+    assert routed is not None
+    assert routed.session_key == "role:mira"
 
 
 def test_channel_hub_chat_type_default_comes_from_the_channel(tmp_path: Path) -> None:

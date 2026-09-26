@@ -107,8 +107,8 @@ class RoleBindingPolicy:
     ) -> RoleProactiveConfig:
         """Validates the candidate sessions and stores them in binding order.
 
-        Every candidate must name one of ``bindings``; enabling proactive
-        delivery requires at least one candidate.
+        Every saved legacy candidate must name one of ``bindings``. An empty
+        candidate list uses the role desktop session as its default target.
         """
         normalized = (
             proactive
@@ -128,8 +128,6 @@ class RoleBindingPolicy:
             normalized,
             candidates=_candidates_in_binding_order(normalized.candidates, bindings),
         )
-        if normalized.enabled and not normalized.candidates:
-            raise ValueError("启用主动推送时至少要选择一个接收会话")
         return normalized
 
     @staticmethod
@@ -139,8 +137,8 @@ class RoleBindingPolicy:
     ) -> RoleProactiveConfig:
         """Drops candidates whose binding was removed, keeping binding order.
 
-        Proactive delivery that is left without any candidate is disabled, since
-        it has nowhere to send.
+        An enabled role without a legacy candidate can use its desktop default
+        or explicitly select an owned account during the turn.
         """
         candidates = _candidates_in_binding_order(proactive.candidates, bindings)
         return replace(

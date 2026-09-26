@@ -402,3 +402,24 @@ def test_manifest_looks_up_one_channel_session_types(tmp_path):
     assert [item.type for item in manifest.channel_chat_types("demo")] == ["private"]
     with pytest.raises(KeyError, match="未声明渠道 other"):
         manifest.channel_chat_types("other")
+
+
+def test_manifest_limits_dynamic_instances_to_declared_prefix(tmp_path):
+    (tmp_path / "manifest.yaml").write_text(
+        _CHANNEL_MANIFEST
+        + f"  - {{name: demo, label: Demo, instance_prefix: demo_, chat_types: [{_PRIVATE}]}}\n",
+        encoding="utf-8",
+    )
+    manifest = load_manifest(tmp_path)
+    assert manifest is not None
+    assert manifest.channel_chat_types("demo_one") == manifest.channel_chat_types(
+        "demo"
+    )
+    for name in ("demo_", "demo.unauthorized", "other_one"):
+        with pytest.raises(KeyError):
+            manifest.channel_chat_types(name)
+    declarations = declared_chat_types([manifest])
+    assert declarations.get("demo_one") == manifest.channels[0].chat_types
+    assert declarations.get("demo_") is None
+    assert declarations.get("demo.unauthorized") is None
+    assert declarations.get("other_one") is None

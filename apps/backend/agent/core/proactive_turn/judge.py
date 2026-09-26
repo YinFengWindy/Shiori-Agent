@@ -226,6 +226,11 @@ async def run_tool_step(
     """调用模型并执行工具；同场景模式可纠正一次纯文本响应。"""
 
     active_schemas = reply_schemas(schemas or TOOL_SCHEMAS, ctx)
+    shared_tools = getattr(pipeline._tool_deps, "shared_tools", None)
+    if schemas is None and shared_tools is not None:
+        active_schemas.extend(
+            shared_tools.get_schemas(["account_list", "account_targets"])
+        )
     llm_fn = pipeline._llm_fn
     if llm_fn is None:
         return False

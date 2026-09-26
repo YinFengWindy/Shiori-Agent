@@ -6,6 +6,10 @@ from typing import Any
 import pytest
 from unittest.mock import AsyncMock
 from core.roles.reply_state import InvalidRoleReply, RoleReply, reply_state_metadata
+from core.roles.reply_state import RoleReplyContext
+from proactive_v2.context import AgentTickContext
+from proactive_v2.tools import ToolDeps
+from agent.core.proactive_turn.judge import run_tool_step
 from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import DeliveryReceipt
@@ -24,6 +28,7 @@ class _ScriptedLlm:
         self._responses = list(responses)
         self.calls: list[list[dict[str, Any]]] = []
         self.tool_choices: list[str | dict[str, Any]] = []
+        self.schemas: list[list[dict[str, Any]]] = []
 
     async def __call__(
         self,
@@ -32,8 +37,40 @@ class _ScriptedLlm:
         tool_choice: str | dict[str, Any] = "auto",
     ) -> dict[str, Any] | None:
         self.calls.append(list(messages))
+        self.schemas.append(_schemas)
         self.tool_choices.append(tool_choice)
         return self._responses.pop(0) if self._responses else None
+
+
+@pytest.mark.asyncio
+async def test_proactive_account_lookup_is_visible_and_role_scoped() -> None:
+    executed: list[tuple[str, dict[str, Any], dict[str, str]]] = []
+
+    async def execute(name: str, args: dict[str, Any], *, context: dict[str, str]):
+        executed.append((name, args, context))
+        return "[]"
+
+    shared_tools = SimpleNamespace(
+        get_schemas=lambda names: [
+            {"type": "function", "function": {"name": name, "parameters": {}}}
+            for name in names
+        ],
+        execute=execute,
+    )
+    llm = _ScriptedLlm([{"name": "account_list", "input": {}}])
+    pipeline = make_proactive_pipeline(
+        llm_fn=llm, tool_deps=ToolDeps(shared_tools=shared_tools)
+    )
+    ctx = AgentTickContext(
+        session_key="role:mira", reply_context=RoleReplyContext(("平静",), "")
+    )
+
+    assert await run_tool_step(pipeline, [], ctx, loop_tag="loop")
+    assert {item["function"]["name"] for item in llm.schemas[0]} >= {
+        "account_list",
+        "account_targets",
+    }
+    assert executed == [("account_list", {}, {"role_id": "mira"})]
 
 
 def _scene_followup_gate(_session_key: str, _now: datetime):
