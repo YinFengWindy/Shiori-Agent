@@ -1,6 +1,6 @@
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
-import { cx, ghostButtonClass, inputClass } from "../styles";
+import { cx, ghostButtonClass, iconButtonClass, inputClass } from "../styles";
 import type { RoleSemanticItem, RoleSemanticList, RoleSemanticQuery } from "./roleSemanticMemory";
 
 type SemanticPaneProps = {
@@ -63,12 +63,12 @@ export function RoleSemanticMemoryPane({ query, onQuery, supportsStructuredFilte
         </button>)}
       </div>}
     {list?.status === "ready" && list.total > query.page_size && <nav className="flex items-center justify-end gap-2" aria-label="记忆分页">
-      <button type="button" className={ghostButtonClass} aria-label="上一页" disabled={query.page <= 1} onClick={() => change({ page: query.page - 1 })}><CaretLeft size={16} /></button>
+      <button type="button" className={iconButtonClass} aria-label="上一页" disabled={query.page <= 1} onClick={() => change({ page: query.page - 1 })}><CaretLeft size={16} /></button>
       <span className="text-body-sm text-ink-muted">{query.page} / {totalPages}</span>
-      <button type="button" className={ghostButtonClass} aria-label="下一页" disabled={query.page >= totalPages} onClick={() => change({ page: query.page + 1 })}><CaretRight size={16} /></button>
+      <button type="button" className={iconButtonClass} aria-label="下一页" disabled={query.page >= totalPages} onClick={() => change({ page: query.page + 1 })}><CaretRight size={16} /></button>
     </nav>}
     {selectedId && <aside className="grid gap-2 border-t border-line-soft pt-3" aria-label="记忆详情">
-      <div className="flex items-center justify-between gap-2"><h4 className="m-0 text-body font-medium text-ink">记忆详情</h4><button type="button" className="text-body-sm text-ink-muted hover:text-ink" onClick={() => onSelect("")}>关闭</button></div>
+      <div className="flex items-center justify-between gap-2"><h4 className="m-0 text-body font-medium text-ink">记忆详情</h4><button type="button" className={ghostButtonClass} onClick={() => onSelect("")}>关闭</button></div>
       {detailLoading ? <p role="status">加载中…</p> : detailError ? renderError(`详情读取失败：${detailError}`) : detail && <>
         <p className="m-0 whitespace-pre-wrap break-words text-body text-ink">{detail.summary || detail.id}</p>
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-body-sm">

@@ -80,6 +80,8 @@ async def test_semantic_rpc_filters_akasha_store_by_role_before_paging_and_detai
         second = await list_rpc({"role_id": "mira", "page": 2, "page_size": 1})
         assert first["total"] == second["total"] == 2
         assert len(first["items"]) == len(second["items"]) == 1
+        assert "status" not in first["items"][0]
+        assert "status" not in second["items"][0]
         assert {first["items"][0]["id"], second["items"][0]["id"]} == {
             "role:mira:0",
             "role:mira:2",
@@ -91,7 +93,9 @@ async def test_semantic_rpc_filters_akasha_store_by_role_before_paging_and_detai
         detail = await detail_rpc({"role_id": "mira", "item_id": "role:mira:0"})
         assert detail["item"]["extra_json"]["role_id"] == "mira"
         assert detail["item"]["summary"] == "mira text 0"
+        assert "status" not in detail["item"]
         assert "embedding" not in detail["item"]
+        assert store.get_item_for_admin("role:mira:0")["status"] == "active"
         with pytest.raises(ValueError, match="memory item not found"):
             await detail_rpc({"role_id": "mira", "item_id": "role:atlas:0"})
         await kernel.unload("akasha")

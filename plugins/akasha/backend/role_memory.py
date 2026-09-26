@@ -39,7 +39,7 @@ class AkashaRoleMemoryReader:
         return {
             "role_id": role_id,
             "status": "ready",
-            "items": [readable_item(item) for item in items],
+            "items": [_dashboard_item(item) for item in items],
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -56,7 +56,14 @@ class AkashaRoleMemoryReader:
         item = self._engine.get_role_item_for_admin(item_id, role_id=role_id)
         if item is None:
             raise ValueError("memory item not found")
-        return {"role_id": role_id, "status": "ready", "item": readable_item(item)}
+        return {"role_id": role_id, "status": "ready", "item": _dashboard_item(item)}
+
+
+def _dashboard_item(item: dict[str, object]) -> dict[str, object]:
+    """Keep Akasha's generic admin status out of its role Dashboard."""
+    visible = readable_item(item)
+    visible.pop("status", None)
+    return visible
 
 
 def register_role_semantic_memory(ctx: PluginRuntimeContext) -> None:

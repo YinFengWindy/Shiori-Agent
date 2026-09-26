@@ -11,7 +11,7 @@ it("loads role documents through Akasha's namespace", async () => {
   const client = createPluginRpcClient("akasha", async (request) => {
     calls.push(request.method);
     const payload = request.method === "plugins.communication.open" ? { generation: "g1" }
-      : request.method.endsWith("semantic.list") ? { role_id: "mira", status: "ready", items: [{ id: "role:mira:0", summary: "role:mira:0", memory_type: "turn", status: "active" }], total: 1 }
+      : request.method.endsWith("semantic.list") ? { role_id: "mira", status: "ready", items: [{ id: "role:mira:0", summary: "role:mira:0", memory_type: "turn" }], total: 1 }
       : request.method.endsWith("semantic.detail") ? { role_id: "mira", status: "ready", item: { id: "role:mira:0", summary: "role:mira:0", source_ref: "role:mira:0", extra_json: { role_id: "mira" } } }
       : { role_id: "mira", documents: [
         { name: "SELF.md", status: "ready", content: "# Mira" },
