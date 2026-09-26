@@ -7,7 +7,11 @@ from typing import Any
 
 import pytest
 
-from agent.tools.account_delivery import AccountDelivery, AccountSendTool
+from agent.tools.account_delivery import (
+    AccountDelivery,
+    AccountSendTool,
+    account_delivery_scope,
+)
 from core.accounts import AccountRegistry
 
 
@@ -55,16 +59,16 @@ async def test_account_send_requires_live_owner_and_returns_receipt(tmp_path) ->
         "complete": True,
     }
     state: dict[str, bool] = {}
-    receipt = json.loads(
-        await AccountSendTool(delivery).execute(
-            account_id=account_id,
-            role_id="mira",
-            target_kind="private",
-            target_id="42",
-            message="hello",
-            account_delivery_state=state,
+    with account_delivery_scope(state):
+        receipt = json.loads(
+            await AccountSendTool(delivery).execute(
+                account_id=account_id,
+                role_id="mira",
+                target_kind="private",
+                target_id="42",
+                message="hello",
+            )
         )
-    )
     assert receipt["platform_message_id"] == "receipt-9"
     assert rpc.calls[-1][1]["target_id"] == "42"
     assert rpc.calls[-1][0] == "plugin.qq.account.send"

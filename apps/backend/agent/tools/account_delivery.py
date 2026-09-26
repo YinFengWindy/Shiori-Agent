@@ -3,12 +3,29 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
+from collections.abc import Iterator
 
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.tools.base import Tool
 from core.accounts import AccountRegistry, AccountSnapshot
 from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
+
+_delivery_state: ContextVar[dict[str, bool] | None] = ContextVar(
+    "account_delivery_state", default=None
+)
+
+
+@contextmanager
+def account_delivery_scope(state: dict[str, bool]) -> Iterator[None]:
+    """Track successful account sends within one model attempt only."""
+    token = _delivery_state.set(state)
+    try:
+        yield
+    finally:
+        _delivery_state.reset(token)
 
 
 class AccountDelivery:
@@ -180,7 +197,7 @@ class AccountSendTool(Tool):
         },
         "required": ["account_id", "target_kind", "target_id", "message"],
     }
-    context_precedence = frozenset({"role_id", "account_delivery_state"})
+    context_precedence = frozenset({"role_id"})
 
     def __init__(self, delivery: AccountDelivery) -> None:
         self._delivery = delivery
@@ -194,7 +211,7 @@ class AccountSendTool(Tool):
             str(kwargs["message"]),
             kwargs.get("message_thread_id"),
         )
-        state = kwargs.get("account_delivery_state")
-        if isinstance(state, dict):
+        state = _delivery_state.get()
+        if state is not None:
             state["sent"] = True
         return receipt

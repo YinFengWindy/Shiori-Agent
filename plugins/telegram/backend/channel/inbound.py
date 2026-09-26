@@ -99,7 +99,11 @@ class _InboundMixin:
                 content=inbound_text,
                 media=reply_media,
                 metadata={
-                    "account_id": getattr(self, "_account_id", None) or "",
+                    **(
+                        {"account_id": self._account_id}
+                        if getattr(self, "_account_id", None)
+                        else {}
+                    ),
                     "mentioned": message_mentioned_bot(
                         msg, getattr(self, "_bot_username", "")
                     ),
@@ -190,7 +194,11 @@ class _InboundMixin:
                 content=content,
                 media=list(media or []),
                 metadata={
-                    "account_id": getattr(self, "_account_id", None) or "",
+                    **(
+                        {"account_id": self._account_id}
+                        if getattr(self, "_account_id", None)
+                        else {}
+                    ),
                     **dict(metadata or {}),
                 },
             )

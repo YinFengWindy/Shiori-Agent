@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from core.common.message_source import MessageSource
 from agent.tools.turn_scope import tool_turn
+from agent.tools.account_delivery import account_delivery_scope
 
 from core.roles.reply_state import role_mood_catalog
 
@@ -347,9 +348,8 @@ class DefaultReasoner(
 
             measured_stream_sink = _measure_stream_delta
         disabled_tools = _disabled_tools_from_msg(msg)
-        tool_execution_context: dict[str, Any] = self._tools.get_context()
+        tool_execution_context = self._tools.get_context()
         account_delivery_state: dict[str, bool] = {}
-        tool_execution_context["account_delivery_state"] = account_delivery_state
         budget_repaired = False
         role_metadata = get_session_metadata(session)
         previous_mood_updated_at = str(role_metadata.get("current_mood_updated_at", ""))
@@ -468,28 +468,31 @@ class DefaultReasoner(
                 initial_messages
             )
             try:
-                result = await self.run(
-                    initial_messages,
-                    request_time=msg.timestamp,
-                    preloaded_tools=preloaded,
-                    preloaded_tool_order=preloaded_order,
-                    preflight_injected=True,
-                    on_content_delta=measured_stream_sink,
-                    tool_event_session_key=session.key,
-                    tool_event_channel=msg.channel,
-                    tool_event_chat_id=msg.chat_id,
-                    tool_execution_context=tool_execution_context,
-                    disabled_tools=disabled_tools,
-                    reply_moods=(
-                        role_mood_catalog(
-                            role_metadata.get("role_runtime_config") or {}
-                        )
-                        if role_metadata.get("role_id")
-                        else None
-                    ),
-                    previous_mood=str(role_metadata.get("current_mood") or ""),
-                    previous_thought=str(role_metadata.get("current_thought") or ""),
-                )
+                with account_delivery_scope(account_delivery_state):
+                    result = await self.run(
+                        initial_messages,
+                        request_time=msg.timestamp,
+                        preloaded_tools=preloaded,
+                        preloaded_tool_order=preloaded_order,
+                        preflight_injected=True,
+                        on_content_delta=measured_stream_sink,
+                        tool_event_session_key=session.key,
+                        tool_event_channel=msg.channel,
+                        tool_event_chat_id=msg.chat_id,
+                        tool_execution_context=tool_execution_context,
+                        disabled_tools=disabled_tools,
+                        reply_moods=(
+                            role_mood_catalog(
+                                role_metadata.get("role_runtime_config") or {}
+                            )
+                            if role_metadata.get("role_id")
+                            else None
+                        ),
+                        previous_mood=str(role_metadata.get("current_mood") or ""),
+                        previous_thought=str(
+                            role_metadata.get("current_thought") or ""
+                        ),
+                    )
                 tools_used = list(result.metadata.get("tools_used") or [])
                 tool_chain = list(result.metadata.get("tool_chain") or [])
                 retry_trace["selected_plan"] = plan["name"]
