@@ -11,7 +11,7 @@ from telegram.ext import ContextTypes
 from bus.events import InboundMessage
 
 from .formatting import _build_inbound_text_with_reply
-from .identity import message_subject, message_topic_metadata
+from .identity import message_mentioned_bot, message_subject, message_topic_metadata
 
 logger = logging.getLogger("plugins.telegram.channel")
 
@@ -99,6 +99,10 @@ class _InboundMixin:
                 content=inbound_text,
                 media=reply_media,
                 metadata={
+                    "account_id": getattr(self, "_account_id", None) or "",
+                    "mentioned": message_mentioned_bot(
+                        msg, getattr(self, "_bot_username", "")
+                    ),
                     "username": user.username or "",
                     "sender_kind": sender_kind,
                     "chat_type": str(getattr(chat, "type", "private") or "private"),
@@ -127,6 +131,7 @@ class _InboundMixin:
             chat_id=str(chat.id),
             sender_id=sender_id or str(user.id),
             sender_alias=user.username or "",
+            account_id=self._account_id or "",
         ):
             return True
         logger.warning(
@@ -137,9 +142,13 @@ class _InboundMixin:
         )
         return False
 
-    def _route_inbound(self, message: InboundMessage) -> InboundMessage:
+    def _route_inbound(self, message: InboundMessage) -> InboundMessage | None:
         if self._channel_hub is None:
             return message
+        if "account_id" in message.metadata and callable(
+            getattr(self._channel_hub, "route_account_inbound", None)
+        ):
+            return self._channel_hub.route_account_inbound(message)
         return self._channel_hub.route_inbound(message)
 
     async def _publish_inbound(self, message: InboundMessage) -> None:
@@ -152,6 +161,7 @@ class _InboundMixin:
             chat_id=message.chat_id,
             sender_id=message.sender,
             sender_alias=str(message.metadata.get("username") or ""),
+            account_id=str(message.metadata.get("account_id") or ""),
         ):
             logger.warning(
                 "[telegram] 忽略未绑定渠道或黑名单成员的消息 chat_id=%s",
@@ -159,7 +169,7 @@ class _InboundMixin:
             )
             return
         routed = self._route_inbound(message)
-        if routed.metadata.get("conversation_duplicate"):
+        if routed is None or routed.metadata.get("conversation_duplicate"):
             return
         await self._require_bus().publish_inbound(routed)
 
@@ -179,6 +189,9 @@ class _InboundMixin:
                 chat_id=chat_id,
                 content=content,
                 media=list(media or []),
-                metadata=dict(metadata or {}),
+                metadata={
+                    "account_id": getattr(self, "_account_id", None) or "",
+                    **dict(metadata or {}),
+                },
             )
         )

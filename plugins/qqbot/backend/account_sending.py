@@ -17,6 +17,22 @@ class _AccountSendingMixin:
     _identity: QQBotAccountIdentity
     _channels: dict[str, QQBotChannel]
 
+    async def account_send(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Adapt the shared account contract to QQBot's C2C OpenID send."""
+        if "target_kind" not in payload and "user_openid" in payload:
+            return await self.send_target(payload)
+        if str(payload.get("target_kind") or "") != "private":
+            raise ValueError("QQBot 仅支持私聊发送")
+        if payload.get("message_thread_id") is not None:
+            raise ValueError("QQBot 不支持群话题")
+        return await self.send_target(
+            {
+                "account_id": payload.get("account_id"),
+                "user_openid": payload.get("target_id"),
+                "content": payload.get("message"),
+            }
+        )
+
     async def send_target(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Send C2C content through the selected application account."""
         app_id = self._identity.app_for_account(payload)

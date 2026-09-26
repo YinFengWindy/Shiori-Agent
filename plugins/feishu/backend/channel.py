@@ -470,7 +470,15 @@ class FeishuChannel:
         if self._channel_hub is not None:
             if not self._is_bound(message.chat_id, message.sender):
                 return
-            message = self._channel_hub.route_inbound(message)
+            if "account_id" in message.metadata and callable(
+                getattr(self._channel_hub, "route_account_inbound", None)
+            ):
+                routed = self._channel_hub.route_account_inbound(message)
+                if routed is None:
+                    return
+                message = routed
+            else:
+                message = self._channel_hub.route_inbound(message)
         if message.metadata.get("conversation_duplicate"):
             return
         self._remember_quote(message)
@@ -489,7 +497,10 @@ class FeishuChannel:
     def _is_bound(self, chat_id: str, sender: str) -> bool:
         hub = self._channel_hub
         if hub is None or hub.is_sender_allowed(
-            channel=self.name, chat_id=chat_id, sender_id=sender
+            channel=self.name,
+            chat_id=chat_id,
+            sender_id=sender,
+            account_id=self.account_id,
         ):
             return True
         # Shown in the channel status so the user can copy the ids to bind.
@@ -518,9 +529,16 @@ class FeishuChannel:
             await self.send(chat_id, "当前未启用中断功能。")
             return
         session_key = (
-            self._channel_hub.resolve_runtime_session_key(self.name, chat_id)
-            if self._channel_hub is not None
-            else f"{self.name}:{chat_id}"
+            self._channel_hub.resolve_account_runtime_session_key(self.account_id)
+            if self.account_id
+            and callable(
+                getattr(self._channel_hub, "resolve_account_runtime_session_key", None)
+            )
+            else (
+                self._channel_hub.resolve_runtime_session_key(self.name, chat_id)
+                if self._channel_hub is not None
+                else f"{self.name}:{chat_id}"
+            )
         )
         result = self._interrupt_controller.request_interrupt(
             session_key=session_key,

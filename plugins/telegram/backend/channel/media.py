@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from .formatting import _build_inbound_text_with_reply
-from .identity import message_subject, message_topic_metadata
+from .identity import message_mentioned_bot, message_subject, message_topic_metadata
 
 logger = logging.getLogger("plugins.telegram.channel")
 
@@ -79,6 +79,7 @@ class _MediaMixin:
             media=media,
             metadata={
                 "username": user.username or "",
+                "mentioned": message_mentioned_bot(msg, self._bot_username),
                 "sender_kind": sender_kind,
                 "chat_type": str(getattr(chat, "type", "private") or "private"),
                 "chat_title": str(getattr(chat, "title", "") or ""),
@@ -135,6 +136,7 @@ class _MediaMixin:
             media=[str(tmp)],
             metadata={
                 "username": user.username or "",
+                "mentioned": message_mentioned_bot(msg, self._bot_username),
                 "sender_kind": sender_kind,
                 "chat_type": str(getattr(chat, "type", "private") or "private"),
                 "chat_title": str(getattr(chat, "title", "") or ""),

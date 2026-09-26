@@ -32,6 +32,12 @@ from agent.provider import LLMProvider
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.scheduler import SchedulerService
 from agent.tools.message_push import MessagePushTool
+from agent.tools.account_delivery import (
+    AccountDelivery,
+    AccountListTool,
+    AccountTargetsTool,
+    AccountSendTool,
+)
 from agent.tools.registry import ToolRegistry
 from core.scene.controller import SceneAwarenessController
 from core.scene.demand import SceneObservationDemand
@@ -633,6 +639,10 @@ def build_core_runtime(
         namespace=uuid4().hex,
         strict=shared is not None,
     )
+    account_delivery = AccountDelivery(role_store.accounts, plugin_manager.rpc)
+    tools.register(AccountListTool(account_delivery), risk="read-only")
+    tools.register(AccountTargetsTool(account_delivery), risk="read-only")
+    tools.register(AccountSendTool(account_delivery), risk="external-side-effect")
 
     return CoreRuntime(
         config=config,

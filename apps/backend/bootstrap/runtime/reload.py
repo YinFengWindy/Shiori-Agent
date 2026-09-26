@@ -80,6 +80,7 @@ class RuntimeReloadMixin:
                 enable_message_channels=self.features.enable_message_channels,
                 previous_host=self.channel_host,
                 channel_directory=core.channel_directory,
+                role_store=core.role_runtime_registry.repository.store,
             )
             candidate.channel_names = frozenset(
                 channel.name for channel in candidate.channel_host.channels

@@ -406,8 +406,8 @@ def test_v8_target_and_desktop_become_the_candidates() -> None:
                 {
                     "id": "luna",
                     "profile": {},
-                    # A stale target naming no binding is dropped, and with
-                    # no candidate left proactive delivery is turned off.
+                    # A stale target naming no binding is dropped; the user's
+                    # enabled setting remains available for account selection.
                     "channel_bindings": [{"channel": "telegram", "chat_id": "42"}],
                     "proactive": {
                         "enabled": True,
@@ -436,7 +436,7 @@ def test_v8_target_and_desktop_become_the_candidates() -> None:
             {"channel": "qq", "chat_id": "gqq:7"},
         ],
     }
-    assert luna["proactive"] == {"enabled": False, "candidates": []}
+    assert luna["proactive"] == {"enabled": True, "candidates": []}
     assert nova["proactive"] == {
         "candidates": [{"channel": "desktop", "chat_id": "role:nova"}]
     }

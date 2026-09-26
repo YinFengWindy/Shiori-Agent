@@ -347,7 +347,9 @@ class DefaultReasoner(
 
             measured_stream_sink = _measure_stream_delta
         disabled_tools = _disabled_tools_from_msg(msg)
-        tool_execution_context = self._tools.get_context()
+        tool_execution_context: dict[str, Any] = self._tools.get_context()
+        account_delivery_state: dict[str, bool] = {}
+        tool_execution_context["account_delivery_state"] = account_delivery_state
         budget_repaired = False
         role_metadata = get_session_metadata(session)
         previous_mood_updated_at = str(role_metadata.get("current_mood_updated_at", ""))
@@ -507,6 +509,8 @@ class DefaultReasoner(
                 retry_trace["react_stats"] = dict(
                     result.metadata.get("react_stats") or {}
                 )
+                if account_delivery_state.get("sent"):
+                    retry_trace["account_delivery_sent"] = True
                 thinking_finished_at = first_content_at or time.perf_counter()
                 turn_metrics: dict[str, int] = {
                     "thinking_duration_ms": max(

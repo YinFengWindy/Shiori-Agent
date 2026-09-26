@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from agent.turns.outbound import OutboundDispatch, OutboundPort
+from agent.tools.account_delivery import AccountSendTool
 from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
@@ -32,6 +34,7 @@ class TurnOrchestratorDeps:
     session: SessionServices
     outbound: OutboundPort
     event_bus: EventBus | None = None
+    account_send_tool: AccountSendTool | None = None
 
 
 class TurnOrchestrator:
@@ -39,6 +42,7 @@ class TurnOrchestrator:
         self._session = deps.session
         self._outbound = deps.outbound
         self._event_bus = deps.event_bus
+        self._account_send_tool = deps.account_send_tool
 
     def capture_reply_context(self, session_key: str) -> RoleReplyContext:
         """Capture role output constraints and the successful-state stamp per tick."""
@@ -102,6 +106,11 @@ class TurnOrchestrator:
             "mood": reply.mood,
             "thought": reply.thought,
         }
+        account_target = (
+            result.trace.extra.get("account_target")
+            if result.trace is not None and isinstance(result.trace.extra, dict)
+            else None
+        )
         await self._run_effects(result.side_effects)
         try:
             sent = await self._session.session_manager.append_messages(
@@ -120,6 +129,7 @@ class TurnOrchestrator:
                     content=content,
                     media=media,
                     metadata={**source_metadata, "pending_commit": True},
+                    account_target=account_target,
                 ),
             )
         except Exception:
@@ -179,6 +189,7 @@ class TurnOrchestrator:
         content: str,
         media: list[str],
         metadata: dict[str, Any],
+        account_target: object = None,
     ) -> bool:
         """Sends the pending message and stamps its delivery facts before commit.
 
@@ -190,6 +201,28 @@ class TurnOrchestrator:
         commits without delivery facts. A refused or failed send commits
         nothing, exactly as before.
         """
+        if isinstance(account_target, dict):
+            if self._account_send_tool is None or media:
+                raise RuntimeError("账号目标发送仅支持已配置的文本投递")
+            raw_receipt = await self._account_send_tool.execute(
+                account_id=account_target["account_id"],
+                role_id=metadata["role_id"],
+                target_kind=account_target["target_kind"],
+                target_id=account_target["target_id"],
+                message=content,
+                message_thread_id=account_target.get("message_thread_id"),
+            )
+            result = json.loads(raw_receipt)
+            message["metadata"].update(
+                {
+                    "delivery_account_id": result["account_id"],
+                    "delivery_target_kind": result["target_kind"],
+                    "delivery_target_id": result["target_id"],
+                }
+            )
+            message["delivery_status"] = "sent"
+            message["external_message_id"] = result["platform_message_id"]
+            return True
         receipt = await self._outbound.dispatch(
             OutboundDispatch(
                 channel=channel,

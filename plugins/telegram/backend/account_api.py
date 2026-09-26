@@ -10,6 +10,7 @@ from telegram.error import TelegramError
 from desktop_bridge.method_policy import Concurrency
 
 from .credentials import verify_bot_token
+from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 
 if TYPE_CHECKING:
     from agent.plugin_host.capabilities import RpcCapability
@@ -45,6 +46,57 @@ class TelegramAccountApi:
         )
         self._rpc.register(
             "target.send", self.send_target, concurrency=Concurrency.INTEGRATION
+        )
+        self._rpc.register(
+            ACCOUNT_TARGETS_METHOD,
+            self.account_targets,
+            concurrency=Concurrency.READ_ONLY,
+        )
+        self._rpc.register(
+            ACCOUNT_SEND_METHOD,
+            self.account_send,
+            concurrency=Concurrency.INTEGRATION,
+        )
+
+    def _ref_for_account(self, payload: dict[str, Any]) -> str:
+        account_id = str(payload.get("account_id") or "")
+        for ref, channel in self._channels.items():
+            if account_id and channel._account_id == account_id:
+                return ref
+        raise ValueError("Unknown Telegram Bot account")
+
+    async def account_targets(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Adapt the shared query while preserving known-only directory scope."""
+        ref = self._ref_for_account(payload)
+        kind = str(payload.get("kind") or "")
+        if kind == "known":
+            return await self.list_known({"ref": ref})
+        if kind == "member":
+            return await self.get_member(
+                {
+                    "ref": ref,
+                    "chat_id": payload.get("group_id"),
+                    "user_id": payload.get("member_id"),
+                }
+            )
+        raise ValueError("Telegram 仅支持已知会话和指定成员查询")
+
+    async def account_send(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Validate a selected Telegram chat and optional forum topic."""
+        ref = self._ref_for_account(payload)
+        target_kind = str(payload.get("target_kind") or "")
+        target_id = str(payload.get("target_id") or "")
+        if target_kind not in {"private", "group"} or (
+            target_id.startswith("-") != (target_kind == "group")
+        ):
+            raise ValueError("Telegram 目标类型与会话 ID 不匹配")
+        return await self.send_target(
+            {
+                "ref": ref,
+                "chat_id": target_id,
+                "text": payload.get("message"),
+                "message_thread_id": payload.get("message_thread_id"),
+            }
         )
 
     def _channel(self, payload: dict[str, Any]) -> TelegramChannel:

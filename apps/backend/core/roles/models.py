@@ -109,17 +109,17 @@ class RoleProactiveCandidate:
 
 
 def keeps_proactive_enabled(enabled: bool, candidates: Sized) -> bool:
-    """Proactive delivery stays on only while it has a candidate session to go to."""
-    return enabled and bool(candidates)
+    """Preserve the user's setting when legacy candidate sessions are removed."""
+    return enabled
 
 
 @dataclass(frozen=True)
 class RoleProactiveConfig:
     """角色自己的主动推送候选会话、策略与执行参数。
 
-    ``candidates`` lists the bound sessions a proactive message may go to, in
-    binding order; each message is delivered once, to the one candidate the
-    target selection picks at send time.
+    ``candidates`` retains legacy default destinations in binding order. An
+    enabled role with no candidates starts from its desktop session and may
+    choose an owned communication account during the turn.
     """
 
     enabled: bool = False

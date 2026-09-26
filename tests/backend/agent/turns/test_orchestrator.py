@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from core.roles.reply_state import RoleReply, RoleReplyContext
 
@@ -22,6 +23,7 @@ from session.manager import SessionManager
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
 from agent.tools.message_push import MessagePushTool
+from agent.tools.account_delivery import AccountSendTool
 from agent.turns.outbound import PushToolOutboundPort
 from conversation.push_sync import ExternalImageSyncService
 from session.manager.models import build_session_message
@@ -44,6 +46,51 @@ class _DummySession:
             msg["media"] = list(media)
         msg.update(kwargs)
         self.messages.append(msg)
+
+
+@pytest.mark.asyncio
+async def test_explicit_proactive_account_target_records_receipt_without_default_send(
+    tmp_path,
+) -> None:
+    sender = SimpleNamespace(
+        send=AsyncMock(
+            return_value=json.dumps(
+                {
+                    "account_id": "account-1",
+                    "target_kind": "private",
+                    "target_id": "user-1",
+                    "platform_message_id": "platform-9",
+                }
+            )
+        )
+    )
+    default = SimpleNamespace(dispatch=AsyncMock())
+    orchestrator = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            session=SessionServices(session_manager=SessionManager(tmp_path)),
+            outbound=default,
+            account_send_tool=AccountSendTool(sender),
+        )
+    )
+    message: dict[str, Any] = {"metadata": {}}
+    delivered = await orchestrator._deliver_before_commit(
+        message,
+        channel="desktop",
+        chat_id="role:mira",
+        content="hello",
+        media=[],
+        metadata={"role_id": "mira"},
+        account_target={
+            "account_id": "account-1",
+            "target_kind": "private",
+            "target_id": "user-1",
+        },
+    )
+    assert delivered
+    assert message["delivery_status"] == "sent"
+    assert message["external_message_id"] == "platform-9"
+    assert message["metadata"]["delivery_account_id"] == "account-1"
+    default.dispatch.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -911,3 +911,33 @@ async def test_execute_recall_memory_uses_memory_from_deps():
     raw = await execute("recall_memory", {"query": "test"}, ctx, deps)
     result = json.loads(raw)
     assert result["hits"] == 1
+
+
+def test_message_push_keeps_explicit_account_target() -> None:
+    ctx = AgentTickContext(reply_context=RoleReplyContext(("平静",), ""))
+    _message_push(
+        ctx,
+        {
+            "message": "hello",
+            "mood": "平静",
+            "thought": "我已准备好",
+            "account_id": "account-1",
+            "target_kind": "private",
+            "target_id": "user-1",
+        },
+    )
+    assert ctx.account_target == {
+        "account_id": "account-1",
+        "target_kind": "private",
+        "target_id": "user-1",
+    }
+    with pytest.raises(ValueError, match="account_id"):
+        _message_push(
+            AgentTickContext(reply_context=RoleReplyContext(("平静",), "")),
+            {
+                "message": "hello",
+                "mood": "平静",
+                "thought": "我已准备好",
+                "target_id": "user-1",
+            },
+        )

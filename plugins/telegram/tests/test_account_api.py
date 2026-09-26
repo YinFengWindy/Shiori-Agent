@@ -25,12 +25,15 @@ def account_api():
     }.get(key, default)
     first = SimpleNamespace(
         _config_ref="first",
+        _account_id="account-first",
         can_send=Mock(return_value=True),
         mark_online=Mock(),
         bot=SimpleNamespace(get_chat_member=AsyncMock()),
         send=AsyncMock(return_value="77"),
     )
-    second = SimpleNamespace(can_send=Mock(return_value=True), bot=Mock())
+    second = SimpleNamespace(
+        _account_id="account-second", can_send=Mock(return_value=True), bot=Mock()
+    )
     return TelegramAccountApi({"first": first, "second": second}, Mock(), store), first
 
 
@@ -83,3 +86,30 @@ async def test_target_send_selects_bot_and_topic(account_api):
     )
     first.send.assert_awaited_once_with("-1001", "hi", message_thread_id=42)
     assert receipt["message_id"] == "77"
+
+
+@pytest.mark.asyncio
+async def test_shared_account_contract_preserves_bot_and_topic(account_api):
+    api, first = account_api
+    known = await api.account_targets({"account_id": "account-first", "kind": "known"})
+    assert known["scope"] == "known_conversations"
+    receipt = await api.account_send(
+        {
+            "account_id": "account-first",
+            "target_kind": "group",
+            "target_id": "-1001",
+            "message": "hello",
+            "message_thread_id": 42,
+        }
+    )
+    assert receipt["message_id"] == "77"
+    first.send.assert_awaited_once_with("-1001", "hello", message_thread_id=42)
+    with pytest.raises(ValueError, match="目标类型"):
+        await api.account_send(
+            {
+                "account_id": "account-first",
+                "target_kind": "private",
+                "target_id": "-1001",
+                "message": "hello",
+            }
+        )

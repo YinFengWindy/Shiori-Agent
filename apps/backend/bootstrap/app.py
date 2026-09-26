@@ -188,6 +188,7 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
                 plugin_channels=plugin_manager.channels if plugin_manager else None,
                 enable_message_channels=self.features.enable_message_channels,
                 channel_directory=self.core.channel_directory,
+                role_store=self.core.role_runtime_registry.repository.store,
             )
             current.channel_names = frozenset(
                 channel.name for channel in self.channel_host.channels

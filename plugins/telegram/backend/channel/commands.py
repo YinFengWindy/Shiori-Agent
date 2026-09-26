@@ -45,12 +45,18 @@ class _CommandMixin:
             return
 
         session_key = (
-            self._channel_hub.resolve_runtime_session_key(
-                self._channel,
-                str(chat.id),
+            self._channel_hub.resolve_account_runtime_session_key(self._account_id)
+            if self._account_id
+            and callable(
+                getattr(self._channel_hub, "resolve_account_runtime_session_key", None)
             )
-            if self._channel_hub is not None
-            else f"{self._channel}:{chat.id}"
+            else (
+                self._channel_hub.resolve_runtime_session_key(
+                    self._channel, str(chat.id)
+                )
+                if self._channel_hub is not None
+                else f"{self._channel}:{chat.id}"
+            )
         )
         result = self._interrupt_controller.request_interrupt(
             session_key=session_key,

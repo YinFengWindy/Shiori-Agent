@@ -56,6 +56,8 @@ async def test_application_target_directories_are_isolated(tmp_path, monkeypatch
     assert (await manager.targets({"account_id": "200"}))["targets"] == [
         {"chat_id": "c2c:200:same-openid", "user_openid": "same-openid"}
     ]
+    with pytest.raises(ValueError, match="私聊"):
+        await manager.targets({"account_id": "100", "kind": "groups"})
 
 
 @pytest.mark.asyncio

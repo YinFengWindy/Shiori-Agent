@@ -10,6 +10,7 @@ from core.accounts import AccountRegistry
 def test_independent_accounts_ownership_and_recovery(tmp_path):
     roles = {"r1", "r2"}
     registry = AccountRegistry(tmp_path, roles.__contains__)
+    registry.set_plugin_enabled("chat", True)
     first = registry.register(
         plugin_id="chat",
         platform="chat",
@@ -38,6 +39,11 @@ def test_independent_accounts_ownership_and_recovery(tmp_path):
     registry.report(second.record.id, "generation-1", connection="login_required")
     access = registry.authorize(first.record.id, "r1")
     assert registry.validate_access(access)
+    registry.set_plugin_enabled("chat", False)
+    assert not registry.validate_access(access)
+    with pytest.raises(PermissionError):
+        registry.authorize(first.record.id, "r1")
+    registry.set_plugin_enabled("chat", True)
 
     with pytest.raises(ValueError, match="already belongs"):
         registry.register(

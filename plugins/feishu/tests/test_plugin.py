@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from shiori_plugin_testkit.packages import stage_plugin_package
@@ -13,8 +15,58 @@ from agent.plugin_host import HostServices, PluginKernel, load_manifest
 from bus.event_bus import EventBus
 from core.accounts import AccountSnapshot
 from core.roles.store import RoleStore
+from plugins.feishu.backend.plugin import setup
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.asyncio
+async def test_shared_account_rpc_uses_selected_private_application() -> None:
+    handlers: dict[str, Any] = {}
+    channels: list[Any] = []
+    ctx = SimpleNamespace(
+        config=SimpleNamespace(
+            as_dict=lambda: {
+                "app_id": "cli_a",
+                "app_secret": "secret",
+                "domain": "feishu",
+            }
+        ),
+        kv=SimpleNamespace(
+            get=lambda key, default: (
+                {"oc_chat": "ou_user"} if key.startswith("targets:") else default
+            )
+        ),
+        rpc=SimpleNamespace(
+            register=lambda name, handler, **kwargs: handlers.__setitem__(name, handler)
+        ),
+        accounts=SimpleNamespace(
+            register=lambda **kwargs: SimpleNamespace(
+                record=SimpleNamespace(id="account-a")
+            ),
+            report=lambda *args, **kwargs: None,
+        ),
+        channels=SimpleNamespace(add=channels.append),
+        manifest=SimpleNamespace(channel_chat_types=lambda name: ()),
+    )
+    await setup(ctx)
+    assert (
+        await handlers["account.targets"]({"account_id": "account-a", "kind": "known"})
+    )["coverage"] == "observed_private_chats"
+    channels[0].send = AsyncMock(return_value="om_9")
+    assert await handlers["account.send"](
+        {
+            "account_id": "account-a",
+            "target_kind": "private",
+            "target_id": "oc_chat",
+            "message": "hello",
+        }
+    ) == {"message_id": "om_9"}
+    channels[0].send.assert_awaited_once_with("oc_chat", "hello")
+    with pytest.raises(ValueError, match="私聊"):
+        await handlers["account.send"](
+            {"account_id": "account-a", "target_kind": "group"}
+        )
 
 
 def _load_feishu_state(

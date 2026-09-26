@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from conversation.service import network_thread_id
+from conversation.service import desktop_chat_id, network_thread_id
 from conversation.store import ConversationStore
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.desktop_presence import DesktopPresence
@@ -76,6 +76,10 @@ class ProactiveTargetResolver:
         if role is None:
             raise KeyError(f"角色不存在: {role_id}")
         candidates = role.proactive.candidates
+        if role.proactive.enabled and not candidates:
+            candidates = (
+                RoleProactiveCandidate(DESKTOP_CHANNEL, desktop_chat_id(role_id)),
+            )
         return self.resolve(role_id, candidates) if candidates else None
 
     def resolve(
