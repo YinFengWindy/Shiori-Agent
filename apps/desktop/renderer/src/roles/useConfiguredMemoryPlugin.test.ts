@@ -35,3 +35,28 @@ it("ignores an older settings read after the runtime changes", async () => {
     await view.cleanup();
   }
 });
+
+it("keeps the same ready selection through an unchanged runtime publication", async () => {
+  const listeners = new Set<(event: { method: string }) => void>();
+  const observed: string[] = [];
+  function Probe() {
+    const selection = useConfiguredMemoryPlugin(true);
+    observed.push(`${selection.status}:${selection.pluginId}`);
+    return createElement("p", null, selection.pluginId || selection.status);
+  }
+  const view = await mountTestComponent(createElement(Probe), { windowGlobals: {
+    miraDesktop: {
+      readSettings: async () => ({ formData: { memory: { engine: "akasha" } } }),
+      onEvent: (listener: (event: { method: string }) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    },
+  } });
+  try {
+    assert.match(view.container.textContent ?? "", /akasha/);
+    const before = observed.length;
+    await act(async () => { for (const listener of listeners) listener({ method: "runtime.applied" }); });
+    assert.ok(observed.slice(before).every((value) => value === "ready:akasha"));
+    assert.equal(observed.at(-1), "ready:akasha");
+  } finally {
+    await view.cleanup();
+  }
+});

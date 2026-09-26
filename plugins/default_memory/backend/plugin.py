@@ -134,18 +134,9 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     是否激活只在装配时判定一次：``ctx.memory_engine`` 在同一次 kernel
     generation 内固定不变，与旧 ``initialize()`` 里的一次性判定效果等价。
     """
-    from desktop_bridge.method_policy import Concurrency
-    from core.roles.memory_document_requests import RoleMemoryDocumentReader
-    from core.roles.memory_service import RoleMemoryService
+    from agent.plugin_host.role_memory_documents import register_role_memory_documents
 
-    if ctx.workspace is None or ctx.role_store is None:
-        raise RuntimeError("default_memory 记忆文档读取需要 workspace 和 role_store")
-    documents = RoleMemoryDocumentReader(
-        ctx.role_store, RoleMemoryService(ctx.workspace)
-    )
-    ctx.rpc.register(
-        "roles.memory.documents", documents.read, concurrency=Concurrency.READ_ONLY
-    )
+    register_role_memory_documents(ctx)
 
     recorder = _DefaultMemoryRecorder(
         active=_is_memory_engine(ctx.memory_engine, "default"),

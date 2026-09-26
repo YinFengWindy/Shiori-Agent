@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { errorMessage } from "../shared/feedback/feedbackStore";
 
-type Selection = { status: "loading" | "ready" | "error"; pluginId: string };
+type Selection = { status: "loading" | "ready" | "error"; pluginId: string; error: string };
 
 /** Maps the saved memory engine to the plugin that owns its Dashboard. */
 export function memoryPluginId(engine: string): string {
@@ -10,19 +11,27 @@ export function memoryPluginId(engine: string): string {
 
 /** Tracks the saved engine across runtime configuration changes. */
 export function useConfiguredMemoryPlugin(bridgeReady: boolean): Selection {
-  const [selection, setSelection] = useState<Selection>({ status: "loading", pluginId: "" });
+  const [selection, setSelection] = useState<Selection>({ status: "loading", pluginId: "", error: "" });
 
   useEffect(() => {
     if (!bridgeReady) return;
     let cancelled = false;
     let request = 0;
+    setSelection((previous) => previous.status === "loading" ? previous : { status: "loading", pluginId: "", error: "" });
     const read = () => {
       const current = ++request;
-      setSelection({ status: "loading", pluginId: "" });
       void window.miraDesktop.readSettings().then((snapshot) => {
-        if (!cancelled && current === request) setSelection({ status: "ready", pluginId: memoryPluginId(snapshot.formData.memory.engine) });
-      }).catch(() => {
-        if (!cancelled && current === request) setSelection({ status: "error", pluginId: "" });
+        if (!cancelled && current === request) {
+          const pluginId = memoryPluginId(snapshot.formData.memory.engine);
+          setSelection((previous) => previous.status === "ready" && previous.pluginId === pluginId
+            ? previous : { status: "ready", pluginId, error: "" });
+        }
+      }).catch((error: unknown) => {
+        if (!cancelled && current === request) {
+          const message = errorMessage(error);
+          setSelection((previous) => previous.status === "error" && previous.error === message
+            ? previous : { status: "error", pluginId: "", error: message });
+        }
       });
     };
     read();
