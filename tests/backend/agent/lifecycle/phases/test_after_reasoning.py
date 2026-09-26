@@ -82,6 +82,52 @@ def role_session(manager, key="role:yin"):
     return session
 
 
+@pytest.mark.parametrize("formal_reply", [True, False])
+async def test_reply_persists_own_receipt_and_separate_trigger_identity(
+    tmp_path, formal_reply
+):
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    request = turn(session)
+    request.turn_result.context_retry["formal_role_reply"] = formal_reply
+    request.state.msg.channel = "qqbot"
+    request.state.msg.chat_id = "c2c:user"
+    request.state.msg.metadata.update(
+        {
+            "external_message_id": "incoming-1",
+            "delivery_status": "received",
+            "message_id": "incoming-1",
+            "thread_id": "thread-1",
+        }
+    )
+    result = await phase(manager).run(request)
+    # The transport envelope retains #408's turn correlation and quote metadata.
+    assert result.outbound.metadata["external_message_id"] == "incoming-1"
+    assert result.outbound.metadata["message_id"] == "incoming-1"
+    reloaded = SessionManager(tmp_path).get_or_create(session.key)
+    user, assistant = reloaded.messages
+    assert user["external_message_id"] == "incoming-1"
+    assert not assistant.get("external_message_id")
+    assert "external_message_id" not in assistant["metadata"]
+    assert assistant["metadata"]["trigger_external_message_id"] == "incoming-1"
+    assert assistant.get("delivery_status") != "received"
+    # A later assistant row cannot steal the earlier turn's acknowledgement.
+    await phase(manager).run(turn(session, content="later reply"))
+    manager.mark_message_delivery(
+        session.key,
+        message_id=result.outbound.committed_message_id,
+        thread_id="thread-1",
+        delivery_status="sent",
+        external_message_id="outgoing-1",
+    )
+    stored = SessionManager(tmp_path).get_or_create(session.key).messages
+    assert stored[0]["external_message_id"] == "incoming-1"
+    assert stored[1]["external_message_id"] == "outgoing-1"
+    assert stored[1]["metadata"]["trigger_external_message_id"] == "incoming-1"
+    assert "external_message_id" not in stored[1]["metadata"]
+    assert not stored[-1].get("external_message_id")
+
+
 async def test_two_turns_commit_correct_state_without_consolidation_and_survive_restart(
     tmp_path,
 ):

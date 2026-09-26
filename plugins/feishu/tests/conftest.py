@@ -36,6 +36,7 @@ class FakeFeishu:
     failures: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     gate: asyncio.Event | None = None
     counter: int = 0
+    sent_ids: list[str] = field(default_factory=list)
 
     def fail(self, key: str, *errors: tuple[int, int]) -> None:
         """Queues ``(http_status, code)`` answers for requests matching ``key``."""
@@ -64,6 +65,7 @@ class FakeFeishu:
         self.counter += 1
         if key in {"send", "reply"}:
             data: dict[str, Any] = {"message_id": f"om_{self.counter}"}
+            self.sent_ids.append(data["message_id"])
         elif key == "get":
             data = {"items": [self.messages[path.rsplit("/", 1)[-1]]]}
         elif key == "download":

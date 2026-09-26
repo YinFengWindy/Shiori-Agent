@@ -704,7 +704,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
         "message_id": "role:mira:0",
         "thread_id": "thread:mira:telegram:123",
         "delivery_status": "sent",
-        "external_message_id": "",
+        "external_message_id": "99",
     } in session_manager.delivery_updates
 
     merged, meta = mod._build_inbound_text_with_reply("hi", None)

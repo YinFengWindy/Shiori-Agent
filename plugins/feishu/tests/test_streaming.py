@@ -7,17 +7,44 @@ agent loop's stream sink are the real ones.
 from __future__ import annotations
 
 import json
+import asyncio
 from datetime import datetime
 from typing import Any
+from unittest.mock import AsyncMock
 
 from agent.looping.core import AgentLoop
 from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import TurnStarted
 from core.common.channel_directory import ChannelDirectory
 from plugins.feishu.backend.formatting import CARD_TEXT_LIMIT, LIVE_ELEMENT_ID
+from plugins.feishu.backend.streaming import LiveCardStreamer
 
 SESSION_KEY = "role:mira"
 CHAT_ID = "oc_chat"
+
+
+async def test_finish_waits_for_inflight_card_receipt_before_returning_it() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+    api = AsyncMock()
+    api.create_card.return_value = "card-1"
+
+    async def send_card(chat_id: str, content: str, quote: str | None) -> str:
+        started.set()
+        await release.wait()
+        return "om_outgoing"
+
+    streamer = LiveCardStreamer(api, send_card)
+    streamer.add_delta(SESSION_KEY, CHAT_ID, "preview")
+    await started.wait()
+    finish = asyncio.create_task(streamer.finish(SESSION_KEY, "final"))
+    await asyncio.sleep(0)
+    assert not finish.done()
+    release.set()
+    assert await finish == ("om_outgoing", "")
+    assert not streamer.has_card(SESSION_KEY)
+    assert api.stream_card_text.await_args_list[-1].args[2] == "final"
+    await streamer.close()
 
 
 async def _turn(harness: Any, make_event: Any) -> Any:

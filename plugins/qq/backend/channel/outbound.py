@@ -29,33 +29,25 @@ class _OutboundMixin:
                     msg.chat_id,
                     exc,
                 )
-        send_failed = False
+        first_id: str | None = None
         if msg.content.strip():
             try:
-                if msg.chat_id.startswith(GROUP_PREFIX):
-                    group_id = msg.chat_id[len(GROUP_PREFIX) :]
-                    logger.info("[qq] 群聊回复 group_id=%s 内容: %r", group_id, preview)
-                    await self._run_on_bot_loop(
-                        api.send_group_text(int(group_id), msg.content)
-                    )
-                else:
-                    logger.info(
-                        "[qq] 私聊回复 user_id=%s 内容: %r", msg.chat_id, preview
-                    )
-                    await self._run_on_bot_loop(
-                        api.send_private_text(int(msg.chat_id), msg.content)
-                    )
-            except Exception as exc:
-                send_failed = True
-                self._record_delivery_status(msg, delivery_status="failed")
+                logger.info("[qq] 回复 chat_id=%s 内容: %r", msg.chat_id, preview)
+                first_id = await self.send(msg.chat_id, msg.content)
+            except BaseException as exc:
+                self._record_delivery_status(
+                    msg, delivery_status="failed", external_message_id=first_id
+                )
                 logger.error("[qq] 发送失败 chat_id=%s 错误: %s", msg.chat_id, exc)
                 raise
         for image in msg.media or []:
             try:
-                _ = await self.send_image(msg.chat_id, image)
-            except Exception as exc:
-                send_failed = True
-                self._record_delivery_status(msg, delivery_status="failed")
+                image_id = await self.send_image(msg.chat_id, image)
+                first_id = first_id or image_id
+            except BaseException as exc:
+                self._record_delivery_status(
+                    msg, delivery_status="failed", external_message_id=first_id
+                )
                 logger.error(
                     "[qq] meme 图片发送失败 chat_id=%s path=%s err=%s",
                     msg.chat_id,
@@ -63,8 +55,9 @@ class _OutboundMixin:
                     exc,
                 )
                 raise
-        if not send_failed:
-            self._record_delivery_status(msg, delivery_status="sent")
+        self._record_delivery_status(
+            msg, delivery_status="sent", external_message_id=first_id
+        )
         self._trace_states.pop(session_key, None)
 
     async def send(self, chat_id: str, message: str) -> str | None:
@@ -113,13 +106,18 @@ class _OutboundMixin:
         return self._api
 
     def _record_delivery_status(
-        self, msg: OutboundMessage, *, delivery_status: str
+        self,
+        msg: OutboundMessage,
+        *,
+        delivery_status: str,
+        external_message_id: str | None = None,
     ) -> None:
         if self._channel_hub is not None:
             self._channel_hub.mark_delivery(
                 msg,
                 default_channel=CHANNEL,
                 delivery_status=delivery_status,
+                external_message_id=external_message_id or "",
             )
 
 

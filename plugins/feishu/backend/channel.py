@@ -410,29 +410,35 @@ class FeishuChannel:
 
     async def _on_response(self, msg: OutboundMessage) -> None:
         session_key = resolve_outbound_session_key(msg, default_channel=CHANNEL)
+        first_id: str | None = None
         try:
-            remaining = await self._streamer.finish(session_key, msg.content)
-            if remaining is None:
-                _ = await self._send_text(
+            finished = await self._streamer.finish(session_key, msg.content)
+            if finished is None:
+                first_id = await self._send_text(
                     msg.chat_id, msg.content, reply_to=quoted_message_id(msg)
                 )
-            elif remaining.strip():
-                _ = await self._send_text(msg.chat_id, remaining)
+            else:
+                first_id, remaining = finished
+                if remaining.strip():
+                    await self._send_text(msg.chat_id, remaining)
             for image in msg.media:
-                _ = await self.send_image(msg.chat_id, image)
-        except Exception:
-            self._record_delivery_status(msg, "failed")
+                image_id = await self.send_image(msg.chat_id, image)
+                first_id = first_id or image_id
+        except BaseException:
+            self._record_delivery_status(msg, "failed", first_id)
             raise
-        self._record_delivery_status(msg, "sent")
+        self._record_delivery_status(msg, "sent", first_id)
 
-    def _record_delivery_status(self, msg: OutboundMessage, status: str) -> None:
+    def _record_delivery_status(
+        self, msg: OutboundMessage, status: str, external_message_id: str | None = None
+    ) -> None:
         if self._channel_hub is None:
             return
         self._channel_hub.mark_delivery(
             msg,
             default_channel=CHANNEL,
             delivery_status=status,
-            external_message_id=str(msg.metadata.get("external_message_id") or ""),
+            external_message_id=external_message_id or "",
         )
 
     async def send(self, chat_id: str, message: str) -> str | None:
