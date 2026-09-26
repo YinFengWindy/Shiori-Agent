@@ -6,7 +6,7 @@ from typing import Any
 from agent.prompting import PromptSectionRender
 from core.roles import RoleStore
 from core.roles.role_macros import expand_role_macros
-from core.roles.role_prompt_compiler import RoleKnowledgeMatcher, RolePromptCompiler
+from core.roles.role_prompt_compiler import RolePromptCompiler
 
 
 def build_role_system_section(
@@ -15,7 +15,7 @@ def build_role_system_section(
     session_metadata: dict[str, Any] | None,
     current_message: str = "",
 ) -> PromptSectionRender | None:
-    """Render the active role with the current turn's selected knowledge."""
+    """Render the active role for a user-visible turn."""
     metadata = session_metadata if isinstance(session_metadata, dict) else {}
     role_id = str(metadata.get("role_id") or "").strip()
     if not role_id:
@@ -26,15 +26,10 @@ def build_role_system_section(
         raise ValueError(f"role not found for user-visible prompt: {role_id}")
 
     role_name = role.name.strip() or role_id
-    profile = role.profile
     prompt = (
         RolePromptCompiler()
         .compile(
             role,
-            matched_knowledge_entries=RoleKnowledgeMatcher().match(
-                profile.knowledge_base,
-                current_message,
-            ),
             runtime_context=role.runtime_config,
             user_name=str(metadata.get("user_name") or ""),
         )

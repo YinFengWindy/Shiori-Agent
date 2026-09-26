@@ -1,6 +1,5 @@
 from core.roles.profile_models import (
     RoleCharacterDefinition,
-    RoleKnowledgeEntry,
     RoleProfile,
 )
 from core.roles.role_prompt_compiler import RolePromptCompiler
@@ -16,10 +15,8 @@ def test_compiler_uses_stable_profile_order_and_mood_contract() -> None:
             response_constraints="回复约束",
         )
     )
-    entry = RoleKnowledgeEntry(content="知识")
     result = RolePromptCompiler().compile(
         profile,
-        [entry],
         {"mood_catalog": ["平静"], "default_mood": "平静"},
     )
 
@@ -30,9 +27,6 @@ def test_compiler_uses_stable_profile_order_and_mood_contract() -> None:
         "[role_behavior_rules]"
     )
     assert result.content.index("[role_behavior_rules]") < result.content.index(
-        "[role_knowledge]"
-    )
-    assert result.content.index("[role_knowledge]") < result.content.index(
         "[role_response_constraints]"
     )
     assert result.content.index("[role_response_constraints]") < result.content.index(
@@ -54,16 +48,11 @@ def test_compiler_expands_identity_in_all_runtime_blocks_without_source_metadata
                 "response_constraints": "回应{{user}}",
             },
             "import_provenance": {"format": "json", "creator": "不应注入的作者"},
+            "knowledge_base": {"enabled": True, "entries": [{"content": "旧知识"}]},
         }
     )
     result = RolePromptCompiler().compile(
         profile,
-        [
-            RoleKnowledgeEntry(
-                content="{{char}}认识{{user}}",
-                raw_source={"extension": "不应注入的原始数据"},
-            )
-        ],
         role_name="Shiori",
         user_name="小明",
     )
@@ -72,7 +61,7 @@ def test_compiler_expands_identity_in_all_runtime_blocks_without_source_metadata
     assert "小栞的性格" in result.content
     assert "尊重小明" in result.content
     assert "回应小明" in result.content
-    assert "小栞认识小明" in result.content
+    assert "旧知识" not in result.content
     assert "不应注入" not in result.content
 
 

@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from bus.event_bus import EventBus
-from core.roles import RoleStore
+from core.roles import RoleMemoryService, RoleStore
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
 from session.manager import SessionManager
@@ -27,7 +27,7 @@ async def test_role_card_preview_forwards_the_full_payload_to_its_service() -> N
     )
     handler = DesktopRoleRequestHandler(
         role_service=SimpleNamespace(),
-        role_store=SimpleNamespace(),
+        role_store=SimpleNamespace(workspace=Path(".")),
         role_presenter=SimpleNamespace(),
         voice_handler=SimpleNamespace(),
         card_import_service=card_import,
@@ -43,6 +43,37 @@ async def test_role_card_preview_forwards_the_full_payload_to_its_service() -> N
         {"source": "C:/workspace/private_runtime/imports/role-cards/card.json"}
     )
     assert result == {"import_id": "preview-1"}
+
+
+@pytest.mark.asyncio
+async def test_role_memory_documents_bridge_reads_only_the_requested_role(tmp_path):
+    store = RoleStore(tmp_path)
+    store.create_role(role_id="mira", name="Mira", system_prompt="test")
+    store.create_role(role_id="luna", name="Luna", system_prompt="test")
+    for role_id in ("mira", "luna"):
+        root = tmp_path / "roles" / role_id / "memory"
+        root.mkdir(parents=True)
+        (root / "SELF.md").write_text(role_id, encoding="utf-8")
+    handler = DesktopRoleRequestHandler(
+        role_service=SimpleNamespace(memory=RoleMemoryService(tmp_path)),
+        role_store=store,
+        role_presenter=SimpleNamespace(),
+        voice_handler=SimpleNamespace(),
+        publish_event=AsyncMock(),
+    )
+
+    result = await handler.handle("roles.memory.documents", {"role_id": "mira"})
+
+    assert result["role_id"] == "mira"
+    assert (
+        next(item for item in result["documents"] if item["name"] == "SELF.md")[
+            "content"
+        ]
+        == "mira"
+    )
+    assert "luna" not in str(result)
+    with pytest.raises(ValueError, match="role not found"):
+        await handler.handle("roles.memory.documents", {"role_id": "missing"})
 
 
 @pytest.mark.asyncio
@@ -81,10 +112,16 @@ async def test_role_create_persists_structured_profile(tmp_path: Path) -> None:
     )
 
     assert response.error is None
-    assert response.payload["role"]["profile"] == {"version": 1, **profile}
+    assert response.payload["role"]["profile"] == {
+        "version": 1,
+        "character": profile["character"],
+    }
     persisted = role_store.get_role(response.payload["role"]["id"])
     assert persisted is not None
-    assert persisted.profile.to_dict() == {"version": 1, **profile}
+    assert persisted.profile.to_dict() == {
+        "version": 1,
+        "character": profile["character"],
+    }
 
     update = await service.handle(
         {
@@ -105,8 +142,7 @@ async def test_role_create_persists_structured_profile(tmp_path: Path) -> None:
 
     assert update.error is None
     assert update.payload["role"]["profile"]["character"] == profile["character"]
-    assert update.payload["role"]["profile"]["knowledge_base"]["enabled"] is False
-    assert "token_budget" not in update.payload["role"]["profile"]["knowledge_base"]
+    assert "knowledge_base" not in update.payload["role"]["profile"]
 
     cleared_rules = await service.handle(
         {
@@ -139,7 +175,7 @@ async def test_the_core_bridge_no_longer_answers_pet_package_methods() -> None:
     """
     handler = DesktopRoleRequestHandler(
         role_service=SimpleNamespace(),
-        role_store=SimpleNamespace(),
+        role_store=SimpleNamespace(workspace=Path(".")),
         role_presenter=SimpleNamespace(),
         voice_handler=SimpleNamespace(),
         card_import_service=SimpleNamespace(),

@@ -1,8 +1,4 @@
-from core.roles.profile_models import (
-    RoleKnowledgeBase,
-    RoleKnowledgeEntry,
-    RoleProfile,
-)
+from core.roles.profile_models import RoleProfile
 
 
 def test_role_profile_round_trips_runtime_fields_without_source_noise() -> None:
@@ -27,7 +23,7 @@ def test_role_profile_round_trips_runtime_fields_without_source_noise() -> None:
     assert "source" not in serialized
     assert "compatibility" not in serialized
     assert "response_constraints" not in serialized
-    assert "token_budget" not in serialized["knowledge_base"]
+    assert "knowledge_base" not in serialized
 
 
 def test_legacy_fields_are_mapped_to_profile() -> None:
@@ -36,25 +32,6 @@ def test_legacy_fields_are_mapped_to_profile() -> None:
     assert profile.character.profile == "背景"
     assert profile.character.behavior_rules == "规则"
     assert profile.character.response_constraints == ""
-    assert RoleKnowledgeBase.from_dict(None).enabled is False
-
-
-def test_explicit_knowledge_enabled_and_raw_source_survive_round_trip() -> None:
-    source = {"extensions": {"selectiveLogic": 2}, "scan_depth": 100}
-    payload = {
-        "enabled": True,
-        "token_budget": 0,
-        "raw_source": source,
-        "entries": [{"content": "世界观", "raw_source": source}],
-    }
-    saved = RoleKnowledgeBase.from_dict(payload).to_dict()
-
-    assert saved["enabled"] is True
-    assert "token_budget" not in saved
-    assert saved["raw_source"] == source
-    assert saved["entries"][0]["raw_source"] == source
-    saved["raw_source"]["extensions"]["selectiveLogic"] = 99
-    assert source["extensions"]["selectiveLogic"] == 2
 
 
 def test_profile_round_trips_constraints_nickname_and_attribution() -> None:
@@ -78,10 +55,3 @@ def test_profile_round_trips_constraints_nickname_and_attribution() -> None:
     assert profile.to_dict()["import_provenance"] == provenance
     assert profile.character.nickname == "小栞"
     assert profile.character.response_constraints == "每次回答一句"
-
-
-def test_knowledge_entry_round_trips_title() -> None:
-    entry = RoleKnowledgeEntry.from_dict({"title": "标题", "content": "内容"})
-
-    assert entry.title == "标题"
-    assert entry.to_dict()["title"] == "标题"

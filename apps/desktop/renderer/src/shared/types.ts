@@ -37,7 +37,6 @@ export type RoleRecord = {
   system_prompt: string;
   profile?: {
     character?: { profile?: string; personality?: string; behavior_rules?: string };
-    knowledge_base?: RoleKnowledgeBase;
   };
   runtime_config: Record<string, unknown>;
   channel_bindings?: RoleChannelBinding[];
@@ -321,29 +320,6 @@ export type NewRoleFormState = {
   emotionSelections?: Record<string, string>;
 };
 
-/** One editable normalized role knowledge entry. */
-export type RoleKnowledgeEntry = {
-  id?: string;
-  title?: string;
-  content?: string;
-  keywords?: string[];
-  primary_keys?: string[];
-  secondary_keys?: string[];
-  enabled?: boolean;
-  always_active?: boolean;
-  case_sensitive?: boolean;
-  priority?: number;
-  insertion_order?: number;
-  raw_source?: Record<string, unknown>;
-};
-
-/** Role-owned knowledge settings; matching has no separate token budget. */
-export type RoleKnowledgeBase = {
-  enabled?: boolean;
-  entries?: RoleKnowledgeEntry[];
-  raw_source?: Record<string, unknown>;
-};
-
 /** Non-runtime metadata retained from an imported character card. */
 export type RoleImportProvenance = {
   format: string;
@@ -359,8 +335,21 @@ export type RoleImportProvenance = {
 /** Editable structured role data shared by card import and role persistence. */
 export type RoleProfileDraft = {
   character?: { profile?: string; personality?: string; behavior_rules?: string; response_constraints?: string; nickname?: string };
-  knowledge_base?: RoleKnowledgeBase;
   import_provenance?: RoleImportProvenance;
+};
+
+/** Read-only state of one role-owned Markdown memory document. */
+export type RoleMemoryDocument = {
+  name: "SELF.md" | "MEMORY.md" | "HISTORY.md" | "RECENT_CONTEXT.md" | "PENDING.md";
+  status: "ready" | "empty" | "missing" | "error";
+  content: string;
+  error?: string;
+};
+
+/** Bridge response scoped to one persisted role. */
+export type RoleMemoryDocumentsPayload = {
+  role_id: string;
+  documents: RoleMemoryDocument[];
 };
 
 /** A decoded candidate image in a staged import. */

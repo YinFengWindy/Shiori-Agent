@@ -12,7 +12,6 @@ describe("roleCardImportState", () => {
       system_prompt: "Speak calmly",
       profile: {
         character: { personality: "calm", response_constraints: "Keep replies short" },
-        knowledge_base: { enabled: false, entries: [{ id: "archive", content: "Archive lore" }] },
       },
     };
 

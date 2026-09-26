@@ -31,3 +31,16 @@ it("requires duplicate selection before continuing and keeps compatibility repor
     await view.cleanup();
   }
 });
+
+it("shows discarded character book in the import preview", async () => {
+  const view = await mountTestComponent(<RoleCardImportPreviewDialog open sourceUrl="" selections={{}}
+    preview={{ import_id: "test", name: "Test", report: { discarded_fields: ["character_book"] } }}
+    onSelectEmotion={() => undefined} onClose={() => undefined} onCancel={() => undefined} />);
+  try {
+    assert.match(view.container.textContent ?? "", /未导入内容/);
+    assert.match(view.container.textContent ?? "", /character_book/);
+    assert.doesNotMatch(view.container.textContent ?? "", /知识库/);
+  } finally {
+    await view.cleanup();
+  }
+});

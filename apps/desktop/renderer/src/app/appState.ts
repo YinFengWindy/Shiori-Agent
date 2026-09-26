@@ -114,7 +114,6 @@ export function navigationEntriesEqual(left: NavigationEntry, right: NavigationE
 function createEmptyRoleProfile() {
   return {
     character: { profile: "", personality: "", behavior_rules: "", response_constraints: "" },
-    knowledge_base: { enabled: false, entries: [] },
   };
 }
 

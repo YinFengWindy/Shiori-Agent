@@ -25,13 +25,10 @@ from .models import (
 from .profile_models import (
     ImportProvenance,
     RoleCharacterDefinition,
-    RoleKnowledgeBase,
-    RoleKnowledgeEntry,
     RoleProfile,
 )
 from .role_prompt_compiler import (
     CompiledRolePrompt,
-    RoleKnowledgeMatcher,
     RolePromptCompiler,
 )
 from .store import RoleStore
@@ -62,9 +59,6 @@ __all__ = [
     "CompiledRolePrompt",
     "ImportProvenance",
     "RoleCharacterDefinition",
-    "RoleKnowledgeBase",
-    "RoleKnowledgeEntry",
-    "RoleKnowledgeMatcher",
     "RoleProfile",
     "RolePromptCompiler",
     "RoleRuntime",

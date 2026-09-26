@@ -45,6 +45,14 @@ class DesktopRoleRequestHandler:
                     for role in self._role_service.repository.list_roles()
                 ]
             }
+        if method == "roles.memory.documents":
+            role_id = str(payload.get("role_id") or "").strip()
+            if self._role_store.get_role(role_id) is None:
+                raise ValueError(f"role not found: {role_id}")
+            return {
+                "role_id": role_id,
+                "documents": self._role_service.memory.read_documents(role_id),
+            }
         if method == "roles.create":
             aggregate = await self._role_service.create_role_async(
                 role_id=str(payload.get("role_id") or "").strip() or None,

@@ -160,6 +160,7 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
     "roles.list": MethodPolicy(
         concurrency=Concurrency.READ_ONLY, admission_exempt=True
     ),
+    "roles.memory.documents": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "session.messagesPage": MethodPolicy(
         concurrency=Concurrency.READ_ONLY, admission_exempt=True
     ),

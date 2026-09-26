@@ -77,3 +77,9 @@ def test_proactive_target_preview_is_an_app_level_read():
     assert policy.handler is Handler.PROACTIVE_TARGET
     assert policy.admission_exempt
     assert policy.concurrency is Concurrency.READ_ONLY
+
+
+def test_role_memory_documents_uses_the_read_only_lane():
+    policy = method_policy("roles.memory.documents")
+    assert policy.concurrency is Concurrency.READ_ONLY
+    assert policy.handler is Handler.GENERATION

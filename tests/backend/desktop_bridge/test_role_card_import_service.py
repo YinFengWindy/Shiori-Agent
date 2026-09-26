@@ -85,6 +85,37 @@ async def test_preview_stages_card_without_creating_a_role(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_commit_discards_character_book_and_keeps_character_fields(tmp_path):
+    service, store = _service(tmp_path)
+    card = _card()
+    card["data"]["character_book"] = {"entries": [{"content": "旧知识"}]}
+    source = _stage_card(tmp_path, card)
+    preview = await service.preview({"source": str(source)})
+
+    assert "character_book" in preview["report"]["discarded_fields"]
+    result = await service.commit(
+        {
+            "import_id": preview["import_id"],
+            "overrides": {
+                "profile": {
+                    "character": {"response_constraints": "简洁"},
+                    "knowledge_base": {
+                        "enabled": True,
+                        "entries": [{"content": "注入"}],
+                    },
+                }
+            },
+        }
+    )
+
+    profile = result["role"]["profile"]
+    assert profile["character"]["profile"] == "角色资料"
+    assert profile["character"]["response_constraints"] == "简洁"
+    assert "knowledge_base" not in profile
+    assert "旧知识" not in str(store.get_role(result["role"]["id"]).to_dict())
+
+
+@pytest.mark.asyncio
 async def test_staging_failure_retains_preview_and_can_retry(tmp_path, monkeypatch):
     service, store = _service(tmp_path)
     preview = await service.preview({"source": str(_stage_card(tmp_path, _card()))})

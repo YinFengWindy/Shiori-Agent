@@ -140,8 +140,25 @@ def test_profile_update_persists_constraints_without_rewriting_legacy_background
     assert reloaded.background == "旧背景"
     assert reloaded.profile.character.profile == "新资料"
     assert reloaded.profile.character.response_constraints == "新约束"
-    assert reloaded.profile.knowledge_base.enabled is True
-    assert "token_budget" not in reloaded.to_dict()["profile"]["knowledge_base"]
+    assert "knowledge_base" not in reloaded.to_dict()["profile"]
+
+
+def test_legacy_manifest_knowledge_is_ignored_and_removed_on_next_save(tmp_path):
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    payload = json.loads(store.manifest_path.read_text(encoding="utf-8"))
+    payload["roles"][0]["profile"]["knowledge_base"] = {
+        "enabled": True,
+        "entries": [{"content": "旧知识"}],
+    }
+    store.manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    role = RoleStore(tmp_path).get_role("mira")
+    assert "knowledge_base" not in role.profile.to_dict()
+    store.update_role("mira", name="Mira updated")
+
+    saved = json.loads(store.manifest_path.read_text(encoding="utf-8"))
+    assert "knowledge_base" not in saved["roles"][0]["profile"]
 
 
 def test_structured_profile_can_clear_rules_without_legacy_validation_or_background_write(
