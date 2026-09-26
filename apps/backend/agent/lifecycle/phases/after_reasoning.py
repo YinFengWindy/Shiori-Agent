@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
+from core.common.message_source import MessageSource
 from agent.core.passive_support import (
     build_session_runtime_metadata,
     update_session_runtime_metadata,
@@ -207,11 +208,13 @@ class _PersistUserMessageModule:
         if relationship_runtime is not None:
             relationship_runtime.handle_user_message(session.key)
         user_kwargs: dict[str, object] = {}
-        user_kwargs["metadata"] = _build_synced_message_metadata(
+        user_metadata = _build_synced_message_metadata(
             channel=msg.channel,
             chat_id=msg.chat_id,
             metadata=msg.metadata,
         )
+        user_metadata["message_source"] = MessageSource.from_inbound(msg).to_metadata()
+        user_kwargs["metadata"] = user_metadata
         llm_user_content = ctx.context_retry.get("llm_user_content")
         if isinstance(llm_user_content, (str, list)):
             user_kwargs["llm_user_content"] = llm_user_content

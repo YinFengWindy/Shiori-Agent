@@ -82,6 +82,37 @@ def role_session(manager, key="role:yin"):
     return session
 
 
+async def test_channel_user_source_survives_commit_and_reload(tmp_path):
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    request = turn(session)
+    request.state.msg.channel = "qq"
+    request.state.msg.chat_id = "gqq:123"
+    request.state.msg.sender = "456"
+    request.state.msg.metadata.update(
+        {
+            "chat_type": "group",
+            "session_key_override": session.key,
+            "transport_channel": "qq",
+            "transport_chat_id": "gqq:123",
+        }
+    )
+
+    await phase(manager).run(request)
+
+    reloaded = SessionManager(tmp_path).get_or_create(session.key)
+    source = reloaded.messages[0]["metadata"]["message_source"]
+    assert source == {
+        "channel": "qq",
+        "chat_id": "gqq:123",
+        "chat_type": "group",
+        "sender_id": "456",
+        "session_key": session.key,
+    }
+    assert '"sender_id": "456"' in reloaded.get_history()[0]["content"]
+    assert '"chat_id": "gqq:123"' in reloaded.get_history()[0]["content"]
+
+
 @pytest.mark.parametrize("formal_reply", [True, False])
 async def test_reply_persists_own_receipt_and_separate_trigger_identity(
     tmp_path, formal_reply

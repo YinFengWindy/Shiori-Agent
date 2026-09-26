@@ -94,10 +94,12 @@ def test_get_history_skips_cached_llm_frame_by_default():
 
     history = session.get_history(start_index=session.last_consolidated)
 
-    assert history == [
-        {"role": "user", "content": user_content},
-        {"role": "assistant", "content": "world"},
-    ]
+    assert history[0]["role"] == "user"
+    assert history[0]["content"].startswith("[当前消息时间: x]\n")
+    assert '"channel": null' in history[0]["content"]
+    assert history[0]["content"].endswith("\nhello")
+    assert "旧记忆" not in history[0]["content"]
+    assert history[1] == {"role": "assistant", "content": "world"}
 
 
 def test_get_history_replays_proactive_as_short_assistant_with_meta_frame():
@@ -142,7 +144,9 @@ def test_get_history_allows_proactive_assistant_boundary():
     context = str(history[1]["content"])
     assert is_context_frame(context)
     assert "上一条 assistant 消息是系统主动推送" in context
-    assert history[2] == {"role": "user", "content": "刚才那个"}
+    assert history[2]["role"] == "user"
+    assert '"channel": null' in history[2]["content"]
+    assert history[2]["content"].endswith("\n刚才那个")
 
 
 def test_get_history_rewinds_consolidated_index_to_user_boundary():
@@ -153,7 +157,8 @@ def test_get_history_rewinds_consolidated_index_to_user_boundary():
 
     history = session.get_history(start_index=session.last_consolidated)
 
-    assert history[0] == {"role": "user", "content": "hello"}
+    assert history[0]["role"] == "user"
+    assert history[0]["content"].endswith("\nhello")
 
 
 def test_get_history_keeps_full_consolidated_tail():
@@ -164,12 +169,13 @@ def test_get_history_keeps_full_consolidated_tail():
     history = session.get_history(max_messages=2, start_index=0)
 
     assert session.consolidation_requested is False
-    assert history == [
-        {"role": "user", "content": "u0"},
-        {"role": "user", "content": "u1"},
-        {"role": "user", "content": "u2"},
-        {"role": "user", "content": "u3"},
-        {"role": "user", "content": "u4"},
+    assert [message["role"] for message in history] == ["user"] * 5
+    assert [message["content"].rsplit("\n", 1)[-1] for message in history] == [
+        "u0",
+        "u1",
+        "u2",
+        "u3",
+        "u4",
     ]
 
 
@@ -192,7 +198,10 @@ def test_get_history_skips_legacy_context_frame_by_default():
 
     history = session.get_history(start_index=0)
 
-    assert history == [{"role": "user", "content": "hello"}]
+    assert len(history) == 1
+    assert history[0]["role"] == "user"
+    assert history[0]["content"].endswith("\nhello")
+    assert "recent_context" not in history[0]["content"]
 
 
 def test_get_history_does_not_inject_inference_tag():

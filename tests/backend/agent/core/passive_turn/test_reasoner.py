@@ -13,6 +13,7 @@ from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import ContentSafetyError, ContextLengthError
 from agent.tools.registry import ToolRegistry
 from agent.tools.turn_scope import current_tool_turn
+from bus.events import InboundMessage
 from session.manager import SessionManager
 
 
@@ -37,8 +38,9 @@ async def test_run_turn_retry_preserves_persisted_history(
     await manager.save_async(session)
     original_messages = deepcopy(session.messages)
     source_history = session.get_history(start_index=last_consolidated)
-    msg = SimpleNamespace(
+    msg = InboundMessage(
         channel="cli",
+        sender="user",
         chat_id="retry",
         content=original_messages[-1]["content"],
         media=[],
@@ -139,8 +141,9 @@ async def test_run_turn_repairs_rendered_input_budget_before_reasoning(tmp_path)
     session = manager.get_or_create("cli:budget")
     session.add_message("user", "x" * 1000)
     await manager.save_async(session)
-    msg = SimpleNamespace(
+    msg = InboundMessage(
         channel="cli",
+        sender="user",
         chat_id="budget",
         content="hello",
         media=[],

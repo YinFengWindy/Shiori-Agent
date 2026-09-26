@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from core.common.message_source import MessageSource
 from bus.events import InboundMessage
 
 
@@ -83,6 +84,7 @@ class ContextRequest:
     skill_names: list[str] | None = None
     channel: str | None = None
     chat_id: str | None = None
+    message_source: MessageSource | None = None
     message_timestamp: datetime | None = None
     retrieved_memory_block: str = ""
     disabled_sections: set[str] | None = None

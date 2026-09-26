@@ -62,16 +62,20 @@ class SessionIdentityIndex:
         channel: str,
         metadata_key: str,
         normalizer: Callable[[str], str] | None = None,
+        accepts_chat_id: Callable[[str], bool] | None = None,
     ) -> None:
         self._session_manager = session_manager
         self._channel = channel
         self._metadata_key = metadata_key
         self._normalizer = normalizer or (lambda value: value)
+        self._accepts_chat_id = accepts_chat_id or (lambda _: True)
         self.mapping: dict[str, str] = {}
 
     def rebuild(self) -> dict[str, str]:
         self.mapping.clear()
         for entry in self._session_manager.get_channel_metadata(self._channel):
+            if not self._accepts_chat_id(entry["chat_id"]):
+                continue
             raw_value = entry["metadata"].get(self._metadata_key)
             if not isinstance(raw_value, str):
                 continue
@@ -87,6 +91,8 @@ class SessionIdentityIndex:
         return self.mapping.get(normalized)
 
     async def remember(self, identity: str, chat_id: str) -> None:
+        if not self._accepts_chat_id(chat_id):
+            return
         normalized = self._normalize(identity)
         if not normalized:
             return
