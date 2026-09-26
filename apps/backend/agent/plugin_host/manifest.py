@@ -24,6 +24,7 @@ KNOWN_CAPABILITIES = frozenset(
         "tool_hooks",
         "proactive_gates",
         "channels",
+        "accounts",
         "events",
         "scene_observations",
         "kv",
