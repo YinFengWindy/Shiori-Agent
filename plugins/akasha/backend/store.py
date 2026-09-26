@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import threading
 import uuid
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -806,22 +807,37 @@ class AkashaStore:
     def list_items_for_admin(
         self,
         *,
+        role_id: str = "",
         q: str = "",
+        matching_keys: list[str] | None = None,
         page: int = 1,
         page_size: int = 50,
         sort_by: str = "updated_at",
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
         # 1. Akasha MVP 只展示节点状态，不展示原文。
-        where = ""
+        conditions: list[str] = []
         params: list[object] = []
+        if role_id:
+            conditions.append("role_id = ?")
+            params.append(role_id.strip())
         if q.strip():
-            where = "WHERE key LIKE ? OR anchor_id LIKE ?"
+            key_matches = (
+                " OR key IN (SELECT value FROM json_each(?))"
+                if matching_keys is not None
+                else ""
+            )
+            conditions.append(f"(key LIKE ? OR anchor_id LIKE ?{key_matches})")
             like = f"%{q.strip()}%"
             params.extend([like, like])
+            if matching_keys is not None:
+                params.append(json.dumps(matching_keys))
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        requested_sort = "first_ts_unix" if sort_by == "happened_at" else sort_by
         safe_sort = (
-            sort_by
-            if sort_by in {"updated_at", "first_ts_unix", "strength", "resource"}
+            requested_sort
+            if requested_sort
+            in {"created_at", "updated_at", "first_ts_unix", "strength", "resource"}
             else "updated_at"
         )
         safe_order = "ASC" if sort_order.lower() == "asc" else "DESC"
@@ -846,13 +862,24 @@ class AkashaStore:
         total = int((count_row["c"] if count_row else 0) or 0)
         return [_node_row_to_admin(row) for row in rows], total
 
+    def list_role_session_keys(self, role_id: str) -> list[str]:
+        """Return only sessions represented by nodes owned by one role."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT DISTINCT session_key FROM akasha_nodes WHERE role_id = ?",
+                (role_id,),
+            ).fetchall()
+        return [str(row["session_key"]) for row in rows]
+
     # 按 id 读取管理工具节点详情。
-    def get_item_for_admin(self, item_id: str) -> dict[str, object] | None:
+    def get_item_for_admin(
+        self, item_id: str, *, role_id: str = ""
+    ) -> dict[str, object] | None:
         # 1. item_id 对应 turn key。
         with self._lock:
             row = self._db.execute(
-                "SELECT * FROM akasha_nodes WHERE key = ?",
-                (item_id,),
+                "SELECT * FROM akasha_nodes WHERE key = ? AND (? = '' OR role_id = ?)",
+                (item_id, role_id, role_id),
             ).fetchone()
         return _node_row_to_admin(row) if row is not None else None
 
@@ -1079,7 +1106,9 @@ def _node_row_to_admin(row: sqlite3.Row) -> dict[str, object]:
         "status": "active",
         "created_at": str(row["created_at"] or ""),
         "updated_at": str(row["updated_at"] or ""),
-        "happened_at": str(row["first_ts_unix"] or ""),
+        "happened_at": datetime.fromtimestamp(
+            float(row["first_ts_unix"]), timezone.utc
+        ).isoformat(),
         "extra_json": {
             "session_key": str(row["session_key"]),
             "role_id": str(row["role_id"] or ""),

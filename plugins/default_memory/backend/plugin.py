@@ -135,8 +135,10 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     generation 内固定不变，与旧 ``initialize()`` 里的一次性判定效果等价。
     """
     from agent.plugin_host.role_memory_documents import register_role_memory_documents
+    from .role_memory import register_role_semantic_memory
 
     register_role_memory_documents(ctx)
+    register_role_semantic_memory(ctx)
 
     recorder = _DefaultMemoryRecorder(
         active=_is_memory_engine(ctx.memory_engine, "default"),
