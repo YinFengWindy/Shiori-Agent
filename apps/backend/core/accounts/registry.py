@@ -8,7 +8,13 @@ from threading import RLock
 from typing import Callable
 from uuid import uuid4
 
-from .models import AccountAccess, AccountRecord, AccountSnapshot, ConnectionState
+from .models import (
+    AccountAccess,
+    AccountRecord,
+    AccountResponseRules,
+    AccountSnapshot,
+    ConnectionState,
+)
 from .persistence import ensure_unique, load_accounts, save_accounts
 from .runtime_state import AccountRuntimeState, DIRECT_GENERATION
 
@@ -50,6 +56,7 @@ class AccountRegistry:
                             row,
                             role_id=current.role_id,
                             ownership_version=current.ownership_version,
+                            response_rules=current.response_rules,
                         )
                     updated[account_id] = row
                 ensure_unique(updated)
@@ -184,6 +191,15 @@ class AccountRegistry:
             )
             if row is None:
                 raise KeyError(account_id)
+            if capabilities and row.known_capabilities != tuple(sorted(capabilities)):
+                row = replace(row, known_capabilities=tuple(sorted(capabilities)))
+                if generation in {
+                    DIRECT_GENERATION,
+                    self._runtime.published_generation,
+                }:
+                    self._save({**self._records, account_id: row})
+                else:
+                    self._staged_records.setdefault(generation, {})[account_id] = row
             return self._runtime.snapshot(row, generation=generation)
 
     def unregister(
@@ -215,6 +231,17 @@ class AccountRegistry:
                 row = replace(
                     row, role_id=role_id, ownership_version=row.ownership_version + 1
                 )
+                self._save({**self._records, account_id: row})
+            return self._runtime.snapshot(row)
+
+    def set_response_rules(
+        self, account_id: str, rules: AccountResponseRules
+    ) -> AccountSnapshot:
+        """Persists shared response policy without changing ownership or live state."""
+        with self._lock:
+            row = self._records[account_id]
+            if row.response_rules != rules:
+                row = replace(row, response_rules=rules)
                 self._save({**self._records, account_id: row})
             return self._runtime.snapshot(row)
 

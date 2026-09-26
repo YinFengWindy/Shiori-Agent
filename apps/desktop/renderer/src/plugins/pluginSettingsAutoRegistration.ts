@@ -51,7 +51,7 @@ const conflictWarnedIds = new Set<string>();
  * (via `PluginUiRegistry.unregisterPlugin`) — no parallel teardown path.
  */
 export function synchronizePluginSettingsAutoRegistration(
-  plugins: Array<Pick<PluginSummary, "id" | "name" | "hasConfigSchema">>,
+  plugins: Array<Pick<PluginSummary, "id" | "name" | "hasConfigSchema"> & Partial<Pick<PluginSummary, "capabilities">>>,
 ): void {
   // A plugin's own full unload (`unregisterPlugin`) may already have
   // removed this entry from the registry; forget it here too so a later
@@ -62,7 +62,7 @@ export function synchronizePluginSettingsAutoRegistration(
     }
   }
 
-  const eligibleIds = new Set(plugins.filter((plugin) => plugin.hasConfigSchema).map((plugin) => plugin.id));
+  const eligibleIds = new Set(plugins.filter((plugin) => plugin.hasConfigSchema || plugin.capabilities?.includes("accounts")).map((plugin) => plugin.id));
   // A plugin that drops out of the roster or loses its schema is no longer
   // a candidate for auto-registration at all, so forgetting it here means a
   // later, genuinely new conflict for the same id gets its own one-time
@@ -78,7 +78,7 @@ export function synchronizePluginSettingsAutoRegistration(
   }
 
   for (const plugin of plugins) {
-    if (!plugin.hasConfigSchema || autoRegisteredIds.has(plugin.id)) continue;
+    if ((!plugin.hasConfigSchema && !plugin.capabilities?.includes("accounts")) || autoRegisteredIds.has(plugin.id)) continue;
     if (pluginUiRegistry.getSettingsSubsection(PARENT_SECTION_ID, plugin.id)) {
       // A hand-written settings.section already claimed this id — it wins,
       // visibly (not a silent overwrite): AC 6. Warned once per id per
@@ -98,7 +98,7 @@ export function synchronizePluginSettingsAutoRegistration(
       id: plugin.id,
       label: plugin.name || plugin.id,
       pluginId: plugin.id,
-      Component: createPluginSchemaSettingsSection(plugin.id),
+      Component: plugin.hasConfigSchema ? createPluginSchemaSettingsSection(plugin.id) : () => null,
     });
     autoRegisteredIds.add(plugin.id);
   }

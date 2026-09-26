@@ -12,6 +12,7 @@ import type { RoleDetailTabId } from "./RoleDetailTabs";
 import { RoleDetailToolbar } from "./RoleDetailToolbar";
 import { RoleMemoryPanel } from "./RoleMemoryPanel";
 import { RoleProfilePanel } from "./RoleProfilePanel";
+import { RoleAccountsPanel } from "../accounts/RoleAccountsPanel";
 
 type RoleDetailPageProps = {
   activeRole: RoleRecord | null;
@@ -77,14 +78,17 @@ export function RoleDetailPage({
   }
 
   const content = activeTab === "profile" ? (
-    <RoleProfilePanel
-      roleId={activeRole?.id ?? ""}
-      roleRevision={activeRole?.updated_at ?? ""}
-      bridgeReady={bridgeReady}
-      roleForm={roleForm}
-      onUpdate={updateRoleForm}
-      onModelChanged={onRoleModelChanged}
-    />
+    <div className="grid gap-7">
+      <RoleProfilePanel
+        roleId={activeRole?.id ?? ""}
+        roleRevision={activeRole?.updated_at ?? ""}
+        bridgeReady={bridgeReady}
+        roleForm={roleForm}
+        onUpdate={updateRoleForm}
+        onModelChanged={onRoleModelChanged}
+      />
+      {activeRoleId ? <RoleAccountsPanel roleId={activeRoleId} onOpenPluginSettings={onOpenPluginSettings} /> : null}
+    </div>
   ) : activeTab === "memory" ? (
     <RoleMemoryPanel roleId={activeRoleId} bridgeReady={bridgeReady} />
   ) : activeTab === "capabilities" ? (

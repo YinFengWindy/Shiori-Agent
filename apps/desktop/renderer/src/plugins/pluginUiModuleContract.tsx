@@ -12,6 +12,7 @@ import {
   type PluginNavPageSidebarProps,
   type PluginRoleAssetsProps,
   type PluginRoleMemoryProps,
+  type PluginAccountDetailProps,
 } from "./pluginUiRegistry";
 
 /**
@@ -72,6 +73,14 @@ export type PluginRoleMemoryContribution = {
   component: React.ComponentType<PluginRoleMemoryComponentProps>;
 };
 
+/** Plugin-authored account controls receive a scoped RPC client and host services. */
+export type PluginAccountDetailComponentProps = PluginAccountDetailProps & PluginInjectedProps;
+
+/** One platform's new-account and connection controls. */
+export type PluginAccountDetailContribution = {
+  component: React.ComponentType<PluginAccountDetailComponentProps>;
+};
+
 export type PluginNavPageContribution = {
   label: string;
   icon?: React.ComponentType<{ className?: string }>;
@@ -96,6 +105,7 @@ export type PluginUiModule = {
   navPage?: PluginNavPageContribution;
   roleAssets?: PluginRoleAssetsContribution;
   roleMemory?: PluginRoleMemoryContribution;
+  accountDetail?: PluginAccountDetailContribution;
   roleSettings?: PluginRoleSettingsContribution;
   chatImageActions?: React.ComponentType<PluginChatImageActionProps>;
 };
@@ -138,7 +148,7 @@ export function applyPluginUiModules(
       console.error(`[pluginUiModules] ${path} 的默认导出不是合法的 PluginUiModule，已跳过`);
       continue;
     }
-    const { pluginId, settingsSection, navPage, roleAssets, roleMemory } = uiModule;
+    const { pluginId, settingsSection, navPage, roleAssets, roleMemory, accountDetail } = uiModule;
     if (uiModule.roleSettings) pluginRoleSettingsRegistry.register({ pluginId, ...uiModule.roleSettings });
     if (uiModule.chatImageActions) pluginChatImageActionsRegistry.register({
       pluginId, Component: uiModule.chatImageActions,
@@ -179,6 +189,13 @@ export function applyPluginUiModules(
         id: pluginId,
         pluginId,
         Component: bindPluginClient(pluginId, roleMemory.component),
+      });
+    }
+    if (accountDetail) {
+      registry.registerAccountDetail({
+        slot: "account.detail",
+        pluginId,
+        Component: bindPluginClient(pluginId, accountDetail.component),
       });
     }
     if (navPage) {

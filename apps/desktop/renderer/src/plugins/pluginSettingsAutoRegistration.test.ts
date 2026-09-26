@@ -36,6 +36,13 @@ describe("synchronizePluginSettingsAutoRegistration (issue #230 AC 5/6)", () => 
     assert.equal(pluginUiRegistry.getSettingsSubsection("plugins", "auto-b"), undefined);
   });
 
+  it("registers an account provider even without a config schema", () => {
+    synchronizePluginSettingsAutoRegistration([
+      { id: "auto-b", name: "Account provider", hasConfigSchema: false, capabilities: ["accounts"] },
+    ]);
+    assert.equal(pluginUiRegistry.getSettingsSubsection("plugins", "auto-b")?.pluginId, "auto-b");
+  });
+
   it("never overwrites a hand-written settings.section already registered for the same plugin id", () => {
     pluginUiRegistry.registerSettingsSubsection({
       slot: "settings.subsection", parentId: "plugins", id: "handwritten", label: "Hand Written",

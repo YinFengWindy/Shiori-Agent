@@ -207,14 +207,56 @@ def test_candidate_identity_is_hidden_until_published_or_discarded(tmp_path):
         generation="next",
     )
     registry.assign(existing.record.id, "role")
+    registry.report(
+        existing.record.id,
+        "published",
+        generation="next",
+        connection="online",
+        capabilities=frozenset({"groups"}),
+    )
+    assert registry.get(existing.record.id).record.known_capabilities == ()
     registry.publish_generation("next")
     assert registry.get(existing.record.id).record.display_name == "Updated"
     assert registry.get(existing.record.id).record.role_id == "role"
+    assert registry.get(existing.record.id).record.known_capabilities == ("groups",)
     assert len(registry.list()) == 2
     assert {
         row.record.platform_account_id
         for row in AccountRegistry(tmp_path, lambda _role_id: True).list()
     } == {"101", "102"}
+
+
+def test_known_capabilities_survive_stop_disable_and_reload(tmp_path):
+    registry = AccountRegistry(tmp_path, lambda _role_id: True)
+    registry.set_plugin_enabled("chat", True)
+    account = registry.register(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="101",
+        config_ref="one",
+        token="running",
+    )
+    registry.report(
+        account.record.id,
+        "running",
+        connection="online",
+        capabilities=frozenset({"groups", "contacts"}),
+    )
+    registry.assign(account.record.id, "role")
+    assert registry.validate_access(registry.authorize(account.record.id, "role"))
+    registry.unregister(account.record.id, "running")
+    registry.set_plugin_enabled("chat", False)
+    stopped = registry.get(account.record.id)
+    assert not stopped.plugin_enabled
+    assert stopped.capabilities == frozenset()
+    assert stopped.record.known_capabilities == ("contacts", "groups")
+    with pytest.raises(PermissionError):
+        registry.authorize(account.record.id, "role")
+    restored = AccountRegistry(tmp_path, lambda _role_id: True)
+    assert restored.get(account.record.id).record.known_capabilities == (
+        "contacts",
+        "groups",
+    )
 
 
 def test_identity_snapshot_distinguishes_omitted_and_explicit_empty(tmp_path):
