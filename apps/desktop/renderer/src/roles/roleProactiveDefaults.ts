@@ -15,7 +15,6 @@ export const roleProactiveDefaults = Object.freeze({
 export type RoleProactiveFormState = Pick<
   RoleFormState,
   | "proactiveEnabled"
-  | "proactiveCandidates"
   | "proactiveProfile"
   | "proactiveAgentMaxSteps"
   | "proactiveAgentContentLimit"
@@ -29,7 +28,6 @@ export type RoleProactiveFormState = Pick<
 export function createDefaultRoleProactiveForm(): RoleProactiveFormState {
   return {
     proactiveEnabled: roleProactiveDefaults.enabled,
-    proactiveCandidates: [],
     proactiveProfile: roleProactiveDefaults.profile,
     proactiveAgentMaxSteps: roleProactiveDefaults.agentMaxSteps,
     proactiveAgentContentLimit: roleProactiveDefaults.agentContentLimit,
@@ -47,7 +45,6 @@ export function readRoleProactiveForm(
   const proactive = role.proactive;
   return {
     proactiveEnabled: proactive?.enabled ?? roleProactiveDefaults.enabled,
-    proactiveCandidates: [],
     proactiveProfile: proactive?.profile ?? roleProactiveDefaults.profile,
     proactiveAgentMaxSteps: proactive?.agent?.max_steps ?? roleProactiveDefaults.agentMaxSteps,
     proactiveAgentContentLimit: proactive?.agent?.content_limit ?? roleProactiveDefaults.agentContentLimit,

@@ -127,7 +127,7 @@ class FeishuChannel:
             if isinstance(saved_targets, dict)
             else {}
         )
-        self._last_unbound = ""
+        self._last_rejected = ""
         # Accepted inbound message ids per session, keyed by the inbound
         # timestamp that the turn's ``TurnStarted`` event carries over.
         self._pending_quotes: dict[str, dict[datetime, str]] = {}
@@ -173,7 +173,7 @@ class FeishuChannel:
         return SYSTEM_PROMPT_HINT.replace("channel=feishu", f"channel={self.name}")
 
     def status(self) -> ChannelStatus:
-        """Reports the long connection, the bot name and the last unbound sender."""
+        """Reports the connection, bot identity, and latest denied private chat."""
         state = (
             self._runner.state
             if self._runner is not None
@@ -187,8 +187,8 @@ class FeishuChannel:
             detail = f"{detail}；机器人 open_id={self._bot_open_id}"
         if self._identity_error:
             detail = f"{detail}；{self._identity_error}"
-        if self._last_unbound:
-            detail = f"{detail}；{self._last_unbound}"
+        if self._last_rejected:
+            detail = f"{detail}；{self._last_rejected}"
         result["detail"] = detail
         return result
 
@@ -437,7 +437,7 @@ class FeishuChannel:
             await self._handle_chat_id(message.chat_id, sender)
             return
         # Admission before resolving the payload, which downloads attachments.
-        if not self._is_bound(message.chat_id, sender):
+        if not self._sender_admitted(message.chat_id, sender):
             return
         if text == STOP_COMMAND:
             await self._handle_stop(message.chat_id, sender)
@@ -468,13 +468,14 @@ class FeishuChannel:
 
     async def _accept_inbound(self, message: InboundMessage) -> None:
         if self._channel_hub is not None:
-            if not self._is_bound(message.chat_id, message.sender):
+            if not self._sender_admitted(message.chat_id, message.sender):
                 return
             if "account_id" in message.metadata and callable(
                 getattr(self._channel_hub, "route_account_inbound", None)
             ):
                 routed = self._channel_hub.route_account_inbound(message)
                 if routed is None:
+                    self._record_rejected_chat(message.chat_id, message.sender)
                     return
                 message = routed
             else:
@@ -494,7 +495,7 @@ class FeishuChannel:
         while len(pending) > PENDING_QUOTES_PER_SESSION:
             pending.pop(next(iter(pending)))
 
-    def _is_bound(self, chat_id: str, sender: str) -> bool:
+    def _sender_admitted(self, chat_id: str, sender: str) -> bool:
         hub = self._channel_hub
         if hub is None or hub.is_sender_allowed(
             channel=self.name,
@@ -502,15 +503,21 @@ class FeishuChannel:
             sender_id=sender,
             account_id=self.account_id,
         ):
+            self._last_rejected = ""
             return True
-        # Shown in the channel status so the user can copy the ids to bind.
-        self._last_unbound = f"未绑定的私聊：chat_id={chat_id}，open_id={sender}"
+        self._record_rejected_chat(chat_id, sender)
+        return False
+
+    def _record_rejected_chat(self, chat_id: str, sender: str) -> None:
+        self._last_rejected = (
+            "私聊未进入角色（账号未归属、未在线或响应规则拒绝）："
+            f"chat_id={chat_id}，open_id={sender}"
+        )
         logger.warning(
-            "[feishu] 拒绝未绑定渠道的消息 chat_id=%s open_id=%s",
+            "[feishu] 私聊被账号归属、在线状态或响应规则拒绝 chat_id=%s open_id=%s",
             chat_id,
             sender,
         )
-        return False
 
     async def _handle_chat_id(self, chat_id: str, sender: str) -> None:
         """Answers ``/chatid``; the admission exception is documented there."""

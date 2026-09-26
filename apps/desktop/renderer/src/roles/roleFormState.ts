@@ -27,7 +27,6 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     profile: role.profile,
     nsfwMemoryEnabled: Boolean(role.runtime_config?.nsfw_memory_enabled),
     pluginSettings: readPluginRoleSettings(role.runtime_config, role.plugin_state),
-    channelBindings: [],
     ...readRoleProactiveForm(role),
     avatarSource: "",
     illustrationSources: [],

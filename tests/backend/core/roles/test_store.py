@@ -225,20 +225,13 @@ def test_role_store_rejects_invalid_manifest_shape(tmp_path):
         store.list_roles()
 
 
-def test_role_store_persists_proactive_policy_and_keeps_it_when_candidates_go(
+def test_role_store_persists_proactive_policy_without_legacy_candidates(
     tmp_path,
 ):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
     store.update_role(
         "mira",
-        channel_bindings=[
-            {
-                "channel": "telegram",
-                "chat_id": "42",
-                "chat_type": "private",
-            },
-        ],
         proactive={
             "enabled": True,
             "candidates": [{"channel": "telegram", "chat_id": "42"}],
@@ -249,7 +242,7 @@ def test_role_store_persists_proactive_policy_and_keeps_it_when_candidates_go(
         },
     )
 
-    updated = store.update_role("mira", channel_bindings=[])
+    updated = store.update_role("mira", description="edited")
     reloaded = store.get_role("mira")
 
     assert updated.proactive.enabled is True

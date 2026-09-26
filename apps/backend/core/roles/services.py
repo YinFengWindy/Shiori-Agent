@@ -1,28 +1,15 @@
 from __future__ import annotations
 
-import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from core.common.channel_chat_types import ChatType
-from core.common.channel_identifiers import chat_ids_equal, normalize_chat_id
 from session.manager import Session, SessionManager
 
 from .store import RoleRecord, RoleStore
-from .models import now_iso as _now_iso, normalize_role_id as _clean_role_id
+from .models import normalize_role_id as _clean_role_id
 from .memory_service import RoleMemoryService as RoleMemoryService
-
-
-def _binding_key(channel: str, chat_id: str) -> str:
-    clean_channel = str(channel).strip()
-    clean_chat_id = normalize_chat_id(chat_id)
-    if not clean_channel:
-        raise ValueError("channel 不能为空")
-    if not clean_chat_id:
-        raise ValueError("chat_id 不能为空")
-    return f"{clean_channel}:{clean_chat_id}"
 
 
 @dataclass(frozen=True)
@@ -48,36 +35,6 @@ class RoleRequest:
     payload: dict[str, Any] | None = None
     runtime_flags: dict[str, Any] | None = None
     request_context: dict[str, Any] | None = None
-
-
-@dataclass(frozen=True)
-class RoleChannelBinding:
-    """旧渠道到角色的绑定关系。"""
-
-    channel: str
-    chat_id: str
-    role_id: str
-    created_at: str
-    updated_at: str
-
-    def to_dict(self) -> dict[str, str]:
-        return {
-            "channel": self.channel,
-            "chat_id": self.chat_id,
-            "role_id": self.role_id,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-        }
-
-    @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "RoleChannelBinding":
-        return cls(
-            channel=str(payload.get("channel") or "").strip(),
-            chat_id=str(payload.get("chat_id") or "").strip(),
-            role_id=str(payload.get("role_id") or "").strip(),
-            created_at=str(payload.get("created_at") or _now_iso()),
-            updated_at=str(payload.get("updated_at") or _now_iso()),
-        )
 
 
 class RoleRepository:
@@ -206,120 +163,8 @@ class RoleSessionService:
         return self._session_manager.delete_role_session(clean_role_id)
 
 
-class RoleBindingService:
-    """角色配置中的渠道绑定查询与兼容服务。"""
-
-    def __init__(self, workspace: Path, repository: RoleRepository) -> None:
-        self._repository = repository
-        self._lock = threading.RLock()
-
-    def get_binding(self, channel: str, chat_id: str) -> RoleChannelBinding | None:
-        key = _binding_key(channel, chat_id)
-        with self._lock:
-            for role in self._repository.list_roles():
-                if any(
-                    binding.channel == str(channel).strip()
-                    and chat_ids_equal(binding.channel, binding.chat_id, chat_id)
-                    for binding in role.channel_bindings
-                ):
-                    return RoleChannelBinding(
-                        channel=str(channel).strip(),
-                        chat_id=str(chat_id).strip(),
-                        role_id=role.id,
-                        created_at=role.created_at,
-                        updated_at=role.updated_at,
-                    )
-        _ = key
-        return None
-
-    def resolve_role_id(self, channel: str, chat_id: str) -> str:
-        binding = self.get_binding(channel, chat_id)
-        if binding is None:
-            raise KeyError(f"渠道未绑定角色: {_binding_key(channel, chat_id)}")
-        _ = self._repository.get_required(binding.role_id)
-        return binding.role_id
-
-    def bind(
-        self,
-        channel: str,
-        chat_id: str,
-        role_id: str,
-        *,
-        chat_type: ChatType,
-        blocked_senders: Sequence[str] = (),
-    ) -> RoleChannelBinding:
-        """Bind one channel session of ``chat_type`` to a role.
-
-        ``blocked_senders`` is a group binding's blacklist; the model rejects it
-        on any other session type.
-        """
-
-        role = self._repository.get_required(role_id)
-        clean_channel = str(channel).strip()
-        clean_chat_id = normalize_chat_id(chat_id)
-        _ = _binding_key(clean_channel, clean_chat_id)
-        next_bindings = [
-            binding.to_dict()
-            for binding in role.channel_bindings
-            if not (
-                binding.channel == clean_channel
-                and chat_ids_equal(clean_channel, binding.chat_id, clean_chat_id)
-            )
-        ]
-        next_bindings.append(
-            {
-                "channel": clean_channel,
-                "chat_id": clean_chat_id,
-                "chat_type": chat_type,
-                "blocked_senders": list(blocked_senders),
-            }
-        )
-        updated = self._repository.update_role(role.id, channel_bindings=next_bindings)
-        return RoleChannelBinding(
-            clean_channel,
-            clean_chat_id,
-            updated.id,
-            updated.created_at,
-            updated.updated_at,
-        )
-
-    def unbind(self, channel: str, chat_id: str) -> bool:
-        clean_channel = str(channel).strip()
-        clean_chat_id = normalize_chat_id(chat_id)
-        _ = _binding_key(clean_channel, clean_chat_id)
-        binding = self.get_binding(clean_channel, clean_chat_id)
-        if binding is None:
-            return False
-        role = self._repository.get_required(binding.role_id)
-        self._repository.update_role(
-            role.id,
-            channel_bindings=[
-                item.to_dict()
-                for item in role.channel_bindings
-                if not (
-                    item.channel == clean_channel
-                    and chat_ids_equal(clean_channel, item.chat_id, clean_chat_id)
-                )
-            ],
-        )
-        return True
-
-    def list_bindings(self) -> list[RoleChannelBinding]:
-        return [
-            RoleChannelBinding(
-                channel=binding.channel,
-                chat_id=binding.chat_id,
-                role_id=role.id,
-                created_at=role.created_at,
-                updated_at=role.updated_at,
-            )
-            for role in self._repository.list_roles()
-            for binding in role.channel_bindings
-        ]
-
-
 class RoleAggregateService:
-    """角色聚合业务入口，供桌面、旧渠道和主动能力统一调用。"""
+    """角色聚合业务入口，供桌面和主动能力统一调用。"""
 
     def __init__(
         self,
@@ -327,14 +172,12 @@ class RoleAggregateService:
         repository: RoleRepository,
         sessions: RoleSessionService,
         memory: RoleMemoryService,
-        bindings: RoleBindingService,
         on_role_deleted: Callable[[str], None] | None = None,
         default_dialogue_registration_id: str = "",
     ) -> None:
         self.repository = repository
         self.sessions = sessions
         self.memory = memory
-        self.bindings = bindings
         # 新建角色时默认绑定的对话模型；空串表示不自动绑定（存储层仍会显式写入空绑定）。
         self._default_dialogue_registration_id = default_dialogue_registration_id
         self._role_deleted_listeners: list[Callable[[str], None]] = []
@@ -367,12 +210,10 @@ class RoleAggregateService:
     ) -> "RoleAggregateService":
         repository = RoleRepository(role_store)
         memory = RoleMemoryService(workspace)
-        bindings = RoleBindingService(workspace, repository)
         return cls(
             repository=repository,
             sessions=RoleSessionService(session_manager),
             memory=memory,
-            bindings=bindings,
             on_role_deleted=on_role_deleted,
             default_dialogue_registration_id=default_dialogue_registration_id,
         )
@@ -505,10 +346,6 @@ class RoleAggregateService:
         return RoleAggregate(
             role=role, session=session, memory_root=self.memory.memory_root(role.id)
         )
-
-    def open_bound_channel(self, *, channel: str, chat_id: str) -> RoleAggregate:
-        role_id = self.bindings.resolve_role_id(channel, chat_id)
-        return self.open_role(role_id)
 
     def build_role_request(
         self,

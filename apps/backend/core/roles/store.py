@@ -1,22 +1,20 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 import uuid
 from pathlib import Path
 from typing import Any
 
 from core.accounts import AccountRegistry
-from core.common.channel_chat_types import ChatTypeDeclarations
 from core.common.channel_identifiers import chat_ids_equal
 
 from .assets import RoleAssetStore
-from .binding_policy import RoleBindingPolicy
 from .manifest import RoleManifestRepository
 from .legacy_sessions import LegacySessionOwners
 from .models import (
     DEFAULT_ASSET_CATEGORY_ID,
     RoleAssetCategory,
-    RoleChannelBindingConfig,
     RoleProactiveConfig,
     RoleRecord,
     default_asset_category,
@@ -38,7 +36,6 @@ class RoleStore:
         self.manifest_path = self._repository.manifest_path
         self._lock = self._repository.lock
         self._assets = RoleAssetStore(self.roles_dir, self.assets_dir)
-        self._bindings = RoleBindingPolicy()
         self._legacy_sessions = LegacySessionOwners(workspace)
         self.extensions = RoleExtensions(self._repository)
         self.accounts = AccountRegistry(
@@ -111,14 +108,6 @@ class RoleStore:
                     ):
                         return role.id
             raise
-
-    def bind_channel_chat_types(self, declarations: ChatTypeDeclarations) -> None:
-        """Validates future binding saves against these declared session types.
-
-        The host binds the plugin manifests' declarations after discovery; the
-        core itself never imports plugins.
-        """
-        self._bindings.bind_chat_types(declarations)
 
     @property
     def lock(self):
@@ -271,7 +260,6 @@ class RoleStore:
         background: str | None = None,
         profile: RoleProfile | dict[str, Any] | None = None,
         runtime_config: dict[str, Any] | None = None,
-        channel_bindings: list[RoleChannelBindingConfig | dict[str, Any]] | None = None,
         proactive: RoleProactiveConfig | dict[str, Any] | None = None,
         memory_init_state: dict[str, Any] | None = None,
         avatar_source: str | Path | None = None,
@@ -302,17 +290,13 @@ class RoleStore:
                     runtime_config=runtime_config,
                     memory_init_state=memory_init_state,
                 )
-                if channel_bindings is not None:
-                    role.channel_bindings = self._bindings.normalize_for_role(
-                        roles, role.id, channel_bindings
-                    )
-                    role.proactive = self._bindings.prune_proactive_candidates(
-                        role.proactive, role.channel_bindings
-                    )
                 if proactive is not None:
-                    role.proactive = self._bindings.normalize_proactive(
-                        proactive, role.channel_bindings
+                    normalized = (
+                        proactive
+                        if isinstance(proactive, RoleProactiveConfig)
+                        else RoleProactiveConfig.from_dict(proactive)
                     )
+                    role.proactive = replace(normalized, candidates=())
                 self._update_asset_categories(
                     role,
                     asset_categories=asset_categories,
@@ -542,12 +526,6 @@ class RoleStore:
     def _is_role_asset_path(self, role_id: str, rel_path: str) -> bool:
         return self._assets.is_role_asset_path(role_id, rel_path)
 
-    def _normalize_channel_bindings(
-        self,
-        bindings: list[RoleChannelBindingConfig | dict[str, Any]],
-    ) -> list[RoleChannelBindingConfig]:
-        return self._bindings.normalize(bindings)
-
     def _normalize_asset_categories(
         self,
         categories: list[RoleAssetCategory | dict[str, Any]],
@@ -564,18 +542,3 @@ class RoleStore:
         return self._assets.normalize_category_bindings(
             role, bindings, categories=categories
         )
-
-    def _ensure_bindings_unique(
-        self,
-        roles: list[RoleRecord],
-        role_id: str,
-        bindings: list[RoleChannelBindingConfig],
-    ) -> None:
-        self._bindings.ensure_unique(roles, role_id, bindings)
-
-    def _validate_desktop_bindings(
-        self,
-        role_id: str,
-        bindings: list[RoleChannelBindingConfig],
-    ) -> None:
-        self._bindings.validate_desktop(role_id, bindings)

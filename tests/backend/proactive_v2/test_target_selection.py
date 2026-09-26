@@ -120,11 +120,6 @@ def _resolver(tmp_path: Path, presence: DesktopPresence) -> ProactiveTargetResol
     )
     _ = roles.update_role(
         "mira",
-        channel_bindings=[
-            {"channel": "desktop", "chat_id": "role:mira", "chat_type": "private"},
-            {"channel": "qq", "chat_id": "10001", "chat_type": "private"},
-            {"channel": "qq", "chat_id": "gqq:7", "chat_type": "group"},
-        ],
         proactive={
             "enabled": True,
             "candidates": [

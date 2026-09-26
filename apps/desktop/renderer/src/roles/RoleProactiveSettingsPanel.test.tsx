@@ -4,13 +4,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createEmptyRoleForm } from "../app/appState";
 import { RoleProactiveSettingsPanel } from "./RoleProactiveSettingsPanel";
 
-test("proactive settings no longer expose legacy bound target candidates", () => {
+test("proactive settings do not expose legacy bound target candidates", () => {
   const markup = renderToStaticMarkup(
     <RoleProactiveSettingsPanel
       roleForm={{
         ...createEmptyRoleForm(),
         proactiveEnabled: true,
-        proactiveCandidates: [{ channel: "qq", chat_id: "gqq:42" }],
       }}
       onUpdate={() => undefined}
     />,

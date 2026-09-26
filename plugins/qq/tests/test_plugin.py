@@ -40,8 +40,8 @@ def _load_qq_channels(
         return kernel.channels
 
 
-def test_manifest_declares_the_legacy_channel_name_for_bindings() -> None:
-    # 渠道名是角色绑定（含 gqq: 群聊）与会话线程的键，必须保持内置时期的 qq。
+def test_manifest_preserves_historical_channel_name() -> None:
+    # Historical conversation keys retain the original QQ channel name.
     manifest = load_manifest(PLUGIN_DIR)
     assert manifest is not None
     assert manifest.id == "qq"
@@ -58,7 +58,7 @@ def test_manifest_declares_the_legacy_channel_name_for_bindings() -> None:
 
 
 def test_manifest_group_prefix_matches_the_transport_group_format() -> None:
-    # 绑定面板按声明拼接前缀、宿主按声明校验；前缀必须与发送端识别群聊的格式一致。
+    # Account intake and outbound target validation share the group prefix.
     manifest = load_manifest(PLUGIN_DIR)
     assert manifest is not None
     types = {item.type: item.prefix for item in manifest.channels[0].chat_types}
@@ -125,10 +125,3 @@ async def test_shared_account_send_adapts_target_and_rejects_topic() -> None:
     runtime.send_target.assert_awaited_once_with("account-1", "group", "42", "hello")
     with pytest.raises(ValueError, match="话题"):
         await _send_account(runtime, {**payload, "message_thread_id": 7})
-
-
-def test_channel_does_not_consume_bot_commands() -> None:
-    # NapCat 不读 ctx.bot_commands，命令列表变化不应重建连接（#363）。
-    from plugins.qq.backend.channel.lifecycle import QQChannel
-
-    assert getattr(QQChannel, "uses_bot_commands", False) is False

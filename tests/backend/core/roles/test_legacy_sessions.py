@@ -5,6 +5,7 @@ from __future__ import annotations
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.store import RoleStore
 from session.manager import SessionManager
+from shiori_plugin_testkit.legacy_roles import seed_legacy_bindings
 
 
 def test_lazy_legacy_thread_projection_after_binding_retirement(tmp_path):
@@ -14,9 +15,10 @@ def test_lazy_legacy_thread_projection_after_binding_retirement(tmp_path):
     sessions.save(old)
     store = RoleStore(tmp_path)
     store.create_role(role_id="mira", name="Mira", system_prompt="Mira")
-    store.update_role(
+    seed_legacy_bindings(
+        tmp_path,
         "mira",
-        channel_bindings=[
+        [
             {
                 "channel": "qq",
                 "chat_id": "gqq:42",

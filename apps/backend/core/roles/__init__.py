@@ -1,8 +1,6 @@
 from .services import (
     RoleAggregate,
     RoleAggregateService,
-    RoleBindingService,
-    RoleChannelBinding,
     RoleMemoryService,
     RoleRepository,
     RoleRequest,
@@ -40,8 +38,6 @@ __all__ = [
     "RoleAggregate",
     "RoleAggregateService",
     "RoleAssetCategory",
-    "RoleBindingService",
-    "RoleChannelBinding",
     "RoleChannelBindingConfig",
     "RoleMemoryService",
     "RoleRelationshipRuntimeService",

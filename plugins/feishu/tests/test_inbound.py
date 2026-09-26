@@ -1,4 +1,4 @@
-"""Inbound events: fast ack, dedupe, message types, quotes, /stop, bindings."""
+"""Inbound events: fast ack, dedupe, message types, quotes, and account admission."""
 
 from __future__ import annotations
 
@@ -198,7 +198,7 @@ async def test_stop_command_interrupts_the_bound_role_session(
     assert harness.api.sent_texts() == ["已停止当前回复。"]
 
 
-async def test_unbound_sender_is_rejected_and_shown_in_status(
+async def test_account_rejected_sender_is_shown_in_status(
     make_harness: Any, make_event: Any
 ) -> None:
     harness = make_harness(allowed=False)
@@ -213,7 +213,32 @@ async def test_unbound_sender_is_rejected_and_shown_in_status(
     assert harness.bus.inbound == []
     assert harness.interrupts.requests == []
     detail = harness.channel.status()["detail"]
+    assert "账号未归属、未在线或响应规则拒绝" in detail
+    assert "未绑定" not in detail
     assert f"chat_id={CHAT_ID}" in detail and f"open_id={OPEN_ID}" in detail
+
+    harness.hub.allowed = True
+    connection.emit(make_event(event_id="ev_allowed", message_id="om_allowed"))
+    await harness.settle()
+    assert "私聊未进入角色" not in harness.channel.status()["detail"]
+
+
+async def test_response_rule_denial_uses_account_status_wording(
+    make_harness: Any, make_event: Any, monkeypatch: Any
+) -> None:
+    harness = make_harness()
+    monkeypatch.setattr(
+        harness.hub, "route_account_inbound", lambda _message: None, raising=False
+    )
+    connection = await harness.start()
+
+    connection.emit(make_event())
+    await harness.settle()
+
+    assert harness.bus.inbound == []
+    detail = harness.channel.status()["detail"]
+    assert "响应规则拒绝" in detail
+    assert "未绑定" not in detail
 
 
 async def test_unbound_sender_attachment_is_not_downloaded(

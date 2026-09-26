@@ -24,6 +24,7 @@ from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleStore
 from conversation.service import LegacySessionDescriptor
 from infra.channels.contract import ChannelContext
+from shiori_plugin_testkit.legacy_roles import seed_legacy_bindings
 
 _CHANNEL_PACKAGE = "plugins.telegram.backend.channel"
 _CHANNEL_DIR = Path(__file__).resolve().parents[1] / "backend" / "channel"
@@ -282,9 +283,10 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
         description="bound telegram role",
         system_prompt="you are mira",
     )
-    role_store.update_role(
+    seed_legacy_bindings(
+        tmp_path,
         "mira",
-        channel_bindings=[
+        [
             {
                 "channel": "telegram",
                 "chat_id": "123",
@@ -807,9 +809,10 @@ async def test_telegram_channel_rejects_legacy_binding_without_account(
         description="bound telegram role",
         system_prompt="you are mira",
     )
-    role_store.update_role(
+    seed_legacy_bindings(
+        tmp_path,
         "mira",
-        channel_bindings=[
+        [
             {
                 "channel": "telegram",
                 "chat_id": "123",
@@ -859,9 +862,10 @@ async def test_telegram_group_rejects_legacy_binding_without_account(
     bus = _Bus()
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
-    role_store.update_role(
+    seed_legacy_bindings(
+        tmp_path,
         "mira",
-        channel_bindings=[
+        [
             {
                 "channel": "telegram",
                 "chat_id": "-100",
@@ -914,9 +918,10 @@ async def test_telegram_rejected_sender_triggers_no_side_effects(
     bus = _Bus()
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
-    role_store.update_role(
+    seed_legacy_bindings(
+        tmp_path,
         "mira",
-        channel_bindings=[
+        [
             {
                 "channel": "telegram",
                 "chat_id": "-100",
@@ -1043,9 +1048,10 @@ async def test_telegram_chatid_reports_ids_without_role_binding(
     bus = _Bus()
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
-    role_store.update_role(
+    seed_legacy_bindings(
+        tmp_path,
         "mira",
-        channel_bindings=[
+        [
             {
                 "channel": "telegram",
                 "chat_id": "-100",

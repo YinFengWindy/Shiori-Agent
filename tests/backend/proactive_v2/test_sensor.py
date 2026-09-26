@@ -43,10 +43,6 @@ def _sensor(
 def _save_candidates(roles: RoleStore, *candidates: dict[str, str]) -> None:
     _ = roles.update_role(
         "mira",
-        channel_bindings=[
-            {"channel": "desktop", "chat_id": "role:mira", "chat_type": "private"},
-            {"channel": "telegram", "chat_id": "42", "chat_type": "private"},
-        ],
         proactive={"enabled": bool(candidates), "candidates": list(candidates)},
     )
 

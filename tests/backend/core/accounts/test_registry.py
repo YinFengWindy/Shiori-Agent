@@ -6,6 +6,7 @@ import pytest
 
 from core.accounts import AccountRegistry
 from core.roles.store import RoleStore
+from shiori_plugin_testkit.legacy_roles import seed_legacy_bindings
 
 
 def test_independent_accounts_ownership_and_recovery(tmp_path):
@@ -96,9 +97,10 @@ def test_legacy_bindings_migrate_one_account_with_group_rules_once(tmp_path):
     store.create_role(role_id="mira", name="Mira", system_prompt="Mira")
     role = store.get_role("mira")
     assert role is not None
-    store.update_role(
+    seed_legacy_bindings(
+        tmp_path,
         role.id,
-        channel_bindings=[
+        [
             {
                 "channel": "qq",
                 "chat_id": "gqq:42",
@@ -144,9 +146,10 @@ def test_conflicting_legacy_owners_require_explicit_assignment(tmp_path):
     store = RoleStore(tmp_path)
     for role_id, chat_id in (("mira", "gqq:42"), ("other", "gqq:43")):
         store.create_role(role_id=role_id, name=role_id, system_prompt=role_id)
-        store.update_role(
+        seed_legacy_bindings(
+            tmp_path,
             role_id,
-            channel_bindings=[
+            [
                 {
                     "channel": "qq",
                     "chat_id": chat_id,
@@ -188,9 +191,10 @@ def test_multi_account_legacy_conflict_keeps_rules_for_chosen_owner(tmp_path):
     store = RoleStore(tmp_path)
     for role_id, chat_id in (("mira", "gqq:42"), ("other", "gqq:43")):
         store.create_role(role_id=role_id, name=role_id, system_prompt=role_id)
-        store.update_role(
+        seed_legacy_bindings(
+            tmp_path,
             role_id,
-            channel_bindings=[
+            [
                 {
                     "channel": "qq",
                     "chat_id": chat_id,
@@ -226,9 +230,10 @@ def test_existing_account_owner_keeps_assignment_and_imports_its_rules(tmp_path)
     store = RoleStore(tmp_path)
     for role_id, chat_id in (("mira", "gqq:42"), ("other", "gqq:43")):
         store.create_role(role_id=role_id, name=role_id, system_prompt=role_id)
-        store.update_role(
+        seed_legacy_bindings(
+            tmp_path,
             role_id,
-            channel_bindings=[
+            [
                 {
                     "channel": "qq",
                     "chat_id": chat_id,
@@ -260,9 +265,10 @@ def test_account_save_before_binding_retirement_recovers_on_restart(
 ):
     store = RoleStore(tmp_path)
     store.create_role(role_id="mira", name="Mira", system_prompt="Mira")
-    store.update_role(
+    seed_legacy_bindings(
+        tmp_path,
         "mira",
-        channel_bindings=[
+        [
             {
                 "channel": "qq",
                 "chat_id": "gqq:42",

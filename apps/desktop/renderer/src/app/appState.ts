@@ -126,7 +126,6 @@ export function createEmptyRoleForm(): RoleFormState {
     profile: createEmptyRoleProfile(),
     nsfwMemoryEnabled: false,
     pluginSettings: readPluginRoleSettings(),
-    channelBindings: [],
     ...createDefaultRoleProactiveForm(),
     avatarSource: "",
     illustrationSources: [],
@@ -168,7 +167,6 @@ export function createPendingRoleRecord(
     system_prompt: form.profile?.character?.behavior_rules ?? form.systemPrompt,
     profile: form.profile,
     runtime_config: {},
-    channel_bindings: [],
     proactive: {
       enabled: false,
       candidates: [],
