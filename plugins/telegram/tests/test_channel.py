@@ -22,6 +22,7 @@ from bus.events_lifecycle import (
 )
 from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleStore
+from conversation.service import LegacySessionDescriptor
 from infra.channels.contract import ChannelContext
 
 _CHANNEL_PACKAGE = "plugins.telegram.backend.channel"
@@ -323,6 +324,9 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     monkeypatch.setattr(mod, "send_stream_markdown", AsyncMock())
     monkeypatch.setattr(mod, "send_thinking_block", AsyncMock())
     await channel.start()
+    hub = channel._channel_hub
+    assert hub is not None
+    channel._channel_hub = None
     assert len(channel._app.handlers) == 6
     assert [
         cmd.command for cmd in channel._app.bot.set_my_commands.await_args.args[0]
@@ -385,7 +389,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     )
     await channel._on_stop_command(stop_update, context)
     interrupt_controller.request_interrupt.assert_called_once_with(
-        session_key="role:mira",
+        session_key="telegram:123",
         sender="1",
         command="/stop",
     )
@@ -451,6 +455,15 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     with pytest.raises(ValueError):
         channel._resolve_chat_id("@missing")
 
+    hub._conversation.ensure_thread_for_session(
+        LegacySessionDescriptor(
+            session_key="telegram:123",
+            role_id="mira",
+            channel="telegram",
+            chat_id="123",
+        )
+    )
+    channel._channel_hub = hub
     await channel.send("123", "hi")
     await channel.send_stream("123", "stream hi")
     sample = tmp_path / "doc.txt"
@@ -780,7 +793,7 @@ async def test_telegram_channel_notifies_pending_input_before_disconnect(
 
 
 @pytest.mark.asyncio
-async def test_telegram_channel_routes_bound_inbound_to_role_session(
+async def test_telegram_channel_rejects_legacy_binding_without_account(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
@@ -833,17 +846,12 @@ async def test_telegram_channel_routes_bound_inbound_to_role_session(
 
     await channel._on_message(update, context)
 
-    assert len(bus.inbound) == 1
-    assert bus.inbound[0].session_key == "role:mira"
-    assert bus.inbound[0].metadata["role_id"] == "mira"
-    assert bus.inbound[0].metadata["thread_id"] == "thread:mira:telegram:123"
-    assert bus.inbound[0].metadata["transport_channel"] == "telegram"
-    assert bus.inbound[0].metadata["transport_chat_id"] == "123"
+    assert bus.inbound == []
     await channel.stop()
 
 
 @pytest.mark.asyncio
-async def test_telegram_group_admits_members_except_blacklisted(
+async def test_telegram_group_rejects_legacy_binding_without_account(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
@@ -892,8 +900,7 @@ async def test_telegram_group_admits_members_except_blacklisted(
     await channel._on_stop_command(_update(5, "troll", "/stop", 2), context)
     await channel._on_message(_update(6, "friend", "hello", 3), context)
 
-    assert [message.sender for message in bus.inbound] == ["6"]
-    assert bus.inbound[0].session_key == "role:mira"
+    assert bus.inbound == []
     interrupt_controller.request_interrupt.assert_not_called()
     await channel.stop()
 
@@ -1024,7 +1031,7 @@ async def test_plugin_channel_takes_runtime_state_and_commands_from_context(
 
 
 @pytest.mark.asyncio
-async def test_telegram_chatid_answers_the_binding_form_fields_without_a_turn(
+async def test_telegram_chatid_reports_ids_without_role_binding(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
@@ -1068,8 +1075,7 @@ async def test_telegram_chatid_answers_the_binding_form_fields_without_a_turn(
             effective_user=SimpleNamespace(id=user_id, username=username),
         )
 
-    # Unbound private chat and unbound group, a bound group member, then a
-    # blacklisted member of the bound group.
+    # /chatid reports IDs before account ownership, even when old bindings exist.
     await channel._on_chat_id_command(_update(42, "private", 42, "me"), context)
     await channel._on_chat_id_command(_update(-200, "supergroup", 6, "a"), context)
     await channel._on_chat_id_command(_update(-100, "group", 7, "friend"), context)
@@ -1078,6 +1084,7 @@ async def test_telegram_chatid_answers_the_binding_form_fields_without_a_turn(
     assert [call.args[1:3] for call in send.await_args_list] == [
         ("42", "会话类型：私聊\n用户 ID：42"),
         ("-200", "会话类型：群聊\n群组 ID：-200"),
+        ("-100", "会话类型：群聊\n群组 ID：-100"),
         ("-100", "会话类型：群聊\n群组 ID：-100"),
     ]
     assert bus.inbound == []
