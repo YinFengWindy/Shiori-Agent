@@ -8,7 +8,7 @@ from typing import Callable
 
 from infra.persistence.json_store import atomic_save_json, load_json
 
-from .models import AccountRecord
+from .models import AccountRecord, AccountResponseRules, GroupResponseRule
 
 
 def ensure_unique(records: dict[str, AccountRecord]) -> None:
@@ -29,6 +29,26 @@ def load_accounts(
     records: dict[str, AccountRecord] = {}
     stale_owner = False
     for raw in rows:
+        if "response_rules" in raw:
+            rules = raw["response_rules"]
+            raw = {
+                **raw,
+                "response_rules": AccountResponseRules(
+                    private_enabled=rules.get("private_enabled", True),
+                    group_enabled=rules["group_enabled"],
+                    require_mention=rules["require_mention"],
+                    blocked_sender_ids=tuple(rules["blocked_sender_ids"]),
+                    group_rules=tuple(
+                        GroupResponseRule(
+                            chat_id=item["chat_id"],
+                            enabled=item["enabled"],
+                            require_mention=item["require_mention"],
+                            blocked_sender_ids=tuple(item["blocked_sender_ids"]),
+                        )
+                        for item in rules.get("group_rules", [])
+                    ),
+                ),
+            }
         row = AccountRecord(**raw)
         if row.id in records:
             raise ValueError("Duplicate account ID")

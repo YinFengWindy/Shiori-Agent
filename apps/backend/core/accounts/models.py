@@ -11,6 +11,27 @@ ConnectionState = Literal[
 
 
 @dataclass(frozen=True)
+class GroupResponseRule:
+    """Per-chat override preserving group-specific response and blacklist policy."""
+
+    chat_id: str
+    enabled: bool = True
+    require_mention: bool = True
+    blocked_sender_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AccountResponseRules:
+    """Host-owned response policy, independent of role ownership and credentials."""
+
+    private_enabled: bool = True
+    group_enabled: bool = True
+    require_mention: bool = True
+    blocked_sender_ids: tuple[str, ...] = ()
+    group_rules: tuple[GroupResponseRule, ...] = ()
+
+
+@dataclass(frozen=True)
 class AccountRecord:
     """Persisted identity; config_ref names plugin-private data, never a secret."""
 
@@ -23,6 +44,7 @@ class AccountRecord:
     avatar_url: str = ""
     role_id: str | None = None
     ownership_version: int = 0
+    response_rules: AccountResponseRules = AccountResponseRules()
 
 
 @dataclass(frozen=True)

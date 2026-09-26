@@ -162,6 +162,7 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
     ),
     "accounts.list": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "accounts.get": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "accounts.rules.set": MethodPolicy(),
     "session.messagesPage": MethodPolicy(
         concurrency=Concurrency.READ_ONLY, admission_exempt=True
     ),
