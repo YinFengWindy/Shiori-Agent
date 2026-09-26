@@ -19,7 +19,6 @@ def plugin_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PluginRun
     """Starts an isolated reloadable host for a plugin package's integration tests."""
     from agent.config import load_config_text
     from bootstrap.app import AppRuntime, RuntimeFeatures
-    from core.roles import RoleStore
     from desktop_bridge.runtime.service import ReloadableDesktopService
 
     @asynccontextmanager
@@ -53,7 +52,11 @@ def plugin_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PluginRun
         )
         try:
             await app.start()
-            service = ReloadableDesktopService(app, path, RoleStore(tmp_path))
+            core = app.core
+            if core is None:
+                raise RuntimeError("Plugin runtime did not start")
+            role_store = core.role_runtime_registry.repository.store
+            service = ReloadableDesktopService(app, path, role_store)
             try:
                 yield service, path
             finally:

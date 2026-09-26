@@ -276,10 +276,10 @@ class AccountsCapability:
         platform: str,
         platform_account_id: str,
         config_ref: str,
-        display_name: str = "",
-        avatar_url: str = "",
+        display_name: str | None = None,
+        avatar_url: str | None = None,
     ) -> "AccountSnapshot":
-        """Registers an identity verified by the plugin; no credentials are accepted."""
+        """Registers verified identity; None keeps display snapshots, empty clears."""
         self._effects.ensure_active("account:register")
         snapshot = self._registry.register(
             plugin_id=self._plugin_id,

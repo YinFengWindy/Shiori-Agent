@@ -90,10 +90,10 @@ class AccountRegistry:
         config_ref: str,
         token: str,
         generation: str = DIRECT_GENERATION,
-        display_name: str = "",
-        avatar_url: str = "",
+        display_name: str | None = None,
+        avatar_url: str | None = None,
     ) -> AccountSnapshot:
-        """Upserts a verified physical identity, retaining its stable ID and owner."""
+        """Upserts identity; omitted display fields retain snapshots, empty ones clear."""
         fields = (plugin_id, platform, platform_account_id, config_ref, token)
         if any(not isinstance(value, str) or not value.strip() for value in fields):
             raise ValueError(
@@ -135,8 +135,12 @@ class AccountRegistry:
             row = (
                 replace(
                     existing,
-                    display_name=display_name or existing.display_name,
-                    avatar_url=avatar_url or existing.avatar_url,
+                    display_name=(
+                        existing.display_name if display_name is None else display_name
+                    ),
+                    avatar_url=(
+                        existing.avatar_url if avatar_url is None else avatar_url
+                    ),
                 )
                 if existing is not None
                 else AccountRecord(
@@ -145,8 +149,8 @@ class AccountRegistry:
                     platform,
                     platform_account_id,
                     config_ref,
-                    display_name,
-                    avatar_url,
+                    display_name or "",
+                    avatar_url or "",
                 )
             )
             if row != existing:

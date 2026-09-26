@@ -215,3 +215,28 @@ def test_candidate_identity_is_hidden_until_published_or_discarded(tmp_path):
         row.record.platform_account_id
         for row in AccountRegistry(tmp_path, lambda _role_id: True).list()
     } == {"101", "102"}
+
+
+def test_identity_snapshot_distinguishes_omitted_and_explicit_empty(tmp_path):
+    registry = AccountRegistry(tmp_path, lambda _role_id: True)
+    identity = dict(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="101",
+        config_ref="one",
+        token="running",
+    )
+    created = registry.register(
+        **identity, display_name="Display name", avatar_url="https://example.test/a.png"
+    )
+    preserved = registry.register(**identity)
+    assert preserved.record.display_name == "Display name"
+    assert preserved.record.avatar_url == "https://example.test/a.png"
+
+    cleared = registry.register(**identity, display_name="", avatar_url="")
+    assert cleared.record.id == created.record.id
+    assert cleared.record.display_name == ""
+    assert cleared.record.avatar_url == ""
+    restored = AccountRegistry(tmp_path, lambda _role_id: True)
+    assert restored.get(created.record.id).record.display_name == ""
+    assert restored.get(created.record.id).record.avatar_url == ""
