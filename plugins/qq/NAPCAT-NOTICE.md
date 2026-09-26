@@ -7,6 +7,11 @@ first use. Its SHA-256 is
 NapCat is Copyright © 2024 Mlikiowa. Its upstream source and license are at
 https://github.com/NapNeko/NapCatQQ.
 
+On Windows x64, managed mode also requires an existing official Tencent QQ
+9.9.31-49738 installation. The plugin checks the installed native files against
+pinned SHA-256 values and uses that directory at runtime. It does not copy or
+redistribute Tencent's DLLs.
+
 ## Limited Redistribution License for NapCat
 
 Copyright © 2024 Mlikiowa

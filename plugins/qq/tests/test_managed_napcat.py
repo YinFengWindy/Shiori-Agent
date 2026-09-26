@@ -6,6 +6,7 @@ import asyncio
 import base64
 import io
 import json
+import os
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -20,7 +21,10 @@ async def test_per_account_ports_profiles_and_logout_are_isolated(
     monkeypatch, tmp_path
 ):
     manager = ManagedNapCat(tmp_path)
-    monkeypatch.setattr(manager, "prepare", lambda: asyncio.sleep(0))
+    official_qq = tmp_path / "official-qq" / "resources" / "app"
+    monkeypatch.setattr(
+        manager, "prepare", lambda: asyncio.sleep(0, result=official_qq)
+    )
     manager.install_dir.mkdir(parents=True)
     first = "a" * 32
     second = "b" * 32
@@ -41,6 +45,14 @@ async def test_per_account_ports_profiles_and_logout_are_isolated(
     assert len(launched) == 2
     a, b = (row[1]["env"] for row in launched)
     assert a["NAPCAT_WORKDIR"] != b["NAPCAT_WORKDIR"]
+    assert a["PATH"].split(os.pathsep)[:2] == [
+        str(manager.install_dir),
+        str(official_qq),
+    ]
+    assert b["PATH"].split(os.pathsep)[:2] == [
+        str(manager.install_dir),
+        str(official_qq),
+    ]
     assert a["APPDATA"] != b["APPDATA"]
     assert a["TEMP"] != b["TEMP"]
     assert a["NAPCAT_WEBUI_JWT_SECRET_KEY"] != b["NAPCAT_WEBUI_JWT_SECRET_KEY"]

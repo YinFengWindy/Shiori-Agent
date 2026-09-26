@@ -16,6 +16,8 @@ from uuid import uuid4
 
 from infra.persistence.json_store import atomic_save_json
 
+from .installed_qq import resolve_official_qq
+
 VERSION = "v4.18.28"
 ARCHIVE_SHA256 = "fb64fa3b036ad2df1a5d7c204c482694c20e4b763978c8a4968fd3474c05b4a8"
 ARCHIVE_URL = (
@@ -37,20 +39,20 @@ class NapCatInstaller:
         self.install_dir = self.root / VERSION
         self._preparation: dict[str, Any] = {"stage": "idle", "percent": 0}
         self._install_lock = asyncio.Lock()
+        self._validated_qq_dir: Path | None = None
 
     def preparation(self) -> dict[str, Any]:
         """Returns the current installer stage without blocking the UI."""
-        if self._package_ready():
-            try:
-                self._check_native_dependencies()
-            except RuntimeError as exc:
-                return {
-                    "stage": "error",
-                    "percent": 0,
-                    "version": VERSION,
-                    "error": str(exc),
-                }
+        package_ready = self._package_ready()
+        if package_ready and self._validated_qq_dir is not None:
             return {"stage": "ready", "percent": 100, "version": VERSION}
+        if not package_ready and self._preparation["stage"] == "ready":
+            return {
+                "stage": "error",
+                "percent": 0,
+                "version": VERSION,
+                "error": "NapCat 安装文件不完整",
+            }
         return {**self._preparation, "version": VERSION}
 
     def _package_ready(self) -> bool:
@@ -65,10 +67,11 @@ class NapCatInstaller:
             data == {"version": VERSION, "sha256": ARCHIVE_SHA256}
             and (self.install_dir / "node.exe").is_file()
             and (self.install_dir / "index.js").is_file()
+            and (self.install_dir / "wrapper.node").is_file()
             and (self.install_dir / "napcat" / "napcat.mjs").is_file()
         )
 
-    async def prepare(self) -> None:
+    async def prepare(self) -> Path:
         """Downloads, verifies, and publishes a complete installation atomically."""
         if not managed_available():
             raise RuntimeError("托管 NapCat 仅支持 Windows x64")
@@ -76,22 +79,20 @@ class NapCatInstaller:
             try:
                 if not self._package_ready():
                     await asyncio.to_thread(self._prepare_sync)
-                self._check_native_dependencies()
+                self._preparation = {"stage": "verifying", "percent": 99}
+                qq_runtime_dir = await asyncio.to_thread(
+                    self._check_native_dependencies
+                )
             except Exception as exc:
+                self._validated_qq_dir = None
                 self._preparation = {"stage": "error", "percent": 0, "error": str(exc)}
                 raise
+            self._validated_qq_dir = qq_runtime_dir
             self._preparation = {"stage": "ready", "percent": 100}
+            return qq_runtime_dir
 
-    def _check_native_dependencies(self) -> None:
-        missing = [
-            name
-            for name in ("crypto.dll", "ssl.dll")
-            if not (self.install_dir / name).is_file() and shutil.which(name) is None
-        ]
-        if missing:
-            raise RuntimeError(
-                "NapCat 官方 Windows Node 包缺少原生 QQ 依赖: " + ", ".join(missing)
-            )
+    def _check_native_dependencies(self) -> Path:
+        return resolve_official_qq(self.install_dir)
 
     def _prepare_sync(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -136,7 +137,12 @@ class NapCatInstaller:
                             destination.open("wb") as target,
                         ):
                             shutil.copyfileobj(source, target)
-            for required in ("node.exe", "index.js", "napcat/napcat.mjs"):
+            for required in (
+                "node.exe",
+                "index.js",
+                "wrapper.node",
+                "napcat/napcat.mjs",
+            ):
                 if not (staging / required).is_file():
                     raise ValueError(f"NapCat 安装包缺少 {required}")
             atomic_save_json(

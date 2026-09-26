@@ -34,7 +34,7 @@ class ManagedNapCat(NapCatInstaller):
         process = self._processes.get(ref)
         if process is not None and process.poll() is None:
             return
-        await self.prepare()
+        qq_runtime_dir = await self.prepare()
         self._files.write_configs(ref, expected_uin)
         self._qr.clear(ref)
         account_dir = self._files.account_dir(ref)
@@ -64,7 +64,9 @@ class ManagedNapCat(NapCatInstaller):
             "LOCALAPPDATA": str(profile / "AppData" / "Local"),
             "TEMP": str(profile / "Temp"),
             "TMP": str(profile / "Temp"),
-            "PATH": str(self.install_dir) + os.pathsep + os.environ.get("PATH", ""),
+            "PATH": os.pathsep.join(
+                (str(self.install_dir), str(qq_runtime_dir), os.environ.get("PATH", ""))
+            ),
             "NAPCAT_WORKDIR": str(account_dir / "napcat"),
             "NAPCAT_WEBUI_PREFERRED_PORT": str(metadata["webui_port"]),
             "NAPCAT_WEBUI_SECRET_KEY": metadata["webui_token"],
