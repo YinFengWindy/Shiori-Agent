@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from core.common.message_source import MessageSource, with_message_source
+
 from .helpers import (
     _align_to_user_boundary,
     _append_proactive_meta,
@@ -76,7 +78,17 @@ class Session:
                         if media_paths
                         else text
                     )
-                out.append({"role": "user", "content": user_content})
+                out.append(
+                    {
+                        "role": "user",
+                        "content": with_message_source(
+                            user_content,
+                            MessageSource.from_metadata(
+                                m.get("metadata") or {}, session_key=self.key
+                            ),
+                        ),
+                    }
+                )
                 continue
 
             if role != "assistant":

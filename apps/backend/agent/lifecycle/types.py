@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from core.common.message_source import MessageSource
 from agent.prompting.assembler import PromptSectionRender
 from bus.events import InboundMessage, OutboundMessage
 
@@ -94,6 +95,7 @@ class PromptRenderInput:
     disabled_sections: set[str]
     turn_injection_prompt: str
     extra_hints: list[str] | None = None
+    message_source: MessageSource | None = None
     session_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
 
 

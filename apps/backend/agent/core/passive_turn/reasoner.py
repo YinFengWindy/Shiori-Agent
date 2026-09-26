@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.common.message_source import MessageSource
 from agent.tools.turn_scope import tool_turn
 
 from core.roles.reply_state import role_mood_catalog
@@ -379,6 +380,7 @@ class DefaultReasoner(
                 prompt_render = await self.render_prompt(
                     PromptRenderInput(
                         session_key=session.key,
+                        message_source=MessageSource.from_inbound(msg),
                         channel=msg.channel,
                         chat_id=msg.chat_id,
                         content=msg.content,

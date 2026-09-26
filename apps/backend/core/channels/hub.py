@@ -86,9 +86,9 @@ class ChannelHub:
         metadata["session_key_override"] = session_key
         metadata.setdefault("context_channel", message.channel)
         metadata.setdefault("context_chat_id", message.chat_id)
-        metadata.setdefault("transport_channel", message.channel)
-        metadata.setdefault("transport_chat_id", message.chat_id)
-        metadata.setdefault("sender_id", message.sender)
+        metadata["transport_channel"] = message.channel
+        metadata["transport_chat_id"] = message.chat_id
+        metadata["sender_id"] = message.sender
         if "chat_type" not in metadata:
             metadata["chat_type"] = self._channel_directory.default_chat_type(
                 message.channel

@@ -3,11 +3,55 @@ from pathlib import Path
 
 import pytest
 
-from agent.context import ContextBuilder, ContextRequest
+from agent.context import ContextBuilder, ContextRequest, MessageEnvelopeBuilder
 from agent.prompting import SYSTEM_CONTEXT_FRAME_MARKER
+from bus.events import InboundMessage
 from core.common.channel_directory import ChannelDirectory
+from core.common.message_source import MessageSource
 from core.roles import RoleStore
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
+from session.manager.models import Session
+
+
+def test_message_envelope_preserves_group_members_across_desktop_followup():
+    session = Session(key="role:mira")
+    for sender in ("11", "22"):
+        session.add_message(
+            "user",
+            "群里的消息",
+            metadata={
+                "transport_channel": "qq",
+                "transport_chat_id": "gqq:123",
+                "chat_type": "group",
+                "sender_id": sender,
+            },
+        )
+    desktop_message = InboundMessage(
+        channel="desktop",
+        sender="desktop",
+        chat_id="role:mira",
+        content="刚才群里是谁说的？",
+        metadata={"chat_type": "desktop"},
+    )
+
+    messages = MessageEnvelopeBuilder().build(
+        history=session.get_history(),
+        current_message=desktop_message.content,
+        system_prompt="role",
+        context_frame="",
+        channel=desktop_message.channel,
+        chat_id=desktop_message.chat_id,
+        message_source=MessageSource.from_inbound(desktop_message),
+        message_timestamp=desktop_message.timestamp,
+        media=None,
+    )
+
+    assert '"sender_id": "11"' in messages[1]["content"]
+    assert '"sender_id": "22"' in messages[2]["content"]
+    assert '"chat_id": "gqq:123"' in messages[1]["content"]
+    assert '"channel": "desktop"' in messages[3]["content"]
+    assert '"chat_id": "role:mira"' in messages[3]["content"]
+    assert messages[3]["content"].endswith("刚才群里是谁说的？")
 
 
 def test_context_builder_injects_interrupted_turn_as_separate_frame(

@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.common.message_source import MessageSource, with_message_source
 from agent.core.types import ContextRenderResult, ContextRequest
 from agent.core.prompt_block import (
     ActiveSkillsPromptBlock,
@@ -80,6 +81,7 @@ class MessageEnvelopeBuilder:
         message_timestamp: datetime | None,
         media: list[str] | None,
         chat_id: str | None = None,
+        message_source: MessageSource | None = None,
     ) -> list[dict[str, Any]]:
         prompt = system_prompt
         if channel:
@@ -96,10 +98,13 @@ class MessageEnvelopeBuilder:
         messages.append(
             {
                 "role": "user",
-                "content": self._build_user_content(
-                    current_message,
-                    media,
-                    message_timestamp=message_timestamp,
+                "content": with_message_source(
+                    self._build_user_content(
+                        current_message,
+                        media,
+                        message_timestamp=message_timestamp,
+                    ),
+                    message_source or MessageSource(channel=channel, chat_id=chat_id),
                 ),
             }
         )
@@ -320,6 +325,7 @@ class ContextBuilder:
             channel=request.channel,
             chat_id=request.chat_id,
             message_timestamp=request.message_timestamp,
+            message_source=request.message_source,
             retrieved_memory_block=request.retrieved_memory_block,
             disabled_sections=request.disabled_sections,
             turn_injection_context=turn_injection_context,

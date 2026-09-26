@@ -207,6 +207,7 @@ class TelegramChannel(
             channel=self._channel,
             metadata_key="username",
             normalizer=lambda value: value.lower(),
+            accepts_chat_id=_is_private_chat_id,
         )
         self.user_map = self._identity_index.mapping
 
@@ -289,5 +290,5 @@ class TelegramChannel(
         await self._app.bot.set_my_commands(commands)
 
     async def _remember_username(self, chat_id: str, username: str | None) -> None:
-        if username:
+        if username and _is_private_chat_id(chat_id):
             await self._require_identity_index().remember(username, chat_id)

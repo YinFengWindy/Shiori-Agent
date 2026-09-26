@@ -93,6 +93,7 @@ class _RenderPromptModule:
                 channel=ctx.channel,
                 chat_id=ctx.chat_id,
                 message_timestamp=ctx.timestamp,
+                message_source=frame.input.message_source,
                 retrieved_memory_block=ctx.retrieved_memory_block,
                 disabled_sections=ctx.disabled_sections,
                 turn_injection_prompt=ctx.turn_injection_prompt,

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from core.common.message_source import MessageSource
+
 if TYPE_CHECKING:
     from datetime import datetime
 
@@ -94,6 +96,7 @@ class PromptAssembler:
         channel: str | None = None,
         chat_id: str | None = None,
         message_timestamp: "datetime | None" = None,
+        message_source: MessageSource | None = None,
         retrieved_memory_block: str = "",
         disabled_sections: set[str] | None = None,
         turn_injection_context: dict[str, str] | None = None,
@@ -156,6 +159,7 @@ class PromptAssembler:
             channel=channel,
             chat_id=chat_id,
             message_timestamp=message_timestamp,
+            message_source=message_source,
             media=media,
         )
         return AssembledTurnInput(
