@@ -41,48 +41,50 @@ export function FeishuAccountDetail({ account, onChanged, client, host }: Plugin
     return () => { active = false; };
   }, [accountRef, client]);
 
-  async function save() {
-    if (!values || !appId.trim()) return;
+  async function applyConfig(
+    build: (latest: Record<string, unknown>) => Record<string, unknown> | Promise<Record<string, unknown>>,
+    selectedRef?: string,
+  ) {
     setBusy(true);
     setError("");
     try {
       const latest = (await settings.getConfig("feishu")).values;
+      const updated = await build(latest);
+      const result = await settings.setConfig("feishu", updated, { operationId: crypto.randomUUID() });
+      setValues(result.values);
+      if (selectedRef) {
+        const refreshed = await accounts.list();
+        onChanged(refreshed.find((item) => item.pluginId === "feishu" && item.platformAccountId === selectedRef)?.id);
+      } else {
+        onChanged();
+      }
+      return true;
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save() {
+    if (!values || !appId.trim()) return;
+    const ref = `${domain}:${appId.trim()}`;
+    const saved = await applyConfig(async (latest) => {
       const current = configuredApps(latest).find((item) => `${item.domain}:${item.app_id}` === `${domain}:${appId.trim()}`);
       const appSecret = secret.trim() || current?.app_secret || "";
       if (!appSecret) throw new Error("请输入 App Secret");
       if (!current || secret.trim()) {
         await client.call("accounts.verify", { domain, app_id: appId.trim(), app_secret: appSecret });
       }
-      const result = await settings.setConfig("feishu", withSavedApp(latest, { domain, app_id: appId.trim(), app_secret: appSecret }), {
-        operationId: crypto.randomUUID(),
-      });
-      setValues(result.values);
-      setSecret("");
-      const refreshed = await accounts.list();
-      onChanged(refreshed.find((item) => item.pluginId === "feishu" && item.platformAccountId === `${domain}:${appId.trim()}`)?.id);
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
-    } finally {
-      setBusy(false);
-    }
+      return withSavedApp(latest, { domain, app_id: appId.trim(), app_secret: appSecret });
+    }, ref);
+    if (saved) setSecret("");
   }
 
   async function disconnect() {
     if (!accountRef) return;
-    setBusy(true);
-    setError("");
-    try {
-      const latest = (await settings.getConfig("feishu")).values;
-      const result = await settings.setConfig("feishu", withConnection(latest, accountRef, false), {
-        operationId: crypto.randomUUID(),
-      });
-      setValues(result.values);
-      onChanged();
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
-    } finally {
-      setBusy(false);
-    }
+    await applyConfig((latest) => withConnection(latest, accountRef, false));
   }
 
   return <div className="grid gap-4">

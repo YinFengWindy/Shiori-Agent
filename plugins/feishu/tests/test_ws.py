@@ -97,7 +97,11 @@ async def test_sdk_handshake_errors_keep_auth_distinct_from_permission_and_netwo
         warnings.simplefilter("ignore", DeprecationWarning)
         from lark_oapi.ws.exception import ClientException
 
-    assert classify_connection_error(ClientException(514, "bad credential")) == "auth"
+    assert classify_connection_error(ClientException(401, "bad credential")) == "auth"
+    assert (
+        classify_connection_error(ClientException(514, "connection limit"))
+        == "transport"
+    )
     assert classify_connection_error(ClientException(403, "forbidden")) == "capability"
     assert classify_connection_error(OSError("offline")) == "transport"
 

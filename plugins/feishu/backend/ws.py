@@ -63,7 +63,9 @@ def classify_connection_error(
     """Maps SDK handshake and HTTP failures to account-facing causes."""
     code = getattr(error, "code", None)
     status = getattr(getattr(error, "response", None), "status_code", None)
-    if code in {401, 514, 10003, 10014, 1000040344} or status == 401:
+    # SDK code 514 also covers connection-limit rejection; it discards the
+    # handshake subcode, so only unambiguous credential errors require login.
+    if code in {401, 10003, 10014, 1000040344} or status == 401:
         return "auth"
     if code == 403 or status == 403:
         return "capability"
