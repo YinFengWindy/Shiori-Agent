@@ -6,6 +6,7 @@ import re
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, field_validator
+from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
@@ -91,6 +92,14 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         concurrency=Concurrency.READ_ONLY,
     )
     ctx.rpc.register("accounts.send", lambda payload: _send(runtime, payload))
+    ctx.rpc.register(
+        ACCOUNT_TARGETS_METHOD,
+        lambda payload: _discover(runtime, payload),
+        concurrency=Concurrency.READ_ONLY,
+    )
+    ctx.rpc.register(
+        ACCOUNT_SEND_METHOD, lambda payload: _send_account(runtime, payload)
+    )
 
 
 async def _settings(runtime, payload: dict) -> dict:
@@ -124,4 +133,19 @@ async def _send(runtime, payload: dict) -> dict:
         str(payload["kind"]),
         str(payload["target_id"]),
         str(payload["message"]),
+    )
+
+
+async def _send_account(runtime, payload: dict) -> dict:
+    """Translate the shared account request into QQ's native target operation."""
+    if payload.get("message_thread_id") is not None:
+        raise ValueError("QQ 不支持话题目标")
+    return await _send(
+        runtime,
+        {
+            "account_id": payload["account_id"],
+            "kind": payload["target_kind"],
+            "target_id": payload["target_id"],
+            "message": payload["message"],
+        },
     )

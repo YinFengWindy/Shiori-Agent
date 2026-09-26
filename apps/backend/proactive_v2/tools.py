@@ -47,6 +47,7 @@ class ToolDeps:
     ack_fn: Any = None  # async (compound_key: str, ttl_hours: int) -> None
     alert_ack_fn: Any = None  # async (compound_key: str) -> None
     max_chars: int = 8_000
+    shared_tools: Any = None
 
 
 # ── Tool Schemas ──────────────────────────────────────────────────────────
@@ -170,6 +171,7 @@ TOOL_SCHEMAS: list[dict] = [
             "调用过 message_push 后，禁止 finish_turn(decision=skip, ...)，否则报错。\n"
             "每轮只能调用一次，重复调用报错。\n"
             "evidence 只填本轮实际引用的 alert/content 条目复合键。"
+            "可选明确指定 account_id、target_kind、target_id 改投其他账号和目标。"
         ),
         {
             "type": "object",
@@ -184,6 +186,10 @@ TOOL_SCHEMAS: list[dict] = [
                     "items": {"type": "string"},
                     "description": '引用的内容复合键列表，格式 "{ack_server}:{event_id}"',
                 },
+                "account_id": {"type": "string"},
+                "target_kind": {"type": "string"},
+                "target_id": {"type": "string"},
+                "message_thread_id": {"type": "integer"},
             },
             "required": ["message", "mood", "thought"],
         },
@@ -599,7 +605,18 @@ def _message_push(ctx: AgentTickContext, args: dict) -> str:
     if not message.strip():
         raise ValueError("message_push requires non-empty message")
     evidence = _parse_evidence(ctx, args.get("evidence", []))
+    target = {
+        key: args[key]
+        for key in ("account_id", "target_kind", "target_id", "message_thread_id")
+        if args.get(key) is not None
+    }
+    if target and not all(
+        str(target.get(key) or "").strip()
+        for key in ("account_id", "target_kind", "target_id")
+    ):
+        raise ValueError("改投账号需明确 account_id、target_kind 和 target_id")
     ctx.draft_message = message
+    ctx.account_target = target or None
     ctx.role_reply = reply
     ctx.draft_evidence = evidence
     return json.dumps({"ok": True}, ensure_ascii=False)
@@ -611,6 +628,15 @@ def _message_push(ctx: AgentTickContext, args: dict) -> str:
 async def dispatch(
     tool_name: str, args: dict, ctx: AgentTickContext, deps: ToolDeps
 ) -> str:
+    if tool_name in {"account_list", "account_targets"}:
+        if deps.shared_tools is None:
+            raise RuntimeError("账号查询工具不可用")
+        role_id = _memory_scope_from_tick_context(ctx).role_id
+        return str(
+            await deps.shared_tools.execute(
+                tool_name, args, context={"role_id": role_id}
+            )
+        )
     if tool_name == "get_alert_events":
         return await _get_alert_events(ctx, args)
 

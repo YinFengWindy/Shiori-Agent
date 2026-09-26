@@ -84,18 +84,19 @@ def test_proactive_candidate_must_be_a_bound_session() -> None:
         )
 
 
-def test_enabling_proactive_requires_a_candidate() -> None:
-    with pytest.raises(ValueError, match="至少要选择一个接收会话"):
-        RoleBindingPolicy.normalize_proactive(
-            {"enabled": True, "candidates": []}, [_DESKTOP]
-        )
+def test_enabling_proactive_without_legacy_candidate_keeps_setting() -> None:
+    enabled = RoleBindingPolicy.normalize_proactive(
+        {"enabled": True, "candidates": []}, [_DESKTOP]
+    )
+    assert enabled.enabled is True
+    assert enabled.candidates == ()
     disabled = RoleBindingPolicy.normalize_proactive(
         {"enabled": False, "candidates": []}, [_DESKTOP]
     )
     assert disabled.candidates == ()
 
 
-def test_removed_binding_leaves_candidates_and_empty_set_disables() -> None:
+def test_removed_binding_leaves_candidates_and_preserves_enabled_setting() -> None:
     proactive = RoleProactiveConfig(
         enabled=True,
         candidates=(
@@ -109,7 +110,7 @@ def test_removed_binding_leaves_candidates_and_empty_set_disables() -> None:
 
     assert kept.enabled is True
     assert kept.candidates == (RoleProactiveCandidate("desktop", "role:mira"),)
-    assert emptied.enabled is False
+    assert emptied.enabled is True
     assert emptied.candidates == ()
 
 

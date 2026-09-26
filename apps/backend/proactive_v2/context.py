@@ -25,6 +25,7 @@ class AgentTickContext:
     gate_trace: tuple["ProactiveGateTraceItem", ...] = field(default_factory=tuple)
     target_channel: str = ""
     target_chat_id: str = ""
+    account_target: dict[str, object] | None = None
 
     # Gateway 预取结果（_run_loop 启动前由 DataGateway 填充）
     fetched_alerts: list[dict] = field(default_factory=list)  # 含 ack_server 字段

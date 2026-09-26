@@ -15,6 +15,10 @@ class OneBotError(RuntimeError):
     """A transport or platform action failed with a visible explanation."""
 
 
+class OneBotDisconnected(OneBotError):
+    """An in-flight action lost its reply when the WebSocket disconnected."""
+
+
 class OneBotAuthError(OneBotError):
     """NapCat is reachable but the configured QQ identity is not logged in."""
 
@@ -91,7 +95,7 @@ class OneBotSocket:
             self._socket = None
             for future in self._pending.values():
                 if not future.done():
-                    future.set_exception(OneBotError("NapCat WebSocket 已断开"))
+                    future.set_exception(OneBotDisconnected("NapCat WebSocket 已断开"))
             self._pending.clear()
             try:
                 await socket.close()

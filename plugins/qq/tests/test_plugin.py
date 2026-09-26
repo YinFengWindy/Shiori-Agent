@@ -13,7 +13,7 @@ from agent.plugin_host import HostServices, PluginKernel, load_manifest
 from bus.event_bus import EventBus
 from core.roles.store import RoleStore
 from plugins.qq.backend.channel.formatting import GROUP_PREFIX
-from plugins.qq.backend.plugin import QQConfigModel
+from plugins.qq.backend.plugin import QQConfigModel, _send_account
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
@@ -106,6 +106,25 @@ def test_config_schema_labels_and_secret_field() -> None:
 def test_timeout_must_be_positive() -> None:
     with pytest.raises(ValidationError):
         QQConfigModel.model_validate({"websocket_open_timeout_seconds": 0})
+
+
+@pytest.mark.asyncio
+async def test_shared_account_send_adapts_target_and_rejects_topic() -> None:
+    from unittest.mock import AsyncMock
+
+    runtime = type(
+        "Runtime", (), {"send_target": AsyncMock(return_value={"message_id": "9"})}
+    )()
+    payload = {
+        "account_id": "account-1",
+        "target_kind": "group",
+        "target_id": "42",
+        "message": "hello",
+    }
+    assert await _send_account(runtime, payload) == {"message_id": "9"}
+    runtime.send_target.assert_awaited_once_with("account-1", "group", "42", "hello")
+    with pytest.raises(ValueError, match="话题"):
+        await _send_account(runtime, {**payload, "message_thread_id": 7})
 
 
 def test_channel_does_not_consume_bot_commands() -> None:

@@ -345,7 +345,7 @@ def test_role_store_rejects_proactive_candidate_outside_its_bindings(tmp_path: P
         raise AssertionError("主动推送候选会话必须属于当前角色")
 
 
-def test_role_store_disables_proactive_when_its_last_candidate_binding_is_removed(
+def test_role_store_keeps_proactive_enabled_when_last_binding_is_removed(
     tmp_path: Path,
 ):
     store = RoleStore(tmp_path)
@@ -367,7 +367,7 @@ def test_role_store_disables_proactive_when_its_last_candidate_binding_is_remove
 
     updated = store.update_role("mira", channel_bindings=[])
 
-    assert updated.proactive.enabled is False
+    assert updated.proactive.enabled is True
     assert updated.proactive.candidates == ()
 
 

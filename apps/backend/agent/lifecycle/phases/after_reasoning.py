@@ -162,6 +162,11 @@ class _BuildAfterReasoningCtxModule:
                 "tool_chain": list(tool_chain),
                 "context_retry": dict(turn_result.context_retry),
                 "streamed_reply": turn_result.streamed,
+                **(
+                    {"account_delivery_sent": True}
+                    if turn_result.context_retry.get("account_delivery_sent")
+                    else {}
+                ),
                 **({"turn_metrics": turn_metrics} if turn_metrics else {}),
             },
         )

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from agent.turns.outbound import OutboundDispatch, OutboundPort
+from agent.account_delivery import AccountDelivery
 from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
@@ -32,6 +33,7 @@ class TurnOrchestratorDeps:
     session: SessionServices
     outbound: OutboundPort
     event_bus: EventBus | None = None
+    account_delivery: AccountDelivery | None = None
 
 
 class TurnOrchestrator:
@@ -39,6 +41,7 @@ class TurnOrchestrator:
         self._session = deps.session
         self._outbound = deps.outbound
         self._event_bus = deps.event_bus
+        self._account_delivery = deps.account_delivery
 
     def capture_reply_context(self, session_key: str) -> RoleReplyContext:
         """Capture role output constraints and the successful-state stamp per tick."""
@@ -102,6 +105,11 @@ class TurnOrchestrator:
             "mood": reply.mood,
             "thought": reply.thought,
         }
+        account_target = (
+            result.trace.extra.get("account_target")
+            if result.trace is not None and isinstance(result.trace.extra, dict)
+            else None
+        )
         await self._run_effects(result.side_effects)
         try:
             sent = await self._session.session_manager.append_messages(
@@ -120,6 +128,7 @@ class TurnOrchestrator:
                     content=content,
                     media=media,
                     metadata={**source_metadata, "pending_commit": True},
+                    account_target=account_target,
                 ),
             )
         except Exception:
@@ -179,6 +188,7 @@ class TurnOrchestrator:
         content: str,
         media: list[str],
         metadata: dict[str, Any],
+        account_target: object = None,
     ) -> bool:
         """Sends the pending message and stamps its delivery facts before commit.
 
@@ -190,6 +200,30 @@ class TurnOrchestrator:
         commits without delivery facts. A refused or failed send commits
         nothing, exactly as before.
         """
+        if isinstance(account_target, dict):
+            if self._account_delivery is None:
+                raise RuntimeError("账号目标发送服务不可用")
+            receipt = await self._account_delivery.send(
+                str(account_target.get("account_id") or ""),
+                str(metadata.get("role_id") or ""),
+                str(account_target.get("target_kind") or ""),
+                str(account_target.get("target_id") or ""),
+                content,
+                account_target.get("message_thread_id"),
+                source="proactive",
+                media=media,
+            )
+            message["metadata"].update(
+                {
+                    "delivery_attempt_id": receipt.attempt_id,
+                    "delivery_account_id": receipt.account_id,
+                    "delivery_target_kind": receipt.target_kind,
+                    "delivery_target_id": receipt.target_id,
+                }
+            )
+            message["delivery_status"] = "sent"
+            message["external_message_id"] = receipt.platform_message_id
+            return True
         receipt = await self._outbound.dispatch(
             OutboundDispatch(
                 channel=channel,

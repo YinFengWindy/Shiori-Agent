@@ -459,6 +459,11 @@ async def resolve_decide(
                     "steps_taken": ctx.steps_taken,
                     "skip_reason": "",
                     "state_summary_tag": "none",
+                    **(
+                        {"account_target": dict(ctx.account_target)}
+                        if ctx.account_target
+                        else {}
+                    ),
                 },
             ),
             success_side_effects=success_side_effects,

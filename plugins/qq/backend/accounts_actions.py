@@ -6,7 +6,8 @@ import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from .onebot import OneBotError, OneBotSocket
+from .onebot import OneBotDisconnected, OneBotError, OneBotSocket
+from core.accounts.target_contract import UncertainDeliveryError
 
 _QQ_ID = re.compile(r"^[1-9][0-9]*$")
 
@@ -97,8 +98,14 @@ class QQAccountActions:
             action, params = "send_group_msg", {"group_id": number, "message": message}
         else:
             raise ValueError("QQ 目标类型必须是 private 或 group")
-        data = await socket.call(action, params)
+        try:
+            data = await socket.call(action, params)
+        except OneBotDisconnected as exc:
+            raise UncertainDeliveryError("NapCat 发送连接中断，结果不确定") from exc
         if not isinstance(data, dict):
-            raise OneBotError("NapCat 发送未返回回执")
-        message_id = qq_number(data.get("message_id"), "消息回执")
+            raise UncertainDeliveryError("NapCat 发送未返回回执")
+        try:
+            message_id = qq_number(data.get("message_id"), "消息回执")
+        except ValueError as exc:
+            raise UncertainDeliveryError("NapCat 发送未返回有效回执") from exc
         return {"message_id": message_id}
