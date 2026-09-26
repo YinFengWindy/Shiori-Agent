@@ -224,8 +224,8 @@ class ProactiveGatesCapability:
 class ChannelsCapability:
     """贡献渠道 adapter；渠道宿主接管其生命周期。
 
-    只接受 manifest ``channels`` 静态声明过的渠道名：绑定面板依据声明列出渠道，
-    未声明的名字会让已落盘的绑定与实际贡献对不上。
+    接受 manifest ``channels`` 声明的渠道名，或由该前缀与账号 ID 标记构成的
+    实例名。绑定面板继续依据基础声明列出渠道；账号实例由账号页管理。
     """
 
     def __init__(
@@ -243,7 +243,18 @@ class ChannelsCapability:
 
     def add(self, channel: "Channel") -> None:
         name = getattr(channel, "name", None)
-        if name not in self._declared:
+        # Account instances keep the declared provider prefix while receiving
+        # separate transport names. The trusted plugin registers account_id.
+        instance = (
+            isinstance(name, str)
+            and isinstance(getattr(channel, "account_id", None), str)
+            and bool(getattr(channel, "account_id"))
+            and any(
+                name.startswith(f"{base}:") and len(name) > len(base) + 1
+                for base in self._declared
+            )
+        )
+        if name not in self._declared and not instance:
             raise ChannelDeclarationError(self._plugin_id, str(name), self._declared)
         contribute_to_list(
             self._contributions.channels,

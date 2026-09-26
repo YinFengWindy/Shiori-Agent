@@ -15,6 +15,7 @@ from plugins.feishu.backend.ws import (
     ConnectionState,
     LongConnectionRunner,
     SdkLongConnection,
+    classify_connection_error,
 )
 
 
@@ -89,6 +90,22 @@ async def test_runner_reconnects_after_failures_and_drops(make_harness: Any) -> 
     await runner.stop()
 
 
+async def test_sdk_handshake_errors_keep_auth_distinct_from_permission_and_network() -> (
+    None
+):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        from lark_oapi.ws.exception import ClientException
+
+    assert classify_connection_error(ClientException(401, "bad credential")) == "auth"
+    assert (
+        classify_connection_error(ClientException(514, "connection limit"))
+        == "transport"
+    )
+    assert classify_connection_error(ClientException(403, "forbidden")) == "capability"
+    assert classify_connection_error(OSError("offline")) == "transport"
+
+
 async def test_stop_is_idempotent_and_leaves_no_thread(make_harness: Any) -> None:
     before = len(_feishu_threads())
     factory = make_harness().factory
@@ -143,7 +160,7 @@ async def test_sdk_private_surface_used_by_the_adapter_still_exists() -> None:
         assert callable(getattr(client_module.Client, name))
 
 
-async def test_sdk_adapter_rebinds_the_module_loop_and_dispatches_raw_events() -> None:
+async def test_sdk_adapter_uses_the_current_loop_and_dispatches_raw_events() -> None:
     """Builds the real SDK client on a private loop and feeds it an event
     payload through the dispatcher, without any network access."""
     with warnings.catch_warnings():
@@ -167,7 +184,9 @@ async def test_sdk_adapter_rebinds_the_module_loop_and_dispatches_raw_events() -
             adapter = SdkLongConnection(
                 "cli_app", "secret", "https://open.feishu.cn", received.append
             )
-            outcome["loop_bound"] = client_module.loop is asyncio.get_running_loop()
+            task = client_module.loop.create_task(asyncio.sleep(0))
+            outcome["loop_bound"] = task.get_loop() is asyncio.get_running_loop()
+            await task
             outcome["connected"] = adapter.is_connected()
             handler = adapter._client._event_handler
             handler._do_without_validation(json.dumps(payload).encode())
@@ -190,3 +209,40 @@ async def test_sdk_adapter_rebinds_the_module_loop_and_dispatches_raw_events() -
             "event": payload["event"],
         }
     ]
+
+
+async def test_sdk_two_accounts_schedule_receive_work_on_their_own_loops() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        from lark_oapi.ws import client as client_module
+
+    gate = threading.Barrier(2)
+    outcomes: list[bool] = []
+
+    def run(app_id: str) -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def verify() -> None:
+            _ = SdkLongConnection(
+                app_id, "secret", "https://open.feishu.cn", lambda _event: None
+            )
+            gate.wait(timeout=5)
+            task = client_module.loop.create_task(asyncio.sleep(0))
+            outcomes.append(task.get_loop() is asyncio.get_running_loop())
+            await task
+
+        try:
+            loop.run_until_complete(verify())
+        finally:
+            ws._close_loop(loop)
+            asyncio.set_event_loop(None)
+
+    threads = [
+        threading.Thread(target=run, args=(app_id,)) for app_id in ("cli_a", "cli_b")
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    assert outcomes == [True, True]

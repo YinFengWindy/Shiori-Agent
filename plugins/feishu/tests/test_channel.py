@@ -10,12 +10,116 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+import httpx
 
 from bus.events import OutboundMessage
 from plugins.feishu.backend import api as feishu_api
 from plugins.feishu.backend.channel import FeishuChannel, resolve_receive_id
+from agent.plugin_host.kv import PluginKVStore
 
 CHAT_ID = "oc_chat"
+
+
+@pytest.mark.parametrize(
+    ("http_status", "expected"), [(401, "login_required"), (403, "error")]
+)
+async def test_bot_identity_failure_distinguishes_auth_from_capability(
+    make_harness: Any, http_status: int, expected: str
+) -> None:
+    accounts = Mock()
+    harness = make_harness(
+        account_id="account-a",
+        profile_ref="feishu:cli_a",
+        accounts=accounts,
+    )
+    harness.api.fail("bot", (http_status, 10003 if http_status == 401 else 99991672))
+    await harness.start()
+    for _ in range(100):
+        if any(
+            call.kwargs.get("connection") == expected
+            for call in accounts.report.call_args_list
+        ):
+            break
+        await asyncio.sleep(0.01)
+    assert any(
+        call.kwargs.get("connection") == expected
+        for call in accounts.report.call_args_list
+    )
+    assert harness.channel.status()["connected"] is True
+
+
+async def test_bare_http_401_identity_response_requires_login(
+    make_harness: Any,
+) -> None:
+    accounts = Mock()
+    harness = make_harness(
+        account_id="account-a",
+        profile_ref="feishu:cli_a",
+        accounts=accounts,
+    )
+
+    async def response(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("tenant_access_token/internal"):
+            return httpx.Response(200, json={"code": 0, "tenant_access_token": "token"})
+        return httpx.Response(401, json={"code": 0})
+
+    harness.channel._api._transport = httpx.MockTransport(response)
+    await harness.start()
+    for _ in range(100):
+        if any(
+            call.kwargs.get("connection") == "login_required"
+            for call in accounts.report.call_args_list
+        ):
+            break
+        await asyncio.sleep(0.01)
+    assert any(
+        call.kwargs.get("connection") == "login_required"
+        for call in accounts.report.call_args_list
+    )
+
+
+async def test_two_account_channels_isolate_inbound_targets_and_receipts(
+    make_harness: Any, tmp_path: Path, make_event: Any
+) -> None:
+    first = make_harness(
+        name="feishu",
+        account_id="account-a",
+        profile_ref="feishu:cli_a",
+        profile_store=PluginKVStore(tmp_path / "first.json"),
+    )
+    second = make_harness(
+        name="feishu:lark:cli_b",
+        account_id="account-b",
+        profile_ref="lark:cli_b",
+        profile_store=PluginKVStore(tmp_path / "second.json"),
+    )
+    second.context.bus = first.context.bus
+    await first.start()
+    await second.start()
+    first.factory.connections[-1].emit(
+        make_event(message_id="om_a", event_id="event-a")
+    )
+    other = make_event(message_id="om_b", event_id="event-b")
+    other["event"]["sender"]["sender_id"]["open_id"] = "ou_other"
+    second.factory.connections[-1].emit(other)
+    await first.settle()
+    await second.settle()
+
+    by_channel = {message.channel: message for message in first.bus.inbound}
+    assert set(by_channel) == {"feishu", "feishu:lark:cli_b"}
+    assert by_channel["feishu"].metadata["account_id"] == "account-a"
+    assert by_channel["feishu:lark:cli_b"].metadata["account_id"] == "account-b"
+    assert first.channel.known_private_targets()[0]["open_id"] == "ou_user"
+    assert second.channel.known_private_targets()[0]["open_id"] == "ou_other"
+    receipt = await second.channel.send(CHAT_ID, "reply")
+    assert receipt in second.api.sent_ids
+    assert not first.api.sent_ids
+    before = len(second.api.sent_ids)
+    with pytest.raises(ValueError, match="已交互的私聊"):
+        await second.channel.send("oc_unknown_group", "must not send")
+    with pytest.raises(ValueError, match="已交互的私聊"):
+        await second.channel.send("ou_unknown", "must not send")
+    assert len(second.api.sent_ids) == before
 
 
 @pytest.mark.parametrize("normal_reply", [False, True])
@@ -244,7 +348,7 @@ async def test_status_reports_connection_and_bot_name(harness: Any) -> None:
     assert harness.channel.status() == {
         "connected": True,
         "account": "Shiori",
-        "detail": "长连接已建立",
+        "detail": "长连接已建立；机器人 open_id=ou_bot",
     }
 
 

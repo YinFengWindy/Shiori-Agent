@@ -9,7 +9,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -26,7 +26,7 @@ from infra.channels.contract import ChannelContext, ChannelStatus
 from infra.channels.intake import ChannelIntake
 from infra.channels.session_key import resolve_outbound_session_key
 
-from .api import FeishuApi, is_rate_limited, with_rate_limit_retry
+from .api import FeishuApi, FeishuApiError, is_rate_limited, with_rate_limit_retry
 from .dedupe import ExpiringIdSet
 from .formatting import (
     CHANNEL,
@@ -45,6 +45,11 @@ from .ws import (
 )
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from agent.plugin_host.capabilities import AccountsCapability
+    from agent.plugin_host.kv import PluginKVStore
+    from core.accounts import ConnectionState as AccountConnectionState
 
 STOP_COMMAND = "/stop"
 PENDING_QUOTES_PER_SESSION = 16
@@ -71,7 +76,19 @@ class FeishuChannel:
         transport: httpx.AsyncBaseTransport | None = None,
         connection_factory: ConnectionFactory | None = None,
         chat_types: tuple[ChatTypeDeclaration, ...] = (),
+        name: str = CHANNEL,
+        account_id: str = "",
+        accounts: "AccountsCapability | None" = None,
+        profile_store: "PluginKVStore | None" = None,
+        profile_ref: str = "",
+        connection_revision: int = 0,
     ) -> None:
+        self.name = name
+        self.account_id = account_id
+        self._accounts = accounts
+        self._profile_store = profile_store
+        self._profile_ref = profile_ref
+        self._connection_revision = connection_revision
         self._app_id = app_id
         # The manifest's session types, for answering ``/chatid``.
         self._chat_types = chat_types
@@ -98,6 +115,18 @@ class FeishuChannel:
         self._events_bound = False
         self._push_registered = False
         self._bot_name = ""
+        self._bot_open_id = ""
+        self._identity_error = ""
+        saved_targets = (
+            profile_store.get(f"targets:{profile_ref}", {})
+            if profile_store is not None
+            else {}
+        )
+        self._known_targets: dict[str, str] = (
+            {str(chat): str(sender) for chat, sender in saved_targets.items()}
+            if isinstance(saved_targets, dict)
+            else {}
+        )
         self._last_unbound = ""
         # Accepted inbound message ids per session, keyed by the inbound
         # timestamp that the turn's ``TurnStarted`` event carries over.
@@ -112,9 +141,25 @@ class FeishuChannel:
         """Identifies connections reusable across plugin generations."""
         return (
             "feishu",
+            self.name,
             self._app_id,
             self._app_secret,
             self._domain,
+            self._connection_revision,
+        )
+
+    def adopt_runtime(self, candidate: "FeishuChannel") -> None:
+        """Routes a reused WebSocket's reports through the published generation."""
+        if self.configuration_key != candidate.configuration_key:
+            raise ValueError("飞书连接配置不匹配")
+        self._accounts = candidate._accounts
+        self.account_id = candidate.account_id
+        self._profile_store = candidate._profile_store
+        self._profile_ref = candidate._profile_ref
+        self._report(
+            "online"
+            if self._runner and self._runner.state.connected and self._bot_open_id
+            else "connecting"
         )
 
     # ── channel hooks ────────────────────────────────────────────────
@@ -125,7 +170,7 @@ class FeishuChannel:
 
     def system_prompt_hint(self, chat_id: str) -> str:
         """Tells the model what a Feishu card can render."""
-        return SYSTEM_PROMPT_HINT
+        return SYSTEM_PROMPT_HINT.replace("channel=feishu", f"channel={self.name}")
 
     def status(self) -> ChannelStatus:
         """Reports the long connection, the bot name and the last unbound sender."""
@@ -138,10 +183,21 @@ class FeishuChannel:
         if self._bot_name:
             result["account"] = self._bot_name
         detail = state.detail
+        if self._bot_open_id:
+            detail = f"{detail}；机器人 open_id={self._bot_open_id}"
+        if self._identity_error:
+            detail = f"{detail}；{self._identity_error}"
         if self._last_unbound:
             detail = f"{detail}；{self._last_unbound}"
         result["detail"] = detail
         return result
+
+    def known_private_targets(self) -> list[dict[str, str]]:
+        """Returns observed private chats; this is not a tenant contact list."""
+        return [
+            {"chat_id": chat_id, "open_id": open_id, "id_scope": "app"}
+            for chat_id, open_id in sorted(self._known_targets.items())
+        ]
 
     # ── lifecycle ────────────────────────────────────────────────────
 
@@ -170,7 +226,7 @@ class FeishuChannel:
         )
         self._push_registered = True
         if not self._outbound_bound:
-            ctx.bus.subscribe_outbound(CHANNEL, self._on_response)
+            ctx.bus.subscribe_outbound(self.name, self._on_response)
             self._outbound_bound = True
         self._intake.start(paused=ctx.intake_paused)
         self._accepting = True
@@ -206,7 +262,7 @@ class FeishuChannel:
         await self._streamer.close()
         await self._intake.close()
         if self._bus is not None and self._outbound_bound:
-            self._bus.unsubscribe_outbound(CHANNEL, self._on_response)
+            self._bus.unsubscribe_outbound(self.name, self._on_response)
             self._outbound_bound = False
         if self._push_tool is not None and self._push_registered:
             self._push_tool.unregister_channel(self.name, text=self.send)
@@ -245,12 +301,51 @@ class FeishuChannel:
 
     def _on_connection_state(self, state: ConnectionState) -> None:
         loop = self._loop
-        if not state.connected or self._bot_name or loop is None:
+        if loop is None:
             return
         try:
-            loop.call_soon_threadsafe(self._spawn_bot_info)
+            loop.call_soon_threadsafe(self._apply_connection_state, state)
         except RuntimeError:
             pass
+
+    def _apply_connection_state(self, state: ConnectionState) -> None:
+        if not self._accepting:
+            return
+        if state.connected:
+            if self._bot_open_id:
+                self._report("online")
+            else:
+                self._report("connecting")
+                self._spawn_bot_info()
+        else:
+            connection = (
+                "login_required"
+                if state.error_kind == "auth"
+                else (
+                    "error"
+                    if state.error_kind in {"capability", "transport"}
+                    else "offline"
+                )
+            )
+            detail = (
+                f"认证失败：{state.detail}"
+                if state.error_kind == "auth"
+                else (
+                    f"能力不足：{state.detail}"
+                    if state.error_kind == "capability"
+                    else state.detail
+                )
+            )
+            self._report(connection, detail)
+
+    def _report(self, connection: "AccountConnectionState", error: str = "") -> None:
+        if self._accounts is not None and self.account_id:
+            self._accounts.report(
+                self.account_id,
+                connection=connection,
+                capabilities=frozenset({"private", "known_private_targets"}),
+                error=error,
+            )
 
     # ── inbound (event loop) ─────────────────────────────────────────
 
@@ -259,7 +354,7 @@ class FeishuChannel:
             self._track(self._handle_message(message))
 
     def _spawn_bot_info(self) -> None:
-        if self._accepting and not self._bot_name:
+        if self._accepting and not self._bot_open_id:
             self._track(self._load_bot_info())
 
     def _track(self, coro: Any) -> None:
@@ -275,10 +370,53 @@ class FeishuChannel:
     async def _load_bot_info(self) -> None:
         try:
             info = await self._api.bot_info()
-        except Exception as error:
-            logger.debug("[feishu] 读取机器人信息失败: %s", error)
+        except (FeishuApiError, httpx.HTTPError, RuntimeError) as error:
+            status = (
+                error.http_status
+                if isinstance(error, FeishuApiError)
+                else (
+                    error.response.status_code
+                    if isinstance(error, httpx.HTTPStatusError)
+                    else None
+                )
+            )
+            auth = status == 401 or (
+                isinstance(error, FeishuApiError) and error.code in {10003, 10014}
+            )
+            label = (
+                "机器人认证失败"
+                if auth
+                else "机器人权限不足" if status == 403 else "机器人身份查询失败"
+            )
+            self._identity_error = f"{label}：{error}"
+            self._report("login_required" if auth else "error", self._identity_error)
             return
         self._bot_name = str(info.get("app_name") or "")
+        self._bot_open_id = str(info.get("open_id") or "")
+        avatar_url = str(info.get("avatar_url") or "")
+        if not self._bot_open_id:
+            self._identity_error = "机器人身份响应缺少 open_id"
+            self._report("error", self._identity_error)
+            return
+        self._identity_error = ""
+        if self._profile_store is not None:
+            self._profile_store.set(
+                f"profile:{self._profile_ref}",
+                {
+                    "name": self._bot_name,
+                    "open_id": self._bot_open_id,
+                    "avatar_url": avatar_url,
+                },
+            )
+        if self._accounts is not None and self.account_id:
+            self._accounts.register(
+                platform="feishu",
+                platform_account_id=self._profile_ref,
+                config_ref=self._profile_ref,
+                display_name=self._bot_name,
+                avatar_url=avatar_url,
+            )
+        self._report("online")
 
     async def _handle_message(self, message: ReceivedMessage) -> None:
         if message.sender_type and message.sender_type != "user":
@@ -286,6 +424,12 @@ class FeishuChannel:
         sender = message.sender_open_id
         if not sender:
             return
+        if self._known_targets.get(message.chat_id) != sender:
+            self._known_targets[message.chat_id] = sender
+            if self._profile_store is not None:
+                self._profile_store.set(
+                    f"targets:{self._profile_ref}", self._known_targets
+                )
         text = ""
         if message.message_type == "text":
             text = str(message.content.get("text") or "").strip()
@@ -305,7 +449,7 @@ class FeishuChannel:
             return
         await self._intake.submit(
             InboundMessage(
-                channel=CHANNEL,
+                channel=self.name,
                 sender=sender,
                 chat_id=message.chat_id,
                 content=payload.text,
@@ -313,6 +457,7 @@ class FeishuChannel:
                 metadata={
                     "chat_type": "private",
                     "open_id": sender,
+                    "account_id": self.account_id,
                     "message_id": message.message_id,
                     "message_type": message.message_type,
                     "external_message_id": message.message_id,
@@ -344,7 +489,7 @@ class FeishuChannel:
     def _is_bound(self, chat_id: str, sender: str) -> bool:
         hub = self._channel_hub
         if hub is None or hub.is_sender_allowed(
-            channel=CHANNEL, chat_id=chat_id, sender_id=sender
+            channel=self.name, chat_id=chat_id, sender_id=sender
         ):
             return True
         # Shown in the channel status so the user can copy the ids to bind.
@@ -360,7 +505,7 @@ class FeishuChannel:
         """Answers ``/chatid``; the admission exception is documented there."""
         await answer_chat_id_command(
             self._channel_hub,
-            channel=CHANNEL,
+            channel=self.name,
             chat_id=chat_id,
             chat_type="private",
             sender_id=sender,
@@ -373,9 +518,9 @@ class FeishuChannel:
             await self.send(chat_id, "当前未启用中断功能。")
             return
         session_key = (
-            self._channel_hub.resolve_runtime_session_key(CHANNEL, chat_id)
+            self._channel_hub.resolve_runtime_session_key(self.name, chat_id)
             if self._channel_hub is not None
-            else f"{CHANNEL}:{chat_id}"
+            else f"{self.name}:{chat_id}"
         )
         result = self._interrupt_controller.request_interrupt(
             session_key=session_key,
@@ -387,7 +532,7 @@ class FeishuChannel:
     # ── streaming ────────────────────────────────────────────────────
 
     async def _on_turn_started(self, event: TurnStarted) -> None:
-        if event.channel != CHANNEL:
+        if event.channel != self.name:
             return
         # Only a turn started by an accepted inbound message quotes it;
         # proactive and scheduled turns carry no matching timestamp.
@@ -397,7 +542,7 @@ class FeishuChannel:
         await self._streamer.begin_turn(event.session_key, quote=quote)
 
     async def _on_stream_delta(self, event: StreamDeltaReady) -> None:
-        if event.channel == CHANNEL and event.content_delta:
+        if event.channel == self.name and event.content_delta:
             self._streamer.add_delta(
                 event.session_key, event.chat_id, event.content_delta
             )
@@ -410,7 +555,7 @@ class FeishuChannel:
     # ── outbound ─────────────────────────────────────────────────────
 
     async def _on_response(self, msg: OutboundMessage) -> None:
-        session_key = resolve_outbound_session_key(msg, default_channel=CHANNEL)
+        session_key = resolve_outbound_session_key(msg, default_channel=self.name)
         first_id: str | None = None
         receipts: list[str] = []
         try:
@@ -443,7 +588,7 @@ class FeishuChannel:
             return
         self._channel_hub.mark_delivery(
             msg,
-            default_channel=CHANNEL,
+            default_channel=self.name,
             delivery_status=status,
             external_message_id=external_message_id or "",
         )
@@ -465,6 +610,7 @@ class FeishuChannel:
     ) -> str | None:
         if not text.strip():
             return None
+        self._require_private_target(chat_id)
         first_id: str | None = None
         for index, chunk in enumerate(split_markdown(text.strip())):
             message_id = await self._send_chunk(
@@ -495,6 +641,7 @@ class FeishuChannel:
         A reply the API refuses (e.g. the quoted message was recalled) is
         sent again as a plain message so the content is not lost.
         """
+        self._require_private_target(chat_id)
         receive_id, receive_id_type = resolve_receive_id(chat_id)
 
         async def send() -> str:
@@ -518,11 +665,23 @@ class FeishuChannel:
             logger.warning("[feishu] 引用回复失败，改为普通发送: %s", error)
             return await with_rate_limit_retry(send, label=label)
 
+    def _require_private_target(self, chat_id: str) -> None:
+        """Account sends are limited to private chats observed by this app."""
+        if not self.account_id:
+            return
+        receive_id, receive_type = resolve_receive_id(chat_id)
+        known = (receive_type == "chat_id" and receive_id in self._known_targets) or (
+            receive_type == "open_id" and receive_id in self._known_targets.values()
+        )
+        if not known:
+            raise ValueError("目标不是该飞书应用已交互的私聊")
+
     async def send_image(self, chat_id: str, image: str) -> str:
         """Uploads and sends an image from a local path or an http(s) URL.
 
         Returns the platform id of the sent image message.
         """
+        self._require_private_target(chat_id)
         source = image.strip()
         if source.startswith(("http://", "https://")):
             data = await self._api.fetch_url(source)
@@ -535,11 +694,14 @@ class FeishuChannel:
 
     async def send_file(
         self, chat_id: str, file_path: str, name: str | None = None
-    ) -> None:
-        """Uploads and sends a local file."""
+    ) -> str:
+        """Uploads a local file and returns the platform message receipt."""
+        self._require_private_target(chat_id)
         path = Path(file_path).expanduser()
         file_key = await self._api.upload_file(path.read_bytes(), name or path.name)
-        await self._deliver(chat_id, "file", json.dumps({"file_key": file_key}), None)
+        return await self._deliver(
+            chat_id, "file", json.dumps({"file_key": file_key}), None
+        )
 
     def _require_bus(self) -> MessageBus:
         if self._bus is None:

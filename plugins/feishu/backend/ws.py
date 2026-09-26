@@ -14,9 +14,9 @@ import asyncio
 import importlib
 import logging
 import threading
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from .formatting import as_dict
 
@@ -54,15 +54,46 @@ class ConnectionState:
 
     connected: bool
     detail: str
+    error_kind: Literal["auth", "capability", "transport"] | None = None
+
+
+def classify_connection_error(
+    error: BaseException,
+) -> Literal["auth", "capability", "transport"]:
+    """Maps SDK handshake and HTTP failures to account-facing causes."""
+    code = getattr(error, "code", None)
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    # SDK code 514 also covers connection-limit rejection; it discards the
+    # handshake subcode, so only unambiguous credential errors require login.
+    if code in {401, 10003, 10014, 1000040344} or status == 401:
+        return "auth"
+    if code == 403 or status == 403:
+        return "capability"
+    return "transport"
+
+
+class _SdkLoopProxy:
+    """Dispatches SDK module-global loop calls to the calling account thread."""
+
+    def create_task(self, coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
+        return asyncio.get_running_loop().create_task(coro)
+
+    def run_until_complete(self, awaitable: Awaitable[Any]) -> Any:
+        # The plugin calls the SDK's async methods; retain its synchronous
+        # Client.start() behavior for other users of the process-global module.
+        return asyncio.get_event_loop().run_until_complete(awaitable)
+
+
+_SDK_LOOP_PROXY = _SdkLoopProxy()
 
 
 class SdkLongConnection:
     """Adapts lark-oapi's ``ws.Client`` to :class:`LongConnection`.
 
     Must be constructed on the runner thread while its loop runs: the SDK
-    module and client capture ``asyncio.get_event_loop()``. The module-global
-    ``loop`` is rebound to the current loop for every connection because the
-    module is imported once per process but runner loops are per connection.
+    module holds a process-global ``loop`` reference. A loop proxy makes each
+    SDK task follow its current runner thread without changing that global to
+    another account's loop.
     """
 
     def __init__(
@@ -72,9 +103,8 @@ class SdkLongConnection:
         domain: str,
         on_event: EventCallback,
     ) -> None:
-        loop = asyncio.get_running_loop()
         client_module = importlib.import_module("lark_oapi.ws.client")
-        client_module.loop = loop
+        client_module.loop = _SDK_LOOP_PROXY
         lark = importlib.import_module("lark_oapi")
         builder = lark.EventDispatcherHandler.builder("", "")
         builder.register_p2_customized_event(
@@ -192,8 +222,13 @@ class LongConnectionRunner:
         except RuntimeError:
             pass  # the loop already closed
 
-    def _set_state(self, connected: bool, detail: str) -> None:
-        self._state = ConnectionState(connected, detail)
+    def _set_state(
+        self,
+        connected: bool,
+        detail: str,
+        error_kind: Literal["auth", "capability", "transport"] | None = None,
+    ) -> None:
+        self._state = ConnectionState(connected, detail, error_kind)
         try:
             self._on_state(self._state)
         except Exception:
@@ -225,7 +260,9 @@ class LongConnectionRunner:
                 await connection.connect()
             except Exception as error:
                 logger.warning("[feishu] 长连接建立失败: %s", error)
-                self._set_state(False, f"连接失败：{error}")
+                self._set_state(
+                    False, f"连接失败：{error}", classify_connection_error(error)
+                )
                 if connection is not None:
                     await self._disconnect(connection)
                 delay = self._delay(failures)

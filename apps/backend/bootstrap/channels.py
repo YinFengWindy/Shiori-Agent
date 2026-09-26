@@ -80,6 +80,7 @@ async def start_channels(
             else None
         )
         if existing is not None:
+            host.defer_runtime_adoption(existing, channel)
             await channel.stop()
         host.add(existing or channel, configuration=configuration)
 

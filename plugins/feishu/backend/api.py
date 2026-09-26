@@ -94,6 +94,8 @@ class FeishuApi:
             )
             payload = _checked_payload(response)
             self._token = str(payload.get("tenant_access_token") or "")
+            if not self._token:
+                raise RuntimeError("飞书认证响应缺少 tenant_access_token")
             expire = int(payload.get("expire") or 7200)
             self._token_expires_at = time.time() + max(
                 60, expire - TOKEN_REFRESH_MARGIN_S
@@ -167,7 +169,10 @@ class FeishuApi:
                 "uuid": str(uuid.uuid4()),
             },
         )
-        return str(as_dict(payload.get("data")).get("message_id") or "")
+        message_id = str(as_dict(payload.get("data")).get("message_id") or "")
+        if not message_id:
+            raise RuntimeError("飞书发送响应缺少 message_id")
+        return message_id
 
     async def reply_message(self, message_id: str, msg_type: str, content: str) -> str:
         """Replies to (quotes) ``message_id`` and returns the new message id."""
@@ -180,7 +185,10 @@ class FeishuApi:
                 "uuid": str(uuid.uuid4()),
             },
         )
-        return str(as_dict(payload.get("data")).get("message_id") or "")
+        message_id = str(as_dict(payload.get("data")).get("message_id") or "")
+        if not message_id:
+            raise RuntimeError("飞书回复响应缺少 message_id")
+        return message_id
 
     async def get_message(self, message_id: str) -> dict[str, Any]:
         """Returns the message item (``msg_type``, ``body``, ``sender`` …)."""

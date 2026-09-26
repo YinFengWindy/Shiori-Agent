@@ -65,6 +65,40 @@ class _KeyedChannel:
 
 
 @pytest.mark.asyncio
+async def test_reused_channel_adopts_new_runtime_only_after_commit(tmp_path):
+    resources = SharedHttpResources()
+    old = _KeyedChannel(uses_bot_commands=False)
+    fresh = _KeyedChannel(uses_bot_commands=False)
+    old.adopt_runtime = Mock()
+    context = dict(
+        bus=MessageBus(),
+        session_manager=SessionManager(tmp_path),
+        push_tool=MessagePushTool(),
+        http_resources=resources,
+        event_bus=EventBus(),
+    )
+    try:
+        active = await start_channels(plugin_channels=[cast(Any, old)], **context)
+        candidate = await start_channels(
+            plugin_channels=[cast(Any, fresh)],
+            previous_host=active,
+            **context,
+        )
+        assert not old.adopt_runtime.called
+
+        def failing_commit() -> None:
+            raise ValueError("commit failed")
+
+        with pytest.raises(ValueError, match="commit failed"):
+            await active.handover(candidate, commit=failing_commit)
+        assert not old.adopt_runtime.called
+        await active.handover(candidate, commit=lambda: None)
+        old.adopt_runtime.assert_called_once_with(fresh)
+    finally:
+        await resources.aclose()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("uses_bot_commands", [True, False])
 async def test_bot_command_changes_rebuild_only_channels_that_use_them(
     tmp_path, uses_bot_commands
