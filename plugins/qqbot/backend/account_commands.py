@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .accounts import resolve_secret
 from .channel import QQBotChannel
 
+if TYPE_CHECKING:
+    from infra.channels.contract import ChannelContext
+
+    from .account_identity import QQBotAccountIdentity
+    from .accounts import QQBotAccountStore
+
 
 class _AccountCommandsMixin:
-    """Expose plugin-owned account commands without coupling host settings UI."""
+    """Account commands on a composite with identity, store, and gateway state."""
+
+    _identity: QQBotAccountIdentity
+    _store: QQBotAccountStore
+    _channels: dict[str, QQBotChannel]
+    _runtime: ChannelContext | None
 
     async def _preflight(self, app_id: str, secret: str) -> None:
         """Authenticate and query gateway before changing persisted/running creds."""
@@ -48,8 +59,8 @@ class _AccountCommandsMixin:
             "bot_name": previous.get("bot_name", "") if previous else "",
         }
         if previous is not None:
-            self._register(row)
-        self._handoffs.add(app_id)
+            self._identity.register(row)
+        self._identity.begin_handoff(app_id)
         old = self._channels.pop(app_id, None)
         old_stopped = False
         try:
@@ -59,50 +70,41 @@ class _AccountCommandsMixin:
             candidate = await self._connect(row)
             if self._runtime is not None and candidate is not None:
                 await candidate.wait_ready()
-            name, bot_id = self._pending_identity.pop(app_id, ("", ""))
+            name, bot_id = self._identity.pending_identity(app_id)
             if name or bot_id:
                 row = {**row, "bot_name": name, "bot_id": bot_id}
-            account_id = self._register(row)
+            account_id = self._identity.register(row)
             self._store.save(row)
         except Exception:
             failed = self._channels.pop(app_id, None)
             if failed is not None:
                 await failed.stop()
-            self._pending_identity.pop(app_id, None)
-            self._handoffs.discard(app_id)
+            self._identity.end_handoff(app_id)
             if old is not None and not old_stopped:
                 self._channels[app_id] = old
             elif previous is not None and previous.get("connected", True):
                 await self._connect(previous)
             raise
-        self._handoffs.discard(app_id)
+        self._identity.end_handoff(app_id)
         if candidate is not None:
             candidate._account_id = account_id
-        self._status(
+        self._identity.report(
             app_id, "online" if self._runtime is not None else "connecting", "", ""
         )
         return {"account_id": account_id}
 
     async def disconnect(self, payload: dict[str, Any]) -> dict[str, Any]:
-        app_id = self._app_for_account(payload)
+        app_id = self._identity.app_for_account(payload)
         row = self._store.get(app_id)
         channel = self._channels.pop(app_id, None)
         if channel is not None:
             await channel.stop()
         self._store.save({**row, "connected": False})
-        self._status(app_id, "offline", "", "")
-        return {"account_id": self._account_ids[app_id]}
-
-    def _app_for_account(self, payload: dict[str, Any]) -> str:
-        account_id = str(payload.get("account_id") or "")
-        return next(
-            app_id
-            for app_id, registered in self._account_ids.items()
-            if registered == account_id
-        )
+        self._identity.report(app_id, "offline", "", "")
+        return {"account_id": self._identity.account_id(app_id)}
 
     async def detail(self, payload: dict[str, Any]) -> dict[str, Any]:
-        app_id = self._app_for_account(payload)
+        app_id = self._identity.app_for_account(payload)
         row = self._store.get(app_id)
         return {
             "app_id": app_id,
@@ -117,7 +119,7 @@ class _AccountCommandsMixin:
         }
 
     async def targets(self, payload: dict[str, Any]) -> dict[str, Any]:
-        app_id = self._app_for_account(payload)
+        app_id = self._identity.app_for_account(payload)
         row = self._store.get(app_id)
         return {
             "coverage": "observed_c2c_only",

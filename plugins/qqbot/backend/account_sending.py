@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
+if TYPE_CHECKING:
+    from .account_identity import QQBotAccountIdentity
+    from .channel import QQBotChannel
+
 
 class _AccountSendingMixin:
-    """Validate platform targets and return an acknowledged message ID."""
+    """Requires the composite's identity lookup and application channels."""
+
+    _identity: QQBotAccountIdentity
+    _channels: dict[str, QQBotChannel]
 
     async def send_target(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Send C2C content through the selected application account."""
-        app_id = self._app_for_account(payload)
+        app_id = self._identity.app_for_account(payload)
         channel = self._channels.get(app_id)
         if channel is None:
             raise RuntimeError("QQBot 应用账号未连接")

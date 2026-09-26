@@ -666,7 +666,7 @@ async def test_illegal_persisted_repeat_limit_fails_load_but_stays_repairable(
         await app.shutdown()
 
 
-_QQBOT_SECRET_REFERENCE = "${SHIORI_TEST_QQBOT_SECRET}"
+_CONFIG_SECRET_REFERENCE = "${SHIORI_TEST_CONFIG_SECRET}"
 
 
 def _config_fixture_reference_config() -> str:
@@ -674,7 +674,7 @@ def _config_fixture_reference_config() -> str:
         extra=(
             "\n[plugins.config_fixture]\n"
             'app_id = "app-old"\n'
-            f'client_secret = "{_QQBOT_SECRET_REFERENCE}"\n'
+            f'client_secret = "{_CONFIG_SECRET_REFERENCE}"\n'
         )
     )
 
@@ -684,7 +684,7 @@ async def test_get_returns_the_unexpanded_reference_and_its_env_status(
     tmp_path, monkeypatch
 ):
     """get 必须给出 config.toml 里的原始 ``${VAR}``，而不是运行时展开后的密钥。"""
-    monkeypatch.setenv("SHIORI_TEST_QQBOT_SECRET", "resolved-secret-value")
+    monkeypatch.setenv("SHIORI_TEST_CONFIG_SECRET", "resolved-secret-value")
     _stage_plugin_dirs(tmp_path, monkeypatch)
     service, _, app = await _start_service(tmp_path, _config_fixture_reference_config())
     try:
@@ -699,7 +699,7 @@ async def test_get_returns_the_unexpanded_reference_and_its_env_status(
         )
 
         assert response.error is None, response.error
-        assert response.payload["values"]["client_secret"] == _QQBOT_SECRET_REFERENCE
+        assert response.payload["values"]["client_secret"] == _CONFIG_SECRET_REFERENCE
         assert response.payload["env_status"] == {"client_secret": "set"}
         assert "resolved-secret-value" not in json.dumps(response.payload)
     finally:
@@ -709,7 +709,7 @@ async def test_get_returns_the_unexpanded_reference_and_its_env_status(
 
 @pytest.mark.asyncio
 async def test_get_reports_a_reference_whose_variable_is_not_set(tmp_path, monkeypatch):
-    monkeypatch.delenv("SHIORI_TEST_QQBOT_SECRET", raising=False)
+    monkeypatch.delenv("SHIORI_TEST_CONFIG_SECRET", raising=False)
     _stage_plugin_dirs(tmp_path, monkeypatch)
     service, _, app = await _start_service(tmp_path, _config_fixture_reference_config())
     try:
@@ -718,7 +718,7 @@ async def test_get_reports_a_reference_whose_variable_is_not_set(tmp_path, monke
         )
 
         assert response.error is None, response.error
-        assert response.payload["values"]["client_secret"] == _QQBOT_SECRET_REFERENCE
+        assert response.payload["values"]["client_secret"] == _CONFIG_SECRET_REFERENCE
         assert response.payload["env_status"] == {"client_secret": "unset"}
     finally:
         await service.aclose()
@@ -728,7 +728,7 @@ async def test_get_reports_a_reference_whose_variable_is_not_set(tmp_path, monke
 @pytest.mark.asyncio
 async def test_reference_survives_an_unrelated_field_edit(tmp_path, monkeypatch):
     """渲染端保存时整表回传：改一个无关字段不能把展开后的密钥明文写回文件。"""
-    monkeypatch.setenv("SHIORI_TEST_QQBOT_SECRET", "resolved-secret-value")
+    monkeypatch.setenv("SHIORI_TEST_CONFIG_SECRET", "resolved-secret-value")
     _stage_plugin_dirs(tmp_path, monkeypatch)
     service, path, app = await _start_service(
         tmp_path, _config_fixture_reference_config()
@@ -752,9 +752,9 @@ async def test_reference_survives_an_unrelated_field_edit(tmp_path, monkeypatch)
         assert response.error is None, response.error
         on_disk = path.read_text(encoding="utf-8")
         assert 'app_id = "app-new"' in on_disk
-        assert _QQBOT_SECRET_REFERENCE in on_disk
+        assert _CONFIG_SECRET_REFERENCE in on_disk
         assert "resolved-secret-value" not in on_disk
-        assert response.payload["values"]["client_secret"] == _QQBOT_SECRET_REFERENCE
+        assert response.payload["values"]["client_secret"] == _CONFIG_SECRET_REFERENCE
         assert response.payload["env_status"] == {"client_secret": "set"}
         assert "resolved-secret-value" not in json.dumps(response.payload)
         # 热应用后的运行时依旧拿到展开后的密钥。
@@ -769,7 +769,7 @@ async def test_reference_survives_an_unrelated_field_edit(tmp_path, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_a_typed_literal_replaces_the_reference(tmp_path, monkeypatch):
-    monkeypatch.setenv("SHIORI_TEST_QQBOT_SECRET", "resolved-secret-value")
+    monkeypatch.setenv("SHIORI_TEST_CONFIG_SECRET", "resolved-secret-value")
     _stage_plugin_dirs(tmp_path, monkeypatch)
     service, path, app = await _start_service(
         tmp_path, _config_fixture_reference_config()
@@ -788,7 +788,7 @@ async def test_a_typed_literal_replaces_the_reference(tmp_path, monkeypatch):
         assert response.error is None, response.error
         on_disk = path.read_text(encoding="utf-8")
         assert 'client_secret = "typed-literal"' in on_disk
-        assert _QQBOT_SECRET_REFERENCE not in on_disk
+        assert _CONFIG_SECRET_REFERENCE not in on_disk
         assert response.payload["env_status"] == {}
         assert app.config.plugins["config_fixture"]["client_secret"] == "typed-literal"
     finally:

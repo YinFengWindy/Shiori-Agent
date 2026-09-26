@@ -71,7 +71,7 @@ def test_qqbot_plugin_accepts_legacy_config_aliases() -> None:
 
     assert len(channels) == 1
     assert channels[0].name == "qqbot"
-    assert "app" in channels[0]._account_ids
+    assert channels[0]._identity.account_id("app")
 
 
 def test_qqbot_plugin_migrates_original_secret_reference() -> None:
@@ -103,7 +103,7 @@ def test_qqbot_plugin_migrates_original_secret_reference() -> None:
 
 def test_qqbot_plugin_does_not_migrate_incomplete_legacy_credentials() -> None:
     [channel] = _load_qqbot_channels({"qqbot": {"app_id": "app"}})
-    assert channel._account_ids == {}
+    assert channel._identity.account_id("app") == ""
 
 
 def test_qqbot_config_model_validates_directly() -> None:

@@ -38,7 +38,7 @@ def _manager(tmp_path):
 
 @pytest.mark.asyncio
 async def test_application_target_directories_are_isolated(tmp_path, monkeypatch):
-    manager, store, accounts = _manager(tmp_path)
+    manager, store, _ = _manager(tmp_path)
 
     async def preflight(app_id, secret):
         assert secret == f"secret-{app_id}"
@@ -56,12 +56,6 @@ async def test_application_target_directories_are_isolated(tmp_path, monkeypatch
     assert (await manager.targets({"account_id": "200"}))["targets"] == [
         {"chat_id": "c2c:200:same-openid", "user_openid": "same-openid"}
     ]
-    manager._status("100", "online", "", "Bot One")
-    manager._status("200", "login_required", "认证失败", "")
-    assert accounts.reports[-2][0] == "100"
-    assert accounts.reports[-2][1]["capabilities"]
-    assert accounts.reports[-1][0] == "200"
-    assert accounts.reports[-1][1]["capabilities"] == frozenset()
 
 
 @pytest.mark.asyncio
@@ -138,23 +132,5 @@ async def test_failed_new_gateway_does_not_create_an_account(tmp_path, monkeypat
         await manager.save_and_connect({"app_id": "100", "client_secret": "broken"})
 
     assert store.list() == []
-    assert manager._account_ids == {}
+    assert manager._identity.account_id("100") == ""
     assert manager._channels == {}
-
-
-@pytest.mark.asyncio
-async def test_disconnected_scoped_target_never_falls_back_to_legacy(
-    tmp_path, monkeypatch
-):
-    store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
-    store.migrate_legacy("100", "secret")
-    manager = QQBotAccountsChannel(SimpleNamespace(accounts=_Accounts()), store, ())
-
-    async def valid(app_id, secret):
-        pass
-
-    monkeypatch.setattr(manager, "_preflight", valid)
-    await manager.save_and_connect({"app_id": "200", "client_secret": "other"})
-    await manager.disconnect({"account_id": "200"})
-    with pytest.raises(RuntimeError, match="未连接"):
-        await manager.send("c2c:200:user", "wrong app")

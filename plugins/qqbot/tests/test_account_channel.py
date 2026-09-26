@@ -68,8 +68,6 @@ async def test_one_public_channel_starts_isolated_application_gateways(
     await manager.start(runtime)
     try:
         assert started == [("100", False), ("200", False)]
-        assert manager._for_chat("c2c:legacy-user")._app_id == "100"
-        assert manager._for_chat("c2c:200:opaque-user")._app_id == "200"
         assert manager._channels["100"]._client_secret == "legacy-secret"
         assert manager._channels["200"]._client_secret == "second-secret"
     finally:

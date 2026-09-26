@@ -49,3 +49,21 @@ it("labels observed C2C targets as application scoped OpenIDs", async () => {
     assert.deepEqual(calls.map((call) => call.method), ["account.detail", "account.targets"]);
   } finally { await view.cleanup(); }
 });
+
+it("restores disconnect control after reconnecting in the same detail", async () => {
+  const calls: Array<{ method: string; payload: Record<string, unknown> | undefined }> = [];
+  const account = { id: "100", platformAccountId: "100", displayName: "Bot One" } as AccountSnapshot;
+  const view = await mountTestComponent(<QQBotAccountDetail account={account} onChanged={() => undefined} client={fakeClient(calls)} host={desktopPluginHostServices} />);
+  try {
+    await act(async () => { await Promise.resolve(); });
+    const disconnect = () => Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "断开连接");
+    assert.ok(disconnect());
+    await act(async () => disconnect()?.click());
+    assert.equal(disconnect(), undefined);
+    const reconnect = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "保存并连接");
+    assert.ok(reconnect);
+    await act(async () => reconnect.click());
+    assert.ok(disconnect());
+    assert.deepEqual(calls.map((call) => call.method), ["account.detail", "account.targets", "account.disconnect", "account.save"]);
+  } finally { await view.cleanup(); }
+});

@@ -37,6 +37,7 @@ export function QQBotAccountDetail({ account, onChanged, client, host }: PluginA
         app_id: appId.trim(), client_secret: secret,
       });
       setSecret("");
+      setDetail((current) => current ? { ...current, connected: true } : current);
       onChanged(result.account_id);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));

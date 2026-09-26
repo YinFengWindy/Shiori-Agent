@@ -11,10 +11,11 @@ from plugins.qqbot.backend.account_sending import _AccountSendingMixin
 class _Sending(_AccountSendingMixin):
     def __init__(self, channel):
         self._channels = {"100": channel}
-
-    def _app_for_account(self, payload):
-        assert payload["account_id"] == "account-100"
-        return "100"
+        self._identity = SimpleNamespace(
+            app_for_account=lambda payload: (
+                "100" if payload["account_id"] == "account-100" else None
+            )
+        )
 
 
 @pytest.mark.asyncio
