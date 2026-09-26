@@ -54,8 +54,10 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     ``AkashaLastCommandModule.run()`` 内部重复判定。
     """
     from agent.plugin_host.role_memory_documents import register_role_memory_documents
+    from .role_memory import register_role_semantic_memory
 
     register_role_memory_documents(ctx)
+    register_role_semantic_memory(ctx)
 
     if not _is_memory_engine(ctx.memory_engine, "akasha"):
         return

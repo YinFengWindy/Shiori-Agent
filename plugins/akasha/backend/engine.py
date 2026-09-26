@@ -498,24 +498,29 @@ class AkashaMemoryEngine:
         sort_by: str = "created_at",
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
-        # 1. 过滤项先保持 MVP，只支持 q 和分页排序。
+        # Akasha 节点不提供 domain/status 等结构化筛选。
         _ = (
             memory_type,
             memory_domain,
             status,
             source_ref,
-            role_id,
             scope_channel,
             scope_chat_id,
             has_embedding,
         )
-        return self._store.list_items_for_admin(
+        matching_keys = (
+            self._matching_role_turn_keys(role_id, q) if role_id and q else None
+        )
+        items, total = self._store.list_items_for_admin(
+            role_id=role_id,
             q=q,
+            matching_keys=matching_keys,
             page=page,
             page_size=page_size,
             sort_by=sort_by,
             sort_order=sort_order,
         )
+        return self._with_turn_summaries(items), total
 
     # 管理工具读取 Akasha 节点详情。
     def get_item_for_admin(
@@ -527,6 +532,54 @@ class AkashaMemoryEngine:
         # 1. include_embedding 由 store MVP 忽略，避免返回大向量。
         _ = include_embedding
         return self._store.get_item_for_admin(item_id)
+
+    def get_role_item_for_admin(
+        self, item_id: str, *, role_id: str
+    ) -> dict[str, object] | None:
+        """Read one Akasha node only when it belongs to the requested role."""
+        item = self._store.get_item_for_admin(item_id, role_id=role_id)
+        if item is None:
+            return None
+        return self._with_turn_summaries([item])[0]
+
+    def _matching_role_turn_keys(self, role_id: str, query: str) -> list[str]:
+        """Find matching turn keys in source messages for one role's node sessions."""
+        sessions = self._store.list_role_session_keys(role_id)
+        if not sessions or not self._session_db_path.exists():
+            return []
+        escaped = (
+            query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        keys: set[str] = set()
+        with closing(sqlite3.connect(str(self._session_db_path))) as db:
+            for session_key in sessions:
+                rows = db.execute(
+                    "SELECT seq, role FROM messages WHERE session_key = ? "
+                    "AND content LIKE ? ESCAPE '\\' AND role IN ('user', 'assistant')",
+                    (session_key, f"%{escaped}%"),
+                ).fetchall()
+                for seq, message_role in rows:
+                    keys.add(turn_key(session_key, int(seq), str(message_role))[2])
+        return sorted(keys)
+
+    def _with_turn_summaries(
+        self, items: list[dict[str, object]]
+    ) -> list[dict[str, object]]:
+        """Display source text when available, while preserving node metadata."""
+        if not self._session_db_path.exists():
+            return items
+        previews = _load_messages_batch(
+            self._session_db_path,
+            [str(item["id"]) for item in items],
+            assistant_preview_chars=self._akasha_config.assistant_preview_chars,
+        )
+        for item in items:
+            user_text, assistant_text = previews.get(str(item["id"]), ("", ""))
+            if user_text or assistant_text:
+                item["summary"] = user_text or assistant_text
+                if assistant_text and user_text:
+                    item["assistant_preview"] = assistant_text
+        return items
 
     # 管理工具更新 Akasha 节点。
     def update_item_for_admin(
