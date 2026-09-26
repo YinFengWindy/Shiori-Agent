@@ -30,6 +30,7 @@ def test_group_event_preserves_account_group_and_member_identity():
         "sender_id": "902",
         "external_message_id": "45",
         "group_id": "777",
+        "mentioned": True,
     }
 
 
@@ -42,13 +43,17 @@ def test_group_trigger_uses_the_actual_account_qq_number():
         "user_id": 902,
         "raw_message": "hello",
     }
-    assert inbound_message(account_id="b", expected_uin="202", event=base) is None
+    unmentioned = inbound_message(account_id="b", expected_uin="202", event=base)
+    assert unmentioned is not None
+    assert unmentioned.metadata["mentioned"] is False
     wrong_at = {**base, "raw_message": "[CQ:at,qq=101] hello"}
-    assert inbound_message(account_id="b", expected_uin="202", event=wrong_at) is None
+    other_mention = inbound_message(account_id="b", expected_uin="202", event=wrong_at)
+    assert other_mention is not None
+    assert other_mention.metadata["mentioned"] is False
     addressed = {**base, "raw_message": "[CQ:at,qq=202] hello"}
-    assert (
-        inbound_message(account_id="b", expected_uin="202", event=addressed) is not None
-    )
+    own_mention = inbound_message(account_id="b", expected_uin="202", event=addressed)
+    assert own_mention is not None
+    assert own_mention.metadata["mentioned"] is True
 
 
 def test_other_account_event_is_rejected():

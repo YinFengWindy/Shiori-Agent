@@ -12,7 +12,8 @@ from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
 
 from .accounts_actions import QQAccountActions, qq_number
-from .accounts_channel import QQChannelIO
+from .accounts_inbound_adapter import QQInboundAdapter
+from .accounts_outbound_adapter import QQOutboundAdapter
 from .accounts_settings import QQAccountSettings, validate_endpoint
 from .accounts_store import QQAccountsStore, QQConnectionConfig
 from .channel.formatting import PUSH_TARGET_HINT
@@ -23,7 +24,7 @@ _CAPABILITIES = frozenset({"friends", "groups", "group_members", "send"})
 STATUS_CHECK_INTERVAL_SECONDS = 5.0
 
 
-class QQAccountsRuntime(QQAccountSettings, QQChannelIO):
+class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
     """Owns independently replaceable QQ connections and their host snapshots."""
 
     def __init__(self, store: QQAccountsStore, accounts: Any) -> None:

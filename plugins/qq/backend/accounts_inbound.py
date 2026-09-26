@@ -29,10 +29,6 @@ def inbound_message(
     )
     raw = event.get("raw_message")
     content = raw if isinstance(raw, str) else str(event.get("message") or "")
-    # QQ's transport default requires @bot; editable account response rules
-    # remain host-owned and are applied by the account router in #425.
-    if kind == "group" and not is_at_bot(content, expected_uin):
-        return None
     metadata = {
         "account_id": account_id,
         "platform_account_id": expected_uin,
@@ -42,6 +38,7 @@ def inbound_message(
     }
     if kind == "group":
         metadata["group_id"] = chat_id[4:]
+        metadata["mentioned"] = is_at_bot(content, expected_uin)
     return InboundMessage(
         channel="qq",
         sender=sender,
