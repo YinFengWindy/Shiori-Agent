@@ -3,7 +3,6 @@ import { useEffect } from "react";
 import { CloseIcon, DocumentIcon } from "../shared/icons";
 import { compactButtonSizeClass, compactPressableClass, cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass } from "../shared/styles";
 import type { RoleCardImportPreview } from "../shared/types";
-import { roleChipClass } from "./roleEditorStyles";
 import { RoleCardImportAssets } from "./RoleCardImportAssets";
 import { hasUnselectedEmotions } from "./roleCardImportSelectors";
 
@@ -73,9 +72,7 @@ export function RoleCardImportPreviewDialog({
   if (!open) return null;
 
   const character = preview.profile?.character;
-  const knowledge = preview.profile?.knowledge_base;
   const assets = (preview.assets ?? []).filter((asset) => asset.size !== undefined);
-  const entries = knowledge?.entries ?? [];
   const hasCharacterContent = Boolean(
     character?.profile || preview.description || character?.personality || character?.behavior_rules || character?.response_constraints,
   );
@@ -116,21 +113,11 @@ export function RoleCardImportPreviewDialog({
               ) : <p className="m-0 text-xs text-ink-faint">无</p>}
             </PreviewSection>
 
-            <PreviewSection title={`知识库 · ${entries.length}`}>
-              {entries.length ? (
-                <div className="grid">
-                  {entries.map((entry, index) => (
-                    <div className="grid gap-1.5 border-b border-line-soft py-2.5 text-xs first:pt-0 last:border-b-0 last:pb-0" key={entry.id ?? index}>
-                      <p className="m-0 line-clamp-3 whitespace-pre-wrap leading-5 text-ink-secondary">{entry.content || "空条目"}</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(entry.primary_keys ?? entry.keywords ?? []).map((keyword) => <span className={roleChipClass} key={keyword}>{keyword}</span>)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : <p className="m-0 text-xs text-ink-faint">无</p>}
-            </PreviewSection>
-
+            {(preview.report?.discarded_fields ?? []).length > 0 ? (
+              <PreviewSection title="未导入内容">
+                <p className="m-0 text-xs leading-5 text-ink-secondary">{preview.report?.discarded_fields?.join("、")}</p>
+              </PreviewSection>
+            ) : null}
             <PreviewSection title={`素材 · ${assets.length}`}>
               {assets.length ? (
                 <RoleCardImportAssets assets={assets} selections={selections} onSelectEmotion={onSelectEmotion} />

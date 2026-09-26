@@ -134,6 +134,10 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     是否激活只在装配时判定一次：``ctx.memory_engine`` 在同一次 kernel
     generation 内固定不变，与旧 ``initialize()`` 里的一次性判定效果等价。
     """
+    from agent.plugin_host.role_memory_documents import register_role_memory_documents
+
+    register_role_memory_documents(ctx)
+
     recorder = _DefaultMemoryRecorder(
         active=_is_memory_engine(ctx.memory_engine, "default"),
         data_path=_data_path(plugin_dir=ctx.plugin_dir, workspace=ctx.workspace),

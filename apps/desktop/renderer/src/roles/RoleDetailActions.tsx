@@ -5,6 +5,7 @@ import type { RoleDetailSaveState } from "./roleDetailSaveState";
 
 type RoleDetailActionsProps = {
   canGoToChat: boolean;
+  showEditorActions: boolean;
   saveState: RoleDetailSaveState;
   onGoToChat: () => void;
   onReset: () => void;
@@ -12,7 +13,7 @@ type RoleDetailActionsProps = {
 };
 
 /** The role header's labeled actions: 去聊天, 重置 and the primary 保存. */
-export function RoleDetailActions({ canGoToChat, saveState, onGoToChat, onReset, onSave }: RoleDetailActionsProps) {
+export function RoleDetailActions({ canGoToChat, showEditorActions, saveState, onGoToChat, onReset, onSave }: RoleDetailActionsProps) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <button
@@ -25,7 +26,7 @@ export function RoleDetailActions({ canGoToChat, saveState, onGoToChat, onReset,
         <ChatCircleDots className="h-4 w-4" weight="duotone" aria-hidden="true" />
         去聊天
       </button>
-      <button
+      {showEditorActions ? <button
         className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)}
         data-testid="reset-role-button"
         type="button"
@@ -34,8 +35,8 @@ export function RoleDetailActions({ canGoToChat, saveState, onGoToChat, onReset,
       >
         <ArrowCounterClockwise className="h-4 w-4" aria-hidden="true" />
         重置
-      </button>
-      <button
+      </button> : null}
+      {showEditorActions ? <button
         className={cx(primaryButtonSurfaceClass, compactButtonSizeClass, "min-w-[88px]")}
         data-testid="save-role-button"
         data-saving={saveState.saving ? "true" : "false"}
@@ -48,7 +49,7 @@ export function RoleDetailActions({ canGoToChat, saveState, onGoToChat, onReset,
           ? <SpinnerIcon className="h-4 w-4 animate-spin stroke-current" />
           : <FloppyDisk className="h-4 w-4" aria-hidden="true" />}
         {saveState.saveLabel}
-      </button>
+      </button> : null}
     </div>
   );
 }

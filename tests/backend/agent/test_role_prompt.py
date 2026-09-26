@@ -90,6 +90,5 @@ def test_role_system_section_expands_runtime_identity_and_places_constraints_las
 
     assert "Mira认识风" in section.content
     assert "回答风" in section.content
-    assert section.content.index("[role_knowledge]") < section.content.index(
-        "[role_response_constraints]"
-    )
+    assert "知识" not in section.content
+    assert "[role_knowledge]" not in section.content

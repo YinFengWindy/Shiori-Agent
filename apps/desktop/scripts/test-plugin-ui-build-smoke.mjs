@@ -6,11 +6,8 @@
  * windows, #181) and `renderer/src/background/pluginBackgroundModules.ts`
  * (headless always-resident background code, #226 item 1).
  *
- * The repo ships no `plugins/<id>/ui/`, `plugins/<id>/surface/` or
- * `plugins/<id>/background/` directory, so all three `import.meta.glob`
- * patterns (one wildcard segment for `<id>`, then a fixed suffix) match zero
- * files, and a plain `pnpm run build:renderer` succeeding proves nothing
- * about whether any of them resolves to the right place. This script creates
+ * The repo has built-in plugin UI entries, but may have no surface or
+ * background entries. This script creates
  * a throwaway plugin under the real top-level `plugins/` tree carrying all
  * three entry points, each with its own recognizable marker, runs a real
  * renderer build against it, asserts all three markers made it into the

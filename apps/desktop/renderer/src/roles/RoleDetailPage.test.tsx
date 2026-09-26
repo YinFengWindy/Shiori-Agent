@@ -41,7 +41,6 @@ const profileForm: RoleFormState = {
       personality: "Calm and precise.",
       behavior_rules: "Keep focus.",
     },
-    knowledge_base: { enabled: true, entries: [] },
   },
 };
 
@@ -57,6 +56,8 @@ describe("RoleDetailPage", () => {
     const markup = renderPage({ roleForm: profileForm, roleFormDirty: true });
 
     assert.match(markup, /资料/);
+    assert.match(markup, /记忆/);
+    assert.doesNotMatch(markup, /知识库/);
     assert.match(markup, /能力/);
     assert.match(markup, /渠道与主动推送/);
     assert.match(markup, /aria-current="page"[^>]*>.*资料/);

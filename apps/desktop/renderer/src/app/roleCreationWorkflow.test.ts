@@ -157,7 +157,6 @@ describe("runRoleCreation", () => {
         personality: "Calm and precise.",
         behavior_rules: "Use concise answers and cite the archive.",
       },
-      knowledge_base: { enabled: true, entries: [] },
     };
     const createdRole = createRole({ id: "manual-role", name: "Mira" });
     const harness = createHarness({
@@ -282,7 +281,6 @@ describe("role creation form actions", () => {
       systemPrompt: "",
       profile: {
         character: { profile: "", personality: "", behavior_rules: "", response_constraints: "" },
-        knowledge_base: { enabled: false, entries: [] },
       },
     });
     assert.deepEqual(feedback.messages("success"), ["已重置新建角色表单"]);
@@ -307,7 +305,6 @@ describe("role creation form actions", () => {
       systemPrompt: "",
       profile: {
         character: { profile: "", personality: "", behavior_rules: "", response_constraints: "" },
-        knowledge_base: { enabled: false, entries: [] },
       },
     });
     assert.deepEqual(feedback.entries, []);

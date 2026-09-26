@@ -14,8 +14,7 @@ type CharacterField = keyof NonNullable<RoleProfileDraft["character"]>;
 
 /**
  * Edits structured character fields as two groups: the setting itself, then
- * personality and rules. Every field grows with its text. The knowledge base
- * is managed in its own detail tab.
+ * personality and rules. Every field grows with its text.
  */
 export function RoleCardProfileForm({
   profile,

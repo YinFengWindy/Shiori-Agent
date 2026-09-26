@@ -213,7 +213,6 @@ class DesktopBridgeService:
         self.request_router = DesktopBridgeRequestRouter(
             roles=DesktopRoleRequestHandler(
                 role_service=self.role_service,
-                role_store=role_store,
                 role_presenter=self.role_presenter,
                 voice_handler=self.voice_handler,
                 card_import_service=self.role_card_import_service,

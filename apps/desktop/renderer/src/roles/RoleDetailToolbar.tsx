@@ -33,7 +33,7 @@ export function RoleDetailToolbar({ activeTab, canGoToChat, saveState, onBack, o
         <RoleDetailTabs activeTab={activeTab} onChange={onChangeTab} />
       </div>
       <div className="self-center">
-        <RoleDetailActions canGoToChat={canGoToChat} saveState={saveState} onGoToChat={onGoToChat} onReset={onReset} onSave={onSave} />
+        <RoleDetailActions canGoToChat={canGoToChat} showEditorActions={activeTab !== "memory"} saveState={saveState} onGoToChat={onGoToChat} onReset={onReset} onSave={onSave} />
       </div>
     </div>
   );

@@ -23,7 +23,7 @@ from agent.core.proactive_turn.gates import (
 from proactive_v2.config import ProactiveConfig
 
 
-def test_proactive_role_prompt_compiles_current_profile_and_always_active_knowledge(
+def test_proactive_role_prompt_compiles_current_profile_without_old_knowledge(
     tmp_path,
 ):
     store = RoleStore(tmp_path)
@@ -54,10 +54,8 @@ def test_proactive_role_prompt_compiles_current_profile_and_always_active_knowle
     prompt = resolve()
     assert prompt.startswith("[role_identity]\nMira")
     assert "小栞的资料" in prompt and "温柔" in prompt and "简洁回应用户" in prompt
-    assert "常驻知识" in prompt
-    assert prompt.index("[role_knowledge]") < prompt.index(
-        "[role_response_constraints]"
-    )
+    assert "常驻知识" not in prompt
+    assert "[role_knowledge]" not in prompt
     assert "过时的规则" not in prompt
     assert "消息关键词知识" not in prompt and "已停用知识" not in prompt
     assert "Mood Output Contract" not in prompt

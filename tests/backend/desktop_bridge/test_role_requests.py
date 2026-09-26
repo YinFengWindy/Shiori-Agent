@@ -27,7 +27,6 @@ async def test_role_card_preview_forwards_the_full_payload_to_its_service() -> N
     )
     handler = DesktopRoleRequestHandler(
         role_service=SimpleNamespace(),
-        role_store=SimpleNamespace(),
         role_presenter=SimpleNamespace(),
         voice_handler=SimpleNamespace(),
         card_import_service=card_import,
@@ -81,10 +80,16 @@ async def test_role_create_persists_structured_profile(tmp_path: Path) -> None:
     )
 
     assert response.error is None
-    assert response.payload["role"]["profile"] == {"version": 1, **profile}
+    assert response.payload["role"]["profile"] == {
+        "version": 1,
+        "character": profile["character"],
+    }
     persisted = role_store.get_role(response.payload["role"]["id"])
     assert persisted is not None
-    assert persisted.profile.to_dict() == {"version": 1, **profile}
+    assert persisted.profile.to_dict() == {
+        "version": 1,
+        "character": profile["character"],
+    }
 
     update = await service.handle(
         {
@@ -105,8 +110,7 @@ async def test_role_create_persists_structured_profile(tmp_path: Path) -> None:
 
     assert update.error is None
     assert update.payload["role"]["profile"]["character"] == profile["character"]
-    assert update.payload["role"]["profile"]["knowledge_base"]["enabled"] is False
-    assert "token_budget" not in update.payload["role"]["profile"]["knowledge_base"]
+    assert "knowledge_base" not in update.payload["role"]["profile"]
 
     cleared_rules = await service.handle(
         {
@@ -139,7 +143,6 @@ async def test_the_core_bridge_no_longer_answers_pet_package_methods() -> None:
     """
     handler = DesktopRoleRequestHandler(
         role_service=SimpleNamespace(),
-        role_store=SimpleNamespace(),
         role_presenter=SimpleNamespace(),
         voice_handler=SimpleNamespace(),
         card_import_service=SimpleNamespace(),

@@ -7,10 +7,7 @@ import { applyPluginUiModules, type PluginUiModule } from "./pluginUiModuleContr
  * exercised by the plain node:test/tsx unit test runner this repo uses for
  * everything else, so this file has no unit test of its own.
  *
- * The glob's path resolution and bundling are NOT proven by `pnpm run
- * build` alone — the repo currently has zero `plugins/<id>/ui/` directories,
- * so the glob below always matches nothing and the build would succeed
- * either way. They are instead proven by
+ * The glob's path resolution and bundling are also proven by
  * `apps/desktop/scripts/test-plugin-ui-build-smoke.mjs` (run via
  * `pnpm run desktop:test:plugin-ui` from the repo root), which writes a
  * throwaway `plugins/<id>/ui/index.tsx` with a marker string, runs a real

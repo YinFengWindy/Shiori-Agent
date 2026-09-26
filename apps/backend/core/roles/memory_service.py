@@ -29,6 +29,35 @@ class RoleMemoryService:
     def memory_root(self, role_id: str) -> Path:
         return self._workspace / "roles" / normalize_role_id(role_id) / "memory"
 
+    def read_documents(self, role_id: str) -> list[dict[str, str]]:
+        """Read the five role-owned documents without creating or changing them."""
+        root = self.memory_root(role_id)
+        documents: list[dict[str, str]] = []
+        for name in self._FILES:
+            path = root / name
+            try:
+                content = path.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                documents.append({"name": name, "status": "missing", "content": ""})
+            except (OSError, UnicodeError) as error:
+                documents.append(
+                    {
+                        "name": name,
+                        "status": "error",
+                        "content": "",
+                        "error": str(error),
+                    }
+                )
+            else:
+                documents.append(
+                    {
+                        "name": name,
+                        "status": "empty" if not content.strip() else "ready",
+                        "content": content,
+                    }
+                )
+        return documents
+
     def ensure_initialized(self, role: RoleRecord) -> Path:
         root = self.memory_root(role.id)
         ensure_memory_documents(root)

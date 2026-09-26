@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import re
-from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
-from .lorebook_adapter import normalize_lorebook
 from .asset_adapter import normalize_assets
 from .models import ImportProvenance, RoleCardImportPreview, RoleCardImportReport
 
@@ -29,7 +27,6 @@ def adapt_json(
     description = _first_text(data, "description")
     personality = _first_text(data, "personality")
     rules = _first_text(data, "system_prompt")
-    entries, lore_discarded = normalize_lorebook(data.get("character_book"))
     profile = {
         "version": 1,
         "character": {
@@ -39,22 +36,11 @@ def adapt_json(
             "response_constraints": _first_text(data, "post_history_instructions"),
             "nickname": _first_text(data, "nickname"),
         },
-        "knowledge_base": {
-            "enabled": False,
-            "entries": entries,
-            "raw_source": (
-                deepcopy(data["character_book"])
-                if isinstance(data.get("character_book"), dict)
-                else {}
-            ),
-        },
     }
     adapted = ["name", "description", "personality", "system_prompt"]
     if data.get("post_history_instructions"):
         adapted.append("post_history_instructions -> response_constraints")
-    if data.get("character_book"):
-        adapted.append("character_book")
-    discarded = list(lore_discarded)
+    discarded = ["character_book"] if "character_book" in data else []
     for field in ("first_mes", "first_message", "alternate_greetings"):
         if data.get(field):
             discarded.append(field)

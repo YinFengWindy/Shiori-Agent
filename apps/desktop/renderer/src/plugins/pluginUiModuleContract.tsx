@@ -11,6 +11,7 @@ import {
   type PluginNavPageProps,
   type PluginNavPageSidebarProps,
   type PluginRoleAssetsProps,
+  type PluginRoleMemoryProps,
 } from "./pluginUiRegistry";
 
 /**
@@ -63,6 +64,14 @@ export type PluginRoleAssetsContribution = {
   component: React.ComponentType<PluginRoleAssetsComponentProps>;
 };
 
+/** Props a memory plugin's role-detail Dashboard receives with its scoped RPC client. */
+export type PluginRoleMemoryComponentProps = PluginRoleMemoryProps & PluginInjectedProps;
+
+/** A memory plugin's role.memory contribution. */
+export type PluginRoleMemoryContribution = {
+  component: React.ComponentType<PluginRoleMemoryComponentProps>;
+};
+
 export type PluginNavPageContribution = {
   label: string;
   icon?: React.ComponentType<{ className?: string }>;
@@ -86,6 +95,7 @@ export type PluginUiModule = {
   settingsSection?: PluginSettingsSectionContribution;
   navPage?: PluginNavPageContribution;
   roleAssets?: PluginRoleAssetsContribution;
+  roleMemory?: PluginRoleMemoryContribution;
   roleSettings?: PluginRoleSettingsContribution;
   chatImageActions?: React.ComponentType<PluginChatImageActionProps>;
 };
@@ -128,7 +138,7 @@ export function applyPluginUiModules(
       console.error(`[pluginUiModules] ${path} 的默认导出不是合法的 PluginUiModule，已跳过`);
       continue;
     }
-    const { pluginId, settingsSection, navPage, roleAssets } = uiModule;
+    const { pluginId, settingsSection, navPage, roleAssets, roleMemory } = uiModule;
     if (uiModule.roleSettings) pluginRoleSettingsRegistry.register({ pluginId, ...uiModule.roleSettings });
     if (uiModule.chatImageActions) pluginChatImageActionsRegistry.register({
       pluginId, Component: uiModule.chatImageActions,
@@ -161,6 +171,14 @@ export function applyPluginUiModules(
         id: pluginId,
         pluginId,
         Component: bindPluginClient(pluginId, roleAssets.component),
+      });
+    }
+    if (roleMemory) {
+      registry.registerRoleMemoryPanel({
+        slot: "role.memory",
+        id: pluginId,
+        pluginId,
+        Component: bindPluginClient(pluginId, roleMemory.component),
       });
     }
     if (navPage) {

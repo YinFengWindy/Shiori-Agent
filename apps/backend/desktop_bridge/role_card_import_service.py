@@ -182,7 +182,7 @@ class DesktopRoleCardImportService:
         if preview.provenance is not None:
             profile["import_provenance"] = preview.provenance.to_dict()
         overrides = raw_overrides if isinstance(raw_overrides, dict) else {}
-        for section in ("character", "knowledge_base"):
+        for section in ("character",):
             value = overrides.get(section)
             if isinstance(value, dict):
                 profile[section] = {**dict(profile.get(section) or {}), **value}

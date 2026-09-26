@@ -53,6 +53,10 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     与旧 ``is_active()`` 每次调用时动态判定的效果等价，因此不再需要
     ``AkashaLastCommandModule.run()`` 内部重复判定。
     """
+    from agent.plugin_host.role_memory_documents import register_role_memory_documents
+
+    register_role_memory_documents(ctx)
+
     if not _is_memory_engine(ctx.memory_engine, "akasha"):
         return
     ctx.bot_commands.add("akashalast", "查看上一轮 Akasha 检索诊断")

@@ -14,10 +14,9 @@ describe("RoleCardProfileForm", () => {
       assert.equal(details.querySelector("textarea")?.value, "细心");
     } finally { await view.cleanup(); }
   });
-  it("edits response constraints independently while retaining imported knowledge", async () => {
+  it("edits response constraints independently", async () => {
     const profile: RoleProfileDraft = {
       character: { profile: "档案管理员", behavior_rules: "诚实", response_constraints: "简洁" },
-      knowledge_base: { enabled: false, entries: [{ content: "图书馆位置" }] },
     };
     let updated = profile;
     const view = await mountTestComponent(<RoleCardProfileForm profile={profile} onUpdate={(next) => { updated = next; }} />);
@@ -30,7 +29,6 @@ describe("RoleCardProfileForm", () => {
       assert.equal(updated.character?.response_constraints, "每次回复一句");
       assert.equal(updated.character?.behavior_rules, "诚实");
       assert.equal(updated.character?.profile, "档案管理员");
-      assert.deepEqual(updated.knowledge_base, profile.knowledge_base);
     } finally {
       await view.cleanup();
     }

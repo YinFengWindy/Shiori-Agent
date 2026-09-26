@@ -14,10 +14,6 @@ export const roleFieldLabelClass = "grid gap-1.5 text-caption text-ink-muted";
 /** Section heading used at the top of each role editor group. */
 export const roleSectionTitleClass = "m-0 text-title-sm text-ink";
 
-/** Small keyword chip used by knowledge entries. */
-export const roleChipClass =
-  "inline-flex max-w-full items-center truncate rounded-full bg-surface-soft px-2.5 py-1 text-caption leading-4 text-ink-secondary";
-
 /** Compact quiet action rendered beside section headings (添加, 编辑参数). */
 export const rolePanelGhostButtonClass = cx(
   pressableClass,

@@ -1,7 +1,7 @@
 from core.roles.card_import.json_adapter import adapt_json
 
 
-def test_import_keeps_constraints_attribution_and_original_lorebook_separate():
+def test_import_keeps_constraints_attribution_and_discards_lorebook():
     book = {
         "scan_depth": 7,
         "recursive_scanning": True,
@@ -37,11 +37,9 @@ def test_import_keeps_constraints_attribution_and_original_lorebook_separate():
         == "{{char}} sees {{user}} and {{unknown}}"
     )
     assert preview.profile["character"]["response_constraints"] == "Stay brief"
-    knowledge = preview.profile["knowledge_base"]
-    assert knowledge["enabled"] is False
-    assert "token_budget" not in knowledge
-    assert knowledge["raw_source"] == book
-    assert knowledge["entries"][0]["raw_source"] == book["entries"][0]
+    assert "knowledge_base" not in preview.profile
+    assert "character_book" in preview.report.discarded_fields
+    assert "character_book" not in preview.report.adapted_fields
     assert preview.report.unsupported_macros == ("{{unknown}}",)
     assert preview.provenance.creator == "Author"
     assert preview.provenance.tags == ["Fantasy"]

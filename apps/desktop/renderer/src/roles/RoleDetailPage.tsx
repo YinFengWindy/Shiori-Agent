@@ -10,7 +10,7 @@ import { RoleDetailHeader } from "./RoleDetailHeader";
 import { selectRoleDetailSaveState } from "./roleDetailSaveState";
 import type { RoleDetailTabId } from "./RoleDetailTabs";
 import { RoleDetailToolbar } from "./RoleDetailToolbar";
-import { RoleKnowledgePanel } from "./RoleKnowledgePanel";
+import { RoleMemoryPanel } from "./RoleMemoryPanel";
 import { RoleProfilePanel } from "./RoleProfilePanel";
 
 type RoleDetailPageProps = {
@@ -85,8 +85,8 @@ export function RoleDetailPage({
       onUpdate={updateRoleForm}
       onModelChanged={onRoleModelChanged}
     />
-  ) : activeTab === "knowledge" ? (
-    <RoleKnowledgePanel roleForm={roleForm} onUpdate={updateRoleForm} />
+  ) : activeTab === "memory" ? (
+    <RoleMemoryPanel roleId={activeRoleId} bridgeReady={bridgeReady} />
   ) : activeTab === "capabilities" ? (
     <RoleCapabilitiesPanel activeRole={activeRole} bridgeReady={bridgeReady} roleForm={roleForm} onUpdate={updateRoleForm} />
   ) : (

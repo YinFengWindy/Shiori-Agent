@@ -9,7 +9,7 @@ export function selectRoleCreateState(form: NewRoleFormState, imported: RoleCard
   return {
     formDirty: Boolean(form.avatarSource !== undefined || form.importId || form.name.trim() || form.description.trim() || form.systemPrompt.trim()
       || character?.profile?.trim() || character?.personality?.trim() || character?.behavior_rules?.trim()
-      || character?.response_constraints?.trim() || form.profile?.knowledge_base?.entries?.length),
+      || character?.response_constraints?.trim()),
     needsEmotionChoice: hasUnselectedEmotions(assets, form.emotionSelections ?? {}),
     previewImagePath: assets.find((asset) => asset.kind === "avatar" && asset.preview_abs)?.preview_abs ?? "",
   };

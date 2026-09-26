@@ -1,101 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from copy import deepcopy
 from typing import Any
 
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
-
-
-@dataclass
-class RoleKnowledgeEntry:
-    """One normalized Lorebook entry used by the role prompt compiler."""
-
-    content: str
-    title: str = ""
-    primary_keys: list[str] = field(default_factory=list)
-    secondary_keys: list[str] = field(default_factory=list)
-    enabled: bool = True
-    always_active: bool = False
-    case_sensitive: bool = False
-    priority: int = 0
-    insertion_order: int = 0
-    id: str = ""
-    raw_source: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "title": self.title,
-            "content": self.content,
-            "primary_keys": list(self.primary_keys),
-            "secondary_keys": list(self.secondary_keys),
-            "enabled": self.enabled,
-            "always_active": self.always_active,
-            "case_sensitive": self.case_sensitive,
-            "priority": self.priority,
-            "insertion_order": self.insertion_order,
-            "raw_source": deepcopy(self.raw_source),
-        }
-
-    @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "RoleKnowledgeEntry":
-        def words(name: str) -> list[str]:
-            value = payload.get(name, [])
-            if isinstance(value, str):
-                value = [value]
-            return (
-                [_text(item) for item in value if _text(item)]
-                if isinstance(value, list)
-                else []
-            )
-
-        return cls(
-            id=_text(payload.get("id")),
-            title=_text(payload.get("title")),
-            content=_text(payload.get("content")),
-            primary_keys=words("primary_keys"),
-            secondary_keys=words("secondary_keys"),
-            enabled=bool(payload.get("enabled", True)),
-            always_active=bool(payload.get("always_active", False)),
-            case_sensitive=bool(payload.get("case_sensitive", False)),
-            priority=int(payload.get("priority") or 0),
-            insertion_order=int(payload.get("insertion_order") or 0),
-            raw_source=deepcopy(payload.get("raw_source") or {}),
-        )
-
-
-@dataclass
-class RoleKnowledgeBase:
-    """Role-owned normalized Lorebook settings and entries."""
-
-    enabled: bool = False
-    entries: list[RoleKnowledgeEntry] = field(default_factory=list)
-    raw_source: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "enabled": self.enabled,
-            "entries": [entry.to_dict() for entry in self.entries],
-            "raw_source": deepcopy(self.raw_source),
-        }
-
-    @classmethod
-    def from_dict(cls, payload: Any) -> "RoleKnowledgeBase":
-        data = payload if isinstance(payload, dict) else {}
-        raw_entries = data.get("entries", [])
-        entries = [
-            RoleKnowledgeEntry.from_dict(item)
-            for item in raw_entries
-            if isinstance(item, dict)
-        ]
-        return cls(
-            enabled=bool(data.get("enabled", False)),
-            entries=entries,
-            raw_source=deepcopy(data.get("raw_source") or {}),
-        )
 
 
 @dataclass
@@ -179,14 +89,12 @@ class RoleProfile:
 
     version: int = 1
     character: RoleCharacterDefinition = field(default_factory=RoleCharacterDefinition)
-    knowledge_base: RoleKnowledgeBase = field(default_factory=RoleKnowledgeBase)
     import_provenance: ImportProvenance | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "version": int(self.version),
             "character": self.character.to_dict(),
-            "knowledge_base": self.knowledge_base.to_dict(),
         }
         if self.import_provenance is not None:
             payload["import_provenance"] = self.import_provenance.to_dict()
@@ -198,7 +106,6 @@ class RoleProfile:
         return cls(
             version=max(1, int(data.get("version") or 1)),
             character=RoleCharacterDefinition.from_dict(data.get("character")),
-            knowledge_base=RoleKnowledgeBase.from_dict(data.get("knowledge_base")),
             import_provenance=ImportProvenance.from_dict(data.get("import_provenance")),
         )
 
