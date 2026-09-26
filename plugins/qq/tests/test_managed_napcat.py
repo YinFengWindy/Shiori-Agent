@@ -95,7 +95,7 @@ async def test_managed_status_uses_official_png_instead_of_scan_url(
     manager._processes[ref] = process
     scan_url = "https://ssl.ptlogin2.qq.com/ptqrlogin?token=account-c"
     image = io.BytesIO()
-    qrcode.make(scan_url).save(image, format="PNG")
+    qrcode.make(scan_url).save(image)
     qr_path = manager._files.account_dir(ref) / "napcat/cache/qrcode.png"
     qr_path.parent.mkdir(parents=True)
     qr_path.write_bytes(image.getvalue())
@@ -129,7 +129,7 @@ async def test_refresh_rejects_missing_or_stale_png(
     ref = "d" * 32
     if old_image_present:
         image = io.BytesIO()
-        qrcode.make("old-url").save(image, format="PNG")
+        qrcode.make("old-url").save(image)
         qr_path = manager._files.account_dir(ref) / "napcat/cache/qrcode.png"
         qr_path.parent.mkdir(parents=True)
         qr_path.write_bytes(image.getvalue())

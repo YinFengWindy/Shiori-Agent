@@ -13,7 +13,7 @@ from plugins.qq.backend.napcat_qrcode import NapCatQrCache
 
 def _qr_png(value: str) -> bytes:
     output = io.BytesIO()
-    qrcode.make(value).save(output, format="PNG")
+    qrcode.make(value).save(output)
     return output.getvalue()
 
 
