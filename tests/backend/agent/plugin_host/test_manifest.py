@@ -420,4 +420,6 @@ def test_manifest_limits_dynamic_instances_to_declared_prefix(tmp_path):
             manifest.channel_chat_types(name)
     declarations = declared_chat_types([manifest])
     assert declarations.get("demo_one") == manifest.channels[0].chat_types
+    assert declarations.get("demo_") is None
+    assert declarations.get("demo.unauthorized") is None
     assert declarations.get("other_one") is None

@@ -59,6 +59,18 @@ DEFAULT_ENTRY = "backend/plugin.py"
 
 # 渠道名同时是角色绑定、会话线程与消息引用的数据键，限定为可移植的小写标识
 _CHANNEL_NAME = re.compile(r"[a-z][a-z0-9_-]{0,63}")
+
+
+def matches_channel_instance(name: object, prefix: str) -> bool:
+    """Checks whether a generated channel name belongs to a declared prefix."""
+    return (
+        isinstance(name, str)
+        and name.startswith(prefix)
+        and len(name) > len(prefix)
+        and _CHANNEL_NAME.fullmatch(name) is not None
+    )
+
+
 # 宿主自有渠道，插件不能声明
 RESERVED_CHANNEL_NAMES = frozenset({"desktop"})
 _CHANNEL_REQUIRED_FIELDS = ("name", "label")
@@ -152,9 +164,7 @@ class PluginManifest:
                 if item.name == name
                 or (
                     item.instance_prefix
-                    and name.startswith(item.instance_prefix)
-                    and len(name) > len(item.instance_prefix)
-                    and _CHANNEL_NAME.fullmatch(name)
+                    and matches_channel_instance(name, item.instance_prefix)
                 )
             ),
             None,
@@ -397,11 +407,7 @@ class _DeclaredChatTypes(dict[str, tuple[ChatTypeDeclaration, ...]]):
 
     def __missing__(self, name: str) -> tuple[ChatTypeDeclaration, ...]:
         for prefix, chat_types in self._prefixes:
-            if (
-                name.startswith(prefix)
-                and len(name) > len(prefix)
-                and _CHANNEL_NAME.fullmatch(name)
-            ):
+            if matches_channel_instance(name, prefix):
                 return chat_types
         raise KeyError(name)
 

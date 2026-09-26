@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-import re
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.effects import EffectScope
+from agent.plugin_host.manifest import matches_channel_instance
 from agent.plugin_host.tool_hooks import PluginToolHook, build_hook_name
 
 if TYPE_CHECKING:
@@ -247,11 +247,7 @@ class ChannelsCapability:
     def add(self, channel: "Channel") -> None:
         name = getattr(channel, "name", None)
         prefixed_instance = any(
-            isinstance(name, str)
-            and name.startswith(prefix)
-            and len(name) > len(prefix)
-            and re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", name)
-            for prefix in self._instance_prefixes
+            matches_channel_instance(name, prefix) for prefix in self._instance_prefixes
         )
         # Account instances keep the declared provider prefix while receiving
         # separate transport names. The trusted plugin registers account_id.

@@ -20,7 +20,11 @@ from dataclasses import replace
 from typing import Any
 
 from agent.plugin_host.kernel import PluginKernel
-from agent.plugin_host.manifest import ChannelDeclaration, PluginManifest
+from agent.plugin_host.manifest import (
+    ChannelDeclaration,
+    PluginManifest,
+    matches_channel_instance,
+)
 from bootstrap.app import AppRuntime
 from bootstrap.channel_host import ChannelSnapshot
 
@@ -102,10 +106,8 @@ class RuntimeChannelListing:
                     )
                 if enabled and plugin_state == "ACTIVE" and declaration.instance_prefix:
                     for instance_name, entry in snapshot.items():
-                        if (
-                            instance_name in seen
-                            or not instance_name.startswith(declaration.instance_prefix)
-                            or len(instance_name) <= len(declaration.instance_prefix)
+                        if instance_name in seen or not matches_channel_instance(
+                            instance_name, declaration.instance_prefix
                         ):
                             continue
                         seen.add(instance_name)
