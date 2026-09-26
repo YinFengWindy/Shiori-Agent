@@ -14,7 +14,7 @@ def test_group_event_preserves_account_group_and_member_identity():
             "group_id": 777,
             "user_id": 902,
             "message_id": 45,
-            "raw_message": "hello",
+            "raw_message": "[CQ:at,qq=101] hello",
         },
     )
     assert message is not None
@@ -31,6 +31,24 @@ def test_group_event_preserves_account_group_and_member_identity():
         "external_message_id": "45",
         "group_id": "777",
     }
+
+
+def test_group_trigger_uses_the_actual_account_qq_number():
+    base = {
+        "post_type": "message",
+        "message_type": "group",
+        "self_id": 202,
+        "group_id": 777,
+        "user_id": 902,
+        "raw_message": "hello",
+    }
+    assert inbound_message(account_id="b", expected_uin="202", event=base) is None
+    wrong_at = {**base, "raw_message": "[CQ:at,qq=101] hello"}
+    assert inbound_message(account_id="b", expected_uin="202", event=wrong_at) is None
+    addressed = {**base, "raw_message": "[CQ:at,qq=202] hello"}
+    assert (
+        inbound_message(account_id="b", expected_uin="202", event=addressed) is not None
+    )
 
 
 def test_other_account_event_is_rejected():

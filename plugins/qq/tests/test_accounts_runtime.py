@@ -46,9 +46,14 @@ class _Socket:
         self.closed = False
         self.waiting = asyncio.Event()
         self.calls: list[tuple[str, dict]] = []
+        self.online = True
 
     async def call(self, action, params=None):
         self.calls.append((action, params or {}))
+        if action == "get_status":
+            return {"online": self.online}
+        if action == "get_login_info":
+            return {"user_id": int(self.identity), "nickname": "bot"}
         if action == "get_friend_list":
             return [{"user_id": 901, "nickname": f"friend-{self.identity}"}]
         if action == "get_group_list":
@@ -169,13 +174,22 @@ async def test_two_accounts_keep_identity_discovery_send_and_events_isolated(
             "user_id": 902,
             "group_id": 777,
             "message_id": 12,
-            "raw_message": "hello",
+            "raw_message": "[CQ:at,qq=202] hello",
         },
     )
     assert [(msg.metadata["account_id"], msg.chat_id) for msg in bus.inbound] == [
         (a, "901"),
         (b, "gqq:777"),
     ]
+
+    sockets["101"].online = False
+    with pytest.raises(OneBotAuthError, match="尚未登录"):
+        await runtime.discover(a, "friends")
+    assert accounts.states[a] == "login_required"
+    assert (await runtime.send_target(b, "private", "901", "still online")) == {
+        "message_id": "202"
+    }
+    assert accounts.states[b] == "online"
 
     await runtime.disconnect(a)
     assert accounts.states[a] == "offline"
@@ -215,6 +229,86 @@ async def test_identity_mismatch_preserves_old_socket_and_saved_identity(
     assert not old.closed
     assert runtime._configs[first["ref"]].expected_uin == "101"
     await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_failed_pending_connection_keeps_active_credentials_after_restart(
+    monkeypatch, tmp_path
+):
+    store = QQAccountsStore(tmp_path)
+    runtime = QQAccountsRuntime(store, _Accounts())
+    active = _Socket("101")
+
+    async def verified(_ref, config):
+        if config.ws_uri.endswith("3002"):
+            raise OneBotError("replacement credentials rejected")
+        return active, {"user_id": 101, "nickname": "bot"}
+
+    monkeypatch.setattr(runtime, "_verified_socket", verified)
+    ref = (
+        await runtime.save_draft(
+            {
+                "ws_uri": "ws://localhost:3001",
+                "ws_token": "working-token",
+            }
+        )
+    )["ref"]
+    account_id = (await runtime.connect_saved(ref))["account_id"]
+    await runtime.save_draft(
+        {
+            "account_id": account_id,
+            "ws_uri": "ws://localhost:3002",
+            "ws_token": "bad-token",
+        }
+    )
+    saved = store.load()[ref]
+    assert (saved.ws_uri, saved.ws_token, saved.auto_connect) == (
+        "ws://localhost:3001",
+        "working-token",
+        True,
+    )
+    assert saved.pending is not None
+    assert (saved.pending.ws_uri, saved.pending.ws_token) == (
+        "ws://localhost:3002",
+        "bad-token",
+    )
+    assert runtime.settings(ref=ref)["account"]["ws_uri"] == "ws://localhost:3002"
+    with pytest.raises(OneBotError, match="replacement credentials rejected"):
+        await runtime.connect_saved(ref)
+    assert runtime._sockets[ref] is active
+    assert not active.closed
+    assert store.load()[ref] == saved
+    await runtime.stop()
+
+    restarted = QQAccountsRuntime(store, _Accounts())
+    restored = _Socket("101")
+    used = []
+
+    async def restore(_ref, config):
+        used.append((config.ws_uri, config.ws_token))
+        return restored, {"user_id": 101, "nickname": "bot"}
+
+    monkeypatch.setattr(restarted, "_verified_socket", restore)
+    bus = _Bus()
+    push_tool = SimpleNamespace(
+        register_channel=lambda *_a, **_k: None,
+        unregister_channel=lambda *_a, **_k: None,
+    )
+    await restarted.start(
+        SimpleNamespace(
+            bus=bus,
+            push_tool=push_tool,
+            intake_paused=False,
+            channel_hub=None,
+        )
+    )
+    for _ in range(20):
+        if restarted._sockets.get(ref) is restored:
+            break
+        await asyncio.sleep(0)
+    assert used == [("ws://localhost:3001", "working-token")]
+    assert store.load()[ref].pending == saved.pending
+    await restarted.stop()
 
 
 @pytest.mark.asyncio
@@ -413,6 +507,131 @@ async def test_saved_account_reports_auth_failure_without_claiming_online(
 
 
 @pytest.mark.asyncio
+async def test_socket_alive_logout_blocks_actions_and_updates_account_status(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        "plugins.qq.backend.accounts_runtime.STATUS_CHECK_INTERVAL_SECONDS", 0.01
+    )
+    accounts = _Accounts()
+    runtime = QQAccountsRuntime(QQAccountsStore(tmp_path), accounts)
+    bus = _Bus()
+    push_tool = SimpleNamespace(
+        register_channel=lambda *_a, **_k: None,
+        unregister_channel=lambda *_a, **_k: None,
+    )
+    await runtime.start(
+        SimpleNamespace(
+            bus=bus,
+            push_tool=push_tool,
+            intake_paused=False,
+            channel_hub=None,
+        )
+    )
+    socket = _Socket("101")
+    monkeypatch.setattr(
+        runtime,
+        "_verified_socket",
+        AsyncMock(
+            side_effect=[
+                (socket, {"user_id": 101, "nickname": "bot"}),
+                OneBotAuthError("QQ 尚未登录"),
+            ]
+        ),
+    )
+    ref = (await runtime.save_draft({"ws_uri": "ws://localhost:3001"}))["ref"]
+    account_id = (await runtime.connect_saved(ref))["account_id"]
+    socket.online = False
+    with pytest.raises(OneBotAuthError, match="尚未登录"):
+        await runtime.send_target(account_id, "private", "901", "blocked")
+    assert accounts.states[account_id] == "login_required"
+    assert not any(action == "send_private_msg" for action, _ in socket.calls)
+    await runtime._on_socket_event(
+        ref,
+        socket,
+        {
+            "post_type": "message",
+            "message_type": "private",
+            "self_id": 101,
+            "user_id": 901,
+            "raw_message": "must not arrive",
+        },
+    )
+    assert bus.inbound == []
+    with pytest.raises(OneBotError, match="不在线"):
+        await runtime.discover(account_id, "friends")
+    for _ in range(50):
+        if socket.closed:
+            break
+        await asyncio.sleep(0.01)
+    assert socket.closed
+    assert any(state == "login_required" for _, state, _ in accounts.reports)
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_periodic_status_check_detects_logout_without_an_account_action(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        "plugins.qq.backend.accounts_runtime.STATUS_CHECK_INTERVAL_SECONDS", 0.01
+    )
+    accounts = _Accounts()
+    runtime = QQAccountsRuntime(QQAccountsStore(tmp_path), accounts)
+    socket = _Socket("101")
+    monkeypatch.setattr(
+        runtime,
+        "_verified_socket",
+        AsyncMock(
+            side_effect=[
+                (socket, {"user_id": 101, "nickname": "bot"}),
+                OneBotAuthError("QQ 尚未登录"),
+            ]
+        ),
+    )
+    ref = (await runtime.save_draft({"ws_uri": "ws://localhost:3001"}))["ref"]
+    account_id = (await runtime.connect_saved(ref))["account_id"]
+    socket.online = False
+    for _ in range(50):
+        if socket.closed:
+            break
+        await asyncio.sleep(0.01)
+    assert socket.closed
+    assert any(
+        row_id == account_id and state == "login_required"
+        for row_id, state, _ in accounts.reports
+    )
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_socket_alive_identity_switch_cannot_send_as_the_old_account(
+    monkeypatch, tmp_path
+):
+    accounts = _Accounts()
+    runtime = QQAccountsRuntime(QQAccountsStore(tmp_path), accounts)
+    socket = _Socket("101")
+    monkeypatch.setattr(
+        runtime,
+        "_verified_socket",
+        AsyncMock(
+            return_value=(
+                socket,
+                {"user_id": 101, "nickname": "bot"},
+            )
+        ),
+    )
+    ref = (await runtime.save_draft({"ws_uri": "ws://localhost:3001"}))["ref"]
+    account_id = (await runtime.connect_saved(ref))["account_id"]
+    socket.identity = "202"
+    with pytest.raises(OneBotError, match="身份与账号记录不匹配"):
+        await runtime.send_target(account_id, "private", "901", "blocked")
+    assert accounts.states[account_id] == "error"
+    assert not any(action == "send_private_msg" for action, _ in socket.calls)
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
 async def test_manual_connection_reader_failure_reports_error_and_reconnects(
     monkeypatch, tmp_path
 ):
@@ -509,7 +728,15 @@ async def test_platform_failure_and_missing_receipt_are_not_reported_as_success(
     )
     ref = (await runtime.save_draft({"ws_uri": "ws://localhost:3001"}))["ref"]
     account_id = (await runtime.connect_saved(ref))["account_id"]
-    socket.call = AsyncMock(return_value={})
+
+    async def missing_receipt(action, _params=None):
+        if action == "get_status":
+            return {"online": True}
+        if action == "get_login_info":
+            return {"user_id": 101}
+        return {}
+
+    socket.call = AsyncMock(side_effect=missing_receipt)
     with pytest.raises(ValueError, match="消息回执"):
         await runtime.send_target(account_id, "private", "901", "hello")
     with pytest.raises(ValueError, match="目标 ID"):

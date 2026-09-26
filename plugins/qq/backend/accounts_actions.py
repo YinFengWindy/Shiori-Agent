@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .onebot import OneBotError, OneBotSocket
@@ -19,6 +19,13 @@ def qq_number(value: object, label: str) -> str:
     return number
 
 
+def qq_chat_target(chat_id: str) -> tuple[str, str]:
+    """Converts the QQ channel's private/group chat ID into a platform target."""
+    if chat_id.startswith("gqq:"):
+        return "group", qq_number(chat_id[4:], "群号")
+    return "private", qq_number(chat_id, "QQ 号")
+
+
 def _rows(data: object, action: str) -> list[dict[str, Any]]:
     if not isinstance(data, list) or any(not isinstance(row, dict) for row in data):
         raise OneBotError(f"NapCat {action} 返回了无效列表")
@@ -28,13 +35,19 @@ def _rows(data: object, action: str) -> list[dict[str, Any]]:
 class QQAccountActions:
     """Per-account NapCat actions with no shared target or response cache."""
 
-    def __init__(self, socket_for: Callable[[str], OneBotSocket]) -> None:
+    def __init__(
+        self,
+        socket_for: Callable[[str], OneBotSocket],
+        ensure_online: Callable[[str], Awaitable[None]],
+    ) -> None:
         self._socket_for = socket_for
+        self._ensure_online = ensure_online
 
     async def discover(
         self, account_id: str, kind: str, group_id: str = ""
     ) -> dict[str, Any]:
         """Returns fresh platform IDs and an explicit complete-result boundary."""
+        await self._ensure_online(account_id)
         socket = self._socket_for(account_id)
         if kind == "friends":
             action, params, id_field, name_field = (
@@ -73,6 +86,7 @@ class QQAccountActions:
         self, account_id: str, kind: str, target_id: str, message: str
     ) -> dict[str, str]:
         """Sends via one verified account and requires NapCat's real receipt."""
+        await self._ensure_online(account_id)
         socket = self._socket_for(account_id)
         if not message.strip():
             raise ValueError("消息不能为空")

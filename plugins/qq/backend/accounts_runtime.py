@@ -6,36 +6,25 @@ import asyncio
 import logging
 from dataclasses import replace
 from typing import Any
-from urllib.parse import urlsplit
 from uuid import uuid4
 
-from bus.events import InboundMessage, OutboundMessage
 from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
 
 from .accounts_actions import QQAccountActions, qq_number
-from .accounts_inbound import inbound_message
+from .accounts_channel import QQChannelIO
+from .accounts_settings import QQAccountSettings, validate_endpoint
 from .accounts_store import QQAccountsStore, QQConnectionConfig
 from .channel.formatting import PUSH_TARGET_HINT
-from .channel.compat import download_to_temp, extract_cq_images
-from .channel.group_filter import strip_at_segments
 from .onebot import OneBotAuthError, OneBotError, OneBotSocket
 
 logger = logging.getLogger(__name__)
 _CAPABILITIES = frozenset({"friends", "groups", "group_members", "send"})
+STATUS_CHECK_INTERVAL_SECONDS = 5.0
 
 
-def _endpoint(uri: str) -> str:
-    parsed = urlsplit(uri)
-    if parsed.scheme not in {"ws", "wss"} or not parsed.hostname:
-        raise ValueError("NapCat 地址必须是 ws:// 或 wss:// WebSocket 地址")
-    return uri
-
-
-class QQAccountsRuntime:
+class QQAccountsRuntime(QQAccountSettings, QQChannelIO):
     """Owns independently replaceable QQ connections and their host snapshots."""
-
-    name = "qq"
 
     def __init__(self, store: QQAccountsStore, accounts: Any) -> None:
         self._store = store
@@ -50,7 +39,7 @@ class QQAccountsRuntime:
         self._ctx: ChannelContext | None = None
         self._stopping = False
         self._intakes: dict[str, ChannelIntake] = {}
-        self._actions = QQAccountActions(self._socket_for)
+        self._actions = QQAccountActions(self._socket_for, self._ensure_online)
         for ref, config in self._configs.items():
             if config.verified and config.expected_uin:
                 snapshot = self._accounts.register(
@@ -103,52 +92,6 @@ class QQAccountsRuntime:
             self._ctx.push_tool.unregister_channel(self.name)
             self._ctx = None
 
-    def pause_intake(self) -> None:
-        """Buffers incoming messages during host generation replacement."""
-        for intake in self._intakes.values():
-            intake.pause()
-
-    def resume_intake(self) -> None:
-        """Resumes incoming messages after host generation replacement."""
-        for intake in self._intakes.values():
-            intake.resume()
-
-    def _start_intake(self, ref: str) -> None:
-        if ref in self._intakes:
-            return
-
-        async def send_notice(chat_id: str, message: str) -> str:
-            kind = "group" if chat_id.startswith("gqq:") else "private"
-            target = chat_id[4:] if kind == "group" else chat_id
-            return (
-                await self._actions.send_target(self._ids[ref], kind, target, message)
-            )["message_id"]
-
-        intake = ChannelIntake(self._accept_inbound, send_notice)
-        intake.start(paused=self._ctx.intake_paused if self._ctx else False)
-        self._intakes[ref] = intake
-
-    def status(self) -> dict[str, bool | str]:
-        """Legacy channel status only; account rows carry the detailed state."""
-        return {"connected": any(not sock.closed for sock in self._sockets.values())}
-
-    def settings(
-        self, account_id: str | None = None, ref: str | None = None
-    ) -> dict[str, Any]:
-        """Returns safe editable fields without returning an access token."""
-        if account_id is None and ref is None:
-            return {
-                "accounts": [
-                    self._public_config(key, row) for key, row in self._configs.items()
-                ]
-            }
-        selected = self._ref_for(account_id) if account_id else str(ref)
-        return {"account": self._public_config(selected, self._configs[selected])}
-
-    def _public_config(self, ref: str, config: QQConnectionConfig) -> dict[str, Any]:
-        connection, error = self._states.get(ref, ("offline", ""))
-        return {**config.public_dict(), "connection": connection, "error": error}
-
     def _ref_for(self, account_id: str) -> str:
         try:
             return next(ref for ref, known in self._ids.items() if known == account_id)
@@ -181,7 +124,7 @@ class QQAccountsRuntime:
                     except BaseException:
                         await socket.close()
                         raise
-                await socket.wait_closed()
+                await self._monitor_socket(ref, socket)
                 if not self._stopping:
                     self._states[ref] = ("offline", "")
                     self._accounts.report(self._ids[ref], connection="offline")
@@ -203,7 +146,7 @@ class QQAccountsRuntime:
         self, ref: str, config: QQConnectionConfig
     ) -> tuple[OneBotSocket, dict[str, Any]]:
         socket = OneBotSocket(
-            _endpoint(config.ws_uri),
+            validate_endpoint(config.ws_uri),
             config.ws_token,
             config.timeout_seconds,
             lambda event: self._on_socket_event(ref, socket, event),
@@ -270,61 +213,26 @@ class QQAccountsRuntime:
         self._start_intake(ref)
         return snapshot.record.id
 
-    async def save_draft(self, payload: dict[str, Any]) -> dict[str, str]:
-        """Persists a draft without changing the current live connection."""
-        account_id = str(payload.get("account_id") or "")
-        supplied_ref = str(payload.get("ref") or "")
-        ref = (
-            self._ref_for(account_id)
-            if account_id
-            else supplied_ref or self._store.new_ref()
-        )
-        if supplied_ref and supplied_ref not in self._configs:
-            raise KeyError("QQ 配置引用不存在")
-        if account_id and supplied_ref and supplied_ref != ref:
-            raise ValueError("QQ 账号与配置引用不匹配")
-        if not account_id and supplied_ref and self._configs[ref].verified:
-            raise PermissionError("已验证 QQ 账号必须按账号 ID 编辑")
-        old = self._configs.get(ref)
-        uri = _endpoint(str(payload.get("ws_uri") or "").strip())
-        token = (
-            ""
-            if payload.get("clear_token") is True
-            else str(payload.get("ws_token") or (old.ws_token if old else ""))
-        )
-        timeout = float(payload.get("timeout_seconds", 5.0))
-        if timeout <= 0:
-            raise ValueError("连接超时必须大于零")
-        config = QQConnectionConfig(
-            ref,
-            uri,
-            token,
-            expected_uin=old.expected_uin if old else "",
-            display_name=old.display_name if old else "",
-            timeout_seconds=timeout,
-            auto_connect=False,
-            verified=old.verified if old else False,
-        )
-        async with self._locks.setdefault(ref, asyncio.Lock()):
-            self._store.save({**self._configs, ref: config})
-            self._configs[ref] = config
-            if ref not in self._sockets:
-                task = self._tasks.pop(ref, None)
-                if task is not None:
-                    task.cancel()
-                if ref in self._ids:
-                    self._accounts.report(self._ids[ref], connection="offline")
-                self._states[ref] = ("offline", "")
-            return {"ref": ref}
-
     async def connect_saved(self, ref: str) -> dict[str, str]:
         """Verifies a saved draft, then atomically replaces that account's socket."""
         if ref not in self._configs:
             raise KeyError("QQ 配置引用不存在")
         async with self._locks.setdefault(ref, asyncio.Lock()):
             config = self._configs[ref]
+            pending = config.pending
+            candidate = (
+                replace(
+                    config,
+                    ws_uri=pending.ws_uri,
+                    ws_token=pending.ws_token,
+                    timeout_seconds=pending.timeout_seconds,
+                    pending=None,
+                )
+                if pending is not None
+                else config
+            )
             try:
-                socket, identity = await self._verified_socket(ref, config)
+                socket, identity = await self._verified_socket(ref, candidate)
             except Exception as exc:
                 if ref not in self._sockets:
                     state = "login_required" if _is_auth_failure(exc) else "error"
@@ -336,7 +244,7 @@ class QQAccountsRuntime:
                 raise
             try:
                 previous = self._sockets.get(ref)
-                result_id = self._activate(ref, config, socket, identity)
+                result_id = self._activate(ref, candidate, socket, identity)
             except BaseException:
                 await socket.close()
                 raise
@@ -356,7 +264,7 @@ class QQAccountsRuntime:
     async def _watch(self, ref: str, socket: OneBotSocket) -> None:
         failure: Exception | None = None
         try:
-            await socket.wait_closed()
+            await self._monitor_socket(ref, socket)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -396,27 +304,71 @@ class QQAccountsRuntime:
         self._states[ref] = ("offline", "")
         self._accounts.report(account_id, connection="offline")
 
-    async def remove_draft(self, ref: str) -> None:
-        """Discards only an unverified, stopped connection draft."""
-        config = self._configs[ref]
-        if ref == "legacy":
-            raise PermissionError("旧 QQ 配置仍在宿主设置中，不能删除迁移记录")
-        if config.verified or config.auto_connect or ref in self._sockets:
-            raise PermissionError("已验证或运行中的 QQ 账号不能作为草稿删除")
-        self._store.save({key: row for key, row in self._configs.items() if key != ref})
-        del self._configs[ref]
-        self._states.pop(ref, None)
-        intake = self._intakes.pop(ref, None)
-        if intake is not None:
-            await intake.close()
-        self._locks.pop(ref, None)
-
     def _socket_for(self, account_id: str) -> OneBotSocket:
         ref = self._ref_for(account_id)
         socket = self._sockets.get(ref)
-        if socket is None or socket.closed:
+        if (
+            socket is None
+            or socket.closed
+            or self._states.get(ref, ("offline", ""))[0] != "online"
+        ):
             raise OneBotError("QQ 账号不在线")
         return socket
+
+    async def _ensure_online(self, account_id: str) -> None:
+        ref = self._ref_for(account_id)
+        socket = self._socket_for(account_id)
+        await self._check_online(ref, socket)
+
+    async def _check_online(self, ref: str, socket: OneBotSocket) -> None:
+        try:
+            status = await socket.call("get_status")
+            if not isinstance(status, dict) or status.get("online") is not True:
+                raise OneBotAuthError("NapCat 已连接但 QQ 尚未登录")
+            try:
+                identity = await socket.call("get_login_info")
+            except OneBotError as exc:
+                raise OneBotAuthError(f"NapCat 登录身份查询失败: {exc}") from exc
+            if (
+                not isinstance(identity, dict)
+                or qq_number(identity.get("user_id"), "登录 QQ 号")
+                != self._configs[ref].expected_uin
+            ):
+                raise OneBotError("NapCat 当前 QQ 身份与账号记录不匹配")
+        except Exception as exc:
+            if self._sockets.get(ref) is socket:
+                state = "login_required" if _is_auth_failure(exc) else "error"
+                self._states[ref] = (state, str(exc))
+                self._accounts.report(self._ids[ref], connection=state, error=str(exc))
+            raise
+        if self._sockets.get(ref) is socket and self._states[ref][0] != "online":
+            self._states[ref] = ("online", "")
+            self._accounts.report(
+                self._ids[ref], connection="online", capabilities=_CAPABILITIES
+            )
+
+    async def _monitor_socket(self, ref: str, socket: OneBotSocket) -> None:
+        closed = asyncio.create_task(socket.wait_closed())
+        try:
+            while True:
+                done, _ = await asyncio.wait(
+                    {closed}, timeout=STATUS_CHECK_INTERVAL_SECONDS
+                )
+                if done:
+                    await closed
+                    return
+                try:
+                    await self._check_online(ref, socket)
+                except Exception:
+                    try:
+                        await socket.close()
+                    except Exception:
+                        logger.exception("[qq] 账号 %s 状态故障连接关闭失败", ref)
+                    raise
+        finally:
+            if not closed.done():
+                closed.cancel()
+                await asyncio.gather(closed, return_exceptions=True)
 
     async def discover(
         self, account_id: str, kind: str, group_id: str = ""
@@ -429,96 +381,6 @@ class QQAccountsRuntime:
     ) -> dict[str, str]:
         """Dispatches a target send through this account's socket."""
         return await self._actions.send_target(account_id, kind, target_id, message)
-
-    async def _send_legacy(self, chat_id: str, message: str) -> str:
-        if len(self._configs) != 1:
-            raise OneBotError("QQ 多账号发送需要明确指定账号")
-        online = [ref for ref, socket in self._sockets.items() if not socket.closed]
-        if len(online) != 1:
-            raise OneBotError("QQ 账号不在线")
-        kind = "group" if chat_id.startswith("gqq:") else "private"
-        target = chat_id[4:] if kind == "group" else chat_id
-        return (
-            await self._actions.send_target(self._ids[online[0]], kind, target, message)
-        )["message_id"]
-
-    async def _send_with_metadata(
-        self, chat_id: str, message: str, metadata: dict[str, object]
-    ) -> str:
-        account_id = str(metadata.get("account_id") or "")
-        if not account_id:
-            return await self._send_legacy(chat_id, message)
-        kind = "group" if chat_id.startswith("gqq:") else "private"
-        target = chat_id[4:] if kind == "group" else chat_id
-        return (await self.send_target(account_id, kind, target, message))["message_id"]
-
-    async def _on_response(self, msg: OutboundMessage) -> None:
-        try:
-            message_id = await self._send_with_metadata(
-                msg.chat_id, msg.content, msg.metadata
-            )
-        except Exception:
-            self._mark_delivery(msg, "failed")
-            raise
-        self._mark_delivery(msg, "sent", message_id)
-
-    def _mark_delivery(
-        self, msg: OutboundMessage, status: str, message_id: str = ""
-    ) -> None:
-        hub = self._ctx.channel_hub if self._ctx else None
-        if hub is not None:
-            hub.mark_delivery(
-                msg,
-                default_channel=self.name,
-                delivery_status=status,
-                external_message_id=message_id,
-            )
-
-    async def _on_event(self, ref: str, event: dict[str, Any]) -> None:
-        if ref not in self._ids:
-            return
-        message = inbound_message(
-            account_id=self._ids[ref],
-            expected_uin=self._configs[ref].expected_uin,
-            event=event,
-        )
-        if message is not None:
-            await self._intakes[ref].submit(message)
-
-    async def _on_socket_event(
-        self, ref: str, socket: OneBotSocket, event: dict[str, Any]
-    ) -> None:
-        if self._sockets.get(ref) is socket:
-            await self._on_event(ref, event)
-
-    async def _accept_inbound(self, message: InboundMessage) -> None:
-        ctx = self._ctx
-        if ctx is None:
-            return
-        hub = ctx.channel_hub
-        if hub is not None:
-            if not hub.is_sender_allowed(
-                channel=self.name, chat_id=message.chat_id, sender_id=message.sender
-            ):
-                return
-        raw = (
-            strip_at_segments(message.content)
-            if message.metadata.get("chat_type") == "group"
-            else message.content
-        )
-        text, image_urls = extract_cq_images(raw)
-        media = (
-            await download_to_temp(
-                image_urls, ctx.http_resources.external_default, ctx.attachment_store
-            )
-            if image_urls
-            else []
-        )
-        message = replace(message, content=text, media=media)
-        if hub is not None:
-            message = hub.route_inbound(message)
-        if not message.metadata.get("conversation_duplicate"):
-            await ctx.bus.publish_inbound(message)
 
 
 def _is_auth_failure(error: Exception) -> bool:

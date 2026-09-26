@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from plugins.qq.backend.accounts_store import QQAccountsStore, QQConnectionConfig
+from plugins.qq.backend.accounts_store import (
+    QQAccountsStore,
+    QQConnectionConfig,
+    QQPendingConnection,
+)
 
 
 def test_legacy_connection_migrates_once_without_overwriting_private_edits(tmp_path):
@@ -54,3 +58,20 @@ def test_migration_does_not_duplicate_an_existing_qq_identity(tmp_path):
         timeout_seconds=5,
     )
     assert migrated == {"already": existing}
+
+
+def test_pending_credentials_round_trip_without_replacing_active_connection(tmp_path):
+    store = QQAccountsStore(tmp_path)
+    config = QQConnectionConfig(
+        "account",
+        "ws://active:3001",
+        "working",
+        expected_uin="101",
+        verified=True,
+        pending=QQPendingConnection("ws://pending:3002", "new", 7),
+    )
+    store.save({config.ref: config})
+    assert store.load()[config.ref] == config
+    public = store.load()[config.ref].public_dict()
+    assert public["ws_uri"] == "ws://pending:3002"
+    assert "working" not in str(public) and "new" not in str(public)

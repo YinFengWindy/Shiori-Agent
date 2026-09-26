@@ -12,6 +12,15 @@ from infra.persistence.json_store import atomic_save_json
 
 
 @dataclass(frozen=True)
+class QQPendingConnection:
+    """Saved replacement credentials that have not passed QQ identity checks."""
+
+    ws_uri: str
+    ws_token: str
+    timeout_seconds: float
+
+
+@dataclass(frozen=True)
 class QQConnectionConfig:
     """A stable private reference and the QQ identity verified on first login."""
 
@@ -23,18 +32,21 @@ class QQConnectionConfig:
     timeout_seconds: float = 5.0
     auto_connect: bool = True
     verified: bool = False
+    pending: QQPendingConnection | None = None
 
     def public_dict(self) -> dict[str, str | float | bool]:
         """Projects editable settings without exposing the access token."""
+        editable = self.pending or self
         return {
             "ref": self.ref,
-            "ws_uri": self.ws_uri,
+            "ws_uri": editable.ws_uri,
             "expected_uin": self.expected_uin,
             "display_name": self.display_name,
-            "timeout_seconds": self.timeout_seconds,
-            "has_token": bool(self.ws_token),
+            "timeout_seconds": editable.timeout_seconds,
+            "has_token": bool(editable.ws_token),
             "auto_connect": self.auto_connect,
             "verified": self.verified,
+            "pending": self.pending is not None,
         }
 
 
@@ -53,7 +65,25 @@ class QQAccountsStore:
             document.get("accounts"), list
         ):
             raise ValueError("QQ 账号配置格式无效")
-        accounts = [QQConnectionConfig(**row) for row in document["accounts"]]
+        accounts = []
+        for row in document["accounts"]:
+            if not isinstance(row, dict):
+                raise ValueError("QQ 账号配置条目无效")
+            pending = row.get("pending")
+            if pending is not None and not isinstance(pending, dict):
+                raise ValueError("QQ 待连接配置无效")
+            accounts.append(
+                QQConnectionConfig(
+                    **{
+                        **row,
+                        "pending": (
+                            QQPendingConnection(**pending)
+                            if isinstance(pending, dict)
+                            else None
+                        ),
+                    }
+                )
+            )
         if len({row.ref for row in accounts}) != len(accounts):
             raise ValueError("QQ 账号配置引用重复")
         return {row.ref: row for row in accounts}

@@ -126,7 +126,7 @@ class OneBotSocket:
     async def wait_closed(self) -> None:
         """Waits for an unplanned socket close."""
         if self._reader is not None:
-            await self._reader
+            await asyncio.shield(self._reader)
 
     async def close(self) -> None:
         """Closes this one connection and settles its pending API requests."""
