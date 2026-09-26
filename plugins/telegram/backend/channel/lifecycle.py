@@ -110,7 +110,14 @@ class TelegramChannel(
         self.user_map: dict[str, str] = {}
         if session_manager is not None:
             self._bind_session_manager(session_manager)
-        self._app = Application.builder().token(token).build()
+        if accounts is None:
+            self._app = Application.builder().token(token).build()
+        else:
+            from .polling import ObservedBot
+
+            self._app = (
+                Application.builder().bot(ObservedBot(token, self.mark_online)).build()
+            )
         self._bot_commands = bot_commands or []
         self._app.add_handler(CommandHandler("stop", self._on_stop_command))
         self._app.add_handler(
