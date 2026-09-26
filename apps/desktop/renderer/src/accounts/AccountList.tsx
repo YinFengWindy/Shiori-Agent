@@ -35,8 +35,8 @@ export function AccountList({ title, accounts, error, onRefresh, onAdd, emptyLab
       </button>
       {showConnectionAction ? <button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)}
         disabled={!account.pluginEnabled}
-        aria-label={`${account.connection === "online" ? "断开连接" : "连接"} ${account.displayName || account.platformAccountId}`}
-        onClick={() => setSelected(account)}>{account.connection === "online" ? "断开连接" : "连接"}</button> : null}
+        aria-label={`管理 ${account.displayName || account.platformAccountId} 的连接`}
+        onClick={() => setSelected(account)}>管理连接</button> : null}
     </div>)}
     {selected ? <AccountDetailDialog key={selected.id} account={accounts?.find((item) => item.id === selected.id) ?? selected} pluginId={selected.pluginId} onClose={() => setSelected(null)} onChanged={onRefresh} /> : null}
   </section>;

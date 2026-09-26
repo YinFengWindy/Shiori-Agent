@@ -27,8 +27,9 @@ test("owned account connection action opens the shared platform controls", async
     } } },
   );
   try {
-    const action = view.container.querySelector<HTMLButtonElement>('[aria-label="断开连接 Owned"]');
+    const action = view.container.querySelector<HTMLButtonElement>('[aria-label="管理 Owned 的连接"]');
     assert.ok(action);
+    assert.equal(action.textContent, "管理连接");
     await act(async () => action.click());
     assert.match(document.querySelector('[role="dialog"]')?.textContent ?? "", /平台操作 account-1/);
   } finally {
