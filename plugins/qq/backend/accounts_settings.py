@@ -10,7 +10,12 @@ from urllib.parse import urlsplit
 
 from infra.channels.intake import ChannelIntake
 
-from .accounts_store import QQAccountsStore, QQConnectionConfig, QQPendingConnection
+from .accounts_store import (
+    QQAccountsStore,
+    QQConnectionConfig,
+    QQConnectionMode,
+    QQPendingConnection,
+)
 from .napcat_installer import managed_available
 from .onebot import OneBotSocket
 
@@ -77,9 +82,12 @@ class QQAccountSettings:
         if not account_id and supplied_ref and self._configs[ref].verified:
             raise PermissionError("已验证 QQ 账号必须按账号 ID 编辑")
         old = self._configs.get(ref)
-        mode = str(payload.get("mode") or (old.mode if old else "external"))
-        if mode not in {"external", "managed"}:
+        requested_mode = str(payload.get("mode") or (old.mode if old else "external"))
+        if requested_mode not in {"external", "managed"}:
             raise ValueError("QQ 连接模式无效")
+        mode: QQConnectionMode = (
+            "managed" if requested_mode == "managed" else "external"
+        )
         if mode == "managed" and not managed_available():
             raise RuntimeError("托管 NapCat 仅支持 Windows x64")
         if old is not None and old.verified and mode != old.mode:

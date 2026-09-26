@@ -41,6 +41,7 @@ test("QQ detail saves a draft before explicitly connecting it", async () => {
 
 test("QQ managed mode saves without an external endpoint and starts independently", async () => {
   const calls: Array<{ method: string; payload: Record<string, unknown> | undefined }> = [];
+  const qrImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZcV8AAAAASUVORK5CYII=";
   const client = {
     ...createPluginRpcClient("qq"),
     async call<T>(method: string, payload?: Record<string, unknown>): Promise<T> {
@@ -49,8 +50,8 @@ test("QQ managed mode saves without an external endpoint and starts independentl
       if (method === "accounts.save") return { ref: "a".repeat(32) } as T;
       if (method === "accounts.connect") return { ref: "a".repeat(32), account_id: "" } as T;
       if (method === "accounts.managed_status") return {
-        preparation: { stage: "downloading", percent: 42, version: "v4.18.28" },
-        login: { phase: "stopped", qrcode: "", error: "" }, connection: "offline", error: "",
+        preparation: { stage: "ready", percent: 100, version: "v4.18.28" },
+        login: { phase: "login_required", qrcode: qrImage, error: "" }, connection: "login_required", error: "",
       } as T;
       throw new Error(method);
     },
@@ -65,6 +66,7 @@ test("QQ managed mode saves without an external endpoint and starts independentl
     await act(async () => { button("保存")?.click(); });
     assert.equal(calls.find((row) => row.method === "accounts.save")?.payload?.mode, "managed");
     assert.equal(calls.find((row) => row.method === "accounts.save")?.payload?.ws_uri, "");
+    assert.equal(view.container.querySelector<HTMLImageElement>('img[alt="QQ 登录二维码"]')?.getAttribute("src"), qrImage);
     await act(async () => { button("连接")?.click(); });
     assert.ok(calls.some((row) => row.method === "accounts.connect"));
   } finally { await view.cleanup(); }

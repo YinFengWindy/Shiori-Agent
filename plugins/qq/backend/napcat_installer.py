@@ -40,11 +40,20 @@ class NapCatInstaller:
 
     def preparation(self) -> dict[str, Any]:
         """Returns the current installer stage without blocking the UI."""
-        if self._ready():
+        if self._package_ready():
+            try:
+                self._check_native_dependencies()
+            except RuntimeError as exc:
+                return {
+                    "stage": "error",
+                    "percent": 0,
+                    "version": VERSION,
+                    "error": str(exc),
+                }
             return {"stage": "ready", "percent": 100, "version": VERSION}
         return {**self._preparation, "version": VERSION}
 
-    def _ready(self) -> bool:
+    def _package_ready(self) -> bool:
         marker = self.install_dir / "shiori-install.json"
         if not marker.is_file():
             return False
@@ -64,13 +73,25 @@ class NapCatInstaller:
         if not managed_available():
             raise RuntimeError("托管 NapCat 仅支持 Windows x64")
         async with self._install_lock:
-            if self._ready():
-                return
             try:
-                await asyncio.to_thread(self._prepare_sync)
+                if not self._package_ready():
+                    await asyncio.to_thread(self._prepare_sync)
+                self._check_native_dependencies()
             except Exception as exc:
                 self._preparation = {"stage": "error", "percent": 0, "error": str(exc)}
                 raise
+            self._preparation = {"stage": "ready", "percent": 100}
+
+    def _check_native_dependencies(self) -> None:
+        missing = [
+            name
+            for name in ("crypto.dll", "ssl.dll")
+            if not (self.install_dir / name).is_file() and shutil.which(name) is None
+        ]
+        if missing:
+            raise RuntimeError(
+                "NapCat 官方 Windows Node 包缺少原生 QQ 依赖: " + ", ".join(missing)
+            )
 
     def _prepare_sync(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -125,7 +146,7 @@ class NapCatInstaller:
             if self.install_dir.exists():
                 shutil.rmtree(self.install_dir)
             staging.replace(self.install_dir)
-            self._preparation = {"stage": "ready", "percent": 100}
+            self._preparation = {"stage": "verifying", "percent": 99}
         finally:
             if staging.exists():
                 shutil.rmtree(staging)
