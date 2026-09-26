@@ -120,11 +120,13 @@ class LiveCardStreamer:
             return
         self._spawn(session_key, self._sync(session_key))
 
-    async def finish(self, session_key: str, text: str) -> str | None:
+    async def finish(self, session_key: str, text: str) -> tuple[str, str] | None:
         """Writes the final reply into the live card and ends streaming mode.
 
         Returns ``None`` when no live card took the reply (the caller sends it
-        normally), else the part that did not fit into the card (maybe empty).
+        normally), else its retained message ID and the part that did not fit
+        into the card (maybe empty). Read the receipt after in-flight sends
+        finish, and only return it when finalization keeps that card.
         A card whose final frame fails is recalled so the caller's fallback
         does not show the reply twice.
         """
@@ -136,7 +138,7 @@ class LiveCardStreamer:
         chunks = split_markdown(text.strip()) if text.strip() else [card.shown]
         head, rest = chunks[0], "".join(chunks[1:])
         if head.strip() and await self._finalize(card, head):
-            return rest
+            return card.message_id, rest
         await self._recall(card)
         return None
 

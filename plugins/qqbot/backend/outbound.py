@@ -27,48 +27,54 @@ class _OutboundMixin:
             msg.chat_id,
             str(msg.metadata.get("external_message_id") or ""),
         )
-        sent_as_stream = False
+        first_id: str | None = None
         try:
             await self._finish_live_tasks(turn_key)
             if turn_key in self._live_states:
                 if msg.content.strip():
-                    sent_as_stream = bool(
-                        await self._finish_stream(
-                            self._live_states[turn_key], msg.content
-                        )
+                    first_id = await self._finish_stream(
+                        self._live_states[turn_key], msg.content
                     )
                 else:
                     # An unfinished preview next to the fallback message would
                     # show the reply twice, so withdraw it first.
                     await self._prepare_stream_fallback(self._live_states[turn_key])
-            if msg.content.strip() and not sent_as_stream:
-                _ = await self.send(msg.chat_id, msg.content)
+            if msg.content.strip() and not first_id:
+                first_id = await self.send(msg.chat_id, msg.content)
             for image in msg.media:
-                _ = await self.send_image(msg.chat_id, image)
+                image_id = await self.send_image(msg.chat_id, image)
+                first_id = first_id or image_id
         except asyncio.CancelledError:
-            self._record_delivery_status(msg, "failed")
-            await self._cleanup_cancelled_stream(self._live_states.get(turn_key))
+            state = self._live_states.get(turn_key)
+            # The shielded terminal write can acknowledge before propagating
+            # cancellation. Completed streams are retained; partial ones are recalled.
+            if state is not None and state.completed:
+                first_id = first_id or state.stream_msg_id
+            self._record_delivery_status(msg, "failed", first_id)
+            await self._cleanup_cancelled_stream(state)
             raise
         except Exception as exc:
-            self._record_delivery_status(msg, "failed")
+            self._record_delivery_status(msg, "failed", first_id)
             # This boundary has already exhausted safe stream recovery. A bus
             # replay can duplicate a preview, a fallback, or an earlier image.
             raise NonRetryableDeliveryError(
                 f"QQBot 投递失败，禁止自动重发：{exc}"
             ) from exc
         else:
-            self._record_delivery_status(msg, "sent")
+            self._record_delivery_status(msg, "sent", first_id)
         finally:
             self._clear_live_turn(turn_key)
 
-    def _record_delivery_status(self, msg: OutboundMessage, status: str) -> None:
+    def _record_delivery_status(
+        self, msg: OutboundMessage, status: str, external_message_id: str | None = None
+    ) -> None:
         if self._channel_hub is None:
             return
         self._channel_hub.mark_delivery(
             msg,
             default_channel=CHANNEL,
             delivery_status=status,
-            external_message_id=str(msg.metadata.get("external_message_id") or ""),
+            external_message_id=external_message_id or "",
         )
 
     async def send_proactive(self, chat_id: str, message: str) -> str | None:

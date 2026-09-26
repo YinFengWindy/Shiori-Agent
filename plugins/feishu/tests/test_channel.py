@@ -7,6 +7,7 @@ import json
 import threading
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -15,6 +16,139 @@ from plugins.feishu.backend import api as feishu_api
 from plugins.feishu.backend.channel import FeishuChannel, resolve_receive_id
 
 CHAT_ID = "oc_chat"
+
+
+@pytest.mark.parametrize("normal_reply", [False, True])
+async def test_chunk_send_keeps_first_nonempty_receipt(
+    harness: Any, normal_reply: bool
+) -> None:
+    from plugins.feishu.backend.formatting import CARD_TEXT_LIMIT
+
+    await harness.start()
+    harness.hub.mark_delivery = Mock()
+    harness.channel._send_chunk = AsyncMock(side_effect=["", "om_second"])
+    content = "甲" * (CARD_TEXT_LIMIT - 10) + "\n" + "乙" * 20
+    if normal_reply:
+        message = OutboundMessage(
+            channel="feishu",
+            chat_id=CHAT_ID,
+            content=content,
+            metadata={"external_message_id": "om_incoming"},
+            committed_message_id="committed",
+        )
+        await harness.channel._on_response(message)
+        harness.hub.mark_delivery.assert_called_once_with(
+            message,
+            default_channel="feishu",
+            delivery_status="sent",
+            external_message_id="om_second",
+        )
+    else:
+        assert await harness.channel.send(CHAT_ID, content) == "om_second"
+    assert harness.channel._send_chunk.await_count == 2
+
+
+async def test_partial_chunk_failure_retains_first_receipt(harness: Any) -> None:
+    from plugins.feishu.backend.formatting import CARD_TEXT_LIMIT
+
+    await harness.start()
+    harness.hub.mark_delivery = Mock()
+    # The first chunk quotes the inbound message; the second chunk and its
+    # existing plain-text fallback both fail on the ordinary send endpoint.
+    harness.api.fail("send", (400, 99991672), (400, 99991672))
+    message = OutboundMessage(
+        channel="feishu",
+        chat_id=CHAT_ID,
+        content="甲" * (CARD_TEXT_LIMIT - 10) + "\n" + "乙" * 20,
+        metadata={"external_message_id": "om_incoming", "message_id": "om_incoming"},
+        committed_message_id="committed",
+    )
+    with pytest.raises(feishu_api.FeishuApiError):
+        await harness.channel._on_response(message)
+    assert len(harness.api.sent_ids) == 1
+    assert len(harness.api.bodies("send")) == 2
+    harness.hub.mark_delivery.assert_called_once_with(
+        message,
+        default_channel="feishu",
+        delivery_status="failed",
+        external_message_id=harness.api.sent_ids[0],
+    )
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "text",
+        "chunks",
+        "image",
+        "text_image",
+        "stream",
+        "stream_chunks",
+        "fallback",
+        "missing",
+        "failed",
+        "cancelled",
+    ],
+)
+async def test_response_records_retained_platform_receipt(
+    harness: Any, tmp_path: Path, mode: str
+) -> None:
+    await harness.start()
+    hub = harness.hub
+    hub.mark_delivery = Mock()
+    text = "reply"
+    if "chunks" in mode:
+        from plugins.feishu.backend.formatting import CARD_TEXT_LIMIT
+
+        text = "甲" * (CARD_TEXT_LIMIT - 10) + "\n" + "乙" * 20
+    if mode in {"stream", "stream_chunks", "fallback"}:
+        await harness.channel._streamer.begin_turn("role:mira", quote="om_incoming")
+        harness.channel._streamer.add_delta("role:mira", CHAT_ID, "preview")
+        await harness.channel._streamer.drain()
+        if mode == "fallback":
+            harness.api.fail("stream_text", (400, 99991672))
+    if mode == "missing":
+        harness.channel._api.reply_message = AsyncMock(return_value="")
+    if mode in {"failed", "cancelled"}:
+        failure = (
+            asyncio.CancelledError() if mode == "cancelled" else RuntimeError("failed")
+        )
+        harness.channel._send_text = AsyncMock(side_effect=failure)
+    image = tmp_path / "image.png"
+    image.write_bytes(b"image")
+    message = OutboundMessage(
+        channel="feishu",
+        chat_id=CHAT_ID,
+        content="" if mode == "image" else text,
+        media=[str(image), str(image)] if mode in {"image", "text_image"} else [],
+        metadata={
+            "session_key_override": "role:mira",
+            "external_message_id": "om_incoming",
+            "message_id": "om_incoming",
+        },
+        committed_message_id="committed",
+    )
+    if mode in {"failed", "cancelled"}:
+        with pytest.raises(type(failure)):
+            await harness.channel._on_response(message)
+    else:
+        await harness.channel._on_response(message)
+    expected = (
+        harness.api.sent_ids[1]
+        if mode == "fallback"
+        else (harness.api.sent_ids[0] if harness.api.sent_ids else "")
+    )
+    hub.mark_delivery.assert_called_once_with(
+        message,
+        default_channel="feishu",
+        delivery_status="failed" if mode in {"failed", "cancelled"} else "sent",
+        external_message_id=expected,
+    )
+    if mode == "fallback":
+        assert any(
+            path.endswith(harness.api.sent_ids[0]) and method == "DELETE"
+            for method, path, body in harness.api.calls
+        )
 
 
 def _feishu_threads() -> list[threading.Thread]:

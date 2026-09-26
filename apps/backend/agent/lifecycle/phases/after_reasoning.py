@@ -285,9 +285,17 @@ class _PersistAssistantMessageModule:
         if persisted_media:
             assistant_kwargs["media"] = persisted_media
         assistant_kwargs.update(_collect_persist_assistant_slots(frame.slots))
+        # Outbound transport metadata still identifies the triggering turn for
+        # live-stream correlation. Persist that identity separately: the reply's
+        # own platform ID is only known after the channel acknowledges delivery.
+        assistant_metadata = assistant_kwargs["metadata"]
+        trigger_id = assistant_metadata.pop("external_message_id", None)
+        if trigger_id:
+            assistant_metadata["trigger_external_message_id"] = trigger_id
+        assistant_metadata.pop("delivery_status", None)
         assistant_kwargs.update(
             _copy_conversation_message_fields(
-                metadata=ctx.outbound_metadata,
+                metadata=assistant_metadata,
                 session=session,
             )
         )
