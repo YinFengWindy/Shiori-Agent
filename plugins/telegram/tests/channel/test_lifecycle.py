@@ -5,8 +5,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from telegram.error import InvalidToken, NetworkError, TelegramError
+from telegram.ext import ExtBot
 
 from plugins.telegram.backend.channel.lifecycle import TelegramChannel
+from plugins.telegram.backend.channel.polling import ObservedBot
 from agent.plugin_host.kv import PluginKVStore
 
 
@@ -143,3 +145,20 @@ async def test_transient_polling_error_waits_for_actual_inbound_recovery():
     channel._on_polling_error(TelegramError("another failure"))
     channel.mark_online()
     assert channel._online is False
+
+
+@pytest.mark.asyncio
+async def test_channel_recovers_on_empty_successful_poll(monkeypatch):
+    monkeypatch.setattr(ExtBot, "get_updates", AsyncMock(return_value=()))
+    accounts = Mock()
+    channel = TelegramChannel(
+        "123:abc", name="telegram_first", config_ref="first", accounts=accounts
+    )
+    bot = channel.bot
+    assert isinstance(bot, ObservedBot)
+    channel._account_id = "account-1"
+    channel._online = False
+    channel._app = Mock(updater=Mock(running=True))
+    await bot.get_updates()
+    assert channel._online is True
+    assert accounts.report.call_args.kwargs["connection"] == "online"

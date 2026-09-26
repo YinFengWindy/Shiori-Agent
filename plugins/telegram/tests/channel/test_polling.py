@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from telegram.ext import ExtBot
 
-from plugins.telegram.backend.channel.lifecycle import TelegramChannel
 from plugins.telegram.backend.channel.polling import ObservedBot
 
 
@@ -29,20 +28,3 @@ async def test_failed_poll_does_not_report_recovery(monkeypatch):
     with pytest.raises(RuntimeError):
         await bot.get_updates()
     recovered.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_channel_recovers_on_empty_successful_poll(monkeypatch):
-    monkeypatch.setattr(ExtBot, "get_updates", AsyncMock(return_value=()))
-    accounts = Mock()
-    channel = TelegramChannel(
-        "123:abc", name="telegram_first", config_ref="first", accounts=accounts
-    )
-    bot = channel.bot
-    assert isinstance(bot, ObservedBot)
-    channel._account_id = "account-1"
-    channel._online = False
-    channel._app = Mock(updater=Mock(running=True))
-    await bot.get_updates()
-    assert channel._online is True
-    assert accounts.report.call_args.kwargs["connection"] == "online"
