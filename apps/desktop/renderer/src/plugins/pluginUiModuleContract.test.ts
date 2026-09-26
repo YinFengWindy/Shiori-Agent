@@ -80,6 +80,26 @@ describe("applyPluginUiModules", () => {
     assert.equal(navElement.type, NavPage);
   });
 
+  it("binds a role.memory contribution to its plugin and removes it on unload", () => {
+    const registry = new PluginUiRegistry();
+    function MemoryDashboard() { return null; }
+    applyPluginUiModules({
+      "/plugins/default_memory/ui/index.tsx": {
+        default: { pluginId: "default_memory", roleMemory: { component: MemoryDashboard } },
+      },
+    }, registry);
+
+    const entry = registry.getRoleMemoryPanel("default_memory", () => true);
+    assert.ok(entry);
+    assert.notEqual(entry.Component, MemoryDashboard);
+    const props = renderElement(entry.Component as never, { roleId: "mira", bridgeReady: true }).props;
+    assert.equal(props.roleId, "mira");
+    assert.equal(props.bridgeReady, true);
+    assert.equal(typeof (props.client as PluginRpcClient).call, "function");
+    registry.unregisterPlugin("default_memory");
+    assert.equal(registry.getRoleMemoryPanel("default_memory", () => true), undefined);
+  });
+
   it("injects into each component a client scoped to only its own plugin's RPC namespace", async () => {
     const registry = new PluginUiRegistry();
     function CustomSection() { return null; }

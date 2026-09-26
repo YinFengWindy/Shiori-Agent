@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from bus.event_bus import EventBus
-from core.roles import RoleMemoryService, RoleStore
+from core.roles import RoleStore
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
 from session.manager import SessionManager
@@ -27,7 +27,6 @@ async def test_role_card_preview_forwards_the_full_payload_to_its_service() -> N
     )
     handler = DesktopRoleRequestHandler(
         role_service=SimpleNamespace(),
-        role_store=SimpleNamespace(workspace=Path(".")),
         role_presenter=SimpleNamespace(),
         voice_handler=SimpleNamespace(),
         card_import_service=card_import,
@@ -43,37 +42,6 @@ async def test_role_card_preview_forwards_the_full_payload_to_its_service() -> N
         {"source": "C:/workspace/private_runtime/imports/role-cards/card.json"}
     )
     assert result == {"import_id": "preview-1"}
-
-
-@pytest.mark.asyncio
-async def test_role_memory_documents_bridge_reads_only_the_requested_role(tmp_path):
-    store = RoleStore(tmp_path)
-    store.create_role(role_id="mira", name="Mira", system_prompt="test")
-    store.create_role(role_id="luna", name="Luna", system_prompt="test")
-    for role_id in ("mira", "luna"):
-        root = tmp_path / "roles" / role_id / "memory"
-        root.mkdir(parents=True)
-        (root / "SELF.md").write_text(role_id, encoding="utf-8")
-    handler = DesktopRoleRequestHandler(
-        role_service=SimpleNamespace(memory=RoleMemoryService(tmp_path)),
-        role_store=store,
-        role_presenter=SimpleNamespace(),
-        voice_handler=SimpleNamespace(),
-        publish_event=AsyncMock(),
-    )
-
-    result = await handler.handle("roles.memory.documents", {"role_id": "mira"})
-
-    assert result["role_id"] == "mira"
-    assert (
-        next(item for item in result["documents"] if item["name"] == "SELF.md")[
-            "content"
-        ]
-        == "mira"
-    )
-    assert "luna" not in str(result)
-    with pytest.raises(ValueError, match="role not found"):
-        await handler.handle("roles.memory.documents", {"role_id": "missing"})
 
 
 @pytest.mark.asyncio
@@ -175,7 +143,6 @@ async def test_the_core_bridge_no_longer_answers_pet_package_methods() -> None:
     """
     handler = DesktopRoleRequestHandler(
         role_service=SimpleNamespace(),
-        role_store=SimpleNamespace(workspace=Path(".")),
         role_presenter=SimpleNamespace(),
         voice_handler=SimpleNamespace(),
         card_import_service=SimpleNamespace(),

@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 import inspect
 from typing import Any
 
-from core.roles import RoleAggregateService, RoleStore
+from core.roles import RoleAggregateService
 
 from .role_presenter import DesktopRolePresenter
 from .voice.voice_handler import DesktopVoiceHandler
@@ -22,14 +22,12 @@ class DesktopRoleRequestHandler:
         self,
         *,
         role_service: RoleAggregateService,
-        role_store: RoleStore,
         role_presenter: DesktopRolePresenter,
         voice_handler: DesktopVoiceHandler,
         card_import_service: Any | None = None,
         publish_event: Callable[[dict[str, Any]], Awaitable[None]],
     ) -> None:
         self._role_service = role_service
-        self._role_store = role_store
         self._role_presenter = role_presenter
         self._voice_handler = voice_handler
         self._card_import_service = card_import_service
@@ -44,14 +42,6 @@ class DesktopRoleRequestHandler:
                     self._role_presenter.serialize(role)
                     for role in self._role_service.repository.list_roles()
                 ]
-            }
-        if method == "roles.memory.documents":
-            role_id = str(payload.get("role_id") or "").strip()
-            if self._role_store.get_role(role_id) is None:
-                raise ValueError(f"role not found: {role_id}")
-            return {
-                "role_id": role_id,
-                "documents": self._role_service.memory.read_documents(role_id),
             }
         if method == "roles.create":
             aggregate = await self._role_service.create_role_async(

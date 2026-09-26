@@ -70,12 +70,24 @@ describe("PluginUiRegistry", () => {
     registry.registerSettingsSection(standaloneSection("section-a", "a"));
     registry.registerNavPage(navPage("page-a", "a"));
     registry.registerNavPage(navPage("page-b", "b"));
+    registry.registerRoleMemoryPanel({ slot: "role.memory", id: "a", pluginId: "a", Component: () => null });
 
     registry.unregisterPlugin("a");
 
     assert.equal(registry.getSettingsSection("section-a"), undefined);
     assert.equal(registry.getNavPage("page-a"), undefined);
     assert.notEqual(registry.getNavPage("page-b"), undefined);
+    assert.equal(registry.getRoleMemoryPanel("a", () => true), undefined);
+  });
+
+  it("selects only the configured enabled role.memory contribution", () => {
+    const registry = new PluginUiRegistry();
+    registry.registerRoleMemoryPanel({ slot: "role.memory", id: "default_memory", pluginId: "default_memory", Component: () => null });
+    registry.registerRoleMemoryPanel({ slot: "role.memory", id: "akasha", pluginId: "akasha", Component: () => null });
+
+    assert.equal(registry.getRoleMemoryPanel("akasha", (id) => id === "akasha")?.id, "akasha");
+    assert.equal(registry.getRoleMemoryPanel("akasha", () => false), undefined);
+    assert.equal(registry.getRoleMemoryPanel("missing", () => true), undefined);
   });
 });
 

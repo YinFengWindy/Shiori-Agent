@@ -20,6 +20,8 @@ from agent.plugin_host import HostServices, PluginKernel
 from bus.event_bus import EventBus
 from bus.events_lifecycle import RoleDeleted, TurnCommitted
 from core.memory.engine import MemoryQuery, MemoryQueryIntent, MemoryScope
+from core.roles import RoleStore
+from desktop_bridge.method_policy import Concurrency
 from agent.config_models import Config, MemoryConfig, MemoryEmbeddingConfig
 from plugins.akasha.backend.config import AkashaConfig
 from plugins.akasha.backend.engine import (
@@ -1403,6 +1405,7 @@ def _load_akasha_kernel(*, memory_engine: object, workspace: Path) -> Any:
             services=HostServices(
                 event_bus=EventBus(),
                 workspace=workspace,
+                role_store=RoleStore(workspace),
                 memory_engine=memory_engine,
             ),
         )
@@ -1425,6 +1428,45 @@ def test_akashalast_command_only_registers_for_akasha_engine(tmp_path: Path) -> 
     assert len(akasha_modules) == 1
     assert default_commands == []
     assert default_modules == []
+
+
+@pytest.mark.asyncio
+async def test_markdown_rpc_survives_disabled_semantic_engine_and_unloads(
+    tmp_path: Path,
+) -> None:
+    plugin_dir = tmp_path / "plugins" / "akasha"
+    plugin_dir.parent.mkdir()
+    stage_plugin_package(_AKASHA_PLUGIN_ROOT, plugin_dir)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = RoleStore(workspace)
+    store.create_role(role_id="mira", name="Mira", system_prompt="test")
+    root = workspace / "roles" / "mira" / "memory"
+    root.mkdir(parents=True)
+    (root / "SELF.md").write_text("# Mira", encoding="utf-8")
+    kernel = PluginKernel(
+        [plugin_dir.parent],
+        services=HostServices(
+            event_bus=EventBus(),
+            workspace=workspace,
+            role_store=store,
+            memory_engine=None,
+        ),
+    )
+    await kernel.load_all()
+    method = "plugin.akasha.roles.memory.documents"
+    assert kernel.rpc.policy_for(method).concurrency is Concurrency.READ_ONLY
+    resolved = kernel.rpc.resolve(method)
+    assert resolved is not None
+    result = await resolved[1]({"role_id": "mira"})
+    assert (
+        next(item for item in result["documents"] if item["name"] == "SELF.md")[
+            "content"
+        ]
+        == "# Mira"
+    )
+    await kernel.unload("akasha")
+    assert kernel.rpc.resolve(method) is None
 
 
 @pytest.mark.parametrize("location", ["default", "legacy", "migrated"])

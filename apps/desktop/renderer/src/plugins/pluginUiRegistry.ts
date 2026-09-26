@@ -14,7 +14,7 @@ import type {
  * own a page of its own — which is the condition #174's scope note named
  * ("等有真实插件需求再开") rather than a slot invented ahead of a use.
  */
-export type PluginUiSlot = "settings.section" | "nav.page" | "role.assets";
+export type PluginUiSlot = "settings.section" | "nav.page" | "role.assets" | "role.memory";
 
 /**
  * A settings section backed by the shared settings draft (`SettingsFormData`)
@@ -147,6 +147,20 @@ export type RoleAssetsPanelEntry = {
   Component: React.ComponentType<PluginRoleAssetsProps>;
 };
 
+/** Props supplied to a memory plugin's panel inside role details. */
+export type PluginRoleMemoryProps = {
+  roleId: string;
+  bridgeReady: boolean;
+};
+
+/** One memory plugin's role-detail Dashboard. */
+export type RoleMemoryPanelEntry = {
+  slot: "role.memory";
+  id: string;
+  pluginId?: string;
+  Component: React.ComponentType<PluginRoleMemoryProps>;
+};
+
 export type NavPageEntry = {
   slot: "nav.page";
   id: string;
@@ -225,6 +239,7 @@ class PluginUiRegistry {
   private readonly settingsSubsections = new Map<string, Map<string, { origin: Origin; entry: SettingsSubsectionEntry }>>();
   private readonly navPages = new Map<string, { origin: Origin; entry: NavPageEntry }>();
   private readonly roleAssetsPanels = new Map<string, { origin: Origin; entry: RoleAssetsPanelEntry }>();
+  private readonly roleMemoryPanels = new Map<string, { origin: Origin; entry: RoleMemoryPanelEntry }>();
 
   /** Registers a settings.section entry; a duplicate id is warned about and skipped. */
   registerSettingsSection(entry: SettingsSectionEntry, origin: Origin = "plugin"): void {
@@ -281,6 +296,15 @@ class PluginUiRegistry {
     this.roleAssetsPanels.set(entry.id, { origin, entry });
   }
 
+  /** Registers one role.memory Dashboard, keyed by its owning plugin. */
+  registerRoleMemoryPanel(entry: RoleMemoryPanelEntry, origin: Origin = "plugin"): void {
+    if (this.roleMemoryPanels.has(entry.id)) {
+      console.warn(`[pluginUiRegistry] role.memory id 重复，已跳过: ${entry.id}`);
+      return;
+    }
+    this.roleMemoryPanels.set(entry.id, { origin, entry });
+  }
+
   /** Removes every contribution owned by one plugin (used by tests and hot-toggle cleanup). */
   unregisterPlugin(pluginId: string): void {
     for (const [id, { entry }] of this.settingsSections) {
@@ -296,6 +320,9 @@ class PluginUiRegistry {
     }
     for (const [id, { entry }] of this.roleAssetsPanels) {
       if (entry.pluginId === pluginId) this.roleAssetsPanels.delete(id);
+    }
+    for (const [id, { entry }] of this.roleMemoryPanels) {
+      if (entry.pluginId === pluginId) this.roleMemoryPanels.delete(id);
     }
   }
 
@@ -316,6 +343,13 @@ class PluginUiRegistry {
   /** Lists role.assets panels with the same built-in-first ordering and filtering. */
   listRoleAssetsPanels(isPluginEnabled?: (pluginId: string) => boolean): RoleAssetsPanelEntry[] {
     return this.listOrdered(this.roleAssetsPanels, isPluginEnabled);
+  }
+
+  /** Looks up only the configured and currently enabled memory plugin. */
+  getRoleMemoryPanel(pluginId: string, isPluginEnabled: (pluginId: string) => boolean): RoleMemoryPanelEntry | undefined {
+    if (!isPluginEnabled(pluginId)) return undefined;
+    const entry = this.roleMemoryPanels.get(pluginId)?.entry;
+    return entry?.pluginId === pluginId ? entry : undefined;
   }
 
   /** Lists a parent settings.section's registered subtabs, built-in-first, filtered the same way as any other slot. */

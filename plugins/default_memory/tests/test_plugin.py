@@ -12,6 +12,8 @@ from shiori_plugin_testkit.packages import stage_plugin_package
 from agent.lifecycle.types import AfterToolResultCtx, BeforeTurnCtx
 from agent.plugin_host import HostServices, PluginKernel
 from bus.event_bus import EventBus
+from core.roles import RoleStore
+from desktop_bridge.method_policy import Concurrency
 from plugins.default_memory.backend.plugin import (
     ContextPrepareRecordModule,
     _DefaultMemoryRecorder,
@@ -143,10 +145,46 @@ def _load_default_memory_kernel(
     kernel = PluginKernel(
         [root],
         services=HostServices(
-            event_bus=bus, workspace=workspace, memory_engine=memory_engine
+            event_bus=bus,
+            workspace=workspace,
+            role_store=RoleStore(workspace),
+            memory_engine=memory_engine,
         ),
     )
     return kernel, bus
+
+
+@pytest.mark.asyncio
+async def test_markdown_rpc_is_read_only_and_unloads_with_plugin(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = RoleStore(workspace)
+    store.create_role(role_id="mira", name="Mira", system_prompt="test")
+    root = workspace / "roles" / "mira" / "memory"
+    root.mkdir(parents=True)
+    (root / "SELF.md").write_text("# Mira", encoding="utf-8")
+    kernel, _ = _load_default_memory_kernel(
+        tmp_path=tmp_path, memory_engine=None, workspace=workspace
+    )
+    await kernel.load_all()
+    method = "plugin.default_memory.roles.memory.documents"
+    assert kernel.rpc.policy_for(method).concurrency is Concurrency.READ_ONLY
+    resolved = kernel.rpc.resolve(method)
+    assert resolved is not None
+    assert resolved[0] == "default_memory"
+    result = await resolved[1]({"role_id": "mira"})
+    assert (
+        next(item for item in result["documents"] if item["name"] == "SELF.md")[
+            "content"
+        ]
+        == "# Mira"
+    )
+    with pytest.raises(ValueError, match="role not found"):
+        await resolved[1]({"role_id": "missing"})
+    await kernel.unload("default_memory")
+    assert kernel.rpc.resolve(method) is None
 
 
 @pytest.mark.asyncio

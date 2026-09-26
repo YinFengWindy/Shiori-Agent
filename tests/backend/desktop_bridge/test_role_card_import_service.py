@@ -88,7 +88,9 @@ async def test_preview_stages_card_without_creating_a_role(tmp_path) -> None:
 async def test_commit_discards_character_book_and_keeps_character_fields(tmp_path):
     service, store = _service(tmp_path)
     card = _card()
-    card["data"]["character_book"] = {"entries": [{"content": "旧知识"}]}
+    card_data = card["data"]
+    assert isinstance(card_data, dict)
+    card_data["character_book"] = {"entries": [{"content": "旧知识"}]}
     source = _stage_card(tmp_path, card)
     preview = await service.preview({"source": str(source)})
 
