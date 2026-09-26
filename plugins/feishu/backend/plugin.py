@@ -1,69 +1,68 @@
 from __future__ import annotations
 
-import re
-from typing import TYPE_CHECKING, Literal
-
-from pydantic import BaseModel, Field, field_validator
+from typing import TYPE_CHECKING
 
 from .channel import FeishuChannel
-from .formatting import DOMAINS, FEISHU_DOMAIN, LARK_DOMAIN
+from .config import FeishuAppConfig, FeishuConfigModel
+from .identity import verify_app
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
-_UNRESOLVED_ENV_RE = re.compile(r"^\$\{\w+\}$")
-# The removed first implementation stored the API base URL itself.
-_DOMAIN_ALIASES = {FEISHU_DOMAIN: "feishu", LARK_DOMAIN: "lark"}
-
-
-class FeishuConfigModel(BaseModel):
-    """Credentials of a Feishu / Lark custom app (企业自建应用) with a bot."""
-
-    app_id: str = Field(
-        default="",
-        title="App ID",
-        description="开发者后台「凭证与基础信息」里的 App ID（cli_…）",
-    )
-    app_secret: str = Field(
-        default="",
-        title="App Secret",
-        description="同一页面的 App Secret，支持 ${ENV} 引用环境变量",
-    )
-    domain: Literal["feishu", "lark"] = Field(
-        default="feishu",
-        title="服务域名",
-        description="feishu：飞书（open.feishu.cn）；lark：Lark 国际版（open.larksuite.com）",
-    )
-
-    @field_validator("app_id", "app_secret", mode="before")
-    @classmethod
-    def _normalize_credential(cls, value: object) -> str:
-        text = str(value or "").strip()
-        return "" if _UNRESOLVED_ENV_RE.fullmatch(text) else text
-
-    @field_validator("domain", mode="before")
-    @classmethod
-    def _normalize_domain(cls, value: object) -> object:
-        if isinstance(value, str):
-            text = value.strip().rstrip("/")
-            return _DOMAIN_ALIASES.get(text, text.lower() or "feishu")
-        return value
-
-    @property
-    def base_url(self) -> str:
-        return DOMAINS[self.domain]
-
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
-    """校验配置，凭据齐备时贡献飞书渠道；校验失败由内核回滚。"""
+    """Register each configured bot and its independently addressed channel."""
     config = FeishuConfigModel.model_validate(ctx.config.as_dict())
-    if not config.app_id or not config.app_secret:
-        return
-    ctx.channels.add(
-        FeishuChannel(
-            app_id=config.app_id,
-            app_secret=config.app_secret,
-            domain=config.base_url,
-            chat_types=ctx.manifest.channel_chat_types("feishu"),
+    from desktop_bridge.method_policy import Concurrency
+
+    async def profile(payload: dict[str, object]) -> dict[str, object]:
+        ref = str(payload.get("ref") or "")
+        if ref not in {app.ref for app in config.applications}:
+            raise KeyError("飞书账号不存在")
+        identity = ctx.kv.get(f"profile:{ref}", {})
+        targets = ctx.kv.get(f"targets:{ref}", {})
+        return {
+            "identity": identity,
+            "targets": [
+                {"chat_id": chat, "open_id": sender, "id_scope": "app"}
+                for chat, sender in sorted(targets.items())
+            ],
+            "coverage": "observed_private_chats",
+        }
+
+    ctx.rpc.register("accounts.profile", profile, concurrency=Concurrency.READ_ONLY)
+
+    async def verify(payload: dict[str, object]) -> dict[str, object]:
+        app = FeishuAppConfig.model_validate(payload)
+        identity = await verify_app(app)
+        known = ctx.kv.get(f"profile:{app.ref}", {})
+        known_id = str(known.get("open_id") or "")
+        if known_id and known_id != identity["open_id"]:
+            raise ValueError("应用凭据指向不同的机器人，请新建账号")
+        return {"name": identity["name"], "open_id": identity["open_id"]}
+
+    ctx.rpc.register("accounts.verify", verify, concurrency=Concurrency.INTEGRATION)
+    for index, app in enumerate(config.applications):
+        profile = ctx.kv.get(f"profile:{app.ref}", {})
+        snapshot = ctx.accounts.register(
+            platform="feishu",
+            platform_account_id=app.ref,
+            config_ref=app.ref,
+            display_name=str(profile.get("name") or ""),
+            avatar_url=str(profile.get("avatar_url") or ""),
         )
-    )
+        account_id = snapshot.record.id
+        ctx.accounts.report(account_id, connection="connecting")
+        ctx.channels.add(
+            FeishuChannel(
+                app_id=app.app_id,
+                app_secret=app.app_secret,
+                domain=app.base_url,
+                name="feishu" if index == 0 else f"feishu:{app.ref}",
+                account_id=account_id,
+                accounts=ctx.accounts,
+                profile_store=ctx.kv,
+                profile_ref=app.ref,
+                chat_types=ctx.manifest.channel_chat_types("feishu"),
+            )
+        )

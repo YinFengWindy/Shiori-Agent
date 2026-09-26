@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
 from shiori_plugin_testkit.packages import stage_plugin_package
+from shiori_plugin_testkit.bridge import plugin_bridge_request
 
 from agent.plugin_host import HostServices, PluginKernel, load_manifest
 from bus.event_bus import EventBus
-from plugins.feishu.backend.plugin import FeishuConfigModel
+from core.roles.store import RoleStore
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
@@ -24,7 +24,10 @@ def _load_feishu_channels(
         kernel = PluginKernel(
             [Path(tmp)],
             services=HostServices(
-                event_bus=EventBus(), plugin_configs=plugin_configs or {}
+                event_bus=EventBus(),
+                plugin_configs=plugin_configs or {},
+                workspace=Path(tmp),
+                role_store=RoleStore(Path(tmp)),
             ),
         )
         asyncio.run(kernel.load_all())
@@ -62,12 +65,56 @@ def test_plugin_contributes_the_channel_with_credentials() -> None:
     assert loaded == 1
     [channel] = channels
     assert channel.name == "feishu"
-    assert channel.configuration_key[:4] == (
+    assert channel.configuration_key[:5] == (
+        "feishu",
         "feishu",
         "cli_a",
         "s",
         "https://open.larksuite.com",
     )
+
+
+def test_two_regional_apps_register_distinct_accounts_and_channels() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        stage_plugin_package(PLUGIN_DIR, root / "feishu")
+        roles = RoleStore(root)
+        kernel = PluginKernel(
+            [root],
+            services=HostServices(
+                event_bus=EventBus(),
+                workspace=root,
+                role_store=roles,
+                plugin_configs={
+                    "feishu": {
+                        "accounts": [
+                            {
+                                "app_id": "cli_a",
+                                "app_secret": "first",
+                                "domain": "feishu",
+                            },
+                            {
+                                "app_id": "cli_b",
+                                "app_secret": "second",
+                                "domain": "lark",
+                            },
+                        ]
+                    }
+                },
+            ),
+        )
+        asyncio.run(kernel.load_all())
+
+        assert [channel.name for channel in kernel.channels] == [
+            "feishu",
+            "feishu:lark:cli_b",
+        ]
+        assert {row.record.platform_account_id for row in roles.accounts.list()} == {
+            "feishu:cli_a",
+            "lark:cli_b",
+        }
+        assert all(row.connection == "connecting" for row in roles.accounts.list())
+        assert all("secret" not in str(row) for row in roles.accounts.list())
 
 
 def test_invalid_config_fails_the_plugin_and_rolls_back() -> None:
@@ -78,21 +125,47 @@ def test_invalid_config_fails_the_plugin_and_rolls_back() -> None:
     assert (loaded, channels) == (0, [])
 
 
-def test_config_model_normalizes_legacy_domains_and_rejects_others() -> None:
-    legacy = FeishuConfigModel.model_validate(
-        {"app_id": " a ", "app_secret": "s", "domain": "https://open.larksuite.com/"}
+@pytest.mark.asyncio
+async def test_config_transaction_migrates_legacy_app_without_changing_account_identity(
+    plugin_runtime,
+) -> None:
+    initial = (
+        '\n[plugins.feishu]\napp_id = "cli_old"\napp_secret = "old"\ndomain = "lark"\n'
     )
+    async with plugin_runtime(("feishu",), initial) as (service, path):
+        before = await plugin_bridge_request(service, "accounts.list")
+        assert before.error is None, before.error
+        [old] = before.payload["accounts"]
 
-    assert (legacy.app_id, legacy.domain) == ("a", "lark")
-    assert legacy.base_url == "https://open.larksuite.com"
-    assert FeishuConfigModel().base_url == "https://open.feishu.cn"
-    with pytest.raises(ValidationError):
-        FeishuConfigModel.model_validate({"domain": "open.example.com"})
-
-
-def test_config_schema_renders_as_a_labelled_form() -> None:
-    properties = FeishuConfigModel.model_json_schema()["properties"]
-
-    assert list(properties) == ["app_id", "app_secret", "domain"]
-    assert properties["domain"]["enum"] == ["feishu", "lark"]
-    assert all(item.get("title") for item in properties.values())
+        saved = await plugin_bridge_request(
+            service,
+            "plugin.config.set",
+            {
+                "plugin_id": "feishu",
+                "operation_id": "migrate-feishu",
+                "values": {
+                    "app_id": "",
+                    "app_secret": "",
+                    "domain": "feishu",
+                    "accounts": [
+                        {"app_id": "cli_old", "app_secret": "old", "domain": "lark"},
+                        {"app_id": "cli_new", "app_secret": "new", "domain": "feishu"},
+                    ],
+                },
+            },
+        )
+        assert saved.error is None, saved.error
+        after = await plugin_bridge_request(service, "accounts.list")
+        assert after.error is None, after.error
+        rows = after.payload["accounts"]
+        assert {row["platform_account_id"] for row in rows} == {
+            "lark:cli_old",
+            "feishu:cli_new",
+        }
+        assert (
+            next(row for row in rows if row["platform_account_id"] == "lark:cli_old")[
+                "id"
+            ]
+            == old["id"]
+        )
+        assert 'app_secret = "old"' in path.read_text(encoding="utf-8")

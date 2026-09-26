@@ -72,6 +72,7 @@ class ChannelHost:
         self._configurations: dict[str, object] = {}
         self._transport_lock = transport_lock or asyncio.Lock()
         self._retired_transports: dict[str, Channel] = {}
+        self._runtime_adoptions: list[tuple[Channel, Channel]] = []
         self._retirements = TaskCollector("Channel retirement")
 
     def add(self, channel: Channel, *, configuration: object = None) -> None:
@@ -80,6 +81,11 @@ class ChannelHost:
             raise ValueError(f"Duplicate channel name: {channel.name}")
         self._channels.append(channel)
         self._configurations[channel.name] = configuration
+
+    def defer_runtime_adoption(self, existing: Channel, candidate: Channel) -> None:
+        """Hands generation-scoped callbacks to a reused transport after publish."""
+        if callable(getattr(existing, "adopt_runtime", None)):
+            self._runtime_adoptions.append((existing, candidate))
 
     def reusable(self, name: str, configuration: object) -> Channel | None:
         """Returns an existing connection when its effective configuration is unchanged."""
@@ -250,10 +256,18 @@ class ChannelHost:
             if phase == "commit" and not degraded:
                 raise
             raise ChannelHandoverError(failure, degraded) from error
+        adoption_failures = []
+        for existing, fresh in candidate._runtime_adoptions:
+            try:
+                getattr(existing, "adopt_runtime")(fresh)
+            except Exception as error:
+                adoption_failures.append(
+                    _failure(existing.name, "runtime_adoption", error)
+                )
         self._channels = candidate.channels
         self._configurations = dict(candidate._configurations)
         self._ctx_factory = candidate._ctx_factory
-        self._failures = candidate.failures
+        self._failures = [*candidate.failures, *adoption_failures]
         for channel in retired_replaced:
             self._retired_transports.pop(channel.name, None)
         return parked

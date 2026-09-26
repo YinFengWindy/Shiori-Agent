@@ -276,6 +276,21 @@ def test_channels_capability_rejects_undeclared_channel_without_registering():
     assert scope.labels == []
 
 
+def test_channels_capability_accepts_account_instance_of_declared_provider():
+    contributions = PluginContributions()
+    scope = EffectScope("demo")
+    capability = ChannelsCapability(
+        contributions, scope, plugin_id="demo", declared=frozenset({"feishu"})
+    )
+    instance = _Named("feishu:lark:cli_b")
+    instance.account_id = "account-b"
+    capability.add(instance)  # type: ignore[arg-type]
+
+    assert contributions.channels == [instance]
+    with pytest.raises(ChannelDeclarationError):
+        capability.add(_Named("feishu:unowned"))  # type: ignore[arg-type]
+
+
 # ── RpcCapability ─────────────────────────────────────────────────────────
 
 
