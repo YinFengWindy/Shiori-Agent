@@ -4,10 +4,96 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
 from plugins.qq.backend import installed_qq
+
+
+@pytest.fixture
+def fake_registry(monkeypatch):
+    registry = ModuleType("winreg")
+    setattr(registry, "HKEY_CURRENT_USER", "HKCU")
+    setattr(registry, "HKEY_LOCAL_MACHINE", "HKLM")
+    entries: dict[tuple[str, str], str] = {}
+    attempts: list[tuple[str, str]] = []
+
+    class Key:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    def open_key(hive: str, name: str):
+        attempts.append((hive, name))
+        return Key(entries[(hive, name)]) if (hive, name) in entries else _missing()
+
+    def _missing():
+        raise FileNotFoundError("registry key absent")
+
+    def query_value(key: Key, name: str):
+        assert name == "UninstallString"
+        return key.value, 1
+
+    setattr(registry, "OpenKey", open_key)
+    setattr(registry, "QueryValueEx", query_value)
+    monkeypatch.setitem(sys.modules, "winreg", registry)
+    monkeypatch.setattr(installed_qq, "os", SimpleNamespace(name="nt"))
+    return entries, attempts
+
+
+def _qq_root(tmp_path, name: str):
+    root = tmp_path / name
+    root.mkdir()
+    (root / "Uninstall.exe").write_bytes(b"official uninstaller")
+    (root / "QQ.exe").write_bytes(b"official QQ")
+    return root
+
+
+def test_registry_prefers_valid_current_user_install(fake_registry, tmp_path):
+    entries, attempts = fake_registry
+    current = _qq_root(tmp_path, "Current User QQ")
+    machine = _qq_root(tmp_path, "Machine QQ")
+    key = installed_qq._UNINSTALL_KEYS[0]
+    entries[("HKCU", key)] = f'"{current / "Uninstall.exe"}"'
+    entries[("HKLM", key)] = str(machine / "Uninstall.exe")
+
+    assert installed_qq._install_root() == current
+    assert attempts == [("HKCU", key)]
+
+
+def test_registry_skips_invalid_entries_then_uses_machine_install(
+    fake_registry, tmp_path
+):
+    entries, attempts = fake_registry
+    invalid = tmp_path / "Missing QQ.exe"
+    invalid.mkdir()
+    (invalid / "Uninstall.exe").write_bytes(b"uninstaller only")
+    machine = _qq_root(tmp_path, "Machine QQ")
+    first, second = installed_qq._UNINSTALL_KEYS
+    entries[("HKCU", first)] = "cmd /c uninstall"
+    entries[("HKCU", second)] = str(invalid / "Uninstall.exe")
+    entries[("HKLM", first)] = str(machine / "Uninstall.exe")
+
+    assert installed_qq._install_root() == machine
+    assert attempts == [("HKCU", first), ("HKCU", second), ("HKLM", first)]
+
+
+def test_registry_missing_install_reports_required_qq_version(fake_registry):
+    _entries, attempts = fake_registry
+    with pytest.raises(RuntimeError, match="官方 QQ 9.9.31-49738"):
+        installed_qq._install_root()
+    assert attempts == [
+        (hive, name)
+        for hive in ("HKCU", "HKLM")
+        for name in installed_qq._UNINSTALL_KEYS
+    ]
 
 
 def test_pinned_native_hashes_are_complete():

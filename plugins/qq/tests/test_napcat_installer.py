@@ -120,7 +120,9 @@ async def test_status_uses_cached_validation_and_prepare_rechecks_off_loop(
     validation = Mock(side_effect=validate)
     monkeypatch.setattr(napcat_installer, "managed_available", lambda: True)
     monkeypatch.setattr(manager, "_package_ready", lambda: True)
-    monkeypatch.setattr(manager, "_check_native_dependencies", validation)
+    monkeypatch.setattr(
+        napcat_installer, "resolve_official_qq", lambda _dir: validation()
+    )
     loop = asyncio.get_running_loop()
     loop.call_later(0.01, gate.set)
     assert await manager.prepare() == qq_dir

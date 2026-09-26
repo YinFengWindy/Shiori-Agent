@@ -81,7 +81,7 @@ class NapCatInstaller:
                     await asyncio.to_thread(self._prepare_sync)
                 self._preparation = {"stage": "verifying", "percent": 99}
                 qq_runtime_dir = await asyncio.to_thread(
-                    self._check_native_dependencies
+                    resolve_official_qq, self.install_dir
                 )
             except Exception as exc:
                 self._validated_qq_dir = None
@@ -90,9 +90,6 @@ class NapCatInstaller:
             self._validated_qq_dir = qq_runtime_dir
             self._preparation = {"stage": "ready", "percent": 100}
             return qq_runtime_dir
-
-    def _check_native_dependencies(self) -> Path:
-        return resolve_official_qq(self.install_dir)
 
     def _prepare_sync(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
