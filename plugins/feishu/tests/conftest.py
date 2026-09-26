@@ -79,7 +79,10 @@ class FakeFeishu:
         elif key == "create_card":
             data = {"card_id": f"card_{self.counter}"}
         elif key == "bot":
-            return httpx.Response(200, json={"code": 0, "bot": {"app_name": "Shiori"}})
+            return httpx.Response(
+                200,
+                json={"code": 0, "bot": {"app_name": "Shiori", "open_id": "ou_bot"}},
+            )
         else:
             data = {}
         return httpx.Response(200, json={"code": 0, "msg": "success", "data": data})

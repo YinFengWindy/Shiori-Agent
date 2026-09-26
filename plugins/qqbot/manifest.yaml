@@ -6,7 +6,9 @@ desc: 官方 QQBot 渠道
 capabilities:
   - config
   - channels
-config_model: QQBotConfigModel
+  - kv
+  - accounts
+  - rpc
 channels:
   - name: qqbot
     label: QQBot

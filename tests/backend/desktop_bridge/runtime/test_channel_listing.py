@@ -106,14 +106,16 @@ async def _list_channels(
 
 
 @pytest.mark.asyncio
-async def test_lists_desktop_builtins_and_unconfigured_qqbot(tmp_path, monkeypatch):
+async def test_lists_desktop_builtins_and_account_ready_qqbot(tmp_path, monkeypatch):
     rows = await _list_channels(tmp_path, monkeypatch)
     assert list(rows) == ["desktop", "qq", "qqbot", "telegram"]
     assert rows["desktop"]["state"] == "active"
     # Telegram、QQ 都已迁为插件：同名渠道由插件声明提供，不再有内置行（#363 T4/T5）。
     assert rows["qq"]["plugin_id"] == "qq"
     assert rows["qq"]["label"] == "QQ（NapCat）"
-    assert rows["qq"]["state"] == "not_configured"
+    # QQ keeps its account manager registered so an empty plugin can add an account.
+    assert rows["qq"]["state"] == "active"
+    assert rows["qq"]["status"] == {"connected": False}
     assert rows["telegram"]["plugin_id"] == "telegram"
     assert rows["telegram"]["label"] == "Telegram"
     assert rows["telegram"]["state"] == "not_configured"
@@ -132,7 +134,7 @@ async def test_lists_desktop_builtins_and_unconfigured_qqbot(tmp_path, monkeypat
         ],
         "plugin_id": "qqbot",
         "plugin_enabled": True,
-        "state": "not_configured",
+        "state": "active",
         "error": "",
         "status": None,
     }

@@ -11,6 +11,7 @@ from shiori_plugin_testkit.packages import stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel, load_manifest
 from bus.event_bus import EventBus
+from core.roles.store import RoleStore
 from plugins.qq.backend.channel.formatting import GROUP_PREFIX
 from plugins.qq.backend.plugin import QQConfigModel
 
@@ -23,10 +24,15 @@ def _load_qq_channels(
     with tempfile.TemporaryDirectory() as tmp:
         plugin_dir = Path(tmp) / "qq"
         stage_plugin_package(PLUGIN_DIR, plugin_dir)
+        workspace = Path(tmp) / "workspace"
+        workspace.mkdir()
         kernel = PluginKernel(
             [Path(tmp)],
             services=HostServices(
-                event_bus=EventBus(), plugin_configs=plugin_configs or {}
+                event_bus=EventBus(),
+                plugin_configs=plugin_configs or {},
+                workspace=workspace,
+                role_store=RoleStore(workspace),
             ),
         )
         asyncio.run(kernel.load_all())
@@ -40,7 +46,14 @@ def test_manifest_declares_the_legacy_channel_name_for_bindings() -> None:
     assert manifest is not None
     assert manifest.id == "qq"
     assert manifest.display_name == "QQ（NapCat）"
-    assert set(manifest.capabilities) == {"config", "channels"}
+    assert set(manifest.capabilities) == {
+        "config",
+        "channels",
+        "accounts",
+        "workspace",
+        "rpc",
+    }
+    assert manifest.config_model == "QQConfigModel"
     assert [item.name for item in manifest.channels] == ["qq"]
 
 
@@ -52,9 +65,9 @@ def test_manifest_group_prefix_matches_the_transport_group_format() -> None:
     assert types == {"private": None, "group": GROUP_PREFIX}
 
 
-def test_plugin_skips_channel_without_bot_uin() -> None:
-    assert _load_qq_channels() == []
-    assert _load_qq_channels({"qq": {"bot_uin": "${QQ_UIN}"}}) == []
+def test_plugin_contributes_account_channel_without_legacy_bot_uin() -> None:
+    assert len(_load_qq_channels()) == 1
+    assert len(_load_qq_channels({"qq": {"bot_uin": "${QQ_UIN}"}})) == 1
 
 
 def test_plugin_contributes_qq_channel_with_connection_settings() -> None:
@@ -71,13 +84,10 @@ def test_plugin_contributes_qq_channel_with_connection_settings() -> None:
 
     assert len(channels) == 1
     assert channels[0].name == "qq"
-    assert channels[0].configuration_key == (
-        "napcat-qq",
-        "10001",
-        9.5,
-        "ws://napcat.lan:3001",
-        "secret",
-    )
+    assert channels[0].configuration_key[0] == "qq-accounts"
+    assert channels[0]._configs["legacy"].expected_uin == "10001"
+    assert channels[0]._configs["legacy"].ws_uri == "ws://napcat.lan:3001"
+    assert channels[0]._configs["legacy"].ws_token == "secret"
 
 
 def test_config_schema_labels_and_secret_field() -> None:

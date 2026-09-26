@@ -54,7 +54,7 @@ class DefaultGroupFilter:
     async def should_process(self, event, group_cfg: QQGroupFilterConfig) -> bool:
         user_id = str(event.user_id)
 
-        if group_cfg.require_at and not _is_at_bot(event.raw_message, self._bot_uin):
+        if group_cfg.require_at and not is_at_bot(event.raw_message, self._bot_uin):
             logger.debug(
                 f"[group_filter] 未被 @ 忽略消息  user_id={user_id}  group={group_cfg.group_id}"
             )
@@ -63,7 +63,7 @@ class DefaultGroupFilter:
         return True
 
 
-def _is_at_bot(raw_message: str, bot_uin: str) -> bool:
+def is_at_bot(raw_message: str, bot_uin: str) -> bool:
     """检查消息中是否包含 @Bot 的 CQ 码。"""
     return any(qq == bot_uin for qq in _CQ_AT_RE.findall(raw_message))
 

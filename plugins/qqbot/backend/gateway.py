@@ -19,19 +19,29 @@ class _TokenCache:
     expires_at: float
 
 
+class QQBotAuthenticationError(RuntimeError):
+    """The official token or gateway rejected application authentication."""
+
+
 class _GatewayMixin:
     """Owns QQBot access tokens, REST requests, and Gateway reconnects."""
 
     async def _gateway_loop(self) -> None:
         while not self._stopped.is_set():
             try:
+                self._report_status("connecting")
                 token = await self._get_access_token()
                 gateway = await self._api_request("GET", "/gateway", token=token)
                 await self._run_gateway(str(gateway["url"]), token)
+                self._report_status("offline", "网关已断开，正在重连")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 logger.warning("[qqbot] Gateway 连接失败: %s", exc)
+                self._report_status(
+                    "login_required" if self._is_auth_error(exc) else "error",
+                    str(exc),
+                )
                 await asyncio.sleep(5)
 
     async def _run_gateway(self, url: str, token: str) -> None:
@@ -73,9 +83,20 @@ class _GatewayMixin:
                             )
                         )
                     elif op == 0:
+                        if event_type == "READY":
+                            user = data.get("user")
+                            identity = user if isinstance(user, dict) else {}
+                            self._report_status(
+                                "online",
+                                "",
+                                str(identity.get("username") or ""),
+                                str(identity.get("id") or ""),
+                            )
                         await self._handle_dispatch(event_type, data)
                     elif op == 7:
                         break
+                    elif op == 9:
+                        raise QQBotAuthenticationError("QQBot 网关鉴权失败")
         finally:
             if heartbeat_task is not None:
                 heartbeat_task.cancel()
@@ -105,10 +126,48 @@ class _GatewayMixin:
         )
         response.raise_for_status()
         data = response.json()
-        token = str(data["access_token"])
+        token = str(data.get("access_token") or "") if isinstance(data, dict) else ""
+        if not token:
+            reason = (
+                str(data.get("message") or data.get("msg") or "").strip()
+                if isinstance(data, dict)
+                else ""
+            )
+            raise QQBotAuthenticationError(
+                "QQBot 应用认证失败" + (f": {reason}" if reason else "")
+            )
         expires_in = int(data.get("expires_in") or 7200)
         self._token = _TokenCache(token=token, expires_at=now + expires_in)
         return token
+
+    def _report_status(
+        self, state: str, error: str = "", name: str = "", bot_id: str = ""
+    ) -> None:
+        self._connection_state = state
+        if (
+            state in {"online", "offline", "login_required", "error"}
+            and not self._ready.is_set()
+        ):
+            self._first_gateway_result = (state, error)
+            self._ready.set()
+        if self._on_status is not None:
+            self._on_status(state, error, name, bot_id)
+
+    async def wait_ready(self, timeout: float = 15.0) -> None:
+        """Wait for the first gateway result before committing credential handover."""
+        await asyncio.wait_for(self._ready.wait(), timeout)
+        state, error = self._first_gateway_result
+        if state != "online" or self._connection_state != "online":
+            raise RuntimeError(error or f"QQBot 网关未就绪: {self._connection_state}")
+
+    @staticmethod
+    def _is_auth_error(error: Exception) -> bool:
+        return isinstance(error, QQBotAuthenticationError) or getattr(
+            getattr(error, "response", None), "status_code", None
+        ) in {
+            401,
+            403,
+        }
 
     async def _api_request(
         self,

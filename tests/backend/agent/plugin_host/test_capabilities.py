@@ -293,6 +293,21 @@ def test_channels_capability_allows_only_valid_declared_instances():
     assert [item.name for item in contributions.channels] == ["telegram_first"]
 
 
+def test_channels_capability_accepts_account_instance_of_declared_provider():
+    contributions = PluginContributions()
+    scope = EffectScope("demo")
+    capability = ChannelsCapability(
+        contributions, scope, plugin_id="demo", declared=frozenset({"feishu"})
+    )
+    instance = _Named("feishu:lark:cli_b")
+    instance.account_id = "account-b"
+    capability.add(instance)  # type: ignore[arg-type]
+
+    assert contributions.channels == [instance]
+    with pytest.raises(ChannelDeclarationError):
+        capability.add(_Named("feishu:unowned"))  # type: ignore[arg-type]
+
+
 # ── RpcCapability ─────────────────────────────────────────────────────────
 
 

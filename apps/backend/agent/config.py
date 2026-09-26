@@ -191,6 +191,11 @@ def load_config_data(data: dict[str, Any]) -> Config:
         voice=voice,
         wiring=wiring,
         plugins=plugins,
+        raw_plugin_configs={
+            name: dict(value)
+            for name, value in _as_dict(data.get("plugins")).items()
+            if isinstance(value, dict)
+        },
         scene_observation_enabled=load_scene_preferences(data),
         model_registrations=model_registrations,
     )

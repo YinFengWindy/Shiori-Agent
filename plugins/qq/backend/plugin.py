@@ -1,4 +1,4 @@
-"""QQ（NapCat）渠道插件入口：校验配置，Bot QQ 号齐备时贡献 ``qq`` 渠道（#363 T5）。"""
+"""QQ account plugin: private external NapCat connections and account actions."""
 
 from __future__ import annotations
 
@@ -49,18 +49,79 @@ class QQConfigModel(BaseModel):
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
-    """Bot QQ 号齐备时贡献渠道；NcatBot 只在渠道启动时才导入和配置。"""
-    config = QQConfigModel.model_validate(ctx.config.as_dict())
-    if not config.bot_uin:
-        return
-    from .channel import QQChannel
+    """Migrates the old connection and contributes one multi-account channel."""
+    from pathlib import Path
 
-    ctx.channels.add(
-        QQChannel(
-            bot_uin=config.bot_uin,
-            websocket_open_timeout_seconds=config.websocket_open_timeout_seconds,
-            ws_uri=config.ws_uri,
-            ws_token=config.ws_token,
-            chat_types=ctx.manifest.channel_chat_types("qq"),
-        )
+    from desktop_bridge.method_policy import Concurrency
+
+    from .accounts_runtime import QQAccountsRuntime
+    from .accounts_store import QQAccountsStore
+
+    config = QQConfigModel.model_validate(ctx.config.as_dict())
+    workspace = ctx.workspace
+    if not isinstance(workspace, Path):
+        raise RuntimeError("QQ 插件需要持久化 workspace")
+    store = QQAccountsStore(workspace)
+    store.migrate_legacy(
+        bot_uin=config.bot_uin,
+        ws_uri=config.ws_uri,
+        ws_token=config.ws_token,
+        timeout_seconds=config.websocket_open_timeout_seconds,
+    )
+    runtime = QQAccountsRuntime(store, ctx.accounts)
+    ctx.channels.add(runtime)
+    ctx.rpc.register(
+        "accounts.settings",
+        lambda payload: _settings(runtime, payload),
+        concurrency=Concurrency.READ_ONLY,
+    )
+    ctx.rpc.register("accounts.save", runtime.save_draft)
+    ctx.rpc.register(
+        "accounts.connect", lambda payload: runtime.connect_saved(str(payload["ref"]))
+    )
+    ctx.rpc.register(
+        "accounts.disconnect", lambda payload: _disconnect(runtime, payload)
+    )
+    ctx.rpc.register(
+        "accounts.remove_draft", lambda payload: _remove_draft(runtime, payload)
+    )
+    ctx.rpc.register(
+        "accounts.discover",
+        lambda payload: _discover(runtime, payload),
+        concurrency=Concurrency.READ_ONLY,
+    )
+    ctx.rpc.register("accounts.send", lambda payload: _send(runtime, payload))
+
+
+async def _settings(runtime, payload: dict) -> dict:
+    return runtime.settings(
+        str(payload["account_id"]) if payload.get("account_id") else None,
+        str(payload["ref"]) if payload.get("ref") else None,
+    )
+
+
+async def _disconnect(runtime, payload: dict) -> dict:
+    await runtime.disconnect(str(payload["account_id"]))
+    return {"ok": True}
+
+
+async def _remove_draft(runtime, payload: dict) -> dict:
+    await runtime.remove_draft(str(payload["ref"]))
+    return {"ok": True}
+
+
+async def _discover(runtime, payload: dict) -> dict:
+    return await runtime.discover(
+        str(payload["account_id"]),
+        str(payload["kind"]),
+        str(payload.get("group_id") or ""),
+    )
+
+
+async def _send(runtime, payload: dict) -> dict:
+    return await runtime.send_target(
+        str(payload["account_id"]),
+        str(payload["kind"]),
+        str(payload["target_id"]),
+        str(payload["message"]),
     )

@@ -28,7 +28,7 @@ class _InboundMixin:
         ).strip()
         if not user_openid:
             return
-        chat_id = f"c2c:{user_openid}"
+        chat_id = self._chat_id(user_openid)
         content = str(data.get("content") or "").strip()
         if is_chat_id_command(content):
             await self._handle_chat_id(chat_id, user_openid)
@@ -39,6 +39,8 @@ class _InboundMixin:
         message_id = str(data.get("id") or "").strip()
         if message_id:
             self._last_c2c_msg_id[user_openid] = message_id
+        if self._on_target is not None:
+            self._on_target(user_openid)
         logger.info(
             "[qqbot] 收到私聊消息 user_openid=%s msg_id=%s",
             user_openid,
@@ -56,6 +58,8 @@ class _InboundMixin:
                 metadata={
                     "chat_type": "private",
                     "user_openid": user_openid,
+                    "qqbot_app_id": self._app_id,
+                    "account_id": self._account_id,
                     "message_id": message_id,
                     "external_message_id": message_id,
                 },

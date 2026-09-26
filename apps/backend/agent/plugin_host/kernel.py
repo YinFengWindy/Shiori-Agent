@@ -116,6 +116,7 @@ class HostServices:
     light_provider: Any = None
     light_model: str = ""
     plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
+    raw_plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     relationship_runtime: Any = None
     # 插件包上移到仓库顶层之前的位置（apps/backend/plugins）。gitignore 覆盖的
     # 本地状态（.kv.json）不会随目录重命名搬走，需要从这里
@@ -469,7 +470,8 @@ class PluginKernel:
                 legacy_plugin_root=services.legacy_plugin_root,
             ),
             "config": lambda: PluginConfig(
-                services.plugin_configs.get(handle.plugin_id, {})
+                services.plugin_configs.get(handle.plugin_id, {}),
+                raw_values=services.raw_plugin_configs.get(handle.plugin_id),
             ),
             "tools": lambda: ToolsCapability(
                 services.tool_registry,
