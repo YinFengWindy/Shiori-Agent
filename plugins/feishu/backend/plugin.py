@@ -52,6 +52,13 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             avatar_url=str(profile.get("avatar_url") or ""),
         )
         account_id = snapshot.record.id
+        if not app.app_secret:
+            ctx.accounts.report(
+                account_id,
+                connection="login_required",
+                error="App Secret 未配置或环境变量未解析",
+            )
+            continue
         ctx.accounts.report(account_id, connection="connecting")
         ctx.channels.add(
             FeishuChannel(

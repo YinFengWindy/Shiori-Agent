@@ -3,18 +3,25 @@ export type FeishuApp = { app_id: string; app_secret: string; domain: "feishu" |
 
 /** Preserves the legacy single-app config until the first explicit save. */
 export function configuredApps(values: Record<string, unknown>): FeishuApp[] {
-  const accounts = Array.isArray(values.accounts) ? values.accounts.filter(isApp) : [];
-  const legacy = isApp(values) ? values : null;
+  const accounts = Array.isArray(values.accounts) ? values.accounts.flatMap((value) => parseApp(value) ?? []) : [];
+  const legacy = parseApp(values);
   return legacy && !accounts.some((app) => app.domain === legacy.domain && app.app_id === legacy.app_id)
     ? [legacy, ...accounts]
     : accounts;
 }
 
-function isApp(value: unknown): value is FeishuApp {
-  if (!value || typeof value !== "object") return false;
-  const item = value as Partial<FeishuApp>;
-  return typeof item.app_id === "string" && typeof item.app_secret === "string"
-    && (item.domain === "feishu" || item.domain === "lark") && Boolean(item.app_id && item.app_secret);
+function parseApp(value: unknown): FeishuApp | null {
+  if (!value || typeof value !== "object") return null;
+  const appId = "app_id" in value ? value.app_id : undefined;
+  const secret = "app_secret" in value ? value.app_secret : undefined;
+  const rawDomain = "domain" in value ? value.domain : undefined;
+  if (typeof appId !== "string" || !appId || typeof secret !== "string") return null;
+  const regionalDomain = typeof rawDomain === "string" ? rawDomain.trim().replace(/\/$/, "") : "";
+  const domain = regionalDomain === "https://open.feishu.cn" ? "feishu"
+    : regionalDomain === "https://open.larksuite.com" ? "lark" : regionalDomain;
+  return domain === "feishu" || domain === "lark"
+    ? { app_id: appId, app_secret: secret, domain }
+    : null;
 }
 
 /** Builds one atomic config update and clears migrated single-app fields. */

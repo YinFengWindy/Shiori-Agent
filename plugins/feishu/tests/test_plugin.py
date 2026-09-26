@@ -125,6 +125,48 @@ def test_invalid_config_fails_the_plugin_and_rolls_back() -> None:
     assert (loaded, channels) == (0, [])
 
 
+def test_one_unresolved_secret_does_not_disable_another_account() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        stage_plugin_package(PLUGIN_DIR, root / "feishu")
+        roles = RoleStore(root)
+        kernel = PluginKernel(
+            [root],
+            services=HostServices(
+                event_bus=EventBus(),
+                workspace=root,
+                role_store=roles,
+                plugin_configs={
+                    "feishu": {
+                        "accounts": [
+                            {
+                                "app_id": "cli_ready",
+                                "app_secret": "ready",
+                                "domain": "feishu",
+                            },
+                            {
+                                "app_id": "cli_missing",
+                                "app_secret": "${MISSING_SECRET}",
+                                "domain": "lark",
+                            },
+                        ]
+                    }
+                },
+            ),
+        )
+        asyncio.run(kernel.load_all())
+        assert kernel.loaded_count == 1
+        assert [channel.name for channel in kernel.channels] == ["feishu"]
+        states = {
+            row.record.platform_account_id: row.connection
+            for row in roles.accounts.list()
+        }
+        assert states == {
+            "feishu:cli_ready": "connecting",
+            "lark:cli_missing": "login_required",
+        }
+
+
 @pytest.mark.asyncio
 async def test_config_transaction_migrates_legacy_app_without_changing_account_identity(
     plugin_runtime,

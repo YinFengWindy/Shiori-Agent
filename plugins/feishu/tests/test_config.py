@@ -48,3 +48,22 @@ def test_config_schema_renders_as_a_labelled_form() -> None:
     assert list(properties) == ["app_id", "app_secret", "domain", "accounts"]
     assert properties["domain"]["enum"] == ["feishu", "lark"]
     assert all(item.get("title") for item in properties.values())
+
+
+def test_unresolved_secret_keeps_other_applications_available() -> None:
+    config = FeishuConfigModel.model_validate(
+        {
+            "accounts": [
+                {"app_id": "cli_ready", "app_secret": "ready", "domain": "feishu"},
+                {
+                    "app_id": "cli_missing",
+                    "app_secret": "${MISSING_SECRET}",
+                    "domain": "lark",
+                },
+            ]
+        }
+    )
+    assert [(app.ref, app.app_secret) for app in config.applications] == [
+        ("feishu:cli_ready", "ready"),
+        ("lark:cli_missing", ""),
+    ]

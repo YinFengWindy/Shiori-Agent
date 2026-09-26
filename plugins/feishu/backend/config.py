@@ -67,10 +67,8 @@ class FeishuConfigModel(FeishuAppConfig):
 
     @model_validator(mode="after")
     def _unique_accounts(self) -> "FeishuConfigModel":
-        if any(
-            not account.app_id or not account.app_secret for account in self.accounts
-        ):
-            raise ValueError("飞书应用账号需要 App ID 和 App Secret")
+        if any(not account.app_id for account in self.accounts):
+            raise ValueError("飞书应用账号需要 App ID")
         refs = [account.ref for account in self.accounts]
         if len(refs) != len(set(refs)):
             raise ValueError("飞书应用的区域和 App ID 不得重复")
@@ -80,11 +78,7 @@ class FeishuConfigModel(FeishuAppConfig):
     def applications(self) -> list[FeishuAppConfig]:
         """Includes the old app once until a settings save migrates it."""
         accounts = list(self.accounts)
-        if (
-            self.app_id
-            and self.app_secret
-            and not any(account.ref == self.ref for account in accounts)
-        ):
+        if self.app_id and not any(account.ref == self.ref for account in accounts):
             accounts.insert(
                 0,
                 FeishuAppConfig(
@@ -93,6 +87,4 @@ class FeishuConfigModel(FeishuAppConfig):
                     domain=self.domain,
                 ),
             )
-        return [
-            account for account in accounts if account.app_id and account.app_secret
-        ]
+        return [account for account in accounts if account.app_id]
