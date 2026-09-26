@@ -15,6 +15,7 @@ from bus.events_lifecycle import (
 )
 
 from ..utils import TelegramLiveTextMessage
+from ..utils.topic import telegram_topic_kwargs
 from .compat import _call_send_markdown, _call_send_thinking_block
 from .formatting import (
     _LIVE_STREAM_MIN_CHARS,
@@ -221,7 +222,7 @@ class _StreamingMixin:
             original_chat_id,
             thinking,
             self._telegram_outbound_limiter,
-            **({"message_thread_id": message_thread_id} if message_thread_id else {}),
+            **telegram_topic_kwargs(message_thread_id),
         )
 
     async def _send_final_tool_snapshot(

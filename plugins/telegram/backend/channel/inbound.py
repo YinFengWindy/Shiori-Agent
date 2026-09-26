@@ -115,8 +115,9 @@ class _InboundMixin:
     ) -> bool:
         """Checks the role binding's admission before any side effect of an update.
 
-        Rejected updates (unbound chat, blacklisted member) must not show
-        typing, remember member usernames or download attachments. ``_accept_inbound``
+        Rejected updates (unbound chat, blacklisted member) only record that a
+        conversation was observed; they must not show typing, remember member
+        usernames or download attachments. ``_accept_inbound``
         repeats the check because paused intake may replay a message after the
         bindings changed. ``kind`` names what was rejected (``消息``, ``/stop``)
         for the warning log.
@@ -145,9 +146,7 @@ class _InboundMixin:
         await self._intake.submit(message)
 
     async def _accept_inbound(self, message: InboundMessage) -> None:
-        if not self._online:
-            self._online = True
-            self._report_account("online")
+        self.mark_online()
         if self._channel_hub is not None and not self._channel_hub.is_sender_allowed(
             channel=message.channel,
             chat_id=message.chat_id,

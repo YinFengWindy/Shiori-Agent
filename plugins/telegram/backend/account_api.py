@@ -78,10 +78,11 @@ class TelegramAccountApi:
 
     async def get_member(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Query one group member; Telegram may reject it without bot permission."""
+        ref = self._known_ref(payload)
         channel = self._channel(payload)
         chat_id = str(payload.get("chat_id") or "")
         user_id = str(payload.get("user_id") or "")
-        known = self._store.get(f"known_chats:{channel._config_ref}", {})
+        known = self._store.get(f"known_chats:{ref}", {})
         if not chat_id.startswith("-") or chat_id not in known or not user_id.isdigit():
             raise ValueError("A known group and numeric user ID are required")
         try:
@@ -104,7 +105,7 @@ class TelegramAccountApi:
     async def send_target(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Send to one explicit target through the selected connected Bot."""
         channel = self._channel(payload)
-        if not channel._online:
+        if not channel.can_send():
             raise RuntimeError("Telegram Bot is not connected")
         chat_id = str(payload.get("chat_id") or "").strip()
         text = str(payload.get("text") or "")

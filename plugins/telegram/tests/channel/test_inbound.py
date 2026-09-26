@@ -44,3 +44,22 @@ async def test_anonymous_group_message_keeps_chat_subject_and_topic():
         update.effective_chat, sender_chat, update.effective_message
     )
     channel._remember_username.assert_awaited_once_with("-1001", "anonymous")
+
+
+@pytest.mark.asyncio
+async def test_unbound_chat_is_observed_without_publishing_its_message():
+    channel = _InboundMixin()
+    channel._remember_chat = Mock()
+    channel._is_sender_admitted = Mock(return_value=False)
+    channel._publish_inbound = AsyncMock()
+    sender = SimpleNamespace(id=9, username="member")
+    message = SimpleNamespace(text="private content", from_user=sender)
+    chat = SimpleNamespace(id=-1001, type="supergroup")
+    update = SimpleNamespace(
+        effective_message=message,
+        effective_chat=chat,
+        effective_user=sender,
+    )
+    await channel._on_message(update, SimpleNamespace(bot=Mock()))
+    channel._remember_chat.assert_called_once_with(chat, sender, message)
+    channel._publish_inbound.assert_not_awaited()

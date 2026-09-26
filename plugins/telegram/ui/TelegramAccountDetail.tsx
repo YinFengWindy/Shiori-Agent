@@ -3,9 +3,8 @@ import { useEffect, useId, useState } from "react";
 import { createPluginBridgeClient, type PluginConfigSnapshot } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import { createAccountClient } from "../../../apps/desktop/renderer/src/accounts/accountClient";
 import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
-import { InlineError } from "../../../apps/desktop/renderer/src/shared/feedback/InlineError";
 import { ghostButtonClass, iconButtonClass, inputClass, primaryButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
-import { telegramBots, withTelegramBot } from "./telegramConfig";
+import { legacyRefToRepair, telegramBots, withTelegramBot } from "./telegramConfig";
 
 const configClient = createPluginBridgeClient();
 const accountsClient = createAccountClient();
@@ -14,7 +13,7 @@ type KnownChat = { chat_id: string; chat_type: string; title: string; username: 
 type BotIdentity = { bot_id: string; name: string; username: string };
 
 /** Platform-owned Token, polling and observed-target controls in the shared account detail. */
-export function TelegramAccountDetail({ account, onChanged, client }: PluginAccountDetailComponentProps) {
+export function TelegramAccountDetail({ account, onChanged, client, host }: PluginAccountDetailComponentProps) {
   const [config, setConfig] = useState<PluginConfigSnapshot | null>(null);
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
@@ -23,6 +22,7 @@ export function TelegramAccountDetail({ account, onChanged, client }: PluginAcco
   const [known, setKnown] = useState<KnownChat[]>([]);
   const [identity, setIdentity] = useState<BotIdentity | null>(null);
   const tokenId = useId();
+  const InlineError = host.ui.InlineError;
   const accountRef = account?.configRef;
   useEffect(() => {
     void configClient.getConfig("telegram").then(setConfig).catch((failure) => setError(String(failure)));
@@ -53,7 +53,7 @@ export function TelegramAccountDetail({ account, onChanged, client }: PluginAcco
           throw new Error("此 Bot 已添加");
         }
       }
-      const ref = account?.configRef ?? crypto.randomUUID().replaceAll("-", "");
+      const ref = account?.configRef ?? legacyRefToRepair(config) ?? crypto.randomUUID().replaceAll("-", "");
       const values = withTelegramBot(config, ref, token.trim() || undefined, enabled);
       const result = await configClient.setConfig("telegram", values, { operationId: crypto.randomUUID() });
       setConfig({ ...config, values: result.values, envStatus: result.envStatus });
@@ -98,7 +98,7 @@ export function TelegramAccountDetail({ account, onChanged, client }: PluginAcco
           <span className="shrink-0 text-ink-muted">{chat.chat_type} · {chat.chat_id}{chat.topics?.length ? ` · ${chat.topics.join(", ")}` : ""}</span>
         </li>)}
       </ul>
-      <p className="m-0 text-body-xs text-ink-muted">仅显示此 Bot 已收到消息的会话；群消息可见性受 Telegram 隐私模式限制。</p>
+      <p className="m-0 text-body-xs text-ink-muted">Telegram 隐私模式可能限制普通群消息接收。</p>
     </section>}
   </div>;
 }

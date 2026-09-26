@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes
 
 from core.channels.chat_id_command import answer_chat_id_command
 
+from ..utils.topic import telegram_topic_kwargs
 from .compat import _call_send_markdown
 from .identity import message_subject, message_topic_metadata
 
@@ -39,11 +40,7 @@ class _CommandMixin:
                 str(chat.id),
                 "当前未启用中断功能。",
                 self._telegram_outbound_limiter,
-                **(
-                    {"message_thread_id": msg.message_thread_id}
-                    if getattr(msg, "message_thread_id", None)
-                    else {}
-                ),
+                **telegram_topic_kwargs(getattr(msg, "message_thread_id", None)),
             )
             return
 
@@ -65,11 +62,7 @@ class _CommandMixin:
             str(chat.id),
             result.message,
             self._telegram_outbound_limiter,
-            **(
-                {"message_thread_id": msg.message_thread_id}
-                if getattr(msg, "message_thread_id", None)
-                else {}
-            ),
+            **telegram_topic_kwargs(getattr(msg, "message_thread_id", None)),
         )
 
     async def _on_chat_id_command(
@@ -99,11 +92,7 @@ class _CommandMixin:
                 chat_id,
                 text,
                 self._telegram_outbound_limiter,
-                **(
-                    {"message_thread_id": msg.message_thread_id}
-                    if msg and getattr(msg, "message_thread_id", None)
-                    else {}
-                ),
+                **telegram_topic_kwargs(getattr(msg, "message_thread_id", None)),
             ),
         )
 

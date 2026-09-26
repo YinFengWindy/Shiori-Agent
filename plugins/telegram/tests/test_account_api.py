@@ -25,11 +25,12 @@ def account_api():
     }.get(key, default)
     first = SimpleNamespace(
         _config_ref="first",
-        _online=True,
+        can_send=Mock(return_value=True),
+        mark_online=Mock(),
         bot=SimpleNamespace(get_chat_member=AsyncMock()),
         send=AsyncMock(return_value="77"),
     )
-    second = SimpleNamespace(_config_ref="second", _online=True, bot=Mock())
+    second = SimpleNamespace(can_send=Mock(return_value=True), bot=Mock())
     return TelegramAccountApi({"first": first, "second": second}, Mock(), store), first
 
 
