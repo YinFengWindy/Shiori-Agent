@@ -9,6 +9,7 @@ requires-python = ">=3.12"
 dependencies = [
     "shiori-agent==0.1.0",
     "ncatbot>=4.4.0",
+    "websockets>=15.0,<16",
 ]
 
 [project.optional-dependencies]
