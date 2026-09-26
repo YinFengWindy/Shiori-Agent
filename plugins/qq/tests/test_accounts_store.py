@@ -99,6 +99,28 @@ def test_mismatched_private_connection_does_not_authorize_host_cleanup(tmp_path)
     assert not store.legacy_receipt.exists()
 
 
+def test_managed_account_does_not_authorize_legacy_host_cleanup(tmp_path):
+    store = QQAccountsStore(tmp_path)
+    store.save(
+        {
+            "managed": QQConnectionConfig(
+                "managed",
+                "ws://localhost:3001",
+                "old-secret",
+                expected_uin="101",
+                mode="managed",
+            )
+        }
+    )
+    store.migrate_legacy(
+        bot_uin="101",
+        ws_uri="ws://localhost:3001",
+        ws_token="old-secret",
+        timeout_seconds=5,
+    )
+    assert not store.legacy_receipt.exists()
+
+
 def test_pending_credentials_round_trip_without_replacing_active_connection(tmp_path):
     store = QQAccountsStore(tmp_path)
     config = QQConnectionConfig(

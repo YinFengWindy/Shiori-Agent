@@ -386,7 +386,7 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     await channel._bot.group_handler(
         SimpleNamespace(group_id="100", user_id="1", raw_message="/stop")
     )
-    # Blacklisted member of the bound group: neither messages nor /stop get in.
+    # Legacy session bindings no longer admit traffic without an owned account.
     await channel._bot.group_handler(
         SimpleNamespace(group_id="100", user_id="2", raw_message="blocked")
     )
@@ -395,19 +395,8 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     )
     if scheduled:
         await asyncio.gather(*scheduled)
-    assert len(bus.inbound) == 2
-    assert bus.inbound[0].metadata["chat_type"] == "private"
-    assert bus.inbound[1].metadata["chat_type"] == "group"
-    assert bus.inbound[0].session_key == "role:mira"
-    assert bus.inbound[0].metadata["role_id"] == "mira"
-    assert bus.inbound[0].metadata["thread_id"] == "thread:mira:qq:1"
-    assert bus.inbound[1].session_key == "role:mira"
-    assert bus.inbound[1].metadata["thread_id"] == "thread:mira:qq:gqq:100"
-    assert channel._interrupt_controller.request_interrupt.call_count == 2
-    assert [
-        call.kwargs["session_key"]
-        for call in channel._interrupt_controller.request_interrupt.call_args_list
-    ] == ["role:mira", "role:mira"]
+    assert bus.inbound == []
+    channel._interrupt_controller.request_interrupt.assert_not_called()
 
     channel._run_on_bot_loop = AsyncMock(side_effect=_drain)
     sample = tmp_path / "image.bin"

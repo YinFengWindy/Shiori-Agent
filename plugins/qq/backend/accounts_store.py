@@ -131,6 +131,7 @@ class QQAccountsStore:
         ):
             if bot_uin and any(
                 row.expected_uin == bot_uin
+                and row.mode == "external"
                 and row.ws_uri == (ws_uri or "ws://localhost:3001")
                 and row.ws_token == ws_token
                 and row.timeout_seconds == timeout_seconds
