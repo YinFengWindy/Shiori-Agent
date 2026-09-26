@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import pytest
 
 from agent.account_delivery import AccountDelivery
@@ -16,7 +17,8 @@ class _Rpc:
         self.ledger = ledger
         self.plugin_id = plugin_id
         self.calls: list[tuple[str, dict]] = []
-        self.failure: Exception | None = None
+        self.failure: BaseException | None = None
+        self.missing_receipt = False
 
     def resolve(self, name: str):
         async def handle(payload: dict):
@@ -27,6 +29,8 @@ class _Rpc:
             assert latest.status == "pending"
             if self.failure is not None:
                 raise self.failure
+            if self.missing_receipt:
+                return {}
             return {"message_id": f"receipt-{len(self.calls)}"}
 
         return (self.plugin_id, handle)
@@ -85,11 +89,14 @@ async def test_each_target_has_durable_receipt_even_if_turn_later_fails(
 @pytest.mark.asyncio
 async def test_rejected_and_unowned_attempts_record_failure(tmp_path) -> None:
     service, _accounts, rpc, _ledger, account_id = _service(tmp_path)
-    with pytest.raises(PermissionError):
-        await service.send(account_id, "other", "private", "42", "hello", None)
+    state: dict[str, bool] = {}
+    with account_delivery_scope(state):
+        with pytest.raises(PermissionError):
+            await service.send(account_id, "other", "private", "42", "hello", None)
     rpc.failure = ValueError("platform rejected target")
-    with pytest.raises(ValueError, match="platform rejected"):
-        await service.send(account_id, "mira", "private", "42", "hello", None)
+    with account_delivery_scope(state):
+        with pytest.raises(ValueError, match="platform rejected"):
+            await service.send(account_id, "mira", "private", "42", "hello", None)
 
     attempts = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert [(row.status, row.error) for row in attempts] == [("failed", "ValueError")]
@@ -98,25 +105,58 @@ async def test_rejected_and_unowned_attempts_record_failure(tmp_path) -> None:
         ("failed", "PermissionError")
     ]
     assert len(rpc.calls) == 1
+    assert state == {}
 
 
 @pytest.mark.asyncio
 async def test_uncertain_timeout_remains_pending(tmp_path) -> None:
     service, _accounts, rpc, _ledger, account_id = _service(tmp_path)
     rpc.failure = TimeoutError("reply lost")
-    with pytest.raises(TimeoutError):
-        await service.send(account_id, "mira", "private", "42", "hello", None)
+    state: dict[str, bool] = {}
+    with account_delivery_scope(state):
+        with pytest.raises(TimeoutError):
+            await service.send(account_id, "mira", "private", "42", "hello", None)
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert attempt.status == "pending"
     assert attempt.platform_message_id is None
     assert attempt.error == "TimeoutError"
+    assert state == {"sent": True}
 
 
 @pytest.mark.asyncio
 async def test_missing_platform_receipt_remains_pending(tmp_path) -> None:
     service, _accounts, rpc, _ledger, account_id = _service(tmp_path)
     rpc.failure = UncertainDeliveryError("receipt missing")
-    with pytest.raises(UncertainDeliveryError):
-        await service.send(account_id, "mira", "private", "42", "hello", None)
+    state: dict[str, bool] = {}
+    with account_delivery_scope(state):
+        with pytest.raises(UncertainDeliveryError):
+            await service.send(account_id, "mira", "private", "42", "hello", None)
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert (attempt.status, attempt.error) == ("pending", "UncertainDeliveryError")
+    assert state == {"sent": True}
+
+
+@pytest.mark.asyncio
+async def test_empty_plugin_receipt_suppresses_implicit_reply(tmp_path) -> None:
+    service, _accounts, rpc, _ledger, account_id = _service(tmp_path)
+    rpc.missing_receipt = True
+    state: dict[str, bool] = {}
+    with account_delivery_scope(state):
+        with pytest.raises(RuntimeError, match="结果不确定"):
+            await service.send(account_id, "mira", "private", "42", "hello", None)
+    [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
+    assert (attempt.status, attempt.error) == ("pending", "MissingReceipt")
+    assert state == {"sent": True}
+
+
+@pytest.mark.asyncio
+async def test_cancelled_plugin_call_suppresses_implicit_reply(tmp_path) -> None:
+    service, _accounts, rpc, _ledger, account_id = _service(tmp_path)
+    rpc.failure = asyncio.CancelledError()
+    state: dict[str, bool] = {}
+    with account_delivery_scope(state):
+        with pytest.raises(asyncio.CancelledError):
+            await service.send(account_id, "mira", "private", "42", "hello", None)
+    [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
+    assert (attempt.status, attempt.error) == ("pending", "CancelledError")
+    assert state == {"sent": True}

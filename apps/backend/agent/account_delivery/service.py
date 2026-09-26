@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -129,6 +130,11 @@ class AccountDelivery:
             if media:
                 raise ValueError("账号目标发送暂不支持媒体")
             access = self._accounts.authorize(account_id, role_id)
+        except Exception as exc:
+            self._ledger.mark_failed(attempt.attempt_id, type(exc).__name__)
+            raise
+
+        try:
             result = await self._call(
                 account.record.plugin_id,
                 ACCOUNT_SEND_METHOD,
@@ -140,11 +146,13 @@ class AccountDelivery:
                     "message_thread_id": message_thread_id,
                 },
             )
-        except PermissionError as exc:
-            self._ledger.mark_failed(attempt.attempt_id, type(exc).__name__)
+        except asyncio.CancelledError:
+            mark_account_delivery_sent()
+            self._ledger.mark_uncertain(attempt.attempt_id, "CancelledError")
             raise
         except (TimeoutError, ConnectionError, OSError, UncertainDeliveryError) as exc:
             # The platform may have accepted the payload before the link failed.
+            mark_account_delivery_sent()
             self._ledger.mark_uncertain(attempt.attempt_id, type(exc).__name__)
             raise
         except Exception as exc:
@@ -156,6 +164,7 @@ class AccountDelivery:
             else ""
         )
         if not message_id:
+            mark_account_delivery_sent()
             self._ledger.mark_uncertain(attempt.attempt_id, "MissingReceipt")
             raise RuntimeError("平台未返回回执，发送结果不确定")
         mark_account_delivery_sent()
