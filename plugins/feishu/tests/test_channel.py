@@ -18,6 +18,36 @@ from plugins.feishu.backend.channel import FeishuChannel, resolve_receive_id
 CHAT_ID = "oc_chat"
 
 
+@pytest.mark.parametrize("normal_reply", [False, True])
+async def test_chunk_send_keeps_first_nonempty_receipt(
+    harness: Any, normal_reply: bool
+) -> None:
+    from plugins.feishu.backend.formatting import CARD_TEXT_LIMIT
+
+    await harness.start()
+    harness.hub.mark_delivery = Mock()
+    harness.channel._send_chunk = AsyncMock(side_effect=["", "om_second"])
+    content = "甲" * (CARD_TEXT_LIMIT - 10) + "\n" + "乙" * 20
+    if normal_reply:
+        message = OutboundMessage(
+            channel="feishu",
+            chat_id=CHAT_ID,
+            content=content,
+            metadata={"external_message_id": "om_incoming"},
+            committed_message_id="committed",
+        )
+        await harness.channel._on_response(message)
+        harness.hub.mark_delivery.assert_called_once_with(
+            message,
+            default_channel="feishu",
+            delivery_status="sent",
+            external_message_id="om_second",
+        )
+    else:
+        assert await harness.channel.send(CHAT_ID, content) == "om_second"
+    assert harness.channel._send_chunk.await_count == 2
+
+
 async def test_partial_chunk_failure_retains_first_receipt(harness: Any) -> None:
     from plugins.feishu.backend.formatting import CARD_TEXT_LIMIT
 

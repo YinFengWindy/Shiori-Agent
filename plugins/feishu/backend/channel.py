@@ -465,15 +465,15 @@ class FeishuChannel:
     ) -> str | None:
         if not text.strip():
             return None
-        message_ids: list[str] = []
+        first_id: str | None = None
         for index, chunk in enumerate(split_markdown(text.strip())):
             message_id = await self._send_chunk(
                 chat_id, chunk, reply_to if index == 0 else None
             )
             if message_id and on_receipt is not None:
                 on_receipt(message_id)
-            message_ids.append(message_id)
-        return message_ids[0] if message_ids else None
+            first_id = first_id or message_id
+        return first_id
 
     async def _send_chunk(self, chat_id: str, chunk: str, reply_to: str | None) -> str:
         try:
