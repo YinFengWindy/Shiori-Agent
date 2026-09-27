@@ -10,12 +10,18 @@ from bus.errors import NonRetryableDeliveryError
 logger = logging.getLogger(__name__)
 
 
+async def _backoff(delay_s: float) -> None:
+    """出站重试前的退避等待；独立成函数，测试可只替换这一处而不影响全局 sleep。"""
+    await asyncio.sleep(delay_s)
+
+
 @dataclass(eq=False)
 class _Lane:
     """单个 channel 的出站积压，以及串行投递它的任务。"""
 
     backlog: deque[OutboundMessage]
     task: asyncio.Task[None] = field(init=False)
+    in_flight: OutboundMessage | None = None
 
 
 class MessageBus:
@@ -134,56 +140,77 @@ class MessageBus:
                     self._route_to_lane(getter.result())
                     getter = None
             # 先停止取数再等 lane，保证 stop() 之后不会再有消息被取出。
-            self._return_to_queue_front(await self._stop_getter(getter))
+            self._return_to_queue_front(self._take_getter(getter))
             getter = None
             while self._lanes:
                 await asyncio.wait({lane.task for lane in self._lanes.values()})
                 self._reap_lanes()
         finally:
-            await self._abandon_lanes(await self._stop_getter(getter))
+            # 收尾的状态变更全部同步完成，再次被取消也不会把 lane 残留在表里。
+            stopping = self._abandon_lanes(self._take_getter(getter))
+            # 只为取回异常，避免 "Task exception was never retrieved"。
+            await asyncio.gather(*stopping, return_exceptions=True)
 
     def _reap_lanes(self) -> None:
-        """移除正常结束的 lane；有 lane 意外失败时抛出其异常（失败即停）。
+        """移除已结束的 lane；有 lane 意外失败时抛出其异常（失败即停）。
 
-        失败的 lane 留在表中，由 dispatch_outbound 收尾时把积压退回队列。
+        被取消的 lane 直接回收，积压退回队列；失败的 lane 留在表中，
+        由 dispatch_outbound 收尾时把积压退回队列。
         """
-        finished = [
-            channel
-            for channel, lane in self._lanes.items()
-            if lane.task.done()
-            and not lane.task.cancelled()
-            and lane.task.exception() is None
-        ]
-        for channel in finished:
-            del self._lanes[channel]
+        for channel, lane in list(self._lanes.items()):
+            if not lane.task.done():
+                continue
+            if lane.task.cancelled():
+                del self._lanes[channel]
+                self._return_to_queue_front(list(lane.backlog))
+                lane.backlog.clear()
+            elif lane.task.exception() is None:
+                del self._lanes[channel]
         for lane in self._lanes.values():
             if lane.task.done():
                 lane.task.result()
 
-    async def _abandon_lanes(self, fetched: list[OutboundMessage]) -> None:
-        """取消剩余 lane，把未投递的积压和已取出未路由的消息按原顺序退回队首。"""
+    def _abandon_lanes(
+        self, fetched: list[OutboundMessage]
+    ) -> list[asyncio.Task[None]]:
+        """取消剩余 lane，把未投递的积压和已取出未路由的消息按原顺序退回队首。
+
+        返回被取消的 lane 任务，由调用方等待其结束。
+        """
         lanes = list(self._lanes.values())
-        for lane in lanes:
-            lane.task.cancel()
-        # return_exceptions 同时取回失败 lane 的异常，避免未取回告警。
-        await asyncio.gather(*(lane.task for lane in lanes), return_exceptions=True)
         self._lanes.clear()
         # 各 lane 积压都早于 getter 取出的那条，按此顺序放回即保持同 channel 次序。
         leftovers = [msg for lane in lanes for msg in lane.backlog] + fetched
-        if leftovers:
-            logger.warning("出站分发中止，%d 条未投递消息退回队列", len(leftovers))
+        interrupted = 0
+        for lane in lanes:
+            # 先清空积压：即便回调吞掉取消继续运行，lane 也不会重复投递已退回的消息。
+            lane.backlog.clear()
+            if not lane.task.done():
+                interrupted += lane.in_flight is not None
+                lane.task.cancel()
+        if leftovers or interrupted:
+            logger.warning(
+                "出站分发中止：%d 条未投递消息退回队列，%d 条投递中的消息被中断",
+                len(leftovers),
+                interrupted,
+            )
         self._return_to_queue_front(leftovers)
+        return [lane.task for lane in lanes]
 
     @staticmethod
-    async def _stop_getter(
+    def _take_getter(
         getter: asyncio.Task[OutboundMessage] | None,
     ) -> list[OutboundMessage]:
-        """取消取数任务；若它已取出消息则返回该消息，交由调用方放回。"""
+        """停止取数任务；若它已取出消息则返回该消息，交由调用方放回。
+
+        未完成的 Queue.get 被取消时不会出队（即便已被唤醒但尚未恢复运行），
+        所以只有已完成的任务才带着消息。
+        """
         if getter is None:
             return []
-        getter.cancel()
-        await asyncio.gather(getter, return_exceptions=True)
-        # Queue.get 在被唤醒前取消不会出队，只有真正完成时才带着消息。
+        if not getter.done():
+            getter.cancel()
+            return []
         if getter.cancelled() or getter.exception() is not None:
             return []
         return [getter.result()]
@@ -212,16 +239,26 @@ class MessageBus:
         )
         self._lanes[msg.channel] = lane
 
-    async def _drain_lane(self, lane: "_Lane") -> None:
+    async def _drain_lane(self, lane: _Lane) -> None:
         # backlog 取空后同一步内直接结束；dispatch_outbound 回收后才会新建 lane，
         # 两者之间没有 await，不会出现消息落进已结束 lane 的竞态。
         # 中止时剩余 backlog 保留在 lane 上，由 dispatch_outbound 统一退回队列。
         while lane.backlog:
             msg = lane.backlog.popleft()
+            lane.in_flight = msg
             try:
                 await self._dispatch_message(msg)
+            except asyncio.CancelledError:
+                # 投递中途被取消无法判断对端是否已收到，不重投以免重复，只记录。
+                logger.error(
+                    "出站投递被中止，消息可能未送达 channel=%s chat_id=%s",
+                    msg.channel,
+                    msg.chat_id,
+                )
+                raise
             finally:
                 self._settle(msg)
+            lane.in_flight = None
 
     def _settle(self, msg: OutboundMessage) -> None:
         key = self._outbound_key(msg)
@@ -255,7 +292,7 @@ class MessageBus:
                     failed.append(cb)
         if not failed:
             return
-        await asyncio.sleep(self.outbound_retry_delay_s)
+        await _backoff(self.outbound_retry_delay_s)
         async with self.transport_lock:
             for cb in self._retry_targets(msg, attempted, failed):
                 error = await self._deliver_once(cb, msg, retrying=True)

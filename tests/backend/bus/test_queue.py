@@ -191,14 +191,11 @@ async def test_retry_waits_configured_delay_once_without_holding_lock(
         else MessageBus()
     )
     events: list[object] = []
-    real_sleep = asyncio.sleep
 
-    async def record_sleep(delay):
+    async def record_backoff(delay):
         events.append(("sleep", delay, bus.transport_lock.locked()))
-        await real_sleep(0)
 
-    # Only _dispatch_message runs here, so no test code depends on the real sleep.
-    monkeypatch.setattr("bus.queue.asyncio.sleep", record_sleep)
+    monkeypatch.setattr("bus.queue._backoff", record_backoff)
 
     async def flaky(message):
         events.append("attempt")
@@ -515,3 +512,73 @@ async def test_retry_without_any_transport_logs_the_lost_message(caplog):
         bus.unsubscribe_outbound("chat", broken)
     await asyncio.wait_for(delivery, 1)
     assert "重试时没有可用的连接" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_cancel_mid_delivery_logs_the_interrupted_message(caplog):
+    bus = MessageBus()
+    entered = asyncio.Event()
+    bus.subscribe_outbound("chat", _blocking_callback([], asyncio.Event(), entered))
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    await bus.publish_outbound(OutboundMessage("chat", "chat-7", "in-flight"))
+    await asyncio.wait_for(entered.wait(), 1)
+    await _cancel(bus, dispatcher)
+    assert "出站投递被中止" in caplog.text
+    assert "channel=chat chat_id=chat-7" in caplog.text
+    assert "1 条投递中的消息被中断" in caplog.text
+    assert not bus.has_pending_outbound("chat", "chat-7", "")
+
+
+@pytest.mark.asyncio
+async def test_cancelling_again_during_cleanup_leaves_no_stale_lane():
+    bus = MessageBus()
+    entered, release, first_cancel = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    delivered: list[str] = []
+
+    async def stubborn(message):
+        entered.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            # Swallows the first cancel so cleanup is still awaiting this lane.
+            first_cancel.set()
+            await release.wait()
+        delivered.append(message.content)
+
+    bus.subscribe_outbound("chat", stubborn)
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    await bus.publish_outbound(OutboundMessage("chat", "one", "in-flight"))
+    await asyncio.wait_for(entered.wait(), 1)
+    await bus.publish_outbound(OutboundMessage("chat", "one", "queued"))
+    await _settle_loop(lambda: bus._outbound.qsize() == 0 and bus.outbound_size == 1)
+    dispatcher.cancel()
+    await asyncio.wait_for(first_cancel.wait(), 1)
+    assert not dispatcher.done()
+    dispatcher.cancel()
+    await asyncio.gather(dispatcher, return_exceptions=True)
+    assert bus._lanes == {}
+    assert bus.outbound_size == 1
+
+    release.set()
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        await asyncio.wait_for(bus.drain_outbound(), 1)
+    finally:
+        await _cancel(bus, dispatcher)
+    assert delivered == ["queued"]
+
+
+@pytest.mark.asyncio
+async def test_cancel_after_get_but_before_routing_returns_the_message():
+    bus = MessageBus()
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    await _settle_loop(lambda: False)  # The dispatcher is parked in its get.
+    # An unbounded put never yields, so the getter has not run yet.
+    await bus.publish_outbound(OutboundMessage("chat", "one", "fetched"))
+    await asyncio.sleep(0)
+    # The getter has dequeued the message; the dispatcher has not routed it.
+    assert bus._outbound.qsize() == 0
+    assert bus._lanes == {}
+    await _cancel(bus, dispatcher)
+    assert bus.outbound_size == 1
+    assert bus._outbound.get_nowait().content == "fetched"
