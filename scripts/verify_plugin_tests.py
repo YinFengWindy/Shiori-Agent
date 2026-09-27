@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 import tomllib
+import traceback
 import zipfile
 
 from packaging.requirements import Requirement
@@ -178,6 +179,11 @@ def pytest_sessionfinish(session, exitstatus):
 """
 
 
+def case_directory(artifact_root: Path, plugin_id: str) -> Path:
+    """Holds every piece of per-plugin evidence (venv, logs, provenance)."""
+    return artifact_root / "cases" / plugin_id
+
+
 def verify_plugin(
     plugin_id: str,
     *,
@@ -189,7 +195,7 @@ def verify_plugin(
     wheel: Path,
 ) -> dict[str, object]:
     """Runs all target tests with only the target and its declared sibling dependencies installed."""
-    case = artifact_root / "cases" / plugin_id
+    case = case_directory(artifact_root, plugin_id)
     case.mkdir(parents=True)
     venv = case / "venv"
     run(
@@ -321,24 +327,33 @@ def schedule(plugin_ids: Iterable[str]) -> list[str]:
 
 
 def _attempt(
-    plugin_id: str, verify: Callable[[str], dict[str, object]]
+    plugin_id: str, verify: Callable[[str], dict[str, object]], artifact_root: Path
 ) -> dict[str, object]:
     """Runs one plugin and converts its failure into a result entry.
 
     This is the per-plugin boundary: one failing suite must not stop the others.
+    Every failure names a log: a failed command keeps its own output log, any
+    other exception gets its full traceback in ``cases/<id>/failure.log``.
     """
     started = time.perf_counter()
     entry: dict[str, object]
     try:
-        entry = {"plugin": plugin_id, "status": "passed", **verify(plugin_id)}
+        # The runner owns plugin/status; verify's fields cannot override them.
+        entry = {**verify(plugin_id), "plugin": plugin_id, "status": "passed"}
     except Exception as error:
+        if isinstance(error, CommandFailed):
+            log = error.log
+        else:
+            log = case_directory(artifact_root, plugin_id) / "failure.log"
+            log.parent.mkdir(parents=True, exist_ok=True)
+            log.write_text(traceback.format_exc(), encoding="utf-8")
         # Bare asserts in verify_plugin carry no message; fall back to the type name.
         lines = str(error).splitlines()
         entry = {
             "plugin": plugin_id,
             "status": "failed",
             "error": lines[0] if lines else type(error).__name__,
-            "log": str(error.log) if isinstance(error, CommandFailed) else None,
+            "log": str(log),
         }
     entry["seconds"] = round(time.perf_counter() - started, 1)
     return entry
@@ -348,13 +363,19 @@ def verify_all(
     plugin_ids: Iterable[str],
     verify: Callable[[str], dict[str, object]],
     *,
+    artifact_root: Path,
     jobs: int,
 ) -> list[dict[str, object]]:
-    """Verifies every plugin in a thread pool and returns entries sorted by plugin."""
-    results = []
+    """Verifies every plugin in a thread pool and returns entries sorted by plugin.
+
+    ``results.json`` is rewritten from this (main) thread after each completion,
+    so a run killed by a timeout still leaves the finished plugins' evidence; the
+    write after the last completion is the complete result.
+    """
+    results: list[dict[str, object]] = []
     with ThreadPoolExecutor(max_workers=jobs) as pool:
         futures = [
-            pool.submit(_attempt, plugin_id, verify)
+            pool.submit(_attempt, plugin_id, verify, artifact_root)
             for plugin_id in schedule(plugin_ids)
         ]
         for future in as_completed(futures):
@@ -365,7 +386,11 @@ def verify_all(
                 flush=True,
             )
             results.append(entry)
-    return sorted(results, key=lambda entry: str(entry["plugin"]))
+            results.sort(key=lambda item: str(item["plugin"]))
+            (artifact_root / "results.json").write_text(
+                json.dumps(results, indent=2), encoding="utf-8"
+            )
+    return results
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -428,16 +453,14 @@ def main(argv: list[str] | None = None) -> None:
             kit=kit,
             wheel=wheels[plugin_id],
         ),
+        artifact_root=artifact_root,
         jobs=args.jobs,
-    )
-    (artifact_root / "results.json").write_text(
-        json.dumps(results, indent=2), encoding="utf-8"
     )
     failed = [entry for entry in results if entry["status"] == "failed"]
     if failed:
         print(f"{len(failed)} of {len(results)} plugin suites failed:", flush=True)
         for entry in failed:
-            print(f"  {entry['plugin']}: {entry['log'] or entry['error']}", flush=True)
+            print(f"  {entry['plugin']}: {entry['log']}", flush=True)
         raise SystemExit(1)
     print(f"All {len(results)} plugin suites passed: {artifact_root}", flush=True)
 

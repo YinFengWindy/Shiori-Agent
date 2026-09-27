@@ -40,4 +40,4 @@ uv run python scripts/verify_plugin_tests.py --output /absolute/path/outside-rep
 
 每个目标执行全部测试后验证宿主模块来自该环境的 site-packages、目标插件代码与副本一致、安装依赖闭包正确、没有 editable 安装；还实际读取内置技能、共享 emoji 并调用初始化流程复制配置模板。最后单独运行故意在 `await` 后失败的异步用例，要求退出码 1 和执行标记，证明 pytest 真正等待了协程。
 
-`results.json`、`host-wheel-files.txt`、各包的 `pytest.log`、`provenance.json`、`async-failure.log` 是验收证据。预期失败的异步探针不算插件失败。wheel 构建失败会停止验证；单个插件的失败或依赖缺失不会中止其余插件，全部跑完后列出失败插件及其日志路径并以非零退出。`results.json` 在全部完成后统一写入，按插件排序，包含通过与失败条目及各自耗时。CI 在独立的 `plugin-isolation` job 中对全部插件执行此流程并上传证据，不能用只收集测试或跳过宿主集成用例替代。
+`results.json`、`host-wheel-files.txt`、各包的 `pytest.log`、`provenance.json`、`async-failure.log` 是验收证据。预期失败的异步探针不算插件失败。wheel 构建失败会停止验证；单个插件的失败或依赖缺失不会中止其余插件，全部跑完后列出失败插件及其日志路径并以非零退出；命令失败指向该命令的日志，其他异常的完整 traceback 写入 `cases/<id>/failure.log`。`results.json` 由主线程在每个插件完成后重写一次（超时中断也保留已完成的证据），按插件排序，包含通过与失败条目及各自耗时。CI 在独立的 `plugin-isolation` job 中对全部插件执行此流程并上传证据，不能用只收集测试或跳过宿主集成用例替代。

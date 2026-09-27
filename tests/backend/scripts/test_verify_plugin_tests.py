@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 import json
 from pathlib import Path
+import time
 
 import pytest
 
@@ -185,12 +186,15 @@ def test_slow_plugins_are_scheduled_first_and_the_rest_keep_order() -> None:
     ]
 
 
-def test_failures_do_not_stop_other_plugins_and_results_are_sorted() -> None:
+def test_failures_do_not_stop_other_plugins_and_results_are_sorted(
+    tmp_path: Path,
+) -> None:
     calls: list[str] = []
 
     results = runner.verify_all(
         ["zeta", "broken", "alpha", "crash"],
         _fake_verify(calls, command_failure="broken", assertion_failure="crash"),
+        artifact_root=tmp_path,
         jobs=2,
     )
 
@@ -204,6 +208,7 @@ def test_failures_do_not_stop_other_plugins_and_results_are_sorted() -> None:
     by_id = {entry["plugin"]: entry for entry in results}
     assert by_id["alpha"]["status"] == "passed"
     assert by_id["alpha"]["result"] == "3 passed"
+    # A failed command is reported with its own output log.
     assert by_id["broken"] == {
         "plugin": "broken",
         "status": "failed",
@@ -211,11 +216,73 @@ def test_failures_do_not_stop_other_plugins_and_results_are_sorted() -> None:
         "log": str(Path("cases", "broken", "pytest.log")),
         "seconds": by_id["broken"]["seconds"],
     }
-    # Assertion failures inside verify_plugin carry no command log.
-    assert by_id["crash"]["status"] == "failed"
-    assert by_id["crash"]["error"] == "AssertionError"
-    assert by_id["crash"]["log"] is None
+    assert not (tmp_path / "cases" / "broken" / "failure.log").exists()
     assert all(isinstance(entry["seconds"], float) for entry in results)
+    written = json.loads((tmp_path / "results.json").read_text(encoding="utf-8"))
+    assert written == results
+
+
+def test_non_command_failure_keeps_its_full_traceback_as_the_log(
+    tmp_path: Path,
+) -> None:
+    results = runner.verify_all(
+        ["crash"],
+        _fake_verify([], assertion_failure="crash"),
+        artifact_root=tmp_path,
+        jobs=1,
+    )
+
+    log = tmp_path / "cases" / "crash" / "failure.log"
+    assert results[0]["status"] == "failed"
+    assert results[0]["error"] == "AssertionError"
+    assert results[0]["log"] == str(log)
+    text = log.read_text(encoding="utf-8")
+    assert text.startswith("Traceback (most recent call last):")
+    # The traceback points at the raising line, which the one-line error cannot.
+    assert "raise AssertionError()" in text
+
+
+def test_verify_fields_cannot_override_the_runner_owned_status(
+    tmp_path: Path,
+) -> None:
+    results = runner.verify_all(
+        ["alpha"],
+        lambda plugin_id: {"plugin": "other", "status": "failed", "result": "ok"},
+        artifact_root=tmp_path,
+        jobs=1,
+    )
+
+    assert results[0]["plugin"] == "alpha"
+    assert results[0]["status"] == "passed"
+    assert results[0]["result"] == "ok"
+
+
+def test_results_are_written_as_each_plugin_completes(tmp_path: Path) -> None:
+    """A run killed mid-way (e.g. by the CI timeout) still leaves partial evidence."""
+    results_file = tmp_path / "results.json"
+    seen_while_running: list[object] = []
+
+    def verify(plugin_id: str) -> dict[str, object]:
+        if plugin_id == "slow":
+            # Wait until the main thread has recorded the fast plugin.
+            deadline = time.monotonic() + 5
+            while not results_file.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            seen_while_running.append(
+                json.loads(results_file.read_text(encoding="utf-8"))
+                if results_file.exists()
+                else None
+            )
+        return {"result": "1 passed"}
+
+    runner.verify_all(["fast", "slow"], verify, artifact_root=tmp_path, jobs=2)
+
+    assert len(seen_while_running) == 1
+    partial = seen_while_running[0]
+    assert isinstance(partial, list)
+    assert [entry["plugin"] for entry in partial] == ["fast"]
+    final = json.loads(results_file.read_text(encoding="utf-8"))
+    assert [entry["plugin"] for entry in final] == ["fast", "slow"]
 
 
 def test_main_summarizes_all_failures_writes_results_and_exits_non_zero(
@@ -275,31 +342,45 @@ def test_main_summarizes_all_failures_writes_results_and_exits_non_zero(
         ("crash", "failed"),
         ("telegram", "passed"),
     ]
+    # Every failed plugin is listed with a log path.
     summary = capsys.readouterr().out.split("2 of 4 plugin suites failed:\n")[1]
     assert summary.splitlines() == [
         f"  broken: {Path('cases', 'broken', 'pytest.log')}",
-        "  crash: AssertionError",
+        f"  crash: {output / 'cases' / 'crash' / 'failure.log'}",
     ]
 
 
-def test_jobs_defaults_to_cpu_count(
+def test_jobs_defaults_to_cpu_count_for_builds_and_verification(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The pool size reaches both the wheel builds and the verification pool."""
-    received: list[int] = []
+    """The default pool size reaches both the wheel builds and the verification pool."""
+    received: dict[str, int] = {}
 
-    def build_wheels(sources, wheelhouse, logs, *, jobs: int):
-        received.append(jobs)
-        raise SystemExit(0)
+    def build_wheels(
+        sources: dict[str, Path], wheelhouse: Path, logs: Path, *, jobs: int
+    ) -> dict[str, Path]:
+        received["build"] = jobs
+        return {name: wheelhouse / f"{name}.whl" for name in sources}
+
+    def verify_all(
+        plugin_ids: list[str],
+        verify: Callable[[str], dict[str, object]],
+        *,
+        artifact_root: Path,
+        jobs: int,
+    ) -> list[dict[str, object]]:
+        received["verify"] = jobs
+        return []
 
     monkeypatch.setattr(runner, "REPOSITORY", tmp_path / "repository")
     _plugin(tmp_path / "repository", "alpha")
     _plugin(tmp_path / "repository", "default_memory")
     monkeypatch.setattr(runner, "stage_plugin_package", lambda source, target: target)
     monkeypatch.setattr(runner, "build_wheels", build_wheels)
+    monkeypatch.setattr(runner, "check_host_wheel", lambda wheel, log: None)
+    monkeypatch.setattr(runner, "verify_all", verify_all)
     monkeypatch.setattr(runner.os, "cpu_count", lambda: 7)
 
-    with pytest.raises(SystemExit):
-        runner.main(["--output", str(tmp_path / "out"), "--plugins", "alpha"])
+    runner.main(["--output", str(tmp_path / "out"), "--plugins", "alpha"])
 
-    assert received == [7]
+    assert received == {"build": 7, "verify": 7}
