@@ -84,7 +84,7 @@ async def test_late_completion_after_intake_closes_releases_its_generation():
 
 @pytest.mark.asyncio
 async def test_message_bus_retries_failed_outbound_dispatch():
-    bus = MessageBus()
+    bus = MessageBus(outbound_retry_delay_s=0)
     await bus.publish_inbound(InboundMessage("telegram", "u", "1", "hello"))
     inbound = await bus.consume_inbound()
     assert inbound.session_key == "telegram:1"
@@ -117,11 +117,9 @@ async def test_message_bus_retries_failed_outbound_dispatch():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_on_retry", [False, True])
 async def test_nonretryable_delivery_never_replays_or_sends_error_notice(
-    monkeypatch, fail_on_retry
+    fail_on_retry,
 ):
-    sleep = AsyncMock()
-    monkeypatch.setattr("bus.queue.asyncio.sleep", sleep)
-    bus = MessageBus()
+    bus = MessageBus(outbound_retry_delay_s=0)
     callback = AsyncMock(
         side_effect=(
             [RuntimeError("retryable"), NonRetryableDeliveryError("uncertain write")]
@@ -134,15 +132,11 @@ async def test_nonretryable_delivery_never_replays_or_sends_error_notice(
     await bus._dispatch_message(message)
     assert callback.await_count == (2 if fail_on_retry else 1)
     assert all(call.args == (message,) for call in callback.await_args_list)
-    assert sleep.await_count == (1 if fail_on_retry else 0)
 
 
 @pytest.mark.asyncio
-async def test_retryable_delivery_still_sends_error_notice_after_second_failure(
-    monkeypatch,
-):
-    monkeypatch.setattr("bus.queue.asyncio.sleep", AsyncMock())
-    bus = MessageBus()
+async def test_retryable_delivery_still_sends_error_notice_after_second_failure():
+    bus = MessageBus(outbound_retry_delay_s=0)
     callback = AsyncMock(
         side_effect=[RuntimeError("first"), RuntimeError("second"), None]
     )
@@ -183,4 +177,123 @@ async def test_pending_outbound_tracks_queue_and_dispatch_until_completion():
         bus.stop()
         dispatcher.cancel()
         with suppress(asyncio.CancelledError):
+            await dispatcher
+
+
+def test_outbound_retry_delay_defaults_to_two_seconds():
+    assert MessageBus().outbound_retry_delay_s == 2.0
+
+
+async def _dispatch_until_drained(bus: MessageBus, *messages: OutboundMessage):
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        for message in messages:
+            await bus.publish_outbound(message)
+        await asyncio.wait_for(bus.drain_outbound(), 2)
+    finally:
+        bus.stop()
+        dispatcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatcher
+
+
+@pytest.mark.asyncio
+async def test_retry_backoff_does_not_block_other_channels():
+    # The backoff is long enough that serial dispatch would deliver "slow" first.
+    bus = MessageBus(outbound_retry_delay_s=0.3)
+    delivered: list[str] = []
+    flaky_attempts: list[str] = []
+
+    async def flaky(message):
+        flaky_attempts.append(message.content)
+        if len(flaky_attempts) == 1:
+            raise RuntimeError("first")
+        delivered.append(message.content)
+
+    async def steady(message):
+        delivered.append(message.content)
+
+    bus.subscribe_outbound("flaky", flaky)
+    bus.subscribe_outbound("steady", steady)
+    await _dispatch_until_drained(
+        bus,
+        OutboundMessage("flaky", "one", "slow"),
+        OutboundMessage("steady", "two", "fast"),
+    )
+    assert flaky_attempts == ["slow", "slow"]
+    assert delivered == ["fast", "slow"]
+
+
+@pytest.mark.asyncio
+async def test_retry_backoff_keeps_same_channel_order():
+    bus = MessageBus(outbound_retry_delay_s=0.05)
+    attempts: list[str] = []
+    delivered: list[str] = []
+
+    async def flaky(message):
+        attempts.append(message.content)
+        if attempts == ["first"]:
+            raise RuntimeError("first")
+        delivered.append(message.content)
+
+    bus.subscribe_outbound("chat", flaky)
+    await _dispatch_until_drained(
+        bus,
+        OutboundMessage("chat", "one", "first"),
+        OutboundMessage("chat", "one", "second"),
+    )
+    assert attempts == ["first", "first", "second"]
+    assert delivered == ["first", "second"]
+
+
+@pytest.mark.asyncio
+async def test_retry_uses_replacement_transport_after_handover_during_backoff():
+    bus = MessageBus(outbound_retry_delay_s=0.05)
+    failed = asyncio.Event()
+    received: list[str] = []
+
+    async def old(message):
+        failed.set()
+        raise RuntimeError("stale connection")
+
+    async def new(message):
+        received.append(message.content)
+
+    bus.subscribe_outbound("chat", old)
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        await bus.publish_outbound(OutboundMessage("chat", "one", "payload"))
+        await asyncio.wait_for(failed.wait(), 1)
+        # The first attempt released the transport lock, so a handover can land
+        # while the retry is backing off.
+        async with bus.transport_lock:
+            bus.unsubscribe_outbound("chat", old)
+            bus.subscribe_outbound("chat", new)
+        await asyncio.wait_for(bus.drain_outbound(), 2)
+    finally:
+        bus.stop()
+        dispatcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatcher
+    assert received == ["payload"]
+
+
+@pytest.mark.asyncio
+async def test_unexpected_lane_failure_stops_dispatcher_immediately(monkeypatch):
+    bus = MessageBus()
+
+    async def broken_dispatch(message):
+        raise LookupError("dispatch bug")
+
+    monkeypatch.setattr(bus, "_dispatch_message", broken_dispatch)
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        await bus.publish_outbound(OutboundMessage("chat", "one", "payload"))
+        # No further message arrives on this channel, yet the bug must surface.
+        with pytest.raises(LookupError, match="dispatch bug"):
+            await asyncio.wait_for(dispatcher, 0.5)
+    finally:
+        bus.stop()
+        dispatcher.cancel()
+        with suppress(asyncio.CancelledError, LookupError):
             await dispatcher

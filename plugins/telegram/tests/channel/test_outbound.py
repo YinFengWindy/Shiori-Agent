@@ -22,7 +22,11 @@ def reply_channel(receipt):
     )
     channel._channel = "telegram"
     channel._channel_hub = Mock()
-    channel._telegram_outbound_limiter = TelegramOutboundLimiter()
+    # Receipt bookkeeping is under test, not Telegram pacing: zero intervals keep
+    # chunked, media and stream-edit sends from waiting on per-chat slots.
+    channel._telegram_outbound_limiter = TelegramOutboundLimiter(
+        send_interval_s=0, edit_interval_s=0, global_interval_s=0
+    )
     channel._has_live_messages = Mock(return_value=False)
     channel._final_thinking_text = Mock(return_value="")
     channel._active_streams = {}

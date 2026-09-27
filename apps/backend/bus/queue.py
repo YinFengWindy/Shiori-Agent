@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections import deque
 from collections.abc import Awaitable, Callable
 
 from bus.events import InboundItem, OutboundMessage
@@ -11,7 +12,9 @@ logger = logging.getLogger(__name__)
 class MessageBus:
     """agent 与各 channel 之间的异步消息总线"""
 
-    def __init__(self) -> None:
+    def __init__(self, *, outbound_retry_delay_s: float = 2.0) -> None:
+        """``outbound_retry_delay_s``：出站首次可重试失败后的退避秒数。"""
+        self.outbound_retry_delay_s = outbound_retry_delay_s
         self._inbound: asyncio.Queue[InboundItem] = asyncio.Queue()
         self._outbound: asyncio.Queue[OutboundMessage] = asyncio.Queue()
         self._pending_outbound: dict[tuple[str, str, str], int] = {}
@@ -95,74 +98,160 @@ class MessageBus:
             self._subscribers.pop(channel, None)
 
     async def dispatch_outbound(self) -> None:
-        """后台任务：将出站消息分发给对应 channel 的订阅者。
+        """后台任务：按 channel 分道，将出站消息分发给对应 channel 的订阅者。
 
-        可重试的失败退避 2s 重试一次；仍失败则发送降级错误通知。
-        渠道明确禁止重试时仅记录错误，避免重复发送已被接收的消息。
+        同一 channel 的消息严格按入队顺序逐条投递；不同 channel 各自推进，
+        某个 channel 在重试退避时不会阻塞其他 channel。
         """
         self._running = True
-        while self._running:
+        lanes: dict[str, tuple[deque[OutboundMessage], asyncio.Task[None]]] = {}
+        getter: asyncio.Task[OutboundMessage] | None = None
+        try:
+            while self._running:
+                if getter is None:
+                    getter = asyncio.create_task(self._outbound.get())
+                active = {task for _, task in lanes.values() if not task.done()}
+                # 同时等待取新消息与各 lane：lane 的意外异常立即从这里冒泡，
+                # 与原先串行分发时一样失败即停；超时只为定期检查 stop()。
+                done, _ = await asyncio.wait(
+                    {getter, *active},
+                    timeout=1.0,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if getter in done:
+                    self._route_to_lane(lanes, getter.result())
+                    getter = None
+                for task in done & active:
+                    task.result()
+            # stop() 只停止取新消息，已分到各 channel 的消息照常投递完。
+            await asyncio.gather(*(task for _, task in lanes.values()))
+        finally:
+            pending: list[asyncio.Task[object]] = [
+                task for _, task in lanes.values() if not task.done()
+            ]
+            if getter is not None:
+                pending.append(getter)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    def _route_to_lane(
+        self,
+        lanes: dict[str, tuple[deque[OutboundMessage], asyncio.Task[None]]],
+        msg: OutboundMessage,
+    ) -> None:
+        lane = lanes.get(msg.channel)
+        if lane is not None and not lane[1].done():
+            lane[0].append(msg)
+            return
+        backlog: deque[OutboundMessage] = deque([msg])
+        task = asyncio.create_task(
+            self._drain_lane(backlog), name=f"bus_outbound_lane:{msg.channel}"
+        )
+        lanes[msg.channel] = (backlog, task)
+
+    async def _drain_lane(self, backlog: deque[OutboundMessage]) -> None:
+        # backlog 取空后同一步内直接结束，dispatch_outbound 看到 done 会新建 lane，
+        # 两者之间没有 await，不会出现消息落进已结束 lane 的竞态。
+        while backlog:
+            msg = backlog.popleft()
+            key = self._outbound_key(msg)
             try:
-                msg = await asyncio.wait_for(self._outbound.get(), timeout=1.0)
-                key = self._outbound_key(msg)
-                try:
-                    async with self.transport_lock:
-                        await self._dispatch_message(msg)
-                finally:
-                    remaining = self._pending_outbound[key] - 1
-                    if remaining:
-                        self._pending_outbound[key] = remaining
-                    else:
-                        self._pending_outbound.pop(key)
-                    self._outbound.task_done()
-            except asyncio.TimeoutError:
-                continue
+                await self._dispatch_message(msg)
+            finally:
+                remaining = self._pending_outbound[key] - 1
+                if remaining:
+                    self._pending_outbound[key] = remaining
+                else:
+                    self._pending_outbound.pop(key)
+                self._outbound.task_done()
 
     async def _dispatch_message(self, msg: OutboundMessage) -> None:
-        for cb in tuple(self._subscribers.get(msg.channel, [])):
+        """投递一条消息：可重试的失败退避后重试一次，仍失败则发送降级通知。
+
+        每次调用订阅者都持有 transport_lock，保证不会与连接切换/停止交错；
+        退避等待期间释放锁，让其他 channel 与主动推送照常发送。
+        渠道明确禁止重试时仅记录错误，避免重复发送已被接收的消息。
+        """
+        async with self.transport_lock:
+            callbacks = tuple(self._subscribers.get(msg.channel, []))
+            failed = [cb for cb in callbacks if not await self._first_attempt(cb, msg)]
+        if not failed:
+            return
+        await asyncio.sleep(self.outbound_retry_delay_s)
+        async with self.transport_lock:
+            for cb in self._retry_targets(msg.channel, callbacks, failed):
+                await self._retry_attempt(cb, msg)
+
+    def _retry_targets(
+        self,
+        channel: str,
+        attempted: tuple[Callable[[OutboundMessage], Awaitable[None]], ...],
+        failed: list[Callable[[OutboundMessage], Awaitable[None]]],
+    ) -> list[Callable[[OutboundMessage], Awaitable[None]]]:
+        # 退避期间连接可能已被切换：仍在订阅的失败回调原样重试；
+        # 已被替换掉的则改投新订阅的连接，与切换前缓冲消息走新连接的语义一致。
+        current = tuple(self._subscribers.get(channel, []))
+        targets = [cb for cb in failed if cb in current]
+        if len(targets) < len(failed):
+            targets.extend(cb for cb in current if cb not in attempted)
+        return targets
+
+    async def _first_attempt(
+        self, cb: Callable[[OutboundMessage], Awaitable[None]], msg: OutboundMessage
+    ) -> bool:
+        """首次投递；返回 False 表示失败且允许重试。"""
+        try:
+            await cb(msg)
+        except NonRetryableDeliveryError as exc:
+            logger.error(
+                "分发消息失败，渠道禁止重试或替换 channel=%s chat_id=%s: %s",
+                msg.channel,
+                msg.chat_id,
+                exc,
+            )
+        except Exception as first_err:
+            logger.warning(
+                "分发消息到 %s 首次失败，%ss 后重试: %s",
+                msg.channel,
+                self.outbound_retry_delay_s,
+                first_err,
+            )
+            return False
+        return True
+
+    async def _retry_attempt(
+        self, cb: Callable[[OutboundMessage], Awaitable[None]], msg: OutboundMessage
+    ) -> None:
+        try:
+            await cb(msg)
+        except NonRetryableDeliveryError as exc:
+            logger.error(
+                "重试分发失败，渠道禁止再次重试或替换 channel=%s chat_id=%s: %s",
+                msg.channel,
+                msg.chat_id,
+                exc,
+            )
+        except Exception as second_err:
+            logger.error(
+                "分发消息到 %s 重试仍失败，发送降级通知: %s",
+                msg.channel,
+                second_err,
+            )
+            fallback = OutboundMessage(
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                content="（消息发送失败，请稍后重试）",
+                metadata=dict(msg.metadata or {}),
+            )
             try:
-                await cb(msg)
-            except NonRetryableDeliveryError as exc:
+                await cb(fallback)
+            except Exception:
                 logger.error(
-                    "分发消息失败，渠道禁止重试或替换 channel=%s chat_id=%s: %s",
+                    "降级通知也失败，消息彻底丢失 channel=%s chat_id=%s",
                     msg.channel,
                     msg.chat_id,
-                    exc,
                 )
-            except Exception as first_err:
-                logger.warning(
-                    "分发消息到 %s 首次失败，2s 后重试: %s", msg.channel, first_err
-                )
-                await asyncio.sleep(2)
-                try:
-                    await cb(msg)
-                except NonRetryableDeliveryError as exc:
-                    logger.error(
-                        "重试分发失败，渠道禁止再次重试或替换 channel=%s chat_id=%s: %s",
-                        msg.channel,
-                        msg.chat_id,
-                        exc,
-                    )
-                except Exception as second_err:
-                    logger.error(
-                        "分发消息到 %s 重试仍失败，发送降级通知: %s",
-                        msg.channel,
-                        second_err,
-                    )
-                    fallback = OutboundMessage(
-                        channel=msg.channel,
-                        chat_id=msg.chat_id,
-                        content="（消息发送失败，请稍后重试）",
-                        metadata=dict(msg.metadata or {}),
-                    )
-                    try:
-                        await cb(fallback)
-                    except Exception:
-                        logger.error(
-                            "降级通知也失败，消息彻底丢失 channel=%s chat_id=%s",
-                            msg.channel,
-                            msg.chat_id,
-                        )
 
     def stop(self) -> None:
         self._running = False
