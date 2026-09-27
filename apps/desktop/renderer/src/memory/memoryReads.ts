@@ -48,9 +48,12 @@ export async function readSemanticBatch({ client, roleId }: MemoryReadContext, q
   return requireRole(roleId, await client.call<RoleSemanticList>("roles.memory.semantic.list", semanticListParams(roleId, query, page)));
 }
 
-/** Reads one semantic item through `roles.memory.semantic.detail`; a different item is an error. */
+/**
+ * Reads one semantic item through `roles.memory.semantic.detail`. A null item
+ * means it no longer exists; a different item is an error.
+ */
 export async function readSemanticDetail({ client, roleId }: MemoryReadContext, itemId: string) {
   const response = requireRole(roleId, await client.call<RoleSemanticDetail>("roles.memory.semantic.detail", { role_id: roleId, item_id: itemId }));
-  if (response.status === "ready" && response.item?.id !== itemId) throw new Error("记忆条目不匹配");
+  if (response.item && response.item.id !== itemId) throw new Error("记忆条目不匹配");
   return response;
 }

@@ -28,9 +28,9 @@ it("sends the role, query and batch, and returns a matching response", async () 
   assert.deepEqual(calls, [{ pluginId: "default_memory", name: "roles.memory.semantic.list", params: { role_id: "mira", q: "tea", sort_order: "desc", page: 2, page_size: 20 } }]);
 });
 
-it("rejects a detail for another item or role, but accepts a disabled engine", async () => {
+it("rejects a detail for another item or role, but accepts a missing item and a disabled engine", async () => {
   await assert.rejects(readSemanticDetail(context(() => ({ role_id: "mira", status: "ready", item: { id: "m2", summary: "" } })).context, "m1"), /记忆条目不匹配/);
-  await assert.rejects(readSemanticDetail(context(() => ({ role_id: "mira", status: "ready", item: null })).context, "m1"), /记忆条目不匹配/);
+  assert.equal((await readSemanticDetail(context(() => ({ role_id: "mira", status: "ready", item: null })).context, "m1")).item, null);
   await assert.rejects(readSemanticDetail(context(() => ({ role_id: "luna", status: "ready", item: { id: "m1", summary: "" } })).context, "m1"), /角色不匹配/);
   assert.equal((await readSemanticDetail(context(() => ({ role_id: "mira", status: "disabled", item: null })).context, "m1")).status, "disabled");
 });

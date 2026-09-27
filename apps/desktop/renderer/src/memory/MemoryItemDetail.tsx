@@ -16,7 +16,8 @@ export function MemoryItemDetail({ context, itemId }: { context: MemoryReadConte
   return <section className="grid gap-2 rounded-md bg-surface-soft px-3 py-3" aria-label="记忆详情">
     {detail.loading ? <MemoryStatusLine text={memoryStatusText.loading} />
       : detail.error ? <MemoryReadError error={detail.error} />
-      : detail.value?.status === "disabled" || !item ? <MemoryStatusLine text={memoryStatusText.disabled} />
+      : detail.value?.status === "disabled" ? <MemoryStatusLine text={memoryStatusText.disabled} />
+      : !item ? <MemoryStatusLine text={memoryStatusText.itemMissing} />
       : <>
         <p className="m-0 whitespace-pre-wrap break-words px-3 text-body text-ink">{item.summary || emptySummaryLabel}</p>
         <div className="grid sm:grid-cols-2">

@@ -20,11 +20,11 @@ export function RoleMemoryPanel({ roleId, bridgeReady }: { roleId: string; bridg
   const selection = useConfiguredMemoryPlugin(bridgeReady);
   const isPluginEnabled = usePluginEnabledState();
 
-  if (!bridgeReady) return <MemoryStatusLine text="连接已断开" />;
-  if (!roleId) return <MemoryStatusLine text="请选择角色" />;
+  if (!bridgeReady) return <MemoryStatusLine text={memoryStatusText.disconnected} />;
+  if (!roleId) return <MemoryStatusLine text={memoryStatusText.noRole} />;
   if (selection.status === "loading") return <MemoryStatusLine text={memoryStatusText.loading} />;
   if (selection.status === "error") return <InlineError message={`记忆设置读取失败：${selection.error}`} />;
-  if (!isPluginEnabled(selection.pluginId)) return <MemoryStatusLine text="记忆插件不可用" />;
+  if (!isPluginEnabled(selection.pluginId)) return <MemoryStatusLine text={memoryStatusText.pluginUnavailable} />;
   // A new plugin or role starts a fresh page, so no state or pending read carries over.
   return <ConnectedRoleMemoryPage key={`${selection.pluginId}:${roleId}`} pluginId={selection.pluginId} roleId={roleId} />;
 }

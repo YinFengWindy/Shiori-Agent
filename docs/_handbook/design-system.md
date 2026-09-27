@@ -135,7 +135,8 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | `cardClass` | 空状态、诊断行等卡片面 |
 | `badgeClass` | 状态与标签胶囊 |
 | `panelHeadClass` / `panelTitleClass` | 面板头部布局与标题 |
-| `sidebarNavItemClass` / `secondarySidebarSurfaceClass` | 侧栏导航项与次级侧栏背景 |
+| `sidebarNavItemClass` | 共享的可悬停行：侧栏导航项，以及内容区里可展开的行（如记忆时间线节点） |
+| `secondarySidebarSurfaceClass` | 次级侧栏背景 |
 | `underlineTabClass(selected)` | 页面一级分区标签（下划线，如角色详情的资料 / 记忆 / 能力 / 主动推送） |
 | `segmentedTabListClass` / `segmentedTabClass(selected)` | 嵌在一级分区里的二级标签：分段轨道 + 选中项浮起（如素材用途、记忆页视图），视觉上从属于下划线标签 |
 | `bodyTextClass` | 非标题栏内容的小号正文 |

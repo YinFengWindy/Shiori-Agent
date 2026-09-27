@@ -12,7 +12,6 @@ type MemoryDocumentViewProps = {
 export function MemoryDocumentView({ name, documents }: MemoryDocumentViewProps) {
   const document = documents.value?.documents.find((item) => item.name === name);
   return <MemoryFrame label={name}>
-    <p className="m-0 text-caption font-medium text-ink-muted">{name}</p>
     {documents.loading ? <MemoryStatusLine text={memoryStatusText.loading} />
       : documents.error ? <MemoryReadError error={documents.error} />
       : document?.status === "error" ? <MemoryReadError error={document.error} />

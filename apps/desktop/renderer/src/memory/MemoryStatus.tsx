@@ -2,11 +2,15 @@ import type { ReactNode } from "react";
 import { InlineError } from "../shared/feedback/InlineError";
 import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "../shared/styles";
 
-/** Status texts shared by the timeline and the document tabs. */
+/** Status texts of the memory tab: page availability, the timeline and the document tabs. */
 export const memoryStatusText = {
+  disconnected: "连接已断开",
+  noRole: "请选择角色",
+  pluginUnavailable: "记忆插件不可用",
   loading: "加载中…",
   disabled: "语义记忆已停用",
   noItems: "暂无记忆",
+  itemMissing: "记忆已不存在",
   documentEmpty: "文档为空",
   documentMissing: "文档缺失",
 } as const;
