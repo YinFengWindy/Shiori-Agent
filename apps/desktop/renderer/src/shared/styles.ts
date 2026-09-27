@@ -13,8 +13,23 @@ export const secondarySidebarSurfaceClass = "bg-transparent";
 export const sidebarNavItemClass =
   "rounded-md transition-colors hover:bg-surface-hover focus-visible:bg-surface-hover";
 
+/** Track of a segmented tab group: secondary navigation nested under a page's section tabs. */
+export const segmentedTabListClass = "rounded-md bg-surface-soft p-1";
+
 /**
- * Underlined in-page tab (role detail sections, memory views). The row that
+ * One tab of a segmented group (role asset modes, memory views); visually
+ * subordinate to `underlineTabClass`. The selected tab lifts onto the surface;
+ * only colors transition.
+ */
+export function segmentedTabClass(selected: boolean) {
+  return cx(
+    "h-8 shrink-0 rounded-md px-3 text-body-sm transition-colors duration-quick",
+    selected ? "bg-surface font-medium text-ink shadow-soft" : "text-ink-muted hover:text-ink",
+  );
+}
+
+/**
+ * Underlined in-page section tab (role detail sections). The row that
  * holds these tabs sits on a bottom border and uses `-mb-px` so the active
  * underline covers it.
  */
