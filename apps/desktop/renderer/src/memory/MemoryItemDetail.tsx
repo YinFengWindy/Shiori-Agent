@@ -1,22 +1,17 @@
 import { DetailRow } from "../shared/ui/DetailRow";
-import { memoryClientKey, readSemanticDetail, type MemoryRpc } from "./memoryReads";
-import { emptySummaryLabel, memoryDetailRows } from "./timelineSelectors";
+import { memoryReadKey, readSemanticDetail, type MemoryReadContext } from "./memoryReads";
 import { MemoryReadError, MemoryStatusLine, memoryStatusText } from "./MemoryStatus";
 import type { RoleSemanticDetail } from "./roleSemanticMemory";
+import { emptySummaryLabel, memoryDetailRows } from "./timelineSelectors";
 import { useMemoryRead } from "./useMemoryRead";
 
-type MemoryItemDetailProps = {
-  client: MemoryRpc;
-  roleId: string;
-  itemId: string;
-  /** The page's refresh counter; a refresh re-reads an open detail. */
-  refreshKey: number;
-};
-
-/** In-place, read-only details of one timeline item, read on demand. */
-export function MemoryItemDetail({ client, roleId, itemId, refreshKey }: MemoryItemDetailProps) {
-  const key = `${memoryClientKey(client)}:${roleId}:${itemId}:${refreshKey}`;
-  const detail = useMemoryRead<RoleSemanticDetail>({ scope: key, key, read: () => readSemanticDetail(client, roleId, itemId) });
+/**
+ * In-place, read-only details of one timeline item, read when it is expanded.
+ * A refresh collapses every item, so an open detail never outlives its context.
+ */
+export function MemoryItemDetail({ context, itemId }: { context: MemoryReadContext; itemId: string }) {
+  const key = memoryReadKey(context, "detail", itemId);
+  const detail = useMemoryRead<RoleSemanticDetail>({ scope: key, key, read: () => readSemanticDetail(context, itemId) });
   const item = detail.value?.item;
   return <section className="grid gap-2 rounded-md bg-surface-soft px-3 py-3" aria-label="记忆详情">
     {detail.loading ? <MemoryStatusLine text={memoryStatusText.loading} />

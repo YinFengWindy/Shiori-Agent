@@ -13,6 +13,18 @@ export const secondarySidebarSurfaceClass = "bg-transparent";
 export const sidebarNavItemClass =
   "rounded-md transition-colors hover:bg-surface-hover focus-visible:bg-surface-hover";
 
+/**
+ * Underlined in-page tab (role detail sections, memory views). The row that
+ * holds these tabs sits on a bottom border and uses `-mb-px` so the active
+ * underline covers it.
+ */
+export function underlineTabClass(selected: boolean) {
+  return cx(
+    "h-10 shrink-0 border-b-2 px-1 text-body transition-colors",
+    selected ? "border-accent font-medium text-ink" : "border-transparent text-ink-muted hover:text-ink",
+  );
+}
+
 /** Shared small-body text class for non-titlebar desktop content. */
 export const bodyTextClass = "text-body-sm";
 

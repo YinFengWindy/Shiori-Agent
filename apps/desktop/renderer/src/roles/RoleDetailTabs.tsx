@@ -1,4 +1,4 @@
-import { cx } from "../shared/styles";
+import { underlineTabClass } from "../shared/styles";
 
 export type RoleDetailTabId = "profile" | "memory" | "capabilities" | "delivery";
 
@@ -23,10 +23,7 @@ export function RoleDetailTabs({
         const selected = activeTab === tab.id;
         return (
           <button
-            className={cx(
-              "h-10 shrink-0 border-b-2 px-1 text-body transition-colors",
-              selected ? "border-accent font-medium text-ink" : "border-transparent text-ink-muted hover:text-ink",
-            )}
+            className={underlineTabClass(selected)}
             key={tab.id}
             type="button"
             aria-current={selected ? "page" : undefined}

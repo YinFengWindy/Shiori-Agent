@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import { formatDate, formatTimestamp } from "../shared/format";
 import type { RoleSemanticList } from "./roleSemanticMemory";
-import { appendSemanticBatch, groupTimeline, hasMoreSemantic, itemOccurredAt, memoryDetailRows } from "./timelineSelectors";
+import { appendTimelineBatch, firstTimelineBatch, groupTimeline, itemOccurredAt, memoryDetailRows, type TimelineBatches } from "./timelineSelectors";
 
 it("groups by local occurrence date, falling back to the record time, in engine order", () => {
   const items = [
@@ -18,15 +18,27 @@ it("groups by local occurrence date, falling back to the record time, in engine 
   assert.deepEqual(groups.map((group) => group.label), [formatDate("2026-09-02T21:00:00"), formatDate("2026-09-01T23:59:00"), "时间未知"]);
 });
 
-it("appends a batch without repeating items and knows when more remain", () => {
-  const first: RoleSemanticList = { role_id: "mira", status: "ready", items: [{ id: "a", summary: "" }, { id: "b", summary: "" }], total: 4, page: 1, page_size: 2, filters: {} };
-  const second: RoleSemanticList = { ...first, items: [{ id: "b", summary: "" }, { id: "c", summary: "" }], page: 2 };
-  const merged = appendSemanticBatch(first, second);
-  assert.deepEqual(merged.items.map((item) => item.id), ["a", "b", "c"]);
-  assert.equal(hasMoreSemantic(merged), true);
-  assert.equal(hasMoreSemantic({ ...first, total: 2 }), false);
-  assert.equal(hasMoreSemantic({ role_id: "mira", status: "disabled", items: [], total: 0 }), false);
-  assert.equal(hasMoreSemantic(null), false);
+const batch = (ids: string[], total = 10, page = 1): RoleSemanticList => ({
+  role_id: "mira", status: "ready", items: ids.map((id) => ({ id, summary: "" })), total, page, page_size: 2, filters: {},
+});
+const ids = (batches: TimelineBatches) => batches.list.items.map((item) => item.id);
+
+it("appends a batch without repeating items and keeps going while full batches add something", () => {
+  const merged = appendTimelineBatch(firstTimelineBatch(batch(["a", "b"])), firstTimelineBatch(batch(["b", "c"], 10, 2)));
+  assert.deepEqual(ids(merged), ["a", "b", "c"]);
+  assert.equal(merged.exhausted, false);
+});
+
+it("stops at a short batch, a batch with nothing new, the engine's total, or a disabled engine", () => {
+  const first = firstTimelineBatch(batch(["a", "b"]));
+  assert.equal(first.exhausted, false);
+  assert.equal(firstTimelineBatch(batch(["a"])).exhausted, true);
+  assert.equal(firstTimelineBatch(batch(["a", "b"], 2)).exhausted, true);
+  assert.equal(appendTimelineBatch(first, firstTimelineBatch(batch(["c"], 10, 2))).exhausted, true);
+  const repeated = appendTimelineBatch(first, firstTimelineBatch(batch(["a", "b"], 10, 2)));
+  assert.deepEqual(ids(repeated), ["a", "b"]);
+  assert.equal(repeated.exhausted, true);
+  assert.equal(firstTimelineBatch({ role_id: "mira", status: "disabled", items: [], total: 0 }).exhausted, true);
 });
 
 it("lists detail fields with Chinese labels and localized times, known fields first", () => {

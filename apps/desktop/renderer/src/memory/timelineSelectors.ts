@@ -1,5 +1,5 @@
 import { formatDate, formatTimestamp, parseTimestamp } from "../shared/format";
-import { semanticStatusLabels, type RoleSemanticItem, type RoleSemanticList } from "./roleSemanticMemory";
+import { semanticStatusLabel, type RoleSemanticItem, type RoleSemanticList } from "./roleSemanticMemory";
 
 /** Neutral placeholder for an item without summary text. */
 export const emptySummaryLabel = "无摘要";
@@ -39,16 +39,33 @@ export function groupTimeline(items: readonly RoleSemanticItem[]): TimelineGroup
   return groups;
 }
 
-/** Appends the next batch, dropping items an earlier batch already showed. */
-export function appendSemanticBatch(previous: RoleSemanticList, next: RoleSemanticList): RoleSemanticList {
-  if (previous.status !== "ready" || next.status !== "ready") return next;
-  const seen = new Set(previous.items.map((item) => item.id));
-  return { ...next, items: [...previous.items, ...next.items.filter((item) => !seen.has(item.id))] };
+/** The loaded timeline: every batch so far, and whether asking for another is pointless. */
+export type TimelineBatches = { list: RoleSemanticList; exhausted: boolean };
+
+/**
+ * The end is reached when a batch comes back short, adds nothing new, or the
+ * loaded items cover the engine's total. Offset paging can still skip or
+ * repeat items when memories change between batches; that is an accepted
+ * limitation (repeats are dropped by id, refresh starts over).
+ */
+function batchesFrom(list: RoleSemanticList, returned: number, fresh: number): TimelineBatches {
+  const exhausted = list.status !== "ready" || fresh === 0 || returned < list.page_size || list.items.length >= list.total;
+  return { list, exhausted };
 }
 
-/** Whether the engine reports more items than have been loaded. */
-export function hasMoreSemantic(list: RoleSemanticList | null) {
-  return list?.status === "ready" && list.items.length < list.total;
+/** The first batch of a scope. */
+export function firstTimelineBatch(list: RoleSemanticList) {
+  return batchesFrom(list, list.items.length, list.items.length);
+}
+
+/** Appends the next batch, dropping items an earlier batch already showed. */
+export function appendTimelineBatch(previous: TimelineBatches, next: TimelineBatches) {
+  const { list: before } = previous;
+  const { list: batch } = next;
+  if (before.status !== "ready" || batch.status !== "ready") return next;
+  const seen = new Set(before.items.map((item) => item.id));
+  const fresh = batch.items.filter((item) => !seen.has(item.id));
+  return batchesFrom({ ...batch, items: [...before.items, ...fresh] }, batch.items.length, fresh.length);
 }
 
 const fieldLabels: Record<string, string> = {
@@ -73,13 +90,12 @@ const fieldLabels: Record<string, string> = {
 };
 
 const timeFields = new Set(["happened_at", "created_at", "updated_at"]);
-const statusLabels: Record<string, string> = semanticStatusLabels;
 /** Shown elsewhere (summary) or not meaningful to readers (the item key). */
 const omittedFields = new Set(["id", "summary", "extra_json"]);
 
 function displayValue(key: string, value: unknown) {
   if (timeFields.has(key) && typeof value === "string") return formatTimestamp(value) || value;
-  if (key === "status" && typeof value === "string") return statusLabels[value] ?? value;
+  if (key === "status" && typeof value === "string") return semanticStatusLabel(value);
   return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 

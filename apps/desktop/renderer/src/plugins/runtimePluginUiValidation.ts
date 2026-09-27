@@ -19,21 +19,15 @@ function label(value: unknown, field: string) {
 }
 
 /**
- * Contributions the host no longer accepts, each with the diagnostic shown to
- * the package author. `roleMemory` never shipped in a released runtime API:
- * the host renders the role memory page itself from the configured memory
- * plugin's `roles.memory.*` RPCs.
+ * Diagnostic for a UI module that still declares `roleMemory`. That
+ * contribution never shipped in a released runtime API: the host renders the
+ * role memory page itself from the configured memory plugin's RPCs.
  */
-const retiredContributions: ReadonlyArray<{ field: string; reason: string }> = [
-  {
-    field: "roleMemory",
-    reason: "roleMemory is retired: the host renders the role memory page from the configured memory plugin's roles.memory.documents / roles.memory.semantic.list / roles.memory.semantic.detail RPCs; remove this contribution",
-  },
-];
+const retiredRoleMemory = "roleMemory is retired: the host renders the role memory page from the configured memory plugin's roles.memory.documents / roles.memory.semantic.list / roles.memory.semantic.detail RPCs; remove this contribution";
 
-/** The diagnostic for the first retired contribution a UI module still declares, or null. */
+/** The diagnostic when a UI module still declares the retired `roleMemory` contribution, or null. */
 export function retiredPluginUiContribution(module: object) {
-  return retiredContributions.find(({ field }) => Object.hasOwn(module, field))?.reason ?? null;
+  return Object.hasOwn(module, "roleMemory") ? retiredRoleMemory : null;
 }
 
 /** Validates the complete UI ABI before mutating any contribution registry. */

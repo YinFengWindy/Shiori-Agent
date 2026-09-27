@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { initialSemanticQuery, pickOffered, sameSemanticQuery, semanticListParams } from "./roleSemanticMemory";
+import { initialSemanticQuery, pickOffered, sameSemanticFilters, sameSemanticQuery, semanticListParams, semanticStatusLabel } from "./roleSemanticMemory";
 
 it("sends only the sort direction and batch, leaving unset filters out of list params", () => {
   assert.deepEqual(semanticListParams("mira", initialSemanticQuery, 1), {
@@ -20,4 +20,17 @@ it("compares queries by every requested field", () => {
   assert.equal(sameSemanticQuery(initialSemanticQuery, { ...initialSemanticQuery }), true);
   assert.equal(sameSemanticQuery(initialSemanticQuery, { ...initialSemanticQuery, status: "active" }), false);
   assert.equal(sameSemanticQuery(initialSemanticQuery, { ...initialSemanticQuery, q: "tea" }), false);
+});
+
+it("compares filter declarations by dimension and value", () => {
+  assert.equal(sameSemanticFilters({ memory_type: ["event"] }, { memory_type: ["event"] }), true);
+  assert.equal(sameSemanticFilters({ memory_type: ["event"] }, { memory_type: ["event", "turn"] }), false);
+  assert.equal(sameSemanticFilters({}, { status: ["active"] }), false);
+  assert.equal(sameSemanticFilters(null, {}), false);
+  assert.equal(sameSemanticFilters(null, null), true);
+});
+
+it("labels known statuses and passes unknown ones through", () => {
+  assert.equal(semanticStatusLabel("superseded"), "已失效");
+  assert.equal(semanticStatusLabel("archived"), "archived");
 });

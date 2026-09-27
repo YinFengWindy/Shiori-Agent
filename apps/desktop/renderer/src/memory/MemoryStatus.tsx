@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { InlineError } from "../shared/feedback/InlineError";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "../shared/styles";
 
 /** Status texts shared by the timeline and the document tabs. */
 export const memoryStatusText = {
@@ -22,7 +23,10 @@ export function MemoryStatusLine({ text }: { text: string }) {
   return <p role="status" className="m-0 text-body-sm text-ink-muted">{text}</p>;
 }
 
-/** A failed memory read, worded the same in both views. */
-export function MemoryReadError({ error }: { error: string }) {
-  return <InlineError message={`读取失败：${error}`} />;
+/** A failed memory read, worded the same in both views; `onRetry` repeats just that read. */
+export function MemoryReadError({ error, onRetry }: { error: string; onRetry?: () => void }) {
+  return <InlineError
+    message={`读取失败：${error}`}
+    actions={onRetry ? <button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} onClick={onRetry}>重试</button> : undefined}
+  />;
 }

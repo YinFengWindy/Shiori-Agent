@@ -5,8 +5,8 @@ import { useLatestRef } from "../shared/useLatestRef";
 /**
  * One memory read. `scope` is the reset boundary (role, filters, refresh):
  * a new scope drops the previous value. `key` identifies this read inside its
- * scope; a new key in the same scope (the next batch) keeps showing the
- * settled value until it arrives and, with `merge`, combines the two.
+ * scope; a new key in the same scope (the next batch, or a retry) keeps
+ * showing the settled value until it arrives and, with `merge`, combines the two.
  */
 export type MemoryReadRequest<T> = {
   scope: string;
@@ -15,14 +15,16 @@ export type MemoryReadRequest<T> = {
   merge?: (previous: T, next: T) => T;
 };
 
-type Settled<T> = {
-  scope: string;
-  key: string;
+/** What a memory view renders from one read. */
+export type MemoryReadState<T> = {
+  /** Settled value of the current scope; null before its first response. */
   value: T | null;
+  loading: boolean;
+  /** Failure of the current key; earlier batches of the scope stay in `value`. */
   error: string;
-  /** Last successful value of any scope, kept across failures. */
-  last: T | null;
 };
+
+type Settled<T> = { scope: string; key: string; value: T | null; error: string };
 
 /**
  * The memory module's single "read -> drop stale responses -> loading / error"
@@ -31,7 +33,7 @@ type Settled<T> = {
  * filter changes and refreshes never show an older answer. Pass `null` when
  * there is nothing to read.
  */
-export function useMemoryRead<T>(request: MemoryReadRequest<T> | null) {
+export function useMemoryRead<T>(request: MemoryReadRequest<T> | null): MemoryReadState<T> {
   const [settled, setSettled] = useState<Settled<T> | null>(null);
   const latest = useLatestRef(request);
   const scope = request?.scope;
@@ -47,7 +49,7 @@ export function useMemoryRead<T>(request: MemoryReadRequest<T> | null) {
         // Only a settled value of this very scope is a batch to append to.
         const base = previous?.scope === current.scope ? previous.value : null;
         const value = base !== null && current.merge ? current.merge(base, next) : next;
-        return { scope: current.scope, key: current.key, value, error: "", last: value };
+        return { scope: current.scope, key: current.key, value, error: "" };
       });
     }, (error: unknown) => {
       if (cancelled) return;
@@ -56,7 +58,6 @@ export function useMemoryRead<T>(request: MemoryReadRequest<T> | null) {
         key: current.key,
         value: previous?.scope === current.scope ? previous.value : null,
         error: errorMessage(error),
-        last: previous?.last ?? null,
       }));
     });
     return () => { cancelled = true; };
@@ -64,10 +65,7 @@ export function useMemoryRead<T>(request: MemoryReadRequest<T> | null) {
 
   const inScope = request && settled?.scope === request.scope ? settled : null;
   return {
-    /** Settled value of the current scope; null before its first response. */
     value: inScope?.value ?? null,
-    /** Last successful value of any earlier scope, for controls that should not flicker. */
-    last: settled?.last ?? null,
     loading: request !== null && settled?.key !== request.key,
     error: request && settled?.key === request.key ? settled.error : "",
   };

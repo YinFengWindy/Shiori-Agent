@@ -3,7 +3,7 @@ import { before, it } from "node:test";
 import { act } from "react";
 import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
-import { createMemoryTestInvoke } from "./memoryTestBridge";
+import { createPluginRpcTestInvoke } from "../shared/testing/pluginRpcTestBridge";
 
 // Base UI binds DOM globals at import time, so the panel loads inside a test window.
 let RoleMemoryPanel: typeof import("./RoleMemoryPanel").RoleMemoryPanel;
@@ -18,7 +18,7 @@ type RuntimeEvent = { method: string; payload: { changed?: boolean } };
 /** A desktop bridge whose memory plugins each answer with their own id. */
 function memoryDesktop(readSettings: () => Promise<unknown>) {
   const listeners = new Set<(event: RuntimeEvent) => void>();
-  const { invoke, calls } = createMemoryTestInvoke((name, params, pluginId) => name === "roles.memory.documents"
+  const { invoke, calls } = createPluginRpcTestInvoke((name, params, pluginId) => name === "roles.memory.documents"
     ? { role_id: params.role_id, documents: [] }
     : { role_id: params.role_id, status: "ready", items: [{ id: `${pluginId}-1`, summary: `${pluginId} memory` }], total: 1, page: 1, page_size: 20, filters: {} });
   return {

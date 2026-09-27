@@ -2,7 +2,7 @@ import { useState } from "react";
 import { MemoryDocumentView } from "./MemoryDocumentView";
 import type { MemoryTab, RoleMemoryDocumentsPayload } from "./memoryDocuments";
 import { MemoryNav } from "./MemoryNav";
-import { memoryClientKey, readMemoryDocuments, type MemoryRpc } from "./memoryReads";
+import { memoryReadKey, readMemoryDocuments, type MemoryReadContext, type MemoryRpc } from "./memoryReads";
 import { MemoryTimeline } from "./MemoryTimeline";
 import { useMemoryRead } from "./useMemoryRead";
 
@@ -15,17 +15,18 @@ import { useMemoryRead } from "./useMemoryRead";
 export function RoleMemoryPage({ client, roleId }: { client: MemoryRpc; roleId: string }) {
   const [tab, setTab] = useState<MemoryTab>("timeline");
   const [refreshKey, setRefreshKey] = useState(0);
-  const documentsKey = `${memoryClientKey(client)}:${roleId}:${refreshKey}`;
+  const context: MemoryReadContext = { client, roleId, refreshKey };
+  const documentsKey = memoryReadKey(context, "documents");
   const documents = useMemoryRead<RoleMemoryDocumentsPayload>({
     scope: documentsKey,
     key: documentsKey,
-    read: () => readMemoryDocuments(client, roleId),
+    read: () => readMemoryDocuments(context),
   });
   return <section className="grid gap-4" aria-label="角色记忆" data-testid="role-memory-panel">
     <MemoryNav tab={tab} onTab={setTab} onRefresh={() => setRefreshKey((value) => value + 1)} />
     <div role="tabpanel">
       {tab === "timeline"
-        ? <MemoryTimeline client={client} roleId={roleId} refreshKey={refreshKey} />
+        ? <MemoryTimeline context={context} />
         : <MemoryDocumentView name={tab} documents={documents} />}
     </div>
   </section>;

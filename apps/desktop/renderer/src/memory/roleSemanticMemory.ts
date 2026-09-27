@@ -65,6 +65,7 @@ export type RoleSemanticDetail = {
   item: RoleSemanticItem | null;
 };
 
+/** A fresh timeline's query: no search or filters (engine default status), newest first. */
 export const initialSemanticQuery: RoleSemanticQuery = {
   q: "", memory_type: "", memory_domain: "", sort_order: "desc",
 };
@@ -87,12 +88,21 @@ export const semanticSortLabels: Record<RoleSemanticSortOrder, string> = {
 /** Shared-picker options for the two occurrence-time directions. */
 export const semanticSortOptions: readonly SelectOption[] = semanticSortOrders.map((value) => ({ value, label: semanticSortLabels[value] }));
 
+/** Every status filter value, in picker order. */
+export const semanticStatusFilters: readonly RoleSemanticStatusFilter[] = ["active", "superseded", "all"];
+
 /** Picker labels for every status an engine may declare. */
 export const semanticStatusLabels: Record<RoleSemanticStatusFilter, string> = {
   active: "有效",
   superseded: "已失效",
   all: "全部",
 };
+
+/** Label of an item's status; a status outside the known set shows as-is. */
+export function semanticStatusLabel(value: string) {
+  const status = semanticStatusFilters.find((item) => item === value);
+  return status ? semanticStatusLabels[status] : value;
+}
 
 /** Narrows a picker's string back to one of the offered values; anything else is a bug. */
 export function pickOffered<T extends string>(offered: readonly T[], value: string) {
@@ -105,6 +115,16 @@ export function pickOffered<T extends string>(offered: readonly T[], value: stri
 export function sameSemanticQuery(left: RoleSemanticQuery, right: RoleSemanticQuery) {
   return left.q === right.q && left.memory_type === right.memory_type && left.memory_domain === right.memory_domain
     && left.status === right.status && left.sort_order === right.sort_order;
+}
+
+function sameValues(left: readonly string[] | undefined, right: readonly string[] | undefined) {
+  return left === right || (left !== undefined && right !== undefined && left.length === right.length && left.every((value, index) => value === right[index]));
+}
+
+/** Whether two engine declarations offer the same filter dimensions and values. */
+export function sameSemanticFilters(left: RoleSemanticFilters | null, right: RoleSemanticFilters | null) {
+  if (left === null || right === null) return left === right;
+  return sameValues(left.memory_type, right.memory_type) && sameValues(left.memory_domain, right.memory_domain) && sameValues(left.status, right.status);
 }
 
 /** List RPC params for one role's batch; unset filters are omitted so engines never receive them. */
