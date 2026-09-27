@@ -336,20 +336,6 @@ export type RoleProfileDraft = {
   import_provenance?: RoleImportProvenance;
 };
 
-/** Read-only state of one role-owned Markdown memory document. */
-export type RoleMemoryDocument = {
-  name: "SELF.md" | "MEMORY.md" | "HISTORY.md" | "RECENT_CONTEXT.md" | "PENDING.md";
-  status: "ready" | "empty" | "missing" | "error";
-  content: string;
-  error?: string;
-};
-
-/** Bridge response scoped to one persisted role. */
-export type RoleMemoryDocumentsPayload = {
-  role_id: string;
-  documents: RoleMemoryDocument[];
-};
-
 /** A decoded candidate image in a staged import. */
 export type RoleCardImportAsset = {
   asset_id: string;

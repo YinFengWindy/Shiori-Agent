@@ -9,9 +9,36 @@ export const cardClass = "rounded-lg border border-line-soft bg-surface shadow-s
 /** Shared background for secondary workspace navigation sidebars: transparent so the app gradient shows through, matching the chat role sidebar. */
 export const secondarySidebarSurfaceClass = "bg-transparent";
 
-/** Shared interaction styling for sidebar navigation entries. */
+/** Shared hover row: sidebar navigation entries and in-content expandable rows (memory timeline nodes). */
 export const sidebarNavItemClass =
   "rounded-md transition-colors hover:bg-surface-hover focus-visible:bg-surface-hover";
+
+/** Track of a segmented tab group: secondary navigation nested under a page's section tabs. */
+export const segmentedTabListClass = "rounded-md bg-surface-soft p-1";
+
+/**
+ * One tab of a segmented group (role asset modes, memory views); visually
+ * subordinate to `underlineTabClass`. The selected tab lifts onto the surface;
+ * only colors transition.
+ */
+export function segmentedTabClass(selected: boolean) {
+  return cx(
+    "h-8 shrink-0 rounded-md px-3 text-body-sm transition-colors duration-quick",
+    selected ? "bg-surface font-medium text-ink shadow-soft" : "text-ink-muted hover:text-ink",
+  );
+}
+
+/**
+ * Underlined in-page section tab (role detail sections). The row that
+ * holds these tabs sits on a bottom border and uses `-mb-px` so the active
+ * underline covers it.
+ */
+export function underlineTabClass(selected: boolean) {
+  return cx(
+    "h-10 shrink-0 border-b-2 px-1 text-body transition-colors",
+    selected ? "border-accent font-medium text-ink" : "border-transparent text-ink-muted hover:text-ink",
+  );
+}
 
 /** Shared small-body text class for non-titlebar desktop content. */
 export const bodyTextClass = "text-body-sm";
