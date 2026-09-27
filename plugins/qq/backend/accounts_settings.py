@@ -157,3 +157,34 @@ class QQAccountSettings:
         if intake is not None:
             await intake.close()
         self._locks.pop(ref, None)
+
+    async def delete_account(self, ref: str) -> None:
+        """Disconnects and permanently purges one account's credentials and data.
+
+        Idempotent so a failed host deletion can be retried: an already
+        removed reference only re-checks that its private directory is gone.
+        """
+        if ref in self._ids:
+            # Forget the host account first so teardown never reports it again.
+            del self._ids[ref]
+        task = self._tasks.pop(ref, None)
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        async with self._locks.setdefault(ref, asyncio.Lock()):
+            socket = self._sockets.pop(ref, None)
+            if socket is not None:
+                await socket.close()
+            intake = self._intakes.pop(ref, None)
+            if intake is not None:
+                await intake.close()
+            # Managed or not, the reference may own a NapCat directory with
+            # login sessions from an earlier managed configuration.
+            await self._managed.delete(ref)
+            if ref in self._configs:
+                self._store.save(
+                    {key: row for key, row in self._configs.items() if key != ref}
+                )
+                del self._configs[ref]
+            self._states.pop(ref, None)
+        self._locks.pop(ref, None)

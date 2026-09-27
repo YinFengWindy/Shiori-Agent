@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -101,3 +101,27 @@ class FeishuConfigModel(FeishuAppConfig):
     def channel_alias_ref(self) -> str:
         """Keeps the old bare channel bound to its original application."""
         return self.legacy_channel_ref or (self.ref if self.app_id else "")
+
+
+def config_without_application(raw: dict[str, Any], ref: str) -> dict[str, Any] | None:
+    """Returns the ``[plugins.feishu]`` table minus one application, or None.
+
+    Works on unexpanded values so other applications' ``${ENV}`` secrets
+    persist. The application may also be the old top-level single app, and the
+    bare ``feishu`` channel alias must not keep pointing at a deleted ref.
+    """
+    accounts = raw.get("accounts") or []
+    kept = [
+        item for item in accounts if FeishuAppConfig.model_validate(item).ref != ref
+    ]
+    legacy = FeishuConfigModel.model_validate(raw)
+    top_level = bool(legacy.app_id) and legacy.ref == ref
+    alias = raw.get("legacy_channel_ref") == ref
+    if len(kept) == len(accounts) and not top_level and not alias:
+        return None
+    updated: dict[str, Any] = {**raw, "accounts": kept}
+    if top_level:
+        updated.update(app_id="", app_secret="")
+    if alias:
+        updated["legacy_channel_ref"] = ""
+    return updated

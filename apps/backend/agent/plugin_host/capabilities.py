@@ -19,7 +19,12 @@ if TYPE_CHECKING:
     from agent.tool_hooks.base import ToolHook
     from desktop_bridge.method_policy import Concurrency
     from infra.channels.contract import Channel
-    from core.accounts import AccountRegistry, AccountSnapshot, ConnectionState
+    from core.accounts import (
+        AccountDeleteHandler,
+        AccountRegistry,
+        AccountSnapshot,
+        ConnectionState,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -350,6 +355,25 @@ class AccountsCapability:
         if account_id not in self._registered:
             raise PermissionError("Account was not registered by this plugin instance")
         self._registry.unregister(account_id, self._token, generation=self._generation)
+
+    def on_delete(self, handler: "AccountDeleteHandler") -> None:
+        """Registers the cleanup the host awaits before forgetting an account.
+
+        The handler receives the account's ``config_ref`` and must be
+        idempotent: disconnect, stop reporting that account, purge private
+        credentials and caches, and return an ``AccountCleanup``. Raising
+        keeps the host record and surfaces the error to the user.
+        """
+        self._effects.ensure_active("account:delete_hook")
+        self._registry.set_delete_handler(
+            self._plugin_id, handler, generation=self._generation
+        )
+        self._effects.add(
+            "account:delete_hook",
+            lambda: self._registry.clear_delete_handler(
+                self._plugin_id, handler, generation=self._generation
+            ),
+        )
 
 
 class BotCommandsCapability:

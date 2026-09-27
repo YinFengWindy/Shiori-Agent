@@ -23,3 +23,15 @@ def test_invalid_persisted_data_is_not_silently_reset(tmp_path: Path):
     with pytest.raises(ValueError):
         PluginKVStore(path).set("key", "value")
     assert path.read_text(encoding="utf-8") == "broken"
+
+
+def test_delete_removes_only_that_key_and_tolerates_absent_keys(tmp_path: Path):
+    path = tmp_path / "kv.json"
+    store = PluginKVStore(path)
+    store.set("identity:a", {"name": "A"})
+    store.set("identity:b", {"name": "B"})
+    store.delete("identity:a")
+    store.delete("identity:missing")
+    reopened = PluginKVStore(path)
+    assert reopened.get("identity:a") is None
+    assert reopened.get("identity:b") == {"name": "B"}

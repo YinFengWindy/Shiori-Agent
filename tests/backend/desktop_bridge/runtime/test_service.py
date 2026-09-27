@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -736,3 +737,54 @@ async def test_role_task_routes_answer_results_and_map_rejections_to_invalid_req
     rejected = await request("roles.tasks.cancel", {"role_id": "mira", "task_id": "x"})
     assert rejected.error.code == "invalid_request"
     assert events == []
+
+
+@pytest.mark.asyncio
+async def test_account_delete_reports_plugin_failures_and_announces_config_swaps():
+    service = object.__new__(ReloadableDesktopService)
+    service.app = SimpleNamespace(accepting_work=False)
+    service._prepare = "prepare"
+    service._publish = "publish"
+    service._owner = lambda *args: pytest.fail("deletion is served app-wide")
+    applied = []
+
+    async def notify(request_id, result):
+        applied.append((request_id, result))
+
+    service._notify_applied = notify
+    outcomes: list[Any] = [
+        {"account_id": "a", "config": {"generation": 3}},
+        {"account_id": "b", "config": None},
+        OSError("NapCat 文件被占用"),
+        KeyError("missing"),
+        PermissionError("账号不属于该角色"),
+    ]
+
+    async def delete(payload, *, prepare_service, publish_service):
+        assert (prepare_service, publish_service) == ("prepare", "publish")
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    service.account_deletion = SimpleNamespace(delete=delete)
+
+    async def request():
+        return await service.handle(
+            {"id": "d", "method": "accounts.delete", "payload": {}},
+            emit_event=lambda event: None,
+        )
+
+    first = await request()
+    assert first.error is None and first.payload == {"account_id": "a"}
+    assert applied == [("d", {"generation": 3})]
+    second = await request()
+    assert second.payload == {"account_id": "b"}
+    assert len(applied) == 1
+    failed = await request()
+    assert (failed.error.code, failed.error.message) == (
+        "account_delete_failed",
+        "NapCat 文件被占用",
+    )
+    assert (await request()).error.code == "account_not_found"
+    assert (await request()).error.code == "account_forbidden"

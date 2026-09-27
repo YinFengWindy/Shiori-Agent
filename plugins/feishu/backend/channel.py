@@ -268,6 +268,14 @@ class FeishuChannel:
             self._push_tool.unregister_channel(self.name, text=self.send)
             self._push_registered = False
         await self._api.aclose()
+
+    async def retire(self) -> None:
+        """Stops a deleted application for good: later stops never report it."""
+        try:
+            await self.stop()
+        finally:
+            self._accounts = None
+            self._profile_store = None
         logger.info("[feishu] 飞书渠道已停止")
 
     def pause_intake(self) -> None:

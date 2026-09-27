@@ -92,6 +92,12 @@ class QQBotAccountIdentity:
             error=error,
         )
 
+    def forget(self, app_id: str) -> None:
+        """Stops reporting a deleted application to the host."""
+        self._account_ids.pop(app_id, None)
+        self._pending_identity.pop(app_id, None)
+        self._handoffs.discard(app_id)
+
     def unregister_all(self) -> None:
         """Discard runtime presence while retaining saved account records."""
         for account_id in self._account_ids.values():

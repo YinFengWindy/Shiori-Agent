@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 ConnectionState = Literal[
     "unknown", "connecting", "online", "offline", "login_required", "error"
@@ -79,3 +80,22 @@ class AccountAccess:
     role_id: str
     ownership_version: int
     runtime_token: str
+
+
+@dataclass(frozen=True)
+class AccountCleanup:
+    """Result of a plugin delete hook after it purged its private account data.
+
+    ``plugin_config`` is the plugin's replacement ``[plugins.<id>]`` table when
+    the credential lives in host configuration; the host persists it through its
+    plugin-config write path before forgetting the account. None means the
+    plugin kept nothing in host configuration for this account.
+    """
+
+    plugin_config: dict[str, Any] | None = None
+
+
+# A plugin delete hook receives the account's plugin-private config_ref. It must
+# stop the connection, stop reporting that account, and purge every credential
+# and cache it owns. Raising keeps the host record so the user can retry.
+AccountDeleteHandler = Callable[[str], Awaitable[AccountCleanup]]

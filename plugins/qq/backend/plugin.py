@@ -6,12 +6,20 @@ import re
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, field_validator
+from core.accounts import AccountCleanup
 from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
 _UNRESOLVED_ENV_RE = re.compile(r"^\$\{\w+\}$")
+# Old single-connection fields; the first three re-create or reconnect the
+# "legacy" account on setup, the timeout only tunes it.
+_LEGACY_CREDENTIAL_FIELDS = ("bot_uin", "ws_uri", "ws_token")
+_LEGACY_CONNECTION_FIELDS = (
+    *_LEGACY_CREDENTIAL_FIELDS,
+    "websocket_open_timeout_seconds",
+)
 
 
 class QQConfigModel(BaseModel):
@@ -71,6 +79,25 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     )
     runtime = QQAccountsRuntime(store, ctx.accounts)
     ctx.channels.add(runtime)
+    raw_config = ctx.config.raw_as_dict()
+
+    async def delete_account(config_ref: str) -> AccountCleanup:
+        await runtime.delete_account(config_ref)
+        # The legacy account would be copied back from host settings on the
+        # next setup unless the old connection fields leave config.toml too.
+        if config_ref == "legacy" and any(
+            raw_config.get(key) for key in _LEGACY_CREDENTIAL_FIELDS
+        ):
+            return AccountCleanup(
+                plugin_config={
+                    key: value
+                    for key, value in raw_config.items()
+                    if key not in _LEGACY_CONNECTION_FIELDS
+                }
+            )
+        return AccountCleanup()
+
+    ctx.accounts.on_delete(delete_account)
     ctx.rpc.register(
         "accounts.settings",
         lambda payload: _settings(runtime, payload),

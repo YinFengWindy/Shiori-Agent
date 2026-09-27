@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable
 from dataclasses import replace
 from pathlib import Path
 from threading import RLock
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
 from .models import (
     AccountAccess,
+    AccountDeleteHandler,
     AccountRecord,
     AccountResponseRules,
     AccountSnapshot,
@@ -44,6 +47,7 @@ class AccountRegistry:
         self._runtime = AccountRuntimeState()
         self._records = load_accounts(self._path, role_exists)
         self._staged_records: dict[str, dict[str, AccountRecord]] = {}
+        self._delete_lock = asyncio.Lock()
 
     def set_plugin_enabled(
         self, plugin_id: str, enabled: bool, *, generation: str = DIRECT_GENERATION
@@ -320,6 +324,66 @@ class AccountRegistry:
                 staged.pop(account_id, None)
                 if not staged:
                     del self._staged_records[generation]
+
+    def set_delete_handler(
+        self,
+        plugin_id: str,
+        handler: AccountDeleteHandler,
+        *,
+        generation: str = DIRECT_GENERATION,
+    ) -> None:
+        """Accepts one plugin generation's cleanup hook for its own accounts."""
+        with self._lock:
+            self._runtime.set_delete_handler(plugin_id, handler, generation)
+
+    def clear_delete_handler(
+        self,
+        plugin_id: str,
+        handler: AccountDeleteHandler,
+        *,
+        generation: str = DIRECT_GENERATION,
+    ) -> None:
+        """Withdraws a disposed plugin instance's cleanup hook."""
+        with self._lock:
+            self._runtime.clear_delete_handler(plugin_id, handler, generation)
+
+    async def delete(
+        self,
+        account_id: str,
+        *,
+        role_id: str,
+        write_plugin_config: Callable[[str, dict[str, Any]], Awaitable[None]],
+    ) -> None:
+        """Deletes an owned account after its plugin purged credentials and data.
+
+        The host record is removed last: a failing plugin hook or config write
+        leaves it in place so the same deletion can be retried, and hooks must
+        therefore be idempotent. A plugin that is disabled or failed to load
+        cannot clean up, so deletion is refused rather than orphaning secrets.
+        """
+        async with self._delete_lock:
+            with self._lock:
+                row = self._records[account_id]
+                if row.role_id != role_id:
+                    raise PermissionError("账号不属于该角色")
+                handler = self._runtime.delete_handler(row.plugin_id)
+            if handler is None:
+                raise RuntimeError(
+                    f"插件 {row.plugin_id} 未启用或未加载，无法清理账号数据；"
+                    "请先启用插件再删除账号"
+                )
+            cleanup = await handler(row.config_ref)
+            if cleanup.plugin_config is not None:
+                await write_plugin_config(row.plugin_id, cleanup.plugin_config)
+            with self._lock:
+                self._save(
+                    {key: item for key, item in self._records.items() if key != row.id}
+                )
+                self._runtime.forget(row.id)
+                for generation, staged in list(self._staged_records.items()):
+                    staged.pop(row.id, None)
+                    if not staged:
+                        del self._staged_records[generation]
 
     def assign(self, account_id: str, role_id: str | None) -> AccountSnapshot:
         """Sets the sole owner and invalidates access captured by the old owner."""

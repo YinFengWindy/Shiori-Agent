@@ -1,18 +1,20 @@
 import { Plus } from "@phosphor-icons/react";
 import { useState } from "react";
 import { InlineError } from "../shared/feedback/InlineError";
-import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "../shared/styles";
+import { compactButtonSizeClass, cx, dangerGhostButtonSurfaceClass, ghostButtonSurfaceClass } from "../shared/styles";
 import { AccountDetailDialog } from "./AccountDetailDialog";
 import type { AccountSnapshot } from "./accountClient";
 import { accountStatus } from "./accountPresentation";
 
 /** Reusable identity list; new-account navigation is supplied by its owner. */
-export function AccountList({ title, accounts, error, onRefresh, onAdd, emptyLabel, showOwner = false, showConnectionAction = false }: {
+export function AccountList({ title, accounts, error, onRefresh, onAdd, onDelete, emptyLabel, showOwner = false, showConnectionAction = false }: {
   title: string;
   accounts: AccountSnapshot[] | null;
   error: string;
   onRefresh: () => void;
   onAdd?: () => void;
+  /** Starts the owner's delete confirmation for one account. */
+  onDelete?: (account: AccountSnapshot) => void;
   emptyLabel: string;
   showOwner?: boolean;
   showConnectionAction?: boolean;
@@ -38,6 +40,9 @@ export function AccountList({ title, accounts, error, onRefresh, onAdd, emptyLab
         disabled={!account.pluginEnabled}
         aria-label={`管理 ${account.displayName || account.platformAccountId} 的连接`}
         onClick={() => setSelected(account)}>管理连接</button> : null}
+      {onDelete ? <button type="button" className={cx(dangerGhostButtonSurfaceClass, compactButtonSizeClass)}
+        aria-label={`删除 ${account.displayName || account.platformAccountId}`}
+        onClick={() => onDelete(account)}>删除</button> : null}
     </div>)}
     {selected ? <AccountDetailDialog key={selected.id} account={accounts?.find((item) => item.id === selected.id) ?? selected} pluginId={selected.pluginId} onClose={() => setSelected(null)} onChanged={onRefresh} /> : null}
   </section>;

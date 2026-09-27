@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .models import AccountAccess, AccountRecord, AccountSnapshot, ConnectionState
+from .models import (
+    AccountAccess,
+    AccountDeleteHandler,
+    AccountRecord,
+    AccountSnapshot,
+    ConnectionState,
+)
 
 DIRECT_GENERATION = "direct"
 _CONNECTION_STATES = frozenset(
@@ -28,6 +34,7 @@ class AccountRuntimeState:
         self._last_tokens: dict[tuple[str, str], str] = {}
         self._retired_tokens: dict[tuple[str, str], set[str]] = {}
         self._enabled: dict[str, dict[str, bool]] = {}
+        self._delete_handlers: dict[str, dict[str, AccountDeleteHandler]] = {}
         self.published_generation = DIRECT_GENERATION
 
     def set_plugin_enabled(
@@ -44,9 +51,43 @@ class AccountRuntimeState:
         """Discards a candidate or retired generation without changing ownership."""
         self._live.pop(generation, None)
         self._enabled.pop(generation, None)
+        self._delete_handlers.pop(generation, None)
         for key in [key for key in self._last_tokens if key[0] == generation]:
             del self._last_tokens[key]
         for key in [key for key in self._retired_tokens if key[0] == generation]:
+            del self._retired_tokens[key]
+
+    def set_delete_handler(
+        self, plugin_id: str, handler: AccountDeleteHandler, generation: str
+    ) -> None:
+        """Records the one cleanup hook a plugin generation offers for its accounts."""
+        handlers = self._delete_handlers.setdefault(generation, {})
+        if plugin_id in handlers:
+            raise ValueError(f"Account delete hook already registered: {plugin_id}")
+        handlers[plugin_id] = handler
+
+    def clear_delete_handler(
+        self, plugin_id: str, handler: AccountDeleteHandler, generation: str
+    ) -> None:
+        """Removes a disposed plugin instance's hook, never a replacement's."""
+        handlers = self._delete_handlers.get(generation, {})
+        if handlers.get(plugin_id) is handler:
+            del handlers[plugin_id]
+
+    def delete_handler(self, plugin_id: str) -> AccountDeleteHandler | None:
+        """Returns the published generation's hook for an enabled plugin."""
+        generation = self.published_generation
+        if not self._enabled.get(generation, {}).get(plugin_id, False):
+            return None
+        return self._delete_handlers.get(generation, {}).get(plugin_id)
+
+    def forget(self, account_id: str) -> None:
+        """Drops every generation's live report and token for a deleted account."""
+        for live_accounts in self._live.values():
+            live_accounts.pop(account_id, None)
+        for key in [key for key in self._last_tokens if key[1] == account_id]:
+            del self._last_tokens[key]
+        for key in [key for key in self._retired_tokens if key[1] == account_id]:
             del self._retired_tokens[key]
 
     def snapshot(
