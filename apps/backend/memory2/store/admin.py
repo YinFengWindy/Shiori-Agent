@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 
+from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
+
 from .common import (
     OCCURRED_EPOCH_SQL_FUNCTION,
     _coerce_emotional_weight,
     _domain_json_filter,
     _domain_json_value,
+    _json_text_key,
     _now_iso,
     _role_json_filter,
 )
@@ -77,10 +80,13 @@ class _StoreAdminMixin:
             params: list[object] = []
 
             if q:
+                # 关键词按字面匹配：%、_ 与转义符不作为通配符。
                 where_parts.append(
-                    "(id LIKE ? OR summary LIKE ? OR COALESCE(source_ref, '') LIKE ?)"
+                    f"(id LIKE ? {LIKE_ESCAPE_CLAUSE} "
+                    f"OR summary LIKE ? {LIKE_ESCAPE_CLAUSE} "
+                    f"OR COALESCE(source_ref, '') LIKE ? {LIKE_ESCAPE_CLAUSE})"
                 )
-                like = f"%{q}%"
+                like = like_contains(q)
                 params.extend([like, like, like])
             if memory_type:
                 where_parts.append("memory_type = ?")
@@ -92,8 +98,10 @@ class _StoreAdminMixin:
                 where_parts.append("status = ?")
                 params.append(status)
             if source_ref:
-                where_parts.append("COALESCE(source_ref, '') LIKE ?")
-                params.append(f"%{source_ref}%")
+                where_parts.append(
+                    f"COALESCE(source_ref, '') LIKE ? {LIKE_ESCAPE_CLAUSE}"
+                )
+                params.append(like_contains(source_ref))
             if role_id:
                 where_parts.append(_role_json_filter())
                 params.append(role_id.strip())
@@ -242,7 +250,8 @@ class _StoreAdminMixin:
             "reinforcement": reinforcement,
             "emotional_weight": emotional_weight,
             "extra_json": extra,
-            "role_id": str(extra.get("role_id", "") or ""),
+            # 与 _role_json_filter 同口径，详情的角色归属判断才能和列表过滤一致。
+            "role_id": _json_text_key(extra.get("role_id")),
             "source_ref": source_ref,
             "happened_at": happened_at,
             "status": status,

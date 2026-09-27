@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 from types import SimpleNamespace
 
 import pytest
@@ -118,13 +119,9 @@ async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_
 async def test_semantic_list_declares_role_facets_and_sorts_by_occurrence_time(
     tmp_path: Path,
 ) -> None:
-    from plugins.default_memory.backend.role_memory import DefaultRoleMemoryReader
-
-    roles = RoleStore(tmp_path)
-    for role_id in ("mira", "atlas"):
-        roles.create_role(role_id=role_id, name=role_id, system_prompt="test")
     store = MemoryStore2(tmp_path / "memory.db")
     try:
+        reader = _store_reader(tmp_path, store, "mira", "atlas")
         # Written in reverse occurrence order so record-time sorting cannot pass.
         future_id = store.upsert_item(
             "plan",
@@ -154,12 +151,6 @@ async def test_semantic_list_declares_role_facets_and_sorts_by_occurrence_time(
             embedding=None,
             extra={"role_id": "atlas", "memory_domain": "atlas-domain"},
         )
-        engine = SimpleNamespace(
-            list_items_for_admin=store.list_items_for_admin,
-            list_role_filter_values=store.list_role_filter_values,
-        )
-        reader = DefaultRoleMemoryReader(roles, engine)
-
         newest = await reader.list({"role_id": "mira", "status": "all"})
         # Superseded items still contribute; other roles and blank domains do not.
         assert newest["filters"] == {
@@ -167,7 +158,7 @@ async def test_semantic_list_declares_role_facets_and_sorts_by_occurrence_time(
             "memory_domain": ["life", "taste"],
             "status": ["active", "superseded", "all"],
         }
-        assert _item_ids(newest) == [
+        assert _listed(newest, "id") == [
             future_id,
             recorded_id,
             past_id,
@@ -175,7 +166,7 @@ async def test_semantic_list_declares_role_facets_and_sorts_by_occurrence_time(
         oldest = await reader.list(
             {"role_id": "mira", "status": "all", "sort_order": "asc"}
         )
-        assert _item_ids(oldest) == [
+        assert _listed(oldest, "id") == [
             past_id,
             recorded_id,
             future_id,
@@ -204,12 +195,74 @@ async def test_semantic_reads_report_disabled_engine_after_role_validation(
         await reader.list({"role_id": "atlas"})
 
 
-def _item_ids(response: dict[str, object]) -> list[object]:
-    """Read item IDs in response order from a direct reader call."""
-    items = response["items"]
-    assert isinstance(items, list)
-    ids: list[object] = []
-    for item in items:
-        assert isinstance(item, dict)
-        ids.append(item["id"])
-    return ids
+def _listed(result: dict[str, object], field: str) -> list[object]:
+    """Read one field from every item of a semantic list response."""
+    return [item[field] for item in cast(list[dict[str, object]], result["items"])]
+
+
+def _detail(result: dict[str, object], field: str) -> object:
+    """Read one field from the item of a semantic detail response."""
+    return cast(dict[str, object], result["item"])[field]
+
+
+def _store_reader(tmp_path: Path, store: MemoryStore2, *role_ids: str):
+    """Build a reader over a real memory2 store with the given persisted roles."""
+    from plugins.default_memory.backend.role_memory import DefaultRoleMemoryReader
+
+    roles = RoleStore(tmp_path)
+    for role_id in role_ids:
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="test")
+    engine = SimpleNamespace(
+        list_items_for_admin=store.list_items_for_admin,
+        list_role_filter_values=store.list_role_filter_values,
+        get_item_for_admin=store.get_item_for_admin,
+    )
+    return DefaultRoleMemoryReader(roles, engine)
+
+
+@pytest.mark.asyncio
+async def test_semantic_list_matches_like_wildcards_literally(tmp_path: Path) -> None:
+    store = MemoryStore2(tmp_path / "memory.db")
+    try:
+        reader = _store_reader(tmp_path, store, "mira")
+        for summary in ("Mira tea", "Mira 100% coffee", "Mira snake_case", "a\\b"):
+            store.upsert_item(
+                "preference", summary, embedding=None, extra={"role_id": "mira"}
+            )
+
+        percent = await reader.list({"role_id": "mira", "q": "%"})
+        underscore = await reader.list({"role_id": "mira", "q": "_"})
+        backslash = await reader.list({"role_id": "mira", "q": "\\"})
+
+        assert _listed(percent, "summary") == ["Mira 100% coffee"]
+        assert _listed(underscore, "summary") == ["Mira snake_case"]
+        assert _listed(backslash, "summary") == ["a\\b"]
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_semantic_detail_accepts_items_the_list_shows_for_padded_role_id(
+    tmp_path: Path,
+) -> None:
+    store = MemoryStore2(tmp_path / "memory.db")
+    try:
+        reader = _store_reader(tmp_path, store, "mira", "atlas")
+        padded_id = store.upsert_item(
+            "preference", "Mira tea", embedding=None, extra={"role_id": "  mira "}
+        ).split(":", 1)[1]
+        atlas_id = store.upsert_item(
+            "preference", "Atlas tea", embedding=None, extra={"role_id": " atlas"}
+        ).split(":", 1)[1]
+
+        listed = await reader.list({"role_id": "mira"})
+        detail = await reader.detail({"role_id": "mira", "item_id": padded_id})
+
+        assert _listed(listed, "id") == [padded_id]
+        assert _detail(detail, "id") == padded_id
+        with pytest.raises(ValueError, match="memory item not found"):
+            await reader.detail({"role_id": "mira", "item_id": atlas_id})
+        with pytest.raises(ValueError, match="memory item not found"):
+            await reader.detail({"role_id": "atlas", "item_id": padded_id})
+    finally:
+        store.close()

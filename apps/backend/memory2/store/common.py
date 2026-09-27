@@ -247,6 +247,18 @@ def _time_prefilter_clauses(
     return clauses, params
 
 
+def _json_text_key(value: object) -> str:
+    """Normalize a JSON field exactly like ``COALESCE(TRIM(json_extract(...)), '')``.
+
+    SQLite ``TRIM`` without arguments removes only spaces, so Python-side
+    comparisons against SQL-filtered keys must not strip other whitespace.
+    """
+
+    if value is None:
+        return ""
+    return str(value).strip(" ")
+
+
 def _role_json_filter(column: str = "extra_json") -> str:
     return f"COALESCE(TRIM(json_extract({column}, '$.role_id')), '') = ?"
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
+from typing import cast
 import sqlite3
 
 import pytest
@@ -104,6 +106,191 @@ async def test_semantic_rpc_filters_akasha_store_by_role_before_paging_and_detai
         store.close()
 
 
+def _listed(result: dict[str, object], field: str) -> list[object]:
+    """Read one field from every item of a semantic list response."""
+    return [item[field] for item in cast(list[dict[str, object]], result["items"])]
+
+
+def _detail(result: dict[str, object], field: str) -> object:
+    """Read one field from the item of a semantic detail response."""
+    return cast(dict[str, object], result["item"])[field]
+
+
+def _akasha_reader(
+    tmp_path: Path,
+    store: AkashaStore,
+    messages: list[tuple[str, int, str]],
+    *,
+    persisted: set[tuple[str, int]] | None = None,
+):
+    """Index role messages into Akasha and persist the chosen ones as source text.
+
+    ``messages`` holds ``(role_id, seq, content)``; ``persisted`` limits which
+    of them also land in sessions.db (all by default).
+    """
+    from plugins.akasha.backend.role_memory import AkashaRoleMemoryReader
+
+    roles = RoleStore(tmp_path)
+    for role_id in sorted({role_id for role_id, _, _ in messages}):
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="test")
+    sessions_path = tmp_path / "sessions.db"
+    with closing(sqlite3.connect(sessions_path)) as db:
+        db.execute(
+            "CREATE TABLE messages "
+            "(id TEXT, session_key TEXT, seq INTEGER, role TEXT, content TEXT)"
+        )
+        for role_id, seq, content in messages:
+            message = SourceMessage(
+                id=f"role:{role_id}:{seq}",
+                session_key=f"role:{role_id}",
+                seq=seq,
+                role="user",
+                content=content,
+                ts="2026-01-01T00:00:00+00:00",
+            )
+            store.upsert_message_node(message, [1.0, 0.0])
+            if persisted is None or (role_id, seq) in persisted:
+                db.execute(
+                    "INSERT INTO messages VALUES (?, ?, ?, ?, ?)",
+                    (message.id, message.session_key, seq, "user", content),
+                )
+        db.commit()
+    engine = object.__new__(AkashaMemoryEngine)
+    engine._store = store
+    engine._session_db_path = sessions_path
+    engine._akasha_config = AkashaConfig()
+    return AkashaRoleMemoryReader(roles, engine)
+
+
+@pytest.mark.asyncio
+async def test_semantic_list_matches_like_wildcards_literally(tmp_path: Path) -> None:
+    store = AkashaStore(tmp_path / "akasha.db")
+    try:
+        reader = _akasha_reader(
+            tmp_path,
+            store,
+            [
+                ("mira", 0, "plain tea"),
+                ("mira", 2, "100% coffee"),
+                ("mira", 4, "snake_case"),
+                ("mira", 6, "a\\b"),
+            ],
+        )
+
+        percent = await reader.list({"role_id": "mira", "q": "%"})
+        underscore = await reader.list({"role_id": "mira", "q": "_"})
+        backslash = await reader.list({"role_id": "mira", "q": "\\"})
+
+        assert _listed(percent, "summary") == ["100% coffee"]
+        assert _listed(underscore, "summary") == ["snake_case"]
+        assert _listed(backslash, "summary") == ["a\\b"]
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_semantic_list_pages_same_time_items_without_gaps(
+    tmp_path: Path,
+) -> None:
+    store = AkashaStore(tmp_path / "akasha.db")
+    try:
+        # 倒序写入，使 rowid 顺序与 key 顺序相反；同一 ts 让主排序键全部相等。
+        seqs = [16, 14, 12, 10, 8, 6, 4, 2, 0]
+        reader = _akasha_reader(
+            tmp_path, store, [("mira", seq, f"text {seq}") for seq in seqs]
+        )
+
+        for sort_order in ("asc", "desc"):
+            ids: list[object] = []
+            for page in range(1, 6):
+                result = await reader.list(
+                    {
+                        "role_id": "mira",
+                        "sort_order": sort_order,
+                        "page": page,
+                        "page_size": 2,
+                    }
+                )
+                assert result["total"] == len(seqs)
+                ids.extend(_listed(result, "id"))
+            assert ids == sorted(f"role:mira:{seq}" for seq in seqs)
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_semantic_items_without_source_text_have_empty_summary(
+    tmp_path: Path,
+) -> None:
+    store = AkashaStore(tmp_path / "akasha.db")
+    try:
+        reader = _akasha_reader(
+            tmp_path,
+            store,
+            [("mira", 0, "kept"), ("mira", 2, "lost")],
+            persisted={("mira", 0)},
+        )
+
+        listed = await reader.list({"role_id": "mira", "sort_order": "asc"})
+        detail = await reader.detail({"role_id": "mira", "item_id": "role:mira:2"})
+
+        assert list(zip(_listed(listed, "id"), _listed(listed, "summary"))) == [
+            ("role:mira:0", "kept"),
+            ("role:mira:2", ""),
+        ]
+        assert _detail(detail, "summary") == ""
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_semantic_reads_isolate_two_roles(tmp_path: Path) -> None:
+    store = AkashaStore(tmp_path / "akasha.db")
+    try:
+        reader = _akasha_reader(
+            tmp_path,
+            store,
+            [("mira", 0, "shared word"), ("atlas", 0, "shared word")],
+        )
+
+        mira = await reader.list({"role_id": "mira", "q": "shared"})
+        atlas = await reader.list({"role_id": "atlas"})
+
+        assert _listed(mira, "id") == ["role:mira:0"]
+        assert _listed(atlas, "id") == ["role:atlas:0"]
+        detail = await reader.detail({"role_id": "atlas", "item_id": "role:atlas:0"})
+        assert (
+            cast(dict[str, object], _detail(detail, "extra_json"))["role_id"] == "atlas"
+        )
+        with pytest.raises(ValueError, match="memory item not found"):
+            await reader.detail({"role_id": "atlas", "item_id": "role:mira:0"})
+        with pytest.raises(ValueError, match="memory item not found"):
+            await reader.detail({"role_id": "mira", "item_id": "role:atlas:0"})
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_semantic_reads_report_disabled_engine_after_role_validation(
+    tmp_path: Path,
+) -> None:
+    from plugins.akasha.backend.role_memory import AkashaRoleMemoryReader
+
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    reader = AkashaRoleMemoryReader(roles, None)
+
+    listed = await reader.list({"role_id": "mira"})
+    detail = await reader.detail({"role_id": "mira", "item_id": "role:mira:0"})
+
+    assert listed == {"role_id": "mira", "status": "disabled", "items": [], "total": 0}
+    assert detail == {"role_id": "mira", "status": "disabled", "item": None}
+    with pytest.raises(ValueError, match="role not found"):
+        await reader.list({"role_id": "atlas"})
+    with pytest.raises(ValueError, match="role not found"):
+        await reader.detail({"role_id": "atlas"})
+
+
 @pytest.mark.asyncio
 async def test_semantic_list_sorts_by_turn_time_and_declares_no_structured_filters(
     tmp_path: Path,
@@ -139,13 +326,13 @@ async def test_semantic_list_sorts_by_turn_time_and_declares_no_structured_filte
 
         newest = await reader.list({"role_id": "mira"})
         assert newest["filters"] == {}
-        assert _item_ids(newest) == [
+        assert _listed(newest, "id") == [
             "role:mira:2",
             "role:mira:0",
             "role:mira:4",
         ]
         oldest = await reader.list({"role_id": "mira", "sort_order": "asc"})
-        assert _item_ids(oldest) == [
+        assert _listed(oldest, "id") == [
             "role:mira:4",
             "role:mira:0",
             "role:mira:2",
@@ -157,14 +344,3 @@ async def test_semantic_list_sorts_by_turn_time_and_declares_no_structured_filte
             await reader.list({"role_id": "mira", "sort_by": "updated_at"})
     finally:
         store.close()
-
-
-def _item_ids(response: dict[str, object]) -> list[object]:
-    """Read item IDs in response order from a direct reader call."""
-    items = response["items"]
-    assert isinstance(items, list)
-    ids: list[object] = []
-    for item in items:
-        assert isinstance(item, dict)
-        ids.append(item["id"])
-    return ids
