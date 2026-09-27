@@ -181,7 +181,8 @@ class QQAccountSettings:
             if socket is not None:
                 await socket.close()
             await self._managed.stop(ref)
-            self._states[ref] = ("offline", "")
+            if ref in self._configs:
+                self._states[ref] = ("offline", "")
 
     async def purge_account(self, ref: str) -> None:
         """Deletes the account's credentials and NapCat data; idempotent."""

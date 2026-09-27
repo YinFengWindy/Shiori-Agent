@@ -13,6 +13,7 @@ from uuid import uuid4
 from .models import (
     AccountAccess,
     AccountDeleteHandler,
+    AccountDeletingError,
     AccountNotFoundError,
     AccountRecord,
     AccountResponseRules,
@@ -145,6 +146,8 @@ class AccountRegistry:
                     "Platform account already has another configuration reference"
                 )
             if existing is not None:
+                # A concurrent generation must not revive an account mid-delete.
+                self._ensure_not_deleting(existing.id)
                 self._runtime.ensure_registration_allowed(
                     existing.id, token, generation
                 )
@@ -288,8 +291,16 @@ class AccountRegistry:
         capabilities: frozenset[str] = frozenset(),
         error: str = "",
     ) -> AccountSnapshot:
-        """Updates this plugin generation's live state for a registered account."""
+        """Updates this plugin generation's live state for a registered account.
+
+        Reports for an account mid-deletion (e.g. a channel's final "offline"
+        while it is being retired) are ignored rather than applied.
+        """
         with self._lock:
+            if account_id in self._deleting:
+                return self._runtime.snapshot(
+                    self._records[account_id], generation=generation
+                )
             self._runtime.report(
                 account_id, token, generation, connection, capabilities, error
             )
@@ -337,7 +348,7 @@ class AccountRegistry:
 
     def _ensure_not_deleting(self, account_id: str) -> None:
         if account_id in self._deleting:
-            raise RuntimeError("账号正在删除")
+            raise AccountDeletingError("账号正在删除")
 
     def set_delete_handler(
         self,
@@ -373,14 +384,23 @@ class AccountRegistry:
 
         Order: the plugin's plan and ``check_plugin_config`` are pure and fail
         before anything changes; ``disconnect`` stops the account without
-        losing data; ``write_plugin_config`` removes a config-held credential
-        transactionally; ``purge`` deletes plugin data; the host record goes
-        last. Residual window: a failure inside ``write_plugin_config``
-        (account disconnected, nothing lost) or during ``purge`` I/O (config
-        credential already gone, some private data left). Both keep the host
-        record and every step is idempotent, so retrying completes deletion.
-        A disabled or unloaded plugin cannot clean up, so deletion is refused
-        rather than orphaning secrets. Ownership and rules are frozen meanwhile.
+        losing data; ``purge`` deletes plugin data; ``write_plugin_config``
+        then removes a config-held credential transactionally, which swaps
+        the runtime generation, so the new generation already starts without
+        the purged data and cannot reconnect it; the host record goes last.
+
+        Residual window: a failed ``purge`` leaves some private data, and a
+        failed ``write_plugin_config`` leaves the host-config credential while
+        private data is already gone. Either way the record is kept and every
+        step is idempotent, so a retry completes deletion. Until that retry,
+        a later generation may re-import a legacy credential from host config
+        (QQ/QQBot migrate it on setup); the retry plans from config again, so
+        it disconnects and purges that re-import too.
+
+        While deleting, ownership and rules are frozen, registration of the
+        same identity is refused, and live reports are ignored. A disabled or
+        unloaded plugin cannot clean up, so deletion is refused rather than
+        orphaning secrets.
         """
         async with self._delete_lock:
             with self._lock:
@@ -401,9 +421,9 @@ class AccountRegistry:
                 if plan.plugin_config is not None:
                     check_plugin_config(row.plugin_id, plan.plugin_config)
                 await plan.disconnect()
+                await plan.purge()
                 if plan.plugin_config is not None:
                     await write_plugin_config(row.plugin_id, plan.plugin_config)
-                await plan.purge()
                 with self._lock:
                     self._save(
                         {
@@ -413,7 +433,7 @@ class AccountRegistry:
                         }
                     )
                     self._runtime.forget(row.id)
-                    self._discard_staged(row.id, self._staged_records)
+                    self._discard_staged(row.id, self._staged_records.keys())
             finally:
                 with self._lock:
                     self._deleting.discard(row.id)

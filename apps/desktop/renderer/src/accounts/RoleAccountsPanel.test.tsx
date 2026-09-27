@@ -61,6 +61,8 @@ test("deleting an owned account asks for confirmation and keeps it when the plug
           deletes.push(payload);
           if (failNext) {
             failNext = false;
+            // The plugin already disconnected before its cleanup failed.
+            rows = [{ ...row, connection: "offline" }];
             return { id: "r", type: "response", method, payload: {},
               error: { code: "account_delete_failed", message: "NapCat 文件被占用", details: {} } };
           }
@@ -86,6 +88,9 @@ test("deleting an owned account asks for confirmation and keeps it when the plug
     assert.deepEqual(deletes, [{ account_id: "account-1", role_id: "role-1" }]);
     assert.match(dialog()?.textContent ?? "", /NapCat 文件被占用/);
     assert.ok(view.container.querySelector('[aria-label="删除 Owned"]'));
+    // The list reloads after a failure too, so the new status is visible.
+    assert.match(view.container.textContent ?? "", /离线/);
+    assert.doesNotMatch(view.container.textContent ?? "", /在线/);
 
     await act(async () => confirm()?.click());
     assert.equal(deletes.length, 2);

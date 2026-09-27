@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -113,9 +113,8 @@ def config_without_application(raw: dict[str, Any], ref: str) -> dict[str, Any] 
     references persist. The application may also be the old top-level single
     app, and the bare ``feishu`` channel alias must not keep pointing at it.
     """
-    resolved = resolve_config_references(raw)
-    if not isinstance(resolved, dict):
-        raise TypeError("飞书配置必须是表")
+    # resolve_config_references returns ``object``; a table stays a table.
+    resolved = cast(dict[str, Any], resolve_config_references(raw))
     accounts = raw.get("accounts") or []
     kept = [
         item

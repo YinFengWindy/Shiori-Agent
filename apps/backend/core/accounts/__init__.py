@@ -3,6 +3,7 @@
 from .models import (
     AccountAccess,
     AccountDeleteHandler,
+    AccountDeletingError,
     AccountDeletionPlan,
     AccountNotFoundError,
     AccountRecord,
@@ -14,6 +15,7 @@ from .registry import AccountRegistry
 __all__ = [
     "AccountAccess",
     "AccountDeleteHandler",
+    "AccountDeletingError",
     "AccountDeletionPlan",
     "AccountNotFoundError",
     "AccountRecord",

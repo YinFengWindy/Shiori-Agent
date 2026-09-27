@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import tomllib
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -177,23 +178,40 @@ async def test_deleting_applications_purges_kv_and_legacy_host_credentials(
             )
             assert assigned.error is None, assigned.error
 
+        legacy = await plugin_bridge_request(
+            service,
+            "accounts.delete",
+            {"account_id": accounts["100"], "role_id": "mira"},
+        )
+        # The config write swapped generations; the new one ran setup (and its
+        # legacy migration) after the purge, so it neither re-imported nor
+        # re-registered the application and loaded cleanly.
+        assert legacy.error is None, legacy.error
+        table = tomllib.loads(path.read_text(encoding="utf-8"))["plugins"]["qqbot"]
+        assert not table.get("app_id") and not table.get("client_secret")
+        assert "legacy-secret" not in path.read_text(encoding="utf-8")
+        assert [row["app_id"] for row in QQBotAccountStore(kv).list()] == ["200"]
+        kept = await plugin_bridge_request(
+            service, "plugin.qqbot.account.detail", {"account_id": accounts["200"]}
+        )
+        assert kept.error is None, kept.error
+        gone = await plugin_bridge_request(
+            service, "plugin.qqbot.account.detail", {"account_id": accounts["100"]}
+        )
+        assert gone.error is not None
+
         scoped = await plugin_bridge_request(
             service,
             "accounts.delete",
             {"account_id": accounts["200"], "role_id": "mira"},
         )
         assert scoped.error is None, scoped.error
-        assert "legacy-secret" in path.read_text(encoding="utf-8")
-        assert [row["app_id"] for row in QQBotAccountStore(kv).list()] == ["100"]
-
-        legacy = await plugin_bridge_request(
-            service,
-            "accounts.delete",
-            {"account_id": accounts["100"], "role_id": "mira"},
-        )
-        assert legacy.error is None, legacy.error
-        assert "legacy-secret" not in path.read_text(encoding="utf-8")
         assert QQBotAccountStore(kv).list() == []
         after = await plugin_bridge_request(service, "accounts.list")
         assert after.payload["accounts"] == []
     assert RoleStore(tmp_path).accounts.list() == []
+    restarted = QQBotAccountStore(kv)
+    restarted.migrate_legacy(
+        str(table.get("app_id") or ""), str(table.get("client_secret") or "")
+    )
+    assert restarted.list() == []

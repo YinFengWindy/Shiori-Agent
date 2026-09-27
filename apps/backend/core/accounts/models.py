@@ -86,13 +86,18 @@ class AccountNotFoundError(LookupError):
     """The requested account has no host record."""
 
 
+class AccountDeletingError(RuntimeError):
+    """The account is being deleted; its identity and settings are frozen."""
+
+
 @dataclass(frozen=True)
 class AccountDeletionPlan:
     """A plugin's side-effect-free plan for deleting one of its accounts.
 
     The host runs it in order: validate ``plugin_config``, ``disconnect``,
-    persist ``plugin_config``, ``purge``, then forget its record. Both steps
-    must be idempotent so a failed deletion can simply be retried.
+    ``purge``, persist ``plugin_config``, then forget its record. Both steps
+    must be idempotent, and planning must still work after a purge, so a
+    failed deletion can simply be retried.
     """
 
     # Stops the connection and all reports for the account; keeps its data.

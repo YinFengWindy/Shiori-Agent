@@ -3,8 +3,12 @@ import { createAccountClient, type AccountSnapshot } from "./accountClient";
 
 const client = createAccountClient();
 
-/** Confirmation state for deleting one of a role's accounts; failures stay in the dialog. */
-export function useAccountDeletion(roleId: string, onDeleted: () => void) {
+/**
+ * Confirmation state for deleting one of a role's accounts; failures stay in the dialog.
+ * `onSettled` reloads the list after every attempt: even a failed deletion may
+ * already have disconnected the account.
+ */
+export function useAccountDeletion(roleId: string, onSettled: () => void) {
   const [pending, setPending] = useState<AccountSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -22,12 +26,12 @@ export function useAccountDeletion(roleId: string, onDeleted: () => void) {
     try {
       await client.remove(pending.id, roleId);
       setPending(null);
-      onDeleted();
     } catch (failure) {
       // The host kept the account; show why so the user can retry.
       setError(failure instanceof Error ? failure.message : String(failure));
     } finally {
       setBusy(false);
+      onSettled();
     }
   }
   return { pending, busy, error, request, cancel, confirm };

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from core.accounts import AccountDeletionPlan, AccountNotFoundError, AccountRegistry
+from core.accounts import (
+    AccountDeletingError,
+    AccountDeletionPlan,
+    AccountNotFoundError,
+    AccountRegistry,
+)
 from core.accounts.models import AccountResponseRules
 from core.roles.store import RoleStore
 from shiori_plugin_testkit.legacy_roles import seed_legacy_bindings
@@ -567,7 +572,7 @@ async def test_delete_validates_disconnects_writes_purges_then_forgets(tmp_path)
 
     await deletion.run(registry, account_id)
 
-    assert deletion.steps == ["plan", "check", "disconnect", "write", "purge"]
+    assert deletion.steps == ["plan", "check", "disconnect", "purge", "write"]
     assert registry.list() == []
     with pytest.raises(KeyError):
         registry.get(account_id)
@@ -606,7 +611,7 @@ async def test_failed_write_or_purge_keeps_record_and_retry_completes(
 
     with pytest.raises(OSError, match=f"{failing} failed"):
         await deletion.run(registry, account_id)
-    completed = ["plan", "check", "disconnect", "write", "purge"]
+    completed = ["plan", "check", "disconnect", "purge", "write"]
     assert deletion.steps == completed[: completed.index(failing) + 1]
     restarted = AccountRegistry(tmp_path, {"r1"}.__contains__)
     assert [row.record.id for row in restarted.list()] == [account_id]
@@ -616,7 +621,7 @@ async def test_failed_write_or_purge_keeps_record_and_retry_completes(
 
 
 @pytest.mark.asyncio
-async def test_ownership_and_rules_are_frozen_while_deleting(tmp_path):
+async def test_account_is_frozen_and_cannot_be_revived_while_deleting(tmp_path):
     registry, account_id = _owned_account(tmp_path)
     refused: list[str] = []
 
@@ -627,10 +632,24 @@ async def test_ownership_and_rules_are_frozen_while_deleting(tmp_path):
                 lambda: registry.set_response_rules(
                     account_id, AccountResponseRules(group_enabled=False)
                 ),
+                # A newly prepared generation re-registering the identity.
+                lambda: registry.register(
+                    plugin_id="chat",
+                    platform="chat",
+                    platform_account_id="101",
+                    config_ref="one",
+                    token="generation-2",
+                    generation="g2",
+                ),
             ):
-                with pytest.raises(RuntimeError, match="正在删除") as error:
+                with pytest.raises(AccountDeletingError, match="正在删除") as error:
                     change()
                 refused.append(str(error.value))
+            # A retiring channel's final report is ignored, not applied.
+            ignored = registry.report(
+                account_id, "generation-1", connection="error", error="late"
+            )
+            assert ignored.connection == "online"
 
         async def purge():
             return None
@@ -644,8 +663,18 @@ async def test_ownership_and_rules_are_frozen_while_deleting(tmp_path):
         check_plugin_config=lambda *_: None,
         write_plugin_config=_Deletion().write,
     )
-    assert refused == ["账号正在删除", "账号正在删除"]
+    assert refused == ["账号正在删除"] * 3
     assert registry.list() == []
+    # After deletion a stale report cannot bring the record back either.
+    with pytest.raises(RuntimeError, match="no longer active"):
+        registry.report(
+            account_id,
+            "generation-1",
+            connection="online",
+            capabilities=frozenset({"send"}),
+        )
+    assert registry.list() == []
+    assert AccountRegistry(tmp_path, {"r1"}.__contains__).list() == []
 
 
 @pytest.mark.asyncio

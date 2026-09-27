@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import tomllib
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -164,6 +165,11 @@ async def test_delete_hook_retires_the_legacy_host_connection_fields(
     await legacy.disconnect()
     await legacy.purge()
     assert QQAccountsStore(tmp_path).load() == {}
+    # A retry after a failed config write plans the same config removal.
+    retried = delete("legacy")
+    assert retried.plugin_config == {"note": "keep"}
+    await retried.disconnect()
+    await retried.purge()
 
 
 @pytest.mark.asyncio
@@ -214,3 +220,70 @@ async def test_deleting_an_account_removes_credentials_napcat_data_and_record(
     assert [row.record.id for row in RoleStore(tmp_path).accounts.list()] == [
         accounts["bb"]
     ]
+
+
+@pytest.mark.asyncio
+async def test_deleting_the_legacy_account_survives_the_config_generation_swap(
+    plugin_runtime, tmp_path
+) -> None:
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
+    store = QQAccountsStore(tmp_path)
+    # A different stored token keeps the host fields from being retired early.
+    store.save(
+        {
+            "legacy": QQConnectionConfig(
+                "legacy",
+                "ws://127.0.0.1:1",
+                "stored-token",
+                expected_uin="101",
+                auto_connect=False,
+                verified=True,
+            )
+        }
+    )
+    napcat = NapCatAccountFiles(store.path.parent / "managed-napcat")
+    login = napcat.account_dir("legacy") / "profile/AppData/Local/QQ"
+    login.mkdir(parents=True)
+    (login / "session.db").write_text("login", encoding="utf-8")
+    config = (
+        '\n[plugins.qq]\nbot_uin = "101"\nws_uri = "ws://127.0.0.1:1"\n'
+        'ws_token = "legacy-token"\n'
+    )
+    async with plugin_runtime(("qq",), config) as (service, path):
+        listed = await plugin_bridge_request(service, "accounts.list")
+        [account] = listed.payload["accounts"]
+        assert account["config_ref"] == "legacy"
+        assigned = await plugin_bridge_request(
+            service, "accounts.assign", {"account_id": account["id"], "role_id": "mira"}
+        )
+        assert assigned.error is None, assigned.error
+
+        deleted = await plugin_bridge_request(
+            service,
+            "accounts.delete",
+            {"account_id": account["id"], "role_id": "mira"},
+        )
+
+        assert deleted.error is None, deleted.error
+        table = tomllib.loads(path.read_text(encoding="utf-8"))["plugins"].get("qq", {})
+        assert not any(table.get(key) for key in ("bot_uin", "ws_uri", "ws_token"))
+        assert "legacy-token" not in path.read_text(encoding="utf-8")
+        assert store.load() == {}
+        assert not napcat.account_dir("legacy").exists()
+        # The generation published by the config write started without it.
+        settings = await plugin_bridge_request(
+            service, "plugin.qq.accounts.settings", {}
+        )
+        assert settings.error is None, settings.error
+        assert settings.payload["accounts"] == []
+        after = await plugin_bridge_request(service, "accounts.list")
+        assert after.payload["accounts"] == []
+    assert RoleStore(tmp_path).accounts.list() == []
+    restarted = QQAccountsStore(tmp_path)
+    restarted.migrate_legacy(
+        bot_uin=str(table.get("bot_uin") or ""),
+        ws_uri=str(table.get("ws_uri") or ""),
+        ws_token=str(table.get("ws_token") or ""),
+        timeout_seconds=float(table.get("websocket_open_timeout_seconds", 5.0)),
+    )
+    assert restarted.load() == {}

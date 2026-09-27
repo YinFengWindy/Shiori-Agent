@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from bootstrap.app import AppRuntime
 from bootstrap.runtime.generations import RuntimeLease
-from core.accounts import AccountNotFoundError
+from core.accounts import AccountDeletingError, AccountNotFoundError
 from core.common.cleanup import run_cleanup_steps
 from core.roles import RoleStore
 from core.common.runtime_scope import bind_runtime
@@ -347,6 +347,8 @@ class ReloadableDesktopService:
             error = BridgeError("account_not_found", f"账号不存在: {exc.args[0]}")
         except PermissionError as exc:
             error = BridgeError("account_forbidden", str(exc))
+        except AccountDeletingError as exc:
+            error = BridgeError("account_deleting", str(exc))
         except Exception as exc:
             # Boundary: a plugin hook may fail in any way (locked files, network
             # teardown). The host record is intact; the user sees why.
