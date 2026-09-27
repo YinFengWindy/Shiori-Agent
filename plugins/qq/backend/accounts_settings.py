@@ -150,23 +150,28 @@ class QQAccountSettings:
             raise PermissionError("已验证或运行中的 QQ 账号不能作为草稿删除")
         if config.mode == "managed":
             await self._managed.stop(ref)
-        self._store.save({key: row for key, row in self._configs.items() if key != ref})
-        del self._configs[ref]
+        await self._discard_config(ref)
+
+    async def _discard_config(self, ref: str) -> None:
+        """Forgets a reference's saved settings, live state, intake, and lock."""
+        if ref in self._configs:
+            self._store.save(
+                {key: row for key, row in self._configs.items() if key != ref}
+            )
+            del self._configs[ref]
         self._states.pop(ref, None)
         intake = self._intakes.pop(ref, None)
         if intake is not None:
             await intake.close()
         self._locks.pop(ref, None)
 
-    async def delete_account(self, ref: str) -> None:
-        """Disconnects and permanently purges one account's credentials and data.
+    async def disconnect_account(self, ref: str) -> None:
+        """Stops a deleted account's socket and NapCat, keeping its saved data.
 
-        Idempotent so a failed host deletion can be retried: an already
-        removed reference only re-checks that its private directory is gone.
+        Idempotent; the host account is forgotten first so teardown never
+        reports it again.
         """
-        if ref in self._ids:
-            # Forget the host account first so teardown never reports it again.
-            del self._ids[ref]
+        self._ids.pop(ref, None)
         task = self._tasks.pop(ref, None)
         if task is not None:
             task.cancel()
@@ -175,16 +180,12 @@ class QQAccountSettings:
             socket = self._sockets.pop(ref, None)
             if socket is not None:
                 await socket.close()
-            intake = self._intakes.pop(ref, None)
-            if intake is not None:
-                await intake.close()
-            # Managed or not, the reference may own a NapCat directory with
-            # login sessions from an earlier managed configuration.
-            await self._managed.delete(ref)
-            if ref in self._configs:
-                self._store.save(
-                    {key: row for key, row in self._configs.items() if key != ref}
-                )
-                del self._configs[ref]
-            self._states.pop(ref, None)
-        self._locks.pop(ref, None)
+            await self._managed.stop(ref)
+            self._states[ref] = ("offline", "")
+
+    async def purge_account(self, ref: str) -> None:
+        """Deletes the account's credentials and NapCat data; idempotent."""
+        # Managed or not, the reference may own a NapCat directory with
+        # login sessions from an earlier managed configuration.
+        await self._managed.delete(ref)
+        await self._discard_config(ref)

@@ -52,15 +52,22 @@ async def test_retired_bot_stops_polling_before_caches_are_purged(tmp_path):
         channels, store, {"bots": [{"ref": "first", "token": "1:a"}]}
     )
 
-    cleanup = await deletion("first")
+    plan = deletion("first")
 
+    # Planning is side-effect free: nothing stops or disappears yet.
+    assert plan.plugin_config == {"bots": []}
+    assert channels == {"first": channel}
+    assert store.get("identity:first") == {"cached": True}
+    await plan.disconnect()
+    await plan.purge()
     assert purged_before_stop == [False]
     assert channels == {}
     assert store.get("known_chats:first") is None
     assert store.get("identity:first") is None
     assert store.get("identity:other") == {"cached": True}
-    assert cleanup.plugin_config == {"bots": []}
-    retried = await deletion("first")
+    retried = deletion("first")
+    await retried.disconnect()
+    await retried.purge()
     channel.retire.assert_awaited_once()
     assert retried.plugin_config == {"bots": []}
 

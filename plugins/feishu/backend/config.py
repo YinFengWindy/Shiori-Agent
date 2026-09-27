@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from agent.config import resolve_config_references
+
 from .formatting import DOMAINS, FEISHU_DOMAIN, LARK_DOMAIN
 
 UNRESOLVED_ENV_RE = re.compile(r"^\$\{\w+\}$")
@@ -106,15 +108,21 @@ class FeishuConfigModel(FeishuAppConfig):
 def config_without_application(raw: dict[str, Any], ref: str) -> dict[str, Any] | None:
     """Returns the ``[plugins.feishu]`` table minus one application, or None.
 
-    Works on unexpanded values so other applications' ``${ENV}`` secrets
-    persist. The application may also be the old top-level single app, and the
-    bare ``feishu`` channel alias must not keep pointing at a deleted ref.
+    Entries are matched by their expanded identity (an App ID may itself be an
+    ``${ENV}`` reference) but written back unexpanded, so other applications'
+    references persist. The application may also be the old top-level single
+    app, and the bare ``feishu`` channel alias must not keep pointing at it.
     """
+    resolved = resolve_config_references(raw)
+    if not isinstance(resolved, dict):
+        raise TypeError("飞书配置必须是表")
     accounts = raw.get("accounts") or []
     kept = [
-        item for item in accounts if FeishuAppConfig.model_validate(item).ref != ref
+        item
+        for item, expanded in zip(accounts, resolved.get("accounts") or [])
+        if FeishuAppConfig.model_validate(expanded).ref != ref
     ]
-    legacy = FeishuConfigModel.model_validate(raw)
+    legacy = FeishuConfigModel.model_validate(resolved)
     top_level = bool(legacy.app_id) and legacy.ref == ref
     alias = raw.get("legacy_channel_ref") == ref
     if len(kept) == len(accounts) and not top_level and not alias:

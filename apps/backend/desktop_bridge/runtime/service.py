@@ -6,10 +6,11 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from bootstrap.app import AppRuntime
 from bootstrap.runtime.generations import RuntimeLease
+from core.accounts import AccountNotFoundError
 from core.common.cleanup import run_cleanup_steps
 from core.roles import RoleStore
 from core.common.runtime_scope import bind_runtime
@@ -330,7 +331,9 @@ class ReloadableDesktopService:
                 error=BridgeError(exc.code, str(exc), exc.details),
             )
 
-    async def _delete_account(self, request_id: str, method: str, payload):
+    async def _delete_account(
+        self, request_id: str, method: str, payload: dict[str, Any]
+    ) -> BridgeResponse:
         """Deletes an account, announcing a generation swap if its config changed."""
         try:
             result = await self.account_deletion.delete(
@@ -340,7 +343,7 @@ class ReloadableDesktopService:
             )
         except RuntimeApplyError as exc:
             error = BridgeError(exc.code, str(exc), exc.details)
-        except KeyError as exc:
+        except AccountNotFoundError as exc:
             error = BridgeError("account_not_found", f"账号不存在: {exc.args[0]}")
         except PermissionError as exc:
             error = BridgeError("account_forbidden", str(exc))

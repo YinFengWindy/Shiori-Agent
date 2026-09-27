@@ -115,37 +115,7 @@ class RuntimePluginConfig:
                 "plugin_config_unsupported",
                 f"插件 {plugin_id} 未声明配置模型",
             )
-        try:
-            normalized = validate_against(model_cls, _resolved_table(values))
-        except ValidationError as exc:
-            raise RuntimeApplyError(
-                "plugin_config_invalid",
-                format_validation_error(exc),
-                # details 会被 JSON 序列化写回 renderer：去掉 url 与 ctx，
-                # 后者可能携带异常对象等不可序列化内容；也去掉 input，
-                # 校验的是展开后的值，input 里可能正是环境变量里的密钥。
-                errors=exc.errors(
-                    include_url=False, include_context=False, include_input=False
-                ),
-            ) from exc
-        persisted = _persisted_values(values, normalized)
-
-        # 复用设置事务：定位-替换式合并 TOML 文本后走既有事务化落盘 + 热更新路径，
-        # 不另起一套写盘逻辑（见 desktop_bridge/plugin_config_text.py）。
-        # 合并与守卫都在事务锁内进行：本方法只改一张表、其余文本沿用"当前已提交
-        # 的配置"，若在锁外读取基准文本，并发的 runtime.apply 会被整份覆盖掉。
-        # 但当幂等 memo 命中时，apply() 根本不会调用这个回调——见
-        # RuntimeSettingsApplication.apply 的文档。
-        def _merge(current_text: str) -> str:
-            merged = _merge_plugin_values(current_text, plugin_id, persisted)
-            self._assert_config_round_trip(
-                model_cls,
-                plugin_id,
-                current_text,
-                merged,
-                normalized,
-            )
-            return merged
+        persisted, _merge = self._validated_replacement(model_cls, plugin_id, values)
 
         apply_payload: dict[str, Any] = {"operation_id": operation_id}
         expected_generation = payload.get("expected_generation")
@@ -170,46 +140,89 @@ class RuntimePluginConfig:
             **result,
         }
 
+    def _validated_replacement(
+        self, model_cls: type[BaseModel], plugin_id: str, values: dict[str, Any]
+    ) -> tuple[dict[str, Any], Callable[[str], str]]:
+        """Validates a table; returns what to persist and its guarded text merge."""
+        try:
+            normalized = validate_against(model_cls, _resolved_table(values))
+        except ValidationError as exc:
+            raise RuntimeApplyError(
+                "plugin_config_invalid",
+                format_validation_error(exc),
+                # details 会被 JSON 序列化写回 renderer：去掉 url 与 ctx，
+                # 后者可能携带异常对象等不可序列化内容；也去掉 input，
+                # 校验的是展开后的值，input 里可能正是环境变量里的密钥。
+                errors=exc.errors(
+                    include_url=False, include_context=False, include_input=False
+                ),
+            ) from exc
+        persisted = _persisted_values(values, normalized)
+
+        # 复用设置事务：定位-替换式合并 TOML 文本后走既有事务化落盘 + 热更新路径，
+        # 不另起一套写盘逻辑（见 desktop_bridge/plugin_config_text.py）。
+        # 合并与守卫都在事务锁内进行：本方法只改一张表、其余文本沿用"当前已提交
+        # 的配置"，若在锁外读取基准文本，并发的 runtime.apply 会被整份覆盖掉。
+        # 但当幂等 memo 命中时，apply() 根本不会调用这个回调——见
+        # RuntimeSettingsApplication.apply 的文档。
+        def merge(current_text: str) -> str:
+            merged = _merge_plugin_values(current_text, plugin_id, persisted)
+            self._assert_config_round_trip(
+                model_cls, plugin_id, current_text, merged, normalized
+            )
+            return merged
+
+        return persisted, merge
+
+    def _plugin_replacement(
+        self, plugin_id: str, values: dict[str, Any]
+    ) -> tuple[dict[str, Any], Callable[[str], str]]:
+        """Chooses validated or verbatim replacement for a plugin-derived table.
+
+        QQBot declares no config model (its settings form was retired in #423)
+        yet its legacy credential still sits in ``[plugins.qqbot]``; such a
+        table is written verbatim, still under the table-isolation guard.
+        """
+        kernel = self._plugin_kernel()
+        model_cls = (
+            kernel.config_schemas.model_for(plugin_id) if kernel is not None else None
+        )
+        if model_cls is not None:
+            return self._validated_replacement(model_cls, plugin_id, values)
+
+        def merge(current_text: str) -> str:
+            merged = _merge_plugin_values(current_text, plugin_id, values)
+            _ = assert_plugin_table_isolated(plugin_id, current_text, merged)
+            return merged
+
+        return values, merge
+
+    def check_replacement(self, plugin_id: str, values: dict[str, Any]) -> None:
+        """Dry-runs ``replace_from_plugin`` on the committed text; writes nothing."""
+        _, merge = self._plugin_replacement(plugin_id, values)
+        _ = merge(self._settings.config_text)
+
     async def replace_from_plugin(
         self,
         plugin_id: str,
         values: dict[str, Any],
         *,
         operation_id: str,
-        prepare_service: Callable,
-        publish_service: Callable,
+        prepare_service: Callable[..., Any],
+        publish_service: Callable[..., Any],
     ) -> dict[str, Any]:
-        """Persists a table the plugin derived from its own unexpanded config.
+        """Commits a table the plugin derived from its own unexpanded config.
 
-        Account deletion uses this to drop a credential. A plugin with a config
-        model goes through the normal validated ``set``; one without a settings
-        form (e.g. only legacy keys remain) is written verbatim, still inside
-        the settings transaction and the table-isolation guard.
+        Account deletion uses this to drop a credential held in host config.
         """
-        kernel = self._plugin_kernel()
-        if kernel is not None and kernel.config_schemas.model_for(plugin_id):
-            return await self.set(
-                {
-                    "plugin_id": plugin_id,
-                    "values": values,
-                    "operation_id": operation_id,
-                },
-                prepare_service=prepare_service,
-                publish_service=publish_service,
-            )
-
-        def _merge(current_text: str) -> str:
-            merged = _merge_plugin_values(current_text, plugin_id, values)
-            _ = assert_plugin_table_isolated(plugin_id, current_text, merged)
-            return merged
-
+        persisted, merge = self._plugin_replacement(plugin_id, values)
         result = await self._settings.apply(
             {"operation_id": operation_id},
             prepare_service=prepare_service,
             publish_service=publish_service,
             derive=DerivedWrite(
-                build_config_toml=_merge,
-                fingerprint_payload={"plugin_id": plugin_id, "values": values},
+                build_config_toml=merge,
+                fingerprint_payload={"plugin_id": plugin_id, "values": persisted},
             ),
         )
         return {"plugin_id": plugin_id, **result}

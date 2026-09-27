@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Iterable
 from dataclasses import replace
 from pathlib import Path
 from threading import RLock
@@ -13,6 +13,7 @@ from uuid import uuid4
 from .models import (
     AccountAccess,
     AccountDeleteHandler,
+    AccountNotFoundError,
     AccountRecord,
     AccountResponseRules,
     AccountSnapshot,
@@ -48,6 +49,8 @@ class AccountRegistry:
         self._records = load_accounts(self._path, role_exists)
         self._staged_records: dict[str, dict[str, AccountRecord]] = {}
         self._delete_lock = asyncio.Lock()
+        # Accounts mid-deletion; ownership and rules are frozen until it ends.
+        self._deleting: set[str] = set()
 
     def set_plugin_enabled(
         self, plugin_id: str, enabled: bool, *, generation: str = DIRECT_GENERATION
@@ -319,11 +322,22 @@ class AccountRegistry:
         """Reclaims a disposed plugin's runtime and unpublished identity data."""
         with self._lock:
             was_current = self._runtime.release(account_id, token, generation)
+            if was_current:
+                self._discard_staged(account_id, (generation,))
+
+    def _discard_staged(self, account_id: str, generations: Iterable[str]) -> None:
+        """Drops unpublished identity data for one account in those generations."""
+        for generation in list(generations):
             staged = self._staged_records.get(generation)
-            if was_current and staged is not None:
-                staged.pop(account_id, None)
-                if not staged:
-                    del self._staged_records[generation]
+            if staged is None:
+                continue
+            staged.pop(account_id, None)
+            if not staged:
+                del self._staged_records[generation]
+
+    def _ensure_not_deleting(self, account_id: str) -> None:
+        if account_id in self._deleting:
+            raise RuntimeError("账号正在删除")
 
     def set_delete_handler(
         self,
@@ -352,44 +366,64 @@ class AccountRegistry:
         account_id: str,
         *,
         role_id: str,
+        check_plugin_config: Callable[[str, dict[str, Any]], None],
         write_plugin_config: Callable[[str, dict[str, Any]], Awaitable[None]],
     ) -> None:
-        """Deletes an owned account after its plugin purged credentials and data.
+        """Deletes an owned account through its plugin's deletion plan.
 
-        The host record is removed last: a failing plugin hook or config write
-        leaves it in place so the same deletion can be retried, and hooks must
-        therefore be idempotent. A plugin that is disabled or failed to load
-        cannot clean up, so deletion is refused rather than orphaning secrets.
+        Order: the plugin's plan and ``check_plugin_config`` are pure and fail
+        before anything changes; ``disconnect`` stops the account without
+        losing data; ``write_plugin_config`` removes a config-held credential
+        transactionally; ``purge`` deletes plugin data; the host record goes
+        last. Residual window: a failure inside ``write_plugin_config``
+        (account disconnected, nothing lost) or during ``purge`` I/O (config
+        credential already gone, some private data left). Both keep the host
+        record and every step is idempotent, so retrying completes deletion.
+        A disabled or unloaded plugin cannot clean up, so deletion is refused
+        rather than orphaning secrets. Ownership and rules are frozen meanwhile.
         """
         async with self._delete_lock:
             with self._lock:
-                row = self._records[account_id]
+                row = self._records.get(account_id)
+                if row is None:
+                    raise AccountNotFoundError(account_id)
                 if row.role_id != role_id:
                     raise PermissionError("账号不属于该角色")
                 handler = self._runtime.delete_handler(row.plugin_id)
-            if handler is None:
-                raise RuntimeError(
-                    f"插件 {row.plugin_id} 未启用或未加载，无法清理账号数据；"
-                    "请先启用插件再删除账号"
-                )
-            cleanup = await handler(row.config_ref)
-            if cleanup.plugin_config is not None:
-                await write_plugin_config(row.plugin_id, cleanup.plugin_config)
-            with self._lock:
-                self._save(
-                    {key: item for key, item in self._records.items() if key != row.id}
-                )
-                self._runtime.forget(row.id)
-                for generation, staged in list(self._staged_records.items()):
-                    staged.pop(row.id, None)
-                    if not staged:
-                        del self._staged_records[generation]
+                if handler is None:
+                    raise RuntimeError(
+                        f"插件 {row.plugin_id} 未启用或未加载，无法清理账号数据；"
+                        "请先启用插件再删除账号"
+                    )
+                self._deleting.add(row.id)
+            try:
+                plan = handler(row.config_ref)
+                if plan.plugin_config is not None:
+                    check_plugin_config(row.plugin_id, plan.plugin_config)
+                await plan.disconnect()
+                if plan.plugin_config is not None:
+                    await write_plugin_config(row.plugin_id, plan.plugin_config)
+                await plan.purge()
+                with self._lock:
+                    self._save(
+                        {
+                            key: item
+                            for key, item in self._records.items()
+                            if key != row.id
+                        }
+                    )
+                    self._runtime.forget(row.id)
+                    self._discard_staged(row.id, self._staged_records)
+            finally:
+                with self._lock:
+                    self._deleting.discard(row.id)
 
     def assign(self, account_id: str, role_id: str | None) -> AccountSnapshot:
         """Sets the sole owner and invalidates access captured by the old owner."""
         with self._lock:
             if role_id is not None and not self._role_exists(role_id):
                 raise KeyError(f"role does not exist: {role_id}")
+            self._ensure_not_deleting(account_id)
             row = self._records[account_id]
             if row.role_id != role_id:
                 rules = row.response_rules
@@ -423,6 +457,7 @@ class AccountRegistry:
     ) -> AccountSnapshot:
         """Persists shared response policy without changing ownership or live state."""
         with self._lock:
+            self._ensure_not_deleting(account_id)
             row = self._records[account_id]
             if row.response_rules != rules:
                 row = replace(row, response_rules=rules)

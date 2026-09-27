@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from .account_channel import QQBotAccountsChannel
-from core.accounts import AccountCleanup
+from core.accounts import AccountDeletionPlan
 from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 from .accounts import QQBotAccountStore
 
@@ -54,20 +54,22 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     channel = QQBotAccountsChannel(ctx, store, ctx.manifest.channel_chat_types("qqbot"))
     ctx.channels.add(channel)
 
-    async def delete_account(config_ref: str) -> AccountCleanup:
+    def delete_account(config_ref: str) -> AccountDeletionPlan:
         if not config_ref.startswith("app:"):
             raise ValueError(f"QQBot 账号引用无效: {config_ref}")
         app_id = config_ref.removeprefix("app:")
-        await channel.delete_account(app_id)
         # The legacy application is re-imported from host settings on every
-        # setup, so its credential must leave config.toml as well.
-        if config.app_id == app_id:
-            return AccountCleanup(
-                plugin_config={
-                    key: value for key, value in raw.items() if key not in _LEGACY_KEYS
-                }
-            )
-        return AccountCleanup()
+        # setup, so its credential must leave config.toml as well. ``config``
+        # holds expanded values, so an ``${ENV}`` App ID still matches.
+        return AccountDeletionPlan(
+            disconnect=lambda: channel.disconnect_account(app_id),
+            purge=lambda: channel.purge_account(app_id),
+            plugin_config=(
+                {key: value for key, value in raw.items() if key not in _LEGACY_KEYS}
+                if config.app_id == app_id
+                else None
+            ),
+        )
 
     ctx.accounts.on_delete(delete_account)
     ctx.rpc.register(

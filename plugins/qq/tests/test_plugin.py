@@ -154,11 +154,15 @@ async def test_delete_hook_retires_the_legacy_host_connection_fields(
     await setup(ctx)
     [delete] = hooks
 
-    other = await delete("abc123")
-    legacy = await delete("legacy")
+    other = delete("abc123")
+    legacy = delete("legacy")
 
     assert other.plugin_config is None
     assert legacy.plugin_config == {"note": "keep"}
+    # Planning left the migrated legacy connection in place.
+    assert list(QQAccountsStore(tmp_path).load()) == ["legacy"]
+    await legacy.disconnect()
+    await legacy.purge()
     assert QQAccountsStore(tmp_path).load() == {}
 
 

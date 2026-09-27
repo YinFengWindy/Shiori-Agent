@@ -28,8 +28,8 @@ class RuntimeAccountDeletion:
         self,
         payload: dict[str, Any],
         *,
-        prepare_service: Callable,
-        publish_service: Callable,
+        prepare_service: Callable[..., Any],
+        publish_service: Callable[..., Any],
     ) -> dict[str, Any]:
         """Returns the applied config result when the plugin table was rewritten."""
         account_id = str(payload.get("account_id") or "").strip()
@@ -51,6 +51,9 @@ class RuntimeAccountDeletion:
             )
 
         await self._roles.accounts.delete(
-            account_id, role_id=role_id, write_plugin_config=write_plugin_config
+            account_id,
+            role_id=role_id,
+            check_plugin_config=self._plugin_config.check_replacement,
+            write_plugin_config=write_plugin_config,
         )
         return {"account_id": account_id, "config": applied}

@@ -137,9 +137,15 @@ async def test_deleted_account_is_disconnected_and_its_napcat_data_purged(tmp_pa
         login.mkdir(parents=True)
         (login / "session.db").write_text("login", encoding="utf-8")
 
-    await runtime.delete_account("aa")
+    await runtime.disconnect_account("aa")
 
     assert socket.closed and reconnect.cancelled()
+    # Disconnecting alone keeps every credential and login file for a retry.
+    assert "token-aa" in store.path.read_text(encoding="utf-8")
+    assert (files.account_dir("aa") / "profile").is_dir()
+
+    await runtime.purge_account("aa")
+
     assert not files.account_dir("aa").exists()
     assert (files.account_dir("bb") / "profile").is_dir()
     assert list(store.load()) == ["bb"]
@@ -148,5 +154,6 @@ async def test_deleted_account_is_disconnected_and_its_napcat_data_purged(tmp_pa
     with pytest.raises(KeyError):
         runtime._ref_for("qq-101")
     assert accounts.reports == []
-    await runtime.delete_account("aa")
+    await runtime.disconnect_account("aa")
+    await runtime.purge_account("aa")
     assert list(QQAccountsStore(tmp_path).load()) == ["bb"]

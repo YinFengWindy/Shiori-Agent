@@ -103,12 +103,15 @@ class _AccountCommandsMixin:
         self._identity.report(app_id, "offline", "", "")
         return {"account_id": self._identity.account_id(app_id)}
 
-    async def delete_account(self, app_id: str) -> None:
-        """Closes the gateway and purges the application's stored credential."""
+    async def disconnect_account(self, app_id: str) -> None:
+        """Closes a deleted application's gateway and stops reporting it."""
         channel = self._channels.pop(app_id, None)
         if channel is not None:
             await channel.stop()
         self._identity.forget(app_id)
+
+    async def purge_account(self, app_id: str) -> None:
+        """Deletes the application's stored credential and observed targets."""
         self._store.remove(app_id)
 
     async def detail(self, payload: dict[str, Any]) -> dict[str, Any]:

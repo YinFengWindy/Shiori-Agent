@@ -347,13 +347,17 @@ async def test_disconnect_and_reconnect_keep_the_saved_account(plugin_runtime) -
 
 @pytest.mark.asyncio
 async def test_deleting_an_application_purges_config_caches_and_host_record(
-    plugin_runtime, tmp_path
+    plugin_runtime, tmp_path, monkeypatch
 ) -> None:
+    monkeypatch.setenv("FEISHU_GONE_ID", "cli_gone")
+    monkeypatch.setenv("FEISHU_KEEP_ID", "cli_keep")
     RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
     initial = (
         '\n[plugins.feishu]\napp_id = "cli_old"\napp_secret = "old"\n'
         'domain = "lark"\nlegacy_channel_ref = "lark:cli_old"\n'
-        '[[plugins.feishu.accounts]]\napp_id = "cli_keep"\n'
+        '[[plugins.feishu.accounts]]\napp_id = "${FEISHU_GONE_ID}"\n'
+        'app_secret = "gone-secret"\ndomain = "feishu"\n'
+        '[[plugins.feishu.accounts]]\napp_id = "${FEISHU_KEEP_ID}"\n'
         'app_secret = "${FEISHU_KEEP_SECRET}"\ndomain = "feishu"\n'
     )
     async with plugin_runtime(("feishu",), initial) as (service, path):
@@ -365,27 +369,28 @@ async def test_deleting_an_application_purges_config_caches_and_host_record(
         for key in ("profile", "targets"):
             kv.set(f"{key}:lark:cli_old", {"stale": True})
             kv.set(f"{key}:feishu:cli_keep", {"kept": True})
-        assigned = await plugin_bridge_request(
-            service,
-            "accounts.assign",
-            {"account_id": accounts["lark:cli_old"], "role_id": "mira"},
-        )
-        assert assigned.error is None, assigned.error
+        for ref in ("lark:cli_old", "feishu:cli_gone"):
+            assigned = await plugin_bridge_request(
+                service,
+                "accounts.assign",
+                {"account_id": accounts[ref], "role_id": "mira"},
+            )
+            assert assigned.error is None, assigned.error
+            deleted = await plugin_bridge_request(
+                service,
+                "accounts.delete",
+                {"account_id": accounts[ref], "role_id": "mira"},
+            )
+            assert deleted.error is None, deleted.error
 
-        deleted = await plugin_bridge_request(
-            service,
-            "accounts.delete",
-            {"account_id": accounts["lark:cli_old"], "role_id": "mira"},
-        )
-
-        assert deleted.error is None, deleted.error
         after = await plugin_bridge_request(service, "accounts.list")
         assert [row["id"] for row in after.payload["accounts"]] == [
             accounts["feishu:cli_keep"]
         ]
         text = path.read_text(encoding="utf-8")
         assert "cli_old" not in text and '"old"' not in text
-        assert "${FEISHU_KEEP_SECRET}" in text
+        assert "FEISHU_GONE_ID" not in text and "gone-secret" not in text
+        assert "${FEISHU_KEEP_ID}" in text and "${FEISHU_KEEP_SECRET}" in text
         assert kv.get("profile:lark:cli_old") is None
         assert kv.get("targets:lark:cli_old") is None
         assert kv.get("profile:feishu:cli_keep") == {"kept": True}
@@ -424,12 +429,18 @@ async def test_delete_hook_closes_the_websocket_before_purging() -> None:
     order: list[str] = []
     channel.stop = AsyncMock(side_effect=lambda: order.append(f"stop:{len(kv)}"))
 
-    cleanup = await handlers[0]("feishu:cli_a")
+    plan = handlers[0]("feishu:cli_a")
 
+    # Planning is side-effect free; disconnect closes before purge deletes.
+    assert plan.plugin_config == {"accounts": []}
+    assert order == [] and len(kv) == 2
+    await plan.disconnect()
+    await plan.purge()
     assert order == ["stop:2"]
     assert kv == {}
-    assert cleanup.plugin_config == {"accounts": []}
     assert channel._accounts is None
-    repeated = await handlers[0]("feishu:cli_a")
+    repeated = handlers[0]("feishu:cli_a")
+    await repeated.disconnect()
+    await repeated.purge()
     assert channel.stop.await_count == 1
     assert repeated.plugin_config == {"accounts": []}

@@ -7,7 +7,7 @@ import httpx
 from .channel import FeishuChannel
 from .config import FeishuAppConfig, FeishuConfigModel, config_without_application
 from .identity import verify_app
-from core.accounts import AccountCleanup
+from core.accounts import AccountDeletionPlan
 from core.accounts.target_contract import (
     ACCOUNT_SEND_METHOD,
     ACCOUNT_TARGETS_METHOD,
@@ -142,19 +142,25 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
     raw_config = ctx.config.raw_as_dict()
 
-    async def delete_account(config_ref: str) -> AccountCleanup:
-        channel = channels.pop(config_ref, None)
-        if channel is not None:
-            # Closed before purging so the WebSocket cannot re-populate caches.
-            await channel.retire()
-        for account_id in [
-            key for key, ref in account_refs.items() if ref == config_ref
-        ]:
-            del account_refs[account_id]
-        ctx.kv.delete(f"profile:{config_ref}")
-        ctx.kv.delete(f"targets:{config_ref}")
-        return AccountCleanup(
-            plugin_config=config_without_application(raw_config, config_ref)
+    def delete_account(config_ref: str) -> AccountDeletionPlan:
+        async def disconnect() -> None:
+            channel = channels.pop(config_ref, None)
+            if channel is not None:
+                # Closed before purging so the WebSocket cannot refill caches.
+                await channel.retire()
+            for account_id in [
+                key for key, ref in account_refs.items() if ref == config_ref
+            ]:
+                del account_refs[account_id]
+
+        async def purge() -> None:
+            ctx.kv.delete(f"profile:{config_ref}")
+            ctx.kv.delete(f"targets:{config_ref}")
+
+        return AccountDeletionPlan(
+            disconnect=disconnect,
+            purge=purge,
+            plugin_config=config_without_application(raw_config, config_ref),
         )
 
     ctx.accounts.on_delete(delete_account)

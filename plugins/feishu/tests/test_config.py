@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from plugins.feishu.backend.config import FeishuConfigModel
+from plugins.feishu.backend.config import FeishuConfigModel, config_without_application
 
 
 def test_legacy_app_is_included_once_during_migration() -> None:
@@ -86,3 +86,23 @@ def test_legacy_channel_alias_remains_bound_to_its_original_app() -> None:
         }
     )
     assert config.channel_alias_ref == "lark:cli_old"
+
+
+def test_deleting_matches_expanded_app_ids_but_writes_references_back(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FEISHU_GONE_ID", "cli_gone")
+    monkeypatch.setenv("FEISHU_KEEP_ID", "cli_keep")
+    keep = {"app_id": "${FEISHU_KEEP_ID}", "app_secret": "${KEEP}", "domain": "lark"}
+    raw = {
+        "accounts": [
+            {"app_id": "${FEISHU_GONE_ID}", "app_secret": "s", "domain": "feishu"},
+            keep,
+        ]
+    }
+
+    assert config_without_application(raw, "feishu:cli_gone") == {"accounts": [keep]}
+    assert config_without_application(raw, "feishu:${FEISHU_GONE_ID}") is None
+    assert config_without_application(raw, "lark:cli_keep") == {
+        "accounts": [raw["accounts"][0]]
+    }

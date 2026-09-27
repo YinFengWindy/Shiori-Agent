@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from core.accounts import AccountCleanup
+from core.accounts import AccountDeletionPlan
 
 if TYPE_CHECKING:
     from agent.plugin_host.kv import PluginKVStore
@@ -44,13 +44,19 @@ class TelegramAccountDeletion:
         self._store = store
         self._raw_config = raw_config
 
-    async def __call__(self, config_ref: str) -> AccountCleanup:
-        channel = self._channels.pop(config_ref, None)
-        if channel is not None:
-            # Stopped before purging so polling cannot re-populate the caches.
-            await channel.retire()
-        for prefix in _CACHE_PREFIXES:
-            self._store.delete(f"{prefix}:{config_ref}")
-        return AccountCleanup(
-            plugin_config=config_without_bot(self._raw_config, config_ref)
+    def __call__(self, config_ref: str) -> AccountDeletionPlan:
+        async def disconnect() -> None:
+            channel = self._channels.pop(config_ref, None)
+            if channel is not None:
+                # Stopped before purging so polling cannot re-populate caches.
+                await channel.retire()
+
+        async def purge() -> None:
+            for prefix in _CACHE_PREFIXES:
+                self._store.delete(f"{prefix}:{config_ref}")
+
+        return AccountDeletionPlan(
+            disconnect=disconnect,
+            purge=purge,
+            plugin_config=config_without_bot(self._raw_config, config_ref),
         )

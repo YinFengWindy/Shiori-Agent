@@ -158,16 +158,19 @@ async def test_deleted_application_closes_gateway_and_forgets_credentials(
 
     manager._channels["100"] = _Gateway()
 
-    await manager.delete_account("100")
+    await manager.disconnect_account("100")
 
     assert stopped == ["100"]
     assert "100" not in manager._channels
+    assert [row["app_id"] for row in store.list()] == ["100", "200"]
+    await manager.purge_account("100")
     assert [row["app_id"] for row in store.list()] == ["200"]
     assert "secret-100" not in (tmp_path / "qqbot.json").read_text(encoding="utf-8")
     assert manager._identity.account_id("100") == ""
     with pytest.raises(StopIteration):
         manager._identity.app_for_account({"account_id": "100"})
-    await manager.delete_account("100")
+    await manager.disconnect_account("100")
+    await manager.purge_account("100")
     assert [row["app_id"] for row in store.list()] == ["200"]
     manager._identity.report("100", "online", "", "late")
     assert [account_id for account_id, _ in accounts.reports] == ["100"]

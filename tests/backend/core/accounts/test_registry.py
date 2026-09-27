@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from core.accounts import AccountCleanup, AccountRegistry
+from core.accounts import AccountDeletionPlan, AccountNotFoundError, AccountRegistry
+from core.accounts.models import AccountResponseRules
 from core.roles.store import RoleStore
 from shiori_plugin_testkit.legacy_roles import seed_legacy_bindings
 
@@ -515,61 +516,135 @@ def _owned_account(tmp_path, roles=frozenset({"r1", "r2"})):
     return registry, account.record.id
 
 
+class _Deletion:
+    """Scripted plugin plan and host config writer recording every step."""
+
+    def __init__(self, config=None, fail=()):
+        self.config = config
+        self.fail = set(fail)
+        self.steps: list[str] = []
+
+    def _step(self, name):
+        self.steps.append(name)
+        if name in self.fail:
+            self.fail.discard(name)
+            raise OSError(f"{name} failed")
+
+    def plan(self, config_ref):
+        assert config_ref == "one"
+        self._step("plan")
+
+        async def disconnect():
+            self._step("disconnect")
+
+        async def purge():
+            self._step("purge")
+
+        return AccountDeletionPlan(disconnect, purge, self.config)
+
+    def check(self, plugin_id, values):
+        assert (plugin_id, values) == ("chat", self.config)
+        self._step("check")
+
+    async def write(self, plugin_id, values):
+        assert (plugin_id, values) == ("chat", self.config)
+        self._step("write")
+
+    async def run(self, registry, account_id, role_id="r1"):
+        await registry.delete(
+            account_id,
+            role_id=role_id,
+            check_plugin_config=self.check,
+            write_plugin_config=self.write,
+        )
+
+
 @pytest.mark.asyncio
-async def test_delete_runs_plugin_cleanup_then_forgets_account_for_good(tmp_path):
+async def test_delete_validates_disconnects_writes_purges_then_forgets(tmp_path):
     registry, account_id = _owned_account(tmp_path)
-    steps: list[tuple[str, object]] = []
+    deletion = _Deletion(config={"bots": []})
+    registry.set_delete_handler("chat", deletion.plan)
 
-    async def cleanup(config_ref: str) -> AccountCleanup:
-        steps.append(("plugin", config_ref))
-        return AccountCleanup(plugin_config={"bots": []})
+    await deletion.run(registry, account_id)
 
-    async def write_config(plugin_id: str, values: dict) -> None:
-        steps.append(("config", (plugin_id, values)))
-        # The record is only forgotten after the credential left config.
-        assert registry.get(account_id).record.config_ref == "one"
-
-    registry.set_delete_handler("chat", cleanup)
-    await registry.delete(account_id, role_id="r1", write_plugin_config=write_config)
-
-    assert steps == [("plugin", "one"), ("config", ("chat", {"bots": []}))]
+    assert deletion.steps == ["plan", "check", "disconnect", "write", "purge"]
     assert registry.list() == []
     with pytest.raises(KeyError):
         registry.get(account_id)
     with pytest.raises(RuntimeError, match="no longer active"):
         registry.report(account_id, "generation-1", connection="offline")
     assert AccountRegistry(tmp_path, {"r1"}.__contains__).list() == []
+    with pytest.raises(AccountNotFoundError):
+        await deletion.run(registry, account_id)
 
 
 @pytest.mark.asyncio
-async def test_failed_plugin_cleanup_or_config_write_keeps_record_for_retry(
-    tmp_path,
+async def test_invalid_plugin_config_aborts_before_anything_is_purged(tmp_path):
+    registry, account_id = _owned_account(tmp_path)
+    deletion = _Deletion(config={"bots": "invalid"}, fail={"check"})
+    registry.set_delete_handler("chat", deletion.plan)
+
+    with pytest.raises(OSError, match="check failed"):
+        await deletion.run(registry, account_id)
+
+    assert deletion.steps == ["plan", "check"]
+    assert registry.get(account_id).connection == "online"
+    restarted = AccountRegistry(tmp_path, {"r1"}.__contains__)
+    assert [row.record.id for row in restarted.list()] == [account_id]
+    # The deletion fence is released after a failure.
+    assert registry.assign(account_id, "r2").record.role_id == "r2"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failing", ["write", "purge"])
+async def test_failed_write_or_purge_keeps_record_and_retry_completes(
+    tmp_path, failing
 ):
     registry, account_id = _owned_account(tmp_path)
-    failures = ["plugin", "config"]
+    deletion = _Deletion(config={}, fail={failing})
+    registry.set_delete_handler("chat", deletion.plan)
 
-    async def cleanup(config_ref: str) -> AccountCleanup:
-        if failures and failures[0] == "plugin":
-            failures.pop(0)
-            raise OSError("NapCat 文件被占用")
-        return AccountCleanup(plugin_config={})
+    with pytest.raises(OSError, match=f"{failing} failed"):
+        await deletion.run(registry, account_id)
+    completed = ["plan", "check", "disconnect", "write", "purge"]
+    assert deletion.steps == completed[: completed.index(failing) + 1]
+    restarted = AccountRegistry(tmp_path, {"r1"}.__contains__)
+    assert [row.record.id for row in restarted.list()] == [account_id]
 
-    async def write_config(plugin_id: str, values: dict) -> None:
-        if failures and failures[0] == "config":
-            failures.pop(0)
-            raise RuntimeError("配置写入失败")
+    await deletion.run(registry, account_id)
+    assert registry.list() == []
 
-    registry.set_delete_handler("chat", cleanup)
-    for error, message in ((OSError, "NapCat"), (RuntimeError, "配置写入失败")):
-        with pytest.raises(error, match=message):
-            await registry.delete(
-                account_id, role_id="r1", write_plugin_config=write_config
-            )
-        restarted = AccountRegistry(tmp_path, {"r1"}.__contains__)
-        assert [row.record.id for row in restarted.list()] == [account_id]
-        assert registry.get(account_id).connection == "online"
 
-    await registry.delete(account_id, role_id="r1", write_plugin_config=write_config)
+@pytest.mark.asyncio
+async def test_ownership_and_rules_are_frozen_while_deleting(tmp_path):
+    registry, account_id = _owned_account(tmp_path)
+    refused: list[str] = []
+
+    def plan(config_ref):
+        async def disconnect():
+            for change in (
+                lambda: registry.assign(account_id, "r2"),
+                lambda: registry.set_response_rules(
+                    account_id, AccountResponseRules(group_enabled=False)
+                ),
+            ):
+                with pytest.raises(RuntimeError, match="正在删除") as error:
+                    change()
+                refused.append(str(error.value))
+
+        async def purge():
+            return None
+
+        return AccountDeletionPlan(disconnect, purge)
+
+    registry.set_delete_handler("chat", plan)
+    await registry.delete(
+        account_id,
+        role_id="r1",
+        check_plugin_config=lambda *_: None,
+        write_plugin_config=_Deletion().write,
+    )
+    assert refused == ["账号正在删除", "账号正在删除"]
     assert registry.list() == []
 
 
@@ -578,31 +653,20 @@ async def test_delete_is_refused_when_plugin_cannot_clean_up_or_role_differs(
     tmp_path,
 ):
     registry, account_id = _owned_account(tmp_path)
-
-    async def cleanup(config_ref: str) -> AccountCleanup:
-        raise AssertionError("cleanup must not run")
-
-    async def write_config(plugin_id: str, values: dict) -> None:
-        raise AssertionError("config must not change")
+    deletion = _Deletion()
 
     with pytest.raises(RuntimeError, match="未启用或未加载"):
-        await registry.delete(
-            account_id, role_id="r1", write_plugin_config=write_config
-        )
-    registry.set_delete_handler("chat", cleanup)
+        await deletion.run(registry, account_id)
+    plan = deletion.plan
+    registry.set_delete_handler("chat", plan)
     with pytest.raises(PermissionError, match="不属于"):
-        await registry.delete(
-            account_id, role_id="r2", write_plugin_config=write_config
-        )
+        await deletion.run(registry, account_id, role_id="r2")
     registry.set_plugin_enabled("chat", False)
     with pytest.raises(RuntimeError, match="未启用或未加载"):
-        await registry.delete(
-            account_id, role_id="r1", write_plugin_config=write_config
-        )
-    registry.clear_delete_handler("chat", cleanup)
+        await deletion.run(registry, account_id)
+    registry.clear_delete_handler("chat", plan)
     registry.set_plugin_enabled("chat", True)
     with pytest.raises(RuntimeError, match="未启用或未加载"):
-        await registry.delete(
-            account_id, role_id="r1", write_plugin_config=write_config
-        )
+        await deletion.run(registry, account_id)
+    assert deletion.steps == []
     assert registry.get(account_id).record.role_id == "r1"

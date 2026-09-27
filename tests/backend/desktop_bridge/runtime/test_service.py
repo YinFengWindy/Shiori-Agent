@@ -11,6 +11,7 @@ import pytest
 from agent.config import load_config_text
 from agent.provider import LLMProvider, LLMResponse
 from bootstrap.app import AppRuntime, RuntimeFeatures
+from core.accounts import AccountNotFoundError
 from core.desktop_presence import DesktopPresence
 from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
@@ -756,7 +757,8 @@ async def test_account_delete_reports_plugin_failures_and_announces_config_swaps
         {"account_id": "a", "config": {"generation": 3}},
         {"account_id": "b", "config": None},
         OSError("NapCat 文件被占用"),
-        KeyError("missing"),
+        KeyError("raised inside a plugin hook"),
+        AccountNotFoundError("gone"),
         PermissionError("账号不属于该角色"),
     ]
 
@@ -786,5 +788,6 @@ async def test_account_delete_reports_plugin_failures_and_announces_config_swaps
         "account_delete_failed",
         "NapCat 文件被占用",
     )
+    assert (await request()).error.code == "account_delete_failed"
     assert (await request()).error.code == "account_not_found"
     assert (await request()).error.code == "account_forbidden"

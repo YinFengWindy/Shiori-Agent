@@ -357,12 +357,11 @@ class AccountsCapability:
         self._registry.unregister(account_id, self._token, generation=self._generation)
 
     def on_delete(self, handler: "AccountDeleteHandler") -> None:
-        """Registers the cleanup the host awaits before forgetting an account.
+        """Registers the planner the host consults before forgetting an account.
 
-        The handler receives the account's ``config_ref`` and must be
-        idempotent: disconnect, stop reporting that account, purge private
-        credentials and caches, and return an ``AccountCleanup``. Raising
-        keeps the host record and surfaces the error to the user.
+        The handler receives the account's ``config_ref`` and returns an
+        ``AccountDeletionPlan`` without side effects; the host then runs its
+        idempotent ``disconnect`` and ``purge`` steps around any config write.
         """
         self._effects.ensure_active("account:delete_hook")
         self._registry.set_delete_handler(

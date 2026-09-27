@@ -2,8 +2,9 @@
 
 from .models import (
     AccountAccess,
-    AccountCleanup,
     AccountDeleteHandler,
+    AccountDeletionPlan,
+    AccountNotFoundError,
     AccountRecord,
     AccountSnapshot,
     ConnectionState,
@@ -12,8 +13,9 @@ from .registry import AccountRegistry
 
 __all__ = [
     "AccountAccess",
-    "AccountCleanup",
     "AccountDeleteHandler",
+    "AccountDeletionPlan",
+    "AccountNotFoundError",
     "AccountRecord",
     "AccountRegistry",
     "AccountSnapshot",
