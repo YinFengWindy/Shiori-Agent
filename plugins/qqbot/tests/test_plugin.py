@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import tomllib
 import tempfile
 from pathlib import Path
 from typing import Any
 
 import pytest
+from shiori_plugin_testkit.bridge import plugin_bridge_request
 from shiori_plugin_testkit.packages import stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel, load_manifest
 from agent.plugin_host.kv import PluginKVStore
+from agent.plugin_host.plugin_data import plugin_data_dir
 from bus.event_bus import EventBus
 from core.roles.store import RoleStore
 from plugins.qqbot.backend.accounts import QQBotAccountStore
@@ -149,3 +152,66 @@ def test_config_schema_labels_fields_for_the_settings_form() -> None:
     assert all(properties[key]["title"] != auto_titles[key] for key in properties)
     assert "groups" not in properties
     assert "allow_from" not in properties
+
+
+@pytest.mark.asyncio
+async def test_deleting_applications_purges_kv_and_legacy_host_credentials(
+    plugin_runtime, tmp_path
+) -> None:
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
+    kv = PluginKVStore(plugin_data_dir(tmp_path, "qqbot") / "kv.json")
+    QQBotAccountStore(kv).save(
+        {"app_id": "200", "client_secret": "scoped-secret", "targets": ["o"]}
+    )
+    config = '\n[plugins.qqbot]\napp_id = "100"\nclient_secret = "legacy-secret"\n'
+    async with plugin_runtime(("qqbot",), config) as (service, path):
+        listed = await plugin_bridge_request(service, "accounts.list")
+        accounts = {
+            row["platform_account_id"]: row["id"] for row in listed.payload["accounts"]
+        }
+        assert set(accounts) == {"100", "200"}
+        for account_id in accounts.values():
+            assigned = await plugin_bridge_request(
+                service,
+                "accounts.assign",
+                {"account_id": account_id, "role_id": "mira"},
+            )
+            assert assigned.error is None, assigned.error
+
+        legacy = await plugin_bridge_request(
+            service,
+            "accounts.delete",
+            {"account_id": accounts["100"], "role_id": "mira"},
+        )
+        # The config write swapped generations; the new one ran setup (and its
+        # legacy migration) after the purge, so it neither re-imported nor
+        # re-registered the application and loaded cleanly.
+        assert legacy.error is None, legacy.error
+        table = tomllib.loads(path.read_text(encoding="utf-8"))["plugins"]["qqbot"]
+        assert not table.get("app_id") and not table.get("client_secret")
+        assert "legacy-secret" not in path.read_text(encoding="utf-8")
+        assert [row["app_id"] for row in QQBotAccountStore(kv).list()] == ["200"]
+        kept = await plugin_bridge_request(
+            service, "plugin.qqbot.account.detail", {"account_id": accounts["200"]}
+        )
+        assert kept.error is None, kept.error
+        gone = await plugin_bridge_request(
+            service, "plugin.qqbot.account.detail", {"account_id": accounts["100"]}
+        )
+        assert gone.error is not None
+
+        scoped = await plugin_bridge_request(
+            service,
+            "accounts.delete",
+            {"account_id": accounts["200"], "role_id": "mira"},
+        )
+        assert scoped.error is None, scoped.error
+        assert QQBotAccountStore(kv).list() == []
+        after = await plugin_bridge_request(service, "accounts.list")
+        assert after.payload["accounts"] == []
+    assert RoleStore(tmp_path).accounts.list() == []
+    restarted = QQBotAccountStore(kv)
+    restarted.migrate_legacy(
+        str(table.get("app_id") or ""), str(table.get("client_secret") or "")
+    )
+    assert restarted.list() == []

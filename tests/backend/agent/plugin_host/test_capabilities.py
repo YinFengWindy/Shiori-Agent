@@ -8,6 +8,7 @@ import inspect
 import pytest
 
 from agent.plugin_host.capabilities import (
+    AccountsCapability,
     BackgroundCapability,
     ChannelsCapability,
     LifecycleCapability,
@@ -495,3 +496,62 @@ async def test_closed_scope_rejects_contributions_before_mutating_registries():
     assert contributions.tool_names == []
     assert contributions.phase_modules["after_turn"] == []
     assert rpc.resolve("plugin.demo.ping") is None
+
+
+@pytest.mark.asyncio
+async def test_account_delete_hook_is_published_per_generation_and_withdrawn(
+    tmp_path,
+):
+    from core.accounts import AccountDeletionPlan, AccountRegistry
+
+    registry = AccountRegistry(tmp_path, {"mira"}.__contains__)
+    registry.set_plugin_enabled("demo", True, generation="g1")
+    registry.publish_generation("g1")
+    effects = EffectScope("demo")
+    accounts = AccountsCapability(registry, effects, "demo", "g1")
+    account = accounts.register(
+        platform="demo", platform_account_id="7", config_ref="a"
+    )
+    registry.assign(account.record.id, "mira")
+    purged: list[str] = []
+
+    def cleanup(config_ref: str) -> AccountDeletionPlan:
+        async def purge() -> None:
+            purged.append(config_ref)
+
+        async def disconnect() -> None:
+            return None
+
+        return AccountDeletionPlan(disconnect, purge)
+
+    accounts.on_delete(cleanup)
+    with pytest.raises(ValueError, match="already registered"):
+        accounts.on_delete(cleanup)
+
+    async def no_config(plugin_id: str, values: dict) -> None:
+        raise AssertionError("no config write expected")
+
+    def no_check(plugin_id: str, values: dict) -> None:
+        raise AssertionError("no config check expected")
+
+    second = accounts.register(platform="demo", platform_account_id="8", config_ref="b")
+    registry.assign(second.record.id, "mira")
+    await registry.delete(
+        account.record.id,
+        role_id="mira",
+        check_plugin_config=no_check,
+        write_plugin_config=no_config,
+    )
+    assert purged == ["a"]
+    assert [row.record.id for row in registry.list()] == [second.record.id]
+
+    assert await effects.dispose_all() == []
+    with pytest.raises(RuntimeError, match="未启用或未加载"):
+        await registry.delete(
+            second.record.id,
+            role_id="mira",
+            check_plugin_config=no_check,
+            write_plugin_config=no_config,
+        )
+    with pytest.raises(RuntimeError):
+        accounts.on_delete(cleanup)

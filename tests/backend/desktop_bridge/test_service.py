@@ -904,3 +904,62 @@ async def test_roles_create_binds_the_first_registered_model(
     assert response.error is None
     runtime_config = response.payload["role"]["runtime_config"]
     assert runtime_config["dialogue_model_registration_id"] == expected
+
+
+@pytest.mark.asyncio
+async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -> None:
+    from core.accounts import AccountDeletionPlan
+
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="m")
+    accounts = role_store.accounts
+    accounts.set_plugin_enabled("demo", True)
+    account_id = accounts.register(
+        plugin_id="demo",
+        platform="demo",
+        platform_account_id="1",
+        config_ref="a",
+        token="t",
+    ).record.id
+    accounts.assign(account_id, "mira")
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    codes: list[str | None] = []
+
+    def plan(config_ref: str) -> AccountDeletionPlan:
+        async def disconnect() -> None:
+            response = await service.handle(
+                {
+                    "id": "assign",
+                    "method": "accounts.assign",
+                    "payload": {"account_id": account_id, "role_id": None},
+                },
+                emit_event=Mock(),
+            )
+            codes.append(response.error.code if response.error else None)
+
+        async def purge() -> None:
+            return None
+
+        return AccountDeletionPlan(disconnect, purge)
+
+    accounts.set_delete_handler("demo", plan)
+
+    async def no_write(plugin_id: str, values: dict) -> None:
+        raise AssertionError("no config write expected")
+
+    await accounts.delete(
+        account_id,
+        role_id="mira",
+        check_plugin_config=lambda *_: None,
+        write_plugin_config=no_write,
+    )
+
+    assert codes == ["account_deleting"]
+    assert accounts.list() == []
+    await service.aclose()

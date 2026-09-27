@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from agent.config import resolve_config_references
 
 from .formatting import DOMAINS, FEISHU_DOMAIN, LARK_DOMAIN
 
@@ -101,3 +103,32 @@ class FeishuConfigModel(FeishuAppConfig):
     def channel_alias_ref(self) -> str:
         """Keeps the old bare channel bound to its original application."""
         return self.legacy_channel_ref or (self.ref if self.app_id else "")
+
+
+def config_without_application(raw: dict[str, Any], ref: str) -> dict[str, Any] | None:
+    """Returns the ``[plugins.feishu]`` table minus one application, or None.
+
+    Entries are matched by their expanded identity (an App ID may itself be an
+    ``${ENV}`` reference) but written back unexpanded, so other applications'
+    references persist. The application may also be the old top-level single
+    app, and the bare ``feishu`` channel alias must not keep pointing at it.
+    """
+    # resolve_config_references returns ``object``; a table stays a table.
+    resolved = cast(dict[str, Any], resolve_config_references(raw))
+    accounts = raw.get("accounts") or []
+    kept = [
+        item
+        for item, expanded in zip(accounts, resolved.get("accounts") or [])
+        if FeishuAppConfig.model_validate(expanded).ref != ref
+    ]
+    legacy = FeishuConfigModel.model_validate(resolved)
+    top_level = bool(legacy.app_id) and legacy.ref == ref
+    alias = raw.get("legacy_channel_ref") == ref
+    if len(kept) == len(accounts) and not top_level and not alias:
+        return None
+    updated: dict[str, Any] = {**raw, "accounts": kept}
+    if top_level:
+        updated.update(app_id="", app_secret="")
+    if alias:
+        updated["legacy_channel_ref"] = ""
+    return updated

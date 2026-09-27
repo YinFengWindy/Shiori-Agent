@@ -3,6 +3,7 @@ from __future__ import annotations
 from agent.plugin_host.bridge_events import PluginBridgeEvent, PluginRpcError
 
 from contextlib import ExitStack
+from core.accounts import AccountDeletingError
 from core.common.cleanup import run_cleanup_steps
 
 import inspect
@@ -741,6 +742,9 @@ class DesktopBridgeService:
             return self._error(request_id, method, "chat_busy", str(exc))
         except PluginRpcError as exc:
             return self._error(request_id, method, exc.code, str(exc))
+        except AccountDeletingError as exc:
+            # accounts.assign / accounts.rules.set while that account is deleted.
+            return self._error(request_id, method, "account_deleting", str(exc))
         except Exception as exc:
             return self._error(request_id, method, "internal_error", str(exc))
         return self._error(

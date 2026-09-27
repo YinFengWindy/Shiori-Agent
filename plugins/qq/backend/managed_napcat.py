@@ -123,6 +123,11 @@ class ManagedNapCat(NapCatInstaller):
         await self.stop(ref)
         await asyncio.to_thread(self._files.clear_login_data, ref)
 
+    async def delete(self, ref: str) -> None:
+        """Stops QQ and removes every file this account's instance owns."""
+        await self.stop(ref)
+        await asyncio.to_thread(self._files.remove, ref)
+
     async def login_status(self, ref: str) -> dict[str, Any]:
         """Exposes the official QR image only while this account needs login."""
         process = self._processes.get(ref)

@@ -31,3 +31,19 @@ test("account client maps host snapshots and sends only explicit rule mutations"
         enabled: true, require_mention: false, blocked_sender_ids: ["sender-1"] }] },
   } });
 });
+
+test("account deletion names the owning role and surfaces the host's refusal", async () => {
+  const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
+  let refuse = false;
+  const client = createAccountClient(async ({ method, payload }) => {
+    calls.push({ method, payload });
+    return refuse
+      ? { id: "r", type: "response", method, payload: {},
+        error: { code: "account_delete_failed", message: "NapCat 文件被占用", details: {} } }
+      : { id: "r", type: "response", method, error: null, payload: { account_id: "a" } };
+  });
+  await client.remove("a", "role-1");
+  assert.deepEqual(calls, [{ method: "accounts.delete", payload: { account_id: "a", role_id: "role-1" } }]);
+  refuse = true;
+  await assert.rejects(client.remove("a", "role-1"), /NapCat 文件被占用/);
+});

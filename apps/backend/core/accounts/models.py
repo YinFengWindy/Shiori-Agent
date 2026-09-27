@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 ConnectionState = Literal[
     "unknown", "connecting", "online", "offline", "login_required", "error"
@@ -79,3 +80,35 @@ class AccountAccess:
     role_id: str
     ownership_version: int
     runtime_token: str
+
+
+class AccountNotFoundError(LookupError):
+    """The requested account has no host record."""
+
+
+class AccountDeletingError(RuntimeError):
+    """The account is being deleted; its identity and settings are frozen."""
+
+
+@dataclass(frozen=True)
+class AccountDeletionPlan:
+    """A plugin's side-effect-free plan for deleting one of its accounts.
+
+    The host runs it in order: validate ``plugin_config``, ``disconnect``,
+    ``purge``, persist ``plugin_config``, then forget its record. Both steps
+    must be idempotent, and planning must still work after a purge, so a
+    failed deletion can simply be retried.
+    """
+
+    # Stops the connection and all reports for the account; keeps its data.
+    disconnect: Callable[[], Awaitable[None]]
+    # Deletes the plugin's credentials, caches, and private files.
+    purge: Callable[[], Awaitable[None]]
+    # Replacement ``[plugins.<id>]`` table (unexpanded values) when the
+    # credential lives in host configuration; None leaves config untouched.
+    plugin_config: dict[str, Any] | None = None
+
+
+# A plugin delete hook receives the account's plugin-private config_ref and
+# returns its plan without side effects; raising aborts before anything changes.
+AccountDeleteHandler = Callable[[str], AccountDeletionPlan]

@@ -136,3 +136,41 @@ async def test_failed_new_gateway_does_not_create_an_account(tmp_path, monkeypat
     assert store.list() == []
     assert manager._identity.account_id("100") == ""
     assert manager._channels == {}
+
+
+@pytest.mark.asyncio
+async def test_deleted_application_closes_gateway_and_forgets_credentials(
+    tmp_path,
+):
+    manager, store, accounts = _manager(tmp_path)
+    for app_id in ("100", "200"):
+        store.save(
+            {"app_id": app_id, "client_secret": f"secret-{app_id}", "targets": ["o"]}
+        )
+        manager._identity.register(store.get(app_id))
+    stopped: list[str] = []
+
+    class _Gateway:
+        async def stop(self):
+            stopped.append("100")
+            # Shutdown may still report while the host record exists.
+            manager._identity.report("100", "offline", "", "")
+
+    manager._channels["100"] = _Gateway()
+
+    await manager.disconnect_account("100")
+
+    assert stopped == ["100"]
+    assert "100" not in manager._channels
+    assert [row["app_id"] for row in store.list()] == ["100", "200"]
+    await manager.purge_account("100")
+    assert [row["app_id"] for row in store.list()] == ["200"]
+    assert "secret-100" not in (tmp_path / "qqbot.json").read_text(encoding="utf-8")
+    assert manager._identity.account_id("100") == ""
+    with pytest.raises(StopIteration):
+        manager._identity.app_for_account({"account_id": "100"})
+    await manager.disconnect_account("100")
+    await manager.purge_account("100")
+    assert [row["app_id"] for row in store.list()] == ["200"]
+    manager._identity.report("100", "online", "", "late")
+    assert [account_id for account_id, _ in accounts.reports] == ["100"]

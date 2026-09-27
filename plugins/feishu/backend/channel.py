@@ -270,6 +270,14 @@ class FeishuChannel:
         await self._api.aclose()
         logger.info("[feishu] 飞书渠道已停止")
 
+    async def retire(self) -> None:
+        """Stops a deleted application for good: later stops never report it."""
+        try:
+            await self.stop()
+        finally:
+            self._accounts = None
+            self._profile_store = None
+
     def pause_intake(self) -> None:
         """Buffers incoming turns while existing replies remain deliverable."""
         self._intake.pause()

@@ -133,3 +133,9 @@ class NapCatAccountFiles:
             directory = profile / relative
             if directory.exists():
                 shutil.rmtree(directory)
+
+    def remove(self, ref: str) -> None:
+        """Deletes the account's ports, NapCat config, login profile, and logs."""
+        directory = self.account_dir(ref)
+        if directory.exists():
+            shutil.rmtree(directory)

@@ -108,3 +108,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         channels[bot.ref] = channel
         ctx.channels.add(channel)
     TelegramAccountApi(channels, ctx.rpc, ctx.kv).register()
+    from .account_deletion import TelegramAccountDeletion
+
+    ctx.accounts.on_delete(
+        TelegramAccountDeletion(channels, ctx.kv, ctx.config.raw_as_dict())
+    )

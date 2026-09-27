@@ -12,6 +12,7 @@ from agent.config import load_config_text
 from bootstrap.app import AppRuntime, RuntimeFeatures
 from shiori_plugin_testkit.packages import stage_plugin_package
 from core.roles.store import RoleStore
+from desktop_bridge.runtime.apply import RuntimeApplyError
 from desktop_bridge.runtime.service import ReloadableDesktopService
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -845,6 +846,63 @@ async def test_a_reference_is_type_checked_by_its_resolved_value(tmp_path, monke
         assert rejected.error.code == "plugin_config_invalid"
         assert "repeat_limit" in rejected.error.message
         assert all("input" not in item for item in rejected.error.details["errors"])
+        assert path.read_text(encoding="utf-8") == before
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_plugin_derived_table_is_written_even_without_a_config_model(
+    tmp_path, monkeypatch
+):
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, path, app = await _start_service(
+        tmp_path,
+        _config(
+            extra='\n[plugins.hello]\nenabled = true\napp_id = "100"\n'
+            'client_secret = "old-secret"\nnote = "keep"\n'
+            '\n[plugins.config_fixture]\nlabel = "untouched"\n'
+        ),
+    )
+    try:
+        result = await service.plugin_config.replace_from_plugin(
+            "hello",
+            {"note": "keep"},
+            operation_id="account-delete:test",
+            prepare_service=service._prepare,
+            publish_service=service._publish,
+        )
+
+        assert result["plugin_id"] == "hello"
+        text = path.read_text(encoding="utf-8")
+        assert "old-secret" not in text and 'app_id = "100"' not in text
+        assert 'note = "keep"' in text and "enabled = true" in text
+        assert 'label = "untouched"' in text
+        assert app.config.raw_plugin_configs["hello"] == {
+            "enabled": True,
+            "note": "keep",
+        }
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_replacement_dry_run_rejects_invalid_tables_and_writes_nothing(
+    tmp_path, monkeypatch
+):
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, path, app = await _start_service(tmp_path)
+    try:
+        before = path.read_text(encoding="utf-8")
+        with pytest.raises(RuntimeApplyError) as rejected:
+            service.plugin_config.check_replacement(
+                "config_fixture", {"groups": "not a list"}
+            )
+        assert rejected.value.code == "plugin_config_invalid"
+        service.plugin_config.check_replacement("config_fixture", {"groups": ["a"]})
+        service.plugin_config.check_replacement("hello", {"note": "keep"})
         assert path.read_text(encoding="utf-8") == before
     finally:
         await service.aclose()

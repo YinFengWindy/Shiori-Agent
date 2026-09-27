@@ -344,6 +344,14 @@ class TelegramChannel(
             self._online = False
             self._report_account("offline")
 
+    async def retire(self) -> None:
+        """Stops a deleted Bot for good: later stops neither report nor persist."""
+        try:
+            await self.stop()
+        finally:
+            self._accounts = None
+            self._known_store = None
+
     def _remember_chat(self, chat: object, user: object, message: object) -> None:
         """Record an observed conversation without retaining message or member data."""
         if self._known_store is None:

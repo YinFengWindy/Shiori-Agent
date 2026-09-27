@@ -115,58 +115,7 @@ class RuntimePluginConfig:
                 "plugin_config_unsupported",
                 f"插件 {plugin_id} 未声明配置模型",
             )
-        try:
-            normalized = validate_against(model_cls, _resolved_table(values))
-        except ValidationError as exc:
-            raise RuntimeApplyError(
-                "plugin_config_invalid",
-                format_validation_error(exc),
-                # details 会被 JSON 序列化写回 renderer：去掉 url 与 ctx，
-                # 后者可能携带异常对象等不可序列化内容；也去掉 input，
-                # 校验的是展开后的值，input 里可能正是环境变量里的密钥。
-                errors=exc.errors(
-                    include_url=False, include_context=False, include_input=False
-                ),
-            ) from exc
-        persisted = _persisted_values(values, normalized)
-
-        # 复用设置事务：定位-替换式合并 TOML 文本后走既有事务化落盘 + 热更新路径，
-        # 不另起一套写盘逻辑（见 desktop_bridge/plugin_config_text.py）。
-        # 合并与守卫都在事务锁内进行：本方法只改一张表、其余文本沿用"当前已提交
-        # 的配置"，若在锁外读取基准文本，并发的 runtime.apply 会被整份覆盖掉。
-        # 但当幂等 memo 命中时，apply() 根本不会调用这个回调——见
-        # RuntimeSettingsApplication.apply 的文档。
-        def _merge(current_text: str) -> str:
-            # 启停状态与插件配置同住一张表，但它归宿主所有、不是配置模型的字段，
-            # 校验时会被 pydantic 丢弃。整表替换必须把它显式带回来，否则用户改一次
-            # 插件配置就会把停用的插件重新启用。
-            values_to_write = dict(persisted)
-            current = read_plugin_table(current_text, plugin_id)
-            if PLUGIN_ENABLED_CONFIG_KEY in current:
-                values_to_write[PLUGIN_ENABLED_CONFIG_KEY] = current[
-                    PLUGIN_ENABLED_CONFIG_KEY
-                ]
-            try:
-                merged = merge_plugin_table(current_text, plugin_id, values_to_write)
-            except PluginTableConflict as exc:
-                # 目标插件已经以本模块定位不到的形式存在于文档中（[plugins] 下的
-                # 点分键，或内联表）：照常追加会生成重复的 [plugins.<id>] 声明，
-                # 使整份文档无法解析，用户只会看到一个跟真实原因毫不相干的
-                # "配置中存在无法用 TOML 表达的值"。这里直接给出能指导用户的错误。
-                raise RuntimeApplyError(
-                    "plugin_config_unrepresentable",
-                    f"插件 {plugin_id} 的配置已经以点分键或内联表的形式写在 "
-                    "[plugins] 表下，无法通过设置页定位替换；请先在配置文件中把它"
-                    f"整理成独立的 [plugins.{plugin_id}] 表，再通过设置页保存",
-                ) from exc
-            self._assert_config_round_trip(
-                model_cls,
-                plugin_id,
-                current_text,
-                merged,
-                normalized,
-            )
-            return merged
+        persisted, _merge = self._validated_replacement(model_cls, plugin_id, values)
 
         apply_payload: dict[str, Any] = {"operation_id": operation_id}
         expected_generation = payload.get("expected_generation")
@@ -190,6 +139,93 @@ class RuntimePluginConfig:
             "env_status": _env_status(persisted),
             **result,
         }
+
+    def _validated_replacement(
+        self, model_cls: type[BaseModel], plugin_id: str, values: dict[str, Any]
+    ) -> tuple[dict[str, Any], Callable[[str], str]]:
+        """Validates a table; returns what to persist and its guarded text merge."""
+        try:
+            normalized = validate_against(model_cls, _resolved_table(values))
+        except ValidationError as exc:
+            raise RuntimeApplyError(
+                "plugin_config_invalid",
+                format_validation_error(exc),
+                # details 会被 JSON 序列化写回 renderer：去掉 url 与 ctx，
+                # 后者可能携带异常对象等不可序列化内容；也去掉 input，
+                # 校验的是展开后的值，input 里可能正是环境变量里的密钥。
+                errors=exc.errors(
+                    include_url=False, include_context=False, include_input=False
+                ),
+            ) from exc
+        persisted = _persisted_values(values, normalized)
+
+        # 复用设置事务：定位-替换式合并 TOML 文本后走既有事务化落盘 + 热更新路径，
+        # 不另起一套写盘逻辑（见 desktop_bridge/plugin_config_text.py）。
+        # 合并与守卫都在事务锁内进行：本方法只改一张表、其余文本沿用"当前已提交
+        # 的配置"，若在锁外读取基准文本，并发的 runtime.apply 会被整份覆盖掉。
+        # 但当幂等 memo 命中时，apply() 根本不会调用这个回调——见
+        # RuntimeSettingsApplication.apply 的文档。
+        def merge(current_text: str) -> str:
+            merged = _merge_plugin_values(current_text, plugin_id, persisted)
+            self._assert_config_round_trip(
+                model_cls, plugin_id, current_text, merged, normalized
+            )
+            return merged
+
+        return persisted, merge
+
+    def _plugin_replacement(
+        self, plugin_id: str, values: dict[str, Any]
+    ) -> tuple[dict[str, Any], Callable[[str], str]]:
+        """Chooses validated or verbatim replacement for a plugin-derived table.
+
+        QQBot declares no config model (its settings form was retired in #423)
+        yet its legacy credential still sits in ``[plugins.qqbot]``; such a
+        table is written verbatim, still under the table-isolation guard.
+        """
+        kernel = self._plugin_kernel()
+        model_cls = (
+            kernel.config_schemas.model_for(plugin_id) if kernel is not None else None
+        )
+        if model_cls is not None:
+            return self._validated_replacement(model_cls, plugin_id, values)
+
+        def merge(current_text: str) -> str:
+            merged = _merge_plugin_values(current_text, plugin_id, values)
+            _ = assert_plugin_table_isolated(plugin_id, current_text, merged)
+            return merged
+
+        return values, merge
+
+    def check_replacement(self, plugin_id: str, values: dict[str, Any]) -> None:
+        """Dry-runs ``replace_from_plugin`` on the committed text; writes nothing."""
+        _, merge = self._plugin_replacement(plugin_id, values)
+        _ = merge(self._settings.config_text)
+
+    async def replace_from_plugin(
+        self,
+        plugin_id: str,
+        values: dict[str, Any],
+        *,
+        operation_id: str,
+        prepare_service: Callable[..., Any],
+        publish_service: Callable[..., Any],
+    ) -> dict[str, Any]:
+        """Commits a table the plugin derived from its own unexpanded config.
+
+        Account deletion uses this to drop a credential held in host config.
+        """
+        persisted, merge = self._plugin_replacement(plugin_id, values)
+        result = await self._settings.apply(
+            {"operation_id": operation_id},
+            prepare_service=prepare_service,
+            publish_service=publish_service,
+            derive=DerivedWrite(
+                build_config_toml=merge,
+                fingerprint_payload={"plugin_id": plugin_id, "values": persisted},
+            ),
+        )
+        return {"plugin_id": plugin_id, **result}
 
     def _plugin_kernel(self) -> "PluginKernel | None":
         """Returns the currently published generation's plugin kernel, if any."""
@@ -236,6 +272,32 @@ class RuntimePluginConfig:
                 "plugin_config_unrepresentable",
                 "配置中存在无法用 TOML 表达的值，写入已取消",
             )
+
+
+def _merge_plugin_values(
+    current_text: str, plugin_id: str, values: dict[str, Any]
+) -> str:
+    """Replaces one plugin table in the committed text, keeping its enable flag."""
+    # 启停状态与插件配置同住一张表，但它归宿主所有、不是配置模型的字段，
+    # 校验时会被 pydantic 丢弃。整表替换必须把它显式带回来，否则用户改一次
+    # 插件配置就会把停用的插件重新启用。
+    values_to_write = dict(values)
+    current = read_plugin_table(current_text, plugin_id)
+    if PLUGIN_ENABLED_CONFIG_KEY in current:
+        values_to_write[PLUGIN_ENABLED_CONFIG_KEY] = current[PLUGIN_ENABLED_CONFIG_KEY]
+    try:
+        return merge_plugin_table(current_text, plugin_id, values_to_write)
+    except PluginTableConflict as exc:
+        # 目标插件已经以本模块定位不到的形式存在于文档中（[plugins] 下的
+        # 点分键，或内联表）：照常追加会生成重复的 [plugins.<id>] 声明，
+        # 使整份文档无法解析，用户只会看到一个跟真实原因毫不相干的
+        # "配置中存在无法用 TOML 表达的值"。这里直接给出能指导用户的错误。
+        raise RuntimeApplyError(
+            "plugin_config_unrepresentable",
+            f"插件 {plugin_id} 的配置已经以点分键或内联表的形式写在 "
+            "[plugins] 表下，无法通过设置页定位替换；请先在配置文件中把它"
+            f"整理成独立的 [plugins.{plugin_id}] 表，再通过设置页保存",
+        ) from exc
 
 
 def _persisted_values(

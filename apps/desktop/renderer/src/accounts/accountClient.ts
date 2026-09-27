@@ -86,6 +86,10 @@ export function createAccountClient(invoke?: DesktopInvoke) {
       const result = await call<{ account: AccountPayload }>("accounts.assign", { account_id: accountId, role_id: roleId });
       return mapAccount(result.account);
     },
+    /** Deletes a role's account after its plugin purged credentials; history is kept. */
+    async remove(accountId: string, roleId: string) {
+      await call<{ account_id: string }>("accounts.delete", { account_id: accountId, role_id: roleId });
+    },
     async setRules(accountId: string, rules: AccountResponseRules) {
       const result = await call<{ account: AccountPayload }>("accounts.rules.set", {
         account_id: accountId,
