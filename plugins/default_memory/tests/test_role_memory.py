@@ -51,6 +51,7 @@ async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_
         engine = SimpleNamespace(
             describe=lambda: SimpleNamespace(name="default"),
             list_items_for_admin=store.list_items_for_admin,
+            list_role_filter_values=store.list_role_filter_values,
             get_item_for_admin=store.get_item_for_admin,
         )
         kernel = PluginKernel(
@@ -114,6 +115,81 @@ async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_
 
 
 @pytest.mark.asyncio
+async def test_semantic_list_declares_role_facets_and_sorts_by_occurrence_time(
+    tmp_path: Path,
+) -> None:
+    from plugins.default_memory.backend.role_memory import DefaultRoleMemoryReader
+
+    roles = RoleStore(tmp_path)
+    for role_id in ("mira", "atlas"):
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="test")
+    store = MemoryStore2(tmp_path / "memory.db")
+    try:
+        # Written in reverse occurrence order so record-time sorting cannot pass.
+        future_id = store.upsert_item(
+            "plan",
+            "Mira trip",
+            embedding=None,
+            extra={"role_id": "mira"},
+            happened_at="2999-01-01T00:00:00+00:00",
+        ).split(":", 1)[1]
+        # No occurrence time: the record time (now) stands in for it.
+        recorded_id = store.upsert_item(
+            "preference",
+            "Mira tea",
+            embedding=None,
+            extra={"role_id": "mira", "memory_domain": " taste "},
+        ).split(":", 1)[1]
+        past_id = store.upsert_item(
+            "event",
+            "Mira moved",
+            embedding=None,
+            extra={"role_id": "mira", "memory_domain": "life"},
+            happened_at="2000-01-01T00:00:00+00:00",
+        ).split(":", 1)[1]
+        store.update_item_for_admin(future_id, status="superseded")
+        store.upsert_item(
+            "profile",
+            "Atlas only",
+            embedding=None,
+            extra={"role_id": "atlas", "memory_domain": "atlas-domain"},
+        )
+        engine = SimpleNamespace(
+            list_items_for_admin=store.list_items_for_admin,
+            list_role_filter_values=store.list_role_filter_values,
+        )
+        reader = DefaultRoleMemoryReader(roles, engine)
+
+        newest = await reader.list({"role_id": "mira", "status": "all"})
+        # Superseded items still contribute; other roles and blank domains do not.
+        assert newest["filters"] == {
+            "memory_type": ["event", "plan", "preference"],
+            "memory_domain": ["life", "taste"],
+            "status": ["active", "superseded", "all"],
+        }
+        assert _item_ids(newest) == [
+            future_id,
+            recorded_id,
+            past_id,
+        ]
+        oldest = await reader.list(
+            {"role_id": "mira", "status": "all", "sort_order": "asc"}
+        )
+        assert _item_ids(oldest) == [
+            past_id,
+            recorded_id,
+            future_id,
+        ]
+        for legacy_sort in ("updated_at", "created_at", "happened_at"):
+            with pytest.raises(ValueError, match="sort_by is not supported"):
+                await reader.list({"role_id": "mira", "sort_by": legacy_sort})
+        with pytest.raises(ValueError, match="invalid sort order"):
+            await reader.list({"role_id": "mira", "sort_order": "newest"})
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
 async def test_semantic_reads_report_disabled_engine_after_role_validation(
     tmp_path: Path,
 ) -> None:
@@ -126,3 +202,14 @@ async def test_semantic_reads_report_disabled_engine_after_role_validation(
     assert (await reader.detail({"role_id": "mira"}))["status"] == "disabled"
     with pytest.raises(ValueError, match="role not found"):
         await reader.list({"role_id": "atlas"})
+
+
+def _item_ids(response: dict[str, object]) -> list[object]:
+    """Read item IDs in response order from a direct reader call."""
+    items = response["items"]
+    assert isinstance(items, list)
+    ids: list[object] = []
+    for item in items:
+        assert isinstance(item, dict)
+        ids.append(item["id"])
+    return ids

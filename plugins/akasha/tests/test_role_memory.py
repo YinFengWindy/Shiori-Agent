@@ -102,3 +102,69 @@ async def test_semantic_rpc_filters_akasha_store_by_role_before_paging_and_detai
         assert kernel.rpc.resolve(list_method) is None
     finally:
         store.close()
+
+
+@pytest.mark.asyncio
+async def test_semantic_list_sorts_by_turn_time_and_declares_no_structured_filters(
+    tmp_path: Path,
+) -> None:
+    from plugins.akasha.backend.role_memory import AkashaRoleMemoryReader
+
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    store = AkashaStore(tmp_path / "akasha.db")
+    try:
+        # Insertion order differs from turn time so the sort cannot pass by accident.
+        for seq, ts in (
+            (0, "2026-01-02T00:00:00+00:00"),
+            (2, "2026-01-03T00:00:00+00:00"),
+            (4, "2026-01-01T00:00:00+00:00"),
+        ):
+            store.upsert_message_node(
+                SourceMessage(
+                    id=f"role:mira:{seq}",
+                    session_key="role:mira",
+                    seq=seq,
+                    role="user",
+                    content=f"text {seq}",
+                    ts=ts,
+                ),
+                [1.0, 0.0],
+            )
+        engine = object.__new__(AkashaMemoryEngine)
+        engine._store = store
+        engine._session_db_path = tmp_path / "missing-sessions.db"
+        engine._akasha_config = AkashaConfig()
+        reader = AkashaRoleMemoryReader(roles, engine)
+
+        newest = await reader.list({"role_id": "mira"})
+        assert newest["filters"] == {}
+        assert _item_ids(newest) == [
+            "role:mira:2",
+            "role:mira:0",
+            "role:mira:4",
+        ]
+        oldest = await reader.list({"role_id": "mira", "sort_order": "asc"})
+        assert _item_ids(oldest) == [
+            "role:mira:4",
+            "role:mira:0",
+            "role:mira:2",
+        ]
+        for key in ("memory_type", "memory_domain", "status"):
+            with pytest.raises(ValueError, match=f"akasha does not filter by: {key}"):
+                await reader.list({"role_id": "mira", key: "turn"})
+        with pytest.raises(ValueError, match="sort_by is not supported"):
+            await reader.list({"role_id": "mira", "sort_by": "updated_at"})
+    finally:
+        store.close()
+
+
+def _item_ids(response: dict[str, object]) -> list[object]:
+    """Read item IDs in response order from a direct reader call."""
+    items = response["items"]
+    assert isinstance(items, list)
+    ids: list[object] = []
+    for item in items:
+        assert isinstance(item, dict)
+        ids.append(item["id"])
+    return ids

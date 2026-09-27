@@ -194,6 +194,10 @@ class _AdminMixin:
             sort_order=sort_order,
         )
 
+    def list_role_filter_values(self, role_id: str) -> dict[str, list[str]]:
+        """Return the memory types and domains present in one role's items."""
+        return self._require_v2_store().list_role_filter_values(role_id)
+
     def get_item_for_admin(
         self,
         item_id: str,

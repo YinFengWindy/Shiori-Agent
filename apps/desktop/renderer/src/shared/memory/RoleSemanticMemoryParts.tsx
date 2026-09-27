@@ -1,12 +1,17 @@
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { cx, ghostButtonClass, iconButtonClass, inputClass } from "../styles";
-import type { RoleSemanticItem, RoleSemanticList, RoleSemanticQuery } from "./roleSemanticMemory";
+import { Select } from "../ui/Select";
+import {
+  defaultSemanticStatus, pickOffered, semanticSortOptions, semanticStatusLabels,
+  type RoleSemanticFilters, type RoleSemanticItem, type RoleSemanticList, type RoleSemanticQuery,
+} from "./roleSemanticMemory";
 
 type SemanticPaneProps = {
   query: RoleSemanticQuery;
   onQuery: (query: RoleSemanticQuery) => void;
-  supportsStructuredFilters: boolean;
+  /** Filters the engine declared for this role; null hides every structured filter. */
+  filters: RoleSemanticFilters | null;
   list: RoleSemanticList | null;
   loading: boolean;
   error: string;
@@ -25,8 +30,31 @@ function metadata(item: RoleSemanticItem) {
   );
 }
 
+/** Offers each option as-is, after an "all" choice that clears the filter. */
+function valueOptions(values: readonly string[], allLabel: string) {
+  return [{ value: "", label: allLabel }, ...values.map((value) => ({ value, label: value }))];
+}
+
+type FilterBarProps = {
+  query: RoleSemanticQuery;
+  filters: RoleSemanticFilters | null;
+  onChange: (patch: Partial<RoleSemanticQuery>) => void;
+};
+
+/** Search and sort, plus exactly the filter pickers the engine declared. */
+function RoleSemanticFilterBar({ query, filters, onChange }: FilterBarProps) {
+  const statuses = filters?.status;
+  return <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+    <input className={inputClass} aria-label="搜索语义记忆" placeholder="搜索记忆" value={query.q} onChange={(event) => onChange({ q: event.target.value })} />
+    {filters?.memory_type && <Select aria-label="记忆类型" value={query.memory_type} options={valueOptions(filters.memory_type, "全部类型")} onValueChange={(memory_type) => onChange({ memory_type })} />}
+    {filters?.memory_domain && <Select aria-label="记忆领域" value={query.memory_domain} options={valueOptions(filters.memory_domain, "全部领域")} onValueChange={(memory_domain) => onChange({ memory_domain })} />}
+    {statuses && <Select aria-label="记忆状态" value={query.status ?? defaultSemanticStatus} options={statuses.map((value) => ({ value, label: semanticStatusLabels[value] }))} onValueChange={(value) => onChange({ status: pickOffered(statuses, value) })} />}
+    <Select aria-label="时间排序" value={query.sort_order} options={semanticSortOptions} onValueChange={(value) => onChange({ sort_order: pickOffered(semanticSortOptions.map((option) => option.value), value) })} />
+  </div>;
+}
+
 /** Stateless list, filters, pagination, and selected item for a plugin Dashboard. */
-export function RoleSemanticMemoryPane({ query, onQuery, supportsStructuredFilters, list, loading, error, selectedId, onSelect, detail, detailLoading, detailError, renderError }: SemanticPaneProps) {
+export function RoleSemanticMemoryPane({ query, onQuery, filters, list, loading, error, selectedId, onSelect, detail, detailLoading, detailError, renderError }: SemanticPaneProps) {
   const change = (patch: Partial<RoleSemanticQuery>) => onQuery({ ...query, ...patch, page: patch.page ?? 1 });
   const totalPages = Math.max(1, Math.ceil((list?.total ?? 0) / query.page_size));
   return <section className="grid gap-3" aria-label="语义记忆">
@@ -34,24 +62,7 @@ export function RoleSemanticMemoryPane({ query, onQuery, supportsStructuredFilte
       <h3 className="m-0 text-title-sm text-ink">语义记忆</h3>
       {list?.status === "ready" && <span className="text-body-sm text-ink-muted">{list.total} 条</span>}
     </div>
-    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-      <input className={inputClass} aria-label="搜索语义记忆" placeholder="搜索记忆" value={query.q} onChange={(event) => change({ q: event.target.value })} />
-      {supportsStructuredFilters && <>
-        <input className={inputClass} aria-label="记忆类型" placeholder="类型" value={query.memory_type} onChange={(event) => change({ memory_type: event.target.value })} />
-        <input className={inputClass} aria-label="记忆领域" placeholder="领域" value={query.memory_domain} onChange={(event) => change({ memory_domain: event.target.value })} />
-        <select className={inputClass} aria-label="记忆状态" value={query.status} onChange={(event) => change({ status: event.target.value })}>
-          <option value="active">有效</option><option value="superseded">已失效</option><option value="all">全部</option>
-        </select>
-      </>}
-      <select className={inputClass} aria-label="时间排序" value={`${query.sort_by}:${query.sort_order}`} onChange={(event) => {
-        const [sort_by, sort_order] = event.target.value.split(":") as [RoleSemanticQuery["sort_by"], RoleSemanticQuery["sort_order"]];
-        change({ sort_by, sort_order });
-      }}>
-        <option value="created_at:desc">创建时间 · 最新</option><option value="created_at:asc">创建时间 · 最早</option>
-        <option value="updated_at:desc">更新时间 · 最新</option><option value="updated_at:asc">更新时间 · 最早</option>
-        <option value="happened_at:desc">发生时间 · 最新</option><option value="happened_at:asc">发生时间 · 最早</option>
-      </select>
-    </div>
+    <RoleSemanticFilterBar query={query} filters={filters} onChange={change} />
     {loading ? <p role="status" className="text-body-sm text-ink-muted">加载中…</p>
       : error ? renderError(`语义记忆读取失败：${error}`)
       : list?.status === "disabled" ? <p role="status" className="text-body-sm text-ink-muted">语义记忆已停用</p>

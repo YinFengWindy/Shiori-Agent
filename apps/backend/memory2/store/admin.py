@@ -11,6 +11,18 @@ from .common import (
     _role_json_filter,
 )
 
+# Admin sort keys mapped to SQL; ``occurred_at`` is occurrence time with the
+# record time standing in for items that never got one.
+_ADMIN_SORT_EXPRESSIONS: dict[str, str] = {
+    "updated_at": "updated_at",
+    "created_at": "created_at",
+    "happened_at": "happened_at",
+    "occurred_at": "COALESCE(NULLIF(TRIM(happened_at), ''), created_at)",
+    "reinforcement": "reinforcement",
+    "emotional_weight": "emotional_weight",
+    "memory_type": "memory_type",
+}
+
 
 class _StoreAdminMixin:
     def invalidate_role_memories(self, role_id: str) -> int:
@@ -50,19 +62,7 @@ class _StoreAdminMixin:
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
         with self._lock:
-            safe_sort_by = (
-                sort_by
-                if sort_by
-                in {
-                    "updated_at",
-                    "created_at",
-                    "happened_at",
-                    "reinforcement",
-                    "emotional_weight",
-                    "memory_type",
-                }
-                else "created_at"
-            )
+            safe_sort_by = _ADMIN_SORT_EXPRESSIONS.get(sort_by, "created_at")
             safe_sort_order = "asc" if sort_order == "asc" else "desc"
             safe_page = max(1, page)
             safe_page_size = max(1, min(page_size, 200))
@@ -162,6 +162,39 @@ class _StoreAdminMixin:
                     }
                 )
             return items, total
+
+    def list_role_filter_values(self, role_id: str) -> dict[str, list[str]]:
+        """Return the memory types and domains that one role's items actually use.
+
+        Every status counts, so the values stay stable while the Dashboard
+        switches between active and superseded items. Blank values are left
+        out because an empty filter already means "no filter".
+        """
+        clean_role_id = role_id.strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for memory filter values")
+        domain_sql = "COALESCE(TRIM(json_extract(extra_json, '$.memory_domain')), '')"
+        with self._lock:
+            types = self._db.execute(
+                f"""
+                SELECT DISTINCT memory_type FROM memory_items
+                WHERE {_role_json_filter()} AND TRIM(memory_type) != ''
+                ORDER BY memory_type
+                """,
+                (clean_role_id,),
+            ).fetchall()
+            domains = self._db.execute(
+                f"""
+                SELECT DISTINCT {domain_sql} FROM memory_items
+                WHERE {_role_json_filter()} AND {domain_sql} != ''
+                ORDER BY 1
+                """,
+                (clean_role_id,),
+            ).fetchall()
+        return {
+            "memory_type": [str(row[0]) for row in types],
+            "memory_domain": [str(row[0]) for row in domains],
+        }
 
     def get_item_for_admin(
         self,

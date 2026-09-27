@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from core.roles.semantic_memory_requests import (
+    SEMANTIC_STATUS_FILTERS,
     page_options,
     readable_item,
     require_memory_role,
@@ -27,9 +28,9 @@ class DefaultRoleMemoryReader:
         role_id = require_memory_role(self._role_store, payload)
         if self._engine is None:
             return {"role_id": role_id, "status": "disabled", "items": [], "total": 0}
-        page, page_size, sort_by, sort_order = page_options(payload)
+        page, page_size, sort_order = page_options(payload)
         status = str(payload.get("status") or "active")
-        if status not in {"active", "superseded", "all"}:
+        if status not in SEMANTIC_STATUS_FILTERS:
             raise ValueError("invalid memory status")
         items, total = self._engine.list_items_for_admin(
             role_id=role_id,
@@ -39,9 +40,11 @@ class DefaultRoleMemoryReader:
             status="" if status == "all" else status,
             page=page,
             page_size=page_size,
-            sort_by=sort_by,
+            sort_by="occurred_at",
             sort_order=sort_order,
         )
+        # Types and domains come from this role's data; status is an engine trait.
+        filters = self._engine.list_role_filter_values(role_id)
         return {
             "role_id": role_id,
             "status": "ready",
@@ -49,6 +52,7 @@ class DefaultRoleMemoryReader:
             "total": total,
             "page": page,
             "page_size": page_size,
+            "filters": {**filters, "status": list(SEMANTIC_STATUS_FILTERS)},
         }
 
     async def detail(self, payload: dict[str, Any]) -> dict[str, object]:
