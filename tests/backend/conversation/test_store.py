@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
+import pytest
+
+import conversation.store as conversation_store_module
 from conversation.store import ConversationStore
 from conversation.service import ConversationService, LegacySessionDescriptor
 from session.manager import SessionManager
@@ -177,3 +181,20 @@ def test_last_user_message_at_reads_only_user_rows_of_one_thread(
         assert store.last_user_message_at("thread:mira:telegram:42") is None
     finally:
         store.close()
+
+
+def test_standalone_schema_failure_rolls_back_all_tables(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "conversation.db"
+
+    def fail_indexes(_connection: sqlite3.Connection) -> None:
+        raise RuntimeError("injected index failure")
+
+    monkeypatch.setattr(conversation_store_module, "_ensure_indexes", fail_indexes)
+
+    with pytest.raises(RuntimeError, match="injected index failure"):
+        ConversationStore(path)
+
+    with closing(sqlite3.connect(path)) as conn:
+        assert conn.execute("SELECT name FROM sqlite_master").fetchall() == []
