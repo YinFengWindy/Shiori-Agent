@@ -38,13 +38,10 @@ class _StoreAdminMixin:
         if not clean_role_id:
             raise ValueError("role_id required for memory invalidation")
         with self._lock:
+            # 与列表查询同一套角色过滤，避免 role_id 带空白的条目漏失效。
             cursor = self._db.execute(
-                """
-                UPDATE memory_items
-                SET status='superseded', updated_at=?
-                WHERE status!='superseded'
-                  AND json_extract(extra_json, '$.role_id')=?
-                """,
+                "UPDATE memory_items SET status='superseded', updated_at=? "
+                f"WHERE status!='superseded' AND {_role_json_filter()}",
                 (_now_iso(), clean_role_id),
             )
             self._db.commit()

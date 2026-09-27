@@ -102,6 +102,22 @@ it("hides the old engine while a changed runtime read is pending and reports a f
   }
 });
 
+it("shows loading, not unavailable, while the plugin roster is still loading", async () => {
+  resetPluginEnabledStateForTests();
+  const desktop = memoryDesktop(async () => ({ formData: { memory: { engine: "akasha" } } }));
+  const rpcInvoke = desktop.miraDesktop.invoke;
+  // The roster request never settles, so the panel stays before its first load.
+  const invoke: typeof rpcInvoke = (request) => request.method === "plugins.list" ? new Promise(() => {}) : rpcInvoke(request);
+  const view = await mountTestComponent(<RoleMemoryPanel roleId="mira" bridgeReady />, { windowGlobals: { miraDesktop: { ...desktop.miraDesktop, invoke } } });
+  try {
+    assert.match(view.container.textContent ?? "", /加载中…/);
+    assert.doesNotMatch(view.container.textContent ?? "", /记忆插件不可用/);
+  } finally {
+    await view.cleanup();
+    resetPluginEnabledStateForTests();
+  }
+});
+
 it("shows a disconnected state without reading anything", async () => {
   resetPluginEnabledStateForTests();
   setPluginEnabledSnapshot([{ id: "default_memory", enabled: true, state: "ACTIVE" }]);

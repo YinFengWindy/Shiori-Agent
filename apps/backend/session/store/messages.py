@@ -7,6 +7,8 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
+
 from .common import _MESSAGE_SELECT_COLUMNS
 from session.media_assets import preserve_media
 
@@ -331,8 +333,8 @@ class _MessageMixin:
             params.append(session_key)
         term = (q or "").strip()
         if term:
-            where_parts.append("content LIKE ?")
-            params.append(f"%{term}%")
+            where_parts.append(f"content LIKE ? {LIKE_ESCAPE_CLAUSE}")
+            params.append(like_contains(term))
         if role:
             where_parts.append("role = ?")
             params.append(role)
