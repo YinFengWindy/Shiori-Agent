@@ -13,15 +13,24 @@ from plugins.qqbot.backend.gateway import QQBotAuthenticationError
 @pytest.mark.asyncio
 async def test_token_error_payload_is_reported_as_authentication_failure():
     channel = QQBotChannel("app", "wrong-secret")
-    request = httpx.Request("POST", "https://bots.qq.com/app/getAppAccessToken")
-    channel._client.post = AsyncMock(
-        return_value=httpx.Response(
-            200, json={"code": 112, "message": "invalid secret"}, request=request
+    channel._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200, json={"code": 112, "message": "invalid secret"}
+            )
         )
     )
     with pytest.raises(QQBotAuthenticationError, match="invalid secret") as failure:
         await channel._get_access_token()
     assert channel._is_auth_error(failure.value)
+    await channel._client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_rest_request_before_client_is_opened_fails_loudly():
+    channel = QQBotChannel("app", "secret")
+    with pytest.raises(RuntimeError, match="尚未打开"):
+        await channel._api_request("GET", "/gateway", token="token")
 
 
 def test_gateway_rejection_is_authentication_not_network_failure():

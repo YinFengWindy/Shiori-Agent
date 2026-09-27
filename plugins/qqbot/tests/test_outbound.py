@@ -33,7 +33,6 @@ async def test_cancelled_delivery_retains_only_completed_receipt(terminal):
         return httpx.Response(200, json={"id": "outgoing-stream"})
 
     channel = QQBotChannel("app", "secret")
-    await channel._client.aclose()
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     channel._channel_hub = Mock()
     key = ("role:mira", "c2c:user", "incoming")
@@ -111,7 +110,6 @@ async def test_reply_records_retained_receipt_instead_of_turn_id(mode):
         return httpx.Response(200, json={"id": message_id})
 
     channel = QQBotChannel("app", "secret")
-    await channel._client.aclose()
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     hub = Mock()
     channel._channel_hub = hub
@@ -195,7 +193,6 @@ async def test_send_stream_preserves_one_message_or_requires_confirmed_cleanup(
         return httpx.Response(200, json={"id": "normal-1"})
 
     channel = QQBotChannel("app", "secret")
-    await channel._client.aclose()
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     channel._last_c2c_msg_id["user-1"] = "inbound-1"
     message = "分段内容" * 90
@@ -241,7 +238,6 @@ async def test_push_recovers_rejected_continuation_in_place() -> None:
         return httpx.Response(200, json={"id": "stream-1"})
 
     channel = QQBotChannel("app", "secret")
-    await channel._client.aclose()
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     channel._last_c2c_msg_id["user-1"] = "inbound-1"
     message = "分段内容" * 90
@@ -283,7 +279,6 @@ async def test_cancelled_push_recalls_only_acknowledged_incomplete_stream(
         return httpx.Response(500 if recall_fails else 200)
 
     channel = QQBotChannel("app", "secret")
-    await channel._client.aclose()
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     channel._last_c2c_msg_id["user-1"] = "inbound-1"
     push = asyncio.create_task(channel.send_stream("c2c:user-1", "分段内容" * 90))

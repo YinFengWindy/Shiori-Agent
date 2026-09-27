@@ -102,9 +102,13 @@ async def test_qqbot_channel_registers_and_stops_cleanly(
 
     channel._gateway_loop = _no_gateway_loop
     context = _context(bus, push_tool, _Hub())
+    assert channel._client is None
     await channel.start(context)
+    client = channel._client
+    assert client is not None and not client.is_closed
     assert bus.outbound[0][0] == "qqbot"
     await channel.stop()
+    assert client.is_closed
 
     assert bus.outbound == []
     assert context.event_bus._handlers == {}
@@ -145,6 +149,7 @@ async def test_qqbot_reports_pending_input_before_closing_original_account(monke
 
     monkeypatch.setattr(QQBotChannel, "send", send)
     channel = QQBotChannel("old-account", "secret")
+    channel._open_http_client()
     channel._bus = _Bus()
     channel.pause_intake()
     await channel._publish_inbound(

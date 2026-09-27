@@ -6,7 +6,6 @@ import asyncio
 import logging
 from typing import Callable
 
-import httpx
 import websockets
 
 from agent.looping.interrupt import InterruptController
@@ -60,7 +59,8 @@ class QQBotChannel(
         self._bus: MessageBus | None = None
         self._interrupt_controller: InterruptController | None = None
         self._channel_hub: ChannelHub | None = None
-        self._client = httpx.AsyncClient(timeout=30.0)
+        # Opened by start(); constructing a channel must not build TLS state.
+        self._client = None
         self._websocket_connect = websockets.connect
         self._token: _TokenCache | None = None
         self._task: asyncio.Task[None] | None = None
@@ -116,8 +116,7 @@ class QQBotChannel(
         self._channel_hub = ctx.channel_hub
         self._event_bus = ctx.event_bus
         self._push_tool = ctx.push_tool
-        if self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=30.0)
+        self._open_http_client()
         self._public_hooks = public_hooks
         if public_hooks and not self._events_bound:
             for event_type, handler in self._event_bindings:
@@ -153,7 +152,7 @@ class QQBotChannel(
         for session_key in list(self._live_tasks_by_turn):
             await self._finish_live_tasks(session_key)
         await self._intake.close()
-        await self._client.aclose()
+        await self._close_http_client()
         if self._bus is not None and self._outbound_bound:
             self._bus.unsubscribe_outbound(CHANNEL, self._on_response)
             self._outbound_bound = False

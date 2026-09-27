@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
+import plugins.qqbot.backend.gateway as gateway_module
 from agent.plugin_host.kv import PluginKVStore
 from plugins.qqbot.backend.account_channel import QQBotAccountsChannel
 from plugins.qqbot.backend.accounts import QQBotAccountStore
@@ -136,3 +138,30 @@ async def test_failed_new_gateway_does_not_create_an_account(tmp_path, monkeypat
     assert store.list() == []
     assert manager._identity.account_id("100") == ""
     assert manager._channels == {}
+
+
+@pytest.mark.asyncio
+async def test_credential_preflight_opens_and_closes_its_own_http_client(
+    tmp_path, monkeypatch
+):
+    manager, _, _ = _manager(tmp_path)
+    real_client = httpx.AsyncClient
+    clients: list[httpx.AsyncClient] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/app/getAppAccessToken":
+            return httpx.Response(200, json={"access_token": "tok", "expires_in": 60})
+        assert request.url.path == "/gateway"
+        return httpx.Response(200, json={"url": "wss://gateway"})
+
+    def client_factory(**kwargs) -> httpx.AsyncClient:
+        client = real_client(transport=httpx.MockTransport(handler), **kwargs)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(gateway_module.httpx, "AsyncClient", client_factory)
+
+    await manager._preflight("100", "secret")
+
+    assert len(clients) == 1
+    assert clients[0].is_closed
