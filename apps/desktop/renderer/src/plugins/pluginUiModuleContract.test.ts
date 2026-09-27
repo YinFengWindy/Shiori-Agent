@@ -98,24 +98,25 @@ describe("applyPluginUiModules", () => {
     assert.equal(navElement.type, NavPage);
   });
 
-  it("binds a role.memory contribution to its plugin and removes it on unload", () => {
+  it("reports and skips a module that still declares the retired roleMemory contribution", () => {
     const registry = new PluginUiRegistry();
     function MemoryDashboard() { return null; }
-    applyPluginUiModules({
-      "/plugins/default_memory/ui/index.tsx": {
-        default: { pluginId: "default_memory", roleMemory: { component: MemoryDashboard } },
-      },
-    }, registry);
+    // A module written against the old contract; only its declared shape matters here.
+    const legacyModule = { pluginId: "legacy_memory", roleMemory: { component: MemoryDashboard }, navPage: { label: "Legacy", component: MemoryDashboard } };
+    const errors: string[] = [];
+    const originalError = console.error;
+    console.error = (message: string) => { errors.push(message); };
+    try {
+      applyPluginUiModules({ "/plugins/legacy_memory/ui/index.tsx": { default: legacyModule } }, registry);
+    } finally {
+      console.error = originalError;
+    }
 
-    const entry = registry.getRoleMemoryPanel("default_memory", () => true);
-    assert.ok(entry);
-    assert.notEqual(entry.Component, MemoryDashboard);
-    const props = renderElement(entry.Component as never, { roleId: "mira", bridgeReady: true }).props;
-    assert.equal(props.roleId, "mira");
-    assert.equal(props.bridgeReady, true);
-    assert.equal(typeof (props.client as PluginRpcClient).call, "function");
-    registry.unregisterPlugin("default_memory");
-    assert.equal(registry.getRoleMemoryPanel("default_memory", () => true), undefined);
+    assert.equal(registry.getNavPage("legacy_memory"), undefined);
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /legacy_memory/);
+    assert.match(errors[0], /roleMemory/);
+    assert.match(errors[0], /roles\.memory/);
   });
 
   it("injects into each component a client scoped to only its own plugin's RPC namespace", async () => {

@@ -1,4 +1,4 @@
-import type { SelectOption } from "../ui/Select";
+import type { SelectOption } from "../shared/ui/Select";
 
 /** Item lifecycle filter values; mirrors the backend's `SEMANTIC_STATUS_FILTERS`. */
 export type RoleSemanticStatusFilter = "active" | "superseded" | "all";
@@ -15,7 +15,7 @@ export type RoleSemanticItem = {
   status?: string;
   created_at?: string;
   updated_at?: string;
-  happened_at?: string;
+  happened_at?: string | null;
   source_ref?: string;
   extra_json?: Record<string, unknown>;
   [key: string]: unknown;
@@ -33,7 +33,7 @@ export type RoleSemanticFilters = {
 };
 
 /**
- * Server-side search, filter, sort, and page options. Items always sort by
+ * Server-side search, filter, and sort options. Items always sort by
  * occurrence time (record time when missing); empty type/domain and an unset
  * status leave that filter out of the request.
  */
@@ -43,8 +43,6 @@ export type RoleSemanticQuery = {
   memory_domain: string;
   status?: RoleSemanticStatusFilter;
   sort_order: RoleSemanticSortOrder;
-  page: number;
-  page_size: number;
 };
 
 /** Role-scoped semantic list response; only a ready engine declares its filters. */
@@ -68,8 +66,11 @@ export type RoleSemanticDetail = {
 };
 
 export const initialSemanticQuery: RoleSemanticQuery = {
-  q: "", memory_type: "", memory_domain: "", sort_order: "desc", page: 1, page_size: 20,
+  q: "", memory_type: "", memory_domain: "", sort_order: "desc",
 };
+
+/** Items per "load more" batch. */
+export const semanticBatchSize = 20;
 
 /** Status an engine applies when the query leaves `status` unset. */
 export const defaultSemanticStatus: RoleSemanticStatusFilter = "active";
@@ -100,12 +101,20 @@ export function pickOffered<T extends string>(offered: readonly T[], value: stri
   return match;
 }
 
-/** List RPC params for one role; unset filters are omitted so engines never receive them. */
-export function semanticListParams(roleId: string, query: RoleSemanticQuery) {
+/** Whether two queries ask the engine for the same items. */
+export function sameSemanticQuery(left: RoleSemanticQuery, right: RoleSemanticQuery) {
+  return left.q === right.q && left.memory_type === right.memory_type && left.memory_domain === right.memory_domain
+    && left.status === right.status && left.sort_order === right.sort_order;
+}
+
+/** List RPC params for one role's batch; unset filters are omitted so engines never receive them. */
+export function semanticListParams(roleId: string, query: RoleSemanticQuery, page: number) {
   const { memory_type, memory_domain, status, ...rest } = query;
   return {
     role_id: roleId,
     ...rest,
+    page,
+    page_size: semanticBatchSize,
     ...(memory_type ? { memory_type } : {}),
     ...(memory_domain ? { memory_domain } : {}),
     ...(status ? { status } : {}),

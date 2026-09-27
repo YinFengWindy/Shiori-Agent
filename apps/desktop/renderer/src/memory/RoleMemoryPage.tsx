@@ -1,0 +1,32 @@
+import { useState } from "react";
+import { MemoryDocumentView } from "./MemoryDocumentView";
+import type { MemoryTab, RoleMemoryDocumentsPayload } from "./memoryDocuments";
+import { MemoryNav } from "./MemoryNav";
+import { memoryClientKey, readMemoryDocuments, type MemoryRpc } from "./memoryReads";
+import { MemoryTimeline } from "./MemoryTimeline";
+import { useMemoryRead } from "./useMemoryRead";
+
+/**
+ * The whole role memory page, rendered by the host from the configured
+ * memory plugin's standard `roles.memory.*` reads. Documents load once per
+ * refresh so switching tabs is instant; refresh re-reads documents and the
+ * semantic layer together.
+ */
+export function RoleMemoryPage({ client, roleId }: { client: MemoryRpc; roleId: string }) {
+  const [tab, setTab] = useState<MemoryTab>("timeline");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const documentsKey = `${memoryClientKey(client)}:${roleId}:${refreshKey}`;
+  const documents = useMemoryRead<RoleMemoryDocumentsPayload>({
+    scope: documentsKey,
+    key: documentsKey,
+    read: () => readMemoryDocuments(client, roleId),
+  });
+  return <section className="grid gap-4" aria-label="角色记忆" data-testid="role-memory-panel">
+    <MemoryNav tab={tab} onTab={setTab} onRefresh={() => setRefreshKey((value) => value + 1)} />
+    <div role="tabpanel">
+      {tab === "timeline"
+        ? <MemoryTimeline client={client} roleId={roleId} refreshKey={refreshKey} />
+        : <MemoryDocumentView name={tab} documents={documents} />}
+    </div>
+  </section>;
+}

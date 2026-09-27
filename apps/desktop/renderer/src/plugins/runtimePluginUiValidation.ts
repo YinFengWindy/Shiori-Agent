@@ -18,10 +18,31 @@ function label(value: unknown, field: string) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`Invalid ${field} label`);
 }
 
+/**
+ * Contributions the host no longer accepts, each with the diagnostic shown to
+ * the package author. `roleMemory` never shipped in a released runtime API:
+ * the host renders the role memory page itself from the configured memory
+ * plugin's `roles.memory.*` RPCs.
+ */
+const retiredContributions: ReadonlyArray<{ field: string; reason: string }> = [
+  {
+    field: "roleMemory",
+    reason: "roleMemory is retired: the host renders the role memory page from the configured memory plugin's roles.memory.documents / roles.memory.semantic.list / roles.memory.semantic.detail RPCs; remove this contribution",
+  },
+];
+
+/** The diagnostic for the first retired contribution a UI module still declares, or null. */
+export function retiredPluginUiContribution(module: object) {
+  return retiredContributions.find(({ field }) => Object.hasOwn(module, field))?.reason ?? null;
+}
+
 /** Validates the complete UI ABI before mutating any contribution registry. */
 export function validateRuntimePluginUi(value: unknown, pluginId: string) {
   const module = object(value);
   if (module.pluginId !== pluginId) throw new Error("Plugin UI identity does not match its admitted package");
+  const retired = retiredPluginUiContribution(module);
+  // Rejected loudly rather than ignored, so the author sees why the panel vanished.
+  if (retired) throw new Error(retired);
   if (module.navPage !== undefined) {
     const page = object(module.navPage);
     component(page.component, "navPage");
@@ -38,7 +59,6 @@ export function validateRuntimePluginUi(value: unknown, pluginId: string) {
     if (section.kind === "component") component(section.component, "settingsSection");
   }
   if (module.roleAssets !== undefined) component(object(module.roleAssets).component, "roleAssets");
-  if (module.roleMemory !== undefined) component(object(module.roleMemory).component, "roleMemory");
   if (module.accountDetail !== undefined) component(object(module.accountDetail).component, "accountDetail");
   if (module.chatImageActions !== undefined) component(module.chatImageActions, "chatImageActions");
   if (module.roleSettings !== undefined) {
