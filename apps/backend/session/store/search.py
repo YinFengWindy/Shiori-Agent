@@ -6,6 +6,8 @@ import json
 import sqlite3
 from typing import Any
 
+from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
+
 from .common import _MESSAGE_SELECT_COLUMNS
 
 
@@ -180,9 +182,12 @@ class _SearchMixin:
         if not terms:
             terms = [query]
 
-        term_conditions_or = " OR ".join("m.content LIKE ?" for _ in terms)
+        term_conditions_or = " OR ".join(
+            f"m.content LIKE ? {LIKE_ESCAPE_CLAUSE}" for _ in terms
+        )
         score_expr = " + ".join(
-            "(CASE WHEN m.content LIKE ? THEN 1 ELSE 0 END)" for _ in terms
+            f"(CASE WHEN m.content LIKE ? {LIKE_ESCAPE_CLAUSE} THEN 1 ELSE 0 END)"
+            for _ in terms
         )
         if self._has_fts:
             # 长词走 FTS，短词继续走 LIKE，再把两路结果合并去重。
@@ -199,7 +204,7 @@ class _SearchMixin:
                     ") fts ON m.rowid = fts.rowid "
                     f"{where_sql} {connector} (fts.rowid IS NOT NULL OR ({term_conditions_or})) "
                 )
-                count_params.extend(f"%{t}%" for t in terms)
+                count_params.extend(like_contains(t) for t in terms)
                 fts_params: list[Any] = []
                 fts_sql = (
                     "SELECT m.id, m.session_key, m.seq, m.role, m.content, m.tool_chain, m.extra, m.ts, "
@@ -216,10 +221,10 @@ class _SearchMixin:
                     "CASE WHEN rank_score IS NULL THEN 1 ELSE 0 END ASC, "
                     "rank_score ASC, m.seq DESC LIMIT ? OFFSET ?"
                 )
-                fts_params.extend(f"%{t}%" for t in terms)
+                fts_params.extend(like_contains(t) for t in terms)
                 fts_params.append(fts_query)
                 fts_params.extend(params[:])
-                fts_params.extend(f"%{t}%" for t in terms)
+                fts_params.extend(like_contains(t) for t in terms)
                 fts_params.extend([limit, offset])
                 try:
                     with self._lock:
@@ -237,7 +242,7 @@ class _SearchMixin:
         count_params = params[:]
         connector = "AND" if where_sql else "WHERE"
         count_sql = f"SELECT COUNT(1) AS c FROM messages m {where_sql} {connector} ({term_conditions_or}) "
-        count_params.extend(f"%{t}%" for t in terms)
+        count_params.extend(like_contains(t) for t in terms)
         like_sql = (
             f"SELECT m.id, m.session_key, m.seq, m.role, m.content, m.tool_chain, m.extra, m.ts, "
             "m.thread_id, m.sender_role, m.media, m.external_message_id, m.delivery_status, "
@@ -246,9 +251,9 @@ class _SearchMixin:
             f"ORDER BY match_score DESC, m.seq DESC LIMIT ? OFFSET ?"
         )
         # score_expr binds: one %t% per term; term_conditions_or binds: one %t% per term
-        like_params.extend(f"%{t}%" for t in terms)  # for score_expr
+        like_params.extend(like_contains(t) for t in terms)  # for score_expr
         like_params.extend(params)
-        like_params.extend(f"%{t}%" for t in terms)  # for WHERE OR
+        like_params.extend(like_contains(t) for t in terms)  # for WHERE OR
         like_params.extend([limit, offset])
         with self._lock:
             count_row = self._conn.execute(count_sql, tuple(count_params)).fetchone()

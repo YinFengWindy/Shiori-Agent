@@ -90,6 +90,15 @@ export function getPluginEnabledPredicate(): PluginEnabledPredicate {
   return predicate;
 }
 
+/**
+ * Whether the roster has loaded at least once, so a caller can tell "not yet
+ * known" apart from "disabled". A `useSyncExternalStore` snapshot getter
+ * (see `usePluginRosterLoaded`); booleans are stable snapshots by value.
+ */
+export function isPluginRosterLoaded(): boolean {
+  return cache !== null;
+}
+
 /** Fetches the roster once (memoized); safe to call from multiple consumers. */
 export async function ensurePluginEnabledStateLoaded(
   client: Pick<PluginBridgeClient, "listPlugins"> = createPluginBridgeClient(),

@@ -6,12 +6,12 @@ import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry, type Plugin
 import type { StandaloneSettingsSectionProps } from "../settings/settingsPageTypes";
 import { createPluginSchemaSettingsSection } from "./pluginSchemaSettingsSectionFactory";
 import { type PluginRpcClient } from "./pluginBridgeClient";
+import { retiredPluginUiContribution } from "./runtimePluginUiValidation";
 import {
   pluginUiRegistry,
   type PluginNavPageProps,
   type PluginNavPageSidebarProps,
   type PluginRoleAssetsProps,
-  type PluginRoleMemoryProps,
   type PluginAccountDetailProps,
 } from "./pluginUiRegistry";
 
@@ -65,14 +65,6 @@ export type PluginRoleAssetsContribution = {
   component: React.ComponentType<PluginRoleAssetsComponentProps>;
 };
 
-/** Props a memory plugin's role-detail Dashboard receives with its scoped RPC client. */
-export type PluginRoleMemoryComponentProps = PluginRoleMemoryProps & PluginInjectedProps;
-
-/** A memory plugin's role.memory contribution. */
-export type PluginRoleMemoryContribution = {
-  component: React.ComponentType<PluginRoleMemoryComponentProps>;
-};
-
 /** Plugin-authored account controls receive a scoped RPC client and host services. */
 export type PluginAccountDetailComponentProps = PluginAccountDetailProps & PluginInjectedProps;
 
@@ -104,7 +96,6 @@ export type PluginUiModule = {
   settingsSection?: PluginSettingsSectionContribution;
   navPage?: PluginNavPageContribution;
   roleAssets?: PluginRoleAssetsContribution;
-  roleMemory?: PluginRoleMemoryContribution;
   accountDetail?: PluginAccountDetailContribution;
   roleSettings?: PluginRoleSettingsContribution;
   chatImageActions?: React.ComponentType<PluginChatImageActionProps>;
@@ -148,7 +139,12 @@ export function applyPluginUiModules(
       console.error(`[pluginUiModules] ${path} 的默认导出不是合法的 PluginUiModule，已跳过`);
       continue;
     }
-    const { pluginId, settingsSection, navPage, roleAssets, roleMemory, accountDetail } = uiModule;
+    const retired = retiredPluginUiContribution(uiModule);
+    if (retired) {
+      console.error(`[pluginUiModules] ${path}（${uiModule.pluginId}）已跳过：${retired}`);
+      continue;
+    }
+    const { pluginId, settingsSection, navPage, roleAssets, accountDetail } = uiModule;
     if (uiModule.roleSettings) pluginRoleSettingsRegistry.register({ pluginId, ...uiModule.roleSettings });
     if (uiModule.chatImageActions) pluginChatImageActionsRegistry.register({
       pluginId, Component: uiModule.chatImageActions,
@@ -181,14 +177,6 @@ export function applyPluginUiModules(
         id: pluginId,
         pluginId,
         Component: bindPluginClient(pluginId, roleAssets.component),
-      });
-    }
-    if (roleMemory) {
-      registry.registerRoleMemoryPanel({
-        slot: "role.memory",
-        id: pluginId,
-        pluginId,
-        Component: bindPluginClient(pluginId, roleMemory.component),
       });
     }
     if (accountDetail) {

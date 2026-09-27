@@ -10,7 +10,7 @@ import { RoleDetailHeader } from "./RoleDetailHeader";
 import { selectRoleDetailSaveState } from "./roleDetailSaveState";
 import type { RoleDetailTabId } from "./RoleDetailTabs";
 import { RoleDetailToolbar } from "./RoleDetailToolbar";
-import { RoleMemoryPanel } from "./RoleMemoryPanel";
+import { RoleMemoryPanel } from "../memory/RoleMemoryPanel";
 import { RoleProfilePanel } from "./RoleProfilePanel";
 import { RoleAccountsPanel } from "../accounts/RoleAccountsPanel";
 

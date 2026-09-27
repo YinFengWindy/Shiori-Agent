@@ -42,6 +42,12 @@ class QQBotAccountStore:
             [*([item for item in rows if item["app_id"] != row["app_id"]]), row],
         )
 
+    def remove(self, app_id: str) -> None:
+        """Deletes an application's credential and observed targets."""
+        rows = self.list()
+        if any(row["app_id"] == app_id for row in rows):
+            self._kv.set(_KEY, [row for row in rows if row["app_id"] != app_id])
+
     def migrate_legacy(self, app_id: str, secret: str) -> None:
         """Import the former single application exactly once, preserving its C2C IDs."""
         if (

@@ -8,6 +8,8 @@ import {
   dangerGhostButtonSurfaceClass,
   ghostButtonSurfaceClass,
   primaryButtonSurfaceClass,
+  segmentedTabClass,
+  segmentedTabListClass,
 } from "../shared/styles";
 import type { RoleAssetMode, RoleAssetPreview } from "./roleAssetPreview";
 import { roleAssetModes } from "./roleAssetPreview";
@@ -53,14 +55,11 @@ export function RoleAssetPreviewPane({
 
   return (
     <aside className="grid content-start gap-4 lg:sticky lg:top-0" data-testid="role-asset-preview">
-      <div className="grid grid-cols-3 gap-1 rounded-md bg-surface-soft p-1" role="tablist" aria-label="素材用途">
+      <div className={cx(segmentedTabListClass, "grid grid-cols-3 gap-1")} role="tablist" aria-label="素材用途">
         {roleAssetModes.map((item) => (
           <button
             key={item.id}
-            className={cx(
-              "h-8 rounded-md text-body-sm transition-colors duration-quick",
-              mode === item.id ? "bg-surface font-medium text-ink shadow-soft" : "text-ink-muted hover:text-ink",
-            )}
+            className={segmentedTabClass(mode === item.id)}
             data-testid={`selection-mode-${item.id}`}
             type="button"
             role="tab"

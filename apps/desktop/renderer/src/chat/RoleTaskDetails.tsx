@@ -15,15 +15,7 @@ import {
   chatSidebarPanelClass,
   chatSidebarScrollableClass,
 } from "./chatSidebarStyles";
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid gap-1 rounded-md px-3 py-2.5">
-      <span className="text-[10px] font-medium tracking-wide text-ink-faint">{label}</span>
-      <span className="break-words text-xs leading-5 text-ink-secondary">{value || "—"}</span>
-    </div>
-  );
-}
+import { DetailRow } from "../shared/ui/DetailRow";
 
 /** Renders complete task information and its supported actions. */
 export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onBack, onEdit, onBeginCancel, onCancel, onDismissCancel }: {

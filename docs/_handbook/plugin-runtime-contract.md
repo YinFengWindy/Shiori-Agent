@@ -289,6 +289,15 @@ The default exports retain the current contribution ABI:
 | `background` | `{ pluginId, setup(ctx) }`, matching `PluginBackgroundContribution` |
 | `surface` | `{ pluginId, surface: { component } }`, matching `PluginSurfaceModule` |
 
+A `ui` export that declares `roleMemory` is rejected as a failed export
+validation (`UI FAILED`, with a message naming the retired field). That
+contribution existed only in unreleased development builds and never belonged to
+a released runtime API, so its removal needs no runtime API version change. The
+host renders the whole role memory page itself: a memory plugin provides only
+the `roles.memory.documents`, `roles.memory.semantic.list` and
+`roles.memory.semantic.detail` RPCs, and the page reads the configured memory
+plugin alone.
+
 `pluginId` must match the manifest ID. UI and surface components receive the
 existing host-injected props; background setup receives the existing background
 context. Code must not assume Vite globs, host source-relative imports or a host

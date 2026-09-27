@@ -7,12 +7,27 @@ import json
 from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
 
 from .common import (
+    OCCURRED_EPOCH_SQL_FUNCTION,
     _coerce_emotional_weight,
     _domain_json_filter,
+    _domain_json_value,
     _json_text_key,
     _now_iso,
     _role_json_filter,
 )
+
+# Admin sort keys mapped to SQL; ``occurred_at`` is occurrence time with the
+# record time standing in for items that never got one, compared as instants
+# because the two columns are stored in different time zones.
+_ADMIN_SORT_EXPRESSIONS: dict[str, str] = {
+    "updated_at": "updated_at",
+    "created_at": "created_at",
+    "happened_at": "happened_at",
+    "occurred_at": f"{OCCURRED_EPOCH_SQL_FUNCTION}(happened_at, created_at)",
+    "reinforcement": "reinforcement",
+    "emotional_weight": "emotional_weight",
+    "memory_type": "memory_type",
+}
 
 
 class _StoreAdminMixin:
@@ -23,13 +38,10 @@ class _StoreAdminMixin:
         if not clean_role_id:
             raise ValueError("role_id required for memory invalidation")
         with self._lock:
+            # 与列表查询同一套角色过滤，避免 role_id 带空白的条目漏失效。
             cursor = self._db.execute(
-                """
-                UPDATE memory_items
-                SET status='superseded', updated_at=?
-                WHERE status!='superseded'
-                  AND json_extract(extra_json, '$.role_id')=?
-                """,
+                "UPDATE memory_items SET status='superseded', updated_at=? "
+                f"WHERE status!='superseded' AND {_role_json_filter()}",
                 (_now_iso(), clean_role_id),
             )
             self._db.commit()
@@ -53,19 +65,9 @@ class _StoreAdminMixin:
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
         with self._lock:
-            safe_sort_by = (
-                sort_by
-                if sort_by
-                in {
-                    "updated_at",
-                    "created_at",
-                    "happened_at",
-                    "reinforcement",
-                    "emotional_weight",
-                    "memory_type",
-                }
-                else "created_at"
-            )
+            if sort_by not in _ADMIN_SORT_EXPRESSIONS:
+                raise ValueError(f"unsupported memory sort: {sort_by}")
+            safe_sort_by = _ADMIN_SORT_EXPRESSIONS[sort_by]
             safe_sort_order = "asc" if sort_order == "asc" else "desc"
             safe_page = max(1, page)
             safe_page_size = max(1, min(page_size, 200))
@@ -170,6 +172,39 @@ class _StoreAdminMixin:
                     }
                 )
             return items, total
+
+    def list_role_filter_values(self, role_id: str) -> dict[str, list[str]]:
+        """Return the memory types and domains that one role's items actually use.
+
+        Every status counts, so the values stay stable while the Dashboard
+        switches between active and superseded items. Blank values are left
+        out because an empty filter already means "no filter".
+        """
+        clean_role_id = role_id.strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for memory filter values")
+        domain_sql = _domain_json_value()
+        with self._lock:
+            types = self._db.execute(
+                f"""
+                SELECT DISTINCT memory_type FROM memory_items
+                WHERE {_role_json_filter()} AND TRIM(memory_type) != ''
+                ORDER BY memory_type
+                """,
+                (clean_role_id,),
+            ).fetchall()
+            domains = self._db.execute(
+                f"""
+                SELECT DISTINCT {domain_sql} FROM memory_items
+                WHERE {_role_json_filter()} AND {domain_sql} != ''
+                ORDER BY 1
+                """,
+                (clean_role_id,),
+            ).fetchall()
+        return {
+            "memory_type": [str(row[0]) for row in types],
+            "memory_domain": [str(row[0]) for row in domains],
+        }
 
     def get_item_for_admin(
         self,

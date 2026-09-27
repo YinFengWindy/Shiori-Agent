@@ -9,6 +9,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
+from infra.persistence.sqlite_transaction import immediate_transaction
 from infra.persistence.text_store import atomic_save_text
 from infra.persistence.owned_assets import copy_owned_asset
 
@@ -68,8 +69,7 @@ def original_media_path(workspace: Path, value: str) -> str:
 
 def adopt_persisted_media(connection: sqlite3.Connection, workspace: Path) -> None:
     """Migrate message references atomically after all required copies exist."""
-    with connection:
-        connection.execute("BEGIN IMMEDIATE")
+    with immediate_transaction(connection):
         connection.execute(
             "CREATE TABLE IF NOT EXISTS media_migrations (version INTEGER PRIMARY KEY)"
         )

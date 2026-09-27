@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { accountStatus } from "./accountPresentation";
+import { accountDeletionDescription, accountHeadline, accountName, accountStatus } from "./accountPresentation";
 import type { AccountSnapshot } from "./accountClient";
 
 const account: AccountSnapshot = {
@@ -18,4 +18,12 @@ test("status uses live report and never presents a stopped provider as online", 
   assert.equal(accountStatus({ ...account, connection: "offline" }), "离线");
   assert.equal(accountStatus({ ...account, pluginEnabled: false }), "离线");
   assert.equal(accountStatus({ ...account, runtimeActive: false }), "离线");
+});
+
+test("account names fall back to the platform ID and the delete text names the account", () => {
+  assert.equal(accountName(account), "Demo");
+  assert.equal(accountName({ ...account, displayName: "" }), "101");
+  assert.equal(accountHeadline({ ...account, displayName: "" }), "demo · 101");
+  assert.equal(accountDeletionDescription(null), "");
+  assert.match(accountDeletionDescription(account), /^“demo · Demo” /);
 });

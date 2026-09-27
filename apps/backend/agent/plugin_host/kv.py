@@ -24,6 +24,13 @@ class PluginKVStore:
         data[key] = value
         self._write(data)
 
+    def delete(self, key: str) -> None:
+        """Removes one key; an absent key is already deleted."""
+        data = self._read()
+        if key in data:
+            del data[key]
+            self._write(data)
+
     def increment(self, key: str, delta: int = 1) -> int:
         """Adds delta to a persisted counter and returns its new value."""
         # 1. 读取 → 加 delta → 写回，返回新值

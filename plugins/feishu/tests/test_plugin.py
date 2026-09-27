@@ -17,6 +17,8 @@ from bus.event_bus import EventBus
 from core.accounts import AccountSnapshot
 from core.accounts.target_contract import UncertainDeliveryError
 from core.roles.store import RoleStore
+from agent.plugin_host.kv import PluginKVStore
+from agent.plugin_host.plugin_data import plugin_data_dir
 from plugins.feishu.backend.plugin import setup
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
@@ -32,7 +34,8 @@ async def test_shared_account_rpc_uses_selected_private_application() -> None:
                 "app_id": "cli_a",
                 "app_secret": "secret",
                 "domain": "feishu",
-            }
+            },
+            raw_as_dict=dict,
         ),
         kv=SimpleNamespace(
             get=lambda key, default: (
@@ -47,6 +50,7 @@ async def test_shared_account_rpc_uses_selected_private_application() -> None:
                 record=SimpleNamespace(id="account-a")
             ),
             report=lambda *args, **kwargs: None,
+            on_delete=lambda handler: None,
         ),
         channels=SimpleNamespace(add=channels.append),
         manifest=SimpleNamespace(channel_chat_types=lambda name: ()),
@@ -339,3 +343,104 @@ async def test_disconnect_and_reconnect_keep_the_saved_account(plugin_runtime) -
             [account] = listed.payload["accounts"]
             assert account["id"] == original["id"]
             assert account["connection"] == expected
+
+
+@pytest.mark.asyncio
+async def test_deleting_an_application_purges_config_caches_and_host_record(
+    plugin_runtime, tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("FEISHU_GONE_ID", "cli_gone")
+    monkeypatch.setenv("FEISHU_KEEP_ID", "cli_keep")
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
+    initial = (
+        '\n[plugins.feishu]\napp_id = "cli_old"\napp_secret = "old"\n'
+        'domain = "lark"\nlegacy_channel_ref = "lark:cli_old"\n'
+        '[[plugins.feishu.accounts]]\napp_id = "${FEISHU_GONE_ID}"\n'
+        'app_secret = "gone-secret"\ndomain = "feishu"\n'
+        '[[plugins.feishu.accounts]]\napp_id = "${FEISHU_KEEP_ID}"\n'
+        'app_secret = "${FEISHU_KEEP_SECRET}"\ndomain = "feishu"\n'
+    )
+    async with plugin_runtime(("feishu",), initial) as (service, path):
+        listed = await plugin_bridge_request(service, "accounts.list")
+        accounts = {
+            row["platform_account_id"]: row["id"] for row in listed.payload["accounts"]
+        }
+        kv = PluginKVStore(plugin_data_dir(tmp_path, "feishu") / "kv.json")
+        for key in ("profile", "targets"):
+            kv.set(f"{key}:lark:cli_old", {"stale": True})
+            kv.set(f"{key}:feishu:cli_keep", {"kept": True})
+        for ref in ("lark:cli_old", "feishu:cli_gone"):
+            assigned = await plugin_bridge_request(
+                service,
+                "accounts.assign",
+                {"account_id": accounts[ref], "role_id": "mira"},
+            )
+            assert assigned.error is None, assigned.error
+            deleted = await plugin_bridge_request(
+                service,
+                "accounts.delete",
+                {"account_id": accounts[ref], "role_id": "mira"},
+            )
+            assert deleted.error is None, deleted.error
+
+        after = await plugin_bridge_request(service, "accounts.list")
+        assert [row["id"] for row in after.payload["accounts"]] == [
+            accounts["feishu:cli_keep"]
+        ]
+        text = path.read_text(encoding="utf-8")
+        assert "cli_old" not in text and '"old"' not in text
+        assert "FEISHU_GONE_ID" not in text and "gone-secret" not in text
+        assert "${FEISHU_KEEP_ID}" in text and "${FEISHU_KEEP_SECRET}" in text
+        assert kv.get("profile:lark:cli_old") is None
+        assert kv.get("targets:lark:cli_old") is None
+        assert kv.get("profile:feishu:cli_keep") == {"kept": True}
+    assert [row.record.id for row in RoleStore(tmp_path).accounts.list()] == [
+        accounts["feishu:cli_keep"]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_delete_hook_closes_the_websocket_before_purging() -> None:
+    handlers: list[Any] = []
+    channels: list[Any] = []
+    kv: dict[str, Any] = {"profile:feishu:cli_a": {}, "targets:feishu:cli_a": {}}
+    ctx = SimpleNamespace(
+        config=SimpleNamespace(
+            as_dict=lambda: {"accounts": [{"app_id": "cli_a", "app_secret": "s"}]},
+            raw_as_dict=lambda: {"accounts": [{"app_id": "cli_a", "app_secret": "s"}]},
+        ),
+        kv=SimpleNamespace(
+            get=lambda key, default: kv.get(key, default),
+            delete=lambda key: kv.pop(key, None),
+        ),
+        rpc=SimpleNamespace(register=lambda *args, **kwargs: None),
+        accounts=SimpleNamespace(
+            register=lambda **kwargs: SimpleNamespace(
+                record=SimpleNamespace(id="account-a")
+            ),
+            report=lambda *args, **kwargs: None,
+            on_delete=handlers.append,
+        ),
+        channels=SimpleNamespace(add=channels.append),
+        manifest=SimpleNamespace(channel_chat_types=lambda name: ()),
+    )
+    await setup(ctx)
+    [channel] = channels
+    order: list[str] = []
+    channel.stop = AsyncMock(side_effect=lambda: order.append(f"stop:{len(kv)}"))
+
+    plan = handlers[0]("feishu:cli_a")
+
+    # Planning is side-effect free; disconnect closes before purge deletes.
+    assert plan.plugin_config == {"accounts": []}
+    assert order == [] and len(kv) == 2
+    await plan.disconnect()
+    await plan.purge()
+    assert order == ["stop:2"]
+    assert kv == {}
+    assert channel._accounts is None
+    repeated = handlers[0]("feishu:cli_a")
+    await repeated.disconnect()
+    await repeated.purge()
+    assert channel.stop.await_count == 1
+    assert repeated.plugin_config == {"accounts": []}

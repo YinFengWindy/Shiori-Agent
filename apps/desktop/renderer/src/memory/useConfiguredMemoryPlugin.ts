@@ -6,7 +6,7 @@ type Selection = { status: "loading" | "ready" | "error"; pluginId: string; erro
 /** The bridge gets its full request deadline; IPC delivery and UI scheduling get 5s more. */
 export const settingsReadTimeoutMs = bridgeTimeoutPolicy.defaultRequest + 5_000;
 
-/** Maps the saved memory engine to the plugin that owns its Dashboard. */
+/** Maps the saved memory engine to the plugin that serves its role memory RPCs. */
 export function memoryPluginId(engine: string): string {
   const normalized = engine.trim();
   return !normalized || normalized === "default" ? "default_memory" : normalized;

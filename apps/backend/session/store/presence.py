@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 from typing import Any
 
+from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_prefix
+
 
 class _PresenceMixin:
     def update_presence(
@@ -82,10 +84,11 @@ class _PresenceMixin:
         return row["last_user_at"]
 
     def get_channel_metadata(self, channel: str) -> list[dict[str, Any]]:
-        like_key = f"{channel}:%"
+        like_key = like_prefix(f"{channel}:")
         with self._lock:
             rows = self._conn.execute(
-                "SELECT key, metadata FROM sessions WHERE key LIKE ?", (like_key,)
+                f"SELECT key, metadata FROM sessions WHERE key LIKE ? {LIKE_ESCAPE_CLAUSE}",
+                (like_key,),
             ).fetchall()
         results: list[dict[str, Any]] = []
         for row in rows:

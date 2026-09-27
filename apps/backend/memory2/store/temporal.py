@@ -7,6 +7,8 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import cast
 
+from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
+
 from .common import (
     _MemoryHit,
     _TIME_FILTER_KEYWORD_CANDIDATE_LIMIT,
@@ -277,11 +279,14 @@ class _StoreTemporalMixin:
                 (scope_chat_id or "").strip(),
             ]
 
-        or_conditions = " OR ".join("summary LIKE ?" for _ in terms)
-        score_expr = " + ".join(
-            "(CASE WHEN summary LIKE ? THEN 1 ELSE 0 END)" for _ in terms
+        or_conditions = " OR ".join(
+            f"summary LIKE ? {LIKE_ESCAPE_CLAUSE}" for _ in terms
         )
-        like_vals = [f"%{t}%" for t in terms]
+        score_expr = " + ".join(
+            f"(CASE WHEN summary LIKE ? {LIKE_ESCAPE_CLAUSE} THEN 1 ELSE 0 END)"
+            for _ in terms
+        )
+        like_vals = [like_contains(t) for t in terms]
 
         has_time_filter = time_start is not None or time_end is not None
         time_filter = ""

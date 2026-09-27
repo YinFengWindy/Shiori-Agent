@@ -18,10 +18,25 @@ function label(value: unknown, field: string) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`Invalid ${field} label`);
 }
 
+/**
+ * Diagnostic for a UI module that still declares `roleMemory`. That
+ * contribution never shipped in a released runtime API: the host renders the
+ * role memory page itself from the configured memory plugin's RPCs.
+ */
+const retiredRoleMemory = "roleMemory is retired: the host renders the role memory page from the configured memory plugin's roles.memory.documents / roles.memory.semantic.list / roles.memory.semantic.detail RPCs; remove this contribution";
+
+/** The diagnostic when a UI module still declares the retired `roleMemory` contribution, or null. */
+export function retiredPluginUiContribution(module: object) {
+  return Object.hasOwn(module, "roleMemory") ? retiredRoleMemory : null;
+}
+
 /** Validates the complete UI ABI before mutating any contribution registry. */
 export function validateRuntimePluginUi(value: unknown, pluginId: string) {
   const module = object(value);
   if (module.pluginId !== pluginId) throw new Error("Plugin UI identity does not match its admitted package");
+  const retired = retiredPluginUiContribution(module);
+  // Rejected loudly rather than ignored, so the author sees why the panel vanished.
+  if (retired) throw new Error(retired);
   if (module.navPage !== undefined) {
     const page = object(module.navPage);
     component(page.component, "navPage");
@@ -38,7 +53,6 @@ export function validateRuntimePluginUi(value: unknown, pluginId: string) {
     if (section.kind === "component") component(section.component, "settingsSection");
   }
   if (module.roleAssets !== undefined) component(object(module.roleAssets).component, "roleAssets");
-  if (module.roleMemory !== undefined) component(object(module.roleMemory).component, "roleMemory");
   if (module.accountDetail !== undefined) component(object(module.accountDetail).component, "accountDetail");
   if (module.chatImageActions !== undefined) component(module.chatImageActions, "chatImageActions");
   if (module.roleSettings !== undefined) {

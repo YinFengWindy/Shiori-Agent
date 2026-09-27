@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import {
   ensurePluginEnabledStateLoaded,
   getPluginEnabledPredicate,
+  isPluginRosterLoaded,
   subscribePluginEnabledState,
 } from "./pluginEnabledStateStore";
 import { errorMessage } from "../shared/feedback/feedbackStore";
@@ -35,4 +36,13 @@ export function usePluginEnabledState(): (pluginId: string) => boolean {
     });
   }, []);
   return isPluginEnabled;
+}
+
+/**
+ * Whether the plugin roster has loaded once. Pair with `usePluginEnabledState`
+ * (which triggers the load) when "not yet known" must render differently from
+ * "disabled".
+ */
+export function usePluginRosterLoaded() {
+  return useSyncExternalStore(subscribePluginEnabledState, isPluginRosterLoaded, isPluginRosterLoaded);
 }
