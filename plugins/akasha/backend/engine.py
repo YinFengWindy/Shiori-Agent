@@ -65,6 +65,7 @@ from core.memory.engine import (
     MemoryToolProfile,
     MemoryToolSpec,
 )
+from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
 from memory2.embedder import Embedder
 
 from .config import AkashaConfig, resolve_akasha_db_path
@@ -547,16 +548,15 @@ class AkashaMemoryEngine:
         sessions = self._store.list_role_session_keys(role_id)
         if not sessions or not self._session_db_path.exists():
             return []
-        escaped = (
-            query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        )
+        pattern = like_contains(query.strip())
         keys: set[str] = set()
         with closing(sqlite3.connect(str(self._session_db_path))) as db:
             for session_key in sessions:
                 rows = db.execute(
                     "SELECT seq, role FROM messages WHERE session_key = ? "
-                    "AND content LIKE ? ESCAPE '\\' AND role IN ('user', 'assistant')",
-                    (session_key, f"%{escaped}%"),
+                    f"AND content LIKE ? {LIKE_ESCAPE_CLAUSE} "
+                    "AND role IN ('user', 'assistant')",
+                    (session_key, pattern),
                 ).fetchall()
                 for seq, message_role in rows:
                     keys.add(turn_key(session_key, int(seq), str(message_role))[2])

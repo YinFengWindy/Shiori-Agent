@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 from types import SimpleNamespace
 
 import pytest
@@ -126,3 +127,75 @@ async def test_semantic_reads_report_disabled_engine_after_role_validation(
     assert (await reader.detail({"role_id": "mira"}))["status"] == "disabled"
     with pytest.raises(ValueError, match="role not found"):
         await reader.list({"role_id": "atlas"})
+
+
+def _listed(result: dict[str, object], field: str) -> list[object]:
+    """Read one field from every item of a semantic list response."""
+    return [item[field] for item in cast(list[dict[str, object]], result["items"])]
+
+
+def _detail(result: dict[str, object], field: str) -> object:
+    """Read one field from the item of a semantic detail response."""
+    return cast(dict[str, object], result["item"])[field]
+
+
+def _store_reader(tmp_path: Path, store: MemoryStore2, *role_ids: str):
+    """Build a reader over a real memory2 store with the given persisted roles."""
+    from plugins.default_memory.backend.role_memory import DefaultRoleMemoryReader
+
+    roles = RoleStore(tmp_path)
+    for role_id in role_ids:
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="test")
+    engine = SimpleNamespace(
+        list_items_for_admin=store.list_items_for_admin,
+        get_item_for_admin=store.get_item_for_admin,
+    )
+    return DefaultRoleMemoryReader(roles, engine)
+
+
+@pytest.mark.asyncio
+async def test_semantic_list_matches_like_wildcards_literally(tmp_path: Path) -> None:
+    store = MemoryStore2(tmp_path / "memory.db")
+    try:
+        reader = _store_reader(tmp_path, store, "mira")
+        for summary in ("Mira tea", "Mira 100% coffee", "Mira snake_case", "a\\b"):
+            store.upsert_item(
+                "preference", summary, embedding=None, extra={"role_id": "mira"}
+            )
+
+        percent = await reader.list({"role_id": "mira", "q": "%"})
+        underscore = await reader.list({"role_id": "mira", "q": "_"})
+        backslash = await reader.list({"role_id": "mira", "q": "\\"})
+
+        assert _listed(percent, "summary") == ["Mira 100% coffee"]
+        assert _listed(underscore, "summary") == ["Mira snake_case"]
+        assert _listed(backslash, "summary") == ["a\\b"]
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_semantic_detail_accepts_items_the_list_shows_for_padded_role_id(
+    tmp_path: Path,
+) -> None:
+    store = MemoryStore2(tmp_path / "memory.db")
+    try:
+        reader = _store_reader(tmp_path, store, "mira", "atlas")
+        padded_id = store.upsert_item(
+            "preference", "Mira tea", embedding=None, extra={"role_id": "  mira "}
+        ).split(":", 1)[1]
+        atlas_id = store.upsert_item(
+            "preference", "Atlas tea", embedding=None, extra={"role_id": " atlas"}
+        ).split(":", 1)[1]
+
+        listed = await reader.list({"role_id": "mira"})
+        detail = await reader.detail({"role_id": "mira", "item_id": padded_id})
+
+        assert _listed(listed, "id") == [padded_id]
+        assert _detail(detail, "id") == padded_id
+        with pytest.raises(ValueError, match="memory item not found"):
+            await reader.detail({"role_id": "mira", "item_id": atlas_id})
+        with pytest.raises(ValueError, match="memory item not found"):
+            await reader.detail({"role_id": "atlas", "item_id": padded_id})
+    finally:
+        store.close()
