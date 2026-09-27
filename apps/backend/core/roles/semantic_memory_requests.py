@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from .store import RoleStore
@@ -17,6 +18,26 @@ def require_memory_role(role_store: RoleStore, payload: dict[str, Any]) -> str:
 
 SEMANTIC_STATUS_FILTERS: tuple[str, ...] = ("active", "superseded", "all")
 """Status filter values an engine declares when it can filter by item status."""
+
+SEMANTIC_FILTER_DIMENSIONS: tuple[str, ...] = ("memory_type", "memory_domain", "status")
+"""Every structured filter a list request may carry; engines declare a subset."""
+
+
+def reject_undeclared_filters(
+    payload: dict[str, Any], declared: Mapping[str, object]
+) -> None:
+    """Fail when a request filters on a dimension the engine did not declare.
+
+    ``declared`` is the ``filters`` object the engine returns, so the check
+    follows the engine's own declaration instead of a separate block list.
+    """
+    undeclared = [
+        key
+        for key in SEMANTIC_FILTER_DIMENSIONS
+        if key in payload and key not in declared
+    ]
+    if undeclared:
+        raise ValueError(f"unsupported memory filters: {', '.join(undeclared)}")
 
 
 def page_options(payload: dict[str, Any]) -> tuple[int, int, str]:

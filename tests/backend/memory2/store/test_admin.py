@@ -1,4 +1,9 @@
+from datetime import datetime, timedelta
+
+import pytest
+
 from memory2.store import MemoryStore2
+from memory2.store.common import _local_naive_iso
 
 
 def test_invalidate_role_memories_only_supersedes_target_role(tmp_path) -> None:
@@ -95,5 +100,50 @@ def test_list_items_for_admin_sorts_occurred_at_with_record_time_fallback(
         items, _ = store.list_items_for_admin(sort_by="occurred_at", sort_order="asc")
 
         assert [item["id"] for item in items] == [earlier, undated, later]
+    finally:
+        store.close()
+
+
+def test_list_items_for_admin_sorts_local_happened_at_and_utc_created_at_as_instants(
+    tmp_path,
+) -> None:
+    store = MemoryStore2(tmp_path / "memory2.db")
+    try:
+        recorded = store.upsert_item("event", "只有记录时间", embedding=None).split(
+            ":", 1
+        )[1]
+        created_at = datetime.fromisoformat(
+            str(store.get_item_for_admin(recorded)["created_at"])
+        )
+        # happened_at is naive time in the store's fixed _LOCAL_TZ (not the OS
+        # zone), so these are 2 hours before / 1 hour after the UTC record time
+        # while their raw text sorts after it whenever the offset exceeds that.
+        before = store.upsert_item(
+            "event",
+            "两小时前",
+            embedding=None,
+            happened_at=_local_naive_iso(created_at - timedelta(hours=2)),
+        ).split(":", 1)[1]
+        after = store.upsert_item(
+            "event",
+            "一小时后",
+            embedding=None,
+            happened_at=_local_naive_iso(created_at + timedelta(hours=1)),
+        ).split(":", 1)[1]
+
+        oldest, _ = store.list_items_for_admin(sort_by="occurred_at", sort_order="asc")
+        newest, _ = store.list_items_for_admin(sort_by="occurred_at", sort_order="desc")
+
+        assert [item["id"] for item in oldest] == [before, recorded, after]
+        assert [item["id"] for item in newest] == [after, recorded, before]
+    finally:
+        store.close()
+
+
+def test_list_items_for_admin_rejects_unknown_sort(tmp_path) -> None:
+    store = MemoryStore2(tmp_path / "memory2.db")
+    try:
+        with pytest.raises(ValueError, match="unsupported memory sort: summary"):
+            store.list_items_for_admin(sort_by="summary")
     finally:
         store.close()

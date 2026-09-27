@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from core.roles.semantic_memory_requests import (
     page_options,
     readable_item,
+    reject_undeclared_filters,
     require_memory_role,
 )
 from desktop_bridge.method_policy import Concurrency
@@ -14,8 +15,9 @@ from desktop_bridge.method_policy import Concurrency
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
-# Structured filters the Dashboard contract defines but Akasha nodes cannot honour.
-_UNSUPPORTED_FILTERS = ("memory_type", "memory_domain", "status")
+# Every node is a turn with no domain or lifecycle status, so Akasha declares no
+# structured filters; requests may only search and sort.
+_DECLARED_FILTERS: dict[str, list[str]] = {}
 
 
 class AkashaRoleMemoryReader:
@@ -31,9 +33,7 @@ class AkashaRoleMemoryReader:
         if self._engine is None:
             return {"role_id": role_id, "status": "disabled", "items": [], "total": 0}
         page, page_size, sort_order = page_options(payload)
-        unsupported = [key for key in _UNSUPPORTED_FILTERS if payload.get(key)]
-        if unsupported:
-            raise ValueError(f"akasha does not filter by: {', '.join(unsupported)}")
+        reject_undeclared_filters(payload, _DECLARED_FILTERS)
         items, total = self._engine.list_items_for_admin(
             role_id=role_id,
             q=str(payload.get("q") or "").strip(),
@@ -50,8 +50,7 @@ class AkashaRoleMemoryReader:
             "total": total,
             "page": page,
             "page_size": page_size,
-            # Every node is a turn with no domain or lifecycle status to filter on.
-            "filters": {},
+            "filters": dict(_DECLARED_FILTERS),
         }
 
     async def detail(self, payload: dict[str, Any]) -> dict[str, object]:

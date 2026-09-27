@@ -151,7 +151,7 @@ async def test_semantic_list_sorts_by_turn_time_and_declares_no_structured_filte
             "role:mira:2",
         ]
         for key in ("memory_type", "memory_domain", "status"):
-            with pytest.raises(ValueError, match=f"akasha does not filter by: {key}"):
+            with pytest.raises(ValueError, match=f"unsupported memory filters: {key}"):
                 await reader.list({"role_id": "mira", key: "turn"})
         with pytest.raises(ValueError, match="sort_by is not supported"):
             await reader.list({"role_id": "mira", "sort_by": "updated_at"})

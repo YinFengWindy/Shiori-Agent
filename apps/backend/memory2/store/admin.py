@@ -5,19 +5,22 @@ from __future__ import annotations
 import json
 
 from .common import (
+    OCCURRED_EPOCH_SQL_FUNCTION,
     _coerce_emotional_weight,
     _domain_json_filter,
+    _domain_json_value,
     _now_iso,
     _role_json_filter,
 )
 
 # Admin sort keys mapped to SQL; ``occurred_at`` is occurrence time with the
-# record time standing in for items that never got one.
+# record time standing in for items that never got one, compared as instants
+# because the two columns are stored in different time zones.
 _ADMIN_SORT_EXPRESSIONS: dict[str, str] = {
     "updated_at": "updated_at",
     "created_at": "created_at",
     "happened_at": "happened_at",
-    "occurred_at": "COALESCE(NULLIF(TRIM(happened_at), ''), created_at)",
+    "occurred_at": f"{OCCURRED_EPOCH_SQL_FUNCTION}(happened_at, created_at)",
     "reinforcement": "reinforcement",
     "emotional_weight": "emotional_weight",
     "memory_type": "memory_type",
@@ -62,7 +65,9 @@ class _StoreAdminMixin:
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
         with self._lock:
-            safe_sort_by = _ADMIN_SORT_EXPRESSIONS.get(sort_by, "created_at")
+            if sort_by not in _ADMIN_SORT_EXPRESSIONS:
+                raise ValueError(f"unsupported memory sort: {sort_by}")
+            safe_sort_by = _ADMIN_SORT_EXPRESSIONS[sort_by]
             safe_sort_order = "asc" if sort_order == "asc" else "desc"
             safe_page = max(1, page)
             safe_page_size = max(1, min(page_size, 200))
@@ -173,7 +178,7 @@ class _StoreAdminMixin:
         clean_role_id = role_id.strip()
         if not clean_role_id:
             raise ValueError("role_id required for memory filter values")
-        domain_sql = "COALESCE(TRIM(json_extract(extra_json, '$.memory_domain')), '')"
+        domain_sql = _domain_json_value()
         with self._lock:
             types = self._db.execute(
                 f"""

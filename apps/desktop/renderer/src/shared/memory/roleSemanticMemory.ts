@@ -1,3 +1,5 @@
+import type { SelectOption } from "../ui/Select";
+
 /** Item lifecycle filter values; mirrors the backend's `SEMANTIC_STATUS_FILTERS`. */
 export type RoleSemanticStatusFilter = "active" | "superseded" | "all";
 
@@ -72,11 +74,17 @@ export const initialSemanticQuery: RoleSemanticQuery = {
 /** Status an engine applies when the query leaves `status` unset. */
 export const defaultSemanticStatus: RoleSemanticStatusFilter = "active";
 
-/** Picker options for the two occurrence-time directions. */
-export const semanticSortOptions: readonly { value: RoleSemanticSortOrder; label: string }[] = [
-  { value: "desc", label: "最新" },
-  { value: "asc", label: "最早" },
-];
+/** The two occurrence-time directions, in picker order. */
+export const semanticSortOrders: readonly RoleSemanticSortOrder[] = ["desc", "asc"];
+
+/** Picker labels for each occurrence-time direction. */
+export const semanticSortLabels: Record<RoleSemanticSortOrder, string> = {
+  desc: "最新",
+  asc: "最早",
+};
+
+/** Shared-picker options for the two occurrence-time directions. */
+export const semanticSortOptions: readonly SelectOption[] = semanticSortOrders.map((value) => ({ value, label: semanticSortLabels[value] }));
 
 /** Picker labels for every status an engine may declare. */
 export const semanticStatusLabels: Record<RoleSemanticStatusFilter, string> = {
