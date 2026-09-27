@@ -360,7 +360,11 @@ def _attempt(
 
 
 def write_results(artifact_root: Path, results: list[dict[str, object]]) -> None:
-    """Replaces results.json atomically, so readers and kills never see partial JSON."""
+    """Replaces results.json atomically: readers only ever see a complete file.
+
+    An interrupted write can leave a partial ``results.json.tmp`` behind, but
+    ``results.json`` itself always holds the last complete result.
+    """
     staging = artifact_root / "results.json.tmp"
     staging.write_text(json.dumps(results, indent=2), encoding="utf-8")
     os.replace(staging, artifact_root / "results.json")

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 import json
 from pathlib import Path
-import time
+import threading
 
 import pytest
 
@@ -257,21 +257,32 @@ def test_verify_fields_cannot_override_the_runner_owned_status(
     assert results[0]["result"] == "ok"
 
 
-def test_results_are_written_as_each_plugin_completes(tmp_path: Path) -> None:
+def test_results_are_written_as_each_plugin_completes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A run killed mid-way (e.g. by the CI timeout) still leaves partial evidence."""
     results_file = tmp_path / "results.json"
     seen_while_running: list[object] = []
+    recorded = threading.Event()
+    write_results = runner.write_results
+
+    def observed_write(artifact_root: Path, results: list[dict[str, object]]) -> None:
+        write_results(artifact_root, results)
+        if results:
+            recorded.set()
+
+    monkeypatch.setattr(runner, "write_results", observed_write)
 
     def verify(plugin_id: str) -> dict[str, object]:
         if plugin_id == "slow":
-            # Wait until the main thread has recorded the fast plugin. The file is
-            # replaced atomically, so every read here sees complete JSON.
-            deadline = time.monotonic() + 5
-            recorded = json.loads(results_file.read_text(encoding="utf-8"))
-            while not recorded and time.monotonic() < deadline:
-                time.sleep(0.01)
-                recorded = json.loads(results_file.read_text(encoding="utf-8"))
-            seen_while_running.append(recorded)
+            # Read only after the main thread finished recording the fast plugin.
+            # Polling instead would let an open read handle collide with the
+            # writer's os.replace, which Windows rejects with PermissionError.
+            # The main thread writes nothing more until this plugin returns.
+            recorded.wait(timeout=5)
+            seen_while_running.append(
+                json.loads(results_file.read_text(encoding="utf-8"))
+            )
         return {"result": "1 passed"}
 
     runner.verify_all(["fast", "slow"], verify, artifact_root=tmp_path, jobs=2)
