@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable, Iterable, Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 import zipfile
 
@@ -20,6 +23,16 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 UV = str(Path(sys.executable).with_name("uv.exe" if os.name == "nt" else "uv"))
 if not Path(UV).is_file():
     UV = "uv"
+# Measured as the longest suites in CI; starting them first shortens the pool's tail.
+SLOW_PLUGINS = ("telegram", "feishu", "qqbot")
+
+
+class CommandFailed(RuntimeError):
+    """An external command exited unexpectedly; ``log`` holds its complete output."""
+
+    def __init__(self, message: str, *, log: Path) -> None:
+        super().__init__(message)
+        self.log = log
 
 
 def clean_environment() -> dict[str, str]:
@@ -58,8 +71,9 @@ def run(command: list[str], *, cwd: Path, log: Path, expected: int = 0) -> str:
     )
     log.write_text(result.stdout, encoding="utf-8")
     if result.returncode != expected:
-        raise RuntimeError(
-            f"Expected exit {expected}, got {result.returncode}; see {log}\n{result.stdout[-6000:]}"
+        raise CommandFailed(
+            f"Expected exit {expected}, got {result.returncode}; see {log}\n{result.stdout[-6000:]}",
+            log=log,
         )
     return result.stdout
 
@@ -76,6 +90,24 @@ def build_wheel(source: Path, destination: Path, log: Path) -> Path:
     return next(
         path for path in destination.glob("*.whl") if path.name.startswith(prefix)
     )
+
+
+def build_wheels(
+    sources: Mapping[str, Path], wheelhouse: Path, logs: Path, *, jobs: int
+) -> dict[str, Path]:
+    """Builds every package concurrently into the shared wheelhouse.
+
+    Each source writes build state only in its own directory, and wheel lookup keys
+    on the distinct ``<name>-`` prefix, so concurrent builds cannot collide.
+    """
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures = {
+            name: pool.submit(
+                build_wheel, source, wheelhouse, logs / f"build-{name}.log"
+            )
+            for name, source in sources.items()
+        }
+        return {name: future.result() for name, future in futures.items()}
 
 
 def check_host_wheel(wheel: Path, log: Path) -> None:
@@ -283,12 +315,73 @@ def plugin_dependencies(
     return resolved
 
 
-def main() -> None:
+def schedule(plugin_ids: Iterable[str]) -> list[str]:
+    """Orders known-slow suites first; the remaining order is preserved."""
+    return sorted(plugin_ids, key=lambda plugin_id: plugin_id not in SLOW_PLUGINS)
+
+
+def _attempt(
+    plugin_id: str, verify: Callable[[str], dict[str, object]]
+) -> dict[str, object]:
+    """Runs one plugin and converts its failure into a result entry.
+
+    This is the per-plugin boundary: one failing suite must not stop the others.
+    """
+    started = time.perf_counter()
+    entry: dict[str, object]
+    try:
+        entry = {"plugin": plugin_id, "status": "passed", **verify(plugin_id)}
+    except Exception as error:
+        # Bare asserts in verify_plugin carry no message; fall back to the type name.
+        lines = str(error).splitlines()
+        entry = {
+            "plugin": plugin_id,
+            "status": "failed",
+            "error": lines[0] if lines else type(error).__name__,
+            "log": str(error.log) if isinstance(error, CommandFailed) else None,
+        }
+    entry["seconds"] = round(time.perf_counter() - started, 1)
+    return entry
+
+
+def verify_all(
+    plugin_ids: Iterable[str],
+    verify: Callable[[str], dict[str, object]],
+    *,
+    jobs: int,
+) -> list[dict[str, object]]:
+    """Verifies every plugin in a thread pool and returns entries sorted by plugin."""
+    results = []
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures = [
+            pool.submit(_attempt, plugin_id, verify)
+            for plugin_id in schedule(plugin_ids)
+        ]
+        for future in as_completed(futures):
+            entry = future.result()
+            detail = entry.get("result") or entry.get("error")
+            print(
+                f"{entry['status']:<6} {entry['plugin']} {entry['seconds']}s: {detail}",
+                flush=True,
+            )
+            results.append(entry)
+    return sorted(results, key=lambda entry: str(entry["plugin"]))
+
+
+def main(argv: list[str] | None = None) -> None:
     """Creates durable isolation evidence without modifying or installing from an editable checkout."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--plugins", nargs="+")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=os.cpu_count() or 1,
+        help="concurrent wheel builds and plugin verifications (default: CPU count)",
+    )
+    args = parser.parse_args(argv)
+    if args.jobs < 1:
+        parser.error("--jobs must be at least 1")
     artifact_root = (
         args.output or Path(tempfile.mkdtemp(prefix="shiori-plugin-isolation-"))
     ).resolve()
@@ -308,37 +401,44 @@ def main() -> None:
                 f"Tested plugin {plugin_id} must declare its package and test dependencies"
             )
     dependencies = plugin_dependencies(set(plugin_ids), extras=frozenset({"test"}))
-    copies, wheels = {}, {}
+    copies = {}
     for plugin_id in sorted(dependencies):
         copies[plugin_id] = artifact_root / "sources" / plugin_id
         stage_plugin_package(REPOSITORY / "plugins" / plugin_id, copies[plugin_id])
-        wheels[plugin_id] = build_wheel(
-            copies[plugin_id], wheelhouse, artifact_root / f"build-{plugin_id}.log"
-        )
-    host = build_wheel(REPOSITORY, wheelhouse, artifact_root / "build-host.log")
-    kit = build_wheel(
-        REPOSITORY / "packages/shiori-plugin-testkit",
+    wheels = build_wheels(
+        {
+            **copies,
+            "host": REPOSITORY,
+            "testkit": REPOSITORY / "packages/shiori-plugin-testkit",
+        },
         wheelhouse,
-        artifact_root / "build-testkit.log",
+        artifact_root,
+        jobs=args.jobs,
     )
+    host, kit = wheels["host"], wheels["testkit"]
     check_host_wheel(host, artifact_root / "host-wheel-files.txt")
-    results = []
-    for plugin_id in plugin_ids:
-        print(f"Verifying {plugin_id} in a fresh external environment", flush=True)
-        results.append(
-            verify_plugin(
-                plugin_id,
-                artifact_root=artifact_root,
-                wheelhouse=wheelhouse,
-                source=copies[plugin_id],
-                host=host,
-                kit=kit,
-                wheel=wheels[plugin_id],
-            )
-        )
-        (artifact_root / "results.json").write_text(
-            json.dumps(results, indent=2), encoding="utf-8"
-        )
+    results = verify_all(
+        plugin_ids,
+        lambda plugin_id: verify_plugin(
+            plugin_id,
+            artifact_root=artifact_root,
+            wheelhouse=wheelhouse,
+            source=copies[plugin_id],
+            host=host,
+            kit=kit,
+            wheel=wheels[plugin_id],
+        ),
+        jobs=args.jobs,
+    )
+    (artifact_root / "results.json").write_text(
+        json.dumps(results, indent=2), encoding="utf-8"
+    )
+    failed = [entry for entry in results if entry["status"] == "failed"]
+    if failed:
+        print(f"{len(failed)} of {len(results)} plugin suites failed:", flush=True)
+        for entry in failed:
+            print(f"  {entry['plugin']}: {entry['log'] or entry['error']}", flush=True)
+        raise SystemExit(1)
     print(f"All {len(results)} plugin suites passed: {artifact_root}", flush=True)
 
 

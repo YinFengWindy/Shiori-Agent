@@ -34,10 +34,10 @@ uv run pytest
 uv run python scripts/verify_plugin_tests.py --output /absolute/path/outside-repository/plugin-isolation
 ```
 
-输出目录必须在仓库外且是新目录。不传 `--output` 会创建系统临时目录。可用 `--plugins novelai story` 只验证受影响插件；不传时发现所有具有 Python 测试的插件。
+输出目录必须在仓库外且是新目录。不传 `--output` 会创建系统临时目录。可用 `--plugins novelai story` 只验证受影响插件；不传时发现所有具有 Python 测试的插件。`--jobs N` 控制 wheel 构建与插件验证的并发数，默认为 CPU 数；已知耗时最长的插件（telegram、feishu、qqbot）优先调度。
 
 脚本将被测插件复制到输出目录，从副本构建 wheel，并构建真实宿主和 testkit wheel。每个目标有单独的干净 venv，仅安装宿主、testkit、目标与其声明依赖。闭包按实际安装的 `目标[test]` 计算：目标的 `project.dependencies` 与 `project.optional-dependencies.test` 都参与构建和来源审计；仅供测试的兄弟依赖（例如状态命令测试使用的 observe）应放在 test extra，不进入运行时依赖。传递兄弟插件只跟随运行时依赖和依赖边显式请求的 extras，不自动启用兄弟的 test extra。环境 marker 按实际测试解释器及已启用 extra 求值；testkit 单独构建，不当作插件目录。安装为非 editable；不会共享已安装的其他测试目标。子进程清空 Python/pytest 导入注入与服务凭证，不调用真实收费模型。
 
 每个目标执行全部测试后验证宿主模块来自该环境的 site-packages、目标插件代码与副本一致、安装依赖闭包正确、没有 editable 安装；还实际读取内置技能、共享 emoji 并调用初始化流程复制配置模板。最后单独运行故意在 `await` 后失败的异步用例，要求退出码 1 和执行标记，证明 pytest 真正等待了协程。
 
-`results.json`、`host-wheel-files.txt`、各包的 `pytest.log`、`provenance.json`、`async-failure.log` 是验收证据。预期失败的异步探针不算插件失败；任何其他失败或依赖缺失都会停止验证。CI 对全部插件执行此流程并上传证据，不能用只收集测试或跳过宿主集成用例替代。
+`results.json`、`host-wheel-files.txt`、各包的 `pytest.log`、`provenance.json`、`async-failure.log` 是验收证据。预期失败的异步探针不算插件失败。wheel 构建失败会停止验证；单个插件的失败或依赖缺失不会中止其余插件，全部跑完后列出失败插件及其日志路径并以非零退出。`results.json` 在全部完成后统一写入，按插件排序，包含通过与失败条目及各自耗时。CI 在独立的 `plugin-isolation` job 中对全部插件执行此流程并上传证据，不能用只收集测试或跳过宿主集成用例替代。

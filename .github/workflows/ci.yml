@@ -49,9 +49,29 @@ jobs:
           # 避免遗漏插件或公开 testkit 的用例（#178、#215）。
           .venv/bin/pytest -q -W error
 
+  plugin-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The runner imports only packaging and the testkit's stdlib-only staging
+      # helper; every plugin gets its own venv built from private wheels.
+      - name: Install runner dependencies
+        run: python -m pip install uv packaging
+
       - name: Verify portable plugin tests
         timeout-minutes: 20
-        run: .venv/bin/python scripts/verify_plugin_tests.py --output "${{ runner.temp }}/plugin-isolation"
+        env:
+          # Read from source so the testkit tree is not touched before its wheel
+          # is built; the runner strips PYTHON* from every child process.
+          PYTHONPATH: packages/shiori-plugin-testkit/src
+        run: python scripts/verify_plugin_tests.py --output "${{ runner.temp }}/plugin-isolation"
 
       - name: Upload plugin isolation evidence
         if: always()
