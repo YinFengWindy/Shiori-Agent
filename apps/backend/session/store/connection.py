@@ -8,20 +8,15 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from conversation.store import ensure_conversation_schema
+from infra.persistence.sqlite_transaction import immediate_transaction
 
 
 class _SessionConnection:
     @contextmanager
     def transaction(self):
         """Commit a synchronous message/metadata batch or roll it back together."""
-        with self._lock:
-            self._conn.execute("BEGIN IMMEDIATE")
-            try:
-                yield
-                self._conn.commit()
-            except BaseException:
-                self._conn.rollback()
-                raise
+        with self._lock, immediate_transaction(self._conn):
+            yield
 
     def __init__(self, db_path: str | Path):
         self.db_path = str(db_path)
@@ -45,7 +40,9 @@ class _SessionConnection:
                 pass
 
     def _init_schema(self) -> None:
-        with self._lock:
+        # All schema DDL and upgrades share one transaction: a single commit, and a
+        # failure anywhere rolls back to the previous schema instead of half of it.
+        with self._lock, immediate_transaction(self._conn):
             self._conn.execute("""
                 CREATE TABLE IF NOT EXISTS sessions (
                     key               TEXT PRIMARY KEY,
@@ -72,7 +69,6 @@ class _SessionConnection:
             ensure_conversation_schema(self._conn)
             self._ensure_next_seq_values()
             self._ensure_fts()
-            self._conn.commit()
 
     def _ensure_session_columns(self) -> None:
         rows = self._conn.execute("PRAGMA table_info(sessions)").fetchall()
@@ -103,6 +99,9 @@ class _SessionConnection:
                 )
 
     def _ensure_fts(self) -> None:
+        # FTS is optional: a savepoint confines a failed FTS setup to its own
+        # statements so the enclosing schema transaction can still commit.
+        self._conn.execute("SAVEPOINT ensure_fts")
         try:
             # Migrate to trigram tokenizer if the table exists without it.
             # trigram supports CJK substring matching; the old unicode61 default does not.
@@ -154,10 +153,17 @@ class _SessionConnection:
             self._conn.execute(
                 "INSERT INTO messages_fts(messages_fts) VALUES('rebuild')"
             )
-            self._conn.commit()
-            self._has_fts = True
         except sqlite3.OperationalError:
+            # Errors such as SQLITE_FULL/IOERR roll back the whole transaction,
+            # taking the savepoint with it; surface the real failure then.
+            if not self._conn.in_transaction:
+                raise
+            self._conn.execute("ROLLBACK TO ensure_fts")
+            self._conn.execute("RELEASE ensure_fts")
             self._has_fts = False
+            return
+        self._conn.execute("RELEASE ensure_fts")
+        self._has_fts = True
 
     def close(self) -> None:
         with self._lock:

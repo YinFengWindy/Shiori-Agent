@@ -8,10 +8,17 @@ from pathlib import Path
 from typing import Any
 
 from conversation.models import ContactRecord, StateRecord, ThreadRecord
+from infra.persistence.sqlite_transaction import immediate_transaction
 
 
 def ensure_conversation_schema(connection: sqlite3.Connection) -> None:
-    """Ensures `sessions.db` exposes the new conversation tables and message columns."""
+    """Ensures `sessions.db` exposes the new conversation tables and message columns.
+
+    Callers own the transaction so that the whole schema setup commits once.
+    """
+    if not connection.in_transaction:
+        # Outside a transaction every DDL statement would commit on its own.
+        raise RuntimeError("ensure_conversation_schema requires an open transaction")
     _ensure_base_legacy_tables(connection)
     _ensure_conversation_tables(connection)
     _ensure_message_columns(connection)
@@ -161,9 +168,8 @@ class ConversationStore:
             self._conn.close()
 
     def ensure_schema(self) -> None:
-        with self._lock:
+        with self._lock, immediate_transaction(self._conn):
             ensure_conversation_schema(self._conn)
-            self._conn.commit()
 
     def list_contacts(self) -> list[ContactRecord]:
         with self._lock:
