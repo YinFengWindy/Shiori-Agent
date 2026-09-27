@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from infra.persistence.sqlite_lifecycle import open_owned_database
+from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
 
 import numpy as np
 
@@ -816,6 +817,7 @@ class AkashaStore:
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
         # 1. Akasha MVP 只展示节点状态，不展示原文。
+        # 2. key 是主键，作为次级排序键保证同时间条目在分页之间顺序稳定。
         conditions: list[str] = []
         params: list[object] = []
         if role_id:
@@ -827,8 +829,12 @@ class AkashaStore:
                 if matching_keys is not None
                 else ""
             )
-            conditions.append(f"(key LIKE ? OR anchor_id LIKE ?{key_matches})")
-            like = f"%{q.strip()}%"
+            # 关键词按字面匹配：%、_ 与转义符不作为通配符。
+            conditions.append(
+                f"(key LIKE ? {LIKE_ESCAPE_CLAUSE} "
+                f"OR anchor_id LIKE ? {LIKE_ESCAPE_CLAUSE}{key_matches})"
+            )
+            like = like_contains(q.strip())
             params.extend([like, like])
             if matching_keys is not None:
                 params.append(json.dumps(matching_keys))
@@ -854,7 +860,7 @@ class AkashaStore:
                 SELECT *
                 FROM akasha_nodes
                 {where}
-                ORDER BY {safe_sort} {safe_order}
+                ORDER BY {safe_sort} {safe_order}, key ASC
                 LIMIT ? OFFSET ?
                 """,
                 [*params, page_size, offset],
@@ -1098,10 +1104,11 @@ def _row_to_node(row: sqlite3.Row) -> AkashaNode | None:
 # 把节点 row 转成管理工具通用 item。
 def _node_row_to_admin(row: sqlite3.Row) -> dict[str, object]:
     # 1. 管理工具使用 MemoryAdminApi 的通用字段名。
+    # 2. 摘要只来自原文；取不到原文时保持为空，不用条目 key 冒充摘要。
     return {
         "id": str(row["key"]),
         "memory_type": "turn",
-        "summary": str(row["key"]),
+        "summary": "",
         "source_ref": str(row["anchor_id"]),
         "status": "active",
         "created_at": str(row["created_at"] or ""),

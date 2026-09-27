@@ -36,3 +36,39 @@ def test_invalidate_role_memories_requires_role_id(tmp_path) -> None:
             raise AssertionError("missing role_id must fail")
     finally:
         store.close()
+
+
+def test_list_items_for_admin_matches_like_wildcards_literally(tmp_path) -> None:
+    store = MemoryStore2(tmp_path / "memory2.db")
+    try:
+        store.upsert_item("preference", "plain tea", embedding=None, source_ref="ref")
+        store.upsert_item(
+            "preference", "100% coffee", embedding=None, source_ref="ref_1"
+        )
+
+        by_summary, summary_total = store.list_items_for_admin(q="%")
+        by_ref, ref_total = store.list_items_for_admin(source_ref="_")
+
+        assert summary_total == ref_total == 1
+        assert [item["summary"] for item in by_summary] == ["100% coffee"]
+        assert [item["summary"] for item in by_ref] == ["100% coffee"]
+    finally:
+        store.close()
+
+
+def test_get_item_for_admin_normalizes_role_id_like_role_filter(tmp_path) -> None:
+    store = MemoryStore2(tmp_path / "memory2.db")
+    try:
+        item_id = store.upsert_item(
+            "preference", "你喜欢拿铁", embedding=None, extra={"role_id": "  mira "}
+        ).split(":", 1)[1]
+
+        listed, _ = store.list_items_for_admin(role_id="mira")
+        detail = store.get_item_for_admin(item_id)
+
+        assert [item["id"] for item in listed] == [item_id]
+        assert detail is not None
+        assert detail["role_id"] == "mira"
+        assert detail["extra_json"] == {"role_id": "  mira "}
+    finally:
+        store.close()
