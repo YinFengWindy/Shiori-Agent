@@ -263,5 +263,27 @@ def _role_json_filter(column: str = "extra_json") -> str:
     return f"COALESCE(TRIM(json_extract({column}, '$.role_id')), '') = ?"
 
 
+def _domain_json_value(column: str = "extra_json") -> str:
+    """SQL for an item's trimmed memory domain, empty when unset."""
+    return f"COALESCE(TRIM(json_extract({column}, '$.memory_domain')), '')"
+
+
 def _domain_json_filter(column: str = "extra_json") -> str:
-    return f"COALESCE(TRIM(json_extract({column}, '$.memory_domain')), '') = ?"
+    return f"{_domain_json_value(column)} = ?"
+
+
+OCCURRED_EPOCH_SQL_FUNCTION = "memory_occurred_epoch"
+"""SQLite function registered on every store connection; see ``_occurred_epoch``."""
+
+
+def _occurred_epoch(happened_at: object, created_at: object) -> float:
+    """Epoch seconds of when an item happened, or of its record time if unknown.
+
+    ``happened_at`` is naive local time (``_LOCAL_TZ``) while ``created_at`` is
+    UTC ISO text, so comparing the raw strings would skew mixed rows by the
+    zone offset. Both go through ``_parse_memory_time`` to one instant first.
+    """
+    occurred = _parse_memory_time(happened_at) or _parse_memory_time(created_at)
+    if occurred is None:
+        raise ValueError(f"memory item has no readable time: {created_at!r}")
+    return occurred.timestamp()

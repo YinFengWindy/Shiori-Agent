@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from .store import RoleStore
@@ -15,17 +16,46 @@ def require_memory_role(role_store: RoleStore, payload: dict[str, Any]) -> str:
     return role_id
 
 
-def page_options(payload: dict[str, Any]) -> tuple[int, int, str, str]:
-    """Bound pagination and time sorting accepted from a plugin Dashboard."""
+SEMANTIC_STATUS_FILTERS: tuple[str, ...] = ("active", "superseded", "all")
+"""Status filter values an engine declares when it can filter by item status."""
+
+SEMANTIC_FILTER_DIMENSIONS: tuple[str, ...] = ("memory_type", "memory_domain", "status")
+"""Every structured filter a list request may carry; engines declare a subset."""
+
+
+def reject_undeclared_filters(
+    payload: dict[str, Any], declared: Mapping[str, object]
+) -> None:
+    """Fail when a request filters on a dimension the engine did not declare.
+
+    ``declared`` is the ``filters`` object the engine returns, so the check
+    follows the engine's own declaration instead of a separate block list.
+    """
+    undeclared = [
+        key
+        for key in SEMANTIC_FILTER_DIMENSIONS
+        if key in payload and key not in declared
+    ]
+    if undeclared:
+        raise ValueError(f"unsupported memory filters: {', '.join(undeclared)}")
+
+
+def page_options(payload: dict[str, Any]) -> tuple[int, int, str]:
+    """Bound pagination and the single supported sort of a plugin Dashboard.
+
+    Items always sort by occurrence time, falling back to record time when an
+    item has none; ``sort_order`` only picks newest (``desc``) or oldest
+    (``asc``). A ``sort_by`` field is rejected so an outdated caller fails
+    instead of silently receiving a different order than it asked for.
+    """
+    if "sort_by" in payload:
+        raise ValueError("sort_by is not supported; items sort by occurrence time")
     page = max(1, int(payload.get("page") or 1))
     page_size = max(1, min(100, int(payload.get("page_size") or 20)))
-    sort_by = str(payload.get("sort_by") or "created_at")
-    if sort_by not in {"created_at", "updated_at", "happened_at"}:
-        raise ValueError("invalid time sort")
     sort_order = str(payload.get("sort_order") or "desc")
     if sort_order not in {"asc", "desc"}:
         raise ValueError("invalid sort order")
-    return page, page_size, sort_by, sort_order
+    return page, page_size, sort_order
 
 
 def readable_item(item: dict[str, object]) -> dict[str, object]:

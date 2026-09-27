@@ -9,7 +9,13 @@ from pathlib import Path
 
 from infra.persistence.sqlite_lifecycle import open_owned_database
 
-from .common import SCHEMA, VEC_DIM, _emb_to_blob
+from .common import (
+    OCCURRED_EPOCH_SQL_FUNCTION,
+    SCHEMA,
+    VEC_DIM,
+    _emb_to_blob,
+    _occurred_epoch,
+)
 
 try:
     import sqlite_vec
@@ -35,6 +41,10 @@ class _StoreConnection:
             raise
 
     def _initialize(self, vec_dim: int) -> None:
+        # Admin listing sorts by this; SQL text comparison cannot mix time zones.
+        self._db.create_function(
+            OCCURRED_EPOCH_SQL_FUNCTION, 2, _occurred_epoch, deterministic=True
+        )
         self._db.executescript(SCHEMA)
         self._db.commit()
 

@@ -206,7 +206,6 @@ async def test_semantic_list_pages_same_time_items_without_gaps(
                 result = await reader.list(
                     {
                         "role_id": "mira",
-                        "sort_by": "happened_at",
                         "sort_order": sort_order,
                         "page": page,
                         "page_size": 2,
@@ -290,3 +289,58 @@ async def test_semantic_reads_report_disabled_engine_after_role_validation(
         await reader.list({"role_id": "atlas"})
     with pytest.raises(ValueError, match="role not found"):
         await reader.detail({"role_id": "atlas"})
+
+
+@pytest.mark.asyncio
+async def test_semantic_list_sorts_by_turn_time_and_declares_no_structured_filters(
+    tmp_path: Path,
+) -> None:
+    from plugins.akasha.backend.role_memory import AkashaRoleMemoryReader
+
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    store = AkashaStore(tmp_path / "akasha.db")
+    try:
+        # Insertion order differs from turn time so the sort cannot pass by accident.
+        for seq, ts in (
+            (0, "2026-01-02T00:00:00+00:00"),
+            (2, "2026-01-03T00:00:00+00:00"),
+            (4, "2026-01-01T00:00:00+00:00"),
+        ):
+            store.upsert_message_node(
+                SourceMessage(
+                    id=f"role:mira:{seq}",
+                    session_key="role:mira",
+                    seq=seq,
+                    role="user",
+                    content=f"text {seq}",
+                    ts=ts,
+                ),
+                [1.0, 0.0],
+            )
+        engine = object.__new__(AkashaMemoryEngine)
+        engine._store = store
+        engine._session_db_path = tmp_path / "missing-sessions.db"
+        engine._akasha_config = AkashaConfig()
+        reader = AkashaRoleMemoryReader(roles, engine)
+
+        newest = await reader.list({"role_id": "mira"})
+        assert newest["filters"] == {}
+        assert _listed(newest, "id") == [
+            "role:mira:2",
+            "role:mira:0",
+            "role:mira:4",
+        ]
+        oldest = await reader.list({"role_id": "mira", "sort_order": "asc"})
+        assert _listed(oldest, "id") == [
+            "role:mira:4",
+            "role:mira:0",
+            "role:mira:2",
+        ]
+        for key in ("memory_type", "memory_domain", "status"):
+            with pytest.raises(ValueError, match=f"unsupported memory filters: {key}"):
+                await reader.list({"role_id": "mira", key: "turn"})
+        with pytest.raises(ValueError, match="sort_by is not supported"):
+            await reader.list({"role_id": "mira", "sort_by": "updated_at"})
+    finally:
+        store.close()
