@@ -16,6 +16,9 @@ def ensure_conversation_schema(connection: sqlite3.Connection) -> None:
 
     Callers own the transaction so that the whole schema setup commits once.
     """
+    if not connection.in_transaction:
+        # Outside a transaction every DDL statement would commit on its own.
+        raise RuntimeError("ensure_conversation_schema requires an open transaction")
     _ensure_base_legacy_tables(connection)
     _ensure_conversation_tables(connection)
     _ensure_message_columns(connection)

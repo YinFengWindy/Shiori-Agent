@@ -198,3 +198,11 @@ def test_standalone_schema_failure_rolls_back_all_tables(
 
     with closing(sqlite3.connect(path)) as conn:
         assert conn.execute("SELECT name FROM sqlite_master").fetchall() == []
+
+
+def test_schema_helper_refuses_to_run_outside_a_transaction(tmp_path: Path) -> None:
+    path = tmp_path / "conversation.db"
+    with closing(sqlite3.connect(path)) as conn:
+        with pytest.raises(RuntimeError, match="open transaction"):
+            conversation_store_module.ensure_conversation_schema(conn)
+        assert conn.execute("SELECT name FROM sqlite_master").fetchall() == []

@@ -232,3 +232,30 @@ def test_legacy_database_upgrades_columns_cursor_and_fts(tmp_path: Path) -> None
         assert conn.execute(
             "SELECT rowid FROM messages_fts WHERE messages_fts MATCH '好世界'"
         ).fetchall() == [(1,)]
+
+
+class _IoErrorOnFtsRebuild(sqlite3.Connection):
+    """Mimics SQLITE_IOERR: SQLite rolls back the whole transaction, then raises."""
+
+    def execute(self, sql: str, *args, **kwargs) -> sqlite3.Cursor:
+        if "VALUES('rebuild')" in sql:
+            super().execute("ROLLBACK")
+            raise sqlite3.OperationalError("disk I/O error")
+        return super().execute(sql, *args, **kwargs)
+
+
+def test_fts_error_that_aborts_transaction_surfaces_original_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    real_connect = sqlite3.connect
+
+    def connect_with_io_error(*args, **kwargs) -> sqlite3.Connection:
+        return real_connect(*args, factory=_IoErrorOnFtsRebuild, **kwargs)
+
+    monkeypatch.setattr(connection_module.sqlite3, "connect", connect_with_io_error)
+
+    with pytest.raises(sqlite3.OperationalError, match="disk I/O error"):
+        SessionStore(db_path)
+
+    assert _schema_objects(db_path) == set()

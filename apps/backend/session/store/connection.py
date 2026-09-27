@@ -154,6 +154,10 @@ class _SessionConnection:
                 "INSERT INTO messages_fts(messages_fts) VALUES('rebuild')"
             )
         except sqlite3.OperationalError:
+            # Errors such as SQLITE_FULL/IOERR roll back the whole transaction,
+            # taking the savepoint with it; surface the real failure then.
+            if not self._conn.in_transaction:
+                raise
             self._conn.execute("ROLLBACK TO ensure_fts")
             self._conn.execute("RELEASE ensure_fts")
             self._has_fts = False
