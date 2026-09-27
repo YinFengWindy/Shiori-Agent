@@ -359,6 +359,13 @@ def _attempt(
     return entry
 
 
+def write_results(artifact_root: Path, results: list[dict[str, object]]) -> None:
+    """Replaces results.json atomically, so readers and kills never see partial JSON."""
+    staging = artifact_root / "results.json.tmp"
+    staging.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    os.replace(staging, artifact_root / "results.json")
+
+
 def verify_all(
     plugin_ids: Iterable[str],
     verify: Callable[[str], dict[str, object]],
@@ -370,9 +377,11 @@ def verify_all(
 
     ``results.json`` is rewritten from this (main) thread after each completion,
     so a run killed by a timeout still leaves the finished plugins' evidence; the
-    write after the last completion is the complete result.
+    write after the last completion is the complete result. It exists from the
+    start, so an empty plugin selection still leaves a (empty) result file.
     """
     results: list[dict[str, object]] = []
+    write_results(artifact_root, results)
     with ThreadPoolExecutor(max_workers=jobs) as pool:
         futures = [
             pool.submit(_attempt, plugin_id, verify, artifact_root)
@@ -387,9 +396,7 @@ def verify_all(
             )
             results.append(entry)
             results.sort(key=lambda item: str(item["plugin"]))
-            (artifact_root / "results.json").write_text(
-                json.dumps(results, indent=2), encoding="utf-8"
-            )
+            write_results(artifact_root, results)
     return results
 
 

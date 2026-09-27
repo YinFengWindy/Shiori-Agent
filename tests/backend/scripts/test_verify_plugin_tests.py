@@ -264,15 +264,14 @@ def test_results_are_written_as_each_plugin_completes(tmp_path: Path) -> None:
 
     def verify(plugin_id: str) -> dict[str, object]:
         if plugin_id == "slow":
-            # Wait until the main thread has recorded the fast plugin.
+            # Wait until the main thread has recorded the fast plugin. The file is
+            # replaced atomically, so every read here sees complete JSON.
             deadline = time.monotonic() + 5
-            while not results_file.exists() and time.monotonic() < deadline:
+            recorded = json.loads(results_file.read_text(encoding="utf-8"))
+            while not recorded and time.monotonic() < deadline:
                 time.sleep(0.01)
-            seen_while_running.append(
-                json.loads(results_file.read_text(encoding="utf-8"))
-                if results_file.exists()
-                else None
-            )
+                recorded = json.loads(results_file.read_text(encoding="utf-8"))
+            seen_while_running.append(recorded)
         return {"result": "1 passed"}
 
     runner.verify_all(["fast", "slow"], verify, artifact_root=tmp_path, jobs=2)
@@ -283,6 +282,36 @@ def test_results_are_written_as_each_plugin_completes(tmp_path: Path) -> None:
     assert [entry["plugin"] for entry in partial] == ["fast"]
     final = json.loads(results_file.read_text(encoding="utf-8"))
     assert [entry["plugin"] for entry in final] == ["fast", "slow"]
+
+
+def test_empty_plugin_selection_still_writes_results(tmp_path: Path) -> None:
+    assert (
+        runner.verify_all([], lambda plugin_id: {}, artifact_root=tmp_path, jobs=1)
+        == []
+    )
+
+    assert json.loads((tmp_path / "results.json").read_text(encoding="utf-8")) == []
+
+
+def test_interrupted_results_write_keeps_the_previous_complete_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A kill mid-write must not leave truncated JSON behind."""
+    runner.write_results(tmp_path, [{"plugin": "alpha", "status": "passed"}])
+    original = Path.write_text
+
+    def killed_mid_write(self: Path, data: str, *args: object, **kwargs: object) -> int:
+        original(self, data[: len(data) // 2], encoding="utf-8")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(Path, "write_text", killed_mid_write)
+    with pytest.raises(KeyboardInterrupt):
+        runner.write_results(tmp_path, [{"plugin": "beta", "status": "passed"}])
+    monkeypatch.undo()
+
+    assert json.loads((tmp_path / "results.json").read_text(encoding="utf-8")) == [
+        {"plugin": "alpha", "status": "passed"}
+    ]
 
 
 def test_main_summarizes_all_failures_writes_results_and_exits_non_zero(
