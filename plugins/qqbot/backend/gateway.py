@@ -31,14 +31,15 @@ class _GatewayMixin:
     _client: httpx.AsyncClient | None
 
     def _open_http_client(self) -> None:
-        """Creates the REST client unless an open one already exists."""
-        if self._client is None or self._client.is_closed:
+        """Creates the REST client unless one is already open."""
+        if self._client is None:
             self._client = httpx.AsyncClient(timeout=30.0)
 
     async def _close_http_client(self) -> None:
-        """Closes the REST client if it was ever opened."""
-        if self._client is not None:
-            await self._client.aclose()
+        """Closes the REST client; closed and never-opened share the ``None`` state."""
+        client, self._client = self._client, None
+        if client is not None:
+            await client.aclose()
 
     def _http_client(self) -> httpx.AsyncClient:
         """Returns the open REST client; requests before opening are a bug."""

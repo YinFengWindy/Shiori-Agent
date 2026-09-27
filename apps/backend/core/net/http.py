@@ -21,6 +21,10 @@ def shared_ssl_context() -> ssl.SSLContext:
     is created once through httpx's own factory with its defaults, so
     ``SSL_CERT_FILE`` / ``SSL_CERT_DIR`` are honored exactly as httpx would, read
     when the first host client is built.
+
+    Only for HTTP/1.1 clients: httpcore calls ``set_alpn_protocols`` on the context
+    for every connection, mutating this shared object, so an ``http2=True`` client
+    must build its own context instead of reusing this one.
     """
     return httpx.create_ssl_context()
 

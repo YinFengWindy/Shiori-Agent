@@ -6,6 +6,10 @@ CA bundle (~0.15s; three times per client under a system proxy). Third-party SDK
 such as python-telegram-bot build their own clients, so the host's shared context
 cannot reach them. Patching that module-level name is the narrowest point that
 covers every httpx client without touching production code or ``ssl`` itself.
+
+Cached contexts are shared and mutable for the whole session: httpcore sets ALPN
+on them per connection (HTTP/1.1 and HTTP/2 clients would overwrite each other),
+so tests must not mutate a context they got from httpx.
 """
 
 from __future__ import annotations

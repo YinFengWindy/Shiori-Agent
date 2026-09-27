@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 from bus.event_bus import EventBus
@@ -109,6 +110,7 @@ async def test_qqbot_channel_registers_and_stops_cleanly(
     assert bus.outbound[0][0] == "qqbot"
     await channel.stop()
     assert client.is_closed
+    assert channel._client is None
 
     assert bus.outbound == []
     assert context.event_bus._handlers == {}
@@ -144,12 +146,15 @@ async def test_qqbot_reports_pending_input_before_closing_original_account(monke
     notices = []
 
     async def send(self, chat_id, text):
-        assert not self._client.is_closed
+        assert self._client is client and not client.is_closed
         notices.append((self._app_id, chat_id, text))
 
     monkeypatch.setattr(QQBotChannel, "send", send)
     channel = QQBotChannel("old-account", "secret")
-    channel._open_http_client()
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200))
+    )
+    channel._client = client
     channel._bus = _Bus()
     channel.pause_intake()
     await channel._publish_inbound(
@@ -162,7 +167,8 @@ async def test_qqbot_reports_pending_input_before_closing_original_account(monke
     assert len(notices) == 1
     assert notices[0][:2] == ("old-account", "c2c:user")
     assert "重新发送" in notices[0][2]
-    assert channel._client.is_closed
+    assert client.is_closed
+    assert channel._client is None
 
 
 @pytest.mark.asyncio
