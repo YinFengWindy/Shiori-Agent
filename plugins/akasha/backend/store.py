@@ -1001,8 +1001,8 @@ class AkashaStore:
             clauses.append("session_key = ?")
             params.append(session_key.strip())
         if q.strip():
-            clauses.append("query_text LIKE ?")
-            params.append(f"%{q.strip()}%")
+            clauses.append(f"query_text LIKE ? {LIKE_ESCAPE_CLAUSE}")
+            params.append(like_contains(q.strip()))
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         page = max(1, page)
         page_size = max(1, min(page_size, 200))

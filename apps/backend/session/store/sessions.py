@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 from typing import Any
 
+from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains, like_prefix
+
 
 class _SessionMixin:
     def session_exists(self, key: str) -> bool:
@@ -123,12 +125,15 @@ class _SessionMixin:
         where_parts: list[str] = []
         query = (q or "").strip()
         if query:
-            where_parts.append("(s.key LIKE ? OR COALESCE(s.metadata, '') LIKE ?)")
-            like = f"%{query}%"
+            where_parts.append(
+                f"(s.key LIKE ? {LIKE_ESCAPE_CLAUSE} "
+                f"OR COALESCE(s.metadata, '') LIKE ? {LIKE_ESCAPE_CLAUSE})"
+            )
+            like = like_contains(query)
             params.extend([like, like])
         if channel:
-            where_parts.append("s.key LIKE ?")
-            params.append(f"{channel}:%")
+            where_parts.append(f"s.key LIKE ? {LIKE_ESCAPE_CLAUSE}")
+            params.append(like_prefix(f"{channel}:"))
         if updated_from:
             where_parts.append("s.updated_at >= ?")
             params.append(updated_from)

@@ -13,7 +13,7 @@ def test_invalidate_role_memories_only_supersedes_target_role(tmp_path) -> None:
             "preference",
             "你喜欢拿铁",
             embedding=None,
-            extra={"role_id": "mira"},
+            extra={"role_id": "  mira "},
         ).split(":", 1)[1]
         atlas_id = store.upsert_item(
             "preference",
