@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act, useState } from "react";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mockableWindowTimers, mountTestComponent } from "../shared/testing/domTestHarness";
 import type { SettingsSavePhase } from "./settingsPageTypes";
 import { SettingsSavedIndicator } from "./SettingsSavedIndicator";
 import { settingsSavedIndicatorMs } from "./settingsSaveState";
@@ -13,7 +13,7 @@ async function mountIndicator() {
     setPhase = update;
     return <SettingsSavedIndicator phase={phase} />;
   }
-  const view = await mountTestComponent(<Harness />);
+  const view = await mountTestComponent(<Harness />, { windowGlobals: mockableWindowTimers });
   const indicator = () => view.container.querySelector('[data-testid="settings-saved-indicator"]')!;
   return {
     view,
@@ -23,7 +23,8 @@ async function mountIndicator() {
 }
 
 describe("SettingsSavedIndicator", () => {
-  it("confirms a completed save, then fades on its own", async () => {
+  it("confirms a completed save, then fades on its own", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
     const harness = await mountIndicator();
     try {
       assert.equal(harness.visible(), false);
@@ -31,7 +32,9 @@ describe("SettingsSavedIndicator", () => {
       assert.equal(harness.visible(), false);
       await harness.phase("idle");
       assert.equal(harness.visible(), true);
-      await act(async () => { await new Promise((resolve) => setTimeout(resolve, settingsSavedIndicatorMs + 100)); });
+      await act(async () => t.mock.timers.tick(settingsSavedIndicatorMs - 1));
+      assert.equal(harness.visible(), true);
+      await act(async () => t.mock.timers.tick(1));
       assert.equal(harness.visible(), false);
     } finally { await harness.view.cleanup(); }
   });

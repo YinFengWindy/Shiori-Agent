@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -104,6 +104,13 @@ if (options.list) {
 const tsxCli = resolve(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
 const rendererTsconfig = resolve(desktopRoot, "renderer", "tsconfig.json");
 const summaryReporter = pathToFileURL(resolve(here, "test-unit-summary-reporter.mjs")).href;
+// Registers loader hooks in every test process; see test-unit-loader-hooks.mjs.
+const testLoader = pathToFileURL(resolve(here, "test-unit-loader.mjs")).href;
+// Node runs each file in its own process and defaults to one process fewer
+// than the CPUs; the parent mostly waits on its children, so using every CPU
+// is measurably faster (#459). Test files stay process-isolated: under
+// `--test-isolation=none` module singletons and globals leak between files.
+const testConcurrency = availableParallelism();
 // Repository-relative paths (the child runs in repoRoot) keep each argument
 // short; batching keeps the whole command line under Windows' limit.
 const batches = batchByArgumentLength(testFiles.map((path) => relative(repoRoot, path)));
@@ -116,7 +123,8 @@ function runBatch(files, summaryPath) {
   return new Promise((resolveBatch, rejectBatch) => {
     const child = spawn(
       process.execPath,
-      [tsxCli, "--tsconfig", rendererTsconfig, "--test",
+      [tsxCli, "--tsconfig", rendererTsconfig, `--import=${testLoader}`, "--test",
+        `--test-concurrency=${testConcurrency}`,
         "--test-reporter=spec", "--test-reporter-destination=stdout",
         `--test-reporter=${summaryReporter}`, `--test-reporter-destination=${summaryPath}`,
         ...(options["test-name-pattern"] !== undefined

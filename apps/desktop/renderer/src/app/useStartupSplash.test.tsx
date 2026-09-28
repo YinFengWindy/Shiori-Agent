@@ -1,9 +1,9 @@
 /// <reference types="node" />
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, type TestContext } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mockableWindowTimers, mountTestComponent } from "../shared/testing/domTestHarness";
 import { startupSplashDelayMs, startupSplashExitMs } from "./startupSplashPhase";
 import { useStartupSplash } from "./useStartupSplash";
 
@@ -12,7 +12,14 @@ function Probe({ health, enabled }: { health: string; enabled: boolean }) {
   return <output data-phase={phase ?? "none"} data-leaving={String(leaving)} />;
 }
 
-const wait = (ms: number) => act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)); });
+/**
+ * Fakes both clocks the hook reads — its window timers and `Date.now` — and
+ * returns a `wait` that advances them together inside `act`.
+ */
+function fakeClock(t: TestContext) {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  return (ms: number) => act(async () => t.mock.timers.tick(ms));
+}
 
 function read(container: HTMLElement) {
   const output = container.querySelector("output")!;
@@ -20,8 +27,9 @@ function read(container: HTMLElement) {
 }
 
 describe("useStartupSplash", () => {
-  it("waits out the delay, then greets, and fades out once the backend answers", async () => {
-    const view = await mountTestComponent(<Probe health="connecting" enabled />);
+  it("waits out the delay, then greets, and fades out once the backend answers", async (t) => {
+    const wait = fakeClock(t);
+    const view = await mountTestComponent(<Probe health="connecting" enabled />, { windowGlobals: mockableWindowTimers });
     try {
       assert.equal(read(view.container).phase, "none");
       await wait(startupSplashDelayMs + 80);
@@ -38,8 +46,9 @@ describe("useStartupSplash", () => {
     }
   });
 
-  it("never appears for a startup quicker than the delay", async () => {
-    const view = await mountTestComponent(<Probe health="connecting" enabled />);
+  it("never appears for a startup quicker than the delay", async (t) => {
+    const wait = fakeClock(t);
+    const view = await mountTestComponent(<Probe health="connecting" enabled />, { windowGlobals: mockableWindowTimers });
     try {
       await wait(startupSplashDelayMs / 2);
       await view.render(<Probe health="online" enabled />);
@@ -61,8 +70,9 @@ describe("useStartupSplash", () => {
     }
   });
 
-  it("shows no splash at all with the 看板娘 off", async () => {
-    const view = await mountTestComponent(<Probe health="offline" enabled={false} />);
+  it("shows no splash at all with the 看板娘 off", async (t) => {
+    const wait = fakeClock(t);
+    const view = await mountTestComponent(<Probe health="offline" enabled={false} />, { windowGlobals: mockableWindowTimers });
     try {
       assert.equal(read(view.container).phase, "none");
       await view.render(<Probe health="connecting" enabled={false} />);
