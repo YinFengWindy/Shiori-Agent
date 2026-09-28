@@ -42,15 +42,23 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._stopping = False
         self._intakes: dict[str, ChannelIntake] = {}
         self._actions = QQAccountActions(self._socket_for, self._ensure_online)
+
+    async def load(self) -> None:
+        """Prunes orphaned configs, then registers the saved accounts left."""
+        await self.prune_orphans()
+        self.register_saved()
+
+    def register_saved(self) -> None:
+        """Registers every verified saved account; refused ones are not served."""
         for ref, config in self._configs.items():
             if config.verified and config.expected_uin:
-                # A saved account the host refuses is reported, not served.
-                snapshot = self._accounts.register_configured(
+                snapshot = self._accounts.register_saved(
                     platform="qq",
                     platform_account_id=config.expected_uin,
                     config_ref=ref,
                     role_id=config.role_id,
                     display_name=config.display_name or None,
+                    response_rules=config.response_rules,
                 )
                 if snapshot is not None:
                     self._ids[ref] = snapshot.record.id

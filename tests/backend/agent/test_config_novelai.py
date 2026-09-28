@@ -3,6 +3,8 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from agent.config import load_config
 
 
@@ -173,10 +175,13 @@ profile = "daily"
     assert config.proactive.role_id == ""
 
 
-def test_load_config_keeps_channel_permissions_in_role_bindings(tmp_path: Path) -> None:
+@pytest.mark.parametrize("channel", ["telegram", "qq"])
+def test_load_config_rejects_removed_channel_tables(
+    tmp_path: Path, channel: str
+) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
-        """
+        f"""
 [[llm.registrations]]
 id = "00000000-0000-4000-a000-000000000001"
 provider = "openai"
@@ -185,23 +190,10 @@ api_key = "sk-test"
 base_url = "https://api.openai.com/v1"
 effort = "none"
 
-[channels.telegram]
-token = "telegram-token"
-allow_from = ["legacy-user"]
-
-[channels.qq]
-bot_uin = "10001"
-allow_from = ["legacy-user"]
-
-[[channels.qq.groups]]
-group_id = "123"
-allow_from = ["legacy-user"]
+[channels.{channel}]
 """.strip(),
         encoding="utf-8",
     )
 
-    config = load_config(config_path)
-
-    # 旧的 allow_from / groups 不随渠道迁入插件表；白名单只看角色绑定。
-    assert config.plugins["telegram"] == {"token": "telegram-token"}
-    assert config.plugins["qq"] == {"bot_uin": "10001"}
+    with pytest.raises(ValueError, match=rf"配置项已移除: \[channels\.{channel}\]"):
+        load_config(config_path)

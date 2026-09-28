@@ -35,7 +35,7 @@ from ..utils import (
     TelegramOutboundLimiter,
     TelegramStreamMessage,
 )
-from ..bot_token import bot_account_id
+from ..credentials import bot_account_id
 from .commands import _CommandMixin
 from .formatting import (
     _CHANNEL,
@@ -84,15 +84,18 @@ class TelegramChannel(
         channel_hub: "ChannelHub | None" = None,
         chat_types: tuple[ChatTypeDeclaration, ...] = (),
         name: str = _CHANNEL,
-        config_ref: str = "legacy",
+        config_ref: str = "",
         accounts: "AccountsCapability | None" = None,
         known_store: "PluginKVStore | None" = None,
         role_id: str | None = None,
     ) -> None:
         # bus / session_manager 在宿主里由 start(ctx) 注入；构造参数只留给
         # 不经 ChannelHost 直接驱动渠道的测试。
+        if accounts is not None and not config_ref:
+            raise ValueError("An account-backed Telegram channel needs its Bot ref")
         self._token = token
         self.name = name
+        # The Bot's plugin-private reference, keying its record and caches.
         self._config_ref = config_ref
         # Role that owns this Bot's account; saved with the Bot's config entry.
         self._role_id = role_id
@@ -349,14 +352,6 @@ class TelegramChannel(
             self._unbind_runtime()
             self._online = False
             self._report_account("offline")
-
-    async def retire(self) -> None:
-        """Stops a deleted Bot for good: later stops neither report nor persist."""
-        try:
-            await self.stop()
-        finally:
-            self._accounts = None
-            self._known_store = None
 
     def _remember_chat(self, chat: object, user: object, message: object) -> None:
         """Record an observed conversation without retaining message or member data."""

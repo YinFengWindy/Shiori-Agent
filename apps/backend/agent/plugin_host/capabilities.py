@@ -20,9 +20,10 @@ if TYPE_CHECKING:
     from desktop_bridge.method_policy import Concurrency
     from infra.channels.contract import Channel
     from core.accounts import (
-        AccountConfigReader,
         AccountDeleteHandler,
         AccountRegistry,
+        AccountResponseRules,
+        AccountRulesHandler,
         AccountSnapshot,
         ConnectionState,
     )
@@ -281,7 +282,12 @@ class ChannelsCapability:
 
 
 class AccountsCapability:
-    """Plugin-scoped registration and reporting for communication accounts."""
+    """Plugin-scoped registration and reporting for communication accounts.
+
+    The plugin saves each account (identity, owner role, response rules,
+    credentials) in its own storage and registers it here whenever it loads;
+    the host keeps only an in-memory index of what was registered.
+    """
 
     def __init__(
         self,
@@ -306,12 +312,14 @@ class AccountsCapability:
         role_id: str | None,
         display_name: str | None = None,
         avatar_url: str | None = None,
+        response_rules: "AccountResponseRules | None" = None,
     ) -> "AccountSnapshot":
         """Registers a verified identity owned by ``role_id``.
 
-        The owner is the role the account was created from; the plugin stores
-        it with its own account data so re-registration after a restart
-        carries it. None keeps display snapshots, empty clears them.
+        The account ID is ``<plugin_id>:<platform_account_id>``. The owner is
+        the role the account was created from, and ``response_rules`` are the
+        rules the plugin saved with it; None keeps what is already indexed
+        (defaults for a new account), and None display fields keep snapshots.
         """
         self._effects.ensure_active("account:register")
         snapshot = self._registry.register(
@@ -324,6 +332,7 @@ class AccountsCapability:
             generation=self._generation,
             display_name=display_name,
             avatar_url=avatar_url,
+            response_rules=response_rules,
         )
         account_id = snapshot.record.id
         if account_id not in self._registered:
@@ -336,7 +345,7 @@ class AccountsCapability:
             )
         return snapshot
 
-    def register_configured(
+    def register_saved(
         self,
         *,
         platform: str,
@@ -345,14 +354,15 @@ class AccountsCapability:
         role_id: str | None,
         display_name: str | None = None,
         avatar_url: str | None = None,
+        response_rules: "AccountResponseRules | None" = None,
     ) -> "AccountSnapshot | None":
-        """Registers an account restored from the plugin's saved data.
+        """Registers an account restored from the plugin's own storage.
 
-        One entry the host refuses (no owner role, a deleted role, another
-        role's or an unowned platform account, a second account for the role)
-        must not take the plugin down: the refusal is logged and listed with
-        the plugin for the user to fix, and None tells the plugin not to serve
-        that entry. Its other accounts keep working.
+        One saved account the host refuses (no owner role, another role's
+        platform account, a second account for the role) must not take the
+        plugin down: the refusal is logged and listed with the plugin for the
+        user to fix, and None tells the plugin not to serve that account. Its
+        other accounts keep working.
         """
         try:
             return self.register(
@@ -362,19 +372,23 @@ class AccountsCapability:
                 role_id=role_id,
                 display_name=display_name,
                 avatar_url=avatar_url,
+                response_rules=response_rules,
             )
         except ValueError as exc:
-            message = f"账号 {config_ref} 未加载：{exc}"
-            logger.error("插件 %s 的%s", self._plugin_id, message)
-            self._registry.reject(self._plugin_id, message, generation=self._generation)
+            self.reject(config_ref, str(exc))
             return None
+
+    def reject(self, config_ref: str, reason: str) -> None:
+        """Reports a saved account the plugin cannot serve (e.g. unreadable data)."""
+        message = f"账号 {config_ref} 未加载：{reason}"
+        logger.error("插件 %s 的%s", self._plugin_id, message)
+        self._registry.reject(self._plugin_id, message, generation=self._generation)
 
     def check_owner(
         self,
         *,
         config_ref: str,
         role_id: str | None,
-        platform: str | None = None,
         platform_account_id: str | None = None,
     ) -> None:
         """Raises ValueError unless ``role_id`` may own this account.
@@ -386,27 +400,18 @@ class AccountsCapability:
             plugin_id=self._plugin_id,
             config_ref=config_ref,
             role_id=role_id,
-            platform=platform,
             platform_account_id=platform_account_id,
+            generation=self._generation,
         )
 
-    def read_config_accounts(self, reader: "AccountConfigReader") -> None:
-        """Declares how the plugin's config table lists its accounts.
+    def role_exists(self, role_id: str) -> bool:
+        """Whether an owner role still exists.
 
-        The host then checks every ``plugin.config.set`` write against account
-        ownership before saving it: an entry's owner cannot change, and no new
-        entry may be one the host would refuse to register.
+        On load a plugin deletes, with all their data, the saved accounts (and
+        drafts) whose owner role is gone: role deletion only reaches plugins
+        that are loaded at the time.
         """
-        self._effects.ensure_active("account:config_reader")
-        self._registry.set_config_reader(
-            self._plugin_id, reader, generation=self._generation
-        )
-        self._effects.add(
-            "account:config_reader",
-            lambda: self._registry.clear_config_reader(
-                self._plugin_id, reader, generation=self._generation
-            ),
-        )
+        return self._registry.role_exists(role_id)
 
     def report(
         self,
@@ -430,18 +435,19 @@ class AccountsCapability:
         )
 
     def unregister(self, account_id: str) -> None:
-        """Stops one account while retaining its saved identity and assignment."""
+        """Stops one account's live presence; it stays listed while the plugin runs."""
         self._effects.ensure_active(f"account:{account_id}:unregister")
         if account_id not in self._registered:
             raise PermissionError("Account was not registered by this plugin instance")
         self._registry.unregister(account_id, self._token, generation=self._generation)
 
     def on_delete(self, handler: "AccountDeleteHandler") -> None:
-        """Registers the planner the host consults before forgetting an account.
+        """Registers the planner the host consults to delete one account.
 
         The handler receives the account's ``config_ref`` and returns an
         ``AccountDeletionPlan`` without side effects; the host then runs its
-        idempotent ``disconnect`` and ``purge`` steps around any config write.
+        idempotent ``disconnect`` and ``purge`` steps. The host also uses it
+        to delete a role's accounts when the role is deleted.
         """
         self._effects.ensure_active("account:delete_hook")
         self._registry.set_delete_handler(
@@ -450,6 +456,23 @@ class AccountsCapability:
         self._effects.add(
             "account:delete_hook",
             lambda: self._registry.clear_delete_handler(
+                self._plugin_id, handler, generation=self._generation
+            ),
+        )
+
+    def on_rules_change(self, handler: "AccountRulesHandler") -> None:
+        """Registers how the plugin saves response rules edited on the host.
+
+        The handler receives the account's ``config_ref`` and the new rules and
+        must persist them with the account, so the next load registers them.
+        """
+        self._effects.ensure_active("account:rules_hook")
+        self._registry.set_rules_handler(
+            self._plugin_id, handler, generation=self._generation
+        )
+        self._effects.add(
+            "account:rules_hook",
+            lambda: self._registry.clear_rules_handler(
                 self._plugin_id, handler, generation=self._generation
             ),
         )

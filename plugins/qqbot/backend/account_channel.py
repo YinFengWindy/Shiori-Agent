@@ -48,7 +48,6 @@ class QQBotAccountsChannel(
             app_id,
             resolve_secret(row["client_secret"]),
             self._chat_types,
-            scoped=not row.get("legacy", False),
             account_id=self._identity.account_id(app_id),
             on_status=lambda state, error, name, bot_id: self._identity.report(
                 app_id, state, error, name, bot_id

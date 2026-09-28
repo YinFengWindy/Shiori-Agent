@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from typing import Literal, NotRequired, TypedDict
 
 from core.common.task_collector import TaskCollector
+from infra.channels.account_group import SupportsMemberChannels
 from infra.channels.contract import (
     Channel,
     ChannelContext,
@@ -323,10 +324,20 @@ class ChannelHost:
         """Returns the published connection for a name, else one still draining.
 
         A retired transport keeps serving replies its generation accepted, so
-        its optional hooks (stream support, prompt hints) stay in effect.
+        its optional hooks (stream support, prompt hints) stay in effect. A
+        name no top-level channel carries may be an account member channel of
+        a group (``SupportsMemberChannels``).
         """
-        active = next((item for item in self._channels if item.name == name), None)
-        return active or self._retired_transports.get(name)
+        for channels in (self._channels, list(self._retired_transports.values())):
+            named = next((item for item in channels if item.name == name), None)
+            if named is not None:
+                return named
+            for channel in channels:
+                if isinstance(channel, SupportsMemberChannels):
+                    member = channel.member_channel(name)
+                    if member is not None:
+                        return member
+        return None
 
     def snapshot(self) -> dict[str, ChannelSnapshot]:
         """Returns each registered or failed channel's state, keyed by channel name.
@@ -335,13 +346,18 @@ class ChannelHost:
         whose start failed. Only the latest failure per name is reported. The
         optional ``status()`` of a healthy channel is included verbatim; if it
         raises, the channel is reported failed instead of hiding the error.
+        Account member channels of a group are listed like top-level ones.
         """
         latest = {failure.channel: failure for failure in self._failures}
         result: dict[str, ChannelSnapshot] = {
             name: {"state": "failed", "error": _describe_failure(failure)}
             for name, failure in latest.items()
         }
+        channels = [*self._channels]
         for channel in self._channels:
+            if isinstance(channel, SupportsMemberChannels):
+                channels.extend(channel.member_channels())
+        for channel in channels:
             if channel.name in latest:
                 continue
             entry: ChannelSnapshot = {"state": "active", "error": ""}

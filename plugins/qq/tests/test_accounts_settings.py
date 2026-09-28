@@ -51,24 +51,17 @@ async def test_saved_unverified_draft_can_be_reopened_and_removed(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_ownerless_legacy_draft_cannot_be_claimed_or_removed(tmp_path):
+async def test_ownerless_draft_cannot_be_claimed(tmp_path):
     store = QQAccountsStore(tmp_path)
-    store.migrate_legacy(
-        bot_uin="101",
-        ws_uri="ws://localhost:3001",
-        ws_token="old",
-        timeout_seconds=5,
-    )
+    store.save({"aa": QQConnectionConfig("aa", "ws://localhost:3001", "old")})
     runtime = QQAccountsRuntime(store, _Accounts())
     # An ownerless draft is never taken over by the role editing it.
     with pytest.raises(ValueError, match="未归属"):
         await runtime.save_draft(
-            {"role_id": "mira", "ref": "legacy", "ws_uri": "ws://localhost:3002"}
+            {"role_id": "mira", "ref": "aa", "ws_uri": "ws://localhost:3002"}
         )
-    assert store.load()["legacy"].ws_uri == "ws://localhost:3001"
-    assert store.load()["legacy"].role_id is None
-    with pytest.raises(PermissionError, match="不能删除迁移记录"):
-        await runtime.remove_draft("legacy")
+    assert store.load()["aa"].ws_uri == "ws://localhost:3001"
+    assert store.load()["aa"].role_id is None
 
 
 @pytest.mark.asyncio
@@ -94,7 +87,14 @@ class _Accounts:
         self.reports: list[tuple[str, str]] = []
 
     def register(
-        self, *, platform, platform_account_id, config_ref, role_id, display_name
+        self,
+        *,
+        platform,
+        platform_account_id,
+        config_ref,
+        role_id,
+        display_name,
+        response_rules=None,
     ):
         return SimpleNamespace(record=SimpleNamespace(id=f"qq-{platform_account_id}"))
 
@@ -102,7 +102,10 @@ class _Accounts:
         if not role_id:
             raise ValueError("账号没有所属角色")
 
-    def register_configured(self, **fields):
+    def role_exists(self, role_id):
+        return True
+
+    def register_saved(self, **fields):
         # The host refuses an entry without an owner; the plugin must skip it.
         return self.register(**fields) if fields.get("role_id") else None
 

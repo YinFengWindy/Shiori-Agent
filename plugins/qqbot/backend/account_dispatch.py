@@ -18,15 +18,12 @@ class _AccountDispatchMixin:
         if kind != "c2c":
             raise ValueError("QQBot 当前仅支持 C2C 私聊")
         app_id = target.split(":", 1)[0]
+        if ":" not in target:
+            raise ValueError("QQBot 目标缺少有效应用账号作用域")
         channel = self._channels.get(app_id)
-        if channel is not None and channel._scoped:
-            return channel
-        if ":" in target:
+        if channel is None:
             raise RuntimeError("QQBot 目标所属应用账号未连接")
-        legacy = [item for item in self._channels.values() if not item._scoped]
-        if len(legacy) == 1:
-            return legacy[0]
-        raise ValueError("QQBot 目标缺少有效应用账号作用域")
+        return channel
 
     async def send(self, chat_id: str, message: str) -> str | None:
         """Route a host C2C send to its application gateway."""

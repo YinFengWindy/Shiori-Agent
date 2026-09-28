@@ -1,63 +1,42 @@
 import { useEffect, useState } from "react";
 import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
-import { createPluginBridgeClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { createAccountClient } from "../../../apps/desktop/renderer/src/accounts/accountClient";
 import { ghostButtonClass, inputClass, primaryButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
 import { Select } from "../../../apps/desktop/renderer/src/shared/ui/Select";
-import { configuredApps, withConnection, withSavedApp, type FeishuApp } from "./accountConfig";
 
-const settings = createPluginBridgeClient();
-const accounts = createAccountClient();
+type FeishuDomain = "feishu" | "lark";
+type FeishuProfile = { identity: { open_id?: string }; targets: Array<{ chat_id: string; open_id: string }> };
+
+/** Splits an account's `<domain>:<app_id>` platform reference. */
+function parseRef(ref: string | undefined): { domain: FeishuDomain; appId: string } | null {
+  const [domain, ...rest] = (ref ?? "").split(":");
+  return (domain === "feishu" || domain === "lark") && rest.length ? { domain, appId: rest.join(":") } : null;
+}
 
 /** Plugin-owned credentials and observed private targets in the shared account detail. */
 export function FeishuAccountDetail({ account, roleId, onChanged, client, host }: PluginAccountDetailComponentProps) {
   const accountRef = account?.platformAccountId;
-  const [values, setValues] = useState<Record<string, unknown> | null>(null);
-  const [domain, setDomain] = useState<FeishuApp["domain"]>("feishu");
-  const [appId, setAppId] = useState("");
+  const saved = parseRef(accountRef);
+  const [domain, setDomain] = useState<FeishuDomain>(saved?.domain ?? "feishu");
+  const [appId, setAppId] = useState(saved?.appId ?? "");
   const [secret, setSecret] = useState("");
-  const [profile, setProfile] = useState<{ identity: { open_id?: string }; targets: Array<{ chat_id: string; open_id: string }> } | null>(null);
+  const [profile, setProfile] = useState<FeishuProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let active = true;
-    void settings.getConfig("feishu").then(({ values: saved }) => {
-      if (!active) return;
-      setValues(saved);
-      const selected = configuredApps(saved).find((item) => `${item.domain}:${item.app_id}` === accountRef);
-      if (selected) { setDomain(selected.domain); setAppId(selected.app_id); }
-    }).catch((failure) => { if (active) setError(String(failure)); });
-    return () => { active = false; };
-  }, [accountRef]);
-
-  useEffect(() => {
     if (!accountRef) return;
     let active = true;
-    void client.call<{ identity: { open_id?: string }; targets: Array<{ chat_id: string; open_id: string }> }>(
-      "accounts.profile", { ref: accountRef },
-    ).then((result) => { if (active) setProfile(result); })
+    void client.call<FeishuProfile>("accounts.profile", { ref: accountRef })
+      .then((result) => { if (active) setProfile(result); })
       .catch((failure) => { if (active) setError(String(failure)); });
     return () => { active = false; };
   }, [accountRef, client]);
 
-  async function applyConfig(
-    build: (latest: Record<string, unknown>) => Record<string, unknown> | Promise<Record<string, unknown>>,
-    selectedRef?: string,
-  ) {
+  async function run(action: () => Promise<string | undefined>) {
     setBusy(true);
     setError("");
     try {
-      const latest = (await settings.getConfig("feishu")).values;
-      const updated = await build(latest);
-      const result = await settings.setConfig("feishu", updated, { operationId: crypto.randomUUID() });
-      setValues(result.values);
-      if (selectedRef) {
-        const refreshed = await accounts.list();
-        onChanged(refreshed.find((item) => item.pluginId === "feishu" && item.platformAccountId === selectedRef)?.id);
-      } else {
-        onChanged();
-      }
+      onChanged(await action());
       return true;
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
@@ -68,25 +47,25 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
   }
 
   async function save() {
-    if (!values || !appId.trim()) return;
-    const ref = `${domain}:${appId.trim()}`;
-    const saved = await applyConfig(async (latest) => {
-      const current = configuredApps(latest).find((item) => `${item.domain}:${item.app_id}` === `${domain}:${appId.trim()}`);
-      const appSecret = secret.trim() || current?.app_secret || "";
-      if (!appSecret) throw new Error("请输入 App Secret");
-      if (!current || secret.trim()) {
-        await client.call("accounts.verify", { domain, app_id: appId.trim(), app_secret: appSecret });
-      }
-      return withSavedApp(latest, { domain, app_id: appId.trim(), app_secret: appSecret, role_id: roleId });
-    }, ref);
-    if (saved) setSecret("");
+    if (!appId.trim()) return;
+    const ok = await run(async () => {
+      const result = await client.call<{ account_id: string }>("accounts.save", {
+        role_id: roleId, domain, app_id: appId.trim(), ...(secret.trim() ? { app_secret: secret.trim() } : {}),
+      });
+      return result.account_id;
+    });
+    if (ok) setSecret("");
   }
 
   async function disconnect() {
-    if (!accountRef) return;
-    await applyConfig((latest) => withConnection(latest, accountRef, false));
+    if (!account) return;
+    await run(async () => {
+      await client.call("accounts.disconnect", { account_id: account.id, role_id: roleId });
+      return account.id;
+    });
   }
 
+  const connected = account?.connection === "online" || account?.connection === "connecting";
   return <div className="grid gap-4">
     {error ? <host.ui.InlineError message={error} /> : null}
     {account?.connection === "login_required" && account.error ? <host.ui.InlineError message={account.error} /> : null}
@@ -102,10 +81,9 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
       <input className={inputClass} type="password" value={secret} disabled={busy} onChange={(event) => setSecret(event.target.value)} autoComplete="new-password" placeholder={account ? "已保存" : ""} />
     </label>
     <div className="flex flex-wrap gap-2">
-      <button type="button" className={primaryButtonClass} disabled={busy || !values || !appId.trim()} onClick={() => void save()}>保存并连接</button>
-      {account ? <button type="button" className={ghostButtonClass} disabled={busy || !values} onClick={() => void (
-        account.connection === "online" || account.connection === "connecting" ? disconnect() : save()
-      )}>{account.connection === "online" || account.connection === "connecting" ? "断开连接" : "重新连接"}</button> : null}
+      <button type="button" className={primaryButtonClass} disabled={busy || !appId.trim() || (!account && !secret.trim())} onClick={() => void save()}>保存并连接</button>
+      {account ? <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => void (connected ? disconnect() : save())}>
+        {connected ? "断开连接" : "重新连接"}</button> : null}
     </div>
     {profile?.identity.open_id ? <p className="m-0 break-all text-body-sm text-ink-muted">机器人 open_id（本应用） · {profile.identity.open_id}</p> : null}
     {profile?.targets.length ? <div className="grid gap-2 border-t border-line-soft pt-4 text-body-sm">

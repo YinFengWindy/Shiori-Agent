@@ -81,22 +81,17 @@ class FeishuChannel:
         accounts: "AccountsCapability | None" = None,
         profile_store: "PluginKVStore | None" = None,
         profile_ref: str = "",
-        connection_revision: int = 0,
         role_id: str | None = None,
     ) -> None:
         self.name = name
         self.account_id = account_id
-        # Role that owns this application's account, from its config entry.
+        # Role that owns this application's account, from its saved entry.
         self._role_id = role_id
         self._accounts = accounts
         self._profile_store = profile_store
         self._profile_ref = profile_ref
-        self._connection_revision = connection_revision
-        self._app_id = app_id
         # The manifest's session types, for answering ``/chatid``.
         self._chat_types = chat_types
-        self._app_secret = app_secret
-        self._domain = domain
         self._api = FeishuApi(app_id, app_secret, domain, transport=transport)
         self._connection_factory = connection_factory or sdk_connection_factory(
             app_id, app_secret, domain
@@ -138,32 +133,6 @@ class FeishuChannel:
             (TurnStarted, self._on_turn_started),
             (StreamDeltaReady, self._on_stream_delta),
         ]
-
-    @property
-    def configuration_key(self):
-        """Identifies connections reusable across plugin generations."""
-        return (
-            "feishu",
-            self.name,
-            self._app_id,
-            self._app_secret,
-            self._domain,
-            self._connection_revision,
-        )
-
-    def adopt_runtime(self, candidate: "FeishuChannel") -> None:
-        """Routes a reused WebSocket's reports through the published generation."""
-        if self.configuration_key != candidate.configuration_key:
-            raise ValueError("飞书连接配置不匹配")
-        self._accounts = candidate._accounts
-        self.account_id = candidate.account_id
-        self._profile_store = candidate._profile_store
-        self._profile_ref = candidate._profile_ref
-        self._report(
-            "online"
-            if self._runner and self._runner.state.connected and self._bot_open_id
-            else "connecting"
-        )
 
     # ── channel hooks ────────────────────────────────────────────────
 

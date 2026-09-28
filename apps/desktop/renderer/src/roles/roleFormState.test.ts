@@ -17,7 +17,6 @@ function createRole(runtime_config: Record<string, unknown> = {}): RoleRecord {
     description: "",
     system_prompt: "prompt",
     runtime_config,
-    channel_bindings: [],
     proactive: {
       enabled: false,
       candidates: [],

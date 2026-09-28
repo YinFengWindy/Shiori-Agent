@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from core.accounts import stored_response_rules
+
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
@@ -22,13 +24,24 @@ class QQBotAccountIdentity:
         self._pending_identity: dict[str, tuple[str, str]] = {}
         self._handoffs: set[str] = set()
         for row in store.list():
+            role_id = row.get("role_id") or None
+            if role_id is not None and not ctx.accounts.role_exists(role_id):
+                # Deleted while this plugin was not loaded: purge the orphan.
+                store.remove(row["app_id"])
+                continue
+            try:
+                rules = stored_response_rules(row.get("response_rules"))
+            except ValueError as exc:
+                ctx.accounts.reject(f"app:{row['app_id']}", str(exc))
+                continue
             # A stored application the host refuses is reported, not served.
-            snapshot = ctx.accounts.register_configured(
+            snapshot = ctx.accounts.register_saved(
                 platform="qqbot",
                 platform_account_id=row["app_id"],
                 config_ref=f"app:{row['app_id']}",
-                role_id=row.get("role_id"),
+                role_id=role_id,
                 display_name=row.get("bot_name") or None,
+                response_rules=rules,
             )
             if snapshot is not None:
                 self._account_ids[row["app_id"]] = snapshot.record.id
@@ -51,7 +64,6 @@ class QQBotAccountIdentity:
         self._ctx.accounts.check_owner(
             config_ref=f"app:{app_id}",
             role_id=role_id,
-            platform="qqbot",
             platform_account_id=app_id,
         )
 

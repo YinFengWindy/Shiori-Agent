@@ -48,23 +48,9 @@ class QQBotAccountStore:
         if any(row["app_id"] == app_id for row in rows):
             self._kv.set(_KEY, [row for row in rows if row["app_id"] != app_id])
 
-    def migrate_legacy(self, app_id: str, secret: str) -> None:
-        """Import the former single application exactly once, preserving its C2C IDs."""
-        if (
-            not app_id
-            or not secret
-            or any(row["app_id"] == app_id for row in self.list())
-        ):
-            return
-        self.save(
-            {
-                "app_id": app_id,
-                "client_secret": secret,
-                "legacy": True,
-                "connected": True,
-                "targets": [],
-            }
-        )
+    def set_rules(self, app_id: str, rules: dict[str, Any]) -> None:
+        """Saves the host-edited response rules with the application's record."""
+        self.save({**self.get(app_id), "response_rules": rules})
 
     def observe(self, app_id: str, openid: str) -> None:
         row = self.get(app_id)

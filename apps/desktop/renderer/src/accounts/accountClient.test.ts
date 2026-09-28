@@ -6,8 +6,8 @@ test("account client maps host snapshots and sends only explicit rule mutations"
   const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
   const row = {
     id: "a", plugin_id: "demo", platform: "demo", platform_account_id: "101", config_ref: "private-a",
-    display_name: "Account", avatar_url: "", role_id: null,
-    plugin_enabled: true, runtime_active: true, connection: "online", capabilities: [], known_capabilities: ["groups"], error: "",
+    display_name: "Account", avatar_url: "", role_id: "role-1",
+    runtime_active: true, connection: "online", capabilities: ["groups"], error: "",
     response_rules: { private_enabled: true, group_enabled: true, require_mention: true,
       blocked_sender_ids: [], group_rules: [{ chat_id: "group-1", enabled: true,
         require_mention: false, blocked_sender_ids: ["sender-1"] }] },
@@ -20,7 +20,7 @@ test("account client maps host snapshots and sends only explicit rule mutations"
   const [account] = await client.list();
   assert.equal(account.responseRules.groupRules[0].chatId, "group-1");
   assert.equal(account.responseRules.groupRules[0].blockedSenderIds[0], "sender-1");
-  assert.deepEqual(account.knownCapabilities, ["groups"]);
+  assert.deepEqual(account.capabilities, ["groups"]);
   assert.equal(account.configRef, "private-a");
   assert.deepEqual(calls.map(({ method }) => method), ["accounts.list"]);
   await client.setRules("a", account.responseRules);

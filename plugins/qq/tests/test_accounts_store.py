@@ -9,30 +9,6 @@ from plugins.qq.backend.accounts_store import (
 )
 
 
-def test_legacy_connection_migrates_once_without_overwriting_private_edits(tmp_path):
-    store = QQAccountsStore(tmp_path)
-    first = store.migrate_legacy(
-        bot_uin="101",
-        ws_uri="ws://localhost:3001",
-        ws_token="first",
-        timeout_seconds=7,
-    )
-    assert first["legacy"].expected_uin == "101"
-    assert first["legacy"].ws_token == "first"
-    assert store.path.is_relative_to(tmp_path / "plugin-data" / "qq")
-    assert store.legacy_receipt.is_file()
-    assert "first" not in store.legacy_receipt.read_text(encoding="utf-8")
-
-    second = store.migrate_legacy(
-        bot_uin="202",
-        ws_uri="ws://other:3002",
-        ws_token="second",
-        timeout_seconds=3,
-    )
-    assert second == first
-    assert "first" not in str(first["legacy"].public_dict())
-
-
 def test_private_store_rejects_duplicate_references(tmp_path):
     store = QQAccountsStore(tmp_path)
     store.path.parent.mkdir(parents=True)
@@ -59,66 +35,6 @@ def test_private_store_rejects_unknown_connection_mode(tmp_path):
     )
     with pytest.raises(ValueError, match="连接模式"):
         store.load()
-
-
-def test_migration_does_not_duplicate_an_existing_qq_identity(tmp_path):
-    store = QQAccountsStore(tmp_path)
-    existing = QQConnectionConfig(
-        "already", "ws://localhost:3001", "secret", expected_uin="101", verified=True
-    )
-    store.save({"already": existing})
-    migrated = store.migrate_legacy(
-        bot_uin="101",
-        ws_uri="ws://localhost:3001",
-        ws_token="secret",
-        timeout_seconds=5,
-    )
-    assert migrated == {"already": existing}
-    assert store.legacy_receipt.is_file()
-
-
-def test_mismatched_private_connection_does_not_authorize_host_cleanup(tmp_path):
-    store = QQAccountsStore(tmp_path)
-    store.save(
-        {
-            "already": QQConnectionConfig(
-                "already",
-                "ws://new:3001",
-                "new-secret",
-                expected_uin="101",
-                verified=True,
-            )
-        }
-    )
-    store.migrate_legacy(
-        bot_uin="101",
-        ws_uri="ws://old:3001",
-        ws_token="old-secret",
-        timeout_seconds=5,
-    )
-    assert not store.legacy_receipt.exists()
-
-
-def test_managed_account_does_not_authorize_legacy_host_cleanup(tmp_path):
-    store = QQAccountsStore(tmp_path)
-    store.save(
-        {
-            "managed": QQConnectionConfig(
-                "managed",
-                "ws://localhost:3001",
-                "old-secret",
-                expected_uin="101",
-                mode="managed",
-            )
-        }
-    )
-    store.migrate_legacy(
-        bot_uin="101",
-        ws_uri="ws://localhost:3001",
-        ws_token="old-secret",
-        timeout_seconds=5,
-    )
-    assert not store.legacy_receipt.exists()
 
 
 def test_pending_credentials_round_trip_without_replacing_active_connection(tmp_path):

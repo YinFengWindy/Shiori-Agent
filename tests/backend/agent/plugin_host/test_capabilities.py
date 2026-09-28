@@ -499,20 +499,30 @@ async def test_closed_scope_rejects_contributions_before_mutating_registries():
 
 
 @pytest.mark.asyncio
-async def test_account_delete_hook_is_published_per_generation_and_withdrawn(
-    tmp_path,
-):
-    from core.accounts import AccountDeletionPlan, AccountRegistry
+async def test_account_hooks_and_accounts_live_and_leave_with_the_plugin_instance():
+    from core.accounts import (
+        AccountDeletionPlan,
+        AccountRegistry,
+        AccountResponseRules,
+    )
 
-    registry = AccountRegistry(tmp_path, {"mira", "other"}.__contains__)
-    registry.set_plugin_enabled("demo", True, generation="g1")
+    registry = AccountRegistry({"mira", "other"}.__contains__)
     registry.publish_generation("g1")
     effects = EffectScope("demo")
     accounts = AccountsCapability(registry, effects, "demo", "g1")
     account = accounts.register(
         platform="demo", platform_account_id="7", config_ref="a", role_id="mira"
     )
+    # A saved account the host refuses is reported, not raised.
+    assert (
+        accounts.register_saved(
+            platform="demo", platform_account_id="9", config_ref="c", role_id="mira"
+        )
+        is None
+    )
+    assert registry.rejected("demo") == ["账号 c 未加载：该角色在这个渠道已有账号"]
     purged: list[str] = []
+    saved_rules: list[tuple[str, AccountResponseRules]] = []
 
     def cleanup(config_ref: str) -> AccountDeletionPlan:
         async def purge() -> None:
@@ -524,34 +534,20 @@ async def test_account_delete_hook_is_published_per_generation_and_withdrawn(
         return AccountDeletionPlan(disconnect, purge)
 
     accounts.on_delete(cleanup)
+    accounts.on_rules_change(lambda ref, rules: saved_rules.append((ref, rules)))
     with pytest.raises(ValueError, match="already registered"):
         accounts.on_delete(cleanup)
-
-    async def no_config(plugin_id: str, values: dict) -> None:
-        raise AssertionError("no config write expected")
-
-    def no_check(plugin_id: str, values: dict) -> None:
-        raise AssertionError("no config check expected")
 
     second = accounts.register(
         platform="demo", platform_account_id="8", config_ref="b", role_id="other"
     )
-    await registry.delete(
-        account.record.id,
-        role_id="mira",
-        check_plugin_config=no_check,
-        write_plugin_config=no_config,
-    )
+    await registry.delete(account.record.id, role_id="mira")
     assert purged == ["a"]
-    assert [row.record.id for row in registry.list()] == [second.record.id]
+    registry.set_response_rules(second.record.id, AccountResponseRules(False))
+    assert saved_rules == [("b", AccountResponseRules(False))]
 
+    # Unloading the plugin takes its accounts and hooks out of the index.
     assert await effects.dispose_all() == []
-    with pytest.raises(RuntimeError, match="未启用或未加载"):
-        await registry.delete(
-            second.record.id,
-            role_id="other",
-            check_plugin_config=no_check,
-            write_plugin_config=no_config,
-        )
+    assert registry.list() == []
     with pytest.raises(RuntimeError):
         accounts.on_delete(cleanup)

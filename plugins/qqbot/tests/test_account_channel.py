@@ -25,9 +25,12 @@ class _Accounts:
         if not role_id:
             raise ValueError("账号没有所属角色")
 
-    def register_configured(self, **fields):
+    def register_saved(self, *, response_rules=None, **fields):
         # The host refuses an entry without an owner; the plugin must skip it.
         return self.register(**fields) if fields.get("role_id") else None
+
+    def role_exists(self, role_id):
+        return True
 
     def report(self, account_id, **kwargs):
         pass
@@ -57,13 +60,13 @@ async def test_one_public_channel_starts_isolated_application_gateways(
     tmp_path, monkeypatch
 ):
     store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
-    store.migrate_legacy("100", "legacy-secret")
+    # Without an owner role the host refuses the application.
+    store.save({"app_id": "100", "client_secret": "unowned-secret"})
     store.save(
         {
             "app_id": "200",
             "client_secret": "second-secret",
             "role_id": "other",
-            "legacy": False,
             "connected": True,
             "targets": [],
         }
@@ -82,7 +85,7 @@ async def test_one_public_channel_starts_isolated_application_gateways(
     runtime = SimpleNamespace(bus=_Bus(), push_tool=_Push(), event_bus=EventBus())
     await manager.start(runtime)
     try:
-        # The imported application has no owner role, so it is not served.
+        # The unowned application is not registered, so it is not served.
         assert started == [("200", False)]
         assert list(manager._channels) == ["200"]
         assert manager._channels["200"]._client_secret == "second-secret"

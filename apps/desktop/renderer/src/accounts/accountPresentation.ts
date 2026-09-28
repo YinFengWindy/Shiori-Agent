@@ -13,14 +13,28 @@ export function accountHeadline(account: AccountIdentity) {
   return `${account.platform} · ${accountName(account)}`;
 }
 
+/**
+ * Consequence text for deleting a role, naming the accounts deleted with it
+ * (those of loaded plugins), or why they could not be listed.
+ */
+export function roleDeletionDescription(
+  roleName: string,
+  deleted: { accounts: ReadonlyArray<AccountIdentity>; error: string },
+) {
+  const base = `“${roleName}” 删除后会移除角色会话与相关素材。`;
+  if (deleted.error) return `${base}账号列表读取失败：${deleted.error}`;
+  if (!deleted.accounts.length) return base;
+  return `${base}以下账号会一并删除：${deleted.accounts.map(accountHeadline).join("、")}。`;
+}
+
 /** Consequence text for the delete confirmation; empty when nothing is pending. */
 export function accountDeletionDescription(account: AccountIdentity | null) {
   return account ? `“${accountHeadline(account)}” 的凭据和平台数据会被清除，历史消息保留。` : "";
 }
 
-/** Disabled providers cannot be shown online even if a stale live report remains. */
+/** An account its plugin is not running cannot be shown online. */
 export function accountStatus(account: AccountSnapshot) {
-  if (!account.pluginEnabled || !account.runtimeActive) return "离线";
+  if (!account.runtimeActive) return "离线";
   switch (account.connection) {
     case "online": return "在线";
     case "connecting": return "连接中";

@@ -82,10 +82,11 @@ class _InboundMixin:
 
     async def _handle_chat_id(self, chat_id: str, sender: str) -> None:
         """Answers ``/chatid``; the admission exception is documented there."""
+        # The reply names the user's OpenID, not the application-scoped chat ID.
         await answer_chat_id_command(
             self._channel_hub,
             channel=CHANNEL,
-            chat_id=chat_id,
+            chat_id=f"c2c:{sender}",
             chat_type="private",
             sender_id=sender,
             declarations=self._chat_types,

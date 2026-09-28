@@ -13,7 +13,6 @@ from core.roles import (
 )
 from core.roles.inbound import route_inbound_by_role
 from session.manager import SessionManager
-from shiori_plugin_testkit.legacy_roles import seed_legacy_bindings
 
 
 def test_role_store_creates_manifest_and_assets_layout(tmp_path: Path):
@@ -200,37 +199,6 @@ def test_role_store_persists_runtime_config_updates(tmp_path: Path):
     reloaded = store.get_role("mira")
     assert reloaded is not None
     assert reloaded.runtime_config["nsfw_memory_enabled"] is True
-
-
-def test_role_store_reads_legacy_group_blacklist_without_editing_it(
-    tmp_path: Path,
-):
-    store = RoleStore(tmp_path)
-    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
-    store.create_role(name="Luna", system_prompt="luna", role_id="luna")
-
-    seeded = seed_legacy_bindings(
-        tmp_path,
-        "mira",
-        [
-            {
-                "channel": "telegram",
-                "chat_id": "-42",
-                "chat_type": "group",
-                "blocked_senders": ["alice", " bob "],
-            },
-            {"channel": "qq", "chat_id": "7", "chat_type": "private"},
-        ],
-    )
-
-    assert seeded.channel_bindings[0].blocked_senders == ["alice", "bob"]
-    assert seeded.channel_bindings[1].blocked_senders == []
-    reloaded = RoleStore(tmp_path).get_role("mira")
-    assert reloaded is not None
-    assert reloaded.channel_bindings == seeded.channel_bindings
-    luna = store.get_role("luna")
-    assert luna is not None
-    assert luna.channel_bindings == []
 
 
 def test_role_store_drops_proactive_candidate_in_other_qq_chat_form(tmp_path: Path):
@@ -629,24 +597,18 @@ def test_route_inbound_by_role_uses_account_owner_session(tmp_path: Path):
         role_store=RoleStore(tmp_path),
         session_manager=session_manager,
     )
-    aggregate = service.create_role(
+    service.create_role(
         role_id="mira",
         name="Mira",
         description="desktop role",
         system_prompt="you are mira",
     )
-    seed_legacy_bindings(
-        tmp_path,
-        aggregate.role.id,
-        [{"channel": "telegram", "chat_id": "chat-1", "chat_type": "private"}],
-    )
     accounts = service.repository.store.accounts
-    accounts.set_plugin_enabled("telegram", True)
     account = accounts.register(
         plugin_id="telegram",
         platform="telegram",
         platform_account_id="self",
-        config_ref="legacy",
+        config_ref="self",
         token="live",
         role_id="mira",
     )

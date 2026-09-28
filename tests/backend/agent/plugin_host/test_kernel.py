@@ -82,7 +82,6 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
         ),
     )
     await discarded.load_all()
-    assert role_store.accounts.get(first).plugin_enabled
     assert role_store.accounts.get(first).connection == "online"
     await discarded.terminate_all(force=True)
     assert role_store.accounts.get(first).connection == "online"
@@ -103,10 +102,9 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     replacement.publish_accounts()
     await first_kernel.terminate_all(force=True)
     assert role_store.accounts.get(first).runtime_active
+    # The unloaded plugin's accounts leave the index instead of lingering.
     await replacement.terminate_all(force=True)
-    assert not role_store.accounts.get(first).plugin_enabled
-    assert not role_store.accounts.get(first).runtime_active
-    assert role_store.accounts.get(first).connection == "unknown"
+    assert role_store.accounts.list() == []
 
     disabled = PluginKernel(
         [tmp_path],
@@ -118,8 +116,7 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
         ),
     )
     await disabled.load_all()
-    assert not role_store.accounts.get(first).plugin_enabled
-    assert not role_store.accounts.get(first).runtime_active
+    assert role_store.accounts.list() == []
 
 
 @pytest.mark.asyncio

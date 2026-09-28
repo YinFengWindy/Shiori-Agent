@@ -7,8 +7,8 @@ import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../pl
 
 const accountRow = {
   id: "account-1", plugin_id: "test-provider", platform: "test", platform_account_id: "101",
-  config_ref: "ref-1", display_name: "Owned", avatar_url: "", role_id: "role-1", plugin_enabled: true,
-  runtime_active: true, connection: "online", capabilities: [], known_capabilities: [], error: "",
+  config_ref: "ref-1", display_name: "Owned", avatar_url: "", role_id: "role-1",
+  runtime_active: true, connection: "online", capabilities: [], error: "",
   response_rules: { private_enabled: true, group_enabled: true, require_mention: true,
     blocked_sender_ids: [], group_rules: [] },
 };
@@ -34,7 +34,7 @@ test("owned account detail opens the platform controls for this role, without ow
   const environment = await mountTestComponent(null);
   const { RoleAccountsPanel } = await import("./RoleAccountsPanel");
   await environment.cleanup();
-  setPluginEnabledSnapshot([]);
+  setPluginEnabledSnapshot([{ id: "test-provider", enabled: true, state: "ACTIVE" }]);
   registerPlatform("test-provider", "Test");
   const view = await mountTestComponent(
     <RoleAccountsPanel roleId="role-1" />,
@@ -55,6 +55,7 @@ test("owned account detail opens the platform controls for this role, without ow
   } finally {
     await view.cleanup();
     pluginUiRegistry.unregisterPlugin("test-provider");
+    resetPluginEnabledStateForTests();
   }
 });
 

@@ -51,7 +51,6 @@ async def test_plugin_account_report_and_bridge_listing_share_role_store(
         assert listed.error is None, listed.error
         assert len(listed.payload["accounts"]) == 1
         account = listed.payload["accounts"][0]
-        assert account["plugin_enabled"] is True
         assert account["runtime_active"] is True
         assert account["connection"] == "online"
         assert account["capabilities"] == ["contacts"]

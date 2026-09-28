@@ -449,21 +449,6 @@ def test_receive_ids_follow_the_id_prefix() -> None:
     assert resolve_receive_id("on_1") == ("on_1", "union_id")
 
 
-def test_configuration_key_covers_every_connection_setting() -> None:
-    base = FeishuChannel("a", "s", "https://open.feishu.cn")
-
-    assert (
-        base.configuration_key
-        == FeishuChannel("a", "s", "https://open.feishu.cn").configuration_key
-    )
-    for other in (
-        FeishuChannel("b", "s", "https://open.feishu.cn"),
-        FeishuChannel("a", "t", "https://open.feishu.cn"),
-        FeishuChannel("a", "s", "https://open.larksuite.com"),
-    ):
-        assert other.configuration_key != base.configuration_key
-
-
 def _reply_of(message_id: str, content: str) -> OutboundMessage:
     """A final reply of an inbound turn: it carries the inbound metadata."""
     return OutboundMessage(

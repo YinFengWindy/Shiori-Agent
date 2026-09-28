@@ -1,32 +1,50 @@
-"""Feishu application configuration and legacy single-app migration."""
+"""Feishu/Lark applications saved in the plugin's own storage, never in host config."""
 
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, field_validator
 
 from agent.config import resolve_config_references
 
 from .formatting import DOMAINS, FEISHU_DOMAIN, LARK_DOMAIN
 
+if TYPE_CHECKING:
+    from agent.plugin_host.kv import PluginKVStore
+
 UNRESOLVED_ENV_RE = re.compile(r"^\$\{\w+\}$")
 _DOMAIN_ALIASES = {FEISHU_DOMAIN: "feishu", LARK_DOMAIN: "lark"}
+# KV key of the saved application list.
+APPLICATIONS_KEY = "applications"
+# Per-application KV caches written by the channel and the profile RPC.
+_CACHE_PREFIXES = ("profile", "targets")
 
 
 class FeishuAppConfig(BaseModel):
-    """One isolated custom bot application and its regional credential."""
+    """One custom bot application and its regional credential.
+
+    ``app_secret`` is a literal secret or a whole ``${NAME}`` reference, kept
+    verbatim and resolved only when connecting or verifying.
+    """
 
     app_id: str
-    app_secret: str
+    app_secret: str = ""
     domain: Literal["feishu", "lark"] = "feishu"
 
-    @field_validator("app_id", "app_secret", mode="before")
+    @field_validator("app_id", mode="before")
     @classmethod
-    def _normalize_credential(cls, value: object) -> str:
+    def _normalize_app_id(cls, value: object) -> str:
         text = str(value or "").strip()
-        return "" if UNRESOLVED_ENV_RE.fullmatch(text) else text
+        if not text or ":" in text or "${" in text:
+            raise ValueError("飞书 App ID 无效")
+        return text
+
+    @field_validator("app_secret", mode="before")
+    @classmethod
+    def _normalize_secret(cls, value: object) -> str:
+        return str(value or "").strip()
 
     @field_validator("domain", mode="before")
     @classmethod
@@ -38,7 +56,7 @@ class FeishuAppConfig(BaseModel):
 
     @property
     def ref(self) -> str:
-        """Stable regional application reference used by the host account record."""
+        """Stable regional reference: config_ref, platform account and channel suffix."""
         return f"{self.domain}:{self.app_id}"
 
     @property
@@ -46,92 +64,64 @@ class FeishuAppConfig(BaseModel):
         """Regional OpenAPI endpoint."""
         return DOMAINS[self.domain]
 
+    def resolved_secret(self) -> str:
+        """The usable secret; empty when missing or its ``${NAME}`` is unset."""
+        secret = str(resolve_config_references(self.app_secret)).strip()
+        return "" if UNRESOLVED_ENV_RE.fullmatch(secret) else secret
 
-class FeishuAccountConfig(FeishuAppConfig):
-    """Persisted connection intent for one configured application."""
+
+class FeishuApplication(FeishuAppConfig):
+    """A saved application: credential, owner role, connection intent, rules."""
 
     connection_enabled: bool = True
-    connection_revision: int = Field(default=0, ge=0)
-    # Role the application was added from; its account is registered for it.
-    # Empty means no owner (TOML has no null); such an app is not served.
     role_id: str = ""
+    # ``core.accounts.response_rules_to_dict`` JSON; None until first edited.
+    response_rules: dict[str, Any] | None = None
 
 
-class FeishuConfigModel(FeishuAppConfig):
-    """Application list plus the old single-app fields retained for migration."""
+class FeishuApplicationStore:
+    """The ``applications`` list in the plugin KV store, keyed by ``ref``."""
 
-    app_id: str = Field(
-        default="",
-        title="App ID",
-        description="开发者后台「凭证与基础信息」里的 App ID（cli_…）",
-    )
-    app_secret: str = Field(
-        default="",
-        title="App Secret",
-        description="同一页面的 App Secret，支持 ${ENV} 引用环境变量",
-    )
-    domain: Literal["feishu", "lark"] = Field(
-        default="feishu",
-        title="服务域名",
-        description="feishu：飞书（open.feishu.cn）；lark：Lark 国际版（open.larksuite.com）",
-    )
-    accounts: list[FeishuAccountConfig] = Field(default_factory=list)
-    legacy_channel_ref: str = ""
+    def __init__(self, kv: PluginKVStore) -> None:
+        self._kv = kv
 
-    @model_validator(mode="after")
-    def _unique_accounts(self) -> "FeishuConfigModel":
-        if any(not account.app_id for account in self.accounts):
-            raise ValueError("飞书应用账号需要 App ID")
-        refs = [account.ref for account in self.accounts]
-        if len(refs) != len(set(refs)):
-            raise ValueError("飞书应用的区域和 App ID 不得重复")
-        return self
+    def rows(self) -> list[Any]:
+        """Raw saved entries; each is parsed on its own so one bad entry is isolated."""
+        rows = self._kv.get(APPLICATIONS_KEY, [])
+        if not isinstance(rows, list):
+            raise ValueError("飞书应用数据格式错误")
+        return rows
 
-    @property
-    def applications(self) -> list[FeishuAccountConfig]:
-        """Includes the old app once until a settings save migrates it."""
-        accounts = list(self.accounts)
-        if self.app_id and not any(account.ref == self.ref for account in accounts):
-            accounts.insert(
-                0,
-                FeishuAccountConfig(
-                    app_id=self.app_id,
-                    app_secret=self.app_secret,
-                    domain=self.domain,
-                ),
-            )
-        return [account for account in accounts if account.app_id]
-
-    @property
-    def channel_alias_ref(self) -> str:
-        """Keeps the old bare channel bound to its original application."""
-        return self.legacy_channel_ref or (self.ref if self.app_id else "")
-
-
-def config_without_application(raw: dict[str, Any], ref: str) -> dict[str, Any] | None:
-    """Returns the ``[plugins.feishu]`` table minus one application, or None.
-
-    Entries are matched by their expanded identity (an App ID may itself be an
-    ``${ENV}`` reference) but written back unexpanded, so other applications'
-    references persist. The application may also be the old top-level single
-    app, and the bare ``feishu`` channel alias must not keep pointing at it.
-    """
-    # resolve_config_references returns ``object``; a table stays a table.
-    resolved = cast(dict[str, Any], resolve_config_references(raw))
-    accounts = raw.get("accounts") or []
-    kept = [
-        item
-        for item, expanded in zip(accounts, resolved.get("accounts") or [])
-        if FeishuAppConfig.model_validate(expanded).ref != ref
-    ]
-    legacy = FeishuConfigModel.model_validate(resolved)
-    top_level = bool(legacy.app_id) and legacy.ref == ref
-    alias = raw.get("legacy_channel_ref") == ref
-    if len(kept) == len(accounts) and not top_level and not alias:
+    def get(self, ref: str) -> FeishuApplication | None:
+        """The saved application behind ``ref``, if any."""
+        for row in self.rows():
+            try:
+                app = FeishuApplication.model_validate(row)
+            except ValueError:
+                continue
+            if app.ref == ref:
+                return app
         return None
-    updated: dict[str, Any] = {**raw, "accounts": kept}
-    if top_level:
-        updated.update(app_id="", app_secret="")
-    if alias:
-        updated["legacy_channel_ref"] = ""
-    return updated
+
+    def save(self, app: FeishuApplication) -> None:
+        """Adds or replaces one application's entry."""
+        kept = [row for row in self.rows() if _row_ref(row) != app.ref]
+        self._kv.set(
+            APPLICATIONS_KEY, [*kept, app.model_dump(mode="json", exclude_none=True)]
+        )
+
+    def remove(self, ref: str) -> None:
+        """Deletes the application's entry and caches; idempotent."""
+        rows = self.rows()
+        kept = [row for row in rows if _row_ref(row) != ref]
+        if len(kept) != len(rows):
+            self._kv.set(APPLICATIONS_KEY, kept)
+        for prefix in _CACHE_PREFIXES:
+            self._kv.delete(f"{prefix}:{ref}")
+
+
+def _row_ref(row: Any) -> str:
+    try:
+        return FeishuAppConfig.model_validate(row).ref
+    except ValueError:
+        return ""

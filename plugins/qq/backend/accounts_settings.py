@@ -8,6 +8,7 @@ from math import isfinite
 from typing import Any
 from urllib.parse import urlsplit
 
+from core.accounts import AccountResponseRules
 from infra.channels.intake import ChannelIntake
 
 from .accounts_store import (
@@ -163,8 +164,6 @@ class QQAccountSettings:
     async def remove_draft(self, ref: str) -> None:
         """Discards only an unverified, stopped connection draft."""
         config = self._configs[ref]
-        if ref == "legacy":
-            raise PermissionError("旧 QQ 配置仍在宿主设置中，不能删除迁移记录")
         if config.verified or config.auto_connect or ref in self._sockets:
             raise PermissionError("已验证或运行中的 QQ 账号不能作为草稿删除")
         if config.mode == "managed":
@@ -202,6 +201,23 @@ class QQAccountSettings:
             await self._managed.stop(ref)
             if ref in self._configs:
                 self._states[ref] = ("offline", "")
+
+    def save_rules(self, ref: str, rules: AccountResponseRules) -> None:
+        """Persists host-edited response rules with the account's private config."""
+        config = replace(self._configs[ref], response_rules=rules)
+        self._store.save({**self._configs, ref: config})
+        self._configs[ref] = config
+
+    async def prune_orphans(self) -> None:
+        """Deletes configs, drafts included, whose owner role no longer exists.
+
+        Role deletion only reaches a loaded plugin, so accounts of a role
+        deleted meanwhile are removed with all their data on the next load.
+        Configs without an owner are kept for the user to fix by hand.
+        """
+        for ref, config in list(self._configs.items()):
+            if config.role_id and not self._accounts.role_exists(config.role_id):
+                await self.purge_account(ref)
 
     async def purge_account(self, ref: str) -> None:
         """Deletes the account's credentials and NapCat data; idempotent."""

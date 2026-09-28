@@ -36,7 +36,6 @@ export function AccountList({ title, roleId, accounts, error, onRefresh, onAdd, 
         </span>
       </button>
       {showConnectionAction ? <button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)}
-        disabled={!account.pluginEnabled}
         aria-label={`管理 ${accountName(account)} 的连接`}
         onClick={() => setSelected(account)}>管理连接</button> : null}
       {onDelete ? <button type="button" className={cx(dangerGhostButtonSurfaceClass, compactButtonSizeClass)}

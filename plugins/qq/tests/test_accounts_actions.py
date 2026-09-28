@@ -55,8 +55,7 @@ async def test_actions_reject_invalid_directory_shape_and_propagate_api_failure(
 
 @pytest.mark.asyncio
 async def test_disconnect_is_pending_but_onebot_rejection_is_failed(tmp_path):
-    accounts = AccountRegistry(tmp_path, lambda role_id: role_id == "mira")
-    accounts.set_plugin_enabled("qq", True)
+    accounts = AccountRegistry(lambda role_id: role_id == "mira")
     account = accounts.register(
         plugin_id="qq",
         platform="qq",

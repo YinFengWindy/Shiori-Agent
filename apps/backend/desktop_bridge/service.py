@@ -3,7 +3,7 @@ from __future__ import annotations
 from agent.plugin_host.bridge_events import PluginBridgeEvent, PluginRpcError
 
 from contextlib import ExitStack
-from core.accounts import AccountDeletingError
+from core.accounts import AccountDeletingError, AccountNotFoundError
 from core.common.cleanup import run_cleanup_steps
 
 import inspect
@@ -143,10 +143,7 @@ class DesktopBridgeService:
             ),
         )
         self.role_service.add_role_deleted_listener(self._role_deleted_listener)
-        self.conversation_service = ConversationService(
-            session_manager,
-            binding_resolver=self.role_service.repository.store.resolve_legacy_session_owner,
-        )
+        self.conversation_service = ConversationService(session_manager)
         self.relationship_runtime = relationship_runtime
         self.presence = presence
         self.scheduler = scheduler
@@ -709,6 +706,10 @@ class DesktopBridgeService:
                 )
             if result is not None:
                 return self._ok(request_id, method, result)
+        except AccountNotFoundError as exc:
+            return self._error(
+                request_id, method, "account_not_found", f"账号不存在: {exc.args[0]}"
+            )
         except KeyError as exc:
             return self._error(request_id, method, "role_not_found", str(exc))
         except VoiceServiceError as exc:
@@ -743,7 +744,7 @@ class DesktopBridgeService:
         except PluginRpcError as exc:
             return self._error(request_id, method, exc.code, str(exc))
         except AccountDeletingError as exc:
-            # accounts.rules.set while that account is deleted.
+            # accounts.rules.set/delete while that account is being deleted.
             return self._error(request_id, method, "account_deleting", str(exc))
         except Exception as exc:
             return self._error(request_id, method, "internal_error", str(exc))

@@ -118,7 +118,8 @@ async def test_lists_desktop_builtins_and_account_ready_qqbot(tmp_path, monkeypa
     assert rows["qq"]["status"] == {"connected": False}
     assert rows["telegram"]["plugin_id"] == "telegram"
     assert rows["telegram"]["label"] == "Telegram"
-    assert rows["telegram"]["state"] == "not_configured"
+    # Telegram keeps its Bot group registered so an empty plugin can add a Bot.
+    assert rows["telegram"]["state"] == "active"
     assert rows["qqbot"] == {
         "name": "qqbot",
         "label": "QQBot",

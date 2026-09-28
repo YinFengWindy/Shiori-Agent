@@ -166,15 +166,6 @@ class RuntimePluginConfig:
         # 但当幂等 memo 命中时，apply() 根本不会调用这个回调——见
         # RuntimeSettingsApplication.apply 的文档。
         def merge(current_text: str) -> str:
-            # Account entries are checked against the committed table inside
-            # the settings lock, so no write can declare an unusable account.
-            before = _resolved_table(read_plugin_table(current_text, plugin_id))
-            try:
-                self._settings.roles.accounts.check_config_write(
-                    plugin_id, before, normalized
-                )
-            except ValueError as exc:
-                raise RuntimeApplyError("plugin_account_refused", str(exc)) from exc
             merged = _merge_plugin_values(current_text, plugin_id, persisted)
             self._assert_config_round_trip(
                 model_cls, plugin_id, current_text, merged, normalized
@@ -182,59 +173,6 @@ class RuntimePluginConfig:
             return merged
 
         return persisted, merge
-
-    def _plugin_replacement(
-        self, plugin_id: str, values: dict[str, Any]
-    ) -> tuple[dict[str, Any], Callable[[str], str]]:
-        """Chooses validated or verbatim replacement for a plugin-derived table.
-
-        QQBot declares no config model (its settings form was retired in #423)
-        yet its legacy credential still sits in ``[plugins.qqbot]``; such a
-        table is written verbatim, still under the table-isolation guard.
-        """
-        kernel = self._plugin_kernel()
-        model_cls = (
-            kernel.config_schemas.model_for(plugin_id) if kernel is not None else None
-        )
-        if model_cls is not None:
-            return self._validated_replacement(model_cls, plugin_id, values)
-
-        def merge(current_text: str) -> str:
-            merged = _merge_plugin_values(current_text, plugin_id, values)
-            _ = assert_plugin_table_isolated(plugin_id, current_text, merged)
-            return merged
-
-        return values, merge
-
-    def check_replacement(self, plugin_id: str, values: dict[str, Any]) -> None:
-        """Dry-runs ``replace_from_plugin`` on the committed text; writes nothing."""
-        _, merge = self._plugin_replacement(plugin_id, values)
-        _ = merge(self._settings.config_text)
-
-    async def replace_from_plugin(
-        self,
-        plugin_id: str,
-        values: dict[str, Any],
-        *,
-        operation_id: str,
-        prepare_service: Callable[..., Any],
-        publish_service: Callable[..., Any],
-    ) -> dict[str, Any]:
-        """Commits a table the plugin derived from its own unexpanded config.
-
-        Account deletion uses this to drop a credential held in host config.
-        """
-        persisted, merge = self._plugin_replacement(plugin_id, values)
-        result = await self._settings.apply(
-            {"operation_id": operation_id},
-            prepare_service=prepare_service,
-            publish_service=publish_service,
-            derive=DerivedWrite(
-                build_config_toml=merge,
-                fingerprint_payload={"plugin_id": plugin_id, "values": persisted},
-            ),
-        )
-        return {"plugin_id": plugin_id, **result}
 
     def _plugin_kernel(self) -> "PluginKernel | None":
         """Returns the currently published generation's plugin kernel, if any."""

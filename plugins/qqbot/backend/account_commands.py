@@ -64,12 +64,13 @@ class _AccountCommandsMixin:
             "app_id": app_id,
             "client_secret": secret,
             "role_id": role_id,
-            "legacy": previous.get("legacy", False) if previous else False,
             "connected": True,
             "targets": previous.get("targets", []) if previous else [],
             "bot_id": previous.get("bot_id", "") if previous else "",
             "bot_name": previous.get("bot_name", "") if previous else "",
         }
+        if previous is not None and "response_rules" in previous:
+            row["response_rules"] = previous["response_rules"]
         if previous is not None:
             self._identity.register(row)
         self._identity.begin_handoff(app_id)
@@ -150,11 +151,7 @@ class _AccountCommandsMixin:
             "coverage": "observed_c2c_only",
             "targets": [
                 {
-                    "chat_id": (
-                        f"c2c:{app_id}:{openid}"
-                        if not row.get("legacy")
-                        else f"c2c:{openid}"
-                    ),
+                    "chat_id": f"c2c:{app_id}:{openid}",
                     "user_openid": openid,
                 }
                 for openid in row.get("targets", [])

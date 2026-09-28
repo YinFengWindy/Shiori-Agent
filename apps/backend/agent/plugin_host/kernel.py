@@ -240,12 +240,6 @@ class PluginKernel:
         records: dict[str, PluginRecord],
         trail: tuple[str, ...],
     ) -> None:
-        if self._services.role_store is not None:
-            self._services.role_store.accounts.set_plugin_enabled(
-                record.manifest.id,
-                self._config_enabled(record.manifest),
-                generation=self._account_generation,
-            )
         existing = self._handles.get(record.candidate_id)
         if existing is not None and existing.state in {
             PluginState.ACTIVE,

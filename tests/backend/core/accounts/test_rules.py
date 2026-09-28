@@ -1,14 +1,14 @@
-"""Response rule payloads normalize IDs and reject ambiguous group policies."""
+"""Response rules normalize IDs, reject ambiguous group policies, and round-trip."""
 
 from __future__ import annotations
 
 import pytest
 
-from desktop_bridge.account_rule_payload import parse_response_rules
+from core.accounts.rules import response_rules_from_dict, response_rules_to_dict
 
 
 def test_normalizes_account_and_group_sender_ids():
-    rules = parse_response_rules(
+    rules = response_rules_from_dict(
         {
             "private_enabled": True,
             "group_enabled": True,
@@ -27,6 +27,7 @@ def test_normalizes_account_and_group_sender_ids():
     assert rules.blocked_sender_ids == ("member-1",)
     assert rules.group_rules[0].chat_id == "group-1"
     assert rules.group_rules[0].blocked_sender_ids == ("sender-1",)
+    assert response_rules_from_dict(response_rules_to_dict(rules)) == rules
 
 
 @pytest.mark.parametrize(
@@ -66,4 +67,4 @@ def test_rejects_malformed_or_duplicate_rules(change, message):
         **change,
     }
     with pytest.raises(ValueError, match=message):
-        parse_response_rules(payload)
+        response_rules_from_dict(payload)

@@ -7,11 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from core.accounts import AccountRegistry
-from core.common.channel_identifiers import chat_ids_equal
 
 from .assets import RoleAssetStore
 from .manifest import RoleManifestRepository
-from .legacy_sessions import LegacySessionOwners
 from .models import (
     DEFAULT_ASSET_CATEGORY_ID,
     RoleAssetCategory,
@@ -36,78 +34,10 @@ class RoleStore:
         self.manifest_path = self._repository.manifest_path
         self._lock = self._repository.lock
         self._assets = RoleAssetStore(self.roles_dir, self.assets_dir)
-        self._legacy_sessions = LegacySessionOwners(workspace)
         self.extensions = RoleExtensions(self._repository)
         self.accounts = AccountRegistry(
-            workspace,
-            lambda role_id: self.get_role(role_id) is not None,
-            lock=self._lock,
-            legacy_roles=self.list_roles,
-            retire_legacy_bindings=self._retire_legacy_bindings,
+            lambda role_id: self.get_role(role_id) is not None, lock=self._lock
         )
-
-    def _retire_legacy_bindings(self, platforms: set[str]) -> None:
-        """Drop copied routing data after accounts.json has the durable result."""
-        roles = self.list_roles()
-        self._legacy_sessions.retain(roles, platforms)
-        self._project_legacy_sessions(roles, platforms)
-        changed = False
-        for role in roles:
-            retained = [
-                binding
-                for binding in role.channel_bindings
-                if binding.channel not in platforms
-            ]
-            if len(retained) != len(role.channel_bindings):
-                role.channel_bindings = retained
-                changed = True
-        if changed:
-            self._save_roles(roles)
-
-    def _project_legacy_sessions(
-        self, roles: list[RoleRecord], platforms: set[str]
-    ) -> None:
-        """Claim old threads before a new account owner can reuse their keys."""
-        from conversation.service import ConversationService, LegacySessionDescriptor
-        from session.manager import SessionManager
-
-        sessions = SessionManager(self.workspace)
-        try:
-            saved = {item["key"]: item for item in sessions.list_sessions()}
-            conversations = ConversationService(sessions)
-            for role in roles:
-                for binding in role.channel_bindings:
-                    if binding.channel not in platforms:
-                        continue
-                    key = f"{binding.channel}:{binding.chat_id}"
-                    session = saved.get(key)
-                    if session is None:
-                        continue
-                    conversations.ensure_thread_for_session(
-                        LegacySessionDescriptor(
-                            session_key=key,
-                            role_id=role.id,
-                            channel=binding.channel,
-                            chat_id=binding.chat_id,
-                            created_at=str(session["created_at"]),
-                            updated_at=str(session["updated_at"]),
-                        )
-                    )
-        finally:
-            sessions._store.close()
-
-    def resolve_legacy_session_owner(self, channel: str, chat_id: str) -> str:
-        """Resolve historical sessions even after active bindings are gone."""
-        try:
-            return self._legacy_sessions.resolve(channel, chat_id)
-        except KeyError:
-            for role in self.list_roles():
-                for binding in role.channel_bindings:
-                    if binding.channel == channel and chat_ids_equal(
-                        channel, binding.chat_id, chat_id
-                    ):
-                        return role.id
-            raise
 
     @property
     def lock(self):
@@ -195,7 +125,6 @@ class RoleStore:
                 asset_categories=[default_asset_category()],
                 asset_category_bindings={},
                 runtime_config=resolved_runtime_config,
-                channel_bindings=[],
                 proactive=RoleProactiveConfig(),
                 memory_init_state={},
                 created_at=now,
@@ -327,10 +256,6 @@ class RoleStore:
             kept = [role for role in roles if role.id != role_id]
             if len(kept) == len(roles):
                 return False
-            # Accounts are never left without an owner. Until role deletion
-            # cascades to its accounts, a role must have none before it goes.
-            if self.accounts.list(role_id=role_id):
-                raise ValueError("角色仍有账号，请先在「账号」中删除")
             self._save_roles(kept)
             self._assets.delete_role_data(role_id, remove_assets=remove_assets)
             return True

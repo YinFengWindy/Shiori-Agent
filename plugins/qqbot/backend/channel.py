@@ -42,7 +42,6 @@ class QQBotChannel(
         client_secret: str,
         chat_types: tuple[ChatTypeDeclaration, ...] = (),
         *,
-        scoped: bool = False,
         account_id: str = "",
         on_status: Callable[[str, str, str, str], None] | None = None,
         on_target: Callable[[str], None] | None = None,
@@ -51,7 +50,6 @@ class QQBotChannel(
         # The manifest's session types, for answering ``/chatid``.
         self._chat_types = chat_types
         self._client_secret = client_secret
-        self._scoped = scoped
         self._account_id = account_id
         self._on_status = on_status
         self._on_target = on_target
@@ -94,7 +92,6 @@ class QQBotChannel(
             "official-qqbot",
             self._app_id,
             self._client_secret,
-            self._scoped,
         )
 
     def supports_stream_events(self, chat_id: str) -> bool:
@@ -178,13 +175,12 @@ class QQBotChannel(
         return self._bus
 
     def _chat_id(self, openid: str) -> str:
-        return f"c2c:{self._app_id}:{openid}" if self._scoped else f"c2c:{openid}"
+        """Chat IDs name the application, so each account's sessions stay apart."""
+        return f"c2c:{self._app_id}:{openid}"
 
     def _parse_chat_id(self, chat_id: str) -> tuple[str, str]:
         kind, target = self._split_chat_id(chat_id)
-        if self._scoped:
-            prefix = f"{self._app_id}:"
-            if not target.startswith(prefix):
-                raise ValueError("QQBot 目标不属于此应用账号")
-            target = target[len(prefix) :]
-        return kind, target
+        prefix = f"{self._app_id}:"
+        if not target.startswith(prefix):
+            raise ValueError("QQBot 目标不属于此应用账号")
+        return kind, target[len(prefix) :]

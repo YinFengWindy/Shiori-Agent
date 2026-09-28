@@ -913,7 +913,7 @@ async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="m")
     accounts = role_store.accounts
-    accounts.set_plugin_enabled("demo", True)
+    accounts.set_rules_handler("demo", lambda *_: None)
     account_id = accounts.register(
         plugin_id="demo",
         platform="demo",
@@ -958,16 +958,16 @@ async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -
         return AccountDeletionPlan(disconnect, purge)
 
     accounts.set_delete_handler("demo", plan)
-
-    async def no_write(plugin_id: str, values: dict) -> None:
-        raise AssertionError("no config write expected")
-
-    await accounts.delete(
-        account_id,
-        role_id="mira",
-        check_plugin_config=lambda *_: None,
-        write_plugin_config=no_write,
+    deleted = await service.handle(
+        {
+            "id": "delete",
+            "method": "accounts.delete",
+            "payload": {"account_id": account_id, "role_id": "mira"},
+        },
+        emit_event=Mock(),
     )
+
+    assert deleted.error is None
 
     assert codes == ["account_deleting"]
     assert accounts.list() == []

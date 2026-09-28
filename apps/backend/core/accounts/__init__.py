@@ -1,29 +1,41 @@
-"""Host-owned communication account identity and runtime contract."""
+"""Communication account index and runtime contract; records live in plugins."""
 
 from .models import (
     AccountAccess,
-    AccountConfigReader,
     AccountDeleteHandler,
     AccountDeletingError,
     AccountDeletionPlan,
     AccountNotFoundError,
     AccountRecord,
+    AccountResponseRules,
+    AccountRulesHandler,
     AccountSnapshot,
-    ConfiguredAccount,
     ConnectionState,
+    GroupResponseRule,
+    account_id_for,
 )
 from .registry import AccountRegistry
+from .rules import (
+    response_rules_from_dict,
+    response_rules_to_dict,
+    stored_response_rules,
+)
 
 __all__ = [
     "AccountAccess",
-    "AccountConfigReader",
     "AccountDeleteHandler",
     "AccountDeletingError",
     "AccountDeletionPlan",
     "AccountNotFoundError",
     "AccountRecord",
     "AccountRegistry",
+    "AccountResponseRules",
+    "AccountRulesHandler",
     "AccountSnapshot",
-    "ConfiguredAccount",
     "ConnectionState",
+    "GroupResponseRule",
+    "account_id_for",
+    "response_rules_from_dict",
+    "response_rules_to_dict",
+    "stored_response_rules",
 ]

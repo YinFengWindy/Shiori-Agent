@@ -5,14 +5,14 @@ import { createAccountClient, type AccountResponseRules, type AccountSnapshot } 
 
 const client = createAccountClient();
 
-/** Edits host-owned account defaults and group-specific overrides with explicit save. */
+/** Edits an account's response defaults and group overrides; its plugin saves them. */
 export function AccountResponseRulesEditor({ account, onChanged }: { account: AccountSnapshot; onChanged: () => void }) {
   const [rules, setRules] = useState<AccountResponseRules>(account.responseRules);
   const [blockedText, setBlockedText] = useState(rules.blockedSenderIds.join("\n"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-  const showGroups = account.knownCapabilities.includes("groups") || rules.groupRules.length > 0 ||
+  const showGroups = account.capabilities.includes("groups") || rules.groupRules.length > 0 ||
     !rules.groupEnabled || !rules.requireMention || rules.blockedSenderIds.length > 0;
 
   function updateGroup(index: number, patch: Partial<AccountResponseRules["groupRules"][number]>) {

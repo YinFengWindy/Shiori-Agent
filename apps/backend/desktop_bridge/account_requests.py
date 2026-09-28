@@ -1,12 +1,15 @@
-"""Bridge read and rule commands for host-owned account records."""
+"""Bridge commands over the account index of the loaded plugins."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from core.accounts import AccountRegistry, AccountSnapshot
-
-from .account_rule_payload import parse_response_rules
+from core.accounts import (
+    AccountRegistry,
+    AccountSnapshot,
+    response_rules_from_dict,
+    response_rules_to_dict,
+)
 
 
 def _serialize(snapshot: AccountSnapshot) -> dict[str, Any]:
@@ -20,32 +23,16 @@ def _serialize(snapshot: AccountSnapshot) -> dict[str, Any]:
         "display_name": row.display_name,
         "avatar_url": row.avatar_url,
         "role_id": row.role_id,
-        "plugin_enabled": snapshot.plugin_enabled,
         "runtime_active": snapshot.runtime_active,
         "connection": snapshot.connection,
         "capabilities": sorted(snapshot.capabilities),
-        "known_capabilities": list(row.known_capabilities),
         "error": snapshot.error,
-        "response_rules": {
-            "private_enabled": row.response_rules.private_enabled,
-            "group_enabled": row.response_rules.group_enabled,
-            "require_mention": row.response_rules.require_mention,
-            "blocked_sender_ids": list(row.response_rules.blocked_sender_ids),
-            "group_rules": [
-                {
-                    "chat_id": rule.chat_id,
-                    "enabled": rule.enabled,
-                    "require_mention": rule.require_mention,
-                    "blocked_sender_ids": list(rule.blocked_sender_ids),
-                }
-                for rule in row.response_rules.group_rules
-            ],
-        },
+        "response_rules": response_rules_to_dict(row.response_rules),
     }
 
 
 class DesktopAccountRequestHandler:
-    """Exposes the canonical account registry to the desktop bridge."""
+    """Exposes the account index to the desktop bridge."""
 
     def __init__(self, accounts: AccountRegistry) -> None:
         self._accounts = accounts
@@ -53,7 +40,7 @@ class DesktopAccountRequestHandler:
     async def handle(
         self, method: str, payload: dict[str, Any]
     ) -> dict[str, Any] | None:
-        """Handles account listing, detail, and response rules."""
+        """Handles account listing, detail, response rules, and deletion."""
         if method == "accounts.list":
             role_id = str(payload.get("role_id") or "").strip() or None
             return {
@@ -67,10 +54,17 @@ class DesktopAccountRequestHandler:
                 "account": _serialize(self._accounts.get(str(payload["account_id"])))
             }
         if method == "accounts.rules.set":
-            rules = parse_response_rules(payload["response_rules"])
+            rules = response_rules_from_dict(payload["response_rules"])
             return {
                 "account": _serialize(
                     self._accounts.set_response_rules(str(payload["account_id"]), rules)
                 )
             }
+        if method == "accounts.delete":
+            account_id = str(payload.get("account_id") or "").strip()
+            role_id = str(payload.get("role_id") or "").strip()
+            if not account_id or not role_id:
+                raise ValueError("account_id 和 role_id 不能为空")
+            await self._accounts.delete(account_id, role_id=role_id)
+            return {"account_id": account_id}
         return None

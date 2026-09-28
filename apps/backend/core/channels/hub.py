@@ -26,10 +26,7 @@ class ChannelHub:
         self._service = service
         self._channel_directory = channel_directory or ChannelDirectory()
         self._accounts = accounts or service.repository.store.accounts
-        self._conversation = ConversationService(
-            service.sessions._session_manager,
-            binding_resolver=service.repository.store.resolve_legacy_session_owner,
-        )
+        self._conversation = ConversationService(service.sessions._session_manager)
 
     @classmethod
     def from_workspace(
@@ -116,7 +113,6 @@ class ChannelHub:
             return None
         if (
             not account.record.role_id
-            or not account.plugin_enabled
             or not account.runtime_active
             or account.connection != "online"
             or (

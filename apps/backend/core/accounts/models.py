@@ -1,10 +1,15 @@
-"""Public host contract for communication account records and access fences."""
+"""Public host contract for communication account records and access fences.
+
+Plugins own every account record (identity, owner role, response rules,
+credentials) in their own storage; the host only keeps an in-memory index of
+the accounts its loaded plugins registered.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 ConnectionState = Literal[
     "unknown", "connecting", "online", "offline", "login_required", "error"
@@ -23,7 +28,7 @@ class GroupResponseRule:
 
 @dataclass(frozen=True)
 class AccountResponseRules:
-    """Host-owned response policy, independent of role ownership and credentials."""
+    """How an account responds; saved by its plugin, applied by host routing."""
 
     private_enabled: bool = True
     group_enabled: bool = True
@@ -32,32 +37,28 @@ class AccountResponseRules:
     group_rules: tuple[GroupResponseRule, ...] = ()
 
 
-@dataclass(frozen=True)
-class LegacyOwnerRules:
-    """Group overrides retained while an ambiguous old owner is chosen."""
+def account_id_for(plugin_id: str, platform_account_id: str) -> str:
+    """The deterministic account ID: ``<plugin_id>:<platform_account_id>``.
 
-    role_id: str
-    group_rules: tuple[GroupResponseRule, ...] = ()
+    Derived from the identity alone, so deleting and re-adding the same
+    platform account yields the same ID and its history stays attached.
+    """
+    return f"{plugin_id}:{platform_account_id}"
 
 
 @dataclass(frozen=True)
 class AccountRecord:
-    """Persisted identity; config_ref names plugin-private data, never a secret."""
+    """One registered account; config_ref names plugin-private data, never a secret."""
 
     id: str
     plugin_id: str
     platform: str
     platform_account_id: str
     config_ref: str
+    role_id: str
     display_name: str = ""
     avatar_url: str = ""
-    role_id: str | None = None
-    ownership_version: int = 0
     response_rules: AccountResponseRules = AccountResponseRules()
-    known_capabilities: tuple[str, ...] = ()
-    legacy_owner_candidates: tuple[str, ...] = ()
-    legacy_owner_rules: tuple[LegacyOwnerRules, ...] = ()
-    legacy_migrated: bool = False
 
 
 @dataclass(frozen=True)
@@ -65,7 +66,6 @@ class AccountSnapshot:
     """One authoritative view shared by role scheduling and presentation."""
 
     record: AccountRecord
-    plugin_enabled: bool
     runtime_active: bool
     connection: ConnectionState
     capabilities: frozenset[str]
@@ -78,12 +78,11 @@ class AccountAccess:
 
     account_id: str
     role_id: str
-    ownership_version: int
     runtime_token: str
 
 
-class AccountNotFoundError(LookupError):
-    """The requested account has no host record."""
+class AccountNotFoundError(KeyError):
+    """No loaded plugin has registered the requested account."""
 
 
 class AccountDeletingError(RuntimeError):
@@ -94,40 +93,21 @@ class AccountDeletingError(RuntimeError):
 class AccountDeletionPlan:
     """A plugin's side-effect-free plan for deleting one of its accounts.
 
-    The host runs it in order: validate ``plugin_config``, ``disconnect``,
-    ``purge``, persist ``plugin_config``, then forget its record. Both steps
-    must be idempotent, and planning must still work after a purge, so a
-    failed deletion can simply be retried.
+    The host runs ``disconnect`` then ``purge``, then drops the account from
+    its index. Both steps must be idempotent, and planning must still work
+    after a purge, so a failed deletion can simply be retried.
     """
 
     # Stops the connection and all reports for the account; keeps its data.
     disconnect: Callable[[], Awaitable[None]]
-    # Deletes the plugin's credentials, caches, and private files.
+    # Deletes the plugin's record, credentials, caches, and private files.
     purge: Callable[[], Awaitable[None]]
-    # Replacement ``[plugins.<id>]`` table (unexpanded values) when the
-    # credential lives in host configuration; None leaves config untouched.
-    plugin_config: dict[str, Any] | None = None
 
 
 # A plugin delete hook receives the account's plugin-private config_ref and
 # returns its plan without side effects; raising aborts before anything changes.
 AccountDeleteHandler = Callable[[str], AccountDeletionPlan]
 
-
-@dataclass(frozen=True)
-class ConfiguredAccount:
-    """One account as a plugin's saved configuration declares it.
-
-    The platform identity is given when the configuration itself determines it
-    (a Feishu app, a Telegram Token's Bot); None when only a login reveals it.
-    """
-
-    config_ref: str
-    role_id: str | None
-    platform: str | None = None
-    platform_account_id: str | None = None
-
-
-# Reads the accounts a ``[plugins.<id>]`` table declares (resolved values), so
-# the host can check a config write against account ownership before saving.
-AccountConfigReader = Callable[[dict[str, Any]], list[ConfiguredAccount]]
+# A plugin rules hook durably saves new response rules for the account behind
+# ``config_ref`` in the plugin's own storage; raising leaves the rules unchanged.
+AccountRulesHandler = Callable[[str, AccountResponseRules], None]

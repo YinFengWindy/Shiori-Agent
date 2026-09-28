@@ -4,12 +4,10 @@ display_name: QQ（NapCat）
 version: '0.1.0'
 desc: 通过 NapCat（NcatBot 远程模式）接入的 QQ 渠道
 capabilities:
-  - config
   - channels
   - accounts
   - workspace
   - rpc
-config_model: QQConfigModel
 channels:
   - name: qq
     label: QQ（NapCat）

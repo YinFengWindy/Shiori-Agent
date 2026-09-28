@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -26,32 +26,6 @@ def _group_message(mentioned: bool):
     )
     assert message is not None
     return message
-
-
-@pytest.mark.asyncio
-async def test_legacy_group_admission_preserves_default_mention_trigger():
-    adapter = QQInboundAdapter()
-    bus = SimpleNamespace(publish_inbound=AsyncMock())
-    hub = SimpleNamespace(
-        is_sender_allowed=Mock(return_value=True),
-        route_inbound=Mock(side_effect=lambda message: message),
-    )
-    adapter._ctx = SimpleNamespace(bus=bus, channel_hub=hub)
-    await adapter._accept_inbound(_group_message(False))
-    bus.publish_inbound.assert_not_awaited()
-    hub.is_sender_allowed.assert_not_called()
-
-    adapter._ctx = SimpleNamespace(
-        bus=bus,
-        channel_hub=hub,
-        http_resources=SimpleNamespace(),
-        attachment_store=SimpleNamespace(),
-    )
-    await adapter._accept_inbound(_group_message(True))
-    sent = bus.publish_inbound.await_args.args[0]
-    assert sent.content == "hello"
-    assert sent.metadata["account_id"] == "account-b"
-    hub.is_sender_allowed.assert_called_once()
 
 
 @pytest.mark.asyncio

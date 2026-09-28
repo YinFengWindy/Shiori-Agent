@@ -30,7 +30,7 @@ import plugins.qqbot.backend.streaming as qqbot_streaming
 from plugins.qqbot.backend.channel import QQBotChannel
 
 SESSION_KEY = "role:mira"
-CHAT_ID = "c2c:user-1"
+CHAT_ID = "c2c:app:user-1"
 STREAM_PATH = "/v2/users/user-1/stream_messages"
 MESSAGE_PATH = "/v2/users/user-1/messages"
 
@@ -182,14 +182,14 @@ def test_qqbot_opts_c2c_chats_into_stream_events_and_prompt_rules() -> None:
     directory = ChannelDirectory()
     directory.bind({"qqbot": channel}.get)
 
-    assert directory.supports_stream_events("qqbot", "c2c:user-1")
-    assert directory.supports_stream_events("qqbot", "user-1")
+    assert directory.supports_stream_events("qqbot", "c2c:app:user-1")
+    assert not directory.supports_stream_events("qqbot", "c2c:other-app:user-1")
     assert not directory.supports_stream_events("qqbot", "group:group-1")
     assert not directory.supports_stream_events("qqbot", "bogus:x")
-    hint = directory.system_prompt_hint("qqbot", "c2c:user-1")
+    hint = directory.system_prompt_hint("qqbot", "c2c:app:user-1")
     assert hint.startswith("## 官方 QQBot 渠道规则（硬性）")
     assert "`channel=qqbot`" in hint
-    assert "c2c:<user_openid>" in hint
+    assert "c2c:<app_id>:<user_openid>" in hint
     assert directory.default_chat_type("qqbot") == "unknown"
 
 

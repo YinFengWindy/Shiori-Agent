@@ -1,17 +1,20 @@
-"""Desktop account reads use the same snapshots as runtime authorization."""
+"""Desktop account commands read the index and delegate changes to the owning plugin."""
 
 from __future__ import annotations
 
 import pytest
 
-from core.accounts import AccountRegistry
+from core.accounts import (
+    AccountDeletionPlan,
+    AccountNotFoundError,
+    AccountRegistry,
+    AccountResponseRules,
+)
 from desktop_bridge.account_requests import DesktopAccountRequestHandler
 
 
-@pytest.mark.asyncio
-async def test_list_and_detail_use_live_account_snapshot(tmp_path):
-    accounts = AccountRegistry(tmp_path, lambda role_id: role_id == "role")
-    accounts.set_plugin_enabled("demo", True)
+def _registry() -> tuple[AccountRegistry, str]:
+    accounts = AccountRegistry({"role"}.__contains__)
     account = accounts.register(
         plugin_id="demo",
         platform="demo",
@@ -21,117 +24,101 @@ async def test_list_and_detail_use_live_account_snapshot(tmp_path):
         role_id="role",
         display_name="Demo",
     )
-    accounts.report(
-        account.record.id,
-        "running",
-        connection="online",
-        capabilities=frozenset({"contacts"}),
-    )
-    handler = DesktopAccountRequestHandler(accounts)
-    assigned = await handler.handle("accounts.get", {"account_id": account.record.id})
-    assert assigned is not None
-    assert assigned["account"]["role_id"] == "role"
-    assert assigned["account"]["plugin_enabled"]
-    assert assigned["account"]["runtime_active"]
-    assert assigned["account"]["connection"] == "online"
-    assert assigned["account"]["capabilities"] == ["contacts"]
-    assert assigned["account"]["known_capabilities"] == ["contacts"]
-    assert assigned["account"]["response_rules"] == {
-        "private_enabled": True,
-        "group_enabled": True,
-        "require_mention": True,
-        "blocked_sender_ids": [],
-        "group_rules": [],
-    }
-    assert accounts.validate_access(accounts.authorize(account.record.id, "role"))
-
-    listed = await handler.handle("accounts.list", {"role_id": "role"})
-    assert listed == {"accounts": [assigned["account"]]}
-    accounts.unregister(account.record.id, "running")
-    detail = await handler.handle("accounts.get", {"account_id": account.record.id})
-    assert detail is not None
-    assert detail["account"]["plugin_enabled"]
-    assert not detail["account"]["runtime_active"]
-    assert detail["account"]["connection"] == "unknown"
-    # Ownership is fixed at creation; there is no bridge method to change it.
-    assert (
-        await handler.handle(
-            "accounts.assign", {"account_id": account.record.id, "role_id": "role"}
-        )
-        is None
-    )
+    return accounts, account.record.id
 
 
 @pytest.mark.asyncio
-async def test_rules_are_account_scoped_and_survive_reload(tmp_path):
-    accounts = AccountRegistry(tmp_path, lambda role_id: role_id in {"first", "second"})
-    one = accounts.register(
-        plugin_id="demo",
-        platform="demo",
-        platform_account_id="101",
-        config_ref="one",
-        token="one",
-        role_id="first",
+async def test_list_and_detail_use_live_account_snapshot():
+    accounts, account_id = _registry()
+    accounts.report(
+        account_id, "running", connection="online", capabilities=frozenset({"groups"})
     )
-    two = accounts.register(
-        plugin_id="demo",
-        platform="demo",
-        platform_account_id="102",
-        config_ref="two",
-        token="two",
-        role_id="second",
-    )
+    handler = DesktopAccountRequestHandler(accounts)
+    detail = await handler.handle("accounts.get", {"account_id": account_id})
+    assert detail == {
+        "account": {
+            "id": "demo:101",
+            "plugin_id": "demo",
+            "platform": "demo",
+            "platform_account_id": "101",
+            "config_ref": "private-key",
+            "display_name": "Demo",
+            "avatar_url": "",
+            "role_id": "role",
+            "runtime_active": True,
+            "connection": "online",
+            "capabilities": ["groups"],
+            "error": "",
+            "response_rules": {
+                "private_enabled": True,
+                "group_enabled": True,
+                "require_mention": True,
+                "blocked_sender_ids": [],
+                "group_rules": [],
+            },
+        }
+    }
+    assert await handler.handle("accounts.list", {"role_id": "role"}) == {
+        "accounts": [detail["account"]]
+    }
+    assert await handler.handle("accounts.list", {"role_id": "other"}) == {
+        "accounts": []
+    }
+
+
+@pytest.mark.asyncio
+async def test_rules_are_validated_then_saved_by_the_plugin():
+    accounts, account_id = _registry()
+    saved: list[AccountResponseRules] = []
+    accounts.set_rules_handler("demo", lambda _ref, rules: saved.append(rules))
     handler = DesktopAccountRequestHandler(accounts)
     rules = {
         "private_enabled": False,
-        "group_enabled": False,
-        "require_mention": False,
-        "blocked_sender_ids": ["member-1", "member-1", " member-2 "],
-        "group_rules": [
-            {
-                "chat_id": "group-7",
-                "enabled": False,
-                "require_mention": True,
-                "blocked_sender_ids": ["group-member"],
-            }
-        ],
-    }
-    changed = await handler.handle(
-        "accounts.rules.set",
-        {
-            "account_id": one.record.id,
-            "response_rules": rules,
-        },
-    )
-    assert changed is not None
-    assert changed["account"]["response_rules"]["blocked_sender_ids"] == [
-        "member-1",
-        "member-2",
-    ]
-    restored = DesktopAccountRequestHandler(
-        AccountRegistry(tmp_path, lambda role_id: role_id in {"first", "second"})
-    )
-    detail = await restored.handle("accounts.get", {"account_id": one.record.id})
-    other = await restored.handle("accounts.get", {"account_id": two.record.id})
-    assert detail is not None and other is not None
-    assert detail["account"]["role_id"] == "first"
-    assert detail["account"]["response_rules"]["group_enabled"] is False
-    assert detail["account"]["response_rules"]["blocked_sender_ids"] == [
-        "member-1",
-        "member-2",
-    ]
-    assert detail["account"]["response_rules"]["group_rules"][0] == {
-        "chat_id": "group-7",
-        "enabled": False,
+        "group_enabled": True,
         "require_mention": True,
-        "blocked_sender_ids": ["group-member"],
+        "blocked_sender_ids": [" member-1 "],
+        "group_rules": [],
     }
-    assert other["account"]["response_rules"]["group_enabled"] is True
     with pytest.raises(ValueError, match="Invalid account response rules"):
-        await restored.handle(
+        await handler.handle(
             "accounts.rules.set",
             {
-                "account_id": one.record.id,
-                "response_rules": {**rules, "group_enabled": "false"},
+                "account_id": account_id,
+                "response_rules": {**rules, "group_enabled": "no"},
             },
         )
+    assert saved == []
+    changed = await handler.handle(
+        "accounts.rules.set", {"account_id": account_id, "response_rules": rules}
+    )
+    assert changed is not None
+    assert changed["account"]["response_rules"]["blocked_sender_ids"] == ["member-1"]
+    assert saved == [
+        AccountResponseRules(private_enabled=False, blocked_sender_ids=("member-1",))
+    ]
+
+
+@pytest.mark.asyncio
+async def test_delete_runs_the_plugin_cleanup_and_drops_the_account():
+    accounts, account_id = _registry()
+    purged: list[str] = []
+
+    def plan(config_ref: str) -> AccountDeletionPlan:
+        async def disconnect() -> None:
+            return None
+
+        async def purge() -> None:
+            purged.append(config_ref)
+
+        return AccountDeletionPlan(disconnect, purge)
+
+    accounts.set_delete_handler("demo", plan)
+    handler = DesktopAccountRequestHandler(accounts)
+    with pytest.raises(ValueError, match="不能为空"):
+        await handler.handle("accounts.delete", {"account_id": account_id})
+    assert await handler.handle(
+        "accounts.delete", {"account_id": account_id, "role_id": "role"}
+    ) == {"account_id": account_id}
+    assert purged == ["private-key"]
+    with pytest.raises(AccountNotFoundError):
+        await handler.handle("accounts.get", {"account_id": account_id})

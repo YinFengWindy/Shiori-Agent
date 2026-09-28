@@ -32,7 +32,7 @@ uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 
 ## 2. 在 Shiori 里启用
 
-1. 设置 › 插件 › 飞书 › 账号：添加账号，选择飞书或 Lark 区域，填入 App ID、App Secret，点击“保存并连接”。App Secret 也可以写成 `${FEISHU_APP_SECRET}` 引用环境变量。
+1. 角色详情 › 账号：添加账号，选择飞书或 Lark 区域，填入 App ID、App Secret，点击“保存并连接”。App Secret 也可以写成 `${FEISHU_APP_SECRET}` 引用环境变量。
 2. 再添加一个不同 App ID 的应用，确认两个账号分别显示连接状态、机器人名称和 `open_id`；凭据验证失败时原账号保持原连接。
 3. 确认私聊目录只包含各应用已经交互过的私聊，`open_id` 属于当前应用，不是租户完整通讯录。
 
@@ -59,7 +59,7 @@ uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 - 让角色用 `message_push` 主动发文本、图片、文件。
 - 撤销开发者后台的 `cardkit:card:write` 权限后再对话：回复仍以普通卡片送达。
 - 断网再恢复：状态先变为未连接，随后自动重连并继续收消息。
-- 在账号详情编辑 App Secret 草稿时连接不变；点击“保存并连接”后先验证机器人身份，再热更新该账号。只改其它插件时飞书连接被复用（日志没有「已停止/已启动」）。
+- 在账号详情编辑 App Secret 草稿时连接不变；点击“保存并连接”后先验证机器人身份，再只重连该账号；`config.toml` 中不出现飞书凭据。
 - 账号详情“断开连接”只停该应用；“重新连接”只重建该应用连接，重启 Shiori 后断开状态仍保留，其他账号继续在线。
 - 停用插件：日志出现「飞书渠道已停止」，进程里不再有 `feishu-ws` 线程。
 - Lark 国际版账号至少验证一次能建立连接。

@@ -21,26 +21,6 @@ def _write_image(path: Path, color: tuple[int, int, int]) -> None:
 
 
 @pytest.mark.asyncio
-async def test_old_role_update_cannot_recreate_channel_bindings() -> None:
-    handler = DesktopRoleRequestHandler(
-        role_service=SimpleNamespace(),
-        role_presenter=SimpleNamespace(),
-        voice_handler=SimpleNamespace(),
-        publish_event=AsyncMock(),
-    )
-    with pytest.raises(ValueError, match="账号归属"):
-        await handler.handle(
-            "roles.update",
-            {
-                "role_id": "mira",
-                "channel_bindings": [
-                    {"channel": "qq", "chat_id": "gqq:42", "chat_type": "group"}
-                ],
-            },
-        )
-
-
-@pytest.mark.asyncio
 async def test_role_card_preview_forwards_the_full_payload_to_its_service() -> None:
     card_import = SimpleNamespace(
         preview=AsyncMock(return_value={"import_id": "preview-1"})
@@ -212,3 +192,63 @@ async def test_role_update_commits_generic_plugin_draft_and_projects_its_owner(
     assert response.payload["role"]["plugin_state"] == {"sample": {"enabled": True}}
     assert store.get_role("mira").name == "After"
     assert "plugin_state" not in store.get_role("mira").to_dict()
+
+
+@pytest.mark.asyncio
+async def test_role_delete_first_deletes_its_accounts_through_their_plugins(
+    tmp_path: Path,
+) -> None:
+    from core.accounts import AccountDeletionPlan
+
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="Mira")
+    role_store.create_role(role_id="luna", name="Luna", system_prompt="Luna")
+    accounts = role_store.accounts
+    for role_id, account in (("mira", "101"), ("luna", "102")):
+        accounts.register(
+            plugin_id="chat",
+            platform="chat",
+            platform_account_id=account,
+            config_ref=f"ref-{account}",
+            token="generation",
+            role_id=role_id,
+        )
+    purged: list[str] = []
+    failing = {"ref-101"}
+
+    def plan(config_ref: str) -> AccountDeletionPlan:
+        async def disconnect() -> None:
+            return None
+
+        async def purge() -> None:
+            if config_ref in failing:
+                failing.discard(config_ref)
+                raise OSError("locked")
+            purged.append(config_ref)
+
+        return AccountDeletionPlan(disconnect, purge)
+
+    accounts.set_delete_handler("chat", plan)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+    request = {"id": "delete", "method": "roles.delete", "payload": {"role_id": "mira"}}
+    try:
+        # A plugin that cannot clean up keeps both the role and its account.
+        failed = await service.handle(request, emit_event=AsyncMock())
+        assert failed.error is not None and "locked" in failed.error.message
+        assert role_store.get_role("mira") is not None
+        assert [row.record.id for row in accounts.list(role_id="mira")] == ["chat:101"]
+
+        deleted = await service.handle(request, emit_event=AsyncMock())
+        assert deleted.error is None
+        assert deleted.payload["deleted_accounts"] == ["chat:101"]
+        assert purged == ["ref-101"]
+        assert role_store.get_role("mira") is None
+        assert [row.record.id for row in accounts.list()] == ["chat:102"]
+    finally:
+        await service.aclose()

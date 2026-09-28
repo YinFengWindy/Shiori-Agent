@@ -25,10 +25,8 @@ class NapCatAccountFiles:
         self.root = root / "accounts"
 
     def account_dir(self, ref: str) -> Path:
-        """Resolves only plugin-issued opaque references and the legacy ref."""
-        if ref != "legacy" and (
-            not ref or any(char not in "0123456789abcdef" for char in ref)
-        ):
+        """Resolves only plugin-issued opaque references."""
+        if not ref or any(char not in "0123456789abcdef" for char in ref):
             raise ValueError("托管账号引用无效")
         return self.root / ref
 

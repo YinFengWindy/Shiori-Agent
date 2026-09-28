@@ -1,6 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { XIcon } from "@phosphor-icons/react";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
+import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
 import { InlineError } from "../shared/feedback/InlineError";
 import { ghostButtonClass, iconButtonClass } from "../shared/styles";
 import { accountStatus } from "./accountPresentation";
@@ -18,7 +19,8 @@ export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChan
   onClose: () => void;
   onChanged: (accountId?: string) => void;
 }) {
-  const pluginControls = pluginUiRegistry.getAccountDetail(pluginId, () => account?.pluginEnabled ?? true);
+  const isPluginEnabled = usePluginEnabledState();
+  const pluginControls = pluginUiRegistry.getAccountDetail(pluginId, isPluginEnabled);
   const PlatformControls = pluginControls?.Component;
 
   return <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>

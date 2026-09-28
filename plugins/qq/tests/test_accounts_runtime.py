@@ -21,7 +21,14 @@ class _Accounts:
         self.reports: list[tuple[str, str, str]] = []
 
     def register(
-        self, *, platform, platform_account_id, config_ref, role_id, display_name=None
+        self,
+        *,
+        platform,
+        platform_account_id,
+        config_ref,
+        role_id,
+        display_name=None,
+        response_rules=None,
     ):
         account_id = f"qq-{platform_account_id}"
         for row in self.rows.values():
@@ -44,7 +51,10 @@ class _Accounts:
         if not role_id:
             raise ValueError("账号没有所属角色")
 
-    def register_configured(self, **fields):
+    def role_exists(self, role_id):
+        return True
+
+    def register_saved(self, **fields):
         # The host refuses an entry without an owner; the plugin must skip it.
         return self.register(**fields) if fields.get("role_id") else None
 
@@ -350,6 +360,7 @@ async def test_failed_pending_connection_keeps_active_credentials_after_restart(
     await runtime.stop()
 
     restarted = QQAccountsRuntime(store, _Accounts())
+    restarted.register_saved()
     restored = _Socket("101")
     used = []
 
@@ -458,21 +469,7 @@ async def test_rejected_first_registration_does_not_mark_draft_verified(
         await runtime.connect_saved(ref)
     assert store.load()[ref].verified is False
     assert candidate.closed
-    QQAccountsRuntime(store, accounts)
-
-
-@pytest.mark.asyncio
-async def test_legacy_number_is_not_registered_before_real_login(tmp_path):
-    store = QQAccountsStore(tmp_path)
-    store.migrate_legacy(
-        bot_uin="101",
-        ws_uri="ws://localhost:3001",
-        ws_token="secret",
-        timeout_seconds=5,
-    )
-    accounts = _Accounts()
-    QQAccountsRuntime(store, accounts)
-    assert accounts.rows == {}
+    QQAccountsRuntime(store, accounts).register_saved()
 
 
 @pytest.mark.asyncio
@@ -514,6 +511,7 @@ async def test_saved_account_reports_auth_failure_without_claiming_online(
     store.save({"known": config})
     accounts = _Accounts()
     runtime = QQAccountsRuntime(store, accounts)
+    runtime.register_saved()
     monkeypatch.setattr(
         runtime,
         "_verified_socket",
@@ -709,15 +707,11 @@ async def test_ownerless_config_is_neither_registered_nor_connected(
     monkeypatch, tmp_path
 ):
     store = QQAccountsStore(tmp_path)
-    store.migrate_legacy(
-        bot_uin="101",
-        ws_uri="ws://localhost:3001",
-        ws_token="secret",
-        timeout_seconds=5,
-    )
     store.save(
         {
-            **store.load(),
+            "unowned": QQConnectionConfig(
+                "unowned", "ws://localhost:3001", "secret", "101", verified=True
+            ),
             "owned": QQConnectionConfig(
                 "owned", "ws://localhost:3002", "", "202", verified=True, role_id="mira"
             ),
@@ -725,6 +719,7 @@ async def test_ownerless_config_is_neither_registered_nor_connected(
     )
     accounts = _Accounts()
     runtime = QQAccountsRuntime(store, accounts)
+    runtime.register_saved()
     assert {row.config_ref: row.role_id for row in accounts.rows.values()} == {
         "owned": "mira"
     }
@@ -744,7 +739,7 @@ async def test_ownerless_config_is_neither_registered_nor_connected(
     for _ in range(20):
         await asyncio.sleep(0)
     assert [call.args[0] for call in verified.await_args_list] == ["owned"]
-    assert store.load()["legacy"].verified is False
+    assert store.load()["unowned"].role_id is None
     await runtime.stop()
 
 
@@ -896,6 +891,7 @@ async def test_managed_logout_preserves_saved_identity_but_clears_login(
     store.save({"known": config})
     accounts = _Accounts()
     runtime = QQAccountsRuntime(store, accounts)
+    runtime.register_saved()
     stop = AsyncMock()
     logout = AsyncMock()
     monkeypatch.setattr(runtime._managed, "stop", stop)

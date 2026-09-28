@@ -35,7 +35,7 @@ async def test_cancelled_delivery_retains_only_completed_receipt(terminal):
     channel = QQBotChannel("app", "secret")
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     channel._channel_hub = Mock()
-    key = ("role:mira", "c2c:user", "incoming")
+    key = ("role:mira", "c2c:app:user", "incoming")
     if terminal:
         channel._live_states[key] = _StreamState(
             openid="user", msg_id="incoming", msg_seq=1
@@ -43,13 +43,13 @@ async def test_cancelled_delivery_retains_only_completed_receipt(terminal):
     else:
 
         async def preview():
-            await channel._send_live_stream(key, "c2c:user", "preview")
+            await channel._send_live_stream(key, "c2c:app:user", "preview")
 
         channel._start_live_task(key, preview())
         await entered.wait()
     message = OutboundMessage(
         channel="qqbot",
-        chat_id="c2c:user",
+        chat_id="c2c:app:user",
         content="final",
         metadata={
             "session_key_override": "role:mira",
@@ -114,7 +114,7 @@ async def test_reply_records_retained_receipt_instead_of_turn_id(mode):
     hub = Mock()
     channel._channel_hub = hub
     if mode in {"stream", "fallback"}:
-        channel._live_states[("role:mira", "c2c:user", "incoming")] = _StreamState(
+        channel._live_states[("role:mira", "c2c:app:user", "incoming")] = _StreamState(
             openid="user",
             msg_id="incoming",
             msg_seq=1,
@@ -123,7 +123,7 @@ async def test_reply_records_retained_receipt_instead_of_turn_id(mode):
         )
     message = OutboundMessage(
         channel="qqbot",
-        chat_id="c2c:user",
+        chat_id="c2c:app:user",
         content="" if mode == "images" else "reply",
         media=(
             ["https://example.test/one", "https://example.test/two"]
@@ -199,9 +199,9 @@ async def test_send_stream_preserves_one_message_or_requires_confirmed_cleanup(
     try:
         if should_raise:
             with pytest.raises((httpx.HTTPError, RuntimeError)):
-                await channel.send_stream("c2c:user-1", message)
+                await channel.send_stream("c2c:app:user-1", message)
         else:
-            await channel.send_stream("c2c:user-1", message)
+            await channel.send_stream("c2c:app:user-1", message)
         ordinary = [body for method, path, body in calls if path.endswith("/messages")]
         if should_raise or failure is None:
             assert ordinary == []
@@ -242,7 +242,7 @@ async def test_push_recovers_rejected_continuation_in_place() -> None:
     channel._last_c2c_msg_id["user-1"] = "inbound-1"
     message = "分段内容" * 90
     try:
-        await channel.send_stream("c2c:user-1", message)
+        await channel.send_stream("c2c:app:user-1", message)
         assert [(b["index"], b["input_state"]) for b in bodies] == [
             (0, 1),
             (1, 1),
@@ -281,7 +281,7 @@ async def test_cancelled_push_recalls_only_acknowledged_incomplete_stream(
     channel = QQBotChannel("app", "secret")
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     channel._last_c2c_msg_id["user-1"] = "inbound-1"
-    push = asyncio.create_task(channel.send_stream("c2c:user-1", "分段内容" * 90))
+    push = asyncio.create_task(channel.send_stream("c2c:app:user-1", "分段内容" * 90))
     try:
         await asyncio.wait_for(entered.wait(), 1)
         push.cancel()

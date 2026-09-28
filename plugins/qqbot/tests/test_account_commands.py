@@ -35,9 +35,12 @@ class _Accounts:
         if not role_id:
             raise ValueError("账号没有所属角色")
 
-    def register_configured(self, **fields):
+    def register_saved(self, *, response_rules=None, **fields):
         # The host refuses an entry without an owner; the plugin must skip it.
         return self.register(**fields) if fields.get("role_id") else None
+
+    def role_exists(self, role_id):
+        return True
 
     def report(self, account_id, **kwargs):
         self.reports.append((account_id, kwargs))

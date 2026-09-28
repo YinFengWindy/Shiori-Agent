@@ -129,7 +129,6 @@ async def test_list_reports_every_discovered_plugin_enabled_by_default(
         assert by_id["hello"]["has_config_schema"] is False
         assert by_id["hello"]["renderer"] == {}
         assert set(by_id["qqbot"]["capabilities"]) == {
-            "config",
             "channels",
             "kv",
             "accounts",
