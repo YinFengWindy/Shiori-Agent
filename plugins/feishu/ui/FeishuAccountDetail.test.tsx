@@ -7,25 +7,27 @@ import type { AccountSnapshot } from "../../../apps/desktop/renderer/src/account
 import { changeInputValue, mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
 import { FeishuAccountDetail } from "./FeishuAccountDetail";
 
-it("keeps a credential draft offline until verification and explicit save", async () => {
-  const calls: string[] = [];
-  let allowVerification = false;
-  let saved: { accounts?: Array<{ role_id?: string }> } | undefined;
-  const invoke = async ({ method, payload: requestPayload }: { method: string; payload: Record<string, unknown> }) => {
-    calls.push(method);
-    if (method === "plugin.config.set") saved = requestPayload.values as typeof saved;
-    if (method === "plugin.feishu.accounts.verify" && !allowVerification) throw new Error("bad credential");
-    const payload = method === "plugin.config.get"
-      ? { values: { app_id: "", app_secret: "", domain: "feishu", accounts: [] }, schema: null, env_status: {} }
-      : method === "plugins.communication.open" ? { generation: "test" }
-        : method === "plugin.config.set" ? { values: requestPayload.values }
-        : method === "accounts.list" ? { accounts: [{
-          id: "new-account", plugin_id: "feishu", platform: "feishu", platform_account_id: "feishu:cli_new",
-          display_name: "", avatar_url: "", role_id: null, plugin_enabled: true, runtime_active: true,
-          connection: "connecting", capabilities: [], known_capabilities: [], error: "",
-          response_rules: { private_enabled: true, group_enabled: true, require_mention: true, blocked_sender_ids: [], group_rules: [] },
-        }] } : {};
-    return { id: "response", type: "response" as const, method, error: null, payload };
+type Request = { method: string; payload: Record<string, unknown> };
+
+/** The request payload without the host's routing context. */
+function body(request: Request | undefined) {
+  if (!request) return undefined;
+  return Object.fromEntries(Object.entries(request.payload).filter(([key]) => key !== "__plugin_context"));
+}
+
+function button(label: string) {
+  return Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((item) => item.textContent === label);
+}
+
+it("saves a new app for the adding role through the plugin and shows a refusal", async () => {
+  const requests: Request[] = [];
+  let refuse = true;
+  const invoke = async ({ method, payload }: Request) => {
+    requests.push({ method, payload });
+    if (method === "plugin.feishu.accounts.save" && refuse) throw new Error("bad credential");
+    const result = method === "plugins.communication.open" ? { generation: "test" }
+      : method === "plugin.feishu.accounts.save" ? { account_id: "feishu:feishu:cli_new" } : {};
+    return { id: "response", type: "response" as const, method, error: null, payload: result };
   };
   const client = createPluginRpcClient("feishu", invoke);
   let created = "";
@@ -36,89 +38,50 @@ it("keeps a credential draft offline until verification and explicit save", asyn
   try {
     const id = document.querySelector<HTMLInputElement>('input[autocomplete="off"]');
     const secret = document.querySelector<HTMLInputElement>('input[type="password"]');
-    assert.ok(id);
-    assert.ok(secret);
-    const save = () => Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
-      .find((button) => button.textContent === "保存并连接");
+    assert.ok(id && secret);
     await changeInputValue(id, "cli_new");
     await changeInputValue(secret, "draft-secret");
-    assert.equal(calls.includes("plugin.config.set"), false);
-    await act(async () => save()?.click());
-    assert.equal(calls.includes("plugin.config.set"), false);
+    await act(async () => button("连接")?.click());
     assert.match(document.body.textContent ?? "", /bad credential/);
+    assert.equal(created, "");
 
-    allowVerification = true;
-    await act(async () => save()?.click());
-    assert.equal(calls.includes("plugin.config.set"), true);
-    // The new app is saved for the role whose page added it.
-    assert.deepEqual(saved?.accounts?.map((app) => app.role_id), ["mira"]);
-    assert.equal(created, "new-account");
+    refuse = false;
+    await act(async () => button("连接")?.click());
+    const saves = requests.filter((item) => item.method === "plugin.feishu.accounts.save");
+    assert.deepEqual(body(saves.at(-1)), { role_id: "mira", domain: "feishu", app_id: "cli_new", app_secret: "draft-secret" });
+    assert.equal(created, "feishu:feishu:cli_new");
+    assert.equal(requests.some((item) => item.method.startsWith("plugin.config.")), false);
   } finally {
     await view.cleanup();
     await client.dispose();
   }
 });
 
-it("disconnects an online app through the explicit account control", async () => {
-  const configured = { app_id: "", app_secret: "", domain: "feishu", accounts: [
-    { app_id: "cli_a", app_secret: "saved", domain: "feishu", connection_enabled: true },
-  ] };
-  let submitted: unknown = null;
-  const invoke = async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
-    if (method === "plugin.config.set") submitted = payload.values;
-    const result = method === "plugin.config.get" ? { values: configured, schema: null, env_status: {} }
-      : method === "plugin.config.set" ? { values: submitted }
-        : method === "plugins.communication.open" ? { generation: "test" }
-          : method === "plugin.feishu.accounts.profile" ? { identity: {}, targets: [] } : {};
+it("disconnects an online app through the plugin", async () => {
+  const requests: Request[] = [];
+  const invoke = async ({ method, payload }: Request) => {
+    requests.push({ method, payload });
+    const result = method === "plugins.communication.open" ? { generation: "test" }
+      : method === "plugin.feishu.accounts.profile" ? { identity: {}, targets: [] } : {};
     return { id: "response", type: "response" as const, method, error: null, payload: result };
   };
   const client = createPluginRpcClient("feishu", invoke);
   const account: AccountSnapshot = {
-    id: "account-a", pluginId: "feishu", platform: "feishu", platformAccountId: "feishu:cli_a", configRef: "feishu:cli_a",
-    displayName: "A", avatarUrl: "", roleId: null, pluginEnabled: true, runtimeActive: true,
-    connection: "online", capabilities: ["private"], knownCapabilities: ["private"], error: "",
-    responseRules: { privateEnabled: true, groupEnabled: false, requireMention: false, blockedSenderIds: [], groupRules: [] },
+    id: "feishu:feishu:cli_a", pluginId: "feishu", platform: "feishu", platformAccountId: "feishu:cli_a", configRef: "feishu:cli_a",
+    displayName: "A", avatarUrl: "", roleId: "mira", runtimeActive: true,
+    connection: "online", capabilities: ["private"], error: "",
+    responseRules: { privateEnabled: true, groupEnabled: false, requireMention: false, blockedSenderIds: [] },
   };
   const view = await mountTestComponent(
     <FeishuAccountDetail account={account} roleId="mira" onChanged={() => undefined} client={client} host={desktopPluginHostServices} />,
     { windowGlobals: { miraDesktop: { invoke, onEvent: () => () => undefined } } },
   );
   try {
-    const disconnect = () => Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
-      .find((button) => button.textContent === "断开连接");
-    assert.ok(disconnect());
-    await act(async () => disconnect()?.click());
-    const accountConfigs = submitted && typeof submitted === "object" && "accounts" in submitted ? submitted.accounts : undefined;
-    assert.ok(Array.isArray(accountConfigs));
-    assert.equal(accountConfigs[0].connection_enabled, false);
-  } finally {
-    await view.cleanup();
-    await client.dispose();
-  }
-});
-
-it("refuses to save another role's app instead of re-enabling it", async () => {
-  const calls: string[] = [];
-  const configured = { accounts: [{ app_id: "cli_a", app_secret: "saved", domain: "feishu", role_id: "mira" }] };
-  const invoke = async ({ method }: { method: string; payload: Record<string, unknown> }) => {
-    calls.push(method);
-    const payload = method === "plugin.config.get" ? { values: configured, schema: null, env_status: {} }
-      : method === "plugins.communication.open" ? { generation: "test" } : {};
-    return { id: "response", type: "response" as const, method, error: null, payload };
-  };
-  const client = createPluginRpcClient("feishu", invoke);
-  const view = await mountTestComponent(
-    <FeishuAccountDetail account={null} roleId="other" onChanged={() => undefined} client={client} host={desktopPluginHostServices} />,
-    { windowGlobals: { miraDesktop: { invoke, onEvent: () => () => undefined } } },
-  );
-  try {
     const id = document.querySelector<HTMLInputElement>('input[autocomplete="off"]');
-    assert.ok(id);
-    await changeInputValue(id, "cli_a");
-    const save = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "保存并连接");
-    await act(async () => save?.click());
-    assert.match(document.body.textContent ?? "", /另一个角色/);
-    assert.equal(calls.includes("plugin.config.set"), false);
+    assert.equal(id?.value, "cli_a");
+    await act(async () => button("断开连接")?.click());
+    assert.deepEqual(body(requests.find((item) => item.method === "plugin.feishu.accounts.disconnect")),
+      { account_id: "feishu:feishu:cli_a", role_id: "mira" });
   } finally {
     await view.cleanup();
     await client.dispose();

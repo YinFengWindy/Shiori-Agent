@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 from .accounts import resolve_secret
@@ -21,6 +22,18 @@ class _AccountCommandsMixin:
     _store: QQBotAccountStore
     _channels: dict[str, QQBotChannel]
     _runtime: ChannelContext | None
+    _avatar_tasks: dict[str, asyncio.Task[None]]
+
+    def _refresh_avatar(self, app_id: str, channel: QQBotChannel) -> None:
+        """Owned by the composite channel, which tracks the refresh tasks."""
+        raise NotImplementedError
+
+    async def _cancel_avatar(self, app_id: str) -> None:
+        """Stops an application's avatar fetch before its gateway client closes."""
+        task = self._avatar_tasks.pop(app_id, None)
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def _preflight(self, app_id: str, secret: str) -> None:
         """Authenticate and query gateway before changing persisted/running creds."""
@@ -64,15 +77,19 @@ class _AccountCommandsMixin:
             "app_id": app_id,
             "client_secret": secret,
             "role_id": role_id,
-            "legacy": previous.get("legacy", False) if previous else False,
             "connected": True,
             "targets": previous.get("targets", []) if previous else [],
             "bot_id": previous.get("bot_id", "") if previous else "",
             "bot_name": previous.get("bot_name", "") if previous else "",
+            "avatar": previous.get("avatar", "") if previous else "",
         }
+        if previous is not None and "response_rules" in previous:
+            row["response_rules"] = previous["response_rules"]
         if previous is not None:
             self._identity.register(row)
         self._identity.begin_handoff(app_id)
+        # The old gateway's client closes below; its avatar fetch must not outlive it.
+        await self._cancel_avatar(app_id)
         old = self._channels.pop(app_id, None)
         old_stopped = False
         try:
@@ -100,6 +117,8 @@ class _AccountCommandsMixin:
         self._identity.end_handoff(app_id)
         if candidate is not None:
             candidate._account_id = account_id
+            if self._runtime is not None:
+                self._refresh_avatar(app_id, candidate)
         self._identity.report(
             app_id, "online" if self._runtime is not None else "connecting", "", ""
         )
@@ -108,6 +127,7 @@ class _AccountCommandsMixin:
     async def disconnect(self, payload: dict[str, Any]) -> dict[str, Any]:
         app_id = self._identity.app_for_account(payload)
         row = self._store.get(app_id)
+        await self._cancel_avatar(app_id)
         channel = self._channels.pop(app_id, None)
         if channel is not None:
             await channel.stop()
@@ -117,6 +137,7 @@ class _AccountCommandsMixin:
 
     async def disconnect_account(self, app_id: str) -> None:
         """Closes a deleted application's gateway and stops reporting it."""
+        await self._cancel_avatar(app_id)
         channel = self._channels.pop(app_id, None)
         if channel is not None:
             await channel.stop()
@@ -150,11 +171,7 @@ class _AccountCommandsMixin:
             "coverage": "observed_c2c_only",
             "targets": [
                 {
-                    "chat_id": (
-                        f"c2c:{app_id}:{openid}"
-                        if not row.get("legacy")
-                        else f"c2c:{openid}"
-                    ),
+                    "chat_id": f"c2c:{app_id}:{openid}",
                     "user_openid": openid,
                 }
                 for openid in row.get("targets", [])

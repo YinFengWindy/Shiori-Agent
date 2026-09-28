@@ -2,91 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from plugins.qq.backend.accounts_runtime import QQAccountsRuntime
-from plugins.qq.backend.accounts_settings import validate_endpoint
 from plugins.qq.backend.accounts_store import QQAccountsStore, QQConnectionConfig
-
-
-def test_connection_drafts_require_a_forward_websocket_endpoint():
-    assert validate_endpoint("ws://localhost:3001") == "ws://localhost:3001"
-    assert validate_endpoint("wss://napcat.example/ws") == "wss://napcat.example/ws"
-    for value in ("", "https://napcat.example", "ws://"):
-        with pytest.raises(ValueError, match="WebSocket"):
-            validate_endpoint(value)
-
-
-@pytest.mark.asyncio
-async def test_nonfinite_timeout_cannot_enter_private_config(tmp_path):
-    store = QQAccountsStore(tmp_path)
-    runtime = QQAccountsRuntime(store, _Accounts())
-    with pytest.raises(ValueError, match="连接超时"):
-        await runtime.save_draft(
-            {
-                "role_id": "mira",
-                "ws_uri": "ws://localhost:3001",
-                "timeout_seconds": float("nan"),
-            }
-        )
-    assert store.load() == {}
-
-
-@pytest.mark.asyncio
-async def test_saved_unverified_draft_can_be_reopened_and_removed(tmp_path):
-    store = QQAccountsStore(tmp_path)
-    runtime = QQAccountsRuntime(store, _Accounts())
-    ref = (
-        await runtime.save_draft(
-            {"role_id": "mira", "ws_uri": "ws://localhost:3001", "ws_token": "secret"}
-        )
-    )["ref"]
-    restarted = QQAccountsRuntime(store, _Accounts())
-    assert restarted.settings(ref=ref)["account"]["ws_uri"] == "ws://localhost:3001"
-    assert restarted.settings(ref=ref)["account"]["has_token"] is True
-    assert "secret" not in str(restarted.settings(ref=ref))
-    await restarted.remove_draft(ref)
-    assert store.load() == {}
-
-
-@pytest.mark.asyncio
-async def test_ownerless_legacy_draft_cannot_be_claimed_or_removed(tmp_path):
-    store = QQAccountsStore(tmp_path)
-    store.migrate_legacy(
-        bot_uin="101",
-        ws_uri="ws://localhost:3001",
-        ws_token="old",
-        timeout_seconds=5,
-    )
-    runtime = QQAccountsRuntime(store, _Accounts())
-    # An ownerless draft is never taken over by the role editing it.
-    with pytest.raises(ValueError, match="未归属"):
-        await runtime.save_draft(
-            {"role_id": "mira", "ref": "legacy", "ws_uri": "ws://localhost:3002"}
-        )
-    assert store.load()["legacy"].ws_uri == "ws://localhost:3001"
-    assert store.load()["legacy"].role_id is None
-    with pytest.raises(PermissionError, match="不能删除迁移记录"):
-        await runtime.remove_draft("legacy")
-
-
-@pytest.mark.asyncio
-async def test_managed_draft_uses_private_endpoint_without_external_fields(
-    monkeypatch, tmp_path
-):
-    monkeypatch.setattr(
-        "plugins.qq.backend.accounts_settings.managed_available", lambda: True
-    )
-    store = QQAccountsStore(tmp_path)
-    runtime = QQAccountsRuntime(store, _Accounts())
-    ref = (await runtime.save_draft({"role_id": "mira", "mode": "managed"}))["ref"]
-    saved = store.load()[ref]
-    assert saved.mode == "managed"
-    assert saved.ws_uri.startswith("ws://127.0.0.1:")
-    assert saved.ws_token
-    assert runtime.settings(ref=ref)["account"]["mode"] == "managed"
-    assert saved.ws_token not in str(runtime.settings(ref=ref))
 
 
 class _Accounts:
@@ -94,7 +15,14 @@ class _Accounts:
         self.reports: list[tuple[str, str]] = []
 
     def register(
-        self, *, platform, platform_account_id, config_ref, role_id, display_name
+        self,
+        *,
+        platform,
+        platform_account_id,
+        config_ref,
+        role_id,
+        display_name,
+        response_rules=None,
     ):
         return SimpleNamespace(record=SimpleNamespace(id=f"qq-{platform_account_id}"))
 
@@ -102,12 +30,44 @@ class _Accounts:
         if not role_id:
             raise ValueError("账号没有所属角色")
 
-    def register_configured(self, **fields):
-        # The host refuses an entry without an owner; the plugin must skip it.
+    def role_exists(self, role_id):
+        return True
+
+    def register_saved(self, **fields):
         return self.register(**fields) if fields.get("role_id") else None
 
     def report(self, account_id, *, connection, capabilities=frozenset(), error=""):
         self.reports.append((account_id, connection))
+
+
+@pytest.mark.asyncio
+async def test_temporary_login_uses_private_endpoint_without_persisting_an_account(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        "plugins.qq.backend.accounts_settings.managed_available", lambda: True
+    )
+    store = QQAccountsStore(tmp_path)
+    runtime = QQAccountsRuntime(store, _Accounts())
+    start = AsyncMock()
+    monkeypatch.setattr(runtime._managed, "start", start)
+
+    ref = (await runtime.begin_login({"role_id": "mira"}))["ref"]
+    temporary = runtime._configs[ref]
+    assert temporary.ws_uri.startswith("ws://127.0.0.1:")
+    assert temporary.ws_token
+    assert temporary.auto_connect is False
+    assert not store.path.exists()
+    assert temporary.ws_token not in str(runtime.settings())
+    start.assert_not_awaited()
+
+    reopened = QQAccountsRuntime(store, _Accounts())
+    await reopened.load()
+    assert ref not in reopened._configs
+    assert not reopened._managed._files.account_dir(ref).exists()
+    await runtime.cancel_login(ref, "mira")
+    assert ref not in runtime._configs
+    assert not store.path.exists()
 
 
 class _Socket:
@@ -118,7 +78,7 @@ class _Socket:
 
 
 @pytest.mark.asyncio
-async def test_deleted_account_is_disconnected_and_its_napcat_data_purged(tmp_path):
+async def test_deleted_managed_account_disconnects_and_purges_only_its_data(tmp_path):
     store = QQAccountsStore(tmp_path)
     store.save(
         {
@@ -129,7 +89,6 @@ async def test_deleted_account_is_disconnected_and_its_napcat_data_purged(tmp_pa
                 expected_uin=uin,
                 auto_connect=False,
                 verified=True,
-                mode="managed",
                 role_id="mira",
             )
             for ref, uin in (("aa", "101"), ("bb", "202"))
@@ -148,22 +107,14 @@ async def test_deleted_account_is_disconnected_and_its_napcat_data_purged(tmp_pa
         (login / "session.db").write_text("login", encoding="utf-8")
 
     await runtime.disconnect_account("aa")
-
     assert socket.closed and reconnect.cancelled()
-    # Disconnecting alone keeps every credential and login file for a retry.
     assert "token-aa" in store.path.read_text(encoding="utf-8")
     assert (files.account_dir("aa") / "profile").is_dir()
 
     await runtime.purge_account("aa")
-
     assert not files.account_dir("aa").exists()
     assert (files.account_dir("bb") / "profile").is_dir()
     assert list(store.load()) == ["bb"]
     assert "token-aa" not in store.path.read_text(encoding="utf-8")
-    assert [row["ref"] for row in runtime.settings()["accounts"]] == ["bb"]
-    with pytest.raises(KeyError):
-        runtime._ref_for("qq-101")
+    assert store.load()["bb"].expected_uin == "202"
     assert accounts.reports == []
-    await runtime.disconnect_account("aa")
-    await runtime.purge_account("aa")
-    assert list(QQAccountsStore(tmp_path).load()) == ["bb"]

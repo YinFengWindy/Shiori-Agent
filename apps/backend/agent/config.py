@@ -50,23 +50,18 @@ def load_config(
     """Loads and validates the persisted TOML configuration.
 
     Runs the one-time ``[integrations.novelai]`` -> ``[plugins.novelai]``
-    migration (issue #180), the built-in channel table migration
-    (``[channels.telegram|qq]`` -> ``[plugins.telegram|qq]``, issue #363), the
-    removal of channel plugin ``allow_from`` whitelists (issue #398), the
+    migration (issue #180), the removal of channel plugin ``allow_from``
+    whitelists (issue #398), the
     removal of the global ``[proactive]`` delivery target (issue #399) and the
     default-disabled plugin pinning (``agent/plugin_default_enabled_migration.py``)
     against the real file before parsing, so an upgrading user's existing
-    token/settings show up under the plugin's own config channel with no
-    action required. ``load_config_text`` deliberately does not run these: it
-    promises never to touch the persisted file, and rejects a non-empty
-    migrated table instead.
+    settings show up under the plugin's own config channel with no action
+    required. ``load_config_text`` deliberately does not run these: it
+    promises never to touch the persisted file.
     """
     resolved_path = Path(path)
     data = _load_config_data(resolved_path)
     data = _migrate_legacy_novelai_config(resolved_path, data)
-    from agent.channel_config_migration import migrate_legacy_channel_configs
-
-    data = migrate_legacy_channel_configs(resolved_path, data)
     from agent.proactive_preferences import migrate_proactive_preferences
 
     data = migrate_proactive_preferences(resolved_path, data)
@@ -78,9 +73,6 @@ def load_config(
         from agent.plugin_config_migration import migrate_plugin_config
 
         data = migrate_plugin_config(resolved_path, data, workspace=workspace)
-        from agent.qq_host_config_migration import retire_copied_qq_config
-
-        data = retire_copied_qq_config(resolved_path, data, workspace=workspace)
     # 放在旧 JSON 插件设置迁入之后：那份 qqbot 设置也可能带着 allow_from。
     from agent.channel_allowlist_migration import remove_channel_allowlists
 
@@ -390,11 +382,8 @@ def _load_plugins_config(data: dict) -> dict[str, dict[str, Any]]:
 
 def _reject_removed_runtime_config(data: dict) -> None:
     """Rejects configuration for product surfaces removed from the runtime."""
-    from agent.channel_config_migration import reject_migrated_channel_tables
-
-    reject_migrated_channel_tables(data)
     sections = {
-        "channels": {"cli", "qqbot", "socket"},
+        "channels": {"cli", "qq", "qqbot", "socket", "telegram"},
         "integrations": {"fitbit"},
     }
     for section, names in sections.items():

@@ -101,8 +101,6 @@ class DesktopRoleRequestHandler:
                 }
             return result
         if method == "roles.update":
-            if "channel_bindings" in payload:
-                raise ValueError("角色渠道绑定已迁移到账号归属与响应规则")
             role_id = str(payload.get("role_id") or "")
             previous = self._role_service.repository.get_required(role_id)
             update_kwargs: dict[str, Any] = {
@@ -151,10 +149,21 @@ class DesktopRoleRequestHandler:
         if method == "roles.delete":
             role_id = str(payload.get("role_id") or "").strip()
             role = self._role_service.repository.get_required(role_id)
+            # The role's accounts go first, through their loaded plugins; a
+            # failed cleanup keeps the role so the deletion can be retried.
+            deleted_accounts = (
+                await self._role_service.repository.store.accounts.delete_role_accounts(
+                    role_id
+                )
+            )
             deleted, session_deleted = self._role_service.delete_role(role_id)
             if deleted:
                 await self._voice_handler.retire_deleted_role(role.runtime_config)
-            return {"deleted": deleted, "session_deleted": session_deleted}
+            return {
+                "deleted": deleted,
+                "session_deleted": session_deleted,
+                "deleted_accounts": deleted_accounts,
+            }
         # `roles.pets.import` / `.remove` / `.select` used to live here. They are
         # now `plugin.desktop_pet.pets.*`, registered by the plugin that owns
         # them (#181-D), so the core bridge no longer knows what a pet package

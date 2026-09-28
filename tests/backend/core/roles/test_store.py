@@ -9,24 +9,6 @@ from core.roles import RoleStore
 from core.roles import assets as assets_module
 
 
-def test_role_with_accounts_is_kept_so_no_account_loses_its_owner(tmp_path):
-    store = RoleStore(tmp_path)
-    role = store.create_role(name="Owner", system_prompt="Owner")
-    account = store.accounts.register(
-        plugin_id="chat",
-        platform="chat",
-        platform_account_id="101",
-        config_ref="one",
-        token="generation",
-        role_id=role.id,
-    )
-    with pytest.raises(ValueError, match="仍有账号"):
-        store.delete_role(role.id)
-    assert store.get_role(role.id) is not None
-    restarted = RoleStore(tmp_path)
-    assert restarted.accounts.get(account.record.id).record.role_id == role.id
-
-
 def test_new_unbound_role_remains_unbound_when_models_are_added(tmp_path):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")

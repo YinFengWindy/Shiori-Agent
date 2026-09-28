@@ -1,15 +1,22 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { XIcon } from "@phosphor-icons/react";
+import { useState } from "react";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
-import { InlineError } from "../shared/feedback/InlineError";
-import { ghostButtonClass, iconButtonClass } from "../shared/styles";
-import { accountStatus } from "./accountPresentation";
+import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
+import { iconButtonClass } from "../shared/styles";
+import { Reveal } from "../shared/ui/Reveal";
+import { accountChannelLine, accountName, accountOnline } from "./accountPresentation";
 import type { AccountSnapshot } from "./accountClient";
+import { AccountAvatar } from "./AccountAvatar";
+import { AccountDangerZone } from "./AccountDangerZone";
+import { AccountDetailActionsTarget } from "./AccountDetailActions";
 import { AccountResponseRulesEditor } from "./AccountResponseRulesEditor";
 
 /**
- * One role's account detail: status, response rules, and the platform's own
- * controls (account.detail). A null account is a new one being added for `roleId`.
+ * One role's account detail, top to bottom: who it is, the platform's own
+ * connection controls (account.detail, led by the shared status card), the
+ * response rules while the account is online, then the danger zone. A null
+ * account is a new one being added for `roleId`.
  */
 export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChanged }: {
   account: AccountSnapshot | null;
@@ -18,28 +25,44 @@ export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChan
   onClose: () => void;
   onChanged: (accountId?: string) => void;
 }) {
-  const pluginControls = pluginUiRegistry.getAccountDetail(pluginId, () => account?.pluginEnabled ?? true);
+  const isPluginEnabled = usePluginEnabledState();
+  const pluginControls = pluginUiRegistry.getAccountDetail(pluginId, isPluginEnabled);
   const PlatformControls = pluginControls?.Component;
+  const platformLabel = pluginControls?.label ?? account?.platform ?? "";
+  // The danger zone's action row, where plugin secondary actions are portaled.
+  const [actionsTarget, setActionsTarget] = useState<HTMLElement | null>(null);
 
   return <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
     <Dialog.Portal>
       <Dialog.Backdrop className="confirm-dialog-backdrop motion-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm" />
       <Dialog.Popup className="confirm-dialog motion-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(42rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-md border border-line bg-surface p-6 shadow-panel">
-        <div className="flex items-start justify-between gap-3 border-b border-line-soft pb-4">
-          <div className="min-w-0">
-            <Dialog.Title className="font-display text-title font-semibold text-ink">{account?.displayName || account?.platformAccountId || (pluginControls ? `添加 ${pluginControls.label} 账号` : "添加账号")}</Dialog.Title>
-            {account ? <p className="m-0 break-all text-body-sm text-ink-muted">{account.platform} · {account.platformAccountId} · {accountStatus(account)}</p> : null}
+        <div className="flex items-center justify-between gap-3 border-b border-line-soft pb-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <AccountAvatar avatarUrl={account?.avatarUrl ?? ""} Icon={pluginControls?.Icon} size="lg" />
+            <div className="grid min-w-0 gap-0.5">
+              <Dialog.Title className="truncate font-display text-title font-semibold text-ink">
+                {account ? accountName(account) : platformLabel ? `添加 ${platformLabel} 账号` : "添加账号"}
+              </Dialog.Title>
+              {account ? <p className="m-0 truncate text-body-sm text-ink-muted">{accountChannelLine(platformLabel, account)}</p> : null}
+            </div>
           </div>
           <Dialog.Close className={iconButtonClass} aria-label="关闭账号详情"><XIcon className="h-5 w-5" /></Dialog.Close>
         </div>
-        <div className="scrollbar-stable grid min-h-0 gap-6 overflow-y-auto py-5">
-          {account?.error && account.connection === "error" ? <InlineError message={account.error} /> : null}
-          {account ? <AccountResponseRulesEditor account={account} onChanged={onChanged} /> : null}
-          {PlatformControls ? <section className="border-t border-line-soft pt-5" aria-label="平台设置">
-            <PlatformControls account={account} roleId={roleId} onChanged={onChanged} />
+        <div className="scrollbar-stable min-h-0 overflow-y-auto pb-1 pt-5">
+          {PlatformControls ? <section aria-label="平台设置">
+            <AccountDetailActionsTarget value={actionsTarget}>
+              <PlatformControls account={account} roleId={roleId} onChanged={onChanged} />
+            </AccountDetailActionsTarget>
           </section> : null}
+          {/* Rules only matter while the account can receive messages. */}
+          <Reveal show={accountOnline(account)} className="pt-6">
+            {account ? <AccountResponseRulesEditor key={account.id} account={account} onChanged={onChanged} /> : null}
+          </Reveal>
+          <Reveal show={Boolean(account)} className="pt-6">
+            {account ? <AccountDangerZone account={account} roleId={roleId} onChanged={onChanged}
+              onDeleted={onClose} onActionsTarget={setActionsTarget} /> : null}
+          </Reveal>
         </div>
-        <div className="flex justify-end border-t border-line-soft pt-4"><button type="button" className={ghostButtonClass} onClick={onClose}>关闭</button></div>
       </Dialog.Popup>
     </Dialog.Portal>
   </Dialog.Root>;

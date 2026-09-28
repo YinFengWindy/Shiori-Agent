@@ -1,64 +1,18 @@
-"""QQ account plugin: private external NapCat connections and account actions."""
+"""QQ account plugin: private managed NapCat instances and account actions."""
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field, field_validator
 from core.accounts import AccountDeletionPlan
 from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
-_UNRESOLVED_ENV_RE = re.compile(r"^\$\{\w+\}$")
-# Old single-connection fields; the first three re-create or reconnect the
-# "legacy" account on setup, the timeout only tunes it.
-_LEGACY_CREDENTIAL_FIELDS = ("bot_uin", "ws_uri", "ws_token")
-_LEGACY_CONNECTION_FIELDS = (
-    *_LEGACY_CREDENTIAL_FIELDS,
-    "websocket_open_timeout_seconds",
-)
-
-
-class QQConfigModel(BaseModel):
-    """``[plugins.qq]``：值明文存 TOML，支持 ``${ENV}`` 占位符。"""
-
-    bot_uin: str = Field(
-        default="",
-        title="Bot QQ 号",
-        description="NapCat 登录的机器人 QQ 号；留空则不启用 QQ 渠道。",
-    )
-    ws_uri: str = Field(
-        default="",
-        title="NapCat WebSocket 地址",
-        description="如 ws://localhost:3001；留空沿用 NcatBot 默认值。",
-    )
-    ws_token: str = Field(
-        default="",
-        title="NapCat WebSocket 令牌",
-        description="NapCat 正向 WebSocket 的 access token；留空沿用 NcatBot 默认值。",
-    )
-    websocket_open_timeout_seconds: float = Field(
-        default=5.0,
-        gt=0,
-        title="连接超时",
-        json_schema_extra={"unit": "秒"},
-        description="与 NapCat 建立 WebSocket 连接的握手超时。",
-    )
-
-    @field_validator("bot_uin", "ws_uri", "ws_token", mode="before")
-    @classmethod
-    def _normalize_text(cls, value: object) -> str:
-        # 宿主已展开 ${ENV}；仍未展开说明变量缺失，按未填写处理。旧配置里的
-        # bot_uin 可能是 TOML 整数，这里统一成字符串。
-        text = str(value if value is not None else "").strip()
-        return "" if _UNRESOLVED_ENV_RE.fullmatch(text) else text
-
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
-    """Migrates the old connection and contributes one multi-account channel."""
+    """Loads the plugin-owned accounts and contributes one multi-account channel."""
     from pathlib import Path
 
     from desktop_bridge.method_policy import Concurrency
@@ -66,56 +20,36 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     from .accounts_runtime import QQAccountsRuntime
     from .accounts_store import QQAccountsStore
 
-    config = QQConfigModel.model_validate(ctx.config.as_dict())
     workspace = ctx.workspace
     if not isinstance(workspace, Path):
         raise RuntimeError("QQ 插件需要持久化 workspace")
-    store = QQAccountsStore(workspace)
-    store.migrate_legacy(
-        bot_uin=config.bot_uin,
-        ws_uri=config.ws_uri,
-        ws_token=config.ws_token,
-        timeout_seconds=config.websocket_open_timeout_seconds,
-    )
-    runtime = QQAccountsRuntime(store, ctx.accounts)
+    runtime = QQAccountsRuntime(QQAccountsStore(workspace), ctx.accounts)
+    await runtime.load()
     ctx.channels.add(runtime)
-    raw_config = ctx.config.raw_as_dict()
 
     def delete_account(config_ref: str) -> AccountDeletionPlan:
-        # The legacy account would be copied back from host settings on the
-        # next setup unless the old connection fields leave config.toml too.
-        legacy = config_ref == "legacy" and any(
-            raw_config.get(key) for key in _LEGACY_CREDENTIAL_FIELDS
-        )
         return AccountDeletionPlan(
             disconnect=lambda: runtime.disconnect_account(config_ref),
             purge=lambda: runtime.purge_account(config_ref),
-            plugin_config=(
-                {
-                    key: value
-                    for key, value in raw_config.items()
-                    if key not in _LEGACY_CONNECTION_FIELDS
-                }
-                if legacy
-                else None
-            ),
         )
 
     ctx.accounts.on_delete(delete_account)
+    ctx.accounts.on_rules_change(runtime.save_rules)
     ctx.rpc.register(
         "accounts.settings",
         lambda payload: _settings(runtime, payload),
         concurrency=Concurrency.READ_ONLY,
     )
-    ctx.rpc.register("accounts.save", runtime.save_draft)
-    ctx.rpc.register("accounts.connect", lambda payload: _connect(runtime, payload))
+    ctx.rpc.register("accounts.begin", runtime.begin_login)
+    ctx.rpc.register("accounts.start", lambda payload: _start(runtime, payload))
     ctx.rpc.register(
         "accounts.disconnect", lambda payload: _disconnect(runtime, payload)
     )
     ctx.rpc.register(
-        "accounts.disconnect_draft",
-        lambda payload: _disconnect_draft(runtime, payload),
+        "accounts.stop",
+        lambda payload: _stop(runtime, payload),
     )
+    ctx.rpc.register("accounts.cancel", lambda payload: _cancel(runtime, payload))
     ctx.rpc.register("accounts.logout", lambda payload: _logout(runtime, payload))
     ctx.rpc.register(
         "accounts.managed_status",
@@ -125,9 +59,6 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     ctx.rpc.register(
         "accounts.refresh_qrcode",
         lambda payload: runtime.refresh_qrcode(str(payload["ref"])),
-    )
-    ctx.rpc.register(
-        "accounts.remove_draft", lambda payload: _remove_draft(runtime, payload)
     )
     ctx.rpc.register(
         "accounts.discover",
@@ -147,20 +78,14 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
 async def _settings(runtime, payload: dict) -> dict:
     return runtime.settings(
-        str(payload["account_id"]) if payload.get("account_id") else None,
-        str(payload["ref"]) if payload.get("ref") else None,
+        str(payload["account_id"]) if payload.get("account_id") else None
     )
 
 
-async def _connect(runtime, payload: dict) -> dict:
-    """Connects a saved draft only for the role that owns it."""
-    from .accounts_settings import ensure_config_owner
-
-    ref = str(payload["ref"])
-    if ref not in runtime._configs:
-        raise KeyError("QQ 配置引用不存在")
-    ensure_config_owner(runtime._configs[ref], str(payload.get("role_id") or ""))
-    return await runtime.connect_saved(ref)
+async def _start(runtime, payload: dict) -> dict:
+    return await runtime.start_login(
+        str(payload["ref"]), str(payload.get("role_id") or "")
+    )
 
 
 async def _disconnect(runtime, payload: dict) -> dict:
@@ -168,18 +93,18 @@ async def _disconnect(runtime, payload: dict) -> dict:
     return {"ok": True}
 
 
-async def _disconnect_draft(runtime, payload: dict) -> dict:
-    await runtime.disconnect_draft(str(payload["ref"]))
+async def _stop(runtime, payload: dict) -> dict:
+    await runtime.stop_login(str(payload["ref"]), str(payload.get("role_id") or ""))
+    return {"ok": True}
+
+
+async def _cancel(runtime, payload: dict) -> dict:
+    await runtime.cancel_login(str(payload["ref"]), str(payload.get("role_id") or ""))
     return {"ok": True}
 
 
 async def _logout(runtime, payload: dict) -> dict:
     await runtime.logout(str(payload["account_id"]))
-    return {"ok": True}
-
-
-async def _remove_draft(runtime, payload: dict) -> dict:
-    await runtime.remove_draft(str(payload["ref"]))
     return {"ok": True}
 
 

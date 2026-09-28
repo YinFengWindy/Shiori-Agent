@@ -31,13 +31,15 @@ describe("applyPluginUiModules", () => {
   it("binds and unloads account.detail for its provider", () => {
     const registry = new PluginUiRegistry();
     function AccountControls() { return null; }
+    function AccountIcon() { return null; }
     applyPluginUiModules({
       "/plugins/demo/ui/index.tsx": {
-        default: { pluginId: "demo", accountDetail: { label: "Demo", component: AccountControls } },
+        default: { pluginId: "demo", accountDetail: { label: "Demo", icon: AccountIcon, component: AccountControls } },
       },
     }, registry);
     const entry = registry.getAccountDetail("demo", () => true);
     assert.ok(entry);
+    assert.equal(entry.Icon, AccountIcon);
     assert.equal(registry.getAccountDetail("demo", () => false), undefined);
     assert.deepEqual(registry.listAccountDetails(() => true).map((item) => item.label), ["Demo"]);
     assert.deepEqual(registry.listAccountDetails(() => false), []);

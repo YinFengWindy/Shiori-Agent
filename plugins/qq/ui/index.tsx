@@ -1,24 +1,34 @@
-import React from "react";
+import React, { useEffect } from "react";
+import { ChatCircleIcon } from "@phosphor-icons/react";
 import type { PluginAccountDetailComponentProps, PluginUiModule } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
 import { QQAccountForm } from "./QQAccountForm";
-import { QQDraftsSection } from "./QQDraftsSection";
 import { useQQAccountForm } from "./useQQAccountForm";
 
-/** One QQ connection form: a saved account, a selected draft, or a new draft for `roleId`. */
-function QQAccountEditor({ account, roleId, onChanged, client, host, draftRef = "" }: PluginAccountDetailComponentProps & { draftRef?: string }) {
-  const form = useQQAccountForm({ accountId: account?.id, draftRef, roleId, client, onChanged });
+/** One verified account or one temporary login for a new QQ account. */
+function QQAccountEditor({ account, roleId, onChanged, client, host }: PluginAccountDetailComponentProps) {
+  const form = useQQAccountForm({ accountId: account?.id, roleId, client, onChanged,
+    onCleanupError: (failure) => host.feedback.error("QQ 临时连接清理失败", {
+      detail: failure instanceof Error ? failure.message : String(failure),
+    }),
+  });
+  const accountId = account?.id;
+  useEffect(() => {
+    if (accountId || !form.ref) return;
+    const ref = form.ref;
+    return () => { void client.call("accounts.cancel", { ref, role_id: roleId }).catch((failure: unknown) => {
+      host.feedback.error("QQ 临时连接清理失败", { detail: failure instanceof Error ? failure.message : String(failure) });
+    }); };
+  }, [accountId, form.ref, client, roleId, host.feedback]);
   return <QQAccountForm account={account} host={host} form={form} />;
 }
 
-/** QQ's controls in the role page's account detail; adding one starts from the role's drafts. */
+/** QQ's controls in the role page's account detail. */
 export function QQAccountDetail(props: PluginAccountDetailComponentProps) {
-  if (props.account) return <QQAccountEditor {...props} />;
-  return <QQDraftsSection roleId={props.roleId} client={props.client} host={props.host}
-    onChanged={props.onChanged} Editor={QQAccountEditor} />;
+  return <QQAccountEditor {...props} />;
 }
 
 const qqUiModule: PluginUiModule = {
   pluginId: "qq",
-  accountDetail: { label: "QQ", component: QQAccountDetail },
+  accountDetail: { label: "QQ", icon: ChatCircleIcon, component: QQAccountDetail },
 };
 export default qqUiModule;

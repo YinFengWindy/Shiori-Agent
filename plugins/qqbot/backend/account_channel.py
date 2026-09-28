@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
+from .account_avatar import fetch_bot_avatar
 from .accounts import QQBotAccountStore, resolve_secret
 from .account_commands import _AccountCommandsMixin
 from .account_sending import _AccountSendingMixin
@@ -36,6 +38,7 @@ class QQBotAccountsChannel(
         self._channels: dict[str, QQBotChannel] = {}
         self._identity = QQBotAccountIdentity(ctx, store)
         self._runtime: ChannelContext | None = None
+        self._avatar_tasks: dict[str, asyncio.Task[None]] = {}
 
     @property
     def configuration_key(self) -> object:
@@ -48,7 +51,6 @@ class QQBotAccountsChannel(
             app_id,
             resolve_secret(row["client_secret"]),
             self._chat_types,
-            scoped=not row.get("legacy", False),
             account_id=self._identity.account_id(app_id),
             on_status=lambda state, error, name, bot_id: self._identity.report(
                 app_id, state, error, name, bot_id
@@ -79,7 +81,9 @@ class QQBotAccountsChannel(
             if not self._identity.account_id(row["app_id"]):
                 continue  # Rows the host refused are not registered, so never served.
             if row.get("connected", True):
-                await self._connect(row)
+                channel = await self._connect(row)
+                if channel is not None:
+                    self._refresh_avatar(row["app_id"], channel)
             else:
                 self._identity.report(row["app_id"], "offline", "", "")
 
@@ -87,6 +91,8 @@ class QQBotAccountsChannel(
         """Stop only gateways owned by this plugin instance."""
         from bus.events_lifecycle import StreamDeltaReady, TurnCancelled, TurnStarted
 
+        for app_id in list(self._avatar_tasks):
+            await self._cancel_avatar(app_id)
         for channel in tuple(self._channels.values()):
             await channel.stop()
         self._channels.clear()
@@ -112,6 +118,20 @@ class QQBotAccountsChannel(
         """Resume all application intakes after a rejected handover."""
         for channel in self._channels.values():
             channel.resume_intake()
+
+    def _refresh_avatar(self, app_id: str, channel: QQBotChannel) -> None:
+        """Fetches a connected application's avatar in the background."""
+        running = self._avatar_tasks.get(app_id)
+        if running is None or running.done():
+            self._avatar_tasks[app_id] = asyncio.create_task(
+                self._store_avatar(app_id, channel), name=f"qqbot-avatar-{app_id}"
+            )
+
+    async def _store_avatar(self, app_id: str, channel: QQBotChannel) -> None:
+        # A failed download keeps the stored avatar.
+        avatar = await fetch_bot_avatar(channel)
+        if avatar is not None:
+            self._identity.update_avatar(app_id, avatar)
 
     async def _connect(self, row: dict[str, Any]) -> QQBotChannel | None:
         app_id = row["app_id"]

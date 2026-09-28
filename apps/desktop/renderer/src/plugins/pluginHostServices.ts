@@ -1,15 +1,24 @@
-import type { ComponentType } from "react";
+import type { ComponentProps, ComponentType } from "react";
+import { AccountDetailActions } from "../accounts/AccountDetailActions";
+import { AccountStatusCard, type AccountStatusCardProps } from "../accounts/AccountStatusCard";
 import { invokeBridgePayload } from "../shared/bridgeInvoke";
 import type { RoleRecord } from "../shared/types";
+import { Reveal } from "../shared/ui/Reveal";
 import { pluginHostFeedback, type PluginHostFeedback } from "./pluginHostFeedback";
 import { HostConfirmDialog, HostInlineError, type HostConfirmDialogProps, type HostInlineErrorProps } from "./pluginHostUi";
 
-/** Host components a plugin UI may render (runtime API 2.4.0). */
+/** Host components a plugin UI may render (runtime API 2.4.0; the account pieces serve `account.detail`). */
 export type PluginHostUi = {
   /** The host's in-page error block; `persona` (true or a scene key) lets 吟风 front it. */
   InlineError: ComponentType<HostInlineErrorProps>;
   /** The host's confirmation dialog; `persona` (true or a scene key) lets 吟风 lead it. */
   ConfirmDialog: ComponentType<HostConfirmDialogProps>;
+  /** The shared account connection card: status, the one connect/disconnect button, plugin rows below. */
+  AccountStatusCard: ComponentType<AccountStatusCardProps>;
+  /** A plugin's secondary account actions, shown in the account detail's danger zone next to 删除账号. */
+  AccountDetailActions: ComponentType<ComponentProps<typeof AccountDetailActions>>;
+  /** Fade + height show/hide for a block that comes and goes with state (QR code, progress). */
+  Reveal: ComponentType<ComponentProps<typeof Reveal>>;
 };
 
 /** Narrow host services available to plugin UI without exposing raw IPC. */
@@ -35,5 +44,8 @@ export const desktopPluginHostServices: PluginHostServices = {
   pickImages: (options) => window.miraDesktop.pickImages(options),
   pickFiles: (options) => window.miraDesktop.pickFiles(options),
   feedback: pluginHostFeedback,
-  ui: { InlineError: HostInlineError, ConfirmDialog: HostConfirmDialog },
+  ui: {
+    InlineError: HostInlineError, ConfirmDialog: HostConfirmDialog,
+    AccountStatusCard, AccountDetailActions, Reveal,
+  },
 };

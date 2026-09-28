@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Sized
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
-
-from core.common.channel_chat_types import CHAT_TYPE_GROUP, ChatType, parse_chat_type
-from core.common.channel_identifiers import normalize_sender_ids
 
 from .profile_models import RoleProfile
 
@@ -32,59 +28,8 @@ def normalize_rel_path(path: str | None) -> str | None:
 
 
 @dataclass(frozen=True)
-class RoleChannelBindingConfig:
-    """One role-owned channel session and who in it the role ignores.
-
-    ``chat_type`` (``private`` / ``group``) is chosen when binding; the runtime
-    never infers it from the ``chat_id`` format. A private chat's partner is
-    the chat itself, so only group bindings carry ``blocked_senders``: members
-    whose messages never reach the role. Every other member is admitted.
-    """
-
-    channel: str
-    chat_id: str
-    chat_type: ChatType
-    blocked_senders: list[str] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        if self.blocked_senders and self.chat_type != CHAT_TYPE_GROUP:
-            raise ValueError("只有群聊绑定可以设置黑名单")
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "channel": self.channel,
-            "chat_id": self.chat_id,
-            "chat_type": self.chat_type,
-            "blocked_senders": list(self.blocked_senders),
-        }
-
-    @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "RoleChannelBindingConfig":
-        channel = str(payload.get("channel") or "").strip()
-        chat_id = str(payload.get("chat_id") or "").strip()
-        if not channel or not chat_id:
-            raise ValueError("角色渠道绑定必须包含 channel 和 chat_id")
-        chat_type = parse_chat_type(
-            payload.get("chat_type"), "角色渠道绑定的 chat_type"
-        )
-        raw_blocked = payload.get("blocked_senders", [])
-        if not isinstance(raw_blocked, list):
-            raise ValueError("角色渠道 blocked_senders 必须是数组")
-        return cls(
-            channel=channel,
-            chat_id=chat_id,
-            chat_type=chat_type,
-            blocked_senders=normalize_sender_ids(raw_blocked),
-        )
-
-
-@dataclass(frozen=True)
 class RoleProactiveCandidate:
-    """One bound session of the role that may receive proactive messages.
-
-    A candidate only references a binding by its ``channel`` and ``chat_id``;
-    the binding itself stays the single owner of the session's settings.
-    """
+    """One session of the role that may receive proactive messages."""
 
     channel: str
     chat_id: str
@@ -102,22 +47,12 @@ class RoleProactiveCandidate:
             raise ValueError("主动推送候选会话必须包含 channel 和 chat_id")
         return cls(channel=channel, chat_id=chat_id)
 
-    @classmethod
-    def of_binding(cls, binding: RoleChannelBindingConfig) -> "RoleProactiveCandidate":
-        """References ``binding`` as a candidate session."""
-        return cls(channel=binding.channel, chat_id=binding.chat_id)
-
-
-def keeps_proactive_enabled(enabled: bool, candidates: Sized) -> bool:
-    """Preserve the user's setting when legacy candidate sessions are removed."""
-    return enabled
-
 
 @dataclass(frozen=True)
 class RoleProactiveConfig:
     """角色自己的主动推送候选会话、策略与执行参数。
 
-    ``candidates`` retains legacy default destinations in binding order. An
+    ``candidates`` retains legacy default destinations in saved order. An
     enabled role with no candidates starts from its desktop session and may
     choose an owned communication account during the turn.
     """
@@ -227,7 +162,6 @@ class RoleRecord:
     asset_categories: list[RoleAssetCategory]
     asset_category_bindings: dict[str, str]
     runtime_config: dict[str, Any]
-    channel_bindings: list[RoleChannelBindingConfig]
     proactive: RoleProactiveConfig
     memory_init_state: dict[str, Any]
     created_at: str
@@ -300,11 +234,6 @@ class RoleRecord:
             asset_categories=categories,
             asset_category_bindings=bindings,
             runtime_config=dict(payload.get("runtime_config") or {}),
-            channel_bindings=[
-                RoleChannelBindingConfig.from_dict(item)
-                for item in payload.get("channel_bindings", [])
-                if isinstance(item, dict)
-            ],
             proactive=RoleProactiveConfig.from_dict(payload.get("proactive")),
             memory_init_state=dict(payload.get("memory_init_state") or {}),
             created_at=str(payload.get("created_at") or now_iso()),

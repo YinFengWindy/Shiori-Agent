@@ -4,12 +4,10 @@ display_name: Telegram
 version: '0.1.0'
 desc: Telegram Bot 渠道
 capabilities:
-  - config
   - channels
   - accounts
   - kv
   - rpc
-config_model: TelegramConfigModel
 channels:
   - name: telegram
     instance_prefix: telegram_

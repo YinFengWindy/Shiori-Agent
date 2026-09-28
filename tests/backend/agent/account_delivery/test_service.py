@@ -37,8 +37,7 @@ class _Rpc:
 
 
 def _service(tmp_path, plugin_id: str = "chat"):
-    accounts = AccountRegistry(tmp_path, lambda role_id: role_id in {"mira", "other"})
-    accounts.set_plugin_enabled(plugin_id, True)
+    accounts = AccountRegistry(lambda role_id: role_id in {"mira", "other"})
     account = accounts.register(
         plugin_id=plugin_id,
         platform=plugin_id,

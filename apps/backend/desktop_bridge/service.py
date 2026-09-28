@@ -3,11 +3,13 @@ from __future__ import annotations
 from agent.plugin_host.bridge_events import PluginBridgeEvent, PluginRpcError
 
 from contextlib import ExitStack
-from core.accounts import AccountDeletingError
+from core.accounts import AccountDeletingError, AccountNotFoundError
 from core.common.cleanup import run_cleanup_steps
+from core.common.task_collector import TaskCollector
 
 import inspect
 import logging
+from contextvars import Context
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -113,6 +115,9 @@ class DesktopBridgeService:
             ProactiveMessageCommitted,
             self._proactive_message_listener,
         )
+        self._account_change_listener = self._on_account_change
+        self._account_pushes = TaskCollector("Account change push")
+        role_store.accounts.add_change_listener(self._account_change_listener)
         self.config = config
         self.role_runtime_registry = role_runtime_registry
         registrations = getattr(config, "model_registrations", None)
@@ -143,10 +148,7 @@ class DesktopBridgeService:
             ),
         )
         self.role_service.add_role_deleted_listener(self._role_deleted_listener)
-        self.conversation_service = ConversationService(
-            session_manager,
-            binding_resolver=self.role_service.repository.store.resolve_legacy_session_owner,
-        )
+        self.conversation_service = ConversationService(session_manager)
         self.relationship_runtime = relationship_runtime
         self.presence = presence
         self.scheduler = scheduler
@@ -279,6 +281,39 @@ class DesktopBridgeService:
             session=session,
         )
 
+    def _on_account_change(self, account_id: str) -> None:
+        # Registry changes arrive synchronously inside plugin reports, often
+        # from plugin tasks that inherited an RPC's since-released runtime
+        # lease. The push is therefore its own task in a fresh context: it pins
+        # no runtime generation and cannot fail the reporting plugin; failures
+        # are logged by the collector. Unwatched changes are dropped.
+        if not self._event_listeners:
+            return
+        push = self._push_account_changed(account_id)
+        try:
+            _ = Context().run(
+                self._account_pushes.spawn,
+                push,
+                name=f"accounts.updated:{account_id}",
+            )
+        except Exception:
+            # Bridge boundary: a push that cannot even be scheduled must not
+            # surface in the plugin's register/report call.
+            push.close()
+            logger.exception("Account change push for %s not scheduled", account_id)
+
+    async def _push_account_changed(self, account_id: str) -> None:
+        """Pushes account changes so account views refresh without polling."""
+
+        await self._broadcast_event(
+            BridgeEvent(
+                id="accounts.updated",
+                type="event",
+                method="accounts.updated",
+                payload={"account_id": account_id},
+            ).to_dict()
+        )
+
     def add_event_listener(
         self,
         listener: Callable[[dict[str, Any]], Awaitable[None] | None],
@@ -327,8 +362,11 @@ class DesktopBridgeService:
             self._proactive_message_listener,
         )
         self.role_service.remove_role_deleted_listener(self._role_deleted_listener)
+        self.role_store.accounts.remove_change_listener(self._account_change_listener)
         self.event_bus.off(PluginBridgeEvent, self._plugin_event_listener)
         self._event_listeners.clear()
+        self._account_pushes.cancel_all()
+        await self._account_pushes.drain()
         if self.plugin_rpc_registry is not None:
             self.plugin_rpc_registry.communication.retire()
         steps = [
@@ -709,6 +747,10 @@ class DesktopBridgeService:
                 )
             if result is not None:
                 return self._ok(request_id, method, result)
+        except AccountNotFoundError as exc:
+            return self._error(
+                request_id, method, "account_not_found", f"账号不存在: {exc.args[0]}"
+            )
         except KeyError as exc:
             return self._error(request_id, method, "role_not_found", str(exc))
         except VoiceServiceError as exc:
@@ -743,7 +785,7 @@ class DesktopBridgeService:
         except PluginRpcError as exc:
             return self._error(request_id, method, exc.code, str(exc))
         except AccountDeletingError as exc:
-            # accounts.rules.set while that account is deleted.
+            # accounts.rules.set/delete while that account is being deleted.
             return self._error(request_id, method, "account_deleting", str(exc))
         except Exception as exc:
             return self._error(request_id, method, "internal_error", str(exc))

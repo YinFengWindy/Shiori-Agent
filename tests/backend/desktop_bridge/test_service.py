@@ -3,11 +3,14 @@ from __future__ import annotations
 import asyncio
 import threading
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from agent.tools.message_push import MessagePushTool
+from bootstrap.runtime.events import RuntimeEventBus
+from bootstrap.runtime.generations import RuntimeCandidate
+from core.common.runtime_scope import bind_runtime
 from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import DeliveryReceipt, PushToolOutboundPort
@@ -913,7 +916,7 @@ async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="m")
     accounts = role_store.accounts
-    accounts.set_plugin_enabled("demo", True)
+    accounts.set_rules_handler("demo", lambda *_: None)
     account_id = accounts.register(
         plugin_id="demo",
         platform="demo",
@@ -944,7 +947,6 @@ async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -
                             "group_enabled": True,
                             "require_mention": True,
                             "blocked_sender_ids": [],
-                            "group_rules": [],
                         },
                     },
                 },
@@ -958,17 +960,111 @@ async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -
         return AccountDeletionPlan(disconnect, purge)
 
     accounts.set_delete_handler("demo", plan)
-
-    async def no_write(plugin_id: str, values: dict) -> None:
-        raise AssertionError("no config write expected")
-
-    await accounts.delete(
-        account_id,
-        role_id="mira",
-        check_plugin_config=lambda *_: None,
-        write_plugin_config=no_write,
+    deleted = await service.handle(
+        {
+            "id": "delete",
+            "method": "accounts.delete",
+            "payload": {"account_id": account_id, "role_id": "mira"},
+        },
+        emit_event=Mock(),
     )
+
+    assert deleted.error is None
 
     assert codes == ["account_deleting"]
     assert accounts.list() == []
     await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_account_report_changes_are_pushed_to_desktop_clients(tmp_path) -> None:
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="m")
+    accounts = role_store.accounts
+    event_bus = EventBus()
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=event_bus,
+    )
+    emitted: list[dict] = []
+    service.add_event_listener(emitted.append)
+    account_id = accounts.register(
+        plugin_id="demo",
+        platform="demo",
+        platform_account_id="1",
+        config_ref="a",
+        token="t",
+        role_id="mira",
+    ).record.id
+    accounts.report(account_id, "t", connection="online")
+    accounts.report(account_id, "t", connection="online")
+    await asyncio.sleep(0)
+
+    assert [(event["method"], event["payload"]) for event in emitted] == [
+        ("accounts.updated", {"account_id": "demo:1"}),
+        ("accounts.updated", {"account_id": "demo:1"}),
+    ]
+    await service.aclose()
+    accounts.report(account_id, "t", connection="offline")
+    await asyncio.sleep(0)
+    assert len(emitted) == 2
+
+
+@pytest.mark.asyncio
+async def test_account_report_from_a_task_with_a_released_lease_still_pushes(
+    tmp_path,
+) -> None:
+    """Plugin tasks outlive the RPC whose runtime lease they inherited."""
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="m")
+    accounts = role_store.accounts
+    outlet = EventBus()
+    event_bus = RuntimeEventBus(outlet)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=event_bus,
+    )
+    emitted: list[dict] = []
+    service.add_event_listener(emitted.append)
+    account_id = accounts.register(
+        plugin_id="demo",
+        platform="demo",
+        platform_account_id="1",
+        config_ref="a",
+        token="t",
+        role_id="mira",
+    ).record.id
+    version = RuntimeCandidate(
+        1,
+        SimpleNamespace(
+            stop=AsyncMock(),
+            assert_hot_unloadable=Mock(),
+            memory_runtime=SimpleNamespace(aclose=AsyncMock()),
+        ),
+        SimpleNamespace(),
+        published=True,
+    )
+    rpc_lease = version.acquire()
+    await rpc_lease.release()
+    for _ in range(3):
+        await asyncio.sleep(0)
+    emitted.clear()
+
+    with bind_runtime(rpc_lease):
+        accounts.report(account_id, "t", connection="online")
+    for _ in range(3):
+        await asyncio.sleep(0)
+
+    assert accounts.get(account_id).connection == "online"
+    assert [(event["method"], event["payload"]) for event in emitted] == [
+        ("accounts.updated", {"account_id": "demo:1"}),
+    ]
+    await service.aclose()
+    await event_bus.aclose()
+    await outlet.aclose()

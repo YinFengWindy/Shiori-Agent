@@ -36,8 +36,7 @@ async def test_account_send_suppresses_default_dispatch() -> None:
 
 @pytest.mark.asyncio
 async def test_uncertain_account_send_does_not_auto_dispatch_original(tmp_path) -> None:
-    accounts = AccountRegistry(tmp_path, lambda role_id: role_id == "mira")
-    accounts.set_plugin_enabled("chat", True)
+    accounts = AccountRegistry(lambda role_id: role_id == "mira")
     account = accounts.register(
         plugin_id="chat",
         platform="chat",

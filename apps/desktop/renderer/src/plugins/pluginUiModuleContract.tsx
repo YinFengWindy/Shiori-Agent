@@ -72,6 +72,7 @@ export type PluginAccountDetailComponentProps = PluginAccountDetailProps & Plugi
 export type PluginAccountDetailContribution = {
   /** Platform name in the role page's add-account choice. */
   label: string;
+  icon?: React.ComponentType<{ className?: string }>;
   component: React.ComponentType<PluginAccountDetailComponentProps>;
 };
 
@@ -186,6 +187,7 @@ export function applyPluginUiModules(
         slot: "account.detail",
         pluginId,
         label: accountDetail.label,
+        Icon: accountDetail.icon,
         Component: bindPluginClient(pluginId, accountDetail.component),
       });
     }

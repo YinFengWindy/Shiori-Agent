@@ -19,6 +19,7 @@ from core.accounts.target_contract import (
 if TYPE_CHECKING:
     from agent.plugin_host.capabilities import RpcCapability
     from agent.plugin_host.kv import PluginKVStore
+    from .bots import TelegramBots
     from .channel.lifecycle import TelegramChannel
 
 
@@ -27,11 +28,11 @@ class TelegramAccountApi:
 
     def __init__(
         self,
-        channels: dict[str, TelegramChannel],
+        bots: TelegramBots,
         rpc: RpcCapability,
         store: PluginKVStore,
     ) -> None:
-        self._channels = channels
+        self._bots = bots
         self._rpc = rpc
         self._store = store
 
@@ -63,11 +64,7 @@ class TelegramAccountApi:
         )
 
     def _ref_for_account(self, payload: dict[str, Any]) -> str:
-        account_id = str(payload.get("account_id") or "")
-        for ref, channel in self._channels.items():
-            if account_id and channel._account_id == account_id:
-                return ref
-        raise ValueError("Unknown Telegram Bot account")
+        return self._bots.ref_for_account(str(payload.get("account_id") or ""))
 
     async def account_targets(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Adapt the shared query while preserving known-only directory scope."""
@@ -104,11 +101,10 @@ class TelegramAccountApi:
         )
 
     def _channel(self, payload: dict[str, Any]) -> TelegramChannel:
-        ref = str(payload.get("ref") or "")
-        try:
-            return self._channels[ref]
-        except KeyError as exc:
-            raise ValueError("Unknown Telegram Bot account") from exc
+        channel = self._bots.channel(str(payload.get("ref") or ""))
+        if channel is None:
+            raise ValueError("Unknown Telegram Bot account")
+        return channel
 
     def _known_ref(self, payload: dict[str, Any]) -> str:
         ref = str(payload.get("ref") or "")

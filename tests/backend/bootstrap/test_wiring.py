@@ -393,7 +393,6 @@ def test_config_load_accepts_dev_model_alias(tmp_path: Path):
 
 def test_config_load_rejects_removed_qqbot_channel_block(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ):
     cfg_path = tmp_path / "config.toml"
     _write_toml(
@@ -414,14 +413,6 @@ def test_config_load_rejects_removed_qqbot_channel_block(
                 "system_prompt": "s",
             },
             "channels": {
-                "telegram": {
-                    "token": "${TELEGRAM_BOT_TOKEN}",
-                    "allow_from": ["user1"],
-                },
-                "qq": {
-                    "bot_uin": "",
-                    "allow_from": ["42"],
-                },
                 "qqbot": {
                     "app_id": "app",
                     "client_secret": "${QQBOT_SECRET}",
@@ -507,7 +498,16 @@ enabled = true
         _ = Config.load(cfg_path)
 
 
-def test_config_load_migrates_qq_websocket_timeout_into_plugin(tmp_path: Path):
+@pytest.mark.parametrize(
+    ("channel", "values"),
+    [
+        ("qq", {"bot_uin": "10001", "websocket_open_timeout_seconds": 9.5}),
+        ("telegram", {"token": "123:abc"}),
+    ],
+)
+def test_config_load_rejects_removed_channel_blocks(
+    tmp_path: Path, channel: str, values: dict[str, object]
+):
     cfg_path = tmp_path / "config.toml"
     _write_toml(
         cfg_path,
@@ -526,22 +526,12 @@ def test_config_load_migrates_qq_websocket_timeout_into_plugin(tmp_path: Path):
             "agent": {
                 "system_prompt": "s",
             },
-            "channels": {
-                "qq": {
-                    "bot_uin": "10001",
-                    "allow_from": ["42"],
-                    "websocket_open_timeout_seconds": 9.5,
-                },
-            },
+            "channels": {channel: values},
         },
     )
 
-    cfg = Config.load(cfg_path)
-
-    assert cfg.plugins["qq"] == {
-        "bot_uin": "10001",
-        "websocket_open_timeout_seconds": 9.5,
-    }
+    with pytest.raises(ValueError, match=rf"配置项已移除: \[channels\.{channel}\]"):
+        Config.load(cfg_path)
 
 
 def test_build_registered_tools_respects_toolset_order_and_subset(

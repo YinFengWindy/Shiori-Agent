@@ -114,3 +114,22 @@ def test_snapshot_reports_a_raising_status_as_failure():
         "state": "failed",
         "error": "status: RuntimeError: socket gone",
     }
+
+
+@pytest.mark.asyncio
+async def test_account_member_channels_are_found_and_listed_through_their_group():
+    from infra.channels.account_group import AccountChannelGroup
+
+    host = ChannelHost(lambda channel: None)
+    group = AccountChannelGroup("telegram")
+    host.add(group)
+    member = _StatusChannel("telegram_42", {"connected": True})
+    await group.add("42", member)  # type: ignore[arg-type]
+
+    assert host.get("telegram_42") is member
+    assert host.get("telegram") is group
+    assert host.snapshot()["telegram_42"] == {
+        "state": "active",
+        "error": "",
+        "status": {"connected": True},
+    }

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 from bus.events import InboundMessage
 from infra.channels.contract import ChannelContext
@@ -15,15 +15,6 @@ from .accounts_store import QQConnectionConfig
 from .channel.compat import download_to_temp, extract_cq_images
 from .channel.group_filter import strip_at_segments
 from .onebot import OneBotSocket
-
-
-@runtime_checkable
-class AccountInboundRouter(Protocol):
-    """#425 host route: admit by account/rules, then project or reject input."""
-
-    def route_account_inbound(self, message: InboundMessage) -> InboundMessage | None:
-        """Returns None for rejected account input; consumes `mentioned` metadata."""
-        ...
 
 
 class QQInboundAdapter:
@@ -87,23 +78,13 @@ class QQInboundAdapter:
         if ctx is None:
             return
         hub = ctx.channel_hub
-        if hub is not None and not isinstance(hub, AccountInboundRouter):
-            # The legacy binding router cannot read account response rules.
+        if hub is None:
             if message.metadata.get(
                 "chat_type"
             ) == "group" and not message.metadata.get("mentioned"):
                 return
-            if not hub.is_sender_allowed(
-                channel=self.name, chat_id=message.chat_id, sender_id=message.sender
-            ):
-                return
-        elif (
-            hub is None
-            and message.metadata.get("chat_type") == "group"
-            and not message.metadata.get("mentioned")
-        ):
-            return
-        if isinstance(hub, AccountInboundRouter):
+        else:
+            # The host admits by account and response rules, then projects.
             routed = hub.route_account_inbound(message)
             if routed is None:
                 return
@@ -124,7 +105,5 @@ class QQInboundAdapter:
             else []
         )
         message = replace(message, content=text, media=media)
-        if hub is not None and not isinstance(hub, AccountInboundRouter):
-            message = hub.route_inbound(message)
         if not message.metadata.get("conversation_duplicate"):
             await ctx.bus.publish_inbound(message)

@@ -8,91 +8,71 @@ import { desktopPluginHostServices } from "../../../apps/desktop/renderer/src/pl
 import { TelegramAccountDetail } from "./TelegramAccountDetail";
 
 const account: AccountSnapshot = {
-  id: "account-1", pluginId: "telegram", platform: "telegram", platformAccountId: "123", configRef: "legacy",
-  displayName: "First Bot", avatarUrl: "", roleId: null, pluginEnabled: true,
-  runtimeActive: true, connection: "online", capabilities: [], knownCapabilities: [], error: "",
-  responseRules: { privateEnabled: true, groupEnabled: true, requireMention: true, blockedSenderIds: [], groupRules: [] },
+  id: "telegram:123", pluginId: "telegram", platform: "telegram", platformAccountId: "123", configRef: "123",
+  displayName: "First Bot", avatarUrl: "", roleId: "mira",
+  runtimeActive: true, connection: "online", capabilities: [], error: "",
+  responseRules: { privateEnabled: true, groupEnabled: true, requireMention: true, blockedSenderIds: [] },
 };
 
-test("Token draft verifies before the legacy account configuration changes", async () => {
-  const calls: string[] = [];
-  const submissions: Record<string, unknown>[] = [];
-  let rejectVerification = true;
-  let changedId = "";
-  const client = { call: async (name: string) => {
-    calls.push(name);
-    if (name === "known.list") return { chats: [] };
-    if (rejectVerification) throw new Error("invalid Token");
-    return { bot_id: "123" };
-  } } as PluginRpcClient;
-  const view = await mountTestComponent(
-    <TelegramAccountDetail account={account} roleId="mira" onChanged={(id) => { changedId = id ?? ""; }} client={client} host={desktopPluginHostServices} />,
-    { windowGlobals: { miraDesktop: { invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
-      calls.push(method);
-      if (method === "plugin.config.set") submissions.push(payload.values as Record<string, unknown>);
-      return { id: "response", type: "response", method, error: null, payload: method === "plugin.config.get"
-        ? { plugin_id: "telegram", schema: null, values: { bots: [{ ref: "legacy", token: "123:old", role_id: "mira" }] }, env_status: {} }
-        : { plugin_id: "telegram", values: submissions.at(-1), env_status: {}, generation: 2 } };
-    } } } },
-  );
-  try {
-    const input = view.container.querySelector<HTMLInputElement>('input[type="password"]');
-    assert.ok(input);
-    await changeInputValue(input, "123:new");
-    assert.equal(submissions.length, 0);
-    const save = () => Array.from(view.container.querySelectorAll<HTMLButtonElement>("button"))
-      .find((button) => button.textContent === "保存并连接");
-    await act(async () => save()?.click());
-    assert.equal(submissions.length, 0);
-    rejectVerification = false;
-    await act(async () => save()?.click());
-    assert.deepEqual(submissions[0]?.bots, [{ ref: "legacy", token: "123:new", enabled: true, role_id: "mira" }]);
-    assert.equal(changedId, "account-1");
-    assert.deepEqual(calls.filter((name) => name === "plugin.config.set"), ["plugin.config.set"]);
-  } finally {
-    await view.cleanup();
-  }
-});
+type Call = { name: string; payload?: Record<string, unknown> };
 
-test("a new Bot never takes over the old single Token", async () => {
-  const submissions: Record<string, unknown>[] = [];
-  const legacyAccount = {
-    id: "legacy-account", plugin_id: "telegram", platform: "telegram", platform_account_id: "123", config_ref: "legacy",
-    display_name: "First Bot", avatar_url: "", role_id: null, plugin_enabled: true,
-    runtime_active: true, connection: "online", capabilities: [], known_capabilities: [], error: "",
-    response_rules: { private_enabled: true, group_enabled: true, require_mention: true,
-      blocked_sender_ids: [], group_rules: [] },
-  };
-  const client = { call: async (name: string) => {
-    assert.equal(name, "token.verify");
-    return { bot_id: "456" };
+function rpc(calls: Call[], fail = () => false) {
+  return { call: async (name: string, payload?: Record<string, unknown>) => {
+    calls.push({ name, payload });
+    if (name === "known.list") return { chats: [] };
+    if (name === "identity.get") return {};
+    if (fail()) throw new Error("Bot Token 验证失败");
+    return { account_id: "telegram:456" };
   } } as PluginRpcClient;
+}
+
+const button = (container: HTMLElement, label: string) => Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+  .find((item) => item.textContent === label);
+
+test("a new Bot is saved for the role through the plugin, and a failure stays in the form", async () => {
+  const calls: Call[] = [];
+  let failing = true;
+  let changedId = "";
   const view = await mountTestComponent(
-    <TelegramAccountDetail account={null} roleId="mira" onChanged={() => undefined} client={client} host={desktopPluginHostServices} />,
-    { windowGlobals: { miraDesktop: { invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
-      if (method === "plugin.config.set") submissions.push(payload.values as Record<string, unknown>);
-      return { id: "response", type: "response", method, error: null, payload:
-        method === "plugin.config.get" ? { plugin_id: "telegram", schema: null,
-          values: { token: "123:old", bots: [] }, env_status: {} }
-          : method === "accounts.list" ? { accounts: [legacyAccount] }
-            : { plugin_id: "telegram", values: submissions.at(-1), env_status: {}, generation: 2 } };
-    } } } },
+    <TelegramAccountDetail account={null} roleId="mira" onChanged={(id) => { changedId = id ?? ""; }}
+      client={rpc(calls, () => failing)} host={desktopPluginHostServices} />,
   );
   try {
     const input = view.container.querySelector<HTMLInputElement>('input[type="password"]');
     assert.ok(input);
     await changeInputValue(input, "456:new");
-    const save = Array.from(view.container.querySelectorAll<HTMLButtonElement>("button"))
-      .find((button) => button.textContent === "保存并连接");
-    await act(async () => save?.click());
-    // The old single Token stays where it is; the new Bot gets its own entry.
-    assert.equal(submissions[0]?.token, "123:old");
-    const bots = submissions[0]?.bots as Array<{ ref: string; token: string; role_id?: string }>;
-    assert.equal(bots.length, 1);
-    assert.equal(bots[0]?.token, "456:new");
-    assert.equal(bots[0]?.role_id, "mira");
-    assert.notEqual(bots[0]?.ref, "legacy");
+    await act(async () => button(view.container, "连接")?.click());
+    assert.match(view.container.textContent ?? "", /验证失败/);
+    assert.equal(changedId, "");
+    failing = false;
+    await act(async () => button(view.container, "连接")?.click());
+    assert.deepEqual(calls.at(-1), { name: "bot.save", payload: { role_id: "mira", token: "456:new" } });
+    assert.equal(changedId, "telegram:456");
   } finally {
     await view.cleanup();
+  }
+});
+
+test("a connected Bot is disconnected, an offline one reconnects without a new Token", async () => {
+  const calls: Call[] = [];
+  const online = await mountTestComponent(
+    <TelegramAccountDetail account={account} roleId="mira" onChanged={() => undefined}
+      client={rpc(calls)} host={desktopPluginHostServices} />,
+  );
+  try {
+    await act(async () => button(online.container, "断开连接")?.click());
+    assert.deepEqual(calls.at(-1), { name: "bot.disconnect", payload: { account_id: "telegram:123", role_id: "mira" } });
+  } finally {
+    await online.cleanup();
+  }
+  const offline = await mountTestComponent(
+    <TelegramAccountDetail account={{ ...account, connection: "offline" }} roleId="mira" onChanged={() => undefined}
+      client={rpc(calls)} host={desktopPluginHostServices} />,
+  );
+  try {
+    await act(async () => button(offline.container, "连接")?.click());
+    assert.deepEqual(calls.at(-1), { name: "bot.save", payload: { role_id: "mira", token: "", account_id: "telegram:123" } });
+  } finally {
+    await offline.cleanup();
   }
 });

@@ -1,48 +1,56 @@
-import { Plus } from "@phosphor-icons/react";
-import { useState } from "react";
+import { CaretRightIcon, PlusIcon } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";
-import { compactButtonSizeClass, cx, dangerGhostButtonSurfaceClass, ghostButtonSurfaceClass } from "../shared/styles";
-import { AccountDetailDialog } from "./AccountDetailDialog";
+import { compactGhostButtonClass, cx, sidebarNavItemClass } from "../shared/styles";
+import type { AccountDetailEntry } from "../plugins/pluginUiRegistry";
 import type { AccountSnapshot } from "./accountClient";
-import { accountHeadline, accountName, accountStatus } from "./accountPresentation";
+import { accountChannelLine, accountName, accountStatusView } from "./accountPresentation";
+import { AccountAvatar } from "./AccountAvatar";
+import { AccountStatusDot } from "./AccountStatusDot";
 
-/** Reusable identity list; new-account navigation is supplied by its owner. */
-export function AccountList({ title, roleId, accounts, error, onRefresh, onAdd, onDelete, emptyLabel, showConnectionAction = false }: {
-  title: string;
-  /** Owner of the listed accounts, handed to their platform controls. */
-  roleId: string;
+const rowClass = cx(
+  sidebarNavItemClass,
+  "flex w-full min-w-0 cursor-pointer items-center gap-3 px-2 py-2.5 text-left disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent",
+);
+
+/**
+ * One whole-row button per enabled channel, whether this role has an account
+ * there yet or not; either way the row opens that channel's account detail.
+ */
+export function AccountList({ platforms, accounts, error, onRefresh, onOpen }: {
+  platforms: AccountDetailEntry[];
   accounts: AccountSnapshot[] | null;
   error: string;
   onRefresh: () => void;
-  onAdd?: () => void;
-  /** Starts the owner's delete confirmation for one account. */
-  onDelete?: (account: AccountSnapshot) => void;
-  emptyLabel: string;
-  showConnectionAction?: boolean;
+  onOpen: (pluginId: string, accountId: string | null) => void;
 }) {
-  const [selected, setSelected] = useState<AccountSnapshot | null>(null);
-  return <section className="grid gap-3" aria-label={title}>
-    <div className="flex items-center justify-between gap-3">
-      <h3 className="m-0 text-body font-semibold text-ink">{title}</h3>
-      {onAdd ? <button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} onClick={onAdd}><Plus className="h-4 w-4" />添加账号</button> : null}
+  return <section className="grid gap-3" aria-label="账号">
+    <h3 className="m-0 text-body font-semibold text-ink">账号</h3>
+    {error ? <InlineError message={error} actions={<button type="button" className={compactGhostButtonClass} onClick={onRefresh}>重试</button>} /> : null}
+    {platforms.length === 0 ? <p className="m-0 text-body-sm text-ink-muted">暂无可用渠道</p> : null}
+    <div className="-mx-2 grid gap-0.5">
+      {platforms.map(({ pluginId, label, Icon }) => {
+        const account = accounts?.find((item) => item.pluginId === pluginId);
+        const status = account ? accountStatusView(account) : null;
+        return <button key={pluginId} type="button" className={rowClass}
+          disabled={!accounts || Boolean(error)} onClick={() => onOpen(pluginId, account?.id ?? null)}
+          aria-label={account && status
+            ? `${accountName(account)}，${status.label}，${accountChannelLine(label, account)}`
+            : `添加 ${label} 账号`}>
+          <AccountAvatar avatarUrl={account?.avatarUrl ?? ""} Icon={Icon} />
+          <span className="grid min-w-0 flex-1 gap-0.5">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-body font-medium text-ink">{account ? accountName(account) : label}</span>
+              {status ? <AccountStatusDot status={status} /> : null}
+            </span>
+            <span className="truncate text-body-sm text-ink-muted">
+              {account ? accountChannelLine(label, account) : accounts ? "未添加" : error ? "读取失败" : "读取中"}
+            </span>
+          </span>
+          {account
+            ? <CaretRightIcon className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+            : <PlusIcon className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />}
+        </button>;
+      })}
     </div>
-    {error ? <InlineError message={error} /> : null}
-    {accounts?.length === 0 ? <p className="m-0 text-body-sm text-ink-muted">{emptyLabel}</p> : null}
-    {accounts?.map((account) => <div key={account.id} className="flex items-center gap-3 border-b border-line-soft py-3 last:border-b-0">
-      <button type="button" className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left hover:text-accent-text" onClick={() => setSelected(account)}>
-        <span className="grid min-w-0 gap-0.5"><span className="truncate text-body font-medium text-ink">{accountHeadline(account)}</span><span className="truncate text-body-sm text-ink-muted">{account.platformAccountId}</span></span>
-        <span className="grid shrink-0 gap-0.5 text-right text-body-sm text-ink-secondary">
-          <span>{accountStatus(account)}</span>
-        </span>
-      </button>
-      {showConnectionAction ? <button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)}
-        disabled={!account.pluginEnabled}
-        aria-label={`管理 ${accountName(account)} 的连接`}
-        onClick={() => setSelected(account)}>管理连接</button> : null}
-      {onDelete ? <button type="button" className={cx(dangerGhostButtonSurfaceClass, compactButtonSizeClass)}
-        aria-label={`删除 ${accountName(account)}`}
-        onClick={() => onDelete(account)}>删除</button> : null}
-    </div>)}
-    {selected ? <AccountDetailDialog key={selected.id} account={accounts?.find((item) => item.id === selected.id) ?? selected} pluginId={selected.pluginId} roleId={roleId} onClose={() => setSelected(null)} onChanged={onRefresh} /> : null}
   </section>;
 }

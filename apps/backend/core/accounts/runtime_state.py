@@ -1,14 +1,14 @@
-"""Generation-scoped account connection reports and operation fences."""
+"""Generation-scoped account index: registered records, live reports, fences."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .models import (
     AccountAccess,
-    AccountConfigReader,
     AccountDeleteHandler,
     AccountRecord,
+    AccountRulesHandler,
     AccountSnapshot,
     ConnectionState,
 )
@@ -27,114 +27,71 @@ class _LiveReport:
     error: str
 
 
+@dataclass
+class _Generation:
+    """Everything one plugin generation told the host about its accounts."""
+
+    # Accounts a live plugin instance of this generation registered.
+    records: dict[str, AccountRecord] = field(default_factory=dict)
+    live: dict[str, _LiveReport] = field(default_factory=dict)
+    # Current and superseded plugin-instance tokens per account.
+    last_tokens: dict[str, str] = field(default_factory=dict)
+    retired_tokens: dict[str, set[str]] = field(default_factory=dict)
+    delete_handlers: dict[str, AccountDeleteHandler] = field(default_factory=dict)
+    rules_handlers: dict[str, AccountRulesHandler] = field(default_factory=dict)
+    # Saved accounts a plugin could not register, per plugin.
+    rejected: dict[str, list[str]] = field(default_factory=dict)
+
+
 class AccountRuntimeState:
-    """Tracks plugin generations; caller serializes access with the account lock."""
+    """Tracks plugin generations; caller serializes access with the account lock.
+
+    Nothing here is persisted: a generation's index is rebuilt by its plugins
+    registering their own saved accounts, and a plugin that is disabled or not
+    loaded simply has no accounts in it.
+    """
 
     def __init__(self) -> None:
-        self._live: dict[str, dict[str, _LiveReport]] = {}
-        self._last_tokens: dict[tuple[str, str], str] = {}
-        self._retired_tokens: dict[tuple[str, str], set[str]] = {}
-        self._enabled: dict[str, dict[str, bool]] = {}
-        self._delete_handlers: dict[str, dict[str, AccountDeleteHandler]] = {}
-        self._config_readers: dict[str, dict[str, AccountConfigReader]] = {}
-        # Saved accounts a plugin generation could not register, per plugin.
-        self._rejected: dict[str, dict[str, list[str]]] = {}
+        self._generations: dict[str, _Generation] = {}
         self.published_generation = DIRECT_GENERATION
 
-    def set_plugin_enabled(
-        self, plugin_id: str, enabled: bool, generation: str
-    ) -> None:
-        """Records the host's resolved manifest/config enable decision."""
-        self._enabled.setdefault(generation, {})[plugin_id] = enabled
+    def generation(self, generation: str) -> _Generation:
+        """Returns (creating on first use) one generation's index."""
+        return self._generations.setdefault(generation, _Generation())
+
+    @property
+    def published(self) -> _Generation:
+        """The generation whose accounts routing, sending and the UI see."""
+        return self.generation(self.published_generation)
 
     def publish(self, generation: str) -> None:
         """Selects one prepared generation for all public account snapshots."""
         self.published_generation = generation
 
     def drop(self, generation: str) -> None:
-        """Discards a candidate or retired generation without changing ownership."""
-        self._live.pop(generation, None)
-        self._enabled.pop(generation, None)
-        self._delete_handlers.pop(generation, None)
-        self._config_readers.pop(generation, None)
-        self._rejected.pop(generation, None)
-        for key in [key for key in self._last_tokens if key[0] == generation]:
-            del self._last_tokens[key]
-        for key in [key for key in self._retired_tokens if key[0] == generation]:
-            del self._retired_tokens[key]
+        """Discards a candidate or retired generation's whole index."""
+        self._generations.pop(generation, None)
 
-    def set_delete_handler(
-        self, plugin_id: str, handler: AccountDeleteHandler, generation: str
-    ) -> None:
-        """Records the one cleanup hook a plugin generation offers for its accounts."""
-        handlers = self._delete_handlers.setdefault(generation, {})
-        if plugin_id in handlers:
-            raise ValueError(f"Account delete hook already registered: {plugin_id}")
-        handlers[plugin_id] = handler
-
-    def clear_delete_handler(
-        self, plugin_id: str, handler: AccountDeleteHandler, generation: str
-    ) -> None:
-        """Removes a disposed plugin instance's hook, never a replacement's."""
-        handlers = self._delete_handlers.get(generation, {})
-        if handlers.get(plugin_id) is handler:
-            del handlers[plugin_id]
-
-    def delete_handler(self, plugin_id: str) -> AccountDeleteHandler | None:
-        """Returns the published generation's hook for an enabled plugin."""
-        generation = self.published_generation
-        if not self._enabled.get(generation, {}).get(plugin_id, False):
-            return None
-        return self._delete_handlers.get(generation, {}).get(plugin_id)
-
-    def set_config_reader(
-        self, plugin_id: str, reader: AccountConfigReader, generation: str
-    ) -> None:
-        """Records how one plugin generation reads accounts from its config table."""
-        self._config_readers.setdefault(generation, {})[plugin_id] = reader
-
-    def clear_config_reader(
-        self, plugin_id: str, reader: AccountConfigReader, generation: str
-    ) -> None:
-        """Removes a disposed plugin instance's reader, never a replacement's."""
-        readers = self._config_readers.get(generation, {})
-        if readers.get(plugin_id) is reader:
-            del readers[plugin_id]
-
-    def config_reader(self, plugin_id: str) -> AccountConfigReader | None:
-        """Returns the published generation's config reader for a plugin."""
-        return self._config_readers.get(self.published_generation, {}).get(plugin_id)
-
-    def reject(self, plugin_id: str, message: str, generation: str) -> None:
-        """Records a saved account this plugin generation could not register."""
-        self._rejected.setdefault(generation, {}).setdefault(plugin_id, []).append(
-            message
-        )
-
-    def rejected(self, plugin_id: str) -> list[str]:
-        """Returns the published generation's unregistrable saved accounts."""
-        return list(
-            self._rejected.get(self.published_generation, {}).get(plugin_id, [])
-        )
+    def generations(self) -> list[_Generation]:
+        """Every generation still holding an index, published or not."""
+        return list(self._generations.values())
 
     def forget(self, account_id: str) -> None:
-        """Drops every generation's live report and token for a deleted account."""
-        for live_accounts in self._live.values():
-            live_accounts.pop(account_id, None)
-        for key in [key for key in self._last_tokens if key[1] == account_id]:
-            del self._last_tokens[key]
-        for key in [key for key in self._retired_tokens if key[1] == account_id]:
-            del self._retired_tokens[key]
+        """Drops a deleted account from every generation's index."""
+        for state in self._generations.values():
+            state.records.pop(account_id, None)
+            state.live.pop(account_id, None)
+            state.last_tokens.pop(account_id, None)
+            state.retired_tokens.pop(account_id, None)
 
     def snapshot(
         self, row: AccountRecord, *, generation: str | None = None
     ) -> AccountSnapshot:
-        """Builds the shared runtime/UI view for one persisted identity."""
-        active_generation = generation or self.published_generation
-        live = self._live.get(active_generation, {}).get(row.id)
+        """Builds the shared runtime/UI view for one registered account."""
+        state = self.generation(generation or self.published_generation)
+        live = state.live.get(row.id)
         return AccountSnapshot(
             row,
-            self._enabled.get(active_generation, {}).get(row.plugin_id, False),
             live is not None,
             live.connection if live else "unknown",
             live.capabilities if live else frozenset(),
@@ -145,20 +102,20 @@ class AccountRuntimeState:
         self, account_id: str, token: str, generation: str
     ) -> None:
         """Prevents an older instance reclaiming an account after replacement."""
-        if token in self._retired_tokens.get((generation, account_id), ()):
+        if token in self.generation(generation).retired_tokens.get(account_id, ()):
             raise RuntimeError("Account plugin generation was superseded")
 
-    def register(self, account_id: str, token: str, generation: str) -> None:
-        """Starts or resumes one account within a plugin generation."""
-        key = (generation, account_id)
-        live_accounts = self._live.setdefault(generation, {})
-        previous_token = self._last_tokens.get(key)
+    def register(self, row: AccountRecord, token: str, generation: str) -> None:
+        """Indexes one account and starts or resumes it within a generation."""
+        state = self.generation(generation)
+        state.records[row.id] = row
+        previous_token = state.last_tokens.get(row.id)
         if previous_token != token:
             if previous_token is not None:
-                self._retired_tokens.setdefault(key, set()).add(previous_token)
-            self._last_tokens[key] = token
-        if previous_token != token or account_id not in live_accounts:
-            live_accounts[account_id] = _LiveReport(token, "unknown", frozenset(), "")
+                state.retired_tokens.setdefault(row.id, set()).add(previous_token)
+            state.last_tokens[row.id] = token
+        if previous_token != token or row.id not in state.live:
+            state.live[row.id] = _LiveReport(token, "unknown", frozenset(), "")
 
     def report(
         self,
@@ -168,64 +125,55 @@ class AccountRuntimeState:
         connection: ConnectionState,
         capabilities: frozenset[str],
         error: str,
-    ) -> None:
+    ) -> AccountRecord:
         """Updates only the account currently owned by this plugin instance."""
         if connection not in _CONNECTION_STATES:
             raise ValueError(f"Invalid connection state: {connection}")
-        live_accounts = self._live.get(generation, {})
-        live = live_accounts.get(account_id)
+        state = self.generation(generation)
+        live = state.live.get(account_id)
         if live is None or live.token != token:
             raise RuntimeError("Account registration is no longer active")
-        live_accounts[account_id] = _LiveReport(
+        state.live[account_id] = _LiveReport(
             token, connection, frozenset(capabilities), error
         )
+        return state.records[account_id]
 
     def unregister(self, account_id: str, token: str, generation: str) -> None:
-        """Stops one account while retaining its persisted identity."""
-        live_accounts = self._live.get(generation, {})
-        live = live_accounts.get(account_id)
+        """Stops one account's live presence; it stays listed while its plugin runs."""
+        state = self.generation(generation)
+        live = state.live.get(account_id)
         if live is not None and live.token == token:
-            del live_accounts[account_id]
+            del state.live[account_id]
 
-    def release(self, account_id: str, token: str, generation: str) -> bool:
-        """Disposes an instance; returns whether it owned staged identity data."""
+    def release(self, account_id: str, token: str, generation: str) -> None:
+        """Disposes a plugin instance: its account leaves that generation's index."""
         self.unregister(account_id, token, generation)
-        key = (generation, account_id)
-        was_current = self._last_tokens.get(key) == token
-        if was_current:
-            del self._last_tokens[key]
-        retired = self._retired_tokens.get(key)
+        state = self.generation(generation)
+        if state.last_tokens.get(account_id) == token:
+            del state.last_tokens[account_id]
+            state.records.pop(account_id, None)
+        retired = state.retired_tokens.get(account_id)
         if retired is not None:
             retired.discard(token)
             if not retired:
-                del self._retired_tokens[key]
-        return was_current
+                del state.retired_tokens[account_id]
 
     def authorize(self, row: AccountRecord, role_id: str) -> AccountAccess:
         """Captures an online, owned account for a later operation."""
-        live = self._live.get(self.published_generation, {}).get(row.id)
-        if (
-            row.role_id != role_id
-            or not self._enabled.get(self.published_generation, {}).get(
-                row.plugin_id, False
-            )
-            or live is None
-            or live.connection != "online"
-        ):
+        live = self.published.live.get(row.id)
+        if row.role_id != role_id or live is None or live.connection != "online":
             raise PermissionError("Account is not owned and online for this role")
-        return AccountAccess(row.id, role_id, row.ownership_version, live.token)
+        return AccountAccess(row.id, role_id, live.token)
 
-    def validate_access(self, row: AccountRecord | None, access: AccountAccess) -> bool:
-        """Rejects in-flight work after ownership or plugin handover."""
-        live = self._live.get(self.published_generation, {}).get(access.account_id)
+    def validate_access(self, access: AccountAccess) -> bool:
+        """Rejects in-flight work after deletion or plugin handover."""
+        state = self.published
+        row = state.records.get(access.account_id)
+        live = state.live.get(access.account_id)
         return bool(
             row
             and live
-            and self._enabled.get(self.published_generation, {}).get(
-                row.plugin_id, False
-            )
             and row.role_id == access.role_id
-            and row.ownership_version == access.ownership_version
             and live.token == access.runtime_token
             and live.connection == "online"
         )

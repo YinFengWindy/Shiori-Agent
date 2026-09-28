@@ -1,7 +1,7 @@
 """Writes a one-time config migration back to ``config.toml``, keeping comments.
 
-Every startup config migration (built-in channel tables, default-disabled
-plugins, channel ``allow_from`` removal) shares one policy: splice the change
+Every startup config migration (default-disabled plugins, channel
+``allow_from`` removal) shares one policy: splice the change
 into the user's TOML text so formatting and comments survive; when the line
 scanner cannot express it (inline tables, dotted keys, a conflicting form) or
 the spliced text does not parse to the intended result, rewrite the whole file

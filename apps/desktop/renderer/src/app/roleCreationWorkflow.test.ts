@@ -21,7 +21,6 @@ function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
     description: overrides.description ?? "A role",
     system_prompt: overrides.system_prompt ?? "Be helpful",
     runtime_config: overrides.runtime_config ?? {},
-    channel_bindings: overrides.channel_bindings ?? [],
     proactive: overrides.proactive,
     avatar: overrides.avatar ?? null,
     avatar_abs: overrides.avatar_abs ?? null,

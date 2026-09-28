@@ -1,20 +1,17 @@
-"""Plugin-private QQ connection drafts and safe settings projections."""
+"""Managed QQ login setup and verified-account projections."""
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
-from math import isfinite
 from typing import Any
-from urllib.parse import urlsplit
 
+from core.accounts import AccountResponseRules
 from infra.channels.intake import ChannelIntake
 
 from .accounts_store import (
     QQAccountsStore,
     QQConnectionConfig,
-    QQConnectionMode,
-    QQPendingConnection,
 )
 from .napcat_installer import managed_available
 from .onebot import OneBotSocket
@@ -24,22 +21,12 @@ def ensure_config_owner(config: QQConnectionConfig, role_id: str) -> None:
     """Refuses to act on a QQ configuration for any role but its owner."""
     if config.role_id != role_id:
         raise ValueError(
-            "该 QQ 配置已属于另一个角色"
-            if config.role_id
-            else "该 QQ 配置是未归属的旧数据，请先手动清理"
+            "该 QQ 配置已属于另一个角色" if config.role_id else "该 QQ 配置没有所属角色"
         )
 
 
-def validate_endpoint(uri: str) -> str:
-    """Accepts only a concrete NapCat forward WebSocket address."""
-    parsed = urlsplit(uri)
-    if parsed.scheme not in {"ws", "wss"} or not parsed.hostname:
-        raise ValueError("NapCat 地址必须是 ws:// 或 wss:// WebSocket 地址")
-    return uri
-
-
 class QQAccountSettings:
-    """Stores pending edits without replacing a verified active connection."""
+    """Starts temporary managed logins without persisting an account."""
 
     _store: QQAccountsStore
     _configs: dict[str, QQConnectionConfig]
@@ -49,24 +36,18 @@ class QQAccountSettings:
     _tasks: dict[str, asyncio.Task[None]]
     _locks: dict[str, asyncio.Lock]
     _intakes: dict[str, ChannelIntake]
+    _avatar_tasks: dict[str, asyncio.Task[None]]
     _accounts: Any
 
     def _ref_for(self, account_id: str) -> str:
         """The owning runtime resolves a host account to its private config."""
         raise NotImplementedError
 
-    def settings(
-        self, account_id: str | None = None, ref: str | None = None
-    ) -> dict[str, Any]:
-        """Returns safe editable fields without returning an access token."""
-        if account_id is None and ref is None:
-            return {
-                "managed_available": managed_available(),
-                "accounts": [
-                    self._public_config(key, row) for key, row in self._configs.items()
-                ],
-            }
-        selected = self._ref_for(account_id) if account_id else str(ref)
+    def settings(self, account_id: str | None = None) -> dict[str, Any]:
+        """Returns availability or one verified account without socket secrets."""
+        if account_id is None:
+            return {"managed_available": managed_available()}
+        selected = self._ref_for(account_id)
         return {
             "account": self._public_config(selected, self._configs[selected]),
             "managed_available": managed_available(),
@@ -76,113 +57,45 @@ class QQAccountSettings:
         connection, error = self._states.get(ref, ("offline", ""))
         return {**config.public_dict(), "connection": connection, "error": error}
 
-    async def save_draft(self, payload: dict[str, Any]) -> dict[str, str]:
-        """Persists a draft without changing a verified connection or its restart."""
-        account_id = str(payload.get("account_id") or "")
-        supplied_ref = str(payload.get("ref") or "")
-        ref = (
-            self._ref_for(account_id)
-            if account_id
-            else supplied_ref or self._store.new_ref()
-        )
-        if supplied_ref and supplied_ref not in self._configs:
-            raise KeyError("QQ 配置引用不存在")
-        if account_id and supplied_ref and supplied_ref != ref:
-            raise ValueError("QQ 账号与配置引用不匹配")
-        if not account_id and supplied_ref and self._configs[ref].verified:
-            raise PermissionError("已验证 QQ 账号必须按账号 ID 编辑")
-        old = self._configs.get(ref)
-        # A new draft remembers the role it was started from; a saved draft
-        # or account keeps its owner, and one saved without an owner is never
-        # taken over.
+    async def begin_login(self, payload: dict[str, Any]) -> dict[str, str]:
+        """Allocates one temporary NapCat instance without saving an account."""
         role_id = str(payload.get("role_id") or "").strip()
-        if old is not None:
-            ensure_config_owner(old, role_id)
-        else:
-            self._accounts.check_owner(config_ref=ref, role_id=role_id)
-        requested_mode = str(payload.get("mode") or (old.mode if old else "external"))
-        if requested_mode not in {"external", "managed"}:
-            raise ValueError("QQ 连接模式无效")
-        mode: QQConnectionMode = (
-            "managed" if requested_mode == "managed" else "external"
-        )
-        if mode == "managed" and not managed_available():
+        if not managed_available():
             raise RuntimeError("托管 NapCat 仅支持 Windows x64")
-        if old is not None and old.verified and mode != old.mode:
-            raise ValueError("已验证账号不能切换 NapCat 连接模式")
-        if mode == "managed":
-            uri, managed_token = self._managed.endpoint(ref)
-        else:
-            uri = validate_endpoint(str(payload.get("ws_uri") or "").strip())
-            managed_token = ""
-        editable = (old.pending or old) if old else None
-        token = (
-            managed_token
-            if mode == "managed"
-            else (
-                ""
-                if payload.get("clear_token") is True
-                else str(
-                    payload.get("ws_token") or (editable.ws_token if editable else "")
-                )
-            )
+        ref = self._store.new_ref()
+        self._accounts.check_owner(config_ref=ref, role_id=role_id)
+        uri, token = self._managed.endpoint(ref)
+        config = QQConnectionConfig(
+            ref,
+            uri,
+            token,
+            auto_connect=False,
+            role_id=role_id,
         )
-        timeout = float(payload.get("timeout_seconds", 5.0))
-        if not isfinite(timeout) or timeout <= 0:
-            raise ValueError("连接超时必须大于零")
-        config = (
-            replace(old, pending=QQPendingConnection(uri, token, timeout))
-            if old is not None and old.verified
-            else QQConnectionConfig(
-                ref,
-                uri,
-                token,
-                expected_uin=old.expected_uin if old else "",
-                display_name=old.display_name if old else "",
-                timeout_seconds=timeout,
-                auto_connect=False,
-                mode=mode,
-                role_id=role_id,
-            )
-        )
-        async with self._locks.setdefault(ref, asyncio.Lock()):
-            self._store.save({**self._configs, ref: config})
-            self._configs[ref] = config
-            if not config.verified and ref not in self._sockets:
-                task = self._tasks.pop(ref, None)
-                if task is not None:
-                    task.cancel()
-                    await asyncio.gather(task, return_exceptions=True)
-                if old is not None and old.mode == "managed":
-                    await self._managed.stop(ref)
-                if ref in self._ids:
-                    self._accounts.report(self._ids[ref], connection="offline")
-                self._states[ref] = ("offline", "")
-            return {"ref": ref}
-
-    async def remove_draft(self, ref: str) -> None:
-        """Discards only an unverified, stopped connection draft."""
-        config = self._configs[ref]
-        if ref == "legacy":
-            raise PermissionError("旧 QQ 配置仍在宿主设置中，不能删除迁移记录")
-        if config.verified or config.auto_connect or ref in self._sockets:
-            raise PermissionError("已验证或运行中的 QQ 账号不能作为草稿删除")
-        if config.mode == "managed":
-            await self._managed.stop(ref)
-        await self._discard_config(ref)
+        self._configs[ref] = config
+        self._states[ref] = ("offline", "")
+        return {"ref": ref}
 
     async def _discard_config(self, ref: str) -> None:
         """Forgets a reference's saved settings, live state, intake, and lock."""
         if ref in self._configs:
-            self._store.save(
-                {key: row for key, row in self._configs.items() if key != ref}
-            )
+            if self._store.path.exists():
+                self._store.save(
+                    {key: row for key, row in self._configs.items() if key != ref}
+                )
             del self._configs[ref]
         self._states.pop(ref, None)
         intake = self._intakes.pop(ref, None)
         if intake is not None:
             await intake.close()
         self._locks.pop(ref, None)
+
+    async def _cancel_avatar(self, ref: str) -> None:
+        """Stops an account's background avatar fetch before it goes away."""
+        task = self._avatar_tasks.pop(ref, None)
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def disconnect_account(self, ref: str) -> None:
         """Stops a deleted account's socket and NapCat, keeping its saved data.
@@ -191,6 +104,7 @@ class QQAccountSettings:
         reports it again.
         """
         self._ids.pop(ref, None)
+        await self._cancel_avatar(ref)
         task = self._tasks.pop(ref, None)
         if task is not None:
             task.cancel()
@@ -203,9 +117,27 @@ class QQAccountSettings:
             if ref in self._configs:
                 self._states[ref] = ("offline", "")
 
+    def save_rules(self, ref: str, rules: AccountResponseRules) -> None:
+        """Persists host-edited response rules with the account's private config."""
+        config = replace(self._configs[ref], response_rules=rules)
+        self._store.save({**self._configs, ref: config})
+        self._configs[ref] = config
+
+    async def prune_orphans(self) -> None:
+        """Deletes unverified leftovers and accounts whose owner role is gone.
+
+        Role deletion only reaches a loaded plugin, so accounts of a role
+        deleted meanwhile are removed with all their data on the next load.
+        Valid saved accounts without an owner remain for manual correction.
+        """
+        for ref, config in list(self._configs.items()):
+            if not config.verified or (
+                config.role_id and not self._accounts.role_exists(config.role_id)
+            ):
+                await self.purge_account(ref)
+
     async def purge_account(self, ref: str) -> None:
         """Deletes the account's credentials and NapCat data; idempotent."""
-        # Managed or not, the reference may own a NapCat directory with
-        # login sessions from an earlier managed configuration.
+        # The managed instance keeps its own login session files.
         await self._managed.delete(ref)
         await self._discard_config(ref)

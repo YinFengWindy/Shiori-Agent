@@ -1,58 +1,69 @@
-import { FloppyDiskIcon, PlugIcon, ArrowClockwiseIcon, SignOutIcon } from "@phosphor-icons/react";
-import React from "react";
+import { ArrowClockwiseIcon, SignOutIcon } from "@phosphor-icons/react";
+import React, { useEffect, useRef } from "react";
+import { accountOnline } from "../../../apps/desktop/renderer/src/accounts/accountPresentation";
 import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
-import { ghostButtonClass, inputClass, primaryButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { compactGhostButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { useLatestRef } from "../../../apps/desktop/renderer/src/shared/useLatestRef";
 import type { useQQAccountForm } from "./useQQAccountForm";
 import { useManagedNapCat } from "./useManagedNapCat";
+import { managedLoginOnline, managedQQStatus, napCatDetail, napCatPreparing } from "./qqStatusPresentation";
 
-/** QQ-only fields and connection commands inside the host account detail. */
+/** Managed NapCat login and connection controls inside the host account detail. */
 export function QQAccountForm({ account, host, form }: Pick<PluginAccountDetailComponentProps, "account" | "host"> & {
   form: ReturnType<typeof useQQAccountForm>;
 }) {
-  const { fields, setField, hasToken, ref, dirty, busy, loading, error, managedAvailable } = form;
-  const managed = useManagedNapCat(form.client, ref, fields.mode === "managed");
-  return <div className="grid gap-4" aria-label="QQ 连接">
-    {error ? <host.ui.InlineError message={error} /> : null}
-    {managed.error ? <host.ui.InlineError message={managed.error} /> : null}
-    {account ? <div className="grid gap-1 text-body-sm text-ink-secondary">
-      <span>QQ 号</span><strong className="text-ink">{account.platformAccountId}</strong>
-    </div> : null}
-    {managedAvailable && !account ? <div className="flex gap-2" role="group" aria-label="连接模式">
-      <button type="button" className={fields.mode === "managed" ? primaryButtonClass : ghostButtonClass} onClick={() => setField("mode", "managed")} disabled={busy || loading}>托管 NapCat</button>
-      <button type="button" className={fields.mode === "external" ? primaryButtonClass : ghostButtonClass} onClick={() => setField("mode", "external")} disabled={busy || loading}>外部连接</button>
-    </div> : null}
-    {fields.mode === "external" ? <><label className="grid gap-2 text-body-sm text-ink-secondary">
-      NapCat WebSocket 地址
-      <input className={inputClass} type="url" value={fields.uri} onChange={(event) => setField("uri", event.target.value)} placeholder="ws://localhost:3001" disabled={busy || loading} />
-    </label>
-    <label className="grid gap-2 text-body-sm text-ink-secondary">
-      WebSocket 令牌
-      <input className={inputClass} type="password" value={fields.token} onChange={(event) => setField("token", event.target.value)} placeholder={hasToken ? "已保存，留空则保持原值" : "可留空"} disabled={busy || loading || fields.clearToken} autoComplete="new-password" />
-    </label>
-    {hasToken ? <label className="flex items-center gap-2 text-body-sm text-ink-secondary">
-      <input type="checkbox" checked={fields.clearToken} onChange={(event) => setField("clearToken", event.target.checked)} disabled={busy || loading} />清除已保存令牌
-    </label> : null}
-    <label className="grid gap-2 text-body-sm text-ink-secondary">
-      连接超时（秒）
-      <input className={inputClass} type="number" min="0.1" step="0.1" value={fields.timeout} onChange={(event) => setField("timeout", event.target.value)} disabled={busy || loading} />
-    </label>
-    </> : <div className="grid gap-3 text-body-sm text-ink-secondary" aria-live="polite">
-      {managed.status ? <>
-        <span>NapCat {managed.status.preparation.version} · {managed.status.preparation.stage}{managed.status.preparation.stage === "downloading" || managed.status.preparation.stage === "extracting" ? ` ${managed.status.preparation.percent}%` : ""}</span>
-        {managed.status.preparation.error ? <host.ui.InlineError message={managed.status.preparation.error} /> : null}
-        {managed.status.error ? <host.ui.InlineError message={managed.status.error} /> : null}
-        <span>QQ · {managed.status.connection === "online" ? "在线" : managed.status.login.login_phase || managed.status.login.phase}</span>
-        {managed.status.login.error && managed.status.login.phase !== "starting" ? <host.ui.InlineError message={managed.status.login.error} /> : null}
-        {managed.status.login.qrcode && managed.status.connection !== "online" ? <img src={managed.status.login.qrcode} alt="QQ 登录二维码" className="h-48 w-48 object-contain" /> : null}
-        {managed.status.login.phase === "login_required" ? <button type="button" className={ghostButtonClass} onClick={() => void managed.refreshQr()} disabled={managed.busy}><ArrowClockwiseIcon className="mr-2 inline h-4 w-4" />刷新二维码</button> : null}
-      </> : null}
-    </div>}
-    <div className="flex flex-wrap gap-2">
-      <button type="button" className={ghostButtonClass} onClick={() => void form.save()} disabled={busy || loading || !dirty || (fields.mode === "external" && (!fields.uri.trim() || !(Number(fields.timeout) > 0)))}><FloppyDiskIcon className="mr-2 inline h-4 w-4" />保存</button>
-      <button type="button" className={primaryButtonClass} onClick={() => void form.connect()} disabled={busy || loading || dirty || !ref}><PlugIcon className="mr-2 inline h-4 w-4" />连接</button>
-      {account ? <button type="button" className={ghostButtonClass} onClick={() => void form.disconnect()} disabled={busy || loading}><PlugIcon className="mr-2 inline h-4 w-4" />断开连接</button> : null}
-      {!account && fields.mode === "managed" && ref ? <button type="button" className={ghostButtonClass} onClick={() => void form.disconnect()} disabled={busy || loading}><PlugIcon className="mr-2 inline h-4 w-4" />停止</button> : null}
-      {account && fields.mode === "managed" ? <button type="button" className={ghostButtonClass} onClick={() => void managed.logout(account.id)} disabled={busy || loading || managed.busy}><SignOutIcon className="mr-2 inline h-4 w-4" />退出登录</button> : null}
-    </div>
-  </div>;
+  const { ref, loading, error, managedAvailable } = form;
+  const managed = useManagedNapCat(form.client, ref, Boolean(ref), account ? undefined : form.onVerified);
+  const status = managed.status;
+  // A verified login is an account already, even before the host list has caught up.
+  const accountId = account?.id || status?.account_id || "";
+  const hostOnline = accountOnline(account);
+  const pending = form.pending ?? (managed.pending === "logout" ? "logout" : null);
+  const preparing = status ? napCatPreparing(status) : false;
+  const qr = status && !managedLoginOnline(status) ? status.login.qrcode : "";
+  const running = account?.connection === "online" || account?.connection === "connecting" || Boolean(ref && status
+    && status.login.phase !== "stopped" && status.connection !== "offline" && status.connection !== "error");
+  const statusError = status?.connection === "error" && status.error !== account?.error ? status.error : "";
+  const errors = [error, managed.error, !managedAvailable && !loading ? "托管 NapCat 仅支持 Windows x64" : "",
+    status?.preparation.error ?? "", statusError].filter(Boolean);
+  const connect = () => form.start(managed.reload);
+  const latestConnect = useLatestRef(connect);
+  const autoStarted = useRef(false);
+  const adding = !account;
+
+  useEffect(() => {
+    // Adding an account opens straight into the QR login. The once-guard lives
+    // in a ref so no effect re-run (StrictMode replay, settings reload) opens a
+    // second temporary login; a failure leaves the 连接 button as the retry.
+    if (!adding || autoStarted.current || loading || !managedAvailable) return;
+    autoStarted.current = true;
+    void latestConnect.current();
+  }, [adding, loading, managedAvailable, latestConnect]);
+
+  return <>
+    <host.ui.AccountStatusCard account={account} pending={pending}
+      status={status ? managedQQStatus(status, hostOnline) : undefined}
+      detail={napCatDetail(status)}
+      action={running
+        ? { kind: "disconnect", onClick: () => void form.disconnect(accountId, managed.reload), disabled: loading }
+        : { kind: "connect", onClick: () => void connect(), disabled: loading || !managedAvailable || preparing }}>
+      <host.ui.Reveal show={errors.length > 0} className="grid gap-2 pt-3">
+        {errors.map((message) => <host.ui.InlineError key={message} message={message} />)}
+      </host.ui.Reveal>
+      <host.ui.Reveal show={preparing} className="pt-3">
+        <progress className="h-1.5 w-full" max={100} value={status?.preparation.percent ?? 0} aria-label="NapCat 准备进度" />
+      </host.ui.Reveal>
+      <host.ui.Reveal show={Boolean(qr)} className="grid justify-items-start gap-3 pt-3">
+        <img src={qr || undefined} alt="QQ 登录二维码" className="h-48 w-48 object-contain" />
+        <button type="button" className={compactGhostButtonClass}
+          onClick={() => void managed.refreshQr()} disabled={managed.busy} title="刷新二维码">
+          <ArrowClockwiseIcon className="h-4 w-4" />刷新二维码
+        </button>
+      </host.ui.Reveal>
+    </host.ui.AccountStatusCard>
+    <host.ui.AccountDetailActions actions={hostOnline && accountId ? [{
+      label: "退出登录", icon: SignOutIcon, onClick: () => void managed.logout(accountId),
+      pending: managed.pending === "logout", disabled: Boolean(pending) || loading,
+    }] : []} />
+  </>;
 }

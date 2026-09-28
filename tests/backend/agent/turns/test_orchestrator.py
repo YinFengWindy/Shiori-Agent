@@ -99,8 +99,7 @@ async def test_explicit_proactive_account_target_records_receipt_without_default
 async def test_failed_proactive_target_remains_durable_without_turn_commit(
     tmp_path,
 ) -> None:
-    accounts = AccountRegistry(tmp_path, lambda role_id: role_id == "mira")
-    accounts.set_plugin_enabled("chat", True)
+    accounts = AccountRegistry(lambda role_id: role_id == "mira")
     account = accounts.register(
         plugin_id="chat",
         platform="chat",

@@ -50,6 +50,19 @@ test("busy confirmations disable both actions and refuse Escape dismissal", asyn
   } finally { await view.cleanup(); }
 });
 
+test("unresolved consequences disable confirmation while keeping cancel available", async () => {
+  let confirmed = 0;
+  const view = await mountTestComponent(<ConfirmDialog open confirmDisabled title="确认删除角色" description="正在读取关联账号..."
+    confirmLabel="确认删除" onClose={() => {}} onConfirm={() => { confirmed++; }} />);
+  try {
+    const buttons = document.querySelector('[role="dialog"]')!.querySelectorAll<HTMLButtonElement>("button");
+    assert.equal(buttons[0].disabled, false);
+    assert.equal(buttons[1].disabled, true);
+    await act(async () => buttons[1].click());
+    assert.equal(confirmed, 0);
+  } finally { await view.cleanup(); }
+});
+
 test("closing keeps the last open copy on screen while the exit animation plays", async () => {
   const view = await mountTestComponent(<ConfirmDialog open title="确认删除角色" description="“Mira” 删除后会移除角色会话。" confirmLabel="确认删除" onClose={() => {}} onConfirm={() => {}} />);
   // happy-dom runs no CSS animations; hand Base UI one exit animation that

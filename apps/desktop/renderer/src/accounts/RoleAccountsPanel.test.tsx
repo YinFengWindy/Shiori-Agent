@@ -5,12 +5,14 @@ import { mountTestComponent } from "../shared/testing/domTestHarness";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
 
+const avatar = "data:image/png;base64,iVBORw0KGgo=";
+
 const accountRow = {
   id: "account-1", plugin_id: "test-provider", platform: "test", platform_account_id: "101",
-  config_ref: "ref-1", display_name: "Owned", avatar_url: "", role_id: "role-1", plugin_enabled: true,
-  runtime_active: true, connection: "online", capabilities: [], known_capabilities: [], error: "",
+  config_ref: "ref-1", display_name: "Owned", avatar_url: "", role_id: "role-1",
+  runtime_active: true, connection: "online", capabilities: [], error: "",
   response_rules: { private_enabled: true, group_enabled: true, require_mention: true,
-    blocked_sender_ids: [], group_rules: [] },
+    blocked_sender_ids: [] },
 };
 
 type Request = { method: string; payload: Record<string, unknown> };
@@ -26,42 +28,22 @@ function desktop(respond: (request: Request) => Record<string, unknown>) {
 function registerPlatform(pluginId: string, label: string) {
   pluginUiRegistry.registerAccountDetail({
     slot: "account.detail", pluginId, label,
-    Component: ({ account, roleId }) => <button type="button">平台操作 {account?.id ?? "new"} {roleId}</button>,
+    Icon: ({ className }) => <svg className={className} data-testid={`${pluginId}-icon`} />,
+    Component: ({ account, roleId }) => <p>平台操作 {account?.id ?? "new"} {roleId}</p>,
   });
 }
 
-test("owned account detail opens the platform controls for this role, without owner or claim controls", async () => {
+async function loadPanel() {
   const environment = await mountTestComponent(null);
   const { RoleAccountsPanel } = await import("./RoleAccountsPanel");
   await environment.cleanup();
-  setPluginEnabledSnapshot([]);
-  registerPlatform("test-provider", "Test");
-  const view = await mountTestComponent(
-    <RoleAccountsPanel roleId="role-1" />,
-    desktop(({ method }) => ({ payload: method === "accounts.list" ? { accounts: [accountRow] } : {} })),
-  );
-  try {
-    // Platform, nickname, platform account and live status are listed.
-    assert.match(view.container.textContent ?? "", /test · Owned/);
-    assert.match(view.container.textContent ?? "", /101/);
-    assert.match(view.container.textContent ?? "", /在线/);
-    const action = view.container.querySelector<HTMLButtonElement>('[aria-label="管理 Owned 的连接"]');
-    assert.ok(action);
-    await act(async () => action.click());
-    const dialog = document.querySelector('[role="dialog"]')?.textContent ?? "";
-    assert.match(dialog, /平台操作 account-1 role-1/);
-    assert.doesNotMatch(dialog, /所属角色|旧渠道归属待确认/);
-    assert.doesNotMatch(view.container.textContent ?? "", /认领/);
-  } finally {
-    await view.cleanup();
-    pluginUiRegistry.unregisterPlugin("test-provider");
-  }
-});
+  return RoleAccountsPanel;
+}
 
-test("adding picks a platform first; platforms the role already has are marked 已绑定", async () => {
-  const environment = await mountTestComponent(null);
-  const { RoleAccountsPanel } = await import("./RoleAccountsPanel");
-  await environment.cleanup();
+const dialog = () => document.querySelector('[role="dialog"]');
+
+test("each channel is one whole-row button that opens its detail; the account's avatar carries the channel badge", async () => {
+  const RoleAccountsPanel = await loadPanel();
   resetPluginEnabledStateForTests();
   setPluginEnabledSnapshot([
     { id: "test-provider", enabled: true, state: "ACTIVE" },
@@ -73,18 +55,26 @@ test("adding picks a platform first; platforms the role already has are marked �
   registerPlatform("off-provider", "Off");
   const view = await mountTestComponent(
     <RoleAccountsPanel roleId="role-1" />,
-    desktop(({ method }) => ({ payload: method === "accounts.list" ? { accounts: [accountRow] } : {} })),
+    desktop(({ method }) => ({ payload: method === "accounts.list" ? { accounts: [{ ...accountRow, avatar_url: avatar }] } : {} })),
   );
   try {
-    const add = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "添加账号");
-    assert.ok(add);
-    await act(async () => add.click());
-    const choices = Array.from(view.container.querySelectorAll<HTMLButtonElement>('[aria-label="选择平台"] button'));
-    assert.deepEqual(choices.map((button) => [button.textContent, button.disabled]),
-      [["Test已绑定", true], ["Other", false]]);
-    await act(async () => choices[1].click());
-    // The new account's form is opened for this role.
-    assert.match(document.querySelector('[role="dialog"]')?.textContent ?? "", /添加 Other 账号[\s\S]*平台操作 new role-1/);
+    const rows = Array.from(view.container.querySelectorAll<HTMLButtonElement>("button"));
+    // One button per enabled channel and nothing else: no 查看 / 添加 / 删除 buttons.
+    assert.deepEqual(rows.map((row) => row.getAttribute("aria-label")), ["Owned，在线，Test · 101", "添加 Other 账号"]);
+    assert.doesNotMatch(view.container.textContent ?? "", /查看|删除|Off/);
+    // Nickname with the status dot beside it, then channel · platform ID.
+    const [owned, other] = rows;
+    assert.match(owned.textContent ?? "", /^Owned\s*Test · 101$/);
+    assert.equal(owned.querySelector('[role="img"]')?.getAttribute("aria-label"), "在线");
+    assert.equal(owned.querySelector("img")?.getAttribute("src"), avatar);
+    assert.ok(owned.querySelector('[data-avatar="account"] [data-testid="test-provider-icon"]'));
+    // Not added yet: the channel's own tile, its label, and 未添加.
+    assert.match(other.textContent ?? "", /^Other\s*未添加$/);
+    assert.equal(other.querySelector("img"), null);
+    assert.ok(other.querySelector('[data-avatar="channel"] [data-testid="other-provider-icon"]'));
+
+    await act(async () => other.click());
+    assert.match(dialog()?.textContent ?? "", /添加 Other 账号[\s\S]*平台操作 new role-1/);
   } finally {
     await view.cleanup();
     for (const pluginId of ["test-provider", "other-provider", "off-provider"]) pluginUiRegistry.unregisterPlugin(pluginId);
@@ -92,11 +82,53 @@ test("adding picks a platform first; platforms the role already has are marked �
   }
 });
 
-test("deleting an owned account asks for confirmation and keeps it when the plugin cleanup fails", async () => {
-  const environment = await mountTestComponent(null);
-  const { RoleAccountsPanel } = await import("./RoleAccountsPanel");
-  await environment.cleanup();
-  setPluginEnabledSnapshot([]);
+test("an account without a picture shows its channel tile; its detail puts platform controls, rules, then the danger zone", async () => {
+  const RoleAccountsPanel = await loadPanel();
+  setPluginEnabledSnapshot([{ id: "test-provider", enabled: true, state: "ACTIVE" }]);
+  registerPlatform("test-provider", "Test");
+  const view = await mountTestComponent(
+    <RoleAccountsPanel roleId="role-1" />,
+    desktop(({ method }) => ({ payload: method === "accounts.list" ? { accounts: [accountRow] } : {} })),
+  );
+  try {
+    const row = view.container.querySelector<HTMLButtonElement>("button");
+    assert.ok(row?.querySelector('[data-avatar="channel"]'));
+    assert.equal(row?.querySelector("img"), null);
+    await act(async () => row?.click());
+    assert.equal(document.querySelector('[role="dialog"] h2')?.textContent, "Owned");
+    assert.match(dialog()?.textContent ?? "", /Test · 101[\s\S]*平台操作 account-1 role-1[\s\S]*响应规则[\s\S]*删除账号/);
+    assert.ok(document.querySelector('[role="dialog"] [aria-label="关闭账号详情"]'));
+    assert.doesNotMatch(dialog()?.textContent ?? "", /所属角色|认领|保存规则/);
+  } finally {
+    await view.cleanup();
+    pluginUiRegistry.unregisterPlugin("test-provider");
+    resetPluginEnabledStateForTests();
+  }
+});
+
+test("response rules are left out while the account is not online", async () => {
+  const RoleAccountsPanel = await loadPanel();
+  setPluginEnabledSnapshot([{ id: "test-provider", enabled: true, state: "ACTIVE" }]);
+  registerPlatform("test-provider", "Test");
+  const view = await mountTestComponent(
+    <RoleAccountsPanel roleId="role-1" />,
+    desktop(({ method }) => ({ payload: method === "accounts.list" ? { accounts: [{ ...accountRow, connection: "login_required" }] } : {} })),
+  );
+  try {
+    await act(async () => view.container.querySelector("button")?.click());
+    assert.doesNotMatch(dialog()?.textContent ?? "", /响应规则|私聊启用/);
+    assert.match(dialog()?.textContent ?? "", /删除账号/);
+  } finally {
+    await view.cleanup();
+    pluginUiRegistry.unregisterPlugin("test-provider");
+    resetPluginEnabledStateForTests();
+  }
+});
+
+test("删除账号 in the detail asks for confirmation, keeps the account when cleanup fails, and closes the detail once deleted", async () => {
+  const RoleAccountsPanel = await loadPanel();
+  setPluginEnabledSnapshot([{ id: "test-provider", enabled: true, state: "ACTIVE" }]);
+  registerPlatform("test-provider", "Test");
   const deletes: unknown[] = [];
   let rows = [accountRow];
   let failNext = true;
@@ -118,28 +150,28 @@ test("deleting an owned account asks for confirmation and keeps it when the plug
     }),
   );
   try {
-    const remove = view.container.querySelector<HTMLButtonElement>('[aria-label="删除 Owned"]');
-    assert.ok(remove);
-    await act(async () => remove.click());
-    const dialog = () => document.querySelector('[role="dialog"]');
-    assert.match(dialog()?.textContent ?? "", /test · Owned/);
+    await act(async () => view.container.querySelector("button")?.click());
+    const buttonIn = (root: ParentNode | null | undefined, label: string) => Array.from(root?.querySelectorAll("button") ?? [])
+      .find((button) => button.textContent === label);
+    await act(async () => buttonIn(dialog(), "删除账号")?.click());
+    const confirmation = () => Array.from(document.querySelectorAll('[role="dialog"]'))
+      .find((item) => item.textContent?.includes("确认删除"));
+    assert.match(confirmation()?.textContent ?? "", /test · Owned/);
     assert.deepEqual(deletes, []);
-    const confirm = () => Array.from(dialog()?.querySelectorAll("button") ?? [])
-      .find((button) => button.textContent === "确认删除");
 
-    await act(async () => confirm()?.click());
+    await act(async () => buttonIn(confirmation(), "确认删除")?.click());
     assert.deepEqual(deletes, [{ account_id: "account-1", role_id: "role-1" }]);
-    assert.match(dialog()?.textContent ?? "", /NapCat 文件被占用/);
-    assert.ok(view.container.querySelector('[aria-label="删除 Owned"]'));
+    assert.match(confirmation()?.textContent ?? "", /NapCat 文件被占用/);
     // The list reloads after a failure too, so the new status is visible.
-    assert.match(view.container.textContent ?? "", /离线/);
-    assert.doesNotMatch(view.container.textContent ?? "", /在线/);
+    assert.equal(view.container.querySelector('[role="img"]')?.getAttribute("aria-label"), "离线");
 
-    await act(async () => confirm()?.click());
+    await act(async () => buttonIn(confirmation(), "确认删除")?.click());
     assert.equal(deletes.length, 2);
-    assert.equal(view.container.querySelector('[aria-label="删除 Owned"]'), null);
-    assert.match(view.container.textContent ?? "", /暂无账号/);
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    assert.match(view.container.textContent ?? "", /未添加/);
   } finally {
     await view.cleanup();
+    pluginUiRegistry.unregisterPlugin("test-provider");
+    resetPluginEnabledStateForTests();
   }
 });

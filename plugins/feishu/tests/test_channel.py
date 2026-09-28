@@ -78,6 +78,55 @@ async def test_bare_http_401_identity_response_requires_login(
     )
 
 
+@pytest.mark.parametrize("cdn_ok", [False, True])
+async def test_bot_avatar_is_stored_and_kept_when_its_download_fails(
+    make_harness: Any, tmp_path: Path, cdn_ok: bool
+) -> None:
+    png = bytes.fromhex("89504e470d0a1a0a") + bytes(8)
+    fresh = "data:image/png;base64,iVBORw0KGgoAAAAAAAAAAA=="
+    old = "data:image/png;base64,iVBORw0KGgo="
+    accounts = Mock()
+    profiles = PluginKVStore(tmp_path / "profiles.json")
+    profiles.set("profile:feishu:cli_a", {"avatar": old})
+    harness = make_harness(
+        account_id="account-a",
+        profile_ref="feishu:cli_a",
+        accounts=accounts,
+        profile_store=profiles,
+    )
+
+    async def response(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "cdn.test":
+            return httpx.Response(200, content=png) if cdn_ok else httpx.Response(502)
+        if request.url.path.endswith("/bot/v3/info"):
+            bot = {
+                "app_name": "Shiori",
+                "open_id": "ou_bot",
+                "avatar_url": "https://cdn.test/bot.png",
+            }
+            return httpx.Response(200, json={"code": 0, "bot": bot})
+        return await harness.api.handler(request)
+
+    harness.channel._api._transport = httpx.MockTransport(response)
+    await harness.start()
+    for _ in range(100):
+        if not harness.channel._inbound_tasks and harness.channel._bot_open_id:
+            break
+        await asyncio.sleep(0.01)
+    assert harness.channel._avatar_task is not None
+    await harness.channel._avatar_task
+
+    avatars = [
+        call.kwargs["avatar_url"]
+        for call in accounts.register.call_args_list
+        if "avatar_url" in call.kwargs
+    ]
+    stored = profiles.get("profile:feishu:cli_a", {})
+    assert stored["name"] == "Shiori"
+    assert stored["avatar"] == (fresh if cdn_ok else old)
+    assert avatars == ([fresh] if cdn_ok else [])
+
+
 async def test_two_account_channels_isolate_inbound_targets_and_receipts(
     make_harness: Any, tmp_path: Path, make_event: Any
 ) -> None:
@@ -447,21 +496,6 @@ def test_receive_ids_follow_the_id_prefix() -> None:
     assert resolve_receive_id("feishu:oc_1") == ("oc_1", "chat_id")
     assert resolve_receive_id("ou_1") == ("ou_1", "open_id")
     assert resolve_receive_id("on_1") == ("on_1", "union_id")
-
-
-def test_configuration_key_covers_every_connection_setting() -> None:
-    base = FeishuChannel("a", "s", "https://open.feishu.cn")
-
-    assert (
-        base.configuration_key
-        == FeishuChannel("a", "s", "https://open.feishu.cn").configuration_key
-    )
-    for other in (
-        FeishuChannel("b", "s", "https://open.feishu.cn"),
-        FeishuChannel("a", "t", "https://open.feishu.cn"),
-        FeishuChannel("a", "s", "https://open.larksuite.com"),
-    ):
-        assert other.configuration_key != base.configuration_key
 
 
 def _reply_of(message_id: str, content: str) -> OutboundMessage:

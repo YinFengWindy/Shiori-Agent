@@ -10,31 +10,33 @@ from core.accounts.runtime_state import AccountRuntimeState
 
 def test_candidate_report_is_hidden_until_publication():
     state = AccountRuntimeState()
-    row = AccountRecord("id", "plugin", "platform", "101", "config", role_id="role")
-    state.set_plugin_enabled("plugin", True, "direct")
-    state.register(row.id, "old", "direct")
+    row = AccountRecord("p:101", "p", "platform", "101", "config", role_id="role")
+    state.register(row, "old", "direct")
     state.report(row.id, "old", "direct", "online", frozenset({"contacts"}), "")
     access = state.authorize(row, "role")
 
-    state.set_plugin_enabled("plugin", False, "candidate")
-    state.register(row.id, "new", "candidate")
+    state.register(row, "new", "candidate")
     assert state.snapshot(row).connection == "online"
-    assert state.validate_access(row, access)
+    assert state.validate_access(access)
     state.drop("candidate")
     assert state.snapshot(row).connection == "online"
 
-    state.register(row.id, "replacement", "next")
+    state.register(row, "replacement", "next")
     state.publish("next")
     assert state.snapshot(row).connection == "unknown"
-    assert not state.validate_access(row, access)
+    assert not state.validate_access(access)
 
 
 def test_old_reporter_cannot_reclaim_same_generation():
     state = AccountRuntimeState()
-    state.register("id", "old", "direct")
-    state.unregister("id", "old", "direct")
-    state.register("id", "new", "direct")
+    row = AccountRecord("p:101", "p", "platform", "101", "config", role_id="role")
+    state.register(row, "old", "direct")
+    state.unregister(row.id, "old", "direct")
+    state.register(row, "new", "direct")
     with pytest.raises(RuntimeError, match="superseded"):
-        state.ensure_registration_allowed("id", "old", "direct")
+        state.ensure_registration_allowed(row.id, "old", "direct")
     with pytest.raises(RuntimeError, match="no longer active"):
-        state.report("id", "old", "direct", "online", frozenset(), "")
+        state.report(row.id, "old", "direct", "online", frozenset(), "")
+    # Releasing the superseded instance leaves the replacement indexed.
+    state.release(row.id, "old", "direct")
+    assert state.published.records == {row.id: row}

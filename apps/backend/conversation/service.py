@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from conversation.models import ThreadRecord
 from conversation.projector import ConversationStateProjector
@@ -44,12 +44,7 @@ class LegacySessionDescriptor:
 class ConversationService:
     """Owns the mapping between legacy session keys and formal conversation threads."""
 
-    def __init__(
-        self,
-        session_manager: "SessionManager",
-        *,
-        binding_resolver: Callable[[str, str], str] | None = None,
-    ) -> None:
+    def __init__(self, session_manager: "SessionManager") -> None:
         self._session_manager = session_manager
         shared_store = getattr(session_manager, "conversation_store", None)
         if shared_store is not None:
@@ -64,7 +59,6 @@ class ConversationService:
                     )
                 db_path = workspace / "sessions.db"
             self._store = ConversationStore(db_path)
-        self._binding_resolver = binding_resolver
         self._projector = ConversationStateProjector(self._store)
 
     def get_thread_by_session_key(self, session_key: str) -> ThreadRecord | None:
@@ -151,10 +145,9 @@ class ConversationService:
             )
 
         if clean_channel and clean_chat_id:
-            resolved_role_id = clean_role_id or self._resolve_role_id(
-                clean_channel,
-                clean_chat_id,
-                dict(descriptor.metadata or {}),
+            resolved_role_id = (
+                clean_role_id
+                or str((descriptor.metadata or {}).get("role_id") or "").strip()
             )
             if resolved_role_id:
                 return self._build_network_thread(
@@ -217,21 +210,6 @@ class ConversationService:
             "created_at": thread.created_at,
             "updated_at": thread.updated_at,
         }
-
-    def _resolve_role_id(
-        self,
-        channel: str,
-        chat_id: str,
-        metadata: dict[str, Any],
-    ) -> str:
-        if self._binding_resolver is not None:
-            try:
-                resolved = str(self._binding_resolver(channel, chat_id) or "").strip()
-            except KeyError:
-                resolved = ""
-            if resolved:
-                return resolved
-        return str(metadata.get("role_id") or "").strip()
 
     def _build_desktop_thread(
         self,

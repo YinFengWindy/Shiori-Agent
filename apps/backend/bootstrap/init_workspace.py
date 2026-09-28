@@ -191,11 +191,11 @@ def init_workspace(
 
     summary.notes.append(f"工作区已初始化: {workspace}")
     summary.next_steps = [
-        f"1. 编辑 {config_path}，填写以下必填项：",
+        f"1. 编辑 {config_path}，配置模型和所需的记忆服务：",
         '     [[llm.registrations]]  api_key = "sk-..."',
-        '     [plugins.telegram]  token = "..."   （或 [plugins.qq] 的 bot_uin）',
         '     [memory.embedding]  api_key = "sk-..."',
         "2. 运行 uv run python apps/backend/main.py 启动。",
-        "3. 向 bot 发一条消息，确认对话正常后，可在 config.toml 开启 proactive。",
+        "3. 在角色页创建角色并添加 Telegram、QQ、QQBot 或飞书账号，在账号中填写凭据和响应规则。",
+        "4. 向账号发一条消息确认对话正常；需要主动消息时再配置 proactive。",
     ]
     return summary

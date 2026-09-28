@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import tomllib
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -16,14 +16,11 @@ from agent.plugin_host.plugin_data import plugin_data_dir
 from bus.event_bus import EventBus
 from core.roles.store import RoleStore
 from plugins.qqbot.backend.accounts import QQBotAccountStore
-from plugins.qqbot.backend.plugin import QQBotConfigModel
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 
-def _load_qqbot_channels(
-    plugin_configs: dict[str, dict[str, Any]] | None = None,
-) -> list[Any]:
+def _load_qqbot_channels() -> list[Any]:
     with tempfile.TemporaryDirectory() as tmp:
         plugin_dir = Path(tmp) / "qqbot"
         stage_plugin_package(PLUGIN_DIR, plugin_dir)
@@ -31,7 +28,6 @@ def _load_qqbot_channels(
             [Path(tmp)],
             services=HostServices(
                 event_bus=EventBus(),
-                plugin_configs=plugin_configs or {},
                 workspace=Path(tmp),
                 role_store=RoleStore(Path(tmp)),
             ),
@@ -60,86 +56,6 @@ def test_qqbot_plugin_exposes_an_empty_account_channel() -> None:
     assert channels[0]._channels == {}
 
 
-def test_qqbot_plugin_accepts_legacy_config_aliases() -> None:
-    channels = _load_qqbot_channels(
-        {
-            "qqbot": {
-                "appId": "app",
-                "clientSecret": "secret",
-                # Removed by the config migration; a leftover key is ignored.
-                "allow_from": ["user-openid"],
-            }
-        }
-    )
-
-    assert len(channels) == 1
-    assert channels[0].name == "qqbot"
-    # Imported without an owner role, the application is not registered.
-    assert channels[0]._identity.account_id("app") == ""
-
-
-def test_qqbot_plugin_migrates_original_secret_reference() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        workspace = Path(tmp)
-        plugin_dir = workspace / "qqbot"
-        stage_plugin_package(PLUGIN_DIR, plugin_dir)
-        kernel = PluginKernel(
-            [workspace],
-            services=HostServices(
-                event_bus=EventBus(),
-                workspace=workspace,
-                role_store=RoleStore(workspace),
-                plugin_configs={
-                    "qqbot": {"app_id": "100", "client_secret": "expanded"}
-                },
-                raw_plugin_configs={
-                    "qqbot": {"app_id": "100", "client_secret": "${QQBOT_SECRET}"}
-                },
-            ),
-        )
-        asyncio.run(kernel.load_all())
-        assert kernel.loaded_count == 1
-        store = QQBotAccountStore(
-            PluginKVStore(workspace / "plugin-data" / "qqbot" / "kv.json")
-        )
-        assert store.get("100")["client_secret"] == "${QQBOT_SECRET}"
-
-
-def test_qqbot_plugin_does_not_migrate_incomplete_legacy_credentials() -> None:
-    [channel] = _load_qqbot_channels({"qqbot": {"app_id": "app"}})
-    assert channel._identity.account_id("app") == ""
-
-
-def test_qqbot_config_model_validates_directly() -> None:
-    """QQBotConfigModel 的校验/别名规则单独测试，不依赖内核装配。"""
-    config = QQBotConfigModel.model_validate(
-        {"app_id": "${APP_ID}", "client_secret": "s"}
-    )
-
-    assert config.app_id == ""
-    assert config.client_secret == "s"
-
-
-@pytest.mark.asyncio
-async def test_qqbot_setup_ignores_removed_group_settings() -> None:
-    """A leftover legacy group field cannot block a C2C account migration."""
-    with tempfile.TemporaryDirectory() as tmp:
-        plugin_dir = Path(tmp) / "qqbot"
-        stage_plugin_package(PLUGIN_DIR, plugin_dir)
-        kernel = PluginKernel(
-            [Path(tmp)],
-            services=HostServices(
-                event_bus=EventBus(),
-                plugin_configs={"qqbot": {"groups": {"not": "a list"}}},
-                workspace=Path(tmp),
-                role_store=RoleStore(Path(tmp)),
-            ),
-        )
-        await kernel.load_all()
-
-        assert kernel.loaded_count == 1
-
-
 def test_qqbot_channel_does_not_consume_bot_commands() -> None:
     # 不读 ctx.bot_commands，命令列表变化不应重建官方 QQBot 连接（#363）。
     from plugins.qqbot.backend.channel import QQBotChannel
@@ -147,87 +63,105 @@ def test_qqbot_channel_does_not_consume_bot_commands() -> None:
     assert getattr(QQBotChannel, "uses_bot_commands", False) is False
 
 
-def test_config_schema_labels_fields_for_the_settings_form() -> None:
-    properties = QQBotConfigModel.model_json_schema()["properties"]
-    auto_titles = {key: key.replace("_", " ").title() for key in properties}
-    assert all(properties[key]["title"] != auto_titles[key] for key in properties)
-    assert "groups" not in properties
-    assert "allow_from" not in properties
+def _offline_preflight(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skips the network credential check in every loaded QQBot generation."""
+
+    async def accept(_self: object, _app_id: str, _secret: str) -> None:
+        return None
+
+    for module in list(sys.modules.values()):
+        mixin = getattr(module, "_AccountCommandsMixin", None)
+        if mixin is not None:
+            monkeypatch.setattr(mixin, "_preflight", accept)
 
 
-@pytest.mark.asyncio
-async def test_deleting_applications_purges_kv_and_legacy_host_credentials(
-    plugin_runtime, tmp_path
-) -> None:
+def _seed(tmp_path: Path, *apps: tuple[str, str]) -> QQBotAccountStore:
     roles = RoleStore(tmp_path)
     for role_id in ("mira", "other"):
         roles.create_role(role_id=role_id, name=role_id, system_prompt="m")
-    kv = PluginKVStore(plugin_data_dir(tmp_path, "qqbot") / "kv.json")
-    store = QQBotAccountStore(kv)
-    # The application imported from host settings, now owned by a role.
-    store.save(
-        {
-            "app_id": "100",
-            "client_secret": "legacy-secret",
-            "legacy": True,
-            "role_id": "mira",
-        }
+    store = QQBotAccountStore(
+        PluginKVStore(plugin_data_dir(tmp_path, "qqbot") / "kv.json")
     )
-    store.save(
-        {
-            "app_id": "200",
-            "client_secret": "scoped-secret",
-            "role_id": "other",
-            "targets": ["o"],
-        }
-    )
-    config = '\n[plugins.qqbot]\napp_id = "100"\nclient_secret = "legacy-secret"\n'
-    async with plugin_runtime(("qqbot",), config) as (service, path):
+    for app_id, role_id in apps:
+        store.save(
+            {"app_id": app_id, "client_secret": f"secret-{app_id}", "role_id": role_id}
+        )
+    return store
+
+
+@pytest.mark.asyncio
+async def test_saved_rules_survive_a_plugin_restart_and_disabling_hides_accounts(
+    plugin_runtime, tmp_path
+) -> None:
+    _seed(tmp_path, ("100", "mira"))
+    rules = {
+        "private_enabled": False,
+        "group_enabled": True,
+        "require_mention": True,
+        "blocked_sender_ids": ["spam"],
+    }
+    async with plugin_runtime(("qqbot",)) as (service, _path):
+        saved = await plugin_bridge_request(
+            service,
+            "accounts.rules.set",
+            {"account_id": "qqbot:100", "response_rules": rules},
+        )
+        assert saved.error is None, saved.error
+        for enabled in (False, True):
+            toggled = await plugin_bridge_request(
+                service,
+                "plugins.setEnabled",
+                {
+                    "plugin_id": "qqbot",
+                    "enabled": enabled,
+                    "operation_id": str(enabled),
+                },
+            )
+            assert toggled.error is None, toggled.error
+            listed = await plugin_bridge_request(service, "accounts.list")
+            if not enabled:
+                # A disabled plugin's accounts are not listed at all.
+                assert listed.payload["accounts"] == []
+        # Restarted, the plugin registers the rules it saved itself.
+        [restored] = listed.payload["accounts"]
+        assert (restored["id"], restored["response_rules"]) == ("qqbot:100", rules)
+
+
+@pytest.mark.asyncio
+async def test_plugin_deletes_accounts_of_deleted_roles_without_host_config(
+    plugin_runtime, tmp_path, monkeypatch
+) -> None:
+    store = _seed(tmp_path, ("100", "mira"), ("200", "other"), ("300", "gone"))
+    async with plugin_runtime(("qqbot",)) as (service, path):
+        config_text = path.read_text(encoding="utf-8")
+        # The application of a role deleted while unloaded is purged at load.
+        assert [row["app_id"] for row in store.list()] == ["100", "200"]
         listed = await plugin_bridge_request(service, "accounts.list")
-        accounts = {
-            row["platform_account_id"]: row["id"] for row in listed.payload["accounts"]
+        assert {row["id"]: row["role_id"] for row in listed.payload["accounts"]} == {
+            "qqbot:100": "mira",
+            "qqbot:200": "other",
         }
-        assert set(accounts) == {"100", "200"}
-        # Stored applications re-register at startup for their saved role.
-        assert {
-            row["platform_account_id"]: row["role_id"]
-            for row in listed.payload["accounts"]
-        } == {"100": "mira", "200": "other"}
 
-        legacy = await plugin_bridge_request(
+        deleted = await plugin_bridge_request(
+            service, "accounts.delete", {"account_id": "qqbot:100", "role_id": "mira"}
+        )
+        assert deleted.error is None, deleted.error
+        assert [row["app_id"] for row in store.list()] == ["200"]
+        _offline_preflight(monkeypatch)
+        added = await plugin_bridge_request(
             service,
-            "accounts.delete",
-            {"account_id": accounts["100"], "role_id": "mira"},
+            "plugin.qqbot.account.save",
+            {"role_id": "mira", "app_id": "100", "client_secret": "secret-100"},
         )
-        # The config write swapped generations; the new one ran setup (and its
-        # legacy migration) after the purge, so it neither re-imported nor
-        # re-registered the application and loaded cleanly.
-        assert legacy.error is None, legacy.error
-        table = tomllib.loads(path.read_text(encoding="utf-8"))["plugins"]["qqbot"]
-        assert not table.get("app_id") and not table.get("client_secret")
-        assert "legacy-secret" not in path.read_text(encoding="utf-8")
-        assert [row["app_id"] for row in QQBotAccountStore(kv).list()] == ["200"]
-        kept = await plugin_bridge_request(
-            service, "plugin.qqbot.account.detail", {"account_id": accounts["200"]}
-        )
-        assert kept.error is None, kept.error
-        gone = await plugin_bridge_request(
-            service, "plugin.qqbot.account.detail", {"account_id": accounts["100"]}
-        )
-        assert gone.error is not None
+        # The same application added again gets the same account ID back.
+        assert added.error is None, added.error
+        assert added.payload == {"account_id": "qqbot:100"}
 
-        scoped = await plugin_bridge_request(
-            service,
-            "accounts.delete",
-            {"account_id": accounts["200"], "role_id": "other"},
+        removed = await plugin_bridge_request(
+            service, "roles.delete", {"role_id": "other"}
         )
-        assert scoped.error is None, scoped.error
-        assert QQBotAccountStore(kv).list() == []
-        after = await plugin_bridge_request(service, "accounts.list")
-        assert after.payload["accounts"] == []
-    assert RoleStore(tmp_path).accounts.list() == []
-    restarted = QQBotAccountStore(kv)
-    restarted.migrate_legacy(
-        str(table.get("app_id") or ""), str(table.get("client_secret") or "")
-    )
-    assert restarted.list() == []
+        assert removed.error is None, removed.error
+        assert removed.payload["deleted_accounts"] == ["qqbot:200"]
+        assert [row["app_id"] for row in store.list()] == ["100"]
+        # Accounts live in plugin data only; host settings never change.
+        assert path.read_text(encoding="utf-8") == config_text

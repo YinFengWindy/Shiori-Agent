@@ -24,7 +24,6 @@ from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleStore
 from conversation.service import LegacySessionDescriptor
 from infra.channels.contract import ChannelContext
-from shiori_plugin_testkit.legacy_roles import seed_legacy_bindings
 
 _CHANNEL_PACKAGE = "plugins.telegram.backend.channel"
 _CHANNEL_DIR = Path(__file__).resolve().parents[1] / "backend" / "channel"
@@ -282,17 +281,6 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
         name="Mira",
         description="bound telegram role",
         system_prompt="you are mira",
-    )
-    seed_legacy_bindings(
-        tmp_path,
-        "mira",
-        [
-            {
-                "channel": "telegram",
-                "chat_id": "123",
-                "chat_type": "private",
-            }
-        ],
     )
     interrupt_controller = MagicMock()
     interrupt_controller.request_interrupt.return_value = SimpleNamespace(
@@ -795,7 +783,7 @@ async def test_telegram_channel_notifies_pending_input_before_disconnect(
 
 
 @pytest.mark.asyncio
-async def test_telegram_channel_rejects_legacy_binding_without_account(
+async def test_telegram_channel_rejects_a_chat_without_receiving_account(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
@@ -808,17 +796,6 @@ async def test_telegram_channel_rejects_legacy_binding_without_account(
         name="Mira",
         description="bound telegram role",
         system_prompt="you are mira",
-    )
-    seed_legacy_bindings(
-        tmp_path,
-        "mira",
-        [
-            {
-                "channel": "telegram",
-                "chat_id": "123",
-                "chat_type": "private",
-            }
-        ],
     )
 
     interrupt_controller = MagicMock()
@@ -854,7 +831,7 @@ async def test_telegram_channel_rejects_legacy_binding_without_account(
 
 
 @pytest.mark.asyncio
-async def test_telegram_group_rejects_legacy_binding_without_account(
+async def test_telegram_group_rejects_a_chat_without_receiving_account(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
@@ -862,18 +839,6 @@ async def test_telegram_group_rejects_legacy_binding_without_account(
     bus = _Bus()
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
-    seed_legacy_bindings(
-        tmp_path,
-        "mira",
-        [
-            {
-                "channel": "telegram",
-                "chat_id": "-100",
-                "chat_type": "group",
-                "blocked_senders": ["Troll"],
-            }
-        ],
-    )
     interrupt_controller = MagicMock()
     channel = mod.TelegramChannel(
         token="token",
@@ -899,7 +864,7 @@ async def test_telegram_group_rejects_legacy_binding_without_account(
             effective_user=SimpleNamespace(id=user_id, username=username),
         )
 
-    # The blacklist entry names a username; it matches case-insensitively.
+    # No receiving account owns the group, so no member is admitted.
     await channel._on_message(_update(5, "troll", "hi", 1), context)
     await channel._on_stop_command(_update(5, "troll", "/stop", 2), context)
     await channel._on_message(_update(6, "friend", "hello", 3), context)
@@ -918,18 +883,6 @@ async def test_telegram_rejected_sender_triggers_no_side_effects(
     bus = _Bus()
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
-    seed_legacy_bindings(
-        tmp_path,
-        "mira",
-        [
-            {
-                "channel": "telegram",
-                "chat_id": "-100",
-                "chat_type": "group",
-                "blocked_senders": ["@troll"],
-            }
-        ],
-    )
     channel = mod.TelegramChannel(
         token="token",
         bus=bus,
@@ -969,7 +922,7 @@ async def test_telegram_rejected_sender_triggers_no_side_effects(
             effective_user=SimpleNamespace(id=user_id, username=username),
         )
 
-    # A blacklisted member of the bound group, then a sender in an unbound chat.
+    # Senders in chats no receiving account owns.
     for update in [_update(-100, 5, "Troll", 1), _update(-200, 6, "friend", 2)]:
         await channel._on_message(update, context)
         await channel._on_photo(update, context)
@@ -1048,18 +1001,6 @@ async def test_telegram_chatid_reports_ids_without_role_binding(
     bus = _Bus()
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
-    seed_legacy_bindings(
-        tmp_path,
-        "mira",
-        [
-            {
-                "channel": "telegram",
-                "chat_id": "-100",
-                "chat_type": "group",
-                "blocked_senders": ["troll"],
-            }
-        ],
-    )
     channel = mod.TelegramChannel(
         token="token",
         bus=bus,
@@ -1081,7 +1022,7 @@ async def test_telegram_chatid_reports_ids_without_role_binding(
             effective_user=SimpleNamespace(id=user_id, username=username),
         )
 
-    # /chatid reports IDs before account ownership, even when old bindings exist.
+    # /chatid reports IDs before any account owns the chat.
     await channel._on_chat_id_command(_update(42, "private", 42, "me"), context)
     await channel._on_chat_id_command(_update(-200, "supergroup", 6, "a"), context)
     await channel._on_chat_id_command(_update(-100, "group", 7, "friend"), context)

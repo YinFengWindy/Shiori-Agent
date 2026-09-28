@@ -1,179 +1,45 @@
+"""Feishu/Lark plugin entry: compose account lifecycle and delivery RPCs."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import httpx
+from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
+from infra.channels.account_group import AccountChannelGroup
 
-from .channel import FeishuChannel
-from .config import FeishuAppConfig, FeishuConfigModel, config_without_application
-from .identity import verify_app
-from core.accounts import AccountDeletionPlan, ConfiguredAccount
-from core.accounts.target_contract import (
-    ACCOUNT_SEND_METHOD,
-    ACCOUNT_TARGETS_METHOD,
-    UncertainDeliveryError,
-)
+from .account_delivery import FeishuAccountDelivery
+from .accounts import FeishuAccounts
+from .config import FeishuAppConfig
+from .formatting import CHANNEL
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
 
-def configured_accounts(values: dict[str, Any]) -> list[ConfiguredAccount]:
-    """The apps a ``[plugins.feishu]`` table declares, for the host's write check."""
-    return [
-        ConfiguredAccount(app.ref, app.role_id or None, "feishu", app.ref)
-        for app in FeishuConfigModel.model_validate(values).applications
-    ]
-
-
 async def setup(ctx: "PluginRuntimeContext") -> None:
-    """Register each configured bot and its independently addressed channel."""
-    config = FeishuConfigModel.model_validate(ctx.config.as_dict())
+    """Registers saved applications and the RPCs that manage them."""
     from desktop_bridge.method_policy import Concurrency
 
-    async def profile(payload: dict[str, object]) -> dict[str, object]:
-        ref = str(payload.get("ref") or "")
-        if ref not in {app.ref for app in config.applications}:
-            raise KeyError("飞书账号不存在")
-        identity = ctx.kv.get(f"profile:{ref}", {})
-        targets = ctx.kv.get(f"targets:{ref}", {})
-        return {
-            "identity": identity,
-            "targets": [
-                {"chat_id": chat, "open_id": sender, "id_scope": "app"}
-                for chat, sender in sorted(targets.items())
-            ],
-            "coverage": "observed_private_chats",
-        }
+    group = AccountChannelGroup(CHANNEL)
+    ctx.channels.add(group)
+    accounts = FeishuAccounts(ctx, group)
+    delivery = FeishuAccountDelivery(ctx, accounts)
 
-    ctx.rpc.register("accounts.profile", profile, concurrency=Concurrency.READ_ONLY)
-
-    channels: dict[str, FeishuChannel] = {}
-    account_refs: dict[str, str] = {}
-
-    def ref_for_account(payload: dict[str, object]) -> str:
-        account_id = str(payload.get("account_id") or "")
-        try:
-            return account_refs[account_id]
-        except KeyError as exc:
-            raise ValueError("飞书账号不存在") from exc
-
-    async def account_targets(payload: dict[str, object]) -> dict[str, object]:
-        if str(payload.get("kind") or "") != "known":
-            raise ValueError("飞书仅支持已交互的私聊目标")
-        return await profile({"ref": ref_for_account(payload)})
-
-    ctx.rpc.register(
-        ACCOUNT_TARGETS_METHOD, account_targets, concurrency=Concurrency.READ_ONLY
-    )
-
-    async def send_target(payload: dict[str, object]) -> dict[str, object]:
-        ref = str(payload.get("ref") or "")
-        channel = channels.get(ref)
-        if channel is None:
-            raise RuntimeError("飞书账号未连接")
-        try:
-            message_id = await channel.send(
-                str(payload.get("chat_id") or ""), str(payload.get("message") or "")
-            )
-        except httpx.TransportError as exc:
-            raise UncertainDeliveryError("飞书发送连接中断，结果不确定") from exc
-        if not message_id:
-            raise UncertainDeliveryError("飞书平台未返回消息回执")
-        return {"message_id": message_id}
-
-    ctx.rpc.register("accounts.send", send_target)
-
-    async def account_send(payload: dict[str, object]) -> dict[str, object]:
-        if str(payload.get("target_kind") or "") != "private":
-            raise ValueError("飞书仅支持私聊发送")
-        if payload.get("message_thread_id") is not None:
-            raise ValueError("飞书不支持群话题")
-        return await send_target(
-            {
-                "ref": ref_for_account(payload),
-                "chat_id": payload.get("target_id"),
-                "message": payload.get("message"),
-            }
-        )
-
-    ctx.rpc.register(ACCOUNT_SEND_METHOD, account_send)
-
-    async def verify(payload: dict[str, object]) -> dict[str, object]:
-        app = FeishuAppConfig.model_validate(payload)
-        identity = await verify_app(app)
-        known = ctx.kv.get(f"profile:{app.ref}", {})
-        known_id = str(known.get("open_id") or "")
-        if known_id and known_id != identity["open_id"]:
-            raise ValueError("应用凭据指向不同的机器人，请新建账号")
+    async def verify(payload: dict[str, Any]) -> dict[str, object]:
+        identity = await accounts.verify(FeishuAppConfig.model_validate(payload))
         return {"name": identity["name"], "open_id": identity["open_id"]}
 
+    ctx.rpc.register(
+        "accounts.profile", delivery.profile, concurrency=Concurrency.READ_ONLY
+    )
+    ctx.rpc.register(
+        ACCOUNT_TARGETS_METHOD, delivery.targets, concurrency=Concurrency.READ_ONLY
+    )
+    ctx.rpc.register("accounts.send", delivery.send)
+    ctx.rpc.register(ACCOUNT_SEND_METHOD, delivery.send_account)
     ctx.rpc.register("accounts.verify", verify, concurrency=Concurrency.INTEGRATION)
-    ctx.accounts.read_config_accounts(configured_accounts)
-    for app in config.applications:
-        profile_data = ctx.kv.get(f"profile:{app.ref}", {})
-        snapshot = ctx.accounts.register_configured(
-            platform="feishu",
-            platform_account_id=app.ref,
-            config_ref=app.ref,
-            role_id=app.role_id or None,
-            display_name=str(profile_data.get("name") or ""),
-            avatar_url=str(profile_data.get("avatar_url") or ""),
-        )
-        if snapshot is None:
-            continue
-        account_id = snapshot.record.id
-        account_refs[account_id] = app.ref
-        if not app.connection_enabled:
-            ctx.accounts.report(account_id, connection="offline")
-            continue
-        if not app.app_secret:
-            ctx.accounts.report(
-                account_id,
-                connection="login_required",
-                error="App Secret 未配置或环境变量未解析",
-            )
-            continue
-        ctx.accounts.report(account_id, connection="connecting")
-        channel = FeishuChannel(
-            app_id=app.app_id,
-            app_secret=app.app_secret,
-            domain=app.base_url,
-            name=(
-                "feishu" if app.ref == config.channel_alias_ref else f"feishu:{app.ref}"
-            ),
-            account_id=account_id,
-            accounts=ctx.accounts,
-            profile_store=ctx.kv,
-            profile_ref=app.ref,
-            connection_revision=app.connection_revision,
-            role_id=app.role_id or None,
-            chat_types=ctx.manifest.channel_chat_types("feishu"),
-        )
-        channels[app.ref] = channel
-        ctx.channels.add(channel)
-
-    raw_config = ctx.config.raw_as_dict()
-
-    def delete_account(config_ref: str) -> AccountDeletionPlan:
-        async def disconnect() -> None:
-            channel = channels.pop(config_ref, None)
-            if channel is not None:
-                # Closed before purging so the WebSocket cannot refill caches.
-                await channel.retire()
-            for account_id in [
-                key for key, ref in account_refs.items() if ref == config_ref
-            ]:
-                del account_refs[account_id]
-
-        async def purge() -> None:
-            ctx.kv.delete(f"profile:{config_ref}")
-            ctx.kv.delete(f"targets:{config_ref}")
-
-        return AccountDeletionPlan(
-            disconnect=disconnect,
-            purge=purge,
-            plugin_config=config_without_application(raw_config, config_ref),
-        )
-
-    ctx.accounts.on_delete(delete_account)
+    ctx.rpc.register("accounts.save", accounts.save)
+    ctx.rpc.register("accounts.disconnect", accounts.disconnect)
+    ctx.accounts.on_delete(accounts.delete_plan)
+    ctx.accounts.on_rules_change(accounts.save_rules)
+    await accounts.load()

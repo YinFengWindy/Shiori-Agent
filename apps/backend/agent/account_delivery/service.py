@@ -56,7 +56,7 @@ class AccountDelivery:
         return await resolved[1](payload)
 
     def list_accounts(self, role_id: str) -> list[dict[str, object]]:
-        """Report only this role's saved accounts and current plugin abilities."""
+        """Report only this role's loaded accounts and current plugin abilities."""
         if not role_id:
             raise PermissionError("需要角色上下文")
         rows: list[dict[str, object]] = []
@@ -68,9 +68,7 @@ class AccountDelivery:
                     "platform": row.platform,
                     "name": row.display_name,
                     "platform_account_id": row.platform_account_id,
-                    "online": account.plugin_enabled
-                    and account.runtime_active
-                    and account.connection == "online",
+                    "online": account.runtime_active and account.connection == "online",
                     "connection": account.connection,
                     "capabilities": sorted(account.capabilities),
                     "error": account.error,

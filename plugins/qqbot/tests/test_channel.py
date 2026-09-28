@@ -159,13 +159,16 @@ async def test_qqbot_reports_pending_input_before_closing_original_account(monke
     channel.pause_intake()
     await channel._publish_inbound(
         InboundMessage(
-            channel="qqbot", sender="user", chat_id="c2c:user", content="pending"
+            channel="qqbot",
+            sender="user",
+            chat_id="c2c:old-account:user",
+            content="pending",
         )
     )
     await channel.stop()
     assert channel._bus.inbound == []
     assert len(notices) == 1
-    assert notices[0][:2] == ("old-account", "c2c:user")
+    assert notices[0][:2] == ("old-account", "c2c:old-account:user")
     assert "重新发送" in notices[0][2]
     assert client.is_closed
     assert channel._client is None
@@ -248,15 +251,15 @@ async def test_qqbot_c2c_inbound_is_role_routed_and_deduplicated() -> None:
     await channel._handle_c2c(event)
 
     assert len(bus.inbound) == 1
-    assert bus.inbound[0].chat_id == "c2c:user-1"
+    assert bus.inbound[0].chat_id == "c2c:app:user-1"
     assert bus.inbound[0].metadata["role_id"] == "mira"
     assert channel._send_input_notify.await_count == 2
 
 
 @pytest.mark.asyncio
-async def test_scoped_c2c_inbound_records_application_account() -> None:
+async def test_c2c_inbound_is_scoped_to_its_application_account() -> None:
     bus = _Bus()
-    channel = QQBotChannel("app-1", "secret", scoped=True, account_id="account-1")
+    channel = QQBotChannel("app-1", "secret", account_id="account-1")
     channel._bus = bus
     channel._channel_hub = _Hub()
     channel._send_input_notify = AsyncMock()
@@ -298,7 +301,7 @@ async def test_qqbot_send_uses_official_markdown_api() -> None:
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(return_value={})
 
-    await channel.send("c2c:user-1", "回复")
+    await channel.send("c2c:app:user-1", "回复")
 
     channel._api_request.assert_awaited_once()
     call = channel._api_request.await_args
@@ -320,7 +323,7 @@ async def test_qqbot_send_image_uploads_public_url_then_sends_media() -> None:
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(side_effect=[{"file_info": "uploaded-file"}, {}])
 
-    await channel.send_image("c2c:user-1", "https://example.com/sticker.gif")
+    await channel.send_image("c2c:app:user-1", "https://example.com/sticker.gif")
 
     upload_call, send_call = channel._api_request.await_args_list
     assert upload_call.args == (
@@ -356,7 +359,7 @@ async def test_qqbot_send_image_uploads_local_gif_without_converting(
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(side_effect=[{"file_info": "gif-file"}, {}])
 
-    await channel.send_image("c2c:user-1", str(image))
+    await channel.send_image("c2c:app:user-1", str(image))
 
     upload_body = channel._api_request.await_args_list[0].args[2]
     assert upload_body == {
@@ -377,7 +380,7 @@ async def test_qqbot_send_image_rejects_unsupported_local_file(
     channel._api_request = AsyncMock()
 
     with pytest.raises(ValueError, match="仅支持 PNG、JPEG、WebP 和 GIF"):
-        await channel.send_image("c2c:user-1", str(image))
+        await channel.send_image("c2c:app:user-1", str(image))
 
     channel._get_access_token.assert_not_awaited()
     channel._api_request.assert_not_awaited()
@@ -390,7 +393,7 @@ async def test_qqbot_send_image_requires_file_info_from_upload() -> None:
     channel._api_request = AsyncMock(return_value={})
 
     with pytest.raises(RuntimeError, match="缺少 file_info"):
-        await channel.send_image("c2c:user-1", "https://example.com/image.png")
+        await channel.send_image("c2c:app:user-1", "https://example.com/image.png")
 
     channel._api_request.assert_awaited_once()
 
@@ -405,18 +408,18 @@ async def test_qqbot_response_records_delivery_for_role_thread() -> None:
     await channel._on_response(
         OutboundMessage(
             channel="qqbot",
-            chat_id="c2c:user-1",
+            chat_id="c2c:app:user-1",
             content="回复",
             metadata={
                 "role_id": "mira",
-                "thread_id": "thread:mira:qqbot:c2c:user-1",
+                "thread_id": "thread:mira:qqbot:c2c:app:user-1",
                 "session_key_override": "role:mira",
             },
         )
     )
 
-    channel.send.assert_awaited_once_with("c2c:user-1", "回复")
-    assert hub.deliveries == [("sent", "c2c:user-1")]
+    channel.send.assert_awaited_once_with("c2c:app:user-1", "回复")
+    assert hub.deliveries == [("sent", "c2c:app:user-1")]
 
 
 @pytest.mark.asyncio
@@ -430,7 +433,7 @@ async def test_qqbot_response_sends_media_and_records_delivery_after_success() -
     await channel._on_response(
         OutboundMessage(
             channel="qqbot",
-            chat_id="c2c:user-1",
+            chat_id="c2c:app:user-1",
             content="",
             media=["first.png", "second.png"],
         )
@@ -438,10 +441,10 @@ async def test_qqbot_response_sends_media_and_records_delivery_after_success() -
 
     channel.send.assert_not_awaited()
     assert channel.send_image.await_args_list == [
-        (("c2c:user-1", "first.png"),),
-        (("c2c:user-1", "second.png"),),
+        (("c2c:app:user-1", "first.png"),),
+        (("c2c:app:user-1", "second.png"),),
     ]
-    assert hub.deliveries == [("sent", "c2c:user-1")]
+    assert hub.deliveries == [("sent", "c2c:app:user-1")]
 
 
 @pytest.mark.asyncio
@@ -455,13 +458,13 @@ async def test_qqbot_response_marks_media_failure_without_sent_status() -> None:
         await channel._on_response(
             OutboundMessage(
                 channel="qqbot",
-                chat_id="c2c:user-1",
+                chat_id="c2c:app:user-1",
                 content="",
                 media=["broken.png"],
             )
         )
 
-    assert hub.deliveries == [("failed", "c2c:user-1")]
+    assert hub.deliveries == [("failed", "c2c:app:user-1")]
 
 
 @pytest.mark.asyncio
@@ -475,14 +478,14 @@ async def test_qqbot_stop_uses_bound_role_session() -> None:
     channel._interrupt_controller = interrupt
     channel.send = AsyncMock()
 
-    await channel._handle_stop("c2c:user-1", "user-1")
+    await channel._handle_stop("c2c:app:user-1", "user-1")
 
     interrupt.request_interrupt.assert_called_once_with(
         session_key="role:mira",
         sender="user-1",
         command="/stop",
     )
-    channel.send.assert_awaited_once_with("c2c:user-1", "已中断")
+    channel.send.assert_awaited_once_with("c2c:app:user-1", "已中断")
 
 
 @pytest.mark.asyncio
@@ -493,7 +496,7 @@ async def test_qqbot_stop_from_unadmitted_sender_is_ignored() -> None:
     channel._interrupt_controller = interrupt
     channel.send = AsyncMock()
 
-    await channel._handle_stop("c2c:user-1", "user-1")
+    await channel._handle_stop("c2c:app:user-1", "user-1")
 
     interrupt.request_interrupt.assert_not_called()
     channel.send.assert_not_awaited()
@@ -504,8 +507,11 @@ async def test_qqbot_stop_from_unadmitted_sender_is_ignored() -> None:
     ("hub", "replies"),
     [
         # Unbound chats are answered: that is how the OpenID to bind is found.
-        (_Hub(allowed=False), [("c2c:user-1", "会话类型：私聊\n用户 OpenID：user-1")]),
-        (_Hub(), [("c2c:user-1", "会话类型：私聊\n用户 OpenID：user-1")]),
+        (
+            _Hub(allowed=False),
+            [("c2c:app:user-1", "会话类型：私聊\n用户 OpenID：user-1")],
+        ),
+        (_Hub(), [("c2c:app:user-1", "会话类型：私聊\n用户 OpenID：user-1")]),
         (_Hub(allowed=False, blocked=True), []),
     ],
     ids=["unbound", "bound", "blacklisted"],
@@ -551,13 +557,13 @@ async def test_qqbot_push_senders_return_the_platform_message_id() -> None:
     )
     channel._last_c2c_msg_id["user-1"] = "inbound-1"
 
-    assert await channel.send_proactive("c2c:user-1", "回复") == "text-id"
+    assert await channel.send_proactive("c2c:app:user-1", "回复") == "text-id"
     assert (
-        await channel.send_image("c2c:user-1", "https://example.com/a.png")
+        await channel.send_image("c2c:app:user-1", "https://example.com/a.png")
         == "image-id"
     )
     # The first stream chunk assigns the id; later chunks reuse it.
-    assert await channel.send_stream("c2c:user-1", "x" * 200) == "stream-id"
+    assert await channel.send_stream("c2c:app:user-1", "x" * 200) == "stream-id"
 
 
 @pytest.mark.asyncio
@@ -567,4 +573,4 @@ async def test_qqbot_stream_fallback_returns_the_plain_message_id() -> None:
     channel._api_request = AsyncMock(return_value={"id": "plain-id"})
 
     # No inbound message to anchor a stream: sent as a plain message.
-    assert await channel.send_stream("c2c:user-1", "回复") == "plain-id"
+    assert await channel.send_stream("c2c:app:user-1", "回复") == "plain-id"

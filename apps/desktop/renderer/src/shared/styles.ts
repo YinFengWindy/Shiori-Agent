@@ -105,6 +105,36 @@ export const dangerGhostButtonSurfaceClass = cx(
 /** Height, padding and type of a compact (36px) labeled button; compose it with a surface class. */
 export const compactButtonSizeClass = "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 px-3.5 text-body-sm font-medium";
 
+/** Compact primary action button (surface + compact size). */
+export const compactPrimaryButtonClass = cx(primaryButtonSurfaceClass, compactButtonSizeClass);
+
+/** Compact secondary action button (surface + compact size). */
+export const compactGhostButtonClass = cx(ghostButtonSurfaceClass, compactButtonSizeClass);
+
+/** Compact quiet destructive button (surface + compact size). */
+export const compactDangerGhostButtonClass = cx(dangerGhostButtonSurfaceClass, compactButtonSizeClass);
+
+/**
+ * Size-free borderless text button surface, for quiet footer actions that
+ * should not compete with the section's main button (account danger zone).
+ */
+export const textButtonSurfaceClass = cx(
+  pressableClass,
+  "cursor-pointer rounded-md border border-transparent bg-transparent text-ink-secondary hover:bg-surface-hover hover:text-ink disabled:cursor-default disabled:opacity-50",
+);
+
+/** Size-free borderless destructive text surface; see `textButtonSurfaceClass`. */
+export const dangerTextButtonSurfaceClass = cx(
+  pressableClass,
+  "cursor-pointer rounded-md border border-transparent bg-transparent text-danger-text hover:bg-danger-soft disabled:cursor-default disabled:opacity-50",
+);
+
+/** Compact borderless text button (surface + compact size). */
+export const compactTextButtonClass = cx(textButtonSurfaceClass, compactButtonSizeClass);
+
+/** Compact borderless destructive text button (surface + compact size). */
+export const compactDangerTextButtonClass = cx(dangerTextButtonSurfaceClass, compactButtonSizeClass);
+
 /** Shared primary action button styling. */
 export const primaryButtonClass = cx(primaryButtonSurfaceClass, "px-[18px] py-3");
 

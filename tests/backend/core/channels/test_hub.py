@@ -7,38 +7,10 @@ import pytest
 
 from bus.events import InboundMessage, OutboundMessage
 from core.channels import ChannelHub
-from core.accounts.models import AccountResponseRules, GroupResponseRule
+from core.accounts.models import AccountResponseRules
 from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleAggregateService, RoleStore
 from session.manager import SessionManager
-from shiori_plugin_testkit.legacy_roles import seed_legacy_bindings
-
-
-def _seed_binding(
-    service: RoleAggregateService,
-    channel: str,
-    chat_id: str,
-    role_id: str,
-    *,
-    chat_type: str,
-    blocked_senders: tuple[str, ...] = (),
-) -> None:
-    store = service.repository.store
-    role = store.get_role(role_id)
-    assert role is not None
-    seed_legacy_bindings(
-        store.workspace,
-        role_id,
-        [
-            *(item.to_dict() for item in role.channel_bindings),
-            {
-                "channel": channel,
-                "chat_id": chat_id,
-                "chat_type": chat_type,
-                "blocked_senders": list(blocked_senders),
-            },
-        ],
-    )
 
 
 def test_channel_hub_routes_owned_inbound_to_role_session(tmp_path: Path) -> None:
@@ -54,7 +26,6 @@ def test_channel_hub_routes_owned_inbound_to_role_session(tmp_path: Path) -> Non
         description="bound role",
         system_prompt="you are mira",
     )
-    _seed_binding(service, "telegram", "123", "mira", chat_type="private")
     account_id = _live_account(service, "telegram")
     hub = ChannelHub(service, channel_directory=_directory_with_private_telegram())
 
@@ -97,22 +68,26 @@ def _directory_with_private_telegram() -> ChannelDirectory:
     return directory
 
 
-def _live_account(service: RoleAggregateService, platform: str) -> str:
+def _live_account(
+    service: RoleAggregateService,
+    platform: str,
+    rules: AccountResponseRules | None = None,
+) -> str:
     accounts = service.repository.store.accounts
-    accounts.set_plugin_enabled(platform, True)
     account = accounts.register(
         plugin_id=platform,
         platform=platform,
         platform_account_id="self",
-        config_ref="legacy",
+        config_ref="self",
         token="live",
         role_id="mira",
+        response_rules=rules,
     )
     accounts.report(account.record.id, "live", connection="online")
     return account.record.id
 
 
-def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
+def test_account_inbound_uses_owner_and_rules(
     tmp_path: Path,
 ) -> None:
     sessions = SessionManager(tmp_path)
@@ -122,9 +97,8 @@ def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
     )
     service.create_role(role_id="mira", name="Mira", system_prompt="mira")
     service.create_role(role_id="other", name="Other", system_prompt="other")
-    _seed_binding(service, "qq", "gqq:42", "other", chat_type="group")
     accounts = store.accounts
-    accounts.set_plugin_enabled("qq", True)
+    accounts.set_rules_handler("qq", lambda *_: None)
     account = accounts.register(
         plugin_id="qq",
         platform="qq",
@@ -174,55 +148,27 @@ def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
     assert hub.resolve_account_runtime_session_key(account_id) == "role:mira"
     accounts.set_response_rules(account_id, AccountResponseRules(group_enabled=False))
     assert hub.route_account_inbound(message) is None
-    accounts.set_response_rules(
-        account_id,
-        AccountResponseRules(
-            blocked_sender_ids=("user",),
-            group_rules=(GroupResponseRule(chat_id="gqq:42", blocked_sender_ids=()),),
-        ),
-    )
-    assert hub.route_account_inbound(message) is None
-    accounts.set_response_rules(
-        account_id,
-        AccountResponseRules(
-            group_rules=(
-                GroupResponseRule(chat_id="gqq:42", blocked_sender_ids=("user",)),
-            ),
-        ),
-    )
-    assert hub.route_account_inbound(message) is None
-    accounts.set_plugin_enabled("qq", False)
-    assert hub.route_account_inbound(message) is None
-
-
-def test_migrated_group_override_admits_only_the_old_group(tmp_path: Path) -> None:
-    sessions = SessionManager(tmp_path)
-    store = RoleStore(tmp_path)
-    service = RoleAggregateService.from_runtime(
-        workspace=tmp_path, role_store=store, session_manager=sessions
-    )
-    service.create_role(role_id="mira", name="Mira", system_prompt="Mira")
-    _seed_binding(
-        service, "qq", "gqq:42", "mira", chat_type="group", blocked_senders=("blocked",)
-    )
-    account_id = _live_account(service, "qq")
-    hub = ChannelHub(service)
-
-    def inbound(chat_id: str, sender: str) -> InboundMessage:
-        return InboundMessage(
-            channel="qq",
-            sender=sender,
-            chat_id=chat_id,
-            content="hello",
-            metadata={
-                "account_id": account_id,
-                "chat_type": "group",
-            },
+    # Account-wide settings gate every group: @ requirement, then the blacklist.
+    accounts.set_response_rules(account_id, AccountResponseRules(require_mention=False))
+    assert (
+        hub.route_account_inbound(
+            InboundMessage(
+                channel=message.channel,
+                sender=message.sender,
+                chat_id="gqq:43",
+                content=message.content,
+                metadata={**message.metadata, "mentioned": False},
+            )
         )
-
-    assert hub.route_account_inbound(inbound("gqq:42", "friend")) is not None
-    assert hub.route_account_inbound(inbound("gqq:42", "blocked")) is None
-    assert hub.route_account_inbound(inbound("gqq:43", "friend")) is None
+        is not None
+    )
+    accounts.set_response_rules(
+        account_id, AccountResponseRules(blocked_sender_ids=("user",))
+    )
+    assert hub.route_account_inbound(message) is None
+    # An unloaded plugin's account no longer routes anything.
+    accounts.release(account_id, "live")
+    assert hub.route_account_inbound(message) is None
 
 
 def test_account_inbound_accepts_telegram_instance_channel_name(tmp_path: Path) -> None:
@@ -233,7 +179,6 @@ def test_account_inbound_accepts_telegram_instance_channel_name(tmp_path: Path) 
     )
     service.create_role(role_id="mira", name="Mira", system_prompt="mira")
     accounts = store.accounts
-    accounts.set_plugin_enabled("telegram", True)
     account = accounts.register(
         plugin_id="telegram",
         platform="telegram",
@@ -265,8 +210,6 @@ def test_channel_hub_chat_type_default_comes_from_the_channel(tmp_path: Path) ->
         session_manager=session_manager,
     )
     _ = service.create_role(role_id="mira", name="Mira", system_prompt="mira")
-    _seed_binding(service, "telegram", "123", "mira", chat_type="private")
-    _seed_binding(service, "qqbot", "c2c:u2", "mira", chat_type="private")
     account_ids = {
         channel: _live_account(service, channel) for channel in ("telegram", "qqbot")
     }
@@ -313,13 +256,12 @@ def test_channel_hub_marks_delivery_by_role_session(tmp_path: Path) -> None:
         role_store=RoleStore(tmp_path),
         session_manager=session_manager,
     )
-    role = service.create_role(
+    service.create_role(
         role_id="mira",
         name="Mira",
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _seed_binding(service, "telegram", "123", role.id, chat_type="private")
     account_id = _live_account(service, "telegram")
     routed = ChannelHub(service).route_inbound(
         InboundMessage(
@@ -379,13 +321,12 @@ def test_channel_hub_skips_delivery_mark_when_outbound_has_no_committed_message(
         role_store=RoleStore(tmp_path),
         session_manager=session_manager,
     )
-    role = service.create_role(
+    service.create_role(
         role_id="mira",
         name="Mira",
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _seed_binding(service, "telegram", "123", role.id, chat_type="private")
     account_id = _live_account(service, "telegram")
     routed = ChannelHub(service).route_inbound(
         InboundMessage(
@@ -476,7 +417,6 @@ def test_channel_hub_skips_delivery_mark_without_running_thread_validation(
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _seed_binding(service, "telegram", "123", role.id, chat_type="private")
     hub = ChannelHub(service)
 
     # No committed_message_id and no thread_id metadata at all: a full-blown
@@ -505,13 +445,12 @@ def test_channel_hub_marks_archived_external_messages_as_duplicates(
         role_store=RoleStore(tmp_path),
         session_manager=session_manager,
     )
-    role = service.create_role(
+    service.create_role(
         role_id="mira",
         name="Mira",
         description="bound role",
         system_prompt="you are mira",
     ).role
-    _seed_binding(service, "telegram", "123", role.id, chat_type="private")
     account_id = _live_account(service, "telegram")
     hub = ChannelHub(service)
     first = hub.route_inbound(
@@ -560,7 +499,6 @@ def test_channel_hub_resolves_account_control_actions_to_role_session(
         description="bound role",
         system_prompt="you are mira",
     )
-    _seed_binding(service, "telegram", "123", "mira", chat_type="private")
     account_id = _live_account(service, "telegram")
     hub = ChannelHub(service)
     _ = hub.route_inbound(
@@ -603,7 +541,6 @@ def test_channel_hub_attaches_complete_role_execution_context(tmp_path: Path) ->
         description="bound role",
         system_prompt="you are mira",
     )
-    _seed_binding(service, "telegram", "123", "mira", chat_type="private")
     account_id = _live_account(service, "telegram")
 
     routed = ChannelHub(service).route_inbound(
@@ -634,11 +571,8 @@ def _hub_with_bindings(
         session_manager=SessionManager(tmp_path),
     )
     _ = service.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
-    _seed_binding(service, "telegram", "123", "mira", chat_type="private")
-    _seed_binding(
-        service, "telegram", "-100", "mira", chat_type="group", blocked_senders=blocked
-    )
-    return ChannelHub(service), _live_account(service, "telegram")
+    rules = AccountResponseRules(blocked_sender_ids=blocked)
+    return ChannelHub(service), _live_account(service, "telegram", rules)
 
 
 def test_channel_hub_admits_any_sender_of_a_bound_private_chat(

@@ -6,11 +6,10 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from bootstrap.app import AppRuntime
 from bootstrap.runtime.generations import RuntimeLease
-from core.accounts import AccountDeletingError, AccountNotFoundError
 from core.common.cleanup import run_cleanup_steps
 from core.roles import RoleStore
 from core.common.runtime_scope import bind_runtime
@@ -22,7 +21,6 @@ from desktop_bridge.method_policy import (
     resolve_plugin_method_policy,
 )
 from desktop_bridge.models import BridgeError, BridgeResponse
-from desktop_bridge.runtime.account_deletion import RuntimeAccountDeletion
 from desktop_bridge.runtime.apply import RuntimeApplyError, RuntimeSettingsApplication
 from desktop_bridge.runtime.desktop_presence import report_desktop_presence
 from desktop_bridge.runtime.proactive_target import preview_proactive_target
@@ -59,7 +57,6 @@ class ReloadableDesktopService:
         self.role_tasks = RuntimeRoleTasks(app, roles)
         self.plugin_config = RuntimePluginConfig(app, self.settings)
         self.plugin_management = RuntimePluginManagement(app, self.settings)
-        self.account_deletion = RuntimeAccountDeletion(roles, self.plugin_config)
         lease = app.pin()
         self._current = _ServiceGeneration(
             build_desktop_service(lease.core, roles), lease
@@ -219,8 +216,6 @@ class ReloadableDesktopService:
             return await self._respond_or_apply_error(
                 request_id, method, compute_plugin_management_result
             )
-        if policy.handler is Handler.ACCOUNT_DELETE:
-            return await self._delete_account(request_id, method, payload)
         if policy.handler is Handler.DESKTOP_PRESENCE:
             # App-level state, not a generation's: a settings reload must not
             # reset what the host last reported.
@@ -330,37 +325,6 @@ class ReloadableDesktopService:
                 method,
                 error=BridgeError(exc.code, str(exc), exc.details),
             )
-
-    async def _delete_account(
-        self, request_id: str, method: str, payload: dict[str, Any]
-    ) -> BridgeResponse:
-        """Deletes an account, announcing a generation swap if its config changed."""
-        try:
-            result = await self.account_deletion.delete(
-                payload,
-                prepare_service=self._prepare,
-                publish_service=self._publish,
-            )
-        except RuntimeApplyError as exc:
-            error = BridgeError(exc.code, str(exc), exc.details)
-        except AccountNotFoundError as exc:
-            error = BridgeError("account_not_found", f"账号不存在: {exc.args[0]}")
-        except PermissionError as exc:
-            error = BridgeError("account_forbidden", str(exc))
-        except AccountDeletingError as exc:
-            error = BridgeError("account_deleting", str(exc))
-        except Exception as exc:
-            # Boundary: a plugin hook may fail in any way (locked files, network
-            # teardown). The host record is intact; the user sees why.
-            logger.exception("Account deletion failed: %s", payload.get("account_id"))
-            error = BridgeError("account_delete_failed", str(exc) or type(exc).__name__)
-        else:
-            if result["config"] is not None:
-                await self._notify_applied(request_id, result["config"])
-            return BridgeResponse(
-                request_id, "response", method, {"account_id": result["account_id"]}
-            )
-        return BridgeResponse(request_id, "response", method, error=error)
 
     async def _respond_or_invalid_request(self, request_id: str, method: str, compute):
         """Runs one app-level handler, mapping rejected input to ``invalid_request``.

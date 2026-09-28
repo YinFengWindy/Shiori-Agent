@@ -35,7 +35,22 @@ def account_api():
     second = SimpleNamespace(
         _account_id="account-second", can_send=Mock(return_value=True), bot=Mock()
     )
-    return TelegramAccountApi({"first": first, "second": second}, Mock(), store), first
+    return (
+        TelegramAccountApi(_bots({"first": first, "second": second}), Mock(), store),
+        first,
+    )
+
+
+def _bots(channels):
+    """The running Bots the API resolves refs and account IDs through."""
+
+    def ref_for_account(account_id):
+        for ref, channel in channels.items():
+            if channel._account_id == account_id:
+                return ref
+        raise ValueError("Unknown Telegram Bot account")
+
+    return SimpleNamespace(channel=channels.get, ref_for_account=ref_for_account)
 
 
 @pytest.mark.asyncio
@@ -51,7 +66,7 @@ async def test_known_chats_are_per_bot_and_not_a_full_directory(account_api):
         "name": "First Bot",
         "username": "first_bot",
     }
-    offline = TelegramAccountApi({}, Mock(), api._store)
+    offline = TelegramAccountApi(_bots({}), Mock(), api._store)
     assert (await offline.list_known({"ref": "first"}))["chats"][0][
         "chat_id"
     ] == "-1001"

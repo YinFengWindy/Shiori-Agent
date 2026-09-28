@@ -35,7 +35,8 @@ from ..utils import (
     TelegramOutboundLimiter,
     TelegramStreamMessage,
 )
-from ..bot_token import bot_account_id
+from ..credentials import avatar_key, bot_account_id
+from .avatar import fetch_bot_avatar
 from .commands import _CommandMixin
 from .formatting import (
     _CHANNEL,
@@ -84,21 +85,26 @@ class TelegramChannel(
         channel_hub: "ChannelHub | None" = None,
         chat_types: tuple[ChatTypeDeclaration, ...] = (),
         name: str = _CHANNEL,
-        config_ref: str = "legacy",
+        config_ref: str = "",
         accounts: "AccountsCapability | None" = None,
         known_store: "PluginKVStore | None" = None,
         role_id: str | None = None,
     ) -> None:
         # bus / session_manager 在宿主里由 start(ctx) 注入；构造参数只留给
         # 不经 ChannelHost 直接驱动渠道的测试。
+        if accounts is not None and not config_ref:
+            raise ValueError("An account-backed Telegram channel needs its Bot ref")
         self._token = token
         self.name = name
+        # The Bot's plugin-private reference, keying its record and caches.
         self._config_ref = config_ref
         # Role that owns this Bot's account; saved with the Bot's config entry.
         self._role_id = role_id
         self._accounts = accounts
         self._account_id: str | None = None
         self._known_store = known_store
+        # Background refresh of the Bot's profile photo after each connect.
+        self._avatar_task: asyncio.Task[None] | None = None
         self._online = False
         self._bot_username = ""
         # The manifest's session types, for answering ``/chatid``.
@@ -263,7 +269,30 @@ class TelegramChannel(
             raise
         self._online = True
         self._report_account("online")
+        if self._accounts is not None:
+            self._avatar_task = asyncio.create_task(
+                self._refresh_avatar(), name=f"telegram-avatar-{self._config_ref}"
+            )
         logger.info(f"TelegramChannel 已启动  已知用户: {len(self.user_map)}")
+
+    async def _refresh_avatar(self) -> None:
+        """Stores and registers the Bot's photo; a failed fetch keeps the old one."""
+        accounts = self._accounts
+        if accounts is None:
+            return
+        bot_id = bot_account_id(self._token)
+        avatar = await fetch_bot_avatar(self._app.bot, int(bot_id))
+        if avatar is None:
+            return
+        if self._known_store is not None:
+            self._known_store.set(avatar_key(self._config_ref), avatar)
+        accounts.register(
+            platform="telegram",
+            platform_account_id=bot_id,
+            config_ref=self._config_ref,
+            role_id=self._role_id,
+            avatar_url=avatar,
+        )
 
     def _report_account(self, connection: ConnectionState, error: str = "") -> None:
         if self._accounts is not None and self._account_id is not None:
@@ -271,7 +300,7 @@ class TelegramChannel(
                 self._account_id,
                 connection=connection,
                 capabilities=frozenset(
-                    {"known_conversations", "member_lookup", "target_send"}
+                    {"known_conversations", "member_lookup", "target_send", "groups"}
                 ),
                 error=error,
             )
@@ -350,14 +379,6 @@ class TelegramChannel(
             self._online = False
             self._report_account("offline")
 
-    async def retire(self) -> None:
-        """Stops a deleted Bot for good: later stops neither report nor persist."""
-        try:
-            await self.stop()
-        finally:
-            self._accounts = None
-            self._known_store = None
-
     def _remember_chat(self, chat: object, user: object, message: object) -> None:
         """Record an observed conversation without retaining message or member data."""
         if self._known_store is None:
@@ -405,6 +426,10 @@ class TelegramChannel(
             self._push_tool.unregister_channel(self.name, text=self.send)
 
     async def _stop_connection(self) -> None:
+        if self._avatar_task is not None:
+            self._avatar_task.cancel()
+            await asyncio.gather(self._avatar_task, return_exceptions=True)
+            self._avatar_task = None
         if self._polling_conflict_task and not self._polling_conflict_task.done():
             await self._polling_conflict_task
         if self._live_tasks:

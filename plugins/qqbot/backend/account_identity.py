@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from core.accounts import stored_response_rules
+
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
@@ -22,13 +24,25 @@ class QQBotAccountIdentity:
         self._pending_identity: dict[str, tuple[str, str]] = {}
         self._handoffs: set[str] = set()
         for row in store.list():
+            role_id = row.get("role_id") or None
+            if role_id is not None and not ctx.accounts.role_exists(role_id):
+                # Deleted while this plugin was not loaded: purge the orphan.
+                store.remove(row["app_id"])
+                continue
+            try:
+                rules = stored_response_rules(row.get("response_rules"))
+            except ValueError as exc:
+                ctx.accounts.reject(f"app:{row['app_id']}", str(exc))
+                continue
             # A stored application the host refuses is reported, not served.
-            snapshot = ctx.accounts.register_configured(
+            snapshot = ctx.accounts.register_saved(
                 platform="qqbot",
                 platform_account_id=row["app_id"],
                 config_ref=f"app:{row['app_id']}",
-                role_id=row.get("role_id"),
+                role_id=role_id,
                 display_name=row.get("bot_name") or None,
+                avatar_url=row.get("avatar", ""),
+                response_rules=rules,
             )
             if snapshot is not None:
                 self._account_ids[row["app_id"]] = snapshot.record.id
@@ -42,16 +56,30 @@ class QQBotAccountIdentity:
             config_ref=f"app:{app_id}",
             role_id=row["role_id"],
             display_name=name or row.get("bot_name") or None,
+            avatar_url=row.get("avatar"),
         )
         self._account_ids[app_id] = snapshot.record.id
         return snapshot.record.id
+
+    def update_avatar(self, app_id: str, avatar: str) -> None:
+        """Stores a freshly fetched avatar with the application and re-registers it.
+
+        Ignored for an application deleted (or never saved) while fetching.
+        """
+        if app_id not in self._account_ids:
+            return
+        row = next((row for row in self._store.list() if row["app_id"] == app_id), None)
+        if row is None or row.get("avatar", "") == avatar:
+            return
+        row = {**row, "avatar": avatar}
+        self._store.save(row)
+        self.register(row)
 
     def check_owner(self, app_id: str, role_id: str) -> None:
         """Raises unless ``role_id`` may own this application's account."""
         self._ctx.accounts.check_owner(
             config_ref=f"app:{app_id}",
             role_id=role_id,
-            platform="qqbot",
             platform_account_id=app_id,
         )
 

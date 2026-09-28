@@ -1,6 +1,8 @@
 import type React from "react";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { ChatSurface } from "../chat/ChatSurface";
+import { roleDeletionDescription } from "../accounts/accountPresentation";
+import { useRoleDeletionAccounts } from "../accounts/useRoleDeletionAccounts";
 import type { ChatMessageNavigationScroller } from "../chat/useChatScrollController";
 import { guardedNavPageSelect } from "../plugins/pluginUiRegistry";
 import { BridgeOfflineBanner } from "./BridgeOfflineBanner";
@@ -18,7 +20,7 @@ import { previewFromSessionMessages } from "../roles/roleChatPreview";
 import { usePluginUiVisibility } from "./usePluginUiVisibility";
 import { SettingsPage } from "../settings/SettingsPage";
 import { type SettingsSectionId } from "../settings/SettingsSidebar";
-import { cx, sidebarTrackMotionClass } from "../shared/styles";
+import { cx, ghostButtonClass, sidebarTrackMotionClass } from "../shared/styles";
 import { buildNavRailViews, NavRail, pluginNavRailViewId, type NavRailViewId } from "../shell/NavRail";
 import { useGlobalShortcuts } from "../shell/useGlobalShortcuts";
 import type {
@@ -330,6 +332,7 @@ export function DesktopAppFrame({
   // Visibility (hiding a disabled plugin's entries immediately, issue #174 AC 3)
   // is centralized in usePluginUiVisibility so it isn't recomputed per call site.
   const { pluginNavPages, settingsSidebarSections, isSectionVisible, resolveVisibleNavPage, isPluginEnabled } = usePluginUiVisibility();
+  const deletedAccounts = useRoleDeletionAccounts(pendingDeleteRole?.id ?? null);
   const activePluginNavPage = mainView.kind === "plugin-page"
     ? resolveVisibleNavPage(mainView.pageId)
     : undefined;
@@ -600,12 +603,16 @@ export function DesktopAppFrame({
         open={Boolean(pendingDeleteRole)}
         title="确认删除角色"
         persona={confirmPersonaLines.deleteRole}
-        description={pendingDeleteRole ? `“${pendingDeleteRole.name}” 删除后会移除角色会话与相关素材。` : ""}
+        description={pendingDeleteRole ? roleDeletionDescription(pendingDeleteRole.name, deletedAccounts) : ""}
         confirmLabel="确认删除"
         busy={deletingRole}
+        confirmDisabled={deletedAccounts.status !== "ready"}
+        error={deletedAccounts.status === "error" ? deletedAccounts.error : ""}
         onClose={onCloseDeleteDialog}
         onConfirm={onConfirmDeleteRole}
-      />
+      >
+        {deletedAccounts.status === "error" ? <button type="button" className={ghostButtonClass} onClick={deletedAccounts.retry}>重新读取账号</button> : null}
+      </ConfirmDialog>
       <ConfirmDialog
         open={leaveConfirmOpen}
         title="放弃未保存的修改？"

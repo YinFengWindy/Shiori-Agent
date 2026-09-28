@@ -39,7 +39,6 @@ export type RoleRecord = {
     character?: { profile?: string; personality?: string; behavior_rules?: string };
   };
   runtime_config: Record<string, unknown>;
-  channel_bindings?: RoleChannelBinding[];
   proactive?: RoleProactiveConfig;
   avatar: string | null;
   avatar_abs: string | null;
@@ -75,18 +74,10 @@ export type RoleAssetCategory = {
   allow_role_send: boolean;
 };
 
-/** Session type of a channel binding, chosen when binding; the desktop session is private. */
+/** Session type a channel declares; the desktop session is private. */
 export type RoleChatType = "private" | "group";
 
-export type RoleChannelBinding = {
-  channel: string;
-  chat_id: string;
-  chat_type: RoleChatType;
-  /** Group members whose messages the role ignores; always empty for private and desktop bindings. */
-  blocked_senders: string[];
-};
-
-/** A bound session that may receive proactive messages, referencing its binding by channel and chat id. */
+/** A session that may receive proactive messages, by channel and chat id. */
 export type RoleProactiveCandidate = {
   channel: string;
   chat_id: string;

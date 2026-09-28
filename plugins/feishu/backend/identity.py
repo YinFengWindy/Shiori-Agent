@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import httpx
 
-from agent.config import resolve_config_references
-
 from .api import FeishuApi
-from .config import FeishuAppConfig, UNRESOLVED_ENV_RE
+from .config import FeishuAppConfig
 
 
 async def verify_app(
     app: FeishuAppConfig, *, transport: httpx.AsyncBaseTransport | None = None
 ) -> dict[str, str]:
     """Authenticates a draft without replacing a live account connection."""
-    secret = str(resolve_config_references(app.app_secret))
-    if not app.app_id or not secret or UNRESOLVED_ENV_RE.fullmatch(secret):
+    secret = app.resolved_secret()
+    if not secret:
         raise ValueError("App ID 和 App Secret 必须有效")
     api = FeishuApi(app.app_id, secret, app.base_url, transport=transport)
     api.open()

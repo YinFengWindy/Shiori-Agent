@@ -32,6 +32,9 @@ describe("plugin host UI (runtime API 2.4.0)", () => {
   it("is what the host services hand to plugins", () => {
     assert.equal(desktopPluginHostServices.ui.InlineError, HostInlineError);
     assert.equal(desktopPluginHostServices.ui.ConfirmDialog, HostConfirmDialog);
+    // The shared account detail pieces every channel's account.detail renders.
+    assert.deepEqual(Object.keys(desktopPluginHostServices.ui).sort(),
+      ["AccountDetailActions", "AccountStatusCard", "ConfirmDialog", "InlineError", "Reveal"]);
   });
 
   it("gives plugins the host inline error: plain by default, generic on true, the scene's line on a key", async () => {
