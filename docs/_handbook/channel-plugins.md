@@ -31,67 +31,36 @@ display_name: Demo Chat
 version: '0.1.0'
 desc: Demo Chat 渠道
 capabilities:
-  - config
   - channels
-config_model: DemoChatConfigModel
+  - accounts
+  - kv
+  - rpc
 channels:
-  - name: demo_chat                 # 渠道名：角色绑定与会话线程的数据键
-    label: Demo Chat                # 绑定面板和消息来源里显示的名字
-    contact_label: 用户 ID           # 可选，群聊绑定黑名单里成员 ID 的说明
+  - name: demo_chat                 # 渠道名：会话线程与账号路由的数据键
+    label: Demo Chat                # 账号面板和消息来源里显示的名字
+    contact_label: 用户 ID           # 可选，群聊响应规则里成员 ID 的说明
     chat_types:                     # 必填，渠道支持的会话类型
       - type: private               # private / group
         label: 私聊                  # 类型下拉里的名字
-        chat_id_label: 用户 ID       # 号码输入框的标签
-        chat_id_hint: 对方的用户 ID   # 可选，号码输入框的占位提示
+        chat_id_label: 用户 ID       # 会话标识的标签
+        chat_id_hint: 对方的用户 ID   # 可选，会话标识的提示
         prefix: 'dm:'               # 可选，拼在号码前组成存储的 chat_id
 ```
 
-- 插件 id 建议与渠道名相同。渠道名写进 `roles.json` 的绑定和会话线程，**发布后不能改名**，否则历史绑定和线程都会变成孤儿。
-- 声明是静态的：插件停用、未授信或还没填凭据时，桌面端也能通过 `channels.list` 列出这个渠道并标注状态，用户可以先绑定再填凭据。
-- `chat_types` 必须声明（Runtime API 2.5，规则见[运行时契约](plugin-runtime-contract.md#runtime-api-22-channel-declarations)），缺失时宿主拒绝整个 manifest：绑定面板让用户先选类型再填号码，按类型的 `prefix` 拼出存储的 `chat_id`，保存时宿主校验两者一致。
+- 插件 id 建议与渠道名相同。渠道名写进会话线程，账号 ID 为 `<插件 id>:<平台账号>`；**发布后不能改名**，否则历史账号和线程无法定位。
+- 声明是静态的：插件停用、未授信或还没有账号时，桌面端也能通过 `channels.list` 列出这个渠道并标注状态。插件加载后再从自己的存储恢复账号。
+- `chat_types` 必须声明（Runtime API 2.5，规则见[运行时契约](plugin-runtime-contract.md#runtime-api-22-channel-declarations)），缺失时宿主拒绝整个 manifest；按类型的 `prefix` 拼出存储的 `chat_id`。
 - `ctx.channels.add()` 只接受本 manifest 声明过的名字；两个插件声明同一个名字会同时变成 `CONFLICT`。规则细节见 [渠道声明](plugins-tutorial.md#渠道声明)。
 
-## 2. 配置模型与自动表单
+## 2. 账号存储与连接
 
-```python
-# backend/plugin.py
-import re
-from pydantic import BaseModel, Field, field_validator
+渠道插件保存每个账号的身份、所属角色、响应规则和凭据。宿主只保留已加载账号的内存索引；`[plugins.<id>]` 只用于插件启停及与账号无关的插件设置。现有实现可对照 `plugins/telegram/backend/bots.py`、`plugins/qq/backend/accounts_runtime.py`、`plugins/qqbot/backend/accounts.py` 和 `plugins/feishu/backend/plugin.py`。
 
-_UNRESOLVED_ENV_RE = re.compile(r"^\$\{\w+\}$")
-
-
-class DemoChatConfigModel(BaseModel):
-    """``[plugins.demo_chat]``：凭据明文存 TOML，支持 ``${ENV}``。"""
-
-    app_id: str = Field(default="", title="App ID", description="开发者后台的应用 ID")
-    app_secret: str = Field(
-        default="", title="App Secret", description="支持 ${ENV} 引用环境变量"
-    )
-
-    @field_validator("app_id", "app_secret", mode="before")
-    @classmethod
-    def _normalize_credential(cls, value: object) -> str:
-        # 宿主已展开 ${ENV}；仍是占位符说明变量缺失，按未配置处理。
-        text = str(value or "").strip()
-        return "" if _UNRESOLVED_ENV_RE.fullmatch(text) else text
-
-
-async def setup(ctx):
-    """凭据齐备时贡献渠道；凭据不全直接 return，渠道显示为「未配置」。"""
-    config = DemoChatConfigModel.model_validate(ctx.config.as_dict())
-    if not config.app_id or not config.app_secret:
-        return
-    from .channel import DemoChatChannel  # 有凭据才导入 SDK，降低未启用时的启动开销
-
-    ctx.channels.add(DemoChatChannel(config.app_id, config.app_secret))
-```
-
-- 声明了 `config_model` 的插件自动在「设置 › 插件」下得到一个表单子标签，不必写 `ui/index.tsx`。字段的 `title` 是标签，`description` 是提示。
-- **密码框按字段名判断**：字符串字段名（不区分大小写）含 `secret`、`token` 或 `password` 时渲染为可切换显示的密码框（`apps/desktop/renderer/src/plugins/jsonSchemaForm.ts`）。所以凭据字段应命名为 `app_secret`、`token`、`ws_token` 这类名字，而不是 `key`。
-- **`${ENV}`**：宿主读取 `[plugins.<id>]` 时展开 `${VAR}`，环境变量不存在时再尝试工作区 `memory/<VAR>` 文件；都没有时占位符原样传给插件。插件应把未展开的占位符当作未配置（上面的 validator），不要拿它去连服务。写回 TOML 时占位符保持原样，密钥不会被展开后落盘。
-- `enabled` 由宿主拥有，不要放进模型。其它字段的合法性在 `setup` 里用 `model_validate` 校验，校验失败由内核回滚为 `FAILED`。
-- 密钥明文存在 `config.toml`（或经 `${ENV}` 引用），目前没有 keyring 集成。
+- `setup` 始终贡献 manifest 声明的渠道。多账号渠道可用 `AccountChannelGroup` 管理账号连接，新增或断开账号不需要重载运行时。
+- 插件从 `ctx.kv` 或自己的工作区存储读取账号；恢复时先用 `ctx.accounts.role_exists(role_id)` 清理所属角色已删除的账号，再用 `register_saved(...)` 登记。读取失败或无效数据用 `reject(...)` 报告，不影响其它账号。
+- 新增账号前校验平台身份，并用 `ctx.accounts.check_owner(...)` 检查角色与账号归属；插件保存数据后用 `register(...)` 登记，再按连接状态调用 `report(...)`。账号 ID 由宿主生成，格式为 `<插件 id>:<平台账号>`。
+- 登记 `on_delete(...)`，提供断开连接与清除插件存储的计划；角色删除时宿主也会调用它。登记 `on_rules_change(...)`，把宿主编辑的响应规则写回同一份账号记录。账号创建、编辑和连接通过插件 RPC 与角色页中的账号界面协作。
+- 若插件还有不属于某个账号的全局设置，可单独声明 `config_model`，由「设置 › 插件」的自动表单编辑；账号凭据不放在该模型或 `config.toml` 中。
 
 ## 3. 渠道对象契约
 
@@ -118,24 +87,24 @@ class DemoChatChannel:
 - **入站闸门**：换代期间宿主先 `pause_intake()`，新连接以 `ctx.intake_paused=True` 启动，发布后再 `resume_intake()`。用 `infra.channels.intake.ChannelIntake` 实现即可：它在暂停时缓冲入站消息，溢出或关闭时回复「渠道配置正在切换」提示，`stop` 时调用 `close()` 排空。
 - **`stop` 的顺序**：先切断新工作的来源（暂停入站、退订事件、断开连接），再取消或等待在途任务，最后注销出站与推送注册。
 
-`ChannelContext` 提供本代的宿主服务：`bus`（消息总线）、`session_manager`、`event_bus`、`push_tool`（`message_push` 工具）、`attachment_store`（入站媒体落盘）、`http_resources`、`interrupt_controller`（`/stop`）、`bot_commands`、`log`、`channel_hub`（角色绑定与路由）、`intake_paused`。
+`ChannelContext` 提供本代的宿主服务：`bus`（消息总线）、`session_manager`、`event_bus`、`push_tool`（`message_push` 工具）、`attachment_store`（入站媒体落盘）、`http_resources`、`interrupt_controller`（`/stop`）、`bot_commands`、`log`、`channel_hub`（账号准入与路由）、`intake_paused`。
 
 ## 4. 入站、会话键与 chat_id 约定
 
 一条入站消息的标准处理顺序（飞书 `_handle_message` / `_accept_inbound`）：
 
 1. 解析平台事件，按平台消息 id 去重（重投很常见，`infra.channels.base.MessageDeduper` 或自带的过期集合）。
-2. 构造 `InboundMessage(channel=self.name, sender=<平台用户 id>, chat_id=<会话 id>, content=..., media=[本地路径], metadata={...})`。`metadata` 至少带 `message_id` / `external_message_id`（宿主用它在线程里去重），能确定时带 `chat_type`。
+2. 构造 `InboundMessage(channel=self.name, sender=<平台用户 id>, chat_id=<会话 id>, content=..., media=[本地路径], metadata={...})`。`metadata` 必须带已登记的 `account_id`，并带 `message_id` / `external_message_id`（宿主用它在线程里去重）；能确定时带 `chat_type`、`mentioned` 和发送者别名 `username`。
 3. 交给 `ChannelIntake.submit()`；真正接收时：
-   - `ctx.channel_hub.is_sender_allowed(channel=, chat_id=, sender_id=)` 为假就丢弃。未绑定的会话一律拒绝，可以把 `chat_id` / 用户 id 写进日志或 `status()`，方便用户复制去绑定。
-   - `message = ctx.channel_hub.route_inbound(message)`：映射到绑定角色的会话，补上 `role_id`、`thread_id`、`session_key_override` 等元数据；`chat_type` 缺省时取渠道的 `default_chat_type`。
+   - `ctx.channel_hub.is_sender_allowed(channel=, chat_id=, sender_id=, account_id=)` 为假就丢弃。只有已登记、在线且所属角色存在的接收账号能处理消息。
+   - `message = ctx.channel_hub.route_account_inbound(message)`：按该账号的私聊/群聊开关、需要 @、黑名单与按群规则准入；返回 `None` 就丢弃，否则补上 `role_id`、`thread_id`、`session_key_override` 等元数据。
    - `metadata["conversation_duplicate"]` 为真时丢弃，否则 `await ctx.bus.publish_inbound(message)`。
 
 约定：
 
-- **chat_id 是渠道本地的会话标识**，也是用户在角色绑定里填的值，必须稳定、可从平台界面或状态信息里拿到。一个渠道有多种会话类型时用前缀区分，例如 QQBot 的 `c2c:<openid>` / `group:<openid>`、QQ（NapCat）群聊的 `gqq:<群号>`。
-- **访问控制只在角色绑定上**，插件不要自己维护发送者白名单。私聊绑定的对方即会话本身；群聊绑定放行所有成员，只忽略黑名单（`blocked_senders`）里的发送者 id。`is_sender_allowed` 支持可选的 `sender_alias`（如 Telegram 用户名），黑名单条目可以写成别名、忽略大小写匹配。`/stop` 这类控制命令也应先过 `is_sender_allowed`。唯一刻意的例外是 `/chatid`（别名 `/myid`）：每个渠道插件在入站处理里自己识别它（`core.common.channel_chat_types.is_chat_id_command`），未绑定的会话也回复会话类型与绑定面板要填的号码（`chat_id_command_reply`，类型声明取自 `ctx.manifest.channel_chat_types(<渠道>)`），只有已绑定会话黑名单里的发送者（`channel_hub.is_sender_blocked`）不回复；它不进入角色对话。平台特有的群聊过滤（如 QQ 群必须 @ 机器人）仍由插件负责。
-- **会话键**：绑定后的消息用角色会话 `role:<role_id>`（`route_inbound` 写进 `session_key_override`），未经路由时退回 `<channel>:<chat_id>`。出站处理和流式状态统一用 `infra.channels.session_key.resolve_outbound_session_key(msg, default_channel=self.name)` 计算，与 `TurnStarted` / `StreamDeltaReady` 的 `session_key` 对齐。`/stop` 这类控制命令用 `channel_hub.resolve_runtime_session_key(channel, chat_id)` 找到角色会话，再交给 `interrupt_controller.request_interrupt(...)`。
+- **chat_id 是渠道本地的会话标识**，必须稳定。一个渠道有多种会话类型时用前缀区分，例如 QQBot 的 `c2c:<openid>` / `group:<openid>`、QQ（NapCat）群聊的 `gqq:<群号>`。
+- **访问控制由接收账号的响应规则决定**。插件将规则与账号一起保存，入站时交给 `ChannelHub` 判断；黑名单支持发送者 ID 与忽略大小写的渠道别名（如 Telegram 用户名）。`/stop` 等控制命令走同一账号准入。`/chatid`（别名 `/myid`）由渠道插件自己识别并回复会话类型与号码，不进入角色对话。
+- **会话键**：准入后的消息用所属角色的 `role:<role_id>`（路由写进 `session_key_override`）。出站处理和流式状态统一用 `infra.channels.session_key.resolve_outbound_session_key(msg, default_channel=self.name)` 计算，与 `TurnStarted` / `StreamDeltaReady` 的 `session_key` 对齐。
 - 用户引用了一条历史消息时，用 `infra.channels.reply_context.build_inbound_text_with_reply_context()` 拼进正文，保持各渠道的格式一致。
 
 ## 5. 出站与 `message_push`
@@ -168,7 +137,7 @@ async def stop(self):
 - `system_prompt_hint(chat_id)`：只写渲染限制和渠道身份这类硬规则（例如 Telegram 禁止 Markdown 表格、QQBot 提醒主动推送用 `channel=qqbot`），保持简短，它每轮都会进系统提示词。
 - `default_chat_type`：只支持私聊的渠道写 `"private"`，入站没带 `chat_type` 时由路由补上。
 - `uses_bot_commands = True`：只有在 `start` 里读取 `ctx.bot_commands`（如注册 Telegram 命令菜单）的渠道才声明；宿主会把命令列表并入复用键，其它插件增减命令时它才会重连。
-- `status()`：返回 `{"connected": bool, "account": str, "detail": str}`（后两项可省略），`channels.list` 原样带给桌面端。适合放机器人名称、断线原因、最近一个被拒绝的未绑定会话。`status()` 抛错时渠道显示为 `failed`。
+- `status()`：返回 `{"connected": bool, "account": str, "detail": str}`（后两项可省略），`channels.list` 原样带给桌面端。适合放机器人名称、断线原因或账号连接状态。`status()` 抛错时渠道显示为 `failed`。
 
 这些钩子和 `description` 参数属于 Runtime API 2.3；外部包要声明 `runtime_api: ">=2.3.0 <3.0.0"`。
 
@@ -198,8 +167,8 @@ async def stop(self):
 
 测试放在 `plugins/<id>/tests/`，文件与 `backend/` 模块对应，全程不联网：
 
-- **配置与 setup**：用 `shiori_plugin_testkit.packages.stage_plugin_package` 把包暂存到临时目录，交给 `PluginKernel([root], services=HostServices(event_bus=EventBus(), plugin_configs={...}))`，断言无凭据时 `kernel.channels == []`、有凭据时贡献了一个同名渠道、`${ENV}` 占位符算未配置、`model_json_schema()` 的字段名能渲染成密码框（参考 `plugins/telegram/tests/test_plugin.py`）。
-- **渠道行为**：平台 REST 用 `httpx.MockTransport` 替代，长连接用假连接；`ChannelContext` 直接构造，`channel_hub`、`push_tool` 可用简单替身（参考 `plugins/feishu/tests/conftest.py`）。至少覆盖：未绑定会话被拒绝、入站去重、`pause_intake` 期间缓冲、`stop` 对未启动实例安全、流式收尾与失败回退。
+- **账号与 setup**：用 `shiori_plugin_testkit.packages.stage_plugin_package` 把包暂存到临时目录，交给 `PluginKernel`；断言渠道声明保持可见、插件能从自己的存储恢复账号、清理已删除角色的账号，并将无效账号单独报告（参考 `plugins/telegram/tests/test_plugin.py`）。
+- **渠道行为**：平台 REST 用 `httpx.MockTransport` 替代，长连接用假连接；`ChannelContext` 直接构造，`channel_hub`、`push_tool` 可用简单替身（参考 `plugins/feishu/tests/conftest.py`）。至少覆盖：未登记、离线或无所属角色的接收账号被拒绝，响应规则准入、入站去重、`pause_intake` 期间缓冲、`stop` 对未启动实例安全、流式收尾与失败回退。
 - **真实运行时**：testkit 的 `plugin_runtime` fixture 启动隔离的 `AppRuntime` 和桌面服务，可用于验证设置保存、热换代。
 - `pyproject.toml` 声明 `test = ["shiori-plugin-testkit==0.1.0"]` extra 和 pytest 配置（`-W error`、`asyncio_mode = "auto"`），`TESTING.md` 写明仓库外运行方式和真机验收清单。
 
@@ -213,11 +182,11 @@ uv run python scripts/verify_plugin_tests.py --plugins <id>
 
 ## 10. 检查清单
 
-- [ ] manifest 声明 `channels` 能力和渠道，渠道名与插件 id 一致且今后不改。
-- [ ] 凭据不全时 `setup` 直接 return；凭据字段名能触发密码框；`${ENV}` 占位符按未配置处理。
+- [ ] manifest 声明 `channels`、`accounts` 能力和渠道，渠道名与插件 id 一致且今后不改。
+- [ ] 凭据和响应规则只存于插件账号记录；恢复时清理已删除角色的账号，缺少凭据的账号独立报告连接状态。
 - [ ] 构造函数不产生流量；`configuration_key` 覆盖全部连接设置。
 - [ ] `start`/`stop` 可重复调用；`stop` 先断来源再排空任务；出站和推送注册在 `stop` 里撤销。
-- [ ] 入站经 `is_sender_allowed` → `route_inbound` → 去重 → `publish_inbound`；用 `ChannelIntake` 处理换代暂停。
+- [ ] 入站带已登记的 `account_id`，经 `is_sender_allowed(..., account_id=...)` → `route_account_inbound` → 去重 → `publish_inbound`；用 `ChannelIntake` 处理换代暂停。
 - [ ] 开了流式就消费事件并在最终回复时收尾；失败时退回普通发送。
 - [ ] `register_channel(..., description=)` 写清 chat_id 格式。
 - [ ] 测试离线，`verify_plugin_tests.py --plugins <id>` 通过。

@@ -112,22 +112,21 @@ async def setup(ctx):
 贡献外部聊天渠道的插件要在 manifest 里静态声明渠道，并同时声明 `channels` 能力（Runtime API 2.2）：
 
 ```yaml
-capabilities: [config, channels]
-config_model: QQBotConfigModel
+capabilities: [channels, accounts, kv, rpc]
 channels:
   - name: qqbot                      # 必填，渠道名
     label: QQBot                     # 必填，显示名
     chat_types:                      # 必填，渠道支持的会话类型
       - type: private                # private / group
         label: 私聊
-        chat_id_label: 用户 OpenID    # 号码输入框的标签
+        chat_id_label: 用户 OpenID    # 会话标识的标签
         chat_id_hint: 对方的用户 OpenID # 可选
         prefix: 'c2c:'               # 可选，拼在号码前组成存储的 chat_id
 ```
 
-- 渠道名是角色绑定、会话线程和消息引用的数据键，发布后不要改名。它必须是小写标识（`[a-z][a-z0-9_-]{0,63}`），`desktop` 由宿主保留。
-- 声明是静态的：插件停用、未信任或还没填凭据时，桌面端也能经 `channels.list` 列出这个渠道。所以凭据不全时 `setup` 可以直接 return，不贡献渠道。
-- `chat_types` 必填（Runtime API 2.5），声明渠道的会话类型（`private` / `group`，各带标签、号码标签与提示、可选内部前缀），缺失时宿主拒绝 manifest。绑定面板按类型拼接前缀，保存绑定时宿主按声明校验会话 ID。
+- 渠道名是会话线程和消息引用的数据键，发布后不要改名。账号 ID 采用 `<插件 id>:<平台账号>`；渠道名必须是小写标识（`[a-z][a-z0-9_-]{0,63}`），`desktop` 由宿主保留。
+- 声明是静态的：插件停用、未信任或还没有账号时，桌面端也能经 `channels.list` 列出这个渠道。账号插件应始终贡献渠道，并从插件自己的存储恢复账号；凭据缺失只影响对应账号的连接状态。
+- `chat_types` 必填（Runtime API 2.5），声明渠道的会话类型（`private` / `group`，各带标签、号码标签与提示、可选内部前缀），缺失时宿主拒绝 manifest。渠道插件用它标注会话类型，并为 `/chatid` 等命令生成可识别的会话标识。
 - `ctx.channels.add(channel)` 只接受本 manifest 声明过的 `channel.name`，否则 setup 失败，插件回滚为 `FAILED`，诊断码 `undeclared_channel`。
 - 两个插件声明同一个渠道名时，两者都是 `CONFLICT`（诊断码 `duplicate_channel`），都不会激活。
 - 渠道的启停和换代由宿主的 ChannelHost 管理，不要用 `background` 自己起连接任务。跨代复用连接时，渠道提供 `configuration_key`，它变化就重建连接；声明了 `uses_bot_commands = True` 的渠道，宿主还会连同 bot 命令列表一起比较。
@@ -225,7 +224,7 @@ const exampleUi: PluginUiModule = {
 export default exampleUi;
 ```
 
-`settings.section` 不再是设置侧栏的顶层条目：它注册为内建「插件」区块下的一个子页面。设置 › 插件的列表按 manifest 的 `category` 分成功能、渠道、系统组件三组，有设置页的插件在所在行显示「设置」按钮，点开进入它的设置页（页头带返回），不再作为「已安装」旁的子标签；侧栏始终只有模型/记忆/语音/外观/高级/插件/关于七项（「频道」已随渠道插件化移除，#363）。深链 `openSettingsWorkspace("plugins", { subsectionId: pluginId })` 直接打开该插件的设置页。manifest 声明了 `config_model` 的插件（如 qqbot）无需手写 `ui/index.tsx` 就能自动获得一个 schema 表单设置页，页标题取自后端 `plugins.list` 的回退链：manifest 的 `display_name` → 插件记录名（未声明 `display_name` 时即插件目录名）→ `id`，所以请在 manifest 里写出 `display_name`。只有需要自定义表单组件、或额外贡献 `navPage`/`roleAssets` 等插槽时才需要手写（如 novelai——它的手写 `settingsSection` 会优先于自动注册，不会重复出现两个子标签）。已使用的插槽还包括 `nav.page`（story）、`role.assets`（desktop_pet）。角色设置与聊天图片动作也有独立贡献契约。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
+`settings.section` 不再是设置侧栏的顶层条目：它注册为内建「插件」区块下的一个子页面。设置 › 插件的列表按 manifest 的 `category` 分成功能、渠道、系统组件三组，有设置页的插件在所在行显示「设置」按钮，点开进入它的设置页（页头带返回），不再作为「已安装」旁的子标签；侧栏始终只有模型/记忆/语音/外观/高级/插件/关于七项（「频道」已随渠道插件化移除，#363）。深链 `openSettingsWorkspace("plugins", { subsectionId: pluginId })` 直接打开该插件的设置页。manifest 声明了 `config_model` 的插件无需手写 `ui/index.tsx` 就能自动获得一个 schema 表单设置页，页标题取自后端 `plugins.list` 的回退链：manifest 的 `display_name` → 插件记录名（未声明 `display_name` 时即插件目录名）→ `id`，所以请在 manifest 里写出 `display_name`。账号插件的凭据与响应规则在角色页编辑，保存在插件自己的账号存储，不放在自动配置表单里。只有需要自定义表单组件、或额外贡献 `navPage`/`roleAssets` 等插槽时才需要手写（如 novelai——它的手写 `settingsSection` 会优先于自动注册，不会重复出现两个子标签）。已使用的插槽还包括 `nav.page`（story）、`role.assets`（desktop_pet）。角色设置与聊天图片动作也有独立贡献契约。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
 
 Runtime API **2.4.0** 起，绑定的组件（`navPage` 及其侧栏、自定义 `settingsSection`、`roleAssets`）除了 `client` 还会收到 `host`（即宿主服务，内置插件也可以继续用 `usePluginHostServices()`）。其中三项是宿主的呈现：`host.feedback.error("加载失败", { detail, persona: true })` 把提示放进宿主唯一的提示队列；`<host.ui.InlineError persona message={error} actions={…} />` 是宿主的页面内报错块（`layout` 可选 `row` / `strip` / `card`）；`<host.ui.ConfirmDialog persona="destructive" … />` 是宿主的确认弹窗（参数与宿主自己的一致）。`persona` 默认 `false`；传 `true`（或 `"generic"`）让看板娘吟风用该处的通用台词出面（报错 / 警告带一句，成功 / 普通提示只露脸），传场景键（`not_configured` / `unauthorized` / `quota` / `network` / `upstream` / `destructive` / `discard` / `confirm`）用宿主为该场景写好的台词。台词永远由宿主写，插件只能选场景；用户在 设置 › 外观 关掉「看板娘」后，一律回到不带她的样式。用到 `host` 的包声明 `runtime_api: ">=2.4.0 <3.0.0"`。细节见[运行时契约](plugin-runtime-contract.md#runtime-api-24-host-feedback-and-inline-errors)，NovelAI 生图的失败卡片和报错提示就是这样接的。
 
