@@ -43,16 +43,19 @@ function migratedValues(values: Record<string, unknown>, accounts: FeishuApp[]) 
 
 /**
  * Builds one atomic config update and clears migrated single-app fields. A new
- * app belongs to `app.role_id`, the role saving it; a saved app keeps its owner.
+ * app belongs to `app.role_id`, the role saving it. A saved app is only ever
+ * changed for its own role; one saved without an owner is never taken over.
  */
 export function withSavedApp(values: Record<string, unknown>, app: FeishuApp): Record<string, unknown> {
   const apps = configuredApps(values);
   const ref = `${app.domain}:${app.app_id}`;
   const index = apps.findIndex((item) => `${item.domain}:${item.app_id}` === ref);
+  if (index >= 0 && apps[index].role_id !== app.role_id) {
+    throw new Error(apps[index].role_id ? "这个飞书应用已属于另一个角色" : "这个飞书应用是未归属的旧数据，请先手动清理");
+  }
   const updated = [...apps];
-  const owner = (index < 0 ? undefined : apps[index].role_id) || app.role_id;
   const connected = {
-    ...app, ...(owner ? { role_id: owner } : {}),
+    ...app,
     connection_enabled: true, connection_revision: (index < 0 ? 0 : apps[index].connection_revision ?? 0) + 1,
   };
   if (index < 0) updated.push(connected);

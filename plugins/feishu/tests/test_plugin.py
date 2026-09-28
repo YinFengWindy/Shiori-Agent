@@ -51,9 +51,10 @@ async def test_shared_account_rpc_uses_selected_private_application() -> None:
             register=lambda name, handler, **kwargs: handlers.__setitem__(name, handler)
         ),
         accounts=SimpleNamespace(
-            register=lambda **kwargs: SimpleNamespace(
+            register_configured=lambda **kwargs: SimpleNamespace(
                 record=SimpleNamespace(id="account-a")
             ),
+            read_config_accounts=lambda reader: None,
             report=lambda *args, **kwargs: None,
             on_delete=lambda handler: None,
         ),
@@ -349,7 +350,19 @@ async def test_config_save_cannot_give_one_role_a_second_application(
 
         rejected = await save("mira", "second-for-mira")
         assert rejected.error is not None
+        assert rejected.error.code == "plugin_account_refused"
         assert "cli_new" not in path.read_text(encoding="utf-8")
+        # An app's owner is fixed: another role cannot take it over by a write.
+        moved = await plugin_bridge_request(
+            service,
+            "plugin.config.set",
+            {
+                "plugin_id": "feishu",
+                "operation_id": "move-to-other",
+                "values": {"accounts": [{**old, "role_id": "other"}]},
+            },
+        )
+        assert moved.error is not None and "不能更改" in moved.error.message
         accepted = await save("other", "first-for-other")
         assert accepted.error is None, accepted.error
         rows = (await plugin_bridge_request(service, "accounts.list")).payload[
@@ -360,6 +373,32 @@ async def test_config_save_cannot_give_one_role_a_second_application(
             "feishu:cli_new": "other",
         }
         assert before["id"] in {row["id"] for row in rows}
+
+
+@pytest.mark.asyncio
+async def test_one_unusable_app_is_reported_while_the_others_still_run(
+    plugin_runtime, tmp_path
+) -> None:
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
+    initial = (
+        '\n[plugins.feishu]\napp_id = "cli_old"\napp_secret = "old"\n'
+        '[[plugins.feishu.accounts]]\napp_id = "cli_ok"\napp_secret = "s"\n'
+        'role_id = "mira"\n'
+        '[[plugins.feishu.accounts]]\napp_id = "cli_gone"\napp_secret = "s"\n'
+        'role_id = "deleted-role"\n'
+    )
+    async with plugin_runtime(("feishu",), initial) as (service, _path):
+        listed = await plugin_bridge_request(service, "accounts.list")
+        assert [row["platform_account_id"] for row in listed.payload["accounts"]] == [
+            "feishu:cli_ok"
+        ]
+        plugins = await plugin_bridge_request(service, "plugins.list")
+        [feishu] = [row for row in plugins.payload["plugins"] if row["id"] == "feishu"]
+        assert feishu["state"] == "ACTIVE"
+        errors = feishu["account_errors"]
+        assert len(errors) == 2
+        assert "feishu:cli_old" in errors[0] and "没有所属角色" in errors[0]
+        assert "feishu:cli_gone" in errors[1] and "角色不存在" in errors[1]
 
 
 @pytest.mark.asyncio
@@ -476,9 +515,10 @@ async def test_delete_hook_closes_the_websocket_before_purging() -> None:
         ),
         rpc=SimpleNamespace(register=lambda *args, **kwargs: None),
         accounts=SimpleNamespace(
-            register=lambda **kwargs: SimpleNamespace(
+            register_configured=lambda **kwargs: SimpleNamespace(
                 record=SimpleNamespace(id="account-a")
             ),
+            read_config_accounts=lambda reader: None,
             report=lambda *args, **kwargs: None,
             on_delete=handlers.append,
         ),

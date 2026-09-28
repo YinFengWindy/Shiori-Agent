@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from .models import (
     AccountAccess,
+    AccountConfigReader,
     AccountDeleteHandler,
     AccountRecord,
     AccountSnapshot,
@@ -35,6 +36,9 @@ class AccountRuntimeState:
         self._retired_tokens: dict[tuple[str, str], set[str]] = {}
         self._enabled: dict[str, dict[str, bool]] = {}
         self._delete_handlers: dict[str, dict[str, AccountDeleteHandler]] = {}
+        self._config_readers: dict[str, dict[str, AccountConfigReader]] = {}
+        # Saved accounts a plugin generation could not register, per plugin.
+        self._rejected: dict[str, dict[str, list[str]]] = {}
         self.published_generation = DIRECT_GENERATION
 
     def set_plugin_enabled(
@@ -52,6 +56,8 @@ class AccountRuntimeState:
         self._live.pop(generation, None)
         self._enabled.pop(generation, None)
         self._delete_handlers.pop(generation, None)
+        self._config_readers.pop(generation, None)
+        self._rejected.pop(generation, None)
         for key in [key for key in self._last_tokens if key[0] == generation]:
             del self._last_tokens[key]
         for key in [key for key in self._retired_tokens if key[0] == generation]:
@@ -80,6 +86,36 @@ class AccountRuntimeState:
         if not self._enabled.get(generation, {}).get(plugin_id, False):
             return None
         return self._delete_handlers.get(generation, {}).get(plugin_id)
+
+    def set_config_reader(
+        self, plugin_id: str, reader: AccountConfigReader, generation: str
+    ) -> None:
+        """Records how one plugin generation reads accounts from its config table."""
+        self._config_readers.setdefault(generation, {})[plugin_id] = reader
+
+    def clear_config_reader(
+        self, plugin_id: str, reader: AccountConfigReader, generation: str
+    ) -> None:
+        """Removes a disposed plugin instance's reader, never a replacement's."""
+        readers = self._config_readers.get(generation, {})
+        if readers.get(plugin_id) is reader:
+            del readers[plugin_id]
+
+    def config_reader(self, plugin_id: str) -> AccountConfigReader | None:
+        """Returns the published generation's config reader for a plugin."""
+        return self._config_readers.get(self.published_generation, {}).get(plugin_id)
+
+    def reject(self, plugin_id: str, message: str, generation: str) -> None:
+        """Records a saved account this plugin generation could not register."""
+        self._rejected.setdefault(generation, {}).setdefault(plugin_id, []).append(
+            message
+        )
+
+    def rejected(self, plugin_id: str) -> list[str]:
+        """Returns the published generation's unregistrable saved accounts."""
+        return list(
+            self._rejected.get(self.published_generation, {}).get(plugin_id, [])
+        )
 
     def forget(self, account_id: str) -> None:
         """Drops every generation's live report and token for a deleted account."""

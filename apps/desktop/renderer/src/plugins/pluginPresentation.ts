@@ -90,6 +90,7 @@ function blockedReason(code: string | undefined): string {
 export function pluginProblem(plugin: PluginSummary): string | null {
   if (plugin.packageOperationError) return "安装或更新没有完成，已保留原来的版本";
   if (plugin.rendererError) return "界面加载失败";
+  if (plugin.state === "ACTIVE" && plugin.accountErrors?.length) return "有账号未能加载";
   switch (plugin.state) {
     case "CONFLICT":
       return "与另一个同 ID 的插件冲突，两者都已停用";

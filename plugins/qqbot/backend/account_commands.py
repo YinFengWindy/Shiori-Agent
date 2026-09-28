@@ -41,12 +41,16 @@ class _AccountCommandsMixin:
         previous = next(
             (row for row in self._store.list() if row["app_id"] == app_id), None
         )
-        # The account belongs to the role it is saved from, for good.
+        # The account belongs to the role it is saved from, for good; an
+        # application saved without an owner is never taken over.
         role_id = str(payload.get("role_id") or "").strip()
-        if not role_id:
-            raise ValueError("QQBot 账号需要所属角色")
-        if previous is not None and previous.get("role_id") not in {None, role_id}:
-            raise ValueError("该 QQBot 应用已属于另一个角色")
+        if previous is not None and previous.get("role_id") != role_id:
+            raise ValueError(
+                "该 QQBot 应用已属于另一个角色"
+                if previous.get("role_id")
+                else "该 QQBot 应用是未归属的旧数据，请先手动清理"
+            )
+        self._identity.check_owner(app_id, role_id)
         supplied = str(payload.get("client_secret") or "").strip()
         secret = supplied or (previous["client_secret"] if previous else "")
         if not secret:

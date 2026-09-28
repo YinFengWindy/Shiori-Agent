@@ -1,3 +1,4 @@
+import type { AccountDetailEntry } from "../plugins/pluginUiRegistry";
 import type { AccountSnapshot } from "./accountClient";
 
 type AccountIdentity = Pick<AccountSnapshot, "platform" | "displayName" | "platformAccountId">;
@@ -37,7 +38,7 @@ export type AccountPlatformChoice = { pluginId: string; label: string; bound: bo
  * (Feishu and Lark are one plugin), so a plugin it already has is `bound`.
  */
 export function accountPlatformChoices(
-  platforms: ReadonlyArray<{ pluginId: string; label: string }>,
+  platforms: ReadonlyArray<Pick<AccountDetailEntry, "pluginId" | "label">>,
   owned: ReadonlyArray<Pick<AccountSnapshot, "pluginId">>,
 ): AccountPlatformChoice[] {
   const bound = new Set(owned.map((account) => account.pluginId));

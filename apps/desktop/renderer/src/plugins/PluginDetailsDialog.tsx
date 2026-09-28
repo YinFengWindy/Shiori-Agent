@@ -68,6 +68,9 @@ export function PluginDetailsDialog({ plugin: currentPlugin, busy, error, popupR
                 </dd>
               </div> : null}
               {plugin.error && !pendingTrust ? <div><dt className="text-ink-muted">错误</dt><dd className="m-0 whitespace-pre-wrap break-words text-danger-text">{plugin.error}</dd></div> : null}
+              {plugin.accountErrors?.length ? <div><dt className="text-ink-muted">账号</dt><dd className="m-0 grid gap-1 break-words text-danger-text">
+                {plugin.accountErrors.map((message) => <span key={message}>{message}</span>)}
+              </dd></div> : null}
               {plugin.packageOperationError ? <div><dt className="text-ink-muted">安装记录</dt><dd role="alert" className="m-0 break-words text-danger-text">操作失败 · {plugin.packageOperationError}</dd></div> : null}
               {plugin.rendererError ? <div><dt className="text-ink-muted">界面</dt><dd className="m-0 break-words text-danger-text">界面加载失败 · {plugin.rendererError}</dd></div> : null}
             </dl>

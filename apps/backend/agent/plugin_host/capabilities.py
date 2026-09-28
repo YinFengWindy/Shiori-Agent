@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from desktop_bridge.method_policy import Concurrency
     from infra.channels.contract import Channel
     from core.accounts import (
+        AccountConfigReader,
         AccountDeleteHandler,
         AccountRegistry,
         AccountSnapshot,
@@ -302,7 +303,7 @@ class AccountsCapability:
         platform: str,
         platform_account_id: str,
         config_ref: str,
-        role_id: str,
+        role_id: str | None,
         display_name: str | None = None,
         avatar_url: str | None = None,
     ) -> "AccountSnapshot":
@@ -334,6 +335,78 @@ class AccountsCapability:
                 ),
             )
         return snapshot
+
+    def register_configured(
+        self,
+        *,
+        platform: str,
+        platform_account_id: str,
+        config_ref: str,
+        role_id: str | None,
+        display_name: str | None = None,
+        avatar_url: str | None = None,
+    ) -> "AccountSnapshot | None":
+        """Registers an account restored from the plugin's saved data.
+
+        One entry the host refuses (no owner role, a deleted role, another
+        role's or an unowned platform account, a second account for the role)
+        must not take the plugin down: the refusal is logged and listed with
+        the plugin for the user to fix, and None tells the plugin not to serve
+        that entry. Its other accounts keep working.
+        """
+        try:
+            return self.register(
+                platform=platform,
+                platform_account_id=platform_account_id,
+                config_ref=config_ref,
+                role_id=role_id,
+                display_name=display_name,
+                avatar_url=avatar_url,
+            )
+        except ValueError as exc:
+            message = f"账号 {config_ref} 未加载：{exc}"
+            logger.error("插件 %s 的%s", self._plugin_id, message)
+            self._registry.reject(self._plugin_id, message, generation=self._generation)
+            return None
+
+    def check_owner(
+        self,
+        *,
+        config_ref: str,
+        role_id: str | None,
+        platform: str | None = None,
+        platform_account_id: str | None = None,
+    ) -> None:
+        """Raises ValueError unless ``role_id`` may own this account.
+
+        Call it before saving account data the plugin keeps itself, so nothing
+        is saved that registration would later refuse.
+        """
+        self._registry.check_owner(
+            plugin_id=self._plugin_id,
+            config_ref=config_ref,
+            role_id=role_id,
+            platform=platform,
+            platform_account_id=platform_account_id,
+        )
+
+    def read_config_accounts(self, reader: "AccountConfigReader") -> None:
+        """Declares how the plugin's config table lists its accounts.
+
+        The host then checks every ``plugin.config.set`` write against account
+        ownership before saving it: an entry's owner cannot change, and no new
+        entry may be one the host would refuse to register.
+        """
+        self._effects.ensure_active("account:config_reader")
+        self._registry.set_config_reader(
+            self._plugin_id, reader, generation=self._generation
+        )
+        self._effects.add(
+            "account:config_reader",
+            lambda: self._registry.clear_config_reader(
+                self._plugin_id, reader, generation=self._generation
+            ),
+        )
 
     def report(
         self,

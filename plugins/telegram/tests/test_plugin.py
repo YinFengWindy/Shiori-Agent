@@ -6,7 +6,6 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-import pytest
 from shiori_plugin_testkit.packages import stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel, load_manifest
@@ -141,7 +140,11 @@ def test_replacing_one_ref_with_another_bot_preserves_old_account(tmp_path) -> N
         ),
     )
     asyncio.run(kernel.load_all())
-    assert kernel.loaded_count == 0
+    # The refused Bot is reported; the plugin itself still starts.
+    assert kernel.loaded_count == 1
+    assert kernel.channels == []
+    [refused] = role_store.accounts.rejected("telegram")
+    assert "legacy" in refused
     assert (
         role_store.accounts.get(original.record.id).record.platform_account_id == "123"
     )
@@ -169,15 +172,3 @@ def test_channel_registers_bot_commands() -> None:
     from plugins.telegram.backend.channel import TelegramChannel
 
     assert TelegramChannel.uses_bot_commands is True
-
-
-def test_config_rejects_a_second_bot_for_a_role_or_a_repeated_bot() -> None:
-    owned = {"ref": "one", "token": "123:a", "role_id": "mira"}
-    with pytest.raises(ValueError, match="一个角色"):
-        TelegramConfigModel.model_validate(
-            {"bots": [owned, {"ref": "two", "token": "456:b", "role_id": "mira"}]}
-        )
-    with pytest.raises(ValueError, match="已添加"):
-        TelegramConfigModel.model_validate(
-            {"bots": [owned, {"ref": "two", "token": "123:a", "role_id": "other"}]}
-        )

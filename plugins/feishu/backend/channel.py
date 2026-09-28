@@ -82,7 +82,7 @@ class FeishuChannel:
         profile_store: "PluginKVStore | None" = None,
         profile_ref: str = "",
         connection_revision: int = 0,
-        role_id: str = "",
+        role_id: str | None = None,
     ) -> None:
         self.name = name
         self.account_id = account_id

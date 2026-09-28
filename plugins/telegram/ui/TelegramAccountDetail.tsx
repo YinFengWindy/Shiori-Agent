@@ -4,7 +4,7 @@ import { createPluginBridgeClient, type PluginConfigSnapshot } from "../../../ap
 import { createAccountClient } from "../../../apps/desktop/renderer/src/accounts/accountClient";
 import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
 import { ghostButtonClass, iconButtonClass, inputClass, primaryButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
-import { legacyRefToRepair, telegramBots, withTelegramBot } from "./telegramConfig";
+import { telegramBots, withTelegramBot } from "./telegramConfig";
 
 const configClient = createPluginBridgeClient();
 const accountsClient = createAccountClient();
@@ -43,23 +43,17 @@ export function TelegramAccountDetail({ account, roleId, onChanged, client, host
     setError("");
     try {
       let identity: { bot_id: string } | undefined;
-      let existingAccounts: Awaited<ReturnType<typeof accountsClient.list>> | undefined;
       if (token.trim()) {
         identity = await client.call<{ bot_id: string }>("token.verify", { token: token.trim() });
         const botId = identity.bot_id;
         if (account && botId !== account.platformAccountId) {
           throw new Error("新 Token 属于另一个 Bot，请添加新账号");
         }
-        if (!account) existingAccounts = await accountsClient.list();
-        if (!account && existingAccounts?.some((item) => item.pluginId === "telegram" && item.platformAccountId === botId)) {
+        if (!account && (await accountsClient.list()).some((item) => item.pluginId === "telegram" && item.platformAccountId === botId)) {
           throw new Error("此 Bot 已添加");
         }
       }
-      const repairRef = legacyRefToRepair(config);
-      const canRepairLegacy = repairRef && !existingAccounts?.some(
-        (item) => item.pluginId === "telegram" && item.configRef === repairRef,
-      );
-      const ref = account?.configRef ?? (canRepairLegacy ? repairRef : null) ?? crypto.randomUUID().replaceAll("-", "");
+      const ref = account?.configRef ?? crypto.randomUUID().replaceAll("-", "");
       const values = withTelegramBot(config, ref, token.trim() || undefined, enabled, roleId);
       const result = await configClient.setConfig("telegram", values, { operationId: crypto.randomUUID() });
       setConfig({ ...config, values: result.values, envStatus: result.envStatus });

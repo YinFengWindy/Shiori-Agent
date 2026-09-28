@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from .models import (
     AccountAccess,
+    AccountConfigReader,
     AccountDeleteHandler,
     AccountDeletingError,
     AccountNotFoundError,
@@ -114,31 +115,34 @@ class AccountRegistry:
         platform_account_id: str,
         config_ref: str,
         token: str,
-        role_id: str,
+        role_id: str | None,
         generation: str = DIRECT_GENERATION,
         display_name: str | None = None,
         avatar_url: str | None = None,
     ) -> AccountSnapshot:
         """Upserts an owned identity; omitted display fields retain snapshots.
 
-        Every account belongs to exactly one role from creation on: the owner
-        is required, a role holds at most one account per plugin, and a
-        platform account owned by another role (or left unowned by older
-        data) is refused rather than taken over.
+        Every account belongs to exactly one role from creation on; the
+        ownership rule is ``_ownership_refusal``.
         """
-        fields = (plugin_id, platform, platform_account_id, config_ref, token, role_id)
+        fields = (plugin_id, platform, platform_account_id, config_ref, token)
         if any(not isinstance(value, str) or not value.strip() for value in fields):
-            raise ValueError(
-                "Account identity, config reference, token, and owner role are required"
-            )
-        plugin_id, platform, platform_account_id, config_ref, token, role_id = (
+            raise ValueError("账号身份、配置引用和运行令牌不能为空")
+        plugin_id, platform, platform_account_id, config_ref, token = (
             value.strip() for value in fields
         )
         with self._lock:
-            if not self._role_exists(role_id):
-                raise ValueError(f"角色不存在: {role_id}")
             staged = self._staged_records.get(generation, {})
             known = {**self._records, **staged}
+            refusal = self._ownership_refusal(
+                known,
+                plugin_id=plugin_id,
+                config_ref=config_ref,
+                role_id=role_id,
+                identity=(platform, platform_account_id),
+            )
+            if refusal is not None:
+                raise ValueError(refusal)
             existing = next(
                 (
                     row
@@ -148,24 +152,6 @@ class AccountRegistry:
                 ),
                 None,
             )
-            if existing is not None and existing.plugin_id != plugin_id:
-                raise ValueError("Platform account already belongs to another plugin")
-            if existing is not None and existing.config_ref != config_ref:
-                raise ValueError(
-                    "Platform account already has another configuration reference"
-                )
-            if existing is not None and existing.role_id != role_id:
-                raise ValueError(
-                    "平台账号已属于另一个角色"
-                    if existing.role_id is not None
-                    else "平台账号存在未归属的旧记录，请先手动清理"
-                )
-            if any(
-                row.id != (existing.id if existing else None)
-                and (row.role_id, row.plugin_id) == (role_id, plugin_id)
-                for row in known.values()
-            ):
-                raise ValueError("该角色在这个渠道已有账号")
             if existing is not None:
                 # A concurrent generation must not revive an account mid-delete.
                 self._ensure_not_deleting(existing.id)
@@ -177,9 +163,7 @@ class AccountRegistry:
                 and (row.plugin_id, row.config_ref) == (plugin_id, config_ref)
                 for row in known.values()
             ):
-                raise ValueError(
-                    "Configuration reference already belongs to an account"
-                )
+                raise ValueError("配置引用已属于另一个账号")
             row = (
                 replace(
                     existing,
@@ -199,7 +183,7 @@ class AccountRegistry:
                     config_ref,
                     display_name or "",
                     avatar_url or "",
-                    role_id=role_id,
+                    role_id=(role_id or "").strip(),
                 )
             )
             if row != existing:
@@ -215,6 +199,180 @@ class AccountRegistry:
                 self.migrate_legacy_bindings()
                 row = self._records[row.id]
             return self._runtime.snapshot(row, generation=generation)
+
+    def _ownership_refusal(
+        self,
+        known: dict[str, AccountRecord],
+        *,
+        plugin_id: str,
+        config_ref: str,
+        role_id: str | None,
+        identity: tuple[str, str] | None,
+    ) -> str | None:
+        """The one ownership rule; returns why ``role_id`` may not hold this account.
+
+        The owner must be an existing role; a platform account belongs to one
+        plugin entry and one role (an unowned old record is never taken over);
+        and a role holds at most one account per plugin. Without a known
+        identity the account is found by its plugin configuration reference.
+        """
+        if not role_id or not role_id.strip():
+            return "账号没有所属角色"
+        role_id = role_id.strip()
+        if not self._role_exists(role_id):
+            return f"角色不存在：{role_id}"
+        existing = next(
+            (
+                row
+                for row in known.values()
+                if (
+                    (row.platform, row.platform_account_id) == identity
+                    if identity is not None
+                    else (row.plugin_id, row.config_ref) == (plugin_id, config_ref)
+                )
+            ),
+            None,
+        )
+        if existing is not None:
+            if existing.plugin_id != plugin_id:
+                return "平台账号已属于另一个插件"
+            if existing.config_ref != config_ref:
+                return "平台账号已作为另一个账号添加"
+            if existing.role_id is None:
+                return "平台账号存在未归属的旧记录，请先手动清理"
+            if existing.role_id != role_id:
+                return "平台账号已属于另一个角色"
+        if any(
+            row.id != (existing.id if existing else None)
+            and (row.role_id, row.plugin_id) == (role_id, plugin_id)
+            for row in known.values()
+        ):
+            return "该角色在这个渠道已有账号"
+        return None
+
+    def check_owner(
+        self,
+        *,
+        plugin_id: str,
+        config_ref: str,
+        role_id: str | None,
+        platform: str | None = None,
+        platform_account_id: str | None = None,
+    ) -> None:
+        """Raises ValueError unless ``role_id`` may hold this account.
+
+        Plugins call it before saving account data of their own, so nothing is
+        saved that a later registration would refuse.
+        """
+        with self._lock:
+            refusal = self._ownership_refusal(
+                self._records,
+                plugin_id=plugin_id,
+                config_ref=config_ref,
+                role_id=role_id,
+                identity=(
+                    (platform, platform_account_id)
+                    if platform and platform_account_id
+                    else None
+                ),
+            )
+        if refusal is not None:
+            raise ValueError(refusal)
+
+    def set_config_reader(
+        self,
+        plugin_id: str,
+        reader: AccountConfigReader,
+        *,
+        generation: str = DIRECT_GENERATION,
+    ) -> None:
+        """Accepts one plugin generation's reader for accounts in its config table."""
+        with self._lock:
+            self._runtime.set_config_reader(plugin_id, reader, generation)
+
+    def clear_config_reader(
+        self,
+        plugin_id: str,
+        reader: AccountConfigReader,
+        *,
+        generation: str = DIRECT_GENERATION,
+    ) -> None:
+        """Withdraws a disposed plugin instance's config reader."""
+        with self._lock:
+            self._runtime.clear_config_reader(plugin_id, reader, generation)
+
+    def check_config_write(
+        self, plugin_id: str, before: dict[str, Any], after: dict[str, Any]
+    ) -> None:
+        """Refuses a ``[plugins.<id>]`` write that would declare an unusable account.
+
+        Both tables are resolved values. An entry keeps its owner for good; a
+        new or changed entry must pass the ownership rule, also against the
+        other entries of the same write. Unchanged entries are left as they
+        are, so older ownerless data stays unusable until cleaned by hand. A
+        plugin that is not running cannot read its table, so nothing is checked.
+        """
+        reader = self._runtime.config_reader(plugin_id)
+        if reader is None:
+            return
+        try:
+            previous = {claim.config_ref: claim for claim in reader(before)}
+        except ValueError:
+            # A table that does not even parse declares no usable account.
+            previous = {}
+        claims = reader(after)
+        with self._lock:
+            for claim in claims:
+                old = previous.get(claim.config_ref)
+                if old is not None and old.role_id != claim.role_id:
+                    raise ValueError(f"账号 {claim.config_ref} 的所属角色不能更改")
+                if old == claim:
+                    continue
+                identity = (
+                    (claim.platform, claim.platform_account_id)
+                    if claim.platform and claim.platform_account_id
+                    else None
+                )
+                refusal = self._ownership_refusal(
+                    self._records,
+                    plugin_id=plugin_id,
+                    config_ref=claim.config_ref,
+                    role_id=claim.role_id,
+                    identity=identity,
+                )
+                if refusal is None and any(
+                    other is not claim
+                    and (
+                        other.role_id == claim.role_id
+                        or (
+                            identity is not None
+                            and (other.platform, other.platform_account_id) == identity
+                        )
+                    )
+                    for other in claims
+                ):
+                    refusal = (
+                        "该角色在这个渠道已有账号"
+                        if any(
+                            other is not claim and other.role_id == claim.role_id
+                            for other in claims
+                        )
+                        else "平台账号已作为另一个账号添加"
+                    )
+                if refusal is not None:
+                    raise ValueError(f"账号 {claim.config_ref}：{refusal}")
+
+    def reject(
+        self, plugin_id: str, message: str, *, generation: str = DIRECT_GENERATION
+    ) -> None:
+        """Records a saved account a plugin generation could not register."""
+        with self._lock:
+            self._runtime.reject(plugin_id, message, generation)
+
+    def rejected(self, plugin_id: str) -> list[str]:
+        """Saved accounts the running plugin could not register, with reasons."""
+        with self._lock:
+            return self._runtime.rejected(plugin_id)
 
     def migrate_legacy_bindings(self) -> None:
         """Import saved role ownership and group policy after accounts are known."""

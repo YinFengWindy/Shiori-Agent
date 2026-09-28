@@ -21,6 +21,14 @@ class _Accounts:
         self.roles[platform_account_id] = role_id
         return SimpleNamespace(record=SimpleNamespace(id=platform_account_id))
 
+    def check_owner(self, *, config_ref, role_id, **_identity):
+        if not role_id:
+            raise ValueError("账号没有所属角色")
+
+    def register_configured(self, **fields):
+        # The host refuses an entry without an owner; the plugin must skip it.
+        return self.register(**fields) if fields.get("role_id") else None
+
     def report(self, account_id, **kwargs):
         pass
 

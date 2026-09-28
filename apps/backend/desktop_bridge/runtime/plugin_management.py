@@ -129,6 +129,9 @@ class RuntimePluginManagement:
                     "activation_token": (
                         state.get("activation_token", "") if state else ""
                     ),
+                    # Saved accounts the running plugin could not register
+                    # (e.g. no owner role); the plugin itself stays up.
+                    "account_errors": self._settings.roles.accounts.rejected(plugin_id),
                     # __contains__ 已随 #177 的死代码清理移除，改用 schema_for 判定
                     "has_config_schema": kernel.config_schemas.schema_for(plugin_id)
                     is not None,

@@ -40,9 +40,9 @@ class QQConnectionConfig:
     pending: QQPendingConnection | None = None
     mode: QQConnectionMode = "external"
     # Role the draft was started from; the verified account belongs to it.
-    role_id: str = ""
+    role_id: str | None = None
 
-    def public_dict(self) -> dict[str, str | float | bool]:
+    def public_dict(self) -> dict[str, str | float | bool | None]:
         """Projects editable settings without exposing the access token."""
         editable = self.pending or self
         return {

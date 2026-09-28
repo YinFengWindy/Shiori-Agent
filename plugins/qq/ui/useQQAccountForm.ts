@@ -82,7 +82,7 @@ export function useQQAccountForm({ accountId, draftRef, roleId, client, onChange
     setSaved({ ref: result.ref, mode: fields.mode, uri, timeout: fields.timeout, hasToken });
   });
   const connect = () => run(async () => {
-    const result = await client.call<{ account_id: string }>("accounts.connect", { ref });
+    const result = await client.call<{ account_id: string }>("accounts.connect", { ref, role_id: roleId });
     if (result.account_id) onChanged(result.account_id);
   });
   const disconnect = () => run(async () => {

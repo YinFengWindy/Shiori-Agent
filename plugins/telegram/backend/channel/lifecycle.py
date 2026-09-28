@@ -35,6 +35,7 @@ from ..utils import (
     TelegramOutboundLimiter,
     TelegramStreamMessage,
 )
+from ..bot_token import bot_account_id
 from .commands import _CommandMixin
 from .formatting import (
     _CHANNEL,
@@ -86,7 +87,7 @@ class TelegramChannel(
         config_ref: str = "legacy",
         accounts: "AccountsCapability | None" = None,
         known_store: "PluginKVStore | None" = None,
-        role_id: str = "",
+        role_id: str | None = None,
     ) -> None:
         # bus / session_manager 在宿主里由 start(ctx) 注入；构造参数只留给
         # 不经 ChannelHost 直接驱动渠道的测试。
@@ -184,7 +185,7 @@ class TelegramChannel(
 
     async def start(self, ctx: ChannelContext | None = None) -> None:
         if self._accounts is not None and self._account_id is None:
-            candidate_id = self._token.split(":", 1)[0]
+            candidate_id = bot_account_id(self._token)
             account = self._accounts.register(
                 platform="telegram",
                 platform_account_id=candidate_id,
@@ -193,7 +194,7 @@ class TelegramChannel(
             )
             self._account_id = account.record.id
         if self._accounts is not None:
-            candidate_id = self._token.split(":", 1)[0]
+            candidate_id = bot_account_id(self._token)
             self._report_account("connecting")
         self._intake.start(paused=ctx.intake_paused if ctx is not None else False)
         if ctx is not None:

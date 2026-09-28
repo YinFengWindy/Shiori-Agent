@@ -19,9 +19,9 @@ it("disconnects and reconnects one app without replacing another app's secret", 
   assert.deepEqual(disconnected.accounts, [{ ...first, connection_enabled: false }, second]);
   const reconnected = withSavedApp(disconnected, first);
   assert.deepEqual(reconnected.accounts, [{ ...first, connection_revision: 4 }, second]);
-  // A saved app keeps the role that added it.
-  const owned = withSavedApp({ accounts: [{ ...second, role_id: "mira" }] }, { ...second, role_id: "other" });
-  assert.equal((owned.accounts as FeishuApp[])[0].role_id, "mira");
+  // A saved app is only changed for its own role; an ownerless one is never taken over.
+  assert.throws(() => withSavedApp({ accounts: [{ ...second, role_id: "mira" }] }, { ...second, role_id: "other" }), /另一个角色/);
+  assert.throws(() => withSavedApp({ accounts: [second] }, { ...second, role_id: "other" }), /未归属/);
 });
 
 it("keeps an account with a missing secret available for repair", () => {

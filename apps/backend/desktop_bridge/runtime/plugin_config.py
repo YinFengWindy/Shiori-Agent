@@ -166,6 +166,15 @@ class RuntimePluginConfig:
         # 但当幂等 memo 命中时，apply() 根本不会调用这个回调——见
         # RuntimeSettingsApplication.apply 的文档。
         def merge(current_text: str) -> str:
+            # Account entries are checked against the committed table inside
+            # the settings lock, so no write can declare an unusable account.
+            before = _resolved_table(read_plugin_table(current_text, plugin_id))
+            try:
+                self._settings.roles.accounts.check_config_write(
+                    plugin_id, before, normalized
+                )
+            except ValueError as exc:
+                raise RuntimeApplyError("plugin_account_refused", str(exc)) from exc
             merged = _merge_plugin_values(current_text, plugin_id, persisted)
             self._assert_config_round_trip(
                 model_cls, plugin_id, current_text, merged, normalized

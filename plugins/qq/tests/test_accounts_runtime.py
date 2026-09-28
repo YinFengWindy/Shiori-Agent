@@ -40,6 +40,14 @@ class _Accounts:
         self.rows[account_id] = row
         return SimpleNamespace(record=row)
 
+    def check_owner(self, *, config_ref, role_id, **_identity):
+        if not role_id:
+            raise ValueError("账号没有所属角色")
+
+    def register_configured(self, **fields):
+        # The host refuses an entry without an owner; the plugin must skip it.
+        return self.register(**fields) if fields.get("role_id") else None
+
     def report(self, account_id, *, connection, capabilities=frozenset(), error=""):
         self.states[account_id] = connection
         self.reports.append((account_id, connection, error))
@@ -137,6 +145,11 @@ async def test_two_accounts_keep_identity_discovery_send_and_events_isolated(
     )
     with pytest.raises(ValueError, match="所属角色"):
         await runtime.save_draft({"ws_uri": "ws://localhost:3003"})
+    # Another role cannot edit or take over this role's draft.
+    with pytest.raises(ValueError, match="另一个角色"):
+        await runtime.save_draft(
+            {"role_id": "other", "ref": first["ref"], "ws_uri": "ws://localhost:3009"}
+        )
     assert accounts.rows == {}
     assert runtime._sockets == {}
     # Drafts remember the role they were started from.

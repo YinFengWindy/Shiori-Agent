@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
+
+from core.accounts import ConfiguredAccount
+
+from .bot_token import bot_account_id
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
 _UNRESOLVED_ENV_RE = re.compile(r"^\$\{\w+\}$")
-logger = logging.getLogger(__name__)
 
 
 class TelegramBotConfig(BaseModel):
@@ -22,6 +24,7 @@ class TelegramBotConfig(BaseModel):
     token: str
     enabled: bool = True
     # Role the Bot was added from; its account is registered for this role.
+    # Empty means no owner (TOML has no null); such an entry is not served.
     role_id: str = ""
 
     @field_validator("ref")
@@ -54,19 +57,6 @@ class TelegramConfigModel(BaseModel):
         text = str(value or "").strip()
         return "" if _UNRESOLVED_ENV_RE.fullmatch(text) else text
 
-    @model_validator(mode="after")
-    def _one_bot_per_role_and_identity(self) -> "TelegramConfigModel":
-        # Rejected before the config is saved, so a bad save cannot leave the
-        # plugin failing at setup: a role owns at most one Bot, and a Bot
-        # (its Token's numeric ID) belongs to one entry only.
-        roles = [bot.role_id for bot in self.bots if bot.role_id]
-        if len(roles) != len(set(roles)):
-            raise ValueError("一个角色只能添加一个 Telegram Bot")
-        ids = [bot.token.split(":", 1)[0] for bot in self.bots if ":" in bot.token]
-        if len(ids) != len(set(ids)):
-            raise ValueError("这个 Telegram Bot 已添加")
-        return self
-
     @property
     def configured_bots(self) -> list[TelegramBotConfig]:
         """Reads the old single Token as the stable legacy account."""
@@ -79,18 +69,28 @@ class TelegramConfigModel(BaseModel):
         return bots
 
 
+def configured_accounts(values: dict[str, Any]) -> list[ConfiguredAccount]:
+    """The Bots a ``[plugins.telegram]`` table declares, for the host's write check."""
+    return [
+        ConfiguredAccount(
+            bot.ref,
+            bot.role_id or None,
+            "telegram",
+            bot_account_id(bot.token) if ":" in bot.token else None,
+        )
+        for bot in TelegramConfigModel.model_validate(values).configured_bots
+    ]
+
+
 async def setup(ctx: "PluginRuntimeContext") -> None:
     """凭据齐备时贡献渠道；bot 命令在 start 时取自 ``ChannelContext``。"""
     config = TelegramConfigModel.model_validate(ctx.config.as_dict())
     from .account_api import TelegramAccountApi
 
+    ctx.accounts.read_config_accounts(configured_accounts)
     channels = {}
     configured_bots = config.configured_bots
     for bot in configured_bots:
-        if not bot.role_id:
-            # Accounts exist only under a role; an ownerless entry is not served.
-            logger.error("Telegram Bot %s 没有所属角色，未注册账号", bot.ref)
-            continue
         if not bot.enabled or not bot.token or _UNRESOLVED_ENV_RE.fullmatch(bot.token):
             continue
         from .channel import TelegramChannel
@@ -104,30 +104,34 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
                 config_ref=bot.ref,
                 accounts=ctx.accounts,
                 known_store=ctx.kv,
-                role_id=bot.role_id,
+                role_id=bot.role_id or None,
                 chat_types=ctx.manifest.channel_chat_types(channel_name),
             )
         except InvalidToken:
-            candidate_id = bot.token.split(":", 1)[0]
+            candidate_id = bot_account_id(bot.token)
             if candidate_id.isdigit():
-                account = ctx.accounts.register(
+                account = ctx.accounts.register_configured(
                     platform="telegram",
                     platform_account_id=candidate_id,
                     config_ref=bot.ref,
-                    role_id=bot.role_id,
+                    role_id=bot.role_id or None,
                 )
+                if account is None:
+                    continue
                 ctx.accounts.report(
                     account.record.id,
                     connection="login_required",
                     error="Invalid Bot Token",
                 )
             continue
-        account = ctx.accounts.register(
+        account = ctx.accounts.register_configured(
             platform="telegram",
-            platform_account_id=bot.token.split(":", 1)[0],
+            platform_account_id=bot_account_id(bot.token),
             config_ref=bot.ref,
-            role_id=bot.role_id,
+            role_id=bot.role_id or None,
         )
+        if account is None:
+            continue
         channel._account_id = account.record.id
         channels[bot.ref] = channel
         ctx.channels.add(channel)

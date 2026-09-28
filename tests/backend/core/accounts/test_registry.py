@@ -54,7 +54,7 @@ def test_independent_accounts_ownership_and_recovery(tmp_path):
         registry.authorize(first.record.id, "r1")
     registry.set_plugin_enabled("chat", True)
 
-    with pytest.raises(ValueError, match="already belongs"):
+    with pytest.raises(ValueError, match="另一个插件"):
         registry.register(
             plugin_id="other",
             platform="chat",
@@ -63,7 +63,7 @@ def test_independent_accounts_ownership_and_recovery(tmp_path):
             token="generation-2",
             role_id="r1",
         )
-    with pytest.raises(ValueError, match="Configuration reference"):
+    with pytest.raises(ValueError, match="配置引用已属于"):
         registry.register(
             plugin_id="chat",
             platform="chat",
@@ -72,7 +72,7 @@ def test_independent_accounts_ownership_and_recovery(tmp_path):
             token="generation-1",
             role_id="r3",
         )
-    with pytest.raises(ValueError, match="another configuration reference"):
+    with pytest.raises(ValueError, match="已作为另一个账号添加"):
         registry.register(
             plugin_id="chat",
             platform="chat",
@@ -100,7 +100,7 @@ def test_independent_accounts_ownership_and_recovery(tmp_path):
 def test_registration_requires_one_owner_role_per_plugin_and_identity(tmp_path):
     registry = AccountRegistry(tmp_path, {"r1", "r2"}.__contains__)
     identity = dict(plugin_id="chat", platform="chat", token="live")
-    for role_id, error in (("", "owner role"), ("missing", "角色不存在")):
+    for role_id, error in (("", "没有所属角色"), ("missing", "角色不存在")):
         with pytest.raises(ValueError, match=error):
             registry.register(
                 **identity,
@@ -637,3 +637,40 @@ async def test_delete_is_refused_when_plugin_cannot_clean_up_or_role_differs(
         await deletion.run(registry, account_id)
     assert deletion.steps == []
     assert registry.get(account_id).record.role_id == "r1"
+
+
+def test_config_write_keeps_owners_and_refuses_unusable_entries(tmp_path):
+    from core.accounts import ConfiguredAccount
+
+    registry = AccountRegistry(tmp_path, {"r1", "r2"}.__contains__)
+    registry.register(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="101",
+        config_ref="one",
+        token="live",
+        role_id="r1",
+    )
+
+    def read(values):
+        return [
+            ConfiguredAccount(ref, row.get("role"), "chat", row.get("id"))
+            for ref, row in values.items()
+        ]
+
+    registry.set_config_reader("chat", read)
+    saved = {"one": {"role": "r1", "id": "101"}, "old": {"role": None, "id": "9"}}
+    # Unchanged entries pass, even an ownerless one left by older data.
+    registry.check_config_write("chat", saved, saved)
+    registry.check_config_write("chat", saved, {**saved, "two": {"role": "r2"}})
+    for after, error in (
+        ({**saved, "one": {"role": "r2", "id": "101"}}, "不能更改"),
+        ({**saved, "old": {"role": "r2", "id": "9"}}, "不能更改"),
+        ({**saved, "two": {"role": None}}, "没有所属角色"),
+        ({**saved, "two": {"role": "gone"}}, "角色不存在"),
+        ({**saved, "two": {"role": "r1"}}, "已有账号"),
+        ({**saved, "two": {"role": "r2", "id": "101"}}, "已作为另一个账号添加"),
+        ({**saved, "two": {"role": "r2"}, "three": {"role": "r2"}}, "已有账号"),
+    ):
+        with pytest.raises(ValueError, match=error):
+            registry.check_config_write("chat", saved, after)

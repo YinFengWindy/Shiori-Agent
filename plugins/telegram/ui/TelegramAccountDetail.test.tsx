@@ -31,7 +31,7 @@ test("Token draft verifies before the legacy account configuration changes", asy
       calls.push(method);
       if (method === "plugin.config.set") submissions.push(payload.values as Record<string, unknown>);
       return { id: "response", type: "response", method, error: null, payload: method === "plugin.config.get"
-        ? { plugin_id: "telegram", schema: null, values: { token: "123:old", bots: [] }, env_status: {} }
+        ? { plugin_id: "telegram", schema: null, values: { bots: [{ ref: "legacy", token: "123:old", role_id: "mira" }] }, env_status: {} }
         : { plugin_id: "telegram", values: submissions.at(-1), env_status: {}, generation: 2 } };
     } } } },
   );
@@ -46,7 +46,6 @@ test("Token draft verifies before the legacy account configuration changes", asy
     assert.equal(submissions.length, 0);
     rejectVerification = false;
     await act(async () => save()?.click());
-    assert.equal(submissions[0]?.token, "");
     assert.deepEqual(submissions[0]?.bots, [{ ref: "legacy", token: "123:new", enabled: true, role_id: "mira" }]);
     assert.equal(changedId, "account-1");
     assert.deepEqual(calls.filter((name) => name === "plugin.config.set"), ["plugin.config.set"]);
@@ -55,47 +54,7 @@ test("Token draft verifies before the legacy account configuration changes", asy
   }
 });
 
-test("new-account form repairs an invalid legacy Token in place", async () => {
-  const submissions: Record<string, unknown>[] = [];
-  let changedId = "";
-  const client = { call: async (name: string) => {
-    assert.equal(name, "token.verify");
-    return { bot_id: "123" };
-  } } as PluginRpcClient;
-  const wireAccount = {
-    id: "legacy-account", plugin_id: "telegram", platform: "telegram", platform_account_id: "123", config_ref: "legacy",
-    display_name: "First Bot", avatar_url: "", role_id: null, plugin_enabled: true,
-    runtime_active: true, connection: "online", capabilities: [], known_capabilities: [], error: "",
-    response_rules: { private_enabled: true, group_enabled: true, require_mention: true,
-      blocked_sender_ids: [], group_rules: [] },
-  };
-  const view = await mountTestComponent(
-    <TelegramAccountDetail account={null} roleId="mira" onChanged={(id) => { changedId = id ?? ""; }} client={client} host={desktopPluginHostServices} />,
-    { windowGlobals: { miraDesktop: { invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
-      if (method === "plugin.config.set") submissions.push(payload.values as Record<string, unknown>);
-      return { id: "response", type: "response", method, error: null, payload:
-        method === "plugin.config.get" ? { plugin_id: "telegram", schema: null,
-          values: { token: "bad-token", bots: [] }, env_status: {} }
-          : method === "accounts.list" ? { accounts: submissions.length ? [wireAccount] : [] }
-            : { plugin_id: "telegram", values: submissions.at(-1), env_status: {}, generation: 2 } };
-    } } } },
-  );
-  try {
-    const input = view.container.querySelector<HTMLInputElement>('input[type="password"]');
-    assert.ok(input);
-    await changeInputValue(input, "123:valid");
-    const save = Array.from(view.container.querySelectorAll<HTMLButtonElement>("button"))
-      .find((button) => button.textContent === "保存并连接");
-    await act(async () => save?.click());
-    assert.equal(submissions[0]?.token, "");
-    assert.deepEqual(submissions[0]?.bots, [{ ref: "legacy", token: "123:valid", enabled: true, role_id: "mira" }]);
-    assert.equal(changedId, "legacy-account");
-  } finally {
-    await view.cleanup();
-  }
-});
-
-test("adding a second Bot preserves an already registered legacy account", async () => {
+test("a new Bot never takes over the old single Token", async () => {
   const submissions: Record<string, unknown>[] = [];
   const legacyAccount = {
     id: "legacy-account", plugin_id: "telegram", platform: "telegram", platform_account_id: "123", config_ref: "legacy",
@@ -126,12 +85,13 @@ test("adding a second Bot preserves an already registered legacy account", async
     const save = Array.from(view.container.querySelectorAll<HTMLButtonElement>("button"))
       .find((button) => button.textContent === "保存并连接");
     await act(async () => save?.click());
-    const bots = submissions[0]?.bots as Array<{ ref: string; token: string }>;
-    assert.equal(bots[0]?.ref, "legacy");
-    assert.equal(bots[0]?.token, "123:old");
-    assert.equal(bots[1]?.token, "456:new");
-    assert.equal((bots[1] as { role_id?: string }).role_id, "mira");
-    assert.notEqual(bots[1]?.ref, "legacy");
+    // The old single Token stays where it is; the new Bot gets its own entry.
+    assert.equal(submissions[0]?.token, "123:old");
+    const bots = submissions[0]?.bots as Array<{ ref: string; token: string; role_id?: string }>;
+    assert.equal(bots.length, 1);
+    assert.equal(bots[0]?.token, "456:new");
+    assert.equal(bots[0]?.role_id, "mira");
+    assert.notEqual(bots[0]?.ref, "legacy");
   } finally {
     await view.cleanup();
   }

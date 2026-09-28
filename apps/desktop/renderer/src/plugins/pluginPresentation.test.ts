@@ -37,6 +37,8 @@ describe("pluginPresentation", () => {
   it("turns diagnostic states into one readable line and keeps untrusted plugins problem-free", () => {
     assert.equal(pluginProblem(plugin({})), null);
     assert.equal(pluginProblem(plugin({ state: "FAILED", error: "ModuleNotFoundError: httpx" })), "启动失败");
+    // A running plugin with a saved account it could not register says so.
+    assert.equal(pluginProblem(plugin({ state: "ACTIVE", accountErrors: ["账号 a 未加载：账号没有所属角色"] })), "有账号未能加载");
     assert.equal(pluginProblem(plugin({ state: "CONFLICT" })), "与另一个同 ID 的插件冲突，两者都已停用");
     assert.equal(
       pluginProblem(plugin({ state: "BLOCKED", diagnostic: { code: "missing_dependency", stage: "dependencies", field: "dependencies", reason: "x", path: "", state: "BLOCKED" } })),
