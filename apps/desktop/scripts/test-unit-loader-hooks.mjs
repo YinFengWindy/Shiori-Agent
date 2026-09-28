@@ -17,13 +17,18 @@
  */
 import { readFile } from "node:fs/promises";
 
-/** Packages whose `require` build replaces their ESM barrel in tests. */
-const prebundledPackages = new Set(["@phosphor-icons/react"]);
+/**
+ * The one specifier redirected to the CommonJS build. Only this exact bare
+ * specifier is matched: a subpath import (`@phosphor-icons/react/ssr`,
+ * `@phosphor-icons/react/dist/...`) still loads the ESM copy, next to the
+ * CommonJS one, with its own `IconContext` instance. Keep icon imports bare.
+ */
+const prebundledSpecifier = "@phosphor-icons/react";
 const prebundledMarker = "?shiori-test-prebundled";
 
-/** Resolves a prebundled package to its CommonJS build, tagged for `load`. */
+/** Resolves the prebundled package to its CommonJS build, tagged for `load`. */
 export async function resolve(specifier, context, nextResolve) {
-  if (!prebundledPackages.has(specifier)) return nextResolve(specifier, context);
+  if (specifier !== prebundledSpecifier) return nextResolve(specifier, context);
   const resolved = await nextResolve(specifier, { ...context, conditions: ["node", "require"] });
   return { url: `${resolved.url}${prebundledMarker}`, format: "commonjs", shortCircuit: true };
 }

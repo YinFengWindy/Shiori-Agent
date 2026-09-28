@@ -24,6 +24,10 @@ export type MountTestComponentOptions = {
  * loads, so a component's `window.setTimeout` never sees `mock.timers` on its
  * own. The global is looked up on every call, so the mock only has to be
  * enabled before the component schedules its timer.
+ *
+ * Only `setTimeout(handler, delay)` and `clearTimeout` are forwarded — no
+ * extra callback arguments and no `setInterval` — which is all the current
+ * callers use; extend it when a component needs more.
  */
 export const mockableWindowTimers = {
   setTimeout: (handler: () => void, delay?: number) => globalThis.setTimeout(handler, delay),
