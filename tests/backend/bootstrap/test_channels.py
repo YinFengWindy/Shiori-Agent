@@ -36,7 +36,8 @@ async def test_unchanged_credentials_reuse_independently_owned_qqbot_connection(
         )
         assert candidate.channels == [old]
         assert not active.requires_exclusive_handover(candidate)
-        assert new._client.is_closed
+        # The discarded duplicate is stopped without ever opening a client.
+        assert new._client is None
         replacement = await start_channels(
             plugin_channels=[changed], previous_host=active, **context
         )

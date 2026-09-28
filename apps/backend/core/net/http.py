@@ -2,12 +2,31 @@ from __future__ import annotations
 
 import asyncio
 import random
+import ssl
 from dataclasses import dataclass, field
+from functools import cache
 from typing import Any, Literal
 
 import httpx
 
 HttpProfile = Literal["external_default", "feed_fetcher", "local_service"]
+
+
+@cache
+def shared_ssl_context() -> ssl.SSLContext:
+    """Returns the process-wide TLS verification context for host HTTP clients.
+
+    httpx builds a fresh context (reloading the CA bundle) for every transport,
+    including the proxy transports it mounts from system proxy settings. This one
+    is created once through httpx's own factory with its defaults, so
+    ``SSL_CERT_FILE`` / ``SSL_CERT_DIR`` are honored exactly as httpx would, read
+    when the first host client is built.
+
+    Only for HTTP/1.1 clients: httpcore calls ``set_alpn_protocols`` on the context
+    for every connection, mutating this shared object, so an ``http2=True`` client
+    must build its own context instead of reusing this one.
+    """
+    return httpx.create_ssl_context()
 
 
 @dataclass(frozen=True)
@@ -138,14 +157,19 @@ class SharedHttpResources:
     _closed: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
+        # All clients (and httpx's proxy transports) share one verification context.
+        verify = shared_ssl_context()
         external_client = httpx.AsyncClient(
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10)
+            verify=verify,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
         feed_client = httpx.AsyncClient(
-            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5)
+            verify=verify,
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
         )
         local_client = httpx.AsyncClient(
-            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5)
+            verify=verify,
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
         )
         self._clients = [external_client, feed_client, local_client]
         self.external_default = HttpRequester(

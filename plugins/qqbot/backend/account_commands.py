@@ -25,13 +25,14 @@ class _AccountCommandsMixin:
     async def _preflight(self, app_id: str, secret: str) -> None:
         """Authenticate and query gateway before changing persisted/running creds."""
         candidate = QQBotChannel(app_id, secret)
+        candidate._open_http_client()
         try:
             token = await candidate._get_access_token()
             gateway = await candidate._api_request("GET", "/gateway", token=token)
             if not str(gateway.get("url") or "").strip():
                 raise RuntimeError("QQBot 网关响应缺少地址")
         finally:
-            await candidate._client.aclose()
+            await candidate._close_http_client()
 
     async def save_and_connect(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Apply an explicit credential commit after authentication succeeds."""

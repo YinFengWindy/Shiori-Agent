@@ -1,17 +1,29 @@
-"""Real runtime fixture registered by the explicitly installed testkit distribution."""
+"""Fixtures registered by the explicitly installed testkit distribution."""
 
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 
 import pytest
 from shiori_plugin_testkit.bridge import PluginBridgeService
 from shiori_plugin_testkit.packages import plugin_directory, stage_plugin_package
+from shiori_plugin_testkit.ssl_context import share_httpx_ssl_contexts
 
 PluginRuntime = Callable[
     [tuple[str, ...], str],
     AbstractAsyncContextManager[tuple[PluginBridgeService, Path]],
 ]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def shared_httpx_ssl_contexts() -> Iterator[None]:
+    """Loads CA certificates once per test session for every httpx client.
+
+    Host tests and standalone plugin test runs both load this plugin, so SDK
+    clients (e.g. python-telegram-bot) stop paying a CA reload per transport.
+    """
+    with share_httpx_ssl_contexts():
+        yield
 
 
 @pytest.fixture

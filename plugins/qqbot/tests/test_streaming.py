@@ -273,7 +273,6 @@ async def test_final_reply_waits_for_inflight_stream_id_and_index(
                 await release.wait()
         return result
 
-    await channel._client.aclose()
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     sink = _stream_sink(channel, event_bus, inbound)
     assert sink is not None
@@ -327,7 +326,6 @@ async def test_uncertain_stream_or_failed_recall_never_resends_or_marks_sent(
             return httpx.Response(500)
         return result
 
-    await channel._client.aclose()
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     sink = _stream_sink(channel, event_bus, inbound)
     assert sink is not None
@@ -364,7 +362,6 @@ async def test_cancelled_final_delivery_waits_for_receipt_and_never_marks_sent(
                 await release.wait()
         return result
 
-    await channel._client.aclose()
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     sink = _stream_sink(channel, event_bus, inbound)
     assert sink is not None
@@ -480,7 +477,6 @@ async def test_bus_dispatch_does_not_replay_uncertain_or_partial_qq_delivery(
             return httpx.Response(500)
         return result
 
-    await channel._client.aclose()
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     sink = _stream_sink(channel, event_bus, inbound)
     assert sink is not None
@@ -518,7 +514,6 @@ async def test_delayed_old_final_preserves_both_turns_stream_ownership(
             return httpx.Response(200, json={"id": f"stream-{body['msg_id']}"})
         return result
 
-    await channel._client.aclose()
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     # A newer inbound can change the channel's latest anchor before the old
     # turn even emits its first delta. Event ownership must retain msg-1.
@@ -660,7 +655,6 @@ async def test_bus_cancelled_delivery_with_failed_recall_never_replays(
             return httpx.Response(500)
         return result
 
-    await channel._client.aclose()
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     sink = _stream_sink(channel, event_bus, inbound)
     assert sink is not None

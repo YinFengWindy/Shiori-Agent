@@ -8,6 +8,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
+import httpx
+
 from .formatting import API_BASE, TOKEN_URL
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,25 @@ class QQBotAuthenticationError(RuntimeError):
 
 class _GatewayMixin:
     """Owns QQBot access tokens, REST requests, and Gateway reconnects."""
+
+    _client: httpx.AsyncClient | None
+
+    def _open_http_client(self) -> None:
+        """Creates the REST client unless one is already open."""
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=30.0)
+
+    async def _close_http_client(self) -> None:
+        """Closes the REST client; closed and never-opened share the ``None`` state."""
+        client, self._client = self._client, None
+        if client is not None:
+            await client.aclose()
+
+    def _http_client(self) -> httpx.AsyncClient:
+        """Returns the open REST client; requests before opening are a bug."""
+        if self._client is None:
+            raise RuntimeError("QQBot HTTP 客户端尚未打开")
+        return self._client
 
     async def _gateway_loop(self) -> None:
         while not self._stopped.is_set():
@@ -120,7 +141,7 @@ class _GatewayMixin:
         now = time.time()
         if self._token and now < self._token.expires_at - 300:
             return self._token.token
-        response = await self._client.post(
+        response = await self._http_client().post(
             TOKEN_URL,
             json={"appId": self._app_id, "clientSecret": self._client_secret},
         )
@@ -185,7 +206,9 @@ class _GatewayMixin:
         }
         if body is not None:
             kwargs["json"] = body
-        response = await self._client.request(method, f"{API_BASE}{path}", **kwargs)
+        response = await self._http_client().request(
+            method, f"{API_BASE}{path}", **kwargs
+        )
         response.raise_for_status()
         if not response.content:
             return {}

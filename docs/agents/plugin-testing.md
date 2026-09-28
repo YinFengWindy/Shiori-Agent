@@ -15,6 +15,8 @@ uv run pytest
 
 根目录不再有 `conftest.py`。`tests/conftest.py` 与 `tests/support/` 只提供宿主测试所需的 fixture 和历史 SDK stub。插件测试不得导入这些模块，不得从父目录推导原仓库路径。插件自己的文件可相对 `__file__` 定位；已声明的兄弟插件通过 `shiori_plugin_testkit.packages.plugin_directory()` 定位。整包暂存统一调用 `stage_plugin_package(source: Path, target: Path) -> Path`（同一模块），它保留插件源码、manifest、测试及资源，排除 `.venv`、含 `pyvenv.cfg` 的环境目录、构建缓存与包级运行状态；不要在各插件中复制 ignore 规则。宿主的 v2 fixture 也直接使用整包暂存；迁移回归在暂存后显式构造历史状态文件，不保留旧布局适配器。testkit 自身测试位于 `packages/shiori-plugin-testkit/tests/`，根 pytest 和测试类型检查均显式覆盖。
 
+testkit 的 pytest 插件在整个会话内按参数与证书环境变量缓存 httpx 的 SSL 上下文，避免每个 client 重复加载 CA 证书；宿主测试与插件独立运行都会启用。测试不得修改从 httpx 拿到的 SSL 上下文。
+
 ## 可安装边界
 
 - `shiori-agent` 是真实生产 Python 模块组成的私有 runtime wheel，使用显式包清单，不包含测试树、其他插件或用户状态。

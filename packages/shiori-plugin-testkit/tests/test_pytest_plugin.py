@@ -1,9 +1,10 @@
-"""The plugin runtime fixture shares account state with its desktop bridge."""
+"""Fixtures registered by the testkit pytest plugin."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 import pytest
 
 from desktop_bridge.runtime.service import ReloadableDesktopService
@@ -71,3 +72,13 @@ async def test_plugin_account_report_and_bridge_assignment_share_role_store(
         assert runtime_store.accounts.validate_access(
             runtime_store.accounts.authorize(account["id"], role_id)
         )
+
+
+def test_session_fixture_shares_ssl_context_between_httpx_clients():
+    first = httpx.AsyncClient(trust_env=False)
+    second = httpx.AsyncClient(trust_env=False)
+    first_transport = first._transport
+    second_transport = second._transport
+    assert isinstance(first_transport, httpx.AsyncHTTPTransport)
+    assert isinstance(second_transport, httpx.AsyncHTTPTransport)
+    assert first_transport._pool._ssl_context is second_transport._pool._ssl_context
