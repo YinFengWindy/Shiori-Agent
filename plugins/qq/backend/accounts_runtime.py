@@ -284,7 +284,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         if avatar is None:
             return
         config = self._configs.get(ref)
-        # The account may have been deleted or logged out while fetching.
+        # The account may have been deleted while fetching.
         if config is None or ref not in self._ids or config.avatar == avatar:
             return
         saved = replace(config, avatar=avatar)
@@ -323,6 +323,8 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         config = replace(self._configs[ref], auto_connect=False)
         self._store.save({**self._configs, ref: config})
         self._configs[ref] = config
+        # Logout goes through here too, so no fetch outlives the session.
+        await self._cancel_avatar(ref)
         task = self._tasks.pop(ref, None)
         if task is not None:
             task.cancel()

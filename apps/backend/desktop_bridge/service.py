@@ -287,12 +287,20 @@ class DesktopBridgeService:
         # lease. The push is therefore its own task in a fresh context: it pins
         # no runtime generation and cannot fail the reporting plugin; failures
         # are logged by the collector. Unwatched changes are dropped.
-        if self._event_listeners:
+        if not self._event_listeners:
+            return
+        push = self._push_account_changed(account_id)
+        try:
             _ = Context().run(
                 self._account_pushes.spawn,
-                self._push_account_changed(account_id),
+                push,
                 name=f"accounts.updated:{account_id}",
             )
+        except Exception:
+            # Bridge boundary: a push that cannot even be scheduled must not
+            # surface in the plugin's register/report call.
+            push.close()
+            logger.exception("Account change push for %s not scheduled", account_id)
 
     async def _push_account_changed(self, account_id: str) -> None:
         """Pushes account changes so account views refresh without polling."""

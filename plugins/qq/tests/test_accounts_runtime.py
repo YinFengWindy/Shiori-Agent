@@ -350,6 +350,55 @@ async def test_connected_avatar_is_stored_reregistered_and_kept_on_failed_refres
 
 
 @pytest.mark.asyncio
+async def test_disconnect_cancels_an_avatar_fetch_in_flight(
+    monkeypatch, tmp_path, _avatar_fetch
+):
+    store = QQAccountsStore(tmp_path)
+    store.save(
+        {
+            "known": QQConnectionConfig(
+                "known",
+                "ws://127.0.0.1:3001",
+                "secret",
+                expected_uin="101",
+                verified=True,
+                role_id="mira",
+            )
+        }
+    )
+    fetching = asyncio.Event()
+
+    async def slow_fetch(_uin):
+        fetching.set()
+        await asyncio.Event().wait()
+
+    _avatar_fetch.side_effect = slow_fetch
+    runtime = QQAccountsRuntime(store, _Accounts())
+    await runtime.load()
+    socket = _Socket("101")
+    socket.open = AsyncMock()
+    monkeypatch.setattr(runtime._managed, "start", AsyncMock())
+    monkeypatch.setattr(runtime._managed, "stop", AsyncMock())
+    monkeypatch.setattr(
+        runtime._managed,
+        "login_status",
+        AsyncMock(return_value={"phase": "online", "qrcode": "", "error": ""}),
+    )
+    monkeypatch.setattr(
+        "plugins.qq.backend.accounts_runtime.OneBotSocket", lambda *_args: socket
+    )
+    runtime._schedule("known")
+    await asyncio.wait_for(fetching.wait(), timeout=1)
+    fetch_task = runtime._avatar_tasks["known"]
+
+    await runtime.disconnect("qq-101")
+
+    assert fetch_task.cancelled()
+    assert "known" not in runtime._avatar_tasks
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
 async def test_pending_login_is_rechecked_quickly_without_flapping(
     monkeypatch, tmp_path
 ):
