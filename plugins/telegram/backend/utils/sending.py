@@ -4,7 +4,7 @@ import logging
 from collections.abc import Callable
 from typing import Any, cast
 
-from telegram import Bot, MessageEntity as TgEntity
+from telegram import Bot, MessageEntity as TgEntity, ReplyParameters
 from telegramify_markdown.entity import MessageEntity, split_entities
 
 from .limiter import TelegramOutboundLimiter, _run_outbound
@@ -18,6 +18,17 @@ def sent_message_id(sent: object) -> str | None:
     """Reads the id of the PTB ``Message`` a send call returned, if any."""
     message_id = getattr(sent, "message_id", None)
     return str(message_id) if message_id is not None else None
+
+
+def _reply_kwargs(message_id: int | None) -> dict[str, ReplyParameters]:
+    """Answer ``message_id``; the send still goes out if it was deleted meanwhile."""
+    if message_id is None:
+        return {}
+    return {
+        "reply_parameters": ReplyParameters(
+            message_id=message_id, allow_sending_without_reply=True
+        )
+    }
 
 
 def _serialize_entities(entities: list[MessageEntity]) -> list[dict] | None:
@@ -71,11 +82,13 @@ async def send_markdown(
     *,
     on_receipt: Callable[[str], None] | None = None,
     message_thread_id: int | None = None,
+    reply_to_message_id: int | None = None,
 ) -> str | None:
     """Sends Markdown chunks and returns the first acknowledged message ID.
 
     ``on_receipt`` observes each acknowledgement before the next chunk starts,
-    so callers can retain delivery evidence even if a later send raises.
+    so callers can retain delivery evidence even if a later send raises. The
+    first chunk replies to ``reply_to_message_id`` when given.
     """
     cid = int(chat_id)
     first_id: str | None = None
@@ -87,6 +100,7 @@ async def send_markdown(
     except Exception as e:
         logger.warning(f"[telegram] Markdown 转换失败，降级纯文本: {e}")
         for chunk in _split_text(text, 4090):
+            reply = _reply_kwargs(None if first_id else reply_to_message_id)
             sent = await _run_outbound(
                 limiter,
                 cid,
@@ -95,6 +109,7 @@ async def send_markdown(
                     chat_id=cid,
                     text=chunk,
                     **telegram_topic_kwargs(message_thread_id),
+                    **reply,
                 ),
                 label="send_message(plain)",
             )
@@ -107,6 +122,7 @@ async def send_markdown(
         chunk_text, chunk_entities = _strip_chunk(chunk_text, chunk_entities)
         if not chunk_text:
             continue
+        reply = _reply_kwargs(None if first_id else reply_to_message_id)
         sent = await _run_outbound(
             limiter,
             cid,
@@ -116,6 +132,7 @@ async def send_markdown(
                 text=chunk_text,
                 entities=cast(Any, _serialize_entities(chunk_entities)),
                 **telegram_topic_kwargs(message_thread_id),
+                **reply,
             ),
             label="send_message(markdown)",
         )

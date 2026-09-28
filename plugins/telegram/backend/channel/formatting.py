@@ -26,6 +26,14 @@ _RENDERING_PROMPT = (
 )
 
 
+def mention_markdown(member_ids: list[object] | tuple[object, ...]) -> str:
+    """Markdown mentioning each user by numeric ID, which works without a username."""
+    ids = [str(member).strip() for member in member_ids]
+    if any(not member.isdigit() for member in ids):
+        raise ValueError("Telegram @ 成员需要数字用户 ID")
+    return "".join(f"[@{member}](tg://user?id={member}) " for member in ids)
+
+
 def _is_private_chat_id(chat_id: str) -> bool:
     """Private Telegram chats have positive numeric IDs; groups are negative."""
     try:

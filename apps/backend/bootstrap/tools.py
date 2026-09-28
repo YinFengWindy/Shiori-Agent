@@ -722,4 +722,4 @@ def _validate_role_target(
     ):
         return True
 
-    return "外部发送请使用 account_send，并选择当前角色拥有的账号"
+    return "外部发送请使用 account_send，并用 channel 选择当前角色拥有账号的渠道"

@@ -11,6 +11,8 @@ from .models import (
     AccountRulesHandler,
     AccountSnapshot,
     ConnectionState,
+    VIA_ACCOUNT_KEY,
+    ViaAccount,
     account_id_for,
 )
 from .registry import AccountRegistry
@@ -32,6 +34,8 @@ __all__ = [
     "AccountRulesHandler",
     "AccountSnapshot",
     "ConnectionState",
+    "VIA_ACCOUNT_KEY",
+    "ViaAccount",
     "account_id_for",
     "response_rules_from_dict",
     "response_rules_to_dict",

@@ -10,6 +10,7 @@ from telegram.error import Conflict, InvalidToken, NetworkError, TelegramError, 
 from telegram.ext import ContextTypes
 
 from bus.events import OutboundMessage
+from core.common.channel_chat_types import REPLY_MENTION_IDS_KEY, is_group_chat_type
 from infra.channels.session_key import resolve_outbound_session_key
 
 from ..utils import TelegramStreamMessage, sent_message_id
@@ -19,6 +20,7 @@ from .compat import (
     _call_send_stream_markdown,
     _call_send_thinking_block,
 )
+from .formatting import mention_markdown
 
 logger = logging.getLogger("plugins.telegram.channel")
 
@@ -160,14 +162,32 @@ class _OutboundMixin:
             default_channel=self._channel,
             delivery_status=delivery_status,
             external_message_id=external_message_id or "",
+            via_account=(
+                self.via_account()
+                if delivery_status == "sent" and getattr(self, "_account_id", None)
+                else None
+            ),
         )
+
+    def via_account(self) -> dict[str, str]:
+        """The channel supplies the Bot's message snapshot."""
+        raise NotImplementedError
 
     async def _on_response(self, msg: OutboundMessage) -> None:
         preview = msg.content[:60] + "..." if len(msg.content) > 60 else msg.content
         logger.info(f"[telegram] 发送回复  chat_id={msg.chat_id}  内容: {preview!r}")
         cid = int(self._resolve_chat_id(msg.chat_id))
-        topic = (msg.metadata or {}).get("message_thread_id")
+        metadata = msg.metadata or {}
+        topic = metadata.get("message_thread_id")
         message_thread_id = topic if isinstance(topic, int) and topic > 0 else None
+        # A group reply answers the message that triggered it and mentions
+        # the members the role chose; private replies are sent as they are.
+        reply_to: int | None = None
+        mentions: list[object] = []
+        if is_group_chat_type(metadata.get("chat_type")):
+            trigger = str(metadata.get("external_message_id") or "")
+            reply_to = int(trigger) if trigger else None
+            mentions = list(metadata.get(REPLY_MENTION_IDS_KEY) or [])
         session_key = resolve_outbound_session_key(
             msg,
             default_channel=self._channel,
@@ -192,6 +212,10 @@ class _OutboundMixin:
         receipts: list[str] = []
         stream = None
         try:
+            # Inside the try: an unusable member ID marks the reply failed.
+            content = (
+                mention_markdown(mentions) + msg.content if mentions else msg.content
+            )
             if msg.content.strip():
                 if streamed_reply:
                     stream = self._active_streams.pop(str(msg.chat_id), None)
@@ -202,9 +226,10 @@ class _OutboundMixin:
                     first_id = await _call_send_markdown(
                         self._app.bot,
                         msg.chat_id,
-                        msg.content,
+                        content,
                         self._telegram_outbound_limiter,
                         on_receipt=receipts.append,
+                        reply_to_message_id=reply_to,
                         **telegram_topic_kwargs(message_thread_id),
                     )
             if final_thinking and not had_live:

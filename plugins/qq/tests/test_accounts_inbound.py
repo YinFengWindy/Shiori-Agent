@@ -2,11 +2,19 @@ from __future__ import annotations
 
 from plugins.qq.backend.accounts_inbound import inbound_message
 
+_VIA = {
+    "platform": "qq",
+    "platform_account_id": "101",
+    "display_name": "小栞",
+    "prefix": "QQ 号「小栞」（101）",
+}
+
 
 def test_group_event_preserves_account_group_and_member_identity():
     message = inbound_message(
         account_id="account-a",
         expected_uin="101",
+        via_account=_VIA,
         event={
             "post_type": "message",
             "message_type": "group",
@@ -31,6 +39,7 @@ def test_group_event_preserves_account_group_and_member_identity():
         "external_message_id": "45",
         "group_id": "777",
         "mentioned": True,
+        "via_account": _VIA,
     }
 
 
@@ -43,15 +52,21 @@ def test_group_trigger_uses_the_actual_account_qq_number():
         "user_id": 902,
         "raw_message": "hello",
     }
-    unmentioned = inbound_message(account_id="b", expected_uin="202", event=base)
+    unmentioned = inbound_message(
+        account_id="b", expected_uin="202", via_account=_VIA, event=base
+    )
     assert unmentioned is not None
     assert unmentioned.metadata["mentioned"] is False
     wrong_at = {**base, "raw_message": "[CQ:at,qq=101] hello"}
-    other_mention = inbound_message(account_id="b", expected_uin="202", event=wrong_at)
+    other_mention = inbound_message(
+        account_id="b", expected_uin="202", via_account=_VIA, event=wrong_at
+    )
     assert other_mention is not None
     assert other_mention.metadata["mentioned"] is False
     addressed = {**base, "raw_message": "[CQ:at,qq=202] hello"}
-    own_mention = inbound_message(account_id="b", expected_uin="202", event=addressed)
+    own_mention = inbound_message(
+        account_id="b", expected_uin="202", via_account=_VIA, event=addressed
+    )
     assert own_mention is not None
     assert own_mention.metadata["mentioned"] is True
 
@@ -61,6 +76,7 @@ def test_other_account_event_is_rejected():
         inbound_message(
             account_id="account-a",
             expected_uin="101",
+            via_account=_VIA,
             event={
                 "post_type": "message",
                 "message_type": "private",

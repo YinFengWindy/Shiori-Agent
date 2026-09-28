@@ -96,7 +96,7 @@ class DemoChatChannel:
 一条入站消息的标准处理顺序（飞书 `_handle_message` / `_accept_inbound`）：
 
 1. 解析平台事件，按平台消息 id 去重（重投很常见，`infra.channels.base.MessageDeduper` 或自带的过期集合）。
-2. 构造 `InboundMessage(channel=self.name, sender=<平台用户 id>, chat_id=<会话 id>, content=..., media=[本地路径], metadata={...})`。`metadata` 必须带已登记的 `account_id`，并带 `message_id` / `external_message_id`（宿主用它在线程里去重）；能确定时带 `chat_type`、`mentioned` 和发送者别名 `username`。
+2. 构造 `InboundMessage(channel=self.name, sender=<平台用户 id>, chat_id=<会话 id>, content=..., media=[本地路径], metadata={...})`。`metadata` 必须带已登记的 `account_id`，并带 `message_id` / `external_message_id`（宿主用它在线程里去重）；能确定时带 `chat_type`、`mentioned` 和发送者别名 `username`。同时在 `metadata["via_account"]` 附上接收账号的快照（见下文「经由账号快照」）。
 3. 交给 `ChannelIntake.submit()`；真正接收时：
    - `ctx.channel_hub.is_sender_allowed(channel=, chat_id=, sender_id=, account_id=)` 为假就丢弃。只有已登记、在线且所属角色存在的接收账号能处理消息。
    - `message = ctx.channel_hub.route_account_inbound(message)`：按该账号的私聊/群聊开关、需要 @ 与黑名单准入，所有群聊共用这组账号级设置；返回 `None` 就丢弃，否则补上 `role_id`、`thread_id`、`session_key_override` 等元数据。
@@ -108,6 +108,23 @@ class DemoChatChannel:
 - **访问控制由接收账号的响应规则决定**。插件将规则与账号一起保存，入站时交给 `ChannelHub` 判断；黑名单支持发送者 ID 与忽略大小写的渠道别名（如 Telegram 用户名）。`/stop` 等控制命令走同一账号准入。`/chatid`（别名 `/myid`）由渠道插件自己识别并回复会话类型与号码，不进入角色对话。
 - **会话键**：准入后的消息用所属角色的 `role:<role_id>`（路由写进 `session_key_override`）。出站处理和流式状态统一用 `infra.channels.session_key.resolve_outbound_session_key(msg, default_channel=self.name)` 计算，与 `TurnStarted` / `StreamDeltaReady` 的 `session_key` 对齐。
 - 用户引用了一条历史消息时，用 `infra.channels.reply_context.build_inbound_text_with_reply_context()` 拼进正文，保持各渠道的格式一致。
+
+### 经由账号快照
+
+契约定义在 `apps/backend/core/accounts/models.py`：`ViaAccount` 与元数据键 `VIA_ACCOUNT_KEY = "via_account"`。快照描述消息当时经由的账号，由插件自己构造，宿主原样存进消息元数据，不回头查账号索引，所以账号删除后历史消息里的快照照样可读；旧消息没有快照时不显示，也不回填。
+
+```python
+ViaAccount(
+    platform="qq",                  # 与 register(...) 的 platform 一致
+    platform_account_id="101",      # 与 register(...) 的 platform_account_id 一致
+    display_name="小栞",             # 当时的显示名，可为空字符串
+    prefix="QQ 号「小栞」（101）",     # 插件按平台习惯写好的来源文案
+).to_metadata()
+```
+
+- 三条路径都要带：入站消息的 `metadata["via_account"]`；回复送达后 `channel_hub.mark_delivery(..., via_account=...)`（只在 `sent` 时传）；`account.send` 的返回值 `{"message_id": ..., "via_account": ...}`。发送前取快照，保证平台已接受的发送一定带回快照。
+- 宿主会校验形状，并要求 `platform` / `platform_account_id` 与该账号登记的一致，不一致视为插件缺陷直接报错。
+- 模型看到的来源前缀直接使用 `prefix`：`[消息来源: {...}；经由账号: QQ 号「小栞」（101）]`。现有文案：QQ `QQ 号「昵称」（QQ 号）`、QQBot `QQ 机器人「机器人名」（AppID ...）`、Telegram `Telegram 机器人「名称」（@用户名）`、飞书 `飞书应用「应用名」（<区域>:<app_id>）`。
 
 ## 5. 出站与 `message_push`
 
@@ -127,9 +144,19 @@ async def stop(self):
     self._push_tool.unregister_channel(self.name, text=self.send)
 ```
 
-- `subscribe_outbound` 接收 Agent 回合的最终回复（`OutboundMessage`）。发送成功或失败后调用 `ctx.channel_hub.mark_delivery(msg, default_channel=self.name, delivery_status="sent"|"failed", external_message_id=...)`，让会话里的消息状态正确。
+- `subscribe_outbound` 接收 Agent 回合的最终回复（`OutboundMessage`）。发送成功或失败后调用 `ctx.channel_hub.mark_delivery(msg, default_channel=self.name, delivery_status="sent"|"failed", external_message_id=..., via_account=...)`，让会话里的消息状态正确；`via_account` 只在 `sent` 时传发送账号的快照。
+- **群聊被动回复点名触发者**：回复的 `msg.metadata` 带着触发消息的元数据（`chat_type`、`sender_id`、`external_message_id` 等）。`chat_type` 为群聊（`core.common.channel_chat_types.is_group_chat_type`）时，插件按平台惯例点名触发者：QQ 在开头 @ 发送者，Telegram 回复触发消息。模型额外选择要 @ 的成员放在 `metadata["mention_ids"]`（键名 `REPLY_MENTION_IDS_KEY`），插件一并提及。私聊回复不受影响；没有群聊的渠道忽略这些字段。
 - `register_channel` 让模型能用 `message_push` 主动发消息。`description` 会写进工具描述的「当前可用渠道」列表，用一句话说明渠道身份和 chat_id 格式；工具描述只列出当前已注册、未停用的渠道。
 - `unregister_channel` 传入自己的 `text` 回调，只注销本实例的注册，不会误删换代后新连接的注册。
+
+### 账号目标发送（`account.send` / `account.targets`）
+
+模型通过宿主的 `account_list`、`account_targets`、`account_send` 工具和 `message_push` 改投使用账号，参数里只有渠道 ID（插件 ID），宿主按「每个渠道一个账号」找到当前角色的账号，再以 `account_id` 调用插件 RPC。常量与请求形状在 `apps/backend/core/accounts/target_contract.py`：
+
+- `account.targets` 收到 `account_id`、`kind`、`group_id`、`member_id`。
+- `account.send` 收到 `account_id`、`message`，以及 `AccountTarget.to_payload()`：`target_kind`、`target_id`、`message_thread_id`（整数或 `None`）、`group_id`（仅 `group_member`，否则为空字符串）、`mention_ids`（仅 `group`，可为空列表）。
+- 宿主只校验形状：`mention_ids` 只能用于 `target_kind="group"`；`target_kind="group_member"`（群临时会话，`target_id` 为成员 ID）必须带 `group_id`。平台能不能做由插件判断，做不到时明确报错，例如 QQBot、飞书没有群聊，收到 `mention_ids` 或 `group_member` 直接拒绝；Telegram 支持提及但没有群临时会话。
+- 返回平台真实的 `message_id`；拿不到回执时抛 `UncertainDeliveryError`，宿主把尝试记为「不确定」。
 
 ## 6. 可选钩子
 
@@ -189,6 +216,7 @@ uv run python scripts/verify_plugin_tests.py --plugins <id>
 - [ ] 构造函数不产生流量；`configuration_key` 覆盖全部连接设置。
 - [ ] `start`/`stop` 可重复调用；`stop` 先断来源再排空任务；出站和推送注册在 `stop` 里撤销。
 - [ ] 入站带已登记的 `account_id`，经 `is_sender_allowed(..., account_id=...)` → `route_account_inbound` → 去重 → `publish_inbound`；用 `ChannelIntake` 处理换代暂停。
+- [ ] 入站、回复送达和 `account.send` 回执都附上 `ViaAccount` 快照；不支持的 `mention_ids` / `group_member` 明确报错。
 - [ ] 开了流式就消费事件并在最终回复时收尾；失败时退回普通发送。
 - [ ] `register_channel(..., description=)` 写清 chat_id 格式。
 - [ ] 测试离线，`verify_plugin_tests.py --plugins <id>` 通过。

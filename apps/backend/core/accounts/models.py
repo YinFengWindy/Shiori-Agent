@@ -8,7 +8,7 @@ the accounts its loaded plugins registered.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Literal
 
 ConnectionState = Literal[
@@ -36,6 +36,63 @@ def account_id_for(plugin_id: str, platform_account_id: str) -> str:
     platform account yields the same ID and its history stays attached.
     """
     return f"{plugin_id}:{platform_account_id}"
+
+
+# Message metadata key of the ``ViaAccount`` snapshot a plugin supplies.
+VIA_ACCOUNT_KEY = "via_account"
+
+
+@dataclass(frozen=True)
+class ViaAccount:
+    """The account a message came in or went out through, as its plugin saw it.
+
+    Channel plugins build it themselves and attach ``to_metadata()`` under
+    ``VIA_ACCOUNT_KEY``: to inbound message metadata, to
+    ``ChannelHub.mark_delivery(via_account=...)`` for replies, and to
+    ``account.send`` results. The host stores it with the message as-is, so it
+    stays readable after the account is deleted, and shows ``prefix`` to the
+    model as the message's 「经由账号」.
+    """
+
+    platform: str
+    platform_account_id: str
+    # The account's display name when the message passed; may be empty.
+    display_name: str
+    # Plugin-formatted source text, e.g. how the platform names the account.
+    prefix: str
+
+    def to_metadata(self) -> dict[str, str]:
+        """The JSON-safe form stored in message metadata."""
+        return asdict(self)
+
+    @classmethod
+    def from_metadata(cls, value: object) -> ViaAccount:
+        """Reads a stored or plugin-supplied snapshot; raises ValueError if malformed."""
+        if not isinstance(value, dict):
+            raise ValueError("经由账号快照必须是对象")
+        fields: dict[str, str] = {}
+        for name in ("platform", "platform_account_id", "display_name", "prefix"):
+            item = value.get(name)
+            if not isinstance(item, str):
+                raise ValueError(f"经由账号快照缺少文本字段 {name}")
+            fields[name] = item
+        if not all(
+            fields[name].strip()
+            for name in ("platform", "platform_account_id", "prefix")
+        ):
+            raise ValueError("经由账号快照的平台、平台账号和前缀不能为空")
+        return cls(**fields)
+
+    @classmethod
+    def for_account(cls, value: object, record: AccountRecord) -> ViaAccount:
+        """Reads a plugin snapshot that must describe ``record``'s platform account."""
+        via = cls.from_metadata(value)
+        if (via.platform, via.platform_account_id) != (
+            record.platform,
+            record.platform_account_id,
+        ):
+            raise ValueError("经由账号快照与账号不一致")
+        return via
 
 
 @dataclass(frozen=True)

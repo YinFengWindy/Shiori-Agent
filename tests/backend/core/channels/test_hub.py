@@ -669,3 +669,90 @@ def test_channel_hub_blocks_only_blacklisted_senders_of_bound_sessions(
     )
     assert not hub.is_sender_blocked(channel="telegram", chat_id="-100", sender_id="8")
     assert not hub.is_sender_blocked(channel="telegram", chat_id="-200", sender_id="7")
+
+
+def _via(platform_account_id: str = "self") -> dict[str, str]:
+    return {
+        "platform": "telegram",
+        "platform_account_id": platform_account_id,
+        "display_name": "Mira Bot",
+        "prefix": "Telegram 机器人「Mira Bot」（@mira_bot）",
+    }
+
+
+@pytest.mark.asyncio
+async def test_plugin_snapshots_are_stored_as_given_and_outlive_the_account(
+    tmp_path: Path,
+) -> None:
+    from core.accounts import AccountDeletionPlan
+    from core.common.message_source import MessageSource
+
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    service.create_role(
+        role_id="mira", name="Mira", description="bound role", system_prompt="mira"
+    )
+    account_id = _live_account(service, "telegram")
+    hub = ChannelHub(service)
+    inbound = InboundMessage(
+        channel="telegram",
+        sender="u1",
+        chat_id="123",
+        content="hello",
+        metadata={"account_id": account_id, "via_account": _via()},
+    )
+    routed = hub.route_inbound(inbound)
+    assert routed.metadata["via_account"] == _via()
+    # A snapshot naming another platform account is a plugin defect.
+    with pytest.raises(ValueError, match="不一致"):
+        hub.route_inbound(
+            InboundMessage(
+                channel="telegram",
+                sender="u1",
+                chat_id="123",
+                content="hello",
+                metadata={"account_id": account_id, "via_account": _via("other")},
+            )
+        )
+
+    session = session_manager.get_or_create("role:mira")
+    session.add_message("assistant", "reply", thread_id=routed.metadata["thread_id"])
+    session_manager.save(session)
+    committed = str(session.messages[-1]["id"])
+    hub.mark_delivery(
+        OutboundMessage(
+            channel="telegram",
+            chat_id="123",
+            content="reply",
+            metadata={
+                "role_id": "mira",
+                "session_key_override": "role:mira",
+                "thread_id": str(routed.metadata["thread_id"]),
+            },
+            committed_message_id=committed,
+        ),
+        default_channel="telegram",
+        delivery_status="sent",
+        external_message_id="tg-1",
+        via_account=_via(),
+    )
+    assert session.messages[-1]["metadata"]["via_account"] == _via()
+
+    async def done() -> None:
+        return None
+
+    accounts = service.repository.store.accounts
+    accounts.set_delete_handler(
+        "telegram", lambda ref: AccountDeletionPlan(disconnect=done, purge=done)
+    )
+    await accounts.delete(account_id, role_id="mira")
+
+    stored = session_manager._store.get_message(committed)
+    assert stored is not None
+    assert stored["metadata"]["via_account"] == _via()
+    source = MessageSource.from_metadata(stored["metadata"], session_key="role:mira")
+    assert source.via_account == "Telegram 机器人「Mira Bot」（@mira_bot）"

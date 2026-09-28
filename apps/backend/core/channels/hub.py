@@ -5,8 +5,14 @@ from typing import Any
 
 from bus.events import InboundMessage, OutboundMessage
 from core.common.channel_directory import ChannelDirectory
+from core.common.channel_chat_types import is_group_chat_type
 from core.common.channel_identifiers import normalize_sender_id
-from core.accounts import AccountRegistry, AccountSnapshot
+from core.accounts import (
+    VIA_ACCOUNT_KEY,
+    AccountRegistry,
+    AccountSnapshot,
+    ViaAccount,
+)
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
@@ -65,12 +71,15 @@ class ChannelHub:
         account = self._live_owned_account(account_id, message.channel)
         if account is None:
             return None
+        if VIA_ACCOUNT_KEY in metadata:
+            metadata[VIA_ACCOUNT_KEY] = ViaAccount.for_account(
+                metadata[VIA_ACCOUNT_KEY], account.record
+            ).to_metadata()
         role_id = account.record.role_id
         if role_id is None:
             return None
         rules = account.record.response_rules
-        chat_type = str(metadata.get("chat_type") or "private").lower()
-        group = chat_type in {"group", "supergroup"}
+        group = is_group_chat_type(metadata.get("chat_type"))
         # Every group chat follows the account-wide group switch and @ requirement.
         if group:
             if not rules.group_enabled:
@@ -245,8 +254,12 @@ class ChannelHub:
         default_channel: str,
         delivery_status: str,
         external_message_id: str = "",
+        via_account: dict[str, str] | None = None,
     ) -> dict[str, Any] | None:
         """Writes delivery state to the message this outbound was committed as.
+
+        ``via_account`` is the sending plugin's ``ViaAccount`` snapshot; it is
+        stored with the message as-is under ``VIA_ACCOUNT_KEY``.
 
         An outbound without a committed message id returns early without
         touching or validating anything: there is no row to mark, so the
@@ -287,4 +300,9 @@ class ChannelHub:
             thread_id=thread_id,
             delivery_status=delivery_status,
             external_message_id=external_message_id,
+            metadata_updates=(
+                {VIA_ACCOUNT_KEY: ViaAccount.from_metadata(via_account).to_metadata()}
+                if via_account is not None
+                else None
+            ),
         )

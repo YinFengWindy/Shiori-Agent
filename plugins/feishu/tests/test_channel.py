@@ -158,6 +158,14 @@ async def test_two_account_channels_isolate_inbound_targets_and_receipts(
     assert set(by_channel) == {"feishu", "feishu:lark:cli_b"}
     assert by_channel["feishu"].metadata["account_id"] == "account-a"
     assert by_channel["feishu:lark:cli_b"].metadata["account_id"] == "account-b"
+    # Each application stamps its own snapshot on what it receives.
+    assert by_channel["feishu"].metadata["via_account"] == first.channel.via_account()
+    assert by_channel["feishu:lark:cli_b"].metadata["via_account"] == {
+        "platform": "feishu",
+        "platform_account_id": "lark:cli_b",
+        "display_name": second.channel._bot_name,
+        "prefix": second.channel.via_account()["prefix"],
+    }
     assert first.channel.known_private_targets()[0]["open_id"] == "ou_user"
     assert second.channel.known_private_targets()[0]["open_id"] == "ou_other"
     receipt = await second.channel.send(CHAT_ID, "reply")
@@ -195,6 +203,7 @@ async def test_chunk_send_keeps_first_nonempty_receipt(
             default_channel="feishu",
             delivery_status="sent",
             external_message_id="om_second",
+            via_account=None,
         )
     else:
         assert await harness.channel.send(CHAT_ID, content) == "om_second"
@@ -225,6 +234,7 @@ async def test_partial_chunk_failure_retains_first_receipt(harness: Any) -> None
         default_channel="feishu",
         delivery_status="failed",
         external_message_id=harness.api.sent_ids[0],
+        via_account=None,
     )
 
 
@@ -296,6 +306,7 @@ async def test_response_records_retained_platform_receipt(
         default_channel="feishu",
         delivery_status="failed" if mode in {"failed", "cancelled"} else "sent",
         external_message_id=expected,
+        via_account=None,
     )
     if mode == "fallback":
         assert any(

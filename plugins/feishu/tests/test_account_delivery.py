@@ -50,7 +50,10 @@ async def test_profile_and_targets_stay_scoped_to_the_selected_account() -> None
 
 @pytest.mark.asyncio
 async def test_account_send_requires_private_target_and_certain_receipt() -> None:
-    channel = SimpleNamespace(send=AsyncMock(return_value="om_1"))
+    via = {"platform": "feishu", "platform_account_id": "feishu:app"}
+    channel = SimpleNamespace(
+        send=AsyncMock(return_value="om_1"), via_account=lambda: via
+    )
     accounts = SimpleNamespace(
         channel=lambda ref: channel if ref == "feishu:app" else None,
         ref_for_account=lambda payload: "feishu:app",
@@ -63,10 +66,21 @@ async def test_account_send_requires_private_target_and_certain_receipt() -> Non
         "message": "hello",
     }
 
-    assert await delivery.send_account(payload) == {"message_id": "om_1"}
+    assert await delivery.send_account(payload) == {
+        "message_id": "om_1",
+        "via_account": via,
+    }
     channel.send.assert_awaited_once_with("oc_a", "hello")
     with pytest.raises(ValueError, match="仅支持私聊"):
         await delivery.send_account({**payload, "target_kind": "group"})
+    # No group chats: mentions and group temporary sessions are refused clearly.
+    with pytest.raises(ValueError, match="不支持 @ 成员"):
+        await delivery.send_account(
+            {**payload, "target_kind": "group", "mention_ids": ["ou_b"]}
+        )
+    with pytest.raises(ValueError, match="群临时会话"):
+        await delivery.send_account({**payload, "target_kind": "group_member"})
+    channel.send.assert_awaited_once()
     channel.send.return_value = None
     with pytest.raises(UncertainDeliveryError, match="未返回回执"):
         await delivery.send_account(payload)

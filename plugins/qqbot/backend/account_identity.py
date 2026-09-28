@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from core.accounts import stored_response_rules
+from core.accounts import ViaAccount, stored_response_rules
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
@@ -86,6 +86,20 @@ class QQBotAccountIdentity:
     def account_id(self, app_id: str) -> str:
         """Return the registered ID, or empty while a new gateway is staged."""
         return self._account_ids.get(app_id, "")
+
+    def via_account(self, app_id: str) -> dict[str, str]:
+        """The application's message snapshot, named as QQ names bots."""
+        name = str(self._store.get(app_id).get("bot_name") or "").strip()
+        return ViaAccount(
+            platform="qqbot",
+            platform_account_id=app_id,
+            display_name=name,
+            prefix=(
+                f"QQ 机器人「{name}」（AppID {app_id}）"
+                if name
+                else f"QQ 机器人（AppID {app_id}）"
+            ),
+        ).to_metadata()
 
     def app_for_account(self, payload: dict[str, Any]) -> str:
         """Resolve a plugin RPC's account ID to its application ID."""

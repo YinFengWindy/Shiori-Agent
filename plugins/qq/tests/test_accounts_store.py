@@ -60,3 +60,17 @@ def test_managed_credentials_round_trip_without_leaking_into_public_settings(tmp
         "role_id": "mira",
     }
     assert "private-token" not in str(config.public_dict())
+
+
+def test_via_account_names_the_qq_number_and_last_nickname():
+    config = QQConnectionConfig(
+        ref="a", ws_uri="ws://127.0.0.1:1", ws_token="t", expected_uin="101"
+    )
+    assert config.via_account() == {
+        "platform": "qq",
+        "platform_account_id": "101",
+        "display_name": "",
+        "prefix": "QQ 号 101",
+    }
+    named = QQConnectionConfig(**{**config.__dict__, "display_name": "小栞"})
+    assert named.via_account()["prefix"] == "QQ 号「小栞」（101）"

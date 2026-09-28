@@ -259,7 +259,15 @@ async def test_qqbot_c2c_inbound_is_role_routed_and_deduplicated() -> None:
 @pytest.mark.asyncio
 async def test_c2c_inbound_is_scoped_to_its_application_account() -> None:
     bus = _Bus()
-    channel = QQBotChannel("app-1", "secret", account_id="account-1")
+    via = {
+        "platform": "qqbot",
+        "platform_account_id": "app-1",
+        "display_name": "Bot",
+        "prefix": "QQ 机器人「Bot」（AppID app-1）",
+    }
+    channel = QQBotChannel(
+        "app-1", "secret", account_id="account-1", via_account=lambda: via
+    )
     channel._bus = bus
     channel._channel_hub = _Hub()
     channel._send_input_notify = AsyncMock()
@@ -271,6 +279,7 @@ async def test_c2c_inbound_is_scoped_to_its_application_account() -> None:
     assert bus.inbound[0].chat_id == "c2c:app-1:opaque-user"
     assert bus.inbound[0].metadata["account_id"] == "account-1"
     assert bus.inbound[0].metadata["qqbot_app_id"] == "app-1"
+    assert bus.inbound[0].metadata["via_account"] == via
 
 
 @pytest.mark.asyncio

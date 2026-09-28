@@ -12,6 +12,8 @@ from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
 from conversation.service import LegacySessionDescriptor, network_thread_id
+from core.accounts import VIA_ACCOUNT_KEY
+from core.accounts.target_contract import AccountTarget
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.roles.reply_state import (
     RoleReplyContext,
@@ -203,13 +205,12 @@ class TurnOrchestrator:
         if isinstance(account_target, dict):
             if self._account_delivery is None:
                 raise RuntimeError("账号目标发送服务不可用")
+            # The role's account on the named channel plugin sends it.
             receipt = await self._account_delivery.send(
-                str(account_target.get("account_id") or ""),
+                str(account_target.get("account_channel") or ""),
                 str(metadata.get("role_id") or ""),
-                str(account_target.get("target_kind") or ""),
-                str(account_target.get("target_id") or ""),
+                AccountTarget.from_arguments(account_target),
                 content,
-                account_target.get("message_thread_id"),
                 source="proactive",
                 media=media,
             )
@@ -219,6 +220,11 @@ class TurnOrchestrator:
                     "delivery_account_id": receipt.account_id,
                     "delivery_target_kind": receipt.target_kind,
                     "delivery_target_id": receipt.target_id,
+                    **(
+                        {VIA_ACCOUNT_KEY: receipt.via_account}
+                        if receipt.via_account is not None
+                        else {}
+                    ),
                 }
             )
             message["delivery_status"] = "sent"

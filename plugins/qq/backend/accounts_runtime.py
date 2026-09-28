@@ -462,10 +462,28 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         return await self._actions.discover(account_id, kind, group_id)
 
     async def send_target(
-        self, account_id: str, kind: str, target_id: str, message: str
+        self,
+        account_id: str,
+        kind: str,
+        target_id: str,
+        message: str,
+        *,
+        group_id: str = "",
+        mention_ids: tuple[str, ...] = (),
     ) -> dict[str, str]:
         """Dispatches a target send through this account's socket."""
-        return await self._actions.send_target(account_id, kind, target_id, message)
+        return await self._actions.send_target(
+            account_id,
+            kind,
+            target_id,
+            message,
+            group_id=group_id,
+            mention_ids=mention_ids,
+        )
+
+    def via_account(self, account_id: str) -> dict[str, str]:
+        """The account's current snapshot for the host to store with a message."""
+        return self._configs[self._ref_for(account_id)].via_account()
 
 
 def _is_auth_failure(error: Exception) -> bool:

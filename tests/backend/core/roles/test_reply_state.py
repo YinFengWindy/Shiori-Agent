@@ -11,6 +11,7 @@ import pytest
 from core.roles.reply_state import (
     InvalidRoleReply,
     role_mood_catalog,
+    role_mood_prompt,
     validate_role_reply,
 )
 
@@ -59,3 +60,16 @@ def test_mood_catalog_does_not_require_illustrations():
         {"mood_catalog": ["平静", "开心"], "mood_illustration_bindings": {}}
     ) == ("平静", "开心")
     assert role_mood_catalog({}) == ("平静",)
+
+
+def test_group_reply_may_name_extra_members_to_mention():
+    payload = {"content": "好", "mood": "平静", "thought": "我放心了。"}
+    assert validate_role_reply(payload, ("平静",)).mention_ids == ()
+    reply = validate_role_reply(
+        {**payload, "mention_ids": ["902", 903, "902"]}, ("平静",)
+    )
+    assert reply.mention_ids == ("902", "903")
+    with pytest.raises(InvalidRoleReply, match="mention_ids"):
+        validate_role_reply({**payload, "mention_ids": "902"}, ("平静",))
+    assert "mention_ids" in role_mood_prompt(("平静",), group=True)
+    assert "mention_ids" not in role_mood_prompt(("平静",))

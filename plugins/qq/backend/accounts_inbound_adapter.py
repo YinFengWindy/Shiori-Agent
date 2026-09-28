@@ -56,9 +56,11 @@ class QQInboundAdapter:
     async def _on_event(self, ref: str, event: dict[str, Any]) -> None:
         if ref not in self._ids:
             return
+        config = self._configs[ref]
         message = inbound_message(
             account_id=self._ids[ref],
-            expected_uin=self._configs[ref].expected_uin,
+            expected_uin=config.expected_uin,
+            via_account=config.via_account(),
             event=event,
         )
         if message is not None:

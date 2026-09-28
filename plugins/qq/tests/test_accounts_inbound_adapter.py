@@ -8,6 +8,7 @@ import pytest
 import plugins.qq.backend.accounts_inbound_adapter as inbound_adapter
 from plugins.qq.backend.accounts_inbound import inbound_message
 from plugins.qq.backend.accounts_inbound_adapter import QQInboundAdapter
+from plugins.qq.backend.accounts_store import QQConnectionConfig
 
 
 def _group_message(mentioned: bool):
@@ -15,6 +16,9 @@ def _group_message(mentioned: bool):
     message = inbound_message(
         account_id="account-b",
         expected_uin="202",
+        via_account=QQConnectionConfig(
+            ref="b", ws_uri="ws://127.0.0.1:1", ws_token="t", expected_uin="202"
+        ).via_account(),
         event={
             "post_type": "message",
             "message_type": "group",

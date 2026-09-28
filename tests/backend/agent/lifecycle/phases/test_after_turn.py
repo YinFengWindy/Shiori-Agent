@@ -12,6 +12,7 @@ from agent.account_delivery import AccountDelivery
 from agent.account_delivery.turn_state import account_delivery_scope
 from bus.events import OutboundMessage
 from core.accounts import AccountRegistry
+from core.accounts.target_contract import AccountTarget
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 
 
@@ -57,7 +58,7 @@ async def test_uncertain_account_send_does_not_auto_dispatch_original(tmp_path) 
     with account_delivery_scope(state):
         with pytest.raises(TimeoutError):
             await delivery.send(
-                account.record.id, "mira", "private", "remote-user", "hi", None
+                "chat", "mira", AccountTarget("private", "remote-user"), "hi"
             )
 
     port = SimpleNamespace(dispatch=AsyncMock())

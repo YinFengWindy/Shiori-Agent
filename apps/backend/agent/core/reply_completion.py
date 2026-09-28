@@ -32,12 +32,14 @@ async def fetch_role_mood(
     messages: list[dict],
     content: str,
     moods: tuple[str, ...],
+    group: bool = False,
 ) -> RoleReply | None:
     """Return a validated mood/thought that followed `content`, or None.
 
     `messages` is the exact prefix used to generate `content`; the produced
     content is appended as an assistant turn before asking the mood question,
-    so thought reflects the moment right after speaking, not before.
+    so thought reflects the moment right after speaking, not before. In a
+    group reply (``group``) the model may also list extra members to mention.
 
     The auxiliary purpose bypasses role effort through the provider's thinking
     controls. Providers with explicit thinking-off support cap this short
@@ -74,7 +76,7 @@ async def fetch_role_mood(
     mood_messages = [
         *messages,
         {"role": "assistant", "content": content},
-        {"role": "user", "content": role_mood_prompt(moods)},
+        {"role": "user", "content": role_mood_prompt(moods, group=group)},
     ]
     response: LLMResponse | None = None
     try:

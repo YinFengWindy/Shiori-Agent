@@ -11,6 +11,7 @@ from uuid import uuid4
 from agent.plugin_host.plugin_data import plugin_data_dir
 from core.accounts import (
     AccountResponseRules,
+    ViaAccount,
     response_rules_to_dict,
     stored_response_rules,
 )
@@ -36,6 +37,21 @@ class QQConnectionConfig:
     role_id: str | None = None
     # Response rules edited on the host; None until first saved (defaults).
     response_rules: AccountResponseRules | None = None
+
+    def via_account(self) -> dict[str, str]:
+        """The account snapshot the host stores with each message it passes.
+
+        QQ names an account by its QQ number; the nickname is the one seen at
+        the last login.
+        """
+        name = self.display_name.strip()
+        uin = self.expected_uin
+        return ViaAccount(
+            platform="qq",
+            platform_account_id=uin,
+            display_name=name,
+            prefix=f"QQ 号「{name}」（{uin}）" if name else f"QQ 号 {uin}",
+        ).to_metadata()
 
     def public_dict(self) -> dict[str, str | float | bool | None]:
         """Projects account identity and state without internal socket secrets."""

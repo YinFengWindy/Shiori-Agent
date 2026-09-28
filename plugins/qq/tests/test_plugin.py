@@ -75,19 +75,32 @@ def test_plugin_contributes_one_account_channel() -> None:
 
 @pytest.mark.asyncio
 async def test_shared_account_send_adapts_target_and_rejects_topic() -> None:
+    from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
-    runtime = type(
-        "Runtime", (), {"send_target": AsyncMock(return_value={"message_id": "9"})}
-    )()
+    via = QQConnectionConfig(
+        ref="a", ws_uri="ws://127.0.0.1:1", ws_token="t", expected_uin="101"
+    ).via_account()
+    runtime = SimpleNamespace(
+        send_target=AsyncMock(return_value={"message_id": "9"}),
+        via_account=lambda account_id: via,
+    )
     payload = {
         "account_id": "account-1",
         "target_kind": "group",
         "target_id": "42",
         "message": "hello",
+        "message_thread_id": None,
+        "group_id": "",
+        "mention_ids": ["902"],
     }
-    assert await _send_account(runtime, payload) == {"message_id": "9"}
-    runtime.send_target.assert_awaited_once_with("account-1", "group", "42", "hello")
+    assert await _send_account(runtime, payload) == {
+        "message_id": "9",
+        "via_account": via,
+    }
+    runtime.send_target.assert_awaited_once_with(
+        "account-1", "group", "42", "hello", group_id="", mention_ids=("902",)
+    )
     with pytest.raises(ValueError, match="话题"):
         await _send_account(runtime, {**payload, "message_thread_id": 7})
 

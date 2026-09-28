@@ -75,6 +75,11 @@ class _OutboundMixin:
             default_channel=CHANNEL,
             delivery_status=status,
             external_message_id=external_message_id or "",
+            via_account=(
+                self._via_account()
+                if status == "sent" and self._via_account is not None
+                else None
+            ),
         )
 
     async def send_proactive(self, chat_id: str, message: str) -> str | None:

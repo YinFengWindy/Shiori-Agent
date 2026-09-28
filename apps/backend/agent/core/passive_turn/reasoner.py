@@ -5,6 +5,7 @@ from agent.tools.turn_scope import tool_turn
 from agent.account_delivery.turn_state import account_delivery_scope
 
 from core.roles.reply_state import role_mood_catalog
+from core.common.channel_chat_types import is_group_chat_type
 
 import asyncio
 import logging
@@ -488,6 +489,7 @@ class DefaultReasoner(
                             if role_metadata.get("role_id")
                             else None
                         ),
+                        group_reply=is_group_chat_type(msg.metadata.get("chat_type")),
                         previous_mood=str(role_metadata.get("current_mood") or ""),
                         previous_thought=str(
                             role_metadata.get("current_thought") or ""

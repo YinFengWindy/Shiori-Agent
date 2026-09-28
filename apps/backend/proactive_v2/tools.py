@@ -15,6 +15,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
+from core.accounts.target_contract import ACCOUNT_TARGET_PROPERTIES, AccountTarget
 from core.memory.engine import MemoryQuery, MemoryScope
 from agent.prompting import is_context_frame
 from proactive_v2.context import AgentTickContext
@@ -171,7 +172,8 @@ TOOL_SCHEMAS: list[dict] = [
             "调用过 message_push 后，禁止 finish_turn(decision=skip, ...)，否则报错。\n"
             "每轮只能调用一次，重复调用报错。\n"
             "evidence 只填本轮实际引用的 alert/content 条目复合键。"
-            "可选明确指定 account_id、target_kind、target_id 改投其他账号和目标。"
+            "可选明确指定 account_channel、target_kind、target_id 改投角色在该渠道的账号和目标；"
+            "不指定时发往默认目标。"
         ),
         {
             "type": "object",
@@ -186,10 +188,11 @@ TOOL_SCHEMAS: list[dict] = [
                     "items": {"type": "string"},
                     "description": '引用的内容复合键列表，格式 "{ack_server}:{event_id}"',
                 },
-                "account_id": {"type": "string"},
-                "target_kind": {"type": "string"},
-                "target_id": {"type": "string"},
-                "message_thread_id": {"type": "integer"},
+                "account_channel": {
+                    "type": "string",
+                    "description": "改投渠道 ID，取自 account_list 的 channel。",
+                },
+                **ACCOUNT_TARGET_PROPERTIES,
             },
             "required": ["message", "mood", "thought"],
         },
@@ -595,6 +598,10 @@ def _finish_turn(ctx: AgentTickContext, args: dict) -> str:
     raise ValueError("finish_turn.decision must be one of: reply, skip")
 
 
+# message_push arguments that retarget the draft to a role account's target.
+_RETARGET_KEYS = ("account_channel", *ACCOUNT_TARGET_PROPERTIES)
+
+
 def _message_push(ctx: AgentTickContext, args: dict) -> str:
     if ctx.draft_message.strip():
         raise ValueError(
@@ -606,15 +613,13 @@ def _message_push(ctx: AgentTickContext, args: dict) -> str:
         raise ValueError("message_push requires non-empty message")
     evidence = _parse_evidence(ctx, args.get("evidence", []))
     target = {
-        key: args[key]
-        for key in ("account_id", "target_kind", "target_id", "message_thread_id")
-        if args.get(key) is not None
+        key: args[key] for key in _RETARGET_KEYS if args.get(key) not in (None, [])
     }
-    if target and not all(
-        str(target.get(key) or "").strip()
-        for key in ("account_id", "target_kind", "target_id")
-    ):
-        raise ValueError("改投账号需明确 account_id、target_kind 和 target_id")
+    if target:
+        # All or nothing: a partial retarget must not fall back to the default.
+        if not str(target.get("account_channel") or "").strip():
+            raise ValueError("改投需明确 account_channel、target_kind 和 target_id")
+        AccountTarget.from_arguments(target)
     ctx.draft_message = message
     ctx.account_target = target or None
     ctx.role_reply = reply

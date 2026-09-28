@@ -90,6 +90,7 @@ async def test_response_records_first_retained_receipt(
         default_channel="telegram",
         delivery_status="sent",
         external_message_id=expected,
+        via_account=None,
     )
     if streamed:
         channel._app.bot.send_message.assert_awaited_once()
@@ -130,6 +131,7 @@ async def test_failed_or_cancelled_send_is_never_marked_sent(failure):
         default_channel="telegram",
         delivery_status="failed",
         external_message_id="",
+        via_account=None,
     )
 
 
@@ -165,6 +167,7 @@ async def test_partial_chunk_failure_retains_first_receipt(
         default_channel="telegram",
         delivery_status="failed",
         external_message_id="301",
+        via_account=None,
     )
 
 
@@ -186,4 +189,64 @@ async def test_failed_stream_finalization_retains_acknowledged_message():
         default_channel="telegram",
         delivery_status="failed",
         external_message_id="301",
+        via_account=None,
     )
+
+
+_VIA = {
+    "platform": "telegram",
+    "platform_account_id": "123",
+    "display_name": "Mira Bot",
+    "prefix": "Telegram 机器人「Mira Bot」（@mira_bot）",
+}
+
+
+async def test_group_reply_answers_its_trigger_and_mentions_chosen_members() -> None:
+    channel = reply_channel(SimpleNamespace(message_id=301))
+    channel._account_id = "telegram:123"
+    channel.via_account = Mock(return_value=_VIA)
+    message = OutboundMessage(
+        channel="telegram",
+        chat_id="-1001",
+        content="好",
+        metadata={
+            "chat_type": "supergroup",
+            "external_message_id": "55",
+            "mention_ids": ["902"],
+        },
+        committed_message_id="committed",
+    )
+
+    await channel._on_response(message)
+
+    sent = channel._app.bot.send_message.await_args.kwargs
+    assert sent["reply_parameters"].message_id == 55
+    assert sent["text"].startswith("@902 ")
+    assert sent["entities"][0]["url"] == "tg://user?id=902"
+    channel._channel_hub.mark_delivery.assert_called_once_with(
+        message,
+        default_channel="telegram",
+        delivery_status="sent",
+        external_message_id="301",
+        via_account=_VIA,
+    )
+
+
+async def test_private_reply_neither_quotes_nor_mentions() -> None:
+    channel = reply_channel(SimpleNamespace(message_id=301))
+    message = OutboundMessage(
+        channel="telegram",
+        chat_id="123",
+        content="好",
+        metadata={
+            "chat_type": "private",
+            "external_message_id": "55",
+            "mention_ids": ["902"],
+        },
+    )
+
+    await channel._on_response(message)
+
+    sent = channel._app.bot.send_message.await_args.kwargs
+    assert "reply_parameters" not in sent
+    assert sent["text"] == "好"

@@ -12,11 +12,16 @@ class InvalidRoleReply(ValueError):
 
 @dataclass(frozen=True)
 class RoleReply:
-    """Validated dialogue and the role's own mood and first-person thought."""
+    """Validated dialogue and the role's own mood and first-person thought.
+
+    ``mention_ids`` are extra group members the role chose to mention in a
+    group reply; empty elsewhere.
+    """
 
     content: str
     mood: str
     thought: str
+    mention_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -61,18 +66,27 @@ def role_reply_prompt(moods: tuple[str, ...]) -> str:
     )
 
 
-def role_mood_prompt(moods: tuple[str, ...]) -> str:
+def role_mood_prompt(moods: tuple[str, ...], *, group: bool = False) -> str:
     """Ask, after a reply is already sent, what mood and thought followed it.
 
     Used only by the passive turn's post-reply mood call: content is fixed
     already, so this only asks for `{mood, thought}`, keeping the reply's own
-    text completely free of JSON formatting constraints.
+    text completely free of JSON formatting constraints. A group reply may
+    also name extra members to mention (`mention_ids`); it is delivered
+    after this call, and the triggering sender is addressed anyway.
     """
+    mentions = (
+        '群聊回复可选再加 "mention_ids":["<成员 ID>"]，列出这条回复要额外 @ 的群成员'
+        "（触发你回复的人会自动被点名，不必列出）；不需要时省略该字段。\n"
+        if group
+        else ""
+    )
     return (
         "刚才那段回复已经说出口。现在请回顾自己说完这句话时的心情和当下想法，"
         "只输出一个 JSON 对象，不要输出 JSON 之外的解释、markdown 或代码块，"
         "不要重复或改写正文内容。\n"
         'JSON 结构固定为：{"mood":"<当前心情>","thought":"<当下想法>"}\n'
+        f"{mentions}"
         f"mood 必须从角色心情目录选择：{'、'.join(moods)}。\n"
         "thought 必须是包含“我”的第一人称当下想法，1–2 句，40–70 字。"
     )
@@ -95,7 +109,26 @@ def validate_role_reply(
         raise InvalidRoleReply("角色回复 mood 不属于当前角色心情目录")
     if len(thought) > 100 or "我" not in thought:
         raise InvalidRoleReply("thought 必须是包含“我”的简短当下想法，不能超过 100 字")
-    return RoleReply(content=payload["content"], mood=mood, thought=thought)
+    return RoleReply(
+        content=payload["content"],
+        mood=mood,
+        thought=thought,
+        mention_ids=_mention_ids(payload.get("mention_ids")),
+    )
+
+
+def _mention_ids(value: object) -> tuple[str, ...]:
+    """Optional member IDs to mention: a list of non-empty strings or numbers."""
+    if value is None:
+        return ()
+    if not isinstance(value, list) or any(
+        isinstance(item, bool)
+        or not isinstance(item, (str, int))
+        or not str(item).strip()
+        for item in value
+    ):
+        raise InvalidRoleReply("mention_ids 必须是成员 ID 列表")
+    return tuple(dict.fromkeys(str(item).strip() for item in value))
 
 
 def reply_state_metadata(reply: RoleReply, *, updated_at: str) -> dict[str, str]:

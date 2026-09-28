@@ -9,6 +9,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from bus.events import InboundMessage
+from core.accounts import VIA_ACCOUNT_KEY
 
 from .formatting import _build_inbound_text_with_reply
 from .identity import message_mentioned_bot, message_subject, message_topic_metadata
@@ -18,6 +19,17 @@ logger = logging.getLogger("plugins.telegram.channel")
 
 class _InboundMixin:
     """处理文本消息并发布标准入站事件。"""
+
+    def _account_metadata(self) -> dict[str, object]:
+        """The receiving account's ID and snapshot; empty for an account-less Bot."""
+        account_id = getattr(self, "_account_id", None)
+        if not account_id:
+            return {}
+        return {"account_id": account_id, VIA_ACCOUNT_KEY: self.via_account()}
+
+    def via_account(self) -> dict[str, str]:
+        """The channel supplies the Bot's message snapshot."""
+        raise NotImplementedError
 
     async def _on_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -99,11 +111,7 @@ class _InboundMixin:
                 content=inbound_text,
                 media=reply_media,
                 metadata={
-                    **(
-                        {"account_id": self._account_id}
-                        if getattr(self, "_account_id", None)
-                        else {}
-                    ),
+                    **self._account_metadata(),
                     "mentioned": message_mentioned_bot(
                         msg, getattr(self, "_bot_username", "")
                     ),
@@ -194,11 +202,7 @@ class _InboundMixin:
                 content=content,
                 media=list(media or []),
                 metadata={
-                    **(
-                        {"account_id": self._account_id}
-                        if getattr(self, "_account_id", None)
-                        else {}
-                    ),
+                    **self._account_metadata(),
                     **dict(metadata or {}),
                 },
             )

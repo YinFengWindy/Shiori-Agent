@@ -505,8 +505,12 @@ class _MessageMixin:
         thread_id: str,
         delivery_status: str,
         external_message_id: str = "",
+        metadata_updates: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Writes delivery bookkeeping to exactly one message row.
+
+        ``metadata_updates`` are merged into the row's stored metadata by the
+        same write (e.g. the sending account's snapshot).
 
         This never guesses which row to touch: it refuses to write (returns
         ``None``) unless ``message_id`` both exists and belongs to the
@@ -529,7 +533,7 @@ class _MessageMixin:
             return None
         with self._lock:
             row = self._conn.execute(
-                "SELECT session_key, thread_id FROM messages WHERE id = ?",
+                "SELECT session_key, thread_id, extra FROM messages WHERE id = ?",
                 (clean_message_id,),
             ).fetchone()
         if row is None:
@@ -538,10 +542,15 @@ class _MessageMixin:
             return None
         if str(row["thread_id"] or "") != clean_thread_id:
             return None
+        extra = None
+        if metadata_updates:
+            extra = json.loads(row["extra"] or "{}")
+            extra["metadata"] = {**(extra.get("metadata") or {}), **metadata_updates}
         return self.update_message(
             clean_message_id,
             delivery_status=clean_status,
             external_message_id=clean_external_id or None,
+            extra=extra,
         )
 
     def delete_message(self, message_id: str) -> bool:

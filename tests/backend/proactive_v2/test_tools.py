@@ -921,17 +921,38 @@ def test_message_push_keeps_explicit_account_target() -> None:
             "message": "hello",
             "mood": "平静",
             "thought": "我已准备好",
-            "account_id": "account-1",
-            "target_kind": "private",
-            "target_id": "user-1",
+            "account_channel": "qq",
+            "target_kind": "group",
+            "target_id": "777",
+            "mention_ids": ["902"],
         },
     )
     assert ctx.account_target == {
-        "account_id": "account-1",
-        "target_kind": "private",
-        "target_id": "user-1",
+        "account_channel": "qq",
+        "target_kind": "group",
+        "target_id": "777",
+        "mention_ids": ["902"],
     }
-    with pytest.raises(ValueError, match="account_id"):
+    untargeted = AgentTickContext(reply_context=RoleReplyContext(("平静",), ""))
+    _message_push(
+        untargeted,
+        {"message": "hello", "mood": "平静", "thought": "我已准备好"},
+    )
+    assert untargeted.account_target is None
+    with pytest.raises(ValueError, match="mention_ids"):
+        _message_push(
+            AgentTickContext(reply_context=RoleReplyContext(("平静",), "")),
+            {
+                "message": "hello",
+                "mood": "平静",
+                "thought": "我已准备好",
+                "account_channel": "qq",
+                "target_kind": "private",
+                "target_id": "902",
+                "mention_ids": ["903"],
+            },
+        )
+    with pytest.raises(ValueError, match="account_channel"):
         _message_push(
             AgentTickContext(reply_context=RoleReplyContext(("平静",), "")),
             {

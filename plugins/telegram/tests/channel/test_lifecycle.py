@@ -97,6 +97,12 @@ async def test_verified_identity_and_polling_status_are_account_scoped():
         "identity:first",
         {"bot_id": "123", "name": "First Bot", "username": "first_bot"},
     )
+    assert channel.via_account() == {
+        "platform": "telegram",
+        "platform_account_id": "123",
+        "display_name": "First Bot",
+        "prefix": "Telegram 机器人「First Bot」（@first_bot）",
+    }
 
 
 @pytest.mark.asyncio

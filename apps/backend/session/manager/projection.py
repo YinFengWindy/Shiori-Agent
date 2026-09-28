@@ -29,12 +29,14 @@ class _ProjectionMixin:
         thread_id: str,
         delivery_status: str,
         external_message_id: str = "",
+        metadata_updates: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Writes delivery bookkeeping to exactly the committed message it belongs to.
 
         This never falls back to "the thread's newest assistant message": if
         ``message_id`` is missing or does not belong to this session/thread,
-        nothing is written.
+        nothing is written. ``metadata_updates`` are merged into the message's
+        metadata by the same write.
         """
         updated = self._store.update_message_delivery(
             message_id,
@@ -42,6 +44,7 @@ class _ProjectionMixin:
             thread_id=thread_id,
             delivery_status=delivery_status,
             external_message_id=external_message_id,
+            metadata_updates=metadata_updates,
         )
         return self._sync_cached_message_delivery(session_key, updated)
 
@@ -61,5 +64,7 @@ class _ProjectionMixin:
                 message["delivery_status"] = updated["delivery_status"]
             if updated.get("external_message_id"):
                 message["external_message_id"] = updated["external_message_id"]
+            if isinstance(updated.get("metadata"), dict):
+                message["metadata"] = dict(updated["metadata"])
             break
         return updated

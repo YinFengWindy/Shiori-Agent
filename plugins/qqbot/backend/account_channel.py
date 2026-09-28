@@ -56,6 +56,7 @@ class QQBotAccountsChannel(
                 app_id, state, error, name, bot_id
             ),
             on_target=lambda openid: self._store.observe(app_id, openid),
+            via_account=lambda: self._identity.via_account(app_id),
         )
 
     async def start(self, ctx: ChannelContext) -> None:

@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from core.accounts.target_contract import UncertainDeliveryError
+from core.accounts import VIA_ACCOUNT_KEY
+from core.accounts.target_contract import GROUP_MEMBER_TARGET, UncertainDeliveryError
 
 if TYPE_CHECKING:
     from .account_identity import QQBotAccountIdentity
@@ -19,20 +20,30 @@ class _AccountSendingMixin:
     _channels: dict[str, QQBotChannel]
 
     async def account_send(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Adapt the shared account contract to QQBot's C2C OpenID send."""
+        """Adapt the shared account contract to QQBot's C2C OpenID send.
+
+        The receipt carries the application's message snapshot.
+        """
         if "target_kind" not in payload and "user_openid" in payload:
             return await self.send_target(payload)
+        if payload.get("mention_ids"):
+            raise ValueError("QQBot 没有群聊，不支持 @ 成员")
+        if str(payload.get("target_kind") or "") == GROUP_MEMBER_TARGET:
+            raise ValueError("QQBot 不支持群临时会话")
         if str(payload.get("target_kind") or "") != "private":
             raise ValueError("QQBot 仅支持私聊发送")
         if payload.get("message_thread_id") is not None:
             raise ValueError("QQBot 不支持群话题")
-        return await self.send_target(
+        # Taken before sending so a completed send always returns its snapshot.
+        via = self._identity.via_account(self._identity.app_for_account(payload))
+        result = await self.send_target(
             {
                 "account_id": payload.get("account_id"),
                 "user_openid": payload.get("target_id"),
                 "content": payload.get("message"),
             }
         )
+        return {**result, VIA_ACCOUNT_KEY: via}
 
     async def send_target(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Send C2C content through the selected application account."""

@@ -232,3 +232,24 @@ async def test_fetch_role_mood_ignores_model_echoed_content_field():
     )
     assert reply is not None
     assert reply.content == "真正的正文"
+
+
+async def test_group_reply_mood_call_offers_and_returns_extra_mentions():
+    provider = AsyncMock()
+    provider.chat.return_value = LLMResponse(
+        content=json.dumps(
+            {"mood": "平静", "thought": "我放心了。", "mention_ids": ["902"]}
+        )
+    )
+    reply = await fetch_role_mood(
+        provider=provider,
+        model="m",
+        max_tokens=200,
+        messages=[{"role": "user", "content": "大家好"}],
+        content="好",
+        moods=("平静",),
+        group=True,
+    )
+    assert reply is not None
+    assert reply.mention_ids == ("902",)
+    assert "mention_ids" in provider.chat.call_args.kwargs["messages"][-1]["content"]

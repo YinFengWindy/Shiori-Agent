@@ -92,6 +92,7 @@ class _SessionManager:
         thread_id: str = "",
         delivery_status: str,
         external_message_id: str = "",
+        metadata_updates: dict | None = None,
     ):
         payload = {
             "session_key": session_key,
@@ -99,6 +100,7 @@ class _SessionManager:
             "thread_id": thread_id,
             "delivery_status": delivery_status,
             "external_message_id": external_message_id,
+            **({"metadata_updates": metadata_updates} if metadata_updates else {}),
         }
         self.delivery_updates.append(payload)
         return payload
@@ -233,6 +235,7 @@ def _import_telegram_channel(monkeypatch: pytest.MonkeyPatch):
     telegram.Bot = Bot
     telegram.BotCommand = BotCommand
     telegram.MessageEntity = MessageEntity
+    telegram.ReplyParameters = SimpleNamespace
     telegram.Update = Update
     telegram_constants.ChatAction = SimpleNamespace(TYPING="typing")
     telegram_error.Conflict = Conflict

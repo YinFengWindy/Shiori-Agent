@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from core.accounts.target_contract import UncertainDeliveryError
+from core.accounts import VIA_ACCOUNT_KEY
+from core.accounts.target_contract import GROUP_MEMBER_TARGET, UncertainDeliveryError
 
 from .accounts import FeishuAccounts
 
@@ -59,15 +60,29 @@ class FeishuAccountDelivery:
         return {"message_id": message_id}
 
     async def send_account(self, payload: dict[str, object]) -> dict[str, object]:
-        """Validates the shared account-send contract before private delivery."""
+        """Validates the shared account-send contract before private delivery.
+
+        The receipt carries the application's message snapshot.
+        """
+        if payload.get("mention_ids"):
+            raise ValueError("飞书没有群聊，不支持 @ 成员")
+        if str(payload.get("target_kind") or "") == GROUP_MEMBER_TARGET:
+            raise ValueError("飞书不支持群临时会话")
         if str(payload.get("target_kind") or "") != "private":
             raise ValueError("飞书仅支持私聊发送")
         if payload.get("message_thread_id") is not None:
             raise ValueError("飞书不支持群话题")
-        return await self.send(
+        ref = self._accounts.ref_for_account(payload)
+        channel = self._accounts.channel(ref)
+        if channel is None:
+            raise RuntimeError("飞书账号未连接")
+        # Taken before sending so a completed send always returns its snapshot.
+        via = channel.via_account()
+        result = await self.send(
             {
-                "ref": self._accounts.ref_for_account(payload),
+                "ref": ref,
                 "chat_id": payload.get("target_id"),
                 "message": payload.get("message"),
             }
         )
+        return {**result, VIA_ACCOUNT_KEY: via}
