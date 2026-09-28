@@ -59,6 +59,8 @@ channels:
 - `setup` 始终贡献 manifest 声明的渠道。多账号渠道可用 `AccountChannelGroup` 管理账号连接，新增或断开账号不需要重载运行时。
 - 插件从 `ctx.kv` 或自己的工作区存储读取账号；恢复时先用 `ctx.accounts.role_exists(role_id)` 清理所属角色已删除的账号，再用 `register_saved(...)` 登记。读取失败或无效数据用 `reject(...)` 报告，不影响其它账号。
 - 新增账号前校验平台身份，并用 `ctx.accounts.check_owner(...)` 检查角色与账号归属；插件保存数据后用 `register(...)` 登记，再按连接状态调用 `report(...)`。账号 ID 由宿主生成，格式为 `<插件 id>:<平台账号>`。
+- 账号头像由插件自己获取：连接成功后在后台下载平台头像，用 `core.accounts.avatar_data_uri(...)` 转成 `data:image/...` URI，与账号一起存进插件存储，再以 `register(..., avatar_url=...)` 更新；加载时随 `register_saved(...)` 一并登记。宿主只接受空字符串（无头像）或不超过 256 KiB 的 PNG/JPEG/GIF/WebP data URI，远程 URL 会被拒绝。下载失败只记警告并保留已存头像，不影响连接；多账号插件可用 `infra.channels.avatar_refresh.AvatarRefreshTasks` 管理后台刷新。
+- 账号的连接、错误、昵称或头像实际变化（以及登记、移除）时，宿主向桌面端推送 `accounts.updated` 事件（payload `{"account_id": ...}`）；报告与之前相同时不推送。
 - 登记 `on_delete(...)`，提供断开连接与清除插件存储的计划；角色删除时宿主也会调用它。登记 `on_rules_change(...)`，把宿主编辑的响应规则写回同一份账号记录。账号创建、编辑和连接通过插件 RPC 与角色页中的账号界面协作。
 - 若插件还有不属于某个账号的全局设置，可单独声明 `config_model`，由「设置 › 插件」的自动表单编辑；账号凭据不放在该模型或 `config.toml` 中。
 

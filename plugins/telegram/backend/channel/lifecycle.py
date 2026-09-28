@@ -35,7 +35,8 @@ from ..utils import (
     TelegramOutboundLimiter,
     TelegramStreamMessage,
 )
-from ..credentials import bot_account_id
+from ..credentials import avatar_key, bot_account_id
+from .avatar import fetch_bot_avatar
 from .commands import _CommandMixin
 from .formatting import (
     _CHANNEL,
@@ -102,6 +103,8 @@ class TelegramChannel(
         self._accounts = accounts
         self._account_id: str | None = None
         self._known_store = known_store
+        # Background refresh of the Bot's profile photo after each connect.
+        self._avatar_task: asyncio.Task[None] | None = None
         self._online = False
         self._bot_username = ""
         # The manifest's session types, for answering ``/chatid``.
@@ -266,7 +269,30 @@ class TelegramChannel(
             raise
         self._online = True
         self._report_account("online")
+        if self._accounts is not None:
+            self._avatar_task = asyncio.create_task(
+                self._refresh_avatar(), name=f"telegram-avatar-{self._config_ref}"
+            )
         logger.info(f"TelegramChannel 已启动  已知用户: {len(self.user_map)}")
+
+    async def _refresh_avatar(self) -> None:
+        """Stores and registers the Bot's photo; a failed fetch keeps the old one."""
+        accounts = self._accounts
+        if accounts is None:
+            return
+        bot_id = bot_account_id(self._token)
+        avatar = await fetch_bot_avatar(self._app.bot, int(bot_id))
+        if avatar is None:
+            return
+        if self._known_store is not None:
+            self._known_store.set(avatar_key(self._config_ref), avatar)
+        accounts.register(
+            platform="telegram",
+            platform_account_id=bot_id,
+            config_ref=self._config_ref,
+            role_id=self._role_id,
+            avatar_url=avatar,
+        )
 
     def _report_account(self, connection: ConnectionState, error: str = "") -> None:
         if self._accounts is not None and self._account_id is not None:
@@ -400,6 +426,10 @@ class TelegramChannel(
             self._push_tool.unregister_channel(self.name, text=self.send)
 
     async def _stop_connection(self) -> None:
+        if self._avatar_task is not None:
+            self._avatar_task.cancel()
+            await asyncio.gather(self._avatar_task, return_exceptions=True)
+            self._avatar_task = None
         if self._polling_conflict_task and not self._polling_conflict_task.done():
             await self._polling_conflict_task
         if self._live_tasks:

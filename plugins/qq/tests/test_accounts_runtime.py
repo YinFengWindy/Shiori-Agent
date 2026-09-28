@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from plugins.qq.backend.accounts_runtime import QQAccountsRuntime
+from plugins.qq.backend.accounts_runtime import (
+    LOGIN_PENDING_POLL_SECONDS,
+    QQAccountsRuntime,
+)
 from plugins.qq.backend.accounts_store import QQAccountsStore, QQConnectionConfig
 from infra.persistence.json_store import atomic_save_json
 
@@ -17,6 +20,7 @@ class _Accounts:
         self.rows: dict[str, SimpleNamespace] = {}
         self.states: dict[str, str] = {}
         self.reports: list[tuple[str, str, str]] = []
+        self.avatars: dict[str, str] = {}
 
     def register(
         self,
@@ -26,9 +30,12 @@ class _Accounts:
         config_ref,
         role_id,
         display_name=None,
+        avatar_url=None,
         response_rules=None,
     ):
         account_id = f"qq-{platform_account_id}"
+        if avatar_url is not None:
+            self.avatars[account_id] = avatar_url
         row = SimpleNamespace(id=account_id, config_ref=config_ref, role_id=role_id)
         self.rows[account_id] = row
         return SimpleNamespace(record=row)
@@ -47,6 +54,17 @@ class _Accounts:
         self.states[account_id] = connection
         self.reports.append((account_id, connection, error))
         return SimpleNamespace(record=self.rows[account_id])
+
+
+_AVATAR = "data:image/png;base64,iVBORw0KGgo="
+
+
+@pytest.fixture(autouse=True)
+def _avatar_fetch(monkeypatch):
+    """Keeps connecting accounts off the network; tests set the fetched avatar."""
+    fetch = AsyncMock(return_value=None)
+    monkeypatch.setattr("plugins.qq.backend.accounts_runtime.fetch_qq_avatar", fetch)
+    return fetch
 
 
 class _Socket:
@@ -276,3 +294,102 @@ async def test_managed_logout_keeps_identity_but_clears_login(monkeypatch, tmp_p
     assert store.load()["known"].expected_uin == "101"
     assert store.load()["known"].auto_connect is False
     assert accounts.states["qq-101"] == "login_required"
+
+
+@pytest.mark.asyncio
+async def test_connected_avatar_is_stored_reregistered_and_kept_on_failed_refresh(
+    monkeypatch, tmp_path, _avatar_fetch
+):
+    store = QQAccountsStore(tmp_path)
+    store.save(
+        {
+            "known": QQConnectionConfig(
+                "known",
+                "ws://127.0.0.1:3001",
+                "secret",
+                expected_uin="101",
+                verified=True,
+                role_id="mira",
+            )
+        }
+    )
+
+    async def connect(fetched: str | None) -> _Accounts:
+        _avatar_fetch.return_value = fetched
+        _avatar_fetch.reset_mock()
+        accounts = _Accounts()
+        runtime = QQAccountsRuntime(store, accounts)
+        await runtime.load()
+        socket = _Socket("101")
+        socket.open = AsyncMock()
+        monkeypatch.setattr(runtime._managed, "start", AsyncMock())
+        monkeypatch.setattr(
+            runtime._managed,
+            "login_status",
+            AsyncMock(return_value={"phase": "online", "qrcode": "", "error": ""}),
+        )
+        monkeypatch.setattr(
+            "plugins.qq.backend.accounts_runtime.OneBotSocket", lambda *_args: socket
+        )
+        runtime._schedule("known")
+        for _ in range(100):
+            if _avatar_fetch.await_count:
+                break
+            await asyncio.sleep(0.01)
+        await runtime._avatars.wait()
+        _avatar_fetch.assert_awaited_once_with("101")
+        await runtime.stop()
+        return accounts
+
+    await connect(_AVATAR)
+    assert store.load()["known"].avatar == _AVATAR
+
+    restarted = await connect(None)
+    assert restarted.avatars["qq-101"] == _AVATAR
+    assert store.load()["known"].avatar == _AVATAR
+
+
+@pytest.mark.asyncio
+async def test_pending_login_is_rechecked_quickly_without_flapping(
+    monkeypatch, tmp_path
+):
+    store = QQAccountsStore(tmp_path)
+    store.save(
+        {
+            "known": QQConnectionConfig(
+                "known",
+                "ws://127.0.0.1:3001",
+                "secret",
+                expected_uin="101",
+                verified=True,
+                role_id="mira",
+            )
+        }
+    )
+    accounts = _Accounts()
+    runtime = QQAccountsRuntime(store, accounts)
+    runtime.register_saved()
+    sleeps: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) >= 3:
+            runtime._stopping = True
+        await real_sleep(0)
+
+    monkeypatch.setattr("plugins.qq.backend.accounts_runtime.asyncio.sleep", sleep)
+    monkeypatch.setattr(runtime._managed, "start", AsyncMock())
+    monkeypatch.setattr(
+        runtime._managed,
+        "login_status",
+        AsyncMock(return_value={"phase": "login_required", "qrcode": "", "error": ""}),
+    )
+
+    await runtime._reconnect("known")
+
+    assert sleeps == [LOGIN_PENDING_POLL_SECONDS] * 3
+    assert LOGIN_PENDING_POLL_SECONDS <= 1.0
+    assert [state for _, state, _ in accounts.reports] == ["connecting"] + [
+        "login_required"
+    ] * 3

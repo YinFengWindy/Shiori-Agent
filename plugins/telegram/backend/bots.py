@@ -12,6 +12,7 @@ from core.accounts import (
 )
 
 from .credentials import (
+    avatar_key,
     TelegramBotStore,
     resolve_token,
     valid_ref,
@@ -65,6 +66,7 @@ class TelegramBots:
                 platform_account_id=bot_id,
                 config_ref=ref,
                 role_id=role_id,
+                avatar_url=str(self._ctx.kv.get(avatar_key(ref), "")),
                 response_rules=rules,
             )
             if snapshot is None:

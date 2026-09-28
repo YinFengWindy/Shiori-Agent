@@ -51,7 +51,7 @@ class FeishuAccounts:
                 config_ref=app.ref,
                 role_id=app.role_id or None,
                 display_name=str(profile.get("name") or ""),
-                avatar_url=str(profile.get("avatar_url") or ""),
+                avatar_url=str(profile.get("avatar") or ""),
                 response_rules=rules,
             )
             if snapshot is None:

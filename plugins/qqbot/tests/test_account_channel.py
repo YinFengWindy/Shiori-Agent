@@ -14,11 +14,21 @@ from plugins.qqbot.backend.channel import QQBotChannel
 class _Accounts:
     def __init__(self):
         self.roles = {}
+        self.avatars = {}
 
     def register(
-        self, *, platform, platform_account_id, config_ref, role_id, display_name=None
+        self,
+        *,
+        platform,
+        platform_account_id,
+        config_ref,
+        role_id,
+        display_name=None,
+        avatar_url=None,
     ):
         self.roles[platform_account_id] = role_id
+        if avatar_url is not None:
+            self.avatars[platform_account_id] = avatar_url
         return SimpleNamespace(record=SimpleNamespace(id=platform_account_id))
 
     def check_owner(self, *, config_ref, role_id, **_identity):
@@ -91,3 +101,40 @@ async def test_one_public_channel_starts_isolated_application_gateways(
         assert manager._channels["200"]._client_secret == "second-secret"
     finally:
         await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_connected_avatar_is_stored_reregistered_and_kept_on_failed_refresh(
+    tmp_path, monkeypatch, avatar_fetch
+):
+    avatar = "data:image/png;base64,iVBORw0KGgo="
+    store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
+    store.save({"app_id": "200", "client_secret": "secret", "role_id": "mira"})
+
+    async def start(self, ctx, *, public_hooks=True):
+        pass
+
+    async def stop(self):
+        pass
+
+    monkeypatch.setattr(QQBotChannel, "start", start)
+    monkeypatch.setattr(QQBotChannel, "stop", stop)
+
+    async def connect(fetched: str | None) -> _Accounts:
+        avatar_fetch.return_value = fetched
+        accounts = _Accounts()
+        manager = QQBotAccountsChannel(SimpleNamespace(accounts=accounts), store, ())
+        await manager.start(
+            SimpleNamespace(bus=_Bus(), push_tool=_Push(), event_bus=EventBus())
+        )
+        await manager._avatars.wait()
+        await manager.stop()
+        return accounts
+
+    fetched = await connect(avatar)
+    assert store.get("200")["avatar"] == avatar
+    assert fetched.avatars["200"] == avatar
+
+    restarted = await connect(None)
+    assert restarted.avatars["200"] == avatar
+    assert store.get("200")["avatar"] == avatar

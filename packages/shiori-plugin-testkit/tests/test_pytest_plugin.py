@@ -26,7 +26,7 @@ async def test_plugin_account_report_and_bridge_listing_share_role_store(
         "async def setup(ctx):\n"
         "    account = ctx.accounts.register(platform='demo', "
         "platform_account_id='101', config_ref='private', role_id='owner', "
-        "display_name='Old', avatar_url='https://example.test/old.png')\n"
+        "display_name='Old', avatar_url='data:image/png;base64,iVBORw0KGgo=')\n"
         "    account = ctx.accounts.register(platform='demo', "
         "platform_account_id='101', config_ref='private', role_id='owner', "
         "display_name='', avatar_url='')\n"

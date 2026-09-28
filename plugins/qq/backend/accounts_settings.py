@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 from core.accounts import AccountResponseRules
+from infra.channels.avatar_refresh import AvatarRefreshTasks
 from infra.channels.intake import ChannelIntake
 
 from .accounts_store import (
@@ -36,6 +37,7 @@ class QQAccountSettings:
     _tasks: dict[str, asyncio.Task[None]]
     _locks: dict[str, asyncio.Lock]
     _intakes: dict[str, ChannelIntake]
+    _avatars: AvatarRefreshTasks
     _accounts: Any
 
     def _ref_for(self, account_id: str) -> str:
@@ -96,6 +98,7 @@ class QQAccountSettings:
         reports it again.
         """
         self._ids.pop(ref, None)
+        await self._avatars.cancel(ref)
         task = self._tasks.pop(ref, None)
         if task is not None:
             task.cancel()

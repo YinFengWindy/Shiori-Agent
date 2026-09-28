@@ -27,6 +27,7 @@ from infra.channels.intake import ChannelIntake
 from infra.channels.session_key import resolve_outbound_session_key
 
 from .api import FeishuApi, FeishuApiError, is_rate_limited, with_rate_limit_retry
+from .avatar import fetch_bot_avatar
 from .dedupe import ExpiringIdSet
 from .formatting import (
     CHANNEL,
@@ -379,15 +380,7 @@ class FeishuChannel:
             self._report("error", self._identity_error)
             return
         self._identity_error = ""
-        if self._profile_store is not None:
-            self._profile_store.set(
-                f"profile:{self._profile_ref}",
-                {
-                    "name": self._bot_name,
-                    "open_id": self._bot_open_id,
-                    "avatar_url": avatar_url,
-                },
-            )
+        self._save_profile()
         if self._accounts is not None and self.account_id:
             self._accounts.register(
                 platform="feishu",
@@ -395,9 +388,37 @@ class FeishuChannel:
                 config_ref=self._profile_ref,
                 role_id=self._role_id,
                 display_name=self._bot_name,
-                avatar_url=avatar_url,
             )
         self._report("online")
+        avatar = await fetch_bot_avatar(self._api, avatar_url)
+        # A failed download keeps the stored avatar.
+        if avatar is not None:
+            self._save_profile(avatar)
+            if self._accounts is not None and self.account_id:
+                self._accounts.register(
+                    platform="feishu",
+                    platform_account_id=self._profile_ref,
+                    config_ref=self._profile_ref,
+                    role_id=self._role_id,
+                    avatar_url=avatar,
+                )
+
+    def _save_profile(self, avatar: str | None = None) -> None:
+        """Stores the bot identity; ``avatar`` None keeps the stored data URI."""
+        if self._profile_store is None:
+            return
+        key = f"profile:{self._profile_ref}"
+        stored = self._profile_store.get(key, {})
+        self._profile_store.set(
+            key,
+            {
+                "name": self._bot_name,
+                "open_id": self._bot_open_id,
+                "avatar": (
+                    str(stored.get("avatar") or "") if avatar is None else avatar
+                ),
+            },
+        )
 
     async def _handle_message(self, message: ReceivedMessage) -> None:
         if message.sender_type and message.sender_type != "user":

@@ -9,9 +9,11 @@ from typing import Any
 from uuid import uuid4
 
 from infra.channels.contract import ChannelContext
+from infra.channels.avatar_refresh import AvatarRefreshTasks
 from infra.channels.intake import ChannelIntake
 
 from .accounts_actions import QQAccountActions, qq_number
+from .accounts_avatar import fetch_qq_avatar
 from .accounts_inbound_adapter import QQInboundAdapter
 from .accounts_outbound_adapter import QQOutboundAdapter
 from .accounts_settings import QQAccountSettings, ensure_config_owner
@@ -22,6 +24,8 @@ from .onebot import OneBotAuthError, OneBotError, OneBotSocket
 logger = logging.getLogger(__name__)
 _CAPABILITIES = frozenset({"friends", "groups", "group_members", "send"})
 STATUS_CHECK_INTERVAL_SECONDS = 5.0
+# How often a pending QR/login is re-checked, so a finished scan goes online fast.
+LOGIN_PENDING_POLL_SECONDS = 0.5
 
 
 class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
@@ -42,6 +46,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._stopping = False
         self._intakes: dict[str, ChannelIntake] = {}
         self._actions = QQAccountActions(self._socket_for, self._ensure_online)
+        self._avatars = AvatarRefreshTasks()
 
     async def load(self) -> None:
         """Prunes temporary or orphaned data, then registers saved accounts."""
@@ -60,6 +65,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
                     config_ref=ref,
                     role_id=config.role_id,
                     display_name=config.display_name or None,
+                    avatar_url=config.avatar,
                     response_rules=config.response_rules,
                 )
                 if snapshot is not None:
@@ -90,6 +96,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._stopping = True
         for intake in self._intakes.values():
             await intake.close()
+        await self._avatars.close()
         tasks = list(self._tasks.values())
         for task in tasks:
             task.cancel()
@@ -129,15 +136,19 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
 
     async def _reconnect(self, ref: str) -> None:
         delay = 1.0
+        login_pending = False
         while (
             not self._stopping
             and ref in self._configs
             and self._configs[ref].auto_connect
         ):
+            # Re-checking a pending login keeps its state instead of flapping
+            # through "connecting" on every poll.
+            if not login_pending:
+                if ref in self._ids:
+                    self._accounts.report(self._ids[ref], connection="connecting")
+                self._states[ref] = ("connecting", "")
             login_pending = False
-            if ref in self._ids:
-                self._accounts.report(self._ids[ref], connection="connecting")
-            self._states[ref] = ("connecting", "")
             try:
                 async with self._locks.setdefault(ref, asyncio.Lock()):
                     await self._managed.start(ref, self._configs[ref].expected_uin)
@@ -180,7 +191,9 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
                     )
                 logger.warning("[qq] 账号 %s 连接失败: %s", ref, exc)
             if not self._stopping:
-                await asyncio.sleep(2.0 if login_pending else delay)
+                await asyncio.sleep(
+                    LOGIN_PENDING_POLL_SECONDS if login_pending else delay
+                )
                 if not login_pending:
                     delay = min(delay * 2, 30.0)
 
@@ -240,6 +253,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
             config_ref=ref,
             role_id=config.role_id,
             display_name=saved.display_name,
+            avatar_url=saved.avatar,
         )
         self._store.save({**self._configs, ref: saved})
         try:
@@ -254,7 +268,29 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._sockets[ref] = socket
         self._states[ref] = ("online", "")
         self._start_intake(ref)
+        self._avatars.start(
+            ref,
+            lambda: fetch_qq_avatar(uin),
+            lambda avatar: self._save_avatar(ref, avatar),
+        )
         return snapshot.record.id
+
+    def _save_avatar(self, ref: str, avatar: str) -> None:
+        """Stores a freshly fetched avatar with the account and re-registers it."""
+        config = self._configs.get(ref)
+        # The account may have been deleted or logged out while fetching.
+        if config is None or ref not in self._ids or config.avatar == avatar:
+            return
+        saved = replace(config, avatar=avatar)
+        self._store.save({**self._configs, ref: saved})
+        self._configs[ref] = saved
+        self._accounts.register(
+            platform="qq",
+            platform_account_id=saved.expected_uin,
+            config_ref=ref,
+            role_id=saved.role_id,
+            avatar_url=avatar,
+        )
 
     def _login_config(self, ref: str, role_id: str) -> QQConnectionConfig:
         """Resolves a login reference only for its owning role."""

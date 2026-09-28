@@ -13,6 +13,7 @@ from agent.plugin_host.kv import PluginKVStore
 from agent.plugin_host.plugin_data import plugin_data_dir
 from core.roles.store import RoleStore
 
+_AVATAR = "data:image/png;base64,iVBORw0KGgo="
 _RULES = {
     "private_enabled": False,
     "group_enabled": True,
@@ -32,6 +33,11 @@ def telegram_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Bot, "initialize", AsyncMock())
     monkeypatch.setattr(Bot, "shutdown", AsyncMock())
     monkeypatch.setattr(Bot, "get_me", get_me)
+    monkeypatch.setattr(
+        Bot,
+        "get_user_profile_photos",
+        AsyncMock(return_value=SimpleNamespace(photos=())),
+    )
 
 
 def _roles(tmp_path, *role_ids: str) -> None:
@@ -74,6 +80,7 @@ async def test_bots_are_added_and_deleted_without_writing_host_config(
         ]
         kv.set("known_chats:111", {"1": {"chat_id": "1"}})
         kv.set("identity:111", {"bot_id": "111"})
+        kv.set("avatar:111", _AVATAR)
 
         deleted = await plugin_bridge_request(
             service,
@@ -87,6 +94,7 @@ async def test_bots_are_added_and_deleted_without_writing_host_config(
         assert kv.get("bots") == []
         assert kv.get("known_chats:111") is None
         assert kv.get("identity:111") is None
+        assert kv.get("avatar:111") is None
 
         # The same Bot added again gets the same account ID back.
         again = await plugin_bridge_request(
@@ -144,3 +152,25 @@ async def test_bots_of_a_deleted_role_are_removed_on_load(plugin_runtime, tmp_pa
         assert [row["id"] for row in listed.payload["accounts"]] == ["telegram:2"]
     assert [row["ref"] for row in kv.get("bots")] == ["2"]
     assert kv.get("identity:1") is None
+
+
+@pytest.mark.asyncio
+async def test_stored_bot_avatar_is_registered_on_load(plugin_runtime, tmp_path):
+    _roles(tmp_path, "mira")
+    kv = _kv(tmp_path)
+    kv.set(
+        "bots",
+        [
+            {
+                "ref": "2",
+                "bot_id": "2",
+                "token": "2:b",
+                "role_id": "mira",
+                "enabled": False,
+            }
+        ],
+    )
+    kv.set("avatar:2", _AVATAR)
+    async with plugin_runtime(("telegram",)) as (service, _path):
+        listed = await plugin_bridge_request(service, "accounts.list")
+        assert [row["avatar_url"] for row in listed.payload["accounts"]] == [_AVATAR]

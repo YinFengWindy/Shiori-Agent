@@ -1,5 +1,6 @@
 """Communication account index and runtime contract; records live in plugins."""
 
+from .avatar import MAX_AVATAR_BYTES, avatar_data_uri, validate_avatar
 from .models import (
     AccountAccess,
     AccountDeleteHandler,
@@ -32,8 +33,11 @@ __all__ = [
     "AccountRulesHandler",
     "AccountSnapshot",
     "ConnectionState",
+    "MAX_AVATAR_BYTES",
     "account_id_for",
+    "avatar_data_uri",
     "response_rules_from_dict",
     "response_rules_to_dict",
     "stored_response_rules",
+    "validate_avatar",
 ]

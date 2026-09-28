@@ -11,11 +11,21 @@ class _Accounts:
     def __init__(self):
         self.reports = []
         self.roles = {}
+        self.avatars = {}
 
     def register(
-        self, *, platform, platform_account_id, config_ref, role_id, display_name=None
+        self,
+        *,
+        platform,
+        platform_account_id,
+        config_ref,
+        role_id,
+        display_name=None,
+        avatar_url=None,
     ):
         self.roles[platform_account_id] = role_id
+        if avatar_url is not None:
+            self.avatars[platform_account_id] = avatar_url
         assert platform == "qqbot"
         assert config_ref == f"app:{platform_account_id}"
         return SimpleNamespace(

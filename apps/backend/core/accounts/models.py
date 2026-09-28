@@ -49,6 +49,8 @@ class AccountRecord:
     config_ref: str
     role_id: str
     display_name: str = ""
+    # The platform account's own picture as an image ``data:`` URI (see
+    # ``avatar.validate_avatar``); empty when unknown.
     avatar_url: str = ""
     response_rules: AccountResponseRules = AccountResponseRules()
 

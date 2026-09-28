@@ -41,6 +41,7 @@ class QQBotAccountIdentity:
                 config_ref=f"app:{row['app_id']}",
                 role_id=role_id,
                 display_name=row.get("bot_name") or None,
+                avatar_url=row.get("avatar", ""),
                 response_rules=rules,
             )
             if snapshot is not None:
@@ -55,9 +56,24 @@ class QQBotAccountIdentity:
             config_ref=f"app:{app_id}",
             role_id=row["role_id"],
             display_name=name or row.get("bot_name") or None,
+            avatar_url=row.get("avatar"),
         )
         self._account_ids[app_id] = snapshot.record.id
         return snapshot.record.id
+
+    def update_avatar(self, app_id: str, avatar: str) -> None:
+        """Stores a freshly fetched avatar with the application and re-registers it.
+
+        Ignored for an application deleted (or never saved) while fetching.
+        """
+        if app_id not in self._account_ids:
+            return
+        row = next((row for row in self._store.list() if row["app_id"] == app_id), None)
+        if row is None or row.get("avatar", "") == avatar:
+            return
+        row = {**row, "avatar": avatar}
+        self._store.save(row)
+        self.register(row)
 
     def check_owner(self, app_id: str, role_id: str) -> None:
         """Raises unless ``role_id`` may own this application's account."""

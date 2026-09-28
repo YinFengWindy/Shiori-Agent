@@ -103,6 +103,24 @@ async def test_shared_account_rpc_uses_selected_private_application() -> None:
 
 
 @pytest.mark.asyncio
+async def test_stored_bot_avatar_is_registered_on_load() -> None:
+    avatar = "data:image/png;base64,iVBORw0KGgo="
+    kv = {
+        "applications": [_app("cli_a", connection_enabled=False)],
+        "profile:feishu:cli_a": {"name": "Bot", "avatar": avatar},
+    }
+    ctx = _fake_ctx(kv, {}, [])
+    registered: list[dict[str, Any]] = []
+    ctx.accounts.register_saved = lambda **kwargs: registered.append(
+        kwargs
+    ) or SimpleNamespace(record=SimpleNamespace(id="account-a"))
+
+    await setup(ctx)
+
+    assert [row["avatar_url"] for row in registered] == [avatar]
+
+
+@pytest.mark.asyncio
 async def test_delete_hook_closes_the_websocket_before_purging() -> None:
     handlers: dict[str, Any] = {}
     channels: list[Any] = []

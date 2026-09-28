@@ -17,6 +17,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.turns.desktop_pushes import current_desktop_pushes
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
+    AccountChanged,
     ProactiveMessageCommitted,
     RoleDeleted,
     TurnCommitted,
@@ -113,6 +114,10 @@ class DesktopBridgeService:
             ProactiveMessageCommitted,
             self._proactive_message_listener,
         )
+        self._account_change_listener = self._on_account_change
+        self._account_changed_listener = self._on_account_changed
+        role_store.accounts.add_change_listener(self._account_change_listener)
+        self.event_bus.on(AccountChanged, self._account_changed_listener)
         self.config = config
         self.role_runtime_registry = role_runtime_registry
         registrations = getattr(config, "model_registrations", None)
@@ -276,6 +281,24 @@ class DesktopBridgeService:
             session=session,
         )
 
+    def _on_account_change(self, account_id: str) -> None:
+        # Registry changes arrive synchronously from plugin reports; the bus
+        # hands them to the async broadcast. Unwatched changes are dropped.
+        if self._event_listeners:
+            self.event_bus.enqueue(AccountChanged(account_id))
+
+    async def _on_account_changed(self, event: AccountChanged) -> None:
+        """Pushes account changes so account views refresh without polling."""
+
+        await self._broadcast_event(
+            BridgeEvent(
+                id="accounts.updated",
+                type="event",
+                method="accounts.updated",
+                payload={"account_id": event.account_id},
+            ).to_dict()
+        )
+
     def add_event_listener(
         self,
         listener: Callable[[dict[str, Any]], Awaitable[None] | None],
@@ -324,6 +347,8 @@ class DesktopBridgeService:
             self._proactive_message_listener,
         )
         self.role_service.remove_role_deleted_listener(self._role_deleted_listener)
+        self.role_store.accounts.remove_change_listener(self._account_change_listener)
+        self.event_bus.off(AccountChanged, self._account_changed_listener)
         self.event_bus.off(PluginBridgeEvent, self._plugin_event_listener)
         self._event_listeners.clear()
         if self.plugin_rpc_registry is not None:

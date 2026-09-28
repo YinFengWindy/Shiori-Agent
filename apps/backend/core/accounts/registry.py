@@ -7,6 +7,7 @@ from dataclasses import replace
 from threading import RLock
 from typing import Callable
 
+from .avatar import validate_avatar
 from .models import (
     AccountAccess,
     AccountDeleteHandler,
@@ -20,6 +21,10 @@ from .models import (
     account_id_for,
 )
 from .runtime_state import DIRECT_GENERATION, AccountRuntimeState
+
+# Called with an account ID after its published snapshot changed or it was
+# added or removed; must not block, since it runs on the reporting call.
+AccountChangeListener = Callable[[str], None]
 
 
 class AccountRegistry:
@@ -40,6 +45,36 @@ class AccountRegistry:
         self._delete_lock = asyncio.Lock()
         # Accounts mid-deletion; identity and rules are frozen until it ends.
         self._deleting: set[str] = set()
+        self._change_listeners: list[AccountChangeListener] = []
+
+    def add_change_listener(self, listener: AccountChangeListener) -> None:
+        """Subscribes to published account changes (added, removed, re-reported).
+
+        Only real changes notify: a report or registration that leaves the
+        published snapshot as it was does not.
+        """
+        self._change_listeners.append(listener)
+
+    def remove_change_listener(self, listener: AccountChangeListener) -> None:
+        """Withdraws a listener added with ``add_change_listener``."""
+        self._change_listeners = [
+            known for known in self._change_listeners if known != listener
+        ]
+
+    def _published_view(self, account_id: str) -> AccountSnapshot | None:
+        """The published snapshot of an account, or None when it is not listed."""
+        row = self._runtime.published.records.get(account_id)
+        return None if row is None else self._runtime.snapshot(row)
+
+    def _notify_if_changed(
+        self, account_id: str, before: AccountSnapshot | None
+    ) -> None:
+        """Tells listeners when the published view of ``account_id`` changed."""
+        with self._lock:
+            after = self._published_view(account_id)
+        if after != before:
+            for listener in list(self._change_listeners):
+                listener(account_id)
 
     def role_exists(self, role_id: str) -> bool:
         """Whether an owner role still exists, for plugins pruning orphaned accounts."""
@@ -92,16 +127,20 @@ class AccountRegistry:
         """Indexes an owned account; omitted display fields and rules are retained.
 
         The ownership rule is ``_ownership_refusal``; a refused account raises
-        ValueError and is not indexed.
+        ValueError and is not indexed, as does an ``avatar_url`` that is not
+        empty or a valid image data URI (``validate_avatar``).
         """
         fields = (plugin_id, platform, platform_account_id, config_ref, token)
         if any(not isinstance(value, str) or not value.strip() for value in fields):
             raise ValueError("账号身份、配置引用和运行令牌不能为空")
+        if avatar_url is not None:
+            validate_avatar(avatar_url)
         plugin_id, platform, platform_account_id, config_ref, token = (
             value.strip() for value in fields
         )
         account_id = account_id_for(plugin_id, platform_account_id)
         with self._lock:
+            before = self._published_view(account_id)
             records = self._runtime.generation(generation).records
             refusal = self._ownership_refusal(
                 records,
@@ -145,7 +184,9 @@ class AccountRegistry:
                 )
             )
             self._runtime.register(row, token, generation)
-            return self._runtime.snapshot(row, generation=generation)
+            snapshot = self._runtime.snapshot(row, generation=generation)
+        self._notify_if_changed(account_id, before)
+        return snapshot
 
     def _ownership_refusal(
         self,
@@ -258,24 +299,31 @@ class AccountRegistry:
                 return self._runtime.snapshot(
                     state.records[account_id], generation=generation
                 )
+            before = self._published_view(account_id)
             row = self._runtime.report(
                 account_id, token, generation, connection, capabilities, error
             )
-            return self._runtime.snapshot(row, generation=generation)
+            snapshot = self._runtime.snapshot(row, generation=generation)
+        self._notify_if_changed(account_id, before)
+        return snapshot
 
     def unregister(
         self, account_id: str, token: str, *, generation: str = DIRECT_GENERATION
     ) -> None:
         """Stops one account's live presence while its plugin keeps it listed."""
         with self._lock:
+            before = self._published_view(account_id)
             self._runtime.unregister(account_id, token, generation)
+        self._notify_if_changed(account_id, before)
 
     def release(
         self, account_id: str, token: str, *, generation: str = DIRECT_GENERATION
     ) -> None:
         """Removes a disposed plugin instance's account from its generation."""
         with self._lock:
+            before = self._published_view(account_id)
             self._runtime.release(account_id, token, generation)
+        self._notify_if_changed(account_id, before)
 
     def _ensure_not_deleting(self, account_id: str) -> None:
         if account_id in self._deleting:
@@ -360,10 +408,12 @@ class AccountRegistry:
                 await plan.disconnect()
                 await plan.purge()
                 with self._lock:
+                    before = self._published_view(row.id)
                     self._runtime.forget(row.id)
             finally:
                 with self._lock:
                     self._deleting.discard(row.id)
+            self._notify_if_changed(row.id, before)
 
     async def delete_role_accounts(self, role_id: str) -> list[str]:
         """Deletes every account a loaded plugin holds for ``role_id``.

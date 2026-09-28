@@ -971,3 +971,40 @@ async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -
     assert codes == ["account_deleting"]
     assert accounts.list() == []
     await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_account_report_changes_are_pushed_to_desktop_clients(tmp_path) -> None:
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="m")
+    accounts = role_store.accounts
+    event_bus = EventBus()
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=event_bus,
+    )
+    emitted: list[dict] = []
+    service.add_event_listener(emitted.append)
+    account_id = accounts.register(
+        plugin_id="demo",
+        platform="demo",
+        platform_account_id="1",
+        config_ref="a",
+        token="t",
+        role_id="mira",
+    ).record.id
+    accounts.report(account_id, "t", connection="online")
+    accounts.report(account_id, "t", connection="online")
+    await event_bus.drain()
+
+    assert [(event["method"], event["payload"]) for event in emitted] == [
+        ("accounts.updated", {"account_id": "demo:1"}),
+        ("accounts.updated", {"account_id": "demo:1"}),
+    ]
+    await service.aclose()
+    accounts.report(account_id, "t", connection="offline")
+    await event_bus.drain()
+    assert len(emitted) == 2

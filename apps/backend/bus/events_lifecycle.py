@@ -124,6 +124,13 @@ class RoleDeleted:
 
 
 @dataclass(frozen=True)
+class AccountChanged:
+    """Signals that a published communication account was added, removed or re-reported."""
+
+    account_id: str
+
+
+@dataclass(frozen=True)
 class ProactiveMessageCommitted:
     """Signals that a proactive role message is available in its shared session."""
 

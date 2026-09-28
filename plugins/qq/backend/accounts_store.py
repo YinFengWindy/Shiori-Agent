@@ -26,6 +26,8 @@ class QQConnectionConfig:
     ws_token: str
     expected_uin: str = ""
     display_name: str = ""
+    # The QQ avatar as an image data URI, refreshed on each connect; "" if unknown.
+    avatar: str = ""
     timeout_seconds: float = 5.0
     auto_connect: bool = True
     verified: bool = False

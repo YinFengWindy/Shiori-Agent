@@ -71,7 +71,8 @@ async def test_verified_identity_and_polling_status_are_account_scoped():
                 full_name="First Bot",
                 username="first_bot",
             )
-        )
+        ),
+        get_user_profile_photos=AsyncMock(return_value=SimpleNamespace(photos=())),
     )
     channel._app = SimpleNamespace(
         bot=bot,
@@ -80,14 +81,19 @@ async def test_verified_identity_and_polling_status_are_account_scoped():
         updater=SimpleNamespace(start_polling=AsyncMock()),
     )
     await channel.start()
+    assert channel._avatar_task is not None
+    await channel._avatar_task
     assert channel.status()["connected"] is True
     assert channel.status()["account"] == "@first_bot"
     assert [call.kwargs["connection"] for call in accounts.report.call_args_list] == [
         "connecting",
         "online",
     ]
-    assert accounts.register.call_args_list[-1].kwargs["display_name"] == "First Bot"
-    channel._known_store.set.assert_called_once_with(
+    assert any(
+        call.kwargs.get("display_name") == "First Bot"
+        for call in accounts.register.call_args_list
+    )
+    channel._known_store.set.assert_any_call(
         "identity:first",
         {"bot_id": "123", "name": "First Bot", "username": "first_bot"},
     )
@@ -162,3 +168,59 @@ async def test_channel_recovers_on_empty_successful_poll(monkeypatch):
     await bot.get_updates()
     assert channel._online is True
     assert accounts.report.call_args.kwargs["connection"] == "online"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fetch_ok", [False, True])
+async def test_bot_photo_is_stored_and_kept_when_its_refresh_fails(tmp_path, fetch_ok):
+    png = bytes.fromhex("89504e470d0a1a0a")
+    old = "data:image/png;base64,AAAA"
+    store = PluginKVStore(tmp_path / "telegram.json")
+    store.set("avatar:first", old)
+    channel = TelegramChannel("123:abc", name="telegram_first", config_ref="first")
+    accounts = Mock()
+    accounts.register.return_value = SimpleNamespace(
+        record=SimpleNamespace(id="account-1")
+    )
+    channel._accounts = accounts
+    channel._known_store = store
+    channel._intake = Mock()
+    channel._bind_runtime = Mock()
+    channel._rebuild_user_map = Mock()
+    channel._register_bot_commands = AsyncMock()
+    photo = SimpleNamespace(file_id="small")
+    bot = SimpleNamespace(
+        get_me=AsyncMock(
+            return_value=SimpleNamespace(id=123, full_name="Bot", username="bot")
+        ),
+        get_user_profile_photos=(
+            AsyncMock(return_value=SimpleNamespace(photos=((photo,),)))
+            if fetch_ok
+            else AsyncMock(side_effect=NetworkError("offline"))
+        ),
+        get_file=AsyncMock(
+            return_value=SimpleNamespace(
+                download_as_bytearray=AsyncMock(return_value=bytearray(png))
+            )
+        ),
+    )
+    channel._app = SimpleNamespace(
+        bot=bot,
+        initialize=AsyncMock(),
+        start=AsyncMock(),
+        updater=SimpleNamespace(start_polling=AsyncMock()),
+    )
+
+    await channel.start()
+    assert channel._avatar_task is not None
+    await channel._avatar_task
+
+    bot.get_user_profile_photos.assert_awaited_once_with(123, limit=1)
+    fresh = "data:image/png;base64,iVBORw0KGgo="
+    assert store.get("avatar:first") == (fresh if fetch_ok else old)
+    avatars = [
+        call.kwargs["avatar_url"]
+        for call in accounts.register.call_args_list
+        if "avatar_url" in call.kwargs
+    ]
+    assert avatars == ([fresh] if fetch_ok else [])

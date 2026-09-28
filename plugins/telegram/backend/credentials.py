@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 BOTS_KEY = "bots"
 # Per-Bot KV caches written by the channel and account API.
-CACHE_PREFIXES = ("known_chats", "identity")
+CACHE_PREFIXES = ("known_chats", "identity", "avatar")
 _REF = re.compile(r"[a-z0-9_]{1,48}")
 _ENV_REFERENCE = re.compile(r"^\$\{\w+\}$")
 
@@ -35,6 +35,11 @@ _ENV_REFERENCE = re.compile(r"^\$\{\w+\}$")
 def bot_account_id(token: str) -> str:
     """The Bot's numeric platform ID, which a Bot Token starts with."""
     return token.split(":", 1)[0]
+
+
+def avatar_key(ref: str) -> str:
+    """The KV key holding one Bot's profile photo as a data URI ("" for none)."""
+    return f"avatar:{ref}"
 
 
 def resolve_token(token: str) -> str:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+
 import pytest
 
 from core.accounts import (
@@ -10,6 +12,8 @@ from core.accounts import (
     AccountNotFoundError,
     AccountRegistry,
     AccountResponseRules,
+    MAX_AVATAR_BYTES,
+    avatar_data_uri,
 )
 
 
@@ -206,3 +210,65 @@ async def test_role_deletion_deletes_every_loaded_account_of_the_role():
     assert chat.steps == ["plan:one", "disconnect", "purge"]
     assert other.steps == ["plan:seven", "disconnect", "purge"]
     assert [row.record.id for row in registry.list()] == ["chat:102"]
+
+
+_PNG_AVATAR = "data:image/png;base64,iVBORw0KGgo="
+
+
+@pytest.mark.parametrize(
+    ("avatar", "reason"),
+    [
+        ("https://cdn.example/bot.png", "data:image"),
+        ("data:text/html;base64,PGh0bWw+", "data:image"),
+        ("data:image/png;base64,PGh0bWw+", "PNG、JPEG"),
+        ("data:image/jpeg;base64,iVBORw0KGgo=", "不符"),
+        ("data:image/png;base64,iVBORw0KGgo", "base64"),
+    ],
+)
+def test_avatar_must_be_an_image_data_uri(avatar, reason):
+    registry = AccountRegistry({"r1"}.__contains__)
+    with pytest.raises(ValueError, match=reason):
+        _register(registry, avatar_url=avatar)
+    assert registry.list() == []
+
+
+def test_oversize_avatar_is_refused_and_empty_means_none():
+    registry = AccountRegistry({"r1"}.__contains__)
+    oversize = b"\x89PNG\r\n\x1a\n" + bytes(MAX_AVATAR_BYTES)
+    with pytest.raises(ValueError, match="KiB"):
+        avatar_data_uri(oversize)
+    too_big = "data:image/png;base64," + base64.b64encode(oversize).decode("ascii")
+    with pytest.raises(ValueError, match="KiB"):
+        _register(registry, avatar_url=too_big)
+    assert _register(registry, avatar_url="").record.avatar_url == ""
+    assert _register(registry, avatar_url=_PNG_AVATAR).record.avatar_url == (
+        _PNG_AVATAR
+    )
+    # Omitting the avatar keeps the indexed one.
+    assert _register(registry).record.avatar_url == _PNG_AVATAR
+
+
+def test_listeners_hear_only_real_published_account_changes():
+    registry = AccountRegistry({"r1"}.__contains__)
+    changed: list[str] = []
+    registry.add_change_listener(changed.append)
+
+    account = _register(registry, display_name="Bot")
+    registry.report(account.record.id, "generation-1", connection="login_required")
+    registry.report(account.record.id, "generation-1", connection="login_required")
+    _register(registry, display_name="Bot")
+    assert changed == ["chat:101", "chat:101"]
+
+    registry.report(account.record.id, "generation-1", connection="online")
+    _register(registry, avatar_url=_PNG_AVATAR)
+    registry.report(
+        account.record.id, "generation-1", connection="error", error="offline"
+    )
+    # A candidate generation is not visible until published.
+    _register(registry, token="generation-2", generation="next")
+    registry.release(account.record.id, "generation-1")
+    assert changed == ["chat:101"] * 6
+
+    registry.remove_change_listener(changed.append)
+    _register(registry, token="generation-3")
+    assert len(changed) == 6

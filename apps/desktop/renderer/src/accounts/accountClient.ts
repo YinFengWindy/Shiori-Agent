@@ -16,6 +16,7 @@ export type AccountSnapshot = {
   platformAccountId: string;
   configRef: string;
   displayName: string;
+  /** The platform account's own picture as an image `data:` URI; `""` when unknown. */
   avatarUrl: string;
   roleId: string;
   runtimeActive: boolean;
