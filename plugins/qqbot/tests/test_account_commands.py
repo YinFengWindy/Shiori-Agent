@@ -245,7 +245,7 @@ async def test_deleted_application_closes_gateway_and_forgets_credentials(
     assert [row["app_id"] for row in store.list()] == ["200"]
     assert "secret-100" not in (tmp_path / "qqbot.json").read_text(encoding="utf-8")
     assert manager._identity.account_id("100") == ""
-    with pytest.raises(StopIteration):
+    with pytest.raises(KeyError, match="QQ 机器人账号不存在"):
         manager._identity.app_for_account({"account_id": "100"})
     await manager.disconnect_account("100")
     await manager.purge_account("100")

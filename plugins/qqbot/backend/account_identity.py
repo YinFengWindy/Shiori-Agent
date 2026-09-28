@@ -104,11 +104,10 @@ class QQBotAccountIdentity:
     def app_for_account(self, payload: dict[str, Any]) -> str:
         """Resolve a plugin RPC's account ID to its application ID."""
         account_id = str(payload.get("account_id") or "")
-        return next(
-            app_id
-            for app_id, registered in self._account_ids.items()
-            if registered == account_id
-        )
+        for app_id, registered in self._account_ids.items():
+            if registered == account_id:
+                return app_id
+        raise KeyError("QQ 机器人账号不存在")
 
     def begin_handoff(self, app_id: str) -> None:
         """Hold Gateway identity changes until replacement credentials commit."""
