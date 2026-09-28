@@ -10,6 +10,9 @@ from pathlib import Path
 from conversation.store import ensure_conversation_schema
 from infra.persistence.sqlite_transaction import immediate_transaction
 
+# Triggers that keep the external-content messages_fts index in sync with messages.
+_FTS_TRIGGERS = ("messages_ai", "messages_ad", "messages_au")
+
 
 class _SessionConnection:
     @contextmanager
@@ -103,56 +106,7 @@ class _SessionConnection:
         # statements so the enclosing schema transaction can still commit.
         self._conn.execute("SAVEPOINT ensure_fts")
         try:
-            # Migrate to trigram tokenizer if the table exists without it.
-            # trigram supports CJK substring matching; the old unicode61 default does not.
-            existing = self._conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='messages_fts'"
-            ).fetchone()
-            if existing:
-                try:
-                    cfg = dict(
-                        self._conn.execute(
-                            "SELECT * FROM messages_fts_config"
-                        ).fetchall()
-                    )
-                    is_trigram = "trigram" in cfg.get("tokenize", "")
-                except sqlite3.OperationalError:
-                    is_trigram = False
-                if not is_trigram:
-                    self._conn.execute("DROP TABLE IF EXISTS messages_fts")
-                    for trig in ("messages_ai", "messages_ad", "messages_au"):
-                        self._conn.execute(f"DROP TRIGGER IF EXISTS {trig}")
-
-            self._conn.execute("""
-                CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-                    content,
-                    content='messages',
-                    content_rowid='rowid',
-                    tokenize='trigram'
-                )
-                """)
-            self._conn.execute("""
-                CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
-                    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
-                END
-                """)
-            self._conn.execute("""
-                CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
-                    INSERT INTO messages_fts(messages_fts, rowid, content)
-                    VALUES('delete', old.rowid, old.content);
-                END
-                """)
-            self._conn.execute("""
-                CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
-                    INSERT INTO messages_fts(messages_fts, rowid, content)
-                    VALUES('delete', old.rowid, old.content);
-                    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
-                END
-                """)
-            # Rebuild index so existing messages are covered by trigram.
-            self._conn.execute(
-                "INSERT INTO messages_fts(messages_fts) VALUES('rebuild')"
-            )
+            self._migrate_fts()
         except sqlite3.OperationalError:
             # Errors such as SQLITE_FULL/IOERR roll back the whole transaction,
             # taking the savepoint with it; surface the real failure then.
@@ -164,6 +118,64 @@ class _SessionConnection:
             return
         self._conn.execute("RELEASE ensure_fts")
         self._has_fts = True
+
+    def _migrate_fts(self) -> None:
+        """Bring messages_fts to the trigram shape, rebuilding only when it changed."""
+        # The tokenizer is only recorded in the CREATE VIRTUAL TABLE statement;
+        # fts5's *_config shadow table holds nothing but the format version.
+        row = self._conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='messages_fts'"
+        ).fetchone()
+        fts_sql = str(row["sql"]) if row else None
+        triggers = {
+            str(trigger["name"])
+            for trigger in self._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='trigger' AND name IN "
+                "('messages_ai', 'messages_ad', 'messages_au')"
+            ).fetchall()
+        }
+        is_trigram = fts_sql is not None and "trigram" in fts_sql.lower()
+        if is_trigram and len(triggers) == len(_FTS_TRIGGERS):
+            # Up to date: only confirm the fts5 module can open the table, so a
+            # build without FTS5 still falls back to LIKE search.
+            self._conn.execute("SELECT 1 FROM messages_fts LIMIT 0").fetchall()
+            return
+        if fts_sql is not None and not is_trigram:
+            # trigram supports CJK substring matching; the old unicode61 default
+            # does not, so a legacy index is dropped and rebuilt from scratch.
+            self._conn.execute("DROP TABLE messages_fts")
+            for trigger in _FTS_TRIGGERS:
+                self._conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+
+        self._conn.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+                content,
+                content='messages',
+                content_rowid='rowid',
+                tokenize='trigram'
+            )
+            """)
+        self._conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+                INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+            END
+            """)
+        self._conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+                INSERT INTO messages_fts(messages_fts, rowid, content)
+                VALUES('delete', old.rowid, old.content);
+            END
+            """)
+        self._conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
+                INSERT INTO messages_fts(messages_fts, rowid, content)
+                VALUES('delete', old.rowid, old.content);
+                INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+            END
+            """)
+        # A new index, or one that missed writes while a trigger was absent,
+        # must be repopulated from messages.
+        self._conn.execute("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')")
 
     def close(self) -> None:
         with self._lock:

@@ -234,6 +234,39 @@ def test_legacy_database_upgrades_columns_cursor_and_fts(tmp_path: Path) -> None
         ).fetchall() == [(1,)]
 
 
+def test_reopening_trigram_database_skips_fts_drop_and_rebuild(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    _create_legacy_database(db_path)
+    # First open migrates unicode61 -> trigram.
+    SessionStore(db_path).close()
+
+    traced: list[str] = []
+    real_connect = sqlite3.connect
+
+    def traced_connect(*args, **kwargs) -> sqlite3.Connection:
+        conn = real_connect(*args, **kwargs)
+        conn.set_trace_callback(traced.append)
+        return conn
+
+    monkeypatch.setattr(connection_module.sqlite3, "connect", traced_connect)
+
+    store = SessionStore(db_path)
+    try:
+        assert store._has_fts is True
+    finally:
+        store.close()
+
+    assert not [sql for sql in traced if sql.lstrip().upper().startswith("DROP")]
+    assert not [sql for sql in traced if "'rebuild'" in sql]
+    assert _schema_objects(db_path) == EXPECTED_OBJECTS
+    with closing(sqlite3.connect(db_path)) as conn:
+        assert conn.execute(
+            "SELECT rowid FROM messages_fts WHERE messages_fts MATCH '好世界'"
+        ).fetchall() == [(1,)]
+
+
 class _IoErrorOnFtsRebuild(sqlite3.Connection):
     """Mimics SQLITE_IOERR: SQLite rolls back the whole transaction, then raises."""
 
