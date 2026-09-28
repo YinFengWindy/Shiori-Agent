@@ -1,39 +1,36 @@
 import { cx } from "../shared/styles";
-import type { AccountSnapshot } from "./accountClient";
-import { accountStatus } from "./accountPresentation";
+import type { AccountStatusTone, AccountStatusView } from "./accountPresentation";
 
-const dotTones = {
-  online: "bg-success",
-  connecting: "bg-warning",
-  login_required: "bg-warning",
-  error: "bg-danger",
-  offline: "bg-ink-faint",
-  unknown: "bg-ink-faint",
-} as const;
+const dotTones: Record<AccountStatusTone, string> = {
+  success: "bg-success",
+  warning: "bg-warning",
+  danger: "bg-danger",
+  muted: "bg-ink-faint",
+};
 
-const dotClass = "block h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-surface";
+// Only the color changes between states, so it eases instead of snapping.
+const dotClass = "block h-2 w-2 shrink-0 rounded-full transition-colors duration-base ease-out-soft";
 
-/** Dot color for an account; one whose plugin is not running reads as offline. */
-export function accountStatusDotTone(account: Pick<AccountSnapshot, "runtimeActive" | "connection">) {
-  return dotTones[account.runtimeActive ? account.connection : "offline"];
+/** Dot color class for a status tone. */
+export function statusDotTone(tone: AccountStatusTone) {
+  return dotTones[tone];
 }
 
 /**
- * Round connection indicator, ringed in the surface color so it reads over a
- * channel icon. Alone, the status text is its title and accessible name; with
- * `withText` the text is shown beside it and the dot itself is decorative.
+ * Round connection indicator. Alone, the status text is its title and
+ * accessible name; with `withText` the text is shown beside it and the dot
+ * itself is decorative.
  */
-export function AccountStatusDot({ account, withText = false, className }: {
-  account: AccountSnapshot;
+export function AccountStatusDot({ status, withText = false, className }: {
+  status: AccountStatusView;
   withText?: boolean;
   className?: string;
 }) {
-  const label = accountStatus(account);
   if (withText) {
-    return <span className={cx("inline-flex items-center gap-1.5", className)}>
-      <span aria-hidden="true" className={cx(dotClass, accountStatusDotTone(account))} />{label}
+    return <span className={cx("inline-flex items-center gap-2", className)}>
+      <span aria-hidden="true" className={cx(dotClass, statusDotTone(status.tone))} />{status.label}
     </span>;
   }
-  return <span role="img" aria-label={label} title={label}
-    className={cx(dotClass, accountStatusDotTone(account), className)} />;
+  return <span role="img" aria-label={status.label} title={status.label}
+    className={cx(dotClass, statusDotTone(status.tone), className)} />;
 }

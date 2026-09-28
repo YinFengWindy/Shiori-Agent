@@ -33,7 +33,7 @@ export function accountDeletionDescription(account: AccountIdentity | null) {
 }
 
 /** An account its plugin is not running cannot be shown online. */
-export function accountStatus(account: AccountSnapshot) {
+export function accountStatus(account: Pick<AccountSnapshot, "runtimeActive" | "connection">) {
   if (!account.runtimeActive) return "离线";
   switch (account.connection) {
     case "online": return "在线";
@@ -42,4 +42,51 @@ export function accountStatus(account: AccountSnapshot) {
     case "error": return "故障";
     default: return "离线";
   }
+}
+
+/** Status colors shared by status dots and the account status card. */
+export type AccountStatusTone = "success" | "warning" | "danger" | "muted";
+
+/** A status as shown to the user: its words and its dot color. */
+export type AccountStatusView = { label: string; tone: AccountStatusTone };
+
+/** Account commands whose request is in flight; their status shows at once, before any report. */
+export type AccountPendingAction = "connect" | "disconnect" | "logout";
+
+const connectionTones: Record<AccountSnapshot["connection"], AccountStatusTone> = {
+  online: "success",
+  connecting: "warning",
+  login_required: "warning",
+  error: "danger",
+  offline: "muted",
+  unknown: "muted",
+};
+
+/** The host's reading of an account's live report; a stopped plugin reads as offline. */
+export function accountStatusView(account: Pick<AccountSnapshot, "runtimeActive" | "connection">): AccountStatusView {
+  return {
+    label: accountStatus(account),
+    tone: connectionTones[account.runtimeActive ? account.connection : "offline"] ?? "muted",
+  };
+}
+
+/** Whether the account is connected right now, as its plugin last reported. */
+export function accountOnline(account: Pick<AccountSnapshot, "runtimeActive" | "connection"> | null) {
+  return Boolean(account?.runtimeActive && account.connection === "online");
+}
+
+const pendingLabels: Record<AccountPendingAction, string> = {
+  connect: "正在连接",
+  disconnect: "正在断开",
+  logout: "正在退出",
+};
+
+/** Status shown while a connect, disconnect or logout request is still in flight. */
+export function pendingAccountStatus(action: AccountPendingAction): AccountStatusView {
+  return { label: pendingLabels[action], tone: "warning" };
+}
+
+/** The line under an account's name: its channel and platform ID, e.g. `QQ · 10001`. */
+export function accountChannelLine(channelLabel: string, account: Pick<AccountSnapshot, "platformAccountId">) {
+  return `${channelLabel} · ${account.platformAccountId}`;
 }

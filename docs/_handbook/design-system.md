@@ -132,6 +132,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | `dangerButtonClass` / `dangerGhostButtonClass` | 破坏性操作的实心版 / 安静版 |
 | `iconButtonClass` | 纯图标方形按钮（返回、重置、工具），统一 `rounded-md` |
 | `primaryButtonSurfaceClass` / `ghostButtonSurfaceClass` / `dangerGhostButtonSurfaceClass` | 不含尺寸的按钮外观，配 `compactButtonSizeClass`（36px 带文字按钮）或自带尺寸使用 |
+| `textButtonSurfaceClass` / `dangerTextButtonSurfaceClass`（`compactTextButtonClass` / `compactDangerTextButtonClass`） | 无边框的文字按钮，给不和主按钮抢视线的底部操作（如账号详情底部的「退出登录」「删除账号」） |
 | `cardClass` | 空状态、诊断行等卡片面 |
 | `badgeClass` | 状态与标签胶囊 |
 | `panelHeadClass` / `panelTitleClass` | 面板头部布局与标题 |
@@ -232,7 +233,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
   手写弹层用 `motion-popover-enter` / `motion-dialog-enter` / `motion-fade-enter`（`@starting-style`），
   只做入场，关闭时直接消失，缩放原点用 Tailwind 的 `origin-*` 指定。右键菜单和命令面板（RoleSearchDialog）刻意不加动效
 - 侧栏开合用 `sidebarTrackMotionClass`（轨道宽度）+ `sidebarContentMotionClass`（内容淡入位移）
-- 展开/收起用 `grid-template-rows: 0fr → 1fr` 的写法（见 `.chat-thinking-content`），不要用 max-height 猜数值；设置页的折叠区（插件「系统组件」、schema 表单「高级」）用 `settings/SettingsDisclosure` 的 `SettingsDisclosure` + `SettingsDisclosureToggle`（样式 `.disclosure-content`，收起时内容 `inert`）
+- 展开/收起用 `grid-template-rows: 0fr → 1fr` 的写法（见 `.chat-thinking-content`），不要用 max-height 猜数值；设置页的折叠区（插件「系统组件」、schema 表单「高级」）用 `settings/SettingsDisclosure` 的 `SettingsDisclosure` + `SettingsDisclosureToggle`（样式 `.disclosure-content`，收起时内容 `inert`）；随状态出现 / 消失的块（账号详情里的二维码、准备进度、响应规则、底部危险区）用 `shared/ui/Reveal`（样式 `.reveal`，收起期间保留最后的内容，收完再卸载；一开始就显示的块不播入场），插件经 `host.ui.Reveal` 使用
 - 减弱动态效果下：`CrossfadeLayers` 的两个变体都只剩透明度淡入淡出（不模糊、不缩放）；心情变化不喷粒子、胶囊不弹，只换颜色；星芒打字静止；聊天背景不呼吸、无视差
 - **`styles.css` 末尾有统一的 `@media (prefers-reduced-motion: reduce)` 块**（这里不写行号，行号会漂）：新增循环动画或较大位移的过渡时，
   必须同时在这个块里给出降级（`animation: none` 或退化成 opacity 过渡）。

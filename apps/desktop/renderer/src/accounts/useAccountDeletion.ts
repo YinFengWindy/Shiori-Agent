@@ -19,16 +19,19 @@ export function useAccountDeletion(roleId: string, onSettled: () => void) {
   function cancel() {
     if (!busy) setPending(null);
   }
+  /** Deletes the pending account; resolves true once it is gone. */
   async function confirm() {
-    if (!pending || busy) return;
+    if (!pending || busy) return false;
     setBusy(true);
     setError("");
     try {
       await client.remove(pending.id, roleId);
       setPending(null);
+      return true;
     } catch (failure) {
       // The host kept the account; show why so the user can retry.
       setError(failure instanceof Error ? failure.message : String(failure));
+      return false;
     } finally {
       setBusy(false);
       onSettled();

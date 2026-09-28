@@ -70,7 +70,7 @@ test("a connected Bot is disconnected, an offline one reconnects without a new T
       client={rpc(calls)} host={desktopPluginHostServices} />,
   );
   try {
-    await act(async () => button(offline.container, "重新连接")?.click());
+    await act(async () => button(offline.container, "连接")?.click());
     assert.deepEqual(calls.at(-1), { name: "bot.save", payload: { role_id: "mira", token: "", account_id: "telegram:123" } });
   } finally {
     await offline.cleanup();

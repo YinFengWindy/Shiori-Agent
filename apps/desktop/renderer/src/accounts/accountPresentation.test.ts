@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { accountDeletionDescription, accountHeadline, accountName, accountStatus, roleDeletionDescription } from "./accountPresentation";
+import {
+  accountChannelLine, accountDeletionDescription, accountHeadline, accountName, accountStatus, accountStatusView,
+  pendingAccountStatus, roleDeletionDescription,
+} from "./accountPresentation";
 import type { AccountSnapshot } from "./accountClient";
 
 const account: AccountSnapshot = {
@@ -17,6 +20,18 @@ test("status uses live report and never presents a stopped provider as online", 
   assert.equal(accountStatus({ ...account, connection: "error" }), "故障");
   assert.equal(accountStatus({ ...account, connection: "offline" }), "离线");
   assert.equal(accountStatus({ ...account, runtimeActive: false }), "离线");
+});
+
+test("status tone is green online, yellow while connecting or awaiting login, red on error, gray otherwise", () => {
+  assert.deepEqual(accountStatusView(account), { label: "在线", tone: "success" });
+  assert.equal(accountStatusView({ ...account, connection: "connecting" }).tone, "warning");
+  assert.equal(accountStatusView({ ...account, connection: "login_required" }).tone, "warning");
+  assert.equal(accountStatusView({ ...account, connection: "error" }).tone, "danger");
+  assert.equal(accountStatusView({ ...account, connection: "unknown" }).tone, "muted");
+  // A plugin that is not running cannot vouch for an online account.
+  assert.deepEqual(accountStatusView({ ...account, runtimeActive: false }), { label: "离线", tone: "muted" });
+  assert.deepEqual(pendingAccountStatus("disconnect"), { label: "正在断开", tone: "warning" });
+  assert.equal(accountChannelLine("QQ", account), "QQ · 101");
 });
 
 test("account names fall back to the platform ID and the delete text names the account", () => {

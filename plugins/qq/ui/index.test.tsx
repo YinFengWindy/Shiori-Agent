@@ -4,8 +4,25 @@ import React, { act } from "react";
 import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import { desktopPluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import type { AccountSnapshot } from "../../../apps/desktop/renderer/src/accounts/accountClient";
+import { AccountDetailActionsTarget } from "../../../apps/desktop/renderer/src/accounts/AccountDetailActions";
+import { deferred } from "../../../apps/desktop/renderer/src/shared/testing/deferred";
 import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
 import { QQAccountDetail } from "./index";
+
+const savedAccount: AccountSnapshot = {
+  id: "qq:101", pluginId: "qq", platform: "qq", platformAccountId: "101", configRef: "aa",
+  displayName: "QQ", avatarUrl: "", roleId: "mira", runtimeActive: true, connection: "offline",
+  capabilities: [], error: "", responseRules: { privateEnabled: true, groupEnabled: true,
+    requireMention: false, blockedSenderIds: [] },
+};
+
+const readyPreparation = { stage: "ready", percent: 100, version: "v4.18.28" };
+
+const buttonIn = (root: ParentNode, label: string) => Array.from(root.querySelectorAll("button"))
+  .find((item) => item.textContent?.trim() === label);
+
+/** The status card's words, i.e. its dot label. */
+const cardStatus = (root: ParentNode) => root.querySelector('[aria-label="连接状态"] [aria-live]')?.firstElementChild?.textContent;
 
 test("QQ add connects once and shows QR only when login requires scanning", async () => {
   const calls: Array<{ method: string; payload?: Record<string, unknown> }> = [];
@@ -52,42 +69,113 @@ test("QQ add connects once and shows QR only when login requires scanning", asyn
   }
 });
 
-test("a saved QQ account connects with its existing session without showing QR", async () => {
+test("a saved QQ account connects with its existing session: 正在连接 at once, then 登录成功，正在连接 until the host reports online", async () => {
   const calls: string[] = [];
   let connected = false;
+  const started = deferred<void>();
   const client = {
     ...createPluginRpcClient("qq"),
     async call<T>(method: string): Promise<T> {
       calls.push(method);
       if (method === "accounts.settings") return { managed_available: true, account: { ref: "aa" } } as T;
       if (method === "accounts.managed_status") return {
-        preparation: { stage: "ready", percent: 100, version: "v4.18.28" },
+        preparation: readyPreparation,
         login: { phase: connected ? "online" : "stopped", qrcode: "", error: "" },
-        connection: connected ? "online" : "offline", error: "", account_id: "qq:101",
+        connection: connected ? "connecting" : "offline", error: "", account_id: "qq:101",
       } as T;
-      if (method === "accounts.start") { connected = true; return { ref: "aa", account_id: "qq:101" } as T; }
+      if (method === "accounts.start") {
+        await started.promise;
+        connected = true;
+        return { ref: "aa", account_id: "qq:101" } as T;
+      }
       throw new Error(method);
     },
   };
-  const account: AccountSnapshot = {
-    id: "qq:101", pluginId: "qq", platform: "qq", platformAccountId: "101", configRef: "aa",
-    displayName: "QQ", avatarUrl: "", roleId: "mira", runtimeActive: true, connection: "offline",
-    capabilities: [], error: "", responseRules: { privateEnabled: true, groupEnabled: true,
-      requireMention: false, blockedSenderIds: [] },
-  };
-  const view = await mountTestComponent(<QQAccountDetail account={account} roleId="mira"
+  const view = await mountTestComponent(<QQAccountDetail account={savedAccount} roleId="mira"
     onChanged={() => undefined} client={client} host={desktopPluginHostServices} />);
   try {
-    const button = () => Array.from(view.container.querySelectorAll("button"))
-      .find((item) => item.textContent?.trim() === "连接");
     // Opening a saved offline account does not connect it by itself.
     assert.equal(calls.includes("accounts.start"), false);
-    assert.ok(button());
-    await act(async () => button()?.click());
+    assert.equal(cardStatus(view.container), "已停止");
+    await act(async () => buttonIn(view.container, "连接")?.click());
+    // The request is in flight: its status shows at once and its button spins and waits.
+    assert.equal(cardStatus(view.container), "正在连接");
+    assert.equal(buttonIn(view.container, "连接")?.disabled, true);
+    assert.equal(buttonIn(view.container, "连接")?.getAttribute("aria-busy"), "true");
+    await act(async () => started.resolve());
     assert.equal(calls.includes("accounts.begin"), false);
-    assert.equal(calls.includes("accounts.start"), true);
     assert.equal(view.container.querySelector('img[alt="QQ 登录二维码"]'), null);
-    assert.ok(Array.from(view.container.querySelectorAll("button")).some((item) => item.textContent?.trim() === "断开连接"));
-    assert.equal(button(), undefined);
+    // Logged in, but the host account is not online yet: not 需要登录.
+    assert.equal(cardStatus(view.container), "登录成功，正在连接");
+    assert.ok(buttonIn(view.container, "断开连接"));
+    assert.equal(buttonIn(view.container, "连接"), undefined);
+    await view.render(<QQAccountDetail account={{ ...savedAccount, connection: "online" }} roleId="mira"
+      onChanged={() => undefined} client={client} host={desktopPluginHostServices} />);
+    assert.equal(cardStatus(view.container), "在线");
+  } finally { await view.cleanup(); }
+});
+
+test("once the add-flow login is verified, 断开连接 disconnects that account instead of stopping the temporary login", async () => {
+  const calls: Array<{ method: string; payload?: Record<string, unknown> }> = [];
+  const changed: Array<string | undefined> = [];
+  const client = {
+    ...createPluginRpcClient("qq"),
+    async call<T>(method: string, payload?: Record<string, unknown>): Promise<T> {
+      calls.push({ method, payload });
+      if (method === "accounts.settings") return { managed_available: true } as T;
+      if (method === "accounts.begin") return { ref: "temporary-1" } as T;
+      if (method === "accounts.start") return { ref: "temporary-1", account_id: "" } as T;
+      if (method === "accounts.managed_status") return {
+        preparation: readyPreparation, login: { phase: "online", qrcode: "", error: "" },
+        connection: "connecting", error: "", account_id: "qq:101",
+      } as T;
+      return {} as T;
+    },
+  };
+  const view = await mountTestComponent(<QQAccountDetail account={null} roleId="mira"
+    onChanged={(accountId) => changed.push(accountId)} client={client} host={desktopPluginHostServices} />);
+  try {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    assert.deepEqual(changed, ["qq:101"]);
+    // The host list has not caught up (account is still null), yet the login is verified.
+    assert.equal(cardStatus(view.container), "登录成功，正在连接");
+    await act(async () => buttonIn(view.container, "断开连接")?.click());
+    assert.deepEqual(calls.find((row) => row.method === "accounts.disconnect")?.payload, { account_id: "qq:101" });
+    assert.equal(calls.some((row) => row.method === "accounts.stop"), false);
+  } finally { await view.cleanup(); }
+});
+
+test("退出登录 sits in the dialog's danger zone and shows 正在退出 while it runs", async () => {
+  const calls: Array<{ method: string; payload?: Record<string, unknown> }> = [];
+  const loggedOut = deferred<void>();
+  const client = {
+    ...createPluginRpcClient("qq"),
+    async call<T>(method: string, payload?: Record<string, unknown>): Promise<T> {
+      calls.push({ method, payload });
+      if (method === "accounts.settings") return { managed_available: true, account: { ref: "aa" } } as T;
+      if (method === "accounts.managed_status") return {
+        preparation: readyPreparation, login: { phase: "online", qrcode: "", error: "" },
+        connection: "online", error: "", account_id: "qq:101",
+      } as T;
+      if (method === "accounts.logout") await loggedOut.promise;
+      return {} as T;
+    },
+  };
+  const view = await mountTestComponent(null);
+  const zone = document.createElement("div");
+  document.body.append(zone);
+  try {
+    await view.render(<AccountDetailActionsTarget value={zone}>
+      <QQAccountDetail account={{ ...savedAccount, connection: "online" }} roleId="mira"
+        onChanged={() => undefined} client={client} host={desktopPluginHostServices} />
+    </AccountDetailActionsTarget>);
+    assert.equal(buttonIn(view.container, "退出登录"), undefined);
+    await act(async () => buttonIn(zone, "退出登录")?.click());
+    assert.deepEqual(calls.find((row) => row.method === "accounts.logout")?.payload, { account_id: "qq:101" });
+    assert.equal(cardStatus(view.container), "正在退出");
+    assert.equal(buttonIn(zone, "退出登录")?.disabled, true);
+    assert.equal(buttonIn(view.container, "断开连接")?.disabled, true);
+    await act(async () => loggedOut.resolve());
+    assert.equal(buttonIn(zone, "退出登录")?.disabled, false);
   } finally { await view.cleanup(); }
 });

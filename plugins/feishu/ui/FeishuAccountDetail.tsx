@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
 import { useAccountAction } from "../../../apps/desktop/renderer/src/accounts/useAccountAction";
-import { compactGhostButtonClass, compactPrimaryButtonClass, inputClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { inputClass } from "../../../apps/desktop/renderer/src/shared/styles";
 import { Select } from "../../../apps/desktop/renderer/src/shared/ui/Select";
 
 type FeishuDomain = "feishu" | "lark";
@@ -21,7 +21,7 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
   const [appId, setAppId] = useState(saved?.appId ?? "");
   const [secret, setSecret] = useState("");
   const [profile, setProfile] = useState<FeishuProfile | null>(null);
-  const { busy, error, setError, run } = useAccountAction(onChanged);
+  const { pending, busy, error, setError, run } = useAccountAction(onChanged);
 
   useEffect(() => {
     if (!accountRef) return;
@@ -32,9 +32,10 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
     return () => { active = false; };
   }, [accountRef, client, setError]);
 
+  // Connecting saves the app; a saved app reconnects with its kept secret unless a new one is typed.
   async function save() {
     if (!appId.trim()) return;
-    const ok = await run(async () => {
+    const ok = await run("connect", async () => {
       const result = await client.call<{ account_id: string }>("accounts.save", {
         role_id: roleId, domain, app_id: appId.trim(), ...(secret.trim() ? { app_secret: secret.trim() } : {}),
       });
@@ -45,16 +46,24 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
 
   async function disconnect() {
     if (!account) return;
-    await run(async () => {
+    await run("disconnect", async () => {
       await client.call("accounts.disconnect", { account_id: account.id, role_id: roleId });
       return account.id;
     });
   }
 
   const connected = account?.connection === "online" || account?.connection === "connecting";
+  const loginError = account?.connection === "login_required" ? account.error : "";
   return <div className="grid gap-4">
-    {error ? <host.ui.InlineError message={error} /> : null}
-    {account?.connection === "login_required" && account.error ? <host.ui.InlineError message={account.error} /> : null}
+    <host.ui.AccountStatusCard account={account} pending={pending}
+      action={account && connected
+        ? { kind: "disconnect", onClick: () => void disconnect() }
+        : { kind: "connect", onClick: () => void save(), disabled: !appId.trim() || (!account && !secret.trim()) }}>
+      <host.ui.Reveal show={Boolean(error || loginError)} className="grid gap-2 pt-3">
+        {error ? <host.ui.InlineError message={error} /> : null}
+        {loginError ? <host.ui.InlineError message={loginError} /> : null}
+      </host.ui.Reveal>
+    </host.ui.AccountStatusCard>
     <label className="grid gap-2 text-body-sm text-ink-secondary">区域
       <Select aria-label="区域" value={domain} disabled={busy || Boolean(account)} options={[
         { value: "feishu", label: "飞书" }, { value: "lark", label: "Lark" },
@@ -66,11 +75,6 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
     <label className="grid gap-2 text-body-sm text-ink-secondary">App Secret
       <input className={inputClass} type="password" value={secret} disabled={busy} onChange={(event) => setSecret(event.target.value)} autoComplete="new-password" placeholder={account ? "已保存" : ""} />
     </label>
-    <div className="flex flex-wrap gap-2">
-      <button type="button" className={compactPrimaryButtonClass} disabled={busy || !appId.trim() || (!account && !secret.trim())} onClick={() => void save()}>连接</button>
-      {account ? <button type="button" className={compactGhostButtonClass} disabled={busy} onClick={() => void (connected ? disconnect() : save())}>
-        {connected ? "断开连接" : "重新连接"}</button> : null}
-    </div>
     {profile?.identity.open_id ? <p className="m-0 break-all text-body-sm text-ink-muted">机器人 open_id（本应用） · {profile.identity.open_id}</p> : null}
     {profile?.targets.length ? <div className="grid gap-2 border-t border-line-soft pt-4 text-body-sm">
       <h3 className="m-0 font-medium text-ink">已交互私聊（本应用）</h3>

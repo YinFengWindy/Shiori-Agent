@@ -1,13 +1,18 @@
 import { useState } from "react";
+import type { AccountPendingAction } from "./accountPresentation";
 
-/** Runs a platform account command and refreshes the host snapshot on success. */
+/**
+ * Runs one platform account command at a time and refreshes the host
+ * snapshot on success. `pending` names the command in flight, so the status
+ * card can show 正在连接 / 正在断开 before any report arrives.
+ */
 export function useAccountAction(onChanged: (accountId?: string) => void) {
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<AccountPendingAction | null>(null);
   const [error, setError] = useState("");
 
-  async function run(action: () => Promise<string | undefined>) {
-    if (busy) return false;
-    setBusy(true);
+  async function run(kind: AccountPendingAction, action: () => Promise<string | undefined>) {
+    if (pending) return false;
+    setPending(kind);
     setError("");
     try {
       onChanged(await action());
@@ -16,9 +21,9 @@ export function useAccountAction(onChanged: (accountId?: string) => void) {
       setError(failure instanceof Error ? failure.message : String(failure));
       return false;
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
 
-  return { busy, error, setError, run };
+  return { pending, busy: pending !== null, error, setError, run };
 }

@@ -12,13 +12,20 @@ type FormOptions = {
   onCleanupError: (failure: unknown) => void;
 };
 
-/** Loads one managed instance and exposes explicit start/stop commands. */
+/** Re-reads the managed status, so the in-flight state only clears once the new state is known. */
+type RefreshStatus = () => Promise<void>;
+
+/**
+ * Loads one managed instance and exposes explicit start/stop commands.
+ * `pending` names the command in flight for the status card.
+ */
 export function useQQAccountForm({ accountId, roleId, client, onChanged, onCleanupError }: FormOptions) {
   const active = useRef(false);
   const [savedRef, setSavedRef] = useState("");
   const [managedAvailable, setManagedAvailable] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [pending, setPending] = useState<"connect" | "disconnect" | null>(null);
+  // Settings load on mount, so nothing reads "unsupported" before they arrive.
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -45,16 +52,17 @@ export function useQQAccountForm({ accountId, roleId, client, onChanged, onClean
 
   const ref = savedRef;
 
-  async function run(operation: () => Promise<void>) {
-    if (busy) return;
-    setBusy(true);
+  async function run(kind: "connect" | "disconnect", operation: () => Promise<void>) {
+    if (pending) return;
+    setPending(kind);
     setError("");
     try { await operation(); }
     catch (failure) { if (active.current) setError(failure instanceof Error ? failure.message : String(failure)); }
-    finally { if (active.current) setBusy(false); }
+    finally { if (active.current) setPending(null); }
   }
 
-  const start = () => run(async () => {
+  /** Starts the saved instance, or begins a temporary login when adding. */
+  const start = (refresh?: RefreshStatus) => run("connect", async () => {
     const managedRef = ref || (await client.call<{ ref: string }>("accounts.begin", {
       role_id: roleId,
     })).ref;
@@ -71,13 +79,20 @@ export function useQQAccountForm({ accountId, roleId, client, onChanged, onClean
       return;
     }
     if (result.account_id) onChanged(result.account_id);
+    await refresh?.();
   });
-  const disconnect = () => run(async () => {
-    if (accountId) await client.call("accounts.disconnect", { account_id: accountId });
+  /**
+   * Disconnects a verified account by its ID — known from the managed status
+   * as soon as the login is verified, before the host list has it — and only
+   * stops a still-unverified temporary login by its ref.
+   */
+  const disconnect = (verifiedAccountId: string, refresh?: RefreshStatus) => run("disconnect", async () => {
+    if (verifiedAccountId) await client.call("accounts.disconnect", { account_id: verifiedAccountId });
     else if (ref) await client.call("accounts.stop", { ref, role_id: roleId });
     else return;
     onChanged();
+    await refresh?.();
   });
 
-  return { ref, busy, loading, error, managedAvailable, client, start, disconnect, onVerified: onChanged };
+  return { ref, pending, busy: pending !== null, loading, error, managedAvailable, client, start, disconnect, onVerified: onChanged };
 }

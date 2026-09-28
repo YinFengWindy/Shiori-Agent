@@ -459,6 +459,28 @@ button[role="combobox"]:focus-visible {
   overflow: hidden;
 }
 
+/* State-driven blocks that come and go (shared/ui/Reveal: account QR code,
+   progress, response rules, danger zone): fade + 0fr → 1fr, both ways, on
+   one duration so the fade and the collapse finish together. The clip leaves
+   room for focus rings and field glows once open. */
+.reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows var(--duration-base) var(--ease-out-soft), opacity var(--duration-base) var(--ease-out-soft);
+}
+
+.reveal-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.reveal > div {
+  min-height: 0;
+  overflow: clip;
+  overflow-clip-margin: 0.25rem;
+}
+
 .chat-tool-call-content,
 .chat-tool-call-detail {
   display: grid;
@@ -1371,6 +1393,12 @@ button[role="combobox"]:focus-visible {
 
   .disclosure-content,
   .disclosure-content-open {
+    transition: opacity var(--duration-quick) var(--ease-out-soft);
+  }
+
+  /* Revealed blocks jump to their height and only fade. */
+  .reveal,
+  .reveal-open {
     transition: opacity var(--duration-quick) var(--ease-out-soft);
   }
 
