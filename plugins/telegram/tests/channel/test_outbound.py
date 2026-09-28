@@ -248,5 +248,5 @@ async def test_private_reply_neither_quotes_nor_mentions() -> None:
     await channel._on_response(message)
 
     sent = channel._app.bot.send_message.await_args.kwargs
-    assert "reply_parameters" not in sent
+    assert sent["reply_parameters"] is None
     assert sent["text"] == "好"

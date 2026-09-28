@@ -200,7 +200,9 @@ async def test_send_markdown_falls_back_to_plain_text(monkeypatch):
 
     await send_markdown(cast(Any, bot), 456, "line1\nline2")
 
-    assert bot.messages == [{"chat_id": 456, "text": "line1\nline2"}]
+    assert bot.messages == [
+        {"chat_id": 456, "text": "line1\nline2", "reply_parameters": None}
+    ]
 
 
 def test_render_telegram_preview_html_renders_markdown():
