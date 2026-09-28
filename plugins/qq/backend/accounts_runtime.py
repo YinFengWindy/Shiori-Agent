@@ -125,8 +125,11 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
     def _ref_for(self, account_id: str) -> str:
         try:
             return next(ref for ref, known in self._ids.items() if known == account_id)
-        except StopIteration as exc:
-            raise KeyError(f"QQ 账号不存在: {account_id}") from exc
+        except StopIteration:
+            # The message reaches the model through account tools: the ID
+            # stays in the log only.
+            logger.warning("QQ 账号不存在: %s", account_id)
+            raise KeyError("QQ 账号不存在") from None
 
     def _schedule(self, ref: str) -> None:
         if ref not in self._tasks or self._tasks[ref].done():

@@ -20,9 +20,25 @@ from .compat import (
     _call_send_stream_markdown,
     _call_send_thinking_block,
 )
-from .formatting import mention_markdown
+from .formatting import mention_markdown, mentionable_user_id
 
 logger = logging.getLogger("plugins.telegram.channel")
+
+
+def _usable_mentions(chosen: list[object]) -> list[str]:
+    """The role's extra mentions that are numeric user IDs; others are skipped.
+
+    They are optional extras on a reply that still answers its trigger, so
+    an unusable ID is logged and dropped instead of failing the whole reply.
+    """
+    usable: list[str] = []
+    for member in chosen:
+        member_id = mentionable_user_id(member)
+        if member_id is None:
+            logger.warning("Telegram 群回复跳过无法提及的成员 ID: %r", member)
+        else:
+            usable.append(member_id)
+    return usable
 
 
 class _OutboundMixin:
@@ -162,16 +178,13 @@ class _OutboundMixin:
             default_channel=self._channel,
             delivery_status=delivery_status,
             external_message_id=external_message_id or "",
+            # ``via_account`` comes from TelegramChannel, like the other state.
             via_account=(
                 self.via_account()
                 if delivery_status == "sent" and getattr(self, "_account_id", None)
                 else None
             ),
         )
-
-    def via_account(self) -> dict[str, str]:
-        """The channel supplies the Bot's message snapshot."""
-        raise NotImplementedError
 
     async def _on_response(self, msg: OutboundMessage) -> None:
         preview = msg.content[:60] + "..." if len(msg.content) > 60 else msg.content
@@ -183,11 +196,11 @@ class _OutboundMixin:
         # A group reply answers the message that triggered it and mentions
         # the members the role chose; private replies are sent as they are.
         reply_to: int | None = None
-        mentions: list[object] = []
+        mentions: list[str] = []
         if is_group_chat_type(metadata.get("chat_type")):
             trigger = str(metadata.get("external_message_id") or "")
             reply_to = int(trigger) if trigger else None
-            mentions = list(metadata.get(REPLY_MENTION_IDS_KEY) or [])
+            mentions = _usable_mentions(list(metadata.get(REPLY_MENTION_IDS_KEY) or []))
         session_key = resolve_outbound_session_key(
             msg,
             default_channel=self._channel,
@@ -212,11 +225,12 @@ class _OutboundMixin:
         receipts: list[str] = []
         stream = None
         try:
-            # Inside the try: an unusable member ID marks the reply failed.
             content = (
                 mention_markdown(mentions) + msg.content if mentions else msg.content
             )
             if msg.content.strip():
+                # Only private chats stream (create_stream_sender refuses
+                # groups), so a group reply always takes the send below.
                 if streamed_reply:
                     stream = self._active_streams.pop(str(msg.chat_id), None)
                 if stream is not None:

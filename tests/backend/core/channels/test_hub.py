@@ -723,16 +723,13 @@ async def test_plugin_snapshots_are_stored_as_given_and_outlive_the_account(
     session.add_message("assistant", "reply", thread_id=routed.metadata["thread_id"])
     session_manager.save(session)
     committed = str(session.messages[-1]["id"])
+    # A reply carries its trigger's routed metadata, sending account included.
     hub.mark_delivery(
         OutboundMessage(
             channel="telegram",
             chat_id="123",
             content="reply",
-            metadata={
-                "role_id": "mira",
-                "session_key_override": "role:mira",
-                "thread_id": str(routed.metadata["thread_id"]),
-            },
+            metadata=dict(routed.metadata),
             committed_message_id=committed,
         ),
         default_channel="telegram",
@@ -756,3 +753,62 @@ async def test_plugin_snapshots_are_stored_as_given_and_outlive_the_account(
     assert stored["metadata"]["via_account"] == _via()
     source = MessageSource.from_metadata(stored["metadata"], session_key="role:mira")
     assert source.via_account == "Telegram 机器人「Mira Bot」（@mira_bot）"
+
+
+@pytest.mark.parametrize(
+    "via", [_via("other"), {"platform": "telegram", "prefix": "no account id"}]
+)
+def test_invalid_reply_snapshot_still_marks_the_sent_reply(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, via: dict[str, str]
+) -> None:
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    service.create_role(
+        role_id="mira", name="Mira", description="bound role", system_prompt="mira"
+    )
+    account_id = _live_account(service, "telegram")
+    hub = ChannelHub(service)
+    routed = hub.route_inbound(
+        InboundMessage(
+            channel="telegram",
+            sender="u1",
+            chat_id="123",
+            content="hello",
+            metadata={"account_id": account_id},
+        )
+    )
+    session = session_manager.get_or_create("role:mira")
+    session.add_message("assistant", "reply", thread_id=routed.metadata["thread_id"])
+    session_manager.save(session)
+    committed = str(session.messages[-1]["id"])
+
+    with caplog.at_level("ERROR"):
+        hub.mark_delivery(
+            OutboundMessage(
+                channel="telegram",
+                chat_id="123",
+                content="reply",
+                metadata=dict(routed.metadata),
+                committed_message_id=committed,
+            ),
+            default_channel="telegram",
+            delivery_status="sent",
+            external_message_id="tg-1",
+            via_account=via,
+        )
+
+    # The reply was sent: it is marked so, only without the plugin's snapshot.
+    stored = session_manager._store.get_message(committed)
+    assert stored is not None
+    assert (stored["delivery_status"], stored["external_message_id"]) == (
+        "sent",
+        "tg-1",
+    )
+    assert "via_account" not in (stored.get("metadata") or {})
+    [record] = caplog.records
+    assert record.levelname == "ERROR"
+    assert account_id in record.getMessage()

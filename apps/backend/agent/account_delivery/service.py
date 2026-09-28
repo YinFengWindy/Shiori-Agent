@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,11 +11,13 @@ from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.account_delivery.turn_state import mark_account_delivery_sent
 from core.accounts import (
     VIA_ACCOUNT_KEY,
+    AccountAccess,
+    AccountNotFoundError,
     AccountRegistry,
     AccountSnapshot,
-    ViaAccount,
+    delivered_via_account,
 )
-from core.accounts.delivery_ledger import AccountDeliveryLedger
+from core.accounts.delivery_ledger import AccountDeliveryAttempt, AccountDeliveryLedger
 from core.accounts.target_contract import (
     ACCOUNT_SEND_METHOD,
     ACCOUNT_TARGETS_METHOD,
@@ -22,13 +25,16 @@ from core.accounts.target_contract import (
     UncertainDeliveryError,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class AccountSendReceipt:
     """Selected target and platform receipt for one explicit send attempt.
 
     ``via_account`` is the sending plugin's ``ViaAccount`` snapshot, stored
-    as-is with any message recorded for this send; None if it gave none.
+    as-is with any message recorded for this send; None if it gave none or
+    gave an invalid one (logged, never failing the completed send).
     """
 
     attempt_id: str
@@ -46,6 +52,7 @@ class AccountDelivery:
 
     Callers name a channel (the channel plugin's ID); the role's account there
     is looked up in the registry, since a role holds at most one per plugin.
+    Errors meant for the model name the channel, never the account ID.
     """
 
     def __init__(
@@ -58,7 +65,7 @@ class AccountDelivery:
         self._rpc = rpc
         self._ledger = ledger
 
-    def _channel_account(self, channel: str, role_id: str) -> AccountSnapshot:
+    def channel_account(self, channel: str, role_id: str) -> AccountSnapshot:
         """The role's account on ``channel``; raises when it has none loaded."""
         if not role_id:
             raise PermissionError("需要角色上下文")
@@ -71,6 +78,17 @@ class AccountDelivery:
         raise LookupError(
             f"当前角色在渠道 {channel} 没有可用账号（未添加账号或渠道插件未加载）"
         )
+
+    def _authorize(self, account: AccountSnapshot, role_id: str) -> AccountAccess:
+        """Captures the ownership fence; an account removed since lookup is named
+        by its channel only, the account ID goes to the log."""
+        try:
+            return self._accounts.authorize(account.record.id, role_id)
+        except AccountNotFoundError:
+            logger.warning("账号 %s 在发起操作前已被移除", account.record.id)
+            raise LookupError(
+                f"当前角色在渠道 {account.record.plugin_id} 的账号已不可用"
+            ) from None
 
     async def _call(self, plugin_id: str, method: str, payload: dict[str, Any]):
         resolved = self._rpc.resolve(f"plugin.{plugin_id}.{method}")
@@ -99,9 +117,9 @@ class AccountDelivery:
         self, channel: str, role_id: str, kind: str, group_id: str, member_id: str
     ) -> dict[str, Any]:
         """Return the plugin's actual directory coverage or lookup limitation."""
-        account = self._channel_account(channel, role_id)
+        account = self.channel_account(channel, role_id)
         account_id = account.record.id
-        access = self._accounts.authorize(account_id, role_id)
+        access = self._authorize(account, role_id)
         if not kind.strip():
             raise ValueError("查询类型不能为空")
         result = await self._call(
@@ -120,6 +138,29 @@ class AccountDelivery:
             raise RuntimeError("插件目标查询未返回有效结果")
         return result
 
+    def _begin(
+        self,
+        *,
+        role_id: str,
+        account_id: str,
+        channel: str,
+        target: AccountTarget,
+        source: str,
+    ) -> AccountDeliveryAttempt:
+        return self._ledger.begin(
+            role_id=role_id,
+            account_id=account_id,
+            target_kind=target.kind,
+            target_id=target.id,
+            target_options={
+                "channel": channel.strip(),
+                "message_thread_id": target.message_thread_id,
+                "group_id": target.group_id,
+                "mention_ids": list(target.mention_ids),
+            },
+            source=source,
+        )
+
     async def send(
         self,
         channel: str,
@@ -132,21 +173,29 @@ class AccountDelivery:
     ) -> AccountSendReceipt:
         """Persist an attempt before sending, then record a real receipt or failure.
 
-        Resolving the channel happens first: a role without an account there
-        has nothing to attempt, so nothing is recorded.
+        Every attempt is recorded, including one the role has no account for
+        on ``channel`` (with an empty account ID). Once the platform returns
+        a receipt the send is recorded and returned as sent; an invalid
+        plugin snapshot is only logged and left out.
         """
-        account = self._channel_account(channel, role_id)
+        try:
+            account = self.channel_account(channel, role_id)
+        except Exception as exc:
+            rejected = self._begin(
+                role_id=role_id,
+                account_id="",
+                channel=channel,
+                target=target,
+                source=source,
+            )
+            self._ledger.mark_failed(rejected.attempt_id, type(exc).__name__)
+            raise
         account_id = account.record.id
-        attempt = self._ledger.begin(
+        attempt = self._begin(
             role_id=role_id,
             account_id=account_id,
-            target_kind=target.kind,
-            target_id=target.id,
-            target_options={
-                "message_thread_id": target.message_thread_id,
-                "group_id": target.group_id,
-                "mention_ids": list(target.mention_ids),
-            },
+            channel=channel,
+            target=target,
             source=source,
         )
         try:
@@ -154,7 +203,7 @@ class AccountDelivery:
                 raise ValueError("消息不能为空")
             if media:
                 raise ValueError("账号目标发送暂不支持媒体")
-            access = self._accounts.authorize(account_id, role_id)
+            access = self._authorize(account, role_id)
         except Exception as exc:
             self._ledger.mark_failed(attempt.attempt_id, type(exc).__name__)
             raise
@@ -177,18 +226,14 @@ class AccountDelivery:
         except Exception as exc:
             self._ledger.mark_failed(attempt.attempt_id, type(exc).__name__)
             raise
-        message_id = (
-            str(result.get("message_id") or "").strip()
-            if isinstance(result, dict)
-            else ""
-        )
-        if not message_id:
+        if not isinstance(result, dict) or not (
+            message_id := str(result.get("message_id") or "").strip()
+        ):
             mark_account_delivery_sent()
             self._ledger.mark_uncertain(attempt.attempt_id, "MissingReceipt")
             raise RuntimeError("平台未返回回执，发送结果不确定")
         mark_account_delivery_sent()
         self._ledger.mark_sent(attempt.attempt_id, message_id)
-        via = result.get(VIA_ACCOUNT_KEY) if isinstance(result, dict) else None
         return AccountSendReceipt(
             attempt_id=attempt.attempt_id,
             account_id=account_id,
@@ -197,11 +242,7 @@ class AccountDelivery:
             target_id=target.id,
             platform_message_id=message_id,
             ownership_current=self._accounts.validate_access(access),
-            # Checked only after the receipt is recorded: the platform already
-            # accepted the message, so a malformed snapshot must not hide that.
-            via_account=(
-                None
-                if via is None
-                else ViaAccount.for_account(via, account.record).to_metadata()
+            via_account=delivered_via_account(
+                result.get(VIA_ACCOUNT_KEY), account.record
             ),
         )

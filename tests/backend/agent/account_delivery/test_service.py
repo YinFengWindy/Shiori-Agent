@@ -96,13 +96,12 @@ _VIA = {
 
 
 @pytest.mark.asyncio
-async def test_rejected_attempt_records_failure_and_role_without_channel_is_named(
+async def test_every_attempt_is_recorded_even_without_an_account_on_the_channel(
     tmp_path,
 ) -> None:
     service, _accounts, rpc, _ledger, account_id = _service(tmp_path)
     state: dict[str, bool] = {}
     with account_delivery_scope(state):
-        # "other" owns no account on this channel: nothing to attempt or record.
         with pytest.raises(LookupError, match="渠道 chat"):
             await service.send("chat", "other", AccountTarget("private", "42"), "hi")
         with pytest.raises(LookupError, match="渠道 telegram"):
@@ -112,11 +111,34 @@ async def test_rejected_attempt_records_failure_and_role_without_channel_is_name
         with pytest.raises(ValueError, match="platform rejected"):
             await service.send("chat", "mira", AccountTarget("private", "42"), "hi")
 
-    attempts = AccountDeliveryLedger(tmp_path).list_for_role("mira")
-    assert [(row.status, row.error) for row in attempts] == [("failed", "ValueError")]
-    assert AccountDeliveryLedger(tmp_path).list_for_role("other") == []
+    ledger = AccountDeliveryLedger(tmp_path)
+    assert [
+        (row.account_id, row.target_options["channel"], row.status, row.error)
+        for row in ledger.list_for_role("mira")
+    ] == [
+        ("", "telegram", "failed", "LookupError"),
+        (account_id, "chat", "failed", "ValueError"),
+    ]
+    assert [
+        (row.account_id, row.status, row.error) for row in ledger.list_for_role("other")
+    ] == [("", "failed", "LookupError")]
     assert len(rpc.calls) == 1
     assert state == {}
+
+
+@pytest.mark.asyncio
+async def test_account_removed_before_send_is_named_by_channel_only(
+    tmp_path, monkeypatch
+) -> None:
+    service, accounts, rpc, _ledger, account_id = _service(tmp_path)
+    account = service.channel_account("chat", "mira")
+    # Listed at lookup, gone by the time the send is authorized.
+    monkeypatch.setattr(accounts, "list", lambda role_id=None: [account])
+    accounts.release(account_id, "live")
+    with pytest.raises(LookupError, match="渠道 chat 的账号已不可用") as raised:
+        await service.send("chat", "mira", AccountTarget("private", "42"), "hi")
+    assert account_id not in str(raised.value)
+    assert rpc.calls == []
 
 
 @pytest.mark.asyncio
@@ -144,10 +166,34 @@ async def test_channel_send_uses_the_roles_account_and_keeps_plugin_snapshot(
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert attempt.target_options["mention_ids"] == ["member-2"]
 
-    # A snapshot of another platform account is a plugin defect, not a receipt.
-    rpc.via = {**_VIA, "platform_account_id": "someone-else"}
-    with pytest.raises(ValueError, match="不一致"):
-        await service.send("chat", "mira", AccountTarget("private", "42"), "hi")
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "via",
+    [
+        {**_VIA, "platform_account_id": "someone-else"},
+        {"prefix": "no identity"},
+    ],
+)
+async def test_invalid_snapshot_after_send_still_returns_the_recorded_receipt(
+    tmp_path, caplog, via
+) -> None:
+    service, _accounts, rpc, _ledger, account_id = _service(tmp_path)
+    rpc.via = via
+    with caplog.at_level("ERROR", logger="core.accounts.models"):
+        receipt = await service.send(
+            "chat", "mira", AccountTarget("private", "42"), "hi"
+        )
+
+    # The platform accepted it: a plugin's bad snapshot only loses the snapshot.
+    assert receipt.via_account is None
+    [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
+    assert (attempt.status, attempt.platform_message_id) == (
+        "sent",
+        receipt.platform_message_id,
+    )
+    [record] = caplog.records
+    assert account_id in record.getMessage()
 
 
 @pytest.mark.asyncio

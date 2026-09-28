@@ -13,6 +13,7 @@ from core.roles.reply_state import (
     role_mood_catalog,
     role_mood_prompt,
     validate_role_reply,
+    with_group_mentions,
 )
 
 
@@ -62,14 +63,18 @@ def test_mood_catalog_does_not_require_illustrations():
     assert role_mood_catalog({}) == ("平静",)
 
 
-def test_group_reply_may_name_extra_members_to_mention():
+def test_only_group_replies_carry_mentions_and_a_bad_list_keeps_the_mood(caplog):
     payload = {"content": "好", "mood": "平静", "thought": "我放心了。"}
-    assert validate_role_reply(payload, ("平静",)).mention_ids == ()
-    reply = validate_role_reply(
-        {**payload, "mention_ids": ["902", 903, "902"]}, ("平静",)
-    )
-    assert reply.mention_ids == ("902", "903")
-    with pytest.raises(InvalidRoleReply, match="mention_ids"):
-        validate_role_reply({**payload, "mention_ids": "902"}, ("平静",))
+    # The shared validator never reads mentions, so private, desktop and
+    # proactive replies cannot carry any.
+    reply = validate_role_reply({**payload, "mention_ids": ["902"]}, ("平静",))
+    assert reply.mention_ids == ()
+    grouped = with_group_mentions(reply, ["902", 903, "902"])
+    assert grouped.mention_ids == ("902", "903")
+    assert (grouped.mood, grouped.thought) == ("平静", "我放心了。")
+    with caplog.at_level("WARNING", logger="core.roles.reply_state"):
+        kept = with_group_mentions(reply, "902")
+    assert kept == reply
+    assert "mention_ids" in caplog.text
     assert "mention_ids" in role_mood_prompt(("平静",), group=True)
     assert "mention_ids" not in role_mood_prompt(("平静",))

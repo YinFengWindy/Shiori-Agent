@@ -122,8 +122,9 @@ ViaAccount(
 ).to_metadata()
 ```
 
-- 三条路径都要带：入站消息的 `metadata["via_account"]`；回复送达后 `channel_hub.mark_delivery(..., via_account=...)`（只在 `sent` 时传）；`account.send` 的返回值 `{"message_id": ..., "via_account": ...}`。发送前取快照，保证平台已接受的发送一定带回快照。
-- 宿主会校验形状，并要求 `platform` / `platform_account_id` 与该账号登记的一致，不一致视为插件缺陷直接报错。
+- 三条路径都要带：入站消息的 `metadata["via_account"]`；回复送达后 `channel_hub.mark_delivery(..., via_account=...)`（只在 `sent` 时传）；`account.send` 的返回值 `{"message_id": ..., "via_account": ...}`。
+- 快照描述送达时经由的账号。平台接受消息之后，取快照这一步不能再失败：快照若来自内存里的连接状态（如 Telegram、飞书的机器人名），发送后在 `mark_delivery` 时取即可；若要读可能被并发删除的存储（如 QQ 的账号配置、QQBot 的应用记录），就在发送前取好。
+- 宿主用同一套规则（`ViaAccount.for_account`）校验三条路径的快照：形状正确，且 `platform` / `platform_account_id` 与该账号登记的一致。入站快照不合格时拒收这条消息；发送后的快照（`mark_delivery`、`account.send` 回执）不合格时，消息照常记为已发送，只是不带快照，宿主记一条 error 日志指出插件缺陷。
 - 模型看到的来源前缀直接使用 `prefix`：`[消息来源: {...}；经由账号: QQ 号「小栞」（101）]`。现有文案：QQ `QQ 号「昵称」（QQ 号）`、QQBot `QQ 机器人「机器人名」（AppID ...）`、Telegram `Telegram 机器人「名称」（@用户名）`、飞书 `飞书应用「应用名」（<区域>:<app_id>）`。
 
 ## 5. 出站与 `message_push`
@@ -145,7 +146,7 @@ async def stop(self):
 ```
 
 - `subscribe_outbound` 接收 Agent 回合的最终回复（`OutboundMessage`）。发送成功或失败后调用 `ctx.channel_hub.mark_delivery(msg, default_channel=self.name, delivery_status="sent"|"failed", external_message_id=..., via_account=...)`，让会话里的消息状态正确；`via_account` 只在 `sent` 时传发送账号的快照。
-- **群聊被动回复点名触发者**：回复的 `msg.metadata` 带着触发消息的元数据（`chat_type`、`sender_id`、`external_message_id` 等）。`chat_type` 为群聊（`core.common.channel_chat_types.is_group_chat_type`）时，插件按平台惯例点名触发者：QQ 在开头 @ 发送者，Telegram 回复触发消息。模型额外选择要 @ 的成员放在 `metadata["mention_ids"]`（键名 `REPLY_MENTION_IDS_KEY`），插件一并提及。私聊回复不受影响；没有群聊的渠道忽略这些字段。
+- **群聊被动回复点名触发者**：回复的 `msg.metadata` 带着触发消息的元数据（`chat_type`、`sender_id`、`external_message_id` 等）。`chat_type` 为群聊（`core.common.channel_chat_types.is_group_chat_type`）时，插件按平台惯例点名触发者：QQ 在开头 @ 发送者，Telegram 回复触发消息。模型额外选择要 @ 的成员放在 `metadata["mention_ids"]`（键名 `REPLY_MENTION_IDS_KEY`，只有群聊回复会带），插件一并提及；其中平台用不了的 ID 记 warning 后跳过，回复照常发出（触发者仍被点名）。私聊回复不受影响；没有群聊的渠道忽略这些字段。
 - `register_channel` 让模型能用 `message_push` 主动发消息。`description` 会写进工具描述的「当前可用渠道」列表，用一句话说明渠道身份和 chat_id 格式；工具描述只列出当前已注册、未停用的渠道。
 - `unregister_channel` 传入自己的 `text` 回调，只注销本实例的注册，不会误删换代后新连接的注册。
 

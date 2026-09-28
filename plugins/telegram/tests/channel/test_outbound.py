@@ -250,3 +250,32 @@ async def test_private_reply_neither_quotes_nor_mentions() -> None:
     sent = channel._app.bot.send_message.await_args.kwargs
     assert sent["reply_parameters"] is None
     assert sent["text"] == "好"
+
+
+async def test_group_reply_skips_unusable_chosen_mentions_and_still_sends(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    channel = reply_channel(SimpleNamespace(message_id=301))
+    message = OutboundMessage(
+        channel="telegram",
+        chat_id="-1001",
+        content="好",
+        metadata={
+            "chat_type": "group",
+            "external_message_id": "55",
+            "mention_ids": ["@alice", "902"],
+        },
+        committed_message_id="committed",
+    )
+
+    with caplog.at_level("WARNING"):
+        await channel._on_response(message)
+
+    sent = channel._app.bot.send_message.await_args.kwargs
+    assert sent["reply_parameters"].message_id == 55
+    assert sent["text"].startswith("@902 ")
+    assert "@alice" not in sent["text"]
+    assert (
+        channel._channel_hub.mark_delivery.call_args.kwargs["delivery_status"] == "sent"
+    )
+    assert "@alice" in caplog.text

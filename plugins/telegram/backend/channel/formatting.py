@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from infra.channels.reply_context import build_inbound_text_with_reply_context
@@ -26,10 +27,16 @@ _RENDERING_PROMPT = (
 )
 
 
-def mention_markdown(member_ids: list[object] | tuple[object, ...]) -> str:
+def mentionable_user_id(member: object) -> str | None:
+    """``member`` as a user ID Telegram can mention (numeric), else None."""
+    member_id = str(member).strip()
+    return member_id if member_id.isdigit() else None
+
+
+def mention_markdown(member_ids: Sequence[object]) -> str:
     """Markdown mentioning each user by numeric ID, which works without a username."""
-    ids = [str(member).strip() for member in member_ids]
-    if any(not member.isdigit() for member in ids):
+    ids = [mentionable_user_id(member) for member in member_ids]
+    if any(member is None for member in ids):
         raise ValueError("Telegram @ 成员需要数字用户 ID")
     return "".join(f"[@{member}](tg://user?id={member}) " for member in ids)
 

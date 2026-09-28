@@ -25,11 +25,8 @@ class _InboundMixin:
         account_id = getattr(self, "_account_id", None)
         if not account_id:
             return {}
+        # ``via_account`` comes from TelegramChannel, like the other channel state.
         return {"account_id": account_id, VIA_ACCOUNT_KEY: self.via_account()}
-
-    def via_account(self) -> dict[str, str]:
-        """The channel supplies the Bot's message snapshot."""
-        raise NotImplementedError
 
     async def _on_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE

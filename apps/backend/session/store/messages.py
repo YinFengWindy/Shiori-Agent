@@ -531,27 +531,32 @@ class _MessageMixin:
         clean_thread_id = str(thread_id or "").strip()
         if not clean_message_id or not clean_status:
             return None
+        # One lock hold (it is reentrant) covers the read, the metadata merge
+        # and the write, so a concurrent writer of ``extra`` is never lost.
         with self._lock:
             row = self._conn.execute(
                 "SELECT session_key, thread_id, extra FROM messages WHERE id = ?",
                 (clean_message_id,),
             ).fetchone()
-        if row is None:
-            return None
-        if str(row["session_key"] or "") != clean_session_key:
-            return None
-        if str(row["thread_id"] or "") != clean_thread_id:
-            return None
-        extra = None
-        if metadata_updates:
-            extra = json.loads(row["extra"] or "{}")
-            extra["metadata"] = {**(extra.get("metadata") or {}), **metadata_updates}
-        return self.update_message(
-            clean_message_id,
-            delivery_status=clean_status,
-            external_message_id=clean_external_id or None,
-            extra=extra,
-        )
+            if row is None:
+                return None
+            if str(row["session_key"] or "") != clean_session_key:
+                return None
+            if str(row["thread_id"] or "") != clean_thread_id:
+                return None
+            extra = None
+            if metadata_updates:
+                extra = json.loads(row["extra"] or "{}")
+                extra["metadata"] = {
+                    **(extra.get("metadata") or {}),
+                    **metadata_updates,
+                }
+            return self.update_message(
+                clean_message_id,
+                delivery_status=clean_status,
+                external_message_id=clean_external_id or None,
+                extra=extra,
+            )
 
     def delete_message(self, message_id: str) -> bool:
         with self._lock:

@@ -15,6 +15,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
+from agent.tools.account_delivery import shared_account_delivery
 from core.accounts.target_contract import ACCOUNT_TARGET_PROPERTIES, AccountTarget
 from core.memory.engine import MemoryQuery, MemoryScope
 from agent.prompting import is_context_frame
@@ -602,7 +603,13 @@ def _finish_turn(ctx: AgentTickContext, args: dict) -> str:
 _RETARGET_KEYS = ("account_channel", *ACCOUNT_TARGET_PROPERTIES)
 
 
-def _message_push(ctx: AgentTickContext, args: dict) -> str:
+def _message_push(
+    ctx: AgentTickContext, args: dict, deps: ToolDeps | None = None
+) -> str:
+    """Stores the draft reply; a retarget needs ``deps.shared_tools`` to check
+    that the role has an account on ``account_channel`` right away, so the
+    model can correct it within the same tick. Whether that channel's plugin
+    supports the target options is still decided when sending."""
     if ctx.draft_message.strip():
         raise ValueError(
             "message_push already called this turn; cannot overwrite draft"
@@ -617,9 +624,14 @@ def _message_push(ctx: AgentTickContext, args: dict) -> str:
     }
     if target:
         # All or nothing: a partial retarget must not fall back to the default.
-        if not str(target.get("account_channel") or "").strip():
+        channel = str(target.get("account_channel") or "").strip()
+        if not channel:
             raise ValueError("改投需明确 account_channel、target_kind 和 target_id")
         AccountTarget.from_arguments(target)
+        delivery = shared_account_delivery(deps.shared_tools if deps else None)
+        if delivery is None:
+            raise RuntimeError("账号目标发送服务不可用")
+        delivery.channel_account(channel, _memory_scope_from_tick_context(ctx).role_id)
     ctx.draft_message = message
     ctx.account_target = target or None
     ctx.role_reply = reply
@@ -669,7 +681,7 @@ async def dispatch(
         return await _get_recent_chat(ctx, args, recent_chat_fn=deps.recent_chat_fn)
 
     if tool_name == "message_push":
-        return _message_push(ctx, args)
+        return _message_push(ctx, args, deps)
 
     if tool_name == "mark_interesting":
         return _mark_interesting(ctx, args)

@@ -18,7 +18,13 @@ import logging
 
 from agent.provider import LLMProvider, LLMResponse, is_truncated_finish_reason
 from core.common.llm_output_log import summarize_llm_output_for_log
-from core.roles.reply_state import RoleReply, role_mood_prompt, validate_role_reply
+from core.common.channel_chat_types import REPLY_MENTION_IDS_KEY
+from core.roles.reply_state import (
+    RoleReply,
+    role_mood_prompt,
+    validate_role_reply,
+    with_group_mentions,
+)
 
 logger = logging.getLogger(__name__)
 _MOOD_MAX_TOKENS = 512
@@ -109,7 +115,7 @@ async def fetch_role_mood(
             raise ValueError("心情响应不是 JSON 对象")
         # Reuse the shared validator; our own `content` always wins over
         # anything the model echoed back under that key.
-        return validate_role_reply({**payload, "content": content}, moods)
+        reply = validate_role_reply({**payload, "content": content}, moods)
     except Exception as exc:
         logger.warning(
             "角色心情获取失败，本轮维持上一轮心情: %s model=%s finish_reason=%s raw=%s",
@@ -122,6 +128,12 @@ async def fetch_role_mood(
             exc_info=True,
         )
         return None
+    # Only a group reply may mention members; a bad list never costs the mood.
+    return (
+        with_group_mentions(reply, payload.get(REPLY_MENTION_IDS_KEY))
+        if group
+        else reply
+    )
 
 
 __all__ = ["fetch_role_mood"]

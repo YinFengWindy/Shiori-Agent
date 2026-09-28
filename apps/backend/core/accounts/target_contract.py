@@ -17,6 +17,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from core.common.channel_chat_types import parse_mention_ids
+
 ACCOUNT_TARGETS_METHOD = "account.targets"
 ACCOUNT_SEND_METHOD = "account.send"
 
@@ -95,14 +97,7 @@ class AccountTarget:
         group_id = _text(arguments.get("group_id"), "group_id")
         if (kind == GROUP_MEMBER_TARGET) != bool(group_id):
             raise ValueError("group_id 只用于且必须用于 group_member 目标")
-        raw_mentions = arguments.get("mention_ids") or []
-        if not isinstance(raw_mentions, list):
-            raise ValueError("mention_ids 必须是成员 ID 列表")
-        mention_ids = tuple(
-            dict.fromkeys(_text(item, "mention_ids") for item in raw_mentions)
-        )
-        if any(not item for item in mention_ids):
-            raise ValueError("mention_ids 不能包含空成员 ID")
+        mention_ids = parse_mention_ids(arguments.get("mention_ids"))
         if mention_ids and kind != GROUP_TARGET:
             raise ValueError("mention_ids 仅对 group 目标有效")
         return cls(kind, target_id, topic, group_id, mention_ids)

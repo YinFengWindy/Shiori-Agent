@@ -2,12 +2,31 @@
 
 from __future__ import annotations
 
+import logging
+
 from bus.events import OutboundMessage
 from core.common.channel_chat_types import REPLY_MENTION_IDS_KEY
 from infra.channels.contract import ChannelContext
 
-from .accounts_actions import qq_chat_target
+from .accounts_actions import qq_chat_target, qq_number
 from .onebot import OneBotError, OneBotSocket
+
+logger = logging.getLogger(__name__)
+
+
+def _usable_mentions(chosen: list[object]) -> list[str]:
+    """The role's extra mentions that are QQ numbers; others are skipped.
+
+    They are optional extras on a reply that still @s its trigger, so an
+    unusable ID is logged and dropped instead of failing the whole reply.
+    """
+    usable: list[str] = []
+    for member in chosen:
+        try:
+            usable.append(qq_number(member, "@ 成员"))
+        except ValueError:
+            logger.warning("QQ 群回复跳过无法 @ 的成员 ID: %r", member)
+    return usable
 
 
 class QQOutboundAdapter:
@@ -62,10 +81,10 @@ class QQOutboundAdapter:
             mentions: tuple[str, ...] = ()
             if kind == "group":
                 trigger = str(msg.metadata.get("sender_id") or "")
-                chosen = msg.metadata.get(REPLY_MENTION_IDS_KEY) or []
-                mentions = tuple(
-                    dict.fromkeys(str(item) for item in [trigger, *chosen] if item)
+                chosen = _usable_mentions(
+                    list(msg.metadata.get(REPLY_MENTION_IDS_KEY) or [])
                 )
+                mentions = tuple(dict.fromkeys(i for i in [trigger, *chosen] if i))
             message_id = (
                 await self.send_target(
                     account_id, kind, target, msg.content, mention_ids=mentions

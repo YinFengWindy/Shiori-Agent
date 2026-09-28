@@ -67,3 +67,23 @@ async def test_private_reply_mentions_nobody() -> None:
     adapter.send_target.assert_awaited_once_with(
         "qq:101", "private", "902", "好", mention_ids=()
     )
+
+
+@pytest.mark.asyncio
+async def test_group_reply_skips_unusable_chosen_mentions_and_still_sends(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    adapter = _Adapter()
+    message = _reply("gqq:777", chat_type="group", mention_ids=["小明", "903"])
+
+    with caplog.at_level("WARNING"):
+        await adapter._on_response(message)
+
+    adapter.send_target.assert_awaited_once_with(
+        "qq:101", "group", "777", "好", mention_ids=("902", "903")
+    )
+    assert (
+        adapter._ctx.channel_hub.mark_delivery.call_args.kwargs["delivery_status"]
+        == "sent"
+    )
+    assert "小明" in caplog.text

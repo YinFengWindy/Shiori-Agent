@@ -913,8 +913,37 @@ async def test_execute_recall_memory_uses_memory_from_deps():
     assert result["hits"] == 1
 
 
-def test_message_push_keeps_explicit_account_target() -> None:
-    ctx = AgentTickContext(reply_context=RoleReplyContext(("平静",), ""))
+def _retarget_deps(tmp_path) -> ToolDeps:
+    """Shared tools whose account_send service knows mira's QQ account."""
+    from agent.account_delivery import AccountDelivery
+    from agent.tools.account_delivery import AccountSendTool
+    from core.accounts import AccountRegistry
+    from core.accounts.delivery_ledger import AccountDeliveryLedger
+
+    accounts = AccountRegistry(lambda role_id: role_id == "mira")
+    accounts.register(
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        token="live",
+        role_id="mira",
+    )
+    tool = AccountSendTool(
+        AccountDelivery(accounts, MagicMock(), AccountDeliveryLedger(tmp_path))
+    )
+    return ToolDeps(shared_tools=SimpleNamespace(get_tool={"account_send": tool}.get))
+
+
+def _tick() -> AgentTickContext:
+    return AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+    )
+
+
+def test_message_push_keeps_explicit_account_target(tmp_path) -> None:
+    deps = _retarget_deps(tmp_path)
+    ctx = _tick()
     _message_push(
         ctx,
         {
@@ -926,6 +955,7 @@ def test_message_push_keeps_explicit_account_target() -> None:
             "target_id": "777",
             "mention_ids": ["902"],
         },
+        deps,
     )
     assert ctx.account_target == {
         "account_channel": "qq",
@@ -933,7 +963,7 @@ def test_message_push_keeps_explicit_account_target() -> None:
         "target_id": "777",
         "mention_ids": ["902"],
     }
-    untargeted = AgentTickContext(reply_context=RoleReplyContext(("平静",), ""))
+    untargeted = _tick()
     _message_push(
         untargeted,
         {"message": "hello", "mood": "平静", "thought": "我已准备好"},
@@ -941,7 +971,7 @@ def test_message_push_keeps_explicit_account_target() -> None:
     assert untargeted.account_target is None
     with pytest.raises(ValueError, match="mention_ids"):
         _message_push(
-            AgentTickContext(reply_context=RoleReplyContext(("平静",), "")),
+            _tick(),
             {
                 "message": "hello",
                 "mood": "平静",
@@ -951,14 +981,37 @@ def test_message_push_keeps_explicit_account_target() -> None:
                 "target_id": "902",
                 "mention_ids": ["903"],
             },
+            deps,
         )
     with pytest.raises(ValueError, match="account_channel"):
         _message_push(
-            AgentTickContext(reply_context=RoleReplyContext(("平静",), "")),
+            _tick(),
             {
                 "message": "hello",
                 "mood": "平静",
                 "thought": "我已准备好",
                 "target_id": "user-1",
             },
+            deps,
         )
+
+
+def test_message_push_rejects_a_channel_the_role_has_no_account_on(
+    tmp_path,
+) -> None:
+    ctx = _tick()
+    # Refused at the call, so the model can pick another channel this tick.
+    with pytest.raises(LookupError, match="渠道 telegram"):
+        _message_push(
+            ctx,
+            {
+                "message": "hello",
+                "mood": "平静",
+                "thought": "我已准备好",
+                "account_channel": "telegram",
+                "target_kind": "private",
+                "target_id": "42",
+            },
+            _retarget_deps(tmp_path),
+        )
+    assert (ctx.draft_message, ctx.account_target) == ("", None)

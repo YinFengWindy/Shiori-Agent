@@ -27,6 +27,10 @@ class _OutboundMixin:
             msg.chat_id,
             str(msg.metadata.get("external_message_id") or ""),
         )
+        # Read before sending: the snapshot comes from the application's saved
+        # row, which may vanish mid-send, and nothing may fail once QQ has
+        # accepted the reply.
+        via = self._via_account() if self._via_account is not None else None
         first_id: str | None = None
         try:
             await self._finish_live_tasks(turn_key)
@@ -61,13 +65,18 @@ class _OutboundMixin:
                 f"QQBot 投递失败，禁止自动重发：{exc}"
             ) from exc
         else:
-            self._record_delivery_status(msg, "sent", first_id)
+            self._record_delivery_status(msg, "sent", first_id, via)
         finally:
             self._clear_live_turn(turn_key)
 
     def _record_delivery_status(
-        self, msg: OutboundMessage, status: str, external_message_id: str | None = None
+        self,
+        msg: OutboundMessage,
+        status: str,
+        external_message_id: str | None = None,
+        via_account: dict[str, str] | None = None,
     ) -> None:
+        """Marks the reply; ``via_account`` is given only for a sent one."""
         if self._channel_hub is None:
             return
         self._channel_hub.mark_delivery(
@@ -75,11 +84,7 @@ class _OutboundMixin:
             default_channel=CHANNEL,
             delivery_status=status,
             external_message_id=external_message_id or "",
-            via_account=(
-                self._via_account()
-                if status == "sent" and self._via_account is not None
-                else None
-            ),
+            via_account=via_account,
         )
 
     async def send_proactive(self, chat_id: str, message: str) -> str | None:

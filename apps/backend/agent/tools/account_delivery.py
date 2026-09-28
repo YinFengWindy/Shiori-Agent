@@ -66,6 +66,16 @@ class AccountTargetsTool(Tool):
         return json.dumps(result, ensure_ascii=False)
 
 
+def shared_account_delivery(tools: Any) -> AccountDelivery | None:
+    """The delivery service behind a tool registry's ``account_send``, if any.
+
+    Host delivery paths outside a passive turn (proactive retargeting) reach
+    the role's channel accounts through the same service the model's tool uses.
+    """
+    tool = tools.get_tool(AccountSendTool.name) if tools is not None else None
+    return tool.delivery if isinstance(tool, AccountSendTool) else None
+
+
 class AccountSendTool(Tool):
     """Sends a text message through the role's account on one channel."""
 

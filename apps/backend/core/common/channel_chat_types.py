@@ -29,6 +29,29 @@ _GROUP_CHAT_TYPES = frozenset({"group", "supergroup"})
 REPLY_MENTION_IDS_KEY = "mention_ids"
 
 
+def parse_mention_ids(value: object) -> tuple[str, ...]:
+    """Member IDs to mention: a list of non-empty strings or integers.
+
+    The single host rule for model-chosen mentions, shared by account target
+    arguments and group replies. Returns the stripped, deduplicated IDs in
+    order (empty for None or an empty list); raises ``ValueError`` otherwise.
+    Whether an ID is usable on a platform is its channel plugin's check.
+    """
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError("mention_ids 必须是成员 ID 列表")
+    ids: list[str] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, (str, int)):
+            raise ValueError("mention_ids 必须是成员 ID 列表")
+        member = str(item).strip()
+        if not member:
+            raise ValueError("mention_ids 不能包含空成员 ID")
+        ids.append(member)
+    return tuple(dict.fromkeys(ids))
+
+
 def is_group_chat_type(value: object) -> bool:
     """Whether an inbound message's ``chat_type`` names a group conversation."""
     return str(value or "").strip().lower() in _GROUP_CHAT_TYPES

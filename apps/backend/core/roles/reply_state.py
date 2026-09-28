@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, replace
 from typing import Any
+
+from core.common.channel_chat_types import parse_mention_ids
+
+logger = logging.getLogger(__name__)
 
 
 class InvalidRoleReply(ValueError):
@@ -15,7 +20,7 @@ class RoleReply:
     """Validated dialogue and the role's own mood and first-person thought.
 
     ``mention_ids`` are extra group members the role chose to mention in a
-    group reply; empty elsewhere.
+    group reply (set only by ``with_group_mentions``); empty elsewhere.
     """
 
     content: str
@@ -109,26 +114,22 @@ def validate_role_reply(
         raise InvalidRoleReply("角色回复 mood 不属于当前角色心情目录")
     if len(thought) > 100 or "我" not in thought:
         raise InvalidRoleReply("thought 必须是包含“我”的简短当下想法，不能超过 100 字")
-    return RoleReply(
-        content=payload["content"],
-        mood=mood,
-        thought=thought,
-        mention_ids=_mention_ids(payload.get("mention_ids")),
-    )
+    return RoleReply(content=payload["content"], mood=mood, thought=thought)
 
 
-def _mention_ids(value: object) -> tuple[str, ...]:
-    """Optional member IDs to mention: a list of non-empty strings or numbers."""
-    if value is None:
-        return ()
-    if not isinstance(value, list) or any(
-        isinstance(item, bool)
-        or not isinstance(item, (str, int))
-        or not str(item).strip()
-        for item in value
-    ):
-        raise InvalidRoleReply("mention_ids 必须是成员 ID 列表")
-    return tuple(dict.fromkeys(str(item).strip() for item in value))
+def with_group_mentions(reply: RoleReply, value: object) -> RoleReply:
+    """``reply`` plus the extra members a group reply's mood output named.
+
+    Only group reply turns call this; every other reply keeps no mentions.
+    Mentions are optional extras, so a malformed list is dropped with a
+    warning and the validated mood and thought are kept.
+    """
+    try:
+        mention_ids = parse_mention_ids(value)
+    except ValueError as exc:
+        logger.warning("群聊回复的 mention_ids 无效，已忽略: %s; 值=%r", exc, value)
+        return reply
+    return replace(reply, mention_ids=mention_ids)
 
 
 def reply_state_metadata(reply: RoleReply, *, updated_at: str) -> dict[str, str]:

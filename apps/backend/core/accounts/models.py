@@ -7,9 +7,12 @@ the accounts its loaded plugins registered.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from typing import Literal
+
+logger = logging.getLogger(__name__)
 
 ConnectionState = Literal[
     "unknown", "connecting", "online", "offline", "login_required", "error"
@@ -93,6 +96,32 @@ class ViaAccount:
         ):
             raise ValueError("经由账号快照与账号不一致")
         return via
+
+
+def delivered_via_account(
+    value: object, record: AccountRecord
+) -> dict[str, str] | None:
+    """The snapshot to store with a message ``record``'s account already sent.
+
+    Checked like every snapshot (``ViaAccount.for_account``), but the platform
+    has accepted the message, so a malformed or mismatched snapshot (a plugin
+    contract violation) must not undo recording the send: it is logged as an
+    error and the message is stored without one. None when there is no
+    snapshot to store.
+    """
+    if value is None:
+        return None
+    try:
+        return ViaAccount.for_account(value, record).to_metadata()
+    except ValueError as exc:
+        logger.error(
+            "插件 %s 为账号 %s 提供的经由账号快照无效，消息不带快照记录: %s; 快照=%r",
+            record.plugin_id,
+            record.id,
+            exc,
+            value,
+        )
+        return None
 
 
 @dataclass(frozen=True)

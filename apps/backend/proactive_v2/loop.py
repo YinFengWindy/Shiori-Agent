@@ -144,13 +144,8 @@ class ProactiveLoop:
         return ProactiveStateStore(state_path or Path("proactive.db"))
 
     def _build_turn_orchestrator(self) -> TurnOrchestrator:
-        from agent.tools.account_delivery import AccountSendTool
+        from agent.tools.account_delivery import shared_account_delivery
 
-        account_send = (
-            self._shared_tools.get_tool("account_send")
-            if self._shared_tools is not None
-            else None
-        )
         return TurnOrchestrator(
             TurnOrchestratorDeps(
                 session=SessionServices(
@@ -166,11 +161,7 @@ class ProactiveLoop:
                     },
                 ),
                 event_bus=self._event_bus,
-                account_delivery=(
-                    account_send.delivery
-                    if isinstance(account_send, AccountSendTool)
-                    else None
-                ),
+                account_delivery=shared_account_delivery(self._shared_tools),
             )
         )
 
