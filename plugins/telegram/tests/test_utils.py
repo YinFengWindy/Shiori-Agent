@@ -176,11 +176,14 @@ async def test_send_markdown_does_not_fallback_when_send_fails(monkeypatch):
 
     bot = BotStub()
     bot.send_message = AsyncMock(side_effect=mod.TimedOut("x"))
+    sleep_mock = AsyncMock()
+    monkeypatch.setattr("plugins.telegram.backend.utils.asyncio.sleep", sleep_mock)
 
     with pytest.raises(mod.TimedOut):
         await send_markdown(cast(Any, bot), 123, "hello")
 
     assert bot.send_message.await_count == 3
+    assert [call.args[0] for call in sleep_mock.await_args_list] == [0.8, 1.6]
 
 
 @pytest.mark.asyncio

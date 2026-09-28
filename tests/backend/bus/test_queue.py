@@ -84,7 +84,7 @@ async def test_late_completion_after_intake_closes_releases_its_generation():
 
 @pytest.mark.asyncio
 async def test_message_bus_retries_failed_outbound_dispatch():
-    bus = MessageBus()
+    bus = MessageBus(outbound_retry_delay_s=0)
     await bus.publish_inbound(InboundMessage("telegram", "u", "1", "hello"))
     inbound = await bus.consume_inbound()
     assert inbound.session_key == "telegram:1"
@@ -117,11 +117,9 @@ async def test_message_bus_retries_failed_outbound_dispatch():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_on_retry", [False, True])
 async def test_nonretryable_delivery_never_replays_or_sends_error_notice(
-    monkeypatch, fail_on_retry
+    fail_on_retry,
 ):
-    sleep = AsyncMock()
-    monkeypatch.setattr("bus.queue.asyncio.sleep", sleep)
-    bus = MessageBus()
+    bus = MessageBus(outbound_retry_delay_s=0)
     callback = AsyncMock(
         side_effect=(
             [RuntimeError("retryable"), NonRetryableDeliveryError("uncertain write")]
@@ -134,15 +132,11 @@ async def test_nonretryable_delivery_never_replays_or_sends_error_notice(
     await bus._dispatch_message(message)
     assert callback.await_count == (2 if fail_on_retry else 1)
     assert all(call.args == (message,) for call in callback.await_args_list)
-    assert sleep.await_count == (1 if fail_on_retry else 0)
 
 
 @pytest.mark.asyncio
-async def test_retryable_delivery_still_sends_error_notice_after_second_failure(
-    monkeypatch,
-):
-    monkeypatch.setattr("bus.queue.asyncio.sleep", AsyncMock())
-    bus = MessageBus()
+async def test_retryable_delivery_still_sends_error_notice_after_second_failure():
+    bus = MessageBus(outbound_retry_delay_s=0)
     callback = AsyncMock(
         side_effect=[RuntimeError("first"), RuntimeError("second"), None]
     )
@@ -184,3 +178,407 @@ async def test_pending_outbound_tracks_queue_and_dispatch_until_completion():
         dispatcher.cancel()
         with suppress(asyncio.CancelledError):
             await dispatcher
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("configured", "expected"), [({}, 2.0), ({"delay": 0.5}, 0.5)])
+async def test_retry_waits_configured_delay_once_without_holding_lock(
+    monkeypatch, configured, expected
+):
+    bus = (
+        MessageBus(outbound_retry_delay_s=configured["delay"])
+        if configured
+        else MessageBus()
+    )
+    events: list[object] = []
+
+    async def record_backoff(delay):
+        events.append(("sleep", delay, bus.transport_lock.locked()))
+
+    monkeypatch.setattr("bus.queue._backoff", record_backoff)
+
+    async def flaky(message):
+        events.append("attempt")
+        if events == ["attempt"]:
+            raise RuntimeError("first")
+
+    bus.subscribe_outbound("chat", flaky)
+    await bus._dispatch_message(OutboundMessage("chat", "one", "payload"))
+    assert events == ["attempt", ("sleep", expected, False), "attempt"]
+
+
+async def _dispatch_until_drained(bus: MessageBus, *messages: OutboundMessage):
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        for message in messages:
+            await bus.publish_outbound(message)
+        await asyncio.wait_for(bus.drain_outbound(), 2)
+    finally:
+        bus.stop()
+        dispatcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatcher
+
+
+@pytest.mark.asyncio
+async def test_retry_backoff_does_not_block_other_channels():
+    # The backoff is long enough that serial dispatch would deliver "slow" first.
+    bus = MessageBus(outbound_retry_delay_s=0.3)
+    delivered: list[str] = []
+    flaky_attempts: list[str] = []
+
+    async def flaky(message):
+        flaky_attempts.append(message.content)
+        if len(flaky_attempts) == 1:
+            raise RuntimeError("first")
+        delivered.append(message.content)
+
+    async def steady(message):
+        delivered.append(message.content)
+
+    bus.subscribe_outbound("flaky", flaky)
+    bus.subscribe_outbound("steady", steady)
+    await _dispatch_until_drained(
+        bus,
+        OutboundMessage("flaky", "one", "slow"),
+        OutboundMessage("steady", "two", "fast"),
+    )
+    assert flaky_attempts == ["slow", "slow"]
+    assert delivered == ["fast", "slow"]
+
+
+@pytest.mark.asyncio
+async def test_retry_backoff_keeps_same_channel_order():
+    bus = MessageBus(outbound_retry_delay_s=0.05)
+    attempts: list[str] = []
+    delivered: list[str] = []
+
+    async def flaky(message):
+        attempts.append(message.content)
+        if attempts == ["first"]:
+            raise RuntimeError("first")
+        delivered.append(message.content)
+
+    bus.subscribe_outbound("chat", flaky)
+    await _dispatch_until_drained(
+        bus,
+        OutboundMessage("chat", "one", "first"),
+        OutboundMessage("chat", "one", "second"),
+    )
+    assert attempts == ["first", "first", "second"]
+    assert delivered == ["first", "second"]
+
+
+@pytest.mark.asyncio
+async def test_retry_uses_replacement_transport_after_handover_during_backoff():
+    bus = MessageBus(outbound_retry_delay_s=0.05)
+    failed = asyncio.Event()
+    received: list[str] = []
+
+    async def old(message):
+        failed.set()
+        raise RuntimeError("stale connection")
+
+    async def new(message):
+        received.append(message.content)
+
+    bus.subscribe_outbound("chat", old)
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        await bus.publish_outbound(OutboundMessage("chat", "one", "payload"))
+        await asyncio.wait_for(failed.wait(), 1)
+        # The first attempt released the transport lock, so a handover can land
+        # while the retry is backing off.
+        async with bus.transport_lock:
+            bus.unsubscribe_outbound("chat", old)
+            bus.subscribe_outbound("chat", new)
+        await asyncio.wait_for(bus.drain_outbound(), 2)
+    finally:
+        bus.stop()
+        dispatcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatcher
+    assert received == ["payload"]
+
+
+@pytest.mark.asyncio
+async def test_unexpected_lane_failure_stops_dispatcher_immediately(monkeypatch):
+    bus = MessageBus()
+
+    async def broken_dispatch(message):
+        raise LookupError("dispatch bug")
+
+    monkeypatch.setattr(bus, "_dispatch_message", broken_dispatch)
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        await bus.publish_outbound(OutboundMessage("chat", "one", "payload"))
+        # No further message arrives on this channel, yet the bug must surface.
+        with pytest.raises(LookupError, match="dispatch bug"):
+            await asyncio.wait_for(dispatcher, 0.5)
+    finally:
+        bus.stop()
+        dispatcher.cancel()
+        with suppress(asyncio.CancelledError, LookupError):
+            await dispatcher
+
+
+def _blocking_callback(delivered: list[str], gate: asyncio.Event, entered=None):
+    async def callback(message):
+        if entered is not None:
+            entered.set()
+        await gate.wait()
+        delivered.append(message.content)
+
+    return callback
+
+
+async def _cancel(bus: MessageBus, dispatcher: asyncio.Task) -> None:
+    bus.stop()
+    dispatcher.cancel()
+    await asyncio.gather(dispatcher, return_exceptions=True)
+
+
+async def _settle_loop(predicate) -> None:
+    for _ in range(100):
+        if predicate():
+            return
+        await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_outbound_size_counts_lane_backlog_and_cancel_returns_it_to_queue():
+    bus = MessageBus()
+    delivered: list[str] = []
+    gate, entered = asyncio.Event(), asyncio.Event()
+    bus.subscribe_outbound("chat", _blocking_callback(delivered, gate, entered))
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    await bus.publish_outbound(OutboundMessage("chat", "one", "in-flight"))
+    await asyncio.wait_for(entered.wait(), 1)
+    for content in ("second", "third"):
+        await bus.publish_outbound(
+            OutboundMessage(
+                "chat", "one", content, metadata={"external_message_id": content}
+            )
+        )
+    # Both follow-ups have left the queue and sit in the lane behind "in-flight".
+    await _settle_loop(lambda: bus._outbound.qsize() == 0 and bus.outbound_size == 2)
+    assert bus._outbound.qsize() == 0
+    assert bus.outbound_size == 2
+
+    await _cancel(bus, dispatcher)
+    # The cancelled lane hands its backlog back instead of stranding it.
+    assert bus.outbound_size == 2
+    assert bus.has_pending_outbound("chat", "one", "third")
+    gate.set()
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        await asyncio.wait_for(bus.drain_outbound(), 1)
+    finally:
+        await _cancel(bus, dispatcher)
+    assert delivered == ["second", "third"]
+    assert not bus.has_pending_outbound("chat", "one", "third")
+
+
+@pytest.mark.asyncio
+async def test_crashed_lane_raises_and_keeps_its_backlog_queued(monkeypatch):
+    bus = MessageBus()
+    gate, entered = asyncio.Event(), asyncio.Event()
+
+    async def broken_dispatch(message):
+        entered.set()
+        await gate.wait()
+        raise LookupError("dispatch bug")
+
+    monkeypatch.setattr(bus, "_dispatch_message", broken_dispatch)
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        await bus.publish_outbound(OutboundMessage("chat", "one", "first"))
+        await asyncio.wait_for(entered.wait(), 1)
+        await bus.publish_outbound(
+            OutboundMessage(
+                "chat", "one", "second", metadata={"external_message_id": "2"}
+            )
+        )
+        await asyncio.sleep(0)
+        gate.set()
+        with pytest.raises(LookupError, match="dispatch bug"):
+            await asyncio.wait_for(dispatcher, 1)
+    finally:
+        await _cancel(bus, dispatcher)
+    assert bus.outbound_size == 1
+    assert bus.has_pending_outbound("chat", "one", "2")
+
+
+@pytest.mark.asyncio
+async def test_stop_finishes_routed_lanes_without_taking_new_messages():
+    bus = MessageBus()
+    delivered: list[str] = []
+    gate_a, entered_a = asyncio.Event(), asyncio.Event()
+    gate_b, entered_b = asyncio.Event(), asyncio.Event()
+    bus.subscribe_outbound("a", _blocking_callback(delivered, gate_a, entered_a))
+    bus.subscribe_outbound("b", _blocking_callback(delivered, gate_b, entered_b))
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        await bus.publish_outbound(OutboundMessage("a", "one", "a-routed"))
+        await bus.publish_outbound(OutboundMessage("b", "one", "b-routed"))
+        await asyncio.wait_for(entered_a.wait(), 1)
+        # Lane b is routed and waits for the transport lock held by lane a.
+        await _settle_loop(lambda: bus._outbound.qsize() == 0)
+        await _settle_loop(lambda: False)  # The dispatcher is idle in its next get.
+        bus.stop()
+        gate_a.set()  # Lane a finishing wakes the dispatcher, which observes stop().
+        await asyncio.wait_for(entered_b.wait(), 1)
+        await _settle_loop(lambda: False)  # Let the dispatcher act on stop().
+        await bus.publish_outbound(OutboundMessage("a", "one", "after-stop"))
+        await _settle_loop(lambda: bus.outbound_size == 0)
+        assert not dispatcher.done()
+        gate_b.set()
+        await asyncio.wait_for(dispatcher, 1)
+    finally:
+        await _cancel(bus, dispatcher)
+    assert delivered == ["a-routed", "b-routed"]
+    # The message published after stop() stays queued for the next dispatcher.
+    assert bus.outbound_size == 1
+
+
+@pytest.mark.asyncio
+async def test_partial_handover_does_not_retry_through_unrelated_replacement(caplog):
+    bus = MessageBus(outbound_retry_delay_s=0.05)
+    steady = AsyncMock()
+    replacement = AsyncMock()
+    failed = asyncio.Event()
+
+    async def broken(message):
+        failed.set()
+        raise RuntimeError("stale")
+
+    bus.subscribe_outbound("chat", steady)
+    bus.subscribe_outbound("chat", broken)
+    delivery = asyncio.create_task(
+        bus._dispatch_message(OutboundMessage("chat", "one", "payload"))
+    )
+    await asyncio.wait_for(failed.wait(), 1)
+    async with bus.transport_lock:
+        bus.unsubscribe_outbound("chat", broken)
+        bus.subscribe_outbound("chat", replacement)
+    await asyncio.wait_for(delivery, 1)
+    assert steady.await_count == 1
+    replacement.assert_not_awaited()
+    assert "失败的连接已被移除" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_full_handover_during_backoff_retries_through_all_replacements():
+    bus = MessageBus(outbound_retry_delay_s=0.05)
+    succeeded = AsyncMock()
+    replacements = [AsyncMock(), AsyncMock()]
+    failed = asyncio.Event()
+
+    async def broken(message):
+        failed.set()
+        raise RuntimeError("stale")
+
+    bus.subscribe_outbound("chat", succeeded)
+    bus.subscribe_outbound("chat", broken)
+    message = OutboundMessage("chat", "one", "payload")
+    delivery = asyncio.create_task(bus._dispatch_message(message))
+    await asyncio.wait_for(failed.wait(), 1)
+    async with bus.transport_lock:
+        bus.unsubscribe_outbound("chat", succeeded)
+        bus.unsubscribe_outbound("chat", broken)
+        for callback in replacements:
+            bus.subscribe_outbound("chat", callback)
+    await asyncio.wait_for(delivery, 1)
+    assert all(
+        callback.await_args_list[0].args == (message,) for callback in replacements
+    )
+
+
+@pytest.mark.asyncio
+async def test_retry_without_any_transport_logs_the_lost_message(caplog):
+    bus = MessageBus(outbound_retry_delay_s=0.05)
+    failed = asyncio.Event()
+
+    async def broken(message):
+        failed.set()
+        raise RuntimeError("stale")
+
+    bus.subscribe_outbound("chat", broken)
+    delivery = asyncio.create_task(
+        bus._dispatch_message(OutboundMessage("chat", "one", "payload"))
+    )
+    await asyncio.wait_for(failed.wait(), 1)
+    async with bus.transport_lock:
+        bus.unsubscribe_outbound("chat", broken)
+    await asyncio.wait_for(delivery, 1)
+    assert "重试时没有可用的连接" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_cancel_mid_delivery_logs_the_interrupted_message(caplog):
+    bus = MessageBus()
+    entered = asyncio.Event()
+    bus.subscribe_outbound("chat", _blocking_callback([], asyncio.Event(), entered))
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    await bus.publish_outbound(OutboundMessage("chat", "chat-7", "in-flight"))
+    await asyncio.wait_for(entered.wait(), 1)
+    await _cancel(bus, dispatcher)
+    assert "出站投递被中止" in caplog.text
+    assert "channel=chat chat_id=chat-7" in caplog.text
+    assert "1 条投递中的消息被中断" in caplog.text
+    assert not bus.has_pending_outbound("chat", "chat-7", "")
+
+
+@pytest.mark.asyncio
+async def test_cancelling_again_during_cleanup_leaves_no_stale_lane():
+    bus = MessageBus()
+    entered, release, first_cancel = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    delivered: list[str] = []
+
+    async def stubborn(message):
+        entered.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            # Swallows the first cancel so cleanup is still awaiting this lane.
+            first_cancel.set()
+            await release.wait()
+        delivered.append(message.content)
+
+    bus.subscribe_outbound("chat", stubborn)
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    await bus.publish_outbound(OutboundMessage("chat", "one", "in-flight"))
+    await asyncio.wait_for(entered.wait(), 1)
+    await bus.publish_outbound(OutboundMessage("chat", "one", "queued"))
+    await _settle_loop(lambda: bus._outbound.qsize() == 0 and bus.outbound_size == 1)
+    dispatcher.cancel()
+    await asyncio.wait_for(first_cancel.wait(), 1)
+    assert not dispatcher.done()
+    dispatcher.cancel()
+    await asyncio.gather(dispatcher, return_exceptions=True)
+    assert bus._lanes == {}
+    assert bus.outbound_size == 1
+
+    release.set()
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    try:
+        await asyncio.wait_for(bus.drain_outbound(), 1)
+    finally:
+        await _cancel(bus, dispatcher)
+    assert delivered == ["queued"]
+
+
+@pytest.mark.asyncio
+async def test_cancel_after_get_but_before_routing_returns_the_message():
+    bus = MessageBus()
+    dispatcher = asyncio.create_task(bus.dispatch_outbound())
+    await _settle_loop(lambda: False)  # The dispatcher is parked in its get.
+    # An unbounded put never yields, so the getter has not run yet.
+    await bus.publish_outbound(OutboundMessage("chat", "one", "fetched"))
+    await asyncio.sleep(0)
+    # The getter has dequeued the message; the dispatcher has not routed it.
+    assert bus._outbound.qsize() == 0
+    assert bus._lanes == {}
+    await _cancel(bus, dispatcher)
+    assert bus.outbound_size == 1
+    assert bus._outbound.get_nowait().content == "fetched"
