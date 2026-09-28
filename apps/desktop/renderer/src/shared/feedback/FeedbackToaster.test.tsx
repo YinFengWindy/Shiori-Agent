@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "../testing/domTestHarness";
+import { mockableWindowTimers, mountTestComponent } from "../testing/domTestHarness";
 import { appearancePrefsStorageKey } from "../appearancePrefs";
 import { mascotFeedback } from "../mascot/mascotFeedback";
 import { resetAppearancePrefsCache } from "../useAppearancePrefs";
 import { FeedbackToaster } from "./FeedbackToaster";
-import { feedback, getFeedbackSnapshot, resetFeedback } from "./feedbackStore";
+import { feedback, feedbackDurationMs, getFeedbackSnapshot, resetFeedback } from "./feedbackStore";
 
 afterEach(() => {
   resetFeedback();
@@ -57,11 +57,14 @@ describe("FeedbackToaster", () => {
     } finally { await view.cleanup(); }
   });
 
-  it("dismisses a success toast on its own", async () => {
-    const view = await mountTestComponent(<FeedbackToaster />);
+  it("dismisses a success toast on its own", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const view = await mountTestComponent(<FeedbackToaster />, { windowGlobals: mockableWindowTimers });
     try {
       await act(async () => feedback.success("已保存"));
-      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 2600)); });
+      await act(async () => t.mock.timers.tick(feedbackDurationMs.success - 1));
+      assert.deepEqual(getFeedbackSnapshot().map((toast) => toast.message), ["已保存"]);
+      await act(async () => t.mock.timers.tick(1));
       assert.deepEqual(getFeedbackSnapshot(), []);
     } finally { await view.cleanup(); }
   });
