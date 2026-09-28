@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import replace
 from threading import RLock
 from typing import Callable
@@ -21,6 +22,8 @@ from .models import (
     account_id_for,
 )
 from .runtime_state import DIRECT_GENERATION, AccountRuntimeState
+
+logger = logging.getLogger(__name__)
 
 # Called with an account ID after its published snapshot changed or it was
 # added or removed; must not block, since it runs on the reporting call.
@@ -74,7 +77,14 @@ class AccountRegistry:
             after = self._published_view(account_id)
         if after != before:
             for listener in list(self._change_listeners):
-                listener(account_id)
+                # Observers must not fail the plugin's register/report call;
+                # the index change has already been applied.
+                try:
+                    listener(account_id)
+                except Exception:
+                    logger.exception(
+                        "Account change listener failed for %s", account_id
+                    )
 
     def role_exists(self, role_id: str) -> bool:
         """Whether an owner role still exists, for plugins pruning orphaned accounts."""

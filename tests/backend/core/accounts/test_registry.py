@@ -272,3 +272,21 @@ def test_listeners_hear_only_real_published_account_changes():
     registry.remove_change_listener(changed.append)
     _register(registry, token="generation-3")
     assert len(changed) == 6
+
+
+def test_a_failing_listener_does_not_break_the_plugin_report(caplog):
+    registry = AccountRegistry({"r1"}.__contains__)
+    changed: list[str] = []
+
+    def broken(_: str) -> None:
+        raise RuntimeError("listener exploded")
+
+    registry.add_change_listener(broken)
+    registry.add_change_listener(changed.append)
+    account = _register(registry)
+
+    snapshot = registry.report(account.record.id, "generation-1", connection="online")
+
+    assert snapshot.connection == "online"
+    assert changed == ["chat:101", "chat:101"]
+    assert "listener exploded" in caplog.text

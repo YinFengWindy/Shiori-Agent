@@ -38,6 +38,9 @@ class TaskCollector:
         """Waits for tracked tasks; failures stay in `errors` rather than raising."""
         while self._tasks:
             await asyncio.gather(*list(self._tasks), return_exceptions=True)
+            # Awaiting already-finished tasks does not yield, so give their
+            # pending `_finished` callbacks a turn or this loop never ends.
+            await asyncio.sleep(0)
 
     def _finished(self, task: asyncio.Task) -> None:
         self._tasks.discard(task)

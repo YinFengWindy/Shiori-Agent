@@ -3,11 +3,14 @@ from __future__ import annotations
 import asyncio
 import threading
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from agent.tools.message_push import MessagePushTool
+from bootstrap.runtime.events import RuntimeEventBus
+from bootstrap.runtime.generations import RuntimeCandidate
+from core.common.runtime_scope import bind_runtime
 from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import DeliveryReceipt, PushToolOutboundPort
@@ -998,7 +1001,7 @@ async def test_account_report_changes_are_pushed_to_desktop_clients(tmp_path) ->
     ).record.id
     accounts.report(account_id, "t", connection="online")
     accounts.report(account_id, "t", connection="online")
-    await event_bus.drain()
+    await asyncio.sleep(0)
 
     assert [(event["method"], event["payload"]) for event in emitted] == [
         ("accounts.updated", {"account_id": "demo:1"}),
@@ -1006,5 +1009,62 @@ async def test_account_report_changes_are_pushed_to_desktop_clients(tmp_path) ->
     ]
     await service.aclose()
     accounts.report(account_id, "t", connection="offline")
-    await event_bus.drain()
+    await asyncio.sleep(0)
     assert len(emitted) == 2
+
+
+@pytest.mark.asyncio
+async def test_account_report_from_a_task_with_a_released_lease_still_pushes(
+    tmp_path,
+) -> None:
+    """Plugin tasks outlive the RPC whose runtime lease they inherited."""
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="m")
+    accounts = role_store.accounts
+    outlet = EventBus()
+    event_bus = RuntimeEventBus(outlet)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=event_bus,
+    )
+    emitted: list[dict] = []
+    service.add_event_listener(emitted.append)
+    account_id = accounts.register(
+        plugin_id="demo",
+        platform="demo",
+        platform_account_id="1",
+        config_ref="a",
+        token="t",
+        role_id="mira",
+    ).record.id
+    version = RuntimeCandidate(
+        1,
+        SimpleNamespace(
+            stop=AsyncMock(),
+            assert_hot_unloadable=Mock(),
+            memory_runtime=SimpleNamespace(aclose=AsyncMock()),
+        ),
+        SimpleNamespace(),
+        published=True,
+    )
+    rpc_lease = version.acquire()
+    await rpc_lease.release()
+    for _ in range(3):
+        await asyncio.sleep(0)
+    emitted.clear()
+
+    with bind_runtime(rpc_lease):
+        accounts.report(account_id, "t", connection="online")
+    for _ in range(3):
+        await asyncio.sleep(0)
+
+    assert accounts.get(account_id).connection == "online"
+    assert [(event["method"], event["payload"]) for event in emitted] == [
+        ("accounts.updated", {"account_id": "demo:1"}),
+    ]
+    await service.aclose()
+    await event_bus.aclose()
+    await outlet.aclose()

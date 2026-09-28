@@ -5,9 +5,11 @@ from agent.plugin_host.bridge_events import PluginBridgeEvent, PluginRpcError
 from contextlib import ExitStack
 from core.accounts import AccountDeletingError, AccountNotFoundError
 from core.common.cleanup import run_cleanup_steps
+from core.common.task_collector import TaskCollector
 
 import inspect
 import logging
+from contextvars import Context
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -17,7 +19,6 @@ from agent.tools.message_push import MessagePushTool
 from agent.turns.desktop_pushes import current_desktop_pushes
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
-    AccountChanged,
     ProactiveMessageCommitted,
     RoleDeleted,
     TurnCommitted,
@@ -115,9 +116,8 @@ class DesktopBridgeService:
             self._proactive_message_listener,
         )
         self._account_change_listener = self._on_account_change
-        self._account_changed_listener = self._on_account_changed
+        self._account_pushes = TaskCollector("Account change push")
         role_store.accounts.add_change_listener(self._account_change_listener)
-        self.event_bus.on(AccountChanged, self._account_changed_listener)
         self.config = config
         self.role_runtime_registry = role_runtime_registry
         registrations = getattr(config, "model_registrations", None)
@@ -282,12 +282,19 @@ class DesktopBridgeService:
         )
 
     def _on_account_change(self, account_id: str) -> None:
-        # Registry changes arrive synchronously from plugin reports; the bus
-        # hands them to the async broadcast. Unwatched changes are dropped.
+        # Registry changes arrive synchronously inside plugin reports, often
+        # from plugin tasks that inherited an RPC's since-released runtime
+        # lease. The push is therefore its own task in a fresh context: it pins
+        # no runtime generation and cannot fail the reporting plugin; failures
+        # are logged by the collector. Unwatched changes are dropped.
         if self._event_listeners:
-            self.event_bus.enqueue(AccountChanged(account_id))
+            _ = Context().run(
+                self._account_pushes.spawn,
+                self._push_account_changed(account_id),
+                name=f"accounts.updated:{account_id}",
+            )
 
-    async def _on_account_changed(self, event: AccountChanged) -> None:
+    async def _push_account_changed(self, account_id: str) -> None:
         """Pushes account changes so account views refresh without polling."""
 
         await self._broadcast_event(
@@ -295,7 +302,7 @@ class DesktopBridgeService:
                 id="accounts.updated",
                 type="event",
                 method="accounts.updated",
-                payload={"account_id": event.account_id},
+                payload={"account_id": account_id},
             ).to_dict()
         )
 
@@ -348,9 +355,10 @@ class DesktopBridgeService:
         )
         self.role_service.remove_role_deleted_listener(self._role_deleted_listener)
         self.role_store.accounts.remove_change_listener(self._account_change_listener)
-        self.event_bus.off(AccountChanged, self._account_changed_listener)
         self.event_bus.off(PluginBridgeEvent, self._plugin_event_listener)
         self._event_listeners.clear()
+        self._account_pushes.cancel_all()
+        await self._account_pushes.drain()
         if self.plugin_rpc_registry is not None:
             self.plugin_rpc_registry.communication.retire()
         steps = [
