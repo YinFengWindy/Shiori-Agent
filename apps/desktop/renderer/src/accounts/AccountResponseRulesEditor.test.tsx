@@ -87,21 +87,21 @@ test("a failed save shows why and puts the last saved value back", async () => {
   } finally { await view.cleanup(); }
 });
 
-test("group controls show for group-capable accounts or retained non-default group settings", async () => {
+test("group toggles show only for group-capable accounts, the blacklist always", async () => {
   const view = await mountTestComponent(
-    <AccountResponseRulesEditor account={account} onChanged={() => undefined} />,
+    <AccountResponseRulesEditor account={{ ...account, responseRules: {
+      ...account.responseRules, requireMention: false,
+    } }} onChanged={() => undefined} />,
   );
   try {
     assert.match(view.container.textContent ?? "", /私聊启用/);
-    assert.doesNotMatch(view.container.textContent ?? "", /群聊启用|黑名单/);
-    await view.render(<AccountResponseRulesEditor key="non-default" account={{ ...account,
-      responseRules: { ...account.responseRules, requireMention: false },
-    }} onChanged={() => undefined} />);
-    assert.match(view.container.textContent ?? "", /群聊需要 @/);
-    assert.equal(checkbox(view.container, "群聊需要 @")?.checked, false);
-    await view.render(<AccountResponseRulesEditor key="online-groups" account={{ ...account,
+    assert.match(view.container.textContent ?? "", /黑名单成员 ID/);
+    assert.doesNotMatch(view.container.textContent ?? "", /群聊/);
+    await view.render(<AccountResponseRulesEditor key="groups" account={{ ...account,
       capabilities: ["groups"],
     }} onChanged={() => undefined} />);
     assert.match(view.container.textContent ?? "", /群聊启用/);
+    assert.match(view.container.textContent ?? "", /群聊需要 @/);
+    assert.match(view.container.textContent ?? "", /黑名单成员 ID/);
   } finally { await view.cleanup(); }
 });

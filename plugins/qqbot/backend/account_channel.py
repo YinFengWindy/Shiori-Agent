@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
-
-from infra.channels.avatar_refresh import AvatarRefreshTasks
 
 from .account_avatar import fetch_bot_avatar
 from .accounts import QQBotAccountStore, resolve_secret
@@ -39,7 +38,7 @@ class QQBotAccountsChannel(
         self._channels: dict[str, QQBotChannel] = {}
         self._identity = QQBotAccountIdentity(ctx, store)
         self._runtime: ChannelContext | None = None
-        self._avatars = AvatarRefreshTasks()
+        self._avatar_tasks: dict[str, asyncio.Task[None]] = {}
 
     @property
     def configuration_key(self) -> object:
@@ -92,7 +91,8 @@ class QQBotAccountsChannel(
         """Stop only gateways owned by this plugin instance."""
         from bus.events_lifecycle import StreamDeltaReady, TurnCancelled, TurnStarted
 
-        await self._avatars.close()
+        for app_id in list(self._avatar_tasks):
+            await self._cancel_avatar(app_id)
         for channel in tuple(self._channels.values()):
             await channel.stop()
         self._channels.clear()
@@ -121,11 +121,17 @@ class QQBotAccountsChannel(
 
     def _refresh_avatar(self, app_id: str, channel: QQBotChannel) -> None:
         """Fetches a connected application's avatar in the background."""
-        self._avatars.start(
-            app_id,
-            lambda: fetch_bot_avatar(channel),
-            lambda avatar: self._identity.update_avatar(app_id, avatar),
-        )
+        running = self._avatar_tasks.get(app_id)
+        if running is None or running.done():
+            self._avatar_tasks[app_id] = asyncio.create_task(
+                self._store_avatar(app_id, channel), name=f"qqbot-avatar-{app_id}"
+            )
+
+    async def _store_avatar(self, app_id: str, channel: QQBotChannel) -> None:
+        # A failed download keeps the stored avatar.
+        avatar = await fetch_bot_avatar(channel)
+        if avatar is not None:
+            self._identity.update_avatar(app_id, avatar)
 
     async def _connect(self, row: dict[str, Any]) -> QQBotChannel | None:
         app_id = row["app_id"]

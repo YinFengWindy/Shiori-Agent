@@ -109,6 +109,7 @@ class FeishuChannel:
         self._interrupt_controller: InterruptController | None = None
         self._resolver: InboundResolver | None = None
         self._inbound_tasks: set[asyncio.Task[None]] = set()
+        self._avatar_task: asyncio.Task[None] | None = None
         self._accepting = False
         self._outbound_bound = False
         self._events_bound = False
@@ -232,6 +233,10 @@ class FeishuChannel:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+        if self._avatar_task is not None:
+            self._avatar_task.cancel()
+            await asyncio.gather(self._avatar_task, return_exceptions=True)
+            self._avatar_task = None
         await self._streamer.close()
         await self._intake.close()
         if self._bus is not None and self._outbound_bound:
@@ -390,18 +395,27 @@ class FeishuChannel:
                 display_name=self._bot_name,
             )
         self._report("online")
+        # The connection never waits on the avatar download; stop cancels it.
+        if self._accepting and (self._avatar_task is None or self._avatar_task.done()):
+            self._avatar_task = asyncio.create_task(
+                self._refresh_avatar(avatar_url),
+                name=f"feishu-avatar-{self._profile_ref}",
+            )
+
+    async def _refresh_avatar(self, avatar_url: str) -> None:
         avatar = await fetch_bot_avatar(self._api, avatar_url)
         # A failed download keeps the stored avatar.
-        if avatar is not None:
-            self._save_profile(avatar)
-            if self._accounts is not None and self.account_id:
-                self._accounts.register(
-                    platform="feishu",
-                    platform_account_id=self._profile_ref,
-                    config_ref=self._profile_ref,
-                    role_id=self._role_id,
-                    avatar_url=avatar,
-                )
+        if avatar is None:
+            return
+        self._save_profile(avatar)
+        if self._accounts is not None and self.account_id:
+            self._accounts.register(
+                platform="feishu",
+                platform_account_id=self._profile_ref,
+                config_ref=self._profile_ref,
+                role_id=self._role_id,
+                avatar_url=avatar,
+            )
 
     def _save_profile(self, avatar: str | None = None) -> None:
         """Stores the bot identity; ``avatar`` None keeps the stored data URI."""

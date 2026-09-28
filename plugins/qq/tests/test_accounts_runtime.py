@@ -336,7 +336,7 @@ async def test_connected_avatar_is_stored_reregistered_and_kept_on_failed_refres
             if _avatar_fetch.await_count:
                 break
             await asyncio.sleep(0.01)
-        await runtime._avatars.wait()
+        await asyncio.gather(*runtime._avatar_tasks.values())
         _avatar_fetch.assert_awaited_once_with("101")
         await runtime.stop()
         return accounts

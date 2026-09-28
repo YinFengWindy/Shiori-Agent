@@ -320,9 +320,9 @@ class AccountsCapability:
         the role the account was created from, and ``response_rules`` are the
         rules the plugin saved with it; None keeps what is already indexed
         (defaults for a new account), and None display fields keep snapshots.
-        ``avatar_url`` is the account's own picture as an image ``data:`` URI
-        (build it with ``core.accounts.avatar_data_uri``) or "" for none; a
-        remote URL, non-image or oversize image raises ValueError.
+        ``avatar_url`` is the account's own picture as a base64 PNG, JPEG, GIF
+        or WebP ``data:`` URI of at most 256 KiB, or "" for none; a remote
+        URL, non-image or oversize image raises ValueError.
         """
         self._effects.ensure_active("account:register")
         snapshot = self._registry.register(

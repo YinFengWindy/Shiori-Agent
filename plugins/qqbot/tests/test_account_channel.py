@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -127,7 +128,7 @@ async def test_connected_avatar_is_stored_reregistered_and_kept_on_failed_refres
         await manager.start(
             SimpleNamespace(bus=_Bus(), push_tool=_Push(), event_bus=EventBus())
         )
-        await manager._avatars.wait()
+        await asyncio.gather(*manager._avatar_tasks.values())
         await manager.stop()
         return accounts
 

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+import base64
+import binascii
+import re
 from dataclasses import replace
 from threading import RLock
 from typing import Callable
 
-from .avatar import validate_avatar
 from .models import (
     AccountAccess,
     AccountDeleteHandler,
@@ -23,7 +24,47 @@ from .models import (
 )
 from .runtime_state import DIRECT_GENERATION, AccountRuntimeState
 
-logger = logging.getLogger(__name__)
+# Decoded bytes; a platform avatar thumbnail is a few KiB to a few dozen KiB.
+_MAX_AVATAR_BYTES = 256 * 1024
+_AVATAR_URI = re.compile(r"data:(image/[a-z]+);base64,([A-Za-z0-9+/]*={0,2})")
+
+
+def _image_mime(content: bytes) -> str | None:
+    """The MIME type the content's signature identifies, if a supported image."""
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if content.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if content.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def _check_avatar(avatar: str) -> None:
+    """Refuses an avatar the renderer cannot show under its ``data:`` image CSP.
+
+    Accepts "" (no avatar) or a base64 image data URI of at most 256 KiB whose
+    content is a PNG, JPEG, GIF or WebP matching the declared MIME type.
+    """
+    if avatar == "":
+        return
+    match = _AVATAR_URI.fullmatch(avatar)
+    if match is None:
+        raise ValueError("账号头像必须是 base64 编码的 data:image URI")
+    try:
+        content = base64.b64decode(match.group(2), validate=True)
+    except binascii.Error as exc:
+        raise ValueError("账号头像的 base64 数据无效") from exc
+    if len(content) > _MAX_AVATAR_BYTES:
+        raise ValueError(f"账号头像超过 {_MAX_AVATAR_BYTES // 1024} KiB")
+    mime = _image_mime(content)
+    if mime is None:
+        raise ValueError("账号头像不是 PNG、JPEG、GIF 或 WebP 图片")
+    if mime != match.group(1):
+        raise ValueError("账号头像的类型与图片内容不符")
+
 
 # Called with an account ID after its published snapshot changed or it was
 # added or removed; must not block, since it runs on the reporting call.
@@ -77,14 +118,7 @@ class AccountRegistry:
             after = self._published_view(account_id)
         if after != before:
             for listener in list(self._change_listeners):
-                # Observers must not fail the plugin's register/report call;
-                # the index change has already been applied.
-                try:
-                    listener(account_id)
-                except Exception:
-                    logger.exception(
-                        "Account change listener failed for %s", account_id
-                    )
+                listener(account_id)
 
     def role_exists(self, role_id: str) -> bool:
         """Whether an owner role still exists, for plugins pruning orphaned accounts."""
@@ -138,13 +172,13 @@ class AccountRegistry:
 
         The ownership rule is ``_ownership_refusal``; a refused account raises
         ValueError and is not indexed, as does an ``avatar_url`` that is not
-        empty or a valid image data URI (``validate_avatar``).
+        empty or a valid image data URI (``_check_avatar``).
         """
         fields = (plugin_id, platform, platform_account_id, config_ref, token)
         if any(not isinstance(value, str) or not value.strip() for value in fields):
             raise ValueError("账号身份、配置引用和运行令牌不能为空")
         if avatar_url is not None:
-            validate_avatar(avatar_url)
+            _check_avatar(avatar_url)
         plugin_id, platform, platform_account_id, config_ref, token = (
             value.strip() for value in fields
         )

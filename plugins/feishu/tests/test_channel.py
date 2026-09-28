@@ -113,6 +113,8 @@ async def test_bot_avatar_is_stored_and_kept_when_its_download_fails(
         if not harness.channel._inbound_tasks and harness.channel._bot_open_id:
             break
         await asyncio.sleep(0.01)
+    assert harness.channel._avatar_task is not None
+    await harness.channel._avatar_task
 
     avatars = [
         call.kwargs["avatar_url"]

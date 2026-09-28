@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
-
-from infra.channels.avatar_refresh import AvatarRefreshTasks
 
 from .accounts import resolve_secret
 from .channel import QQBotChannel
@@ -23,11 +22,18 @@ class _AccountCommandsMixin:
     _store: QQBotAccountStore
     _channels: dict[str, QQBotChannel]
     _runtime: ChannelContext | None
-    _avatars: AvatarRefreshTasks
+    _avatar_tasks: dict[str, asyncio.Task[None]]
 
     def _refresh_avatar(self, app_id: str, channel: QQBotChannel) -> None:
         """Owned by the composite channel, which tracks the refresh tasks."""
         raise NotImplementedError
+
+    async def _cancel_avatar(self, app_id: str) -> None:
+        """Stops an application's avatar fetch before its gateway client closes."""
+        task = self._avatar_tasks.pop(app_id, None)
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def _preflight(self, app_id: str, secret: str) -> None:
         """Authenticate and query gateway before changing persisted/running creds."""
@@ -83,7 +89,7 @@ class _AccountCommandsMixin:
             self._identity.register(row)
         self._identity.begin_handoff(app_id)
         # The old gateway's client closes below; its avatar fetch must not outlive it.
-        await self._avatars.cancel(app_id)
+        await self._cancel_avatar(app_id)
         old = self._channels.pop(app_id, None)
         old_stopped = False
         try:
@@ -121,7 +127,7 @@ class _AccountCommandsMixin:
     async def disconnect(self, payload: dict[str, Any]) -> dict[str, Any]:
         app_id = self._identity.app_for_account(payload)
         row = self._store.get(app_id)
-        await self._avatars.cancel(app_id)
+        await self._cancel_avatar(app_id)
         channel = self._channels.pop(app_id, None)
         if channel is not None:
             await channel.stop()
@@ -131,7 +137,7 @@ class _AccountCommandsMixin:
 
     async def disconnect_account(self, app_id: str) -> None:
         """Closes a deleted application's gateway and stops reporting it."""
-        await self._avatars.cancel(app_id)
+        await self._cancel_avatar(app_id)
         channel = self._channels.pop(app_id, None)
         if channel is not None:
             await channel.stop()

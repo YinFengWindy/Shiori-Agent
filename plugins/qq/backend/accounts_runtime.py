@@ -9,7 +9,6 @@ from typing import Any
 from uuid import uuid4
 
 from infra.channels.contract import ChannelContext
-from infra.channels.avatar_refresh import AvatarRefreshTasks
 from infra.channels.intake import ChannelIntake
 
 from .accounts_actions import QQAccountActions, qq_number
@@ -46,7 +45,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._stopping = False
         self._intakes: dict[str, ChannelIntake] = {}
         self._actions = QQAccountActions(self._socket_for, self._ensure_online)
-        self._avatars = AvatarRefreshTasks()
+        self._avatar_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def load(self) -> None:
         """Prunes temporary or orphaned data, then registers saved accounts."""
@@ -96,7 +95,8 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._stopping = True
         for intake in self._intakes.values():
             await intake.close()
-        await self._avatars.close()
+        for ref in list(self._avatar_tasks):
+            await self._cancel_avatar(ref)
         tasks = list(self._tasks.values())
         for task in tasks:
             task.cancel()
@@ -268,15 +268,21 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._sockets[ref] = socket
         self._states[ref] = ("online", "")
         self._start_intake(ref)
-        self._avatars.start(
-            ref,
-            lambda: fetch_qq_avatar(uin),
-            lambda avatar: self._save_avatar(ref, avatar),
-        )
+        running = self._avatar_tasks.get(ref)
+        if running is None or running.done():
+            self._avatar_tasks[ref] = asyncio.create_task(
+                self._refresh_avatar(ref, uin), name=f"qq-avatar-{ref}"
+            )
         return snapshot.record.id
 
-    def _save_avatar(self, ref: str, avatar: str) -> None:
-        """Stores a freshly fetched avatar with the account and re-registers it."""
+    async def _refresh_avatar(self, ref: str, uin: str) -> None:
+        """Stores a freshly fetched avatar with the account and re-registers it.
+
+        A failed download keeps the stored avatar and never affects the socket.
+        """
+        avatar = await fetch_qq_avatar(uin)
+        if avatar is None:
+            return
         config = self._configs.get(ref)
         # The account may have been deleted or logged out while fetching.
         if config is None or ref not in self._ids or config.avatar == avatar:

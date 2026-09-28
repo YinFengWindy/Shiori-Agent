@@ -15,19 +15,15 @@ const FAST_POLL_MS = 1000;
 const SLOW_POLL_MS = 3000;
 
 /**
- * How soon to read the status again: every second while it is about to move
- * on its own (preparing, starting, fetching the QR, connecting after a scan),
- * every three while it waits on the user or holds still (QR shown, online, stopped).
+ * How soon to read the status again: every three seconds once it holds still
+ * (connected, or stopped), otherwise every second — including while a QR code
+ * is shown, so a finished scan shows up promptly.
  */
 export function managedPollInterval(status: ManagedStatus | null) {
-  if (!status) return FAST_POLL_MS;
-  if (status.login.qrcode && status.login.phase !== "online") return SLOW_POLL_MS;
-  const settling = napCatPreparing(status)
-    || status.login.phase === "starting"
-    || status.connection === "connecting"
-    || status.login.phase === "login_required"
-    || (status.login.phase === "online" && status.connection !== "online");
-  return settling ? FAST_POLL_MS : SLOW_POLL_MS;
+  if (!status || napCatPreparing(status) || status.connection === "connecting") return FAST_POLL_MS;
+  const settled = status.login.phase === "stopped"
+    || (status.login.phase === "online" && status.connection === "online");
+  return settled ? SLOW_POLL_MS : FAST_POLL_MS;
 }
 
 /** Polls only the selected QQ managed instance while its account detail is open. */

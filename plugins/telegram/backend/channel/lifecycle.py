@@ -300,7 +300,7 @@ class TelegramChannel(
                 self._account_id,
                 connection=connection,
                 capabilities=frozenset(
-                    {"known_conversations", "member_lookup", "target_send"}
+                    {"known_conversations", "member_lookup", "target_send", "groups"}
                 ),
                 error=error,
             )

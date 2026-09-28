@@ -7,7 +7,6 @@ from dataclasses import replace
 from typing import Any
 
 from core.accounts import AccountResponseRules
-from infra.channels.avatar_refresh import AvatarRefreshTasks
 from infra.channels.intake import ChannelIntake
 
 from .accounts_store import (
@@ -37,7 +36,7 @@ class QQAccountSettings:
     _tasks: dict[str, asyncio.Task[None]]
     _locks: dict[str, asyncio.Lock]
     _intakes: dict[str, ChannelIntake]
-    _avatars: AvatarRefreshTasks
+    _avatar_tasks: dict[str, asyncio.Task[None]]
     _accounts: Any
 
     def _ref_for(self, account_id: str) -> str:
@@ -91,6 +90,13 @@ class QQAccountSettings:
             await intake.close()
         self._locks.pop(ref, None)
 
+    async def _cancel_avatar(self, ref: str) -> None:
+        """Stops an account's background avatar fetch before it goes away."""
+        task = self._avatar_tasks.pop(ref, None)
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
     async def disconnect_account(self, ref: str) -> None:
         """Stops a deleted account's socket and NapCat, keeping its saved data.
 
@@ -98,7 +104,7 @@ class QQAccountSettings:
         reports it again.
         """
         self._ids.pop(ref, None)
-        await self._avatars.cancel(ref)
+        await self._cancel_avatar(ref)
         task = self._tasks.pop(ref, None)
         if task is not None:
             task.cancel()

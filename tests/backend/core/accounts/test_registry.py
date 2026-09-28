@@ -12,8 +12,6 @@ from core.accounts import (
     AccountNotFoundError,
     AccountRegistry,
     AccountResponseRules,
-    MAX_AVATAR_BYTES,
-    avatar_data_uri,
 )
 
 
@@ -213,6 +211,7 @@ async def test_role_deletion_deletes_every_loaded_account_of_the_role():
 
 
 _PNG_AVATAR = "data:image/png;base64,iVBORw0KGgo="
+_OVERSIZE_PNG = b"\x89PNG\r\n\x1a\n" + bytes(256 * 1024)
 
 
 @pytest.mark.parametrize(
@@ -223,29 +222,31 @@ _PNG_AVATAR = "data:image/png;base64,iVBORw0KGgo="
         ("data:image/png;base64,PGh0bWw+", "PNG、JPEG"),
         ("data:image/jpeg;base64,iVBORw0KGgo=", "不符"),
         ("data:image/png;base64,iVBORw0KGgo", "base64"),
+        ("data:image/png;base64," + base64.b64encode(_OVERSIZE_PNG).decode(), "KiB"),
+    ],
+    ids=[
+        "remote-url",
+        "non-image-mime",
+        "non-image",
+        "mime-mismatch",
+        "bad-base64",
+        "oversize",
     ],
 )
-def test_avatar_must_be_an_image_data_uri(avatar, reason):
+def test_register_refuses_an_avatar_that_is_not_a_small_image_data_uri(avatar, reason):
     registry = AccountRegistry({"r1"}.__contains__)
     with pytest.raises(ValueError, match=reason):
         _register(registry, avatar_url=avatar)
     assert registry.list() == []
 
 
-def test_oversize_avatar_is_refused_and_empty_means_none():
+def test_empty_avatar_means_none_and_omitting_it_keeps_the_indexed_one():
     registry = AccountRegistry({"r1"}.__contains__)
-    oversize = b"\x89PNG\r\n\x1a\n" + bytes(MAX_AVATAR_BYTES)
-    with pytest.raises(ValueError, match="KiB"):
-        avatar_data_uri(oversize)
-    too_big = "data:image/png;base64," + base64.b64encode(oversize).decode("ascii")
-    with pytest.raises(ValueError, match="KiB"):
-        _register(registry, avatar_url=too_big)
-    assert _register(registry, avatar_url="").record.avatar_url == ""
     assert _register(registry, avatar_url=_PNG_AVATAR).record.avatar_url == (
         _PNG_AVATAR
     )
-    # Omitting the avatar keeps the indexed one.
     assert _register(registry).record.avatar_url == _PNG_AVATAR
+    assert _register(registry, avatar_url="").record.avatar_url == ""
 
 
 def test_listeners_hear_only_real_published_account_changes():
@@ -272,21 +273,3 @@ def test_listeners_hear_only_real_published_account_changes():
     registry.remove_change_listener(changed.append)
     _register(registry, token="generation-3")
     assert len(changed) == 6
-
-
-def test_a_failing_listener_does_not_break_the_plugin_report(caplog):
-    registry = AccountRegistry({"r1"}.__contains__)
-    changed: list[str] = []
-
-    def broken(_: str) -> None:
-        raise RuntimeError("listener exploded")
-
-    registry.add_change_listener(broken)
-    registry.add_change_listener(changed.append)
-    account = _register(registry)
-
-    snapshot = registry.report(account.record.id, "generation-1", connection="online")
-
-    assert snapshot.connection == "online"
-    assert changed == ["chat:101", "chat:101"]
-    assert "listener exploded" in caplog.text

@@ -25,9 +25,8 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
   const [blockedText, setBlockedText] = useState(account.responseRules.blockedSenderIds.join("\n"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // Group settings show for group-capable accounts, or when they already hold non-default values.
-  const showGroups = account.capabilities.includes("groups") ||
-    !rules.groupEnabled || !rules.requireMention || rules.blockedSenderIds.length > 0;
+  // Group toggles only apply to accounts that serve group chats; the blacklist also covers private chats.
+  const showGroups = account.capabilities.includes("groups");
 
   async function save(next: AccountResponseRules) {
     setRules(next);
@@ -68,10 +67,10 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
       <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
         <input type="checkbox" checked={rules.requireMention} disabled={busy || !rules.groupEnabled} onChange={(event) => toggle("requireMention", event.target.checked)} />群聊需要 @
       </label>
-      <label className="grid gap-2 text-body-sm text-ink-secondary">黑名单成员 ID
-        <textarea className={textareaClass} rows={3} value={blockedText} disabled={busy}
-          onChange={(event) => setBlockedText(event.target.value)} onBlur={commitBlocked} />
-      </label>
     </> : null}
+    <label className="grid gap-2 text-body-sm text-ink-secondary">黑名单成员 ID
+      <textarea className={textareaClass} rows={3} value={blockedText} disabled={busy}
+        onChange={(event) => setBlockedText(event.target.value)} onBlur={commitBlocked} />
+    </label>
   </section>;
 }

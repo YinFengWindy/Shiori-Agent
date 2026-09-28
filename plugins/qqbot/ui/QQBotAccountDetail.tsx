@@ -52,11 +52,7 @@ export function QQBotAccountDetail({ account, roleId, onChanged, client, host }:
         : { kind: "connect", onClick: () => void save(), disabled: !appId.trim() || (!secret.trim() && !detail?.has_secret) }}>
       <host.ui.Reveal show={Boolean(error)} className="pt-3"><host.ui.InlineError message={error} /></host.ui.Reveal>
     </host.ui.AccountStatusCard>
-    <div className="grid gap-1">
-      <p className="m-0 font-medium text-ink">QQ 官方机器人应用</p>
-      {detail?.bot_name ? <p className="m-0 text-ink-muted">{detail.bot_name}</p> : null}
-      {detail?.bot_id ? <p className="m-0 break-all text-ink-muted">Bot ID {detail.bot_id}</p> : null}
-    </div>
+    <p className="m-0 font-medium text-ink">QQ 官方机器人应用</p>
     <label className="grid gap-2 text-ink-secondary">App ID
       <input className={inputClass} value={appId} disabled={busy || Boolean(account)} onChange={(event) => setAppId(event.target.value)} autoComplete="off" />
     </label>
