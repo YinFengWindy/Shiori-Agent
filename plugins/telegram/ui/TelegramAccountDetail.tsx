@@ -56,7 +56,7 @@ export function TelegramAccountDetail({ account, roleId, onChanged, client, host
     </div>
     <div className="flex flex-wrap gap-2">
       <button type="button" className={primaryButtonClass} disabled={busy || (!account && !token.trim())}
-        onClick={() => void save()}>保存并连接</button>
+        onClick={() => void save()}>连接</button>
       {account && connected && <button type="button" className={ghostButtonClass} disabled={busy}
         onClick={() => void disconnect()}>断开连接</button>}
       {account && !connected && <button type="button" className={ghostButtonClass} disabled={busy}

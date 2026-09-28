@@ -28,7 +28,7 @@ it("keeps credential edits local until Save and Connect", async () => {
     await changeInputValue(appId, "100");
     await changeInputValue(secret, "draft-secret");
     assert.deepEqual(calls, []);
-    const save = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "保存并连接");
+    const save = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "连接");
     assert.ok(save);
     await act(async () => save.click());
     assert.deepEqual(calls, [{ method: "account.save", payload: { app_id: "100", client_secret: "draft-secret", role_id: "mira" } }]);
@@ -60,7 +60,7 @@ it("restores disconnect control after reconnecting in the same detail", async ()
     assert.ok(disconnect());
     await act(async () => disconnect()?.click());
     assert.equal(disconnect(), undefined);
-    const reconnect = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "保存并连接");
+    const reconnect = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "连接");
     assert.ok(reconnect);
     await act(async () => reconnect.click());
     assert.ok(disconnect());

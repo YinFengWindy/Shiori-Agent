@@ -27,7 +27,7 @@ related:
 | 插件 | 渠道名 | 结构 |
 | --- | --- | --- |
 | `plugins/telegram/` | `telegram` | `backend/channel/` 拆分 lifecycle、inbound、outbound、media、streaming、commands；`backend/utils/` 负责限流、渲染与 live 编辑；声明 `uses_bot_commands` |
-| `plugins/qq/`（QQ（NapCat）） | `qq` | lifecycle 只装配 NcatBot 与订阅，inbound、outbound、trace、loop bridge、群聊过滤各自独立；ws_uri/ws_token 每次激活显式写入 NcatBot 进程级配置（留空恢复 SDK 原值）；运行目录 `~/.shiori/ncatbot` |
+| `plugins/qq/`（QQ（NapCat）） | `qq` | 每个账号使用插件私有的托管 NapCat 进程和登录目录；仅在验证出 QQ 号后写入 `plugin-data/qq/accounts.json`（归属、响应规则和内部 OneBot endpoint/令牌），扫码中的临时连接关闭时清理，异常退出的残留目录在下次加载时清理 |
 | `plugins/qqbot/` | `qqbot` | `channel.py` 只做组合与启停，Gateway、C2C 入站、HTTP/媒体出站、live stream 分属各 mixin |
 | `plugins/feishu/` | `feishu` | lark-oapi 长连接跑在独立线程和私有事件循环（`ws.py`），回调只去重并交回宿主循环；REST 在 `api.py`，入站解析在 `inbound.py`，CardKit 流式卡片在 `streaming.py` |
 

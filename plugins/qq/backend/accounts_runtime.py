@@ -14,7 +14,7 @@ from infra.channels.intake import ChannelIntake
 from .accounts_actions import QQAccountActions, qq_number
 from .accounts_inbound_adapter import QQInboundAdapter
 from .accounts_outbound_adapter import QQOutboundAdapter
-from .accounts_settings import QQAccountSettings, validate_endpoint
+from .accounts_settings import QQAccountSettings
 from .accounts_store import QQAccountsStore, QQConnectionConfig
 from .managed_napcat import ManagedNapCat
 from .onebot import OneBotAuthError, OneBotError, OneBotSocket
@@ -44,8 +44,10 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._actions = QQAccountActions(self._socket_for, self._ensure_online)
 
     async def load(self) -> None:
-        """Prunes orphaned configs, then registers the saved accounts left."""
+        """Prunes temporary or orphaned data, then registers saved accounts."""
         await self.prune_orphans()
+        for ref in self._managed.account_refs() - self._configs.keys():
+            await self._managed.delete(ref)
         self.register_saved()
 
     def register_saved(self) -> None:
@@ -99,13 +101,17 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._sockets.clear()
         self._intakes.clear()
         await self._managed.stop_all()
+        for ref, config in list(self._configs.items()):
+            if not config.verified:
+                await self._managed.delete(ref)
+                self._configs.pop(ref, None)
         if self._ctx is not None:
             self._ctx.bus.unsubscribe_outbound(self.name, self._on_response)
             self._ctx.push_tool.unregister_channel(self.name)
             self._ctx = None
 
     def _servable(self, ref: str) -> bool:
-        """A registered account, or an owned draft still waiting for its login."""
+        """A registered account or a role-owned temporary login."""
         config = self._configs[ref]
         return ref in self._ids or (not config.verified and bool(config.role_id))
 
@@ -128,30 +134,41 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
             and ref in self._configs
             and self._configs[ref].auto_connect
         ):
+            login_pending = False
             if ref in self._ids:
                 self._accounts.report(self._ids[ref], connection="connecting")
             self._states[ref] = ("connecting", "")
             try:
                 async with self._locks.setdefault(ref, asyncio.Lock()):
-                    if self._configs[ref].mode == "managed":
-                        await self._managed.start(ref, self._configs[ref].expected_uin)
-                        login = await self._managed.login_status(ref)
-                        if login["phase"] != "online":
-                            raise OneBotAuthError(
-                                login.get("error") or "等待 QQ 扫码登录"
-                            )
-                    socket, identity = await self._verified_socket(
-                        ref, self._configs[ref]
+                    await self._managed.start(ref, self._configs[ref].expected_uin)
+                    login = await self._managed.login_status(ref)
+                    socket = None
+                    if login["phase"] == "online":
+                        socket, identity = await self._verified_socket(
+                            ref, self._configs[ref]
+                        )
+                        try:
+                            self._activate(ref, self._configs[ref], socket, identity)
+                        except BaseException:
+                            await socket.close()
+                            raise
+                if socket is None:
+                    login_pending = True
+                    state = (
+                        "login_required"
+                        if login["phase"] == "login_required"
+                        else "connecting"
                     )
-                    try:
-                        self._activate(ref, self._configs[ref], socket, identity)
-                    except BaseException:
-                        await socket.close()
-                        raise
-                await self._monitor_socket(ref, socket)
-                if not self._stopping:
-                    self._states[ref] = ("offline", "")
-                    self._accounts.report(self._ids[ref], connection="offline")
+                    self._states[ref] = (state, "")
+                    if ref in self._ids:
+                        self._accounts.report(
+                            self._ids[ref], connection=state, error=""
+                        )
+                else:
+                    await self._monitor_socket(ref, socket)
+                    if not self._stopping:
+                        self._states[ref] = ("offline", "")
+                        self._accounts.report(self._ids[ref], connection="offline")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -163,14 +180,15 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
                     )
                 logger.warning("[qq] 账号 %s 连接失败: %s", ref, exc)
             if not self._stopping:
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, 30.0)
+                await asyncio.sleep(2.0 if login_pending else delay)
+                if not login_pending:
+                    delay = min(delay * 2, 30.0)
 
     async def _verified_socket(
         self, ref: str, config: QQConnectionConfig
     ) -> tuple[OneBotSocket, dict[str, Any]]:
         socket = OneBotSocket(
-            validate_endpoint(config.ws_uri),
+            config.ws_uri,
             config.ws_token,
             config.timeout_seconds,
             lambda event: self._on_socket_event(ref, socket, event),
@@ -238,89 +256,18 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._start_intake(ref)
         return snapshot.record.id
 
-    async def connect_saved(self, ref: str) -> dict[str, str]:
-        """Verifies a saved draft, then atomically replaces that account's socket."""
+    async def start_login(self, ref: str) -> dict[str, str]:
+        """Starts or resumes one managed instance asynchronously."""
         if ref not in self._configs:
             raise KeyError("QQ 配置引用不存在")
-        if self._configs[ref].mode == "managed":
-            config = self._configs[ref]
-            if not config.auto_connect:
-                config = replace(config, auto_connect=True)
+        config = self._configs[ref]
+        if not config.auto_connect:
+            config = replace(config, auto_connect=True)
+            if config.verified:
                 self._store.save({**self._configs, ref: config})
-                self._configs[ref] = config
-            self._schedule(ref)
-            return {"ref": ref, "account_id": self._ids.get(ref, "")}
-        async with self._locks.setdefault(ref, asyncio.Lock()):
-            config = self._configs[ref]
-            pending = config.pending
-            candidate = (
-                replace(
-                    config,
-                    ws_uri=pending.ws_uri,
-                    ws_token=pending.ws_token,
-                    timeout_seconds=pending.timeout_seconds,
-                    pending=None,
-                )
-                if pending is not None
-                else config
-            )
-            try:
-                socket, identity = await self._verified_socket(ref, candidate)
-            except Exception as exc:
-                if ref not in self._sockets:
-                    state = "login_required" if _is_auth_failure(exc) else "error"
-                    self._states[ref] = (state, str(exc))
-                    if ref in self._ids:
-                        self._accounts.report(
-                            self._ids[ref], connection=state, error=str(exc)
-                        )
-                raise
-            try:
-                previous = self._sockets.get(ref)
-                result_id = self._activate(ref, candidate, socket, identity)
-            except BaseException:
-                await socket.close()
-                raise
-            task = self._tasks.get(ref)
-            if task is not None:
-                task.cancel()
-            self._tasks[ref] = asyncio.create_task(
-                self._watch(ref, socket), name=f"qq-account-{ref}"
-            )
-            if previous is not None:
-                try:
-                    await previous.close()
-                except Exception:
-                    logger.exception("[qq] 旧账号连接关闭失败 ref=%s", ref)
-            return {"account_id": result_id}
-
-    async def _watch(self, ref: str, socket: OneBotSocket) -> None:
-        failure: Exception | None = None
-        try:
-            await self._monitor_socket(ref, socket)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            failure = exc
-        if self._stopping or self._sockets.get(ref) is not socket:
-            return
-        self._sockets.pop(ref, None)
-        state = (
-            "offline"
-            if failure is None
-            else ("login_required" if _is_auth_failure(failure) else "error")
-        )
-        error = str(failure) if failure is not None else ""
-        self._states[ref] = (state, error)
-        self._accounts.report(self._ids[ref], connection=state, error=error)
-        if failure is not None:
-            logger.warning("[qq] 账号 %s 连接中断: %s", ref, failure)
-            try:
-                await socket.close()
-            except Exception:
-                logger.exception("[qq] 账号 %s 故障连接关闭失败", ref)
-        if self._configs[ref].auto_connect:
-            await self._reconnect(ref)
+            self._configs[ref] = config
+        self._schedule(ref)
+        return {"ref": ref, "account_id": self._ids.get(ref, "")}
 
     async def disconnect(self, account_id: str) -> None:
         """Stops one socket and retains its saved QQ identity and credentials."""
@@ -334,15 +281,14 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         socket = self._sockets.pop(ref, None)
         if socket is not None:
             await socket.close()
-        if config.mode == "managed":
-            await self._managed.stop(ref)
+        await self._managed.stop(ref)
         self._states[ref] = ("offline", "")
         self._accounts.report(account_id, connection="offline")
 
-    async def disconnect_draft(self, ref: str) -> None:
-        """Stops an unverified managed instance before it has a host account ID."""
+    async def stop_login(self, ref: str) -> None:
+        """Stops a temporary login while the account detail stays open."""
         config = self._configs[ref]
-        if config.mode != "managed" or config.verified:
+        if config.verified:
             raise ValueError("仅未验证的托管 QQ 配置可按引用停止")
         stopped = replace(config, auto_connect=False)
         self._store.save({**self._configs, ref: stopped})
@@ -354,11 +300,20 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         await self._managed.stop(ref)
         self._states[ref] = ("offline", "")
 
+    async def cancel_login(self, ref: str) -> None:
+        """Discards an unverified login; never removes a verified account."""
+        config = self._configs.get(ref)
+        if config is None or config.verified:
+            return
+        task = self._tasks.pop(ref, None)
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        await self.purge_account(ref)
+
     async def logout(self, account_id: str) -> None:
         """Removes a managed QQ session while retaining identity and ownership."""
         ref = self._ref_for(account_id)
-        if self._configs[ref].mode != "managed":
-            raise ValueError("外部 NapCat 的退出登录须由外部实例执行")
         await self.disconnect(account_id)
         await self._managed.logout(ref)
         self._states[ref] = ("login_required", "")
@@ -366,18 +321,19 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
 
     async def managed_status(self, ref: str) -> dict[str, Any]:
         """Returns installer and authentication progress for QQ account UI."""
-        if ref not in self._configs or self._configs[ref].mode != "managed":
+        if ref not in self._configs:
             raise KeyError("托管 QQ 配置引用不存在")
         return {
             "preparation": self._managed.preparation(),
             "login": await self._managed.login_status(ref),
             "connection": self._states.get(ref, ("offline", ""))[0],
             "error": self._states.get(ref, ("offline", ""))[1],
+            "account_id": self._ids.get(ref, ""),
         }
 
     async def refresh_qrcode(self, ref: str) -> dict[str, Any]:
         """Refreshes the official NapCat login QR for this account."""
-        if ref not in self._configs or self._configs[ref].mode != "managed":
+        if ref not in self._configs:
             raise KeyError("托管 QQ 配置引用不存在")
         return await self._managed.refresh_qrcode(ref)
 

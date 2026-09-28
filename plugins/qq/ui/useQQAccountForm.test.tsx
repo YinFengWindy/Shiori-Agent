@@ -1,35 +1,66 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import React from "react";
+import React, { act } from "react";
 import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { changeInputValue, mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
+import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
 import { useQQAccountForm } from "./useQQAccountForm";
 
-test("QQ form dirty state follows the saved baseline and clears on revert", async () => {
+test("a temporary QQ login begins only when the user connects", async () => {
+  const calls: Array<{ method: string; payload?: Record<string, unknown> }> = [];
   const client = {
     ...createPluginRpcClient("qq"),
-    async call<T>(method: string): Promise<T> {
-      if (method === "accounts.settings") return { account: {
-        ref: "saved", ws_uri: "ws://localhost:3001", timeout_seconds: 5,
-        has_token: true,
-      } } as T;
+    async call<T>(method: string, payload?: Record<string, unknown>): Promise<T> {
+      calls.push({ method, payload });
+      if (method === "accounts.settings") return { managed_available: true } as T;
+      if (method === "accounts.begin") return { ref: "temporary-1" } as T;
+      if (method === "accounts.start") return { ref: "temporary-1", account_id: "" } as T;
       throw new Error(method);
     },
   };
   function Probe() {
-    const form = useQQAccountForm({ accountId: "account-1", draftRef: "", roleId: "mira", client, onChanged: () => undefined });
-    return <><input value={form.fields.uri} onChange={(event) => form.setField("uri", event.target.value)} />
-      <output>{form.dirty ? "dirty" : "saved"}</output></>;
+    const form = useQQAccountForm({ roleId: "mira", client, onChanged: () => undefined,
+      onCleanupError: (failure) => { throw failure; },
+    });
+    return <><output>{form.ref || "new"}</output><button type="button" onClick={() => void form.start()}>启动</button></>;
   }
   const view = await mountTestComponent(<Probe />);
   try {
-    const input = view.container.querySelector("input");
-    assert.ok(input);
-    assert.equal(input.value, "ws://localhost:3001");
-    assert.equal(view.container.querySelector("output")?.textContent, "saved");
-    await changeInputValue(input, "ws://localhost:3002");
-    assert.equal(view.container.querySelector("output")?.textContent, "dirty");
-    await changeInputValue(input, "ws://localhost:3001");
-    assert.equal(view.container.querySelector("output")?.textContent, "saved");
+    assert.deepEqual(calls.map((call) => call.method), ["accounts.settings"]);
+    await act(async () => view.container.querySelector("button")?.click());
+    assert.deepEqual(calls.map((call) => call.method), ["accounts.settings", "accounts.begin", "accounts.start"]);
+    assert.deepEqual(calls[1].payload, { role_id: "mira" });
+    assert.equal(calls[2].payload?.ref, "temporary-1");
+    assert.equal(view.container.querySelector("output")?.textContent, "temporary-1");
   } finally { await view.cleanup(); }
+});
+
+test("closing before begin returns cancels the late temporary login", async () => {
+  const calls: Array<{ method: string; payload?: Record<string, unknown> }> = [];
+  let finishBegin!: (result: { ref: string }) => void;
+  const client = {
+    ...createPluginRpcClient("qq"),
+    async call<T>(method: string, payload?: Record<string, unknown>): Promise<T> {
+      calls.push({ method, payload });
+      if (method === "accounts.settings") return { managed_available: true } as T;
+      if (method === "accounts.begin") return new Promise<T>((resolve) => {
+        finishBegin = (result) => resolve(result as T);
+      });
+      if (method === "accounts.cancel") return {} as T;
+      throw new Error(method);
+    },
+  };
+  function Probe() {
+    const form = useQQAccountForm({ roleId: "mira", client, onChanged: () => undefined,
+      onCleanupError: (failure) => { throw failure; },
+    });
+    return <button type="button" onClick={() => void form.start()}>连接</button>;
+  }
+  const view = await mountTestComponent(<Probe />);
+  await act(async () => view.container.querySelector("button")?.click());
+  await view.cleanup();
+  await act(async () => finishBegin({ ref: "temporary-2" }));
+  assert.deepEqual(calls.filter((call) => call.method !== "accounts.settings"), [
+    { method: "accounts.begin", payload: { role_id: "mira" } },
+    { method: "accounts.cancel", payload: { ref: "temporary-2", role_id: "mira" } },
+  ]);
 });

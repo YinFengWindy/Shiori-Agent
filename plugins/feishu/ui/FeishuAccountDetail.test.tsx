@@ -41,12 +41,12 @@ it("saves a new app for the adding role through the plugin and shows a refusal",
     assert.ok(id && secret);
     await changeInputValue(id, "cli_new");
     await changeInputValue(secret, "draft-secret");
-    await act(async () => button("保存并连接")?.click());
+    await act(async () => button("连接")?.click());
     assert.match(document.body.textContent ?? "", /bad credential/);
     assert.equal(created, "");
 
     refuse = false;
-    await act(async () => button("保存并连接")?.click());
+    await act(async () => button("连接")?.click());
     const saves = requests.filter((item) => item.method === "plugin.feishu.accounts.save");
     assert.deepEqual(body(saves.at(-1)), { role_id: "mira", domain: "feishu", app_id: "cli_new", app_secret: "draft-secret" });
     assert.equal(created, "feishu:feishu:cli_new");

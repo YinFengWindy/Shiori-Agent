@@ -2,7 +2,7 @@ api: 2
 id: qq
 display_name: QQ（NapCat）
 version: '0.1.0'
-desc: 通过 NapCat（NcatBot 远程模式）接入的 QQ 渠道
+desc: 通过插件托管的 NapCat 接入的 QQ 渠道
 capabilities:
   - channels
   - accounts

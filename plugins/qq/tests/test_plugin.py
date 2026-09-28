@@ -16,7 +16,7 @@ from core.roles.store import RoleStore
 from plugins.qq.backend.channel.formatting import GROUP_PREFIX
 from plugins.qq.backend.accounts_store import QQAccountsStore, QQConnectionConfig
 from plugins.qq.backend.napcat_account_files import NapCatAccountFiles
-from plugins.qq.backend.plugin import _send_account
+from plugins.qq.backend.plugin import _cancel, _send_account
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
@@ -90,6 +90,25 @@ async def test_shared_account_send_adapts_target_and_rejects_topic() -> None:
     runtime.send_target.assert_awaited_once_with("account-1", "group", "42", "hello")
     with pytest.raises(ValueError, match="话题"):
         await _send_account(runtime, {**payload, "message_thread_id": 7})
+
+
+@pytest.mark.asyncio
+async def test_temporary_login_cancel_is_scoped_to_its_owner() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    runtime = SimpleNamespace(
+        _configs={
+            "aa": QQConnectionConfig("aa", "ws://127.0.0.1:1", "secret", role_id="mira")
+        },
+        cancel_login=AsyncMock(),
+    )
+    with pytest.raises(ValueError, match="另一个角色"):
+        await _cancel(runtime, {"ref": "aa", "role_id": "other"})
+    runtime.cancel_login.assert_not_awaited()
+
+    assert await _cancel(runtime, {"ref": "aa", "role_id": "mira"}) == {"ok": True}
+    runtime.cancel_login.assert_awaited_once_with("aa")
 
 
 @pytest.mark.asyncio
@@ -211,19 +230,21 @@ async def test_rules_edited_on_the_host_survive_a_plugin_restart(
 
 
 @pytest.mark.asyncio
-async def test_load_deletes_accounts_and_drafts_whose_role_is_gone(tmp_path) -> None:
+async def test_load_deletes_orphaned_accounts_and_temporary_napcat_files(
+    tmp_path,
+) -> None:
     RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
     store = QQAccountsStore(tmp_path)
     store.save(
         {
             "aa": _verified("aa", "101", "gone"),
-            "bb": QQConnectionConfig("bb", "ws://127.0.0.1:2", "", role_id="gone"),
             "cc": _verified("cc", "303", "mira"),
             # Without an owner the data is kept for the user to fix.
             "dd": _verified("dd", "404", ""),
         }
     )
     napcat = NapCatAccountFiles(store.path.parent / "managed-napcat")
+    # bb has no saved account: it is a temporary login left after a crash.
     for ref in ("aa", "bb"):
         napcat.account_dir(ref).mkdir(parents=True)
 

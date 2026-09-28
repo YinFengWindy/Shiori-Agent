@@ -29,6 +29,10 @@ class ManagedNapCat(NapCatInstaller):
         """Returns a stable private OneBot endpoint for a managed account."""
         return self._files.endpoint(ref)
 
+    def account_refs(self) -> set[str]:
+        """Lists private instance directories for startup orphan cleanup."""
+        return self._files.refs()
+
     async def start(self, ref: str, expected_uin: str) -> None:
         """Starts one owned process with private profile and NapCat directories."""
         process = self._processes.get(ref)

@@ -1,18 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 
-type ManagedStatus = {
+/** One managed instance's preparation, QR login, and connection state. */
+export type ManagedStatus = {
   preparation: { stage: "idle" | "downloading" | "extracting" | "verifying" | "ready" | "error"; percent: number; version: string; error?: string };
   login: { phase: string; qrcode: string; error: string; login_phase?: string };
   connection: string;
   error: string;
+  account_id?: string;
 };
 
 /** Polls only the selected QQ managed instance while its account detail is open. */
-export function useManagedNapCat(client: PluginRpcClient, ref: string, enabled: boolean) {
+export function useManagedNapCat(client: PluginRpcClient, ref: string, enabled: boolean, onVerified?: (accountId: string) => void) {
   const [status, setStatus] = useState<ManagedStatus | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const reportedAccount = useRef("");
   const reload = useCallback(async () => {
     if (!enabled || !ref) return;
     try {
@@ -30,6 +33,14 @@ export function useManagedNapCat(client: PluginRpcClient, ref: string, enabled: 
     const timer = window.setInterval(() => void reload(), 3000);
     return () => window.clearInterval(timer);
   }, [enabled, ref, reload]);
+
+  useEffect(() => {
+    const accountId = status?.account_id;
+    if (accountId && accountId !== reportedAccount.current) {
+      reportedAccount.current = accountId;
+      onVerified?.(accountId);
+    }
+  }, [status?.account_id, onVerified]);
 
   const refreshQr = async () => {
     setBusy(true);
@@ -55,5 +66,5 @@ export function useManagedNapCat(client: PluginRpcClient, ref: string, enabled: 
       setBusy(false);
     }
   };
-  return { status, error, busy, refreshQr, logout };
+  return { status, error, busy, reload, refreshQr, logout };
 }

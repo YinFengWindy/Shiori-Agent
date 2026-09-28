@@ -80,7 +80,7 @@ export function QQBotAccountDetail({ account, roleId, onChanged, client, host }:
     </label>
     {error ? <host.ui.InlineError message={error} /> : null}
     <div className="flex flex-wrap gap-2">
-      <button type="button" className={primaryButtonClass} disabled={busy || !appId.trim() || (!secret.trim() && !detail?.has_secret)} onClick={() => void save()}>{busy ? "连接中" : "保存并连接"}</button>
+      <button type="button" className={primaryButtonClass} disabled={busy || !appId.trim() || (!secret.trim() && !detail?.has_secret)} onClick={() => void save()}>{busy ? "连接中" : "连接"}</button>
       {account && detail?.connected ? <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => void disconnect()}>断开连接</button> : null}
     </div>
     {account ? <section className="grid gap-2 border-t border-line-soft pt-4" aria-label="已交互 C2C 用户">

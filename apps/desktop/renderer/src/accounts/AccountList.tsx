@@ -5,6 +5,15 @@ import type { AccountDetailEntry } from "../plugins/pluginUiRegistry";
 import type { AccountSnapshot } from "./accountClient";
 import { accountName, accountStatus } from "./accountPresentation";
 
+const connectionTones = {
+  online: "bg-success-soft text-success-text",
+  connecting: "bg-warning-soft text-warning-text",
+  login_required: "bg-accent-soft text-accent-text",
+  error: "bg-danger-soft text-danger-text",
+  offline: "bg-surface-soft text-ink-muted",
+  unknown: "bg-surface-soft text-ink-muted",
+} as const;
+
 /** One row per enabled channel, whether this role has an account there yet or not. */
 export function AccountList({ platforms, accounts, error, onRefresh, onOpen, onDelete }: {
   platforms: AccountDetailEntry[];
@@ -26,8 +35,13 @@ export function AccountList({ platforms, accounts, error, onRefresh, onOpen, onD
             {Icon ? <Icon className="h-5 w-5" /> : <PuzzlePieceIcon className="h-5 w-5" />}
           </span>
           <span className="grid min-w-0 flex-1 gap-0.5">
-            <span className="text-body font-medium text-ink">{label}</span>
-            <span className="truncate text-body-sm text-ink-muted">{account ? `${accountName(account)} · ${account.platformAccountId} · ${accountStatus(account)}` : accounts ? "未添加" : error ? "读取失败" : "读取中"}</span>
+            <span className="flex flex-wrap items-center gap-2 text-body font-medium text-ink">{label}
+              {account ? <span className={cx("inline-flex items-center rounded-full px-2 py-0.5 text-caption font-medium", connectionTones[account.runtimeActive ? account.connection : "offline"])}>{accountStatus(account)}</span> : null}
+            </span>
+            {account ? <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-body-sm">
+              <span className="truncate text-ink-secondary">{accountName(account)}</span>
+              {account.displayName && account.displayName !== account.platformAccountId ? <span className="truncate text-ink-muted">{account.platformAccountId}</span> : null}
+            </span> : <span className="text-body-sm text-ink-muted">{accounts ? "未添加" : error ? "读取失败" : "读取中"}</span>}
           </span>
           <button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)}
             disabled={!accounts || Boolean(error)} onClick={() => onOpen(pluginId, account?.id ?? null)}>

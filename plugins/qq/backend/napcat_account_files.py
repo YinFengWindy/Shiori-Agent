@@ -30,6 +30,18 @@ class NapCatAccountFiles:
             raise ValueError("托管账号引用无效")
         return self.root / ref
 
+    def refs(self) -> set[str]:
+        """Returns opaque account directories left by managed instances."""
+        if not self.root.exists():
+            return set()
+        return {
+            path.name
+            for path in self.root.iterdir()
+            if path.is_dir()
+            and path.name
+            and all(char in "0123456789abcdef" for char in path.name)
+        }
+
     def _reserved_ports(self) -> set[int]:
         reserved: set[int] = set()
         if not self.root.exists():

@@ -43,7 +43,9 @@ test("owned account detail opens the platform controls for this role, without ow
   );
   try {
     // Platform, nickname, platform account and live status are listed.
-    assert.match(view.container.textContent ?? "", /Owned · 101 · 在线/);
+    assert.match(view.container.textContent ?? "", /Owned/);
+    assert.match(view.container.textContent ?? "", /101/);
+    assert.equal(view.container.querySelector(".bg-success-soft")?.textContent, "在线");
     assert.ok(view.container.querySelector('[data-testid="test-provider-icon"]'));
     assert.match(view.container.textContent ?? "", /101/);
     assert.match(view.container.textContent ?? "", /在线/);
@@ -53,6 +55,9 @@ test("owned account detail opens the platform controls for this role, without ow
     await act(async () => action.click());
     const dialog = document.querySelector('[role="dialog"]')?.textContent ?? "";
     assert.match(dialog, /平台操作 account-1 role-1/);
+    assert.equal(Array.from(document.querySelectorAll('[role="dialog"] button'))
+      .some((button) => button.textContent === "关闭"), false);
+    assert.ok(document.querySelector('[role="dialog"] [aria-label="关闭账号详情"]'));
     assert.doesNotMatch(dialog, /所属角色|旧渠道归属待确认/);
     assert.doesNotMatch(view.container.textContent ?? "", /认领/);
   } finally {
@@ -82,7 +87,7 @@ test("enabled channels stay visible as rows with add or view actions; disabled c
   try {
     const buttons = Array.from(view.container.querySelectorAll<HTMLButtonElement>("button"));
     assert.equal(buttons.some((button) => button.textContent === "添加账号"), false);
-    assert.match(view.container.textContent ?? "", /Test[\s\S]*Owned · 101 · 在线[\s\S]*Other[\s\S]*未添加/);
+    assert.match(view.container.textContent ?? "", /Test[\s\S]*在线[\s\S]*Owned[\s\S]*101[\s\S]*Other[\s\S]*未添加/);
     assert.doesNotMatch(view.container.textContent ?? "", /Off/);
     assert.ok(view.container.querySelector('[data-testid="other-provider-icon"]'));
     const add = buttons.find((button) => button.textContent?.includes("添加"));

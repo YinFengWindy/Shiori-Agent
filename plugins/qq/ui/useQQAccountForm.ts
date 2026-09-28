@@ -1,106 +1,83 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 
-type ConnectionSettings = {
-  ref: string;
-  mode: "external" | "managed";
-  ws_uri: string;
-  timeout_seconds: number;
-  has_token: boolean;
-};
-
-type Fields = { mode: "external" | "managed"; uri: string; token: string; timeout: string; clearToken: boolean };
-const emptyFields: Fields = { mode: "external", uri: "", token: "", timeout: "5", clearToken: false };
+type ConnectionSettings = { ref: string };
 
 type FormOptions = {
   accountId?: string;
-  draftRef: string;
-  /** Role a new draft is started for; its verified account belongs to this role. */
+  /** Role that owns the managed instance and its eventual verified account. */
   roleId: string;
   client: PluginRpcClient;
   onChanged: (accountId?: string) => void;
+  onCleanupError: (failure: unknown) => void;
 };
 
-/** Owns QQ connection form loading, a saved baseline, and explicit commands. */
-export function useQQAccountForm({ accountId, draftRef, roleId, client, onChanged }: FormOptions) {
-  const [fields, setFields] = useState<Fields>(emptyFields);
-  const [saved, setSaved] = useState({ ref: "", mode: "external" as Fields["mode"], uri: "", timeout: "5", hasToken: false });
+/** Loads one managed instance and exposes explicit start/stop commands. */
+export function useQQAccountForm({ accountId, roleId, client, onChanged, onCleanupError }: FormOptions) {
+  const active = useRef(false);
+  const [savedRef, setSavedRef] = useState("");
   const [managedAvailable, setManagedAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+
+  useEffect(() => {
     let current = true;
     setError("");
-    if (!accountId && !draftRef) {
-      setFields(emptyFields);
-      setSaved({ ref: "", mode: "external", uri: "", timeout: "5", hasToken: false });
-      void client.call<{ managed_available: boolean }>("accounts.settings")
-        .then((result) => { if (current) setManagedAvailable(result.managed_available); })
-        .catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); });
-      setLoading(false);
-      return;
-    }
+    setSavedRef("");
     setLoading(true);
-    void client.call<{ account: ConnectionSettings; managed_available: boolean }>("accounts.settings", accountId ? { account_id: accountId } : { ref: draftRef })
-      .then(({ account: settings, managed_available: available }) => {
+    const payload = accountId ? { account_id: accountId } : undefined;
+    void client.call<{ account?: ConnectionSettings; managed_available: boolean }>("accounts.settings", payload)
+      .then(({ account, managed_available }) => {
         if (!current) return;
-        setManagedAvailable(available);
-        const timeout = String(settings.timeout_seconds);
-        const mode = settings.mode ?? "external";
-        setFields({ mode, uri: settings.ws_uri, token: "", timeout, clearToken: false });
-        setSaved({ ref: settings.ref, mode, uri: settings.ws_uri, timeout, hasToken: settings.has_token });
+        setManagedAvailable(managed_available);
+        setSavedRef(account?.ref ?? "");
       })
       .catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [accountId, draftRef, client]);
+  }, [accountId, client]);
 
-  const dirty = fields.mode !== saved.mode || (fields.mode === "external" && (fields.uri !== saved.uri || fields.timeout !== saved.timeout
-    || Boolean(fields.token) || fields.clearToken));
-  const ref = saved.ref || draftRef;
-  const setField = <K extends keyof Fields>(key: K, value: Fields[K]) =>
-    setFields((current) => ({ ...current, [key]: value }));
+  const ref = savedRef;
 
   async function run(operation: () => Promise<void>) {
+    if (busy) return;
     setBusy(true);
     setError("");
     try { await operation(); }
-    catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
-    finally { setBusy(false); }
+    catch (failure) { if (active.current) setError(failure instanceof Error ? failure.message : String(failure)); }
+    finally { if (active.current) setBusy(false); }
   }
 
-  async function persistDraft() {
-    const uri = fields.uri.trim();
-    const result = await client.call<{ ref: string }>("accounts.save", {
-      account_id: accountId ?? "", ref, role_id: roleId, mode: fields.mode, ws_uri: uri, ws_token: fields.token,
-      clear_token: fields.clearToken, timeout_seconds: Number(fields.timeout),
-    });
-    const hasToken = !fields.clearToken && (saved.hasToken || Boolean(fields.token));
-    setFields({ mode: fields.mode, uri, token: "", timeout: fields.timeout, clearToken: false });
-    setSaved({ ref: result.ref, mode: fields.mode, uri, timeout: fields.timeout, hasToken });
-    return result.ref;
-  }
-  const save = () => run(async () => { await persistDraft(); });
-  const startManaged = () => run(async () => {
-    const managedRef = dirty || !ref ? await persistDraft() : ref;
-    const result = await client.call<{ account_id: string }>("accounts.connect", { ref: managedRef, role_id: roleId });
-    if (result.account_id) onChanged(result.account_id);
-  });
-  const connect = () => run(async () => {
-    const result = await client.call<{ account_id: string }>("accounts.connect", { ref, role_id: roleId });
+  const start = () => run(async () => {
+    const managedRef = ref || (await client.call<{ ref: string }>("accounts.begin", {
+      role_id: roleId,
+    })).ref;
+    if (!active.current) {
+      try { await client.call("accounts.cancel", { ref: managedRef, role_id: roleId }); }
+      catch (failure) { onCleanupError(failure); }
+      return;
+    }
+    setSavedRef(managedRef);
+    const result = await client.call<{ account_id: string }>("accounts.start", { ref: managedRef, role_id: roleId });
+    if (!active.current) {
+      try { await client.call("accounts.cancel", { ref: managedRef, role_id: roleId }); }
+      catch (failure) { onCleanupError(failure); }
+      return;
+    }
     if (result.account_id) onChanged(result.account_id);
   });
   const disconnect = () => run(async () => {
     if (accountId) await client.call("accounts.disconnect", { account_id: accountId });
-    else if (fields.mode === "managed" && ref) await client.call("accounts.disconnect_draft", { ref });
+    else if (ref) await client.call("accounts.stop", { ref, role_id: roleId });
     else return;
     onChanged();
   });
 
-  return {
-    fields, setField, hasToken: saved.hasToken, ref, dirty, busy, loading, error, managedAvailable, client,
-    save, connect, startManaged, disconnect,
-  };
+  return { ref, busy, loading, error, managedAvailable, client, start, disconnect, onVerified: onChanged };
 }

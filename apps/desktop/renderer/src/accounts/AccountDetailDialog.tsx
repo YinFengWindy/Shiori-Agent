@@ -3,7 +3,7 @@ import { XIcon } from "@phosphor-icons/react";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
 import { InlineError } from "../shared/feedback/InlineError";
-import { ghostButtonClass, iconButtonClass } from "../shared/styles";
+import { iconButtonClass } from "../shared/styles";
 import { accountStatus } from "./accountPresentation";
 import type { AccountSnapshot } from "./accountClient";
 import { AccountResponseRulesEditor } from "./AccountResponseRulesEditor";
@@ -41,7 +41,6 @@ export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChan
             <PlatformControls account={account} roleId={roleId} onChanged={onChanged} />
           </section> : null}
         </div>
-        <div className="flex justify-end border-t border-line-soft pt-4"><button type="button" className={ghostButtonClass} onClick={onClose}>关闭</button></div>
       </Dialog.Popup>
     </Dialog.Portal>
   </Dialog.Root>;

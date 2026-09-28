@@ -1,4 +1,4 @@
-"""QQ account plugin: private external NapCat connections and account actions."""
+"""QQ account plugin: private managed NapCat instances and account actions."""
 
 from __future__ import annotations
 
@@ -40,15 +40,16 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         lambda payload: _settings(runtime, payload),
         concurrency=Concurrency.READ_ONLY,
     )
-    ctx.rpc.register("accounts.save", runtime.save_draft)
-    ctx.rpc.register("accounts.connect", lambda payload: _connect(runtime, payload))
+    ctx.rpc.register("accounts.begin", runtime.begin_login)
+    ctx.rpc.register("accounts.start", lambda payload: _start(runtime, payload))
     ctx.rpc.register(
         "accounts.disconnect", lambda payload: _disconnect(runtime, payload)
     )
     ctx.rpc.register(
-        "accounts.disconnect_draft",
-        lambda payload: _disconnect_draft(runtime, payload),
+        "accounts.stop",
+        lambda payload: _stop(runtime, payload),
     )
+    ctx.rpc.register("accounts.cancel", lambda payload: _cancel(runtime, payload))
     ctx.rpc.register("accounts.logout", lambda payload: _logout(runtime, payload))
     ctx.rpc.register(
         "accounts.managed_status",
@@ -58,9 +59,6 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     ctx.rpc.register(
         "accounts.refresh_qrcode",
         lambda payload: runtime.refresh_qrcode(str(payload["ref"])),
-    )
-    ctx.rpc.register(
-        "accounts.remove_draft", lambda payload: _remove_draft(runtime, payload)
     )
     ctx.rpc.register(
         "accounts.discover",
@@ -80,20 +78,19 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
 async def _settings(runtime, payload: dict) -> dict:
     return runtime.settings(
-        str(payload["account_id"]) if payload.get("account_id") else None,
-        str(payload["ref"]) if payload.get("ref") else None,
+        str(payload["account_id"]) if payload.get("account_id") else None
     )
 
 
-async def _connect(runtime, payload: dict) -> dict:
-    """Connects a saved draft only for the role that owns it."""
+async def _start(runtime, payload: dict) -> dict:
+    """Starts a managed login only for the role that owns it."""
     from .accounts_settings import ensure_config_owner
 
     ref = str(payload["ref"])
     if ref not in runtime._configs:
         raise KeyError("QQ 配置引用不存在")
     ensure_config_owner(runtime._configs[ref], str(payload.get("role_id") or ""))
-    return await runtime.connect_saved(ref)
+    return await runtime.start_login(ref)
 
 
 async def _disconnect(runtime, payload: dict) -> dict:
@@ -101,18 +98,28 @@ async def _disconnect(runtime, payload: dict) -> dict:
     return {"ok": True}
 
 
-async def _disconnect_draft(runtime, payload: dict) -> dict:
-    await runtime.disconnect_draft(str(payload["ref"]))
+async def _stop(runtime, payload: dict) -> dict:
+    from .accounts_settings import ensure_config_owner
+
+    ref = str(payload["ref"])
+    ensure_config_owner(runtime._configs[ref], str(payload.get("role_id") or ""))
+    await runtime.stop_login(ref)
+    return {"ok": True}
+
+
+async def _cancel(runtime, payload: dict) -> dict:
+    from .accounts_settings import ensure_config_owner
+
+    ref = str(payload["ref"])
+    config = runtime._configs.get(ref)
+    if config is not None:
+        ensure_config_owner(config, str(payload.get("role_id") or ""))
+    await runtime.cancel_login(ref)
     return {"ok": True}
 
 
 async def _logout(runtime, payload: dict) -> dict:
     await runtime.logout(str(payload["account_id"]))
-    return {"ok": True}
-
-
-async def _remove_draft(runtime, payload: dict) -> dict:
-    await runtime.remove_draft(str(payload["ref"]))
     return {"ok": True}
 
 

@@ -41,11 +41,11 @@ test("a new Bot is saved for the role through the plugin, and a failure stays in
     const input = view.container.querySelector<HTMLInputElement>('input[type="password"]');
     assert.ok(input);
     await changeInputValue(input, "456:new");
-    await act(async () => button(view.container, "保存并连接")?.click());
+    await act(async () => button(view.container, "连接")?.click());
     assert.match(view.container.textContent ?? "", /验证失败/);
     assert.equal(changedId, "");
     failing = false;
-    await act(async () => button(view.container, "保存并连接")?.click());
+    await act(async () => button(view.container, "连接")?.click());
     assert.deepEqual(calls.at(-1), { name: "bot.save", payload: { role_id: "mira", token: "456:new" } });
     assert.equal(changedId, "telegram:456");
   } finally {

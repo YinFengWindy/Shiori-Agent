@@ -1,4 +1,4 @@
-"""Private, per-account external NapCat connection settings."""
+"""Plugin-private managed NapCat account records."""
 
 from __future__ import annotations
 
@@ -16,22 +16,10 @@ from core.accounts import (
 )
 from infra.persistence.json_store import atomic_save_json
 
-# Transport values persisted in each QQ account's private settings.
-QQConnectionMode = Literal["external", "managed"]
-
-
-@dataclass(frozen=True)
-class QQPendingConnection:
-    """Saved replacement credentials that have not passed QQ identity checks."""
-
-    ws_uri: str
-    ws_token: str
-    timeout_seconds: float
-
 
 @dataclass(frozen=True)
 class QQConnectionConfig:
-    """A stable private reference and the QQ identity verified on first login."""
+    """A managed instance and the QQ identity verified on first login."""
 
     ref: str
     ws_uri: str
@@ -41,26 +29,20 @@ class QQConnectionConfig:
     timeout_seconds: float = 5.0
     auto_connect: bool = True
     verified: bool = False
-    pending: QQPendingConnection | None = None
-    mode: QQConnectionMode = "external"
-    # Role the draft was started from; the verified account belongs to it.
+    mode: Literal["managed"] = "managed"
+    # Owner of the temporary login and eventual verified account.
     role_id: str | None = None
     # Response rules edited on the host; None until first saved (defaults).
     response_rules: AccountResponseRules | None = None
 
     def public_dict(self) -> dict[str, str | float | bool | None]:
-        """Projects editable settings without exposing the access token."""
-        editable = self.pending or self
+        """Projects account identity and state without internal socket secrets."""
         return {
             "ref": self.ref,
-            "ws_uri": editable.ws_uri,
             "expected_uin": self.expected_uin,
             "display_name": self.display_name,
-            "timeout_seconds": editable.timeout_seconds,
-            "has_token": bool(editable.ws_token),
             "auto_connect": self.auto_connect,
             "verified": self.verified,
-            "pending": self.pending is not None,
             "mode": self.mode,
             "role_id": self.role_id,
         }
@@ -77,28 +59,22 @@ class QQAccountsStore:
         if not self.path.exists():
             return {}
         document = json.loads(self.path.read_text(encoding="utf-8"))
-        if document.get("version") != 1 or not isinstance(
-            document.get("accounts"), list
+        if (
+            not isinstance(document, dict)
+            or document.get("version") != 1
+            or not isinstance(document.get("accounts"), list)
         ):
             raise ValueError("QQ 账号配置格式无效")
         accounts = []
         for row in document["accounts"]:
             if not isinstance(row, dict):
                 raise ValueError("QQ 账号配置条目无效")
-            if row.get("mode", "external") not in {"external", "managed"}:
-                raise ValueError("QQ 连接模式无效")
-            pending = row.get("pending")
-            if pending is not None and not isinstance(pending, dict):
-                raise ValueError("QQ 待连接配置无效")
+            if row.get("mode") != "managed":
+                raise ValueError("QQ 账号配置格式无效")
             accounts.append(
                 QQConnectionConfig(
                     **{
                         **row,
-                        "pending": (
-                            QQPendingConnection(**pending)
-                            if isinstance(pending, dict)
-                            else None
-                        ),
                         "response_rules": stored_response_rules(
                             row.get("response_rules")
                         ),
@@ -110,11 +86,16 @@ class QQAccountsStore:
         return {row.ref: row for row in accounts}
 
     def save(self, accounts: dict[str, QQConnectionConfig]) -> None:
-        """Atomically replaces plugin-private connection settings."""
+        """Persists only identities verified by QQ; temporary logins stay in memory."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         atomic_save_json(
             self.path,
-            {"version": 1, "accounts": [_row(config) for config in accounts.values()]},
+            {
+                "version": 1,
+                "accounts": [
+                    _row(config) for config in accounts.values() if config.verified
+                ],
+            },
         )
 
     @staticmethod
