@@ -1,4 +1,3 @@
-import type { AccountDetailEntry } from "../plugins/pluginUiRegistry";
 import type { AccountSnapshot } from "./accountClient";
 
 type AccountIdentity = Pick<AccountSnapshot, "platform" | "displayName" | "platformAccountId">;
@@ -19,10 +18,11 @@ export function accountHeadline(account: AccountIdentity) {
  */
 export function roleDeletionDescription(
   roleName: string,
-  deleted: { accounts: ReadonlyArray<AccountIdentity>; error: string },
+  deleted: { accounts: ReadonlyArray<AccountIdentity>; error: string; status: "loading" | "ready" | "error" },
 ) {
   const base = `“${roleName}” 删除后会移除角色会话与相关素材。`;
-  if (deleted.error) return `${base}账号列表读取失败：${deleted.error}`;
+  if (deleted.status === "loading") return `${base}正在读取关联账号...`;
+  if (deleted.status === "error") return `${base}账号列表读取失败，暂不能确认删除范围。`;
   if (!deleted.accounts.length) return base;
   return `${base}以下账号会一并删除：${deleted.accounts.map(accountHeadline).join("、")}。`;
 }
@@ -42,19 +42,4 @@ export function accountStatus(account: AccountSnapshot) {
     case "error": return "故障";
     default: return "离线";
   }
-}
-
-/** One platform offered when adding an account to a role. */
-export type AccountPlatformChoice = { pluginId: string; label: string; bound: boolean };
-
-/**
- * Platforms a role can add an account on. A role holds one account per plugin
- * (Feishu and Lark are one plugin), so a plugin it already has is `bound`.
- */
-export function accountPlatformChoices(
-  platforms: ReadonlyArray<Pick<AccountDetailEntry, "pluginId" | "label">>,
-  owned: ReadonlyArray<Pick<AccountSnapshot, "pluginId">>,
-): AccountPlatformChoice[] {
-  const bound = new Set(owned.map((account) => account.pluginId));
-  return platforms.map(({ pluginId, label }) => ({ pluginId, label, bound: bound.has(pluginId) }));
 }

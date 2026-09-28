@@ -42,7 +42,7 @@ test("QQ detail saves a draft before explicitly connecting it", async () => {
   } finally { await view.cleanup(); }
 });
 
-test("QQ managed mode saves without an external endpoint and starts independently", async () => {
+test("QQ managed mode starts from one explicit command and then shows its QR code", async () => {
   const calls: Array<{ method: string; payload: Record<string, unknown> | undefined }> = [];
   const qrImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZcV8AAAAASUVORK5CYII=";
   const client = {
@@ -66,11 +66,14 @@ test("QQ managed mode saves without an external endpoint and starts independentl
     const button = (label: string) => Array.from(view.container.querySelectorAll("button"))
       .find((item) => item.textContent?.trim() === label);
     await act(async () => { button("托管 NapCat")?.click(); });
-    await act(async () => { button("保存")?.click(); });
+    assert.equal(calls.some((row) => row.method === "accounts.save" || row.method === "accounts.connect"), false);
+    assert.equal(view.container.querySelector('img[alt="QQ 登录二维码"]'), null);
+    await act(async () => { button("启动并显示二维码")?.click(); });
     assert.equal(calls.find((row) => row.method === "accounts.save")?.payload?.mode, "managed");
     assert.equal(calls.find((row) => row.method === "accounts.save")?.payload?.ws_uri, "");
+    assert.deepEqual(calls.filter((row) => row.method === "accounts.save" || row.method === "accounts.connect").map((row) => row.method),
+      ["accounts.save", "accounts.connect"]);
+    assert.equal(calls.find((row) => row.method === "accounts.connect")?.payload?.ref, "a".repeat(32));
     assert.equal(view.container.querySelector<HTMLImageElement>('img[alt="QQ 登录二维码"]')?.getAttribute("src"), qrImage);
-    await act(async () => { button("连接")?.click(); });
-    assert.ok(calls.some((row) => row.method === "accounts.connect"));
   } finally { await view.cleanup(); }
 });

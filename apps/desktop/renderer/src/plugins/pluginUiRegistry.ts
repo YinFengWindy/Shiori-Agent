@@ -35,6 +35,8 @@ export type AccountDetailEntry = {
   pluginId: string;
   /** Platform name shown when choosing where to add an account. */
   label: string;
+  /** Platform mark shown beside the role's channel row. */
+  Icon?: React.ComponentType<{ className?: string }>;
   Component: React.ComponentType<PluginAccountDetailProps>;
 };
 

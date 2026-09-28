@@ -71,7 +71,7 @@ export function useQQAccountForm({ accountId, draftRef, roleId, client, onChange
     finally { setBusy(false); }
   }
 
-  const save = () => run(async () => {
+  async function persistDraft() {
     const uri = fields.uri.trim();
     const result = await client.call<{ ref: string }>("accounts.save", {
       account_id: accountId ?? "", ref, role_id: roleId, mode: fields.mode, ws_uri: uri, ws_token: fields.token,
@@ -80,6 +80,13 @@ export function useQQAccountForm({ accountId, draftRef, roleId, client, onChange
     const hasToken = !fields.clearToken && (saved.hasToken || Boolean(fields.token));
     setFields({ mode: fields.mode, uri, token: "", timeout: fields.timeout, clearToken: false });
     setSaved({ ref: result.ref, mode: fields.mode, uri, timeout: fields.timeout, hasToken });
+    return result.ref;
+  }
+  const save = () => run(async () => { await persistDraft(); });
+  const startManaged = () => run(async () => {
+    const managedRef = dirty || !ref ? await persistDraft() : ref;
+    const result = await client.call<{ account_id: string }>("accounts.connect", { ref: managedRef, role_id: roleId });
+    if (result.account_id) onChanged(result.account_id);
   });
   const connect = () => run(async () => {
     const result = await client.call<{ account_id: string }>("accounts.connect", { ref, role_id: roleId });
@@ -94,6 +101,6 @@ export function useQQAccountForm({ accountId, draftRef, roleId, client, onChange
 
   return {
     fields, setField, hasToken: saved.hasToken, ref, dirty, busy, loading, error, managedAvailable, client,
-    save, connect, disconnect,
+    save, connect, startManaged, disconnect,
   };
 }

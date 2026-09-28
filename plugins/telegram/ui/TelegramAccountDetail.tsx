@@ -1,6 +1,7 @@
 import { EyeIcon, EyeSlashIcon, InfoIcon } from "@phosphor-icons/react";
 import { useEffect, useId, useState } from "react";
 import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
+import { useAccountAction } from "../../../apps/desktop/renderer/src/accounts/useAccountAction";
 import { ghostButtonClass, iconButtonClass, inputClass, primaryButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
 
 type KnownChat = { chat_id: string; chat_type: string; title: string; username: string; topics: number[]; last_seen: string };
@@ -10,8 +11,7 @@ type BotIdentity = { bot_id: string; name: string; username: string };
 export function TelegramAccountDetail({ account, roleId, onChanged, client, host }: PluginAccountDetailComponentProps) {
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, setError, run } = useAccountAction(onChanged);
   const [known, setKnown] = useState<KnownChat[]>([]);
   const [identity, setIdentity] = useState<BotIdentity | null>(null);
   const tokenId = useId();
@@ -24,20 +24,7 @@ export function TelegramAccountDetail({ account, roleId, onChanged, client, host
       .then((result) => setKnown(result.chats)).catch((failure) => setError(String(failure)));
     void client.call<BotIdentity>("identity.get", { ref: accountRef })
       .then(setIdentity).catch((failure) => setError(String(failure)));
-  }, [accountRef, client]);
-
-  async function run(action: () => Promise<string | undefined>) {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      onChanged(await action());
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
-    } finally {
-      setBusy(false);
-    }
-  }
+  }, [accountRef, client, setError]);
 
   const save = () => run(async () => {
     const result = await client.call<{ account_id: string }>("bot.save", {

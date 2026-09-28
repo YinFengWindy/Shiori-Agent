@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
+import { useAccountAction } from "../../../apps/desktop/renderer/src/accounts/useAccountAction";
 import { ghostButtonClass, inputClass, primaryButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
 import { Select } from "../../../apps/desktop/renderer/src/shared/ui/Select";
 
@@ -20,8 +21,7 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
   const [appId, setAppId] = useState(saved?.appId ?? "");
   const [secret, setSecret] = useState("");
   const [profile, setProfile] = useState<FeishuProfile | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, setError, run } = useAccountAction(onChanged);
 
   useEffect(() => {
     if (!accountRef) return;
@@ -30,21 +30,7 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
       .then((result) => { if (active) setProfile(result); })
       .catch((failure) => { if (active) setError(String(failure)); });
     return () => { active = false; };
-  }, [accountRef, client]);
-
-  async function run(action: () => Promise<string | undefined>) {
-    setBusy(true);
-    setError("");
-    try {
-      onChanged(await action());
-      return true;
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
+  }, [accountRef, client, setError]);
 
   async function save() {
     if (!appId.trim()) return;

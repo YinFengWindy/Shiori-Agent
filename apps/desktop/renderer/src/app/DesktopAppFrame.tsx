@@ -20,7 +20,7 @@ import { previewFromSessionMessages } from "../roles/roleChatPreview";
 import { usePluginUiVisibility } from "./usePluginUiVisibility";
 import { SettingsPage } from "../settings/SettingsPage";
 import { type SettingsSectionId } from "../settings/SettingsSidebar";
-import { cx, sidebarTrackMotionClass } from "../shared/styles";
+import { cx, ghostButtonClass, sidebarTrackMotionClass } from "../shared/styles";
 import { buildNavRailViews, NavRail, pluginNavRailViewId, type NavRailViewId } from "../shell/NavRail";
 import { useGlobalShortcuts } from "../shell/useGlobalShortcuts";
 import type {
@@ -606,9 +606,13 @@ export function DesktopAppFrame({
         description={pendingDeleteRole ? roleDeletionDescription(pendingDeleteRole.name, deletedAccounts) : ""}
         confirmLabel="确认删除"
         busy={deletingRole}
+        confirmDisabled={deletedAccounts.status !== "ready"}
+        error={deletedAccounts.status === "error" ? deletedAccounts.error : ""}
         onClose={onCloseDeleteDialog}
         onConfirm={onConfirmDeleteRole}
-      />
+      >
+        {deletedAccounts.status === "error" ? <button type="button" className={ghostButtonClass} onClick={deletedAccounts.retry}>重新读取账号</button> : null}
+      </ConfirmDialog>
       <ConfirmDialog
         open={leaveConfirmOpen}
         title="放弃未保存的修改？"

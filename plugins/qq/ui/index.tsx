@@ -1,4 +1,5 @@
 import React from "react";
+import { ChatCircleIcon } from "@phosphor-icons/react";
 import type { PluginAccountDetailComponentProps, PluginUiModule } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
 import { QQAccountForm } from "./QQAccountForm";
 import { QQDraftsSection } from "./QQDraftsSection";
@@ -19,6 +20,6 @@ export function QQAccountDetail(props: PluginAccountDetailComponentProps) {
 
 const qqUiModule: PluginUiModule = {
   pluginId: "qq",
-  accountDetail: { label: "QQ", component: QQAccountDetail },
+  accountDetail: { label: "QQ", icon: ChatCircleIcon, component: QQAccountDetail },
 };
 export default qqUiModule;

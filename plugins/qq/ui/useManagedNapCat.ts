@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 
 type ManagedStatus = {
-  preparation: { stage: string; percent: number; version: string; error?: string };
+  preparation: { stage: "idle" | "downloading" | "extracting" | "verifying" | "ready" | "error"; percent: number; version: string; error?: string };
   login: { phase: string; qrcode: string; error: string; login_phase?: string };
   connection: string;
   error: string;

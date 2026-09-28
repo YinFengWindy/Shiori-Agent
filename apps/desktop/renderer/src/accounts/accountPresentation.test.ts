@@ -28,10 +28,11 @@ test("account names fall back to the platform ID and the delete text names the a
 });
 
 test("role deletion text lists the accounts deleted with the role, or why they are unknown", () => {
-  assert.equal(roleDeletionDescription("Mira", { accounts: [], error: "" }), "“Mira” 删除后会移除角色会话与相关素材。");
+  assert.equal(roleDeletionDescription("Mira", { accounts: [], error: "", status: "ready" }), "“Mira” 删除后会移除角色会话与相关素材。");
+  assert.match(roleDeletionDescription("Mira", { accounts: [], error: "", status: "loading" }), /正在读取关联账号/);
   assert.equal(
-    roleDeletionDescription("Mira", { accounts: [account, { ...account, platform: "qq", displayName: "" }], error: "" }),
+    roleDeletionDescription("Mira", { accounts: [account, { ...account, platform: "qq", displayName: "" }], error: "", status: "ready" }),
     "“Mira” 删除后会移除角色会话与相关素材。以下账号会一并删除：demo · Demo、qq · 101。",
   );
-  assert.match(roleDeletionDescription("Mira", { accounts: [], error: "bridge down" }), /账号列表读取失败：bridge down$/);
+  assert.match(roleDeletionDescription("Mira", { accounts: [], error: "bridge down", status: "error" }), /账号列表读取失败，暂不能确认删除范围/);
 });

@@ -27,7 +27,7 @@ export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChan
     <Dialog.Portal>
       <Dialog.Backdrop className="confirm-dialog-backdrop motion-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm" />
       <Dialog.Popup className="confirm-dialog motion-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(42rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-md border border-line bg-surface p-6 shadow-panel">
-        <div className="flex items-start justify-between gap-3 border-b border-line-soft pb-4">
+        <div className={`flex items-start justify-between gap-3 ${account ? "border-b border-line-soft pb-4" : ""}`}>
           <div className="min-w-0">
             <Dialog.Title className="font-display text-title font-semibold text-ink">{account?.displayName || account?.platformAccountId || (pluginControls ? `添加 ${pluginControls.label} 账号` : "添加账号")}</Dialog.Title>
             {account ? <p className="m-0 break-all text-body-sm text-ink-muted">{account.platform} · {account.platformAccountId} · {accountStatus(account)}</p> : null}
@@ -37,7 +37,7 @@ export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChan
         <div className="scrollbar-stable grid min-h-0 gap-6 overflow-y-auto py-5">
           {account?.error && account.connection === "error" ? <InlineError message={account.error} /> : null}
           {account ? <AccountResponseRulesEditor account={account} onChanged={onChanged} /> : null}
-          {PlatformControls ? <section className="border-t border-line-soft pt-5" aria-label="平台设置">
+          {PlatformControls ? <section className={account ? "border-t border-line-soft pt-5" : ""} aria-label="平台设置">
             <PlatformControls account={account} roleId={roleId} onChanged={onChanged} />
           </section> : null}
         </div>

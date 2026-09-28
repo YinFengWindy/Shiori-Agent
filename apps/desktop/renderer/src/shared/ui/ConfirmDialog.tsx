@@ -10,7 +10,7 @@ import { dangerButtonClass, ghostButtonClass, primaryButtonClass } from "../styl
 /** Props of `ConfirmDialog` (plugins get it as `PluginHostServices.ui.ConfirmDialog`, with a plugin persona instead). */
 export type ConfirmDialogProps = {
   open: boolean; title: string; description: string; confirmLabel: string; children?: ReactNode;
-  busy?: boolean; busyLabel?: string; cancelLabel?: string; error?: string; destructive?: boolean; onClose: () => void; onConfirm: () => void;
+  busy?: boolean; confirmDisabled?: boolean; busyLabel?: string; cancelLabel?: string; error?: string; destructive?: boolean; onClose: () => void; onConfirm: () => void;
   /** 吟风's lead line for this confirmation (see `confirmPersonaLines`). */
   persona?: MascotLine;
   /** Optional stable focus destination when a successful action removes its trigger. */
@@ -26,7 +26,7 @@ export type ConfirmDialogProps = {
  * is. Without `persona`, or with the 看板娘 off, the dialog is plain —
  * plugin dialogs never get her unless they ask.
  */
-export function ConfirmDialog({ open, title, description, confirmLabel, children, busy = false, busyLabel = "删除中...", cancelLabel = "取消", error = "", destructive = true, persona, finalFocus, onClose, onConfirm }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, title, description, confirmLabel, children, busy = false, confirmDisabled = false, busyLabel = "删除中...", cancelLabel = "取消", error = "", destructive = true, persona, finalFocus, onClose, onConfirm }: ConfirmDialogProps) {
   // Callers usually derive the copy from the pending item and clear it on
   // close; keep showing the last open copy so the exit animation does not
   // play on an emptied, resized dialog.
@@ -56,7 +56,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel, children
         </MascotOnStage>
         <div className="flex justify-end gap-3">
           <button type="button" className={ghostButtonClass} disabled={busy} onClick={onClose}>{cancelLabel}</button>
-          <button type="button" className={destructive ? dangerButtonClass : primaryButtonClass} disabled={busy} onClick={onConfirm}>{busy ? busyLabel : confirmLabel}</button>
+          <button type="button" className={destructive ? dangerButtonClass : primaryButtonClass} disabled={busy || confirmDisabled} onClick={onConfirm}>{busy ? busyLabel : confirmLabel}</button>
         </div>
       </Dialog.Popup>
     </Dialog.Portal>
