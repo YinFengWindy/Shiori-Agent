@@ -41,6 +41,12 @@ class _AccountCommandsMixin:
         previous = next(
             (row for row in self._store.list() if row["app_id"] == app_id), None
         )
+        # The account belongs to the role it is saved from, for good.
+        role_id = str(payload.get("role_id") or "").strip()
+        if not role_id:
+            raise ValueError("QQBot 账号需要所属角色")
+        if previous is not None and previous.get("role_id") not in {None, role_id}:
+            raise ValueError("该 QQBot 应用已属于另一个角色")
         supplied = str(payload.get("client_secret") or "").strip()
         secret = supplied or (previous["client_secret"] if previous else "")
         if not secret:
@@ -52,6 +58,7 @@ class _AccountCommandsMixin:
         row = {
             "app_id": app_id,
             "client_secret": secret,
+            "role_id": role_id,
             "legacy": previous.get("legacy", False) if previous else False,
             "connected": True,
             "targets": previous.get("targets", []) if previous else [],

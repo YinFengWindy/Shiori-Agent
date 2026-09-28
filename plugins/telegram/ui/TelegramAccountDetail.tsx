@@ -13,7 +13,7 @@ type KnownChat = { chat_id: string; chat_type: string; title: string; username: 
 type BotIdentity = { bot_id: string; name: string; username: string };
 
 /** Platform-owned Token, polling and observed-target controls in the shared account detail. */
-export function TelegramAccountDetail({ account, onChanged, client, host }: PluginAccountDetailComponentProps) {
+export function TelegramAccountDetail({ account, roleId, onChanged, client, host }: PluginAccountDetailComponentProps) {
   const [config, setConfig] = useState<PluginConfigSnapshot | null>(null);
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
@@ -60,7 +60,7 @@ export function TelegramAccountDetail({ account, onChanged, client, host }: Plug
         (item) => item.pluginId === "telegram" && item.configRef === repairRef,
       );
       const ref = account?.configRef ?? (canRepairLegacy ? repairRef : null) ?? crypto.randomUUID().replaceAll("-", "");
-      const values = withTelegramBot(config, ref, token.trim() || undefined, enabled);
+      const values = withTelegramBot(config, ref, token.trim() || undefined, enabled, roleId);
       const result = await configClient.setConfig("telegram", values, { operationId: crypto.randomUUID() });
       setConfig({ ...config, values: result.values, envStatus: result.envStatus });
       setToken("");

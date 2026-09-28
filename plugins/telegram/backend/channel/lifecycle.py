@@ -86,12 +86,15 @@ class TelegramChannel(
         config_ref: str = "legacy",
         accounts: "AccountsCapability | None" = None,
         known_store: "PluginKVStore | None" = None,
+        role_id: str = "",
     ) -> None:
         # bus / session_manager 在宿主里由 start(ctx) 注入；构造参数只留给
         # 不经 ChannelHost 直接驱动渠道的测试。
         self._token = token
         self.name = name
         self._config_ref = config_ref
+        # Role that owns this Bot's account; saved with the Bot's config entry.
+        self._role_id = role_id
         self._accounts = accounts
         self._account_id: str | None = None
         self._known_store = known_store
@@ -186,6 +189,7 @@ class TelegramChannel(
                 platform="telegram",
                 platform_account_id=candidate_id,
                 config_ref=self._config_ref,
+                role_id=self._role_id,
             )
             self._account_id = account.record.id
         if self._accounts is not None:
@@ -233,6 +237,7 @@ class TelegramChannel(
                     platform="telegram",
                     platform_account_id=str(identity.id),
                     config_ref=self._config_ref,
+                    role_id=self._role_id,
                     display_name=identity.full_name,
                 )
             await self._app.start()

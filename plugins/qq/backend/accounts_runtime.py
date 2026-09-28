@@ -43,11 +43,16 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._intakes: dict[str, ChannelIntake] = {}
         self._actions = QQAccountActions(self._socket_for, self._ensure_online)
         for ref, config in self._configs.items():
+            if not config.role_id:
+                # Accounts exist only under a role; ownerless configs are not served.
+                logger.error("QQ 配置 %s 没有所属角色，未注册账号", ref)
+                continue
             if config.verified and config.expected_uin:
                 snapshot = self._accounts.register(
                     platform="qq",
                     platform_account_id=config.expected_uin,
                     config_ref=ref,
+                    role_id=config.role_id,
                     display_name=config.display_name or None,
                 )
                 self._ids[ref] = snapshot.record.id
@@ -69,7 +74,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
             text_with_metadata=self._send_with_metadata,
         )
         for ref, config in self._configs.items():
-            if config.auto_connect:
+            if config.auto_connect and config.role_id:
                 self._schedule(ref)
 
     async def stop(self) -> None:
@@ -204,6 +209,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
             platform="qq",
             platform_account_id=uin,
             config_ref=ref,
+            role_id=config.role_id,
             display_name=saved.display_name,
         )
         self._store.save({**self._configs, ref: saved})

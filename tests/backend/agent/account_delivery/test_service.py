@@ -45,9 +45,9 @@ def _service(tmp_path, plugin_id: str = "chat"):
         platform_account_id="bot",
         config_ref="bot",
         token="live",
+        role_id="mira",
     )
     account_id = account.record.id
-    accounts.assign(account_id, "mira")
     accounts.report(account_id, "live", connection="online")
     ledger = AccountDeliveryLedger(tmp_path)
     rpc = _Rpc(ledger, plugin_id)

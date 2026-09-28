@@ -743,7 +743,7 @@ class DesktopBridgeService:
         except PluginRpcError as exc:
             return self._error(request_id, method, exc.code, str(exc))
         except AccountDeletingError as exc:
-            # accounts.assign / accounts.rules.set while that account is deleted.
+            # accounts.rules.set while that account is deleted.
             return self._error(request_id, method, "account_deleting", str(exc))
         except Exception as exc:
             return self._error(request_id, method, "internal_error", str(exc))

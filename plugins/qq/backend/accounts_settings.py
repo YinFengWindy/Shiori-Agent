@@ -82,6 +82,13 @@ class QQAccountSettings:
         if not account_id and supplied_ref and self._configs[ref].verified:
             raise PermissionError("已验证 QQ 账号必须按账号 ID 编辑")
         old = self._configs.get(ref)
+        # A new draft remembers the role it was started from; an existing
+        # draft or account keeps its owner.
+        role_id = old.role_id if old is not None and old.role_id else ""
+        if not role_id:
+            role_id = str(payload.get("role_id") or "").strip()
+            if not role_id:
+                raise ValueError("QQ 账号需要所属角色")
         requested_mode = str(payload.get("mode") or (old.mode if old else "external"))
         if requested_mode not in {"external", "managed"}:
             raise ValueError("QQ 连接模式无效")
@@ -124,6 +131,7 @@ class QQAccountSettings:
                 timeout_seconds=timeout,
                 auto_connect=False,
                 mode=mode,
+                role_id=role_id,
             )
         )
         async with self._locks.setdefault(ref, asyncio.Lock()):

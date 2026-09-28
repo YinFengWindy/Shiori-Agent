@@ -15,12 +15,14 @@ const emptyFields: Fields = { mode: "external", uri: "", token: "", timeout: "5"
 type FormOptions = {
   accountId?: string;
   draftRef: string;
+  /** Role a new draft is started for; its verified account belongs to this role. */
+  roleId: string;
   client: PluginRpcClient;
   onChanged: (accountId?: string) => void;
 };
 
 /** Owns QQ connection form loading, a saved baseline, and explicit commands. */
-export function useQQAccountForm({ accountId, draftRef, client, onChanged }: FormOptions) {
+export function useQQAccountForm({ accountId, draftRef, roleId, client, onChanged }: FormOptions) {
   const [fields, setFields] = useState<Fields>(emptyFields);
   const [saved, setSaved] = useState({ ref: "", mode: "external" as Fields["mode"], uri: "", timeout: "5", hasToken: false });
   const [managedAvailable, setManagedAvailable] = useState(false);
@@ -72,7 +74,7 @@ export function useQQAccountForm({ accountId, draftRef, client, onChanged }: For
   const save = () => run(async () => {
     const uri = fields.uri.trim();
     const result = await client.call<{ ref: string }>("accounts.save", {
-      account_id: accountId ?? "", ref, mode: fields.mode, ws_uri: uri, ws_token: fields.token,
+      account_id: accountId ?? "", ref, role_id: roleId, mode: fields.mode, ws_uri: uri, ws_token: fields.token,
       clear_token: fields.clearToken, timeout_seconds: Number(fields.timeout),
     });
     const hasToken = !fields.clearToken && (saved.hasToken || Boolean(fields.token));

@@ -504,15 +504,14 @@ async def test_account_delete_hook_is_published_per_generation_and_withdrawn(
 ):
     from core.accounts import AccountDeletionPlan, AccountRegistry
 
-    registry = AccountRegistry(tmp_path, {"mira"}.__contains__)
+    registry = AccountRegistry(tmp_path, {"mira", "other"}.__contains__)
     registry.set_plugin_enabled("demo", True, generation="g1")
     registry.publish_generation("g1")
     effects = EffectScope("demo")
     accounts = AccountsCapability(registry, effects, "demo", "g1")
     account = accounts.register(
-        platform="demo", platform_account_id="7", config_ref="a"
+        platform="demo", platform_account_id="7", config_ref="a", role_id="mira"
     )
-    registry.assign(account.record.id, "mira")
     purged: list[str] = []
 
     def cleanup(config_ref: str) -> AccountDeletionPlan:
@@ -534,8 +533,9 @@ async def test_account_delete_hook_is_published_per_generation_and_withdrawn(
     def no_check(plugin_id: str, values: dict) -> None:
         raise AssertionError("no config check expected")
 
-    second = accounts.register(platform="demo", platform_account_id="8", config_ref="b")
-    registry.assign(second.record.id, "mira")
+    second = accounts.register(
+        platform="demo", platform_account_id="8", config_ref="b", role_id="other"
+    )
     await registry.delete(
         account.record.id,
         role_id="mira",
@@ -549,7 +549,7 @@ async def test_account_delete_hook_is_published_per_generation_and_withdrawn(
     with pytest.raises(RuntimeError, match="未启用或未加载"):
         await registry.delete(
             second.record.id,
-            role_id="mira",
+            role_id="other",
             check_plugin_config=no_check,
             write_plugin_config=no_config,
         )

@@ -1,7 +1,7 @@
-/** One regional Feishu/Lark custom app saved in plugin configuration. */
+/** One regional Feishu/Lark custom app saved in plugin configuration, with the role owning it. */
 export type FeishuApp = {
   app_id: string; app_secret: string; domain: "feishu" | "lark";
-  connection_enabled?: boolean; connection_revision?: number;
+  connection_enabled?: boolean; connection_revision?: number; role_id?: string;
 };
 
 /** Preserves the legacy single-app config until the first explicit save. */
@@ -20,6 +20,7 @@ function parseApp(value: unknown): FeishuApp | null {
   const rawDomain = "domain" in value ? value.domain : undefined;
   const enabled = "connection_enabled" in value ? value.connection_enabled : undefined;
   const revision = "connection_revision" in value ? value.connection_revision : undefined;
+  const roleId = "role_id" in value ? value.role_id : undefined;
   if (typeof appId !== "string" || !appId || typeof secret !== "string") return null;
   const regionalDomain = typeof rawDomain === "string" ? rawDomain.trim().replace(/\/$/, "") : "";
   const domain = regionalDomain === "https://open.feishu.cn" ? "feishu"
@@ -28,6 +29,7 @@ function parseApp(value: unknown): FeishuApp | null {
     ? { app_id: appId, app_secret: secret, domain,
       ...(typeof enabled === "boolean" ? { connection_enabled: enabled } : {}),
       ...(typeof revision === "number" ? { connection_revision: revision } : {}),
+      ...(typeof roleId === "string" && roleId ? { role_id: roleId } : {}),
     }
     : null;
 }
@@ -39,13 +41,20 @@ function migratedValues(values: Record<string, unknown>, accounts: FeishuApp[]) 
   return { ...values, app_id: "", app_secret: "", domain: "feishu", legacy_channel_ref: legacyRef, accounts };
 }
 
-/** Builds one atomic config update and clears migrated single-app fields. */
+/**
+ * Builds one atomic config update and clears migrated single-app fields. A new
+ * app belongs to `app.role_id`, the role saving it; a saved app keeps its owner.
+ */
 export function withSavedApp(values: Record<string, unknown>, app: FeishuApp): Record<string, unknown> {
   const apps = configuredApps(values);
   const ref = `${app.domain}:${app.app_id}`;
   const index = apps.findIndex((item) => `${item.domain}:${item.app_id}` === ref);
   const updated = [...apps];
-  const connected = { ...app, connection_enabled: true, connection_revision: (index < 0 ? 0 : apps[index].connection_revision ?? 0) + 1 };
+  const owner = (index < 0 ? undefined : apps[index].role_id) || app.role_id;
+  const connected = {
+    ...app, ...(owner ? { role_id: owner } : {}),
+    connection_enabled: true, connection_revision: (index < 0 ? 0 : apps[index].connection_revision ?? 0) + 1,
+  };
   if (index < 0) updated.push(connected);
   else updated[index] = connected;
   return migratedValues(values, updated);

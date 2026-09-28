@@ -4,17 +4,21 @@ import { QQAccountForm } from "./QQAccountForm";
 import { QQDraftsSection } from "./QQDraftsSection";
 import { useQQAccountForm } from "./useQQAccountForm";
 
-/** Binds QQ's connection form to the shared host account detail slot. */
-export function QQAccountDetail({ account, onChanged, client, host, draftRef = "" }: PluginAccountDetailComponentProps & { draftRef?: string }) {
-  const form = useQQAccountForm({ accountId: account?.id, draftRef, client, onChanged });
+/** One QQ connection form: a saved account, a selected draft, or a new draft for `roleId`. */
+function QQAccountEditor({ account, roleId, onChanged, client, host, draftRef = "" }: PluginAccountDetailComponentProps & { draftRef?: string }) {
+  const form = useQQAccountForm({ accountId: account?.id, draftRef, roleId, client, onChanged });
   return <QQAccountForm account={account} host={host} form={form} />;
+}
+
+/** QQ's controls in the role page's account detail; adding one starts from the role's drafts. */
+export function QQAccountDetail(props: PluginAccountDetailComponentProps) {
+  if (props.account) return <QQAccountEditor {...props} />;
+  return <QQDraftsSection roleId={props.roleId} client={props.client} host={props.host}
+    onChanged={props.onChanged} Editor={QQAccountEditor} />;
 }
 
 const qqUiModule: PluginUiModule = {
   pluginId: "qq",
-  // The host appends PluginAccountsSection; keep the legacy schema available
-  // for migration while hiding its old autosave form.
-  settingsSection: { kind: "component", label: "QQ", component: (props) => <QQDraftsSection {...props} Editor={QQAccountDetail} /> },
-  accountDetail: { component: QQAccountDetail },
+  accountDetail: { label: "QQ", component: QQAccountDetail },
 };
 export default qqUiModule;

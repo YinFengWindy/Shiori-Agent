@@ -8,10 +8,15 @@ test("old Token becomes one legacy bot without duplicating it", () => {
     values: { token: "123:old", bots: [{ ref: "second", token: "456:new", enabled: true }] }, envStatus: {} };
   assert.deepEqual(telegramBots(config).map((bot) => bot.ref), ["legacy", "second"]);
   assert.equal(legacyRefToRepair(config), "legacy");
-  const changed = withTelegramBot(config, "second", "456:replacement", true);
+  const changed = withTelegramBot(config, "second", "456:replacement", true, "mira");
   assert.equal(changed.token, "");
   assert.deepEqual((changed.bots as Array<{ ref: string; token: string }>).map((bot) => [bot.ref, bot.token]),
     [["legacy", "123:old"], ["second", "456:replacement"]]);
+  // A new Bot is owned by the role it is added from; an owned Bot keeps its owner.
+  const added = withTelegramBot({ ...config, values: changed }, "third", "789:t", true, "mira");
+  const owned = withTelegramBot({ ...config, values: added }, "third", undefined, false, "other");
+  assert.deepEqual((owned.bots as Array<{ ref: string; role_id?: string }>).at(-1),
+    { ref: "third", token: "789:t", enabled: false, role_id: "mira" });
 });
 
 test("an invalid old single Token still selects the legacy reference for repair", () => {

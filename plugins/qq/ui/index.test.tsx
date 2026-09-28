@@ -21,7 +21,7 @@ test("QQ detail saves a draft before explicitly connecting it", async () => {
   };
   const view = await mountTestComponent(null);
   try {
-    await view.render(<QQAccountDetail account={null} onChanged={(id) => changed.push(id ?? "")}
+    await view.render(<QQAccountDetail account={null} roleId="mira" onChanged={(id) => changed.push(id ?? "")}
       client={client} host={desktopPluginHostServices} />);
     const uri = view.container.querySelector<HTMLInputElement>('input[type="url"]');
     assert.ok(uri);
@@ -30,11 +30,14 @@ test("QQ detail saves a draft before explicitly connecting it", async () => {
       .find((item) => item.textContent?.trim() === label);
     assert.equal(button("连接")?.disabled, true);
     await act(async () => { button("保存")?.click(); });
-    assert.deepEqual(calls.map(({ method }) => method), ["accounts.settings", "accounts.save"]);
+    const commands = () => calls.map(({ method }) => method).filter((method) => method !== "accounts.settings");
+    assert.deepEqual(commands(), ["accounts.save"]);
+    // The draft remembers the role whose page started it.
+    assert.equal(calls.find(({ method }) => method === "accounts.save")?.payload?.role_id, "mira");
     assert.equal(changed.length, 0);
     assert.equal(button("连接")?.disabled, false);
     await act(async () => { button("连接")?.click(); });
-    assert.deepEqual(calls.map(({ method }) => method), ["accounts.settings", "accounts.save", "accounts.connect"]);
+    assert.deepEqual(commands(), ["accounts.save", "accounts.connect"]);
     assert.deepEqual(changed, ["account-1"]);
   } finally { await view.cleanup(); }
 });
@@ -58,7 +61,7 @@ test("QQ managed mode saves without an external endpoint and starts independentl
   };
   const view = await mountTestComponent(null);
   try {
-    await view.render(<QQAccountDetail account={null} onChanged={() => undefined}
+    await view.render(<QQAccountDetail account={null} roleId="mira" onChanged={() => undefined}
       client={client} host={desktopPluginHostServices} />);
     const button = (label: string) => Array.from(view.container.querySelectorAll("button"))
       .find((item) => item.textContent?.trim() === label);

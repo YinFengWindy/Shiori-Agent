@@ -3,38 +3,92 @@ import { test } from "node:test";
 import { act } from "react";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
+import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
 
-test("owned account connection action opens the shared platform controls", async () => {
+const accountRow = {
+  id: "account-1", plugin_id: "test-provider", platform: "test", platform_account_id: "101",
+  config_ref: "ref-1", display_name: "Owned", avatar_url: "", role_id: "role-1", plugin_enabled: true,
+  runtime_active: true, connection: "online", capabilities: [], known_capabilities: [], error: "",
+  response_rules: { private_enabled: true, group_enabled: true, require_mention: true,
+    blocked_sender_ids: [], group_rules: [] },
+};
+
+type Request = { method: string; payload: Record<string, unknown> };
+
+function desktop(respond: (request: Request) => Record<string, unknown>) {
+  return { windowGlobals: { miraDesktop: {
+    onEvent: () => () => undefined,
+    invoke: async (request: Request) =>
+      ({ id: "r", type: "response", method: request.method, error: null, payload: {}, ...respond(request) }),
+  } } };
+}
+
+function registerPlatform(pluginId: string, label: string) {
+  pluginUiRegistry.registerAccountDetail({
+    slot: "account.detail", pluginId, label,
+    Component: ({ account, roleId }) => <button type="button">平台操作 {account?.id ?? "new"} {roleId}</button>,
+  });
+}
+
+test("owned account detail opens the platform controls for this role, without owner or claim controls", async () => {
   const environment = await mountTestComponent(null);
   const { RoleAccountsPanel } = await import("./RoleAccountsPanel");
   await environment.cleanup();
-  pluginUiRegistry.registerAccountDetail({
-    slot: "account.detail", pluginId: "test-provider",
-    Component: ({ account }) => <button type="button">平台操作 {account?.id}</button>,
-  });
+  setPluginEnabledSnapshot([]);
+  registerPlatform("test-provider", "Test");
   const view = await mountTestComponent(
-    <RoleAccountsPanel roleId="role-1" onOpenPluginSettings={() => undefined} />,
-    { windowGlobals: { miraDesktop: {
-      onEvent: () => () => undefined,
-      invoke: async ({ method }: { method: string }) => ({ id: "response", type: "response", method,
-        error: null, payload: method === "accounts.list" ? { accounts: [{
-          id: "account-1", plugin_id: "test-provider", platform: "test", platform_account_id: "101",
-          display_name: "Owned", avatar_url: "", role_id: "role-1", plugin_enabled: true,
-          runtime_active: true, connection: "online", capabilities: [], known_capabilities: [], error: "",
-          response_rules: { private_enabled: true, group_enabled: true, require_mention: true,
-            blocked_sender_ids: [], group_rules: [] },
-        }] } : { roles: [] } }),
-    } } },
+    <RoleAccountsPanel roleId="role-1" />,
+    desktop(({ method }) => ({ payload: method === "accounts.list" ? { accounts: [accountRow] } : {} })),
   );
   try {
+    // Platform, nickname, platform account and live status are listed.
+    assert.match(view.container.textContent ?? "", /test · Owned/);
+    assert.match(view.container.textContent ?? "", /101/);
+    assert.match(view.container.textContent ?? "", /在线/);
     const action = view.container.querySelector<HTMLButtonElement>('[aria-label="管理 Owned 的连接"]');
     assert.ok(action);
-    assert.equal(action.textContent, "管理连接");
     await act(async () => action.click());
-    assert.match(document.querySelector('[role="dialog"]')?.textContent ?? "", /平台操作 account-1/);
+    const dialog = document.querySelector('[role="dialog"]')?.textContent ?? "";
+    assert.match(dialog, /平台操作 account-1 role-1/);
+    assert.doesNotMatch(dialog, /所属角色|旧渠道归属待确认/);
+    assert.doesNotMatch(view.container.textContent ?? "", /认领/);
   } finally {
     await view.cleanup();
     pluginUiRegistry.unregisterPlugin("test-provider");
+  }
+});
+
+test("adding picks a platform first; platforms the role already has are marked 已绑定", async () => {
+  const environment = await mountTestComponent(null);
+  const { RoleAccountsPanel } = await import("./RoleAccountsPanel");
+  await environment.cleanup();
+  resetPluginEnabledStateForTests();
+  setPluginEnabledSnapshot([
+    { id: "test-provider", enabled: true, state: "ACTIVE" },
+    { id: "other-provider", enabled: true, state: "ACTIVE" },
+    { id: "off-provider", enabled: false, state: "DISABLED" },
+  ]);
+  registerPlatform("test-provider", "Test");
+  registerPlatform("other-provider", "Other");
+  registerPlatform("off-provider", "Off");
+  const view = await mountTestComponent(
+    <RoleAccountsPanel roleId="role-1" />,
+    desktop(({ method }) => ({ payload: method === "accounts.list" ? { accounts: [accountRow] } : {} })),
+  );
+  try {
+    const add = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "添加账号");
+    assert.ok(add);
+    await act(async () => add.click());
+    const choices = Array.from(view.container.querySelectorAll<HTMLButtonElement>('[aria-label="选择平台"] button'));
+    assert.deepEqual(choices.map((button) => [button.textContent, button.disabled]),
+      [["Test已绑定", true], ["Other", false]]);
+    await act(async () => choices[1].click());
+    // The new account's form is opened for this role.
+    assert.match(document.querySelector('[role="dialog"]')?.textContent ?? "", /添加 Other 账号[\s\S]*平台操作 new role-1/);
+  } finally {
+    await view.cleanup();
+    for (const pluginId of ["test-provider", "other-provider", "off-provider"]) pluginUiRegistry.unregisterPlugin(pluginId);
+    resetPluginEnabledStateForTests();
   }
 });
 
@@ -42,37 +96,26 @@ test("deleting an owned account asks for confirmation and keeps it when the plug
   const environment = await mountTestComponent(null);
   const { RoleAccountsPanel } = await import("./RoleAccountsPanel");
   await environment.cleanup();
-  const row = {
-    id: "account-1", plugin_id: "test-provider", platform: "test", platform_account_id: "101",
-    config_ref: "ref-1", display_name: "Owned", avatar_url: "", role_id: "role-1", plugin_enabled: true,
-    runtime_active: true, connection: "online", capabilities: [], known_capabilities: [], error: "",
-    response_rules: { private_enabled: true, group_enabled: true, require_mention: true,
-      blocked_sender_ids: [], group_rules: [] },
-  };
+  setPluginEnabledSnapshot([]);
   const deletes: unknown[] = [];
-  let rows = [row];
+  let rows = [accountRow];
   let failNext = true;
   const view = await mountTestComponent(
-    <RoleAccountsPanel roleId="role-1" onOpenPluginSettings={() => undefined} />,
-    { windowGlobals: { miraDesktop: {
-      onEvent: () => () => undefined,
-      invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
-        if (method === "accounts.delete") {
-          deletes.push(payload);
-          if (failNext) {
-            failNext = false;
-            // The plugin already disconnected before its cleanup failed.
-            rows = [{ ...row, connection: "offline" }];
-            return { id: "r", type: "response", method, payload: {},
-              error: { code: "account_delete_failed", message: "NapCat 文件被占用", details: {} } };
-          }
-          rows = [];
-          return { id: "r", type: "response", method, error: null, payload: { account_id: "account-1" } };
+    <RoleAccountsPanel roleId="role-1" />,
+    desktop(({ method, payload }) => {
+      if (method === "accounts.delete") {
+        deletes.push(payload);
+        if (failNext) {
+          failNext = false;
+          // The plugin already disconnected before its cleanup failed.
+          rows = [{ ...accountRow, connection: "offline" }];
+          return { error: { code: "account_delete_failed", message: "NapCat 文件被占用", details: {} } };
         }
-        return { id: "r", type: "response", method, error: null,
-          payload: method === "accounts.list" ? { accounts: rows } : { roles: [] } };
-      },
-    } } },
+        rows = [];
+        return { payload: { account_id: "account-1" } };
+      }
+      return { payload: method === "accounts.list" ? { accounts: rows } : {} };
+    }),
   );
   try {
     const remove = view.container.querySelector<HTMLButtonElement>('[aria-label="删除 Owned"]');

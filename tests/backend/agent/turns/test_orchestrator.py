@@ -107,9 +107,9 @@ async def test_failed_proactive_target_remains_durable_without_turn_commit(
         platform_account_id="bot",
         config_ref="bot",
         token="live",
+        role_id="mira",
     )
     account_id = account.record.id
-    accounts.assign(account_id, "mira")
     accounts.report(account_id, "live", connection="online")
 
     async def rejected(payload):

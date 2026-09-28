@@ -25,6 +25,7 @@ async def test_nonfinite_timeout_cannot_enter_private_config(tmp_path):
     with pytest.raises(ValueError, match="连接超时"):
         await runtime.save_draft(
             {
+                "role_id": "mira",
                 "ws_uri": "ws://localhost:3001",
                 "timeout_seconds": float("nan"),
             }
@@ -38,7 +39,7 @@ async def test_saved_unverified_draft_can_be_reopened_and_removed(tmp_path):
     runtime = QQAccountsRuntime(store, object())
     ref = (
         await runtime.save_draft(
-            {"ws_uri": "ws://localhost:3001", "ws_token": "secret"}
+            {"role_id": "mira", "ws_uri": "ws://localhost:3001", "ws_token": "secret"}
         )
     )["ref"]
     restarted = QQAccountsRuntime(store, object())
@@ -59,7 +60,9 @@ async def test_edited_legacy_draft_cannot_reappear_after_remove(tmp_path):
         timeout_seconds=5,
     )
     runtime = QQAccountsRuntime(store, object())
-    await runtime.save_draft({"ref": "legacy", "ws_uri": "ws://localhost:3002"})
+    await runtime.save_draft(
+        {"role_id": "mira", "ref": "legacy", "ws_uri": "ws://localhost:3002"}
+    )
     assert store.load()["legacy"].auto_connect is False
     with pytest.raises(PermissionError, match="不能删除迁移记录"):
         await runtime.remove_draft("legacy")
@@ -81,7 +84,7 @@ async def test_managed_draft_uses_private_endpoint_without_external_fields(
     )
     store = QQAccountsStore(tmp_path)
     runtime = QQAccountsRuntime(store, object())
-    ref = (await runtime.save_draft({"mode": "managed"}))["ref"]
+    ref = (await runtime.save_draft({"role_id": "mira", "mode": "managed"}))["ref"]
     saved = store.load()[ref]
     assert saved.mode == "managed"
     assert saved.ws_uri.startswith("ws://127.0.0.1:")
@@ -94,7 +97,9 @@ class _Accounts:
     def __init__(self) -> None:
         self.reports: list[tuple[str, str]] = []
 
-    def register(self, *, platform, platform_account_id, config_ref, display_name):
+    def register(
+        self, *, platform, platform_account_id, config_ref, role_id, display_name
+    ):
         return SimpleNamespace(record=SimpleNamespace(id=f"qq-{platform_account_id}"))
 
     def report(self, account_id, *, connection, capabilities=frozenset(), error=""):
@@ -121,6 +126,7 @@ async def test_deleted_account_is_disconnected_and_its_napcat_data_purged(tmp_pa
                 auto_connect=False,
                 verified=True,
                 mode="managed",
+                role_id="mira",
             )
             for ref, uin in (("aa", "101"), ("bb", "202"))
         }

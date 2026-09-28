@@ -97,11 +97,15 @@ async def test_deleting_a_bot_removes_token_caches_and_host_record(
     plugin_runtime, tmp_path, monkeypatch
 ):
     monkeypatch.setenv("TG_KEEP_TOKEN", "222:keep")
-    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
+    roles = RoleStore(tmp_path)
+    for role_id in ("mira", "other"):
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="m")
     config = (
         "\n[plugins.telegram]\n"
         '[[plugins.telegram.bots]]\nref = "gone"\ntoken = "111:gone"\n'
+        'role_id = "mira"\n'
         '[[plugins.telegram.bots]]\nref = "keep"\ntoken = "${TG_KEEP_TOKEN}"\n'
+        'role_id = "other"\n'
     )
     async with plugin_runtime(("telegram",), config) as (service, path):
         listed = await plugin_bridge_request(service, "accounts.list")
@@ -110,12 +114,10 @@ async def test_deleting_a_bot_removes_token_caches_and_host_record(
         for ref in ("gone", "keep"):
             kv.set(f"known_chats:{ref}", {"1": {"chat_id": "1"}})
             kv.set(f"identity:{ref}", {"bot_id": ref})
-        assigned = await plugin_bridge_request(
-            service,
-            "accounts.assign",
-            {"account_id": accounts["gone"], "role_id": "mira"},
-        )
-        assert assigned.error is None, assigned.error
+        # Each Bot is registered for the role saved in its config entry.
+        assert {
+            row["config_ref"]: row["role_id"] for row in listed.payload["accounts"]
+        } == {"gone": "mira", "keep": "other"}
 
         deleted = await plugin_bridge_request(
             service,

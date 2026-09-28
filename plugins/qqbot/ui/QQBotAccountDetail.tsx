@@ -7,7 +7,7 @@ type Detail = { app_id: string; has_secret: boolean; secret_reference: string; c
 type Targets = { coverage: "observed_c2c_only"; targets: Array<{ chat_id: string; user_openid: string }> };
 
 /** QQBot-owned application credentials, C2C targets, and connection commands. */
-export function QQBotAccountDetail({ account, onChanged, client, host }: PluginAccountDetailComponentProps) {
+export function QQBotAccountDetail({ account, roleId, onChanged, client, host }: PluginAccountDetailComponentProps) {
   const accountId = account?.id;
   const [appId, setAppId] = useState(account?.platformAccountId ?? "");
   const [secret, setSecret] = useState("");
@@ -34,7 +34,7 @@ export function QQBotAccountDetail({ account, onChanged, client, host }: PluginA
     setError("");
     try {
       const result = await client.call<{ account_id: string }>("account.save", {
-        app_id: appId.trim(), client_secret: secret,
+        app_id: appId.trim(), client_secret: secret, role_id: roleId,
       });
       setSecret("");
       setDetail((current) => current ? { ...current, connected: true } : current);

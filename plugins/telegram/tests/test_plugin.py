@@ -6,6 +6,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+import pytest
 from shiori_plugin_testkit.packages import stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel, load_manifest
@@ -23,12 +24,15 @@ def _load_telegram_channels(
     with tempfile.TemporaryDirectory() as tmp:
         plugin_dir = Path(tmp) / "telegram"
         stage_plugin_package(PLUGIN_DIR, plugin_dir)
+        role_store = RoleStore(Path(tmp))
+        for role_id in ("mira", "other"):
+            role_store.create_role(role_id=role_id, name=role_id, system_prompt="m")
         kernel = PluginKernel(
             [Path(tmp)],
             services=HostServices(
                 event_bus=EventBus(),
                 workspace=Path(tmp),
-                role_store=RoleStore(Path(tmp)),
+                role_store=role_store,
                 plugin_configs=plugin_configs or {},
             ),
         )
@@ -57,20 +61,27 @@ def test_plugin_skips_channel_without_token() -> None:
     assert _load_telegram_channels({"telegram": {"token": "  "}}) == []
 
 
-def test_plugin_contributes_telegram_channel_with_token() -> None:
-    channels = _load_telegram_channels({"telegram": {"token": "123:abc"}})
+def test_only_bots_with_an_owner_role_contribute_channels() -> None:
+    # The old single Token has no owner role, so it is not served.
+    assert _load_telegram_channels({"telegram": {"token": "123:abc"}}) == []
+    channels = _load_telegram_channels(
+        {"telegram": {"bots": [{"ref": "main", "token": "123:abc", "role_id": "mira"}]}}
+    )
 
     assert len(channels) == 1
-    assert channels[0].name == "telegram"
+    assert channels[0].name == "telegram_main"
+    assert channels[0]._role_id == "mira"
     assert channels[0].configuration_key is None
 
 
-def test_two_bots_keep_distinct_channels_and_legacy_config() -> None:
+def test_two_bots_keep_distinct_channels() -> None:
     channels = _load_telegram_channels(
         {
             "telegram": {
-                "token": "123:legacy",
-                "bots": [{"ref": "second", "token": "456:new"}],
+                "bots": [
+                    {"ref": "legacy", "token": "123:legacy", "role_id": "mira"},
+                    {"ref": "second", "token": "456:new", "role_id": "other"},
+                ],
             }
         }
     )
@@ -110,20 +121,23 @@ def test_replacing_one_ref_with_another_bot_preserves_old_account(tmp_path) -> N
     plugin_dir = tmp_path / "telegram"
     stage_plugin_package(PLUGIN_DIR, plugin_dir)
     role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="m")
     original = role_store.accounts.register(
         plugin_id="telegram",
         platform="telegram",
         platform_account_id="123",
         config_ref="legacy",
         token="existing-runtime",
+        role_id="mira",
     )
+    bot = {"ref": "legacy", "token": "456:other", "role_id": "mira"}
     kernel = PluginKernel(
         [tmp_path],
         services=HostServices(
             event_bus=EventBus(),
             workspace=tmp_path,
             role_store=role_store,
-            plugin_configs={"telegram": {"token": "456:other"}},
+            plugin_configs={"telegram": {"bots": [bot]}},
         ),
     )
     asyncio.run(kernel.load_all())
@@ -155,3 +169,15 @@ def test_channel_registers_bot_commands() -> None:
     from plugins.telegram.backend.channel import TelegramChannel
 
     assert TelegramChannel.uses_bot_commands is True
+
+
+def test_config_rejects_a_second_bot_for_a_role_or_a_repeated_bot() -> None:
+    owned = {"ref": "one", "token": "123:a", "role_id": "mira"}
+    with pytest.raises(ValueError, match="一个角色"):
+        TelegramConfigModel.model_validate(
+            {"bots": [owned, {"ref": "two", "token": "456:b", "role_id": "mira"}]}
+        )
+    with pytest.raises(ValueError, match="已添加"):
+        TelegramConfigModel.model_validate(
+            {"bots": [owned, {"ref": "two", "token": "123:a", "role_id": "other"}]}
+        )

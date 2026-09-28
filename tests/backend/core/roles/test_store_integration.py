@@ -648,6 +648,7 @@ def test_route_inbound_by_role_uses_account_owner_session(tmp_path: Path):
         platform_account_id="self",
         config_ref="legacy",
         token="live",
+        role_id="mira",
     )
     accounts.report(account.record.id, "live", connection="online")
 

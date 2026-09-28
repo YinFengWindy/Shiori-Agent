@@ -26,7 +26,7 @@ test("Token draft verifies before the legacy account configuration changes", asy
     return { bot_id: "123" };
   } } as PluginRpcClient;
   const view = await mountTestComponent(
-    <TelegramAccountDetail account={account} onChanged={(id) => { changedId = id ?? ""; }} client={client} host={desktopPluginHostServices} />,
+    <TelegramAccountDetail account={account} roleId="mira" onChanged={(id) => { changedId = id ?? ""; }} client={client} host={desktopPluginHostServices} />,
     { windowGlobals: { miraDesktop: { invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
       calls.push(method);
       if (method === "plugin.config.set") submissions.push(payload.values as Record<string, unknown>);
@@ -47,7 +47,7 @@ test("Token draft verifies before the legacy account configuration changes", asy
     rejectVerification = false;
     await act(async () => save()?.click());
     assert.equal(submissions[0]?.token, "");
-    assert.deepEqual(submissions[0]?.bots, [{ ref: "legacy", token: "123:new", enabled: true }]);
+    assert.deepEqual(submissions[0]?.bots, [{ ref: "legacy", token: "123:new", enabled: true, role_id: "mira" }]);
     assert.equal(changedId, "account-1");
     assert.deepEqual(calls.filter((name) => name === "plugin.config.set"), ["plugin.config.set"]);
   } finally {
@@ -70,7 +70,7 @@ test("new-account form repairs an invalid legacy Token in place", async () => {
       blocked_sender_ids: [], group_rules: [] },
   };
   const view = await mountTestComponent(
-    <TelegramAccountDetail account={null} onChanged={(id) => { changedId = id ?? ""; }} client={client} host={desktopPluginHostServices} />,
+    <TelegramAccountDetail account={null} roleId="mira" onChanged={(id) => { changedId = id ?? ""; }} client={client} host={desktopPluginHostServices} />,
     { windowGlobals: { miraDesktop: { invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
       if (method === "plugin.config.set") submissions.push(payload.values as Record<string, unknown>);
       return { id: "response", type: "response", method, error: null, payload:
@@ -88,7 +88,7 @@ test("new-account form repairs an invalid legacy Token in place", async () => {
       .find((button) => button.textContent === "保存并连接");
     await act(async () => save?.click());
     assert.equal(submissions[0]?.token, "");
-    assert.deepEqual(submissions[0]?.bots, [{ ref: "legacy", token: "123:valid", enabled: true }]);
+    assert.deepEqual(submissions[0]?.bots, [{ ref: "legacy", token: "123:valid", enabled: true, role_id: "mira" }]);
     assert.equal(changedId, "legacy-account");
   } finally {
     await view.cleanup();
@@ -109,7 +109,7 @@ test("adding a second Bot preserves an already registered legacy account", async
     return { bot_id: "456" };
   } } as PluginRpcClient;
   const view = await mountTestComponent(
-    <TelegramAccountDetail account={null} onChanged={() => undefined} client={client} host={desktopPluginHostServices} />,
+    <TelegramAccountDetail account={null} roleId="mira" onChanged={() => undefined} client={client} host={desktopPluginHostServices} />,
     { windowGlobals: { miraDesktop: { invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
       if (method === "plugin.config.set") submissions.push(payload.values as Record<string, unknown>);
       return { id: "response", type: "response", method, error: null, payload:
@@ -130,6 +130,7 @@ test("adding a second Bot preserves an already registered legacy account", async
     assert.equal(bots[0]?.ref, "legacy");
     assert.equal(bots[0]?.token, "123:old");
     assert.equal(bots[1]?.token, "456:new");
+    assert.equal((bots[1] as { role_id?: string }).role_id, "mira");
     assert.notEqual(bots[1]?.ref, "legacy");
   } finally {
     await view.cleanup();

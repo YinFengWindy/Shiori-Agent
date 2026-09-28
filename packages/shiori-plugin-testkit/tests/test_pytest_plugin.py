@@ -6,12 +6,13 @@ from pathlib import Path
 
 import pytest
 
+from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
 from shiori_plugin_testkit.bridge import plugin_bridge_request
 
 
 @pytest.mark.asyncio
-async def test_plugin_account_report_and_bridge_assignment_share_role_store(
+async def test_plugin_account_report_and_bridge_listing_share_role_store(
     plugin_runtime, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     package = tmp_path / "account_demo"
@@ -23,15 +24,16 @@ async def test_plugin_account_report_and_bridge_assignment_share_role_store(
     (package / "backend/plugin.py").write_text(
         "async def setup(ctx):\n"
         "    account = ctx.accounts.register(platform='demo', "
-        "platform_account_id='101', config_ref='private', display_name='Old', "
-        "avatar_url='https://example.test/old.png')\n"
+        "platform_account_id='101', config_ref='private', role_id='owner', "
+        "display_name='Old', avatar_url='https://example.test/old.png')\n"
         "    account = ctx.accounts.register(platform='demo', "
-        "platform_account_id='101', config_ref='private', display_name='', "
-        "avatar_url='')\n"
+        "platform_account_id='101', config_ref='private', role_id='owner', "
+        "display_name='', avatar_url='')\n"
         "    ctx.accounts.report(account.record.id, connection='online', "
         "capabilities=frozenset({'contacts'}))\n",
         encoding="utf-8",
     )
+    RoleStore(tmp_path).create_role(role_id="owner", name="Owner", system_prompt="o")
     monkeypatch.setattr(
         "shiori_plugin_testkit.pytest_plugin.plugin_directory",
         lambda _plugin_id: package,
@@ -55,18 +57,8 @@ async def test_plugin_account_report_and_bridge_assignment_share_role_store(
         assert account["display_name"] == ""
         assert account["avatar_url"] == ""
 
-        created = await plugin_bridge_request(
-            bridge, "roles.create", {"name": "Owner", "system_prompt": "Owner"}
-        )
-        assert created.error is None, created.error
-        role_id = created.payload["role"]["id"]
-        assigned = await plugin_bridge_request(
-            bridge,
-            "accounts.assign",
-            {"account_id": account["id"], "role_id": role_id},
-        )
-        assert assigned.error is None, assigned.error
-        assert assigned.payload["account"]["role_id"] == role_id
+        role_id = "owner"
+        assert account["role_id"] == role_id
         assert runtime_store.accounts.get(account["id"]).record.role_id == role_id
         assert runtime_store.accounts.validate_access(
             runtime_store.accounts.authorize(account["id"], role_id)

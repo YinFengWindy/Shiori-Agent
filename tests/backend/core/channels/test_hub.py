@@ -106,6 +106,7 @@ def _live_account(service: RoleAggregateService, platform: str) -> str:
         platform_account_id="self",
         config_ref="legacy",
         token="live",
+        role_id="mira",
     )
     accounts.report(account.record.id, "live", connection="online")
     return account.record.id
@@ -130,10 +131,10 @@ def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
         platform_account_id="100",
         config_ref="one",
         token="live",
+        role_id="mira",
     )
     account_id = account.record.id
     accounts.report(account_id, "live", connection="online")
-    accounts.assign(account_id, None)
     hub = ChannelHub(service)
     message = InboundMessage(
         channel="qq",
@@ -143,7 +144,6 @@ def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
         metadata={"account_id": account_id, "chat_type": "group", "mentioned": True},
     )
 
-    assert hub.route_account_inbound(message) is None
     with pytest.raises(PermissionError):
         hub.route_inbound(
             InboundMessage(
@@ -154,7 +154,7 @@ def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
                 metadata={"account_id": ""},
             )
         )
-    accounts.assign(account_id, "mira")
+    # The owner's default rules only answer group messages that mention it.
     assert (
         hub.route_account_inbound(
             InboundMessage(
@@ -165,7 +165,7 @@ def test_account_inbound_uses_owner_and_rules_without_legacy_binding(
                 metadata={**message.metadata, "mentioned": False},
             )
         )
-        is not None
+        is None
     )
     routed = hub.route_account_inbound(message)
     assert routed is not None
@@ -240,8 +240,8 @@ def test_account_inbound_accepts_telegram_instance_channel_name(tmp_path: Path) 
         platform_account_id="123",
         config_ref="second",
         token="live",
+        role_id="mira",
     )
-    accounts.assign(account.record.id, "mira")
     accounts.report(account.record.id, "live", connection="online")
 
     routed = ChannelHub(service).route_account_inbound(

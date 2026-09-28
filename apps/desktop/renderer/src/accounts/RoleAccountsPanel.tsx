@@ -1,37 +1,48 @@
 import { useState } from "react";
+import { AccountDetailDialog } from "./AccountDetailDialog";
 import { AccountList } from "./AccountList";
 import { useAccounts } from "./useAccounts";
-import { accountDeletionDescription, accountHeadline, accountStatus } from "./accountPresentation";
-import { createAccountClient } from "./accountClient";
+import { accountDeletionDescription, accountPlatformChoices } from "./accountPresentation";
 import { useAccountDeletion } from "./useAccountDeletion";
-import { InlineError } from "../shared/feedback/InlineError";
+import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
+import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
 import { confirmPersonaLines } from "../shared/mascot/mascotLines";
-import { ghostButtonClass } from "../shared/styles";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "../shared/styles";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 
-const client = createAccountClient();
+/** A new account being added on one platform; its ID arrives once the plugin created it. */
+type Adding = { pluginId: string; accountId: string | null };
 
-/** Role's owned accounts and unclaimed account picker. */
-export function RoleAccountsPanel({ roleId, onOpenPluginSettings }: {
-  roleId: string;
-  onOpenPluginSettings: (pluginId: string | null) => void;
-}) {
+/** The role page's 账号 tab: the role's accounts, adding one per platform, and deletion. */
+export function RoleAccountsPanel({ roleId }: { roleId: string }) {
   const { accounts, error, reload } = useAccounts();
-  const [claiming, setClaiming] = useState(false);
-  const [claimError, setClaimError] = useState("");
+  const isPluginEnabled = usePluginEnabledState();
+  const [choosing, setChoosing] = useState(false);
+  const [adding, setAdding] = useState<Adding | null>(null);
   const deletion = useAccountDeletion(roleId, () => void reload());
   const owned = accounts?.filter((item) => item.roleId === roleId) ?? null;
-  const unclaimed = accounts?.filter((item) => item.roleId === null) ?? [];
+  const platforms = accountPlatformChoices(pluginUiRegistry.listAccountDetails(isPluginEnabled), owned ?? []);
   return <div className="grid gap-3">
-    <AccountList title="账号" accounts={owned} error={error} onRefresh={() => void reload()} onAdd={() => { if (unclaimed.length === 0) onOpenPluginSettings(null); else setClaiming(true); }} onDelete={deletion.request} emptyLabel="暂无账号" showConnectionAction />
-    {claiming ? <div className="grid gap-3 border-t border-line-soft pt-3">
-      {claimError ? <InlineError message={claimError} /> : null}
-      {unclaimed.map((account) => <div key={account.id} className="flex items-center justify-between gap-3 text-body-sm">
-        <span className="min-w-0 truncate">{accountHeadline(account)} · {accountStatus(account)}</span>
-        <button type="button" className={ghostButtonClass} onClick={() => void client.assign(account.id, roleId).then(() => { setClaiming(false); void reload(); }).catch((failure) => setClaimError(String(failure)))}>认领</button>
-      </div>)}
-      <div className="flex gap-3"><button type="button" className={ghostButtonClass} onClick={() => onOpenPluginSettings(null)}>配置新账号</button><button type="button" className={ghostButtonClass} onClick={() => setClaiming(false)}>取消</button></div>
+    <AccountList title="账号" roleId={roleId} accounts={owned} error={error} onRefresh={() => void reload()}
+      onAdd={() => setChoosing((open) => !open)} onDelete={deletion.request} emptyLabel="暂无账号" showConnectionAction />
+    {choosing ? <div className="flex flex-wrap gap-2 border-t border-line-soft pt-3" role="group" aria-label="选择平台">
+      {platforms.map((platform) => <button key={platform.pluginId} type="button"
+        className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} disabled={platform.bound}
+        onClick={() => { setChoosing(false); setAdding({ pluginId: platform.pluginId, accountId: null }); }}>
+        {platform.label}{platform.bound ? <span className="text-ink-muted">已绑定</span> : null}
+      </button>)}
     </div> : null}
+    {adding ? <AccountDetailDialog
+      account={owned?.find((account) => account.id === adding.accountId) ?? null}
+      pluginId={adding.pluginId}
+      roleId={roleId}
+      onClose={() => setAdding(null)}
+      onChanged={(accountId) => {
+        // A created account turns the add dialog into that account's detail.
+        if (accountId) setAdding({ pluginId: adding.pluginId, accountId });
+        void reload();
+      }}
+    /> : null}
     <ConfirmDialog
       open={Boolean(deletion.pending)}
       title="删除账号"

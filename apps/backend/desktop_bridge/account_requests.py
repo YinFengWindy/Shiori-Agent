@@ -1,4 +1,4 @@
-"""Bridge read and ownership commands for host-owned account records."""
+"""Bridge read and rule commands for host-owned account records."""
 
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ def _serialize(snapshot: AccountSnapshot) -> dict[str, Any]:
         "display_name": row.display_name,
         "avatar_url": row.avatar_url,
         "role_id": row.role_id,
-        "legacy_owner_candidates": list(row.legacy_owner_candidates),
         "plugin_enabled": snapshot.plugin_enabled,
         "runtime_active": snapshot.runtime_active,
         "connection": snapshot.connection,
@@ -54,7 +53,7 @@ class DesktopAccountRequestHandler:
     async def handle(
         self, method: str, payload: dict[str, Any]
     ) -> dict[str, Any] | None:
-        """Handles account listing, detail, and exclusive role assignment."""
+        """Handles account listing, detail, and response rules."""
         if method == "accounts.list":
             role_id = str(payload.get("role_id") or "").strip() or None
             return {
@@ -66,13 +65,6 @@ class DesktopAccountRequestHandler:
         if method == "accounts.get":
             return {
                 "account": _serialize(self._accounts.get(str(payload["account_id"])))
-            }
-        if method == "accounts.assign":
-            role_id = str(payload.get("role_id") or "").strip() or None
-            return {
-                "account": _serialize(
-                    self._accounts.assign(str(payload["account_id"]), role_id)
-                )
             }
         if method == "accounts.rules.set":
             rules = parse_response_rules(payload["response_rules"])

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -10,6 +11,7 @@ if TYPE_CHECKING:
     from .accounts import QQBotAccountStore
 
 _CAPABILITIES = frozenset({"private", "c2c", "known_targets", "send"})
+logger = logging.getLogger(__name__)
 
 
 class QQBotAccountIdentity:
@@ -22,15 +24,20 @@ class QQBotAccountIdentity:
         self._pending_identity: dict[str, tuple[str, str]] = {}
         self._handoffs: set[str] = set()
         for row in store.list():
+            if not row.get("role_id"):
+                # Accounts exist only under a role; ownerless rows are not served.
+                logger.error("QQBot 应用 %s 没有所属角色，未注册账号", row["app_id"])
+                continue
             self.register(row)
 
     def register(self, row: dict[str, Any], name: str = "") -> str:
-        """Associate an application ID with one host account record."""
+        """Associate an application ID with its owner role's host account."""
         app_id = row["app_id"]
         snapshot = self._ctx.accounts.register(
             platform="qqbot",
             platform_account_id=app_id,
             config_ref=f"app:{app_id}",
+            role_id=row["role_id"],
             display_name=name or row.get("bot_name") or None,
         )
         self._account_ids[app_id] = snapshot.record.id

@@ -28,3 +28,18 @@ export function accountStatus(account: AccountSnapshot) {
     default: return "离线";
   }
 }
+
+/** One platform offered when adding an account to a role. */
+export type AccountPlatformChoice = { pluginId: string; label: string; bound: boolean };
+
+/**
+ * Platforms a role can add an account on. A role holds one account per plugin
+ * (Feishu and Lark are one plugin), so a plugin it already has is `bound`.
+ */
+export function accountPlatformChoices(
+  platforms: ReadonlyArray<{ pluginId: string; label: string }>,
+  owned: ReadonlyArray<Pick<AccountSnapshot, "pluginId">>,
+): AccountPlatformChoice[] {
+  const bound = new Set(owned.map((account) => account.pluginId));
+  return platforms.map(({ pluginId, label }) => ({ pluginId, label, bound: bound.has(pluginId) }));
+}

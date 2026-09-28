@@ -10,8 +10,12 @@ from plugins.qqbot.backend.accounts import QQBotAccountStore
 class _Accounts:
     def __init__(self):
         self.reports = []
+        self.roles = {}
 
-    def register(self, *, platform, platform_account_id, config_ref, display_name=None):
+    def register(
+        self, *, platform, platform_account_id, config_ref, role_id, display_name=None
+    ):
+        self.roles[platform_account_id] = role_id
         assert platform == "qqbot"
         assert config_ref == f"app:{platform_account_id}"
         return SimpleNamespace(
@@ -27,8 +31,10 @@ class _Accounts:
 
 def test_gateway_status_and_bot_identity_are_account_scoped(tmp_path):
     store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
-    store.migrate_legacy("100", "secret-100")
-    store.migrate_legacy("200", "secret-200")
+    for app_id in ("100", "200"):
+        store.save(
+            {"app_id": app_id, "client_secret": f"secret-{app_id}", "role_id": app_id}
+        )
     accounts = _Accounts()
     identity = QQBotAccountIdentity(SimpleNamespace(accounts=accounts), store)
 
@@ -45,7 +51,7 @@ def test_gateway_status_and_bot_identity_are_account_scoped(tmp_path):
 
 def test_candidate_ready_identity_is_not_persisted_before_handover(tmp_path):
     store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
-    store.migrate_legacy("100", "working")
+    store.save({"app_id": "100", "client_secret": "working", "role_id": "mira"})
     identity = QQBotAccountIdentity(SimpleNamespace(accounts=_Accounts()), store)
 
     identity.begin_handoff("100")

@@ -114,20 +114,29 @@ class AccountRegistry:
         platform_account_id: str,
         config_ref: str,
         token: str,
+        role_id: str,
         generation: str = DIRECT_GENERATION,
         display_name: str | None = None,
         avatar_url: str | None = None,
     ) -> AccountSnapshot:
-        """Upserts identity; omitted display fields retain snapshots, empty ones clear."""
-        fields = (plugin_id, platform, platform_account_id, config_ref, token)
+        """Upserts an owned identity; omitted display fields retain snapshots.
+
+        Every account belongs to exactly one role from creation on: the owner
+        is required, a role holds at most one account per plugin, and a
+        platform account owned by another role (or left unowned by older
+        data) is refused rather than taken over.
+        """
+        fields = (plugin_id, platform, platform_account_id, config_ref, token, role_id)
         if any(not isinstance(value, str) or not value.strip() for value in fields):
             raise ValueError(
-                "Account identity, config reference, and token are required"
+                "Account identity, config reference, token, and owner role are required"
             )
-        plugin_id, platform, platform_account_id, config_ref, token = (
+        plugin_id, platform, platform_account_id, config_ref, token, role_id = (
             value.strip() for value in fields
         )
         with self._lock:
+            if not self._role_exists(role_id):
+                raise ValueError(f"角色不存在: {role_id}")
             staged = self._staged_records.get(generation, {})
             known = {**self._records, **staged}
             existing = next(
@@ -145,6 +154,18 @@ class AccountRegistry:
                 raise ValueError(
                     "Platform account already has another configuration reference"
                 )
+            if existing is not None and existing.role_id != role_id:
+                raise ValueError(
+                    "平台账号已属于另一个角色"
+                    if existing.role_id is not None
+                    else "平台账号存在未归属的旧记录，请先手动清理"
+                )
+            if any(
+                row.id != (existing.id if existing else None)
+                and (row.role_id, row.plugin_id) == (role_id, plugin_id)
+                for row in known.values()
+            ):
+                raise ValueError("该角色在这个渠道已有账号")
             if existing is not None:
                 # A concurrent generation must not revive an account mid-delete.
                 self._ensure_not_deleting(existing.id)
@@ -178,6 +199,7 @@ class AccountRegistry:
                     config_ref,
                     display_name or "",
                     avatar_url or "",
+                    role_id=role_id,
                 )
             )
             if row != existing:
@@ -438,40 +460,6 @@ class AccountRegistry:
                 with self._lock:
                     self._deleting.discard(row.id)
 
-    def assign(self, account_id: str, role_id: str | None) -> AccountSnapshot:
-        """Sets the sole owner and invalidates access captured by the old owner."""
-        with self._lock:
-            if role_id is not None and not self._role_exists(role_id):
-                raise KeyError(f"role does not exist: {role_id}")
-            self._ensure_not_deleting(account_id)
-            row = self._records[account_id]
-            if row.role_id != role_id:
-                rules = row.response_rules
-                if (
-                    role_id in row.legacy_owner_candidates
-                    and rules == AccountResponseRules()
-                ):
-                    groups = next(
-                        (
-                            choice.group_rules
-                            for choice in row.legacy_owner_rules
-                            if choice.role_id == role_id
-                        ),
-                        (),
-                    )
-                    if groups:
-                        rules = replace(rules, group_enabled=False, group_rules=groups)
-                row = replace(
-                    row,
-                    role_id=role_id,
-                    ownership_version=row.ownership_version + 1,
-                    legacy_owner_candidates=(),
-                    legacy_owner_rules=(),
-                    response_rules=rules,
-                )
-                self._save({**self._records, account_id: row})
-            return self._runtime.snapshot(row)
-
     def set_response_rules(
         self, account_id: str, rules: AccountResponseRules
     ) -> AccountSnapshot:
@@ -483,22 +471,6 @@ class AccountRegistry:
                 row = replace(row, response_rules=rules)
                 self._save({**self._records, account_id: row})
             return self._runtime.snapshot(row)
-
-    def unassign_role(self, role_id: str) -> None:
-        """Keeps account records when a role is deleted."""
-        with self._lock:
-            updated = {
-                account_id: (
-                    replace(
-                        row, role_id=None, ownership_version=row.ownership_version + 1
-                    )
-                    if row.role_id == role_id
-                    else row
-                )
-                for account_id, row in self._records.items()
-            }
-            if updated != self._records:
-                self._save(updated)
 
     def authorize(self, account_id: str, role_id: str) -> AccountAccess:
         """Captures an online, owned account for a later operation."""

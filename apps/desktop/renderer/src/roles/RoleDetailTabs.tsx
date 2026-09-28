@@ -1,12 +1,13 @@
 import { underlineTabClass } from "../shared/styles";
 
-export type RoleDetailTabId = "profile" | "memory" | "capabilities" | "delivery";
+export type RoleDetailTabId = "profile" | "memory" | "capabilities" | "delivery" | "accounts";
 
 const tabs: Array<{ id: RoleDetailTabId; label: string }> = [
   { id: "profile", label: "资料" },
   { id: "memory", label: "记忆" },
   { id: "capabilities", label: "能力" },
   { id: "delivery", label: "主动推送" },
+  { id: "accounts", label: "账号" },
 ];
 
 /** Renders the role-editor's task-focused navigation without adding another sidebar. */

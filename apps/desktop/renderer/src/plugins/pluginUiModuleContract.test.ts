@@ -33,14 +33,17 @@ describe("applyPluginUiModules", () => {
     function AccountControls() { return null; }
     applyPluginUiModules({
       "/plugins/demo/ui/index.tsx": {
-        default: { pluginId: "demo", accountDetail: { component: AccountControls } },
+        default: { pluginId: "demo", accountDetail: { label: "Demo", component: AccountControls } },
       },
     }, registry);
     const entry = registry.getAccountDetail("demo", () => true);
     assert.ok(entry);
     assert.equal(registry.getAccountDetail("demo", () => false), undefined);
-    const props = renderElement(entry.Component as never, { account: null, onChanged: () => undefined }).props;
+    assert.deepEqual(registry.listAccountDetails(() => true).map((item) => item.label), ["Demo"]);
+    assert.deepEqual(registry.listAccountDetails(() => false), []);
+    const props = renderElement(entry.Component as never, { account: null, roleId: "mira", onChanged: () => undefined }).props;
     assert.equal(props.account, null);
+    assert.equal(props.roleId, "mira");
     assert.equal(typeof (props.client as PluginRpcClient).call, "function");
     registry.unregisterPlugin("demo");
     assert.equal(registry.getAccountDetail("demo", () => true), undefined);

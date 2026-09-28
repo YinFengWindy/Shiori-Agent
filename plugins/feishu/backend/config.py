@@ -52,6 +52,8 @@ class FeishuAccountConfig(FeishuAppConfig):
 
     connection_enabled: bool = True
     connection_revision: int = Field(default=0, ge=0)
+    # Role the application was added from; its account is registered for it.
+    role_id: str = ""
 
 
 class FeishuConfigModel(FeishuAppConfig):
@@ -82,6 +84,11 @@ class FeishuConfigModel(FeishuAppConfig):
         refs = [account.ref for account in self.accounts]
         if len(refs) != len(set(refs)):
             raise ValueError("飞书应用的区域和 App ID 不得重复")
+        # Rejected before the config is saved, so a bad save cannot leave the
+        # plugin failing at setup: a role owns at most one app.
+        roles = [account.role_id for account in self.accounts if account.role_id]
+        if len(roles) != len(set(roles)):
+            raise ValueError("一个角色只能添加一个飞书应用")
         return self
 
     @property

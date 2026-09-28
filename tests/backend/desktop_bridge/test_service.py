@@ -920,8 +920,8 @@ async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -
         platform_account_id="1",
         config_ref="a",
         token="t",
+        role_id="mira",
     ).record.id
-    accounts.assign(account_id, "mira")
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
@@ -935,9 +935,18 @@ async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -
         async def disconnect() -> None:
             response = await service.handle(
                 {
-                    "id": "assign",
-                    "method": "accounts.assign",
-                    "payload": {"account_id": account_id, "role_id": None},
+                    "id": "rules",
+                    "method": "accounts.rules.set",
+                    "payload": {
+                        "account_id": account_id,
+                        "response_rules": {
+                            "private_enabled": False,
+                            "group_enabled": True,
+                            "require_mention": True,
+                            "blocked_sender_ids": [],
+                            "group_rules": [],
+                        },
+                    },
                 },
                 emit_event=Mock(),
             )

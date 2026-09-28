@@ -176,7 +176,9 @@ async def test_delete_hook_retires_the_legacy_host_connection_fields(
 async def test_deleting_an_account_removes_credentials_napcat_data_and_record(
     plugin_runtime, tmp_path
 ) -> None:
-    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
+    roles = RoleStore(tmp_path)
+    for role_id in ("mira", "other"):
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="m")
     store = QQAccountsStore(tmp_path)
     store.save(
         {
@@ -187,8 +189,9 @@ async def test_deleting_an_account_removes_credentials_napcat_data_and_record(
                 expected_uin=uin,
                 auto_connect=False,
                 verified=True,
+                role_id=role_id,
             )
-            for ref, uin in (("aa", "101"), ("bb", "202"))
+            for ref, uin, role_id in (("aa", "101", "mira"), ("bb", "202", "other"))
         }
     )
     napcat = NapCatAccountFiles(store.path.parent / "managed-napcat")
@@ -198,12 +201,10 @@ async def test_deleting_an_account_removes_credentials_napcat_data_and_record(
     async with plugin_runtime(("qq",)) as (service, _path):
         listed = await plugin_bridge_request(service, "accounts.list")
         accounts = {row["config_ref"]: row["id"] for row in listed.payload["accounts"]}
-        assigned = await plugin_bridge_request(
-            service,
-            "accounts.assign",
-            {"account_id": accounts["aa"], "role_id": "mira"},
-        )
-        assert assigned.error is None, assigned.error
+        # Saved accounts re-register at startup for the role stored with them.
+        assert {
+            row["config_ref"]: row["role_id"] for row in listed.payload["accounts"]
+        } == {"aa": "mira", "bb": "other"}
 
         deleted = await plugin_bridge_request(
             service,
@@ -238,6 +239,7 @@ async def test_deleting_the_legacy_account_survives_the_config_generation_swap(
                 expected_uin="101",
                 auto_connect=False,
                 verified=True,
+                role_id="mira",
             )
         }
     )
@@ -253,10 +255,6 @@ async def test_deleting_the_legacy_account_survives_the_config_generation_swap(
         listed = await plugin_bridge_request(service, "accounts.list")
         [account] = listed.payload["accounts"]
         assert account["config_ref"] == "legacy"
-        assigned = await plugin_bridge_request(
-            service, "accounts.assign", {"account_id": account["id"], "role_id": "mira"}
-        )
-        assert assigned.error is None, assigned.error
 
         deleted = await plugin_bridge_request(
             service,

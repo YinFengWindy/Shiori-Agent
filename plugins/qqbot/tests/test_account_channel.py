@@ -12,7 +12,13 @@ from plugins.qqbot.backend.channel import QQBotChannel
 
 
 class _Accounts:
-    def register(self, *, platform, platform_account_id, config_ref, display_name=None):
+    def __init__(self):
+        self.roles = {}
+
+    def register(
+        self, *, platform, platform_account_id, config_ref, role_id, display_name=None
+    ):
+        self.roles[platform_account_id] = role_id
         return SimpleNamespace(record=SimpleNamespace(id=platform_account_id))
 
     def report(self, account_id, **kwargs):
@@ -48,6 +54,7 @@ async def test_one_public_channel_starts_isolated_application_gateways(
         {
             "app_id": "200",
             "client_secret": "second-secret",
+            "role_id": "other",
             "legacy": False,
             "connected": True,
             "targets": [],
@@ -67,8 +74,9 @@ async def test_one_public_channel_starts_isolated_application_gateways(
     runtime = SimpleNamespace(bus=_Bus(), push_tool=_Push(), event_bus=EventBus())
     await manager.start(runtime)
     try:
-        assert started == [("100", False), ("200", False)]
-        assert manager._channels["100"]._client_secret == "legacy-secret"
+        # The imported application has no owner role, so it is not served.
+        assert started == [("200", False)]
+        assert list(manager._channels) == ["200"]
         assert manager._channels["200"]._client_secret == "second-secret"
     finally:
         await manager.stop()

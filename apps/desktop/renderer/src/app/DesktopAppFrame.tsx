@@ -139,7 +139,7 @@ type DesktopAppFrameProps = {
   roleFormDirty: boolean;
   savingRole: boolean;
   onOpenAssetsPage: () => void;
-  /** Opens 设置 › 插件, on the plugin's own settings tab when given (role detail channel notices). */
+  /** Opens 设置 › 插件, on the given plugin's own settings tab (a plugin page's "not configured" notice). */
   onOpenPluginSettings: (pluginId: string | null) => void;
   /** A role's model binding changed outside the draft (role detail 模型 section). */
   onRoleModelChanged: () => void;
@@ -543,7 +543,6 @@ export function DesktopAppFrame({
               onBackToList={onBackToRoleList}
               onGoToChat={() => onGoToRoleChat(detailRoleId)}
               onOpenAssetsPage={onOpenAssetsPage}
-              onOpenPluginSettings={onOpenPluginSettings}
               onRoleModelChanged={onRoleModelChanged}
               onUpdateRoleForm={onUpdateRoleForm}
               onResetRoleForm={onResetRoleForm}

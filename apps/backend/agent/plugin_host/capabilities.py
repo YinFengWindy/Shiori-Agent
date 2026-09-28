@@ -302,10 +302,16 @@ class AccountsCapability:
         platform: str,
         platform_account_id: str,
         config_ref: str,
+        role_id: str,
         display_name: str | None = None,
         avatar_url: str | None = None,
     ) -> "AccountSnapshot":
-        """Registers verified identity; None keeps display snapshots, empty clears."""
+        """Registers a verified identity owned by ``role_id``.
+
+        The owner is the role the account was created from; the plugin stores
+        it with its own account data so re-registration after a restart
+        carries it. None keeps display snapshots, empty clears them.
+        """
         self._effects.ensure_active("account:register")
         snapshot = self._registry.register(
             plugin_id=self._plugin_id,
@@ -313,6 +319,7 @@ class AccountsCapability:
             platform_account_id=platform_account_id,
             config_ref=config_ref,
             token=self._token,
+            role_id=role_id,
             generation=self._generation,
             display_name=display_name,
             avatar_url=avatar_url,

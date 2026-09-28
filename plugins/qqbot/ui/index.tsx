@@ -3,7 +3,7 @@ import { QQBotAccountDetail } from "./QQBotAccountDetail";
 
 const qqbotUi: PluginUiModule = {
   pluginId: "qqbot",
-  accountDetail: { component: QQBotAccountDetail },
+  accountDetail: { label: "QQ 官方机器人", component: QQBotAccountDetail },
 };
 
 export default qqbotUi;

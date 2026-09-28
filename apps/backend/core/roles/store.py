@@ -327,8 +327,11 @@ class RoleStore:
             kept = [role for role in roles if role.id != role_id]
             if len(kept) == len(roles):
                 return False
+            # Accounts are never left without an owner. Until role deletion
+            # cascades to its accounts, a role must have none before it goes.
+            if self.accounts.list(role_id=role_id):
+                raise ValueError("角色仍有账号，请先在「账号」中删除")
             self._save_roles(kept)
-            self.accounts.unassign_role(role_id)
             self._assets.delete_role_data(role_id, remove_assets=remove_assets)
             return True
 

@@ -2,23 +2,27 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
 _UNRESOLVED_ENV_RE = re.compile(r"^\$\{\w+\}$")
+logger = logging.getLogger(__name__)
 
 
 class TelegramBotConfig(BaseModel):
-    """A stable plugin-private Bot reference and its credential."""
+    """A stable plugin-private Bot reference, its credential, and owner role."""
 
     ref: str
     token: str
     enabled: bool = True
+    # Role the Bot was added from; its account is registered for this role.
+    role_id: str = ""
 
     @field_validator("ref")
     @classmethod
@@ -50,6 +54,19 @@ class TelegramConfigModel(BaseModel):
         text = str(value or "").strip()
         return "" if _UNRESOLVED_ENV_RE.fullmatch(text) else text
 
+    @model_validator(mode="after")
+    def _one_bot_per_role_and_identity(self) -> "TelegramConfigModel":
+        # Rejected before the config is saved, so a bad save cannot leave the
+        # plugin failing at setup: a role owns at most one Bot, and a Bot
+        # (its Token's numeric ID) belongs to one entry only.
+        roles = [bot.role_id for bot in self.bots if bot.role_id]
+        if len(roles) != len(set(roles)):
+            raise ValueError("一个角色只能添加一个 Telegram Bot")
+        ids = [bot.token.split(":", 1)[0] for bot in self.bots if ":" in bot.token]
+        if len(ids) != len(set(ids)):
+            raise ValueError("这个 Telegram Bot 已添加")
+        return self
+
     @property
     def configured_bots(self) -> list[TelegramBotConfig]:
         """Reads the old single Token as the stable legacy account."""
@@ -70,6 +87,10 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     channels = {}
     configured_bots = config.configured_bots
     for bot in configured_bots:
+        if not bot.role_id:
+            # Accounts exist only under a role; an ownerless entry is not served.
+            logger.error("Telegram Bot %s 没有所属角色，未注册账号", bot.ref)
+            continue
         if not bot.enabled or not bot.token or _UNRESOLVED_ENV_RE.fullmatch(bot.token):
             continue
         from .channel import TelegramChannel
@@ -83,6 +104,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
                 config_ref=bot.ref,
                 accounts=ctx.accounts,
                 known_store=ctx.kv,
+                role_id=bot.role_id,
                 chat_types=ctx.manifest.channel_chat_types(channel_name),
             )
         except InvalidToken:
@@ -92,6 +114,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
                     platform="telegram",
                     platform_account_id=candidate_id,
                     config_ref=bot.ref,
+                    role_id=bot.role_id,
                 )
                 ctx.accounts.report(
                     account.record.id,
@@ -103,6 +126,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             platform="telegram",
             platform_account_id=bot.token.split(":", 1)[0],
             config_ref=bot.ref,
+            role_id=bot.role_id,
         )
         channel._account_id = account.record.id
         channels[bot.ref] = channel

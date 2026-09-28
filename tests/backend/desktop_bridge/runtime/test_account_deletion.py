@@ -46,8 +46,8 @@ def _roles_with_account(tmp_path) -> tuple[RoleStore, str]:
         platform_account_id="42",
         config_ref="bot_a",
         token="t",
+        role_id="mira",
     )
-    roles.accounts.assign(account.record.id, "mira")
     return roles, account.record.id
 
 

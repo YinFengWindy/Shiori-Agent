@@ -20,6 +20,11 @@ export type PluginUiSlot = "settings.section" | "nav.page" | "role.assets" | "ac
 /** Account null requests a plugin-owned new-account draft; existing accounts open the same detail surface. */
 export type PluginAccountDetailProps = {
   account: AccountSnapshot | null;
+  /**
+   * The role whose account page opened this detail. A new account is created
+   * for it: plugins pass it with every create, save, connect, and login call.
+   */
+  roleId: string;
   /** Refreshes host identity; a created account ID switches the current detail to that record. */
   onChanged: (accountId?: string) => void;
 };
@@ -28,6 +33,8 @@ export type PluginAccountDetailProps = {
 export type AccountDetailEntry = {
   slot: "account.detail";
   pluginId: string;
+  /** Platform name shown when choosing where to add an account. */
+  label: string;
   Component: React.ComponentType<PluginAccountDetailProps>;
 };
 
@@ -342,6 +349,11 @@ class PluginUiRegistry {
   /** Lists role.assets panels with the same built-in-first ordering and filtering. */
   listRoleAssetsPanels(isPluginEnabled?: (pluginId: string) => boolean): RoleAssetsPanelEntry[] {
     return this.listOrdered(this.roleAssetsPanels, isPluginEnabled);
+  }
+
+  /** Lists platforms an account can be added on, i.e. enabled plugins' account controls. */
+  listAccountDetails(isPluginEnabled: (pluginId: string) => boolean): AccountDetailEntry[] {
+    return this.listOrdered(this.accountDetails, isPluginEnabled);
   }
 
   /** Returns platform controls only while their plugin is enabled. */

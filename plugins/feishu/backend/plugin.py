@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import httpx
@@ -16,6 +17,8 @@ from core.accounts.target_contract import (
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
+
+logger = logging.getLogger(__name__)
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
@@ -102,11 +105,16 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
     ctx.rpc.register("accounts.verify", verify, concurrency=Concurrency.INTEGRATION)
     for app in config.applications:
+        if not app.role_id:
+            # Accounts exist only under a role; an ownerless entry is not served.
+            logger.error("飞书应用 %s 没有所属角色，未注册账号", app.ref)
+            continue
         profile_data = ctx.kv.get(f"profile:{app.ref}", {})
         snapshot = ctx.accounts.register(
             platform="feishu",
             platform_account_id=app.ref,
             config_ref=app.ref,
+            role_id=app.role_id,
             display_name=str(profile_data.get("name") or ""),
             avatar_url=str(profile_data.get("avatar_url") or ""),
         )
@@ -135,6 +143,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             profile_store=ctx.kv,
             profile_ref=app.ref,
             connection_revision=app.connection_revision,
+            role_id=app.role_id,
             chat_types=ctx.manifest.channel_chat_types("feishu"),
         )
         channels[app.ref] = channel
