@@ -131,7 +131,8 @@ class _SessionConnection:
             str(trigger["name"])
             for trigger in self._conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='trigger' AND name IN "
-                "('messages_ai', 'messages_ad', 'messages_au')"
+                f"({', '.join('?' for _ in _FTS_TRIGGERS)})",
+                _FTS_TRIGGERS,
             ).fetchall()
         }
         is_trigram = fts_sql is not None and "trigram" in fts_sql.lower()
