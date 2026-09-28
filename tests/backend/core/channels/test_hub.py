@@ -7,7 +7,7 @@ import pytest
 
 from bus.events import InboundMessage, OutboundMessage
 from core.channels import ChannelHub
-from core.accounts.models import AccountResponseRules, GroupResponseRule
+from core.accounts.models import AccountResponseRules
 from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleAggregateService, RoleStore
 from session.manager import SessionManager
@@ -148,66 +148,27 @@ def test_account_inbound_uses_owner_and_rules(
     assert hub.resolve_account_runtime_session_key(account_id) == "role:mira"
     accounts.set_response_rules(account_id, AccountResponseRules(group_enabled=False))
     assert hub.route_account_inbound(message) is None
-    accounts.set_response_rules(
-        account_id,
-        AccountResponseRules(
-            blocked_sender_ids=("user",),
-            group_rules=(GroupResponseRule(chat_id="gqq:42", blocked_sender_ids=()),),
-        ),
+    # Account-wide settings gate every group: @ requirement, then the blacklist.
+    accounts.set_response_rules(account_id, AccountResponseRules(require_mention=False))
+    assert (
+        hub.route_account_inbound(
+            InboundMessage(
+                channel=message.channel,
+                sender=message.sender,
+                chat_id="gqq:43",
+                content=message.content,
+                metadata={**message.metadata, "mentioned": False},
+            )
+        )
+        is not None
     )
-    assert hub.route_account_inbound(message) is None
     accounts.set_response_rules(
-        account_id,
-        AccountResponseRules(
-            group_rules=(
-                GroupResponseRule(chat_id="gqq:42", blocked_sender_ids=("user",)),
-            ),
-        ),
+        account_id, AccountResponseRules(blocked_sender_ids=("user",))
     )
     assert hub.route_account_inbound(message) is None
     # An unloaded plugin's account no longer routes anything.
     accounts.release(account_id, "live")
     assert hub.route_account_inbound(message) is None
-
-
-def test_group_override_admits_only_its_group(tmp_path: Path) -> None:
-    sessions = SessionManager(tmp_path)
-    store = RoleStore(tmp_path)
-    service = RoleAggregateService.from_runtime(
-        workspace=tmp_path, role_store=store, session_manager=sessions
-    )
-    service.create_role(role_id="mira", name="Mira", system_prompt="Mira")
-    account_id = _live_account(
-        service,
-        "qq",
-        AccountResponseRules(
-            group_enabled=False,
-            group_rules=(
-                GroupResponseRule(
-                    chat_id="gqq:42",
-                    require_mention=False,
-                    blocked_sender_ids=("blocked",),
-                ),
-            ),
-        ),
-    )
-    hub = ChannelHub(service)
-
-    def inbound(chat_id: str, sender: str) -> InboundMessage:
-        return InboundMessage(
-            channel="qq",
-            sender=sender,
-            chat_id=chat_id,
-            content="hello",
-            metadata={
-                "account_id": account_id,
-                "chat_type": "group",
-            },
-        )
-
-    assert hub.route_account_inbound(inbound("gqq:42", "friend")) is not None
-    assert hub.route_account_inbound(inbound("gqq:42", "blocked")) is None
-    assert hub.route_account_inbound(inbound("gqq:43", "friend")) is None
 
 
 def test_account_inbound_accepts_telegram_instance_channel_name(tmp_path: Path) -> None:
@@ -610,9 +571,7 @@ def _hub_with_bindings(
         session_manager=SessionManager(tmp_path),
     )
     _ = service.create_role(role_id="mira", name="Mira", system_prompt="you are mira")
-    rules = AccountResponseRules(
-        group_rules=(GroupResponseRule(chat_id="-100", blocked_sender_ids=blocked),)
-    )
+    rules = AccountResponseRules(blocked_sender_ids=blocked)
     return ChannelHub(service), _live_account(service, "telegram", rules)
 
 

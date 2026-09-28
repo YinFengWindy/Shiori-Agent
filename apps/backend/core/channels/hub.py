@@ -71,26 +71,16 @@ class ChannelHub:
         rules = account.record.response_rules
         chat_type = str(metadata.get("chat_type") or "private").lower()
         group = chat_type in {"group", "supergroup"}
+        # Every group chat follows the account-wide group switch and @ requirement.
         if group:
-            override = next(
-                (item for item in rules.group_rules if item.chat_id == message.chat_id),
-                None,
-            )
-            if not (override.enabled if override is not None else rules.group_enabled):
+            if not rules.group_enabled:
                 return None
-            require_mention = (
-                override.require_mention
-                if override is not None
-                else rules.require_mention
-            )
-            if require_mention and not metadata.get("mentioned"):
+            if rules.require_mention and not metadata.get("mentioned"):
                 return None
-        else:
-            if not rules.private_enabled:
-                return None
+        elif not rules.private_enabled:
+            return None
         if self._account_sender_blocked(
             account,
-            chat_id=message.chat_id,
             sender_id=message.sender,
             sender_alias=str(metadata.get("username") or ""),
         ):
@@ -141,18 +131,12 @@ class ChannelHub:
         self,
         account: AccountSnapshot,
         *,
-        chat_id: str,
         sender_id: str,
         sender_alias: str,
     ) -> bool:
-        rules = account.record.response_rules
-        group = next(
-            (item for item in rules.group_rules if item.chat_id == chat_id), None
+        return self._sender_blocked(
+            sender_id, sender_alias, account.record.response_rules.blocked_sender_ids
         )
-        blocked = rules.blocked_sender_ids + (
-            group.blocked_sender_ids if group is not None else ()
-        )
-        return self._sender_blocked(sender_id, sender_alias, blocked)
 
     def _route_for_role(
         self, message: InboundMessage, role_id: str, metadata: dict[str, Any]
@@ -223,7 +207,6 @@ class ChannelHub:
             account = self._live_owned_account(account_id, channel)
             return account is not None and not self._account_sender_blocked(
                 account,
-                chat_id=chat_id,
                 sender_id=sender_id,
                 sender_alias=sender_alias,
             )

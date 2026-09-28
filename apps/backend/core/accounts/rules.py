@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import AccountResponseRules, GroupResponseRule
+from .models import AccountResponseRules
 
 
 def _ids(value: Any, error: str) -> tuple[str, ...]:
@@ -25,39 +25,11 @@ def response_rules_from_dict(value: Any) -> AccountResponseRules:
     ):
         raise ValueError("Invalid account response rules")
     blocked = _ids(value.get("blocked_sender_ids"), "Invalid account response rules")
-    raw_groups = value.get("group_rules")
-    if not isinstance(raw_groups, list):
-        raise ValueError("Invalid account response rules")
-    groups: list[GroupResponseRule] = []
-    for raw in raw_groups:
-        if not isinstance(raw, dict):
-            raise ValueError("Invalid group response rule")
-        chat_id = raw.get("chat_id")
-        if (
-            not isinstance(chat_id, str)
-            or not chat_id.strip()
-            or type(raw.get("enabled")) is not bool
-            or type(raw.get("require_mention")) is not bool
-        ):
-            raise ValueError("Invalid group response rule")
-        groups.append(
-            GroupResponseRule(
-                chat_id=chat_id.strip(),
-                enabled=raw["enabled"],
-                require_mention=raw["require_mention"],
-                blocked_sender_ids=_ids(
-                    raw.get("blocked_sender_ids"), "Invalid group response rule"
-                ),
-            )
-        )
-    if len({group.chat_id for group in groups}) != len(groups):
-        raise ValueError("Duplicate group response rule")
     return AccountResponseRules(
         private_enabled=value["private_enabled"],
         group_enabled=value["group_enabled"],
         require_mention=value["require_mention"],
         blocked_sender_ids=blocked,
-        group_rules=tuple(groups),
     )
 
 
@@ -73,13 +45,4 @@ def response_rules_to_dict(rules: AccountResponseRules) -> dict[str, Any]:
         "group_enabled": rules.group_enabled,
         "require_mention": rules.require_mention,
         "blocked_sender_ids": list(rules.blocked_sender_ids),
-        "group_rules": [
-            {
-                "chat_id": rule.chat_id,
-                "enabled": rule.enabled,
-                "require_mention": rule.require_mention,
-                "blocked_sender_ids": list(rule.blocked_sender_ids),
-            }
-            for rule in rules.group_rules
-        ],
     }

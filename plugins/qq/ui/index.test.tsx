@@ -73,7 +73,7 @@ test("a saved QQ account connects with its existing session without showing QR",
     id: "qq:101", pluginId: "qq", platform: "qq", platformAccountId: "101", configRef: "aa",
     displayName: "QQ", avatarUrl: "", roleId: "mira", runtimeActive: true, connection: "offline",
     capabilities: [], error: "", responseRules: { privateEnabled: true, groupEnabled: true,
-      requireMention: false, blockedSenderIds: [], groupRules: [] },
+      requireMention: false, blockedSenderIds: [] },
   };
   const view = await mountTestComponent(<QQAccountDetail account={account} roleId="mira"
     onChanged={() => undefined} client={client} host={desktopPluginHostServices} />);

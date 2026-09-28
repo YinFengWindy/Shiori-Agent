@@ -97,7 +97,7 @@ class DemoChatChannel:
 2. 构造 `InboundMessage(channel=self.name, sender=<平台用户 id>, chat_id=<会话 id>, content=..., media=[本地路径], metadata={...})`。`metadata` 必须带已登记的 `account_id`，并带 `message_id` / `external_message_id`（宿主用它在线程里去重）；能确定时带 `chat_type`、`mentioned` 和发送者别名 `username`。
 3. 交给 `ChannelIntake.submit()`；真正接收时：
    - `ctx.channel_hub.is_sender_allowed(channel=, chat_id=, sender_id=, account_id=)` 为假就丢弃。只有已登记、在线且所属角色存在的接收账号能处理消息。
-   - `message = ctx.channel_hub.route_account_inbound(message)`：按该账号的私聊/群聊开关、需要 @、黑名单与按群规则准入；返回 `None` 就丢弃，否则补上 `role_id`、`thread_id`、`session_key_override` 等元数据。
+   - `message = ctx.channel_hub.route_account_inbound(message)`：按该账号的私聊/群聊开关、需要 @ 与黑名单准入，所有群聊共用这组账号级设置；返回 `None` 就丢弃，否则补上 `role_id`、`thread_id`、`session_key_override` 等元数据。
    - `metadata["conversation_duplicate"]` 为真时丢弃，否则 `await ctx.bus.publish_inbound(message)`。
 
 约定：

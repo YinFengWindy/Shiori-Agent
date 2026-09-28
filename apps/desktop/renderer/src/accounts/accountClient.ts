@@ -1,18 +1,9 @@
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 
-/** Response policy the account's plugin saves with it; applied by host routing. */
+/** Account-wide response policy the account's plugin saves with it; every group chat follows it. */
 export type AccountResponseRules = {
   privateEnabled: boolean;
   groupEnabled: boolean;
-  requireMention: boolean;
-  blockedSenderIds: string[];
-  groupRules: GroupResponseRule[];
-};
-
-/** Group-specific policy keyed by the plugin's real conversation ID. */
-export type GroupResponseRule = {
-  chatId: string;
-  enabled: boolean;
   requireMention: boolean;
   blockedSenderIds: string[];
 };
@@ -40,8 +31,7 @@ type AccountPayload = {
   display_name: string; avatar_url: string; role_id: string;
   runtime_active: boolean; connection: AccountSnapshot["connection"];
   capabilities: string[]; error: string;
-  response_rules: { private_enabled: boolean; group_enabled: boolean; require_mention: boolean; blocked_sender_ids: string[];
-    group_rules: Array<{ chat_id: string; enabled: boolean; require_mention: boolean; blocked_sender_ids: string[] }> };
+  response_rules: { private_enabled: boolean; group_enabled: boolean; require_mention: boolean; blocked_sender_ids: string[] };
 };
 
 function mapAccount(row: AccountPayload): AccountSnapshot {
@@ -56,10 +46,6 @@ function mapAccount(row: AccountPayload): AccountSnapshot {
       groupEnabled: row.response_rules.group_enabled,
       requireMention: row.response_rules.require_mention,
       blockedSenderIds: row.response_rules.blocked_sender_ids,
-      groupRules: row.response_rules.group_rules.map((group) => ({
-        chatId: group.chat_id, enabled: group.enabled, requireMention: group.require_mention,
-        blockedSenderIds: group.blocked_sender_ids,
-      })),
     },
   };
 }
@@ -89,10 +75,6 @@ export function createAccountClient(invoke?: DesktopInvoke) {
           group_enabled: rules.groupEnabled,
           require_mention: rules.requireMention,
           blocked_sender_ids: rules.blockedSenderIds,
-          group_rules: rules.groupRules.map((group) => ({
-            chat_id: group.chatId, enabled: group.enabled,
-            require_mention: group.requireMention, blocked_sender_ids: group.blockedSenderIds,
-          })),
         },
       });
       return mapAccount(result.account);

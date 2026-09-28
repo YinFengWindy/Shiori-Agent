@@ -17,24 +17,16 @@ ConnectionState = Literal[
 
 
 @dataclass(frozen=True)
-class GroupResponseRule:
-    """Per-chat override preserving group-specific response and blacklist policy."""
-
-    chat_id: str
-    enabled: bool = True
-    require_mention: bool = True
-    blocked_sender_ids: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class AccountResponseRules:
-    """How an account responds; saved by its plugin, applied by host routing."""
+    """How an account responds; saved by its plugin, applied by host routing.
+
+    Every group chat follows the same account-wide group settings.
+    """
 
     private_enabled: bool = True
     group_enabled: bool = True
     require_mention: bool = True
     blocked_sender_ids: tuple[str, ...] = ()
-    group_rules: tuple[GroupResponseRule, ...] = ()
 
 
 def account_id_for(plugin_id: str, platform_account_id: str) -> str:

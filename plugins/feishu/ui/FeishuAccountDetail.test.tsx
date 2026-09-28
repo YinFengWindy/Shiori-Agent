@@ -70,7 +70,7 @@ it("disconnects an online app through the plugin", async () => {
     id: "feishu:feishu:cli_a", pluginId: "feishu", platform: "feishu", platformAccountId: "feishu:cli_a", configRef: "feishu:cli_a",
     displayName: "A", avatarUrl: "", roleId: "mira", runtimeActive: true,
     connection: "online", capabilities: ["private"], error: "",
-    responseRules: { privateEnabled: true, groupEnabled: false, requireMention: false, blockedSenderIds: [], groupRules: [] },
+    responseRules: { privateEnabled: true, groupEnabled: false, requireMention: false, blockedSenderIds: [] },
   };
   const view = await mountTestComponent(
     <FeishuAccountDetail account={account} roleId="mira" onChanged={() => undefined} client={client} host={desktopPluginHostServices} />,

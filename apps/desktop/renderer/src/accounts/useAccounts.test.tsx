@@ -25,7 +25,7 @@ test("mounted account views poll fresh runtime status and stop polling on unmoun
           id: "a", plugin_id: "demo", platform: "demo", platform_account_id: "1", display_name: "",
           avatar_url: "", role_id: "role-1", runtime_active: true, connection,
           capabilities: [], error: "", response_rules: { private_enabled: true, group_enabled: true,
-            require_mention: true, blocked_sender_ids: [], group_rules: [] },
+            require_mention: true, blocked_sender_ids: [] },
         }] } };
       },
     },

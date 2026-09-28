@@ -28,7 +28,7 @@ test("role deletion waits for its account list and can retry a failed lookup", a
       payload: { accounts: [{ id: "telegram:1", role_id: "mira", plugin_id: "telegram", platform: "telegram",
         platform_account_id: "1", config_ref: "1", display_name: "", avatar_url: "", runtime_active: true,
         connection: "online", capabilities: [], error: "", response_rules: {
-          private_enabled: true, group_enabled: true, require_mention: false, blocked_sender_ids: [], group_rules: [],
+          private_enabled: true, group_enabled: true, require_mention: false, blocked_sender_ids: [],
         } }] } }));
     assert.equal(view.container.querySelector("output")?.textContent, "ready:1:");
   } finally { await view.cleanup(); }

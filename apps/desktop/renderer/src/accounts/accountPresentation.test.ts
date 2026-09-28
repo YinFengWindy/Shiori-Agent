@@ -7,7 +7,7 @@ const account: AccountSnapshot = {
   id: "a", pluginId: "demo", platform: "demo", platformAccountId: "101", configRef: "demo",
   displayName: "Demo", avatarUrl: "", roleId: "role-1",
   runtimeActive: true, connection: "online", capabilities: [], error: "",
-  responseRules: { privateEnabled: true, groupEnabled: true, requireMention: true, blockedSenderIds: [], groupRules: [] },
+  responseRules: { privateEnabled: true, groupEnabled: true, requireMention: true, blockedSenderIds: [] },
 };
 
 test("status uses live report and never presents a stopped provider as online", () => {

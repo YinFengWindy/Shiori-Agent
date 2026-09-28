@@ -11,7 +11,6 @@ from .models import (
     AccountRulesHandler,
     AccountSnapshot,
     ConnectionState,
-    GroupResponseRule,
     account_id_for,
 )
 from .registry import AccountRegistry
@@ -33,7 +32,6 @@ __all__ = [
     "AccountRulesHandler",
     "AccountSnapshot",
     "ConnectionState",
-    "GroupResponseRule",
     "account_id_for",
     "response_rules_from_dict",
     "response_rules_to_dict",

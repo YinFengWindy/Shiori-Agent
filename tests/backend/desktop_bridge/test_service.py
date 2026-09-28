@@ -944,7 +944,6 @@ async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -
                             "group_enabled": True,
                             "require_mention": True,
                             "blocked_sender_ids": [],
-                            "group_rules": [],
                         },
                     },
                 },

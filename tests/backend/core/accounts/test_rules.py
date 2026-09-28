@@ -1,4 +1,4 @@
-"""Response rules normalize IDs, reject ambiguous group policies, and round-trip."""
+"""Response rules normalize IDs, reject malformed fields, and round-trip."""
 
 from __future__ import annotations
 
@@ -7,64 +7,30 @@ import pytest
 from core.accounts.rules import response_rules_from_dict, response_rules_to_dict
 
 
-def test_normalizes_account_and_group_sender_ids():
+def test_normalizes_blocked_sender_ids_and_round_trips():
     rules = response_rules_from_dict(
         {
             "private_enabled": True,
             "group_enabled": True,
             "require_mention": False,
             "blocked_sender_ids": [" member-1 ", "member-1"],
-            "group_rules": [
-                {
-                    "chat_id": " group-1 ",
-                    "enabled": False,
-                    "require_mention": True,
-                    "blocked_sender_ids": ["sender-1", " sender-1 "],
-                }
-            ],
         }
     )
     assert rules.blocked_sender_ids == ("member-1",)
-    assert rules.group_rules[0].chat_id == "group-1"
-    assert rules.group_rules[0].blocked_sender_ids == ("sender-1",)
     assert response_rules_from_dict(response_rules_to_dict(rules)) == rules
 
 
 @pytest.mark.parametrize(
-    "change, message",
-    [
-        ({"private_enabled": "true"}, "Invalid account response rules"),
-        ({"blocked_sender_ids": [""]}, "Invalid account response rules"),
-        ({"group_rules": [{}]}, "Invalid group response rule"),
-        (
-            {
-                "group_rules": [
-                    {
-                        "chat_id": "a",
-                        "enabled": True,
-                        "require_mention": True,
-                        "blocked_sender_ids": [],
-                    },
-                    {
-                        "chat_id": " a ",
-                        "enabled": True,
-                        "require_mention": True,
-                        "blocked_sender_ids": [],
-                    },
-                ]
-            },
-            "Duplicate group response rule",
-        ),
-    ],
+    "change",
+    [{"private_enabled": "true"}, {"blocked_sender_ids": [""]}],
 )
-def test_rejects_malformed_or_duplicate_rules(change, message):
+def test_rejects_malformed_rules(change):
     payload = {
         "private_enabled": True,
         "group_enabled": True,
         "require_mention": True,
         "blocked_sender_ids": [],
-        "group_rules": [],
         **change,
     }
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match="Invalid account response rules"):
         response_rules_from_dict(payload)

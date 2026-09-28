@@ -54,7 +54,6 @@ async def test_list_and_detail_use_live_account_snapshot():
                 "group_enabled": True,
                 "require_mention": True,
                 "blocked_sender_ids": [],
-                "group_rules": [],
             },
         }
     }
@@ -77,7 +76,6 @@ async def test_rules_are_validated_then_saved_by_the_plugin():
         "group_enabled": True,
         "require_mention": True,
         "blocked_sender_ids": [" member-1 "],
-        "group_rules": [],
     }
     with pytest.raises(ValueError, match="Invalid account response rules"):
         await handler.handle(

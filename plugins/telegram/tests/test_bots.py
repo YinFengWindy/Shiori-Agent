@@ -18,7 +18,6 @@ _RULES = {
     "group_enabled": True,
     "require_mention": False,
     "blocked_sender_ids": ["troll"],
-    "group_rules": [],
 }
 
 

@@ -10,7 +10,7 @@ const accountRow = {
   config_ref: "ref-1", display_name: "Owned", avatar_url: "", role_id: "role-1",
   runtime_active: true, connection: "online", capabilities: [], error: "",
   response_rules: { private_enabled: true, group_enabled: true, require_mention: true,
-    blocked_sender_ids: [], group_rules: [] },
+    blocked_sender_ids: [] },
 };
 
 type Request = { method: string; payload: Record<string, unknown> };

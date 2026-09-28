@@ -99,7 +99,6 @@ async def test_saved_rules_survive_a_plugin_restart_and_disabling_hides_accounts
         "group_enabled": True,
         "require_mention": True,
         "blocked_sender_ids": ["spam"],
-        "group_rules": [],
     }
     async with plugin_runtime(("qqbot",)) as (service, _path):
         saved = await plugin_bridge_request(

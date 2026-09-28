@@ -202,7 +202,6 @@ async def test_rules_edited_on_the_host_survive_a_plugin_restart(
         "group_enabled": True,
         "require_mention": False,
         "blocked_sender_ids": ["9"],
-        "group_rules": [],
     }
     async with plugin_runtime(("qq",)) as (service, _path):
         saved = await plugin_bridge_request(
