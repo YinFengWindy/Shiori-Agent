@@ -28,13 +28,13 @@ test("QQ add connects once and shows QR only when login requires scanning", asyn
   };
   const view = await mountTestComponent(null);
   try {
-    await view.render(<QQAccountDetail account={null} roleId="mira" onChanged={() => undefined}
-      client={client} host={desktopPluginHostServices} />);
+    // StrictMode replays mount effects; opening the add dialog must still begin exactly one login.
+    await view.render(<React.StrictMode><QQAccountDetail account={null} roleId="mira" onChanged={() => undefined}
+      client={client} host={desktopPluginHostServices} /></React.StrictMode>);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     const button = (label: string) => Array.from(view.container.querySelectorAll("button"))
       .find((item) => item.textContent?.trim() === label);
     assert.equal(view.container.querySelector('input[type="url"]'), null);
-    assert.equal(calls.some((row) => row.method === "accounts.begin" || row.method === "accounts.start"), false);
-    await act(async () => button("连接")?.click());
     assert.deepEqual(calls.filter((row) => row.method === "accounts.begin" || row.method === "accounts.start").map((row) => row.method),
       ["accounts.begin", "accounts.start"]);
     assert.deepEqual(calls.find((row) => row.method === "accounts.begin")?.payload, { role_id: "mira" });
@@ -44,11 +44,11 @@ test("QQ add connects once and shows QR only when login requires scanning", asyn
     assert.equal(view.container.querySelector('[role="alert"]'), null);
     assert.equal(button("连接"), undefined);
     assert.ok(button("刷新二维码"));
-    assert.ok(button("停止"));
+    assert.ok(button("断开连接"));
   } finally {
     await view.cleanup();
-    assert.deepEqual(calls.find((row) => row.method === "accounts.cancel")?.payload,
-      { ref: "temporary-1", role_id: "mira" });
+    assert.deepEqual(calls.filter((row) => row.method === "accounts.cancel").map((row) => row.payload),
+      [{ ref: "temporary-1", role_id: "mira" }]);
   }
 });
 
@@ -80,12 +80,14 @@ test("a saved QQ account connects with its existing session without showing QR",
   try {
     const button = () => Array.from(view.container.querySelectorAll("button"))
       .find((item) => item.textContent?.trim() === "连接");
+    // Opening a saved offline account does not connect it by itself.
+    assert.equal(calls.includes("accounts.start"), false);
     assert.ok(button());
     await act(async () => button()?.click());
     assert.equal(calls.includes("accounts.begin"), false);
     assert.equal(calls.includes("accounts.start"), true);
     assert.equal(view.container.querySelector('img[alt="QQ 登录二维码"]'), null);
-    assert.match(view.container.textContent ?? "", /在线/);
+    assert.ok(Array.from(view.container.querySelectorAll("button")).some((item) => item.textContent?.trim() === "断开连接"));
     assert.equal(button(), undefined);
   } finally { await view.cleanup(); }
 });

@@ -45,16 +45,21 @@ test("owned account detail opens the platform controls for this role, without ow
     // Platform, nickname, platform account and live status are listed.
     assert.match(view.container.textContent ?? "", /Owned/);
     assert.match(view.container.textContent ?? "", /101/);
-    assert.equal(view.container.querySelector(".bg-success-soft")?.textContent, "在线");
+    // Status is a dot on the channel icon, named for assistive tech rather than printed.
+    const dot = view.container.querySelector('[role="img"][aria-label="在线"]');
+    assert.equal(dot?.getAttribute("title"), "在线");
+    assert.ok(dot?.classList.contains("bg-success"));
     assert.ok(view.container.querySelector('[data-testid="test-provider-icon"]'));
-    assert.match(view.container.textContent ?? "", /101/);
-    assert.match(view.container.textContent ?? "", /在线/);
+    assert.doesNotMatch(view.container.textContent ?? "", /在线/);
     const action = Array.from(view.container.querySelectorAll<HTMLButtonElement>("button"))
       .find((button) => button.textContent === "查看");
     assert.ok(action);
     await act(async () => action.click());
     const dialog = document.querySelector('[role="dialog"]')?.textContent ?? "";
-    assert.match(dialog, /平台操作 account-1 role-1/);
+    // The header names the account once with the plugin's label; connection controls precede the rules.
+    assert.equal(document.querySelector('[role="dialog"] h2')?.textContent, "Owned");
+    assert.match(dialog, /在线Test · 101[\s\S]*平台操作 account-1 role-1[\s\S]*响应规则/);
+    assert.doesNotMatch(dialog, /test · 101/);
     assert.equal(Array.from(document.querySelectorAll('[role="dialog"] button'))
       .some((button) => button.textContent === "关闭"), false);
     assert.ok(document.querySelector('[role="dialog"] [aria-label="关闭账号详情"]'));
@@ -87,7 +92,7 @@ test("enabled channels stay visible as rows with add or view actions; disabled c
   try {
     const buttons = Array.from(view.container.querySelectorAll<HTMLButtonElement>("button"));
     assert.equal(buttons.some((button) => button.textContent === "添加账号"), false);
-    assert.match(view.container.textContent ?? "", /Test[\s\S]*在线[\s\S]*Owned[\s\S]*101[\s\S]*Other[\s\S]*未添加/);
+    assert.match(view.container.textContent ?? "", /Test[\s\S]*Owned[\s\S]*101[\s\S]*Other[\s\S]*未添加/);
     assert.doesNotMatch(view.container.textContent ?? "", /Off/);
     assert.ok(view.container.querySelector('[data-testid="other-provider-icon"]'));
     const add = buttons.find((button) => button.textContent?.includes("添加"));
@@ -143,8 +148,7 @@ test("deleting an owned account asks for confirmation and keeps it when the plug
     assert.match(dialog()?.textContent ?? "", /NapCat 文件被占用/);
     assert.ok(view.container.querySelector('[aria-label="删除 Owned"]'));
     // The list reloads after a failure too, so the new status is visible.
-    assert.match(view.container.textContent ?? "", /离线/);
-    assert.doesNotMatch(view.container.textContent ?? "", /在线/);
+    assert.equal(view.container.querySelector('[role="img"]')?.getAttribute("aria-label"), "离线");
 
     await act(async () => confirm()?.click());
     assert.equal(deletes.length, 2);

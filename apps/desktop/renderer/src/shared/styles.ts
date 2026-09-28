@@ -105,6 +105,15 @@ export const dangerGhostButtonSurfaceClass = cx(
 /** Height, padding and type of a compact (36px) labeled button; compose it with a surface class. */
 export const compactButtonSizeClass = "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 px-3.5 text-body-sm font-medium";
 
+/** Compact primary action button (surface + compact size). */
+export const compactPrimaryButtonClass = cx(primaryButtonSurfaceClass, compactButtonSizeClass);
+
+/** Compact secondary action button (surface + compact size). */
+export const compactGhostButtonClass = cx(ghostButtonSurfaceClass, compactButtonSizeClass);
+
+/** Compact quiet destructive button (surface + compact size). */
+export const compactDangerGhostButtonClass = cx(dangerGhostButtonSurfaceClass, compactButtonSizeClass);
+
 /** Shared primary action button styling. */
 export const primaryButtonClass = cx(primaryButtonSurfaceClass, "px-[18px] py-3");
 

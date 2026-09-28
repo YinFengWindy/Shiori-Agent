@@ -1,7 +1,7 @@
 import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
-import { ghostButtonClass, iconButtonClass, inputClass, primaryButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { compactGhostButtonClass, compactPrimaryButtonClass, iconButtonClass, inputClass } from "../../../apps/desktop/renderer/src/shared/styles";
 
 type Detail = { app_id: string; has_secret: boolean; secret_reference: string; connected: boolean; identity: string; bot_id: string; bot_name: string };
 type Targets = { coverage: "observed_c2c_only"; targets: Array<{ chat_id: string; user_openid: string }> };
@@ -80,8 +80,8 @@ export function QQBotAccountDetail({ account, roleId, onChanged, client, host }:
     </label>
     {error ? <host.ui.InlineError message={error} /> : null}
     <div className="flex flex-wrap gap-2">
-      <button type="button" className={primaryButtonClass} disabled={busy || !appId.trim() || (!secret.trim() && !detail?.has_secret)} onClick={() => void save()}>{busy ? "连接中" : "连接"}</button>
-      {account && detail?.connected ? <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => void disconnect()}>断开连接</button> : null}
+      <button type="button" className={compactPrimaryButtonClass} disabled={busy || !appId.trim() || (!secret.trim() && !detail?.has_secret)} onClick={() => void save()}>{busy ? "连接中" : "连接"}</button>
+      {account && detail?.connected ? <button type="button" className={compactGhostButtonClass} disabled={busy} onClick={() => void disconnect()}>断开连接</button> : null}
     </div>
     {account ? <section className="grid gap-2 border-t border-line-soft pt-4" aria-label="已交互 C2C 用户">
       <h3 className="m-0 text-body font-medium text-ink">已交互 C2C 用户</h3>

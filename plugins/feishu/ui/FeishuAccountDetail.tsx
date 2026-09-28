@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
 import { useAccountAction } from "../../../apps/desktop/renderer/src/accounts/useAccountAction";
-import { ghostButtonClass, inputClass, primaryButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { compactGhostButtonClass, compactPrimaryButtonClass, inputClass } from "../../../apps/desktop/renderer/src/shared/styles";
 import { Select } from "../../../apps/desktop/renderer/src/shared/ui/Select";
 
 type FeishuDomain = "feishu" | "lark";
@@ -67,8 +67,8 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
       <input className={inputClass} type="password" value={secret} disabled={busy} onChange={(event) => setSecret(event.target.value)} autoComplete="new-password" placeholder={account ? "已保存" : ""} />
     </label>
     <div className="flex flex-wrap gap-2">
-      <button type="button" className={primaryButtonClass} disabled={busy || !appId.trim() || (!account && !secret.trim())} onClick={() => void save()}>连接</button>
-      {account ? <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => void (connected ? disconnect() : save())}>
+      <button type="button" className={compactPrimaryButtonClass} disabled={busy || !appId.trim() || (!account && !secret.trim())} onClick={() => void save()}>连接</button>
+      {account ? <button type="button" className={compactGhostButtonClass} disabled={busy} onClick={() => void (connected ? disconnect() : save())}>
         {connected ? "断开连接" : "重新连接"}</button> : null}
     </div>
     {profile?.identity.open_id ? <p className="m-0 break-all text-body-sm text-ink-muted">机器人 open_id（本应用） · {profile.identity.open_id}</p> : null}

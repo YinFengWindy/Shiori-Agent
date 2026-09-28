@@ -2,7 +2,7 @@ import { EyeIcon, EyeSlashIcon, InfoIcon } from "@phosphor-icons/react";
 import { useEffect, useId, useState } from "react";
 import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
 import { useAccountAction } from "../../../apps/desktop/renderer/src/accounts/useAccountAction";
-import { ghostButtonClass, iconButtonClass, inputClass, primaryButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { compactGhostButtonClass, compactPrimaryButtonClass, iconButtonClass, inputClass } from "../../../apps/desktop/renderer/src/shared/styles";
 
 type KnownChat = { chat_id: string; chat_type: string; title: string; username: string; topics: number[]; last_seen: string };
 type BotIdentity = { bot_id: string; name: string; username: string };
@@ -55,11 +55,11 @@ export function TelegramAccountDetail({ account, roleId, onChanged, client, host
       </span>
     </div>
     <div className="flex flex-wrap gap-2">
-      <button type="button" className={primaryButtonClass} disabled={busy || (!account && !token.trim())}
+      <button type="button" className={compactPrimaryButtonClass} disabled={busy || (!account && !token.trim())}
         onClick={() => void save()}>连接</button>
-      {account && connected && <button type="button" className={ghostButtonClass} disabled={busy}
+      {account && connected && <button type="button" className={compactGhostButtonClass} disabled={busy}
         onClick={() => void disconnect()}>断开连接</button>}
-      {account && !connected && <button type="button" className={ghostButtonClass} disabled={busy}
+      {account && !connected && <button type="button" className={compactGhostButtonClass} disabled={busy}
         onClick={() => void save()}>重新连接</button>}
     </div>
     {account && <section className="grid gap-2 border-t border-line-soft pt-4">
