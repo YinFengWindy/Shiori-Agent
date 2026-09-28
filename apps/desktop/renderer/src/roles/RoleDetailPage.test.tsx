@@ -22,7 +22,6 @@ function renderPage(overrides: Partial<PageProps> = {}) {
       onBackToList={() => undefined}
       onGoToChat={() => undefined}
       onOpenAssetsPage={() => undefined}
-      onOpenPluginSettings={() => undefined}
       onRoleModelChanged={() => undefined}
       onUpdateRoleForm={() => undefined}
       onResetRoleForm={() => undefined}
@@ -60,6 +59,9 @@ describe("RoleDetailPage", () => {
     assert.doesNotMatch(markup, /知识库/);
     assert.match(markup, /能力/);
     assert.match(markup, /主动推送/);
+    // Tabs read 资料 / 记忆 / 能力 / 主动推送 / 账号; accounts live only in their own tab.
+    assert.match(markup, /资料<\/button>.*记忆<\/button>.*能力<\/button>.*主动推送<\/button>.*账号<\/button>/);
+    assert.doesNotMatch(markup, /添加账号/);
     assert.doesNotMatch(markup, /渠道绑定/);
     assert.match(markup, /aria-current="page"[^>]*>.*资料/);
     assert.match(markup, /角色设定/);

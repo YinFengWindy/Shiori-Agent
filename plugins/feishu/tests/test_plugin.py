@@ -31,9 +31,14 @@ async def test_shared_account_rpc_uses_selected_private_application() -> None:
     ctx = SimpleNamespace(
         config=SimpleNamespace(
             as_dict=lambda: {
-                "app_id": "cli_a",
-                "app_secret": "secret",
-                "domain": "feishu",
+                "accounts": [
+                    {
+                        "app_id": "cli_a",
+                        "app_secret": "secret",
+                        "domain": "feishu",
+                        "role_id": "mira",
+                    }
+                ]
             },
             raw_as_dict=dict,
         ),
@@ -46,9 +51,10 @@ async def test_shared_account_rpc_uses_selected_private_application() -> None:
             register=lambda name, handler, **kwargs: handlers.__setitem__(name, handler)
         ),
         accounts=SimpleNamespace(
-            register=lambda **kwargs: SimpleNamespace(
+            register_configured=lambda **kwargs: SimpleNamespace(
                 record=SimpleNamespace(id="account-a")
             ),
+            read_config_accounts=lambda reader: None,
             report=lambda *args, **kwargs: None,
             on_delete=lambda handler: None,
         ),
@@ -102,6 +108,8 @@ def _load_feishu_state(
         root = Path(tmp)
         stage_plugin_package(PLUGIN_DIR, root / "feishu")
         roles = RoleStore(root)
+        for role_id in ("mira", "other"):
+            roles.create_role(role_id=role_id, name=role_id, system_prompt="m")
         kernel = PluginKernel(
             [root],
             services=HostServices(
@@ -146,9 +154,26 @@ def test_plugin_contributes_nothing_without_credentials() -> None:
 
 
 def test_plugin_contributes_the_channel_with_credentials() -> None:
-    loaded, channels = _load_feishu_channels(
+    # The old single app has no owner role, so it is not served.
+    assert _load_feishu_state(
         {"feishu": {"app_id": "cli_a", "app_secret": "s", "domain": "lark"}}
+    )[1:] == ([], [])
+    loaded, channels, accounts = _load_feishu_state(
+        {
+            "feishu": {
+                "legacy_channel_ref": "lark:cli_a",
+                "accounts": [
+                    {
+                        "app_id": "cli_a",
+                        "app_secret": "s",
+                        "domain": "lark",
+                        "role_id": "mira",
+                    }
+                ],
+            }
+        }
     )
+    assert [row.record.role_id for row in accounts] == ["mira"]
 
     assert loaded == 1
     [channel] = channels
@@ -167,8 +192,18 @@ def test_two_regional_apps_register_distinct_accounts_and_channels() -> None:
         {
             "feishu": {
                 "accounts": [
-                    {"app_id": "cli_a", "app_secret": "first", "domain": "feishu"},
-                    {"app_id": "cli_b", "app_secret": "second", "domain": "lark"},
+                    {
+                        "app_id": "cli_a",
+                        "app_secret": "first",
+                        "domain": "feishu",
+                        "role_id": "mira",
+                    },
+                    {
+                        "app_id": "cli_b",
+                        "app_secret": "second",
+                        "domain": "lark",
+                        "role_id": "other",
+                    },
                 ]
             }
         }
@@ -187,8 +222,14 @@ def test_two_regional_apps_register_distinct_accounts_and_channels() -> None:
 
 
 def test_reordering_accounts_keeps_the_legacy_channel_alias_stable() -> None:
-    old = {"app_id": "cli_old", "app_secret": "old", "domain": "lark"}
+    old = {
+        "app_id": "cli_old",
+        "app_secret": "old",
+        "domain": "lark",
+        "role_id": "mira",
+    }
     new = {"app_id": "cli_new", "app_secret": "new", "domain": "feishu"}
+    new["role_id"] = "other"
     for order in ([old, new], [new, old]):
         loaded, channels = _load_feishu_channels(
             {
@@ -218,11 +259,17 @@ def test_one_unresolved_secret_does_not_disable_another_account() -> None:
         {
             "feishu": {
                 "accounts": [
-                    {"app_id": "cli_ready", "app_secret": "ready", "domain": "feishu"},
+                    {
+                        "app_id": "cli_ready",
+                        "app_secret": "ready",
+                        "domain": "feishu",
+                        "role_id": "mira",
+                    },
                     {
                         "app_id": "cli_missing",
                         "app_secret": "${MISSING_SECRET}",
                         "domain": "lark",
+                        "role_id": "other",
                     },
                 ]
             }
@@ -246,8 +293,14 @@ def test_disconnected_app_keeps_identity_while_other_channel_runs() -> None:
                         "app_secret": "off",
                         "domain": "feishu",
                         "connection_enabled": False,
+                        "role_id": "mira",
                     },
-                    {"app_id": "cli_on", "app_secret": "on", "domain": "lark"},
+                    {
+                        "app_id": "cli_on",
+                        "app_secret": "on",
+                        "domain": "lark",
+                        "role_id": "other",
+                    },
                 ]
             }
         }
@@ -261,55 +314,102 @@ def test_disconnected_app_keeps_identity_while_other_channel_runs() -> None:
 
 
 @pytest.mark.asyncio
-async def test_config_transaction_migrates_legacy_app_without_changing_account_identity(
-    plugin_runtime,
+async def test_config_save_cannot_give_one_role_a_second_application(
+    plugin_runtime, tmp_path
 ) -> None:
+    roles = RoleStore(tmp_path)
+    for role_id in ("mira", "other"):
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="m")
+    old = {
+        "app_id": "cli_old",
+        "app_secret": "old",
+        "domain": "lark",
+        "role_id": "mira",
+    }
     initial = (
-        '\n[plugins.feishu]\napp_id = "cli_old"\napp_secret = "old"\ndomain = "lark"\n'
+        '\n[plugins.feishu]\n[[plugins.feishu.accounts]]\napp_id = "cli_old"\n'
+        'app_secret = "old"\ndomain = "lark"\nrole_id = "mira"\n'
     )
     async with plugin_runtime(("feishu",), initial) as (service, path):
-        before = await plugin_bridge_request(service, "accounts.list")
-        assert before.error is None, before.error
-        [old] = before.payload["accounts"]
+        [before] = (await plugin_bridge_request(service, "accounts.list")).payload[
+            "accounts"
+        ]
+        assert before["role_id"] == "mira"
 
-        saved = await plugin_bridge_request(
+        async def save(owner: str, operation: str):
+            new = {"app_id": "cli_new", "app_secret": "new", "domain": "feishu"}
+            return await plugin_bridge_request(
+                service,
+                "plugin.config.set",
+                {
+                    "plugin_id": "feishu",
+                    "operation_id": operation,
+                    "values": {"accounts": [old, {**new, "role_id": owner}]},
+                },
+            )
+
+        rejected = await save("mira", "second-for-mira")
+        assert rejected.error is not None
+        assert rejected.error.code == "plugin_account_refused"
+        assert "cli_new" not in path.read_text(encoding="utf-8")
+        # An app's owner is fixed: another role cannot take it over by a write.
+        moved = await plugin_bridge_request(
             service,
             "plugin.config.set",
             {
                 "plugin_id": "feishu",
-                "operation_id": "migrate-feishu",
-                "values": {
-                    "app_id": "",
-                    "app_secret": "",
-                    "domain": "feishu",
-                    "legacy_channel_ref": "lark:cli_old",
-                    "accounts": [
-                        {"app_id": "cli_old", "app_secret": "old", "domain": "lark"},
-                        {"app_id": "cli_new", "app_secret": "new", "domain": "feishu"},
-                    ],
-                },
+                "operation_id": "move-to-other",
+                "values": {"accounts": [{**old, "role_id": "other"}]},
             },
         )
-        assert saved.error is None, saved.error
-        after = await plugin_bridge_request(service, "accounts.list")
-        assert after.error is None, after.error
-        rows = after.payload["accounts"]
-        assert {row["platform_account_id"] for row in rows} == {
-            "lark:cli_old",
-            "feishu:cli_new",
+        assert moved.error is not None and "不能更改" in moved.error.message
+        accepted = await save("other", "first-for-other")
+        assert accepted.error is None, accepted.error
+        rows = (await plugin_bridge_request(service, "accounts.list")).payload[
+            "accounts"
+        ]
+        assert {row["platform_account_id"]: row["role_id"] for row in rows} == {
+            "lark:cli_old": "mira",
+            "feishu:cli_new": "other",
         }
-        assert (
-            next(row for row in rows if row["platform_account_id"] == "lark:cli_old")[
-                "id"
-            ]
-            == old["id"]
-        )
-        assert 'app_secret = "old"' in path.read_text(encoding="utf-8")
+        assert before["id"] in {row["id"] for row in rows}
 
 
 @pytest.mark.asyncio
-async def test_disconnect_and_reconnect_keep_the_saved_account(plugin_runtime) -> None:
-    initial = '\n[plugins.feishu]\n[[plugins.feishu.accounts]]\napp_id = "cli_a"\napp_secret = "secret"\ndomain = "feishu"\n'
+async def test_one_unusable_app_is_reported_while_the_others_still_run(
+    plugin_runtime, tmp_path
+) -> None:
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
+    initial = (
+        '\n[plugins.feishu]\napp_id = "cli_old"\napp_secret = "old"\n'
+        '[[plugins.feishu.accounts]]\napp_id = "cli_ok"\napp_secret = "s"\n'
+        'role_id = "mira"\n'
+        '[[plugins.feishu.accounts]]\napp_id = "cli_gone"\napp_secret = "s"\n'
+        'role_id = "deleted-role"\n'
+    )
+    async with plugin_runtime(("feishu",), initial) as (service, _path):
+        listed = await plugin_bridge_request(service, "accounts.list")
+        assert [row["platform_account_id"] for row in listed.payload["accounts"]] == [
+            "feishu:cli_ok"
+        ]
+        plugins = await plugin_bridge_request(service, "plugins.list")
+        [feishu] = [row for row in plugins.payload["plugins"] if row["id"] == "feishu"]
+        assert feishu["state"] == "ACTIVE"
+        errors = feishu["account_errors"]
+        assert len(errors) == 2
+        assert "feishu:cli_old" in errors[0] and "没有所属角色" in errors[0]
+        assert "feishu:cli_gone" in errors[1] and "角色不存在" in errors[1]
+
+
+@pytest.mark.asyncio
+async def test_disconnect_and_reconnect_keep_the_saved_account(
+    plugin_runtime, tmp_path
+) -> None:
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
+    initial = (
+        '\n[plugins.feishu]\n[[plugins.feishu.accounts]]\napp_id = "cli_a"\n'
+        'app_secret = "secret"\ndomain = "feishu"\nrole_id = "mira"\n'
+    )
     async with plugin_runtime(("feishu",), initial) as (service, _path):
         before = await plugin_bridge_request(service, "accounts.list")
         [original] = before.payload["accounts"]
@@ -333,6 +433,7 @@ async def test_disconnect_and_reconnect_keep_the_saved_account(plugin_runtime) -
                                 "app_secret": "secret",
                                 "domain": "feishu",
                                 "connection_enabled": enabled,
+                                "role_id": "mira",
                             }
                         ],
                     },
@@ -351,14 +452,18 @@ async def test_deleting_an_application_purges_config_caches_and_host_record(
 ) -> None:
     monkeypatch.setenv("FEISHU_GONE_ID", "cli_gone")
     monkeypatch.setenv("FEISHU_KEEP_ID", "cli_keep")
-    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
+    roles = RoleStore(tmp_path)
+    for role_id in ("mira", "other", "keeper"):
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="m")
     initial = (
-        '\n[plugins.feishu]\napp_id = "cli_old"\napp_secret = "old"\n'
-        'domain = "lark"\nlegacy_channel_ref = "lark:cli_old"\n'
+        '\n[plugins.feishu]\nlegacy_channel_ref = "lark:cli_old"\n'
+        '[[plugins.feishu.accounts]]\napp_id = "cli_old"\napp_secret = "old"\n'
+        'domain = "lark"\nrole_id = "mira"\n'
         '[[plugins.feishu.accounts]]\napp_id = "${FEISHU_GONE_ID}"\n'
-        'app_secret = "gone-secret"\ndomain = "feishu"\n'
+        'app_secret = "gone-secret"\ndomain = "feishu"\nrole_id = "other"\n'
         '[[plugins.feishu.accounts]]\napp_id = "${FEISHU_KEEP_ID}"\n'
         'app_secret = "${FEISHU_KEEP_SECRET}"\ndomain = "feishu"\n'
+        'role_id = "keeper"\n'
     )
     async with plugin_runtime(("feishu",), initial) as (service, path):
         listed = await plugin_bridge_request(service, "accounts.list")
@@ -369,17 +474,11 @@ async def test_deleting_an_application_purges_config_caches_and_host_record(
         for key in ("profile", "targets"):
             kv.set(f"{key}:lark:cli_old", {"stale": True})
             kv.set(f"{key}:feishu:cli_keep", {"kept": True})
-        for ref in ("lark:cli_old", "feishu:cli_gone"):
-            assigned = await plugin_bridge_request(
-                service,
-                "accounts.assign",
-                {"account_id": accounts[ref], "role_id": "mira"},
-            )
-            assert assigned.error is None, assigned.error
+        for ref, owner in (("lark:cli_old", "mira"), ("feishu:cli_gone", "other")):
             deleted = await plugin_bridge_request(
                 service,
                 "accounts.delete",
-                {"account_id": accounts[ref], "role_id": "mira"},
+                {"account_id": accounts[ref], "role_id": owner},
             )
             assert deleted.error is None, deleted.error
 
@@ -404,10 +503,11 @@ async def test_delete_hook_closes_the_websocket_before_purging() -> None:
     handlers: list[Any] = []
     channels: list[Any] = []
     kv: dict[str, Any] = {"profile:feishu:cli_a": {}, "targets:feishu:cli_a": {}}
+    app = {"app_id": "cli_a", "app_secret": "s", "role_id": "mira"}
     ctx = SimpleNamespace(
         config=SimpleNamespace(
-            as_dict=lambda: {"accounts": [{"app_id": "cli_a", "app_secret": "s"}]},
-            raw_as_dict=lambda: {"accounts": [{"app_id": "cli_a", "app_secret": "s"}]},
+            as_dict=lambda: {"accounts": [app]},
+            raw_as_dict=lambda: {"accounts": [app]},
         ),
         kv=SimpleNamespace(
             get=lambda key, default: kv.get(key, default),
@@ -415,9 +515,10 @@ async def test_delete_hook_closes_the_websocket_before_purging() -> None:
         ),
         rpc=SimpleNamespace(register=lambda *args, **kwargs: None),
         accounts=SimpleNamespace(
-            register=lambda **kwargs: SimpleNamespace(
+            register_configured=lambda **kwargs: SimpleNamespace(
                 record=SimpleNamespace(id="account-a")
             ),
+            read_config_accounts=lambda reader: None,
             report=lambda *args, **kwargs: None,
             on_delete=handlers.append,
         ),

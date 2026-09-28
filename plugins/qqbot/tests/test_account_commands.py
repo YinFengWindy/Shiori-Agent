@@ -21,11 +21,23 @@ class _AccountRecord:
 class _Accounts:
     def __init__(self):
         self.reports = []
+        self.roles = {}
 
-    def register(self, *, platform, platform_account_id, config_ref, display_name=None):
+    def register(
+        self, *, platform, platform_account_id, config_ref, role_id, display_name=None
+    ):
+        self.roles[platform_account_id] = role_id
         assert platform == "qqbot"
         assert config_ref == f"app:{platform_account_id}"
         return SimpleNamespace(record=_AccountRecord(platform_account_id))
+
+    def check_owner(self, *, config_ref, role_id, **_identity):
+        if not role_id:
+            raise ValueError("账号没有所属角色")
+
+    def register_configured(self, **fields):
+        # The host refuses an entry without an owner; the plugin must skip it.
+        return self.register(**fields) if fields.get("role_id") else None
 
     def report(self, account_id, **kwargs):
         self.reports.append((account_id, kwargs))
@@ -40,17 +52,26 @@ def _manager(tmp_path):
 
 @pytest.mark.asyncio
 async def test_application_target_directories_are_isolated(tmp_path, monkeypatch):
-    manager, store, _ = _manager(tmp_path)
+    manager, store, accounts = _manager(tmp_path)
 
     async def preflight(app_id, secret):
         assert secret == f"secret-{app_id}"
 
     monkeypatch.setattr(manager, "_preflight", preflight)
-    for app_id in ("100", "200"):
+    with pytest.raises(ValueError, match="所属角色"):
+        await manager.save_and_connect({"app_id": "100", "client_secret": "s"})
+    for app_id, role_id in (("100", "mira"), ("200", "other")):
         assert await manager.save_and_connect(
-            {"app_id": app_id, "client_secret": f"secret-{app_id}"}
+            {"role_id": role_id, "app_id": app_id, "client_secret": f"secret-{app_id}"}
         ) == {"account_id": app_id}
         store.observe(app_id, "same-openid")
+    # Each application is registered for, and stored with, the role saving it.
+    assert accounts.roles == {"100": "mira", "200": "other"}
+    assert [row["role_id"] for row in store.list()] == ["mira", "other"]
+    with pytest.raises(ValueError, match="另一个角色"):
+        await manager.save_and_connect(
+            {"role_id": "mira", "app_id": "200", "client_secret": "secret-200"}
+        )
 
     assert (await manager.targets({"account_id": "100"}))["targets"] == [
         {"chat_id": "c2c:100:same-openid", "user_openid": "same-openid"}
@@ -72,7 +93,9 @@ async def test_failed_credential_preflight_preserves_running_account(
         pass
 
     monkeypatch.setattr(manager, "_preflight", valid)
-    await manager.save_and_connect({"app_id": "100", "client_secret": "working"})
+    await manager.save_and_connect(
+        {"role_id": "mira", "app_id": "100", "client_secret": "working"}
+    )
     active = manager._channels["100"]
 
     async def rejected(app_id, secret):
@@ -80,7 +103,9 @@ async def test_failed_credential_preflight_preserves_running_account(
 
     monkeypatch.setattr(manager, "_preflight", rejected)
     with pytest.raises(ValueError, match="invalid secret"):
-        await manager.save_and_connect({"app_id": "100", "client_secret": "broken"})
+        await manager.save_and_connect(
+            {"role_id": "mira", "app_id": "100", "client_secret": "broken"}
+        )
     assert store.get("100")["client_secret"] == "working"
     assert manager._channels["100"] is active
 
@@ -104,11 +129,15 @@ async def test_gateway_handover_failure_restores_old_credentials(tmp_path, monke
     monkeypatch.setattr(manager, "_preflight", valid)
     monkeypatch.setattr(QQBotChannel, "start", start)
     monkeypatch.setattr(QQBotChannel, "stop", stop)
-    await manager.save_and_connect({"app_id": "100", "client_secret": "working"})
+    await manager.save_and_connect(
+        {"role_id": "mira", "app_id": "100", "client_secret": "working"}
+    )
     manager._runtime = SimpleNamespace()
 
     with pytest.raises(RuntimeError, match="gateway rejected"):
-        await manager.save_and_connect({"app_id": "100", "client_secret": "broken"})
+        await manager.save_and_connect(
+            {"role_id": "mira", "app_id": "100", "client_secret": "broken"}
+        )
 
     assert store.get("100")["client_secret"] == "working"
     assert manager._channels["100"]._client_secret == "working"
@@ -133,7 +162,9 @@ async def test_failed_new_gateway_does_not_create_an_account(tmp_path, monkeypat
     manager._runtime = SimpleNamespace()
 
     with pytest.raises(RuntimeError, match="gateway rejected"):
-        await manager.save_and_connect({"app_id": "100", "client_secret": "broken"})
+        await manager.save_and_connect(
+            {"role_id": "mira", "app_id": "100", "client_secret": "broken"}
+        )
 
     assert store.list() == []
     assert manager._identity.account_id("100") == ""
@@ -174,7 +205,12 @@ async def test_deleted_application_closes_gateway_and_forgets_credentials(
     manager, store, accounts = _manager(tmp_path)
     for app_id in ("100", "200"):
         store.save(
-            {"app_id": app_id, "client_secret": f"secret-{app_id}", "targets": ["o"]}
+            {
+                "app_id": app_id,
+                "client_secret": f"secret-{app_id}",
+                "role_id": "mira",
+                "targets": ["o"],
+            }
         )
         manager._identity.register(store.get(app_id))
     stopped: list[str] = []

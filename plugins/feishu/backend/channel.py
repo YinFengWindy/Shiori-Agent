@@ -82,9 +82,12 @@ class FeishuChannel:
         profile_store: "PluginKVStore | None" = None,
         profile_ref: str = "",
         connection_revision: int = 0,
+        role_id: str | None = None,
     ) -> None:
         self.name = name
         self.account_id = account_id
+        # Role that owns this application's account, from its config entry.
+        self._role_id = role_id
         self._accounts = accounts
         self._profile_store = profile_store
         self._profile_ref = profile_ref
@@ -421,6 +424,7 @@ class FeishuChannel:
                 platform="feishu",
                 platform_account_id=self._profile_ref,
                 config_ref=self._profile_ref,
+                role_id=self._role_id,
                 display_name=self._bot_name,
                 avatar_url=avatar_url,
             )

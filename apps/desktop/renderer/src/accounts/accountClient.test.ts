@@ -23,9 +23,8 @@ test("account client maps host snapshots and sends only explicit rule mutations"
   assert.deepEqual(account.knownCapabilities, ["groups"]);
   assert.equal(account.configRef, "private-a");
   assert.deepEqual(calls.map(({ method }) => method), ["accounts.list"]);
-  await client.assign("a", "role-1");
   await client.setRules("a", account.responseRules);
-  assert.deepEqual(calls[2], { method: "accounts.rules.set", payload: {
+  assert.deepEqual(calls[1], { method: "accounts.rules.set", payload: {
     account_id: "a", response_rules: { private_enabled: true, group_enabled: true,
       require_mention: true, blocked_sender_ids: [], group_rules: [{ chat_id: "group-1",
         enabled: true, require_mention: false, blocked_sender_ids: ["sender-1"] }] },

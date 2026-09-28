@@ -27,7 +27,6 @@ export type AccountSnapshot = {
   displayName: string;
   avatarUrl: string;
   roleId: string | null;
-  legacyOwnerCandidates?: string[];
   pluginEnabled: boolean;
   runtimeActive: boolean;
   connection: "unknown" | "connecting" | "online" | "offline" | "login_required" | "error";
@@ -41,7 +40,7 @@ export type AccountSnapshot = {
 
 type AccountPayload = {
   id: string; plugin_id: string; platform: string; platform_account_id: string; config_ref: string;
-  display_name: string; avatar_url: string; role_id: string | null; legacy_owner_candidates: string[];
+  display_name: string; avatar_url: string; role_id: string | null;
   plugin_enabled: boolean; runtime_active: boolean; connection: AccountSnapshot["connection"];
   capabilities: string[]; known_capabilities: string[]; error: string;
   response_rules: { private_enabled: boolean; group_enabled: boolean; require_mention: boolean; blocked_sender_ids: string[];
@@ -52,7 +51,7 @@ function mapAccount(row: AccountPayload): AccountSnapshot {
   return {
     id: row.id, pluginId: row.plugin_id, platform: row.platform,
     platformAccountId: row.platform_account_id, configRef: row.config_ref, displayName: row.display_name,
-    avatarUrl: row.avatar_url, roleId: row.role_id, legacyOwnerCandidates: row.legacy_owner_candidates ?? [], pluginEnabled: row.plugin_enabled,
+    avatarUrl: row.avatar_url, roleId: row.role_id, pluginEnabled: row.plugin_enabled,
     runtimeActive: row.runtime_active, connection: row.connection,
     capabilities: row.capabilities, error: row.error,
     knownCapabilities: row.known_capabilities,
@@ -69,7 +68,7 @@ function mapAccount(row: AccountPayload): AccountSnapshot {
   };
 }
 
-/** Narrow bridge client for account identity, ownership, and common rules. */
+/** Narrow bridge client for account identity, deletion, and common rules. */
 export function createAccountClient(invoke?: DesktopInvoke) {
   const call = <T>(method: string, payload: Record<string, unknown>) =>
     invokeBridgePayload<T>(invoke ?? window.miraDesktop.invoke, method, payload);
@@ -80,10 +79,6 @@ export function createAccountClient(invoke?: DesktopInvoke) {
     },
     async get(accountId: string) {
       const result = await call<{ account: AccountPayload }>("accounts.get", { account_id: accountId });
-      return mapAccount(result.account);
-    },
-    async assign(accountId: string, roleId: string | null) {
-      const result = await call<{ account: AccountPayload }>("accounts.assign", { account_id: accountId, role_id: roleId });
       return mapAccount(result.account);
     },
     /** Deletes a role's account after its plugin purged credentials; history is kept. */

@@ -1,7 +1,7 @@
-/** One regional Feishu/Lark custom app saved in plugin configuration. */
+/** One regional Feishu/Lark custom app saved in plugin configuration, with the role owning it. */
 export type FeishuApp = {
   app_id: string; app_secret: string; domain: "feishu" | "lark";
-  connection_enabled?: boolean; connection_revision?: number;
+  connection_enabled?: boolean; connection_revision?: number; role_id?: string;
 };
 
 /** Preserves the legacy single-app config until the first explicit save. */
@@ -20,6 +20,7 @@ function parseApp(value: unknown): FeishuApp | null {
   const rawDomain = "domain" in value ? value.domain : undefined;
   const enabled = "connection_enabled" in value ? value.connection_enabled : undefined;
   const revision = "connection_revision" in value ? value.connection_revision : undefined;
+  const roleId = "role_id" in value ? value.role_id : undefined;
   if (typeof appId !== "string" || !appId || typeof secret !== "string") return null;
   const regionalDomain = typeof rawDomain === "string" ? rawDomain.trim().replace(/\/$/, "") : "";
   const domain = regionalDomain === "https://open.feishu.cn" ? "feishu"
@@ -28,6 +29,7 @@ function parseApp(value: unknown): FeishuApp | null {
     ? { app_id: appId, app_secret: secret, domain,
       ...(typeof enabled === "boolean" ? { connection_enabled: enabled } : {}),
       ...(typeof revision === "number" ? { connection_revision: revision } : {}),
+      ...(typeof roleId === "string" && roleId ? { role_id: roleId } : {}),
     }
     : null;
 }
@@ -39,13 +41,23 @@ function migratedValues(values: Record<string, unknown>, accounts: FeishuApp[]) 
   return { ...values, app_id: "", app_secret: "", domain: "feishu", legacy_channel_ref: legacyRef, accounts };
 }
 
-/** Builds one atomic config update and clears migrated single-app fields. */
+/**
+ * Builds one atomic config update and clears migrated single-app fields. A new
+ * app belongs to `app.role_id`, the role saving it. A saved app is only ever
+ * changed for its own role; one saved without an owner is never taken over.
+ */
 export function withSavedApp(values: Record<string, unknown>, app: FeishuApp): Record<string, unknown> {
   const apps = configuredApps(values);
   const ref = `${app.domain}:${app.app_id}`;
   const index = apps.findIndex((item) => `${item.domain}:${item.app_id}` === ref);
+  if (index >= 0 && apps[index].role_id !== app.role_id) {
+    throw new Error(apps[index].role_id ? "这个飞书应用已属于另一个角色" : "这个飞书应用是未归属的旧数据，请先手动清理");
+  }
   const updated = [...apps];
-  const connected = { ...app, connection_enabled: true, connection_revision: (index < 0 ? 0 : apps[index].connection_revision ?? 0) + 1 };
+  const connected = {
+    ...app,
+    connection_enabled: true, connection_revision: (index < 0 ? 0 : apps[index].connection_revision ?? 0) + 1,
+  };
   if (index < 0) updated.push(connected);
   else updated[index] = connected;
   return migratedValues(values, updated);

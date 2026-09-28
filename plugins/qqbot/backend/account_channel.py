@@ -76,6 +76,8 @@ class QQBotAccountsChannel(
         ):
             ctx.event_bus.on(event_type, handler)
         for row in self._store.list():
+            if not self._identity.account_id(row["app_id"]):
+                continue  # Rows the host refused are not registered, so never served.
             if row.get("connected", True):
                 await self._connect(row)
             else:

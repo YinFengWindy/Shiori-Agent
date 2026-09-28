@@ -17,7 +17,7 @@ test("QQ form dirty state follows the saved baseline and clears on revert", asyn
     },
   };
   function Probe() {
-    const form = useQQAccountForm({ accountId: "account-1", draftRef: "", client, onChanged: () => undefined });
+    const form = useQQAccountForm({ accountId: "account-1", draftRef: "", roleId: "mira", client, onChanged: () => undefined });
     return <><input value={form.fields.uri} onChange={(event) => form.setField("uri", event.target.value)} />
       <output>{form.dirty ? "dirty" : "saved"}</output></>;
   }

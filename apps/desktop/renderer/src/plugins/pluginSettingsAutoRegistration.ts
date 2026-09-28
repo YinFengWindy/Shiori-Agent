@@ -62,7 +62,7 @@ export function synchronizePluginSettingsAutoRegistration(
     }
   }
 
-  const eligibleIds = new Set(plugins.filter((plugin) => plugin.hasConfigSchema || plugin.capabilities?.includes("accounts")).map((plugin) => plugin.id));
+  const eligibleIds = new Set(plugins.filter(hasAutoSettings).map((plugin) => plugin.id));
   // A plugin that drops out of the roster or loses its schema is no longer
   // a candidate for auto-registration at all, so forgetting it here means a
   // later, genuinely new conflict for the same id gets its own one-time
@@ -78,7 +78,7 @@ export function synchronizePluginSettingsAutoRegistration(
   }
 
   for (const plugin of plugins) {
-    if ((!plugin.hasConfigSchema && !plugin.capabilities?.includes("accounts")) || autoRegisteredIds.has(plugin.id)) continue;
+    if (!hasAutoSettings(plugin) || autoRegisteredIds.has(plugin.id)) continue;
     if (pluginUiRegistry.getSettingsSubsection(PARENT_SECTION_ID, plugin.id)) {
       // A hand-written settings.section already claimed this id — it wins,
       // visibly (not a silent overwrite): AC 6. Warned once per id per
@@ -98,10 +98,20 @@ export function synchronizePluginSettingsAutoRegistration(
       id: plugin.id,
       label: plugin.name || plugin.id,
       pluginId: plugin.id,
-      Component: plugin.hasConfigSchema ? createPluginSchemaSettingsSection(plugin.id) : () => null,
+      Component: createPluginSchemaSettingsSection(plugin.id),
     });
     autoRegisteredIds.add(plugin.id);
   }
+}
+
+/**
+ * Whether a plugin gets a schema-generated settings subtab. An account
+ * plugin's config holds the accounts themselves, which are created and
+ * managed only on a role's 账号 tab, so it gets none; it may still hand-write
+ * a settings.section for settings of its own.
+ */
+function hasAutoSettings(plugin: Pick<PluginSummary, "hasConfigSchema"> & Partial<Pick<PluginSummary, "capabilities">>) {
+  return plugin.hasConfigSchema && !plugin.capabilities?.includes("accounts");
 }
 
 /** Test-only: clears bookkeeping so each test starts from a clean slate. */

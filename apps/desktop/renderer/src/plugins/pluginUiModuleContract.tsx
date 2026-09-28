@@ -68,8 +68,10 @@ export type PluginRoleAssetsContribution = {
 /** Plugin-authored account controls receive a scoped RPC client and host services. */
 export type PluginAccountDetailComponentProps = PluginAccountDetailProps & PluginInjectedProps;
 
-/** One platform's new-account and connection controls. */
+/** One platform's new-account and connection controls, opened from a role's account page. */
 export type PluginAccountDetailContribution = {
+  /** Platform name in the role page's add-account choice. */
+  label: string;
   component: React.ComponentType<PluginAccountDetailComponentProps>;
 };
 
@@ -183,6 +185,7 @@ export function applyPluginUiModules(
       registry.registerAccountDetail({
         slot: "account.detail",
         pluginId,
+        label: accountDetail.label,
         Component: bindPluginClient(pluginId, accountDetail.component),
       });
     }

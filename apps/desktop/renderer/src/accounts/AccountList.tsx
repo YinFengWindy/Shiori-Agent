@@ -7,8 +7,10 @@ import type { AccountSnapshot } from "./accountClient";
 import { accountHeadline, accountName, accountStatus } from "./accountPresentation";
 
 /** Reusable identity list; new-account navigation is supplied by its owner. */
-export function AccountList({ title, accounts, error, onRefresh, onAdd, onDelete, emptyLabel, showOwner = false, showConnectionAction = false }: {
+export function AccountList({ title, roleId, accounts, error, onRefresh, onAdd, onDelete, emptyLabel, showConnectionAction = false }: {
   title: string;
+  /** Owner of the listed accounts, handed to their platform controls. */
+  roleId: string;
   accounts: AccountSnapshot[] | null;
   error: string;
   onRefresh: () => void;
@@ -16,7 +18,6 @@ export function AccountList({ title, accounts, error, onRefresh, onAdd, onDelete
   /** Starts the owner's delete confirmation for one account. */
   onDelete?: (account: AccountSnapshot) => void;
   emptyLabel: string;
-  showOwner?: boolean;
   showConnectionAction?: boolean;
 }) {
   const [selected, setSelected] = useState<AccountSnapshot | null>(null);
@@ -32,8 +33,6 @@ export function AccountList({ title, accounts, error, onRefresh, onAdd, onDelete
         <span className="grid min-w-0 gap-0.5"><span className="truncate text-body font-medium text-ink">{accountHeadline(account)}</span><span className="truncate text-body-sm text-ink-muted">{account.platformAccountId}</span></span>
         <span className="grid shrink-0 gap-0.5 text-right text-body-sm text-ink-secondary">
           <span>{accountStatus(account)}</span>
-          {(account.legacyOwnerCandidates?.length ?? 0) > 0 ? <span className="text-ink-muted">待选择归属</span> : null}
-          {showOwner ? <span className="text-ink-muted">{account.roleId ?? "未分配"}</span> : null}
         </span>
       </button>
       {showConnectionAction ? <button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)}
@@ -44,6 +43,6 @@ export function AccountList({ title, accounts, error, onRefresh, onAdd, onDelete
         aria-label={`删除 ${accountName(account)}`}
         onClick={() => onDelete(account)}>删除</button> : null}
     </div>)}
-    {selected ? <AccountDetailDialog key={selected.id} account={accounts?.find((item) => item.id === selected.id) ?? selected} pluginId={selected.pluginId} onClose={() => setSelected(null)} onChanged={onRefresh} /> : null}
+    {selected ? <AccountDetailDialog key={selected.id} account={accounts?.find((item) => item.id === selected.id) ?? selected} pluginId={selected.pluginId} roleId={roleId} onClose={() => setSelected(null)} onChanged={onRefresh} /> : null}
   </section>;
 }

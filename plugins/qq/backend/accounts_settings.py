@@ -20,6 +20,16 @@ from .napcat_installer import managed_available
 from .onebot import OneBotSocket
 
 
+def ensure_config_owner(config: QQConnectionConfig, role_id: str) -> None:
+    """Refuses to act on a QQ configuration for any role but its owner."""
+    if config.role_id != role_id:
+        raise ValueError(
+            "该 QQ 配置已属于另一个角色"
+            if config.role_id
+            else "该 QQ 配置是未归属的旧数据，请先手动清理"
+        )
+
+
 def validate_endpoint(uri: str) -> str:
     """Accepts only a concrete NapCat forward WebSocket address."""
     parsed = urlsplit(uri)
@@ -82,6 +92,14 @@ class QQAccountSettings:
         if not account_id and supplied_ref and self._configs[ref].verified:
             raise PermissionError("已验证 QQ 账号必须按账号 ID 编辑")
         old = self._configs.get(ref)
+        # A new draft remembers the role it was started from; a saved draft
+        # or account keeps its owner, and one saved without an owner is never
+        # taken over.
+        role_id = str(payload.get("role_id") or "").strip()
+        if old is not None:
+            ensure_config_owner(old, role_id)
+        else:
+            self._accounts.check_owner(config_ref=ref, role_id=role_id)
         requested_mode = str(payload.get("mode") or (old.mode if old else "external"))
         if requested_mode not in {"external", "managed"}:
             raise ValueError("QQ 连接模式无效")
@@ -124,6 +142,7 @@ class QQAccountSettings:
                 timeout_seconds=timeout,
                 auto_connect=False,
                 mode=mode,
+                role_id=role_id,
             )
         )
         async with self._locks.setdefault(ref, asyncio.Lock()):

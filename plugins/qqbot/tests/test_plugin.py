@@ -74,7 +74,8 @@ def test_qqbot_plugin_accepts_legacy_config_aliases() -> None:
 
     assert len(channels) == 1
     assert channels[0].name == "qqbot"
-    assert channels[0]._identity.account_id("app")
+    # Imported without an owner role, the application is not registered.
+    assert channels[0]._identity.account_id("app") == ""
 
 
 def test_qqbot_plugin_migrates_original_secret_reference() -> None:
@@ -158,10 +159,27 @@ def test_config_schema_labels_fields_for_the_settings_form() -> None:
 async def test_deleting_applications_purges_kv_and_legacy_host_credentials(
     plugin_runtime, tmp_path
 ) -> None:
-    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="m")
+    roles = RoleStore(tmp_path)
+    for role_id in ("mira", "other"):
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="m")
     kv = PluginKVStore(plugin_data_dir(tmp_path, "qqbot") / "kv.json")
-    QQBotAccountStore(kv).save(
-        {"app_id": "200", "client_secret": "scoped-secret", "targets": ["o"]}
+    store = QQBotAccountStore(kv)
+    # The application imported from host settings, now owned by a role.
+    store.save(
+        {
+            "app_id": "100",
+            "client_secret": "legacy-secret",
+            "legacy": True,
+            "role_id": "mira",
+        }
+    )
+    store.save(
+        {
+            "app_id": "200",
+            "client_secret": "scoped-secret",
+            "role_id": "other",
+            "targets": ["o"],
+        }
     )
     config = '\n[plugins.qqbot]\napp_id = "100"\nclient_secret = "legacy-secret"\n'
     async with plugin_runtime(("qqbot",), config) as (service, path):
@@ -170,13 +188,11 @@ async def test_deleting_applications_purges_kv_and_legacy_host_credentials(
             row["platform_account_id"]: row["id"] for row in listed.payload["accounts"]
         }
         assert set(accounts) == {"100", "200"}
-        for account_id in accounts.values():
-            assigned = await plugin_bridge_request(
-                service,
-                "accounts.assign",
-                {"account_id": account_id, "role_id": "mira"},
-            )
-            assert assigned.error is None, assigned.error
+        # Stored applications re-register at startup for their saved role.
+        assert {
+            row["platform_account_id"]: row["role_id"]
+            for row in listed.payload["accounts"]
+        } == {"100": "mira", "200": "other"}
 
         legacy = await plugin_bridge_request(
             service,
@@ -203,7 +219,7 @@ async def test_deleting_applications_purges_kv_and_legacy_host_credentials(
         scoped = await plugin_bridge_request(
             service,
             "accounts.delete",
-            {"account_id": accounts["200"], "role_id": "mira"},
+            {"account_id": accounts["200"], "role_id": "other"},
         )
         assert scoped.error is None, scoped.error
         assert QQBotAccountStore(kv).list() == []

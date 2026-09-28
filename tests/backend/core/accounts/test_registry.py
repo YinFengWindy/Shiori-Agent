@@ -16,7 +16,7 @@ from shiori_plugin_testkit.legacy_roles import seed_legacy_bindings
 
 
 def test_independent_accounts_ownership_and_recovery(tmp_path):
-    roles = {"r1", "r2"}
+    roles = {"r1", "r2", "r3"}
     registry = AccountRegistry(tmp_path, roles.__contains__)
     registry.set_plugin_enabled("chat", True)
     first = registry.register(
@@ -25,6 +25,7 @@ def test_independent_accounts_ownership_and_recovery(tmp_path):
         platform_account_id="101",
         config_ref="one",
         token="generation-1",
+        role_id="r1",
         display_name="First",
     )
     second = registry.register(
@@ -33,11 +34,11 @@ def test_independent_accounts_ownership_and_recovery(tmp_path):
         platform_account_id="102",
         config_ref="two",
         token="generation-1",
+        role_id="r2",
         display_name="Second",
     )
     assert first.record.id != second.record.id
-    registry.assign(first.record.id, "r1")
-    registry.assign(second.record.id, "r2")
+    assert (first.record.role_id, second.record.role_id) == ("r1", "r2")
     registry.report(
         first.record.id,
         "generation-1",
@@ -53,38 +54,35 @@ def test_independent_accounts_ownership_and_recovery(tmp_path):
         registry.authorize(first.record.id, "r1")
     registry.set_plugin_enabled("chat", True)
 
-    with pytest.raises(ValueError, match="already belongs"):
+    with pytest.raises(ValueError, match="另一个插件"):
         registry.register(
             plugin_id="other",
             platform="chat",
             platform_account_id="101",
             config_ref="duplicate",
             token="generation-2",
+            role_id="r1",
         )
-    with pytest.raises(ValueError, match="Configuration reference"):
+    with pytest.raises(ValueError, match="配置引用已属于"):
         registry.register(
             plugin_id="chat",
             platform="chat",
             platform_account_id="103",
             config_ref="one",
             token="generation-1",
+            role_id="r3",
         )
-    with pytest.raises(ValueError, match="another configuration reference"):
+    with pytest.raises(ValueError, match="已作为另一个账号添加"):
         registry.register(
             plugin_id="chat",
             platform="chat",
             platform_account_id="101",
             config_ref="duplicate",
             token="generation-1",
+            role_id="r1",
         )
     with pytest.raises(PermissionError):
         registry.authorize(first.record.id, "r2")
-
-    registry.assign(first.record.id, "r2")
-    assert not registry.validate_access(access)
-    registry.unassign_role("r2")
-    assert registry.get(first.record.id).record.role_id is None
-    assert registry.get(second.record.id).record.role_id is None
 
     restored = AccountRegistry(tmp_path, roles.__contains__)
     assert {row.record.id for row in restored.list()} == {
@@ -96,6 +94,50 @@ def test_independent_accounts_ownership_and_recovery(tmp_path):
         for row in restored.list()
     )
     assert restored.get(first.record.id).record.display_name == "First"
+    assert restored.get(first.record.id).record.role_id == "r1"
+
+
+def test_registration_requires_one_owner_role_per_plugin_and_identity(tmp_path):
+    registry = AccountRegistry(tmp_path, {"r1", "r2"}.__contains__)
+    identity = dict(plugin_id="chat", platform="chat", token="live")
+    for role_id, error in (("", "没有所属角色"), ("missing", "角色不存在")):
+        with pytest.raises(ValueError, match=error):
+            registry.register(
+                **identity,
+                platform_account_id="101",
+                config_ref="one",
+                role_id=role_id,
+            )
+    owned = registry.register(
+        **identity, platform_account_id="101", config_ref="one", role_id="r1"
+    )
+    # A second account of the same plugin for the same role is refused.
+    with pytest.raises(ValueError, match="已有账号"):
+        registry.register(
+            **identity, platform_account_id="102", config_ref="two", role_id="r1"
+        )
+    # Another plugin, or another role, may still add its own account.
+    registry.register(
+        plugin_id="mail",
+        platform="mail",
+        platform_account_id="101",
+        config_ref="one",
+        token="live",
+        role_id="r1",
+    )
+    registry.register(
+        **identity, platform_account_id="102", config_ref="two", role_id="r2"
+    )
+    # The same platform account cannot be registered for a second role.
+    with pytest.raises(ValueError, match="另一个角色"):
+        registry.register(
+            **identity, platform_account_id="101", config_ref="one", role_id="r2"
+        )
+    again = registry.register(
+        **identity, platform_account_id="101", config_ref="one", role_id="r1"
+    )
+    assert again.record.id == owned.record.id
+    assert len(registry.list(role_id="r1")) == 2
 
 
 def test_legacy_bindings_migrate_one_account_with_group_rules_once(tmp_path):
@@ -121,6 +163,7 @@ def test_legacy_bindings_migrate_one_account_with_group_rules_once(tmp_path):
         platform_account_id="100",
         config_ref="legacy",
         token="first",
+        role_id="mira",
     )
     row = account.record
     assert row.role_id == "mira"
@@ -137,133 +180,17 @@ def test_legacy_bindings_migrate_one_account_with_group_rules_once(tmp_path):
     assert again.ownership_version == version
     assert again.response_rules == row.response_rules
     assert restored.get_role("mira").channel_bindings == []
+    restored.create_role(role_id="other", name="Other", system_prompt="Other")
     second = restored.accounts.register(
         plugin_id="qq",
         platform="qq",
         platform_account_id="200",
         config_ref="new",
         token="second",
+        role_id="other",
     ).record
-    assert second.role_id is None
+    assert second.role_id == "other"
     assert second.response_rules.group_rules == ()
-
-
-def test_conflicting_legacy_owners_require_explicit_assignment(tmp_path):
-    store = RoleStore(tmp_path)
-    for role_id, chat_id in (("mira", "gqq:42"), ("other", "gqq:43")):
-        store.create_role(role_id=role_id, name=role_id, system_prompt=role_id)
-        seed_legacy_bindings(
-            tmp_path,
-            role_id,
-            [
-                {
-                    "channel": "qq",
-                    "chat_id": chat_id,
-                    "chat_type": "group",
-                    "blocked_senders": [],
-                }
-            ],
-        )
-    row = store.accounts.register(
-        plugin_id="qq",
-        platform="qq",
-        platform_account_id="100",
-        config_ref="legacy",
-        token="first",
-    ).record
-    assert row.role_id is None
-    assert row.legacy_owner_candidates == ("mira", "other")
-    assert row.response_rules.group_rules == ()
-    with pytest.raises(PermissionError):
-        store.accounts.authorize(row.id, "mira")
-
-    restarted = RoleStore(tmp_path)
-    assert restarted.accounts.get(row.id).record.legacy_owner_candidates == (
-        "mira",
-        "other",
-    )
-    assert all(not role.channel_bindings for role in restarted.list_roles())
-    assigned = restarted.accounts.assign(row.id, "other").record
-    assert assigned.role_id == "other"
-    assert assigned.legacy_owner_candidates == ()
-    assert {rule.chat_id for rule in assigned.response_rules.group_rules} == {
-        "gqq:43",
-    }
-    restarted.accounts.migrate_legacy_bindings()
-    assert restarted.accounts.get(row.id).record == assigned
-
-
-def test_multi_account_legacy_conflict_keeps_rules_for_chosen_owner(tmp_path):
-    store = RoleStore(tmp_path)
-    for role_id, chat_id in (("mira", "gqq:42"), ("other", "gqq:43")):
-        store.create_role(role_id=role_id, name=role_id, system_prompt=role_id)
-        seed_legacy_bindings(
-            tmp_path,
-            role_id,
-            [
-                {
-                    "channel": "qq",
-                    "chat_id": chat_id,
-                    "chat_type": "group",
-                    "blocked_senders": [role_id],
-                }
-            ],
-        )
-    for uin in ("100", "200"):
-        store.accounts.register(
-            plugin_id="qq",
-            platform="qq",
-            platform_account_id=uin,
-            config_ref=uin,
-            token=uin,
-            generation="prepared",
-        )
-    store.accounts.publish_generation("prepared")
-    rows = store.accounts.list()
-    assert all(row.record.role_id is None for row in rows)
-    assert all(row.record.response_rules.group_rules == () for row in rows)
-    assert all(not role.channel_bindings for role in store.list_roles())
-
-    restarted = RoleStore(tmp_path)
-    chosen = restarted.accounts.assign(rows[0].record.id, "other").record
-    assert [rule.chat_id for rule in chosen.response_rules.group_rules] == ["gqq:43"]
-    assert chosen.response_rules.group_rules[0].blocked_sender_ids == ("other",)
-    assert chosen.response_rules.group_rules[0].require_mention is False
-    assert restarted.accounts.get(rows[1].record.id).record.role_id is None
-
-
-def test_existing_account_owner_keeps_assignment_and_imports_its_rules(tmp_path):
-    store = RoleStore(tmp_path)
-    for role_id, chat_id in (("mira", "gqq:42"), ("other", "gqq:43")):
-        store.create_role(role_id=role_id, name=role_id, system_prompt=role_id)
-        seed_legacy_bindings(
-            tmp_path,
-            role_id,
-            [
-                {
-                    "channel": "qq",
-                    "chat_id": chat_id,
-                    "chat_type": "group",
-                    "blocked_senders": [],
-                }
-            ],
-        )
-    old_registry = AccountRegistry(
-        tmp_path, lambda role_id: role_id in {"mira", "other"}
-    )
-    account = old_registry.register(
-        plugin_id="qq",
-        platform="qq",
-        platform_account_id="100",
-        config_ref="legacy",
-        token="live",
-    )
-    old_registry.assign(account.record.id, "mira")
-    upgraded = RoleStore(tmp_path)
-    upgraded.accounts.migrate_legacy_bindings()
-    row = upgraded.accounts.get(account.record.id).record
-    assert row.role_id == "mira"
-    assert [rule.chat_id for rule in row.response_rules.group_rules] == ["gqq:42"]
 
 
 def test_account_save_before_binding_retirement_recovers_on_restart(
@@ -295,6 +222,7 @@ def test_account_save_before_binding_retirement_recovers_on_restart(
             platform_account_id="100",
             config_ref="legacy",
             token="live",
+            role_id="mira",
         )
     assert store.get_role("mira").channel_bindings
 
@@ -315,9 +243,9 @@ def test_live_generation_fence_and_error_report(tmp_path):
         platform_account_id="101",
         config_ref="one",
         token="old",
+        role_id="role",
     )
     account_id = account.record.id
-    registry.assign(account_id, "role")
     registry.report(account_id, "old", connection="online")
     access = registry.authorize(account_id, "role")
     replacement = registry.register(
@@ -326,6 +254,7 @@ def test_live_generation_fence_and_error_report(tmp_path):
         platform_account_id="101",
         config_ref="one",
         token="new",
+        role_id="role",
     )
     assert replacement.record.id == account_id
     assert replacement.record.role_id == "role"
@@ -337,6 +266,7 @@ def test_live_generation_fence_and_error_report(tmp_path):
             platform_account_id="101",
             config_ref="one",
             token="old",
+            role_id="role",
         )
     registry.unregister(account_id, "old")
     assert registry.get(account_id).plugin_enabled
@@ -360,6 +290,7 @@ def test_stopped_old_instance_cannot_reclaim_after_handover(tmp_path):
         platform_account_id="101",
         config_ref="one",
         token="old",
+        role_id="role",
     )
     registry.unregister(account.record.id, "old")
     registry.register(
@@ -368,6 +299,7 @@ def test_stopped_old_instance_cannot_reclaim_after_handover(tmp_path):
         platform_account_id="101",
         config_ref="one",
         token="new",
+        role_id="role",
     )
     with pytest.raises(RuntimeError, match="superseded"):
         registry.register(
@@ -376,17 +308,19 @@ def test_stopped_old_instance_cannot_reclaim_after_handover(tmp_path):
             platform_account_id="101",
             config_ref="one",
             token="old",
+            role_id="role",
         )
 
 
 def test_candidate_identity_is_hidden_until_published_or_discarded(tmp_path):
-    registry = AccountRegistry(tmp_path, lambda role_id: role_id == "role")
+    registry = AccountRegistry(tmp_path, {"role", "other"}.__contains__)
     existing = registry.register(
         plugin_id="chat",
         platform="chat",
         platform_account_id="101",
         config_ref="one",
         token="old",
+        role_id="role",
         display_name="Original",
     )
     registry.register(
@@ -395,6 +329,7 @@ def test_candidate_identity_is_hidden_until_published_or_discarded(tmp_path):
         platform_account_id="101",
         config_ref="one",
         token="prepared",
+        role_id="role",
         generation="discarded",
         display_name="Uncommitted",
     )
@@ -404,6 +339,7 @@ def test_candidate_identity_is_hidden_until_published_or_discarded(tmp_path):
         platform_account_id="102",
         config_ref="two",
         token="prepared",
+        role_id="other",
         generation="discarded",
     )
     assert registry.get(existing.record.id).record.display_name == "Original"
@@ -417,6 +353,7 @@ def test_candidate_identity_is_hidden_until_published_or_discarded(tmp_path):
         platform_account_id="101",
         config_ref="one",
         token="published",
+        role_id="role",
         generation="next",
         display_name="Updated",
     )
@@ -426,9 +363,9 @@ def test_candidate_identity_is_hidden_until_published_or_discarded(tmp_path):
         platform_account_id="102",
         config_ref="two",
         token="published",
+        role_id="other",
         generation="next",
     )
-    registry.assign(existing.record.id, "role")
     registry.report(
         existing.record.id,
         "published",
@@ -457,6 +394,7 @@ def test_known_capabilities_survive_stop_disable_and_reload(tmp_path):
         platform_account_id="101",
         config_ref="one",
         token="running",
+        role_id="role",
     )
     registry.report(
         account.record.id,
@@ -464,7 +402,6 @@ def test_known_capabilities_survive_stop_disable_and_reload(tmp_path):
         connection="online",
         capabilities=frozenset({"groups", "contacts"}),
     )
-    registry.assign(account.record.id, "role")
     assert registry.validate_access(registry.authorize(account.record.id, "role"))
     registry.unregister(account.record.id, "running")
     registry.set_plugin_enabled("chat", False)
@@ -489,6 +426,7 @@ def test_identity_snapshot_distinguishes_omitted_and_explicit_empty(tmp_path):
         platform_account_id="101",
         config_ref="one",
         token="running",
+        role_id="role",
     )
     created = registry.register(
         **identity, display_name="Display name", avatar_url="https://example.test/a.png"
@@ -515,8 +453,8 @@ def _owned_account(tmp_path, roles=frozenset({"r1", "r2"})):
         platform_account_id="101",
         config_ref="one",
         token="generation-1",
+        role_id="r1",
     )
-    registry.assign(account.record.id, "r1")
     registry.report(account.record.id, "generation-1", connection="online")
     return registry, account.record.id
 
@@ -597,7 +535,7 @@ async def test_invalid_plugin_config_aborts_before_anything_is_purged(tmp_path):
     restarted = AccountRegistry(tmp_path, {"r1"}.__contains__)
     assert [row.record.id for row in restarted.list()] == [account_id]
     # The deletion fence is released after a failure.
-    assert registry.assign(account_id, "r2").record.role_id == "r2"
+    registry.set_response_rules(account_id, AccountResponseRules(group_enabled=False))
 
 
 @pytest.mark.asyncio
@@ -628,7 +566,6 @@ async def test_account_is_frozen_and_cannot_be_revived_while_deleting(tmp_path):
     def plan(config_ref):
         async def disconnect():
             for change in (
-                lambda: registry.assign(account_id, "r2"),
                 lambda: registry.set_response_rules(
                     account_id, AccountResponseRules(group_enabled=False)
                 ),
@@ -639,6 +576,7 @@ async def test_account_is_frozen_and_cannot_be_revived_while_deleting(tmp_path):
                     platform_account_id="101",
                     config_ref="one",
                     token="generation-2",
+                    role_id="r1",
                     generation="g2",
                 ),
             ):
@@ -663,7 +601,7 @@ async def test_account_is_frozen_and_cannot_be_revived_while_deleting(tmp_path):
         check_plugin_config=lambda *_: None,
         write_plugin_config=_Deletion().write,
     )
-    assert refused == ["账号正在删除"] * 3
+    assert refused == ["账号正在删除"] * 2
     assert registry.list() == []
     # After deletion a stale report cannot bring the record back either.
     with pytest.raises(RuntimeError, match="no longer active"):
@@ -699,3 +637,40 @@ async def test_delete_is_refused_when_plugin_cannot_clean_up_or_role_differs(
         await deletion.run(registry, account_id)
     assert deletion.steps == []
     assert registry.get(account_id).record.role_id == "r1"
+
+
+def test_config_write_keeps_owners_and_refuses_unusable_entries(tmp_path):
+    from core.accounts import ConfiguredAccount
+
+    registry = AccountRegistry(tmp_path, {"r1", "r2"}.__contains__)
+    registry.register(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="101",
+        config_ref="one",
+        token="live",
+        role_id="r1",
+    )
+
+    def read(values):
+        return [
+            ConfiguredAccount(ref, row.get("role"), "chat", row.get("id"))
+            for ref, row in values.items()
+        ]
+
+    registry.set_config_reader("chat", read)
+    saved = {"one": {"role": "r1", "id": "101"}, "old": {"role": None, "id": "9"}}
+    # Unchanged entries pass, even an ownerless one left by older data.
+    registry.check_config_write("chat", saved, saved)
+    registry.check_config_write("chat", saved, {**saved, "two": {"role": "r2"}})
+    for after, error in (
+        ({**saved, "one": {"role": "r2", "id": "101"}}, "不能更改"),
+        ({**saved, "old": {"role": "r2", "id": "9"}}, "不能更改"),
+        ({**saved, "two": {"role": None}}, "没有所属角色"),
+        ({**saved, "two": {"role": "gone"}}, "角色不存在"),
+        ({**saved, "two": {"role": "r1"}}, "已有账号"),
+        ({**saved, "two": {"role": "r2", "id": "101"}}, "已作为另一个账号添加"),
+        ({**saved, "two": {"role": "r2"}, "three": {"role": "r2"}}, "已有账号"),
+    ):
+        with pytest.raises(ValueError, match=error):
+            registry.check_config_write("chat", saved, after)

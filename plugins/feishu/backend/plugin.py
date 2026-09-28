@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from .channel import FeishuChannel
 from .config import FeishuAppConfig, FeishuConfigModel, config_without_application
 from .identity import verify_app
-from core.accounts import AccountDeletionPlan
+from core.accounts import AccountDeletionPlan, ConfiguredAccount
 from core.accounts.target_contract import (
     ACCOUNT_SEND_METHOD,
     ACCOUNT_TARGETS_METHOD,
@@ -16,6 +16,14 @@ from core.accounts.target_contract import (
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
+
+
+def configured_accounts(values: dict[str, Any]) -> list[ConfiguredAccount]:
+    """The apps a ``[plugins.feishu]`` table declares, for the host's write check."""
+    return [
+        ConfiguredAccount(app.ref, app.role_id or None, "feishu", app.ref)
+        for app in FeishuConfigModel.model_validate(values).applications
+    ]
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
@@ -101,15 +109,19 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         return {"name": identity["name"], "open_id": identity["open_id"]}
 
     ctx.rpc.register("accounts.verify", verify, concurrency=Concurrency.INTEGRATION)
+    ctx.accounts.read_config_accounts(configured_accounts)
     for app in config.applications:
         profile_data = ctx.kv.get(f"profile:{app.ref}", {})
-        snapshot = ctx.accounts.register(
+        snapshot = ctx.accounts.register_configured(
             platform="feishu",
             platform_account_id=app.ref,
             config_ref=app.ref,
+            role_id=app.role_id or None,
             display_name=str(profile_data.get("name") or ""),
             avatar_url=str(profile_data.get("avatar_url") or ""),
         )
+        if snapshot is None:
+            continue
         account_id = snapshot.record.id
         account_refs[account_id] = app.ref
         if not app.connection_enabled:
@@ -135,6 +147,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             profile_store=ctx.kv,
             profile_ref=app.ref,
             connection_revision=app.connection_revision,
+            role_id=app.role_id or None,
             chat_types=ctx.manifest.channel_chat_types("feishu"),
         )
         channels[app.ref] = channel

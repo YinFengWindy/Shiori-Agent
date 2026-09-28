@@ -52,6 +52,9 @@ class FeishuAccountConfig(FeishuAppConfig):
 
     connection_enabled: bool = True
     connection_revision: int = Field(default=0, ge=0)
+    # Role the application was added from; its account is registered for it.
+    # Empty means no owner (TOML has no null); such an app is not served.
+    role_id: str = ""
 
 
 class FeishuConfigModel(FeishuAppConfig):

@@ -10,7 +10,7 @@ const settings = createPluginBridgeClient();
 const accounts = createAccountClient();
 
 /** Plugin-owned credentials and observed private targets in the shared account detail. */
-export function FeishuAccountDetail({ account, onChanged, client, host }: PluginAccountDetailComponentProps) {
+export function FeishuAccountDetail({ account, roleId, onChanged, client, host }: PluginAccountDetailComponentProps) {
   const accountRef = account?.platformAccountId;
   const [values, setValues] = useState<Record<string, unknown> | null>(null);
   const [domain, setDomain] = useState<FeishuApp["domain"]>("feishu");
@@ -77,7 +77,7 @@ export function FeishuAccountDetail({ account, onChanged, client, host }: Plugin
       if (!current || secret.trim()) {
         await client.call("accounts.verify", { domain, app_id: appId.trim(), app_secret: appSecret });
       }
-      return withSavedApp(latest, { domain, app_id: appId.trim(), app_secret: appSecret });
+      return withSavedApp(latest, { domain, app_id: appId.trim(), app_secret: appSecret, role_id: roleId });
     }, ref);
     if (saved) setSecret("");
   }

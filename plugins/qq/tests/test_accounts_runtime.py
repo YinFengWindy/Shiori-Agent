@@ -20,7 +20,9 @@ class _Accounts:
         self.states: dict[str, str] = {}
         self.reports: list[tuple[str, str, str]] = []
 
-    def register(self, *, platform, platform_account_id, config_ref, display_name=None):
+    def register(
+        self, *, platform, platform_account_id, config_ref, role_id, display_name=None
+    ):
         account_id = f"qq-{platform_account_id}"
         for row in self.rows.values():
             if (
@@ -32,10 +34,19 @@ class _Accounts:
             id=account_id,
             platform_account_id=platform_account_id,
             config_ref=config_ref,
+            role_id=role_id,
             display_name=display_name,
         )
         self.rows[account_id] = row
         return SimpleNamespace(record=row)
+
+    def check_owner(self, *, config_ref, role_id, **_identity):
+        if not role_id:
+            raise ValueError("账号没有所属角色")
+
+    def register_configured(self, **fields):
+        # The host refuses an entry without an owner; the plugin must skip it.
+        return self.register(**fields) if fields.get("role_id") else None
 
     def report(self, account_id, *, connection, capabilities=frozenset(), error=""):
         self.states[account_id] = connection
@@ -127,17 +138,32 @@ async def test_two_accounts_keep_identity_discovery_send_and_events_isolated(
         )
     )
     first = await runtime.save_draft(
-        {"ws_uri": "ws://localhost:3001", "ws_token": "one"}
+        {"role_id": "mira", "ws_uri": "ws://localhost:3001", "ws_token": "one"}
     )
     second = await runtime.save_draft(
-        {"ws_uri": "ws://localhost:3002", "ws_token": "two"}
+        {"role_id": "other", "ws_uri": "ws://localhost:3002", "ws_token": "two"}
     )
+    with pytest.raises(ValueError, match="所属角色"):
+        await runtime.save_draft({"ws_uri": "ws://localhost:3003"})
+    # Another role cannot edit or take over this role's draft.
+    with pytest.raises(ValueError, match="另一个角色"):
+        await runtime.save_draft(
+            {"role_id": "other", "ref": first["ref"], "ws_uri": "ws://localhost:3009"}
+        )
     assert accounts.rows == {}
     assert runtime._sockets == {}
+    # Drafts remember the role they were started from.
+    listed = runtime.settings()["accounts"]
+    assert {row["ref"]: row["role_id"] for row in listed} == {
+        first["ref"]: "mira",
+        second["ref"]: "other",
+    }
 
     a = (await runtime.connect_saved(first["ref"]))["account_id"]
     b = (await runtime.connect_saved(second["ref"]))["account_id"]
     assert a != b
+    # The verified account is registered directly for the draft's role.
+    assert (accounts.rows[a].role_id, accounts.rows[b].role_id) == ("mira", "other")
     assert accounts.states == {a: "online", b: "online"}
     assert (await runtime.discover(a, "friends"))["items"] == [
         {"id": "901", "name": "friend-101"}
@@ -257,10 +283,12 @@ async def test_identity_mismatch_preserves_old_socket_and_saved_identity(
         return candidate, {"user_id": 202, "nickname": "second"}
 
     monkeypatch.setattr(runtime, "_verified_socket", verified)
-    first = await runtime.save_draft({"ws_uri": "ws://localhost:3001"})
+    first = await runtime.save_draft(
+        {"role_id": "mira", "ws_uri": "ws://localhost:3001"}
+    )
     account_id = (await runtime.connect_saved(first["ref"]))["account_id"]
     await runtime.save_draft(
-        {"account_id": account_id, "ws_uri": "ws://localhost:3002"}
+        {"role_id": "mira", "account_id": account_id, "ws_uri": "ws://localhost:3002"}
     )
     assert not old.closed
     with pytest.raises(OneBotError, match="账号记录要求 101"):
@@ -287,6 +315,7 @@ async def test_failed_pending_connection_keeps_active_credentials_after_restart(
     ref = (
         await runtime.save_draft(
             {
+                "role_id": "mira",
                 "ws_uri": "ws://localhost:3001",
                 "ws_token": "working-token",
             }
@@ -295,6 +324,7 @@ async def test_failed_pending_connection_keeps_active_credentials_after_restart(
     account_id = (await runtime.connect_saved(ref))["account_id"]
     await runtime.save_draft(
         {
+            "role_id": "mira",
             "account_id": account_id,
             "ws_uri": "ws://localhost:3002",
             "ws_token": "bad-token",
@@ -365,10 +395,12 @@ async def test_registration_rejection_keeps_previous_config_and_live_socket(
         return socket, {"user_id": 101, "nickname": "same QQ"}
 
     monkeypatch.setattr(runtime, "_verified_socket", verified)
-    ref = (await runtime.save_draft({"ws_uri": "ws://localhost:3001"}))["ref"]
+    ref = (
+        await runtime.save_draft({"role_id": "mira", "ws_uri": "ws://localhost:3001"})
+    )["ref"]
     account_id = (await runtime.connect_saved(ref))["account_id"]
     await runtime.save_draft(
-        {"account_id": account_id, "ws_uri": "ws://localhost:3002"}
+        {"role_id": "mira", "account_id": account_id, "ws_uri": "ws://localhost:3002"}
     )
     before = store.load()[ref]
     monkeypatch.setattr(
@@ -414,7 +446,9 @@ async def test_rejected_first_registration_does_not_mark_draft_verified(
             )
         ),
     )
-    ref = (await runtime.save_draft({"ws_uri": "ws://localhost:3001"}))["ref"]
+    ref = (
+        await runtime.save_draft({"role_id": "mira", "ws_uri": "ws://localhost:3001"})
+    )["ref"]
     monkeypatch.setattr(
         accounts,
         "register",
@@ -456,7 +490,7 @@ async def test_verified_socket_checks_login_uin_and_online_state(monkeypatch, tm
         "plugins.qq.backend.accounts_runtime.OneBotSocket", lambda *_args: socket
     )
     config = QQConnectionConfig(
-        "old", "ws://localhost:3001", "secret", expected_uin="101"
+        "old", "ws://localhost:3001", "secret", expected_uin="101", role_id="mira"
     )
     with pytest.raises(OneBotError, match="账号记录要求 101"):
         await runtime._verified_socket("old", config)
@@ -475,6 +509,7 @@ async def test_saved_account_reports_auth_failure_without_claiming_online(
         "secret",
         expected_uin="101",
         verified=True,
+        role_id="mira",
     )
     store.save({"known": config})
     accounts = _Accounts()
@@ -538,7 +573,9 @@ async def test_socket_alive_logout_blocks_actions_and_updates_account_status(
             ]
         ),
     )
-    ref = (await runtime.save_draft({"ws_uri": "ws://localhost:3001"}))["ref"]
+    ref = (
+        await runtime.save_draft({"role_id": "mira", "ws_uri": "ws://localhost:3001"})
+    )["ref"]
     account_id = (await runtime.connect_saved(ref))["account_id"]
     socket.online = False
     with pytest.raises(OneBotAuthError, match="尚未登录"):
@@ -588,7 +625,9 @@ async def test_periodic_status_check_detects_logout_without_an_account_action(
             ]
         ),
     )
-    ref = (await runtime.save_draft({"ws_uri": "ws://localhost:3001"}))["ref"]
+    ref = (
+        await runtime.save_draft({"role_id": "mira", "ws_uri": "ws://localhost:3001"})
+    )["ref"]
     account_id = (await runtime.connect_saved(ref))["account_id"]
     socket.online = False
     for _ in range(50):
@@ -620,7 +659,9 @@ async def test_socket_alive_identity_switch_cannot_send_as_the_old_account(
             )
         ),
     )
-    ref = (await runtime.save_draft({"ws_uri": "ws://localhost:3001"}))["ref"]
+    ref = (
+        await runtime.save_draft({"role_id": "mira", "ws_uri": "ws://localhost:3001"})
+    )["ref"]
     account_id = (await runtime.connect_saved(ref))["account_id"]
     socket.identity = "202"
     with pytest.raises(OneBotError, match="身份与账号记录不匹配"):
@@ -648,7 +689,9 @@ async def test_manual_connection_reader_failure_reports_error_and_reconnects(
             ]
         ),
     )
-    ref = (await runtime.save_draft({"ws_uri": "ws://localhost:3001"}))["ref"]
+    ref = (
+        await runtime.save_draft({"role_id": "mira", "ws_uri": "ws://localhost:3001"})
+    )["ref"]
     account_id = (await runtime.connect_saved(ref))["account_id"]
     for _ in range(30):
         if runtime._sockets.get(ref) is replacement:
@@ -662,7 +705,7 @@ async def test_manual_connection_reader_failure_reports_error_and_reconnects(
 
 
 @pytest.mark.asyncio
-async def test_migrated_account_becomes_verified_only_after_login(
+async def test_ownerless_config_is_neither_registered_nor_connected(
     monkeypatch, tmp_path
 ):
     store = QQAccountsStore(tmp_path)
@@ -672,39 +715,36 @@ async def test_migrated_account_becomes_verified_only_after_login(
         ws_token="secret",
         timeout_seconds=5,
     )
+    store.save(
+        {
+            **store.load(),
+            "owned": QQConnectionConfig(
+                "owned", "ws://localhost:3002", "", "202", verified=True, role_id="mira"
+            ),
+        }
+    )
     accounts = _Accounts()
     runtime = QQAccountsRuntime(store, accounts)
-    assert accounts.rows == {}
-    socket = _Socket("101")
-    monkeypatch.setattr(
-        runtime,
-        "_verified_socket",
-        AsyncMock(
-            return_value=(
-                socket,
-                {"user_id": 101, "nickname": "verified bot"},
-            )
-        ),
-    )
-    bus = _Bus()
-    push_tool = SimpleNamespace(
-        register_channel=lambda *_a, **_k: None,
-        unregister_channel=lambda *_a, **_k: None,
-    )
+    assert {row.config_ref: row.role_id for row in accounts.rows.values()} == {
+        "owned": "mira"
+    }
+    verified = AsyncMock(side_effect=OneBotError("offline"))
+    monkeypatch.setattr(runtime, "_verified_socket", verified)
     await runtime.start(
         SimpleNamespace(
-            bus=bus,
-            push_tool=push_tool,
+            bus=_Bus(),
+            push_tool=SimpleNamespace(
+                register_channel=lambda *_a, **_k: None,
+                unregister_channel=lambda *_a, **_k: None,
+            ),
             intake_paused=False,
             channel_hub=None,
         )
     )
     for _ in range(20):
-        if accounts.states.get("qq-101") == "online":
-            break
         await asyncio.sleep(0)
-    assert accounts.states["qq-101"] == "online"
-    assert store.load()["legacy"].verified is True
+    assert [call.args[0] for call in verified.await_args_list] == ["owned"]
+    assert store.load()["legacy"].verified is False
     await runtime.stop()
 
 
@@ -725,7 +765,9 @@ async def test_platform_failure_and_missing_receipt_are_not_reported_as_success(
             )
         ),
     )
-    ref = (await runtime.save_draft({"ws_uri": "ws://localhost:3001"}))["ref"]
+    ref = (
+        await runtime.save_draft({"role_id": "mira", "ws_uri": "ws://localhost:3001"})
+    )["ref"]
     account_id = (await runtime.connect_saved(ref))["account_id"]
 
     async def missing_receipt(action, _params=None):
@@ -762,7 +804,7 @@ async def test_managed_connect_waits_for_auth_without_registering_fake_identity(
     )
     monkeypatch.setattr(runtime._managed, "start", start)
     monkeypatch.setattr(runtime._managed, "login_status", status)
-    ref = (await runtime.save_draft({"mode": "managed"}))["ref"]
+    ref = (await runtime.save_draft({"role_id": "mira", "mode": "managed"}))["ref"]
     result = await runtime.connect_saved(ref)
     assert result == {"ref": ref, "account_id": ""}
     for _ in range(20):
@@ -813,7 +855,7 @@ async def test_managed_qr_login_registers_only_after_verified_onebot_identity(
     monkeypatch.setattr(
         "plugins.qq.backend.accounts_runtime.OneBotSocket", lambda *_args: socket
     )
-    ref = (await runtime.save_draft({"mode": "managed"}))["ref"]
+    ref = (await runtime.save_draft({"role_id": "mira", "mode": "managed"}))["ref"]
     assert (await runtime.connect_saved(ref))["account_id"] == ""
     for _ in range(20):
         if runtime._states.get(ref, ("", ""))[0] == "login_required":
@@ -849,6 +891,7 @@ async def test_managed_logout_preserves_saved_identity_but_clears_login(
         expected_uin="101",
         verified=True,
         mode="managed",
+        role_id="mira",
     )
     store.save({"known": config})
     accounts = _Accounts()

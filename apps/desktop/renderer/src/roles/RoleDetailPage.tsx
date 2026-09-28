@@ -30,8 +30,6 @@ type RoleDetailPageProps = {
   /** Switches to the chat with this role. */
   onGoToChat: () => void;
   onOpenAssetsPage: () => void;
-  /** Opens 设置 › 插件, on the given plugin's own settings tab when there is one. */
-  onOpenPluginSettings: (pluginId: string | null) => void;
   /** The role's model binding changed outside the draft; the app's role snapshot must catch up. */
   onRoleModelChanged: () => void;
   onUpdateRoleForm: React.Dispatch<React.SetStateAction<RoleFormState>>;
@@ -53,7 +51,6 @@ export function RoleDetailPage({
   onBackToList,
   onGoToChat,
   onOpenAssetsPage,
-  onOpenPluginSettings,
   onRoleModelChanged,
   onUpdateRoleForm,
   onResetRoleForm,
@@ -78,17 +75,16 @@ export function RoleDetailPage({
   }
 
   const content = activeTab === "profile" ? (
-    <div className="grid gap-7">
-      <RoleProfilePanel
-        roleId={activeRole?.id ?? ""}
-        roleRevision={activeRole?.updated_at ?? ""}
-        bridgeReady={bridgeReady}
-        roleForm={roleForm}
-        onUpdate={updateRoleForm}
-        onModelChanged={onRoleModelChanged}
-      />
-      {activeRoleId ? <RoleAccountsPanel roleId={activeRoleId} onOpenPluginSettings={onOpenPluginSettings} /> : null}
-    </div>
+    <RoleProfilePanel
+      roleId={activeRole?.id ?? ""}
+      roleRevision={activeRole?.updated_at ?? ""}
+      bridgeReady={bridgeReady}
+      roleForm={roleForm}
+      onUpdate={updateRoleForm}
+      onModelChanged={onRoleModelChanged}
+    />
+  ) : activeTab === "accounts" ? (
+    activeRoleId ? <RoleAccountsPanel roleId={activeRoleId} /> : null
   ) : activeTab === "memory" ? (
     <RoleMemoryPanel roleId={activeRoleId} bridgeReady={bridgeReady} />
   ) : activeTab === "capabilities" ? (

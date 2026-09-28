@@ -44,8 +44,8 @@ async def test_uncertain_account_send_does_not_auto_dispatch_original(tmp_path) 
         platform_account_id="bot",
         config_ref="bot",
         token="live",
+        role_id="mira",
     )
-    accounts.assign(account.record.id, "mira")
     accounts.report(account.record.id, "live", connection="online")
 
     async def timed_out(payload):

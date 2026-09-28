@@ -15,12 +15,13 @@ test("identity and all contribution shapes are validated, including wrapped Reac
     { navPage: { component, label: "Demo", sidebar: 1 } },
     { settingsSection: { label: "Settings", kind: "invalid" } },
     { chatImageActions: {} },
-    { accountDetail: { component: 1 } },
+    { accountDetail: { label: "Demo", component: 1 } },
+    { accountDetail: { component } },
     { roleSettings: { Component: component, read: () => ({}), pluginId: "other" } },
     { roleSettings: { Component: component, read: () => ({}), storage: "runtime" } },
   ]) assert.throws(() => validateRuntimePluginUi({ pluginId: "demo", ...contribution }, "demo"));
   assert.doesNotThrow(() => validateRuntimePluginUi({ pluginId: "demo", roleSettings: { Component: component, read: () => ({}), storage: "plugin" } }, "demo"));
-  assert.doesNotThrow(() => validateRuntimePluginUi({ pluginId: "demo", accountDetail: { component } }, "demo"));
+  assert.doesNotThrow(() => validateRuntimePluginUi({ pluginId: "demo", accountDetail: { label: "Demo", component } }, "demo"));
 });
 
 test("a package still declaring the retired roleMemory contribution is rejected with an explicit diagnostic", () => {

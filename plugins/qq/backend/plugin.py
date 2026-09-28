@@ -108,9 +108,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         concurrency=Concurrency.READ_ONLY,
     )
     ctx.rpc.register("accounts.save", runtime.save_draft)
-    ctx.rpc.register(
-        "accounts.connect", lambda payload: runtime.connect_saved(str(payload["ref"]))
-    )
+    ctx.rpc.register("accounts.connect", lambda payload: _connect(runtime, payload))
     ctx.rpc.register(
         "accounts.disconnect", lambda payload: _disconnect(runtime, payload)
     )
@@ -152,6 +150,17 @@ async def _settings(runtime, payload: dict) -> dict:
         str(payload["account_id"]) if payload.get("account_id") else None,
         str(payload["ref"]) if payload.get("ref") else None,
     )
+
+
+async def _connect(runtime, payload: dict) -> dict:
+    """Connects a saved draft only for the role that owns it."""
+    from .accounts_settings import ensure_config_owner
+
+    ref = str(payload["ref"])
+    if ref not in runtime._configs:
+        raise KeyError("QQ 配置引用不存在")
+    ensure_config_owner(runtime._configs[ref], str(payload.get("role_id") or ""))
+    return await runtime.connect_saved(ref)
 
 
 async def _disconnect(runtime, payload: dict) -> dict:

@@ -44,13 +44,16 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._actions = QQAccountActions(self._socket_for, self._ensure_online)
         for ref, config in self._configs.items():
             if config.verified and config.expected_uin:
-                snapshot = self._accounts.register(
+                # A saved account the host refuses is reported, not served.
+                snapshot = self._accounts.register_configured(
                     platform="qq",
                     platform_account_id=config.expected_uin,
                     config_ref=ref,
+                    role_id=config.role_id,
                     display_name=config.display_name or None,
                 )
-                self._ids[ref] = snapshot.record.id
+                if snapshot is not None:
+                    self._ids[ref] = snapshot.record.id
 
     @property
     def configuration_key(self) -> tuple[str, str]:
@@ -69,7 +72,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
             text_with_metadata=self._send_with_metadata,
         )
         for ref, config in self._configs.items():
-            if config.auto_connect:
+            if config.auto_connect and self._servable(ref):
                 self._schedule(ref)
 
     async def stop(self) -> None:
@@ -92,6 +95,11 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
             self._ctx.bus.unsubscribe_outbound(self.name, self._on_response)
             self._ctx.push_tool.unregister_channel(self.name)
             self._ctx = None
+
+    def _servable(self, ref: str) -> bool:
+        """A registered account, or an owned draft still waiting for its login."""
+        config = self._configs[ref]
+        return ref in self._ids or (not config.verified and bool(config.role_id))
 
     def _ref_for(self, account_id: str) -> str:
         try:
@@ -204,6 +212,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
             platform="qq",
             platform_account_id=uin,
             config_ref=ref,
+            role_id=config.role_id,
             display_name=saved.display_name,
         )
         self._store.save({**self._configs, ref: saved})

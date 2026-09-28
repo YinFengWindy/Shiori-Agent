@@ -10,8 +10,10 @@ import { FeishuAccountDetail } from "./FeishuAccountDetail";
 it("keeps a credential draft offline until verification and explicit save", async () => {
   const calls: string[] = [];
   let allowVerification = false;
+  let saved: { accounts?: Array<{ role_id?: string }> } | undefined;
   const invoke = async ({ method, payload: requestPayload }: { method: string; payload: Record<string, unknown> }) => {
     calls.push(method);
+    if (method === "plugin.config.set") saved = requestPayload.values as typeof saved;
     if (method === "plugin.feishu.accounts.verify" && !allowVerification) throw new Error("bad credential");
     const payload = method === "plugin.config.get"
       ? { values: { app_id: "", app_secret: "", domain: "feishu", accounts: [] }, schema: null, env_status: {} }
@@ -28,7 +30,7 @@ it("keeps a credential draft offline until verification and explicit save", asyn
   const client = createPluginRpcClient("feishu", invoke);
   let created = "";
   const view = await mountTestComponent(
-    <FeishuAccountDetail account={null} onChanged={(id) => { created = id ?? ""; }} client={client} host={desktopPluginHostServices} />,
+    <FeishuAccountDetail account={null} roleId="mira" onChanged={(id) => { created = id ?? ""; }} client={client} host={desktopPluginHostServices} />,
     { windowGlobals: { miraDesktop: { invoke, onEvent: () => () => undefined } } },
   );
   try {
@@ -48,6 +50,8 @@ it("keeps a credential draft offline until verification and explicit save", asyn
     allowVerification = true;
     await act(async () => save()?.click());
     assert.equal(calls.includes("plugin.config.set"), true);
+    // The new app is saved for the role whose page added it.
+    assert.deepEqual(saved?.accounts?.map((app) => app.role_id), ["mira"]);
     assert.equal(created, "new-account");
   } finally {
     await view.cleanup();
@@ -76,7 +80,7 @@ it("disconnects an online app through the explicit account control", async () =>
     responseRules: { privateEnabled: true, groupEnabled: false, requireMention: false, blockedSenderIds: [], groupRules: [] },
   };
   const view = await mountTestComponent(
-    <FeishuAccountDetail account={account} onChanged={() => undefined} client={client} host={desktopPluginHostServices} />,
+    <FeishuAccountDetail account={account} roleId="mira" onChanged={() => undefined} client={client} host={desktopPluginHostServices} />,
     { windowGlobals: { miraDesktop: { invoke, onEvent: () => () => undefined } } },
   );
   try {
@@ -87,6 +91,34 @@ it("disconnects an online app through the explicit account control", async () =>
     const accountConfigs = submitted && typeof submitted === "object" && "accounts" in submitted ? submitted.accounts : undefined;
     assert.ok(Array.isArray(accountConfigs));
     assert.equal(accountConfigs[0].connection_enabled, false);
+  } finally {
+    await view.cleanup();
+    await client.dispose();
+  }
+});
+
+it("refuses to save another role's app instead of re-enabling it", async () => {
+  const calls: string[] = [];
+  const configured = { accounts: [{ app_id: "cli_a", app_secret: "saved", domain: "feishu", role_id: "mira" }] };
+  const invoke = async ({ method }: { method: string; payload: Record<string, unknown> }) => {
+    calls.push(method);
+    const payload = method === "plugin.config.get" ? { values: configured, schema: null, env_status: {} }
+      : method === "plugins.communication.open" ? { generation: "test" } : {};
+    return { id: "response", type: "response" as const, method, error: null, payload };
+  };
+  const client = createPluginRpcClient("feishu", invoke);
+  const view = await mountTestComponent(
+    <FeishuAccountDetail account={null} roleId="other" onChanged={() => undefined} client={client} host={desktopPluginHostServices} />,
+    { windowGlobals: { miraDesktop: { invoke, onEvent: () => () => undefined } } },
+  );
+  try {
+    const id = document.querySelector<HTMLInputElement>('input[autocomplete="off"]');
+    assert.ok(id);
+    await changeInputValue(id, "cli_a");
+    const save = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "保存并连接");
+    await act(async () => save?.click());
+    assert.match(document.body.textContent ?? "", /另一个角色/);
+    assert.equal(calls.includes("plugin.config.set"), false);
   } finally {
     await view.cleanup();
     await client.dispose();

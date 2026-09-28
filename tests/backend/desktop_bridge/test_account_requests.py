@@ -9,7 +9,7 @@ from desktop_bridge.account_requests import DesktopAccountRequestHandler
 
 
 @pytest.mark.asyncio
-async def test_list_and_assignment_use_live_account_snapshot(tmp_path):
+async def test_list_and_detail_use_live_account_snapshot(tmp_path):
     accounts = AccountRegistry(tmp_path, lambda role_id: role_id == "role")
     accounts.set_plugin_enabled("demo", True)
     account = accounts.register(
@@ -18,6 +18,7 @@ async def test_list_and_assignment_use_live_account_snapshot(tmp_path):
         platform_account_id="101",
         config_ref="private-key",
         token="running",
+        role_id="role",
         display_name="Demo",
     )
     accounts.report(
@@ -27,9 +28,7 @@ async def test_list_and_assignment_use_live_account_snapshot(tmp_path):
         capabilities=frozenset({"contacts"}),
     )
     handler = DesktopAccountRequestHandler(accounts)
-    assigned = await handler.handle(
-        "accounts.assign", {"account_id": account.record.id, "role_id": "role"}
-    )
+    assigned = await handler.handle("accounts.get", {"account_id": account.record.id})
     assert assigned is not None
     assert assigned["account"]["role_id"] == "role"
     assert assigned["account"]["plugin_enabled"]
@@ -54,18 +53,17 @@ async def test_list_and_assignment_use_live_account_snapshot(tmp_path):
     assert detail["account"]["plugin_enabled"]
     assert not detail["account"]["runtime_active"]
     assert detail["account"]["connection"] == "unknown"
-
-    with pytest.raises(KeyError):
+    # Ownership is fixed at creation; there is no bridge method to change it.
+    assert (
         await handler.handle(
-            "accounts.assign", {"account_id": account.record.id, "role_id": "missing"}
+            "accounts.assign", {"account_id": account.record.id, "role_id": "role"}
         )
-    assert (await handler.handle("accounts.assign", {"account_id": account.record.id}))[
-        "account"
-    ]["role_id"] is None
+        is None
+    )
 
 
 @pytest.mark.asyncio
-async def test_rules_are_account_scoped_and_survive_reassignment_and_reload(tmp_path):
+async def test_rules_are_account_scoped_and_survive_reload(tmp_path):
     accounts = AccountRegistry(tmp_path, lambda role_id: role_id in {"first", "second"})
     one = accounts.register(
         plugin_id="demo",
@@ -73,6 +71,7 @@ async def test_rules_are_account_scoped_and_survive_reassignment_and_reload(tmp_
         platform_account_id="101",
         config_ref="one",
         token="one",
+        role_id="first",
     )
     two = accounts.register(
         plugin_id="demo",
@@ -80,6 +79,7 @@ async def test_rules_are_account_scoped_and_survive_reassignment_and_reload(tmp_
         platform_account_id="102",
         config_ref="two",
         token="two",
+        role_id="second",
     )
     handler = DesktopAccountRequestHandler(accounts)
     rules = {
@@ -108,27 +108,13 @@ async def test_rules_are_account_scoped_and_survive_reassignment_and_reload(tmp_
         "member-1",
         "member-2",
     ]
-    await handler.handle(
-        "accounts.assign",
-        {
-            "account_id": one.record.id,
-            "role_id": "first",
-        },
-    )
-    await handler.handle(
-        "accounts.assign",
-        {
-            "account_id": one.record.id,
-            "role_id": "second",
-        },
-    )
     restored = DesktopAccountRequestHandler(
         AccountRegistry(tmp_path, lambda role_id: role_id in {"first", "second"})
     )
     detail = await restored.handle("accounts.get", {"account_id": one.record.id})
     other = await restored.handle("accounts.get", {"account_id": two.record.id})
     assert detail is not None and other is not None
-    assert detail["account"]["role_id"] == "second"
+    assert detail["account"]["role_id"] == "first"
     assert detail["account"]["response_rules"]["group_enabled"] is False
     assert detail["account"]["response_rules"]["blocked_sender_ids"] == [
         "member-1",

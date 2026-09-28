@@ -63,9 +63,9 @@ async def test_disconnect_is_pending_but_onebot_rejection_is_failed(tmp_path):
         platform_account_id="101",
         config_ref="bot",
         token="live",
+        role_id="mira",
     )
     account_id = account.record.id
-    accounts.assign(account_id, "mira")
     accounts.report(account_id, "live", connection="online")
     socket = AsyncMock()
     actions = QQAccountActions(lambda selected: socket, AsyncMock())

@@ -38,21 +38,26 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     (package / "backend/plugin.py").write_text(
         "async def setup(ctx):\n"
         "    first = ctx.accounts.register(platform='demo', "
-        "platform_account_id='101', config_ref='one', display_name='One')\n"
+        "platform_account_id='101', config_ref='one', role_id='mira', "
+        "display_name='One')\n"
         "    second = ctx.accounts.register(platform='demo', "
-        "platform_account_id='102', config_ref='two', display_name='Two')\n"
+        "platform_account_id='102', config_ref='two', role_id='other', "
+        "display_name='Two')\n"
         "    ctx.accounts.report(first.record.id, connection='online', "
         "capabilities=frozenset({'contacts'}))\n"
         "    ctx.accounts.report(second.record.id, connection='login_required')\n"
         "    ctx.accounts.unregister(second.record.id)\n"
         "    second = ctx.accounts.register(platform='demo', "
-        "platform_account_id='102', config_ref='two', display_name='Two')\n"
+        "platform_account_id='102', config_ref='two', role_id='other', "
+        "display_name='Two')\n"
         "    ctx.accounts.report(second.record.id, connection='login_required')\n"
         "    ctx.expose((first.record.id, second.record.id))\n",
         encoding="utf-8",
     )
     workspace = tmp_path / "workspace"
     role_store = RoleStore(workspace)
+    for role_id in ("mira", "other"):
+        role_store.create_role(role_id=role_id, name=role_id, system_prompt=role_id)
     first_kernel = PluginKernel(
         [tmp_path],
         services=HostServices(
@@ -128,12 +133,13 @@ async def test_failed_account_plugin_setup_discards_unpublished_identity(tmp_pat
     (package / "backend/plugin.py").write_text(
         "async def setup(ctx):\n"
         "    ctx.accounts.register(platform='demo', "
-        "platform_account_id='101', config_ref='one')\n"
+        "platform_account_id='101', config_ref='one', role_id='mira')\n"
         "    raise RuntimeError('setup failed')\n",
         encoding="utf-8",
     )
     workspace = tmp_path / "workspace"
     role_store = RoleStore(workspace)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="Mira")
     kernel = PluginKernel(
         [tmp_path],
         services=HostServices(

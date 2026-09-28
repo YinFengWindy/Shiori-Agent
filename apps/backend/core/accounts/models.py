@@ -112,3 +112,22 @@ class AccountDeletionPlan:
 # A plugin delete hook receives the account's plugin-private config_ref and
 # returns its plan without side effects; raising aborts before anything changes.
 AccountDeleteHandler = Callable[[str], AccountDeletionPlan]
+
+
+@dataclass(frozen=True)
+class ConfiguredAccount:
+    """One account as a plugin's saved configuration declares it.
+
+    The platform identity is given when the configuration itself determines it
+    (a Feishu app, a Telegram Token's Bot); None when only a login reveals it.
+    """
+
+    config_ref: str
+    role_id: str | None
+    platform: str | None = None
+    platform_account_id: str | None = None
+
+
+# Reads the accounts a ``[plugins.<id>]`` table declares (resolved values), so
+# the host can check a config write against account ownership before saving.
+AccountConfigReader = Callable[[dict[str, Any]], list[ConfiguredAccount]]

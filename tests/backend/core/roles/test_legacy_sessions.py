@@ -33,6 +33,7 @@ def test_lazy_legacy_thread_projection_after_binding_retirement(tmp_path):
         platform_account_id="100",
         config_ref="legacy",
         token="live",
+        role_id="mira",
     )
     assert store.get_role("mira").channel_bindings == []
     projected = sessions.conversation_store.get_thread_by_legacy_session_key(

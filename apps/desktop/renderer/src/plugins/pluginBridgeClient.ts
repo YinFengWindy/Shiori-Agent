@@ -167,6 +167,8 @@ export type PluginSummary = {
   packageInstalled?: boolean;
   /** Retained startup transaction failure, with the prior package restored. */
   packageOperationError?: string;
+  /** Saved accounts the running plugin could not register, each with its reason. */
+  accountErrors?: string[];
 };
 
 /** Structured static admission or runtime dependency rejection. */
@@ -272,6 +274,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         pending_renderer_kinds?: string[];
         capabilities: string[]; channels: PluginChannelDeclarationPayload[]; category: PluginCategory;
         package_installed?: boolean; pending_operation?: PluginSummary["pendingOperation"]; pending_version?: string; package_operation_error?: string;
+        account_errors?: string[];
       }> }>(resolveInvoke(), "plugins.list", {});
       return payload.plugins.map((item) => ({
         id: item.id,
@@ -297,6 +300,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         pendingVersion: item.pending_version,
         packageInstalled: item.package_installed,
         packageOperationError: item.package_operation_error,
+        accountErrors: item.account_errors ?? [],
         hasConfigSchema: item.has_config_schema,
         capabilities: item.capabilities,
         channels: item.channels.map(mapChannelDeclaration),

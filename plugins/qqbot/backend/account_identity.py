@@ -22,19 +22,38 @@ class QQBotAccountIdentity:
         self._pending_identity: dict[str, tuple[str, str]] = {}
         self._handoffs: set[str] = set()
         for row in store.list():
-            self.register(row)
+            # A stored application the host refuses is reported, not served.
+            snapshot = ctx.accounts.register_configured(
+                platform="qqbot",
+                platform_account_id=row["app_id"],
+                config_ref=f"app:{row['app_id']}",
+                role_id=row.get("role_id"),
+                display_name=row.get("bot_name") or None,
+            )
+            if snapshot is not None:
+                self._account_ids[row["app_id"]] = snapshot.record.id
 
     def register(self, row: dict[str, Any], name: str = "") -> str:
-        """Associate an application ID with one host account record."""
+        """Associate an application ID with its owner role's host account."""
         app_id = row["app_id"]
         snapshot = self._ctx.accounts.register(
             platform="qqbot",
             platform_account_id=app_id,
             config_ref=f"app:{app_id}",
+            role_id=row["role_id"],
             display_name=name or row.get("bot_name") or None,
         )
         self._account_ids[app_id] = snapshot.record.id
         return snapshot.record.id
+
+    def check_owner(self, app_id: str, role_id: str) -> None:
+        """Raises unless ``role_id`` may own this application's account."""
+        self._ctx.accounts.check_owner(
+            config_ref=f"app:{app_id}",
+            role_id=role_id,
+            platform="qqbot",
+            platform_account_id=app_id,
+        )
 
     def account_id(self, app_id: str) -> str:
         """Return the registered ID, or empty while a new gateway is staged."""
