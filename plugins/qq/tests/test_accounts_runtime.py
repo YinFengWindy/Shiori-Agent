@@ -94,7 +94,7 @@ async def test_managed_qr_wait_is_normal_and_does_not_register_fake_identity(
     monkeypatch.setattr(runtime._managed, "login_status", status)
     ref = (await runtime.begin_login({"role_id": "mira"}))["ref"]
 
-    assert await runtime.start_login(ref) == {"ref": ref, "account_id": ""}
+    assert await runtime.start_login(ref, "mira") == {"ref": ref, "account_id": ""}
     for _ in range(50):
         if runtime._states.get(ref, ("", ""))[0] == "login_required":
             break
@@ -109,13 +109,33 @@ async def test_managed_qr_wait_is_normal_and_does_not_register_fake_identity(
 
     stop = AsyncMock()
     monkeypatch.setattr(runtime._managed, "stop", stop)
-    await runtime.stop_login(ref)
+    await runtime.stop_login(ref, "mira")
     stop.assert_awaited_once_with(ref)
     assert runtime._configs[ref].auto_connect is False
-    await runtime.cancel_login(ref)
+    await runtime.cancel_login(ref, "mira")
     assert ref not in runtime._configs
     assert not runtime._managed._files.account_dir(ref).exists()
     await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_temporary_login_operations_reject_another_role(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "plugins.qq.backend.accounts_settings.managed_available", lambda: True
+    )
+    runtime = QQAccountsRuntime(QQAccountsStore(tmp_path), _Accounts())
+    ref = (await runtime.begin_login({"role_id": "mira"}))["ref"]
+
+    for operation in (runtime.start_login, runtime.stop_login, runtime.cancel_login):
+        with pytest.raises(ValueError, match="另一个角色"):
+            await operation(ref, "other")
+
+    assert runtime._configs[ref].auto_connect is False
+    assert ref not in runtime._tasks
+    assert not runtime._store.path.exists()
+    await runtime.cancel_login("missing", "other")
+    await runtime.cancel_login(ref, "mira")
+    assert ref not in runtime._configs
 
 
 @pytest.mark.asyncio
@@ -148,7 +168,7 @@ async def test_managed_scan_registers_only_after_verified_onebot_identity(
     )
     ref = (await runtime.begin_login({"role_id": "mira"}))["ref"]
 
-    assert (await runtime.start_login(ref))["account_id"] == ""
+    assert (await runtime.start_login(ref, "mira"))["account_id"] == ""
     for _ in range(50):
         if runtime._states.get(ref, ("", ""))[0] == "login_required":
             break
@@ -170,7 +190,9 @@ async def test_managed_scan_registers_only_after_verified_onebot_identity(
     login_status.side_effect = None
     login_status.return_value = {"phase": "online", "qrcode": "", "error": ""}
     assert (await runtime.managed_status(ref))["account_id"] == "qq-101"
-    await runtime.cancel_login(ref)
+    with pytest.raises(ValueError, match="另一个角色"):
+        await runtime.cancel_login(ref, "other")
+    await runtime.cancel_login(ref, "mira")
     assert store.load()[ref].expected_uin == "101"
     await runtime.stop()
 
@@ -196,7 +218,7 @@ async def test_existing_managed_session_connects_without_qr(monkeypatch, tmp_pat
     )
     ref = (await runtime.begin_login({"role_id": "mira"}))["ref"]
 
-    await runtime.start_login(ref)
+    await runtime.start_login(ref, "mira")
     for _ in range(50):
         if accounts.states.get("qq-101") == "online":
             break

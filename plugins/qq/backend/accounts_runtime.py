@@ -14,7 +14,7 @@ from infra.channels.intake import ChannelIntake
 from .accounts_actions import QQAccountActions, qq_number
 from .accounts_inbound_adapter import QQInboundAdapter
 from .accounts_outbound_adapter import QQOutboundAdapter
-from .accounts_settings import QQAccountSettings
+from .accounts_settings import QQAccountSettings, ensure_config_owner
 from .accounts_store import QQAccountsStore, QQConnectionConfig
 from .managed_napcat import ManagedNapCat
 from .onebot import OneBotAuthError, OneBotError, OneBotSocket
@@ -256,11 +256,17 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._start_intake(ref)
         return snapshot.record.id
 
-    async def start_login(self, ref: str) -> dict[str, str]:
-        """Starts or resumes one managed instance asynchronously."""
+    def _login_config(self, ref: str, role_id: str) -> QQConnectionConfig:
+        """Resolves a login reference only for its owning role."""
         if ref not in self._configs:
             raise KeyError("QQ 配置引用不存在")
         config = self._configs[ref]
+        ensure_config_owner(config, role_id)
+        return config
+
+    async def start_login(self, ref: str, role_id: str) -> dict[str, str]:
+        """Starts or resumes one managed instance asynchronously."""
+        config = self._login_config(ref, role_id)
         if not config.auto_connect:
             config = replace(config, auto_connect=True)
             if config.verified:
@@ -285,9 +291,9 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._states[ref] = ("offline", "")
         self._accounts.report(account_id, connection="offline")
 
-    async def stop_login(self, ref: str) -> None:
+    async def stop_login(self, ref: str, role_id: str) -> None:
         """Stops a temporary login while the account detail stays open."""
-        config = self._configs[ref]
+        config = self._login_config(ref, role_id)
         if config.verified:
             raise ValueError("仅未验证的托管 QQ 配置可按引用停止")
         stopped = replace(config, auto_connect=False)
@@ -300,10 +306,12 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         await self._managed.stop(ref)
         self._states[ref] = ("offline", "")
 
-    async def cancel_login(self, ref: str) -> None:
+    async def cancel_login(self, ref: str, role_id: str) -> None:
         """Discards an unverified login; never removes a verified account."""
-        config = self._configs.get(ref)
-        if config is None or config.verified:
+        if ref not in self._configs:
+            return
+        config = self._login_config(ref, role_id)
+        if config.verified:
             return
         task = self._tasks.pop(ref, None)
         if task is not None:

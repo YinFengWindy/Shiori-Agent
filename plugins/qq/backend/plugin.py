@@ -83,14 +83,9 @@ async def _settings(runtime, payload: dict) -> dict:
 
 
 async def _start(runtime, payload: dict) -> dict:
-    """Starts a managed login only for the role that owns it."""
-    from .accounts_settings import ensure_config_owner
-
-    ref = str(payload["ref"])
-    if ref not in runtime._configs:
-        raise KeyError("QQ 配置引用不存在")
-    ensure_config_owner(runtime._configs[ref], str(payload.get("role_id") or ""))
-    return await runtime.start_login(ref)
+    return await runtime.start_login(
+        str(payload["ref"]), str(payload.get("role_id") or "")
+    )
 
 
 async def _disconnect(runtime, payload: dict) -> dict:
@@ -99,22 +94,12 @@ async def _disconnect(runtime, payload: dict) -> dict:
 
 
 async def _stop(runtime, payload: dict) -> dict:
-    from .accounts_settings import ensure_config_owner
-
-    ref = str(payload["ref"])
-    ensure_config_owner(runtime._configs[ref], str(payload.get("role_id") or ""))
-    await runtime.stop_login(ref)
+    await runtime.stop_login(str(payload["ref"]), str(payload.get("role_id") or ""))
     return {"ok": True}
 
 
 async def _cancel(runtime, payload: dict) -> dict:
-    from .accounts_settings import ensure_config_owner
-
-    ref = str(payload["ref"])
-    config = runtime._configs.get(ref)
-    if config is not None:
-        ensure_config_owner(config, str(payload.get("role_id") or ""))
-    await runtime.cancel_login(ref)
+    await runtime.cancel_login(str(payload["ref"]), str(payload.get("role_id") or ""))
     return {"ok": True}
 
 

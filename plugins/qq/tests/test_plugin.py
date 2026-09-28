@@ -93,22 +93,13 @@ async def test_shared_account_send_adapts_target_and_rejects_topic() -> None:
 
 
 @pytest.mark.asyncio
-async def test_temporary_login_cancel_is_scoped_to_its_owner() -> None:
+async def test_temporary_login_cancel_forwards_role_to_runtime() -> None:
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
-    runtime = SimpleNamespace(
-        _configs={
-            "aa": QQConnectionConfig("aa", "ws://127.0.0.1:1", "secret", role_id="mira")
-        },
-        cancel_login=AsyncMock(),
-    )
-    with pytest.raises(ValueError, match="另一个角色"):
-        await _cancel(runtime, {"ref": "aa", "role_id": "other"})
-    runtime.cancel_login.assert_not_awaited()
-
+    runtime = SimpleNamespace(cancel_login=AsyncMock())
     assert await _cancel(runtime, {"ref": "aa", "role_id": "mira"}) == {"ok": True}
-    runtime.cancel_login.assert_awaited_once_with("aa")
+    runtime.cancel_login.assert_awaited_once_with("aa", "mira")
 
 
 @pytest.mark.asyncio

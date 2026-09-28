@@ -21,9 +21,7 @@ def ensure_config_owner(config: QQConnectionConfig, role_id: str) -> None:
     """Refuses to act on a QQ configuration for any role but its owner."""
     if config.role_id != role_id:
         raise ValueError(
-            "该 QQ 配置已属于另一个角色"
-            if config.role_id
-            else "该 QQ 配置是未归属的旧数据，请先手动清理"
+            "该 QQ 配置已属于另一个角色" if config.role_id else "该 QQ 配置没有所属角色"
         )
 
 

@@ -65,7 +65,7 @@ async def test_temporary_login_uses_private_endpoint_without_persisting_an_accou
     await reopened.load()
     assert ref not in reopened._configs
     assert not reopened._managed._files.account_dir(ref).exists()
-    await runtime.cancel_login(ref)
+    await runtime.cancel_login(ref, "mira")
     assert ref not in runtime._configs
     assert not store.path.exists()
 
