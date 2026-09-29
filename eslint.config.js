@@ -31,17 +31,6 @@ const pluginRendererFiles = [
   "packages/plugin-sdk/src/**/*.tsx",
 ];
 
-/**
- * Plugin renderer files that still import host source while their plugin
- * awaits migration to the SDK (#440). One entry per file that really has such
- * an import — never a directory — so a new file is always checked. Delete an
- * entry as soon as its file is migrated; the last migration ticket removes
- * this list and the `ignores` below. `pluginHostImportBoundary.test.ts`
- * fails on an entry whose file no longer imports host source.
- */
-export const pluginHostImportExemptions = [
-];
-
 const hostImportMessage = "Plugins must not import host source (apps/desktop); use @shiori/plugin-sdk or the injected client/host.";
 const hostInternalMessage = "@shiori/plugin-sdk/host-internal is host-only and not part of the plugin contract; use the @shiori/plugin-sdk main entry.";
 
@@ -59,7 +48,6 @@ export default [
   ]),
   {
     files: pluginRendererFiles,
-    ignores: pluginHostImportExemptions,
     rules: {
       "no-restricted-imports": ["error", {
         patterns: [
