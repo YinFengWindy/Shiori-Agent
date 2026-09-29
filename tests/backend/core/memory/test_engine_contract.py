@@ -24,6 +24,7 @@ from core.memory.engine import (
     MemoryScope,
 )
 from core.memory.events import ConsolidationCommitted, TurnIngested
+from core.memory.markdown.contracts import ConsolidationSegments
 from core.memory.markdown import (
     ConsolidateRequest,
     ConsolidateResult,
@@ -744,6 +745,9 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(
             keep_count=6,
             consolidate_up_to=6,
         ),
+        segments=ConsolidationSegments(
+            user_messages=list(session.messages[:6]), external_messages=[]
+        ),
         source_ref='["role:mira:0"]',
         history_entry_payloads=[("[2026-05-05 13:00] 用户测试记忆", 0)],
         pending_items="",
@@ -825,6 +829,9 @@ async def test_markdown_consolidation_runs_post_consolidation_hook(tmp_path: Pat
             keep_count=6,
             consolidate_up_to=6,
         ),
+        segments=ConsolidationSegments(
+            user_messages=list(session.messages[:6]), external_messages=[]
+        ),
         source_ref='["role:mira:0"]',
         history_entry_payloads=[],
         pending_items="",
@@ -876,6 +883,9 @@ async def test_markdown_consolidation_ignores_post_consolidation_hook_failure(
             old_messages=list(session.messages[:6]),
             keep_count=6,
             consolidate_up_to=6,
+        ),
+        segments=ConsolidationSegments(
+            user_messages=list(session.messages[:6]), external_messages=[]
         ),
         source_ref='["role:mira:0"]',
         history_entry_payloads=[],

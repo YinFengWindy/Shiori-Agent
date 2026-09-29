@@ -58,10 +58,28 @@ class UserContextThreads:
         )
 
 
+def in_user_context(
+    message: Mapping[str, Any], user_threads: UserContextThreads
+) -> bool:
+    """已存消息 ``message`` 所在会话是否属于用户上下文（按会话，不看发送者）。"""
+    return user_threads.contains(message_thread_id(message))
+
+
+def stored_message_source(message: Mapping[str, Any]) -> MessageSource:
+    """已存消息 ``message`` 记录的来源；没有 metadata 的消息来源未知。
+
+    只读消息自己记下的字段（发送者标记、群名等），不补全旧格式的 session_key。
+    """
+    metadata = message.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return MessageSource()
+    return MessageSource.from_metadata(metadata, session_key="")
+
+
 def belongs_to_user(
     message: Mapping[str, Any], user_threads: UserContextThreads
 ) -> bool:
-    """``message`` 是否属于用户本人：唯一的共享判定，调用方不另写规则。
+    """已存消息 ``message`` 是否属于用户本人：唯一的共享判定，调用方不另写规则。
 
     两种情况成立：消息所在会话属于用户上下文（桌面、已绑定用户的私聊、计划任务、
     没有 ``thread_id`` 的旧消息）；或消息来源记录了发送者是已绑定的用户本人
@@ -71,13 +89,19 @@ def belongs_to_user(
 
     对角色自己的消息，这等于“是否在用户上下文里”：它们不带发送者标记。
     """
-    if user_threads.contains(message_thread_id(message)):
-        return True
-    metadata = message.get("metadata")
-    if not isinstance(metadata, Mapping):
-        return False
-    # session_key 只用于补全旧格式来源，这里只读发送者标记。
-    return MessageSource.from_metadata(metadata, session_key="").sender_is_user
+    return source_belongs_to_user(
+        message_thread_id(message), stored_message_source(message), user_threads
+    )
+
+
+def source_belongs_to_user(
+    thread_id: str, source: MessageSource, user_threads: UserContextThreads
+) -> bool:
+    """会话 ``thread_id`` 里来源为 ``source`` 的消息是否属于用户本人。
+
+    ``belongs_to_user`` 的规则本体；尚未持久化的入站消息直接用它判定。
+    """
+    return user_threads.contains(thread_id) or source.sender_is_user
 
 
 def in_desktop_view(role_id: str, thread_id: str) -> bool:

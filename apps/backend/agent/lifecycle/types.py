@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from core.common.message_source import MessageSource
+from conversation.context_scope import source_belongs_to_user
 from agent.prompting.assembler import PromptSectionRender
 from bus.events import InboundMessage, OutboundMessage
 
@@ -45,6 +46,20 @@ class TurnState:
     def context_scope(self) -> ContextScope | None:
         """回合所在的上下文；非角色共享会话为 None。"""
         return self.context_view.scope if self.context_view is not None else None
+
+    def is_user_authored(self) -> bool:
+        """本回合的来信是否出自用户本人（规则见 ``source_belongs_to_user``）。
+
+        角色共享会话混存各渠道的消息，群友与陌生人的发言不能当成用户本人的；
+        其他会话只有一段对话，没有划分，照旧视为用户本人。
+        """
+        if self.context_view is None:
+            return True
+        return source_belongs_to_user(
+            str((self.msg.metadata or {}).get("thread_id") or "").strip(),
+            MessageSource.from_inbound(self.msg),
+            self.context_view.user_threads,
+        )
 
 
 @dataclass

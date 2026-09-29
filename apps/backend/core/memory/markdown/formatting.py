@@ -10,9 +10,15 @@ from typing import TYPE_CHECKING, Any
 from agent.llm_json import load_json_object_loose
 from agent.prompting import is_context_frame
 from agent.core.passive_support import estimate_messages_tokens
+from conversation.context_scope import (
+    UserContextThreads,
+    belongs_to_user,
+    in_user_context,
+    stored_message_source,
+)
 from session.manager.models import whole_session
 
-from .contracts import _ConsolidationWindow
+from .contracts import ConsolidationSegments, _ConsolidationWindow
 
 if TYPE_CHECKING:
     from .runtime import MarkdownMemoryStore
@@ -144,13 +150,37 @@ def _estimate_session_input_tokens(session: object, current_content: str = "") -
     return estimate_messages_tokens(estimate_messages)
 
 
-def _build_consolidation_source_ref(window: _ConsolidationWindow) -> str:
-    """返回本次 consolidation 窗口内所有消息 ID 的 JSON 列表。
+def _split_consolidation_window(
+    window: _ConsolidationWindow, user_threads: UserContextThreads | None
+) -> ConsolidationSegments:
+    """把整理窗口按 ``belongs_to_user`` 拆成用户本人段与外部段。
+
+    ``user_threads`` 为 None 表示会话没有上下文划分（非角色共享会话），整段都属于
+    用户本人。
+    """
+    if user_threads is None:
+        return ConsolidationSegments(
+            user_messages=list(window.old_messages), external_messages=[]
+        )
+    user_messages: list[dict] = []
+    external_messages: list[dict] = []
+    for message in window.old_messages:
+        if belongs_to_user(message, user_threads):
+            user_messages.append(message)
+        else:
+            external_messages.append(message)
+    return ConsolidationSegments(
+        user_messages=user_messages, external_messages=external_messages
+    )
+
+
+def _build_consolidation_source_ref(messages: list[dict]) -> str:
+    """返回参与本次整理的消息 ID 的 JSON 列表。
     缺失 id 的消息（迁移前的历史脏数据）直接跳过。
     """
     ids = [
         str(msg["id"])
-        for msg in window.old_messages
+        for msg in messages
         if msg.get("id") and not _is_context_frame_message(msg)
     ]
     return json.dumps(ids, ensure_ascii=False)
@@ -265,11 +295,26 @@ def _normalize_memory_content(
     return _abstract_nsfw_memory_content(role, content)
 
 
+def _speaker_label(message: dict, user_threads: UserContextThreads | None) -> str:
+    """整理输入里的说话人标记；用户本人在外部会话（群聊）的发言带上群名。"""
+    role = str(message.get("role", "")).upper()
+    if user_threads is None or in_user_context(message, user_threads):
+        return role
+    group_name = stored_message_source(message).group_name
+    return f"{role}（在群「{group_name}」里）" if group_name else f"{role}（在群聊里）"
+
+
 def _format_conversation_for_consolidation(
     old_messages: list[dict],
     *,
     nsfw_memory_enabled: bool = False,
+    user_threads: UserContextThreads | None = None,
 ) -> str:
+    """把用户本人段格式化成整理输入。
+
+    ``user_threads`` 给出时，不在用户上下文会话里的消息（用户在群里的发言）标注
+    群名；为 None 时不标注。
+    """
     lines = []
     for message in old_messages:
         if _is_context_frame_message(message):
@@ -284,7 +329,7 @@ def _format_conversation_for_consolidation(
         )
         if not content:
             continue
-        role = str(message.get("role", "")).upper()
+        role = _speaker_label(message, user_threads)
         ts = str(message.get("timestamp", "?"))[:16]
         lines.append(f"[{ts}] {role}: {content}")
     return "\n".join(lines)

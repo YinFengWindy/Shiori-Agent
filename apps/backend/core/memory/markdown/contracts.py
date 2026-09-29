@@ -75,8 +75,22 @@ class _ConsolidationWindow:
 
 
 @dataclass(frozen=True)
+class ConsolidationSegments:
+    """一个整理窗口按发送者拆成的两段，各自保持原有顺序。
+
+    ``user_messages`` 属于用户本人（见 ``conversation.context_scope.belongs_to_user``），
+    走用户层整理；``external_messages`` 是群友、陌生人的发言以及角色在外部会话里的
+    回复，目前不整理，留给群环境层接入。游标仍按整个窗口推进。
+    """
+
+    user_messages: list[dict]
+    external_messages: list[dict]
+
+
+@dataclass(frozen=True)
 class _ConsolidationDraft:
     window: _ConsolidationWindow
+    segments: ConsolidationSegments
     source_ref: str
     history_entry_payloads: list[tuple[str, int]]
     pending_items: str
