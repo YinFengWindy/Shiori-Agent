@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
-import { useAccountAction } from "../../../apps/desktop/renderer/src/accounts/useAccountAction";
-import { inputClass } from "../../../apps/desktop/renderer/src/shared/styles";
-import { Select } from "../../../apps/desktop/renderer/src/shared/ui/Select";
+import { inputClass, Select, useAccountAction, type PluginAccountDetailComponentProps } from "@shiori/plugin-sdk";
 
 type FeishuDomain = "feishu" | "lark";
 type FeishuProfile = { identity: { open_id?: string }; targets: Array<{ chat_id: string; open_id: string }> };

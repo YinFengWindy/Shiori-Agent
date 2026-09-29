@@ -415,6 +415,7 @@ or the import map, and production renderer code must not import it. It provides:
 | `chooseSelectOption(label, optionLabel, index?)` | picks an option of the SDK `Select` through its visible trigger and a real pointer event |
 | `deferred()` | a promise the test settles on demand |
 | `createFakeHostServices(options)` | in-memory `PluginHostServices` whose calls can be asserted: `host` (pass as the prop or to the Provider), `calls` (every service call in order), `feedback` (the toasts), `uiRenders` (the props of each `host.ui` render), `config()` (the stored config), `emit(event)` (delivers a bridge event to `onEvent` listeners) and `accountDetailActionsZone()` (where `host.ui.AccountDetailActions` render). Options answer `listRoles`, `pickImages`, `pickFiles`, the initial `config`, `saveConfig` and `assetUrl` |
+| `createFakePluginClient(overrides)` | an injected `client` with no bridge behind it: pass the parts the component uses (usually `call`, answering by local method name); any other request rejects, `dispose` resolves |
 
 The fake `host.ui` components are plain stand-ins: they render the text, buttons,
 disabled/busy state and ARIA roles of their contract, and the account status card

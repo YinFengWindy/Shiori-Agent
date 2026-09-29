@@ -1,5 +1,5 @@
 import { RobotIcon } from "@phosphor-icons/react";
-import type { PluginUiModule } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
+import type { PluginUiModule } from "@shiori/plugin-sdk";
 import { QQBotAccountDetail } from "./QQBotAccountDetail";
 
 const qqbotUi: PluginUiModule = {

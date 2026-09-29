@@ -1,8 +1,6 @@
 import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
-import { useAccountAction } from "../../../apps/desktop/renderer/src/accounts/useAccountAction";
-import type { PluginAccountDetailComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
-import { iconButtonClass, inputClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { iconButtonClass, inputClass, useAccountAction, type PluginAccountDetailComponentProps } from "@shiori/plugin-sdk";
 
 type Detail = { app_id: string; has_secret: boolean; secret_reference: string; connected: boolean; identity: string; bot_id: string; bot_name: string };
 type Targets = { coverage: "observed_c2c_only"; targets: Array<{ chat_id: string; user_openid: string }> };

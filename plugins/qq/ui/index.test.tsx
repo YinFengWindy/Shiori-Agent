@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import React, { act } from "react";
-import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
-import type { AccountSnapshot } from "../../../apps/desktop/renderer/src/accounts/accountClient";
-import { AccountDetailActionsTarget } from "../../../apps/desktop/renderer/src/accounts/AccountDetailActions";
-import { deferred } from "../../../apps/desktop/renderer/src/shared/testing/deferred";
-import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
+import type { AccountSnapshot } from "@shiori/plugin-sdk";
+import { createFakeHostServices, createFakePluginClient, deferred, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { QQAccountDetail } from "./index";
 
 const savedAccount: AccountSnapshot = {
@@ -27,8 +23,7 @@ const cardStatus = (root: ParentNode) => root.querySelector('[aria-label="连接
 test("QQ add connects once and shows QR only when login requires scanning", async () => {
   const calls: Array<{ method: string; payload?: Record<string, unknown> }> = [];
   const qrImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7ZcV8AAAAASUVORK5CYII=";
-  const client = {
-    ...createPluginRpcClient("qq"),
+  const client = createFakePluginClient({
     async call<T>(method: string, payload?: Record<string, unknown>): Promise<T> {
       calls.push({ method, payload });
       if (method === "accounts.settings") return { managed_available: true } as T;
@@ -42,12 +37,13 @@ test("QQ add connects once and shows QR only when login requires scanning", asyn
       if (method === "accounts.refresh_qrcode" || method === "accounts.stop" || method === "accounts.cancel") return {} as T;
       throw new Error(method);
     },
-  };
+  });
+  const { host } = createFakeHostServices();
   const view = await mountTestComponent(null);
   try {
     // StrictMode replays mount effects; opening the add dialog must still begin exactly one login.
     await view.render(<React.StrictMode><QQAccountDetail account={null} roleId="mira" onChanged={() => undefined}
-      client={client} host={pluginHostServicesFor("qq")} /></React.StrictMode>);
+      client={client} host={host} /></React.StrictMode>);
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     const button = (label: string) => Array.from(view.container.querySelectorAll("button"))
       .find((item) => item.textContent?.trim() === label);
@@ -73,8 +69,7 @@ test("a saved QQ account connects with its existing session: 正在连接 at onc
   const calls: string[] = [];
   let connected = false;
   const started = deferred<void>();
-  const client = {
-    ...createPluginRpcClient("qq"),
+  const client = createFakePluginClient({
     async call<T>(method: string): Promise<T> {
       calls.push(method);
       if (method === "accounts.settings") return { managed_available: true, account: { ref: "aa" } } as T;
@@ -90,9 +85,10 @@ test("a saved QQ account connects with its existing session: 正在连接 at onc
       }
       throw new Error(method);
     },
-  };
+  });
+  const { host } = createFakeHostServices();
   const view = await mountTestComponent(<QQAccountDetail account={savedAccount} roleId="mira"
-    onChanged={() => undefined} client={client} host={pluginHostServicesFor("qq")} />);
+    onChanged={() => undefined} client={client} host={host} />);
   try {
     // Opening a saved offline account does not connect it by itself.
     assert.equal(calls.includes("accounts.start"), false);
@@ -110,7 +106,7 @@ test("a saved QQ account connects with its existing session: 正在连接 at onc
     assert.ok(buttonIn(view.container, "断开连接"));
     assert.equal(buttonIn(view.container, "连接"), undefined);
     await view.render(<QQAccountDetail account={{ ...savedAccount, connection: "online" }} roleId="mira"
-      onChanged={() => undefined} client={client} host={pluginHostServicesFor("qq")} />);
+      onChanged={() => undefined} client={client} host={host} />);
     assert.equal(cardStatus(view.container), "在线");
   } finally { await view.cleanup(); }
 });
@@ -118,8 +114,7 @@ test("a saved QQ account connects with its existing session: 正在连接 at onc
 test("once the add-flow login is verified, 断开连接 disconnects that account instead of stopping the temporary login", async () => {
   const calls: Array<{ method: string; payload?: Record<string, unknown> }> = [];
   const changed: Array<string | undefined> = [];
-  const client = {
-    ...createPluginRpcClient("qq"),
+  const client = createFakePluginClient({
     async call<T>(method: string, payload?: Record<string, unknown>): Promise<T> {
       calls.push({ method, payload });
       if (method === "accounts.settings") return { managed_available: true } as T;
@@ -131,9 +126,10 @@ test("once the add-flow login is verified, 断开连接 disconnects that account
       } as T;
       return {} as T;
     },
-  };
+  });
+  const { host } = createFakeHostServices();
   const view = await mountTestComponent(<QQAccountDetail account={null} roleId="mira"
-    onChanged={(accountId) => changed.push(accountId)} client={client} host={pluginHostServicesFor("qq")} />);
+    onChanged={(accountId) => changed.push(accountId)} client={client} host={host} />);
   try {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     assert.deepEqual(changed, ["qq:101"]);
@@ -148,8 +144,7 @@ test("once the add-flow login is verified, 断开连接 disconnects that account
 test("退出登录 sits in the dialog's danger zone and shows 正在退出 while it runs", async () => {
   const calls: Array<{ method: string; payload?: Record<string, unknown> }> = [];
   const loggedOut = deferred<void>();
-  const client = {
-    ...createPluginRpcClient("qq"),
+  const client = createFakePluginClient({
     async call<T>(method: string, payload?: Record<string, unknown>): Promise<T> {
       calls.push({ method, payload });
       if (method === "accounts.settings") return { managed_available: true, account: { ref: "aa" } } as T;
@@ -160,15 +155,13 @@ test("退出登录 sits in the dialog's danger zone and shows 正在退出 while
       if (method === "accounts.logout") await loggedOut.promise;
       return {} as T;
     },
-  };
+  });
+  const fake = createFakeHostServices();
   const view = await mountTestComponent(null);
-  const zone = document.createElement("div");
-  document.body.append(zone);
+  const zone = fake.accountDetailActionsZone();
   try {
-    await view.render(<AccountDetailActionsTarget value={zone}>
-      <QQAccountDetail account={{ ...savedAccount, connection: "online" }} roleId="mira"
-        onChanged={() => undefined} client={client} host={pluginHostServicesFor("qq")} />
-    </AccountDetailActionsTarget>);
+    await view.render(<QQAccountDetail account={{ ...savedAccount, connection: "online" }} roleId="mira"
+      onChanged={() => undefined} client={client} host={fake.host} />);
     assert.equal(buttonIn(view.container, "退出登录"), undefined);
     await act(async () => buttonIn(zone, "退出登录")?.click());
     assert.deepEqual(calls.find((row) => row.method === "accounts.logout")?.payload, { account_id: "qq:101" });

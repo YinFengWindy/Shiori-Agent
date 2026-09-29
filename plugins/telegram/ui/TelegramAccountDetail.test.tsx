@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { changeInputValue, mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
-import type { AccountSnapshot } from "../../../apps/desktop/renderer/src/accounts/accountClient";
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import type { AccountSnapshot } from "@shiori/plugin-sdk";
+import { changeInputValue, createFakeHostServices, createFakePluginClient, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { TelegramAccountDetail } from "./TelegramAccountDetail";
 
 const account: AccountSnapshot = {
@@ -17,13 +15,13 @@ const account: AccountSnapshot = {
 type Call = { name: string; payload?: Record<string, unknown> };
 
 function rpc(calls: Call[], fail = () => false) {
-  return { call: async (name: string, payload?: Record<string, unknown>) => {
+  return createFakePluginClient({ call: async <T,>(name: string, payload?: Record<string, unknown>) => {
     calls.push({ name, payload });
-    if (name === "known.list") return { chats: [] };
-    if (name === "identity.get") return {};
+    if (name === "known.list") return { chats: [] } as T;
+    if (name === "identity.get") return {} as T;
     if (fail()) throw new Error("Bot Token 验证失败");
-    return { account_id: "telegram:456" };
-  } } as PluginRpcClient;
+    return { account_id: "telegram:456" } as T;
+  } });
 }
 
 const button = (container: HTMLElement, label: string) => Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
@@ -35,7 +33,7 @@ test("a new Bot is saved for the role through the plugin, and a failure stays in
   let changedId = "";
   const view = await mountTestComponent(
     <TelegramAccountDetail account={null} roleId="mira" onChanged={(id) => { changedId = id ?? ""; }}
-      client={rpc(calls, () => failing)} host={pluginHostServicesFor("telegram")} />,
+      client={rpc(calls, () => failing)} host={createFakeHostServices().host} />,
   );
   try {
     const input = view.container.querySelector<HTMLInputElement>('input[type="password"]');
@@ -57,7 +55,7 @@ test("a connected Bot is disconnected, an offline one reconnects without a new T
   const calls: Call[] = [];
   const online = await mountTestComponent(
     <TelegramAccountDetail account={account} roleId="mira" onChanged={() => undefined}
-      client={rpc(calls)} host={pluginHostServicesFor("telegram")} />,
+      client={rpc(calls)} host={createFakeHostServices().host} />,
   );
   try {
     await act(async () => button(online.container, "断开连接")?.click());
@@ -67,7 +65,7 @@ test("a connected Bot is disconnected, an offline one reconnects without a new T
   }
   const offline = await mountTestComponent(
     <TelegramAccountDetail account={{ ...account, connection: "offline" }} roleId="mira" onChanged={() => undefined}
-      client={rpc(calls)} host={pluginHostServicesFor("telegram")} />,
+      client={rpc(calls)} host={createFakeHostServices().host} />,
   );
   try {
     await act(async () => button(offline.container, "连接")?.click());
