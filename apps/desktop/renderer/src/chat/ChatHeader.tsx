@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { toFileUrl } from "../shared/format";
 import { cx } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
@@ -9,6 +10,8 @@ type ChatHeaderProps = {
   title: string;
   /** The role is streaming a reply: shown as a quiet second line, never in place of the name. */
   typing?: boolean;
+  /** Buttons at the header's trailing end (the phone toggle). */
+  actions?: ReactNode;
   onOpenRoleDetail: () => void;
 };
 
@@ -36,6 +39,7 @@ export function ChatHeader({
   detailRole,
   title,
   typing = false,
+  actions,
   onOpenRoleDetail,
 }: ChatHeaderProps) {
   return (
@@ -65,6 +69,7 @@ export function ChatHeader({
           </div>
         ) : null}
       </div>
+      {actions}
     </header>
   );
 }

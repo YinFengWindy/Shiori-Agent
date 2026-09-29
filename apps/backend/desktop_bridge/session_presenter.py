@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from typing import Any
 
 from conversation.context_scope import desktop_view_thread_ids, in_desktop_view
@@ -15,6 +15,16 @@ from session.manager.models import message_thread_id
 
 # The chat list shows one line; the renderer strips Markdown from this prefix.
 _PREVIEW_MAX_CHARS = 200
+
+
+def message_preview(message: dict[str, Any]) -> dict[str, Any]:
+    """A stored message as a light chat-list preview (content capped)."""
+    return {
+        "role": str(message.get("role") or ""),
+        "content": str(message.get("content") or "")[:_PREVIEW_MAX_CHARS],
+        "timestamp": str(message.get("timestamp") or ""),
+        "has_media": bool(message.get("media")),
+    }
 
 
 class DesktopSessionPresenter:
@@ -166,15 +176,15 @@ class DesktopSessionPresenter:
             limit=1,
             thread_ids=self._desktop_thread_ids(session_key),
         )["messages"]
-        if not messages:
-            return None
-        message = messages[-1]
-        return {
-            "role": str(message.get("role") or ""),
-            "content": str(message.get("content") or "")[:_PREVIEW_MAX_CHARS],
-            "timestamp": str(message.get("timestamp") or ""),
-            "has_media": bool(message.get("media")),
-        }
+        return message_preview(messages[-1]) if messages else None
+
+    def newest_thread_messages(
+        self, session_key: str, thread_ids: Collection[str]
+    ) -> dict[str, dict[str, Any]]:
+        """The newest stored message of each thread in ``session_key``, by thread."""
+        return self._session_store().fetch_newest_thread_messages(
+            session_key, thread_ids
+        )
 
     def desktop_messages(
         self, session_key: str, messages: Iterable[dict[str, Any]]

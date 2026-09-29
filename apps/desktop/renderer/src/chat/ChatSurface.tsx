@@ -13,7 +13,7 @@ import {
 import { findRetryableChatErrorKey } from "./chatFailedTurn";
 import { getChatMessageReactKey } from "./chatMessageIdentity";
 import { ChatRightSidebar, type ChatSidebarMode } from "./ChatRightSidebar";
-import { ChatPanelToggle, ChatPanelSegments } from "./ChatPanelControls";
+import { ChatPanelToggle, ChatPanelSegments, chatPanelToggleClearanceClass } from "./ChatPanelControls";
 import {
   clearViewedChatPanelBadge,
   emptyChatPanelBadges,
@@ -38,6 +38,8 @@ import {
   type ChatMessageNavigationScroller,
   useChatScrollController,
 } from "./useChatScrollController";
+import { PhonePanel } from "../phone/PhonePanel";
+import { PhoneToggle } from "../phone/PhoneToggle";
 import { cx, sidebarContentMotionClass, sidebarTrackMotionClass } from "../shared/styles";
 import { useLatestRef } from "../shared/useLatestRef";
 import { useWindowActivity } from "../shared/useWindowActivity";
@@ -153,6 +155,7 @@ export function ChatSurface({
   const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
   const [composerDraftRequest, setComposerDraftRequest] = useState<ChatComposerDraftRequest | null>(null);
   const [conversationPaneHeight, setConversationPaneHeight] = useState(0);
+  const [phoneOpen, setPhoneOpen] = useState(false);
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
   const hasStatusContent = hasStatusIllustration || Boolean(roleSelfView);
   const [sidebarMode, setSidebarMode] = useState<ChatSidebarMode>(
@@ -422,6 +425,9 @@ export function ChatSurface({
         detailRole={detailRole}
         title={headerTitle}
         typing={sending}
+        actions={activeRole ? (
+          <PhoneToggle open={phoneOpen} onToggle={() => setPhoneOpen((open) => !open)} className={panelOpen ? undefined : chatPanelToggleClearanceClass} />
+        ) : null}
         onOpenRoleDetail={handleOpenRoleDetail}
       />
       <section ref={conversationPanelRef} className="conversation-panel relative z-[1] h-full min-h-0 overflow-hidden bg-transparent" data-chat-conversation="">
@@ -464,6 +470,12 @@ export function ChatSurface({
           onHeightChange={handleComposerHeightChange}
         />
       </section>
+      {phoneOpen && activeRole ? (
+        // Placed in the grid's second row, so it starts under the header whatever the header's height.
+        <div className="pointer-events-none absolute inset-0 z-[4] col-start-1 row-start-2 p-4">
+          <PhonePanel key={activeRole.id} role={activeRole} />
+        </div>
+      ) : null}
       </div>
       <div
         className={cx(

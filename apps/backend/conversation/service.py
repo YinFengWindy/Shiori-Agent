@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from conversation.models import ThreadRecord
+from conversation.models import ContactRecord, ThreadRecord
 from conversation.projector import ConversationStateProjector
 from conversation.store import ConversationStore
+from core.common.channel_chat_types import (
+    CHAT_TYPE_GROUP,
+    CHAT_TYPE_PRIVATE,
+    ChatType,
+    is_group_chat_type,
+)
 
 if TYPE_CHECKING:
     from session.manager import SessionManager
@@ -52,6 +59,15 @@ class LegacySessionDescriptor:
     metadata: dict[str, Any] | None = None
 
 
+def _chat_type_of(recorded: set[str]) -> ChatType | None:
+    """Group wins over private; neither known gives None."""
+    if any(is_group_chat_type(value) for value in recorded):
+        return CHAT_TYPE_GROUP
+    if CHAT_TYPE_PRIVATE in recorded:
+        return CHAT_TYPE_PRIVATE
+    return None
+
+
 class ConversationService:
     """Owns the mapping between legacy session keys and formal conversation threads."""
 
@@ -78,6 +94,43 @@ class ConversationService:
     def get_thread(self, thread_id: str) -> ThreadRecord | None:
         """Looks up a formal thread without exposing a legacy session key."""
         return self._store.get_thread(thread_id)
+
+    def list_network_threads(self, role_id: str) -> list[ThreadRecord]:
+        """The role's current external channel threads, without the desktop one.
+
+        An archived thread belonged to the role before its chat was rebound
+        to another role, so it is not one of the role's conversations now.
+        """
+        return [
+            thread
+            for thread in self._store.list_threads()
+            if thread.role_id == role_id
+            and thread.thread_kind == "network"
+            and not thread.archived
+        ]
+
+    def thread_chat_types(
+        self, thread_ids: Collection[str]
+    ) -> dict[str, ChatType | None]:
+        """Whether each thread is a group or a private chat, as its messages recorded.
+
+        A group chat type on any message makes a thread a group; otherwise a
+        private one makes it private. None when no message recorded a known
+        type (e.g. only ``unknown``, or nothing at all).
+        """
+        recorded = self._store.thread_chat_types(thread_ids)
+        return {
+            thread_id: _chat_type_of(recorded.get(thread_id, set()))
+            for thread_id in thread_ids
+        }
+
+    def contacts_by_id(self, role_id: str) -> dict[str, ContactRecord]:
+        """The role's contacts keyed by ID, read in one query."""
+        return {
+            contact.id: contact
+            for contact in self._store.list_contacts()
+            if contact.role_id == role_id
+        }
 
     def get_thread_for_runtime(
         self,

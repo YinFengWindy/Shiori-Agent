@@ -141,6 +141,22 @@ class AccountRecord:
     response_rules: AccountResponseRules = AccountResponseRules()
 
 
+def account_serves_channel(record: AccountRecord, channel: str) -> bool:
+    """Whether transport ``channel`` can carry messages of account ``record``.
+
+    A plugin names its channel after the platform, either plainly (``qq``) or
+    per account instance (``telegram_<ref>``, ``feishu:<ref>``). The rule
+    matches on the platform alone; a role holds at most one account per
+    plugin, so among one role's accounts it picks out a single account.
+    """
+    platform = record.platform
+    return (
+        channel == platform
+        or channel.startswith(f"{platform}:")
+        or channel.startswith(f"{platform}_")
+    )
+
+
 @dataclass(frozen=True)
 class AccountSnapshot:
     """One authoritative view shared by role scheduling and presentation."""

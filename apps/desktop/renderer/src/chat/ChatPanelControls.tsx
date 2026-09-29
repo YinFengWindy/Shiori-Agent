@@ -6,6 +6,14 @@ import type { ChatSidebarMode } from "./ChatRightSidebar";
 
 const badgeDotClass = "absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-accent ring-2 ring-surface";
 
+/**
+ * Right margin the chat header's trailing controls keep while the role panel
+ * is shut, when ChatPanelToggle floats over the header's end: the toggle's
+ * right-4 inset plus its w-7 box, less the header's own pr-6, plus a gap.
+ * Change it together with the toggle's position below.
+ */
+export const chatPanelToggleClearanceClass = "mr-7";
+
 /** The chat header's toggle for the role panel (状态 / 任务 / 图片), with a dot while something new is unseen. */
 export function ChatPanelToggle({ open, badged, onToggle }: { open: boolean; badged: boolean; onToggle: () => void }) {
   const label = open ? "收起角色面板" : "展开角色面板";

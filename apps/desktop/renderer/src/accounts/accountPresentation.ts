@@ -1,3 +1,4 @@
+import { prettifyPluginId } from "../plugins/pluginPresentation";
 import type { AccountSnapshot } from "./accountClient";
 
 type AccountIdentity = Pick<AccountSnapshot, "platform" | "displayName" | "platformAccountId">;
@@ -84,6 +85,15 @@ const pendingLabels: Record<AccountPendingAction, string> = {
 /** Status shown while a connect, disconnect or logout request is still in flight. */
 export function pendingAccountStatus(action: AccountPendingAction): AccountStatusView {
   return { label: pendingLabels[action], tone: "warning" };
+}
+
+/**
+ * The name of an account's channel: the label its plugin registered for
+ * account controls (「QQ」, 「飞书 / Lark」), or, when the plugin's UI
+ * registered none, its word-cased id (never the raw one).
+ */
+export function accountChannelLabel(pluginId: string, registered: { label: string } | undefined) {
+  return registered?.label ?? prettifyPluginId(pluginId);
 }
 
 /** The line under an account's name: its channel and platform ID, e.g. `QQ · 10001`. */

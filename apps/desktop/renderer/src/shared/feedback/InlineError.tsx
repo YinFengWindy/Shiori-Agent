@@ -4,7 +4,7 @@ import { MascotFaceAvatar } from "../mascot/MascotFigure";
 import { useMascotCameoAllowed } from "../mascot/MascotOnStage";
 import { MascotSpeechBubble } from "../mascot/MascotSpeech";
 import { inlineErrorLines, isPersonaSceneKey, personaSceneLines, type InlineErrorPersona, type PersonaSceneKey } from "../mascot/mascotLines";
-import { compactPressableClass, cx } from "../styles";
+import { compactIconButtonClass, cx } from "../styles";
 import { FeedbackDetail } from "./FeedbackDetail";
 
 /** Props of the shared in-page error block. */
@@ -89,7 +89,7 @@ export function InlineError({
   const detailFold = detail ? <FeedbackDetail detail={detail} open={detailOpen} onToggle={() => setDetailOpen((current) => !current)} /> : null;
   const dismiss = onDismiss ? (
     <button
-      className={cx(compactPressableClass, "grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-surface-hover hover:text-ink", layout === "card" && "absolute right-3 top-3")}
+      className={cx(compactIconButtonClass, layout === "card" && "absolute right-3 top-3")}
       type="button"
       aria-label="关闭"
       onClick={onDismiss}

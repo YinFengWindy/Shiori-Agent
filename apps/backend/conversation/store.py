@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from collections.abc import Collection
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -550,6 +551,38 @@ class ConversationStore:
             }
             for row in rows
         ]
+
+    def thread_chat_types(self, thread_ids: Collection[str]) -> dict[str, set[str]]:
+        """The distinct ``chat_type`` values recorded on each thread's messages.
+
+        Reads the message's platform source (``message_source.chat_type``)
+        and falls back to the message metadata's own ``chat_type``; messages
+        recording neither contribute nothing, and a thread with no recorded
+        type is absent. One query for all threads.
+        """
+        named = sorted({thread_id for thread_id in thread_ids if thread_id})
+        if not named:
+            return {}
+        placeholders = ",".join("?" for _ in named)
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT DISTINCT thread_id, COALESCE(
+                    json_extract(extra, '$.metadata.message_source.chat_type'),
+                    json_extract(extra, '$.metadata.chat_type')
+                ) AS chat_type
+                FROM messages
+                WHERE thread_id IN ({placeholders})
+                """,
+                named,
+            ).fetchall()
+        recorded: dict[str, set[str]] = {}
+        for row in rows:
+            if row["chat_type"]:
+                recorded.setdefault(str(row["thread_id"]), set()).add(
+                    str(row["chat_type"])
+                )
+        return recorded
 
     def last_user_message_at(self, thread_id: str) -> str | None:
         """Returns the ``ts`` of the newest user message in one thread, if any.

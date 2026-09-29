@@ -13,6 +13,7 @@ from core.accounts import (
     AccountRegistry,
     AccountSnapshot,
     ViaAccount,
+    account_serves_channel,
     delivered_via_account,
 )
 from conversation.service import ConversationService, LegacySessionDescriptor
@@ -181,12 +182,7 @@ class ChannelHub:
             not account.record.role_id
             or not account.runtime_active
             or account.connection != "online"
-            or (
-                channel
-                and channel != account.record.platform
-                and not channel.startswith(f"{account.record.platform}:")
-                and not channel.startswith(f"{account.record.platform}_")
-            )
+            or (channel and not account_serves_channel(account.record, channel))
         ):
             return None
         return account
