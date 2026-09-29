@@ -78,6 +78,15 @@ async def test_lists_the_roles_channel_conversations_newest_first(
         token="q",
         role_id="mira",
     )
+    # Feishu names its channel ``feishu:<ref>``, the ref being ``<domain>:<app_id>``.
+    feishu = accounts.register(
+        plugin_id="feishu",
+        platform="feishu",
+        platform_account_id="feishu:cli_a",
+        config_ref="feishu:cli_a",
+        token="f",
+        role_id="mira",
+    )
     _ = accounts.register(
         plugin_id="qq",
         platform="qq",
@@ -104,7 +113,15 @@ async def test_lists_the_roles_channel_conversations_newest_first(
     group = _thread(
         conversation, role_id="mira", channel="qq", chat_id="gqq:5", name="摸鱼群"
     )
-    orphan = _thread(conversation, role_id="mira", channel="feishu:app", chat_id="7")
+    feishu_chat = _thread(
+        conversation,
+        role_id="mira",
+        channel="feishu:feishu:cli_a",
+        chat_id="oc_1",
+        name="项目群",
+    )
+    # The role has no QQBot account, so this conversation belongs to no app.
+    orphan = _thread(conversation, role_id="mira", channel="qqbot", chat_id="c2c:7")
     _ = _thread(conversation, role_id="mira", channel="qq", chat_id="silent")
     others = _thread(conversation, role_id="other", channel="qq", chat_id="gqq:9")
 
@@ -129,6 +146,12 @@ async def test_lists_the_roles_channel_conversations_newest_first(
         "我来",
         timestamp="2026-09-29T10:30:00+08:00",
         metadata={"thread_id": group.id},
+    )
+    session.add_message(
+        "user",
+        "周会改到三点",
+        timestamp="2026-09-28T20:00:00+08:00",
+        metadata=_metadata(feishu_chat, chat_type="group", sender_name="老王"),
     )
     session.add_message(
         "user",
@@ -185,12 +208,27 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 },
             },
             {
+                "thread_id": feishu_chat.id,
+                "account_id": feishu.record.id,
+                "channel": "feishu:feishu:cli_a",
+                "chat_type": "group",
+                "display_name": "项目群",
+                "is_user_chat": False,
+                "last_message": {
+                    "role": "user",
+                    "content": "周会改到三点",
+                    "timestamp": "2026-09-28T20:00:00+08:00",
+                    "has_media": False,
+                    "sender_name": "老王",
+                },
+            },
+            {
                 "thread_id": orphan.id,
                 "account_id": None,
-                "channel": "feishu:app",
+                "channel": "qqbot",
                 # Only an ``unknown`` type was recorded: no guess.
                 "chat_type": None,
-                "display_name": "7",
+                "display_name": "c2c:7",
                 "is_user_chat": False,
                 "last_message": {
                     "role": "user",

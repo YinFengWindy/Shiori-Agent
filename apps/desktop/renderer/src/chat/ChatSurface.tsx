@@ -13,7 +13,7 @@ import {
 import { findRetryableChatErrorKey } from "./chatFailedTurn";
 import { getChatMessageReactKey } from "./chatMessageIdentity";
 import { ChatRightSidebar, type ChatSidebarMode } from "./ChatRightSidebar";
-import { ChatPanelToggle, ChatPanelSegments } from "./ChatPanelControls";
+import { ChatPanelToggle, ChatPanelSegments, chatPanelToggleClearanceClass } from "./ChatPanelControls";
 import {
   clearViewedChatPanelBadge,
   emptyChatPanelBadges,
@@ -426,8 +426,7 @@ export function ChatSurface({
         title={headerTitle}
         typing={sending}
         actions={activeRole ? (
-          // Clears the role panel toggle, which floats over the header's end while the panel is shut.
-          <PhoneToggle open={phoneOpen} onToggle={() => setPhoneOpen((open) => !open)} className={panelOpen ? undefined : "mr-7"} />
+          <PhoneToggle open={phoneOpen} onToggle={() => setPhoneOpen((open) => !open)} className={panelOpen ? undefined : chatPanelToggleClearanceClass} />
         ) : null}
         onOpenRoleDetail={handleOpenRoleDetail}
       />
@@ -472,7 +471,8 @@ export function ChatSurface({
         />
       </section>
       {phoneOpen && activeRole ? (
-        <div className="pointer-events-none absolute bottom-4 right-4 top-[67px] z-[4]">
+        // Placed in the grid's second row, so it starts under the header whatever the header's height.
+        <div className="pointer-events-none absolute inset-0 z-[4] col-start-1 row-start-2 p-4">
           <PhonePanel key={activeRole.id} role={activeRole} />
         </div>
       ) : null}

@@ -1,8 +1,8 @@
 import { PuzzlePieceIcon } from "@phosphor-icons/react";
-import { InlineError } from "../shared/feedback/InlineError";
 import { emptyStateLines } from "../shared/mascot/mascotLines";
-import { compactGhostButtonClass, cx, pressableClass } from "../shared/styles";
+import { cx, pressableClass } from "../shared/styles";
 import { PhoneEmptyState } from "./PhoneEmptyState";
+import { PhoneLoadError } from "./PhoneLoadError";
 import type { PhoneApp } from "./phonePresentation";
 
 const appButtonClass = cx(
@@ -22,16 +22,14 @@ export function PhoneHomeScreen({ apps, error, onRetry, onOpen }: {
   onOpen: (accountId: string) => void;
 }) {
   if (error) {
-    return <div className="p-3">
-      <InlineError message={error} actions={<button type="button" className={compactGhostButtonClass} onClick={onRetry}>重试</button>} />
-    </div>;
+    return <PhoneLoadError message={error} onRetry={onRetry} />;
   }
   if (!apps) return null;
   if (!apps.length) {
     return <PhoneEmptyState line={emptyStateLines.phoneNoAccounts} label="还没有账号" testId="phone-home-empty" />;
   }
   return (
-    <ul className="m-0 grid list-none grid-cols-3 content-start gap-x-2 gap-y-4 px-4 pt-5" aria-label="应用" data-testid="phone-home">
+    <ul className="m-0 grid list-none grid-cols-3 content-start gap-x-1 gap-y-4 px-4 pt-5" aria-label="应用" data-testid="phone-home">
       {apps.map(({ accountId, label, Icon = PuzzlePieceIcon, offline }) => (
         <li key={accountId} className="min-w-0">
           <button type="button" className={appButtonClass} aria-label={offline ? `${label}，离线` : label}
@@ -42,7 +40,7 @@ export function PhoneHomeScreen({ apps, error, onRetry, onOpen }: {
             )}>
               <Icon className="h-7 w-7" />
             </span>
-            <span className="phone-glass max-w-full truncate rounded-full px-1.5 text-caption text-ink">{label}</span>
+            <span className="surface-glass max-w-full truncate rounded-full px-1 text-caption text-ink">{label}</span>
             {offline ? <span className="rounded-full bg-surface-soft px-1.5 text-caption text-ink-muted">离线</span> : null}
           </button>
         </li>

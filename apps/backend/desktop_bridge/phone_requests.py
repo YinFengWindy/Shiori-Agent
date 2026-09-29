@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from collections.abc import Collection
 from typing import Any, Protocol
 
 from conversation.context_scope import user_context_threads
@@ -16,11 +17,11 @@ from session.manager.helpers import role_session_key
 
 
 class ThreadMessages(Protocol):
-    """Reads the newest stored message of one thread (the session presenter)."""
+    """Reads the newest stored message of each thread (the session presenter)."""
 
-    def newest_thread_message(
-        self, session_key: str, thread_id: str
-    ) -> dict[str, Any] | None: ...
+    def newest_thread_messages(
+        self, session_key: str, thread_ids: Collection[str]
+    ) -> dict[str, dict[str, Any]]: ...
 
 
 def _message_time(message: dict[str, Any]) -> datetime:
@@ -84,12 +85,18 @@ class DesktopPhoneRequestHandler:
         session_key = role_session_key(role_id)
         accounts = self._accounts.list(role_id=role_id)
         user_threads = user_context_threads(role_id, self._identities.list())
+        threads = self._conversations.list_network_threads(role_id)
+        thread_ids = [thread.id for thread in threads]
+        # Newest messages, contacts and chat types are each read in one query.
+        newest = self._messages.newest_thread_messages(session_key, thread_ids)
+        contacts = self._conversations.contacts_by_id(role_id)
+        chat_types = self._conversations.thread_chat_types(thread_ids)
         rows: list[tuple[datetime, dict[str, Any]]] = []
-        for thread in self._conversations.list_network_threads(role_id):
-            message = self._messages.newest_thread_message(session_key, thread.id)
+        for thread in threads:
+            message = newest.get(thread.id)
             if message is None:
                 continue
-            contact = self._conversations.get_contact(thread.contact_id)
+            contact = contacts.get(thread.contact_id)
             if contact is None:
                 raise LookupError(f"会话 {thread.id} 缺少联系人 {thread.contact_id}")
             source = MessageSource.from_metadata(
@@ -103,7 +110,7 @@ class DesktopPhoneRequestHandler:
                         "thread_id": thread.id,
                         "account_id": account.record.id if account else None,
                         "channel": thread.channel,
-                        "chat_type": self._conversations.thread_chat_type(thread.id),
+                        "chat_type": chat_types[thread.id],
                         "display_name": contact.display_name,
                         "is_user_chat": thread.id in user_threads.bound_chat_thread_ids,
                         "last_message": {

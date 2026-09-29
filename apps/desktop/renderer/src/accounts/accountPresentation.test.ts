@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  accountChannelLine, accountDeletionDescription, accountHeadline, accountName, accountStatus, accountStatusView,
+  accountChannelLabel, accountChannelLine, accountDeletionDescription, accountHeadline, accountName, accountStatus, accountStatusView,
   pendingAccountStatus, roleDeletionDescription,
 } from "./accountPresentation";
 import type { AccountSnapshot } from "./accountClient";
@@ -50,4 +50,9 @@ test("role deletion text lists the accounts deleted with the role, or why they a
     "“Mira” 删除后会移除角色会话与相关素材。以下账号会一并删除：demo · Demo、qq · 101。",
   );
   assert.match(roleDeletionDescription("Mira", { accounts: [], error: "bridge down", status: "error" }), /账号列表读取失败，暂不能确认删除范围/);
+});
+
+test("a channel is named by its plugin's registered label, else its word-cased id", () => {
+  assert.equal(accountChannelLabel("feishu", { label: "飞书 / Lark" }), "飞书 / Lark");
+  assert.equal(accountChannelLabel("tool_loop_guard", undefined), "Tool Loop Guard");
 });

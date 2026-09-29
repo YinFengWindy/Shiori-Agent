@@ -1,10 +1,10 @@
 import { CaretLeftIcon, ChatCircleIcon, UserIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { formatChatListTime } from "../roles/roleChatPreview";
-import { InlineError } from "../shared/feedback/InlineError";
 import { emptyStateLines } from "../shared/mascot/mascotLines";
-import { compactGhostButtonClass, compactPressableClass, cx } from "../shared/styles";
+import { compactIconButtonClass } from "../shared/styles";
 import type { PhoneChatType, PhoneConversation } from "./phoneClient";
 import { PhoneEmptyState } from "./PhoneEmptyState";
+import { PhoneLoadError } from "./PhoneLoadError";
 import { phoneConversationPreview, type PhoneApp } from "./phonePresentation";
 
 /** Group or private mark; a conversation whose type no message recorded gets a neutral one rather than a guess. */
@@ -49,20 +49,17 @@ export function PhoneConversationList({ app, conversations, error, now, onRetry,
 }) {
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-      <header className="phone-glass flex min-w-0 items-center gap-1 px-2 py-1.5">
-        <button type="button" aria-label="返回主屏" data-testid="phone-back" onClick={onBack}
-          className={cx(compactPressableClass, "grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-secondary hover:bg-surface-hover hover:text-ink")}>
+      <header className="surface-glass flex min-w-0 items-center gap-1 px-2 py-1.5">
+        <button type="button" aria-label="返回主屏" data-testid="phone-back" onClick={onBack} className={compactIconButtonClass}>
           <CaretLeftIcon className="h-4 w-4" aria-hidden="true" />
         </button>
         <h3 className="m-0 min-w-0 truncate text-body font-semibold text-ink">{app.label}</h3>
       </header>
       <div className="min-h-0 overflow-y-auto">
         {error ? (
-          <div className="p-3">
-            <InlineError message={error} actions={<button type="button" className={compactGhostButtonClass} onClick={onRetry}>重试</button>} />
-          </div>
+          <PhoneLoadError message={error} onRetry={onRetry} />
         ) : !conversations ? null : conversations.length ? (
-          <ul className="phone-glass m-0 grid list-none p-0" aria-label={`${app.label} 会话`} data-testid="phone-conversations">
+          <ul className="surface-glass m-0 grid list-none p-0" aria-label={`${app.label} 会话`} data-testid="phone-conversations">
             {conversations.map((conversation) => <ConversationRow key={conversation.threadId} conversation={conversation} now={now} />)}
           </ul>
         ) : (

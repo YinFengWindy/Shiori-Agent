@@ -285,6 +285,33 @@ class _MessageMixin:
             "next_before_seq": returned_oldest,
         }
 
+    def fetch_newest_thread_messages(
+        self, session_key: str, thread_ids: Collection[str]
+    ) -> dict[str, dict[str, Any]]:
+        """The newest message of each of ``thread_ids`` in one session, by thread.
+
+        One query for all threads; a thread without messages is absent.
+        """
+        named = sorted({thread_id for thread_id in thread_ids if thread_id})
+        if not named:
+            return {}
+        placeholders = ",".join("?" for _ in named)
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT {_MESSAGE_SELECT_COLUMNS}
+                FROM messages
+                WHERE session_key = ? AND thread_id IN ({placeholders})
+                  AND seq = (
+                    SELECT MAX(newest.seq) FROM messages AS newest
+                    WHERE newest.session_key = messages.session_key
+                      AND newest.thread_id = messages.thread_id
+                  )
+                """,
+                (session_key, *named),
+            ).fetchall()
+        return {str(row["thread_id"]): self._row_to_message(row) for row in rows}
+
     def fetch_image_history(
         self, session_key: str, *, thread_ids: Collection[str] | None = None
     ) -> list[dict[str, Any]]:

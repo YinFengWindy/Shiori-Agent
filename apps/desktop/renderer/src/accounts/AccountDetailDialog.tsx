@@ -5,7 +5,7 @@ import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
 import { iconButtonClass } from "../shared/styles";
 import { Reveal } from "../shared/ui/Reveal";
-import { accountChannelLine, accountName, accountOnline } from "./accountPresentation";
+import { accountChannelLabel, accountChannelLine, accountName, accountOnline } from "./accountPresentation";
 import type { AccountSnapshot } from "./accountClient";
 import { AccountAvatar } from "./AccountAvatar";
 import { AccountDangerZone } from "./AccountDangerZone";
@@ -28,7 +28,7 @@ export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChan
   const isPluginEnabled = usePluginEnabledState();
   const pluginControls = pluginUiRegistry.getAccountDetail(pluginId, isPluginEnabled);
   const PlatformControls = pluginControls?.Component;
-  const platformLabel = pluginControls?.label ?? account?.platform ?? "";
+  const platformLabel = accountChannelLabel(pluginId, pluginControls);
   // The danger zone's action row, where plugin secondary actions are portaled.
   const [actionsTarget, setActionsTarget] = useState<HTMLElement | null>(null);
 
@@ -41,7 +41,7 @@ export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChan
             <AccountAvatar avatarUrl={account?.avatarUrl ?? ""} Icon={pluginControls?.Icon} size="lg" />
             <div className="grid min-w-0 gap-0.5">
               <Dialog.Title className="truncate font-display text-title font-semibold text-ink">
-                {account ? accountName(account) : platformLabel ? `添加 ${platformLabel} 账号` : "添加账号"}
+                {account ? accountName(account) : `添加 ${platformLabel} 账号`}
               </Dialog.Title>
               {account ? <p className="m-0 truncate text-body-sm text-ink-muted">{accountChannelLine(platformLabel, account)}</p> : null}
             </div>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from typing import Any
 
 from conversation.context_scope import desktop_view_thread_ids, in_desktop_view
@@ -171,24 +171,20 @@ class DesktopSessionPresenter:
 
     def last_message_preview(self, session_key: str) -> dict[str, Any] | None:
         """Returns the newest desktop message as a light chat-list preview."""
-        message = self._newest_message(
-            session_key, self._desktop_thread_ids(session_key)
-        )
-        return message_preview(message) if message is not None else None
-
-    def newest_thread_message(
-        self, session_key: str, thread_id: str
-    ) -> dict[str, Any] | None:
-        """The newest stored message of one thread in session ``session_key``."""
-        return self._newest_message(session_key, frozenset({thread_id}))
-
-    def _newest_message(
-        self, session_key: str, thread_ids: frozenset[str] | None
-    ) -> dict[str, Any] | None:
         messages = self._session_store().fetch_messages_page(
-            session_key, limit=1, thread_ids=thread_ids
+            session_key,
+            limit=1,
+            thread_ids=self._desktop_thread_ids(session_key),
         )["messages"]
-        return messages[-1] if messages else None
+        return message_preview(messages[-1]) if messages else None
+
+    def newest_thread_messages(
+        self, session_key: str, thread_ids: Collection[str]
+    ) -> dict[str, dict[str, Any]]:
+        """The newest stored message of each thread in ``session_key``, by thread."""
+        return self._session_store().fetch_newest_thread_messages(
+            session_key, thread_ids
+        )
 
     def desktop_messages(
         self, session_key: str, messages: Iterable[dict[str, Any]]

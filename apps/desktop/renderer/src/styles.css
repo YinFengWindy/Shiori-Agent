@@ -268,7 +268,7 @@
        the --radius-* ladder. Body skins: 吟风 (pink / lavender, with her
        brand motifs) while the 看板娘 is on, plain grey when she is off.
        The wallpaper tint lies over the role's blurred avatar (decorative, no
-       contrast target of its own: text above it sits on --color-bg-glass). */
+       contrast target of its own: text above it sits on .surface-glass). */
     --phone-width: 18.5rem;
     --phone-max-height: 40rem;
     --phone-bezel: 0.45rem;
@@ -277,6 +277,8 @@
     --phone-body-yinfeng: linear-gradient(160deg in oklab, var(--pink-200), var(--lavender-200) 55%, var(--pink-300));
     --phone-body-plain: linear-gradient(160deg in oklab, var(--neutral-200), var(--neutral-300));
     --phone-wallpaper-blur: 22px;
+    --phone-wallpaper-saturate: 1.1; /* keeps the blurred avatar from going grey */
+    --phone-wallpaper-zoom: 1.25; /* hides the blur's soft edges past the screen */
     --phone-wallpaper-tint: linear-gradient(
       170deg in oklab,
       color-mix(in srgb, var(--blue-100) 70%, transparent),
@@ -284,6 +286,13 @@
       color-mix(in srgb, var(--pink-100) 78%, transparent)
     );
     --phone-view-shift: 18px; /* a screen sliding in when going deeper / back */
+    --phone-rise-shift: 12px; /* the phone rising in when it opens */
+    --phone-rise-scale: 0.98;
+    /* the home bar at the foot of the screen (decorative, no contrast target) */
+    --phone-home-bar-width: 34%;
+    --phone-home-bar-height: 0.3rem;
+    --phone-home-bar-gap: 0.45rem;
+    --phone-home-bar-opacity: 0.55;
     /* 吟风 skin motifs on the bezel: the bow charm, then large / small sparkles and petals */
     --phone-motif-bow-size: 3rem;
     --phone-motif-lg-size: 1.9rem;
@@ -1425,24 +1434,18 @@ button[role="combobox"]:focus-visible {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: blur(var(--phone-wallpaper-blur)) saturate(1.1);
-  transform: scale(1.25);
-}
-
-/* Text blocks over the wallpaper sit on glass so they read over any picture. */
-.phone-glass {
-  background: var(--color-bg-glass);
-  backdrop-filter: blur(12px);
+  filter: blur(var(--phone-wallpaper-blur)) saturate(var(--phone-wallpaper-saturate));
+  transform: scale(var(--phone-wallpaper-zoom));
 }
 
 .phone-home-bar {
   justify-self: center;
-  width: 34%;
-  height: 0.3rem;
-  margin: 0.4rem 0 0.5rem;
+  width: var(--phone-home-bar-width);
+  height: var(--phone-home-bar-height);
+  margin-block: var(--phone-home-bar-gap);
   border-radius: 9999px;
   background: var(--color-text-secondary);
-  opacity: 0.55;
+  opacity: var(--phone-home-bar-opacity);
 }
 
 .phone-view {
@@ -1458,7 +1461,7 @@ button[role="combobox"]:focus-visible {
 }
 
 @keyframes phone-rise {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  from { opacity: 0; transform: translateY(var(--phone-rise-shift)) scale(var(--phone-rise-scale)); }
 }
 
 @keyframes phone-view-forward {

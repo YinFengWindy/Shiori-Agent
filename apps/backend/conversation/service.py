@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -58,6 +59,15 @@ class LegacySessionDescriptor:
     metadata: dict[str, Any] | None = None
 
 
+def _chat_type_of(recorded: set[str]) -> ChatType | None:
+    """Group wins over private; neither known gives None."""
+    if any(is_group_chat_type(value) for value in recorded):
+        return CHAT_TYPE_GROUP
+    if CHAT_TYPE_PRIVATE in recorded:
+        return CHAT_TYPE_PRIVATE
+    return None
+
+
 class ConversationService:
     """Owns the mapping between legacy session keys and formal conversation threads."""
 
@@ -99,23 +109,28 @@ class ConversationService:
             and not thread.archived
         ]
 
-    def thread_chat_type(self, thread_id: str) -> ChatType | None:
-        """Whether a thread is a group or a private chat, as its messages recorded.
+    def thread_chat_types(
+        self, thread_ids: Collection[str]
+    ) -> dict[str, ChatType | None]:
+        """Whether each thread is a group or a private chat, as its messages recorded.
 
-        A group chat type on any message makes it a group; otherwise a
+        A group chat type on any message makes a thread a group; otherwise a
         private one makes it private. None when no message recorded a known
         type (e.g. only ``unknown``, or nothing at all).
         """
-        recorded = self._store.thread_chat_types(thread_id)
-        if any(is_group_chat_type(value) for value in recorded):
-            return CHAT_TYPE_GROUP
-        if CHAT_TYPE_PRIVATE in recorded:
-            return CHAT_TYPE_PRIVATE
-        return None
+        recorded = self._store.thread_chat_types(thread_ids)
+        return {
+            thread_id: _chat_type_of(recorded.get(thread_id, set()))
+            for thread_id in thread_ids
+        }
 
-    def get_contact(self, contact_id: str) -> ContactRecord | None:
-        """Looks up the contact a thread talks with."""
-        return self._store.get_contact(contact_id)
+    def contacts_by_id(self, role_id: str) -> dict[str, ContactRecord]:
+        """The role's contacts keyed by ID, read in one query."""
+        return {
+            contact.id: contact
+            for contact in self._store.list_contacts()
+            if contact.role_id == role_id
+        }
 
     def get_thread_for_runtime(
         self,

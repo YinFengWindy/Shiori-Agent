@@ -156,6 +156,16 @@ export const iconButtonClass = cx(
   "grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-surface text-ink-secondary hover:border-line-strong hover:bg-surface-hover disabled:cursor-default disabled:opacity-40",
 );
 
+/**
+ * Borderless 28px icon-only button (dismiss, back, header toggles), for
+ * places where iconButtonClass's bordered 40px tile would be too heavy.
+ * Its icon is h-4 w-4.
+ */
+export const compactIconButtonClass = cx(
+  compactPressableClass,
+  "grid h-7 w-7 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-surface-hover hover:text-ink",
+);
+
 /** Shared focus reset for controls that rely on their existing state styling. */
 export const focusResetClass = "focus:outline-none";
 

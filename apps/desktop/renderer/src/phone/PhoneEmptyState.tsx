@@ -16,7 +16,7 @@ export function PhoneEmptyState({ line, label, testId }: { line: MascotLine; lab
       <span className="grid h-11 w-11 place-items-center rounded-full bg-accent-softer text-accent">
         <PetalIcon className="h-5 w-5" />
       </span>
-      <span className="phone-glass rounded-full px-3 py-0.5 text-body-sm text-ink-muted">{label}</span>
+      <span className="surface-glass rounded-full px-3 py-0.5 text-body-sm text-ink-muted">{label}</span>
     </div>
   );
 }

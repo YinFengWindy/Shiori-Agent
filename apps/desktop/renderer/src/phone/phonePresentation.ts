@@ -1,7 +1,6 @@
 import type { ComponentType } from "react";
 import type { AccountSnapshot } from "../accounts/accountClient";
-import { accountOnline } from "../accounts/accountPresentation";
-import { prettifyPluginId } from "../plugins/pluginPresentation";
+import { accountChannelLabel, accountOnline } from "../accounts/accountPresentation";
 import { extractChatPreviewText } from "../roles/roleChatPreview";
 import type { PhoneConversation } from "./phoneClient";
 
@@ -37,7 +36,7 @@ export function phoneApps(
       const channel = channelOf(account.pluginId);
       return {
         accountId: account.id,
-        label: channel?.label ?? prettifyPluginId(account.pluginId),
+        label: accountChannelLabel(account.pluginId, channel),
         Icon: channel?.Icon,
         offline: !accountOnline(account),
       };
