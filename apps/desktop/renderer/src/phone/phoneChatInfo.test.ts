@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { memberDraftDirty, phoneChatInfoSections, phoneChatSummaryRows, phoneMemberEntryOf, phoneSubpageBack } from "./phoneChatInfo";
+import { memberDraftDirty, noteDraftDirty, phoneChatInfoSections, phoneChatSummaryRows, phoneMemberEntryOf, phoneSubpageBack } from "./phoneChatInfo";
 import type { PhoneChatItem } from "./phoneChatPresentation";
 import type { PhoneMessage } from "./phoneClient";
 
@@ -54,9 +54,14 @@ test("a profile goes back to where it was opened from; the info page back to the
   assert.equal(phoneSubpageBack({ kind: "info" }), null);
 });
 
-test("a member draft is dirty when an editable field differs", () => {
+test("a draft is dirty only when it would store something else (the bridge trims)", () => {
+  assert.equal(noteDraftDirty("abc", "abc"), false);
+  // Saving "abc\n" over "abc" stores "abc" again: nothing left to save.
+  assert.equal(noteDraftDirty("abc\n", "abc"), false);
+  assert.equal(noteDraftDirty("abcd", "abc"), true);
   const stored = { brief: "爱开黑", profile: "## 印象" };
   assert.equal(memberDraftDirty({ ...stored }, stored), false);
+  assert.equal(memberDraftDirty({ brief: " 爱开黑 ", profile: "## 印象\n" }, stored), false);
   assert.equal(memberDraftDirty({ ...stored, brief: "爱睡觉" }, stored), true);
   assert.equal(memberDraftDirty({ ...stored, profile: "" }, stored), true);
 });

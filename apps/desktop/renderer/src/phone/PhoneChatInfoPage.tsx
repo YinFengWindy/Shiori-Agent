@@ -19,17 +19,21 @@ const sectionViews: Record<PhoneChatInfoSectionId, ComponentType<PhoneChatInfoSe
  * opened from the chat page's header: `sections` (from
  * `phoneChatInfoSections`) as glass cards, top to bottom.
  */
-export function PhoneChatInfoPage({ roleId, app, conversation, sections, onBack, onOpenMember }: {
+export function PhoneChatInfoPage({ roleId, app, conversation, sections, active, membersRevision, onBack, onOpenMember }: {
   roleId: string;
   app: PhoneApp;
   conversation: PhoneConversation;
   sections: readonly PhoneChatInfoSection[];
+  /** The page is on top (not covered by a profile opened from it); focus moves to it when it becomes so. */
+  active: boolean;
+  /** See `PhoneChatInfoSectionProps.membersRevision`. */
+  membersRevision: number;
   onBack: () => void;
   onOpenMember: (senderId: string) => void;
 }) {
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-      <PhoneScreenHeader title="聊天信息" backLabel="返回聊天" onBack={onBack} />
+      <PhoneScreenHeader title="聊天信息" backLabel="返回聊天" onBack={onBack} focusBack={active} />
       <div className="grid min-h-0 content-start gap-2.5 overflow-y-auto p-2.5" data-testid="phone-chat-info-page">
         {sections.map((section) => {
           const View = sectionViews[section.id];
@@ -37,7 +41,8 @@ export function PhoneChatInfoPage({ roleId, app, conversation, sections, onBack,
             <section key={section.id} className="surface-glass grid min-w-0 gap-1.5 rounded-md p-2.5"
               aria-label={section.title} data-testid={`phone-info-${section.id}`}>
               <h4 className="m-0 px-0.5 text-caption font-semibold text-ink-muted">{section.title}</h4>
-              <View section={section} roleId={roleId} app={app} conversation={conversation} onOpenMember={onOpenMember} />
+              <View section={section} roleId={roleId} app={app} conversation={conversation} onOpenMember={onOpenMember}
+                membersRevision={membersRevision} />
             </section>
           );
         })}

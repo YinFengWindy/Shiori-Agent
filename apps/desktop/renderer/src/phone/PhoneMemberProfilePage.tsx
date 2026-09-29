@@ -83,23 +83,27 @@ function MemberProfileEditor({ member, onSave, onDelete }: {
  * One member's profile, opened from a chat avatar or the info page's member
  * list. Once it is deleted, the screen goes back.
  */
-export function PhoneMemberProfilePage({ roleId, threadId, senderId, backLabel, onBack }: {
+export function PhoneMemberProfilePage({ roleId, threadId, senderId, backLabel, onBack, onChanged }: {
   roleId: string;
   threadId: string;
   senderId: string;
   backLabel: string;
   onBack: () => void;
+  /** The profile was saved or deleted, so lists showing it are stale. */
+  onChanged: () => void;
 }) {
   const { profile, error, retry, save, remove } = usePhoneMemberProfile(roleId, threadId, senderId);
   const member = profile?.member;
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-      <PhoneScreenHeader title={member?.callName ?? "成员档案"} backLabel={backLabel} onBack={onBack} />
+      <PhoneScreenHeader title={member?.callName ?? "成员档案"} backLabel={backLabel} onBack={onBack} focusBack />
       <div className="surface-glass min-h-0 overflow-y-auto">
         {error ? <PhoneLoadError message={error} onRetry={() => void retry()} />
           : !profile ? null
             : !member ? <div className="p-3"><PhoneInfoEmpty label="暂无档案" /></div>
-              : <MemberProfileEditor member={member} onSave={save} onDelete={async () => { await remove(); onBack(); }} />}
+              : <MemberProfileEditor member={member}
+                onSave={async (fields) => { await save(fields); onChanged(); }}
+                onDelete={async () => { await remove(); onChanged(); onBack(); }} />}
       </div>
     </div>
   );

@@ -78,7 +78,15 @@ export function phoneSubpageBack(page: PhoneChatSubpage): PhoneChatSubpage | nul
 /** The editable fields of a member profile; the nickname history is kept by the host. */
 export type PhoneMemberDraft = Pick<PhoneMember, "brief" | "profile">;
 
-/** A member profile draft differs from the stored profile. */
+/**
+ * A note draft would store something other than `stored`. The bridge
+ * stores text trimmed, so edits only to surrounding whitespace do not count.
+ */
+export function noteDraftDirty(draft: string, stored: string) {
+  return draft.trim() !== stored.trim();
+}
+
+/** A member profile draft would store something other than the stored profile (compared as `noteDraftDirty` does). */
 export function memberDraftDirty(draft: PhoneMemberDraft, member: PhoneMemberDraft) {
-  return draft.brief !== member.brief || draft.profile !== member.profile;
+  return noteDraftDirty(draft.brief, member.brief) || noteDraftDirty(draft.profile, member.profile);
 }

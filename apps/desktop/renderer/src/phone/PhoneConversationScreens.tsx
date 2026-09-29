@@ -28,6 +28,8 @@ export function PhoneConversationScreens({ role, app, conversation, now, onBack 
 }) {
   const [view, setView] = useState<SubpageView>({ page: null, direction: "forward" });
   const sections = phoneChatInfoSections(conversation);
+  // Bumped after a profile is saved or deleted, so the info page's member list rereads.
+  const [membersRevision, setMembersRevision] = useState(0);
   const open = (page: PhoneChatSubpage) => setView({ page, direction: "forward" });
   const back = () => setView((current) => ({ page: current.page && phoneSubpageBack(current.page), direction: "back" }));
   const { page, direction } = view;
@@ -44,14 +46,16 @@ export function PhoneConversationScreens({ role, app, conversation, now, onBack 
       {infoOpen ? (
         <div className={cx("phone-view absolute inset-0", member && "invisible")} inert={Boolean(member)}
           data-direction={member ? undefined : direction}>
-          <PhoneChatInfoPage roleId={role.id} app={app} conversation={conversation} sections={sections} onBack={back}
+          <PhoneChatInfoPage roleId={role.id} app={app} conversation={conversation} sections={sections}
+            active={!member} membersRevision={membersRevision} onBack={back}
             onOpenMember={(senderId) => open({ kind: "member", senderId, from: "info" })} />
         </div>
       ) : null}
       {member ? (
         <div key={member.senderId} className="phone-view absolute inset-0" data-direction={direction}>
           <PhoneMemberProfilePage roleId={role.id} threadId={conversation.threadId} senderId={member.senderId}
-            backLabel={member.from === "info" ? "返回聊天信息" : "返回聊天"} onBack={back} />
+            backLabel={member.from === "info" ? "返回聊天信息" : "返回聊天"} onBack={back}
+            onChanged={() => setMembersRevision((revision) => revision + 1)} />
         </div>
       ) : null}
     </div>

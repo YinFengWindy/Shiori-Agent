@@ -14,6 +14,8 @@ export type PhoneChatInfoSectionProps = {
   app: PhoneApp;
   conversation: PhoneConversation;
   onOpenMember: (senderId: string) => void;
+  /** Changes whenever a member profile opened from this page was saved or deleted. */
+  membersRevision: number;
 };
 
 const memberButtonClass = cx(
@@ -36,7 +38,12 @@ export function PhoneChatSummarySection({ app, conversation }: PhoneChatInfoSect
 }
 
 /** 群成员: profiled members who spoke here; a tap opens the member's profile. */
-export function PhoneChatMembersSection({ roleId, conversation, onOpenMember }: PhoneChatInfoSectionProps) {
+export function PhoneChatMembersSection(props: PhoneChatInfoSectionProps) {
+  // A new revision (a profile was saved or deleted) mounts a fresh list, which reads the members again.
+  return <MemberList key={props.membersRevision} {...props} />;
+}
+
+function MemberList({ roleId, conversation, onOpenMember }: PhoneChatInfoSectionProps) {
   const { members, error, retry } = usePhoneMembers(roleId, conversation.threadId);
   if (error) return <PhoneLoadError message={error} onRetry={() => void retry()} />;
   if (!members) return null;

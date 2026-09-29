@@ -5,9 +5,8 @@ import type { PhoneChatInfoSectionProps } from "./PhoneChatInfoSections";
 import { PhoneLoadError } from "./PhoneLoadError";
 import { useBusyAction } from "../shared/useBusyAction";
 import { useEditDraft } from "../shared/useEditDraft";
+import { noteDraftDirty } from "./phoneChatInfo";
 import { usePhoneGroupNote } from "./usePhoneChatMemory";
-
-const textDiffers = (draft: string, stored: string) => draft !== stored;
 
 /** The note block's editor once the note has loaded: Markdown text, saved or reverted while it differs. */
 function GroupNoteEditor({ stored, label, onSave }: {
@@ -15,7 +14,7 @@ function GroupNoteEditor({ stored, label, onSave }: {
   label: string;
   onSave: (note: string) => Promise<void>;
 }) {
-  const { draft, dirty, setDraft, reset } = useEditDraft(stored, textDiffers);
+  const { draft, dirty, setDraft, reset } = useEditDraft(stored, noteDraftDirty);
   const saving = useBusyAction();
   return (
     <div className="grid gap-1.5">

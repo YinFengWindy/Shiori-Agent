@@ -50,6 +50,8 @@ test("group chat info: blocks, note saved and its draft kept, recent activity re
       onEvent: () => () => {},
       invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
         calls.push({ method, payload });
+        // Once deleted, the member is gone from the list.
+        if (method === "phone.member.profile.delete") replies["phone.conversation.members"] = { members: [] };
         return { id: "response", type: "response", method, error: null, payload: replies[method] };
       },
     } } },
@@ -97,5 +99,7 @@ test("group chat info: blocks, note saved and its draft kept, recent activity re
     // Back where the profile was opened from.
     assert.equal(find("phone-member-profile"), null);
     assert.equal(find<HTMLTextAreaElement>("phone-info-note-input")?.value, "草稿");
+    // The kept-mounted info page reread its member list.
+    assert.equal(find("phone-info-member-42"), null);
   } finally { await view.cleanup(); }
 });
