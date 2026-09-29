@@ -1,9 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, ImageSquare } from "@phosphor-icons/react";
-import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
-import { SettingsToggleCard } from "../../../apps/desktop/renderer/src/settings/SettingsToggleCard";
-import { toFileUrl } from "../../../apps/desktop/renderer/src/shared/format";
 import {
+  Select,
+  SettingsToggleCard,
   cardClass,
   compactButtonSizeClass,
   cx,
@@ -13,8 +12,8 @@ import {
   pressableClass,
   primaryButtonSurfaceClass,
   textareaClass,
-} from "../../../apps/desktop/renderer/src/shared/styles";
-import { Select } from "../../../apps/desktop/renderer/src/shared/ui/Select";
+  usePluginHostServices,
+} from "@shiori/plugin-sdk";
 import type { PromptTagEntry } from "./types";
 
 type PromptTagEntryEditorProps = {
@@ -117,7 +116,7 @@ export function PromptTagEntryEditor({ draft, creating, error, saving, bridgeRea
             onClick={() => void pickReferenceImage()}
           >
             {draft.image_path ? (
-              <img className="h-full w-full object-cover" src={toFileUrl(draft.image_path)} alt="参考图" />
+              <img className="h-full w-full object-cover" src={host.assets.url(draft.image_path)} alt="参考图" />
             ) : (
               <span className="grid justify-items-center gap-2 text-body-sm">
                 <ImageSquare className="h-7 w-7" aria-hidden="true" />

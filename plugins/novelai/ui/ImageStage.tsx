@@ -1,7 +1,6 @@
 import { ArrowUUpLeft, Key } from "@phosphor-icons/react";
-import { CrossfadeLayers } from "../../../apps/desktop/renderer/src/shared/CrossfadeLayers";
-import { toFileUrl } from "../../../apps/desktop/renderer/src/shared/format";
-import { compactPressableClass, cx } from "../../../apps/desktop/renderer/src/shared/styles";
+import { compactPressableClass, cx, usePluginHostServices } from "@shiori/plugin-sdk";
+import { CrossfadeLayers } from "./CrossfadeLayers";
 import type { GenerationFailure } from "./generationFailure";
 import { StageEmpty, StageFailure, StageGenerating } from "./StageStates";
 import type { StageView } from "./studioSelectors";
@@ -32,6 +31,7 @@ function StageNotice({ notice, onOpenSettings }: { notice: GenerationFailure; on
 }
 
 function StageImage({ view, onOpenSettings, onReusePrompt }: { view: Extract<StageView, { kind: "image" }>; onOpenSettings?: () => void; onReusePrompt: (record: ImageHistoryRecord) => void }) {
+  const { assets } = usePluginHostServices();
   const { record } = view;
   return (
     <div className="relative h-full" data-testid="novelai-stage-image">
@@ -42,7 +42,7 @@ function StageImage({ view, onOpenSettings, onReusePrompt }: { view: Extract<Sta
         render={(path) => (
           <img
             className={cx("max-h-full max-w-full rounded-lg object-contain shadow-panel", view.reveal && "nai-reveal")}
-            src={toFileUrl(path)}
+            src={assets.url(path)}
             alt={record?.prompt || "生成结果"}
           />
         )}

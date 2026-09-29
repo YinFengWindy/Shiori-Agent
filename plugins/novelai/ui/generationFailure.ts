@@ -1,5 +1,4 @@
-import { BridgeError } from "../../../apps/desktop/renderer/src/shared/bridgeInvoke";
-import type { PluginPersona } from "../../../apps/desktop/renderer/src/plugins/pluginHostFeedback";
+import { BridgeError, type PluginPersona } from "@shiori/plugin-sdk";
 
 /** Which kind of problem stopped a generation; decides copy and the offered next step. */
 export type GenerationFailureKind =

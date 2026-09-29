@@ -2,28 +2,22 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type React from "react";
 import { act } from "react";
-import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
-import { PluginHostServicesProvider } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
-import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
-import { appearancePrefsStorageKey } from "../../../apps/desktop/renderer/src/shared/appearancePrefs";
-import { resetAppearancePrefsCache } from "../../../apps/desktop/renderer/src/shared/useAppearancePrefs";
+import { PluginHostServicesProvider } from "@shiori/plugin-sdk";
+import { createFakeHostServices, mountTestComponent, type FakeHostServices } from "@shiori/plugin-sdk/testing";
 import { ImageStage } from "./ImageStage";
 import type { StageView } from "./studioSelectors";
 
 const notConfigured = { kind: "not-configured", title: "NovelAI 未配置", message: "NovelAI token 引用的环境变量 NOVELAI_TOKEN 未设置", opensSettings: true } as const;
 
 /**
- * Mounts inside a DOM whose bridge can turn file paths into asset URLs, under
- * the host services a bound plugin component gets. `mascot` sets 设置 › 外观 ›
- * 看板娘 before the first render.
+ * Mounts under fake host services, as the host mounts a bound plugin
+ * component: file paths render as `fake-asset://<path>`, and `fake.uiRenders`
+ * records what the stage asked of the host components.
  */
-async function mountStage(element: React.ReactElement, { mascot = true } = {}) {
-  const view = await mountTestComponent(null);
-  Object.defineProperty(window, "miraDesktop", { configurable: true, value: { localAssetUrl: (path: string) => `asset://${path}` } });
-  resetAppearancePrefsCache();
-  window.localStorage.setItem(appearancePrefsStorageKey, JSON.stringify({ version: 1, backdropMotion: true, mascot }));
-  await view.render(<PluginHostServicesProvider services={pluginHostServicesFor("novelai")}>{element}</PluginHostServicesProvider>);
-  return view;
+async function mountStage(element: React.ReactElement, fake: FakeHostServices = createFakeHostServices()) {
+  const wrap = (next: React.ReactElement) => <PluginHostServicesProvider services={fake.host}>{next}</PluginHostServicesProvider>;
+  const view = await mountTestComponent(wrap(element));
+  return { ...view, render: (next: React.ReactElement) => view.render(wrap(next)) };
 }
 
 function buttonByText(container: HTMLElement, text: string): HTMLButtonElement | undefined {
@@ -47,25 +41,18 @@ describe("ImageStage", () => {
     } finally { await view.cleanup(); }
   });
 
-  it("lets 吟风 front the failure card through the host inline error, and drops her when the 看板娘 is off", async () => {
+  it("lets 吟风 front the failure card through the host inline error, with the scene of its failure kind", async () => {
+    // Whether she actually shows (设置 › 外观 › 看板娘) is the host inline error's call, covered by pluginHostUi.test.tsx.
     const failure = { kind: "network", title: "连不上 NovelAI", message: "timeout", opensSettings: false } as const;
-    const on = await mountStage(<ImageStage view={{ kind: "failure", failure }} onReusePrompt={() => undefined} />);
+    const fake = createFakeHostServices();
+    const view = await mountStage(<ImageStage view={{ kind: "failure", failure }} onReusePrompt={() => undefined} />, fake);
     try {
-      const card = on.container.querySelector("[data-testid=\"novelai-stage-failure\"] [role=\"alert\"]");
+      const card = view.container.querySelector("[data-testid=\"novelai-stage-failure\"] [role=\"alert\"]");
       // The failure kind picks the host persona scene: 「连不上」 → network.
-      assert.equal(card?.getAttribute("data-persona"), "network");
-      assert.ok(card?.querySelector("[data-testid=\"mascot-face\"]"));
-      assert.match(card?.textContent ?? "", /吟风/);
-      assert.match(card?.textContent ?? "", /timeout/);
-    } finally { await on.cleanup(); }
-    const off = await mountStage(<ImageStage view={{ kind: "failure", failure }} onReusePrompt={() => undefined} />, { mascot: false });
-    try {
-      const card = off.container.querySelector("[data-testid=\"novelai-stage-failure\"] [role=\"alert\"]");
-      assert.equal(card?.getAttribute("data-persona"), null);
-      assert.equal(card?.querySelector("[data-testid=\"mascot-face\"]"), null);
-      assert.doesNotMatch(card?.textContent ?? "", /吟风/);
+      assert.equal(fake.uiRenders.InlineError.at(-1)?.persona, "network");
       assert.match(card?.textContent ?? "", /连不上 NovelAI/);
-    } finally { await off.cleanup(); resetAppearancePrefsCache(); }
+      assert.match(card?.textContent ?? "", /timeout/);
+    } finally { await view.cleanup(); }
   });
 
   it("a failure settings cannot fix offers only dismissal", async () => {
@@ -100,7 +87,7 @@ describe("ImageStage", () => {
     const view = await mountStage(<ImageStage view={{ kind: "image", path: "D:/out/r.png", record: null, reveal: false, notice: notConfigured }}
       onOpenSettings={() => undefined} onReusePrompt={() => undefined} />);
     try {
-      assert.ok(view.container.querySelector("img"));
+      assert.equal(view.container.querySelector("img")?.getAttribute("src"), "fake-asset://D:/out/r.png");
       assert.match(view.container.querySelector('[role="status"]')?.textContent ?? "", /NovelAI 未配置/);
     } finally { await view.cleanup(); }
   });

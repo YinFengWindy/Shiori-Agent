@@ -1,7 +1,5 @@
 import { useState } from "react";
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { errorMessage } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
-import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
+import { errorMessage, usePluginHostServices, type PluginRpcClient } from "@shiori/plugin-sdk";
 import type { PromptTagWorkspaceSectionId } from "./novelAiPageStore";
 import { PromptTagEntryEditor } from "./PromptTagEntryEditor";
 import { PromptTagGrid } from "./PromptTagGrid";

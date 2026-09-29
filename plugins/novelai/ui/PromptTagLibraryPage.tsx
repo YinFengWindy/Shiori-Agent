@@ -1,4 +1,4 @@
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
+import type { PluginRpcClient } from "@shiori/plugin-sdk";
 import type { PromptTagWorkspaceSectionId } from "./novelAiPageStore";
 import { PromptTagLibraryPanel } from "./PromptTagLibraryPanel";
 

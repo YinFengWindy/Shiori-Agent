@@ -1,8 +1,6 @@
 import { useRef, useState } from "react";
 import { ArrowClockwise } from "@phosphor-icons/react";
-import type { PluginChatImageActionProps } from "../../../apps/desktop/renderer/src/plugins/pluginFeatureRegistry";
-import type { SessionMessageUpdatePayload } from "../../../apps/desktop/renderer/src/shared/types";
-import { cx, ghostButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { cx, ghostButtonClass, type PluginChatImageActionProps, type SessionMessageUpdatePayload } from "@shiori/plugin-sdk";
 import { novelAiGenerationTimeoutMs } from "./rpcPolicy";
 
 /** Determines whether this image belongs to NovelAI's persisted output collection. */

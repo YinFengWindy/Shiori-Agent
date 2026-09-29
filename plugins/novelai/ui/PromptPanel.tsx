@@ -1,9 +1,6 @@
 import { useState } from "react";
 import { Sparkle } from "@phosphor-icons/react";
-import { toFileUrl } from "../../../apps/desktop/renderer/src/shared/format";
-import { cx, inputClass, primaryButtonSurfaceClass } from "../../../apps/desktop/renderer/src/shared/styles";
-import type { RoleRecord } from "../../../apps/desktop/renderer/src/shared/types";
-import { Select, type SelectOption } from "../../../apps/desktop/renderer/src/shared/ui/Select";
+import { Select, cx, inputClass, primaryButtonSurfaceClass, usePluginHostServices, type RoleRecord, type SelectOption } from "@shiori/plugin-sdk";
 import { BaseImageField } from "./BaseImageField";
 import { PromptSettingsPopover } from "./PromptSettingsPopover";
 import { SegmentedControl } from "./SegmentedControl";
@@ -27,8 +24,9 @@ type PromptTab = "prompt" | "negative";
 
 /** A role's avatar at select-row size, or its initial on the accent tint. */
 function RoleAvatar({ role }: { role: RoleRecord }) {
+  const { assets } = usePluginHostServices();
   if (role.avatar_abs) {
-    return <img className="h-6 w-6 rounded-full object-cover" src={toFileUrl(role.avatar_abs)} alt="" />;
+    return <img className="h-6 w-6 rounded-full object-cover" src={assets.url(role.avatar_abs)} alt="" />;
   }
   return (
     <span className="grid h-6 w-6 place-items-center rounded-full bg-accent-softer text-caption font-semibold text-accent-text">

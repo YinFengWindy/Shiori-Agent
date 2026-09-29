@@ -1,8 +1,5 @@
-import type { PluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { errorMessage, type PluginHostFeedback, type PluginHostServices, type RoleRecord } from "@shiori/plugin-sdk";
 import { useSyncExternalStore } from "react";
-import { errorMessage } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
-import type { PluginHostFeedback } from "../../../apps/desktop/renderer/src/plugins/pluginHostFeedback";
-import type { RoleRecord } from "../../../apps/desktop/renderer/src/shared/types";
 import type { GenerationFailure, NovelAiReadiness } from "./generationFailure";
 import type { ImageGenerateResult, ImageHistoryRecord, ImageStudioFormState } from "./types";
 
