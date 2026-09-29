@@ -76,11 +76,6 @@ def stored_message_source(message: Mapping[str, Any]) -> MessageSource:
     return MessageSource.from_metadata(metadata, session_key="")
 
 
-def sent_by_user(message: Mapping[str, Any]) -> bool:
-    """已存消息 ``message`` 的来源是否记录了发送者是已绑定的用户本人。"""
-    return stored_message_source(message).sender_is_user
-
-
 def belongs_to_user(
     message: Mapping[str, Any], user_threads: UserContextThreads
 ) -> bool:
