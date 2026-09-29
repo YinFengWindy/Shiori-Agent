@@ -10,6 +10,7 @@ from core.roles import RoleStore
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
 from session.manager import SessionManager
+from core.memory.group_environment import GroupEnvironment
 
 
 def _write_image(path: Path, color: tuple[int, int, int]) -> None:
@@ -50,7 +51,10 @@ async def test_role_create_persists_structured_profile(tmp_path: Path) -> None:
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -172,7 +176,10 @@ async def test_role_update_commits_generic_plugin_draft_and_projects_its_owner(
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -232,7 +239,10 @@ async def test_role_delete_first_deletes_its_accounts_through_their_plugins(
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )

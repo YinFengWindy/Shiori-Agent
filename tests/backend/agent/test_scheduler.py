@@ -21,6 +21,7 @@ from core.roles.model_runtime import RoleModelRuntime, RoleModelSnapshot
 from desktop_bridge import DesktopBridgeService
 from session.manager import SessionManager
 from tests.support.scheduler import make_job
+from core.memory.group_environment import GroupEnvironment
 
 
 def test_job_store_raises_for_invalid_json(tmp_path: Path):
@@ -110,6 +111,7 @@ async def test_recurring_desktop_delivery_persists_once_per_occurrence(tmp_path,
         workspace=tmp_path,
         role_store=role_store,
         session_manager=sessions,
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
         agent_loop=loop,
         event_bus=event_bus,
         push_tool=push,

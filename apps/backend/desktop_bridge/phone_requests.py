@@ -11,7 +11,7 @@ from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.accounts import AccountRegistry, account_for_channel
 from core.common.message_source import MessageSource
-from core.identity import BoundUserSenders, UserIdentityStore
+from core.identity import BoundUserSenders, UserIdentity, UserIdentityStore
 from desktop_bridge.session_presenter import MESSAGE_PAGE_SIZE, message_preview
 from session.manager.helpers import role_session_key
 from session.manager.models import message_thread_id
@@ -42,12 +42,39 @@ def _message_time(message: dict[str, Any]) -> datetime:
     return datetime.fromisoformat(str(message["timestamp"])).astimezone()
 
 
-def _required(payload: dict[str, Any], key: str) -> str:
+def required_text(payload: dict[str, Any], key: str) -> str:
     """A required, non-blank string field of a request payload."""
     value = str(payload.get(key) or "").strip()
     if not value:
         raise ValueError(f"{key} 不能为空")
     return value
+
+
+def role_channel_thread(
+    conversations: ConversationService, role_id: str, thread_id: str
+) -> ThreadRecord | None:
+    """``thread_id`` when it is one of the role's current channel conversations."""
+    if not thread_id:
+        return None
+    thread = conversations.get_thread(thread_id)
+    if (
+        thread is None
+        or thread.role_id != role_id
+        or thread.thread_kind != "network"
+        or thread.archived
+    ):
+        return None
+    return thread
+
+
+def role_bound_senders(
+    role_id: str, *, accounts: AccountRegistry, identities: Iterable[UserIdentity]
+) -> BoundUserSenders:
+    """The bindings ``identities`` (as read once) over the role's accounts."""
+    return BoundUserSenders(
+        identities=tuple(identities),
+        accounts=tuple(account.record for account in accounts.list(role_id=role_id)),
+    )
 
 
 def phone_message(
@@ -121,15 +148,15 @@ class DesktopPhoneRequestHandler:
     ) -> dict[str, Any] | None:
         """Handles one phone request; None for methods it does not own."""
         if method == "phone.conversations.list":
-            role_id = _required(payload, "role_id")
+            role_id = required_text(payload, "role_id")
             return {
                 "conversations": self._conversation_rows(
                     role_id, self._conversations.list_network_threads(role_id)
                 )
             }
         if method == "phone.conversation.messages":
-            role_id = _required(payload, "role_id")
-            thread = self._role_thread(role_id, _required(payload, "thread_id"))
+            role_id = required_text(payload, "role_id")
+            thread = self._role_thread(role_id, required_text(payload, "thread_id"))
             if thread is None:
                 raise ValueError("会话不属于该角色")
             before_seq = payload.get("before_seq")
@@ -175,18 +202,7 @@ class DesktopPhoneRequestHandler:
         ]
 
     def _role_thread(self, role_id: str, thread_id: str) -> ThreadRecord | None:
-        """``thread_id`` when it is one of the role's current channel conversations."""
-        if not thread_id:
-            return None
-        thread = self._conversations.get_thread(thread_id)
-        if (
-            thread is None
-            or thread.role_id != role_id
-            or thread.thread_kind != "network"
-            or thread.archived
-        ):
-            return None
-        return thread
+        return role_channel_thread(self._conversations, role_id, thread_id)
 
     def _phone_messages(
         self, role_id: str, thread: ThreadRecord, messages: Iterable[dict[str, Any]]
@@ -198,11 +214,8 @@ class DesktopPhoneRequestHandler:
         account, none are. The bindings are read once for all rows.
         """
         session_key = role_session_key(role_id)
-        bound = BoundUserSenders(
-            identities=tuple(self._identities.list()),
-            accounts=tuple(
-                account.record for account in self._accounts.list(role_id=role_id)
-            ),
+        bound = role_bound_senders(
+            role_id, accounts=self._accounts, identities=self._identities.list()
         )
 
         def is_user(sender_id: str | None) -> bool:

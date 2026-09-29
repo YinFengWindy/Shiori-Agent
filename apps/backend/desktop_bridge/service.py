@@ -25,6 +25,8 @@ from bus.events_lifecycle import (
     TurnCommitted,
 )
 from conversation.service import ConversationService
+from core.memory.group_environment import GroupEnvironment
+from core.memory.member_profiles import MemberProfiles
 from core.roles import (
     RoleAggregateService,
     RoleRelationshipRuntimeService,
@@ -39,6 +41,7 @@ from desktop_bridge.chat_requests import DesktopChatRequestHandler
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.method_policy import MethodPolicy, resolve_plugin_method_policy
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
+from desktop_bridge.phone_memory_requests import DesktopPhoneMemoryRequestHandler
 from desktop_bridge.phone_requests import (
     PHONE_CONVERSATION_UPDATED,
     DesktopPhoneRequestHandler,
@@ -90,6 +93,7 @@ class DesktopBridgeService:
         session_manager: SessionManager,
         agent_loop: AgentLoop,
         event_bus: EventBus,
+        group_environment: GroupEnvironment,
         role_service: RoleAggregateService | None = None,
         config: Any = None,
         push_tool: MessagePushTool | None = None,
@@ -232,6 +236,14 @@ class DesktopBridgeService:
             accounts=DesktopAccountRequestHandler(role_store.accounts),
             identities=DesktopIdentityRequestHandler(role_store.identities),
             phone=self.phone,
+            phone_memory=DesktopPhoneMemoryRequestHandler(
+                conversations=self.conversation_service,
+                accounts=role_store.accounts,
+                identities=role_store.identities,
+                # The runtime's shared instance, the one consolidation writes through.
+                group_environment=group_environment,
+                members=MemberProfiles(workspace),
+            ),
             roles=DesktopRoleRequestHandler(
                 role_service=self.role_service,
                 role_presenter=self.role_presenter,

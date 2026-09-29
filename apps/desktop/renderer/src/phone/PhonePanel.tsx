@@ -4,8 +4,8 @@ import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { usePluginEnabledState, usePluginRosterLoaded } from "../plugins/usePluginEnabledState";
 import { toFileUrl } from "../shared/format";
 import type { RoleRecord } from "@shiori/plugin-sdk";
-import { PhoneChatPage } from "./PhoneChatPage";
 import { PhoneConversationList } from "./PhoneConversationList";
+import { PhoneConversationScreens } from "./PhoneConversationScreens";
 import { PhoneHomeScreen } from "./PhoneHomeScreen";
 import { accountConversations, phoneApps } from "./phonePresentation";
 import { PhoneShell } from "./PhoneShell";
@@ -24,7 +24,7 @@ const homeView: PhoneView = { accountId: null, threadId: null, direction: "none"
 /**
  * The role's phone, floating at the right of the chat: home screen of the
  * role's accounts, then one account's conversations, then one
- * conversation. Mounting it (opening the phone) reads the accounts and
+ * conversation (with its chat info and member profiles). Mounting it (opening the phone) reads the accounts and
  * conversations afresh; while it is open, new messages arrive live.
  */
 export function PhonePanel({ role }: { role: RoleRecord }) {
@@ -48,8 +48,9 @@ export function PhonePanel({ role }: { role: RoleRecord }) {
       <PhoneShell avatarUrl={role.avatar_abs ? toFileUrl(role.avatar_abs) : ""} now={now}>
         <div key={openConversation?.threadId ?? openApp?.accountId ?? "home"} className="phone-view h-full" data-direction={view.direction}>
           {openApp && openConversation ? (
-            <PhoneChatPage
+            <PhoneConversationScreens
               role={role}
+              app={openApp}
               conversation={openConversation}
               now={now}
               onBack={() => setView({ accountId: openApp.accountId, threadId: null, direction: "back" })}

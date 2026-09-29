@@ -18,6 +18,7 @@ from desktop_bridge.role_card_import_service import DesktopRoleCardImportService
 from desktop_bridge import role_card_import_service as import_service_module
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
+from core.memory.group_environment import GroupEnvironment
 
 
 def _card(*, name: str = "小诗") -> dict[str, object]:
@@ -463,7 +464,10 @@ async def test_default_desktop_bridge_service_exposes_role_card_preview(
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=create_autospec(AgentLoop, instance=True),
         event_bus=EventBus(),
     )
@@ -490,7 +494,10 @@ async def test_commit_keeps_png_card_as_avatar_and_imported_asset(tmp_path) -> N
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=create_autospec(AgentLoop, instance=True),
         event_bus=EventBus(),
     )
