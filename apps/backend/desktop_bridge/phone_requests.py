@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
 from typing import Any, Protocol
 
 from conversation.context_scope import user_context_threads
@@ -11,7 +11,7 @@ from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.accounts import AccountRegistry, AccountSnapshot, account_serves_channel
 from core.common.message_source import MessageSource
-from core.identity import UserIdentityStore
+from core.identity import UserIdentityStore, match_identity
 from desktop_bridge.session_presenter import message_preview
 from session.manager.helpers import role_session_key
 from session.manager.models import message_thread_id
@@ -64,14 +64,20 @@ def _required(payload: dict[str, Any], key: str) -> str:
     return value
 
 
-def phone_message(message: dict[str, Any], *, session_key: str) -> dict[str, Any]:
+def phone_message(
+    message: dict[str, Any],
+    *,
+    session_key: str,
+    is_user: Callable[[str | None], bool],
+) -> dict[str, Any]:
     """One conversation message as the phone's chat page shows it.
 
     ``sender`` is ``role`` for the role's own messages and ``other`` for
     anyone else in the chat. For others, ``sender_id`` and ``sender_name``
     are the platform ID and the name snapshot stored with the message (None
-    when unrecorded), and ``sender_is_user`` whether that sender was the
-    desktop user's bound identity when the message arrived.
+    when unrecorded), and ``sender_is_user`` is ``is_user(sender_id)``: whether
+    that sender is the desktop user under the bindings as they are now (like
+    the context split, #482), not the flag stored when the message arrived.
     """
     from_role = message.get("role") == "assistant"
     source = MessageSource.from_metadata(
@@ -84,7 +90,7 @@ def phone_message(message: dict[str, Any], *, session_key: str) -> dict[str, Any
         "sender": "role" if from_role else "other",
         "sender_id": None if from_role else source.sender_id,
         "sender_name": None if from_role else source.sender_name,
-        "sender_is_user": not from_role and source.sender_is_user,
+        "sender_is_user": not from_role and is_user(source.sender_id),
         "content": str(message.get("content") or ""),
         "media": [str(item) for item in message.get("media") or []],
         "timestamp": str(message.get("timestamp") or ""),
@@ -143,7 +149,7 @@ class DesktopPhoneRequestHandler:
             before_seq = payload.get("before_seq")
             return self._messages_page(
                 role_id,
-                thread.id,
+                thread,
                 before_seq=int(before_seq) if before_seq is not None else None,
                 limit=int(payload.get("limit") or 50),
             )
@@ -159,7 +165,6 @@ class DesktopPhoneRequestHandler:
         conversation, each with its refreshed list row. Rows of any other
         thread (the desktop conversation, scheduled tasks) are ignored.
         """
-        session_key = role_session_key(role_id)
         by_thread: dict[str, list[dict[str, Any]]] = {}
         for message in messages:
             by_thread.setdefault(message_thread_id(message), []).append(message)
@@ -178,10 +183,7 @@ class DesktopPhoneRequestHandler:
                 "role_id": role_id,
                 "thread_id": thread.id,
                 "conversation": rows[thread.id],
-                "messages": [
-                    phone_message(message, session_key=session_key)
-                    for message in by_thread[thread.id]
-                ],
+                "messages": self._phone_messages(role_id, thread, by_thread[thread.id]),
             }
             for thread in threads
         ]
@@ -200,19 +202,40 @@ class DesktopPhoneRequestHandler:
             return None
         return thread
 
-    def _messages_page(
-        self, role_id: str, thread_id: str, *, before_seq: int | None, limit: int
-    ) -> dict[str, Any]:
+    def _phone_messages(
+        self, role_id: str, thread: ThreadRecord, messages: Iterable[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """``messages`` of ``thread`` as ``phone_message`` rows.
+
+        The user's messages are those whose sender a current binding
+        recognises on the role's account carrying the thread; with no such
+        account, none are. The bindings are read once for all rows.
+        """
         session_key = role_session_key(role_id)
+        account = _account_for(self._accounts.list(role_id=role_id), thread)
+        identities = self._identities.list()
+
+        def is_user(sender_id: str | None) -> bool:
+            return (
+                account is not None
+                and sender_id is not None
+                and match_identity(identities, account.record, sender_id) is not None
+            )
+
+        return [
+            phone_message(message, session_key=session_key, is_user=is_user)
+            for message in messages
+        ]
+
+    def _messages_page(
+        self, role_id: str, thread: ThreadRecord, *, before_seq: int | None, limit: int
+    ) -> dict[str, Any]:
         page = self._messages.thread_messages_page(
-            session_key, thread_id, before_seq=before_seq, limit=limit
+            role_session_key(role_id), thread.id, before_seq=before_seq, limit=limit
         )
         return {
-            "thread_id": thread_id,
-            "messages": [
-                phone_message(message, session_key=session_key)
-                for message in page["messages"]
-            ],
+            "thread_id": thread.id,
+            "messages": self._phone_messages(role_id, thread, page["messages"]),
             "has_more": page["has_more"],
             "next_before_seq": page["next_before_seq"],
         }

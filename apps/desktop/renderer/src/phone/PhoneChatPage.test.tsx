@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { before, test } from "node:test";
 import { act } from "react";
 import type { BridgeEvent } from "../../../src/bridge/shared";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
 import type { PhoneConversation } from "./phoneClient";
-import { PhoneChatPage } from "./PhoneChatPage";
+
+// Base UI's dialog reads browser globals when it loads: import after a window exists.
+let PhoneChatPage: typeof import("./PhoneChatPage").PhoneChatPage;
+before(async () => {
+  const view = await mountTestComponent(null);
+  ({ PhoneChatPage } = await import("./PhoneChatPage"));
+  await view.cleanup();
+});
 
 const role = { id: "mira", name: "Mira", avatar_abs: "" };
 
@@ -36,6 +43,7 @@ test("the chat page shows the conversation from the role's side and takes its ne
   const view = await mountTestComponent(
     <PhoneChatPage role={role} conversation={conversation} now={new Date("2026-09-29T12:00:00+08:00")} onBack={() => {}} />,
     { windowGlobals: { miraDesktop: {
+      localAssetUrl: (path: string) => path,
       onEvent: (listener: (event: BridgeEvent) => void) => {
         emit = listener;
         return () => { unsubscribed = true; };
@@ -44,7 +52,7 @@ test("the chat page shows the conversation from the role's side and takes its ne
         id: "response", type: "response", method, error: null,
         payload: { thread_id: conversation.threadId, has_more: false, next_before_seq: 1, messages: [
           row("谁来开黑", { seq: 1 }),
-          row("我也来", { seq: 2, sender_id: "100", sender_name: "主人", sender_is_user: true }),
+          row("我也来", { seq: 2, sender_id: "100", sender_name: "主人", sender_is_user: true, media: ["D:/media/cat.png"] }),
           row("我来", { seq: 3, sender: "role", sender_id: null, sender_name: null }),
         ] },
       }),
@@ -58,6 +66,9 @@ test("the chat page shows the conversation from the role's side and takes its ne
     const marked = view.container.querySelector('[data-testid="phone-message-me"]')?.closest("[data-side]");
     assert.equal(marked?.querySelector("p")?.textContent, "我也来");
     assert.match(marked?.textContent ?? "", /主人/);
+    // Its picture opens enlarged.
+    await act(async () => marked?.querySelector<HTMLButtonElement>('button[aria-label="查看大图"]')?.click());
+    assert.equal(document.querySelector('[role="dialog"] img')?.getAttribute("src"), "D:/media/cat.png");
 
     await act(async () => emit?.(liveEvent(conversation.threadId, [row("我来"), row("新消息")])));
     await act(async () => emit?.(liveEvent("thread:mira:qq:gqq:6", [row("别的群")])));

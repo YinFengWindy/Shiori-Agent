@@ -5,7 +5,7 @@ import { isChatImageAsset } from "../chat/chatImageHistory";
 import { RoleAvatar } from "../roles/RoleAvatar";
 import { toFileUrl } from "../shared/format";
 import { DocumentIcon } from "../shared/icons";
-import { badgeClass, cx } from "../shared/styles";
+import { badgeClass, cx, pressableClass } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
 import type { PhoneChatItem } from "./phoneChatPresentation";
 
@@ -14,13 +14,19 @@ const phoneImageBounds = { width: 180, height: 220 };
 
 const bubbleClass = "w-fit max-w-full whitespace-pre-wrap break-words rounded-md px-3 py-1.5 text-body-sm text-ink shadow-soft";
 
-/** A message's attachments: pictures at the phone's size, other files as a named chip. */
-function PhoneMessageMedia({ media }: { media: readonly string[] }) {
+const imageButtonClass = cx(
+  pressableClass,
+  "block w-fit cursor-zoom-in overflow-hidden rounded-md border border-line-soft bg-surface p-0",
+);
+
+/** A message's attachments: pictures at the phone's size (a click enlarges one), other files as a named chip. */
+function PhoneMessageMedia({ media, onOpenImage }: { media: readonly string[]; onOpenImage: (path: string) => void }) {
   return media.map((path, index) => (
     isChatImageAsset(path) ? (
-      <span key={`${index}:${path}`} className="block w-fit overflow-hidden rounded-md border border-line-soft bg-surface">
+      <button key={`${index}:${path}`} type="button" className={imageButtonClass} aria-label="查看大图"
+        onClick={() => onOpenImage(path)}>
         <ChatMessageImage imagePath={path} bounds={phoneImageBounds} />
-      </span>
+      </button>
     ) : (
       <a key={`${index}:${path}`} href={toFileUrl(path)} target="_blank" rel="noreferrer"
         className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-line-soft bg-surface px-2.5 py-1 text-caption text-ink">
@@ -37,9 +43,11 @@ function PhoneMessageMedia({ media }: { media: readonly string[] }) {
  * placeholder avatar, under their name, the bound user's name with a
  * 「这是我」 badge.
  */
-export function PhoneChatMessageRow({ item, role }: {
+export function PhoneChatMessageRow({ item, role, onOpenImage }: {
   item: Extract<PhoneChatItem, { kind: "message" }>;
   role: Pick<RoleRecord, "name" | "avatar_abs">;
+  /** Enlarges one of the message's pictures. */
+  onOpenImage: (path: string) => void;
 }) {
   const { message, side, senderLabel, isUser } = item;
   const right = side === "right";
@@ -60,7 +68,7 @@ export function PhoneChatMessageRow({ item, role }: {
         {message.content ? (
           <p className={cx("m-0", bubbleClass, right ? "bg-accent-soft" : "bg-surface")}>{message.content}</p>
         ) : null}
-        <PhoneMessageMedia media={message.media} />
+        <PhoneMessageMedia media={message.media} onOpenImage={onOpenImage} />
       </div>
     </li>
   );

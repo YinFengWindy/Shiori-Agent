@@ -13,7 +13,7 @@ from uuid import uuid4
 from core.accounts import AccountRecord
 from infra.persistence.json_store import atomic_save_json, load_json
 
-from .models import IdentityChat, IdentityScope, UserIdentity
+from .models import IdentityChat, IdentityScope, UserIdentity, match_identity
 from .pairing import PairingCode, PairingCodes
 
 logger = logging.getLogger(__name__)
@@ -63,14 +63,7 @@ class UserIdentityStore:
 
     def match(self, record: AccountRecord, user_id: str) -> UserIdentity | None:
         """The binding recognising ``user_id`` on messages of account ``record``."""
-        return next(
-            (
-                identity
-                for identity in self.list()
-                if identity.user_id == user_id and identity.applies_to(record)
-            ),
-            None,
-        )
+        return match_identity(self.list(), record, user_id)
 
     def create_pairing_code(self) -> PairingCode:
         """Issues the one-time code the user sends to bind an identity."""
