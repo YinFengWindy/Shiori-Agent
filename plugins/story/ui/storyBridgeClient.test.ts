@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { PluginBridgeError, type PluginRpcClient } from "@shiori/plugin-sdk";
-import { deferred } from "@shiori/plugin-sdk/testing";
+import { PluginBridgeError } from "@shiori/plugin-sdk";
+import { createFakePluginClient, deferred } from "@shiori/plugin-sdk/testing";
 import { createStoryBridgeClient as makeStoryClient } from "./storyBridgeClient";
 import { StoryBridgeError } from "./types";
 
@@ -167,24 +167,6 @@ type FakeStoryRequest = { method: string; payload: Record<string, unknown> };
 
 /** The fake backend answer: the call result, or an error the injected client raises as `PluginBridgeError`. */
 type FakeStoryResponse = { payload: Record<string, unknown>; error: { code: string; message: string } | null };
-
-/**
- * A fake injected `client`: given members are used as is, every other request
- * rejects and `dispose` resolves. Same contract as the SDK testing
- * `createFakePluginClient` that #506 adds; switch to that import once it lands.
- */
-function createFakePluginClient(overrides: Partial<PluginRpcClient>): PluginRpcClient {
-  const unexpected = (member: string) => () => Promise.reject(new Error(`unexpected client.${member}`));
-  return {
-    call: unexpected("call"),
-    events: { on: unexpected("events.on") },
-    background: { call: unexpected("background.call") },
-    dependency: unexpected("dependency"),
-    handle: unexpected("handle"),
-    dispose: async () => undefined,
-    ...overrides,
-  };
-}
 
 /** Builds the Story client over a fake injected `client` whose calls `invoke` answers. */
 function createStoryBridgeClient(invoke: (request: FakeStoryRequest) => Promise<FakeStoryResponse>) {
