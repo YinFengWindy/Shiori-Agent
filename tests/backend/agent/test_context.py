@@ -710,7 +710,9 @@ def test_context_builder_injects_group_environment_by_turn_scope(
             ),
             updated_at=now - age,
         )
-    builder = ContextBuilder(tmp_path, _Memory())  # type: ignore[arg-type]
+    builder = ContextBuilder(
+        tmp_path, _Memory(), runtime_roles=RoleStore(tmp_path)  # type: ignore[arg-type]
+    )
     builder.set_group_environment(environment)
 
     def model_input(scope: ContextScope, thread_id: str) -> str:
