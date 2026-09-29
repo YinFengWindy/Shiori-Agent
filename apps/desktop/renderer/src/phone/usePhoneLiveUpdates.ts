@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLatestRef } from "../shared/useLatestRef";
-import { phoneConversationUpdateOf, type PhoneConversationUpdate } from "./phoneClient";
+import type { PhoneConversationUpdate } from "./phoneClient";
+import { phoneConversationUpdateOf } from "./phonePayloads";
 
 /**
  * Calls `onUpdate` with every `phone.conversation.updated` event for

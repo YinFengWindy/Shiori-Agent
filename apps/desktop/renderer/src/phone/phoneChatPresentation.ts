@@ -1,9 +1,9 @@
-import { formatChatListTime } from "../roles/roleChatPreview";
-import { parseTimestamp } from "../shared/format";
+import { chatListDayLabel } from "../roles/roleChatPreview";
+import { formatHourMinute, parseTimestamp } from "../shared/format";
 import type { PhoneConversation, PhoneMessage } from "./phoneClient";
 
 /** A pause longer than this between two messages gets a time separator. */
-export const phoneTimeSeparatorGapMs = 5 * 60_000;
+const phoneTimeSeparatorGapMs = 5 * 60_000;
 
 /** One line of the phone's chat page: a centered time, or a message bubble. */
 export type PhoneChatItem =
@@ -20,10 +20,6 @@ export type PhoneChatItem =
     isUser: boolean;
   };
 
-function clockOf(date: Date) {
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
 /**
  * A time separator's label: 「14:05」 today, otherwise the chat-list day
  * (「昨天」, a weekday, a date) followed by the clock, e.g. 「昨天 14:05」.
@@ -31,9 +27,8 @@ function clockOf(date: Date) {
 export function phoneSeparatorTime(timestamp: string, now: Date) {
   const date = parseTimestamp(timestamp);
   if (!date) return "";
-  const clock = clockOf(date);
-  const day = formatChatListTime(timestamp, now);
-  return day === clock ? clock : `${day} ${clock}`;
+  const day = chatListDayLabel(date, now);
+  return day ? `${day} ${formatHourMinute(date)}` : formatHourMinute(date);
 }
 
 /**

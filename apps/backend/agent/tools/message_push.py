@@ -10,7 +10,7 @@ from typing import Any
 
 from agent.tools.base import Tool
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ExternalImagePushed
+from bus.events_lifecycle import ExternalImagePushed, ExternalTextPushed
 from core.common.runtime_scope import current_runtime_lease
 
 logger = logging.getLogger(__name__)
@@ -277,6 +277,7 @@ class MessagePushTool(Tool):
                 external_ids.append(message_id)
 
         image_sent = False
+        text_sent = False
         try:
             if message:
                 if "text_with_metadata" in senders:
@@ -292,6 +293,7 @@ class MessagePushTool(Tool):
                     record_external_id(await senders[sender_name](chat_id, message))
                 preview = message[:60] + "..." if len(message) > 60 else message
                 logger.info(f"[message_push] {channel}:{chat_id} ← text: {preview!r}")
+                text_sent = True
                 results.append(
                     "文本已排队，回合成功后发送"
                     if delivery_metadata.get("queued")
@@ -326,6 +328,30 @@ class MessagePushTool(Tool):
         except Exception as e:
             logger.error(f"[message_push] 发送失败 {channel}:{chat_id}: {e}")
             return PushOutcome(f"发送失败：{e}")
+
+        # A host-owned text send outside any turn (a scheduled job) is recorded in
+        # the role's session; turn pushes and persisted deliveries have owners.
+        if (
+            text_sent
+            and message
+            and channel != "desktop"
+            and role_id
+            and session_key
+            and self._event_bus is not None
+            and not pending_commit
+            and not delivery_metadata["already_persisted"]
+            and not _is_truthy(kwargs.get("defer_push_session_sync"))
+        ):
+            _ = await self._event_bus.emit(
+                ExternalTextPushed(
+                    session_key=session_key,
+                    role_id=role_id,
+                    channel=channel,
+                    chat_id=chat_id,
+                    text=message,
+                    delivery_key=str(delivery_metadata["delivery_key"]),
+                )
+            )
 
         if (
             image_sent

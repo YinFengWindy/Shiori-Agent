@@ -23,8 +23,14 @@ export function usePhoneChatScroll({ messages, hasMore, loadOlder }: {
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
-    if (!viewport || !messages) return;
     const anchor = anchorRef.current;
+    if (!messages) {
+      // Nothing loaded (first open, or a retry reloading): the next page opens at its newest message.
+      anchor.firstId = null;
+      anchor.atBottom = true;
+      return;
+    }
+    if (!viewport) return;
     const firstId = messages[0]?.id ?? null;
     if (anchor.atBottom) {
       viewport.scrollTop = viewport.scrollHeight;

@@ -5,6 +5,23 @@ import { buildChatImageHistoryKey, isChatImageAsset } from "./chatImageHistory";
 import { normalizeSessionMediaPaths } from "./chatMedia";
 import { toFileUrl } from "../shared/format";
 import { DocumentIcon } from "../shared/icons";
+import { cx } from "../shared/styles";
+
+/** A file attachment's pill (without its width cap or interaction), shared with the phone's read-only chat. */
+export const chatFileChipClass =
+  "inline-flex items-center gap-2.5 rounded-full border border-line-soft bg-surface-soft px-3 py-2 text-[12px] text-ink";
+
+/** Inside a file attachment's pill: the document mark and the file name. */
+export function ChatFileChipContent({ path }: { path: string }) {
+  return (
+    <>
+      <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-transparent text-ink-faint">
+        <DocumentIcon className="h-[13px] w-[13px] stroke-current" />
+      </span>
+      <span className="truncate font-medium">{getChatAttachmentName(path)}</span>
+    </>
+  );
+}
 
 type ChatMessageAttachmentsProps = {
   messageKey: string;
@@ -50,14 +67,11 @@ export function ChatMessageAttachments({
             href={toFileUrl(item)}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex max-w-[280px] cursor-grab items-center gap-2.5 rounded-full border border-line-soft bg-surface-soft px-3 py-2 text-[12px] text-ink transition hover:bg-white active:cursor-grabbing focus:outline-none"
+            className={cx(chatFileChipClass, "max-w-[280px] cursor-grab transition hover:bg-white active:cursor-grabbing focus:outline-none")}
             draggable
             onDragStart={(event) => handleAttachmentDragStart(event, item)}
           >
-            <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-transparent text-ink-faint">
-              <DocumentIcon className="h-[13px] w-[13px] stroke-current" />
-            </span>
-            <span className="truncate font-medium">{getChatAttachmentName(item)}</span>
+            <ChatFileChipContent path={item} />
           </a>
         )
       ))}

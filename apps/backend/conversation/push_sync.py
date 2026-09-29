@@ -4,13 +4,21 @@ from typing import Any, cast
 
 from agent.lifecycle.types import AfterReasoningCtx
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ExternalImagePushed, ProactiveMessageCommitted
+from bus.events_lifecycle import (
+    ExternalImagePushed,
+    ExternalTextPushed,
+    ProactiveMessageCommitted,
+)
 from conversation.service import ConversationService, LegacySessionDescriptor
 from session.manager import Session, SessionManager
 
 
 class ExternalImageSyncService:
-    """Persists externally pushed images into their authoritative role session."""
+    """Persists externally pushed images, and host-owned pushed texts, into the role session.
+
+    Each is stored in the role's session under the network thread of the chat
+    it went to, then announced with ``ProactiveMessageCommitted``.
+    """
 
     def __init__(
         self,
@@ -26,6 +34,7 @@ class ExternalImageSyncService:
         )
         self._pending_turn_images: dict[str, list[str]] = {}
         event_bus.on(ExternalImagePushed, self.handle_image_pushed)
+        event_bus.on(ExternalTextPushed, self.handle_text_pushed)
         event_bus.on(AfterReasoningCtx, self.attach_turn_images)
 
     async def handle_image_pushed(
@@ -44,6 +53,36 @@ class ExternalImageSyncService:
                 pending.append(event.image)
             return event
 
+        await self._persist_push(event, content="", media=[event.image])
+        return event
+
+    async def handle_text_pushed(self, event: ExternalTextPushed) -> ExternalTextPushed:
+        """Stores a host-owned text delivery once per ``delivery_key``."""
+        self._validate_role_session(event)
+        session = self._sessions.get_or_create(event.session_key)
+        if event.delivery_key and any(
+            (message.get("metadata") or {}).get("delivery_key") == event.delivery_key
+            for message in session.messages
+        ):
+            # A retried delivery: the first send is already recorded.
+            return event
+        await self._persist_push(
+            event,
+            content=event.text,
+            media=None,
+            delivery_key=event.delivery_key,
+        )
+        return event
+
+    async def _persist_push(
+        self,
+        event: ExternalImagePushed | ExternalTextPushed,
+        *,
+        content: str,
+        media: list[str] | None,
+        delivery_key: str = "",
+    ) -> None:
+        """Appends one delivered push to the role session under the chat's thread."""
         session = self._sessions.get_or_create(event.session_key)
         thread = self._conversations.ensure_thread_for_session(
             LegacySessionDescriptor(
@@ -54,10 +93,12 @@ class ExternalImageSyncService:
             )
         )
         metadata = self._build_source_metadata(event, thread_id=thread.id)
+        if delivery_key:
+            metadata["delivery_key"] = delivery_key
         session.add_message(
             "assistant",
-            "",
-            media=[event.image],
+            content,
+            media=media,
             proactive=True,
             tools_used=["message_push"],
             thread_id=thread.id,
@@ -75,7 +116,6 @@ class ExternalImageSyncService:
                 message_id=str(pushed["id"]),
             )
         )
-        return event
 
     def attach_turn_images(self, ctx: AfterReasoningCtx) -> AfterReasoningCtx:
         """Attaches already-delivered images to persistence without resending them."""
@@ -86,7 +126,9 @@ class ExternalImageSyncService:
                 ctx.persisted_media.append(image)
         return ctx
 
-    def _validate_role_session(self, event: ExternalImagePushed) -> None:
+    def _validate_role_session(
+        self, event: ExternalImagePushed | ExternalTextPushed
+    ) -> None:
         expected = self._sessions.role_session_key(event.role_id)
         if event.session_key != expected:
             raise ValueError(
@@ -122,7 +164,7 @@ class ExternalImageSyncService:
 
     @staticmethod
     def _build_source_metadata(
-        event: ExternalImagePushed,
+        event: ExternalImagePushed | ExternalTextPushed,
         *,
         thread_id: str,
     ) -> dict[str, str]:

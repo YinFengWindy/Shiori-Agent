@@ -1,5 +1,5 @@
-import type { BridgeEvent } from "../../../src/bridge/shared";
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
+import { mapConversation, mapMessage, type PhoneConversationPayload, type PhoneMessagePayload } from "./phonePayloads";
 
 /** Whether a channel conversation is a group chat or a private one. */
 export type PhoneChatType = "group" | "private";
@@ -30,18 +30,6 @@ export type PhoneConversation = {
   lastMessage: PhoneLastMessage;
 };
 
-type PhoneConversationPayload = {
-  thread_id: string;
-  account_id: string | null;
-  channel: string;
-  chat_type: PhoneChatType | null;
-  display_name: string;
-  is_user_chat: boolean;
-  last_message: {
-    role: string; content: string; timestamp: string; has_media: boolean; sender_name: string | null;
-  };
-};
-
 /** One message of a conversation, from the role's point of view. */
 export type PhoneMessage = {
   id: string;
@@ -53,7 +41,7 @@ export type PhoneMessage = {
   senderId: string | null;
   /** The other sender's name as the platform reported it with this message; null for the role or when unrecorded. */
   senderName: string | null;
-  /** The sender was the desktop user's bound platform identity when the message arrived. */
+  /** The sender is the desktop user: a binding recognises them now (read time, not when the message arrived). */
   senderIsUser: boolean;
   content: string;
   /** Local file paths of attached media. */
@@ -78,67 +66,6 @@ export type PhoneConversationUpdate = {
   messages: PhoneMessage[];
 };
 
-/** Bridge event carrying a `PhoneConversationUpdate`. */
-export const phoneConversationUpdatedEvent = "phone.conversation.updated";
-
-type PhoneMessagePayload = {
-  id: string;
-  seq: number | null;
-  sender: "role" | "other";
-  sender_id: string | null;
-  sender_name: string | null;
-  sender_is_user: boolean;
-  content: string;
-  media: string[];
-  timestamp: string;
-};
-
-function mapMessage(row: PhoneMessagePayload): PhoneMessage {
-  return {
-    id: row.id,
-    seq: row.seq,
-    sender: row.sender,
-    senderId: row.sender_id,
-    senderName: row.sender_name,
-    senderIsUser: row.sender_is_user,
-    content: row.content,
-    media: row.media,
-    timestamp: row.timestamp,
-  };
-}
-
-/** The update a `phone.conversation.updated` event carries; null for any other event. */
-export function phoneConversationUpdateOf(event: BridgeEvent) {
-  if (event.method !== phoneConversationUpdatedEvent) return null;
-  const payload = event.payload as {
-    role_id: string; thread_id: string; conversation: PhoneConversationPayload; messages: PhoneMessagePayload[];
-  };
-  return {
-    roleId: payload.role_id,
-    threadId: payload.thread_id,
-    conversation: mapConversation(payload.conversation),
-    messages: payload.messages.map(mapMessage),
-  };
-}
-
-function mapConversation(row: PhoneConversationPayload): PhoneConversation {
-  return {
-    threadId: row.thread_id,
-    accountId: row.account_id,
-    channel: row.channel,
-    chatType: row.chat_type,
-    displayName: row.display_name,
-    isUserChat: row.is_user_chat,
-    lastMessage: {
-      role: row.last_message.role,
-      content: row.last_message.content,
-      timestamp: row.last_message.timestamp,
-      hasMedia: row.last_message.has_media,
-      senderName: row.last_message.sender_name,
-    },
-  };
-}
-
 /** Bridge client for the phone panel's reads. */
 export function createPhoneClient(invoke?: DesktopInvoke) {
   const call = <T>(method: string, payload: Record<string, unknown>) =>
@@ -150,7 +77,7 @@ export function createPhoneClient(invoke?: DesktopInvoke) {
       return result.conversations.map(mapConversation);
     },
     /** One page of a conversation of the role, the newest one unless `beforeSeq` asks for older. */
-    async listMessages(roleId: string, threadId: string, beforeSeq: number | null) {
+    async listMessages(roleId: string, threadId: string, beforeSeq: number | null): Promise<PhoneMessagePage> {
       const result = await call<{ messages: PhoneMessagePayload[]; has_more: boolean; next_before_seq: number | null }>(
         "phone.conversation.messages",
         { role_id: roleId, thread_id: threadId, ...(beforeSeq === null ? {} : { before_seq: beforeSeq }) },

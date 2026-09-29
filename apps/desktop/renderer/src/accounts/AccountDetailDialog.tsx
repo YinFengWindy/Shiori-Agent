@@ -3,7 +3,7 @@ import { XIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
-import { iconButtonClass } from "../shared/styles";
+import { iconButtonClass, dialogBackdropClass } from "../shared/styles";
 import { Reveal } from "../shared/ui/Reveal";
 import { accountChannelLabel, accountChannelLine, accountName, accountOnline } from "./accountPresentation";
 import type { AccountSnapshot } from "./accountClient";
@@ -34,7 +34,7 @@ export function AccountDetailDialog({ account, pluginId, roleId, onClose, onChan
 
   return <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
     <Dialog.Portal>
-      <Dialog.Backdrop className="confirm-dialog-backdrop motion-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm" />
+      <Dialog.Backdrop className={dialogBackdropClass} />
       <Dialog.Popup className="confirm-dialog motion-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(42rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-md border border-line bg-surface p-6 shadow-panel">
         <div className="flex items-center justify-between gap-3 border-b border-line-soft pb-4">
           <div className="flex min-w-0 items-center gap-3">

@@ -43,3 +43,8 @@ export function formatDate(value?: string): string {
 export function formatClock(value?: string): string {
   return parseTimestamp(value)?.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) ?? "";
 }
+
+/** Local 24-hour 「HH:MM」 of `date` (chat list times, time separators, the phone's status bar). */
+export function formatHourMinute(date: Date): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}

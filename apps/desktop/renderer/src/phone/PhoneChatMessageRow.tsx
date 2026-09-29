@@ -1,10 +1,8 @@
 import { UserIcon } from "@phosphor-icons/react";
+import { ChatFileChipContent, chatFileChipClass } from "../chat/ChatMessageAttachments";
 import { ChatMessageImage } from "../chat/ChatMessageImage";
-import { getChatAttachmentName } from "../chat/chatMessageActions";
 import { isChatImageAsset } from "../chat/chatImageHistory";
 import { RoleAvatar } from "../roles/RoleAvatar";
-import { toFileUrl } from "../shared/format";
-import { DocumentIcon } from "../shared/icons";
 import { badgeClass, cx, pressableClass } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
 import type { PhoneChatItem } from "./phoneChatPresentation";
@@ -19,7 +17,7 @@ const imageButtonClass = cx(
   "block w-fit cursor-zoom-in overflow-hidden rounded-md border border-line-soft bg-surface p-0",
 );
 
-/** A message's attachments: pictures at the phone's size (a click enlarges one), other files as a named chip. */
+/** A message's attachments: pictures at the phone's size (a click enlarges one), other files as a plain named chip. */
 function PhoneMessageMedia({ media, onOpenImage }: { media: readonly string[]; onOpenImage: (path: string) => void }) {
   return media.map((path, index) => (
     isChatImageAsset(path) ? (
@@ -28,11 +26,9 @@ function PhoneMessageMedia({ media, onOpenImage }: { media: readonly string[]; o
         <ChatMessageImage imagePath={path} bounds={phoneImageBounds} />
       </button>
     ) : (
-      <a key={`${index}:${path}`} href={toFileUrl(path)} target="_blank" rel="noreferrer"
-        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-line-soft bg-surface px-2.5 py-1 text-caption text-ink">
-        <DocumentIcon className="h-3 w-3 shrink-0 stroke-current" />
-        <span className="truncate">{getChatAttachmentName(path)}</span>
-      </a>
+      <span key={`${index}:${path}`} className={cx(chatFileChipClass, "max-w-full")}>
+        <ChatFileChipContent path={path} />
+      </span>
     )
   ));
 }
@@ -58,6 +54,7 @@ export function PhoneChatMessageRow({ item, role, onOpenImage }: {
           <UserIcon className="h-4 w-4" />
         </span>
       )}
+      {/* No width token fits a bubble column; 78% leaves the avatar and a gutter on the phone's narrow screen. */}
       <div className={cx("grid min-w-0 max-w-[78%] gap-1", right ? "justify-items-end" : "justify-items-start")}>
         {senderLabel || isUser ? (
           <span className="flex min-w-0 max-w-full items-center gap-1 text-caption text-ink-muted">

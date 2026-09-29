@@ -182,6 +182,23 @@ class ExternalImagePushed:
 
 
 @dataclass(frozen=True)
+class ExternalTextPushed:
+    """One text a host-owned send (e.g. a scheduled job) delivered through an external channel.
+
+    Only sends no turn records: a turn's own pushes and already-persisted
+    deliveries never raise it. ``delivery_key`` identifies the delivery, so a
+    retried send is stored once.
+    """
+
+    session_key: str
+    role_id: str
+    channel: str
+    chat_id: str
+    text: str
+    delivery_key: str = ""
+
+
+@dataclass(frozen=True)
 class ToolCallStarted:
     session_key: str
     channel: str

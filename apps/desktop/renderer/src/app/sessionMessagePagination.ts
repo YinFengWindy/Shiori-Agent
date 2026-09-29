@@ -6,10 +6,7 @@ import type {
   SessionSummary,
 } from "../shared/types";
 import { createChatMessageMatcher } from "../chat/chatMessageMatching";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
+import { isRecord } from "../shared/isRecord";
 
 function isSessionMessage(value: unknown): value is SessionMessage {
   return isRecord(value) && typeof value.role === "string" && typeof value.content === "string";

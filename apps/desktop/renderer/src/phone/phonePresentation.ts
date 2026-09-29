@@ -60,8 +60,3 @@ export function phoneConversationPreview({ chatType, lastMessage }: PhoneConvers
   }
   return body;
 }
-
-/** The status bar's clock: local 24-hour 「HH:MM」. */
-export function phoneStatusTime(now: Date) {
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-}

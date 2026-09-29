@@ -181,3 +181,6 @@ export const checkboxClass = "h-4 w-4 accent-accent";
 /** Soft pill badge for statuses and tags. */
 export const badgeClass =
   "inline-flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-0.5 text-caption text-accent-text";
+
+/** The dimmed, blurred backdrop behind a modal dialog (Base UI `Dialog.Backdrop`), fading with `motion-backdrop`. */
+export const dialogBackdropClass = "confirm-dialog-backdrop motion-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm";

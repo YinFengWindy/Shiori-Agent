@@ -1,7 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { XIcon } from "@phosphor-icons/react";
 import { toFileUrl } from "../shared/format";
-import { compactIconButtonClass, cx } from "../shared/styles";
+import { compactIconButtonClass, cx, dialogBackdropClass } from "../shared/styles";
 
 /**
  * A phone picture enlarged over the whole window, view only. Esc, the close
@@ -17,7 +17,7 @@ export function PhoneImageLightbox({ imagePath, open, onClose }: {
   return (
     <Dialog.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="motion-backdrop fixed inset-0 z-50 bg-ink/50 backdrop-blur-sm" />
+        <Dialog.Backdrop className={dialogBackdropClass} />
         <Dialog.Popup aria-label="图片预览" data-testid="phone-image-lightbox"
           className="motion-dialog fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2">
           {imagePath ? (

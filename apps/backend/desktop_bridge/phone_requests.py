@@ -12,7 +12,7 @@ from conversation.service import ConversationService
 from core.accounts import AccountRegistry, AccountSnapshot, account_serves_channel
 from core.common.message_source import MessageSource
 from core.identity import UserIdentityStore, match_identity
-from desktop_bridge.session_presenter import message_preview
+from desktop_bridge.session_presenter import MESSAGE_PAGE_SIZE, message_preview
 from session.manager.helpers import role_session_key
 from session.manager.models import message_thread_id
 
@@ -33,7 +33,7 @@ class ThreadMessages(Protocol):
         thread_id: str,
         *,
         before_seq: int | None = None,
-        limit: int = 50,
+        limit: int = MESSAGE_PAGE_SIZE,
     ) -> dict[str, Any]: ...
 
 
@@ -151,7 +151,7 @@ class DesktopPhoneRequestHandler:
                 role_id,
                 thread,
                 before_seq=int(before_seq) if before_seq is not None else None,
-                limit=int(payload.get("limit") or 50),
+                limit=int(payload.get("limit") or MESSAGE_PAGE_SIZE),
             )
         return None
 

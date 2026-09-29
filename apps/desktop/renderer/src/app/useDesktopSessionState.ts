@@ -47,12 +47,9 @@ import type {
 } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";
+import { isRecord } from "../shared/isRecord";
 
 type SendingSessionsMap = Record<string, string>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 /** Parses the paginated bridge response into the renderer's loaded-message session shape. */
 export function parseOpenedSessionPayload(payload: Record<string, unknown>): SessionPayload | null {
