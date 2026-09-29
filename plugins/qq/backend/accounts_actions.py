@@ -124,6 +124,20 @@ class QQAccountActions:
             "source": "napcat",
         }
 
+    async def group_name(self, account_id: str, group_id: str) -> str:
+        """The group's current name from NapCat ``get_group_info``.
+
+        Used while a message from that group is being received, so the
+        account's socket is already online and no status check is made.
+        """
+        socket = self._socket_for(account_id)
+        data = await socket.call(
+            "get_group_info", {"group_id": int(qq_number(group_id, "群号"))}
+        )
+        if not isinstance(data, dict) or not isinstance(data.get("group_name"), str):
+            raise OneBotError("NapCat get_group_info 未返回群名")
+        return data["group_name"]
+
     async def send_target(
         self,
         account_id: str,

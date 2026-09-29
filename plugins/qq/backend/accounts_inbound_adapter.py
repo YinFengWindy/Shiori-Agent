@@ -7,10 +7,12 @@ from typing import Any
 
 from bus.events import InboundMessage
 from core.channels.pairing_command import answer_pairing_code
+from core.common.message_source import GROUP_NAME_KEY
 from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
 
 from .accounts_actions import QQAccountActions, qq_chat_target
+from .accounts_group_names import QQGroupNames
 from .accounts_inbound import inbound_message, is_real_private_chat
 from .accounts_store import QQConnectionConfig
 from .channel.compat import download_to_temp, extract_cq_images
@@ -33,6 +35,7 @@ class QQInboundAdapter:
     _intake_paused: bool
     _ctx: ChannelContext | None
     _actions: QQAccountActions
+    _group_names: QQGroupNames
 
     def pause_intake(self) -> None:
         """Buffers incoming messages during host generation replacement."""
@@ -82,10 +85,23 @@ class QQInboundAdapter:
         ):
             await self._on_event(ref, event)
 
+    async def _with_group_name(self, message: InboundMessage) -> InboundMessage:
+        """Adds the group's name snapshot to a group message when it is known."""
+        metadata = message.metadata
+        if metadata.get("chat_type") != "group":
+            return message
+        name = await self._group_names.name(
+            str(metadata["account_id"]), str(metadata["group_id"])
+        )
+        if name is None:
+            return message
+        return replace(message, metadata={**metadata, GROUP_NAME_KEY: name})
+
     async def _accept_inbound(self, message: InboundMessage) -> None:
         ctx = self._ctx
         if ctx is None:
             return
+        message = await self._with_group_name(message)
         hub = ctx.channel_hub
         if hub is None:
             if message.metadata.get(

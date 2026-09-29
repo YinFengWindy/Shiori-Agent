@@ -13,7 +13,12 @@ from core.accounts import VIA_ACCOUNT_KEY
 from core.channels.pairing_command import answer_pairing_code
 
 from .formatting import _build_inbound_text_with_reply
-from .identity import message_mentioned_bot, message_subject, message_topic_metadata
+from .identity import (
+    message_mentioned_bot,
+    message_names,
+    message_subject,
+    message_topic_metadata,
+)
 
 logger = logging.getLogger("plugins.telegram.channel")
 
@@ -117,7 +122,7 @@ class _InboundMixin:
                     "sender_kind": sender_kind,
                     "chat_type": str(getattr(chat, "type", "private") or "private"),
                     "external_message_id": str(msg.message_id),
-                    "chat_title": str(getattr(chat, "title", "") or ""),
+                    **message_names(chat, user),
                     **message_topic_metadata(msg),
                     **reply_meta,
                 },

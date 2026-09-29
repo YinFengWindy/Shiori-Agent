@@ -11,7 +11,7 @@ from core.channels.chat_id_command import answer_chat_id_command
 
 from ..utils.topic import telegram_topic_kwargs
 from .compat import _call_send_markdown
-from .identity import message_subject, message_topic_metadata
+from .identity import message_names, message_subject, message_topic_metadata
 
 logger = logging.getLogger("plugins.telegram.channel")
 
@@ -124,7 +124,7 @@ class _CommandMixin:
                 "username": user.username or "",
                 "sender_kind": sender_kind,
                 "chat_type": str(getattr(chat, "type", "private") or "private"),
-                "chat_title": str(getattr(chat, "title", "") or ""),
+                **message_names(chat, user),
                 "external_message_id": str(msg.message_id),
                 **message_topic_metadata(msg),
             },

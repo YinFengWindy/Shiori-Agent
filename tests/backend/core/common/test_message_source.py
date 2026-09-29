@@ -129,3 +129,34 @@ def test_unbound_senders_are_not_named_as_the_user():
 
     assert "sender_is_user" not in source.to_metadata()
     assert "你的用户" not in with_message_source("hello", source)
+
+
+def test_display_names_are_stored_and_shown_to_the_model():
+    inbound = InboundMessage(
+        channel="qq",
+        chat_id="gqq:777",
+        sender="902",
+        content="hello",
+        metadata={"chat_type": "group", "group_name": "读书会", "sender_name": "小明"},
+    )
+    stored = MessageSource.from_metadata(
+        {"message_source": MessageSource.from_inbound(inbound).to_metadata()},
+        session_key="role:mira",
+    )
+
+    assert (stored.group_name, stored.sender_name) == ("读书会", "小明")
+    header = with_message_source("hello", stored).split("\n", 1)[0]
+    assert '"group_name": "读书会"' in header
+    assert '"sender_name": "小明"' in header
+
+
+def test_messages_without_display_names_keep_their_exact_prefix():
+    source = MessageSource.from_metadata(
+        {"message_source": {"channel": "qq", "chat_id": "gqq:777"}},
+        session_key="role:mira",
+    )
+
+    assert with_message_source("hello", source) == (
+        '[消息来源: {"channel": "qq", "chat_id": "gqq:777", "chat_type": null, '
+        '"sender_id": null, "session_key": null}]\nhello'
+    )

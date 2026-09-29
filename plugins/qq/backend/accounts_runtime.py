@@ -13,6 +13,7 @@ from infra.channels.intake import ChannelIntake
 
 from .accounts_actions import QQAccountActions, qq_number
 from .accounts_avatar import fetch_qq_avatar
+from .accounts_group_names import QQGroupNames
 from .accounts_inbound_adapter import QQInboundAdapter
 from .accounts_outbound_adapter import QQOutboundAdapter
 from .accounts_settings import QQAccountSettings, ensure_config_owner
@@ -46,6 +47,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._intakes: dict[str, ChannelIntake] = {}
         self._intake_paused = False
         self._actions = QQAccountActions(self._socket_for, self._ensure_online)
+        self._group_names = QQGroupNames(self._actions.group_name)
         self._avatar_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def load(self) -> None:
