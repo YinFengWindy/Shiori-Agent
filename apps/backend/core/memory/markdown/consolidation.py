@@ -22,12 +22,14 @@ from .formatting import (
     _parse_consolidation_payload,
     _select_consolidation_window,
     _select_recent_history_entries,
+    _split_consolidation_window,
     _estimate_session_input_tokens,
 )
 from .recent_context import _RecentContextWorkerMixin
 
 if TYPE_CHECKING:
     from agent.provider import LLMProvider
+    from conversation.context_scope import UserContextThreads
     from .runtime import MarkdownMemoryStore
 
 logger = logging.getLogger("memory.markdown")
@@ -105,13 +107,72 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         return (response.content or "").strip(), elapsed_ms
 
+    async def _extract_user_layer(
+        self, prompt: str
+    ) -> tuple[list[tuple[str, int]], str] | _ConsolidationFailure:
+        """调主模型提取用户层产物：HISTORY 事件条目与 PENDING 候选。"""
+        call_result = await self._call_llm_step(
+            step="event_extract",
+            provider=self._provider,
+            model=self._model,
+            messages=[
+                {"role": "system", "content": _CONSOLIDATION_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=1024,
+            timeout_s=_EVENT_EXTRACTION_TIMEOUT_S,
+        )
+        if isinstance(call_result, _ConsolidationFailure):
+            return call_result
+        text, event_elapsed_ms = call_result
+        logger.info(
+            "Memory consolidation event llm raw: elapsed_ms=%d chars=%d preview=%r",
+            event_elapsed_ms,
+            len(text),
+            text[:300],
+        )
+
+        if not text:
+            logger.warning("Memory consolidation: LLM returned empty response")
+            return _ConsolidationFailure(
+                step="event_extract",
+                error="empty_response",
+                elapsed_ms=event_elapsed_ms,
+            )
+        result = _parse_consolidation_payload(text)
+        if result is None:
+            logger.warning(
+                "Memory consolidation: unexpected response type. Response: %r",
+                text[:200],
+            )
+            return _ConsolidationFailure(
+                step="event_extract",
+                error="invalid_json",
+                elapsed_ms=event_elapsed_ms,
+            )
+
+        # 归一化文本产物，并把后续写入所需信息交给 engine。
+        history_entry_payloads = _normalize_history_entries(
+            result.get("history_entries"),
+            result.get("history_entry"),
+        )
+        pending_items = _format_pending_items(result.get("pending_items", []))
+        return history_entry_payloads, pending_items
+
     async def prepare_consolidation(
         self,
         session,
         archive_all: bool = False,
         force: bool = False,
         input_token_estimate: int | None = None,
+        user_threads: "UserContextThreads | None" = None,
     ) -> _ConsolidationDraft | _ConsolidationFailure | None:
+        """准备一次整理：选窗口、拆段、提取用户层产物并生成 RECENT_CONTEXT。
+
+        ``user_threads`` 是角色共享会话此刻的用户上下文会话；给出时窗口按发送者
+        拆段，只有用户本人段进入用户层整理与引擎，RECENT_CONTEXT 只取用户上下文
+        会话的消息。为 None 时会话没有划分，整个窗口都属于用户本人。
+        """
         profile_maint = self._profile_maint
         # 1. 先决定这次要归档哪一段消息窗口；没有新窗口就直接返回。
         window = _select_consolidation_window(
@@ -165,12 +226,15 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         if window is None:
             return
 
-        # 2. 把窗口消息格式化成一段对话文本，并准备好 source_ref / 现有长期记忆 / 最近 history。
+        # 2. 窗口按发送者拆段：只把用户本人段格式化成对话文本，外部段留在 draft 里不整理；
+        #    再准备好 source_ref / 现有长期记忆 / 最近 history。
         nsfw_memory_enabled = _is_nsfw_memory_enabled_session(session)
-        source_ref = _build_consolidation_source_ref(window)
+        segments = _split_consolidation_window(window, user_threads)
+        source_ref = _build_consolidation_source_ref(segments.user_messages)
         conversation = _format_conversation_for_consolidation(
-            window.old_messages,
+            segments.user_messages,
             nsfw_memory_enabled=nsfw_memory_enabled,
+            user_threads=user_threads,
         )
         current_memory = await asyncio.to_thread(profile_maint.read_long_term)
         history_text = ""
@@ -288,57 +352,19 @@ history_entries.emotional_weight 规则：
 {recent_history_block or "（空）"},
 
 ## 待处理对话
+标注“（在群「…」里）”的 USER 发言是 USER 本人在群聊里说的话，同样按 USER 的发言处理。
 {conversation}
 
 只返回合法 JSON，不要 markdown 代码块。"""
 
-        # 3. 调主模型把这段旧对话提炼成结构化结果。
-        call_result = await self._call_llm_step(
-            step="event_extract",
-            provider=self._provider,
-            model=self._model,
-            messages=[
-                {"role": "system", "content": _CONSOLIDATION_SYSTEM},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=1024,
-            timeout_s=_EVENT_EXTRACTION_TIMEOUT_S,
-        )
-        if isinstance(call_result, _ConsolidationFailure):
-            return call_result
-        text, event_elapsed_ms = call_result
-        logger.info(
-            "Memory consolidation event llm raw: elapsed_ms=%d chars=%d preview=%r",
-            event_elapsed_ms,
-            len(text),
-            text[:300],
-        )
-
-        if not text:
-            logger.warning("Memory consolidation: LLM returned empty response")
-            return _ConsolidationFailure(
-                step="event_extract",
-                error="empty_response",
-                elapsed_ms=event_elapsed_ms,
-            )
-        result = _parse_consolidation_payload(text)
-        if result is None:
-            logger.warning(
-                "Memory consolidation: unexpected response type. Response: %r",
-                text[:200],
-            )
-            return _ConsolidationFailure(
-                step="event_extract",
-                error="invalid_json",
-                elapsed_ms=event_elapsed_ms,
-            )
-
-        # 4. 归一化文本产物，并把后续写入所需信息交给 engine。
-        history_entry_payloads = _normalize_history_entries(
-            result.get("history_entries"),
-            result.get("history_entry"),
-        )
-        pending_items = _format_pending_items(result.get("pending_items", []))
+        # 3. 调主模型把用户本人段提炼成结构化结果；窗口里没有用户本人的发言时不调用。
+        history_entry_payloads: list[tuple[str, int]] = []
+        pending_items = ""
+        if conversation:
+            extracted = await self._extract_user_layer(prompt)
+            if isinstance(extracted, _ConsolidationFailure):
+                return extracted
+            history_entry_payloads, pending_items = extracted
         # 4. 归一化 markdown 产物，向量写入由 engine 订阅提交事件完成。
         recent_context_text = await self._build_recent_context_snapshot(
             session=session,
@@ -346,11 +372,13 @@ history_entries.emotional_weight 规则：
             window=window,
             archive_all=archive_all,
             nsfw_memory_enabled=nsfw_memory_enabled,
+            user_threads=user_threads,
         )
         if isinstance(recent_context_text, _ConsolidationFailure):
             return recent_context_text
         return _ConsolidationDraft(
             window=window,
+            segments=segments,
             source_ref=source_ref,
             history_entry_payloads=history_entry_payloads,
             pending_items=pending_items,

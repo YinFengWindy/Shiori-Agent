@@ -150,7 +150,9 @@ def test_build_consolidation_source_ref_keeps_only_messages_with_ids():
             {"content": "missing id"},
         ]
     )
-    assert json.loads(_build_consolidation_source_ref(cast(Any, window))) == [
+    assert json.loads(
+        _build_consolidation_source_ref(cast(Any, window).old_messages)
+    ) == [
         "telegram:1:0",
         "telegram:1:1",
     ]

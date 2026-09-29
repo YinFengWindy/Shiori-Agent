@@ -7,6 +7,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+from session.manager.models import message_thread_id
 
 from .contracts import _ConsolidationFailure, _ConsolidationWindow
 from .formatting import (
@@ -18,7 +19,7 @@ from .formatting import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from conversation.context_scope import UserContextThreads
 
 logger = logging.getLogger("memory.markdown")
 
@@ -31,6 +32,24 @@ def _recent_turn_count(keep_count: int) -> int:
 
 def _message_time(message: dict) -> str:
     return str(message.get("timestamp") or "").strip()
+
+
+def _user_context_messages(
+    messages: list[dict], user_threads: "UserContextThreads | None"
+) -> list[dict]:
+    """RECENT_CONTEXT 的输入只取用户上下文会话的消息。
+
+    RECENT_CONTEXT 会原样注入用户上下文的回合，所以按会话划分，与历史组装同一条
+    规则：外部会话的消息（包括用户本人在群里的发言）都不进入。``user_threads``
+    为 None 表示会话没有划分，全部保留。
+    """
+    if user_threads is None:
+        return list(messages)
+    return [
+        message
+        for message in messages
+        if user_threads.contains(message_thread_id(message))
+    ]
 
 
 def _format_recent_context_messages(
@@ -313,12 +332,11 @@ ongoing_threads 严格限制：
         window: _ConsolidationWindow | None,
         archive_all: bool,
         nsfw_memory_enabled: bool = False,
+        user_threads: "UserContextThreads | None" = None,
     ) -> str | _ConsolidationFailure:
-        tail = (
-            list(session.messages[-self._keep_count :]) if self._keep_count > 0 else []
-        )
+        session_messages = _user_context_messages(list(session.messages), user_threads)
+        tail = session_messages[-self._keep_count :] if self._keep_count > 0 else []
         recent_count = min(len(tail), _recent_turn_count(self._keep_count))
-        session_messages = list(session.messages)
         if archive_all:
             compact_source = (
                 session_messages[:-recent_count]
@@ -326,7 +344,11 @@ ongoing_threads 严格限制：
                 else session_messages
             )
         else:
-            compact_source = list(window.old_messages) if window is not None else []
+            compact_source = (
+                _user_context_messages(list(window.old_messages), user_threads)
+                if window is not None
+                else []
+            )
         compression_until = _message_time(compact_source[-1]) if compact_source else ""
         recent_turns = tail[-recent_count:] if recent_count > 0 else []
         rendered_recent_turns = _format_recent_context_messages(
@@ -429,11 +451,17 @@ ongoing_threads 严格限制：
             recent_turns=rendered_recent_turns,
         )
 
-    async def refresh_recent_turns(self, *, session, profile_maint=None) -> None:
+    async def refresh_recent_turns(
+        self,
+        *,
+        session,
+        profile_maint=None,
+        user_threads: "UserContextThreads | None" = None,
+    ) -> None:
+        """只刷新 RECENT_CONTEXT 的“最近的对话”块；输入规则见 ``_user_context_messages``。"""
         profile = profile_maint or self._profile_maint
-        tail = (
-            list(session.messages[-self._keep_count :]) if self._keep_count > 0 else []
-        )
+        session_messages = _user_context_messages(list(session.messages), user_threads)
+        tail = session_messages[-self._keep_count :] if self._keep_count > 0 else []
         recent_count = min(len(tail), _recent_turn_count(self._keep_count))
         recent_turns = tail[-recent_count:] if recent_count > 0 else []
         rendered_recent_turns = _format_recent_context_messages(

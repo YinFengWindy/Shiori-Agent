@@ -8,9 +8,15 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from bus.events_lifecycle import TurnCommitted
+from bus.events_lifecycle import (
+    NOT_USER_AUTHORED_KEY,
+    SKIP_POST_MEMORY_KEY,
+    TurnCommitted,
+)
+from conversation.context_scope import UserContextThreads, load_user_context_threads
 from core.memory.events import ConsolidationCommitted
 from session.manager.consolidation import ConsolidationCommitRequest
+from session.manager.helpers import role_session_key
 
 from .consolidation import _MarkdownConsolidationWorker
 from .contracts import (
@@ -59,6 +65,7 @@ class MarkdownMemoryMaintenance:
         recent_context_model: str | None = None,
     ) -> None:
         self._store = store
+        self._workspace = store.memory_dir.parent
         self._event_bus = event_bus
         self._worker = _MarkdownConsolidationWorker(
             profile_maint=store,
@@ -96,9 +103,24 @@ class MarkdownMemoryMaintenance:
     def _resolve_store_for_session(self, session: object) -> MarkdownMemoryStore:
         metadata = getattr(session, "metadata", {})
         return resolve_markdown_store(
-            workspace=self._store.memory_dir.parent,
+            workspace=self._workspace,
             session_metadata=metadata if isinstance(metadata, dict) else None,
         )
+
+    def _user_threads_for_session(self, session: object) -> UserContextThreads | None:
+        """角色共享会话此刻的用户上下文会话，供整理按发送者拆段。
+
+        只有 ``role:<id>`` 会话混存多个会话的消息；其他会话没有划分，返回 None。
+        """
+        metadata = getattr(session, "metadata", {})
+        role_id = (
+            str(metadata.get("role_id") or "").strip()
+            if isinstance(metadata, dict)
+            else ""
+        )
+        if not role_id or getattr(session, "key", "") != role_session_key(role_id):
+            return None
+        return load_user_context_threads(self._workspace, role_id)
 
     def bind_lifecycle(self, request: MemoryLifecycleBindRequest) -> None:
         self._get_session = request.get_session
@@ -118,7 +140,9 @@ class MarkdownMemoryMaintenance:
             await asyncio.sleep(0)
 
     def on_turn_committed(self, event: TurnCommitted) -> None:
-        if bool((event.extra or {}).get("skip_post_memory")):
+        extra = event.extra or {}
+        # 群友回合只是不给引擎抽取，整理照常触发，由整理按发送者拆段。
+        if extra.get(SKIP_POST_MEMORY_KEY) and not extra.get(NOT_USER_AUTHORED_KEY):
             return
         self._enqueue_maintenance(event.session_key)
 
@@ -308,6 +332,7 @@ class MarkdownMemoryMaintenance:
             input_token_estimate=_estimate_session_input_tokens(
                 request.session, request.current_content
             ),
+            user_threads=self._user_threads_for_session(request.session),
         )
         if draft is None:
             if session_key:
@@ -403,6 +428,9 @@ class MarkdownMemoryMaintenance:
     async def _publish_consolidation(
         self, session: object, draft: _ConsolidationDraft
     ) -> None:
+        # 引擎只收用户本人段；窗口里没有用户本人的发言时没有可交给引擎的内容。
+        if not draft.conversation:
+            return
         role_id = str(getattr(session, "metadata", {}).get("role_id") or "").strip()
         if self._event_bus is not None:
             await self._event_bus.emit(
@@ -423,4 +451,5 @@ class MarkdownMemoryMaintenance:
         await self._worker.refresh_recent_turns(
             session=request.session,
             profile_maint=self._resolve_store_for_session(request.session),
+            user_threads=self._user_threads_for_session(request.session),
         )

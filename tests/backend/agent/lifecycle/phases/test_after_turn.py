@@ -7,10 +7,17 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.lifecycle.phases.after_turn import AfterTurnFrame, _DispatchOutboundModule
+from agent.lifecycle.phases.after_turn import (
+    AfterTurnFrame,
+    _DispatchOutboundModule,
+    _memory_extra,
+)
+from agent.lifecycle.types import TurnState
 from agent.account_delivery import AccountDelivery
 from agent.account_delivery.turn_state import account_delivery_scope
-from bus.events import OutboundMessage
+from bus.events import InboundMessage, OutboundMessage
+from conversation.context_scope import turn_context_view
+from conversation.service import network_thread_id
 from core.accounts import AccountRegistry
 from core.accounts.target_contract import AccountTarget
 from core.accounts.delivery_ledger import AccountDeliveryLedger
@@ -78,3 +85,30 @@ async def test_uncertain_account_send_does_not_auto_dispatch_original(tmp_path) 
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert attempt.status == "pending"
     port.dispatch.assert_not_awaited()
+
+
+@pytest.mark.parametrize("sender_is_user", [False, True])
+def test_only_the_users_own_group_turn_is_offered_to_memory_extraction(
+    tmp_path, sender_is_user
+) -> None:
+    group = network_thread_id("mira", "qq", "g1")
+    state = TurnState(
+        msg=InboundMessage(
+            channel="qq",
+            sender="902" if sender_is_user else "555",
+            chat_id="g1",
+            content="我最喜欢狗了",
+            metadata={"chat_type": "group", "thread_id": group}
+            | ({"sender_is_user": True} if sender_is_user else {}),
+        ),
+        session_key="role:mira",
+        dispatch_outbound=False,
+        context_view=turn_context_view(tmp_path, "mira", group),
+    )
+
+    extra = _memory_extra(state)
+
+    if sender_is_user:
+        assert extra == {}
+    else:
+        assert extra == {"skip_post_memory": True, "not_user_authored": True}

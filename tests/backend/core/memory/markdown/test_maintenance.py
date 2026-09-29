@@ -13,6 +13,8 @@ from agent.looping.core import AgentLoop
 import agent.looping.core as loop_core
 from agent.looping.ports import SessionServices
 from bus.event_bus import EventBus
+from bus.events_lifecycle import TurnCommitted
+from conversation.service import desktop_thread_id, network_thread_id
 from core.memory.events import ConsolidationCommitted
 from core.memory.markdown import (
     ConsolidateRequest,
@@ -21,7 +23,7 @@ from core.memory.markdown import (
     MarkdownMemoryRuntime,
     MemoryLifecycleBindRequest,
 )
-from core.memory.markdown.contracts import _ConsolidationDraft
+from core.memory.markdown.contracts import ConsolidationSegments, _ConsolidationDraft
 from core.memory.markdown.formatting import (
     _build_consolidation_source_ref,
     _select_consolidation_window,
@@ -68,7 +70,10 @@ def _draft(session: Session, *, archive_all: bool = False):
     assert window is not None
     return _ConsolidationDraft(
         window=window,
-        source_ref=_build_consolidation_source_ref(window),
+        segments=ConsolidationSegments(
+            user_messages=list(window.old_messages), external_messages=[]
+        ),
+        source_ref=_build_consolidation_source_ref(window.old_messages),
         history_entry_payloads=[("[2026-09-11 12:00] 你完成了第三轮问题。", 0)],
         pending_items="- [preference] 你喜欢第三轮讨论。",
         conversation="USER: question 2\nASSISTANT: answer 2",
@@ -423,3 +428,125 @@ async def test_concurrent_ensure_consolidation_shares_in_flight_task(
         assert calls == 1
     finally:
         await event_bus.aclose()
+
+
+class _RecordingProvider:
+    """记下整理各步收到的提示词，按步骤返回固定结果。"""
+
+    def __init__(self) -> None:
+        self.event_prompts: list[str] = []
+        self.recent_context_prompts: list[str] = []
+
+    async def chat(self, *, messages: list[dict[str, str]], **_kwargs: Any):
+        prompt = messages[-1]["content"]
+        if "近期语境压缩代理" in prompt:
+            self.recent_context_prompts.append(prompt)
+            return SimpleNamespace(content='{"active_topics": ["你喜欢猫"]}')
+        self.event_prompts.append(prompt)
+        return SimpleNamespace(
+            content=(
+                '{"history_entries": [{"summary": "[2026-09-30 10:00] 你说喜欢猫",'
+                ' "emotional_weight": 0}], "pending_items":'
+                ' [{"tag": "preference", "content": "你喜欢猫"}]}'
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_group_members_stay_out_of_the_user_layer_while_the_cursor_covers_them(
+    tmp_path: Path,
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    desktop = desktop_thread_id("mira")
+    group = network_thread_id("mira", "qq", "g1")
+    session.add_message("user", "我喜欢猫", thread_id=desktop)
+    session.add_message("assistant", "猫很可爱", thread_id=desktop)
+    session.add_message(
+        "user",
+        "我是阿明，我最喜欢狗",
+        thread_id=group,
+        metadata={"message_source": {"sender_id": "555", "group_name": "猫猫群"}},
+    )
+    session.add_message("assistant", "阿明好", thread_id=group)
+    session.add_message(
+        "user",
+        "我明天去面试",
+        thread_id=group,
+        metadata={
+            "message_source": {
+                "sender_id": "902",
+                "sender_is_user": True,
+                "group_name": "猫猫群",
+            }
+        },
+    )
+    manager.save(session)
+    provider = _RecordingProvider()
+    event_bus = EventBus()
+    events: list[ConsolidationCommitted] = []
+    event_bus.on(ConsolidationCommitted, lambda event: events.append(event))
+    maintenance = MarkdownMemoryMaintenance(
+        store=MarkdownMemoryStore(tmp_path),
+        provider=cast(LLMProvider, provider),
+        model="test",
+        keep_count=0,
+        event_bus=event_bus,
+    )
+    maintenance.bind_lifecycle(
+        MemoryLifecycleBindRequest(
+            get_session=manager.get_or_create,
+            commit_consolidation=manager.commit_consolidation,
+        )
+    )
+    try:
+        result = await maintenance.consolidate(
+            ConsolidateRequest(session=session, force=True)
+        )
+        repeated = await maintenance.consolidate(
+            ConsolidateRequest(session=session, force=True)
+        )
+    finally:
+        await event_bus.aclose()
+
+    # 用户层整理与引擎只看到用户本人的发言，群里那句带群名。
+    [event_prompt] = provider.event_prompts
+    [event] = events
+    for conversation in (event_prompt, event.conversation):
+        assert "我喜欢猫" in conversation
+        assert "USER（在群「猫猫群」里）: 我明天去面试" in conversation
+        assert "阿明" not in conversation
+    # RECENT_CONTEXT 只取用户上下文会话的消息。
+    [recent_prompt] = provider.recent_context_prompts
+    assert "我喜欢猫" in recent_prompt
+    assert "阿明" not in recent_prompt
+    assert "我明天去面试" not in recent_prompt
+    recent_context = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    assert "阿明" not in recent_context.read_recent_context()
+    # 游标一次越过两段；再次整理没有新窗口，不重复写入。
+    assert result.consolidated_count == 5
+    assert repeated.trace == {"mode": "skipped"}
+    manager.invalidate(session.key)
+    assert manager.get_or_create(session.key).last_consolidated == 5
+
+
+def test_group_member_turn_still_triggers_consolidation():
+    maintenance = MarkdownMemoryMaintenance.__new__(MarkdownMemoryMaintenance)
+    enqueued: list[str] = []
+    maintenance._enqueue_maintenance = enqueued.append
+
+    maintenance.on_turn_committed(
+        TurnCommitted(
+            session_key="role:mira",
+            channel="qq",
+            chat_id="g1",
+            input_message="我最喜欢狗",
+            persisted_user_message="我最喜欢狗",
+            assistant_response="好",
+            tools_used=[],
+            extra={"skip_post_memory": True, "not_user_authored": True},
+        )
+    )
+
+    assert enqueued == ["role:mira"]

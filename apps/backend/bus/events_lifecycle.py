@@ -76,6 +76,13 @@ class BeforeReasoning:
     role_id: str = ""
 
 
+# ``TurnCommitted.extra`` 的记忆标记。``SKIP_POST_MEMORY_KEY`` 为真时记忆引擎不从本回合
+# 抽取记忆；``NOT_USER_AUTHORED_KEY`` 为真说明跳过的原因是本回合不是用户本人发言
+# （群友、陌生人），这类回合仍会触发记忆整理，由整理按发送者拆段。
+SKIP_POST_MEMORY_KEY = "skip_post_memory"
+NOT_USER_AUTHORED_KEY = "not_user_authored"
+
+
 @dataclass(frozen=True)
 class TurnCommitted:
     session_key: str

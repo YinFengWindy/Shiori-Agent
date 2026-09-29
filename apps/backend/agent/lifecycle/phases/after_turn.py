@@ -19,11 +19,15 @@ from agent.lifecycle.phase import (
     collect_prefixed_slots,
     topo_sort_modules,
 )
-from agent.lifecycle.types import AfterTurnCtx, TurnSnapshot
+from agent.lifecycle.types import AfterTurnCtx, TurnSnapshot, TurnState
 from agent.turns.outbound import OutboundDispatch, OutboundPort
 from bus.event_bus import EventBus
 from bus.events import OutboundMessage
-from bus.events_lifecycle import TurnCommitted
+from bus.events_lifecycle import (
+    NOT_USER_AUTHORED_KEY,
+    SKIP_POST_MEMORY_KEY,
+    TurnCommitted,
+)
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
@@ -90,16 +94,25 @@ class _BuildTurnWorkModule:
             history_window=hw,
         )
         frame.slots[_REACT_STATS_SLOT] = extract_react_stats(snap.ctx.context_retry)
-        frame.slots[_EXTRA_SLOT] = (
-            {"skip_post_memory": True}
-            if (msg.metadata or {}).get("skip_post_memory")
-            else {}
-        )
+        frame.slots[_EXTRA_SLOT] = _memory_extra(state)
         frame.slots[_TOOL_CHAIN_SLOT] = list(snap.ctx.tool_chain)
         frame.slots[_OMIT_USER_TURN_SLOT] = bool(
             (msg.metadata or {}).get("omit_user_turn")
         )
         return frame
+
+
+def _memory_extra(state: TurnState) -> dict[str, object]:
+    """``TurnCommitted.extra`` 的记忆标记（含义见 ``bus.events_lifecycle``）。
+
+    群友、陌生人的回合不给记忆引擎抽取，免得他们的发言被当成用户的画像与偏好
+    证据；用户本人的回合（包括在群里的）照常抽取。
+    """
+    if (state.msg.metadata or {}).get(SKIP_POST_MEMORY_KEY):
+        return {SKIP_POST_MEMORY_KEY: True}
+    if not state.is_user_authored():
+        return {SKIP_POST_MEMORY_KEY: True, NOT_USER_AUTHORED_KEY: True}
+    return {}
 
 
 class _BuildTurnCommittedModule:
