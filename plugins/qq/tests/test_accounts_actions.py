@@ -12,6 +12,7 @@ from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from plugins.qq.backend.accounts_actions import QQAccountActions, qq_chat_target
 from plugins.qq.backend.onebot import OneBotDisconnected, OneBotError
+from core.identity import UserIdentityStore
 
 
 @pytest.mark.asyncio
@@ -176,7 +177,7 @@ async def test_disconnect_is_pending_but_onebot_rejection_is_failed(tmp_path):
 
     rpc = type("Rpc", (), {"resolve": lambda self, name: ("qq", send)})()
     ledger = AccountDeliveryLedger(tmp_path)
-    delivery = AccountDelivery(accounts, rpc, ledger)
+    delivery = AccountDelivery(accounts, rpc, ledger, UserIdentityStore(tmp_path))
     socket.call.side_effect = OneBotDisconnected("NapCat WebSocket 已断开")
     with pytest.raises(UncertainDeliveryError):
         await delivery.send("qq", "mira", target, "hi")

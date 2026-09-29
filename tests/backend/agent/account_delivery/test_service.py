@@ -10,6 +10,7 @@ from agent.account_delivery.turn_state import account_delivery_scope
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from core.accounts.target_contract import AccountTarget, UncertainDeliveryError
+from core.identity import IdentityChat, UserIdentityStore
 
 
 class _Rpc:
@@ -52,7 +53,13 @@ def _service(tmp_path, plugin_id: str = "chat"):
     accounts.report(account_id, "live", connection="online")
     ledger = AccountDeliveryLedger(tmp_path)
     rpc = _Rpc(ledger, plugin_id)
-    return AccountDelivery(accounts, rpc, ledger), accounts, rpc, ledger, account_id
+    return (
+        AccountDelivery(accounts, rpc, ledger, UserIdentityStore(tmp_path)),
+        accounts,
+        rpc,
+        ledger,
+        account_id,
+    )
 
 
 @pytest.mark.asyncio
@@ -285,3 +292,69 @@ async def test_cancelled_plugin_call_suppresses_implicit_reply(tmp_path) -> None
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert (attempt.status, attempt.error) == ("pending", "CancelledError")
     assert state == {"sent": True}
+
+
+def _bind(store: UserIdentityStore, record, user_id: str, scope, chat=None):
+    """Pairs ``user_id`` through ``record``; ``chat`` defaults to its private chat."""
+    code = store.create_pairing_code().code
+    identity = store.pair(
+        code,
+        record=record,
+        user_id=user_id,
+        scope=scope,
+        chat=chat or IdentityChat(record.id, record.plugin_id, user_id),
+    )
+    assert identity is not None
+    return identity
+
+
+def test_user_chat_is_the_remembered_private_chat_of_the_roles_account(
+    tmp_path,
+) -> None:
+    service, accounts, _rpc, _ledger, account_id = _service(tmp_path)
+    store = UserIdentityStore(tmp_path)
+    other = accounts.register(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="other-bot",
+        config_ref="other-bot",
+        token="live",
+        role_id="other",
+    ).record
+    # An account-scoped ID of another role's account never names the user here.
+    _bind(store, other, "stranger-id", "account")
+    _bind(
+        store,
+        accounts.get(account_id).record,
+        "user-7",
+        "platform",
+        IdentityChat(account_id, "chat_bot", "dm-7"),
+    )
+
+    resolved = service.user_chat("chat", "mira")
+
+    assert resolved.target == AccountTarget("private", "user-7")
+    assert resolved.chat == IdentityChat(account_id, "chat_bot", "dm-7")
+
+
+def test_user_chat_refuses_an_unbound_or_unreached_channel(tmp_path) -> None:
+    service, accounts, rpc, ledger, _account_id = _service(tmp_path)
+    store = UserIdentityStore(tmp_path)
+    with pytest.raises(LookupError, match="没有在渠道 chat 绑定身份"):
+        service.user_chat("chat", "mira")
+
+    # Bound platform-wide through another role's account: the ID is known,
+    # but the user never wrote to this role's account, so no chat is known.
+    other = accounts.register(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="other-bot",
+        config_ref="other-bot",
+        token="live",
+        role_id="other",
+    ).record
+    _bind(store, other, "user-7", "platform")
+    with pytest.raises(LookupError, match="还没有私聊过当前角色"):
+        service.user_chat("chat", "mira")
+    assert rpc.calls == []
+    assert ledger.list_for_role("mira") == []

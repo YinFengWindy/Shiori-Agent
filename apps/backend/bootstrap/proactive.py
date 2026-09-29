@@ -9,6 +9,7 @@ from agent.looping.core import AgentLoop
 from agent.provider import LLMProvider
 from agent.tool_hooks import ToolHook
 from agent.core.proactive_turn.gates import ProactiveGate
+from agent.core.prompt_block import build_role_user_identities_prompt
 from agent.tools.message_push import MessagePushTool
 from conversation.service import desktop_chat_id, desktop_thread_id
 from core.common.channel_directory import DESKTOP_CHANNEL
@@ -113,7 +114,9 @@ def build_proactive_runtime(
             proactive_gates=proactive_gates,
             proactive_motives=proactive_motives,
             event_bus=event_bus,
-            role_prompt_fn=_build_role_prompt_resolver(workspace, role.id),
+            role_prompt_fn=_build_role_prompt_resolver(
+                workspace, role.id, role_runtime_registry.repository.store
+            ),
             tick_dispatcher=_build_role_tick_dispatcher(
                 role_id=role.id,
                 registry=role_runtime_registry,
@@ -126,7 +129,16 @@ def build_proactive_runtime(
     return tasks, loops
 
 
-def _build_role_prompt_resolver(workspace: Path, role_id: str):
+def _build_role_prompt_resolver(
+    workspace: Path, role_id: str, runtime_roles: RoleStore
+):
+    """The role prompt of proactive and drift turns, read fresh on each turn.
+
+    It ends with the user's identities on the role's channels, rendered like
+    in passive turns from ``runtime_roles`` (the runtime's shared store, the
+    only one indexing the role's accounts); without bindings it is omitted.
+    """
+
     def resolve() -> str:
         role = RoleStore(workspace).get_role(role_id)
         if role is None:
@@ -134,7 +146,8 @@ def _build_role_prompt_resolver(workspace: Path, role_id: str):
         prompt = RolePromptCompiler().compile(role).content.strip()
         if not prompt:
             raise ValueError(f"role.system_prompt required: {role_id}")
-        return prompt
+        identities = build_role_user_identities_prompt(role_id, runtime_roles)
+        return f"{prompt}\n\n{identities}" if identities else prompt
 
     return resolve
 

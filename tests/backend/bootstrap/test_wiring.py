@@ -19,6 +19,7 @@ from bootstrap.tools import (
     _resolve_plugin_llm_dependencies,
     build_registered_tools,
 )
+from core.roles import RoleStore
 from bootstrap.wiring import (
     wire_turn_lifecycle,
     register_memory_plugin,
@@ -602,8 +603,13 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
         "bootstrap.tools.resolve_context_factory",
         lambda name: (
-            lambda workspace, memory_store: observed.update(
-                {"name": name, "workspace": workspace, "memory_store": memory_store}
+            lambda workspace, memory_store, roles: observed.update(
+                {
+                    "name": name,
+                    "workspace": workspace,
+                    "memory_store": memory_store,
+                    "roles": roles,
+                }
             )
             or fake_context
         ),
@@ -615,9 +621,11 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
         api_key="k",
         wiring=WiringConfig(context="default"),
     )
+    roles = RoleStore(tmp_path)
     deps = _build_loop_deps(
         config=config,
         workspace=tmp_path,
+        runtime_roles=roles,
         bus=cast(Any, SimpleNamespace()),
         provider=cast(Any, object()),
         light_provider=None,
@@ -648,6 +656,7 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
     assert observed["name"] == "default"
     assert observed["workspace"] == tmp_path
     assert observed["memory_store"] is markdown_store
+    assert observed["roles"] is roles
     assert deps.context is fake_context
 
 

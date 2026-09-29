@@ -5,6 +5,7 @@ from .models import (
     IdentityChat,
     IdentityScope,
     UserIdentity,
+    identities_for_account,
     match_identity,
     parse_identity_scope,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "PairingCode",
     "UserIdentity",
     "UserIdentityStore",
+    "identities_for_account",
     "match_identity",
     "parse_identity_scope",
 ]

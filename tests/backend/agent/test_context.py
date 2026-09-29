@@ -9,6 +9,7 @@ from bus.events import InboundMessage
 from conversation.context_scope import ContextScope
 from core.common.channel_directory import ChannelDirectory
 from core.common.message_source import MessageSource
+from core.identity import IdentityChat
 from core.roles import RoleStore
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 from session.manager.models import Session, whole_session
@@ -94,7 +95,9 @@ def test_context_builder_injects_interrupted_turn_as_separate_frame(
         name="Mira",
         system_prompt="test role",
     )
-    builder = ContextBuilder(tmp_path, _Memory())  # type: ignore[arg-type]
+    builder = ContextBuilder(
+        tmp_path, _Memory(), runtime_roles=RoleStore(tmp_path)  # type: ignore[arg-type]
+    )
     result = builder.render(
         ContextRequest(
             history=[
@@ -170,7 +173,9 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     )
     role_metadata = {"role_id": "mira"}
 
-    builder = ContextBuilder(tmp_path, _Memory())  # type: ignore[arg-type]
+    builder = ContextBuilder(
+        tmp_path, _Memory(), runtime_roles=RoleStore(tmp_path)  # type: ignore[arg-type]
+    )
     result = builder.render(
         ContextRequest(
             history=[],
@@ -305,6 +310,7 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     text_media_builder = ContextBuilder(
         tmp_path,
         _Memory(),  # type: ignore[arg-type]
+        runtime_roles=RoleStore(tmp_path),
         multimodal=False,
     )
     text_media_messages = text_media_builder.render(
@@ -449,7 +455,9 @@ def test_context_builder_reproduces_temporal_conflict_baseline(
         system_prompt="你是 Mira。",
     )
 
-    builder = ContextBuilder(tmp_path, _Memory())  # type: ignore[arg-type]
+    builder = ContextBuilder(
+        tmp_path, _Memory(), runtime_roles=RoleStore(tmp_path)  # type: ignore[arg-type]
+    )
     request_time = datetime.fromisoformat("2026-04-08T17:57:00+08:00")
     retrieved_memory_block = """
 [item_5a9c8d59f77c] [2026-03-29 12:44] 用户表示明天下午三点有面试，因当前感到疲惫想小睡，但担心此举会打乱明天的生物钟。
@@ -497,6 +505,88 @@ def test_context_builder_reproduces_temporal_conflict_baseline(
     assert user_message.endswith("你还记得明天什么时候面试吗")
 
 
+class _EmptySkills:
+    def __init__(self, workspace: Path) -> None:
+        self.workspace = workspace
+
+    def get_always_skills(self) -> list[str]:
+        return []
+
+    def load_skills_for_context(self, names: list[str]) -> str:
+        return ""
+
+    def build_skills_summary(self) -> str:
+        return ""
+
+
+class _EmptyMemory:
+    def read_profile(self) -> str:
+        return ""
+
+    def read_self(self) -> str:
+        return ""
+
+    def read_recent_context(self) -> str:
+        return ""
+
+    def get_memory_context(self) -> str:
+        return ""
+
+
+def test_every_turn_lists_the_users_current_channel_identities(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.setattr("agent.context.SkillsLoader", _EmptySkills)
+    store = RoleStore(tmp_path)
+    store.create_role(role_id="mira", name="Mira", system_prompt="test role")
+    record = store.accounts.register(
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        token="live",
+        role_id="mira",
+    ).record
+    builder = ContextBuilder(
+        tmp_path, _EmptyMemory(), runtime_roles=store  # type: ignore[arg-type]
+    )
+
+    def pair() -> None:
+        store.identities.pair(
+            store.identities.create_pairing_code().code,
+            record=record,
+            user_id="3174898512",
+            scope="platform",
+            chat=IdentityChat(record.id, "qq", "3174898512"),
+        )
+
+    def system_prompt(channel: str, chat_id: str, scope: ContextScope = "user") -> str:
+        return builder.render(
+            ContextRequest(
+                history=[],
+                current_message="在吗",
+                channel=channel,
+                chat_id=chat_id,
+                context_scope=scope,
+            ),
+            session_metadata={"role_id": "mira"},
+        ).system_prompt
+
+    line = "- 渠道 qq：3174898512（整个平台通用；私聊 qq:3174898512）"
+    assert "你的用户在各渠道的身份" not in system_prompt("desktop", "role:mira")
+    pair()
+    # User context (desktop) and external context (a QQ group) alike: the
+    # external filter of user memory (#495) leaves the identities in.
+    assert line in system_prompt("desktop", "role:mira")
+    assert line in system_prompt("qq", "gqq:5", "external")
+
+    [bound] = store.identities.list()
+    store.identities.unbind(bound.id)
+    assert "3174898512" not in system_prompt("desktop", "role:mira")
+    pair()
+    assert line in system_prompt("desktop", "role:mira")
+
+
 def test_context_builder_external_turn_injects_only_public_self_sections(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
@@ -532,7 +622,9 @@ def test_context_builder_external_turn_injects_only_public_self_sections(
     RoleStore(tmp_path).create_role(
         role_id="mira", name="Mira", system_prompt="test role"
     )
-    builder = ContextBuilder(tmp_path, _Memory())  # type: ignore[arg-type]
+    builder = ContextBuilder(
+        tmp_path, _Memory(), runtime_roles=RoleStore(tmp_path)  # type: ignore[arg-type]
+    )
 
     def model_input(scope: ContextScope) -> str:
         result = builder.render(

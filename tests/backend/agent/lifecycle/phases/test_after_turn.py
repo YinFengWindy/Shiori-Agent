@@ -21,6 +21,7 @@ from conversation.service import network_thread_id
 from core.accounts import AccountRegistry
 from core.accounts.target_contract import AccountTarget
 from core.accounts.delivery_ledger import AccountDeliveryLedger
+from core.identity import UserIdentityStore
 
 
 @pytest.mark.asyncio
@@ -60,7 +61,7 @@ async def test_uncertain_account_send_does_not_auto_dispatch_original(tmp_path) 
 
     rpc = SimpleNamespace(resolve=lambda name: ("chat", timed_out))
     ledger = AccountDeliveryLedger(tmp_path)
-    delivery = AccountDelivery(accounts, rpc, ledger)
+    delivery = AccountDelivery(accounts, rpc, ledger, UserIdentityStore(tmp_path))
     state: dict[str, bool] = {}
     with account_delivery_scope(state):
         with pytest.raises(TimeoutError):

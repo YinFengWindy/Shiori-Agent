@@ -190,7 +190,7 @@ class ExternalImagePushed:
 
 @dataclass(frozen=True)
 class ExternalTextPushed:
-    """One text ``message_push`` delivered through an external channel.
+    """One text delivered through an external channel by a model tool.
 
     ``in_turn`` marks a push the model made during a turn: it is committed
     with that turn. Otherwise a host-owned send (e.g. a scheduled job) is
@@ -198,6 +198,12 @@ class ExternalTextPushed:
     raise it. ``delivery_key`` (host sends) and ``external_message_id`` (the
     platform's ID, when the sender reported one) identify the delivery, so it
     is stored once.
+
+    ``tool`` names the sending tool (``message_push`` or ``account_send``);
+    ``media`` are images sent with the text as the same message; and
+    ``message_metadata`` is stored with the recorded message over the push
+    defaults (e.g. the chat type and the account delivery facts: attempt,
+    account, target and the ``ViaAccount`` snapshot).
     """
 
     session_key: str
@@ -208,6 +214,9 @@ class ExternalTextPushed:
     delivery_key: str = ""
     in_turn: bool = False
     external_message_id: str = ""
+    tool: str = "message_push"
+    media: tuple[str, ...] = ()
+    message_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
 
 
 @dataclass(frozen=True)

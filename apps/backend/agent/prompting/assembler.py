@@ -104,6 +104,7 @@ class PromptAssembler:
         turn_injection_context: dict[str, str] | None = None,
         system_sections_top: list[PromptSectionRender] | None = None,
         system_sections_bottom: list[PromptSectionRender] | None = None,
+        role_id: str = "",
     ) -> AssembledTurnInput:
         # assembler 负责把“主 prompt + turn injection + message envelope”
         # 收束成一份统一输入，避免调用方各自手拼消息顺序。
@@ -113,6 +114,7 @@ class PromptAssembler:
             chat_id=chat_id,
             retrieved_memory_block=retrieved_memory_block,
             disabled_sections=disabled_sections,
+            role_id=role_id,
             context_scope=context_scope,
         )
         injection_context = turn_injection_context or {}

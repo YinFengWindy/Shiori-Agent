@@ -31,6 +31,7 @@ from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
 from session.manager.models import build_session_message
 from core.roles.reply_state import reply_state_metadata
+from core.identity import UserIdentityStore
 
 
 class _DummySession:
@@ -80,7 +81,9 @@ async def test_explicit_proactive_account_target_records_receipt_without_default
         return {"message_id": "platform-9", "via_account": _VIA}
 
     rpc = SimpleNamespace(resolve=lambda name: ("chat", send))
-    delivery = AccountDelivery(accounts, rpc, AccountDeliveryLedger(tmp_path))
+    delivery = AccountDelivery(
+        accounts, rpc, AccountDeliveryLedger(tmp_path), UserIdentityStore(tmp_path)
+    )
     default = SimpleNamespace(dispatch=AsyncMock())
     orchestrator = TurnOrchestrator(
         TurnOrchestratorDeps(
@@ -140,7 +143,10 @@ async def test_proactive_images_reach_the_bound_private_chat(tmp_path) -> None:
             session=SessionServices(session_manager=cast(Any, session_manager)),
             outbound=SimpleNamespace(dispatch=AsyncMock()),
             account_delivery=AccountDelivery(
-                accounts, rpc, AccountDeliveryLedger(tmp_path)
+                accounts,
+                rpc,
+                AccountDeliveryLedger(tmp_path),
+                UserIdentityStore(tmp_path),
             ),
             bound_chat_target=lambda role_id, channel, chat_id: (
                 channel,
@@ -189,7 +195,7 @@ async def test_failed_proactive_target_remains_durable_without_turn_commit(
 
     rpc = SimpleNamespace(resolve=lambda name: ("chat", rejected))
     ledger = AccountDeliveryLedger(tmp_path)
-    delivery = AccountDelivery(accounts, rpc, ledger)
+    delivery = AccountDelivery(accounts, rpc, ledger, UserIdentityStore(tmp_path))
     default = SimpleNamespace(dispatch=AsyncMock())
     orchestrator = TurnOrchestrator(
         TurnOrchestratorDeps(
@@ -847,6 +853,7 @@ async def test_bound_private_chat_target_is_delivered_through_the_account(
                 accounts,
                 SimpleNamespace(resolve=lambda name: ("chat", send)),
                 AccountDeliveryLedger(tmp_path),
+                UserIdentityStore(tmp_path),
             ),
             bound_chat_target=bound_chat_target,
         )

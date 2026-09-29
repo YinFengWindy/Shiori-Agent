@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import platform
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -184,3 +186,40 @@ def build_skills_catalog_prompt(skills_summary: str) -> str:
 
 def build_current_session_prompt(*, channel: str, chat_id: str) -> str:
     return f"\n\n## Current Session\nChannel: {channel}\nChat ID: {chat_id}"
+
+
+# ─── 用户的渠道身份层：按当前身份绑定逐回合计算 ──────────────────────────────
+@dataclass(frozen=True)
+class UserChannelIdentity:
+    """用户在某渠道的一个已绑定身份，提示词里的一行。
+
+    ``channel`` 是渠道 ID（account_send 的 channel），``platform_wide`` 表示该 ID
+    在整个平台通用（否则只对角色在该渠道的账号有效），``private_chat`` 是用户与
+    角色在该渠道账号的已知私聊（``会话渠道:会话 ID``），没有时为 None。
+    """
+
+    channel: str
+    user_id: str
+    platform_wide: bool
+    private_chat: str | None
+
+
+def build_user_identities_prompt(
+    identities: Sequence[UserChannelIdentity],
+) -> str | None:
+    """用户各渠道身份的提示词段；没有绑定时返回 None，不出现该段。"""
+    if not identities:
+        return None
+    lines = [
+        f"- 渠道 {item.channel}：{item.user_id}"
+        f"（{'整个平台通用' if item.platform_wide else '仅限你在该渠道的账号'}；"
+        f"{f'私聊 {item.private_chat}' if item.private_chat else '尚无私聊'}）"
+        for item in identities
+    ]
+    return "\n".join(
+        [
+            "## 你的用户在各渠道的身份",
+            *lines,
+            "群聊里有人提到或 @ 这些 ID 时，指的就是你的用户。",
+        ]
+    )

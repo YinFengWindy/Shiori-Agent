@@ -30,6 +30,7 @@ from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.turns.outbound import BusOutboundPort
 from bus.event_bus import EventBus
 from core.common.channel_directory import ChannelDirectory
+from core.roles import RoleStore
 from core.roles.model_runtime import RoleAwareProvider
 
 from typing import TYPE_CHECKING
@@ -77,6 +78,13 @@ class _AssemblyMixin:
         self._context = deps.context or ContextBuilder(
             deps.workspace,
             memory=memory_profile,
+            # Without a role runtime no plugin account is indexed anywhere,
+            # so a store of its own lists none.
+            runtime_roles=(
+                self._role_runtime_registry.repository.store
+                if self._role_runtime_registry is not None
+                else RoleStore(deps.workspace)
+            ),
             multimodal=config.llm.multimodal,
             channel_directory=self._channel_directory,
         )

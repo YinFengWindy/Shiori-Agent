@@ -398,21 +398,29 @@ class MessagePushTool(Tool):
     async def _record_delivery(
         self, event: ExternalTextPushed | ExternalImagePushed
     ) -> None:
-        """Has the push sync record a delivery the platform already accepted.
-
-        Boundary: the send happened, so a failure to record it is logged and
-        never reported as a failed send (the model would send it again).
-        """
+        """Has the push sync record a delivery the platform already accepted."""
         if self._event_bus is None:  # records_delivery implies a bus
             return
-        try:
-            _ = await self._event_bus.emit(event)
-        except Exception:
-            logger.exception(
-                "[message_push] 已发送但未能记入角色会话 %s:%s",
-                event.channel,
-                event.chat_id,
-            )
+        await record_delivered_push(self._event_bus, event)
+
+
+async def record_delivered_push(
+    event_bus: EventBus, event: ExternalTextPushed | ExternalImagePushed
+) -> None:
+    """Has the push sync record a send the platform already accepted.
+
+    Shared by the model's sending tools. Boundary: the send happened, so a
+    failure to record it is logged and never reported as a failed send (the
+    model would send it again).
+    """
+    try:
+        _ = await event_bus.emit(event)
+    except Exception:
+        logger.exception(
+            "[push] 已发送但未能记入角色会话 %s:%s",
+            event.channel,
+            event.chat_id,
+        )
 
 
 def _normalize_message_id(sent: SenderResult) -> str | None:

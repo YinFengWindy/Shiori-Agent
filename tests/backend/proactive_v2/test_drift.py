@@ -34,6 +34,8 @@ from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
 from session.manager import SessionManager
 from proactive_v2.context import AgentTickContext
 from agent.core.drift_turn import DriftTurnPipeline, DriftTurnPipelineDeps
+from bootstrap.proactive import _build_role_prompt_resolver
+from core.roles import RoleStore
 from proactive_v2.drift_state import DriftStateStore
 from proactive_v2.drift_tools import DriftToolDeps, build_drift_tool_registry
 from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
@@ -1540,3 +1542,38 @@ async def test_drift_recall_memory_searches_the_drifting_role(tmp_path: Path):
 
     scope = memory.query.await_args.args[0].scope
     assert (scope.role_id, scope.session_key) == ("mira", "")
+
+
+def test_drift_system_prompt_carries_the_users_channel_identities(tmp_path: Path):
+    roles = RoleStore(tmp_path)
+    roles.create_role(name="Mira", role_id="mira", system_prompt="规则")
+    record = roles.accounts.register(
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        token="live",
+        role_id="mira",
+    ).record
+    store = DriftStateStore(tmp_path)
+    pipeline = DriftTurnPipeline(
+        DriftTurnPipelineDeps(
+            store=store,
+            tool_deps=DriftToolDeps(drift_dir=tmp_path, store=store),
+            # The role prompt drift turns are built with.
+            role_prompt_fn=_build_role_prompt_resolver(tmp_path, "mira", roles),
+        )
+    )
+    assert "你的用户在各渠道的身份" not in pipeline._build_system_prompt()
+
+    roles.identities.pair(
+        roles.identities.create_pairing_code().code,
+        record=record,
+        user_id="3174898512",
+        scope="platform",
+        chat=IdentityChat(record.id, "qq", "3174898512"),
+    )
+
+    assert "- 渠道 qq：3174898512（整个平台通用；私聊 qq:3174898512）" in (
+        pipeline._build_system_prompt()
+    )

@@ -29,7 +29,7 @@ from core.accounts import AccountRecord
 from core.accounts.target_contract import AccountTarget
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.desktop_presence import DesktopPresence
-from core.identity import IdentityChat, UserIdentity
+from core.identity import IdentityChat, UserIdentity, identities_for_account
 from core.roles.models import RoleProactiveCandidate
 from core.roles.store import RoleStore
 
@@ -127,13 +127,18 @@ class ProactiveTargetResolver:
             for account in self._roles.accounts.list(role_id=role_id)
             if account.runtime_active and account.connection == "online"
         ]
+        bindings = self._roles.identities.list()
+        applicable = {
+            record.id: identities_for_account(bindings, record) for record in records
+        }
+        # Candidates follow binding order (``select_proactive_target`` falls
+        # back to the first), then account order within one binding.
         return [
             (record, identity, chat)
-            for identity in self._roles.identities.list()
+            for identity in bindings
             for record in records
-            if identity.applies_to(record)
-            for chat in identity.chats
-            if chat.account_id == record.id
+            if identity in applicable[record.id]
+            and (chat := identity.chat_for(record.id)) is not None
         ]
 
     def resolve(

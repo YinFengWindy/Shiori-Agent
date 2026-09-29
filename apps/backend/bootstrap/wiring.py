@@ -13,12 +13,14 @@ from bootstrap.toolsets.meta import CommonMetaToolsetProvider, SpawnToolsetProvi
 from bootstrap.toolsets.protocol import ToolsetProvider
 from bootstrap.toolsets.schedule import SchedulerToolsetProvider
 from core.memory.plugin import MemoryPlugin
+from core.roles import RoleStore
 
 if TYPE_CHECKING:
     from agent.looping.interrupt import TurnInterruptState
 
 
-ContextFactory = Callable[[Path, Any], Any]
+# (workspace, memory store, the runtime's shared role store) -> context builder.
+ContextFactory = Callable[[Path, Any, RoleStore], Any]
 ToolsetProviderFactory = Callable[[], ToolsetProvider]
 MemoryPluginFactory = Callable[[], MemoryPlugin]
 
@@ -35,7 +37,9 @@ _MEMORY_PLUGIN_WIRING: dict[str, MemoryPluginFactory] = {
     "default": _build_default_memory_plugin,
 }
 _CONTEXT_WIRING: dict[str, ContextFactory] = {
-    "default": lambda workspace, memory: ContextBuilder(workspace, memory=memory),
+    "default": lambda workspace, memory, roles: ContextBuilder(
+        workspace, memory=memory, runtime_roles=roles
+    ),
 }
 _TOOLSET_WIRING: dict[str, ToolsetProviderFactory] = {
     "spawn": SpawnToolsetProvider,

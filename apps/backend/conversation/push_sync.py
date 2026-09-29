@@ -90,7 +90,7 @@ class ExternalPushSyncService:
         drafts = self._live_turn_pushes(event.session_key) if event.in_turn else None
         if drafts is not None:
             drafts.append(
-                self._push_message(event, content=event.text),
+                self._push_message(event, content=event.text, media=_text_media(event)),
                 owner=self,
                 if_abandoned=lambda: self._persist_text(event),
             )
@@ -106,7 +106,7 @@ class ExternalPushSyncService:
         ):
             # A retried delivery: the first send is already recorded.
             return
-        await self._persist_push(event, content=event.text, media=None)
+        await self._persist_push(event, content=event.text, media=_text_media(event))
 
     def _role_session_key(self, event: ExternalImagePushed | ExternalTextPushed) -> str:
         """The role's session, which records every push of the role."""
@@ -128,8 +128,13 @@ class ExternalPushSyncService:
                 chat_id=event.chat_id,
             )
         )
-        metadata = self._build_source_metadata(event, thread_id=thread.id)
+        metadata: dict[str, Any] = {
+            **self._build_source_metadata(event, thread_id=thread.id)
+        }
+        tool = "message_push"
         if isinstance(event, ExternalTextPushed):
+            tool = event.tool
+            metadata.update(source=tool, sender_id=tool, **event.message_metadata)
             if event.delivery_key:
                 metadata["delivery_key"] = event.delivery_key
             if event.external_message_id:
@@ -139,7 +144,7 @@ class ExternalPushSyncService:
             content,
             media=media,
             proactive=True,
-            tools_used=["message_push"],
+            tools_used=[tool],
             thread_id=thread.id,
             sender_role="assistant",
             metadata=metadata,
@@ -222,3 +227,8 @@ class ExternalPushSyncService:
             "thread_id": thread_id,
             "session_key_override": self._role_session_key(event),
         }
+
+
+def _text_media(event: ExternalTextPushed) -> list[str] | None:
+    """The images sent in the same message as a pushed text, if any."""
+    return list(event.media) or None

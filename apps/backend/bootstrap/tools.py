@@ -317,6 +317,7 @@ def _build_loop_deps(
     event_bus: EventBus,
     memory_runtime: MemoryRuntime,
     relationship_runtime: RoleRelationshipRuntimeService,
+    runtime_roles: RoleStore,
     role_runtime_registry: RoleRuntimeRegistry | None = None,
     channel_directory: ChannelDirectory | None = None,
 ) -> AgentLoopDeps:
@@ -324,6 +325,7 @@ def _build_loop_deps(
     context = resolve_context_factory(wiring.context)(
         workspace,
         memory_runtime.markdown.store,
+        runtime_roles,
     )
     if isinstance(context, ContextBuilder):
         context.set_media_capabilities(
@@ -521,6 +523,7 @@ def build_core_runtime(
     loop_deps = _build_loop_deps(
         config=config,
         workspace=workspace,
+        runtime_roles=role_store,
         bus=bus,
         provider=loop_provider,
         light_provider=light_provider,
@@ -632,7 +635,10 @@ def build_core_runtime(
         strict=shared is not None,
     )
     account_delivery = AccountDelivery(
-        role_store.accounts, plugin_manager.rpc, AccountDeliveryLedger(workspace)
+        role_store.accounts,
+        plugin_manager.rpc,
+        AccountDeliveryLedger(workspace),
+        role_store.identities,
     )
     # 账号查询在外部上下文受限回合也可用（#489），发送不行。
     tools.register(
@@ -641,7 +647,10 @@ def build_core_runtime(
     tools.register(
         AccountTargetsTool(account_delivery), risk="read-only", external_allowed=True
     )
-    tools.register(AccountSendTool(account_delivery), risk="external-side-effect")
+    tools.register(
+        AccountSendTool(account_delivery, event_outlet or event_bus),
+        risk="external-side-effect",
+    )
 
     return CoreRuntime(
         config=config,

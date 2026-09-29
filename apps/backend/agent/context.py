@@ -21,6 +21,7 @@ from agent.core.prompt_block import (
     SystemPromptBuildResult,
     SystemPromptBuilder,
     TurnContext,
+    UserIdentitiesPromptBlock,
 )
 from agent.prompting import (
     PromptAssembler,
@@ -44,6 +45,7 @@ from prompts.agent import (
 if TYPE_CHECKING:
     from conversation.context_scope import ContextScope
     from core.memory.markdown import MemoryProfileApi
+    from core.roles import RoleStore
 
 logger = logging.getLogger("agent.context")
 
@@ -215,9 +217,13 @@ class ContextBuilder:
         workspace: Path,
         memory: "MemoryProfileApi",
         *,
+        runtime_roles: "RoleStore",
         multimodal: bool = True,
         channel_directory: ChannelDirectory | None = None,
     ):
+        """``runtime_roles`` is the runtime's shared role store: every turn's
+        prompt lists the user's identities on the role's channels from its
+        account index and identity bindings (``UserIdentitiesPromptBlock``)."""
         self.workspace = workspace
         self.skills = SkillsLoader(workspace)
         self.memory = memory
@@ -230,6 +236,7 @@ class ContextBuilder:
                 SelfModelPromptBlock(),
                 RecentContextPromptBlock(),
                 SessionContextPromptBlock(),
+                UserIdentitiesPromptBlock(runtime_roles),
                 ActiveSkillsPromptBlock(),
                 SkillsCatalogPromptBlock(render_fn=build_skills_catalog_prompt),
             ]
@@ -319,6 +326,7 @@ class ContextBuilder:
             session_metadata=session_metadata,
         )
         assembled = self._assembler.assemble(
+            role_id=str((session_metadata or {}).get("role_id") or "").strip(),
             history=request.history,
             current_message=request.current_message,
             media=request.media,
@@ -352,6 +360,7 @@ class ContextBuilder:
         chat_id: str | None = None,
         retrieved_memory_block: str = "",
         disabled_sections: set[str] | None = None,
+        role_id: str = "",
         context_scope: "ContextScope | None" = None,
     ) -> SystemPromptBuildResult:
         ctx = TurnContext(
@@ -362,6 +371,7 @@ class ContextBuilder:
             channel=channel,
             chat_id=chat_id,
             retrieved_memory_block=retrieved_memory_block,
+            role_id=role_id,
             context_scope=context_scope,
         )
         built = self._system_prompt_builder.build(

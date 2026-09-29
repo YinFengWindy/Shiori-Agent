@@ -39,6 +39,7 @@ from proactive_v2.tools import (
     _get_context_data,
     _get_recent_chat,
 )
+from core.identity import UserIdentityStore
 
 # ── TOOL_SCHEMAS 结构 ─────────────────────────────────────────────────────
 
@@ -930,7 +931,13 @@ def _retarget_deps(tmp_path) -> ToolDeps:
         role_id="mira",
     )
     tool = AccountSendTool(
-        AccountDelivery(accounts, MagicMock(), AccountDeliveryLedger(tmp_path))
+        AccountDelivery(
+            accounts,
+            MagicMock(),
+            AccountDeliveryLedger(tmp_path),
+            UserIdentityStore(tmp_path),
+        ),
+        MagicMock(),
     )
     return ToolDeps(shared_tools=SimpleNamespace(get_tool={"account_send": tool}.get))
 

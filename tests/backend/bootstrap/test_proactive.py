@@ -14,6 +14,7 @@ from bootstrap.proactive import (
     _build_role_tick_dispatcher,
 )
 from core.desktop_presence import DesktopPresence
+from core.identity import IdentityChat
 from core.roles import RoleStore
 from agent.core.proactive_turn.gates import (
     ProactiveGateAdapter,
@@ -21,6 +22,34 @@ from agent.core.proactive_turn.gates import (
     ProactiveGateDecision,
 )
 from proactive_v2.config import ProactiveConfig
+
+
+def test_role_prompt_ends_with_the_users_current_channel_identities(tmp_path):
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", role_id="mira", system_prompt="规则")
+    record = store.accounts.register(
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        token="live",
+        role_id="mira",
+    ).record
+    resolve = _build_role_prompt_resolver(tmp_path, "mira", store)
+    assert "你的用户在各渠道的身份" not in resolve()
+
+    store.identities.pair(
+        store.identities.create_pairing_code().code,
+        record=record,
+        user_id="3174898512",
+        scope="platform",
+        chat=IdentityChat(record.id, "qq", "3174898512"),
+    )
+
+    assert resolve().endswith(
+        "- 渠道 qq：3174898512（整个平台通用；私聊 qq:3174898512）\n"
+        "群聊里有人提到或 @ 这些 ID 时，指的就是你的用户。"
+    )
 
 
 def test_proactive_role_prompt_compiles_current_profile_without_old_knowledge(
@@ -49,9 +78,10 @@ def test_proactive_role_prompt_compiles_current_profile_without_old_knowledge(
             },
         },
     )
-    resolve = _build_role_prompt_resolver(tmp_path, "mira")
+    resolve = _build_role_prompt_resolver(tmp_path, "mira", store)
 
     prompt = resolve()
+    assert "你的用户在各渠道的身份" not in prompt
     assert prompt.startswith("[role_identity]\nMira")
     assert "小栞的资料" in prompt and "温柔" in prompt and "简洁回应用户" in prompt
     assert "常驻知识" not in prompt

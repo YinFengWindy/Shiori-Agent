@@ -25,6 +25,7 @@ from core.accounts.target_contract import (
     AccountTarget,
     UncertainDeliveryError,
 )
+from core.identity import IdentityChat, UserIdentityStore, identities_for_account
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,34 @@ class AccountSendReceipt:
     ownership_current: bool
     via_account: dict[str, str] | None = None
 
+    def message_metadata(self) -> dict[str, Any]:
+        """The delivery facts stored with the session message recording this send."""
+        return {
+            "delivery_attempt_id": self.attempt_id,
+            "delivery_account_id": self.account_id,
+            "delivery_target_kind": self.target_kind,
+            "delivery_target_id": self.target_id,
+            **(
+                {VIA_ACCOUNT_KEY: self.via_account}
+                if self.via_account is not None
+                else {}
+            ),
+        }
+
+
+@dataclass(frozen=True)
+class UserChatTarget:
+    """Where the role reaches its user on one channel.
+
+    ``target`` is the private target the plugin sends to (the bound platform
+    user ID, as for proactive delivery); ``chat`` is the known private chat
+    with the user through the role's account there, whose conversation thread
+    a message sent this way belongs to.
+    """
+
+    chat: IdentityChat
+    target: AccountTarget
+
 
 class AccountDelivery:
     """Checks live ownership and records each plugin send independently of turns.
@@ -54,6 +83,8 @@ class AccountDelivery:
     Callers name a channel (the channel plugin's ID); the role's account there
     is looked up in the registry, since a role holds at most one per plugin.
     Errors meant for the model name the channel, never the account ID.
+    ``identities`` are the desktop user's bindings, which name the user's
+    private chat on a channel (``user_chat``).
     """
 
     def __init__(
@@ -61,10 +92,12 @@ class AccountDelivery:
         accounts: AccountRegistry,
         rpc: PluginRpcRegistry,
         ledger: AccountDeliveryLedger,
+        identities: UserIdentityStore,
     ) -> None:
         self._accounts = accounts
         self._rpc = rpc
         self._ledger = ledger
+        self._identities = identities
 
     def channel_account(self, channel: str, role_id: str) -> AccountSnapshot:
         """The role's account on ``channel``; raises when it has none loaded."""
@@ -78,6 +111,29 @@ class AccountDelivery:
                 return account
         raise LookupError(
             f"当前角色在渠道 {channel} 没有可用账号（未添加账号或渠道插件未加载）"
+        )
+
+    def user_chat(self, channel: str, role_id: str) -> UserChatTarget:
+        """The user's private chat through the role's account on ``channel``.
+
+        Read from the current bindings: among those applying to the account,
+        the first with a known private chat through it. Nothing is guessed
+        from a bound ID alone, since the chat the send belongs to must be
+        known. Raises LookupError when the user has no binding there or has
+        no known private chat with this account yet.
+        """
+        account = self.channel_account(channel, role_id)
+        record = account.record
+        bound = identities_for_account(self._identities.list(), record)
+        if not bound:
+            raise LookupError(f"你的用户没有在渠道 {record.plugin_id} 绑定身份")
+        for identity in bound:
+            chat = identity.chat_for(record.id)
+            if chat is not None:
+                return UserChatTarget(chat, AccountTarget("private", identity.user_id))
+        raise LookupError(
+            f"你的用户在渠道 {record.plugin_id} 已绑定身份，但还没有私聊过当前角色"
+            "在该渠道的账号，无法直接发给用户"
         )
 
     def _authorize(self, account: AccountSnapshot, role_id: str) -> AccountAccess:
