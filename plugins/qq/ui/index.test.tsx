@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import React, { act } from "react";
 import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { desktopPluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import type { AccountSnapshot } from "../../../apps/desktop/renderer/src/accounts/accountClient";
 import { AccountDetailActionsTarget } from "../../../apps/desktop/renderer/src/accounts/AccountDetailActions";
 import { deferred } from "../../../apps/desktop/renderer/src/shared/testing/deferred";
@@ -47,7 +47,7 @@ test("QQ add connects once and shows QR only when login requires scanning", asyn
   try {
     // StrictMode replays mount effects; opening the add dialog must still begin exactly one login.
     await view.render(<React.StrictMode><QQAccountDetail account={null} roleId="mira" onChanged={() => undefined}
-      client={client} host={desktopPluginHostServices} /></React.StrictMode>);
+      client={client} host={pluginHostServicesFor("qq")} /></React.StrictMode>);
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     const button = (label: string) => Array.from(view.container.querySelectorAll("button"))
       .find((item) => item.textContent?.trim() === label);
@@ -92,7 +92,7 @@ test("a saved QQ account connects with its existing session: 正在连接 at onc
     },
   };
   const view = await mountTestComponent(<QQAccountDetail account={savedAccount} roleId="mira"
-    onChanged={() => undefined} client={client} host={desktopPluginHostServices} />);
+    onChanged={() => undefined} client={client} host={pluginHostServicesFor("qq")} />);
   try {
     // Opening a saved offline account does not connect it by itself.
     assert.equal(calls.includes("accounts.start"), false);
@@ -110,7 +110,7 @@ test("a saved QQ account connects with its existing session: 正在连接 at onc
     assert.ok(buttonIn(view.container, "断开连接"));
     assert.equal(buttonIn(view.container, "连接"), undefined);
     await view.render(<QQAccountDetail account={{ ...savedAccount, connection: "online" }} roleId="mira"
-      onChanged={() => undefined} client={client} host={desktopPluginHostServices} />);
+      onChanged={() => undefined} client={client} host={pluginHostServicesFor("qq")} />);
     assert.equal(cardStatus(view.container), "在线");
   } finally { await view.cleanup(); }
 });
@@ -133,7 +133,7 @@ test("once the add-flow login is verified, 断开连接 disconnects that account
     },
   };
   const view = await mountTestComponent(<QQAccountDetail account={null} roleId="mira"
-    onChanged={(accountId) => changed.push(accountId)} client={client} host={desktopPluginHostServices} />);
+    onChanged={(accountId) => changed.push(accountId)} client={client} host={pluginHostServicesFor("qq")} />);
   try {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     assert.deepEqual(changed, ["qq:101"]);
@@ -167,7 +167,7 @@ test("退出登录 sits in the dialog's danger zone and shows 正在退出 while
   try {
     await view.render(<AccountDetailActionsTarget value={zone}>
       <QQAccountDetail account={{ ...savedAccount, connection: "online" }} roleId="mira"
-        onChanged={() => undefined} client={client} host={desktopPluginHostServices} />
+        onChanged={() => undefined} client={client} host={pluginHostServicesFor("qq")} />
     </AccountDetailActionsTarget>);
     assert.equal(buttonIn(view.container, "退出登录"), undefined);
     await act(async () => buttonIn(zone, "退出登录")?.click());

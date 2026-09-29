@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.9.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.10.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -85,6 +85,7 @@ version whose additions it uses.
 | `2.7.0` | `ctx.tools.register(..., external_allowed=)` to declare a tool usable in external-context turns; from this host on, undeclared plugin tools are unavailable in restricted external-context turns, including tools of existing packages that require an older `runtime_api` (host policy, not an API break) | #489 |
 | `2.8.0` | the `@shiori/plugin-sdk` renderer peer, resolved to the host's own instance through the renderer import map (see [Runtime API 2.8 plugin SDK peer](#runtime-api-28-plugin-sdk-peer)) | #503 (#440 T1) |
 | `2.9.0` | `@shiori/plugin-sdk` shared renderer primitives: components, class names, icons, pure helpers and hooks, plus the UI module, host service, account and role contract types (see [Runtime API 2.9 plugin SDK primitives](#runtime-api-29-plugin-sdk-primitives)) | #504 (#440 T2) |
+| `2.10.0` | the host services context (`PluginHostServicesProvider` / `usePluginHostServices`) exported by `@shiori/plugin-sdk`, plus `host.config` (the plugin's own config: read, save a patch, subscribe) and `host.assets` (local path to displayable URL) (see [Runtime API 2.10 host services context, config and assets](#runtime-api-210-host-services-context-config-and-assets)) | #505 (#440 T3) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -354,6 +355,73 @@ vocabulary (`AccountSnapshot`, `AccountResponseRules`, `AccountStatusView`, …)
 and the role and session domain types (`RoleRecord`,
 `SessionMessageUpdatePayload`, …). They describe the 2.4–2.8 behaviour
 unchanged; only their source of truth moved.
+
+## Runtime API 2.10 host services context, config and assets
+
+API 2.10 gives plugins the stateful host capabilities they used to reach through
+host source, as services instead of host stores. A precompiled package that uses
+any of them declares `runtime_api: ">=2.10.0 <3.0.0"`.
+
+Runtime exports added in 2.10.0 (listed in `pluginUiPeerExports`):
+
+| Export | Meaning |
+| --- | --- |
+| `PluginHostServicesProvider` | the React context provider the host mounts every bound contribution (`settings.section` component, `nav.page` and its sidebar, `role.assets`, `account.detail`) under, with the same services object it injects as the `host` prop |
+| `usePluginHostServices()` | reads those services from any component below the contribution, so deep components need not pass `host` down; throws outside a mounted contribution |
+
+The SDK owns the context's only instance and the host imports it from the SDK,
+so a precompiled plugin, whose `@shiori/plugin-sdk` import resolves to the host's
+instance through the import map, reads exactly the services the host provided.
+A plugin's own tests may wrap components in `PluginHostServicesProvider` with
+fake services.
+
+`PluginHostServices` gains two members (types `PluginHostConfig`,
+`PluginHostAssets` and `PluginConfigValues`):
+
+- **`host.config`** is the plugin's own config, bound when the host mounts the
+  plugin: there is no plugin id to pass and no way to reach another plugin's
+  config. `get()` resolves to the current values of the plugin's
+  `[plugins.<id>]` table (schema defaults filled in; a `${NAME}` reference
+  arrives as written, never resolved). `save(patch)` merges `patch` over the
+  current top-level values, stores the result through the same validation and
+  hot-apply path as the plugin's page in 设置 › 插件, and resolves to the values
+  as stored; saves of one plugin run one at a time, each over what the previous
+  one stored, and a value the config schema rejects fails that save with a
+  `PluginBridgeError` (code `plugin_config_invalid`) and stores nothing.
+  `subscribe(listener)` calls `listener` with the stored values after every
+  successful save of the plugin's config, through `save` or through 设置 › 插件,
+  and returns the unsubscribe function. A save through `host.config` refreshes
+  an open 设置 › 插件 page of that plugin.
+- **`host.assets.url(path)`** turns a local path the host handed to the plugin
+  (in a bridge or RPC response) into a URL for `<img src>` or CSS, exactly as
+  the host renders its own images. A path the host granted no access to yields
+  the host's placeholder URL rather than throwing. The background
+  `ctx.assets.url` resolves through the same host bridge
+  but answers `null` for such a path, because background code decides whether
+  to show something at all.
+
+The host store behind any of this (plugin enablement, feedback queue, registries,
+appearance preferences) stays private; accounts still arrive through the
+`account.detail` props and `host.ui`.
+
+### Test entry
+
+`@shiori/plugin-sdk/testing` remains development-only: it is not in the peer ABI
+or the import map, and production renderer code must not import it. It provides:
+
+| Export | Use |
+| --- | --- |
+| `mountTestComponent(node, { windowGlobals })`, `changeInputValue`, `mockableWindowTimers` | a happy-dom DOM harness: each mount installs a fresh window as the global DOM and `cleanup()` restores the previous globals |
+| `chooseSelectOption(label, optionLabel, index?)` | picks an option of the SDK `Select` through its visible trigger and a real pointer event |
+| `deferred()` | a promise the test settles on demand |
+| `createFakeHostServices(options)` | in-memory `PluginHostServices` whose calls can be asserted: `host` (pass as the prop or to the Provider), `calls` (every service call in order), `feedback` (the toasts), `uiRenders` (the props of each `host.ui` render), `config()` (the stored config), `emit(event)` (delivers a bridge event to `onEvent` listeners) and `accountDetailActionsZone()` (where `host.ui.AccountDetailActions` render). Options answer `listRoles`, `pickImages`, `pickFiles`, the initial `config`, `saveConfig` and `assetUrl` |
+
+The fake `host.ui` components are plain stand-ins: they render the text, buttons,
+disabled/busy state and ARIA roles of their contract, and the account status card
+uses the host's status wording, but they have no host styling, motion or 吟风;
+assert a `persona` on the recorded props instead. The harness relies on Base UI
+settling its DOM detection before the first mount; the desktop unit test loader
+(`apps/desktop/scripts/test-unit-loader.mjs`) does this for every test process.
 
 ## Renderer artifacts and dependencies
 

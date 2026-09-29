@@ -36,5 +36,8 @@ test("every peer in the ABI is installed, and the SDK export list matches the ho
     assert.equal(imports["@shiori/plugin-sdk"], "shiori-plugin://host/@shiori/plugin-sdk.mjs");
     // The test entry is development-only and never a runtime peer.
     assert.equal(Object.keys(imports).some((name) => name.startsWith("@shiori/plugin-sdk/")), false);
+    const testingExports = Object.keys(await import("@shiori/plugin-sdk/testing"));
+    assert.ok(testingExports.includes("createFakeHostServices"));
+    assert.deepEqual(testingExports.filter((name) => pluginUiPeerExports["@shiori/plugin-sdk"].includes(name)), []);
   } finally { await view.cleanup(); }
 });

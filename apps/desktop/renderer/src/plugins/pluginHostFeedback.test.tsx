@@ -7,7 +7,7 @@ import { getFeedbackSnapshot, resetFeedback } from "../shared/feedback/feedbackS
 import { mountTestComponent } from "../shared/testing/domTestHarness";
 import { resetAppearancePrefsCache } from "../shared/useAppearancePrefs";
 import { pluginHostFeedback } from "./pluginHostFeedback";
-import { desktopPluginHostServices } from "./pluginHostServices";
+import { pluginHostServicesFor } from "./pluginHostServices";
 import { feedbackPersonaCue } from "../shared/mascot/mascotFeedback";
 import { personaSceneLines } from "../shared/mascot/mascotLines";
 
@@ -26,7 +26,7 @@ async function mountWithMascot(mascot: boolean) {
 
 describe("plugin host feedback (runtime API 2.4.0)", () => {
   it("is what the host services hand to plugins", () => {
-    assert.equal(desktopPluginHostServices.feedback, pluginHostFeedback);
+    assert.equal(pluginHostServicesFor("demo").feedback, pluginHostFeedback);
   });
 
   it("queues plain toasts unless the plugin opts in, then applies the host's rule per tone", () => {

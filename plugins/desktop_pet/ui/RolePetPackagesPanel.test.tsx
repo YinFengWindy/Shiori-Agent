@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import { act } from "react";
 import { PluginHostServicesProvider } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
-import { desktopPluginHostServices, type PluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { pluginHostServicesFor, type PluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import { RolePetPackagesPanel as PetPackagesPanel } from "./RolePetPackagesPanel";
 import type { PluginRoleAssetsComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
 import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
 import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 
 function RolePetPackagesPanel({ pickFiles = async () => [], ...props }: Omit<PluginRoleAssetsComponentProps, "host"> & { pickFiles?: PluginHostServices["pickFiles"] }) {
-  return <PluginHostServicesProvider services={{ ...desktopPluginHostServices, pickFiles }}>
+  return <PluginHostServicesProvider services={{ ...pluginHostServicesFor("desktop_pet"), pickFiles }}>
     <PetPackagesPanel {...props} />
   </PluginHostServicesProvider>;
 }

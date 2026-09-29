@@ -57,6 +57,8 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     // Runtime API 2.9.0: components and icons.
     "ActionMenu", "AutosizeTextarea", "RoleCapabilityCard", "Select", "SettingsToggleCard",
     "UploadIcon", "PetalIcon", "SparkleIcon", "navMotifs", "withMotif",
+    // Runtime API 2.10.0 (#505): the host services context.
+    "PluginHostServicesProvider", "usePluginHostServices",
   ],
 };
 

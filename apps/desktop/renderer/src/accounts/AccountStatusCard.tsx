@@ -4,15 +4,12 @@ import { InlineError } from "../shared/feedback/InlineError";
 import { SpinnerIcon } from "../shared/icons";
 import { cardClass, compactGhostButtonClass, compactPrimaryButtonClass, cx } from "../shared/styles";
 import { Reveal } from "../shared/ui/Reveal";
-import {
-  accountStatusView, pendingAccountStatus, type AccountPendingAction,
-} from "./accountPresentation";
+import { accountCardActionLabels, accountCardView } from "@shiori/plugin-sdk/host-internal";
+import type { AccountPendingAction } from "./accountPresentation";
 import { AccountStatusDot } from "./AccountStatusDot";
 
 /** The card's props contract is owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
 export type { AccountStatusCardAction, AccountStatusCardProps };
-
-const actionLabels = { connect: "连接", disconnect: "断开连接" } as const;
 
 /**
  * One account's connection at a glance, the same for every channel: status
@@ -21,8 +18,8 @@ const actionLabels = { connect: "连接", disconnect: "断开连接" } as const;
  * The host's own failure report shows here too.
  */
 export function AccountStatusCard({ account, status, pending = null, detail, action, children }: AccountStatusCardProps) {
-  const shown = pending ? pendingAccountStatus(pending) : status ?? (account ? accountStatusView(account) : { label: "未连接", tone: "muted" as const });
-  const failure = !pending && account?.connection === "error" ? account.error : "";
+  // The wording is the SDK's, shared with the testing entry's stand-in card.
+  const { status: shown, failure } = accountCardView({ account, status, pending });
   return <section className={cx(cardClass, "p-4")} aria-label="连接状态">
     <div className="flex items-center justify-between gap-3">
       <div className="grid min-w-0" aria-live="polite">
@@ -44,6 +41,6 @@ function AccountStatusCardButton({ action, pending }: { action: AccountStatusCar
     {acting
       ? <SpinnerIcon className="h-4 w-4 animate-spin stroke-current motion-reduce:animate-none" />
       : <Icon className="h-4 w-4" aria-hidden="true" />}
-    {actionLabels[action.kind]}
+    {accountCardActionLabels[action.kind]}
   </button>;
 }

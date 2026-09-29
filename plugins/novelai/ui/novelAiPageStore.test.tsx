@@ -1,4 +1,4 @@
-import { desktopPluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
@@ -93,18 +93,18 @@ describe("novelAiPageStore (issue #226 gap A's 'real complication')", () => {
     const originalWindow = (globalThis as { window?: { miraDesktop?: unknown } }).window;
     try {
       (globalThis as { window?: { miraDesktop?: unknown } }).window = { miraDesktop: fakeMiraDesktop([]) };
-      assert.equal(selectBlockedReasonForNovelAiPage(desktopPluginHostServices), null, "must fail open before the roster is known");
-      await refreshRoles(desktopPluginHostServices);
+      assert.equal(selectBlockedReasonForNovelAiPage(pluginHostServicesFor("novelai")), null, "must fail open before the roster is known");
+      await refreshRoles(pluginHostServicesFor("novelai"));
       assert.equal(
-        selectBlockedReasonForNovelAiPage(desktopPluginHostServices),
+        selectBlockedReasonForNovelAiPage(pluginHostServicesFor("novelai")),
         "请先创建至少一个角色，再进入生图。",
         "zero roles once loaded must block navigation with the pre-migration message, verbatim",
       );
 
       resetNovelAiPageStoreForTests();
       (globalThis as { window?: { miraDesktop?: unknown } }).window = { miraDesktop: fakeMiraDesktop([{ id: "role-1", name: "Ada" }]) };
-      await refreshRoles(desktopPluginHostServices);
-      assert.equal(selectBlockedReasonForNovelAiPage(desktopPluginHostServices), null, "a non-empty roster must allow navigation");
+      await refreshRoles(pluginHostServicesFor("novelai"));
+      assert.equal(selectBlockedReasonForNovelAiPage(pluginHostServicesFor("novelai")), null, "a non-empty roster must allow navigation");
     } finally {
       (globalThis as { window?: unknown }).window = originalWindow;
       resetNovelAiPageStoreForTests();

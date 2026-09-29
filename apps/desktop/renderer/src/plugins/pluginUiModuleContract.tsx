@@ -1,8 +1,7 @@
 import type React from "react";
-import type { PluginInjectedProps, PluginUiModule } from "@shiori/plugin-sdk";
+import { PluginHostServicesProvider, type PluginInjectedProps, type PluginUiModule } from "@shiori/plugin-sdk";
 import { usePluginRpcClient } from "./usePluginRpcClient";
-import { PluginHostServicesProvider } from "./PluginHostServicesProvider";
-import { desktopPluginHostServices } from "./pluginHostServices";
+import { pluginHostServicesFor } from "./pluginHostServices";
 import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { createPluginSchemaSettingsSection } from "./pluginSchemaSettingsSectionFactory";
 import { retiredPluginUiContribution } from "./runtimePluginUiValidation";
@@ -30,17 +29,21 @@ function isPluginUiModule(value: unknown): value is PluginUiModule {
 }
 
 /**
- * Injects mount-scoped clients and host services into contributed components.
+ * Injects mount-scoped clients and the plugin's host services into
+ * contributed components, both as the `host` prop and through the SDK's
+ * `PluginHostServicesProvider` (the one context instance plugins read with
+ * `usePluginHostServices`, #505).
  * Namespace binding expresses cooperation; it is not a same-realm sandbox.
  */
 function bindPluginClient<TBaseProps extends object>(
   pluginId: string,
   Component: React.ComponentType<TBaseProps & PluginInjectedProps>,
 ): React.ComponentType<TBaseProps> {
+  const host = pluginHostServicesFor(pluginId);
   return function PluginClientBoundComponent(props: TBaseProps) {
     const client = usePluginRpcClient(pluginId);
-    return <PluginHostServicesProvider services={desktopPluginHostServices}>
-      <Component {...props} client={client} host={desktopPluginHostServices} />
+    return <PluginHostServicesProvider services={host}>
+      <Component {...props} client={client} host={host} />
     </PluginHostServicesProvider>;
   };
 }
@@ -120,7 +123,7 @@ export function applyPluginUiModules(
         pluginId,
         Component: bindPluginClient(pluginId, navPage.component),
         Sidebar: navPage.sidebar ? bindPluginClient(pluginId, navPage.sidebar) : undefined,
-        selectBlockedReason: navPage.selectBlockedReason ? () => navPage.selectBlockedReason!(desktopPluginHostServices) : undefined,
+        selectBlockedReason: navPage.selectBlockedReason ? () => navPage.selectBlockedReason!(pluginHostServicesFor(pluginId)) : undefined,
       });
     }
   }

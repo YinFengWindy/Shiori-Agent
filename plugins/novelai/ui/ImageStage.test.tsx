@@ -4,7 +4,7 @@ import type React from "react";
 import { act } from "react";
 import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
 import { PluginHostServicesProvider } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
-import { desktopPluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import { appearancePrefsStorageKey } from "../../../apps/desktop/renderer/src/shared/appearancePrefs";
 import { resetAppearancePrefsCache } from "../../../apps/desktop/renderer/src/shared/useAppearancePrefs";
 import { ImageStage } from "./ImageStage";
@@ -22,7 +22,7 @@ async function mountStage(element: React.ReactElement, { mascot = true } = {}) {
   Object.defineProperty(window, "miraDesktop", { configurable: true, value: { localAssetUrl: (path: string) => `asset://${path}` } });
   resetAppearancePrefsCache();
   window.localStorage.setItem(appearancePrefsStorageKey, JSON.stringify({ version: 1, backdropMotion: true, mascot }));
-  await view.render(<PluginHostServicesProvider services={desktopPluginHostServices}>{element}</PluginHostServicesProvider>);
+  await view.render(<PluginHostServicesProvider services={pluginHostServicesFor("novelai")}>{element}</PluginHostServicesProvider>);
   return view;
 }
 

@@ -1,9 +1,8 @@
-// The implementation lives in @shiori/plugin-sdk; this test moves next to it once #505's testing entry provides the DOM harness.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { deferred } from "../shared/testing/deferred";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { deferred } from "../testing/deferred";
+import { mountTestComponent } from "../testing/domTestHarness";
 import { useAccountAction } from "./useAccountAction";
 
 test("account action names the command in flight, refreshes only after success and clears retry errors", async () => {
