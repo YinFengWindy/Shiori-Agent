@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from agent.prompting import PromptSectionMeta, PromptSectionRender, SectionCache
-from core.memory.markdown_schema import select_memory_sections
+from core.memory.markdown_schema import (
+    SELF_PERSONA_SECTION,
+    SELF_RELATIONSHIP_SECTION,
+    select_memory_sections,
+)
 from prompts.agent import (
     build_agent_behavior_rules_prompt,
     build_agent_session_context_prompt,
@@ -46,7 +50,7 @@ def is_external_turn(ctx: TurnContext) -> bool:
 
 # 外部回合可见的 SELF.md 段落：角色自己的形象，以及用户名片（关系定位与称呼）。
 # 「我对你的理解」写的是对用户的理解，只在用户上下文注入。
-EXTERNAL_SELF_SECTIONS = ("## 我的性格与形象", "## 我们的关系")
+EXTERNAL_SELF_SECTIONS = (SELF_PERSONA_SECTION, SELF_RELATIONSHIP_SECTION)
 
 
 class PromptBlock(Protocol):

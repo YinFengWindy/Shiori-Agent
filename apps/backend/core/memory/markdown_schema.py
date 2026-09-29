@@ -41,11 +41,16 @@ DOCUMENT_DEFAULTS = {
     "PENDING.md": "# 待整理的记忆\n",
 }
 
+# SELF.md 的三个规范段落标题。
+SELF_PERSONA_SECTION = "## 我的性格与形象"
+SELF_UNDERSTANDING_SECTION = "## 我对你的理解"
+SELF_RELATIONSHIP_SECTION = "## 我们的关系"
+
 DOCUMENT_SECTIONS = {
     "SELF.md": (
-        "## 我的性格与形象",
-        "## 我对你的理解",
-        "## 我们的关系",
+        SELF_PERSONA_SECTION,
+        SELF_UNDERSTANDING_SECTION,
+        SELF_RELATIONSHIP_SECTION,
     ),
     "MEMORY.md": (
         "## 关于你",

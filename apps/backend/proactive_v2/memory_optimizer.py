@@ -318,14 +318,15 @@ class MemoryOptimizer:
             default_store=self._memory,
             role_id=clean_role_id,
         )
-        role = RoleStore(self._workspace).get_role(clean_role_id)
+        role_store = RoleStore(self._workspace)
+        role = role_store.get_role(clean_role_id)
         rewrite_self = False
         if role is not None and self_rewrite_pending(role.memory_init_state):
             seed = resolve_self_seed_state(role, memory_store.read_self())
             if seed["status"] == "pending":
                 # 还没生成首版 SELF 的角色只有默认模板，没有需要按新规则整理的内容；
                 # 此时改写 SELF 还会让首版生成误判为用户编辑而放弃。
-                self._mark_self_rewritten(clean_role_id)
+                self._mark_self_rewritten(role_store, clean_role_id)
             else:
                 rewrite_self = True
         # ── Step 1: MEMORY.md 合并 ────────────────────────────────
@@ -344,7 +345,7 @@ class MemoryOptimizer:
                 model=active_model,
                 rewrite=True,
             ):
-                self._mark_self_rewritten(clean_role_id)
+                self._mark_self_rewritten(role_store, clean_role_id)
             return
 
         merged_memory = await self._merge_memory(
@@ -384,8 +385,8 @@ class MemoryOptimizer:
             rewrite=rewrite_self,
         )
         if rewrite_self and self_written:
-            self._mark_self_rewritten(clean_role_id)
-        self._mark_role_optimized(clean_role_id)
+            self._mark_self_rewritten(role_store, clean_role_id)
+        self._mark_role_optimized(role_store, clean_role_id)
 
     async def _merge_memory(
         self,
@@ -471,29 +472,39 @@ class MemoryOptimizer:
         )
         return (resp.content or "").strip()
 
-    def _mark_self_rewritten(self, role_id: str) -> None:
+    @staticmethod
+    def _mark_self_rewritten(store: RoleStore, role_id: str) -> None:
         """记下角色 SELF.md 已按当前写入规则重写，之后不再触发一次性重写。"""
-        store = RoleStore(self._workspace)
+        _set_role_memory_state(
+            store, role_id, _SELF_RULES_VERSION_STATE_KEY, SELF_RULES_VERSION
+        )
+
+    @staticmethod
+    def _mark_role_optimized(store: RoleStore, role_id: str) -> None:
+        """记下角色本次优化完成的时间，供启动补跑判断是否过期。"""
+        _set_role_memory_state(
+            store,
+            role_id,
+            _LAST_OPTIMIZED_STATE_KEY,
+            datetime.now().astimezone().isoformat(),
+        )
+
+
+def _set_role_memory_state(
+    store: RoleStore, role_id: str, key: str, value: object
+) -> None:
+    """在角色 ``memory_init_state`` 里写入一个键；角色已不存在时不写。
+
+    优化期间要等待模型调用，其他流程（如 SELF 首版生成）可能已改写同一份状态，
+    所以写入前在存储锁内重新读取角色，只改这一个键。
+    """
+    with store.lock:
         role = store.get_role(role_id)
         if role is None:
             return
-        next_state = dict(role.memory_init_state or {})
-        next_state[_SELF_RULES_VERSION_STATE_KEY] = SELF_RULES_VERSION
-        _ = store.update_role(role_id, memory_init_state=next_state)
-
-    def _mark_role_optimized(self, role_id: str) -> None:
-        clean_role_id = str(role_id or "").strip()
-        if not clean_role_id:
-            return
-        store = RoleStore(self._workspace)
-        role = store.get_role(clean_role_id)
-        if role is None:
-            return
-        next_state = dict(role.memory_init_state or {})
-        next_state[_LAST_OPTIMIZED_STATE_KEY] = datetime.now().astimezone().isoformat()
-        if next_state == role.memory_init_state:
-            return
-        store.update_role(clean_role_id, memory_init_state=next_state)
+        next_state: dict[str, object] = {**role.memory_init_state, key: value}
+        if next_state != role.memory_init_state:
+            _ = store.update_role(role_id, memory_init_state=next_state)
 
 
 # ── MemoryOptimizerLoop ───────────────────────────────────────────
