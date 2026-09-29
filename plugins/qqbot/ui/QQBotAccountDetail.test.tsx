@@ -3,7 +3,7 @@ import { it } from "node:test";
 import { act } from "react";
 import type { AccountSnapshot } from "../../../apps/desktop/renderer/src/accounts/accountClient";
 import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { desktopPluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import { changeInputValue, mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
 import { QQBotAccountDetail } from "./QQBotAccountDetail";
 
@@ -22,7 +22,7 @@ function fakeClient(calls: Array<{ method: string; payload: Record<string, unkno
 it("keeps credential edits local until Save and Connect", async () => {
   const calls: Array<{ method: string; payload: Record<string, unknown> | undefined }> = [];
   const changed: string[] = [];
-  const view = await mountTestComponent(<QQBotAccountDetail account={null} roleId="mira" onChanged={(id) => { if (id) changed.push(id); }} client={fakeClient(calls)} host={desktopPluginHostServices} />);
+  const view = await mountTestComponent(<QQBotAccountDetail account={null} roleId="mira" onChanged={(id) => { if (id) changed.push(id); }} client={fakeClient(calls)} host={pluginHostServicesFor("qqbot")} />);
   try {
     const [appId, secret] = Array.from(view.container.querySelectorAll("input"));
     await changeInputValue(appId, "100");
@@ -39,7 +39,7 @@ it("keeps credential edits local until Save and Connect", async () => {
 it("labels observed C2C targets as application scoped OpenIDs", async () => {
   const calls: Array<{ method: string; payload: Record<string, unknown> | undefined }> = [];
   const account = { id: "100", platformAccountId: "100", displayName: "Bot One" } as AccountSnapshot;
-  const view = await mountTestComponent(<QQBotAccountDetail account={account} roleId="mira" onChanged={() => undefined} client={fakeClient(calls)} host={desktopPluginHostServices} />);
+  const view = await mountTestComponent(<QQBotAccountDetail account={account} roleId="mira" onChanged={() => undefined} client={fakeClient(calls)} host={pluginHostServicesFor("qqbot")} />);
   try {
     await act(async () => { await Promise.resolve(); });
     assert.match(view.container.textContent, /已交互 C2C 用户/);
@@ -53,7 +53,7 @@ it("labels observed C2C targets as application scoped OpenIDs", async () => {
 it("restores disconnect control after reconnecting in the same detail", async () => {
   const calls: Array<{ method: string; payload: Record<string, unknown> | undefined }> = [];
   const account = { id: "100", platformAccountId: "100", displayName: "Bot One" } as AccountSnapshot;
-  const view = await mountTestComponent(<QQBotAccountDetail account={account} roleId="mira" onChanged={() => undefined} client={fakeClient(calls)} host={desktopPluginHostServices} />);
+  const view = await mountTestComponent(<QQBotAccountDetail account={account} roleId="mira" onChanged={() => undefined} client={fakeClient(calls)} host={pluginHostServicesFor("qqbot")} />);
   try {
     await act(async () => { await Promise.resolve(); });
     const disconnect = () => Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "断开连接");

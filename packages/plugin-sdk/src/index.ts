@@ -15,7 +15,7 @@
 export { BridgeError, PluginBridgeError } from "./errors";
 export type { BridgeEvent, PluginBackgroundHandler, PluginEventHandler, PluginPeer, PluginRpcClient } from "./rpc";
 
-// Everything below: runtime API 2.9.0 (#504).
+// From here to the 2.10.0 block at the end: runtime API 2.9.0 (#504).
 
 // Pure helpers and hooks.
 export { errorMessage } from "./errors";
@@ -107,7 +107,12 @@ export type {
   RevealProps,
 } from "./contract/hostUi";
 export type { NativeFilePickerOptions } from "./contract/filePicker";
-export type { PluginHostServices } from "./contract/hostServices";
+export type {
+  PluginConfigValues,
+  PluginHostAssets,
+  PluginHostConfig,
+  PluginHostServices,
+} from "./contract/hostServices";
 export type {
   PluginAccountDetailProps,
   PluginNavPageProps,
@@ -135,3 +140,8 @@ export type {
   PluginSettingsSectionContribution,
   PluginUiModule,
 } from "./contract/uiModule";
+
+// Runtime API 2.10.0 (#505): the host services context. One instance for host
+// and plugins, so a component anywhere below a mounted contribution reads the
+// services that contribution was injected with.
+export { PluginHostServicesProvider, usePluginHostServices } from "./hostServicesContext";

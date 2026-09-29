@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import { PluginHostServicesProvider } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
-import { desktopPluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import { PromptTagLibraryPage } from "./PromptTagLibraryPage";
 
 const noopClient: PluginRpcClient = { ...createPluginRpcClient("fixture"), call: async <T,>() => ({} as T) };
@@ -12,7 +12,7 @@ const noopClient: PluginRpcClient = { ...createPluginRpcClient("fixture"), call:
 describe("PromptTagLibraryPage", () => {
   it("renders the tag library inside its dedicated page", () => {
     const markup = renderToStaticMarkup(
-      <PluginHostServicesProvider services={desktopPluginHostServices}>
+      <PluginHostServicesProvider services={pluginHostServicesFor("novelai")}>
         <PromptTagLibraryPage
           client={noopClient}
           bridgeReady={false}

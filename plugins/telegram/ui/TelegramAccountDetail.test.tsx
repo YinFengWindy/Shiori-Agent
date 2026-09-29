@@ -4,7 +4,7 @@ import { act } from "react";
 import { changeInputValue, mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
 import type { AccountSnapshot } from "../../../apps/desktop/renderer/src/accounts/accountClient";
 import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { desktopPluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import { TelegramAccountDetail } from "./TelegramAccountDetail";
 
 const account: AccountSnapshot = {
@@ -35,7 +35,7 @@ test("a new Bot is saved for the role through the plugin, and a failure stays in
   let changedId = "";
   const view = await mountTestComponent(
     <TelegramAccountDetail account={null} roleId="mira" onChanged={(id) => { changedId = id ?? ""; }}
-      client={rpc(calls, () => failing)} host={desktopPluginHostServices} />,
+      client={rpc(calls, () => failing)} host={pluginHostServicesFor("telegram")} />,
   );
   try {
     const input = view.container.querySelector<HTMLInputElement>('input[type="password"]');
@@ -57,7 +57,7 @@ test("a connected Bot is disconnected, an offline one reconnects without a new T
   const calls: Call[] = [];
   const online = await mountTestComponent(
     <TelegramAccountDetail account={account} roleId="mira" onChanged={() => undefined}
-      client={rpc(calls)} host={desktopPluginHostServices} />,
+      client={rpc(calls)} host={pluginHostServicesFor("telegram")} />,
   );
   try {
     await act(async () => button(online.container, "断开连接")?.click());
@@ -67,7 +67,7 @@ test("a connected Bot is disconnected, an offline one reconnects without a new T
   }
   const offline = await mountTestComponent(
     <TelegramAccountDetail account={{ ...account, connection: "offline" }} roleId="mira" onChanged={() => undefined}
-      client={rpc(calls)} host={desktopPluginHostServices} />,
+      client={rpc(calls)} host={pluginHostServicesFor("telegram")} />,
   );
   try {
     await act(async () => button(offline.container, "连接")?.click());

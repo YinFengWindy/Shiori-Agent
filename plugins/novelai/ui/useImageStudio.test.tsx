@@ -4,7 +4,7 @@ import { act } from "react";
 import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import { pluginHostFeedback } from "../../../apps/desktop/renderer/src/plugins/pluginHostFeedback";
 import { PluginHostServicesProvider } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
-import { desktopPluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import { BridgeError } from "../../../apps/desktop/renderer/src/shared/bridgeInvoke";
 import { getFeedbackSnapshot, resetFeedback } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
 import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
@@ -54,7 +54,7 @@ describe("useImageStudio submit", () => {
       submit = useImageStudio(client, "rin").submit;
       return null;
     }
-    await view.render(<PluginHostServicesProvider services={desktopPluginHostServices}><Probe /></PluginHostServicesProvider>);
+    await view.render(<PluginHostServicesProvider services={pluginHostServicesFor("novelai")}><Probe /></PluginHostServicesProvider>);
     return { view, fail, submit: () => submit() };
   }
 

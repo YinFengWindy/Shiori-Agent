@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SerialDraftQueue, type DraftSavePhase } from "../shared/serialDraftQueue";
 import { PluginBridgeError, createPluginBridgeClient, type PluginConfigSaveResult, type PluginConfigSnapshot } from "./pluginBridgeClient";
+import { pluginConfigChanges } from "./pluginConfigChanges";
 
 type PluginConfigValues = Record<string, unknown>;
 
@@ -26,6 +27,10 @@ function valuesEqual(a: PluginConfigValues | null, b: PluginConfigValues | null)
  * in the main settings draft's optimistic-concurrency tracking (a
  * concurrent save there and here that touch unrelated tables coexist
  * safely; see `desktop_bridge/runtime/plugin_config.py`).
+ *
+ * Shares `pluginConfigChanges` with the plugin's own `host.config` (#505):
+ * each applied save is published there, and a save the plugin made itself
+ * reloads this page's state.
  */
 export function usePluginConfigController(pluginId: string) {
   const [snapshot, setSnapshot] = useState<PluginConfigSnapshot | null>(null);
@@ -35,6 +40,8 @@ export function usePluginConfigController(pluginId: string) {
   const [statusMessage, setStatusMessage] = useState("");
   const loadRequestIdRef = useRef(0);
   const client = useMemo(() => createPluginBridgeClient(), []);
+  // This controller's identity on the change channel, to tell its own saves from the plugin's.
+  const [origin] = useState(() => ({}));
 
   const [queue] = useState(() => new SerialDraftQueue<PluginConfigValues, PluginConfigSaveResult>({
     isEqual: valuesEqual,
@@ -55,6 +62,7 @@ export function usePluginConfigController(pluginId: string) {
       }
     },
     onApplied: (result) => {
+      pluginConfigChanges.publish(pluginId, result.values, origin);
       setSnapshot((current) => (current ? { ...current, values: result.values, envStatus: result.envStatus } : current));
       setDraft(cloneValues(result.values));
     },
@@ -82,6 +90,10 @@ export function usePluginConfigController(pluginId: string) {
   }, [client, pluginId, queue]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => pluginConfigChanges.subscribe(pluginId, (_values, from) => {
+    // Reload rather than adopt the values: the snapshot also carries env status.
+    if (from !== origin) void load();
+  }), [load, origin, pluginId]);
   useEffect(() => () => { loadRequestIdRef.current += 1; }, []);
   useEffect(() => {
     if (snapshot && draft) queue.enqueue(draft, snapshot.values);

@@ -7,12 +7,12 @@ import { resetAppearancePrefsCache } from "../shared/useAppearancePrefs";
 
 let HostInlineError: typeof import("./pluginHostUi").HostInlineError;
 let HostConfirmDialog: typeof import("./pluginHostUi").HostConfirmDialog;
-let desktopPluginHostServices: typeof import("./pluginHostServices").desktopPluginHostServices;
+let pluginHostServicesFor: typeof import("./pluginHostServices").pluginHostServicesFor;
 before(async () => {
   // Base UI's dialog needs a DOM before it is imported (so do the host services, which import it).
   const view = await mountTestComponent(null);
   ({ HostInlineError, HostConfirmDialog } = await import("./pluginHostUi"));
-  ({ desktopPluginHostServices } = await import("./pluginHostServices"));
+  ({ pluginHostServicesFor } = await import("./pluginHostServices"));
   await view.cleanup();
 });
 
@@ -30,10 +30,11 @@ const noop = () => undefined;
 
 describe("plugin host UI (runtime API 2.4.0)", () => {
   it("is what the host services hand to plugins", () => {
-    assert.equal(desktopPluginHostServices.ui.InlineError, HostInlineError);
-    assert.equal(desktopPluginHostServices.ui.ConfirmDialog, HostConfirmDialog);
+    const { ui } = pluginHostServicesFor("demo");
+    assert.equal(ui.InlineError, HostInlineError);
+    assert.equal(ui.ConfirmDialog, HostConfirmDialog);
     // The shared account detail pieces every channel's account.detail renders.
-    assert.deepEqual(Object.keys(desktopPluginHostServices.ui).sort(),
+    assert.deepEqual(Object.keys(ui).sort(),
       ["AccountDetailActions", "AccountStatusCard", "ConfirmDialog", "InlineError", "Reveal"]);
   });
 

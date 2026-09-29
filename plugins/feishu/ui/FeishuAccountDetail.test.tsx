@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import { act } from "react";
 import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { desktopPluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import type { AccountSnapshot } from "../../../apps/desktop/renderer/src/accounts/accountClient";
 import { changeInputValue, mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
 import { FeishuAccountDetail } from "./FeishuAccountDetail";
@@ -32,7 +32,7 @@ it("saves a new app for the adding role through the plugin and shows a refusal",
   const client = createPluginRpcClient("feishu", invoke);
   let created = "";
   const view = await mountTestComponent(
-    <FeishuAccountDetail account={null} roleId="mira" onChanged={(id) => { created = id ?? ""; }} client={client} host={desktopPluginHostServices} />,
+    <FeishuAccountDetail account={null} roleId="mira" onChanged={(id) => { created = id ?? ""; }} client={client} host={pluginHostServicesFor("feishu")} />,
     { windowGlobals: { miraDesktop: { invoke, onEvent: () => () => undefined } } },
   );
   try {
@@ -73,7 +73,7 @@ it("disconnects an online app through the plugin", async () => {
     responseRules: { privateEnabled: true, groupEnabled: false, requireMention: false, blockedSenderIds: [] },
   };
   const view = await mountTestComponent(
-    <FeishuAccountDetail account={account} roleId="mira" onChanged={() => undefined} client={client} host={desktopPluginHostServices} />,
+    <FeishuAccountDetail account={account} roleId="mira" onChanged={() => undefined} client={client} host={pluginHostServicesFor("feishu")} />,
     { windowGlobals: { miraDesktop: { invoke, onEvent: () => () => undefined } } },
   );
   try {

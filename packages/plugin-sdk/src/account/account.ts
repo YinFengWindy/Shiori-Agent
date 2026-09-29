@@ -44,3 +44,66 @@ export type AccountPendingAction = "connect" | "disconnect" | "logout";
 export function accountOnline(account: Pick<AccountSnapshot, "runtimeActive" | "connection"> | null) {
   return Boolean(account?.runtimeActive && account.connection === "online");
 }
+
+/*
+ * The host's own status wording, used by its account list and status card and
+ * by the testing entry's stand-in card. Host-only (`@shiori/plugin-sdk/host-internal`):
+ * plugins get it rendered through `host.ui.AccountStatusCard`, never as text.
+ */
+
+/** An account its plugin is not running cannot be shown online. */
+export function accountStatus(account: Pick<AccountSnapshot, "runtimeActive" | "connection">) {
+  if (!account.runtimeActive) return "离线";
+  switch (account.connection) {
+    case "online": return "在线";
+    case "connecting": return "连接中";
+    case "login_required": return "需要登录";
+    case "error": return "故障";
+    default: return "离线";
+  }
+}
+
+const connectionTones: Record<AccountSnapshot["connection"], AccountStatusTone> = {
+  online: "success",
+  connecting: "warning",
+  login_required: "warning",
+  error: "danger",
+  offline: "muted",
+  unknown: "muted",
+};
+
+/** The host's reading of an account's live report; a stopped plugin reads as offline. */
+export function accountStatusView(account: Pick<AccountSnapshot, "runtimeActive" | "connection">): AccountStatusView {
+  return {
+    label: accountStatus(account),
+    tone: connectionTones[account.runtimeActive ? account.connection : "offline"] ?? "muted",
+  };
+}
+
+const pendingLabels: Record<AccountPendingAction, string> = {
+  connect: "正在连接",
+  disconnect: "正在断开",
+  logout: "正在退出",
+};
+
+/** Status shown while a connect, disconnect or logout request is still in flight. */
+export function pendingAccountStatus(action: AccountPendingAction): AccountStatusView {
+  return { label: pendingLabels[action], tone: "warning" };
+}
+
+/** Labels of the account status card's one button. */
+export const accountCardActionLabels: Record<"connect" | "disconnect", string> = { connect: "连接", disconnect: "断开连接" };
+
+/**
+ * What the account status card shows: a request in flight first, then the
+ * plugin's own status, then the host's reading of the account; and the
+ * account's failure report while no request is in flight.
+ */
+export function accountCardView({ account, status, pending }: {
+  account: AccountSnapshot | null;
+  status?: AccountStatusView;
+  pending: AccountPendingAction | null;
+}): { status: AccountStatusView; failure: string } {
+  const shown = pending ? pendingAccountStatus(pending) : status ?? (account ? accountStatusView(account) : { label: "未连接", tone: "muted" as const });
+  return { status: shown, failure: !pending && account?.connection === "error" ? account.error : "" };
+}
