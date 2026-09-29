@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from agent.turns.desktop_pushes import DesktopPushDrafts
     from agent.core.response_parser import ResponseMetadata
     from agent.core.runtime_support import SessionLike, TurnRunResult
+    from agent.core.types import HistoryMessage
     from conversation.context_scope import ContextScope, ContextView
 
 
@@ -57,9 +58,9 @@ class BeforeTurnCtx:
     timestamp: datetime
     retrieved_memory_block: str
     retrieval_trace_raw: object | None
-    history_messages: tuple[Any, ...]
+    history_messages: tuple[HistoryMessage, ...]
     # 回合所在的上下文（用户 / 外部），取自 TurnState.context_scope；非角色共享会话为 None。
-    context_scope: ContextScope | None = None
+    context_scope: ContextScope | None
     # writable
     skill_names: list[str] = field(default_factory=_empty_str_list)
     abort: bool = False

@@ -483,6 +483,7 @@ async def test_external_turn_committed_broadcasts_role_session_once(tmp_path) ->
             session_key="role:other",
             channel="telegram",
             role_id="mira",
+            thread_id="thread:mira:telegram:1",
         )
     )
     assert len(emitted) == 1
@@ -556,6 +557,7 @@ async def test_external_proactive_media_commit_broadcasts_role_session(
             session_key="role:mira",
             channel="telegram",
             role_id="mira",
+            thread_id="thread:mira:telegram:1",
         )
     )
 
@@ -568,6 +570,7 @@ async def test_external_proactive_media_commit_broadcasts_role_session(
             session_key="role:mira",
             channel="desktop",
             role_id="mira",
+            thread_id="thread:mira:desktop",
         )
     )
     assert len(emitted) == 2

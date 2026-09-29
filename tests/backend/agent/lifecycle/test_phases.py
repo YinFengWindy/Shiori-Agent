@@ -16,7 +16,7 @@ from agent.core.passive_support import build_context_hint_message
 from agent.core.passive_turn import ContextStore
 from agent.core.response_parser import ResponseMetadata
 from agent.core.runtime_support import TurnRunResult
-from agent.core.types import ContextBundle
+from agent.core.types import ContextBundle, HistoryMessage
 from agent.lifecycle.phase import Phase
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
@@ -107,6 +107,7 @@ class _MemoryStatusPluginModule:
             retrieved_memory_block="",
             retrieval_trace_raw=None,
             history_messages=(),
+            context_scope=None,
             abort=True,
             abort_reply=_format_memory_status_reply(messages, last),
         )
@@ -142,6 +143,7 @@ class _KVCachePluginModule:
             retrieved_memory_block="",
             retrieval_trace_raw=None,
             history_messages=(),
+            context_scope=None,
             abort=True,
             abort_reply=_build_kvcache_reply(state, self._db_path),
         )
@@ -294,7 +296,7 @@ async def test_before_turn_setup_fills_turn_state():
         skill_mentions=["search"],
         retrieved_memory_block="block_text",
         retrieval_trace_raw={"trace": 1},
-        history_messages=[{"role": "user", "content": "prev"}],
+        history_messages=[HistoryMessage(role="user", content="prev")],
     )
     ctx_store = SimpleNamespace(
         prepare=AsyncMock(return_value=bundle),
@@ -319,7 +321,7 @@ async def test_before_turn_setup_fills_turn_state():
     assert ctx.chat_id == "123"
     assert ctx.retrieved_memory_block == "block_text"
     assert ctx.retrieval_trace_raw == {"trace": 1}
-    assert ctx.history_messages == ({"role": "user", "content": "prev"},)
+    assert ctx.history_messages == (HistoryMessage(role="user", content="prev"),)
     assert ctx.abort is False
 
 
@@ -746,6 +748,7 @@ async def test_before_turn_accepts_custom_command_module():
                 retrieved_memory_block="",
                 retrieval_trace_raw=None,
                 history_messages=(),
+                context_scope=None,
                 abort=True,
                 abort_reply="debug ok",
             )
@@ -785,7 +788,7 @@ async def test_before_turn_accepts_plugin_modules():
         skill_mentions=["memo"],
         retrieved_memory_block="retrieved block",
         retrieval_trace_raw={"trace": 1},
-        history_messages=[{"role": "user", "content": "prev"}],
+        history_messages=[HistoryMessage(role="user", content="prev")],
     )
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=bundle))
     seen: list[str] = []
@@ -974,6 +977,7 @@ async def test_before_reasoning_setup_calls_tools_set_context():
         retrieved_memory_block="block",
         retrieval_trace_raw=None,
         history_messages=(),
+        context_scope=None,
         skill_names=["search"],
     )
 
@@ -1021,6 +1025,7 @@ async def test_before_reasoning_requires_session():
         retrieved_memory_block="",
         retrieval_trace_raw=None,
         history_messages=(),
+        context_scope=None,
     )
 
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
@@ -1066,6 +1071,7 @@ async def test_before_reasoning_finalize_calls_render():
         retrieved_memory_block="block",
         retrieval_trace_raw=None,
         history_messages=(),
+        context_scope=None,
         skill_names=["search"],
     )
 
@@ -1120,6 +1126,7 @@ async def test_before_reasoning_chain_can_add_extra_hints():
         retrieved_memory_block="",
         retrieval_trace_raw=None,
         history_messages=(),
+        context_scope=None,
         extra_hints=["hint from before turn"],
     )
 
@@ -1169,6 +1176,7 @@ async def test_before_reasoning_collects_export_slots():
         retrieved_memory_block="",
         retrieval_trace_raw=None,
         history_messages=(),
+        context_scope=None,
     )
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
     state.session = session
@@ -1220,6 +1228,7 @@ async def test_before_reasoning_chain_modify_skill_names_used_in_finalize_render
         retrieved_memory_block="original_block",
         retrieval_trace_raw=None,
         history_messages=(),
+        context_scope=None,
         skill_names=["base_skill"],
     )
 

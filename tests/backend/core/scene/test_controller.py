@@ -119,6 +119,7 @@ async def test_passive_turn_publishes_started_scene_and_persists_scene_key(
             retrieved_memory_block="",
             retrieval_trace_raw=None,
             history_messages=(),
+            context_scope="user",
         )
     )
     controller.schedule_passive_turn(
@@ -149,6 +150,7 @@ async def test_passive_turn_publishes_started_scene_and_persists_scene_key(
             retrieved_memory_block="",
             retrieval_trace_raw=None,
             history_messages=(),
+            context_scope="user",
         )
     )
     assert (
@@ -189,6 +191,7 @@ async def test_passive_turn_observes_reply_returned_by_desktop_bridge(
             retrieved_memory_block="",
             retrieval_trace_raw=None,
             history_messages=(),
+            context_scope="user",
         )
     )
     controller.schedule_passive_turn(
@@ -230,6 +233,7 @@ async def test_passive_turn_publishes_none_without_persisting_scene_key(
             retrieved_memory_block="",
             retrieval_trace_raw=None,
             history_messages=(),
+            context_scope="user",
         )
     )
     controller.schedule_passive_turn(
@@ -277,6 +281,7 @@ async def test_invalid_scene_protocol_does_not_publish_observation(
             retrieved_memory_block="",
             retrieval_trace_raw=None,
             history_messages=(),
+            context_scope="user",
         )
     )
     controller.schedule_passive_turn(

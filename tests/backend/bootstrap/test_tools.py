@@ -244,6 +244,7 @@ async def test_published_generation_keeps_before_turn_capture_until_old_after_tu
                     retrieved_memory_block="",
                     retrieval_trace_raw=None,
                     history_messages=(),
+                    context_scope=None,
                 )
             )
         candidate = await app.prepare(replace(config, dev_mode=True))

@@ -63,6 +63,7 @@ async def test_before_reasoning_syncs_session_key_and_role_id_into_tool_context(
         retrieved_memory_block="",
         retrieval_trace_raw=None,
         history_messages=(),
+        context_scope=None,
     )
 
     await phase.run(BeforeReasoningInput(state=state, before_turn=before_turn))

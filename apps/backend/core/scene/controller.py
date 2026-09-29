@@ -111,6 +111,9 @@ class SceneAwarenessController:
     def schedule_passive_turn(self, ctx: AfterTurnCtx) -> None:
         """Schedule scene observation for one completed passive role turn."""
 
+        # 这里不再判断上下文：外部回合开始时 capture_passive_turn 已 pop 掉同一会话
+        # 残留的 pending，而角色回合由 turn_lock 串行执行，取到的 pending 只会属于
+        # 本回合，不会来自外部上下文。
         pending = self._pending_turns.pop(ctx.session_key, None)
         if pending is None or not ctx.reply.strip():
             return
@@ -131,7 +134,8 @@ class SceneAwarenessController:
         ``thread_id`` 时 ``session_context_view`` 直接报错。
         """
 
-        if not event.assistant_response.strip():
+        # 先做不涉及 I/O 的检查，场景观察关闭时不必读取身份绑定。
+        if not event.assistant_response.strip() or not self._can_observe():
             return
         view = session_context_view(
             self._session_manager.workspace,
@@ -187,12 +191,7 @@ class SceneAwarenessController:
         history_messages: tuple[HistoryMessage, ...],
         tools_used: tuple[str, ...] = (),
     ) -> _PendingTurn | None:
-        if (
-            self._closed
-            or self._light_provider is None
-            or not self._light_model
-            or self._session_manager is None
-        ):
+        if not self._can_observe():
             return None
         session = self._session_manager.get_or_create(session_key)
         clean_role_id = str(role_id or session.metadata.get("role_id") or "").strip()
@@ -220,6 +219,15 @@ class SceneAwarenessController:
             role_id=clean_role_id,
             tools_used=tuple(tools_used),
             revision=self.state.reserve(session_key),
+        )
+
+    def _can_observe(self) -> bool:
+        """控制器未关闭且观察所需的轻量模型与会话管理器都已配置。"""
+        return (
+            not self._closed
+            and self._light_provider is not None
+            and bool(self._light_model)
+            and self._session_manager is not None
         )
 
     def _schedule(self, pending: _PendingTurn, *, assistant_reply: str) -> None:
@@ -315,7 +323,10 @@ class SceneAwarenessController:
 def _compact_history(
     items: tuple[HistoryMessage, ...],
 ) -> tuple[dict[str, str], ...]:
-    """最近几条消息压成观察调用用的 role/content 对；两条路径都先转成 HistoryMessage。"""
+    """取最近 ``_RECENT_HISTORY_LIMIT`` 条消息转成 role/content 对。
+
+    role 或 content 为空的消息直接丢弃，不向前补足；content 截断到 1000 字符。
+    """
     history: list[dict[str, str]] = []
     for item in items[-_RECENT_HISTORY_LIMIT:]:
         role = item.role.strip()
