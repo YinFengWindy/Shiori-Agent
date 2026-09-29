@@ -12,6 +12,8 @@ from agent.tool_hooks.types import (
 )
 
 ToolInvoker = Callable[[str, dict[str, Any]], Awaitable[Any]]
+# 宿主对 pre hooks 之后最终参数的准入判定：返回拒绝原因，或 None 表示放行。
+ToolAdmission = Callable[[str, dict[str, Any]], str | None]
 
 
 class HookExecutionError(RuntimeError):
@@ -33,14 +35,18 @@ class ToolExecutor:
         self,
         request: ToolExecutionRequest,
         invoker: ToolInvoker,
+        *,
+        admit: ToolAdmission | None = None,
     ) -> ToolExecutionResult:
         """执行单次工具调用。
 
         request 描述“这次想调用什么工具、带什么参数”；
-        invoker 是真实执行入口（通常是 ToolRegistry.execute）。
+        invoker 是真实执行入口（通常是 ToolRegistry.execute）；
+        admit 是宿主对最终参数的准入判定，hook 改过的参数也要再过一遍。
 
         固定流程：
         1. pre hooks：匹配、改参、必要时拒绝
+        1.5 admit：按最终参数判定，拒绝时以 denied 结束，不执行工具
         2. invoker：用最终参数执行真实工具
         3. post hooks：记录成功或错误后的附加信息与 trace
         """
@@ -69,6 +75,9 @@ class ToolExecutor:
                 post_hook_trace=post_trace,
             )
         final_arguments = dict(current_arguments)
+        if not denied_reason and admit is not None:
+            # hook 可能改写参数（如把发给用户改成发到群），宿主按最终参数再判一次。
+            denied_reason = admit(request.tool_name, final_arguments)
         if denied_reason:
             return ToolExecutionResult(
                 status="denied",

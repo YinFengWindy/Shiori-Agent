@@ -171,6 +171,12 @@ class ToolRegistry:
             raise ValueError(f"MCP 工具不能声明外部上下文可用: {tool.name}")
         if external_limit is not None and not external_allowed:
             raise ValueError(f"参数限制只能用于外部上下文可用的工具: {tool.name}")
+        if external_limit is not None and not _tool_defines_parameter(
+            tool, external_limit.argument
+        ):
+            raise ValueError(
+                f"参数限制指向工具未定义的参数 {external_limit.argument}: {tool.name}"
+            )
         self._tools[tool.name] = tool
         meta = ToolMeta(
             risk=risk,
@@ -254,12 +260,11 @@ class ToolRegistry:
         """外部上下文受限回合里这次调用的拦截原因；可以执行时返回 None。
 
         未声明外部可用（或未注册）的工具一律拦截；带参数限制的工具按模型给出的
-        参数判断。每次都查当前注册表。
+        参数判断。每次都查当前注册表。回合在模型调用时与 pre hooks 改参后各判一次。
         """
-        meta = self._metadata.get(name)
-        if meta is None or not meta.external_allowed:
+        if not self.is_external_allowed(name):
             return EXTERNAL_TOOL_DENIED
-        limit = meta.external_limit
+        limit = self._metadata[name].external_limit
         if limit is not None and not limit.allows(arguments):
             return limit.denied
         return None

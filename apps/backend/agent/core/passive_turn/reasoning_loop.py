@@ -131,17 +131,26 @@ class _PassiveReasoningLoopMixin:
 
         disabled = set(disabled_tools or set())
 
-        def _external_denied(name: str) -> bool:
-            """受限回合里 ``name`` 没有声明外部上下文可用；每次查当前注册表。"""
-            return external_restricted and not self._tools.is_external_allowed(name)
+        def _turn_tool_names(names: set[str] | list[str]) -> list[str]:
+            """``names`` 里本回合可用的：去掉禁用的与受限回合未声明外部可用的。"""
+            return (
+                turn_tool_names(
+                    self._tools,
+                    names,
+                    disabled=disabled,
+                    external_restricted=external_restricted,
+                )
+                or []
+            )
+
+        # 外部上下文受限回合在 pre hooks 改参后按最终参数再判一次（#522）。
+        admit_external = self._tools.external_denial if external_restricted else None
 
         if self._tool_search_enabled:
             always_on = self._tools.get_always_on_names()
-            visible_names = {
-                name
-                for name in always_on | (preloaded_tools or set())
-                if name not in disabled and not _external_denied(name)
-            }
+            visible_names = set(
+                _turn_tool_names(always_on | (preloaded_tools or set()))
+            )
             visible_order = self._tools.get_registered_order(always_on & visible_names)
             seen_visible = set(visible_order)
             for name in preloaded_tool_order or sorted(preloaded_tools or set()):
@@ -514,6 +523,7 @@ class _PassiveReasoningLoopMixin:
                             args,
                             context=call_context,
                         ),
+                        admit=admit_external,
                     )
                     if exec_result.status == "success":
                         tools_used.append(tool_call.name)
@@ -564,15 +574,15 @@ class _PassiveReasoningLoopMixin:
                         and tool_call.name == "tool_search"
                         and visible_names is not None
                     ):
-                        _newly_unlocked = [
-                            name
-                            for name in self._discovery.unlock_names_from_result(
-                                normalized.text
-                            )
-                            if name not in visible_names
-                            and name not in disabled
-                            and not _external_denied(name)
-                        ]
+                        _newly_unlocked = _turn_tool_names(
+                            [
+                                name
+                                for name in self._discovery.unlock_names_from_result(
+                                    normalized.text
+                                )
+                                if name not in visible_names
+                            ]
+                        )
                         if _newly_unlocked:
                             visible_names.update(_newly_unlocked)
                             tools_unlocked.extend(_newly_unlocked)
