@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import agent.core.passive_support as support
 from .helpers import get_session_metadata
+from agent.core.runtime_support import context_view_filter
 from agent.core.types import ContextBundle
 from agent.retrieval.protocol import RetrievalRequest, RetrievalResult
 
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     from agent.core.runtime_support import SessionLike
     from agent.retrieval.protocol import MemoryRetrievalPipeline
     from bus.events import InboundMessage
+    from conversation.context_scope import ContextView
 
 
 class ContextStore(ABC):
@@ -34,8 +36,12 @@ class ContextStore(ABC):
         msg: "InboundMessage",
         session_key: str,
         session: "SessionLike",
+        context_view: "ContextView | None" = None,
     ) -> ContextBundle:
-        """准备本轮对话需要的上下文。"""
+        """准备本轮对话需要的上下文。
+
+        ``context_view`` 是角色回合所在上下文的可见范围，历史只取其中的消息。
+        """
 
 
 class DefaultContextStore(ContextStore):
@@ -58,9 +64,10 @@ class DefaultContextStore(ContextStore):
         msg: "InboundMessage",
         session_key: str,
         session: "SessionLike",
+        context_view: "ContextView | None" = None,
     ) -> ContextBundle:
-        # 1. 先读取 session history，并转换成 retrieval pipeline 需要的结构。
-        raw_history = list(session.get_history())
+        # 1. 先读取回合所在上下文可见的 session history，并转换成 retrieval pipeline 需要的结构。
+        raw_history = list(session.get_history(**context_view_filter(context_view)))
         history_messages = support.to_history_messages(raw_history)
 
         # 2. 系统轮次可显式跳过预检索，避免污染检索诊断和激活状态。

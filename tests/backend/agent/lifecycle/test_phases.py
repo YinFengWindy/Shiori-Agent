@@ -327,6 +327,7 @@ async def test_before_turn_binds_message_role_id_to_session_before_context_prepa
     session_mgr = SimpleNamespace(
         get_or_create=lambda key: session,
         save=lambda value: saved.append(value),
+        role_session_key=lambda role_id: f"role:{role_id}",
     )
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
     phase = Phase(

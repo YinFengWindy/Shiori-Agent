@@ -5,7 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from conversation.service import desktop_thread_id, network_thread_id
+from core.accounts import AccountRecord
 from core.desktop_presence import DesktopPresence
+from core.identity import IdentityChat
 from core.roles import RoleStore
 from proactive_v2.sensor import Sensor
 from proactive_v2.target_selection import ProactiveTargetResolver
@@ -77,3 +80,36 @@ def test_sensor_refuses_to_pick_a_target_without_a_resolver(tmp_path: Path):
 
     with pytest.raises(RuntimeError, match="目标选择服务"):
         _ = sensor.target_transport()
+
+
+def test_recent_chat_for_proactive_turns_is_the_user_context(tmp_path: Path):
+    sensor, roles = _sensor(tmp_path, DesktopPresence())
+    account = AccountRecord(
+        id="qq:101",
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        role_id="mira",
+    )
+    assert roles.identities.pair(
+        roles.identities.create_pairing_code().code,
+        record=account,
+        user_id="902",
+        scope="platform",
+        chat=IdentityChat(account.id, "qq", "902"),
+    )
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    for content, thread in (
+        ("on desktop", desktop_thread_id("mira")),
+        ("in user dm", network_thread_id("mira", "qq", "902")),
+        ("in group", network_thread_id("mira", "qq", "group:7")),
+        ("in stranger dm", network_thread_id("mira", "qq", "555")),
+    ):
+        session.add_message("user", content, thread_id=thread)
+    manager.save(session)
+
+    recent = [item["content"] for item in sensor.collect_recent()]
+
+    assert recent == ["on desktop", "in user dm"]

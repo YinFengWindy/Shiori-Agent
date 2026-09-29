@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from agent.prompting import is_context_frame
+from conversation.context_scope import user_context_view
 from proactive_v2.energy import compute_energy, d_recent
 from proactive_v2.presence import PresenceStore
 from proactive_v2.state import ProactiveStateStore
@@ -102,6 +103,7 @@ class Sensor:
         return max(energy_target, energy_global)
 
     def collect_recent(self) -> list[dict]:
+        """最近的用户上下文对话；主动消息只面向用户，看不到群聊和陌生私聊。"""
         session_key = self.target_session_key()
         if not session_key:
             return []
@@ -109,7 +111,9 @@ class Sensor:
             session = self._sessions.get_or_create(session_key)
         except Exception:
             return []
-        messages = session.messages[-self._cfg.recent_chat_messages :]
+        view = user_context_view(self._sessions.workspace, self._cfg.role_id)
+        visible = [message for message in session.messages if view.includes(message)]
+        messages = visible[-self._cfg.recent_chat_messages :]
         results: list[dict] = []
         for message in messages:
             if message.get("role") not in ("user", "assistant"):

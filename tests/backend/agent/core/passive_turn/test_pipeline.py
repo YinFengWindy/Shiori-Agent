@@ -8,14 +8,24 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from agent.core.passive_turn.pipeline import AgentCoreDeps, PassiveTurnPipeline
-from agent.core.runtime_support import TurnRunResult
-from agent.core.types import ContextBundle
+from agent.core.passive_turn.reasoner import DefaultReasoner
+from agent.core.runtime_support import ToolDiscoveryState, TurnRunResult
+from agent.core.types import ContextBundle, ReasonerResult
+from agent.lifecycle.types import PromptRenderResult
+from agent.looping.ports import LLMConfig, LLMServices
 from agent.tool_hooks import ToolExecutionRequest
 from agent.tool_hooks.executor import ToolExecutor
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from bus.events import InboundMessage
+from conversation.service import (
+    desktop_thread_id,
+    network_thread_id,
+    scheduler_thread_id,
+)
+from core.accounts import AccountRecord
+from core.identity import IdentityChat, UserIdentityStore
 from core.roles import RoleStore
 from core.roles.reply_state import RoleReply
 from desktop_bridge.service import DesktopBridgeService
@@ -93,7 +103,10 @@ def incoming():
         sender="user",
         content="send to desktop",
         timestamp=datetime(2026, 9, 26, 0, 21, 44, tzinfo=timezone.utc),
-        metadata={"role_id": "mira"},
+        metadata={
+            "role_id": "mira",
+            "thread_id": network_thread_id("mira", "qqbot", "friend"),
+        },
     )
 
 
@@ -243,3 +256,185 @@ async def test_cancel_while_waiting_to_commit_cannot_leak_pushes_into_queued_sav
             await task
     assert runtime.session.messages == []
     assert runtime.emitted == []
+
+
+# ── Context isolation: what history the model is sent for each kind of turn ──
+
+QQ_ACCOUNT = AccountRecord(
+    id="qq:101",
+    plugin_id="qq",
+    platform="qq",
+    platform_account_id="101",
+    config_ref="101",
+    role_id="mira",
+)
+DESKTOP = desktop_thread_id("mira")
+USER_DM = network_thread_id("mira", "qq", "902")
+STRANGER_DM = network_thread_id("mira", "qq", "555")
+GROUP_A = network_thread_id("mira", "qq", "group:7")
+GROUP_B = network_thread_id("mira", "qq", "group:8")
+_LABELS = ("desk", "udm", "sdm", "ga", "gb")
+
+
+def _bind(workspace, chat_id):
+    store = UserIdentityStore(workspace)
+    assert store.pair(
+        store.create_pairing_code().code,
+        record=QQ_ACCOUNT,
+        user_id=chat_id,
+        scope="platform",
+        chat=IdentityChat(QQ_ACCOUNT.id, "qq", chat_id),
+    )
+
+
+def _seed_role_session(manager, *, group_text="said in group a"):
+    """One exchange per thread; the bound user (902) also speaks in group A."""
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    for label, thread, text in (
+        ("desk", DESKTOP, "said on desktop"),
+        ("udm", USER_DM, "said in user dm"),
+        ("sdm", STRANGER_DM, "said in stranger dm"),
+        ("ga", GROUP_A, group_text),
+        ("gb", GROUP_B, "said in group b"),
+    ):
+        metadata = {"sender_is_user": True} if thread == GROUP_A else {}
+        session.add_message(
+            "user", f"{label}-user {text}", thread_id=thread, metadata=metadata
+        )
+        session.add_message("assistant", f"{label}-reply", thread_id=thread)
+    manager.save(session)
+    return session
+
+
+def _isolation_pipeline(manager, *, input_token_threshold=75000):
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=AsyncMock(), light_provider=AsyncMock()),
+        llm_config=LLMConfig(),
+        tools=ToolRegistry(),
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
+        context=AsyncMock(),
+        session_manager=manager,
+    )
+    reasoner.render_prompt = AsyncMock(
+        side_effect=lambda request: PromptRenderResult(
+            messages=[*request.history, {"role": "user", "content": request.content}]
+        )
+    )
+    role_reply = RoleReply(content="ok", mood="平静", thought="好")
+    reasoner.run = AsyncMock(
+        return_value=ReasonerResult(reply="ok", metadata={"role_reply": role_reply})
+    )
+    pipeline = PassiveTurnPipeline(
+        AgentCoreDeps(
+            session=SimpleNamespace(session_manager=manager, presence=None),
+            context_store=SimpleNamespace(
+                prepare=AsyncMock(return_value=ContextBundle())
+            ),
+            context=SimpleNamespace(
+                render=Mock(return_value=SimpleNamespace(system_prompt="", messages=[]))
+            ),
+            tools=ToolRegistry(),
+            reasoner=reasoner,
+            event_bus=EventBus(),
+            memory_input_token_threshold=input_token_threshold,
+        )
+    )
+    return pipeline, reasoner
+
+
+def _turn(thread, channel="qq", chat_id="x"):
+    return InboundMessage(
+        channel=channel,
+        chat_id=chat_id,
+        sender="someone",
+        content="now",
+        timestamp=datetime(2026, 9, 29, tzinfo=timezone.utc),
+        metadata={"role_id": "mira", "thread_id": thread},
+    )
+
+
+async def _model_history(tmp_path, thread):
+    """Runs one turn in ``thread`` and returns the history texts the model got."""
+    manager = SessionManager(tmp_path)
+    pipeline, reasoner = _isolation_pipeline(manager)
+    await pipeline.run(_turn(thread), "role:mira", dispatch_outbound=False)
+    sent = reasoner.run.await_args.args[0][:-1]
+    return [str(message["content"]) for message in sent]
+
+
+def _labels(history):
+    return [
+        label
+        for label in _LABELS
+        if any(f"{label}-user" in text or f"{label}-reply" in text for text in history)
+    ]
+
+
+@pytest.mark.parametrize("thread", [DESKTOP, USER_DM])
+async def test_user_context_turn_sees_desktop_and_user_dm_only(tmp_path, thread):
+    _bind(tmp_path, "902")
+    _seed_role_session(SessionManager(tmp_path))
+
+    history = await _model_history(tmp_path, thread)
+
+    assert _labels(history) == ["desk", "udm"]
+
+
+async def test_scheduled_job_without_source_thread_runs_in_user_context(tmp_path):
+    _bind(tmp_path, "902")
+    _seed_role_session(SessionManager(tmp_path))
+    # The thread a scheduled job created without a source thread runs in.
+    thread = scheduler_thread_id("mira", "job-1")
+
+    history = await _model_history(tmp_path, thread)
+
+    assert _labels(history) == ["desk", "udm"]
+
+
+@pytest.mark.parametrize("thread", [GROUP_B, STRANGER_DM])
+async def test_external_turn_sees_groups_and_stranger_dm_only(tmp_path, thread):
+    _bind(tmp_path, "902")
+    _seed_role_session(SessionManager(tmp_path))
+
+    history = await _model_history(tmp_path, thread)
+
+    # Group A holds the bound user's own group message: external only.
+    assert _labels(history) == ["sdm", "ga", "gb"]
+
+
+async def test_bound_stranger_dm_joins_user_context_once_after_the_cursor(
+    tmp_path,
+):
+    _bind(tmp_path, "902")
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    session.add_message("user", "sdm-old consolidated", thread_id=STRANGER_DM)
+    session.add_message("assistant", "sdm-old-reply", thread_id=STRANGER_DM)
+    session.last_consolidated = 2
+    manager.save(session)
+    _seed_role_session(manager)
+    assert _labels(await _model_history(tmp_path, DESKTOP)) == ["desk", "udm"]
+
+    _bind(tmp_path, "555")
+    history = await _model_history(tmp_path, DESKTOP)
+
+    assert _labels(history) == ["desk", "udm", "sdm"]
+    assert sum("sdm-user" in text for text in history) == 1
+    assert not any("sdm-old" in text for text in history)
+
+
+async def test_input_budget_counts_only_the_turn_context(tmp_path):
+    _bind(tmp_path, "902")
+    manager = SessionManager(tmp_path)
+    _seed_role_session(manager, group_text="x" * 40000)
+
+    for thread, runs in ((DESKTOP, True), (GROUP_B, False)):
+        pipeline, reasoner = _isolation_pipeline(manager, input_token_threshold=2000)
+        await pipeline.run(_turn(thread), "role:mira", dispatch_outbound=False)
+        # The large group message only weighs on external turns, where the
+        # context guard stops the turn before the model is called.
+        assert reasoner.run.await_count == (1 if runs else 0)

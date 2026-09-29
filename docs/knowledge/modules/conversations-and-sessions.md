@@ -9,6 +9,7 @@ source_paths:
   - apps/backend/conversation/service.py
   - apps/backend/conversation/projector.py
   - apps/backend/conversation/push_sync.py
+  - apps/backend/conversation/context_scope.py
 related:
   - roles.md
   - memory.md
@@ -39,3 +40,4 @@ related:
 - 同一逻辑会话在渠道、桌面和主动投递路径中应得到同一权威标识。
 - 投影可以重建，权威消息不能只存在于 UI 状态。
 - 迁移失败必须可见，不能静默创建一条看似正常但丢失历史的新线程。
+- 模型历史按会话分为用户上下文（桌面、已绑定用户的私聊）与外部上下文（群聊、陌生私聊）并双向隔离；归属在读取时按当前身份绑定计算，规则只在 `conversation/context_scope.py`。没有 `thread_id` 的旧消息和没有来源会话的计划任务归入用户上下文；新写入角色会话的消息必须带 `thread_id`。

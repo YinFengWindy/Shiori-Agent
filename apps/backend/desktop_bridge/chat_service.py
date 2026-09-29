@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from agent.looping.core import AgentLoop
 from agent.looping.interrupt import TurnInterruptState
 from bus.event_bus import EventBus
+from conversation.service import desktop_thread_id
 from bus.events_lifecycle import (
     StreamDeltaReady,
     ToolCallCompleted,
@@ -342,11 +343,15 @@ class DesktopChatService:
             or state.tools_used
             or state.tool_chain_partial
         )
-        assistant_metadata = {
+        role_id = self._role_id_from_session_key(session_key)
+        assistant_metadata: dict[str, Any] = {
             "interrupted_reply": True,
             "turn_id": turn_id,
             "interrupted_by": state.interrupted_by,
         }
+        if role_id:
+            # 中断的回复属于桌面会话，按会话划分上下文时才能被归入用户上下文。
+            assistant_metadata["thread_id"] = desktop_thread_id(role_id)
         assistant_kwargs: dict[str, Any] = {
             "metadata": assistant_metadata,
             "tools_used": list(state.tools_used) if state.tools_used else None,
@@ -368,7 +373,6 @@ class DesktopChatService:
             session,
             [assistant_message] if assistant_message is not None else [],
         )
-        role_id = self._role_id_from_session_key(session_key)
         if role_id:
             self._sync_desktop_session_thread(session, role_id=role_id)
         return assistant_message

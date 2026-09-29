@@ -11,6 +11,7 @@ from agent.core.passive_support import (
     log_post_reply_context_budget,
     log_react_context_budget,
 )
+from agent.core.runtime_support import context_view_filter
 from agent.core.types import to_tool_call_groups
 from agent.lifecycle.phase import (
     PhaseFrame,
@@ -82,7 +83,9 @@ class _BuildTurnWorkModule:
         hw = self._history_window
         frame.slots[_BUDGET_SLOT] = build_post_reply_context_budget(
             context=self._context,
-            history=session.get_history(max_messages=hw),
+            history=session.get_history(
+                max_messages=hw, **context_view_filter(state.context_view)
+            ),
             history_window=hw,
         )
         frame.slots[_REACT_STATS_SLOT] = extract_react_stats(snap.ctx.context_retry)

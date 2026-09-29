@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from agent.turns.desktop_pushes import DesktopPushDrafts
     from agent.core.response_parser import ResponseMetadata
     from agent.core.runtime_support import SessionLike, TurnRunResult
+    from conversation.context_scope import ContextView
 
 
 # 1. 工厂函数：给 dataclass field(default_factory=...) 提供显式类型签名，消除 pyright Unknown 推断。
@@ -36,6 +37,8 @@ class TurnState:
     extra_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
     desktop_pushes: DesktopPushDrafts | None = None
     committed_message_ids: tuple[str, ...] = ()
+    # 角色共享会话里的回合按所在会话算出的可见历史范围；其他会话为 None，历史不筛选。
+    context_view: ContextView | None = None
 
 
 @dataclass

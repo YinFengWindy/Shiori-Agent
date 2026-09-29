@@ -27,6 +27,7 @@ from typing import Any, Callable
 
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from conversation.service import scheduler_thread_id
 from core.common.timekit import parse_iso as _parse_iso
 from infra.persistence.json_store import atomic_save_json, load_json
 from agent.scheduler_cron import is_cron_expr, next_cron_fire
@@ -675,7 +676,7 @@ class SchedulerService:
         return {
             "role_id": job.role_id,
             "role_config_version": job.role_config_version,
-            "thread_id": job.thread_id or f"thread:{job.role_id}:scheduler:{job.id}",
+            "thread_id": job.thread_id or scheduler_thread_id(job.role_id, job.id),
             # The creating turn may own several jobs. Identify this job occurrence,
             # keeping nominal fire time stable across retries and process restarts.
             "delivery_key": f"scheduler:{job.id}:{job.fire_at.isoformat()}",

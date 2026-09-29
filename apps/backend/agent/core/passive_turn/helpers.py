@@ -4,37 +4,44 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from agent.core.runtime_support import context_view_filter
 from agent.prompting import is_context_frame
 
 if TYPE_CHECKING:
     from agent.core.runtime_support import SessionLike
+    from conversation.context_scope import ContextView
     from agent.tools.registry import ToolRegistry
 
 
 def get_history_since_consolidated(
     session: "SessionLike",
     memory_window: int,
+    context_view: "ContextView | None" = None,
 ) -> list[dict]:
-    """读取最近一次记忆整合之后的会话历史。"""
+    """读取最近一次记忆整合之后、回合所在上下文可见的会话历史。"""
 
+    include = context_view_filter(context_view)
     try:
         return session.get_history(
             max_messages=memory_window,
             start_index=session.last_consolidated,
+            **include,
         )
     except TypeError:
-        return session.get_history(max_messages=memory_window)
+        return session.get_history(max_messages=memory_window, **include)
 
 
 def get_history_tool_names_since_consolidated(
     session: "SessionLike",
     memory_window: int,
+    context_view: "ContextView | None" = None,
 ) -> list[str]:
     """读取与 get_history_since_consolidated 同一窗口内用过或解锁过的工具名。"""
 
     return session.get_history_tool_names(
         max_messages=memory_window,
         start_index=session.last_consolidated,
+        **context_view_filter(context_view),
     )
 
 

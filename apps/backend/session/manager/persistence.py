@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
-from .models import Session
+from .models import Session, message_thread_id
 
 
 class _PersistenceMixin:
@@ -70,9 +70,7 @@ class _PersistenceMixin:
         metadata = msg.get("metadata")
         typed_metadata = metadata if isinstance(metadata, dict) else {}
         fields: dict[str, Any] = {}
-        thread_id = str(
-            msg.get("thread_id") or typed_metadata.get("thread_id") or ""
-        ).strip()
+        thread_id = message_thread_id(msg)
         if thread_id:
             fields["thread_id"] = thread_id
         sender_role = str(msg.get("sender_role") or "").strip()
