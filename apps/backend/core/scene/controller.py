@@ -15,6 +15,7 @@ from bus.events_lifecycle import (
     SceneObservationCommitted,
     SceneTurnSource,
 )
+from conversation.context_scope import history_filter, session_context_view
 from core.roles.store import RoleStore
 from core.common.runtime_tasks import create_runtime_task
 from core.scene.contracts import (
@@ -27,6 +28,9 @@ from core.scene.decision import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 场景观察参考的最近消息条数。
+_RECENT_HISTORY_LIMIT = 6
 
 
 @dataclass(frozen=True)
@@ -124,7 +128,7 @@ class SceneAwarenessController:
             role_id=event.role_id,
             source="proactive",
             user_message="",
-            history_messages=self._session_history(event.session_key),
+            history_messages=self._proactive_history(event),
             tools_used=event.tools_used,
         )
         if pending is None:
@@ -259,10 +263,23 @@ class SceneAwarenessController:
             )
             raise
 
-    def _session_history(self, session_key: str) -> tuple[Any, ...]:
-        session = self._session_manager.get_or_create(session_key)
-        messages = getattr(session, "messages", ())
-        return tuple(messages) if isinstance(messages, (list, tuple)) else ()
+    def _proactive_history(self, event: ProactiveMessageCommitted) -> tuple[Any, ...]:
+        """主动消息所在会话同类上下文里的最近消息。
+
+        该事件既来自主动回合，也来自消息推送同步，发送目标不一定属于用户上下文，
+        所以不固定取用户上下文，而是按事件自带的 ``thread_id`` 判定；缺少时
+        ``session_context_view`` 直接报错，不读取未筛选的角色会话。
+        """
+        view = session_context_view(
+            self._session_manager.workspace,
+            session_key=event.session_key,
+            role_id=event.role_id,
+            thread_id=event.thread_id,
+        )
+        session = self._session_manager.get_or_create(event.session_key)
+        return tuple(
+            session.history_window(_RECENT_HISTORY_LIMIT, include=history_filter(view))
+        )
 
     def _cancel_pending_task(self, session_key: str) -> None:
         task = self._tasks.pop(session_key, None)
@@ -287,7 +304,7 @@ class SceneAwarenessController:
 
 def _compact_history(items: tuple[Any, ...]) -> tuple[dict[str, str], ...]:
     history: list[dict[str, str]] = []
-    for item in items[-6:]:
+    for item in items[-_RECENT_HISTORY_LIMIT:]:
         if not isinstance(item, dict):
             continue
         role = str(item.get("role") or "").strip()

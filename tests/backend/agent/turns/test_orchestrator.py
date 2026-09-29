@@ -296,6 +296,7 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
             chat_id="role:mira",
             assistant_response="给你看张图",
             tools_used=("message_push",),
+            thread_id=session.messages[0]["metadata"]["thread_id"],
         )
     ]
 

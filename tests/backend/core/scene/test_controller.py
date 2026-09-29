@@ -322,6 +322,7 @@ async def test_proactive_message_is_observed_with_shared_scene_state(
             role_id="mira",
             chat_id="role:mira",
             assistant_response="她忽然走近抱住了你。",
+            thread_id="thread:mira:desktop",
             tools_used=("message_push",),
         )
     )
@@ -344,4 +345,40 @@ async def test_proactive_message_is_observed_with_shared_scene_state(
             assistant_reply="她忽然走近抱住了你。",
         )
     ]
+    await controller.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("thread_id", "visible", "hidden"),
+    [
+        ("thread:mira:qq:group-1", "群里在聊游戏", "桌面上说想去看海"),
+        ("thread:mira:desktop", "桌面上说想去看海", "群里在聊游戏"),
+    ],
+    ids=["group-origin", "desktop-origin"],
+)
+async def test_proactive_observation_only_sees_its_own_thread_context(
+    tmp_path: Path, thread_id: str, visible: str, hidden: str
+) -> None:
+    decide = AsyncMock(return_value=SceneDecision("started", "sea", "sea", "海边"))
+    controller = _controller(tmp_path, event_bus=EventBus(), decision_provider=decide)
+    session = controller._session_manager.get_or_create("role:mira")
+    session.add_message("user", "桌面上说想去看海", thread_id="thread:mira:desktop")
+    session.add_message("user", "群里在聊游戏", thread_id="thread:mira:qq:group-1")
+
+    controller.schedule_proactive_turn(
+        ProactiveMessageCommitted(
+            session_key="role:mira",
+            channel="desktop",
+            role_id="mira",
+            assistant_response="她看向你。",
+            thread_id=thread_id,
+        )
+    )
+    await asyncio.gather(*controller.tasks.values())
+
+    history = decide.await_args.kwargs["decision_input"].recent_history
+    contents = [item["content"] for item in history]
+    assert visible in contents
+    assert hidden not in contents
     await controller.terminate()

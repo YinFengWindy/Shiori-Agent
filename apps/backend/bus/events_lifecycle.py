@@ -125,7 +125,11 @@ class RoleDeleted:
 
 @dataclass(frozen=True)
 class ProactiveMessageCommitted:
-    """Signals that a proactive role message is available in its shared session."""
+    """Signals that a proactive role message is available in its shared session.
+
+    ``thread_id`` 是这条消息所在的会话；角色共享会话混存各会话的消息，订阅者
+    读取历史时按它判定上下文归属。
+    """
 
     session_key: str
     channel: str
@@ -133,6 +137,7 @@ class ProactiveMessageCommitted:
     chat_id: str = ""
     assistant_response: str = ""
     tools_used: tuple[str, ...] = ()
+    thread_id: str = ""
 
 
 SceneTransition = Literal["started", "same", "changed", "closed", "none"]

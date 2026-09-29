@@ -162,7 +162,7 @@ def test_actual_runtime_observes_and_follows_scene_without_novelai_package(tmp_p
                 controller._decision_provider = AsyncMock(return_value=SceneDecision("started", "rain", "umbrella", "少女撑伞"))
                 lease = app.acquire()
                 with bind_runtime(lease):
-                    await app.core.event_bus.fanout(ProactiveMessageCommitted("role:mira", "desktop", "mira", assistant_response="她撑开雨伞"))
+                    await app.core.event_bus.fanout(ProactiveMessageCommitted("role:mira", "desktop", "mira", assistant_response="她撑开雨伞", thread_id="thread:mira:desktop"))
                 await asyncio.gather(*controller.tasks.values())
                 await lease.release()
                 controller._decision_provider.assert_awaited_once()
@@ -347,7 +347,11 @@ async def test_core_scene_demand_respects_followup_strategy_and_independent_cons
         controller._decision_provider = model
         await app.core.event_bus.fanout(
             ProactiveMessageCommitted(
-                "role:mira", "desktop", "mira", assistant_response="雨中"
+                "role:mira",
+                "desktop",
+                "mira",
+                assistant_response="雨中",
+                thread_id="thread:mira:desktop",
             )
         )
         await asyncio.gather(*controller.tasks.values())

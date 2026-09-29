@@ -178,6 +178,7 @@ class TurnOrchestrator:
                         chat_id=chat_id,
                         assistant_response=content,
                         tools_used=("message_push",),
+                        thread_id=source_metadata.get("thread_id", ""),
                     )
                 )
         else:
