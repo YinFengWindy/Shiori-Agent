@@ -10,6 +10,7 @@ from session.manager.consolidation import ConsolidationCommitRequest
 
 if TYPE_CHECKING:
     from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
+    from core.memory.member_profiles import MemberProfileUpdate
 
 
 @dataclass(frozen=True)
@@ -85,7 +86,7 @@ class ConsolidationSegments:
 
     ``user_messages`` 属于用户本人（见 ``conversation.context_scope.belongs_to_user``），
     走用户层整理；``external_messages`` 是群友、陌生人的发言以及角色在外部会话里的
-    回复，按会话整理成群环境层（#497），不交给记忆引擎。游标仍按整个窗口推进。
+    回复，按会话整理成群环境层（#497）与成员层（#498），不交给记忆引擎。游标仍按整个窗口推进。
     """
 
     user_messages: list[dict]
@@ -106,6 +107,8 @@ class _ConsolidationDraft:
     archive_all: bool = False
     # 外部段整理出的各会话群环境层更新，提交时由宿主写入，不发给引擎。
     group_environment_updates: tuple["GroupEnvironmentUpdate", ...] = ()
+    # 外部段整理出的成员档案更新（#498），提交时由宿主写入，不发给引擎。
+    member_profile_updates: tuple["MemberProfileUpdate", ...] = ()
 
 
 @dataclass(frozen=True)

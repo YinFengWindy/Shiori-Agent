@@ -96,6 +96,8 @@ class ContextRequest:
     context_scope: ContextScope | None = None
     # 回合所在会话（thread）；外部回合据此注入当前会话的群笔记（#497）。
     thread_id: str = ""
+    # 本回合可见历史窗口里非用户本人消息的来源，旧的在前；外部回合据此注入成员档案（#498）。
+    window_sources: tuple[MessageSource, ...] = ()
 
 
 @dataclass

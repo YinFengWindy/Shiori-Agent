@@ -47,7 +47,7 @@ def test_external_thread_renders_speakers_in_the_third_person() -> None:
     [thread] = group_external_threads(window, segments)
     conversation = format_external_thread(thread)
     prompt = build_group_environment_prompt(
-        thread, conversation, GroupEnvironmentSnapshot("", "")
+        thread, conversation, GroupEnvironmentSnapshot("", ""), {}
     )
 
     assert thread.label == "群「猫猫群」"

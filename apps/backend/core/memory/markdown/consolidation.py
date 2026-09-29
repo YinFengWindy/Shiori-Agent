@@ -7,6 +7,8 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from core.memory.member_profiles import merge_member_profile
+
 from .contracts import (
     _ConsolidationDraft,
     _ConsolidationFailure,
@@ -33,6 +35,7 @@ from .external_segment import (
     format_external_thread,
     group_external_threads,
     parse_group_environment_update,
+    parse_member_profile_updates,
 )
 from .recent_context import _RecentContextWorkerMixin
 
@@ -40,11 +43,20 @@ if TYPE_CHECKING:
     from agent.provider import LLMProvider
     from conversation.context_scope import UserContextThreads
     from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
+    from core.memory.member_profiles import (
+        MemberKey,
+        MemberProfile,
+        MemberProfileUpdate,
+        MemberProfiles,
+    )
     from .runtime import MarkdownMemoryStore
 
 logger = logging.getLogger("memory.markdown")
 
 _EVENT_EXTRACTION_TIMEOUT_S = 300.0
+# 外部会话整理的输出预算：最近动态与群笔记，外加每个发言成员的档案与速记。
+_GROUP_ENVIRONMENT_MAX_TOKENS = 2048
+_MEMBER_PROFILE_MAX_TOKENS = 400
 _CONSOLIDATION_SYSTEM = (
     "你是中性的 Markdown 记忆提取器，不扮演角色，也不生成用户可见回复。"
     "USER 是当前角色交流对象“你”，ASSISTANT 是当前角色“我”。"
@@ -174,25 +186,41 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         threads: list[ExternalThread],
         *,
         group_environment: "GroupEnvironment",
+        member_profiles: "MemberProfiles",
         role_id: str,
         nsfw_memory_enabled: bool,
-    ) -> "list[GroupEnvironmentUpdate] | _ConsolidationFailure":
-        """调主模型把外部段逐个会话整理成最近动态与群笔记（#497）。
+    ) -> "tuple[list[GroupEnvironmentUpdate], list[MemberProfileUpdate]] | _ConsolidationFailure":
+        """调主模型把外部段逐个会话整理成最近动态、群笔记（#497）与成员档案（#498）。
 
-        每个会话单独调用一次，输出规模只与该会话挂钩。任一会话失败时语义与用户层
-        整理一致：返回 ``_ConsolidationFailure``，本次整理不提交、游标不推进，下次重试。
+        每个会话单独调用一次，输出规模只与该会话及其发言成员数挂钩。同一成员在
+        本次窗口的多个会话里发言时，后面的会话看到的是前面会话合并后的档案。任一
+        会话失败时语义与用户层整理一致：返回 ``_ConsolidationFailure``，本次整理
+        不提交、游标不推进，下次重试。
         """
         updates: list[GroupEnvironmentUpdate] = []
+        member_updates: list[MemberProfileUpdate] = []
+        # 本次整理里已合并过的成员档案，尚未落盘；None 表示还没有档案。
+        merged_members: dict[MemberKey, MemberProfile | None] = {}
         for thread in threads:
             conversation = format_external_thread(
                 thread, nsfw_memory_enabled=nsfw_memory_enabled
             )
             if not conversation:
                 continue
+            for sighting in thread.members:
+                if sighting.key not in merged_members:
+                    merged_members[sighting.key] = member_profiles.read(
+                        role_id, sighting.key
+                    )
             prompt = build_group_environment_prompt(
                 thread,
                 conversation,
                 group_environment.read(role_id, thread.thread_id),
+                {
+                    sighting.key: profile
+                    for sighting in thread.members
+                    if (profile := merged_members[sighting.key]) is not None
+                },
             )
             call_result = await self._call_llm_step(
                 step="group_environment_extract",
@@ -202,7 +230,8 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
                     {"role": "system", "content": GROUP_ENVIRONMENT_SYSTEM},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=2048,
+                max_tokens=_GROUP_ENVIRONMENT_MAX_TOKENS
+                + _MEMBER_PROFILE_MAX_TOKENS * len(thread.members),
                 timeout_s=_EVENT_EXTRACTION_TIMEOUT_S,
             )
             if isinstance(call_result, _ConsolidationFailure):
@@ -223,7 +252,12 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
             update = parse_group_environment_update(payload, thread)
             if update.recent_activity or update.group_note:
                 updates.append(update)
-        return updates
+            for member_update in parse_member_profile_updates(payload, thread):
+                member_updates.append(member_update)
+                merged_members[member_update.key] = merge_member_profile(
+                    merged_members[member_update.key], member_update
+                )
+        return updates, member_updates
 
     async def prepare_consolidation(
         self,
@@ -234,13 +268,14 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         user_threads: "UserContextThreads | None" = None,
         *,
         group_environment: "GroupEnvironment",
+        member_profiles: "MemberProfiles",
     ) -> _ConsolidationDraft | _ConsolidationFailure | None:
         """准备一次整理：选窗口、拆段、提取用户层产物、整理外部段并生成 RECENT_CONTEXT。
 
         ``user_threads`` 是角色共享会话此刻的用户上下文会话；给出时窗口按发送者
         拆段，只有用户本人段进入用户层整理与引擎，RECENT_CONTEXT 只取用户上下文
         会话的消息。为 None 时会话没有划分，整个窗口都属于用户本人。外部段按会话
-        整理成 ``group_environment`` 的更新。
+        整理成 ``group_environment`` 与 ``member_profiles`` 的更新。
         """
         profile_maint = self._profile_maint
         # 1. 先决定这次要归档哪一段消息窗口；没有新窗口就直接返回。
@@ -434,19 +469,22 @@ history_entries.emotional_weight 规则：
             if isinstance(extracted, _ConsolidationFailure):
                 return extracted
             history_entry_payloads, pending_items = extracted
-        # 4. 外部段按会话整理成群环境层的最近动态与群笔记；外部段为空时不调用。
+        # 4. 外部段按会话整理成群环境层的最近动态与群笔记、成员层的成员档案；
+        #    外部段为空时不调用。
         group_environment_updates: list[GroupEnvironmentUpdate] = []
+        member_profile_updates: list[MemberProfileUpdate] = []
         external_threads = group_external_threads(window, segments)
         if external_threads:
             environment_result = await self._extract_group_environment(
                 external_threads,
                 group_environment=group_environment,
+                member_profiles=member_profiles,
                 role_id=_session_role_id(session),
                 nsfw_memory_enabled=nsfw_memory_enabled,
             )
             if isinstance(environment_result, _ConsolidationFailure):
                 return environment_result
-            group_environment_updates = environment_result
+            group_environment_updates, member_profile_updates = environment_result
         # 5. 归一化 markdown 产物，向量写入由 engine 订阅提交事件完成。
         recent_context_text = await self._build_recent_context_snapshot(
             session=session,
@@ -470,4 +508,5 @@ history_entries.emotional_weight 规则：
             scope_chat_id=scope_chat_id,
             archive_all=archive_all,
             group_environment_updates=tuple(group_environment_updates),
+            member_profile_updates=tuple(member_profile_updates),
         )

@@ -16,6 +16,7 @@ from bus.event_bus import EventBus
 from bus.events_lifecycle import TurnCommitted
 from conversation.service import desktop_thread_id, network_thread_id
 from core.memory.events import ConsolidationCommitted
+from core.memory.member_profiles import MemberKey, MemberProfiles
 from core.memory.group_environment import (
     SUMMARY_LABEL_KEY,
     SUMMARY_UPDATED_AT_KEY,
@@ -713,3 +714,100 @@ async def test_failed_external_thread_keeps_the_whole_window_uncommitted(
     assert result.trace["error"] == "invalid_json"
     manager.invalidate(session.key)
     assert manager.get_or_create(session.key).last_consolidated == 0
+
+
+def _member_message(
+    session: Session, content: str, thread_id: str, **source: object
+) -> None:
+    session.add_message(
+        "user",
+        content,
+        thread_id=thread_id,
+        metadata={"message_source": {"chat_type": "group", **source}},
+    )
+
+
+@pytest.mark.asyncio
+async def test_external_segment_updates_member_profiles_but_never_the_users(
+    tmp_path: Path,
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    cats = network_thread_id("mira", "qq", "g1")
+    dogs = network_thread_id("mira", "qq", "g2")
+    telegram = network_thread_id("mira", "telegram", "g3")
+    _member_message(
+        session,
+        "我最喜欢狗",
+        cats,
+        channel="qq",
+        sender_id="555",
+        sender_name="阿明",
+        group_name="猫猫群",
+    )
+    _member_message(
+        session,
+        "我明天去面试",
+        cats,
+        channel="qq",
+        sender_id="902",
+        sender_name="小风",
+        group_name="猫猫群",
+        sender_is_user=True,
+    )
+    _member_message(
+        session,
+        "改名了",
+        dogs,
+        channel="qq",
+        sender_id="555",
+        sender_name="明哥",
+        group_name="狗狗群",
+    )
+    _member_message(
+        session,
+        "hi",
+        telegram,
+        channel="telegram",
+        sender_id="555",
+        sender_name="Ming",
+        group_name="电报群",
+    )
+    manager.save(session)
+    replies = {
+        "群「猫猫群」": (
+            '{"members": {"555": {"profile": "## 印象\n爱狗", "brief": "阿明：爱狗"},'
+            ' "902": {"profile": "不该写", "brief": "不该写"}}}'
+        ),
+        "群「狗狗群」": (
+            '{"members": {"555": {"profile": "## 印象\n爱狗，改名明哥",'
+            ' "brief": "明哥：爱狗"}}}'
+        ),
+    }
+    provider, event_bus, _events, maintenance = _recording_maintenance(
+        tmp_path, manager, replies
+    )
+    try:
+        result = await maintenance.consolidate(
+            ConsolidateRequest(session=session, force=True)
+        )
+    finally:
+        await event_bus.aclose()
+
+    assert result.trace["mode"] == "markdown"
+    members = MemberProfiles(tmp_path)
+    # 同一渠道两个群的发言合并为一份，后一个群在前一个群的结果上更新。
+    [_, dogs_prompt, _] = provider.environment_prompts
+    assert "阿明：爱狗" in dogs_prompt
+    qq = members.read("mira", MemberKey("qq", "555"))
+    assert qq is not None
+    assert qq.nicknames == ("阿明", "明哥")
+    assert qq.thread_ids == (cats, dogs)
+    assert qq.profile == "## 印象\n爱狗，改名明哥"
+    assert qq.brief == "明哥：爱狗"
+    # 另一渠道的相同 ID 是另一份档案；用户本人不产生档案。
+    telegram_member = members.read("mira", MemberKey("telegram", "555"))
+    assert telegram_member is not None and telegram_member.nicknames == ("Ming",)
+    assert members.read("mira", MemberKey("qq", "902")) is None
+    assert len(members.list("mira")) == 2

@@ -44,6 +44,7 @@ class _FixedPayloadHarness:
             session,
             archive_all=archive_all,
             group_environment=cast(Any, object()),
+            member_profiles=cast(Any, object()),
         )
 
 
@@ -85,6 +86,7 @@ def _prepare(
             archive_all=archive_all,
             force=force,
             group_environment=cast(Any, object()),
+            member_profiles=cast(Any, object()),
         )
     )
 

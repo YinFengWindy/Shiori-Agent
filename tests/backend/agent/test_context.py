@@ -12,6 +12,7 @@ from core.common.channel_directory import ChannelDirectory
 from core.common.message_source import MessageSource
 from core.identity import IdentityChat
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
+from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
 from core.roles import RoleStore
 from session.manager import SessionManager
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
@@ -740,3 +741,52 @@ def test_context_builder_injects_group_environment_by_turn_scope(
     assert "群1的笔记" in external
     assert "群0的笔记" not in external
     assert not any(f"动态{index}" in external for index in range(7))
+
+
+def test_context_builder_injects_member_profiles_only_in_external_turns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.setattr("agent.context.SkillsLoader", _EmptySkills)
+    RoleStore(tmp_path).create_role(
+        role_id="mira", name="Mira", system_prompt="test role"
+    )
+    members = MemberProfiles(tmp_path)
+    for sender_id in ("555", "666"):
+        members.write(
+            "mira",
+            MemberProfile(
+                MemberKey("qq", sender_id),
+                (f"人{sender_id}",),
+                ("g1",),
+                brief=f"速记{sender_id}",
+                profile=f"完整档案{sender_id}",
+            ),
+        )
+    builder = ContextBuilder(
+        tmp_path, _EmptyMemory(), runtime_roles=RoleStore(tmp_path)  # type: ignore[arg-type]
+    )
+
+    def model_input(scope: ContextScope) -> str:
+        result = builder.render(
+            ContextRequest(
+                history=[],
+                current_message="你好",
+                context_scope=scope,
+                thread_id="thread:mira:qq:g1",
+                message_source=MessageSource(channel="qq", sender_id="555"),
+                window_sources=(MessageSource(channel="qq", sender_id="666"),),
+            ),
+            session_metadata={"role_id": "mira"},
+        )
+        return "\n".join(str(message["content"]) for message in result.messages)
+
+    external = model_input("external")
+    user = model_input("user")
+
+    # 外部回合：触发者完整档案，窗口里的其他发言者一行速记。
+    assert "完整档案555" in external
+    assert "速记666" in external
+    assert "完整档案666" not in external
+    # 用户上下文回合不注入成员档案。
+    assert "完整档案555" not in user
+    assert "速记666" not in user

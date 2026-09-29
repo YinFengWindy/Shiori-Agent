@@ -16,6 +16,7 @@ from bus.events_lifecycle import (
 )
 from conversation.context_scope import UserContextThreads, load_user_context_threads
 from core.memory.events import ConsolidationCommitted
+from core.memory.member_profiles import MemberProfiles
 from session.manager.consolidation import ConsolidationCommitRequest
 from session.manager.helpers import role_session_key
 
@@ -69,6 +70,8 @@ class MarkdownMemoryMaintenance:
     ) -> None:
         self._store = store
         self._workspace = store.memory_dir.parent
+        # 成员层（#498）只依赖工作区路径，整理读写成员档案都经由它。
+        self._member_profiles = MemberProfiles(self._workspace)
         self._event_bus = event_bus
         self._worker = _MarkdownConsolidationWorker(
             profile_maint=store,
@@ -339,6 +342,7 @@ class MarkdownMemoryMaintenance:
             ),
             user_threads=self._user_threads_for_session(request.session),
             group_environment=group_environment,
+            member_profiles=self._member_profiles,
         )
         if draft is None:
             if session_key:
@@ -361,6 +365,7 @@ class MarkdownMemoryMaintenance:
             await self._write_group_environment(
                 request.session, draft, group_environment
             )
+            await self._write_member_profiles(request.session, draft)
 
         async def publish_committed() -> None:
             await self._publish_consolidation(request.session, draft)
@@ -446,6 +451,16 @@ class MarkdownMemoryMaintenance:
             await asyncio.to_thread(
                 group_environment.apply, role_id, update, updated_at=updated_at
             )
+
+    async def _write_member_profiles(
+        self, session: object, draft: _ConsolidationDraft
+    ) -> None:
+        """把外部段整理出的成员档案更新合并进成员层；不经过记忆引擎。"""
+        if not draft.member_profile_updates:
+            return
+        role_id = _session_role_id(session)
+        for update in draft.member_profile_updates:
+            await asyncio.to_thread(self._member_profiles.apply, role_id, update)
 
     async def _publish_consolidation(
         self, session: object, draft: _ConsolidationDraft
