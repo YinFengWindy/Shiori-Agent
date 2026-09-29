@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -12,6 +13,9 @@ from core.accounts.target_contract import (
     UncertainDeliveryError,
     account_send_media,
 )
+from core.common.media import detect_image_mime_from_header
+
+from .formatting import SUPPORTED_IMAGE_MIME_TYPES
 
 if TYPE_CHECKING:
     from .account_identity import QQBotAccountIdentity
@@ -65,6 +69,8 @@ class _AccountSendingMixin:
         media = account_send_media(payload)
         if not content and not media:
             raise ValueError("发送内容不能为空")
+        for image in media:
+            _check_image(image)
         chat_id = channel._chat_id(openid)
         # Text, then each image, as separate C2C messages; the first ID is the receipt.
         parts = [
@@ -109,3 +115,23 @@ async def _confirmed(sending: Awaitable[str | None]) -> str:
     if not receipt:
         raise UncertainDeliveryError("QQBot 平台未返回消息 ID，发送结果不确定")
     return receipt
+
+
+def _check_image(source: str) -> None:
+    """Refuses a local image QQBot cannot send before anything is sent.
+
+    URLs pass through; the platform fetches them. A local path must be a
+    readable PNG、JPEG、WebP 和 GIF file.
+    """
+    if source.startswith(("http://", "https://")):
+        return
+    path = Path(source).expanduser()
+    if not path.is_file():
+        raise ValueError(f"QQBot 图片文件不存在: {path}")
+    try:
+        with path.open("rb") as image:
+            header = image.read(4096)
+    except OSError as exc:
+        raise ValueError(f"QQBot 图片文件无法读取: {path}") from exc
+    if detect_image_mime_from_header(header) not in SUPPORTED_IMAGE_MIME_TYPES:
+        raise ValueError(f"QQBot 图片仅支持 PNG、JPEG、WebP 和 GIF: {path}")

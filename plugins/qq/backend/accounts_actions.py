@@ -10,8 +10,13 @@ from typing import Any
 
 from .onebot import OneBotDisconnected, OneBotError, OneBotSocket
 from core.accounts.target_contract import UncertainDeliveryError
+from core.common.media import detect_image_mime_from_header
 
 _QQ_ID = re.compile(r"^[1-9][0-9]*$")
+# Image types NapCat sends as a QQ picture.
+_IMAGE_MIME_TYPES = frozenset(
+    {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"}
+)
 
 
 def qq_number(value: object, label: str) -> str:
@@ -43,15 +48,23 @@ def qq_image_segment(image: str) -> str:
     """The CQ image code of a local image path or an http(s) URL.
 
     A local file travels inline as ``base64://`` so NapCat need not share the
-    host's file system view; a URL is fetched by NapCat itself.
+    host's file system view; a URL is fetched by NapCat itself. Raises
+    ValueError for a missing, unreadable or non-image local file; it runs
+    while the message is built, before anything is sent.
     """
     source = image.strip()
     if source.startswith(("http://", "https://")):
         return f"[CQ:image,file={_cq_escape(source)}]"
     path = Path(source).expanduser()
     if not path.is_file():
-        raise FileNotFoundError(f"QQ 图片文件不存在: {path}")
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        raise ValueError(f"QQ 图片文件不存在: {path}")
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"QQ 图片文件无法读取: {path}") from exc
+    if detect_image_mime_from_header(data[:4096]) not in _IMAGE_MIME_TYPES:
+        raise ValueError(f"QQ 图片仅支持 PNG、JPEG、WebP、GIF 和 BMP: {path}")
+    encoded = base64.b64encode(data).decode("ascii")
     return f"[CQ:image,file=base64://{encoded}]"
 
 

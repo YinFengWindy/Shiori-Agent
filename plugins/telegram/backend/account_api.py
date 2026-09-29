@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from telegram.error import NetworkError, TelegramError
@@ -12,6 +13,7 @@ from desktop_bridge.method_policy import Concurrency
 
 from .credentials import verify_bot_token
 from core.accounts import VIA_ACCOUNT_KEY
+from core.common.media import detect_image_mime_from_header
 from core.accounts.target_contract import (
     ACCOUNT_SEND_METHOD,
     ACCOUNT_TARGETS_METHOD,
@@ -26,6 +28,10 @@ if TYPE_CHECKING:
     from agent.plugin_host.kv import PluginKVStore
     from .bots import TelegramBots
     from .channel.lifecycle import TelegramChannel
+
+
+# Image types Telegram accepts as a photo.
+_PHOTO_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
 
 
 class TelegramAccountApi:
@@ -193,6 +199,8 @@ class TelegramAccountApi:
             not isinstance(topic, int) or topic <= 0 or not chat_id.startswith("-")
         ):
             raise ValueError("A group topic requires a positive message_thread_id")
+        for image in media:
+            _check_image(image)
         # Text, then each image as a photo in the same topic; the first ID is
         # the receipt.
         parts = [
@@ -225,3 +233,23 @@ async def _confirmed(sending: Awaitable[str | None]) -> str:
     if not receipt:
         raise UncertainDeliveryError("Telegram 发送未返回消息 ID")
     return receipt
+
+
+def _check_image(source: str) -> None:
+    """Refuses a local image Telegram cannot send before anything is sent.
+
+    URLs pass through; the platform fetches them. A local path must be a
+    readable PNG、JPEG、WebP 和 GIF file.
+    """
+    if source.startswith(("http://", "https://")):
+        return
+    path = Path(source).expanduser()
+    if not path.is_file():
+        raise ValueError(f"Telegram 图片文件不存在: {path}")
+    try:
+        with path.open("rb") as image:
+            header = image.read(4096)
+    except OSError as exc:
+        raise ValueError(f"Telegram 图片文件无法读取: {path}") from exc
+    if detect_image_mime_from_header(header) not in _PHOTO_MIME_TYPES:
+        raise ValueError(f"Telegram 图片仅支持 PNG、JPEG、WebP 和 GIF: {path}")

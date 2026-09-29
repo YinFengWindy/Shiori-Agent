@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 from unittest.mock import AsyncMock
 
 import pytest
@@ -77,7 +79,8 @@ async def test_images_follow_the_text_in_one_napcat_message(tmp_path):
     socket.call.return_value = {"message_id": 91}
     actions = QQAccountActions(lambda account_id: socket, AsyncMock())
     image = tmp_path / "sky.png"
-    image.write_bytes(b"png")
+    image.write_bytes(b"\x89PNG\r\n\x1a\n")
+    encoded = base64.b64encode(image.read_bytes()).decode("ascii")
 
     receipt = await actions.send_target(
         "account-a",
@@ -91,20 +94,33 @@ async def test_images_follow_the_text_in_one_napcat_message(tmp_path):
         "send_private_msg",
         {
             "user_id": 902,
-            "message": "看天空[CQ:image,file=base64://cG5n]"
+            "message": f"看天空[CQ:image,file=base64://{encoded}]"
             "[CQ:image,file=https://x.test/a.png?w=1&#44;h=2]",
         },
     )
     await actions.send_target("account-a", "private", "902", "", images=(str(image),))
     socket.call.assert_awaited_with(
         "send_private_msg",
-        {"user_id": 902, "message": "[CQ:image,file=base64://cG5n]"},
+        {"user_id": 902, "message": f"[CQ:image,file=base64://{encoded}]"},
     )
-    with pytest.raises(FileNotFoundError):
+    assert socket.call.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_invalid_local_image_is_refused_before_any_send(tmp_path):
+    socket = AsyncMock()
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+    not_image = tmp_path / "note.png"
+    not_image.write_text("plain text", encoding="utf-8")
+    with pytest.raises(ValueError, match="图片文件不存在"):
         await actions.send_target(
             "account-a", "private", "902", "hi", images=(str(tmp_path / "gone.png"),)
         )
-    assert socket.call.await_count == 2
+    with pytest.raises(ValueError, match="图片仅支持"):
+        await actions.send_target(
+            "account-a", "private", "902", "hi", images=(str(not_image),)
+        )
+    socket.call.assert_not_awaited()
 
 
 @pytest.mark.asyncio

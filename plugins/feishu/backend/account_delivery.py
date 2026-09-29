@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
@@ -13,11 +14,19 @@ from core.accounts.target_contract import (
     UncertainDeliveryError,
     account_send_media,
 )
+from core.common.media import detect_image_mime_from_header
 
 from .accounts import FeishuAccounts
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
+
+
+# Image types Feishu's image upload accepts (it also takes TIFF and ICO, which
+# are not recognised here).
+_IMAGE_MIME_TYPES = frozenset(
+    {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"}
+)
 
 
 class FeishuAccountDelivery:
@@ -63,6 +72,8 @@ class FeishuAccountDelivery:
         media = account_send_media(payload)
         if not message.strip() and not media:
             raise ValueError("消息和图片不能都为空")
+        for image in media:
+            _check_image(image)
         parts = [
             *([(channel.send, message)] if message.strip() else []),
             *((channel.send_image, image) for image in media),
@@ -120,3 +131,23 @@ async def _confirmed(sending: Awaitable[str | None]) -> str:
     if not message_id:
         raise UncertainDeliveryError("飞书平台未返回回执")
     return message_id
+
+
+def _check_image(source: str) -> None:
+    """Refuses a local image 飞书 cannot send before anything is sent.
+
+    URLs pass through; the platform fetches them. A local path must be a
+    readable PNG、JPEG、WebP、GIF 和 BMP file.
+    """
+    if source.startswith(("http://", "https://")):
+        return
+    path = Path(source).expanduser()
+    if not path.is_file():
+        raise ValueError(f"飞书 图片文件不存在: {path}")
+    try:
+        with path.open("rb") as image:
+            header = image.read(4096)
+    except OSError as exc:
+        raise ValueError(f"飞书 图片文件无法读取: {path}") from exc
+    if detect_image_mime_from_header(header) not in _IMAGE_MIME_TYPES:
+        raise ValueError(f"飞书 图片仅支持 PNG、JPEG、WebP、GIF 和 BMP: {path}")
