@@ -4,8 +4,8 @@
  * testable; `useStartupSplash` feeds it the clock.
  */
 
-/** A quicker startup never shows the splash, so it cannot flash for a frame. */
-export const startupSplashDelayMs = 400;
+/** On first launch the splash stays up at least this long (not counting its fade-out). */
+export const startupSplashMinMs = 3000;
 
 /** From here on 吟风 remarks that startup is slow. */
 export const startupSlowAfterMs = 8000;
@@ -27,27 +27,35 @@ export type StartupSplashInput = {
   settled: boolean;
   /** The splash is already up (it stays up across a restart from its own button). */
   shown: boolean;
-  /** Time since the current connection attempt began. */
+  /** The current attempt is the one begun at launch, not a 「重启连接」 after a failure. */
+  firstAttempt: boolean;
+  /** Time since the current connection attempt began (since launch on the first attempt). */
   attemptElapsedMs: number;
 };
 
 /**
  * The splash phase, or null when no splash is due. Only the first connect
  * after launch counts: once the backend has answered, later drops are the
- * offline banner's job. A failed startup shows at once (it does not go away
- * by itself); a booting one only after `startupSplashDelayMs`, unless the
- * splash is already up, e.g. while it retries after 「重启连接」.
+ * offline banner's job. The splash shows at once, and a failed startup
+ * turns it to `failed` (it does not go away by itself). On the first
+ * attempt a splash already up is held until `startupSplashMinMs` after
+ * launch even if the backend answered sooner; a slower answer, or one
+ * after 「重启连接」, lets it go at once.
  */
-export function selectStartupSplashPhase({ health, settled, shown, attemptElapsedMs }: StartupSplashInput): StartupSplashPhase | null {
-  if (settled || health === "online") return null;
+export function selectStartupSplashPhase({ health, settled, shown, firstAttempt, attemptElapsedMs }: StartupSplashInput): StartupSplashPhase | null {
+  if (settled || health === "online") {
+    return shown && firstAttempt && attemptElapsedMs < startupSplashMinMs ? "booting" : null;
+  }
   if (health === "offline") return "failed";
-  if (!shown && attemptElapsedMs < startupSplashDelayMs) return null;
   return attemptElapsedMs >= startupSlowAfterMs ? "slow" : "booting";
 }
 
-/** The next elapsed time at which the phase can change by itself, or null once nothing is pending. */
-export function nextStartupSplashCheckMs(attemptElapsedMs: number): number | null {
-  if (attemptElapsedMs < startupSplashDelayMs) return startupSplashDelayMs;
-  if (attemptElapsedMs < startupSlowAfterMs) return startupSlowAfterMs;
+/**
+ * The next elapsed time at which the phase can change by itself (the
+ * minimum-duration floor, then the slow remark), or null once nothing is pending.
+ */
+export function nextStartupSplashCheckMs(attemptElapsedMs: number, settled: boolean): number | null {
+  if (attemptElapsedMs < startupSplashMinMs) return startupSplashMinMs;
+  if (!settled && attemptElapsedMs < startupSlowAfterMs) return startupSlowAfterMs;
   return null;
 }

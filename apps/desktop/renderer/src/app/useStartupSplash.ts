@@ -9,14 +9,16 @@ import {
 /**
  * Drives the startup splash from the bridge health: times the current
  * connection attempt (restarted whenever health goes back to "connecting"),
- * remembers that startup is over once the backend has answered, and keeps
- * the last phase on screen for the fade-out. With `enabled` false (the
+ * remembers that startup is over once the backend has answered and whether
+ * it failed first (then a 「重启连接」 attempt gets no minimum duration), and
+ * keeps the last phase on screen for the fade-out. With `enabled` false (the
  * 看板娘 is off) there is no splash at all, as before stage 10.
  */
 export function useStartupSplash(health: string, enabled: boolean) {
   const [attemptStartedAt, setAttemptStartedAt] = useState(() => Date.now());
   const [elapsedMs, setElapsedMs] = useState(0);
   const [settled, setSettled] = useState(health === "online");
+  const [failedOnce, setFailedOnce] = useState(false);
   const [shownPhase, setShownPhase] = useState<StartupSplashPhase | null>(null);
   const [leaving, setLeaving] = useState(false);
 
@@ -26,22 +28,22 @@ export function useStartupSplash(health: string, enabled: boolean) {
       setSettled(true);
       return;
     }
+    if (health === "offline") setFailedOnce(true);
     if (health === "connecting") {
       setAttemptStartedAt(Date.now());
       setElapsedMs(0);
     }
   }, [health]);
 
-  // Wakes up once per threshold (show, slow) instead of ticking.
+  // Wakes up once per threshold (minimum duration, slow) instead of ticking.
   useEffect(() => {
-    if (settled) return undefined;
-    const next = nextStartupSplashCheckMs(elapsedMs);
+    const next = nextStartupSplashCheckMs(elapsedMs, settled);
     if (next === null) return undefined;
     const timer = window.setTimeout(() => setElapsedMs(Date.now() - attemptStartedAt), Math.max(0, attemptStartedAt + next - Date.now()));
     return () => window.clearTimeout(timer);
   }, [attemptStartedAt, elapsedMs, settled]);
 
-  const phase = enabled ? selectStartupSplashPhase({ health, settled, shown: shownPhase !== null, attemptElapsedMs: elapsedMs }) : null;
+  const phase = enabled ? selectStartupSplashPhase({ health, settled, shown: shownPhase !== null, firstAttempt: !failedOnce, attemptElapsedMs: elapsedMs }) : null;
 
   // Remember what was last on screen, so the splash can fade out showing it.
   useEffect(() => {
