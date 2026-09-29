@@ -21,6 +21,7 @@ def abort_command(state: TurnState, reply: str) -> BeforeTurnCtx:
         retrieved_memory_block="",
         retrieval_trace_raw=None,
         history_messages=(),
+        context_scope=state.context_scope,
         abort=True,
         abort_reply=reply,
     )

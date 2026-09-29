@@ -41,6 +41,7 @@ def _before_turn_ctx(**overrides: object) -> BeforeTurnCtx:
         retrieved_memory_block="",
         retrieval_trace_raw=None,
         history_messages=(),
+        context_scope=None,
     )
     defaults.update(overrides)
     return BeforeTurnCtx(**defaults)

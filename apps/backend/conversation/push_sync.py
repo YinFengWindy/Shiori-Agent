@@ -70,6 +70,7 @@ class ExternalImageSyncService:
                 session_key=event.session_key,
                 channel=event.channel,
                 role_id=event.role_id,
+                thread_id=thread.id,
             )
         )
         return event
