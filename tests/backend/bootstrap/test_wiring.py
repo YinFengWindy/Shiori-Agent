@@ -626,6 +626,7 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
         config=config,
         workspace=tmp_path,
         runtime_roles=roles,
+        group_environment=cast(Any, object()),
         bus=cast(Any, SimpleNamespace()),
         provider=cast(Any, object()),
         light_provider=None,
@@ -635,7 +636,6 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
             SimpleNamespace(
                 get_or_create=lambda key: None,
                 commit_consolidation=lambda request, write_memory, publish_committed: None,
-                conversation_store=object(),
             ),
         ),
         presence=cast(Any, None),

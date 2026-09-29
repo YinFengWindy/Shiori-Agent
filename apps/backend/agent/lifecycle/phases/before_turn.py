@@ -92,7 +92,7 @@ class _AcquireSessionModule:
                 self._session_manager.workspace,
                 session_key=state.session_key,
                 role_id=message_role_id or session_role_id,
-                thread_id=str((state.msg.metadata or {}).get("thread_id") or ""),
+                thread_id=state.thread_id,
             )
         frame.slots[_SESSION_SLOT] = session
         return frame

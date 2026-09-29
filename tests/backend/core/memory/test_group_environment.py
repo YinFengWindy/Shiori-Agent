@@ -61,4 +61,6 @@ def test_recent_activity_leaves_out_chats_merged_into_the_user_context(
     assert "903 的最近动态" in injected
     assert "902 的最近动态" not in injected
     # 记录本身不迁移、不删除。
-    assert environment.read_recent_activity(thread_ids["902"]) == "902 的最近动态"
+    assert environment.read("mira", thread_ids["902"]).recent_activity == (
+        "902 的最近动态"
+    )

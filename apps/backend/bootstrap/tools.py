@@ -107,6 +107,8 @@ class CoreRuntime:
     presence: PresenceStore
     relationship_runtime: RoleRelationshipRuntimeService
     role_runtime_registry: RoleRuntimeRegistry
+    # 群环境层（#497）：被动回合、记忆整理与主动/发呆回合共用这一个实例。
+    group_environment: GroupEnvironment
     scene_service: SceneObservationService | None = None
     image_sync_service: ExternalPushSyncService | None = None
     agent_provider: LLMProvider | None = None
@@ -320,11 +322,11 @@ def _build_loop_deps(
     memory_runtime: MemoryRuntime,
     relationship_runtime: RoleRelationshipRuntimeService,
     runtime_roles: RoleStore,
+    group_environment: GroupEnvironment,
     role_runtime_registry: RoleRuntimeRegistry | None = None,
     channel_directory: ChannelDirectory | None = None,
 ) -> AgentLoopDeps:
     wiring = getattr(config, "wiring", WiringConfig())
-    group_environment = GroupEnvironment(workspace, session_manager.conversation_store)
     context = resolve_context_factory(wiring.context)(
         workspace,
         memory_runtime.markdown.store,
@@ -527,10 +529,12 @@ def build_core_runtime(
     channel_directory = (
         shared.channel_directory if shared is not None else ChannelDirectory()
     )
+    group_environment = GroupEnvironment(workspace, session_manager.conversation_store)
     loop_deps = _build_loop_deps(
         config=config,
         workspace=workspace,
         runtime_roles=role_store,
+        group_environment=group_environment,
         bus=bus,
         provider=loop_provider,
         light_provider=light_provider,
@@ -680,6 +684,7 @@ def build_core_runtime(
         presence=presence,
         relationship_runtime=relationship_runtime,
         role_runtime_registry=role_runtime_registry,
+        group_environment=group_environment,
         plugin_manager=plugin_manager,
         scene_service=scene_service,
         channel_directory=channel_directory,

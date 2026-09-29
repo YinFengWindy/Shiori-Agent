@@ -32,7 +32,7 @@ from .external_segment import (
     build_group_environment_prompt,
     format_external_thread,
     group_external_threads,
-    parse_group_environment_updates,
+    parse_group_environment_update,
 )
 from .recent_context import _RecentContextWorkerMixin
 
@@ -177,59 +177,53 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         role_id: str,
         nsfw_memory_enabled: bool,
     ) -> "list[GroupEnvironmentUpdate] | _ConsolidationFailure":
-        """调主模型把外部段按会话整理成最近动态与群笔记（#497）。
+        """调主模型把外部段逐个会话整理成最近动态与群笔记（#497）。
 
-        失败语义与用户层整理一致：返回 ``_ConsolidationFailure``，本次整理不提交、
-        游标不推进，下次整理重试。
+        每个会话单独调用一次，输出规模只与该会话挂钩。任一会话失败时语义与用户层
+        整理一致：返回 ``_ConsolidationFailure``，本次整理不提交、游标不推进，下次重试。
         """
-        rendered = [
-            (thread, text)
-            for thread in threads
-            if (
-                text := format_external_thread(
-                    thread, nsfw_memory_enabled=nsfw_memory_enabled
-                )
+        updates: list[GroupEnvironmentUpdate] = []
+        for thread in threads:
+            conversation = format_external_thread(
+                thread, nsfw_memory_enabled=nsfw_memory_enabled
             )
-        ]
-        if not rendered:
-            return []
-        previous = {
-            thread.thread_id: (
-                group_environment.read_recent_activity(thread.thread_id),
-                group_environment.read_note(role_id, thread.thread_id),
+            if not conversation:
+                continue
+            prompt = build_group_environment_prompt(
+                thread,
+                conversation,
+                group_environment.read(role_id, thread.thread_id),
             )
-            for thread, _ in rendered
-        }
-        call_result = await self._call_llm_step(
-            step="group_environment_extract",
-            provider=self._provider,
-            model=self._model,
-            messages=[
-                {"role": "system", "content": GROUP_ENVIRONMENT_SYSTEM},
-                {
-                    "role": "user",
-                    "content": build_group_environment_prompt(
-                        rendered, previous=previous
-                    ),
-                },
-            ],
-            max_tokens=4096,
-            timeout_s=_EVENT_EXTRACTION_TIMEOUT_S,
-        )
-        if isinstance(call_result, _ConsolidationFailure):
-            return call_result
-        text, elapsed_ms = call_result
-        payload = _parse_consolidation_payload(text) if text else None
-        if payload is None:
-            logger.warning(
-                "Group environment consolidation: invalid response %r", text[:200]
-            )
-            return _ConsolidationFailure(
+            call_result = await self._call_llm_step(
                 step="group_environment_extract",
-                error="invalid_json" if text else "empty_response",
-                elapsed_ms=elapsed_ms,
+                provider=self._provider,
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": GROUP_ENVIRONMENT_SYSTEM},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=2048,
+                timeout_s=_EVENT_EXTRACTION_TIMEOUT_S,
             )
-        return parse_group_environment_updates(payload, [t for t, _ in rendered])
+            if isinstance(call_result, _ConsolidationFailure):
+                return call_result
+            text, elapsed_ms = call_result
+            payload = _parse_consolidation_payload(text) if text else None
+            if payload is None:
+                logger.warning(
+                    "Group environment consolidation: invalid response thread=%s %r",
+                    thread.thread_id,
+                    text[:200],
+                )
+                return _ConsolidationFailure(
+                    step="group_environment_extract",
+                    error="invalid_json" if text else "empty_response",
+                    elapsed_ms=elapsed_ms,
+                )
+            update = parse_group_environment_update(payload, thread)
+            if update.recent_activity or update.group_note:
+                updates.append(update)
+        return updates
 
     async def prepare_consolidation(
         self,
@@ -238,14 +232,15 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         force: bool = False,
         input_token_estimate: int | None = None,
         user_threads: "UserContextThreads | None" = None,
-        group_environment: "GroupEnvironment | None" = None,
+        *,
+        group_environment: "GroupEnvironment",
     ) -> _ConsolidationDraft | _ConsolidationFailure | None:
         """准备一次整理：选窗口、拆段、提取用户层产物、整理外部段并生成 RECENT_CONTEXT。
 
         ``user_threads`` 是角色共享会话此刻的用户上下文会话；给出时窗口按发送者
         拆段，只有用户本人段进入用户层整理与引擎，RECENT_CONTEXT 只取用户上下文
         会话的消息。为 None 时会话没有划分，整个窗口都属于用户本人。外部段按会话
-        整理成群环境层的更新，外部段非空时必须给出 ``group_environment``。
+        整理成 ``group_environment`` 的更新。
         """
         profile_maint = self._profile_maint
         # 1. 先决定这次要归档哪一段消息窗口；没有新窗口就直接返回。
@@ -443,8 +438,6 @@ history_entries.emotional_weight 规则：
         group_environment_updates: list[GroupEnvironmentUpdate] = []
         external_threads = group_external_threads(window, segments)
         if external_threads:
-            if group_environment is None:
-                raise RuntimeError("group environment is not bound")
             environment_result = await self._extract_group_environment(
                 external_threads,
                 group_environment=group_environment,

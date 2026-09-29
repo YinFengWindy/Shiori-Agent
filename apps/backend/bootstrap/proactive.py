@@ -68,11 +68,13 @@ def build_proactive_runtime(
     event_bus: "EventBus | None" = None,
     provider_consumer: Callable[[LLMProvider], None] | None = None,
     desktop_presence: DesktopPresence,
+    group_environment: GroupEnvironment,
 ) -> tuple[list, dict[str, ProactiveLoop]]:
     """Builds one proactive loop per enabled role.
 
     ``desktop_presence`` is the app-level report the loops read when choosing
-    where each proactive message goes.
+    where each proactive message goes. ``group_environment`` is the runtime's
+    shared group environment layer (#497), read for recent external activity.
     """
     tasks: list = []
     roles = [
@@ -88,7 +90,6 @@ def build_proactive_runtime(
     loops: dict[str, ProactiveLoop] = {}
     role_runtime_registry = agent_loop.role_runtime_registry
     role_aware_provider = RoleAwareProvider(proactive_provider)
-    group_environment = GroupEnvironment(workspace, session_manager.conversation_store)
     for role in roles:
         proactive_cfg = _build_role_proactive_config(role)
         proactive_state = ProactiveStateStore(

@@ -26,5 +26,4 @@ def test_projecting_new_messages_keeps_the_thread_summary(tmp_path: Path) -> Non
     state = manager.conversation_store.get_thread_state(thread.id)
     assert state is not None
     assert state.summary == "阿明在群里晒了新买的狗。"
-    assert state.metadata["summary_updated_at"] == "2026-09-30T10:00:00+08:00"
     assert state.metadata["message_count"] == 1

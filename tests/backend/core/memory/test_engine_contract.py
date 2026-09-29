@@ -501,6 +501,7 @@ async def test_markdown_maintenance_records_background_consolidation_failure(
         MemoryLifecycleBindRequest(
             get_session=lambda _key: session,
             commit_consolidation=AsyncMock(),
+            group_environment=cast(Any, object()),
         )
     )
 
@@ -542,6 +543,7 @@ async def test_markdown_maintenance_background_request_does_not_wait(tmp_path: P
         MemoryLifecycleBindRequest(
             get_session=lambda _key: session,
             commit_consolidation=AsyncMock(),
+            group_environment=cast(Any, object()),
         )
     )
 
@@ -576,6 +578,7 @@ async def test_default_memory_engine_refreshes_recent_context_from_lifecycle_rol
         MemoryLifecycleBindRequest(
             get_session=lambda _key: session,
             commit_consolidation=commit_consolidation,
+            group_environment=cast(Any, object()),
         )
     )
 
@@ -624,6 +627,7 @@ async def test_default_memory_engine_refreshes_role_recent_context_in_role_memor
         MemoryLifecycleBindRequest(
             get_session=lambda _key: session,
             commit_consolidation=commit_consolidation,
+            group_environment=cast(Any, object()),
         )
     )
 
@@ -681,6 +685,7 @@ async def test_default_memory_engine_consolidates_ready_session_from_lifecycle(
         MemoryLifecycleBindRequest(
             get_session=lambda _key: session,
             commit_consolidation=commit_consolidation,
+            group_environment=cast(Any, object()),
         )
     )
 
@@ -737,6 +742,7 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(
         MemoryLifecycleBindRequest(
             get_session=manager.get_or_create,
             commit_consolidation=manager.commit_consolidation,
+            group_environment=cast(Any, object()),
         )
     )
     draft = _ConsolidationDraft(
@@ -782,6 +788,13 @@ async def test_markdown_consolidation_failure_trace_does_not_advance_cursor(
         provider=cast(Any, SimpleNamespace()),
         model="lm",
         keep_count=4,
+    )
+    maintenance.bind_lifecycle(
+        MemoryLifecycleBindRequest(
+            get_session=lambda _key: session,
+            commit_consolidation=AsyncMock(),
+            group_environment=cast(Any, object()),
+        )
     )
     maintenance._worker.prepare_consolidation = AsyncMock(
         return_value=_ConsolidationFailure(
@@ -847,6 +860,7 @@ async def test_markdown_consolidation_runs_post_consolidation_hook(tmp_path: Pat
             get_session=lambda _key: session,
             commit_consolidation=manager.commit_consolidation,
             after_consolidation=after_consolidation,
+            group_environment=cast(Any, object()),
         )
     )
 
@@ -905,6 +919,7 @@ async def test_markdown_consolidation_ignores_post_consolidation_hook_failure(
             get_session=lambda _key: session,
             commit_consolidation=manager.commit_consolidation,
             after_consolidation=_fail,
+            group_environment=cast(Any, object()),
         )
     )
 
@@ -950,6 +965,7 @@ async def test_default_memory_engine_serializes_lifecycle_maintenance(
         MemoryLifecycleBindRequest(
             get_session=lambda _key: session,
             commit_consolidation=AsyncMock(),
+            group_environment=cast(Any, object()),
         )
     )
 

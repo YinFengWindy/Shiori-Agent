@@ -42,6 +42,7 @@ from agent.lifecycle.phases.prompt_render import (
     default_prompt_render_modules,
 )
 from agent.lifecycle.types import (
+    inbound_thread_id,
     AfterStepCtx,
     BeforeStepCtx,
     BeforeStepInput,
@@ -411,7 +412,7 @@ class DefaultReasoner(
                         context_scope=(
                             context_view.scope if context_view is not None else None
                         ),
-                        thread_id=str((msg.metadata or {}).get("thread_id") or ""),
+                        thread_id=inbound_thread_id(msg),
                     )
                 )
                 initial_messages = prompt_render.messages

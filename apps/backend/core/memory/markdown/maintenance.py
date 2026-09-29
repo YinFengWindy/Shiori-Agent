@@ -325,6 +325,11 @@ class MarkdownMemoryMaintenance:
             for message in getattr(request.session, "messages", [])
         )
         expected_cursor = int(getattr(request.session, "last_consolidated", 0))
+        # 整理的提交与群环境层写入都由 bind_lifecycle 接入，未接入时直接失败。
+        commit = self._commit_consolidation
+        group_environment = self._group_environment
+        if commit is None or group_environment is None:
+            raise RuntimeError("memory lifecycle is not bound")
         draft = await self._worker.prepare_consolidation(
             request.session,
             archive_all=request.archive_all,
@@ -333,7 +338,7 @@ class MarkdownMemoryMaintenance:
                 request.session, request.current_content
             ),
             user_threads=self._user_threads_for_session(request.session),
-            group_environment=self._group_environment,
+            group_environment=group_environment,
         )
         if draft is None:
             if session_key:
@@ -350,12 +355,12 @@ class MarkdownMemoryMaintenance:
                     "elapsed_ms": draft.elapsed_ms,
                 }
             )
-        commit = self._commit_consolidation
-        if commit is None:
-            raise RuntimeError("session consolidation commit operation is not bound")
 
         async def write_memory() -> None:
             await self._commit_markdown_draft(request.session, draft)
+            await self._write_group_environment(
+                request.session, draft, group_environment
+            )
 
         async def publish_committed() -> None:
             await self._publish_consolidation(request.session, draft)
@@ -425,17 +430,16 @@ class MarkdownMemoryMaintenance:
                 history_entries,
                 draft.source_ref,
             )
-        await self._write_group_environment(session, draft)
 
     async def _write_group_environment(
-        self, session: object, draft: _ConsolidationDraft
+        self,
+        session: object,
+        draft: _ConsolidationDraft,
+        group_environment: "GroupEnvironment",
     ) -> None:
         """把外部段整理出的最近动态与群笔记写入群环境层；不经过记忆引擎。"""
         if not draft.group_environment_updates:
             return
-        group_environment = self._group_environment
-        if group_environment is None:
-            raise RuntimeError("group environment is not bound")
         role_id = _session_role_id(session)
         updated_at = datetime.now().astimezone()
         for update in draft.group_environment_updates:

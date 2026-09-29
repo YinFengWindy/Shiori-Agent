@@ -135,6 +135,8 @@ class _PromptWarmupModule:
                 message_timestamp=ctx.timestamp,
                 retrieved_memory_block=ctx.retrieved_memory_block,
                 context_scope=frame.input.state.context_scope,
+                # 与正式渲染同一来源：外部回合据此注入当前会话的群笔记。
+                thread_id=frame.input.state.thread_id,
             ),
             session_metadata=(
                 dict(frame.input.state.session.metadata)

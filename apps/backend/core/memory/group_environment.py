@@ -47,6 +47,14 @@ class GroupEnvironmentUpdate:
 
 
 @dataclass(frozen=True)
+class GroupEnvironmentSnapshot:
+    """某个外部会话当前的群环境层内容，供整理时在其基础上更新；没有时为空串。"""
+
+    recent_activity: str
+    group_note: str
+
+
+@dataclass(frozen=True)
 class RecentActivity:
     """一个外部会话的最近动态。"""
 
@@ -76,10 +84,13 @@ class GroupEnvironment:
             return ""
         return path.read_text(encoding="utf-8").strip()
 
-    def read_recent_activity(self, thread_id: str) -> str:
-        """会话当前的最近动态；还没有时为空串。"""
+    def read(self, role_id: str, thread_id: str) -> GroupEnvironmentSnapshot:
+        """会话当前的最近动态与群笔记。"""
         state = self._store.get_thread_state(thread_id)
-        return state.summary if state is not None else ""
+        return GroupEnvironmentSnapshot(
+            recent_activity=state.summary if state is not None else "",
+            group_note=self.read_note(role_id, thread_id),
+        )
 
     def apply(
         self, role_id: str, update: GroupEnvironmentUpdate, *, updated_at: datetime
@@ -111,6 +122,8 @@ class GroupEnvironment:
         for state in self._store.list_summarized_thread_states(role_id):
             if user_threads.contains(state.owner_id):
                 continue
+            # ``apply`` 总是把摘要与更新时间一起写入；有摘要却缺时间说明数据已损坏，
+            # 直接 KeyError 失败即停，不猜一个时间。
             updated_at = datetime.fromisoformat(
                 str(state.metadata[SUMMARY_UPDATED_AT_KEY])
             )

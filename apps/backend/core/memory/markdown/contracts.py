@@ -45,7 +45,7 @@ class MemoryLifecycleBindRequest:
         Awaitable[bool],
     ]
     after_consolidation: Callable[[object], Awaitable[None]] | None = None
-    # 群环境层（#497）：整理外部段的产出写到这里；外部段非空却没有绑定时整理失败。
+    # 群环境层（#497）：整理外部段的产出写到这里；未绑定时整理直接失败。
     group_environment: "GroupEnvironment | None" = None
 
 

@@ -206,3 +206,48 @@ def test_schema_helper_refuses_to_run_outside_a_transaction(tmp_path: Path) -> N
         with pytest.raises(RuntimeError, match="open transaction"):
             conversation_store_module.ensure_conversation_schema(conn)
         assert conn.execute("SELECT name FROM sqlite_master").fetchall() == []
+
+
+def test_thread_state_upsert_keeps_summary_and_merges_metadata(
+    tmp_path: Path,
+) -> None:
+    store = ConversationStore(tmp_path / "conversation.db")
+    try:
+        store.upsert_thread_state(
+            "thread", summary="群里在聊狗", metadata={"summary_updated_at": "t0"}
+        )
+        # 投影只写计数：不传 summary 时保留摘要，metadata 合并而不是覆盖。
+        state = store.upsert_thread_state("thread", metadata={"message_count": 3})
+    finally:
+        store.close()
+
+    assert state.summary == "群里在聊狗"
+    assert state.metadata == {"summary_updated_at": "t0", "message_count": 3}
+
+
+def test_list_summarized_thread_states_covers_the_roles_current_threads(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    service = ConversationService(manager)
+    store = manager.conversation_store
+    threads = {
+        name: service.ensure_thread_for_session(
+            LegacySessionDescriptor(
+                session_key=f"qq:{name}", role_id=role_id, channel="qq", chat_id=name
+            )
+        )
+        for name, role_id in (
+            ("current", "mira"),
+            ("archived", "mira"),
+            ("blank", "mira"),
+            ("other", "luna"),
+        )
+    }
+    for name, thread in threads.items():
+        store.upsert_thread_state(thread.id, summary="" if name == "blank" else name)
+    store.archive_thread_and_release_legacy_session_key(threads["archived"].id)
+
+    states = store.list_summarized_thread_states("mira")
+
+    assert [state.owner_id for state in states] == [threads["current"].id]

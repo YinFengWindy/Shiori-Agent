@@ -59,6 +59,7 @@ def _setup(tmp_path: Path):
         MemoryLifecycleBindRequest(
             get_session=manager.get_or_create,
             commit_consolidation=manager.commit_consolidation,
+            group_environment=GroupEnvironment(tmp_path, manager.conversation_store),
         )
     )
     return manager, session, maintenance, event_bus
@@ -438,17 +439,26 @@ async def test_concurrent_ensure_consolidation_shares_in_flight_task(
 class _RecordingProvider:
     """记下整理各步收到的提示词，按步骤返回固定结果。"""
 
-    def __init__(self, environment_reply: str = '{"threads": []}') -> None:
+    def __init__(self, environment_replies: dict[str, str] | None = None) -> None:
         self.event_prompts: list[str] = []
         self.recent_context_prompts: list[str] = []
         self.environment_prompts: list[str] = []
-        self.environment_reply = environment_reply
+        # 群环境整理按会话称呼给出回复；没给的会话回空对象（不更新）。
+        self.environment_replies = environment_replies or {}
 
     async def chat(self, *, messages: list[dict[str, str]], **_kwargs: Any):
         prompt = messages[-1]["content"]
         if prompt.startswith("群环境整理"):
             self.environment_prompts.append(prompt)
-            return SimpleNamespace(content=self.environment_reply)
+            reply = next(
+                (
+                    content
+                    for label, content in self.environment_replies.items()
+                    if label in prompt
+                ),
+                "{}",
+            )
+            return SimpleNamespace(content=reply)
         if "近期语境压缩代理" in prompt:
             self.recent_context_prompts.append(prompt)
             return SimpleNamespace(content='{"active_topics": ["你喜欢猫"]}')
@@ -463,10 +473,12 @@ class _RecordingProvider:
 
 
 def _recording_maintenance(
-    tmp_path: Path, manager: SessionManager, environment_reply: str = '{"threads": []}'
+    tmp_path: Path,
+    manager: SessionManager,
+    environment_replies: dict[str, str] | None = None,
 ):
     """接上真实会话提交、群环境层，记录提示词与引擎事件的整理服务。"""
-    provider = _RecordingProvider(environment_reply)
+    provider = _RecordingProvider(environment_replies)
     event_bus = EventBus()
     events: list[ConsolidationCommitted] = []
     event_bus.on(ConsolidationCommitted, lambda event: events.append(event))
@@ -602,53 +614,52 @@ def test_group_member_turn_still_triggers_consolidation():
     assert enqueued == ["role:mira"]
 
 
-_GROUP_SOURCE = {"chat_type": "group", "group_name": "猫猫群"}
-
-
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("chat_id", "source", "label"),
-    [
-        ("g1", _GROUP_SOURCE, "群「猫猫群」"),
-        ("p9", {"chat_type": "private"}, "与「阿明」的私聊"),
-    ],
-)
 async def test_external_segment_updates_each_threads_recent_activity_and_note(
-    tmp_path: Path, chat_id: str, source: dict[str, str], label: str
+    tmp_path: Path,
 ):
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")
     session.metadata["role_id"] = "mira"
-    thread = network_thread_id("mira", "qq", chat_id)
+    group = network_thread_id("mira", "qq", "g1")
+    stranger = network_thread_id("mira", "qq", "p9")
     session.add_message(
         "user",
         "我是阿明，我最喜欢狗",
-        thread_id=thread,
-        metadata={
-            "message_source": {**source, "sender_id": "555", "sender_name": "阿明"}
-        },
-    )
-    session.add_message("assistant", "阿明好", thread_id=thread)
-    session.add_message(
-        "user",
-        "我明天去面试",
-        thread_id=thread,
+        thread_id=group,
         metadata={
             "message_source": {
-                **source,
-                "sender_id": "902",
-                "sender_name": "小风",
-                "sender_is_user": True,
+                "chat_type": "group",
+                "group_name": "猫猫群",
+                "sender_id": "555",
+                "sender_name": "阿明",
+            }
+        },
+    )
+    session.add_message("assistant", "阿明好", thread_id=group)
+    session.add_message(
+        "user",
+        "你好呀",
+        thread_id=stranger,
+        metadata={
+            "message_source": {
+                "chat_type": "private",
+                "sender_id": "777",
+                "sender_name": "路人甲",
             }
         },
     )
     manager.save(session)
-    reply = (
-        '{"threads": [{"id": "T1", "recent_activity": "阿明说他最喜欢狗，我和他打了招呼。",'
-        ' "group_note": "## 氛围\n轻松"}]}'
-    )
+    replies = {
+        "群「猫猫群」": (
+            '{"recent_activity": "阿明说他最喜欢狗。", "group_note": "## 氛围\\n轻松"}'
+        ),
+        "与「路人甲」的私聊": (
+            '{"recent_activity": "路人甲来打了招呼。", "group_note": "## 氛围\\n陌生"}'
+        ),
+    }
     provider, event_bus, _events, maintenance = _recording_maintenance(
-        tmp_path, manager, reply
+        tmp_path, manager, replies
     )
     try:
         result = await maintenance.consolidate(
@@ -657,18 +668,48 @@ async def test_external_segment_updates_each_threads_recent_activity_and_note(
     finally:
         await event_bus.aclose()
 
-    # 外部段按会话渲染：带会话称呼，群友标昵称，用户本人标「你的用户」，角色是「我」。
-    [prompt] = provider.environment_prompts
-    assert f"## 会话 T1：{label}" in prompt
-    assert "阿明（555）: 我是阿明，我最喜欢狗" in prompt
-    assert "我: 阿明好" in prompt
-    assert "你的用户（小风）: 我明天去面试" in prompt
-    # 最近动态写进会话状态的摘要，群笔记写进角色记忆目录。
-    state = manager.conversation_store.get_thread_state(thread)
-    assert state is not None
-    assert state.summary == "阿明说他最喜欢狗，我和他打了招呼。"
-    assert state.metadata[SUMMARY_LABEL_KEY] == label
-    assert SUMMARY_UPDATED_AT_KEY in state.metadata
+    # 每个外部会话单独整理一次；群聊与陌生私聊各自产出最近动态与群笔记。
+    assert len(provider.environment_prompts) == 2
     environment = GroupEnvironment(tmp_path, manager.conversation_store)
-    assert environment.read_note("mira", thread) == "## 氛围\n轻松"
+    for thread, label, summary, note in (
+        (group, "群「猫猫群」", "阿明说他最喜欢狗。", "## 氛围\n轻松"),
+        (stranger, "与「路人甲」的私聊", "路人甲来打了招呼。", "## 氛围\n陌生"),
+    ):
+        state = manager.conversation_store.get_thread_state(thread)
+        assert state is not None
+        assert state.summary == summary
+        assert state.metadata[SUMMARY_LABEL_KEY] == label
+        assert SUMMARY_UPDATED_AT_KEY in state.metadata
+        assert environment.read_note("mira", thread) == note
     assert result.consolidated_count == 3
+
+
+@pytest.mark.asyncio
+async def test_failed_external_thread_keeps_the_whole_window_uncommitted(
+    tmp_path: Path,
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    group = network_thread_id("mira", "qq", "g1")
+    session.add_message(
+        "user",
+        "我是阿明",
+        thread_id=group,
+        metadata={"message_source": {"sender_id": "555", "group_name": "猫猫群"}},
+    )
+    manager.save(session)
+    provider, event_bus, _events, maintenance = _recording_maintenance(
+        tmp_path, manager, {"群「猫猫群」": "not json"}
+    )
+    try:
+        result = await maintenance.consolidate(
+            ConsolidateRequest(session=session, force=True)
+        )
+    finally:
+        await event_bus.aclose()
+
+    assert result.trace["mode"] == "failed"
+    assert result.trace["error"] == "invalid_json"
+    manager.invalidate(session.key)
+    assert manager.get_or_create(session.key).last_consolidated == 0

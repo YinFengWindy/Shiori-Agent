@@ -63,6 +63,7 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
             ),
         ),
         desktop_presence=DesktopPresence(),
+        group_environment=MagicMock(),
     )
 
     assert loops["mira"]._memory is facade
