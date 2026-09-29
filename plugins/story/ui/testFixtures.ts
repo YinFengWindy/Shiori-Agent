@@ -4,12 +4,13 @@ import { PluginHostServicesProvider } from "@shiori/plugin-sdk";
 import { createFakeHostServices } from "@shiori/plugin-sdk/testing";
 import type { StoryBeat, StoryDetails, StorySummary } from "./types";
 
-/** The URL the host renders for a local path it granted no access to, which is every path in these tests. */
-const UNAVAILABLE_ASSET_URL = "shiori-asset://local/unavailable";
-
-/** Renders Story markup inside fake host services, the way the host mounts the Story page. */
+/**
+ * Renders Story markup inside fake host services, the way the host mounts the
+ * Story page. A local path renders as the fake `host.assets.url` of that path,
+ * `fake-asset://<path>`, so tests can tell which path a surface displayed.
+ */
 export function renderStoryMarkup(node: ReactNode) {
-  const { host } = createFakeHostServices({ assetUrl: () => UNAVAILABLE_ASSET_URL });
+  const { host } = createFakeHostServices();
   return renderToStaticMarkup(createElement(PluginHostServicesProvider, { services: host, children: node }));
 }
 

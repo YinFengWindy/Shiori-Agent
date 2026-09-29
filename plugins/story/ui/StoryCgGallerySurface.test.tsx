@@ -35,7 +35,7 @@ describe("StoryCgGallerySurface", () => {
     assert.match(markup, /data-testid="story-cg-gallery-panel"/);
     assert.match(markup, />CG 鉴赏</);
     assert.match(markup, />雨港</);
-    assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
+    assert.match(markup, /src="fake-asset:\/\/D:\\stories\\opening\.png"/);
     assert.doesNotMatch(markup, />1 张</);
     assert.doesNotMatch(markup, />1 \/ 1</);
     assert.doesNotMatch(markup, /text-\[#B64B75\]/);

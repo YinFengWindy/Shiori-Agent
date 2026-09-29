@@ -44,7 +44,7 @@ describe("StoryGameSurface", () => {
   it("uses the Story-owned background resource when it is ready", () => {
     const markup = renderStoryMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({ currentScene: { key: "default", name: "默认场景", characterIds: ["role-1"] }, backgroundResource: { id: "resource-1", storyId: "story-1", kind: "background", visualType: "scene", sceneKey: "default", status: "ready", path: "D:\\stories\\opening.png", prompt: "anime screencap", sourceTurnId: "turn-1", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" } })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
     assert.match(markup, /data-testid="story-game-backdrop"/);
-    assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
+    assert.match(markup, /url\(fake-asset:\/\/D:\\stories\\opening\.png\)/);
     assert.match(markup, /data-testid="story-game-character"/);
     assert.match(markup, /shiori-asset:\/\/local\/role/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
@@ -58,7 +58,7 @@ describe("StoryGameSurface", () => {
       ],
     })} busy={false} error="" onSubmitInput={async () => true} onRegenerateCg={() => undefined} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
-    assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
+    assert.match(markup, /url\(fake-asset:\/\/D:\\stories\\scene-2\.png\)/);
     assert.match(markup, /aria-label="重新生成当前 CG"/);
     assert.doesNotMatch(markup, /scene-1\.png/);
     assert.doesNotMatch(markup, /data-testid="story-game-character"/);
@@ -72,7 +72,7 @@ describe("StoryGameSurface", () => {
       ],
     })} busy={false} error="" onSubmitInput={async () => true} onRegenerateCg={() => undefined} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
-    assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
+    assert.match(markup, /url\(fake-asset:\/\/D:\\stories\\scene-old\.png\)/);
     assert.match(markup, /aria-label="重新生成当前 CG"/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
