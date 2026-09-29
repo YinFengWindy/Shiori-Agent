@@ -8,7 +8,12 @@ from typing import Any
 
 from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains, like_prefix
 
-from .common import CONTEXT_CURSORS_METADATA_KEY, ContextScope
+from .common import (
+    CONTEXT_CURSOR_ASSIGNMENTS,
+    ContextScope,
+    context_cursor_values,
+    row_context_cursors,
+)
 
 
 class _SessionMixin:
@@ -68,28 +73,19 @@ class _SessionMixin:
             self._conn.commit()
 
     def write_context_cursors(
-        self, key: str, context_cursors: dict[ContextScope, int]
+        self, key: str, context_cursors: dict[ContextScope, int] | None
     ) -> None:
-        """把按上下文的整理游标写进会话元数据；不提交，调用方持锁并负责提交。"""
+        """写入按上下文的整理游标列（None 写回未迁移）；不提交，调用方负责提交。"""
         with self._lock:
-            row = self._conn.execute(
-                "SELECT metadata FROM sessions WHERE key = ?", (key,)
-            ).fetchone()
-            if row is None:
-                raise ValueError(f"session 不存在: {key}")
-            metadata = json.loads(row["metadata"] or "{}")
-            metadata[CONTEXT_CURSORS_METADATA_KEY] = {
-                scope: int(cursor) for scope, cursor in context_cursors.items()
-            }
             self._conn.execute(
-                "UPDATE sessions SET metadata = ? WHERE key = ?",
-                (json.dumps(metadata, ensure_ascii=False), key),
+                f"UPDATE sessions SET {CONTEXT_CURSOR_ASSIGNMENTS} WHERE key = ?",
+                (*context_cursor_values(context_cursors), key),
             )
 
     def get_session_meta(self, key: str) -> dict[str, Any] | None:
         with self._lock:
             row = self._conn.execute(
-                "SELECT key, created_at, updated_at, last_consolidated, metadata, last_user_at, last_proactive_at FROM sessions WHERE key = ?",
+                "SELECT key, created_at, updated_at, last_consolidated, metadata, last_user_at, last_proactive_at, user_cursor, external_cursor FROM sessions WHERE key = ?",
                 (key,),
             ).fetchone()
         if row is None:
@@ -102,6 +98,7 @@ class _SessionMixin:
             "metadata": json.loads(row["metadata"] or "{}"),
             "last_user_at": row["last_user_at"],
             "last_proactive_at": row["last_proactive_at"],
+            "context_cursors": row_context_cursors(row),
         }
 
     def list_sessions(self) -> list[dict[str, Any]]:

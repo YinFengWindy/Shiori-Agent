@@ -18,7 +18,6 @@ from conversation.service import desktop_thread_id, network_thread_id
 from core.accounts import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
 from session.manager import Session
-from session.store.common import CONTEXT_CURSORS_METADATA_KEY
 
 QQ = AccountRecord(
     id="qq:101",
@@ -157,7 +156,7 @@ def test_each_context_reads_history_from_its_own_cursor(tmp_path: Path) -> None:
     } == before
     assert history_start(session, None) == 2
 
-    session.metadata[CONTEXT_CURSORS_METADATA_KEY] = {"user": 0, "external": 5}
+    session.context_cursors = {"user": 0, "external": 5}
     assert history(user, history_start(session, user)) == ["m0", "m2", "m4"]
     assert history(external, history_start(session, external)) == ["m5"]
     assert history_start(session, None) == 2

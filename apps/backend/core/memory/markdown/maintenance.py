@@ -17,12 +17,11 @@ from bus.events_lifecycle import (
 from conversation.context_scope import (
     ContextView,
     UserContextThreads,
-    load_user_context_threads,
     role_context_views,
+    role_session_user_threads,
 )
 from core.memory.events import ConsolidationCommitted
 from session.manager.consolidation import ConsolidationCommitRequest
-from session.manager.helpers import role_session_key
 from session.manager.models import consolidation_cursor
 from session.store.common import ContextScope
 
@@ -36,6 +35,7 @@ from .contracts import (
     _ConsolidationFailure,
 )
 from .formatting import (
+    _budget_view,
     _append_entries_to_journal,
     _format_consolidation_error,
     _select_consolidation_window,
@@ -118,10 +118,9 @@ class MarkdownMemoryMaintenance:
             event_bus.on(TurnCommitted, self.on_turn_committed)
 
     def _resolve_store_for_session(self, session: object) -> MarkdownMemoryStore:
-        metadata = getattr(session, "metadata", {})
+        # 角色 ID 与上下文划分同一来源：元数据没有时取 role:<id> 会话键里的。
         return resolve_markdown_store(
-            workspace=self._workspace,
-            session_metadata=metadata if isinstance(metadata, dict) else None,
+            workspace=self._workspace, role_id=_session_role_id(session)
         )
 
     def _user_threads_for_session(self, session: object) -> UserContextThreads | None:
@@ -129,10 +128,9 @@ class MarkdownMemoryMaintenance:
 
         只有 ``role:<id>`` 会话混存多个会话的消息；其他会话没有划分，返回 None。
         """
-        role_id = _session_role_id(session)
-        if not role_id or getattr(session, "key", "") != role_session_key(role_id):
-            return None
-        return load_user_context_threads(self._workspace, role_id)
+        return role_session_user_threads(
+            self._workspace, str(getattr(session, "key", "") or "")
+        )
 
     def _scope_view(
         self, session: object, scope: ContextScope | None
@@ -352,7 +350,7 @@ class MarkdownMemoryMaintenance:
                 consolidation_min_new_messages=self._consolidation_min_new_messages,
                 input_token_threshold=self._input_token_threshold,
                 input_token_estimate=_estimate_session_input_tokens(
-                    session, view=views[0] if views else None
+                    session, view=_budget_view(views)
                 ),
                 archive_all=False,
                 force=False,
@@ -373,15 +371,18 @@ class MarkdownMemoryMaintenance:
     async def _consolidate_unlocked(
         self, request: ConsolidateRequest
     ) -> ConsolidateResult:
-        """按窗口逐个整理并提交；角色会话平时每类上下文各自一个窗口（#523）。
+        """按窗口逐个整理并提交；角色会话每类上下文各自一个窗口（#523）。
 
-        force 与 archive_all 把两类上下文放进同一个窗口一起推进。某个窗口失败时
-        立即返回失败，此前已提交的窗口保留。
+        带 ``scope`` 的请求（包括回合预算触发的 force）只整理并推进这一类上下文；
+        只有 archive_all 与不带 scope 的全量 force 把两类放进同一个窗口一起推进。
+        某个窗口失败时立即返回失败，此前已提交的窗口保留。
         """
         session = request.session
         user_threads = self._user_threads_for_session(session)
-        if request.archive_all or request.force:
-            plans = [role_context_views(user_threads) if user_threads else ()]
+        if user_threads is not None and (
+            request.archive_all or (request.force and request.scope is None)
+        ):
+            plans = [role_context_views(user_threads)]
         else:
             plans = self._window_plans(session, scope=request.scope)
         committed: list[ConsolidateResult] = []
@@ -392,8 +393,6 @@ class MarkdownMemoryMaintenance:
                 break
             if outcome.trace.get("mode") == "markdown":
                 committed.append(outcome)
-        if committed:
-            await self._run_after_consolidation(session)
         if outcome.trace.get("mode") == "failed" or not committed:
             return outcome
         return ConsolidateResult(
@@ -428,7 +427,7 @@ class MarkdownMemoryMaintenance:
             for view in views
         }
         # 只有一类上下文时按它自己的历史估算预算；回合正文只计入回合所在的那一类。
-        budget_view = views[0] if len(views) == 1 else None
+        budget_view = _budget_view(views)
         current_content = (
             request.current_content
             if budget_view is None or request.scope in (None, budget_view.scope)
@@ -483,6 +482,7 @@ class MarkdownMemoryMaintenance:
         )
         if not committed:
             return ConsolidateResult(trace={"mode": "skipped", "reason": "stale"})
+        await self._run_after_consolidation(request.session)
         if session_key:
             _ = self._maintenance_failures.pop(session_key, None)
         return ConsolidateResult(

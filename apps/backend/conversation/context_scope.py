@@ -33,7 +33,7 @@ from conversation.service import (
 )
 from core.common.message_source import MessageSource
 from core.identity import UserIdentity, UserIdentityStore
-from session.manager.helpers import role_session_key
+from session.manager.helpers import role_id_from_session_key, role_session_key
 from session.manager.models import (
     HistoryFilter,
     consolidation_cursor,
@@ -206,6 +206,21 @@ def user_context_view(workspace: Path, role_id: str) -> ContextView:
     return ContextView(
         scope="user", user_threads=load_user_context_threads(workspace, role_id)
     )
+
+
+def role_session_user_threads(
+    workspace: Path, session_key: str
+) -> UserContextThreads | None:
+    """会话 ``session_key`` 若是角色共享会话，返回它此刻的用户上下文会话。
+
+    “是否角色共享会话、需要按上下文划分”的唯一判定：只看会话键是否为
+    ``role:<id>``，与 ``session_context_view`` 的规则一致。整理与撤销都经由这里，
+    两边对同一会话要么都按上下文游标、要么都按单游标。其他会话返回 None。
+    """
+    role_id = role_id_from_session_key(session_key)
+    if not role_id:
+        return None
+    return load_user_context_threads(workspace, role_id)
 
 
 def session_context_view(

@@ -18,6 +18,7 @@ from conversation.context_scope import (
     in_user_context,
     stored_message_source,
 )
+from session.manager.helpers import role_id_from_session_key
 from session.manager.models import consolidation_cursor, whole_session
 from session.store.common import ContextScope
 
@@ -116,7 +117,8 @@ def _select_consolidation_window(
     ``views`` 为空表示会话只有一段对话（非角色会话），从 ``last_consolidated`` 起
     整理整个会话。角色会话给出要推进的上下文（#523）：窗口只含这些上下文在各自
     游标之后的消息，保留的“最后 keep_count 条”与最小批量也只数这些上下文的消息，
-    另一类上下文的消息再多也不影响；平时每次只给一类，force 时两类一起整理到末尾。
+    另一类上下文的消息再多也不影响；平时每次只给一类；archive_all 与不带 scope 的全量
+    force 两类一起整理。
     """
     messages = session.messages
     total_messages = len(messages)
@@ -167,6 +169,11 @@ def _select_consolidation_window(
         consolidate_up_to=consolidate_up_to,
         scopes=scopes,
     )
+
+
+def _budget_view(views: tuple[ContextView, ...]) -> ContextView | None:
+    """整理窗口的预算按哪类上下文估算：只推进一类时就是它，否则按整个会话。"""
+    return views[0] if len(views) == 1 else None
 
 
 def _estimate_session_input_tokens(
@@ -261,11 +268,12 @@ _NSFW_MEMORY_SHY_RE = re.compile(r"(害羞|脸红|耳尖|轻哼|别误会|嘴硬
 
 
 def _session_role_id(session: object) -> str:
-    """会话元数据里记录的角色 ID；没有时为空串。"""
+    """会话所属的角色 ID：元数据里记录的，没有时取角色共享会话键里的；都没有为空串。"""
     metadata = getattr(session, "metadata", {})
-    if not isinstance(metadata, dict):
-        return ""
-    return str(metadata.get("role_id") or "").strip()
+    role_id = (
+        str(metadata.get("role_id") or "").strip() if isinstance(metadata, dict) else ""
+    )
+    return role_id or role_id_from_session_key(str(getattr(session, "key", "") or ""))
 
 
 def _session_role_runtime_config(session: object) -> dict[str, Any]:

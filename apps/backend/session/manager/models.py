@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 from core.common.message_source import MessageSource, with_message_source
-from session.store.common import (
-    CONTEXT_CURSORS_METADATA_KEY,
-    CONTEXT_SCOPES,
-    ContextScope,
-)
+from session.store.common import CONTEXT_SCOPES, ContextScope
 
 from .helpers import (
     _align_to_user_boundary,
@@ -52,39 +48,29 @@ def message_thread_id(message: Mapping[str, Any]) -> str:
     ).strip()
 
 
-def stored_context_cursors(
-    metadata: Mapping[str, Any],
-    last_consolidated: int,
-    scopes: Iterable[ContextScope] = CONTEXT_SCOPES,
+def effective_context_cursors(
+    context_cursors: Mapping[ContextScope, int] | None, last_consolidated: int
 ) -> dict[ContextScope, int]:
-    """元数据里记录的各上下文整理游标，只取 ``scopes``。
+    """各上下文的整理游标；未迁移（None）时都取 ``last_consolidated``。
 
-    没有记录时（旧会话、非角色会话）各上下文都取 ``last_consolidated``，这就是
-    迁移规则：迁移前后每类上下文读历史的起点不变。记录缺了某个上下文或格式不对时
-    直接报错，不静默回退。
+    这就是旧会话的迁移规则：迁移前后每类上下文读历史的起点不变。
     """
-    raw = metadata.get(CONTEXT_CURSORS_METADATA_KEY)
-    if raw is None:
-        return {scope: int(last_consolidated) for scope in scopes}
-    if not isinstance(raw, Mapping):
-        raise ValueError(f"会话整理游标格式错误: {raw!r}")
-    return {scope: int(raw[scope]) for scope in scopes}
+    if context_cursors is None:
+        return {scope: int(last_consolidated) for scope in CONTEXT_SCOPES}
+    return {scope: int(context_cursors[scope]) for scope in CONTEXT_SCOPES}
 
 
 def consolidation_cursor(session: Any, scope: ContextScope | None) -> int:
     """回合读历史、估算预算时的整理游标：此前的消息已整理，不再原文发给模型。
 
     ``scope`` 为 None 表示会话只有一段对话（非角色会话），用 ``last_consolidated``；
-    否则取角色会话里这类上下文自己的游标，见 ``stored_context_cursors``。
+    否则取角色会话里这类上下文自己的游标，见 ``effective_context_cursors``。
     """
     last_consolidated = int(getattr(session, "last_consolidated", 0))
     if scope is None:
         return last_consolidated
-    metadata = getattr(session, "metadata", None)
-    return stored_context_cursors(
-        metadata if isinstance(metadata, Mapping) else {},
-        last_consolidated,
-        (scope,),
+    return effective_context_cursors(
+        getattr(session, "context_cursors", None), last_consolidated
     )[scope]
 
 
@@ -116,6 +102,9 @@ class Session:
     updated_at: datetime = field(default_factory=datetime.now)
     metadata: dict[str, Any] = field(default_factory=dict)
     last_consolidated: int = 0
+    # 角色会话按上下文的整理游标（#523）；None 表示未迁移，各上下文取
+    # last_consolidated。只由整理提交与撤销改写，见 ``set_consolidation_cursors``。
+    context_cursors: dict[ContextScope, int] | None = None
     consolidation_requested: bool = False
 
     def add_message(
@@ -303,5 +292,19 @@ class Session:
         self.messages = []
         self.updated_at = datetime.now()
         self.last_consolidated = 0
-        self.metadata.pop(CONTEXT_CURSORS_METADATA_KEY, None)
+        self.context_cursors = None
         self.consolidation_requested = False
+
+    def set_consolidation_cursors(
+        self,
+        last_consolidated: int,
+        context_cursors: dict[ContextScope, int] | None,
+    ) -> None:
+        """整理提交或撤销落盘后，把新的游标同步到缓存里的会话。
+
+        ``context_cursors`` 为 None 表示非角色会话，只有 ``last_consolidated``。
+        """
+        self.last_consolidated = last_consolidated
+        if context_cursors is not None:
+            self.context_cursors = dict(context_cursors)
+        self.updated_at = datetime.now()

@@ -480,6 +480,7 @@ def _recording_maintenance(
     manager: SessionManager,
     environment_replies: dict[str, str] | None = None,
     keep_count: int = 0,
+    input_token_threshold: int = 75000,
 ):
     """接上真实会话提交、群环境层，记录提示词与引擎事件的整理服务。"""
     provider = _RecordingProvider(environment_replies)
@@ -491,6 +492,7 @@ def _recording_maintenance(
         provider=cast(LLMProvider, provider),
         model="test",
         keep_count=keep_count,
+        input_token_threshold=input_token_threshold,
         event_bus=event_bus,
     )
     maintenance.bind_lifecycle(
@@ -786,3 +788,68 @@ async def test_failed_external_thread_keeps_the_whole_window_uncommitted(
     assert result.trace["error"] == "invalid_json"
     manager.invalidate(session.key)
     assert manager.get_or_create(session.key).last_consolidated == 0
+
+
+@pytest.mark.asyncio
+async def test_group_turn_budget_force_only_advances_the_external_cursor(
+    tmp_path: Path,
+):
+    """群回合预算不够、走到强制整理时，也只推进外部游标，桌面原文不动（#523）。"""
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    desktop = desktop_thread_id("mira")
+    group = network_thread_id("mira", "qq", "g1")
+    session.add_message("user", "我喜欢猫", thread_id=desktop)
+    session.add_message("assistant", "猫很可爱", thread_id=desktop)
+    _add_group_turns(session, group, 3)
+    manager.save(session)
+    user_view = user_context_view(tmp_path, "mira")
+    user_history = get_history_since_consolidated(session, 500, user_view)
+    _provider, event_bus, _events, maintenance = _recording_maintenance(
+        tmp_path, manager, keep_count=4, input_token_threshold=1
+    )
+    try:
+        # 阈值为 1，普通整理后仍超预算，于是走强制整理；预算始终降不下来。
+        assert (
+            await maintenance.ensure_consolidation(
+                session.key, "群里新消息", "external"
+            )
+            is False
+        )
+    finally:
+        await event_bus.aclose()
+
+    manager.invalidate(session.key)
+    reloaded = manager.get_or_create(session.key)
+    assert get_history_since_consolidated(reloaded, 500, user_view) == user_history
+    assert consolidation_cursor(reloaded, "user") == 0
+    assert consolidation_cursor(reloaded, "external") == len(reloaded.messages)
+
+
+@pytest.mark.asyncio
+async def test_role_session_without_role_metadata_consolidates_after_undo(
+    tmp_path: Path,
+):
+    """会话键是 role:<id> 就按上下文游标，撤销与整理对同一会话判定一致。"""
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    desktop = desktop_thread_id("mira")
+    for index in range(3):
+        session.add_message("user", f"桌面第 {index} 句", thread_id=desktop)
+        session.add_message("assistant", f"回桌面第 {index} 句", thread_id=desktop)
+    manager.save(session)
+    assert await manager.undo_last_turn(session.key) is not None
+    assert session.context_cursors == {"user": 0, "external": 0}
+    _provider, event_bus, _events, maintenance = _recording_maintenance(
+        tmp_path, manager
+    )
+    try:
+        result = await maintenance.consolidate(
+            ConsolidateRequest(session=session, force=True)
+        )
+    finally:
+        await event_bus.aclose()
+
+    assert result.trace["mode"] == "markdown"
+    assert session.context_cursors == {"user": 4, "external": 4}

@@ -12,6 +12,7 @@ from .contracts import (
     _ConsolidationFailure,
 )
 from .formatting import (
+    _budget_view,
     _build_consolidation_source_ref,
     _coerce_history_text,
     _format_consolidation_error,
@@ -252,9 +253,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
             consolidation_min_new_messages=self._consolidation_min_new_messages,
             input_token_threshold=self._input_token_threshold,
             input_token_estimate=(
-                _estimate_session_input_tokens(
-                    session, view=views[0] if len(views) == 1 else None
-                )
+                _estimate_session_input_tokens(session, view=_budget_view(views))
                 if input_token_estimate is None
                 else input_token_estimate
             ),

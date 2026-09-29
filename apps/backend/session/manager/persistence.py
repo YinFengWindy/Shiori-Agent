@@ -37,6 +37,7 @@ class _PersistenceMixin:
             updated_at=updated_at,
             metadata=metadata,
             last_consolidated=last_consolidated,
+            context_cursors=meta["context_cursors"] if meta else None,
         )
 
     def _ensure_session_meta(self, session: Session, *, commit: bool = True) -> None:
@@ -200,6 +201,7 @@ class _PersistenceMixin:
             rows=rows,
             updated_at=session.updated_at.isoformat(),
             last_consolidated=session.last_consolidated,
+            context_cursors=session.context_cursors,
             next_seq=next_seq,
         )
         for message, row in zip(session.messages, rows):

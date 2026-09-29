@@ -155,7 +155,7 @@ class _MemoryContextGuardModule:
         session = cast(SessionLike, frame.slots[_SESSION_SLOT])
         messages = list(getattr(session, "messages", []))
         # 积压与预算都只看本回合所在上下文：从这类上下文自己的整理游标起算。
-        last = _clamp_last_consolidated(
+        last = _clamp_context_cursor(
             history_start(session, state.context_view),
             len(messages),
         )
@@ -195,7 +195,7 @@ class _MemoryContextGuardModule:
                 input_tokens = _estimate_session_input_tokens(
                     session,
                     state.msg.content,
-                    _clamp_last_consolidated(
+                    _clamp_context_cursor(
                         history_start(session, state.context_view),
                         len(getattr(session, "messages", [])),
                     ),
@@ -349,8 +349,13 @@ def default_before_turn_modules(
     )
 
 
-def _clamp_last_consolidated(value: int, total_messages: int) -> int:
-    return min(max(0, value), max(0, int(total_messages)))
+def _clamp_context_cursor(cursor: int, total_messages: int) -> int:
+    """把本回合所在上下文的整理游标夹到 ``[0, total_messages]``。
+
+    游标由 ``history_start`` 给出，已经是 int（会话字段按 int 存取，数字字符串在
+    ``consolidation_cursor`` 里就转成 int，非数字直接报错），这里只需夹范围。
+    """
+    return min(max(0, cursor), max(0, int(total_messages)))
 
 
 def _pending_messages(

@@ -3,13 +3,12 @@
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any
 
-from session.store.common import CONTEXT_CURSORS_METADATA_KEY, ContextScope
+from session.store.common import ContextScope
 
 from .manager import _ManagerCoreMixin
-from .models import stored_context_cursors
+from .models import effective_context_cursors
 
 
 @dataclass(frozen=True)
@@ -94,13 +93,9 @@ class _ConsolidationMixin(_ManagerCoreMixin):
                 )
                 session = self._cache.get(request.session_key)
                 if session is not None:
-                    session.last_consolidated = last_consolidated
-                    if context_cursors is not None:
-                        session.metadata = {
-                            **session.metadata,
-                            CONTEXT_CURSORS_METADATA_KEY: context_cursors,
-                        }
-                    session.updated_at = datetime.now()
+                    session.set_consolidation_cursors(
+                        last_consolidated, context_cursors
+                    )
                 if publish_committed is not None:
                     await publish_committed()
 
@@ -132,9 +127,8 @@ def _next_cursors(
     提交只比较本次推进的那些上下文，另一类上下文的游标怎么变都不影响本次提交。
     """
     stored_last = int(meta["last_consolidated"])
-    metadata = meta["metadata"]
     if not request.context_cursors:
-        if CONTEXT_CURSORS_METADATA_KEY in metadata:
+        if meta["context_cursors"] is not None:
             raise ValueError("会话已按上下文记录整理游标，必须按上下文提交")
         if (
             request.last_consolidated is None
@@ -142,7 +136,7 @@ def _next_cursors(
         ):
             return None
         return request.last_consolidated, None
-    current = stored_context_cursors(metadata, stored_last)
+    current = effective_context_cursors(meta["context_cursors"], stored_last)
     if any(
         current[scope] != expected
         for scope, expected in request.expected_context_cursors.items()

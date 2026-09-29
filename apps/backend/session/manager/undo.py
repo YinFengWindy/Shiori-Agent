@@ -1,16 +1,17 @@
 """Atomic passive-turn undo owned by the session manager."""
 
 from collections.abc import Callable
-from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from session.store.common import CONTEXT_CURSORS_METADATA_KEY, ContextScope
+from session.store.common import ContextScope
 
-from .helpers import role_id_from_session_key
 from .manager import _ManagerCoreMixin
-from .models import stored_context_cursors
+from .models import effective_context_cursors
 from .undo_result import UndoSessionResult
 from .undo_selection import _compute_rollback_index, _find_last_passive_turn
+
+if TYPE_CHECKING:
+    from conversation.context_scope import UserContextThreads
 
 
 class _UndoMixin(_ManagerCoreMixin):
@@ -41,16 +42,19 @@ class _UndoMixin(_ManagerCoreMixin):
             meta = self._store.get_session_meta(session_key)
             old_last = max(0, int(meta["last_consolidated"])) if meta else 0
             context_cursors: dict[ContextScope, int] | None = None
-            role_id = role_id_from_session_key(session_key)
-            if role_id:
+            # 延迟导入：context_scope 依赖 session.manager，模块级导入会形成循环。
+            from conversation.context_scope import role_session_user_threads
+
+            user_threads = role_session_user_threads(self.workspace, session_key)
+            if user_threads is not None:
                 # 角色会话按上下文各自回退：删掉的消息只让它所属那类上下文的游标
                 # 退回重新整理，另一类游标只随删除平移（#523）。
-                rollback_index, context_cursors = self._rolled_back_context_cursors(
-                    role_id,
+                rollback_index, context_cursors = _rolled_back_context_cursors(
+                    user_threads,
                     messages,
                     indices=indices,
-                    old_cursors=stored_context_cursors(
-                        meta["metadata"] if meta else {}, old_last
+                    old_cursors=effective_context_cursors(
+                        meta["context_cursors"] if meta else None, old_last
                     ),
                     rollback_source_ids=sources,
                 )
@@ -90,13 +94,7 @@ class _UndoMixin(_ManagerCoreMixin):
                     for message in session.messages
                     if message.get("id") not in deleted_set
                 ]
-                session.last_consolidated = new_last
-                if context_cursors is not None:
-                    session.metadata = {
-                        **session.metadata,
-                        CONTEXT_CURSORS_METADATA_KEY: context_cursors,
-                    }
-                session.updated_at = datetime.now()
+                session.set_consolidation_cursors(new_last, context_cursors)
             return UndoSessionResult(
                 deleted_ids=deleted_ids,
                 target_user_id=str(messages[user_index]["id"]),
@@ -106,41 +104,41 @@ class _UndoMixin(_ManagerCoreMixin):
                 last_consolidated_after=new_last,
             )
 
-    def _rolled_back_context_cursors(
-        self,
-        role_id: str,
-        messages: list[dict[str, Any]],
-        *,
-        indices: list[int],
-        old_cursors: dict[ContextScope, int],
-        rollback_source_ids: list[str],
-    ) -> tuple[int, dict[ContextScope, int]]:
-        """角色会话撤销后各上下文的游标，以及最靠前的回退位置。
 
-        删除的消息按此刻的身份绑定归入上下文，与整理时的划分一致。
-        """
-        # 延迟导入：context_scope 依赖 session.manager，模块级导入会形成循环。
-        from conversation.context_scope import (
-            load_user_context_threads,
-            role_context_views,
+def _rolled_back_context_cursors(
+    user_threads: "UserContextThreads",
+    messages: list[dict[str, Any]],
+    *,
+    indices: list[int],
+    old_cursors: dict[ContextScope, int],
+    rollback_source_ids: list[str],
+) -> tuple[int, dict[ContextScope, int]]:
+    """角色会话撤销后各上下文的游标，以及最靠前的回退位置。
+
+    删除的消息与记忆来源都按此刻的身份绑定归入上下文，与整理时的划分一致；
+    计算某类游标时只看这类上下文的删除与来源，另一类的来源不会把它多拉回。
+    """
+    from conversation.context_scope import role_context_views
+
+    by_id = {str(message.get("id") or ""): message for message in messages}
+    rollback_indices: list[int] = []
+    cursors: dict[ContextScope, int] = {}
+    for view in role_context_views(user_threads):
+        rollback_index, cursors[view.scope] = _rolled_back_cursor(
+            messages,
+            indices=indices,
+            scoped_indices=[
+                index for index in indices if view.includes(messages[index])
+            ],
+            old_cursor=old_cursors[view.scope],
+            rollback_source_ids=[
+                source_id
+                for source_id in (str(item).strip() for item in rollback_source_ids)
+                if source_id in by_id and view.includes(by_id[source_id])
+            ],
         )
-
-        rollback_indices: list[int] = []
-        cursors: dict[ContextScope, int] = {}
-        for view in role_context_views(
-            load_user_context_threads(self.workspace, role_id)
-        ):
-            rollback_index, cursors[view.scope] = _rolled_back_cursor(
-                messages,
-                indices=indices,
-                scoped_indices=[
-                    index for index in indices if view.includes(messages[index])
-                ],
-                old_cursor=old_cursors[view.scope],
-                rollback_source_ids=rollback_source_ids,
-            )
-            rollback_indices.append(rollback_index)
-        return min(rollback_indices), cursors
+        rollback_indices.append(rollback_index)
+    return min(rollback_indices), cursors
 
 
 def _rolled_back_cursor(

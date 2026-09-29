@@ -3,11 +3,11 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
 from session.manager import SessionManager
-from session.store.common import CONTEXT_CURSORS_METADATA_KEY
 
 _FRAME = '<system-reminder data-system-context-frame="true">内部</system-reminder>'
 
@@ -325,9 +325,11 @@ async def test_undo_rolls_back_each_context_cursor(
     for index, thread_id in enumerate((group, desktop, group, desktop)):
         session.add_message("user", f"u{index}", thread_id=thread_id)
         session.add_message("assistant", f"a{index}", thread_id=thread_id)
-    session.metadata[CONTEXT_CURSORS_METADATA_KEY] = cursors
-    session.last_consolidated = min(cursors.values())
     manager.save(session)
+    manager._store.update_last_consolidated(
+        session.key, min(cursors.values()), context_cursors=cast(Any, cursors)
+    )
+    manager.invalidate(session.key)
 
     result = await manager.undo_last_turn(session.key)
 
@@ -335,6 +337,34 @@ async def test_undo_rolls_back_each_context_cursor(
     assert result.deleted_ids == ["role:mira:6", "role:mira:7"]
     manager.invalidate(session.key)
     reloaded = manager.get_or_create(session.key)
-    assert reloaded.metadata[CONTEXT_CURSORS_METADATA_KEY] == expected
+    assert reloaded.context_cursors == expected
     assert reloaded.last_consolidated == min(expected.values())
     assert result.last_consolidated_after == min(expected.values())
+
+
+@pytest.mark.asyncio
+async def test_undo_ignores_memory_sources_from_the_other_context(tmp_path: Path):
+    """另一类上下文的记忆来源不会把本类游标多拉回（#523）。"""
+    from conversation.service import desktop_thread_id, network_thread_id
+
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    group = network_thread_id("mira", "qq", "g1")
+    desktop = desktop_thread_id("mira")
+    for index, thread_id in enumerate((group, desktop, group, desktop)):
+        session.add_message("user", f"u{index}", thread_id=thread_id)
+        session.add_message("assistant", f"a{index}", thread_id=thread_id)
+    manager.save(session)
+    manager._store.update_last_consolidated(
+        session.key, 8, context_cursors={"user": 8, "external": 8}
+    )
+    manager.invalidate(session.key)
+
+    result = await manager.undo_last_turn(
+        session.key,
+        rollback_source_resolver=lambda _ids: ["role:mira:0", "role:mira:6"],
+    )
+
+    assert result is not None
+    reloaded = manager.get_or_create(session.key)
+    assert reloaded.context_cursors == {"user": 6, "external": 6}

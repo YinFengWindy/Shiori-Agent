@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from session.manager import ConsolidationCommitRequest, SessionManager
-from session.store.common import CONTEXT_CURSORS_METADATA_KEY
 
 
 def _setup(tmp_path: Path):
@@ -153,7 +152,7 @@ async def test_context_cursors_commit_independently_and_repeat_is_rejected(
 
     # 旧会话首次提交：未推进的外部游标沿用原 last_consolidated。
     assert await manager.commit_consolidation(user, write) is True
-    assert session.metadata[CONTEXT_CURSORS_METADATA_KEY] == {
+    assert session.context_cursors == {
         "user": 2,
         "external": 1,
     }
@@ -164,8 +163,31 @@ async def test_context_cursors_commit_independently_and_repeat_is_rejected(
     assert write.await_count == 2
     manager.invalidate(session.key)
     reloaded = manager.get_or_create(session.key)
-    assert reloaded.metadata[CONTEXT_CURSORS_METADATA_KEY] == {
+    assert reloaded.context_cursors == {
         "user": 2,
         "external": 2,
     }
     assert reloaded.last_consolidated == 2
+
+
+@pytest.mark.asyncio
+async def test_saving_a_stale_session_keeps_context_cursors(tmp_path: Path):
+    """普通保存不碰按上下文游标：过期对象或别处改写元数据都抹不掉它们（#523）。"""
+    manager, session, _ = _setup(tmp_path)
+    ids = tuple(message["id"] for message in session.messages)
+    stale = replace(session, messages=list(session.messages), metadata={})
+    request = ConsolidationCommitRequest(
+        session_key=session.key,
+        expected_message_ids=ids,
+        expected_context_cursors={"user": 0},
+        context_cursors={"user": 2},
+    )
+    assert await manager.commit_consolidation(request, AsyncMock()) is True
+
+    manager.save(stale)
+    manager.invalidate(session.key)
+
+    assert manager.get_or_create(session.key).context_cursors == {
+        "user": 2,
+        "external": 0,
+    }

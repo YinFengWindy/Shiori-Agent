@@ -129,9 +129,13 @@ class _MessageMixin:
         rows: list[dict[str, Any]],
         updated_at: str,
         last_consolidated: int,
+        context_cursors: dict[ContextScope, int] | None,
         next_seq: int,
     ) -> None:
-        """Atomically replace one session's persisted message snapshot."""
+        """Atomically replace one session's persisted message snapshot.
+
+        整段重写消息会改变位置，整理游标（含按上下文的游标）随快照一起写入。
+        """
         with self._lock:
             self._conn.execute("BEGIN IMMEDIATE")
             try:
@@ -194,6 +198,7 @@ class _MessageMixin:
                         session_key,
                     ),
                 )
+                self.write_context_cursors(session_key, context_cursors)
                 self._conn.commit()
             except Exception:
                 self._conn.rollback()
