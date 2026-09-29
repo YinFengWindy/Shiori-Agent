@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -45,6 +46,8 @@ class _ServiceGeneration:
     publication_pending: bool = False
     requests: int = 0
     idle: asyncio.Event = field(default_factory=asyncio.Event)
+    # Set once this generation's service close and lease release have started.
+    closing: asyncio.Task[None] | None = None
 
 
 class ReloadableDesktopService:
@@ -419,6 +422,23 @@ class ReloadableDesktopService:
         kernel = entry.lease.core.plugin_manager
         if kernel is not None:
             await kernel.drain()
+        await self._close_entry(entry)
+
+    async def _close_entry(self, entry: _ServiceGeneration) -> None:
+        """Closes one generation's service and releases its lease exactly once.
+
+        The close runs as its own task so cancelling a retirement (bridge
+        shutdown) cannot interrupt it half way: the entry stays in
+        ``_entries`` until its lease is really released, and ``aclose`` joins
+        the in-flight close instead of dropping the lease.
+        """
+        if entry.closing is None:
+            entry.closing = asyncio.create_task(
+                self._release_entry(entry), name="desktop-runtime-close"
+            )
+        await asyncio.shield(entry.closing)
+
+    async def _release_entry(self, entry: _ServiceGeneration) -> None:
         try:
             await run_cleanup_steps(
                 ("desktop.service.close", entry.service.aclose),
@@ -431,19 +451,13 @@ class ReloadableDesktopService:
         """Cancels tasks only when the desktop bridge itself is shutting down."""
         self._retirements.cancel_all()
         await self._retirements.drain()
-        try:
-            await run_cleanup_steps(
-                *[
-                    step
-                    for entry in self._entries
-                    for step in (
-                        ("desktop.service.close", entry.service.aclose),
-                        ("desktop.runtime.release", entry.lease.release),
-                    )
-                ]
-            )
-        finally:
-            self._entries.clear()
+        # Each close removes its own entry once the lease is released.
+        await run_cleanup_steps(
+            *[
+                ("desktop.runtime.close", partial(self._close_entry, entry))
+                for entry in list(self._entries)
+            ]
+        )
         if self._retirements.errors:
             raise ExceptionGroup(
                 "Desktop runtime retirement failed", self._retirements.errors

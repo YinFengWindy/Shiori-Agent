@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 from pathlib import Path
 
@@ -1058,3 +1059,35 @@ async def test_list_reflects_a_manifest_default_disabled_plugin_and_can_enable_i
     finally:
         await service.aclose()
         await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_drains_after_channel_plugin_reload_and_role_deletion(
+    tmp_path, monkeypatch
+):
+    """#472：通道插件停用再启用、随后删除角色，关闭时每一代 runtime 都能排空。"""
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, _, app = await _start_service(tmp_path)
+    try:
+        created = await _request(
+            service, "roles.create", {"name": "Mira", "system_prompt": "Be Mira"}
+        )
+        assert created.error is None, created.error
+        for enabled, operation_id in ((False, "op-disable"), (True, "op-enable")):
+            toggled = await _request(
+                service,
+                "plugins.setEnabled",
+                {
+                    "plugin_id": "qqbot",
+                    "enabled": enabled,
+                    "operation_id": operation_id,
+                },
+            )
+            assert toggled.error is None, toggled.error
+        deleted = await _request(
+            service, "roles.delete", {"role_id": created.payload["role"]["id"]}
+        )
+        assert deleted.error is None, deleted.error
+    finally:
+        await service.aclose()
+        await asyncio.wait_for(app.shutdown(), 3)
