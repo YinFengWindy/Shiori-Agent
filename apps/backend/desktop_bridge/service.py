@@ -93,6 +93,7 @@ class DesktopBridgeService:
         session_manager: SessionManager,
         agent_loop: AgentLoop,
         event_bus: EventBus,
+        group_environment: GroupEnvironment,
         role_service: RoleAggregateService | None = None,
         config: Any = None,
         push_tool: MessagePushTool | None = None,
@@ -108,7 +109,6 @@ class DesktopBridgeService:
         activate_transport: bool = True,
         model_resolver: RoleModelRuntime | None = None,
         plugin_rpc_registry: PluginRpcRegistry | None = None,
-        group_environment: GroupEnvironment | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -236,18 +236,13 @@ class DesktopBridgeService:
             accounts=DesktopAccountRequestHandler(role_store.accounts),
             identities=DesktopIdentityRequestHandler(role_store.identities),
             phone=self.phone,
-            # Needs the runtime's shared group environment; a bare service
-            # without one serves no chat info requests.
-            phone_memory=(
-                DesktopPhoneMemoryRequestHandler(
-                    conversations=self.conversation_service,
-                    accounts=role_store.accounts,
-                    identities=role_store.identities,
-                    group_environment=group_environment,
-                    members=MemberProfiles(workspace),
-                )
-                if group_environment is not None
-                else None
+            phone_memory=DesktopPhoneMemoryRequestHandler(
+                conversations=self.conversation_service,
+                accounts=role_store.accounts,
+                identities=role_store.identities,
+                # The runtime's shared instance, the one consolidation writes through.
+                group_environment=group_environment,
+                members=MemberProfiles(workspace),
             ),
             roles=DesktopRoleRequestHandler(
                 role_service=self.role_service,

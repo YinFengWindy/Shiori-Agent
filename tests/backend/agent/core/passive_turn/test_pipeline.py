@@ -32,6 +32,7 @@ from core.roles import RoleStore
 from core.roles.reply_state import RoleReply
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
+from core.memory.group_environment import GroupEnvironment
 
 
 @pytest.fixture
@@ -45,6 +46,7 @@ async def runtime(tmp_path):
         workspace=tmp_path,
         role_store=roles,
         session_manager=manager,
+        group_environment=GroupEnvironment(tmp_path, manager.conversation_store),
         agent_loop=SimpleNamespace(),
         event_bus=bus,
         push_tool=push,

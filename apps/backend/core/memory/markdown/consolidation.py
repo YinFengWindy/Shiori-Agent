@@ -7,6 +7,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from core.memory.external_writes import ExternalLayerSnapshot
 from core.memory.member_profiles import merge_member_profile
 
 from .contracts import (
@@ -206,6 +207,9 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         member_updates: list[MemberProfileUpdate] = []
         # 本次整理里已合并过的成员档案，尚未落盘；None 表示还没有档案。
         merged_members: dict[MemberKey, MemberProfile | None] = {}
+        # 准备时读到的原始内容，提交时据此判断是否被别处（小手机）改过。
+        read_members: dict[MemberKey, MemberProfile | None] = {}
+        read_notes: dict[str, str] = {}
         for thread in threads:
             conversation = format_external_thread(
                 thread, nsfw_memory_enabled=nsfw_memory_enabled
@@ -215,18 +219,21 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
             for index, batch in enumerate(member_batches(thread)):
                 for sighting in batch:
                     if sighting.key not in merged_members:
-                        merged_members[sighting.key] = member_profiles.read(
-                            role_id, sighting.key
-                        )
+                        profile = member_profiles.read(role_id, sighting.key)
+                        merged_members[sighting.key] = profile
+                        read_members[sighting.key] = profile
                 with_environment = index == 0
+                environment = (
+                    group_environment.read(role_id, thread.thread_id)
+                    if with_environment
+                    else None
+                )
+                if environment is not None:
+                    read_notes[thread.thread_id] = environment.group_note
                 prompt = build_group_environment_prompt(
                     thread,
                     conversation,
-                    (
-                        group_environment.read(role_id, thread.thread_id)
-                        if with_environment
-                        else None
-                    ),
+                    environment,
                     batch,
                     {
                         sighting.key: profile
@@ -258,6 +265,16 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         return ExternalLayerUpdates(
             group_environment=tuple(environment_updates),
             member_profiles=tuple(member_updates),
+            snapshot=ExternalLayerSnapshot(
+                group_notes={
+                    update.thread_id: read_notes[update.thread_id]
+                    for update in environment_updates
+                    if update.group_note
+                },
+                member_profiles={
+                    update.key: read_members[update.key] for update in member_updates
+                },
+            ),
         )
 
     async def _call_external_layer_step(
@@ -508,6 +525,7 @@ history_entries.emotional_weight 规则：
         #    外部段为空时不调用。
         group_environment_updates: list[GroupEnvironmentUpdate] = []
         member_profile_updates: list[MemberProfileUpdate] = []
+        external_snapshot = ExternalLayerSnapshot()
         external_threads = group_external_threads(window, segments, bound_senders)
         if external_threads:
             environment_result = await self._extract_external_layers(
@@ -521,6 +539,7 @@ history_entries.emotional_weight 规则：
                 return environment_result
             group_environment_updates = list(environment_result.group_environment)
             member_profile_updates = list(environment_result.member_profiles)
+            external_snapshot = environment_result.snapshot
         # 5. 归一化 markdown 产物，向量写入由 engine 订阅提交事件完成。
         recent_context_text = await self._build_recent_context_snapshot(
             session=session,
@@ -545,4 +564,5 @@ history_entries.emotional_weight 规则：
             archive_all=archive_all,
             group_environment_updates=tuple(group_environment_updates),
             member_profile_updates=tuple(member_profile_updates),
+            external_snapshot=external_snapshot,
         )

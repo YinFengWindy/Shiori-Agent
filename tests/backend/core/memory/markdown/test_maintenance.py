@@ -16,13 +16,14 @@ from bus.event_bus import EventBus
 from bus.events_lifecycle import TurnCommitted
 from conversation.service import desktop_thread_id, network_thread_id
 from core.memory.events import ConsolidationCommitted
-from core.memory.member_profiles import MemberKey, MemberProfiles
+from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
 from core.roles import RoleStore
 from core.memory.group_environment import (
     SUMMARY_LABEL_KEY,
     SUMMARY_UPDATED_AT_KEY,
     GroupEnvironment,
 )
+from collections.abc import Callable
 from core.memory.markdown import (
     ConsolidateRequest,
     MarkdownMemoryMaintenance,
@@ -450,6 +451,8 @@ class _RecordingProvider:
         self.environment_max_tokens: list[int] = []
         # 群环境整理按会话称呼给出回复；没给的会话回空对象（不更新）。
         self.environment_replies = environment_replies or {}
+        # 群环境整理调用期间（准备之后、提交之前）要做的事，模拟小手机的并发编辑。
+        self.during_environment: Callable[[], None] | None = None
 
     async def chat(
         self, *, messages: list[dict[str, str]], max_tokens: int, **_kwargs: Any
@@ -458,6 +461,8 @@ class _RecordingProvider:
         if prompt.startswith("群环境整理"):
             self.environment_prompts.append(prompt)
             self.environment_max_tokens.append(max_tokens)
+            if self.during_environment is not None:
+                self.during_environment()
             reply = next(
                 (
                     content
@@ -855,3 +860,73 @@ async def test_many_members_are_consolidated_in_bounded_batches(tmp_path: Path):
     assert "### 人9（9）" in second and "### 人9（9）" not in first
     assert max(provider.environment_max_tokens) <= 2048 + 400 * MEMBER_BATCH_SIZE
     assert len(MemberProfiles(tmp_path).list("mira")) == MEMBER_BATCH_SIZE + 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("edited", ["group_note", "member_profile"])
+async def test_phone_edits_made_while_preparing_are_not_overwritten(
+    tmp_path: Path, edited: str
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    group = network_thread_id("mira", "qq", "g1")
+    _member_message(
+        session,
+        "我最喜欢狗",
+        group,
+        channel="qq",
+        sender_id="555",
+        sender_name="阿明",
+        group_name="猫猫群",
+    )
+    manager.save(session)
+    environment = GroupEnvironment(tmp_path, manager.conversation_store)
+    members = MemberProfiles(tmp_path)
+    key = MemberKey("qq", "555")
+    environment.write_note("mira", group, "旧笔记")
+    members.write("mira", MemberProfile(key=key, nicknames=("阿明",), brief="旧速记"))
+    replies = {
+        "群「猫猫群」": (
+            '{"group_note": "模型笔记",'
+            ' "members": {"555": {"profile": "模型档案", "brief": "模型速记"}}}'
+        ),
+    }
+    provider, event_bus, _events, maintenance = _recording_maintenance(
+        tmp_path, manager, replies
+    )
+
+    def phone_edit() -> None:
+        if edited == "group_note":
+            environment.write_note("mira", group, "用户笔记")
+        else:
+            members.write(
+                "mira", MemberProfile(key=key, nicknames=("阿明",), brief="用户速记")
+            )
+
+    provider.during_environment = phone_edit
+    try:
+        stale = await maintenance.consolidate(
+            ConsolidateRequest(session=session, force=True)
+        )
+        # 什么都没写，游标不动：用户的编辑原样保留。
+        assert stale.trace == {"mode": "skipped", "reason": "stale"}
+        assert session.last_consolidated == 0
+        expected_note = "用户笔记" if edited == "group_note" else "旧笔记"
+        assert environment.read_note("mira", group) == expected_note
+        profile = members.read("mira", key)
+        assert profile is not None
+        assert profile.brief == ("用户速记" if edited == "member_profile" else "旧速记")
+
+        # 下次以新内容为快照重来，照常提交。
+        provider.during_environment = None
+        retried = await maintenance.consolidate(
+            ConsolidateRequest(session=session, force=True)
+        )
+    finally:
+        await event_bus.aclose()
+
+    assert retried.trace["mode"] == "markdown"
+    assert environment.read_note("mira", group) == "模型笔记"
+    profile = members.read("mira", key)
+    assert profile is not None and profile.brief == "模型速记"

@@ -2,6 +2,7 @@ import { CaretRightIcon, UserIcon } from "@phosphor-icons/react";
 import { cx, pressableClass } from "../shared/styles";
 import { phoneChatSummaryRows, type PhoneChatInfoSection } from "./phoneChatInfo";
 import type { PhoneConversation } from "./phoneClient";
+import { PhoneInfoEmpty } from "./PhoneInfoEmpty";
 import { PhoneLoadError } from "./PhoneLoadError";
 import type { PhoneApp } from "./phonePresentation";
 import { usePhoneMembers, usePhoneRecentActivity } from "./usePhoneChatMemory";
@@ -14,11 +15,6 @@ export type PhoneChatInfoSectionProps = {
   conversation: PhoneConversation;
   onOpenMember: (senderId: string) => void;
 };
-
-/** Quiet placeholder line of an empty block. */
-export function PhoneInfoEmpty({ label }: { label: string }) {
-  return <p className="m-0 px-0.5 text-body-sm text-ink-muted">{label}</p>;
-}
 
 const memberButtonClass = cx(
   pressableClass,

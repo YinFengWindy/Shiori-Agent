@@ -3,14 +3,14 @@ import { InlineError } from "../shared/feedback/InlineError";
 import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { badgeClass, compactDangerTextButtonClass, compactPrimaryButtonClass, compactTextButtonClass, cx, inputClass, textareaClass } from "../shared/styles";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
+import { useBusyAction } from "../shared/useBusyAction";
+import { useEditDraft } from "../shared/useEditDraft";
 import { memberDraftDirty, type PhoneMemberDraft } from "./phoneChatInfo";
-import { PhoneInfoEmpty } from "./PhoneChatInfoSections";
+import { PhoneInfoEmpty } from "./PhoneInfoEmpty";
 import { PhoneLoadError } from "./PhoneLoadError";
 import type { PhoneMember } from "./phoneMemoryClient";
 import { PhoneScreenHeader } from "./PhoneScreenHeader";
-import { actionFailed, usePhoneAction } from "./usePhoneAction";
 import { usePhoneMemberProfile } from "./usePhoneChatMemory";
-import { usePhoneDraft } from "./usePhoneDraft";
 
 const fieldLabelClass = "grid gap-1 text-caption font-medium text-ink-muted";
 
@@ -21,17 +21,13 @@ const fieldLabelClass = "grid gap-1 text-caption font-medium text-ink-muted";
  */
 function MemberProfileEditor({ member, onSave, onDelete }: {
   member: PhoneMember;
-  onSave: (fields: PhoneMemberDraft) => Promise<PhoneMember>;
+  onSave: (fields: PhoneMemberDraft) => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
-  const { draft, dirty, setDraft, restart } = usePhoneDraft(member, memberDraftDirty);
-  const saving = usePhoneAction();
-  const deleting = usePhoneAction();
+  const { draft, dirty, setDraft, reset } = useEditDraft(member, memberDraftDirty);
+  const saving = useBusyAction();
+  const deleting = useBusyAction();
   const [confirming, setConfirming] = useState(false);
-  async function save() {
-    const result = await saving.run(() => onSave({ brief: draft.brief, profile: draft.profile }));
-    if (result !== actionFailed) restart(result);
-  }
   const busy = saving.busy || deleting.busy;
   return (
     <div className="grid content-start gap-3 p-3" data-testid="phone-member-profile">
@@ -61,9 +57,9 @@ function MemberProfileEditor({ member, onSave, onDelete }: {
         {dirty ? (
           <>
             <button type="button" className={cx(compactTextButtonClass, "ml-auto")} disabled={busy}
-              onClick={() => restart(member)}>还原</button>
+              onClick={reset}>还原</button>
             <button type="button" className={compactPrimaryButtonClass} disabled={busy} data-testid="phone-member-save"
-              onClick={() => void save()}>{saving.busy ? "保存中..." : "保存"}</button>
+              onClick={() => void saving.run(() => onSave({ brief: draft.brief, profile: draft.profile }))}>{saving.busy ? "保存中..." : "保存"}</button>
           </>
         ) : null}
       </div>
@@ -71,7 +67,7 @@ function MemberProfileEditor({ member, onSave, onDelete }: {
         open={confirming}
         title="删除成员档案"
         persona={confirmPersonaLines.destructive}
-        description={`${member.callName}（ID ${member.senderId}）的档案会被删除。`}
+        description={`${member.callName}（ID ${member.senderId}）的档案将被删除；同一渠道的所有群共用这份档案。`}
         confirmLabel="确认删除"
         busy={deleting.busy}
         error={deleting.error}
@@ -93,14 +89,15 @@ export function PhoneMemberProfilePage({ roleId, threadId, senderId, backLabel, 
   backLabel: string;
   onBack: () => void;
 }) {
-  const { member, error, retry, save, remove } = usePhoneMemberProfile(roleId, threadId, senderId);
+  const { profile, error, retry, save, remove } = usePhoneMemberProfile(roleId, threadId, senderId);
+  const member = profile?.member;
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
       <PhoneScreenHeader title={member?.callName ?? "成员档案"} backLabel={backLabel} onBack={onBack} />
       <div className="surface-glass min-h-0 overflow-y-auto">
         {error ? <PhoneLoadError message={error} onRetry={() => void retry()} />
-          : member === undefined ? null
-            : member === null ? <div className="p-3"><PhoneInfoEmpty label="暂无档案" /></div>
+          : !profile ? null
+            : !member ? <div className="p-3"><PhoneInfoEmpty label="暂无档案" /></div>
               : <MemberProfileEditor member={member} onSave={save} onDelete={async () => { await remove(); onBack(); }} />}
       </div>
     </div>

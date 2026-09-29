@@ -224,3 +224,29 @@ async def test_the_user_has_no_member_profile(tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="用户本人"):
             _ = await setup.call(method, thread_id=setup.group.id, sender_id="100")
     assert setup.members.read("mira", MemberKey("qq", "100")) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_conversation_only_reaches_members_who_spoke_in_it(
+    tmp_path: Path,
+) -> None:
+    setup = _Setup(tmp_path)
+    other_group = _thread(setup.conversation, role_id="mira", chat_id="gqq:6")
+    # Same channel, but only ever seen in the other group.
+    setup.profile("8", "路人", thread=other_group)
+
+    for method, extra in (
+        ("phone.member.profile", {}),
+        ("phone.member.profile.save", {"brief": "", "profile": ""}),
+        ("phone.member.profile.delete", {}),
+    ):
+        with pytest.raises(ValueError, match="没有在这个会话出现过"):
+            _ = await setup.call(
+                method, thread_id=setup.group.id, sender_id="8", **extra
+            )
+    assert setup.members.read("mira", MemberKey("qq", "8")) is not None
+    # From its own conversation it is reachable.
+    read = await setup.call(
+        "phone.member.profile", thread_id=other_group.id, sender_id="8"
+    )
+    assert read["member"]["sender_id"] == "8"

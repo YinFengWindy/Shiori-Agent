@@ -26,7 +26,6 @@ def stub_core_runtime():
             memory_optimizer=None,
             role_runtime_registry=None,
             memory_runtime=SimpleNamespace(engine=None),
-            group_environment=None,
             plugin_manager=None,
         )
         for name, value in overrides.items():

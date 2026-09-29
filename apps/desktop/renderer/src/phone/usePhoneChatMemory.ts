@@ -15,16 +15,15 @@ function usePhoneLoadedValue<T>(load: () => Promise<T>) {
 
 /**
  * A conversation's group note (null while it loads). `save` stores a new
- * note, rereads it, and resolves to what was stored; failures propagate.
+ * note and rereads it; failures propagate.
  */
 export function usePhoneGroupNote(roleId: string, threadId: string) {
   const { value, error, refresh } = usePhoneLoadedValue(
     useCallback(() => client.readNote(roleId, threadId), [roleId, threadId]),
   );
   const save = useCallback(async (note: string) => {
-    const stored = await client.saveNote(roleId, threadId, note);
+    await client.saveNote(roleId, threadId, note);
     await refresh();
-    return stored;
   }, [roleId, threadId, refresh]);
   return { note: value, error, retry: refresh, save };
 }
@@ -46,20 +45,19 @@ export function usePhoneMembers(roleId: string, threadId: string) {
 }
 
 /**
- * One member's profile, opened from a conversation: `undefined` while it
- * loads, null when the role has none for them. `save` stores the editable
- * fields and rereads the profile, resolving to what was stored; `remove`
+ * One member's profile, opened from a conversation: null while it loads,
+ * then `{ member }` with `member` null when the role has none for them.
+ * `save` stores the editable fields and rereads the profile; `remove`
  * deletes it. Failures propagate to the caller.
  */
 export function usePhoneMemberProfile(roleId: string, threadId: string, senderId: string) {
-  const { value, loading, error, refresh } = usePhoneLoadedValue(
-    useCallback(() => client.readMember(roleId, threadId, senderId), [roleId, threadId, senderId]),
+  const { value, error, refresh } = usePhoneLoadedValue(
+    useCallback(async () => ({ member: await client.readMember(roleId, threadId, senderId) }), [roleId, threadId, senderId]),
   );
   const save = useCallback(async (fields: Pick<PhoneMember, "brief" | "profile">) => {
-    const stored = await client.saveMember(roleId, threadId, senderId, fields);
+    await client.saveMember(roleId, threadId, senderId, fields);
     await refresh();
-    return stored;
   }, [roleId, threadId, senderId, refresh]);
   const remove = useCallback(() => client.deleteMember(roleId, threadId, senderId), [roleId, threadId, senderId]);
-  return { member: loading && value === null ? undefined : value, error, retry: refresh, save, remove };
+  return { profile: value, error, retry: refresh, save, remove };
 }

@@ -28,7 +28,7 @@ const message = (id: string, patch: Record<string, unknown>) => ({
 
 const member = { channel: "qq", sender_id: "42", call_name: "阿花", nicknames: ["花花", "阿花"], brief: "爱开黑", profile: "## 印象" };
 
-test("group chat info: blocks, note saved, recent activity read-only; a profile opens from the list and is deleted", async () => {
+test("group chat info: blocks, note saved and its draft kept, recent activity read-only; a profile opens from the list and is deleted", async () => {
   const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
   const replies: Record<string, unknown> = {
     "phone.conversation.messages": { has_more: false, next_before_seq: null, messages: [
@@ -77,15 +77,25 @@ test("group chat info: blocks, note saved, recent activity read-only; a profile 
     const saved = calls.find((call) => call.method === "phone.conversation.note.save");
     assert.deepEqual(saved?.payload, { role_id: "mira", thread_id: conversation.threadId, note: "新笔记" });
 
+    // An unsaved note survives a visit to a member's profile.
+    await changeInputValue(find<HTMLTextAreaElement>("phone-info-note-input")!, "草稿");
     await click(find("phone-info-member-42"));
     assert.equal(find<HTMLInputElement>("phone-member-brief")?.value, "爱开黑");
     assert.equal(find("phone-member-nicknames")?.textContent, "花花阿花");
+    const backs = () => Array.from(view.container.querySelectorAll<HTMLButtonElement>('[data-testid="phone-back"]'));
+    await click(backs().at(-1));
+    assert.equal(find("phone-member-profile"), null);
+    assert.equal(find<HTMLTextAreaElement>("phone-info-note-input")?.value, "草稿");
+
+    await click(find("phone-info-member-42"));
     await click(find("phone-member-delete"));
+    assert.match(document.querySelector('[role="dialog"]')?.textContent ?? "", /同一渠道的所有群共用/);
     const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'))
       .find((button) => button.textContent === "确认删除");
     await click(confirm);
     assert.ok(calls.some((call) => call.method === "phone.member.profile.delete" && call.payload.sender_id === "42"));
     // Back where the profile was opened from.
-    assert.ok(find("phone-chat-info-page"));
+    assert.equal(find("phone-member-profile"), null);
+    assert.equal(find<HTMLTextAreaElement>("phone-info-note-input")?.value, "草稿");
   } finally { await view.cleanup(); }
 });

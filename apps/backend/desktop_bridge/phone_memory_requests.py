@@ -11,7 +11,8 @@ from conversation.context_scope import user_context_threads
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.accounts import AccountRegistry
-from core.identity import UserIdentityStore
+from core.identity import UserIdentity, UserIdentityStore
+from core.memory.external_writes import EXTERNAL_MEMORY_WRITE_LOCK
 from core.memory.group_environment import GroupEnvironment
 from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
 from desktop_bridge.phone_requests import (
@@ -38,6 +39,12 @@ def member_row(profile: MemberProfile) -> dict[str, Any]:
     }
 
 
+def _require_in_thread(profile: MemberProfile, thread: ThreadRecord) -> None:
+    """Rejects a member who never spoke in ``thread``."""
+    if thread.id not in profile.thread_ids:
+        raise ValueError("该成员没有在这个会话出现过")
+
+
 class DesktopPhoneMemoryRequestHandler:
     """Reads and edits the role's memory of one external conversation.
 
@@ -59,8 +66,14 @@ class DesktopPhoneMemoryRequestHandler:
       when the member has no profile); ``phone.member.profile.save`` with
       ``brief`` and ``profile`` rewrites those two fields of an existing
       profile and returns it; ``phone.member.profile.delete`` deletes it. The
-      member is ``sender_id`` on the conversation's channel; the user has no
-      member profile, so naming the user is an error.
+      member is ``sender_id`` on the conversation's channel and must have
+      spoken in this conversation (its profile lists the thread), so one
+      conversation cannot reach members of others on the same channel; the
+      user has no member profile, so naming the user is an error.
+
+    Writes hold ``EXTERNAL_MEMORY_WRITE_LOCK`` (a short lock, never memory
+    consolidation's): a consolidation prepared before them sees its snapshot
+    changed at commit time and retries instead of overwriting them.
     """
 
     def __init__(
@@ -83,70 +96,91 @@ class DesktopPhoneMemoryRequestHandler:
     ) -> dict[str, Any] | None:
         """Handles one chat info request; None for methods it does not own."""
         if method == "phone.conversation.note":
-            role_id, thread = self._external_thread(payload)
+            role_id, thread, _ = self._external_thread(payload)
             return self._note(role_id, thread)
         if method == "phone.conversation.note.save":
-            role_id, thread = self._external_thread(payload)
+            role_id, thread, _ = self._external_thread(payload)
             note = payload.get("note")
             if not isinstance(note, str):
                 raise ValueError("note 必须是文本")
-            self._group_environment.write_note(role_id, thread.id, note)
+            with EXTERNAL_MEMORY_WRITE_LOCK:
+                self._group_environment.write_note(role_id, thread.id, note)
             return self._note(role_id, thread)
         if method == "phone.conversation.activity":
-            role_id, thread = self._external_thread(payload)
+            role_id, thread, _ = self._external_thread(payload)
             snapshot = self._group_environment.read(role_id, thread.id)
             return {"thread_id": thread.id, "recent_activity": snapshot.recent_activity}
         if method == "phone.conversation.members":
-            role_id, thread = self._external_thread(payload)
+            role_id, thread, identities = self._external_thread(payload)
             return {
                 "thread_id": thread.id,
-                "members": self._member_rows(role_id, thread),
+                "members": self._member_rows(role_id, thread, identities),
             }
         if method == "phone.member.profile":
-            role_id, key = self._member(payload)
+            role_id, thread, key = self._member(payload)
             profile = self._members.read(role_id, key)
+            # Nothing leaks without a profile; an existing one must list this thread.
+            if profile is not None:
+                _require_in_thread(profile, thread)
             return {"member": member_row(profile) if profile is not None else None}
         if method == "phone.member.profile.save":
-            role_id, key = self._member(payload)
+            role_id, thread, key = self._member(payload)
             brief, text = payload.get("brief"), payload.get("profile")
             if not isinstance(brief, str) or not isinstance(text, str):
                 raise ValueError("brief 与 profile 必须是文本")
-            existing = self._members.read(role_id, key)
-            if existing is None:
-                raise LookupError("该成员还没有档案")
-            saved = replace(existing, brief=brief.strip(), profile=text.strip())
-            self._members.write(role_id, saved)
+            with EXTERNAL_MEMORY_WRITE_LOCK:
+                existing = self._existing_profile(role_id, thread, key)
+                saved = replace(existing, brief=brief.strip(), profile=text.strip())
+                self._members.write(role_id, saved)
             return {"member": member_row(saved)}
         if method == "phone.member.profile.delete":
-            role_id, key = self._member(payload)
-            self._members.delete(role_id, key)
+            role_id, thread, key = self._member(payload)
+            with EXTERNAL_MEMORY_WRITE_LOCK:
+                _ = self._existing_profile(role_id, thread, key)
+                self._members.delete(role_id, key)
             return {"channel": key.channel, "sender_id": key.sender_id}
         return None
 
-    def _external_thread(self, payload: dict[str, Any]) -> tuple[str, ThreadRecord]:
-        """The request's role and conversation; fails unless it is external."""
+    def _external_thread(
+        self, payload: dict[str, Any]
+    ) -> tuple[str, ThreadRecord, tuple[UserIdentity, ...]]:
+        """The request's role and conversation, and the bindings read to check it.
+
+        Fails unless the conversation is one of the role's external ones.
+        """
         role_id = required_text(payload, "role_id")
         thread = role_channel_thread(
             self._conversations, role_id, required_text(payload, "thread_id")
         )
         if thread is None:
             raise ValueError("会话不属于该角色")
-        if user_context_threads(role_id, self._identities.list()).contains(thread.id):
+        identities = tuple(self._identities.list())
+        if user_context_threads(role_id, identities).contains(thread.id):
             raise ValueError("用户上下文会话没有群信息")
-        return role_id, thread
+        return role_id, thread, identities
 
-    def _member(self, payload: dict[str, Any]) -> tuple[str, MemberKey]:
-        """The request's role and member (``sender_id`` on the thread's channel)."""
-        role_id, thread = self._external_thread(payload)
+    def _member(self, payload: dict[str, Any]) -> tuple[str, ThreadRecord, MemberKey]:
+        """The request's role, conversation and member (``sender_id`` on its channel)."""
+        role_id, thread, identities = self._external_thread(payload)
         key = MemberKey(
             channel=thread.channel, sender_id=required_text(payload, "sender_id")
         )
         bound = role_bound_senders(
-            role_id, accounts=self._accounts, identities=self._identities
+            role_id, accounts=self._accounts, identities=identities
         )
         if key.is_user(bound):
             raise ValueError("用户本人没有成员档案")
-        return role_id, key
+        return role_id, thread, key
+
+    def _existing_profile(
+        self, role_id: str, thread: ThreadRecord, key: MemberKey
+    ) -> MemberProfile:
+        """The member's profile, which must exist and list ``thread``."""
+        profile = self._members.read(role_id, key)
+        if profile is None:
+            raise LookupError("该成员还没有档案")
+        _require_in_thread(profile, thread)
+        return profile
 
     def _note(self, role_id: str, thread: ThreadRecord) -> dict[str, Any]:
         return {
@@ -154,9 +188,14 @@ class DesktopPhoneMemoryRequestHandler:
             "note": self._group_environment.read_note(role_id, thread.id),
         }
 
-    def _member_rows(self, role_id: str, thread: ThreadRecord) -> list[dict[str, Any]]:
+    def _member_rows(
+        self,
+        role_id: str,
+        thread: ThreadRecord,
+        identities: tuple[UserIdentity, ...],
+    ) -> list[dict[str, Any]]:
         bound = role_bound_senders(
-            role_id, accounts=self._accounts, identities=self._identities
+            role_id, accounts=self._accounts, identities=identities
         )
         profiles = [
             profile

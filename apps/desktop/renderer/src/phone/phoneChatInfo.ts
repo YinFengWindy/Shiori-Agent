@@ -15,8 +15,6 @@ export type PhoneChatInfoSectionId = "summary" | "members" | "note" | "activity"
 export type PhoneChatInfoSection = {
   id: PhoneChatInfoSectionId;
   title: string;
-  /** The block edits what the role remembers; the others only show it. */
-  editable: boolean;
 };
 
 /**
@@ -31,10 +29,10 @@ export function phoneChatInfoSections(conversation: Pick<PhoneConversation, "isU
   if (conversation.isUserChat) return [];
   const group = conversation.chatType === "group";
   return [
-    { id: "summary", title: group ? "群信息" : "聊天信息", editable: false },
-    { id: "members", title: group ? "群成员" : "成员", editable: false },
-    { id: "note", title: group ? "群笔记" : "笔记", editable: true },
-    { id: "activity", title: "最近动态", editable: false },
+    { id: "summary", title: group ? "群信息" : "聊天信息" },
+    { id: "members", title: group ? "群成员" : "成员" },
+    { id: "note", title: group ? "群笔记" : "笔记" },
+    { id: "activity", title: "最近动态" },
   ];
 }
 

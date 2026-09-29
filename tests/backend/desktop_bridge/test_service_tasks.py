@@ -10,6 +10,7 @@ from bus.event_bus import EventBus
 from core.roles import RoleStore
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
+from core.memory.group_environment import GroupEnvironment
 
 
 @pytest.mark.asyncio
@@ -43,7 +44,10 @@ async def test_desktop_bridge_lists_and_cancels_role_subagent_tasks(tmp_path):
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
         subagent_manager=manager,
@@ -84,7 +88,10 @@ async def test_desktop_bridge_creates_updates_and_emits_role_task_events(tmp_pat
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
         scheduler=scheduler,
@@ -165,7 +172,10 @@ async def test_desktop_bridge_rejects_cross_role_and_running_schedule_updates(tm
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
         scheduler=scheduler,

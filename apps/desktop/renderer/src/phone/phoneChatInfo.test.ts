@@ -16,12 +16,12 @@ const item = (patch: Partial<PhoneMessage>, isUser = false): MessageItem => {
 
 const group = { isUserChat: false, chatType: "group" } as const;
 
-test("external chats get the four blocks in order, only the note editable; the user's own chat gets none", () => {
+test("external chats get the four blocks in order; the user's own chat gets none", () => {
   assert.deepEqual(phoneChatInfoSections(group), [
-    { id: "summary", title: "群信息", editable: false },
-    { id: "members", title: "群成员", editable: false },
-    { id: "note", title: "群笔记", editable: true },
-    { id: "activity", title: "最近动态", editable: false },
+    { id: "summary", title: "群信息" },
+    { id: "members", title: "群成员" },
+    { id: "note", title: "群笔记" },
+    { id: "activity", title: "最近动态" },
   ]);
   // A stranger's private chat is external as well, titled for a chat.
   assert.deepEqual(

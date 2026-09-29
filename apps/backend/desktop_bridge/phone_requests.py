@@ -11,7 +11,7 @@ from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.accounts import AccountRegistry, account_for_channel
 from core.common.message_source import MessageSource
-from core.identity import BoundUserSenders, UserIdentityStore
+from core.identity import BoundUserSenders, UserIdentity, UserIdentityStore
 from desktop_bridge.session_presenter import MESSAGE_PAGE_SIZE, message_preview
 from session.manager.helpers import role_session_key
 from session.manager.models import message_thread_id
@@ -68,11 +68,11 @@ def role_channel_thread(
 
 
 def role_bound_senders(
-    role_id: str, *, accounts: AccountRegistry, identities: UserIdentityStore
+    role_id: str, *, accounts: AccountRegistry, identities: Iterable[UserIdentity]
 ) -> BoundUserSenders:
-    """The current bindings over the role's accounts, read once for many senders."""
+    """The bindings ``identities`` (as read once) over the role's accounts."""
     return BoundUserSenders(
-        identities=tuple(identities.list()),
+        identities=tuple(identities),
         accounts=tuple(account.record for account in accounts.list(role_id=role_id)),
     )
 
@@ -215,7 +215,7 @@ class DesktopPhoneRequestHandler:
         """
         session_key = role_session_key(role_id)
         bound = role_bound_senders(
-            role_id, accounts=self._accounts, identities=self._identities
+            role_id, accounts=self._accounts, identities=self._identities.list()
         )
 
         def is_user(sender_id: str | None) -> bool:

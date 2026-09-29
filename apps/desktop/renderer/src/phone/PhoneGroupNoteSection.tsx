@@ -2,9 +2,9 @@ import { InlineError } from "../shared/feedback/InlineError";
 import { compactPrimaryButtonClass, compactTextButtonClass, textareaClass } from "../shared/styles";
 import type { PhoneChatInfoSectionProps } from "./PhoneChatInfoSections";
 import { PhoneLoadError } from "./PhoneLoadError";
-import { actionFailed, usePhoneAction } from "./usePhoneAction";
+import { useBusyAction } from "../shared/useBusyAction";
+import { useEditDraft } from "../shared/useEditDraft";
 import { usePhoneGroupNote } from "./usePhoneChatMemory";
-import { usePhoneDraft } from "./usePhoneDraft";
 
 const textDiffers = (draft: string, stored: string) => draft !== stored;
 
@@ -12,14 +12,10 @@ const textDiffers = (draft: string, stored: string) => draft !== stored;
 function GroupNoteEditor({ stored, label, onSave }: {
   stored: string;
   label: string;
-  onSave: (note: string) => Promise<string>;
+  onSave: (note: string) => Promise<void>;
 }) {
-  const { draft, dirty, setDraft, restart } = usePhoneDraft(stored, textDiffers);
-  const saving = usePhoneAction();
-  async function save() {
-    const result = await saving.run(() => onSave(draft));
-    if (result !== actionFailed) restart(result);
-  }
+  const { draft, dirty, setDraft, reset } = useEditDraft(stored, textDiffers);
+  const saving = useBusyAction();
   return (
     <div className="grid gap-1.5">
       <textarea className={textareaClass} rows={6} value={draft} aria-label={label} data-testid="phone-info-note-input"
@@ -27,9 +23,9 @@ function GroupNoteEditor({ stored, label, onSave }: {
       {saving.error ? <InlineError message={saving.error} persona={false} /> : null}
       {dirty ? (
         <div className="flex justify-end gap-1.5">
-          <button type="button" className={compactTextButtonClass} disabled={saving.busy} onClick={() => restart(stored)}>还原</button>
+          <button type="button" className={compactTextButtonClass} disabled={saving.busy} onClick={reset}>还原</button>
           <button type="button" className={compactPrimaryButtonClass} disabled={saving.busy} data-testid="phone-info-note-save"
-            onClick={() => void save()}>{saving.busy ? "保存中..." : "保存"}</button>
+            onClick={() => void saving.run(() => onSave(draft))}>{saving.busy ? "保存中..." : "保存"}</button>
         </div>
       ) : null}
     </div>

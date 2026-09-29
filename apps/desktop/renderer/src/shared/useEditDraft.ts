@@ -2,11 +2,11 @@ import { useState } from "react";
 
 /**
  * An editable copy of a stored value. The draft starts as `stored` and
- * starts over whenever `stored` changes (loaded, reread after a save);
- * `restart` begins again from a value the caller just stored, before the
- * reread arrives. `dirty` compares the draft with `stored` by `differs`.
+ * starts over whenever `stored` changes (loaded, or reread after a save);
+ * `reset` drops the edits. `dirty` compares the draft with `stored` by
+ * `differs`.
  */
-export function usePhoneDraft<T>(stored: T, differs: (draft: T, stored: T) => boolean) {
+export function useEditDraft<T>(stored: T, differs: (draft: T, stored: T) => boolean) {
   const [state, setState] = useState({ base: stored, draft: stored });
   let current = state;
   if (state.base !== stored) {
@@ -17,7 +17,7 @@ export function usePhoneDraft<T>(stored: T, differs: (draft: T, stored: T) => bo
   return {
     draft: current.draft,
     dirty: differs(current.draft, stored),
-    setDraft: (draft: T) => setState((previous) => ({ ...previous, draft })),
-    restart: (value: T) => setState({ base: value, draft: value }),
+    setDraft: (draft: T) => setState({ base: stored, draft }),
+    reset: () => setState({ base: stored, draft: stored }),
   };
 }
