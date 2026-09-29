@@ -5,7 +5,14 @@
  * not import it. The host's own tests use the same harness.
  */
 export { deferred } from "./deferred";
-export { changeInputValue, mockableWindowTimers, mountTestComponent } from "./domTestHarness";
+export { changeInputValue, mockableWindowTimers, mountTestComponent, type MountTestComponentOptions } from "./domTestHarness";
 export { chooseSelectOption } from "./selectTestActions";
-export { createFakeHostServices, type FakeHostServices, type FakeHostServicesOptions } from "./fakeHostServices";
+export {
+  createFakeHostServices,
+  type FakeHostCall,
+  type FakeHostFeedback,
+  type FakeHostServices,
+  type FakeHostServicesOptions,
+} from "./fakeHostServices";
+export type { FakeHostUiRenders } from "./fakeHostUi";
 export { createFakePluginClient } from "./fakePluginClient";
