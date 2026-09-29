@@ -38,6 +38,14 @@ def is_role_session_key(key: str) -> bool:
     return key.startswith(_ROLE_SESSION_PREFIX) and len(key) > len(_ROLE_SESSION_PREFIX)
 
 
+def role_id_from_session_key(key: str) -> str:
+    """The role that owns shared session ``key``; "" when ``key`` is not one."""
+    clean_key = str(key or "").strip()
+    if not clean_key.startswith(_ROLE_SESSION_PREFIX):
+        return ""
+    return clean_key.removeprefix(_ROLE_SESSION_PREFIX).strip()
+
+
 def _truncate_tool_result(content: object) -> str:
     text = content if isinstance(content, str) else str(content)
     if len(text) <= _TOOL_RESULT_CHAR_BUDGET:

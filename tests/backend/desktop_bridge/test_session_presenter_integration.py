@@ -191,3 +191,51 @@ def test_session_presenter_last_message_preview_is_none_for_empty_sessions(
     presenter = DesktopSessionPresenter(ConversationService(manager))
 
     assert presenter.last_message_preview("role:nobody") is None
+
+
+def test_session_presenter_reads_only_the_desktop_conversation(tmp_path) -> None:
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    for content, thread_id, media in [
+        ("旧的天气", "", None),
+        ("桌面天气", "thread:mira:desktop", ["desk.png"]),
+        ("群里天气", "thread:mira:qq:group-1", ["group.png"]),
+        ("提醒天气", "thread:mira:scheduler:job-1", None),
+        ("最新群消息", "thread:mira:qq:group-1", None),
+    ]:
+        session.add_message(
+            "user",
+            content,
+            media=media,
+            metadata={"thread_id": thread_id} if thread_id else None,
+        )
+    manager.save(session)
+    other = manager.get_or_create("role:other")
+    other.add_message(
+        "user", "别人的群天气", metadata={"thread_id": "thread:other:qq:g"}
+    )
+    manager.save(other)
+    presenter = DesktopSessionPresenter(ConversationService(manager))
+
+    page = presenter.serialize_page(session)
+    around = presenter.serialize_around("role:mira:1", context=1)
+    role_search = presenter.serialize_search("天气", session_key="role:mira")
+    all_search = presenter.serialize_search("天气")
+    images = presenter.serialize_image_history("role:mira")
+    preview = presenter.last_message_preview("role:mira")
+
+    assert [message["seq"] for message in page["messages"]] == [0, 1, 3]
+    assert [message["seq"] for message in around["messages"]] == [0, 1, 3]
+    assert presenter.serialize_around("role:mira:2")["messages"] == []
+    assert sorted(hit["seq"] for hit in role_search["results"]) == [0, 1, 3]
+    assert sorted(hit["id"] for hit in all_search["results"]) == [
+        "role:mira:0",
+        "role:mira:1",
+        "role:mira:3",
+    ]
+    assert [item["media"] for item in images["messages"]] == [["desk.png"]]
+    assert preview is not None and preview["content"] == "提醒天气"
+    assert [
+        message["content"]
+        for message in presenter.desktop_messages("role:mira", session.messages)
+    ] == ["旧的天气", "桌面天气", "提醒天气"]

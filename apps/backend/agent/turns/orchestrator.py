@@ -340,7 +340,7 @@ class TurnOrchestrator:
         else:
             thread_id = (
                 desktop_thread_id(role_id)
-                if channel == "desktop"
+                if channel == DESKTOP_CHANNEL
                 else network_thread_id(role_id, channel, chat_id)
             )
         metadata.update(

@@ -6,7 +6,11 @@ from typing import Any
 from conversation.context_scope import desktop_view_thread_ids, in_desktop_view
 from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from session.manager import Session
-from session.manager.helpers import ROLE_SESSION_PREFIX, is_role_session_key
+from session.manager.helpers import (
+    ROLE_SESSION_PREFIX,
+    is_role_session_key,
+    role_id_from_session_key,
+)
 from session.manager.models import message_thread_id
 
 # The chat list shows one line; the renderer strips Markdown from this prefix.
@@ -87,16 +91,10 @@ class DesktopSessionPresenter:
 
         A message outside the desktop conversation is not found.
         """
-        store = self._session_store()
-        target = store.get_message(message_id)
-        result = store.fetch_message_around(
+        result = self._session_store().fetch_message_around(
             message_id,
             context=context,
-            thread_ids=(
-                self._desktop_thread_ids(str(target["session_key"]))
-                if target is not None
-                else None
-            ),
+            thread_ids_for_session=self._desktop_thread_ids,
         )
         result["messages"] = [
             self.serialize_message(message) for message in result["messages"]
@@ -127,7 +125,9 @@ class DesktopSessionPresenter:
                 for key, threads in store.thread_ids_by_session(
                     ROLE_SESSION_PREFIX
                 ).items()
-                for thread_id in desktop_view_thread_ids(_role_id(key), threads)
+                for thread_id in desktop_view_thread_ids(
+                    role_id_from_session_key(key), threads
+                )
             )
             session_prefix = ROLE_SESSION_PREFIX
         results, total = store.search_message_previews(
@@ -182,7 +182,7 @@ class DesktopSessionPresenter:
         """Keeps the messages the desktop chat shows; other sessions keep all."""
         if not is_role_session_key(session_key):
             return list(messages)
-        role_id = _role_id(session_key)
+        role_id = role_id_from_session_key(session_key)
         return [
             message
             for message in messages
@@ -194,7 +194,8 @@ class DesktopSessionPresenter:
         if not is_role_session_key(session_key):
             return None
         return desktop_view_thread_ids(
-            _role_id(session_key), self._session_store().session_thread_ids(session_key)
+            role_id_from_session_key(session_key),
+            self._session_store().session_thread_ids(session_key),
         )
 
     def _session_store(self):
@@ -298,7 +299,3 @@ class DesktopSessionPresenter:
                     }
                 )
         return groups
-
-
-def _role_id(session_key: str) -> str:
-    return session_key.removeprefix(ROLE_SESSION_PREFIX)

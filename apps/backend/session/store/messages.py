@@ -9,7 +9,7 @@ from typing import Any
 
 from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
 
-from .common import _MESSAGE_SELECT_COLUMNS, _thread_filter_sql
+from .common import _MESSAGE_SELECT_COLUMNS, thread_filter_sql
 from session.media_assets import preserve_media
 
 
@@ -225,16 +225,13 @@ class _MessageMixin:
         """Fetch one desktop message page using a stable sequence cursor.
 
         ``thread_ids`` limits the page and its counts to those threads (see
-        ``_thread_filter_sql``).
+        ``thread_filter_sql``).
         """
         safe_limit = max(1, min(int(limit), 100))
         clean_before = int(before_seq) if before_seq is not None else None
-        where = "session_key = ?"
-        params: list[Any] = [session_key]
-        if thread_ids is not None:
-            thread_sql, thread_params = _thread_filter_sql(thread_ids)
-            where += f" AND {thread_sql}"
-            params.extend(thread_params)
+        thread_sql, thread_params = thread_filter_sql(thread_ids)
+        where = f"session_key = ? AND {thread_sql}"
+        params: list[Any] = [session_key, *thread_params]
         stats_where = where
         stats_params = tuple(params)
         if clean_before is not None:
@@ -293,11 +290,9 @@ class _MessageMixin:
     ) -> list[dict[str, Any]]:
         """Returns the lightweight media projection for every persisted message.
 
-        ``thread_ids`` limits it to those threads (see ``_thread_filter_sql``).
+        ``thread_ids`` limits it to those threads (see ``thread_filter_sql``).
         """
-        thread_sql, thread_params = (
-            _thread_filter_sql(thread_ids) if thread_ids is not None else ("1", [])
-        )
+        thread_sql, thread_params = thread_filter_sql(thread_ids)
         with self._lock:
             rows = self._conn.execute(
                 f"""

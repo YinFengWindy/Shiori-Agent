@@ -95,9 +95,11 @@ class DesktopChatRequestHandler:
 
         A failed desktop turn persists the user message and nothing after it
         (errors are never stored), so the retryable turn is exactly "the
-        session ends with this user message". Anything else — a reply already
-        followed, or another message arrived — is refused, and the single
-        timeline is never rewritten or given a duplicate user message.
+        desktop conversation ends with this user message". Anything else — a
+        reply already followed, or another desktop message arrived — is
+        refused, and the timeline is never rewritten or given a duplicate user
+        message. Channel messages stored in the same role session since then
+        are not part of the desktop conversation and do not block the retry.
         """
         role_id = str(payload.get("role_id") or "").strip()
         turn_id = str(payload.get("turn_id") or "").strip()
@@ -110,7 +112,10 @@ class DesktopChatRequestHandler:
         session = aggregate.session
         if self._chat_service.is_busy(session.key):
             raise ChatTurnBusyError("当前会话已有正在执行的聊天任务")
-        user_message = session.messages[-1] if session.messages else None
+        desktop_messages = self._session_presenter.desktop_messages(
+            session.key, session.messages
+        )
+        user_message = desktop_messages[-1] if desktop_messages else None
         if (
             user_message is None
             or user_message.get("role") != "user"

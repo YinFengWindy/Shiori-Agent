@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from typing import Any
 
 from infra.persistence.sqlite_like import (
@@ -13,7 +13,7 @@ from infra.persistence.sqlite_like import (
     like_prefix,
 )
 
-from .common import _MESSAGE_SELECT_COLUMNS, _thread_filter_sql
+from .common import _MESSAGE_SELECT_COLUMNS, thread_filter_sql
 
 
 class _SearchMixin:
@@ -115,33 +115,40 @@ class _SearchMixin:
         message_id: str,
         *,
         context: int = 5,
-        thread_ids: Collection[str] | None = None,
+        thread_ids_for_session: Callable[[str], Collection[str] | None] | None = None,
     ) -> dict[str, Any]:
         """Fetch a message and nearby persisted messages by its real id.
 
-        ``thread_ids`` limits the target, its neighbours and the counts to those
-        threads (see ``_thread_filter_sql``); a target outside them is not found.
+        ``thread_ids_for_session`` maps the target's session to the threads the
+        caller may see (see ``thread_filter_sql``); the neighbours and counts are
+        limited to them, and a target outside them is not found.
         """
         safe_context = max(0, min(int(context), 100))
-        thread_sql, thread_params = (
-            _thread_filter_sql(thread_ids) if thread_ids is not None else ("1", [])
-        )
+        not_found: dict[str, Any] = {
+            "messages": [],
+            "target_message_id": message_id,
+            "has_more_before": False,
+            "has_more_after": False,
+            "total_count": 0,
+        }
         with self._lock:
             target = self._conn.execute(
-                f"SELECT {_MESSAGE_SELECT_COLUMNS} FROM messages "
-                f"WHERE id = ? AND {thread_sql}",
-                (message_id, *thread_params),
+                f"SELECT {_MESSAGE_SELECT_COLUMNS} FROM messages WHERE id = ?",
+                (message_id,),
             ).fetchone()
-            if target is None:
-                return {
-                    "messages": [],
-                    "target_message_id": message_id,
-                    "has_more_before": False,
-                    "has_more_after": False,
-                    "total_count": 0,
-                }
-            session_key = str(target["session_key"])
-            target_seq = int(target["seq"])
+        if target is None:
+            return not_found
+        session_key = str(target["session_key"])
+        thread_ids = (
+            thread_ids_for_session(session_key)
+            if thread_ids_for_session is not None
+            else None
+        )
+        if thread_ids is not None and str(target["thread_id"] or "") not in thread_ids:
+            return not_found
+        thread_sql, thread_params = thread_filter_sql(thread_ids)
+        target_seq = int(target["seq"])
+        with self._lock:
             before_rows = self._conn.execute(
                 f"""
                 SELECT {_MESSAGE_SELECT_COLUMNS}
@@ -224,7 +231,7 @@ class _SearchMixin:
             where_parts.append("m.session_key = ?")
             params.append(session_key)
         if thread_ids is not None:
-            thread_sql, thread_params = _thread_filter_sql(thread_ids, "m.thread_id")
+            thread_sql, thread_params = thread_filter_sql(thread_ids, "m.thread_id")
             where_parts.append(thread_sql)
             params.extend(thread_params)
         if session_prefix:

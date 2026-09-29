@@ -4,6 +4,8 @@ from pathlib import Path
 
 from conversation.context_scope import (
     ContextView,
+    desktop_view_thread_ids,
+    in_desktop_view,
     turn_context_view,
     user_context_view,
 )
@@ -80,3 +82,15 @@ def test_legacy_messages_without_a_thread_belong_to_the_user_context(
     assert not turn_context_view(tmp_path, "mira", GROUP).includes(
         {"metadata": {"thread_id": DESKTOP}}
     )
+
+
+def test_desktop_view_is_only_the_desktop_conversation(tmp_path: Path) -> None:
+    _bind(tmp_path, "902")
+    scheduler = "thread:mira:scheduler:job-1"
+    threads = ["", DESKTOP, scheduler, USER_DM, STRANGER_DM, GROUP]
+
+    # A bound user's private chat is user context but not the desktop view.
+    assert user_context_view(tmp_path, "mira").includes_thread(USER_DM)
+    assert not in_desktop_view("mira", USER_DM)
+    assert desktop_view_thread_ids("mira", threads) == {"", DESKTOP, scheduler}
+    assert not in_desktop_view("mira", desktop_thread_id("other"))

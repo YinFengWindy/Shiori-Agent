@@ -259,7 +259,11 @@ export function useDesktopBridgeLifecycle({
             const currentRole = rolesRef.current.find((item) => item.id === activeRoleIdRef.current) ?? null;
             setActiveIllustration((current) => callbacks.chooseIllustration(currentRole, session, current));
           }
-          if (event.id === "proactive" && roleId && isProactiveAssistantMessage(session) && !isVisibleChat) {
+          // Channel updates refresh the summary but carry no desktop message; only a
+          // newly delivered desktop message may count as unread.
+          const carriesDesktopMessage = Boolean(update.message) || Boolean(update.messages?.length);
+          if (event.id === "proactive" && roleId && carriesDesktopMessage
+            && isProactiveAssistantMessage(session) && !isVisibleChat) {
             setUnreadCounts((current) => ({
               ...current,
               [roleId]: (current[roleId] ?? 0) + 1,

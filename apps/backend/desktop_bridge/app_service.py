@@ -5,6 +5,7 @@ from typing import Any
 from conversation.service import ConversationService
 from core.roles import RoleAggregateService, RoleRelationshipRuntimeService
 from session.manager import Session, SessionManager
+from session.manager.helpers import role_id_from_session_key
 from session.manager.models import build_session_message
 
 
@@ -217,10 +218,7 @@ class DesktopAppService:
         raise ValueError("desktop proactive chat_id 不能为空")
 
     def role_id_from_desktop_session_key(self, session_key: str) -> str:
-        clean_key = str(session_key or "").strip()
-        if not clean_key.startswith("role:"):
-            return ""
-        return clean_key.removeprefix("role:").strip()
+        return role_id_from_session_key(session_key)
 
     def sync_desktop_session_thread(self, session: Session, *, role_id: str) -> None:
         thread = self.conversation_service.ensure_desktop_thread(role_id)

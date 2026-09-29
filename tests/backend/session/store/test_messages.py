@@ -213,3 +213,49 @@ def test_update_message_delivery_merges_metadata_into_the_same_row(tmp_path: Pat
         }
     finally:
         store.close()
+
+
+def _threaded_store(tmp_path: Path) -> SessionStore:
+    """seq 0 has no thread, 1 and 3 are desktop, 2 and 4 belong to a group."""
+    store = SessionStore(tmp_path / "sessions.db")
+    store.create_session(key="role:mira", metadata={})
+    for seq, thread_id in enumerate([None, "desktop", "group", "desktop", "group"]):
+        store.insert_message(
+            "role:mira",
+            role="user",
+            content=f"m{seq}",
+            ts=f"2026-09-29T12:0{seq}:00",
+            seq=seq,
+            thread_id=thread_id,
+            media=[f"{seq}.png"],
+        )
+    return store
+
+
+def test_fetch_messages_page_limits_rows_and_counts_to_the_threads(tmp_path: Path):
+    store = _threaded_store(tmp_path)
+    try:
+        newest = store.fetch_messages_page(
+            "role:mira", limit=2, thread_ids={"", "desktop"}
+        )
+        older = store.fetch_messages_page(
+            "role:mira", limit=2, before_seq=1, thread_ids={"", "desktop"}
+        )
+
+        assert [message["seq"] for message in newest["messages"]] == [1, 3]
+        assert newest["total_count"] == 3
+        assert newest["has_more"] is True
+        assert [message["seq"] for message in older["messages"]] == [0]
+        assert older["has_more"] is False
+    finally:
+        store.close()
+
+
+def test_fetch_image_history_limits_media_to_the_threads(tmp_path: Path):
+    store = _threaded_store(tmp_path)
+    try:
+        history = store.fetch_image_history("role:mira", thread_ids={"desktop"})
+
+        assert [item["seq"] for item in history] == [1, 3]
+    finally:
+        store.close()
