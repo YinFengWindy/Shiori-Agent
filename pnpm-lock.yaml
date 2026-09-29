@@ -136,7 +136,24 @@ importers:
         specifier: ^6.0.7
         version: 6.4.3(@types/node@24.13.3)(jiti@1.21.7)(tsx@4.23.1)
 
-  packages/plugin-sdk: {}
+  packages/plugin-sdk:
+    dependencies:
+      '@base-ui/react':
+        specifier: 1.8.0
+        version: 1.8.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@phosphor-icons/react':
+        specifier: ^2.1.10
+        version: 2.1.10(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.18
+      react:
+        specifier: ^19.2.5
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.2.5
+        version: 19.2.8(react@19.2.8)
 
 packages:
 

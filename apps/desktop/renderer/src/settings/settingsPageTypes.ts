@@ -22,13 +22,5 @@ export type SettingsSubsection = {
   label: string;
 };
 
-/** Props for a settings section that owns its own data (no shared draft). */
-export type StandaloneSettingsSectionProps = {
-  subsectionId: string;
-  /**
-   * Opens another subsection of the same section — how 「插件」's list
-   * reaches a plugin's nested settings page. Absent where a component is
-   * mounted outside `SettingsPage`.
-   */
-  onSelectSubsection?: (subsectionId: string) => void;
-};
+/** Owned by `@shiori/plugin-sdk` (#440; custom plugin settings sections receive it); re-exported for host callers. */
+export type { StandaloneSettingsSectionProps } from "@shiori/plugin-sdk";

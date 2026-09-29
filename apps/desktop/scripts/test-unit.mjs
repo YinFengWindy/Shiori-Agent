@@ -75,6 +75,8 @@ const testRoots = [
   resolve(desktopRoot, "renderer", "src"),
   // 跨模块集成回归；e2e 脚本用 *.e2e.ts 命名，不会被这里收集
   resolve(desktopRoot, "tests", "integration"),
+  // 插件 SDK（#440）的源码与单测同目录并列
+  resolve(repoRoot, "packages", "plugin-sdk", "src"),
   ...(await pluginTestRoots()),
 ];
 

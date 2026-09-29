@@ -1,37 +1,16 @@
 import { PlugIcon, StopIcon } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import type { AccountStatusCardAction, AccountStatusCardProps } from "@shiori/plugin-sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 import { SpinnerIcon } from "../shared/icons";
 import { cardClass, compactGhostButtonClass, compactPrimaryButtonClass, cx } from "../shared/styles";
 import { Reveal } from "../shared/ui/Reveal";
-import type { AccountSnapshot } from "./accountClient";
 import {
-  accountStatusView, pendingAccountStatus, type AccountPendingAction, type AccountStatusView,
+  accountStatusView, pendingAccountStatus, type AccountPendingAction,
 } from "./accountPresentation";
 import { AccountStatusDot } from "./AccountStatusDot";
 
-/** The card's one button: 连接 while the account is offline, 断开连接 while it runs. */
-export type AccountStatusCardAction = {
-  kind: "connect" | "disconnect";
-  onClick: () => void;
-  /** Blocks the button for a plugin reason (missing credentials, not supported here). */
-  disabled?: boolean;
-};
-
-/** Props of `AccountStatusCard` (plugins get it as `PluginHostServices.ui.AccountStatusCard`). */
-export type AccountStatusCardProps = {
-  /** The host account, or null while a new one is being added. */
-  account: AccountSnapshot | null;
-  /** A plugin-known status (e.g. a QR login step) that replaces the host's reading of `account`. */
-  status?: AccountStatusView;
-  /** A request in flight: its status shows at once and its button spins; every button waits. */
-  pending?: AccountPendingAction | null;
-  /** Short progress under the status, e.g. `NapCat v4 · 下载中 42%`. */
-  detail?: ReactNode;
-  action?: AccountStatusCardAction;
-  /** Rows below the status (QR code, progress bar); wrap each changing row in `Reveal`. */
-  children?: ReactNode;
-};
+/** The card's props contract is owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
+export type { AccountStatusCardAction, AccountStatusCardProps };
 
 const actionLabels = { connect: "连接", disconnect: "断开连接" } as const;
 

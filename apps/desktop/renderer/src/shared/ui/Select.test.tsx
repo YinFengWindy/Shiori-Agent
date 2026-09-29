@@ -1,16 +1,9 @@
+// The implementation lives in @shiori/plugin-sdk; this test moves next to it once #505's testing entry provides the DOM harness.
 import assert from "node:assert/strict";
-import { before, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import { act, useState } from "react";
 import { mountTestComponent } from "../testing/domTestHarness";
-import type { SelectOption } from "./Select";
-
-let Select: typeof import("./Select").Select;
-before(async () => {
-  // Headless UI chooses browser layout effects when its module is first loaded.
-  const environment = await mountTestComponent(null);
-  ({ Select } = await import("./Select"));
-  await environment.cleanup();
-});
+import { Select, type SelectOption } from "./Select";
 
 const options: SelectOption[] = [
   { value: "", label: "System default" },

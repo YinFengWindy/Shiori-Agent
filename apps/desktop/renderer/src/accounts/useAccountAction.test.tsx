@@ -1,3 +1,4 @@
+// The implementation lives in @shiori/plugin-sdk; this test moves next to it once #505's testing entry provides the DOM harness.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";

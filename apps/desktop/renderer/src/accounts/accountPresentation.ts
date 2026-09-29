@@ -1,5 +1,12 @@
+import type { AccountPendingAction, AccountSnapshot, AccountStatusTone, AccountStatusView } from "@shiori/plugin-sdk";
 import { prettifyPluginId } from "../plugins/pluginPresentation";
-import type { AccountSnapshot } from "./accountClient";
+
+/*
+ * The status vocabulary and `accountOnline` are owned by `@shiori/plugin-sdk`
+ * (#440) and re-exported here for host callers.
+ */
+export { accountOnline } from "@shiori/plugin-sdk";
+export type { AccountPendingAction, AccountStatusTone, AccountStatusView };
 
 type AccountIdentity = Pick<AccountSnapshot, "platform" | "displayName" | "platformAccountId">;
 
@@ -45,15 +52,6 @@ export function accountStatus(account: Pick<AccountSnapshot, "runtimeActive" | "
   }
 }
 
-/** Status colors shared by status dots and the account status card. */
-export type AccountStatusTone = "success" | "warning" | "danger" | "muted";
-
-/** A status as shown to the user: its words and its dot color. */
-export type AccountStatusView = { label: string; tone: AccountStatusTone };
-
-/** Account commands whose request is in flight; their status shows at once, before any report. */
-export type AccountPendingAction = "connect" | "disconnect" | "logout";
-
 const connectionTones: Record<AccountSnapshot["connection"], AccountStatusTone> = {
   online: "success",
   connecting: "warning",
@@ -69,11 +67,6 @@ export function accountStatusView(account: Pick<AccountSnapshot, "runtimeActive"
     label: accountStatus(account),
     tone: connectionTones[account.runtimeActive ? account.connection : "offline"] ?? "muted",
   };
-}
-
-/** Whether the account is connected right now, as its plugin last reported. */
-export function accountOnline(account: Pick<AccountSnapshot, "runtimeActive" | "connection"> | null) {
-  return Boolean(account?.runtimeActive && account.connection === "online");
 }
 
 const pendingLabels: Record<AccountPendingAction, string> = {

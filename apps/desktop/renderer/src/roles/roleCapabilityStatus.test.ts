@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { SettingsFormData } from "../../../src/bridge/shared";
-import { globalVoiceOutputEnabled, roleToggleStatus, roleVoiceStatus } from "./roleCapabilityStatus";
+import { globalVoiceOutputEnabled, roleVoiceStatus } from "./roleCapabilityStatus";
 
 function voiceSettings(voice: Partial<SettingsFormData["voice"]>): Pick<SettingsFormData, "voice"> {
   return { voice: { enabled: false, hotkey: "", microphoneDeviceId: "", asrProvider: "", asrBaseUrl: "", asrSecretId: "", asrSecretKey: "", ttsProvider: "", ttsBaseUrl: "", ttsModel: "", ttsApiKey: "", ttsVolume: 1, ...voice } };
@@ -41,13 +41,5 @@ describe("globalVoiceOutputEnabled", () => {
   it("falls back to the voice switch when the TTS switch is unset, and is unknown without settings", () => {
     assert.equal(globalVoiceOutputEnabled(voiceSettings({ enabled: true })), true);
     assert.equal(globalVoiceOutputEnabled(null), null);
-  });
-});
-
-describe("roleToggleStatus", () => {
-  it("maps the switch and lets an unavailable reason win", () => {
-    assert.deepEqual(roleToggleStatus(true), { label: "已启用", tone: "on" });
-    assert.deepEqual(roleToggleStatus(false), { label: "未启用", tone: "off" });
-    assert.deepEqual(roleToggleStatus(true, "未配置桌宠"), { label: "未配置桌宠", tone: "off" });
   });
 });

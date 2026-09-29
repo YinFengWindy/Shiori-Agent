@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
+import type { HostConfirmDialogProps } from "@shiori/plugin-sdk";
 import { Dialog } from "@base-ui/react/dialog";
 import { InlineError } from "../feedback/InlineError";
 import { MascotFaceAvatar } from "../mascot/MascotFigure";
@@ -8,13 +9,9 @@ import type { MascotLine } from "../mascot/mascotLines";
 import { dangerButtonClass, ghostButtonClass, primaryButtonClass, dialogBackdropClass } from "../styles";
 
 /** Props of `ConfirmDialog` (plugins get it as `PluginHostServices.ui.ConfirmDialog`, with a plugin persona instead). */
-export type ConfirmDialogProps = {
-  open: boolean; title: string; description: string; confirmLabel: string; children?: ReactNode;
-  busy?: boolean; confirmDisabled?: boolean; busyLabel?: string; cancelLabel?: string; error?: string; destructive?: boolean; onClose: () => void; onConfirm: () => void;
+export type ConfirmDialogProps = Omit<HostConfirmDialogProps, "persona"> & {
   /** 吟风's lead line for this confirmation (see `confirmPersonaLines`). */
   persona?: MascotLine;
-  /** Optional stable focus destination when a successful action removes its trigger. */
-  finalFocus?: Dialog.Popup.Props["finalFocus"];
 };
 
 /**

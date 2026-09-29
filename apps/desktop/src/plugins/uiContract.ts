@@ -41,8 +41,23 @@ export const pluginUiPeerExports: Record<string, string[]> = {
   "react/jsx-runtime": ["Fragment", "jsx", "jsxs"],
   "react-dom": ["createPortal", "flushSync", "preconnect", "prefetchDNS", "preinit", "preinitModule", "preload", "preloadModule", "requestFormReset", "unstable_batchedUpdates", "useFormState", "useFormStatus", "version"],
   "react-dom/client": ["createRoot", "hydrateRoot", "version"],
-  // Runtime API 2.8.0 (#503). Only the main entry: `@shiori/plugin-sdk/testing` is development-only.
-  "@shiori/plugin-sdk": ["BridgeError", "PluginBridgeError"],
+  // Only the main entry: `@shiori/plugin-sdk/testing` is development-only,
+  // `@shiori/plugin-sdk/contract` is type-only and
+  // `@shiori/plugin-sdk/host-internal` is host-only (not plugin contract).
+  "@shiori/plugin-sdk": [
+    // Runtime API 2.8.0 (#503).
+    "BridgeError", "PluginBridgeError",
+    // Runtime API 2.9.0 (#504): helpers and hooks.
+    "errorMessage", "useLatestRef", "roleToggleStatus", "accountOnline", "useAccountAction",
+    // Runtime API 2.9.0: shared class names.
+    "badgeClass", "cardClass", "compactButtonSizeClass", "compactGhostButtonClass", "compactPressableClass", "cx",
+    "ghostButtonClass", "ghostButtonSurfaceClass", "iconButtonClass", "inputClass", "pressableClass",
+    "primaryButtonSurfaceClass", "secondarySidebarSurfaceClass", "sidebarContentMotionClass", "sidebarNavItemClass",
+    "textareaClass", "menuPanelClass", "menuSeparatorClass",
+    // Runtime API 2.9.0: components and icons.
+    "ActionMenu", "AutosizeTextarea", "RoleCapabilityCard", "Select", "SettingsToggleCard",
+    "UploadIcon", "PetalIcon", "SparkleIcon", "navMotifs", "withMotif",
+  ],
 };
 
 /**

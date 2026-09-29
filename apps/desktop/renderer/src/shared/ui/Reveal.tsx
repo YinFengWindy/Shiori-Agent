@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import type { RevealProps } from "@shiori/plugin-sdk";
 import { cx } from "../styles";
 
 /**
@@ -13,7 +14,7 @@ import { cx } from "../styles";
  * there (e.g. `pt-3`) rather than on a parent grid gap, which a collapsed
  * block would still take up.
  */
-export function Reveal({ show, className, children }: { show: boolean; className?: string; children: ReactNode }) {
+export function Reveal({ show, className, children }: RevealProps) {
   const [kept, setKept] = useState<ReactNode>(show ? children : null);
   // Remember what was last shown (adjusting state during render, not in an effect).
   if (show && kept !== children) setKept(children);

@@ -136,6 +136,7 @@ export const pluginHostImportExemptions = [
 ];
 
 const hostImportMessage = "Plugins must not import host source (apps/desktop); use @shiori/plugin-sdk or the injected client/host.";
+const hostInternalMessage = "@shiori/plugin-sdk/host-internal is host-only and not part of the plugin contract; use the @shiori/plugin-sdk main entry.";
 
 export default [
   ...desktopEslintConfig([
@@ -157,6 +158,8 @@ export default [
         patterns: [
           // Any relative (`../../../apps/desktop/...`) or aliased spelling that names the host tree.
           { regex: "(^|/)apps/desktop(/|$)", message: hostImportMessage },
+          // SDK internals the host shares with the SDK; not in the peer ABI, so a plugin could not load them anyway.
+          { regex: "^@shiori/plugin-sdk/host-internal$", message: hostInternalMessage },
         ],
       }],
     },

@@ -1,17 +1,11 @@
-import { createContext, useContext, type ComponentType } from "react";
+import { createContext, useContext } from "react";
 import { createPortal } from "react-dom";
+import type { AccountDetailAction, AccountDetailActionsProps } from "@shiori/plugin-sdk";
 import { SpinnerIcon } from "../shared/icons";
 import { compactTextButtonClass } from "../shared/styles";
 
-/** One plugin secondary action in the account detail's bottom row (QQ: 退出登录). */
-export type AccountDetailAction = {
-  label: string;
-  onClick: () => void;
-  icon?: ComponentType<{ className?: string }>;
-  /** Its request is in flight: the button spins and waits. */
-  pending?: boolean;
-  disabled?: boolean;
-};
+/** The action contract is owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
+export type { AccountDetailAction, AccountDetailActionsProps };
 
 const ActionsTargetContext = createContext<HTMLElement | null>(null);
 
@@ -27,7 +21,7 @@ export const AccountDetailActionsTarget = ActionsTargetContext.Provider;
  * state — but shown in the host's bottom danger zone, left of 删除账号, as
  * quiet text buttons. Outside an account dialog they render nothing.
  */
-export function AccountDetailActions({ actions }: { actions: AccountDetailAction[] }) {
+export function AccountDetailActions({ actions }: AccountDetailActionsProps) {
   const target = useContext(ActionsTargetContext);
   if (!target || !actions.length) return null;
   return createPortal(actions.map(({ label, onClick, icon: Icon, pending = false, disabled = false }) => (
