@@ -23,6 +23,8 @@ from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.types import HookContext, HookOutcome
 from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
+from agent.tools.external_access import EXTERNAL_TOOL_DENIED
+from agent.tools.tool_search import ToolSearchTool
 
 
 class CounterTool(Tool):
@@ -683,3 +685,95 @@ for line in sys.stdin:
         assert requests[0].get("model") == requests[1].get("model")
     finally:
         await client.disconnect()
+
+
+# ── #489 外部上下文工具白名单 ─────────────────────────────────────────────────
+
+
+def _schema_names(call) -> list[str]:
+    return [schema["function"]["name"] for schema in call.kwargs["tools"]]
+
+
+def _external_registry() -> tuple[ToolRegistry, CounterTool, CounterTool]:
+    """tool_search 与 allowed 声明外部可用，restricted 未声明；都 always_on。"""
+    tools = ToolRegistry()
+    tools.register(ToolSearchTool(tools), always_on=True, external_allowed=True)
+    allowed = CounterTool()
+    allowed.name = "allowed"
+    tools.register(allowed, always_on=True, external_allowed=True)
+    restricted = CounterTool()
+    restricted.name = "restricted"
+    tools.register(restricted, always_on=True)
+    return tools, allowed, restricted
+
+
+@pytest.mark.parametrize("tool_search_enabled", [True, False])
+async def test_external_restricted_turn_hides_and_blocks_undeclared_tools(
+    tool_search_enabled,
+):
+    """受限回合：未声明工具不进 schema、tool_search 解锁不了、调用被拦并回提示；
+    回合中途新注册的未声明工具同样被排除。"""
+    tools, allowed, restricted = _external_registry()
+    late = CounterTool()
+    late.name = "late"
+
+    async def allowed_then_register_late(**kwargs):
+        allowed.calls += 1
+        tools.register(late, always_on=True)
+        return "done"
+
+    allowed.execute = allowed_then_register_late
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(
+            content="",
+            tool_calls=[
+                ToolCall("c1", "allowed", {}),
+                ToolCall("c2", "tool_search", {"query": "select:restricted"}),
+                ToolCall("c3", "restricted", {}),
+            ],
+        ),
+        LLMResponse(content="", tool_calls=[ToolCall("c4", "late", {})]),
+        LLMResponse(content="好的"),
+    ]
+
+    result = await make_reasoner(
+        provider, tools, tool_search_enabled=tool_search_enabled
+    ).run(
+        [{"role": "user", "content": "帮我跑个命令"}],
+        external_restricted=True,
+    )
+
+    assert result.reply == "好的"
+    assert allowed.calls == 1
+    assert restricted.calls == 0 and late.calls == 0
+    for call in provider.chat.call_args_list:
+        assert set(_schema_names(call)) == {"tool_search", "allowed"}
+    calls = [c for group in result.metadata["tool_chain"] for c in group["calls"]]
+    by_id = {c["call_id"]: c for c in calls}
+    search_result = json.loads(by_id["c2"]["result"])
+    assert search_result["unlocked"] == []
+    assert EXTERNAL_TOOL_DENIED in search_result["tip"]
+    for call_id in ("c3", "c4"):
+        assert by_id[call_id]["status"] == "blocked"
+        assert by_id[call_id]["result"] == EXTERNAL_TOOL_DENIED
+    if tool_search_enabled:
+        assert result.metadata["visible_names"] == {"tool_search", "allowed"}
+
+
+async def test_unrestricted_turn_keeps_every_tool():
+    """已绑定用户（含群里）与用户上下文的回合不受白名单限制。"""
+    tools, _allowed, restricted = _external_registry()
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(content="", tool_calls=[ToolCall("c1", "restricted", {})]),
+        LLMResponse(content="好的"),
+    ]
+
+    await make_reasoner(provider, tools, tool_search_enabled=True).run(
+        [{"role": "user", "content": "帮我跑个命令"}],
+        external_restricted=False,
+    )
+
+    assert restricted.calls == 1
+    assert "restricted" in _schema_names(provider.chat.call_args_list[0])

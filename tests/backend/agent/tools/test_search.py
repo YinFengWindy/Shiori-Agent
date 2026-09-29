@@ -21,6 +21,7 @@ import pytest
 from agent.mcp.client import McpToolInfo
 from agent.mcp.tool import McpToolWrapper
 from agent.tools.base import Tool
+from agent.tools.external_access import EXTERNAL_TOOL_DENIED
 from agent.tools.registry import ToolRegistry
 from agent.tools.search_backend import _default_normalize
 from agent.tools.tool_search import ToolSearchTool
@@ -473,6 +474,18 @@ class TestMcpToolSearch:
         results2 = reg.search("create event")
         assert any(r["name"] == "mcp_calendar__create_event" for r in results2)
 
+    def test_mcp_tool_cannot_declare_external_allowed(self):
+        """#489：MCP 动态工具一律不进外部上下文允许集合。"""
+        reg = ToolRegistry()
+        with pytest.raises(ValueError, match="MCP"):
+            reg.register(
+                _StubTool("mcp_x__y", "mcp"),
+                source_type="mcp",
+                source_name="x",
+                external_allowed=True,
+            )
+        assert not reg.has_tool("mcp_x__y")
+
     def _make_feed_registry(self) -> ToolRegistry:
         """模拟真实 feed MCP 工具注册（含中文 docstring）。"""
         reg = ToolRegistry()
@@ -712,6 +725,29 @@ class TestToolSearchTool:
 
         after = json.loads(asyncio.run(_run_excluded()))
         assert all(m["name"] != "schedule" for m in after["matched"])
+
+    def test_external_only_cannot_find_or_unlock_restricted_tools(self):
+        """#489：受限回合的 tool_search 只搜、只解锁允许集合内的工具。"""
+        reg = ToolRegistry()
+        reg.register(ToolSearchTool(reg), always_on=True, external_allowed=True)
+        reg.register(_StubTool("write_file", "将内容写入指定文件路径"), risk="write")
+        reg.register(_StubTool("web_fetch", "读取网页文件内容"), external_allowed=True)
+        tool = ToolSearchTool(reg)
+
+        async def _run(query: str) -> dict[str, Any]:
+            tool.set_excluded_names(set(), external_only=True)
+            return json.loads(await tool.execute(query=query))
+
+        keyword = asyncio.run(_run("文件"))
+        assert [m["name"] for m in keyword["matched"]] == ["web_fetch"]
+        select = asyncio.run(_run("select:write_file,web_fetch"))
+        assert select["unlocked"] == ["web_fetch"]
+        assert f"write_file: {EXTERNAL_TOOL_DENIED}" in select["tip"]
+        deferred = cast(
+            dict[str, object],
+            reg.get_deferred_names(allowed=reg.get_external_allowed_names()),
+        )
+        assert deferred["builtin"] == ["web_fetch"]
 
     def test_get_deferred_names_excludes_visible(self):
         """get_deferred_names(visible=...) 不包含已可见（preloaded）工具。"""

@@ -48,7 +48,13 @@ def register_common_meta_tools(
     workspace: Path,
     push_tool: MessagePushTool | None = None,
 ) -> MessagePushTool:
-    tools.register(ToolSearchTool(tools), always_on=True, risk="read-only")
+    # external_allowed 标出外部上下文受限回合仍可用的内置工具（#489）。
+    tools.register(
+        ToolSearchTool(tools),
+        always_on=True,
+        risk="read-only",
+        external_allowed=True,
+    )
     tools.register(
         ShellTool(),
         always_on=True,
@@ -72,12 +78,14 @@ def register_common_meta_tools(
         always_on=True,
         risk="read-only",
         search_hint="谷歌 Bing 查资料",
+        external_allowed=True,
     )
     tools.register(
         cast(Tool, readonly_tools["web_fetch"]),
         always_on=True,
         risk="read-only",
         search_hint="读取网址 浏览网页",
+        external_allowed=True,
     )
     tools.register(
         cast(Tool, readonly_tools["read_file"]),
@@ -95,12 +103,14 @@ def register_common_meta_tools(
         always_on=True,
         risk="read-only",
         search_hint="消息回溯 按ID查对话原文 source_ref",
+        external_allowed=True,
     )
     tools.register(
         SearchMessagesTool(session_store, workspace),
         always_on=True,
         risk="read-only",
         search_hint="你之前说 聊过什么 历史对话",
+        external_allowed=True,
     )
     resolved_push_tool = push_tool or MessagePushTool()
     tools.register(

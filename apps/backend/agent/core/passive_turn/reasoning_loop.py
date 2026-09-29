@@ -28,9 +28,11 @@ from agent.tool_runtime import (
     tool_call_batch_snapshot,
 )
 from agent.tools.base import normalize_tool_result
+from agent.tools.external_access import EXTERNAL_TOOL_DENIED
 from agent.tools.registry import ToolRegistry
 from agent.tools.turn_scope import tool_turn
 from agent.provider import ContextLengthError, is_truncated_finish_reason
+from .helpers import turn_tool_names
 
 logger = logging.getLogger("agent.core.passive_turn")
 
@@ -67,6 +69,7 @@ class _PassiveReasoningLoopMixin:
         tool_event_chat_id: str = "",
         tool_execution_context: dict[str, Any] | None = None,
         disabled_tools: set[str] | None = None,
+        external_restricted: bool = False,
         reply_moods: tuple[str, ...] | None = None,
         group_reply: bool = False,
         previous_mood: str = "",
@@ -127,10 +130,25 @@ class _PassiveReasoningLoopMixin:
             return summary, summary_role_reply, summary_role_reply_fresh
 
         disabled = set(disabled_tools or set())
+
+        def _external_denied(name: str) -> bool:
+            """受限回合里 ``name`` 不在允许集合内；允许集合每次现算。"""
+            return (
+                external_restricted
+                and name not in self._tools.get_external_allowed_names()
+            )
+
         if self._tool_search_enabled:
             always_on = self._tools.get_always_on_names()
-            visible_names = (always_on | (preloaded_tools or set())) - disabled
-            visible_order = self._tools.get_registered_order(always_on - disabled)
+            visible_names = set(
+                turn_tool_names(
+                    self._tools,
+                    always_on | (preloaded_tools or set()),
+                    disabled=disabled,
+                    external_restricted=external_restricted,
+                )
+            )
+            visible_order = self._tools.get_registered_order(always_on & visible_names)
             seen_visible = set(visible_order)
             for name in preloaded_tool_order or sorted(preloaded_tools or set()):
                 if name in visible_names and name not in seen_visible:
@@ -201,14 +219,15 @@ class _PassiveReasoningLoopMixin:
                 ),
                 step_ctx.input_tokens_estimate,
             )
-            schema_names: list[str] | set[str] | None = (
-                list(visible_order) if visible_order is not None else None
+            # 允许集合每轮现算：回合中途注册的未声明工具不会进入 schema。
+            schemas = self._tools.get_schemas(
+                names=turn_tool_names(
+                    self._tools,
+                    list(visible_order) if visible_order is not None else None,
+                    disabled=disabled,
+                    external_restricted=external_restricted,
+                )
             )
-            if schema_names is None and disabled:
-                schema_names = self._tools.get_registered_names() - disabled
-            elif schema_names is not None:
-                schema_names = [name for name in schema_names if name not in disabled]
-            schemas = self._tools.get_schemas(names=schema_names)
             threshold = int(getattr(self, "_memory_input_token_threshold", 0))
             if (
                 threshold > 0
@@ -262,7 +281,17 @@ class _PassiveReasoningLoopMixin:
                 # 6. 逐个执行本轮工具调用。
                 iter_calls: list[dict[str, Any]] = []
                 for tool_batch_index, tool_call in enumerate(response.tool_calls):
-                    if tool_call.name in disabled:
+                    # 6.0 受限工具直接回填拦截原因，独立于可见/解锁状态：
+                    # 外部上下文受限回合按允许集合拦，后台任务按 disabled 拦。
+                    blocked_result: str | None = None
+                    if _external_denied(tool_call.name):
+                        blocked_result = EXTERNAL_TOOL_DENIED
+                    elif tool_call.name in disabled:
+                        blocked_result = (
+                            f"工具 '{tool_call.name}' 在当前后台任务中不可用。"
+                            "请直接返回要发送的最终内容，不要主动推送。"
+                        )
+                    if blocked_result is not None:
                         await self._observe_tool_call_started(
                             session_key=tool_event_session_key,
                             channel=tool_event_channel,
@@ -272,10 +301,7 @@ class _PassiveReasoningLoopMixin:
                             tool_name=tool_call.name,
                             arguments=tool_call.arguments,
                         )
-                        result = (
-                            f"工具 '{tool_call.name}' 在当前后台任务中不可用。"
-                            "请直接返回要发送的最终内容，不要主动推送。"
-                        )
+                        result = blocked_result
                         append_tool_result(
                             messages,
                             tool_call_id=tool_call.id,
@@ -436,11 +462,15 @@ class _PassiveReasoningLoopMixin:
                     # set_excluded_names() instead of the old ContextVar channel.
                     if (
                         tool_call.name == "tool_search"
-                        and visible_names is not None
                         and self._tool_search_tool is not None
                     ):
                         self._tool_search_tool.set_excluded_names(
-                            visible_names | disabled
+                            (
+                                visible_names | disabled
+                                if visible_names is not None
+                                else None
+                            ),
+                            external_only=external_restricted,
                         )
                     _args_preview = support.log_preview(tool_call.arguments, 120)
                     logger.info(
@@ -540,7 +570,9 @@ class _PassiveReasoningLoopMixin:
                             for name in self._discovery.unlock_names_from_result(
                                 normalized.text
                             )
-                            if name not in visible_names and name not in disabled
+                            if name not in visible_names
+                            and name not in disabled
+                            and not _external_denied(name)
                         ]
                         if _newly_unlocked:
                             visible_names.update(_newly_unlocked)

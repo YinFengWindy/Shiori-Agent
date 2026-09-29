@@ -14,6 +14,8 @@ from agent.provider import ContentSafetyError, ContextLengthError
 from agent.tools.registry import ToolRegistry
 from agent.tools.turn_scope import current_tool_turn
 from bus.events import InboundMessage
+from conversation.context_scope import ContextView, UserContextThreads
+from core.common.message_source import SENDER_IS_USER_KEY
 from session.manager import SessionManager
 
 
@@ -185,3 +187,58 @@ async def test_run_turn_repairs_rendered_input_budget_before_reasoning(tmp_path)
         "cli:budget", "hello"
     )
     assert reasoner.run.await_args.args[0] == [{"role": "user", "content": "hello"}]
+
+
+@pytest.mark.parametrize(
+    "scope,sender_is_user,expected",
+    [
+        ("external", False, True),
+        ("external", True, False),
+        ("user", False, False),
+        (None, False, False),
+    ],
+    ids=["external-other", "external-bound-user", "user-context", "no-view"],
+)
+async def test_run_turn_restricts_tools_only_for_external_non_user_sender(
+    tmp_path, scope, sender_is_user, expected
+):
+    """#489：只有外部上下文里非已绑定用户发起的回合受工具白名单限制。"""
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("qq:group-1")
+    msg = InboundMessage(
+        channel="qq",
+        sender="someone",
+        chat_id="group-1",
+        content="hi",
+        media=[],
+        timestamp=datetime.now(timezone.utc),
+        metadata={SENDER_IS_USER_KEY: True} if sender_is_user else {},
+    )
+    context_view = (
+        ContextView(
+            scope=scope,
+            user_threads=UserContextThreads(
+                role_id="mira", bound_chat_thread_ids=frozenset()
+            ),
+        )
+        if scope is not None
+        else None
+    )
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=AsyncMock(), light_provider=AsyncMock()),
+        llm_config=LLMConfig(),
+        tools=ToolRegistry(),
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
+        context=AsyncMock(),
+        session_manager=manager,
+    )
+    reasoner.render_prompt = AsyncMock(
+        return_value=PromptRenderResult(messages=[{"role": "user", "content": "hi"}])
+    )
+    reasoner.run = AsyncMock(return_value=ReasonerResult(reply="ok"))
+
+    await reasoner.run_turn(msg=msg, session=session, context_view=context_view)
+
+    assert reasoner.run.await_args.kwargs["external_restricted"] is expected

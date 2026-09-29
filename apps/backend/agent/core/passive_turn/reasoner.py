@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 from .helpers import (
     build_turn_injection_prompt,
+    turn_tool_names,
     extract_model_facing_turn,
     get_history_since_consolidated,
     get_history_tool_names_since_consolidated,
@@ -50,6 +51,7 @@ from agent.lifecycle.types import (
 from agent.prompting import DEFAULT_CONTEXT_TRIM_PLANS
 from agent.provider import ContentSafetyError, ContextLengthError
 from agent.tool_hooks import ToolExecutor
+from agent.tools.external_access import external_tools_restricted
 from agent.tools.tool_search import ToolSearchTool
 from bus.event_bus import EventBus
 
@@ -96,8 +98,12 @@ class Reasoner(ABC):
         tool_event_chat_id: str = "",
         tool_execution_context: dict[str, Any] | None = None,
         disabled_tools: set[str] | None = None,
+        external_restricted: bool = False,
     ) -> ReasonerResult:
-        """执行多轮 tool loop，并返回本轮结果。"""
+        """执行多轮 tool loop，并返回本轮结果。
+
+        ``external_restricted`` 为真时只能使用外部上下文允许的工具（#489）。
+        """
 
     @abstractmethod
     async def run_turn(
@@ -357,6 +363,10 @@ class DefaultReasoner(
 
             measured_stream_sink = _measure_stream_delta
         disabled_tools = _disabled_tools_from_msg(msg)
+        # 外部上下文里非用户本人发起的回合只能用允许集合内的工具（#489）。
+        external_restricted = external_tools_restricted(
+            context_view, MessageSource.from_inbound(msg)
+        )
         tool_execution_context = self._tools.get_context()
         account_delivery_state: dict[str, bool] = {}
         budget_repaired = False
@@ -387,6 +397,11 @@ class DefaultReasoner(
                         if self._tool_search_enabled
                         else None
                     ),
+                    allowed_names=(
+                        self._tools.get_external_allowed_names()
+                        if external_restricted
+                        else None
+                    ),
                 )
                 prompt_render = await self.render_prompt(
                     PromptRenderInput(
@@ -407,29 +422,20 @@ class DefaultReasoner(
                     )
                 )
                 initial_messages = prompt_render.messages
-                schema_names: list[str] | set[str] | None = None
-                if self._tool_search_enabled:
-                    visible_names = (
-                        self._tools.get_always_on_names() | (preloaded or set())
-                    ) - disabled_tools
-                    get_registered_order = getattr(
-                        self._tools, "get_registered_order", None
+                schemas = self._tools.get_schemas(
+                    names=turn_tool_names(
+                        self._tools,
+                        (
+                            self._tools.get_registered_order(
+                                self._tools.get_always_on_names() | (preloaded or set())
+                            )
+                            if self._tool_search_enabled
+                            else None
+                        ),
+                        disabled=disabled_tools,
+                        external_restricted=external_restricted,
                     )
-                    ordered_names = cast(
-                        "Callable[[set[str]], list[str]]", get_registered_order
-                    )
-                    schema_names = (
-                        ordered_names(visible_names)
-                        if callable(ordered_names)
-                        else visible_names
-                    )
-                if schema_names is None and disabled_tools:
-                    schema_names = self._tools.get_registered_names() - disabled_tools
-                elif schema_names is not None:
-                    schema_names = [
-                        name for name in schema_names if name not in disabled_tools
-                    ]
-                schemas = self._tools.get_schemas(names=schema_names)
+                )
                 request_tokens = passive_support.estimate_messages_tokens(
                     initial_messages, schemas
                 )
@@ -490,6 +496,7 @@ class DefaultReasoner(
                         tool_event_chat_id=msg.chat_id,
                         tool_execution_context=tool_execution_context,
                         disabled_tools=disabled_tools,
+                        external_restricted=external_restricted,
                         reply_moods=(
                             role_mood_catalog(
                                 role_metadata.get("role_runtime_config") or {}

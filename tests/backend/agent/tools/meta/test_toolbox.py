@@ -98,6 +98,14 @@ def test_register_meta_tool_helpers_mark_expected_tools_always_on():
     assert isinstance(push_tool, MessagePushTool)
     assert set(META_TOOLBOX_NAMES) - {"memorize"} <= always_on
     assert "reinforce_memory" in always_on
+    # 外部上下文受限回合只放行这些内置工具；记忆读写、命令、文件、推送一律不放行。
+    assert tools.get_external_allowed_names() == {
+        "tool_search",
+        "web_search",
+        "web_fetch",
+        "fetch_messages",
+        "search_messages",
+    }
 
 
 def test_register_memory_meta_tools_rejects_duplicate_names():

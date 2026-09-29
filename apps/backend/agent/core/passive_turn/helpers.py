@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Iterable, Set as AbstractSet
+from typing import TYPE_CHECKING, Any, overload
 
 from agent.prompting import is_context_frame
 from conversation.context_scope import history_filter
@@ -67,29 +68,81 @@ def extract_model_facing_turn(
     return user_content, None
 
 
+@overload
+def turn_tool_names(
+    tools: "ToolRegistry",
+    names: Iterable[str],
+    *,
+    disabled: AbstractSet[str],
+    external_restricted: bool,
+) -> list[str]: ...
+
+
+@overload
+def turn_tool_names(
+    tools: "ToolRegistry",
+    names: None,
+    *,
+    disabled: AbstractSet[str],
+    external_restricted: bool,
+) -> list[str] | None: ...
+
+
+def turn_tool_names(
+    tools: "ToolRegistry",
+    names: Iterable[str] | None,
+    *,
+    disabled: AbstractSet[str],
+    external_restricted: bool,
+) -> list[str] | None:
+    """本回合可以发给模型的工具名，保持 ``names`` 的顺序。
+
+    ``names`` 为 None 表示全部已注册工具；没有任何限制时仍返回 None（全量）。
+    ``disabled`` 是后台任务禁用的工具；``external_restricted`` 为真时只保留
+    外部上下文允许集合内的工具，允许集合在调用时从注册表现算。
+    """
+    if names is None:
+        if not disabled and not external_restricted:
+            return None
+        names = tools.get_registered_order()
+    allowed = tools.get_external_allowed_names() if external_restricted else None
+    return [
+        name
+        for name in names
+        if name not in disabled and (allowed is None or name in allowed)
+    ]
+
+
 def build_turn_injection_prompt(
     *,
     tools: "ToolRegistry",
     tool_search_enabled: bool,
     visible_names: set[str] | None,
+    allowed_names: AbstractSet[str] | None = None,
 ) -> str:
-    """构造当前 turn 的延迟工具提示。"""
+    """构造当前 turn 的延迟工具提示。
+
+    ``allowed_names`` 不为 None 时目录只列其中的工具（外部上下文受限回合）。
+    """
 
     if not tool_search_enabled:
         return ""
-    return build_deferred_tools_hint(tools, visible=visible_names)
+    return build_deferred_tools_hint(
+        tools, visible=visible_names, allowed=allowed_names
+    )
 
 
 def build_deferred_tools_hint(
     tools: "ToolRegistry",
     visible: set[str] | None = None,
+    allowed: AbstractSet[str] | None = None,
 ) -> str:
     """将尚未加载 schema 的工具目录渲染为提示文本。"""
 
     get_deferred_names = getattr(tools, "get_deferred_names", None)
     if not callable(get_deferred_names):
         return ""
-    deferred_raw = get_deferred_names(visible=visible)
+    deferred_raw = get_deferred_names(visible=visible, allowed=allowed)
     if not isinstance(deferred_raw, dict):
         return ""
     builtin_raw = deferred_raw.get("builtin", [])

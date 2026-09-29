@@ -23,6 +23,8 @@ from agent.plugin_host.capabilities import (
 from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.rpc import PluginRpcRegistry
+from agent.tools.base import Tool
+from agent.tools.registry import ToolRegistry
 from desktop_bridge.method_policy import Concurrency, Handler
 
 
@@ -100,6 +102,31 @@ async def test_tools_capability_registers_with_plugin_source_and_unregisters():
     _ = await scope.dispose_all()
     assert registry.registered == []
     assert contributions.tool_names == []
+
+
+class _PluginTool(Tool):
+    name = "plugin_tool"
+    description = "插件工具"
+    parameters = {"type": "object", "properties": {}}
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    async def execute(self, **kwargs: object) -> str:
+        return ""
+
+
+def test_tools_capability_plugin_tool_is_external_only_when_declared():
+    """#489：插件工具默认不进外部上下文允许集合，显式声明后才进。"""
+    registry = ToolRegistry()
+    capability = ToolsCapability(
+        registry, EffectScope("demo"), PluginContributions(), "demo_plugin"
+    )
+
+    capability.register(_PluginTool("undeclared"))
+    capability.register(_PluginTool("declared"), external_allowed=True)
+
+    assert registry.get_external_allowed_names() == {"declared"}
 
 
 def test_tools_capability_without_registry_raises():

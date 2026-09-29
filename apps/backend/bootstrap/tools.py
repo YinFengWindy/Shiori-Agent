@@ -632,8 +632,13 @@ def build_core_runtime(
     account_delivery = AccountDelivery(
         role_store.accounts, plugin_manager.rpc, AccountDeliveryLedger(workspace)
     )
-    tools.register(AccountListTool(account_delivery), risk="read-only")
-    tools.register(AccountTargetsTool(account_delivery), risk="read-only")
+    # 账号查询在外部上下文受限回合也可用（#489），发送不行。
+    tools.register(
+        AccountListTool(account_delivery), risk="read-only", external_allowed=True
+    )
+    tools.register(
+        AccountTargetsTool(account_delivery), risk="read-only", external_allowed=True
+    )
     tools.register(AccountSendTool(account_delivery), risk="external-side-effect")
 
     return CoreRuntime(

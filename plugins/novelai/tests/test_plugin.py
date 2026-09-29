@@ -110,6 +110,8 @@ def test_plugin_registers_tool_and_rpc_and_both_disappear_on_unload(
 
     assert services.tool_registry is not None
     assert services.tool_registry.has_tool("generate_image") is True
+    # 生图声明了外部上下文可用（#489）。
+    assert "generate_image" in services.tool_registry.get_external_allowed_names()
     registered_rpc = (
         "plugin.novelai.generate",
         "plugin.novelai.regenerateMessageMedia",

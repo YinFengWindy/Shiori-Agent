@@ -70,6 +70,9 @@ class ToolMeta:
     # 可选：3–10 词短语，补充工具名和描述中没有的别名或口语化表达。
     # 不需要重复名称或描述里已有的词——搜索后端自动索引 name + description。
     search_hint: str | None = None
+    # 注册方显式声明：外部上下文里非用户本人发起的回合也能使用此工具（#489）。
+    # 未声明即不可用，所以以后新增的工具默认被外部回合排除。
+    external_allowed: bool = False
 
 
 # ── ToolDocument ──────────────────────────────────────────────────────────────
@@ -88,7 +91,7 @@ class ToolDocument:
     risk: str
     always_on: bool
     search_hint: str | None
-    source_type: str  # "builtin" | "mcp"
+    source_type: str  # "builtin" | "mcp" | "plugin"
     source_name: str  # mcp server 名，builtin 为空字符串
 
     @classmethod
@@ -144,12 +147,21 @@ class ToolRegistry:
         search_hint: str | None = None,
         source_type: str = "builtin",
         source_name: str = "",
+        external_allowed: bool = False,
     ) -> None:
+        """注册工具。
+
+        external_allowed: 声明外部上下文（群聊、陌生私聊）中非用户本人发起的回合
+        也可使用此工具；未声明的工具在这类回合里不可用。MCP 动态工具不允许声明。
+        """
+        if external_allowed and source_type == "mcp":
+            raise ValueError(f"MCP 工具不能声明外部上下文可用: {tool.name}")
         self._tools[tool.name] = tool
         meta = ToolMeta(
             risk=risk,
             always_on=always_on,
             search_hint=search_hint,
+            external_allowed=external_allowed,
         )
         self._metadata[tool.name] = meta
         doc = ToolDocument.from_tool_and_meta(
@@ -210,14 +222,26 @@ class ToolRegistry:
         """返回标记为 always_on 的工具名称集合。"""
         return {name for name, meta in self._metadata.items() if meta.always_on}
 
+    def get_external_allowed_names(self) -> set[str]:
+        """返回注册时声明外部上下文可用的工具名集合。
+
+        每次调用都从当前注册表现算，回合中途新注册的未声明工具天然不在其中。
+        """
+        return {name for name, meta in self._metadata.items() if meta.external_allowed}
+
     def get_documents(self) -> list[ToolDocument]:
         """返回所有已注册工具的索引文档列表。"""
         return list(self._documents.values())
 
-    def get_deferred_names(self, visible: set[str] | None = None) -> dict[str, object]:
+    def get_deferred_names(
+        self,
+        visible: set[str] | None = None,
+        allowed: AbstractSet[str] | None = None,
+    ) -> dict[str, object]:
         """返回所有 deferred 工具名，按来源分组。
 
         visible: 当前 turn 已可见工具名（always_on + preloaded），从结果中排除。
+        allowed: 不为 None 时只列出其中的工具（外部回合的允许集合）。
         deferred = 全量注册工具 - always_on - meta_tools - visible
         格式: {"builtin": [...], "mcp": {"server_name": [...], ...}}
         """
@@ -227,7 +251,7 @@ class ToolRegistry:
         mcp: dict[str, list[str]] = {}
 
         for name, doc in self._documents.items():
-            if name in excluded:
+            if name in excluded or (allowed is not None and name not in allowed):
                 continue
             if doc.source_type == "mcp":
                 mcp.setdefault(doc.source_name, []).append(name)
@@ -313,13 +337,17 @@ class ToolRegistry:
         top_k: int = 5,
         allowed_risk: list[str] | None = None,
         excluded_names: AbstractSet[str] | None = None,
+        allowed_names: AbstractSet[str] | None = None,
     ) -> list[dict[str, Any]]:
         """关键词搜索工具目录，返回匹配的工具信息列表。
 
         excluded_names: 调用方（当前 turn）传入的排除集合，通常为已可见工具名。
+        allowed_names: 不为 None 时只在其中搜索，其余已注册工具一律不返回。
         meta_tools 始终被排除。搜索逻辑委托给 SearchBackend。
         """
         excluded = _META_TOOLS | (excluded_names or set())
+        if allowed_names is not None:
+            excluded |= self._tools.keys() - allowed_names
         return cast(
             list[dict[str, Any]],
             self._backend.search(

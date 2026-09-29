@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.5.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.7.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -81,6 +81,8 @@ version whose additions it uses.
 | `2.3.0` | optional channel hooks, including `uses_bot_commands`, and `register_channel(..., description=)` | #363 T2 (hooks) and T4 (`uses_bot_commands`) |
 | `2.4.0` | renderer host services as an injected `host` prop, with `host.feedback` (host toasts), `host.ui.InlineError` (host inline error block) and `host.ui.ConfirmDialog` (host confirmation), all with an opt-in 看板娘 `persona` (generic or by scene key) | #362 follow-up (看板娘扩展) |
 | `2.5.0` | required `chat_types` session-type declarations on manifest `channels` entries (replacing the channel-level `chat_id_label` / `chat_id_hint`) | #397 |
+| `2.6.0` | the `accounts` capability: `ctx.accounts.register(...)` / `report(...)` for host-owned communication account registration and ownership, released with the plugin scope | #419 |
+| `2.7.0` | `ctx.tools.register(..., external_allowed=)` to declare a tool usable in external-context turns | #489 |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -258,6 +260,28 @@ generation failure card and error toasts pick the scene from the backend's
 stable error codes (`novelai_not_configured` → `not_configured`, …), and its
 prompt-library delete confirmation is `host.ui.ConfirmDialog` with
 `persona="destructive"`.
+
+## Tools in external contexts (#489)
+
+A turn in an external context (group chats, private chats with someone who is
+not a bound user) whose sender is not the bound user may only use tools that
+were registered as allowed there. `ctx.tools.register(tool, ...,
+external_allowed=True)` is that declaration; the default is `False`, so a plugin
+tool that does not declare it is unavailable in such turns. Messages from the
+bound user themselves are never restricted, even in a group.
+
+Restricted tools are left out of the tool schemas sent to the model and out of
+`tool_search` results, `tool_search` cannot unlock them, and a call that still
+reaches one is rejected with a tool result telling the model only its user can
+ask for it. The allowed set is read from the registry on every check, so a tool
+registered mid-turn without the declaration is excluded as well. MCP tools are
+dynamic and can never be declared: registering one with `external_allowed=True`
+raises. Declare it only for tools that are safe for strangers to trigger; the
+bundled NovelAI `generate_image` does, while commands, files, desktop, browser,
+outbound messages, schedule changes and memory stay undeclared.
+
+Packages that pass `external_allowed` must require
+`runtime_api: ">=2.7.0 <3.0.0"`; older hosts reject the keyword.
 
 ## Renderer artifacts and dependencies
 

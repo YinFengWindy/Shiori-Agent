@@ -29,6 +29,8 @@ class SchedulerToolsetProvider(ToolsetProvider):
             ListSchedulesTool(scheduler),
             risk="read-only",
             search_hint="提醒列表 已有计划",
+            # 外部上下文受限回合也可查看计划（#489），增删计划不行。
+            external_allowed=True,
         )
         registry.register(
             CancelScheduleTool(scheduler),
