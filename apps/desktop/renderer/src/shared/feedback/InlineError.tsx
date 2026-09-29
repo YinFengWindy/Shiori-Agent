@@ -1,5 +1,6 @@
-import { WarningCircle, X, type Icon } from "@phosphor-icons/react";
-import { useState, type ReactNode } from "react";
+import { WarningCircle, X } from "@phosphor-icons/react";
+import { useState } from "react";
+import type { HostInlineErrorProps } from "@shiori/plugin-sdk";
 import { MascotFaceAvatar } from "../mascot/MascotFigure";
 import { useMascotCameoAllowed } from "../mascot/MascotOnStage";
 import { MascotSpeechBubble } from "../mascot/MascotSpeech";
@@ -7,41 +8,18 @@ import { inlineErrorLines, isPersonaSceneKey, personaSceneLines, type InlineErro
 import { compactIconButtonClass, cx } from "../styles";
 import { FeedbackDetail } from "./FeedbackDetail";
 
-/** Props of the shared in-page error block. */
-export type InlineErrorProps = {
-  /** The original, factual message; always shown, persona or not. */
-  message: string;
-  /** Heading of a `card` (e.g. 「生成失败」); rows and strips have none. */
-  title?: string;
-  /** Technical cause folded behind 「详情」. */
-  detail?: string;
-  /** The way out (retry, reload, open settings …), placed after the text. */
-  actions?: ReactNode;
+/**
+ * Props of the shared in-page error block: the plugin-facing props of
+ * `host.ui.InlineError` (owned by `@shiori/plugin-sdk`, #440) with the host's
+ * own choice of who fronts it.
+ */
+export type InlineErrorProps = Omit<HostInlineErrorProps, "persona"> & {
   /**
    * Which of 吟风's inline-error lines fronts the block (default `generic`),
    * a plugin-named scene (`personaSceneLines`), or `false` for a plain block. She also stays out when the 看板娘 is off
    * or she already stands in this subtree (`MascotOnStage`).
    */
   persona?: InlineErrorPersona | PersonaSceneKey | false;
-  /**
-   * `row`: a compact bordered block inside a form or list. `strip`: a
-   * full-width band pinned to a container's edge (a card footer). `card`:
-   * a centred glass card that takes over an empty area.
-   */
-  layout?: "row" | "strip" | "card";
-  /** Glyph of the plain block (default the warning circle). */
-  glyph?: Icon;
-  /** Tint of the plain glyph: `accent` for a problem the user fixes in settings rather than a failure. */
-  glyphTone?: "danger" | "accent";
-  /**
-   * `alert` interrupts assistive tech (default); `status` for results the
-   * user just asked for; `false` inside a container that already is a live region.
-   */
-  role?: "alert" | "status" | false;
-  /** Adds a close button (cards). */
-  onDismiss?: () => void;
-  className?: string;
-  testId?: string;
 };
 
 const glyphToneClass = {

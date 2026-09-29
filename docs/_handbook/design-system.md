@@ -27,6 +27,7 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 | `apps/desktop/renderer/src/styles.css` | 全部 token 定义、全局 base 规则、工具类、动效 |
 | `apps/desktop/renderer/tailwind.config.ts` | token → Tailwind 语义类的映射、排版阶梯 |
 | `apps/desktop/renderer/src/shared/styles.ts` | 组件级共享类名常量 |
+| `packages/plugin-sdk/src/styles.ts`、`menuStyles.ts`、`components/`、`icons/` | 插件也在用的共享类名、菜单词汇、通用组件与图标的唯一实现（#440）；宿主原模块 re-export，宿主代码照旧从 `shared/` 导入 |
 | `apps/desktop/renderer/src/shared/ui/icons/SPEC.md` | 品牌母题图形的绘制规则 |
 
 **活的样式手册**：`apps/desktop/renderer/styleguide.html`（入口 `src/styleguide/main.tsx`）能把全部色阶、

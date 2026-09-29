@@ -6,7 +6,22 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./contract": "./src/contract.ts",
     "./testing": "./src/testing/index.ts"
   },
-  "//exports": "Source-only workspace package (#440): built-in plugins and the host compile it straight into the renderer bundle, and tsc, the tsx test runner and Vite all resolve these .ts entries through the workspace link, so there is no build step and exactly one implementation. External precompiled plugins never resolve this package: the main entry reaches them as a host peer through the renderer import map (apps/desktop/src/plugins/uiContract.ts). The ./testing entry is development-only and is deliberately absent from that import map."
+  "//exports": "Source-only workspace package (#440): built-in plugins and the host compile it straight into the renderer bundle, and tsc, the tsx test runner and Vite all resolve these .ts entries through the workspace link, so there is no build step and exactly one implementation. External precompiled plugins never resolve this package: the main entry reaches them as a host peer through the renderer import map (apps/desktop/src/plugins/uiContract.ts). ./contract is a type-only, React- and DOM-free view of the contract types for host code compiled outside the renderer (main process, preload). The ./testing entry is development-only. Neither subpath is in that import map.",
+  "dependencies": {
+    "@base-ui/react": "1.8.0",
+    "@phosphor-icons/react": "^2.1.10"
+  },
+  "peerDependencies": {
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "//dependencies": "The shared components are built on Base UI and Phosphor, at the same versions as apps/desktop so pnpm resolves one instance of each; React is a peer (the host's single instance). External plugins never install these: they receive the SDK's components from the host."
 }

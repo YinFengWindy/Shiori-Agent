@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.8.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.9.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -84,6 +84,7 @@ version whose additions it uses.
 | `2.6.0` | the `accounts` capability: `ctx.accounts.register(...)` / `report(...)` for host-owned communication account registration and ownership, released with the plugin scope | #419 |
 | `2.7.0` | `ctx.tools.register(..., external_allowed=)` to declare a tool usable in external-context turns; from this host on, undeclared plugin tools are unavailable in restricted external-context turns, including tools of existing packages that require an older `runtime_api` (host policy, not an API break) | #489 |
 | `2.8.0` | the `@shiori/plugin-sdk` renderer peer, resolved to the host's own instance through the renderer import map (see [Runtime API 2.8 plugin SDK peer](#runtime-api-28-plugin-sdk-peer)) | #503 (#440 T1) |
+| `2.9.0` | `@shiori/plugin-sdk` shared renderer primitives: components, class names, icons, pure helpers and hooks, plus the UI module, host service, account and role contract types (see [Runtime API 2.9 plugin SDK primitives](#runtime-api-29-plugin-sdk-primitives)) | #504 (#440 T2) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -296,7 +297,7 @@ else, and their tools become available in those turns once they declare
 
 API 2.8 adds `@shiori/plugin-sdk` as a renderer peer next to React. It is the
 public renderer contract between plugins and the host (#440): contract types
-and, in later 2.x minors, the shared components, style class names and pure
+and, from 2.9 on, the shared components, style class names and pure
 helpers plugins may use. A precompiled package externalizes `@shiori/plugin-sdk`
 exactly like `react`; the renderer import map resolves it to a host-served
 wrapper around the **host's own instance**, so `instanceof` checks and shared
@@ -308,13 +309,48 @@ exports it uses).
 The runtime exports are exactly those listed for `@shiori/plugin-sdk` in the
 renderer peer ABI (`pluginUiPeerExports` in
 `apps/desktop/src/plugins/uiContract.ts`); at 2.8.0 they are `BridgeError` and
-`PluginBridgeError`. Type-only exports (such as `PluginRpcClient`, the type of
+`PluginBridgeError` (2.9.0 adds the primitives below). Type-only exports (such as `PluginRpcClient`, the type of
 the injected `client`) have no runtime presence. Adding an export is a new
 minor version.
 
 The `@shiori/plugin-sdk/testing` subpath is development-only test support. It is
 **not** part of the runtime API or the import map; production renderer code must
-not import it.
+not import it. The `@shiori/plugin-sdk/contract` subpath is a type-only,
+React- and DOM-free view of contract types for host code compiled outside the
+renderer (main process, preload); it has no runtime presence, is not in the
+import map, and plugins import the same types from the main entry.
+
+## Runtime API 2.9 plugin SDK primitives
+
+API 2.9 moves the shared renderer primitives that plugins use into
+`@shiori/plugin-sdk`, which now owns their only implementation (the host's own
+modules re-export them, so host and plugins render the same components and
+class names). A precompiled package that imports any of the exports below
+declares `runtime_api: ">=2.9.0 <3.0.0"`; on a 2.8 host those names are missing
+from the served peer wrapper and the package fails to load.
+
+Runtime exports added in 2.9.0 (all are listed in `pluginUiPeerExports`):
+
+| Group | Exports |
+| --- | --- |
+| Helpers and hooks | `errorMessage`, `useLatestRef`, `roleToggleStatus`, `accountOnline`, `useAccountAction` |
+| Class names | `cx`, `cardClass`, `badgeClass`, `inputClass`, `textareaClass`, `pressableClass`, `compactPressableClass`, `primaryButtonSurfaceClass`, `ghostButtonSurfaceClass`, `ghostButtonClass`, `compactButtonSizeClass`, `compactGhostButtonClass`, `iconButtonClass`, `secondarySidebarSurfaceClass`, `sidebarNavItemClass`, `sidebarContentMotionClass`, `menuPanelClass`, `menuItemClass`, `menuItemSelectedClass`, `menuSeparatorClass` |
+| Components | `Select`, `ActionMenu`, `AutosizeTextarea`, `SettingsToggleCard`, `RoleCapabilityCard`, `RoleCapabilityBadge` |
+| Icons | `UploadIcon`, `SparkleIcon`, `PetalIcon`, `brandMotifPaths`, `withMotif`, `navMotifs` |
+
+The class names are Tailwind utility strings resolved against the host's
+stylesheet; an external package's own CSS does not need to repeat them.
+
+Type-only exports added in 2.9.0: the UI module contract (`PluginUiModule`,
+each contribution and its component props, `PluginInjectedProps`), the slot
+props, `PluginRoleSettingsContribution` and `PluginChatImageActionProps`, the
+host services (`PluginHostServices`, `PluginHostUi` and the props of each
+`host.ui` component, `PluginHostFeedback`, `PluginPersona`,
+`PersonaSceneKey`, `NativeFilePickerOptions`), the account snapshot and status
+vocabulary (`AccountSnapshot`, `AccountResponseRules`, `AccountStatusView`, …),
+and the role and session domain types (`RoleRecord`,
+`SessionMessageUpdatePayload`, …). They describe the 2.4–2.8 behaviour
+unchanged; only their source of truth moved.
 
 ## Renderer artifacts and dependencies
 

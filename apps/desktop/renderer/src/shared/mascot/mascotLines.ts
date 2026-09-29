@@ -1,3 +1,4 @@
+import type { PersonaSceneKey } from "@shiori/plugin-sdk";
 import type { MascotExpression } from "./mascotExpressions";
 
 /*
@@ -178,10 +179,10 @@ export const personaSceneLines = {
   discard: confirmPersonaLines.discardChanges,
   /** Any other confirmation. */
   confirm: confirmPersonaLines.confirm,
-} satisfies Record<string, MascotLine>;
+} satisfies Record<PersonaSceneKey, MascotLine>;
 
-/** A scene a plugin may name for 吟风 (see `personaSceneLines`). */
-export type PersonaSceneKey = keyof typeof personaSceneLines;
+/** A scene a plugin may name for 吟风; the key set is owned by `@shiori/plugin-sdk` (#440). */
+export type { PersonaSceneKey };
 
 /** Whether `value` names one of the plugin persona scenes. */
 export function isPersonaSceneKey(value: string): value is PersonaSceneKey {

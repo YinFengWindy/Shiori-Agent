@@ -16,6 +16,9 @@ export default {
     // issue #174); without this Tailwind never scans it and any class name
     // used only there is silently dropped from the production build.
     resolve(here, "../../../plugins/*/ui/**/*.{ts,tsx}"),
+    // The plugin SDK (#440) owns shared class names and components the host
+    // renders too; like plugin UI it lives outside renderer/.
+    resolve(here, "../../../packages/plugin-sdk/src/**/*.{ts,tsx}"),
   ],
   theme: {
     extend: {

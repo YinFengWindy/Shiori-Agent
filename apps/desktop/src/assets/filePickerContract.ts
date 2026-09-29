@@ -1,10 +1,7 @@
-/** Renderer-safe options for a native selection copied into private import staging. */
-export type NativeFilePickerOptions = {
-  namespace: string;
-  filters: Array<{ name: string; extensions: string[] }>;
-  multiple?: boolean;
-  maxFileBytes: number;
-};
+import type { NativeFilePickerOptions } from "@shiori/plugin-sdk/contract";
+
+/** The options type is owned by `@shiori/plugin-sdk` (#440; plugins pass it to `host.pickFiles`); re-exported for host callers. */
+export type { NativeFilePickerOptions };
 
 /** Hard host ceilings; a plugin may request a smaller per-file limit. */
 export const maxNativeFileBytes = 32 * 1024 * 1024;

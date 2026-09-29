@@ -1,4 +1,4 @@
-import type { BridgeEvent } from "@shiori/plugin-sdk";
+import type { BridgeEvent } from "@shiori/plugin-sdk/contract";
 
 export type BridgeRequest = {
   id: string;

@@ -1,105 +1,49 @@
 import type {
+  ChatToolCall,
+  ChatToolCallGroup,
+  LonelinessRuntime,
+  RelationshipSnapshot,
+  RoleAssetCategory,
+  RoleLastMessage,
+  RoleProactiveCandidate,
+  RoleProactiveConfig,
+  RoleRecord,
+  SessionMessage,
+  SessionMessagePage,
+  SessionMessageUpdatePayload,
+  SessionPaginationState,
+  SessionPayload,
+  SessionSummary,
+} from "@shiori/plugin-sdk";
+import type {
   SettingsFormData,
   SettingsSnapshot,
 } from "../../../src/bridge/shared.js";
 
-/** Role data returned by the desktop bridge. */
-export type RelationshipSnapshot = {
-  role_id: string;
-  role_self_view: string;
-  relation_tags: string[];
-  internal_profile: {
-    relation_state: Record<string, number>;
-    behavior_profile: Record<string, number>;
-  };
-  source_summary: Record<string, unknown>;
-  generated_at: string;
-  last_attempted_at: string;
-  last_error: string;
-};
-
-export type LonelinessRuntime = {
-  role_id: string;
-  loneliness_value: number;
-  last_calculated_at: string;
-  last_user_at: string;
-  last_proactive_at: string;
-  awaiting_reply_after_proactive: boolean;
-  awaiting_reply_since: string;
-  last_triggered_at: string;
-  cooldown_until: string;
-};
-
-export type RoleRecord = {
-  id: string;
-  name: string;
-  description: string;
-  system_prompt: string;
-  profile?: {
-    character?: { profile?: string; personality?: string; behavior_rules?: string };
-  };
-  runtime_config: Record<string, unknown>;
-  proactive?: RoleProactiveConfig;
-  avatar: string | null;
-  avatar_abs: string | null;
-  chat_background: string | null;
-  chat_background_abs: string | null;
-  illustrations: string[];
-  illustrations_abs: string[];
-  asset_categories: RoleAssetCategory[];
-  asset_category_bindings: Record<string, string>;
-  /** Active plugins project their independently owned role settings here. */
-  plugin_state?: Record<string, Record<string, unknown>>;
-  relationship_snapshot?: RelationshipSnapshot | null;
-  loneliness_runtime?: LonelinessRuntime | null;
-  /** Newest message of the role's session, for the chat-list preview; null when the session is empty. */
-  last_message?: RoleLastMessage | null;
-  created_at: string;
-  updated_at: string;
-};
-
-/** Light preview of a role session's newest message (content capped at 200 chars by the bridge). */
-export type RoleLastMessage = {
-  role: string;
-  content: string;
-  timestamp: string;
-  has_media: boolean;
-};
-
-
-/** User-defined single-owner category for one role's asset library. */
-export type RoleAssetCategory = {
-  id: string;
-  name: string;
-  allow_role_send: boolean;
+/*
+ * Role and session types plugins also see are owned by `@shiori/plugin-sdk`
+ * (#440) and re-exported here for host callers.
+ */
+export type {
+  ChatToolCall,
+  ChatToolCallGroup,
+  LonelinessRuntime,
+  RelationshipSnapshot,
+  RoleAssetCategory,
+  RoleLastMessage,
+  RoleProactiveCandidate,
+  RoleProactiveConfig,
+  RoleRecord,
+  SessionMessage,
+  SessionMessagePage,
+  SessionMessageUpdatePayload,
+  SessionPaginationState,
+  SessionPayload,
+  SessionSummary,
 };
 
 /** Session type a channel declares; the desktop session is private. */
 export type RoleChatType = "private" | "group";
-
-/** A session that may receive proactive messages, by channel and chat id. */
-export type RoleProactiveCandidate = {
-  channel: string;
-  chat_id: string;
-};
-
-export type RoleProactiveConfig = {
-  enabled: boolean;
-  /** Candidate sessions in binding order; each message goes to the one the backend selects. */
-  candidates: RoleProactiveCandidate[];
-  profile?: string;
-  overrides?: Record<string, Record<string, number>>;
-  agent?: {
-    max_steps?: number;
-    content_limit?: number;
-    web_fetch_max_chars?: number;
-  };
-  drift?: {
-    enabled?: boolean;
-    max_steps?: number;
-    min_interval_hours?: number;
-  };
-};
 
 export type RoleTaskKind = "schedule" | "subagent" | "memory_maintenance";
 
@@ -134,43 +78,9 @@ export type RoleTask = {
   schedule: RoleTaskSchedule | null;
 };
 
-/** Single message in a role-bound session. */
-export type SessionMessage = {
-  id?: string;
-  /** Stable persisted ordering cursor assigned by the session store. */
-  seq?: number;
-  /** Stable renderer-only identity used to keep one visual message node mounted across local and bridge updates. */
-  render_id?: string;
-  role: string;
-  content: string;
-  timestamp?: string;
-  reasoning_content?: string | null;
-  streaming?: boolean;
-  tool_chain?: ChatToolCallGroup[];
-  media?: string[];
-  metadata?: Record<string, unknown>;
-};
-
 export type ChatTurnMetrics = {
   total_tokens?: number;
   thinking_duration_ms?: number;
-};
-
-/** Sanitized tool call record displayed inside one assistant reply. */
-export type ChatToolCall = {
-  call_id: string;
-  name: string;
-  status: "running" | "success" | "error" | string;
-  arguments: Record<string, unknown>;
-  final_arguments: Record<string, unknown>;
-  result: string;
-};
-
-/** One model iteration containing one or more tool calls. */
-export type ChatToolCallGroup = {
-  text: string;
-  reasoning_content: string;
-  calls: ChatToolCall[];
 };
 
 /** Referenced chat message shown above the composer before sending. */
@@ -188,54 +98,10 @@ export type ChatSendRequest = {
   replyTarget: ChatReplyTarget | null;
 };
 
-/** Session payload returned by the desktop bridge. */
-export type SessionPayload = {
-  key: string;
-  created_at: string;
-  updated_at: string;
-  last_consolidated: number;
-  metadata: Record<string, unknown> & {
-    /** Formal state committed with the latest successful role reply. */
-    current_mood?: string;
-    current_thought?: string;
-    relationship_snapshot?: RelationshipSnapshot | null;
-    loneliness_runtime?: LonelinessRuntime | null;
-  };
-  messages: SessionMessage[];
-  /** Present for sessions opened through the paginated desktop bridge contract. */
-  pagination?: SessionPaginationState;
-};
-
-/** Session fields sent by the bridge when message history is intentionally omitted. */
-export type SessionSummary = Omit<SessionPayload, "messages" | "pagination">;
-
-/** One bounded group of persisted session messages. */
-export type SessionMessagePage = {
-  messages: SessionMessage[];
-  limit: number;
-  has_more: boolean;
-  oldest_seq: number | null;
-  newest_seq: number | null;
-  total_count: number;
-  before_seq: number | null;
-  next_before_seq: number | null;
-};
-
-/** Renderer-owned cursor metadata for the messages currently loaded in one session. */
-export type SessionPaginationState = Omit<SessionMessagePage, "messages">;
-
 /** Paginated session payload returned when a role session is opened. */
 export type SessionOpenPayload = {
   session: SessionSummary;
   page: SessionMessagePage;
-};
-
-/** Summary plus changed messages used by incremental bridge responses and events. */
-export type SessionMessageUpdatePayload = {
-  session: SessionSummary;
-  message: SessionMessage | null;
-  /** Contains every persisted message appended by one external turn when available. */
-  messages?: SessionMessage[];
 };
 
 /** Lightweight persisted-message hit returned by the desktop search API. */

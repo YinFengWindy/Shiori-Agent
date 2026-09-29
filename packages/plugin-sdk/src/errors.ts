@@ -26,3 +26,8 @@ export class PluginBridgeError extends BridgeError {
     this.name = "PluginBridgeError";
   }
 }
+
+/** Normalizes a thrown value into the message an error toast or inline error shows. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

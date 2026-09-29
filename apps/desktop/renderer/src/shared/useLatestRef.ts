@@ -1,10 +1,2 @@
-import { useLayoutEffect, useRef } from "react";
-
-/** Keeps a mutable ref synchronized with the latest rendered value. */
-export function useLatestRef<T>(value: T) {
-  const ref = useRef(value);
-  useLayoutEffect(() => {
-    ref.current = value;
-  }, [value]);
-  return ref;
-}
+/** Owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
+export { useLatestRef } from "@shiori/plugin-sdk";
