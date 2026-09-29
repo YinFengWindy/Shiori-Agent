@@ -30,6 +30,7 @@ from agent.tool_runtime import (
 from agent.tools.base import normalize_tool_result
 from agent.tools.external_access import EXTERNAL_TOOL_DENIED
 from agent.tools.registry import ToolRegistry
+from agent.tools.tool_search import tool_search_call_context
 from agent.tools.turn_scope import tool_turn
 from agent.provider import ContextLengthError, is_truncated_finish_reason
 from .helpers import turn_tool_names
@@ -132,22 +133,16 @@ class _PassiveReasoningLoopMixin:
         disabled = set(disabled_tools or set())
 
         def _external_denied(name: str) -> bool:
-            """受限回合里 ``name`` 不在允许集合内；允许集合每次现算。"""
-            return (
-                external_restricted
-                and name not in self._tools.get_external_allowed_names()
-            )
+            """受限回合里 ``name`` 没有声明外部上下文可用；每次查当前注册表。"""
+            return external_restricted and not self._tools.is_external_allowed(name)
 
         if self._tool_search_enabled:
             always_on = self._tools.get_always_on_names()
-            visible_names = set(
-                turn_tool_names(
-                    self._tools,
-                    always_on | (preloaded_tools or set()),
-                    disabled=disabled,
-                    external_restricted=external_restricted,
-                )
-            )
+            visible_names = {
+                name
+                for name in always_on | (preloaded_tools or set())
+                if name not in disabled and not _external_denied(name)
+            }
             visible_order = self._tools.get_registered_order(always_on & visible_names)
             seen_visible = set(visible_order)
             for name in preloaded_tool_order or sorted(preloaded_tools or set()):
@@ -458,20 +453,21 @@ class _PassiveReasoningLoopMixin:
                         continue
 
                     # 6.2 通过统一执行器跑 pre/post hooks + 真实工具。
-                    # For tool_search: pass visible_names explicitly via
-                    # set_excluded_names() instead of the old ContextVar channel.
-                    if (
-                        tool_call.name == "tool_search"
-                        and self._tool_search_tool is not None
-                    ):
-                        self._tool_search_tool.set_excluded_names(
-                            (
-                                visible_names | disabled
-                                if visible_names is not None
-                                else None
+                    # tool_search 的已可见名单与受限标志随本次调用的执行上下文
+                    # 传入，不挂在跨会话共享的工具实例上。
+                    call_context = execution_context
+                    if tool_call.name == "tool_search":
+                        call_context = {
+                            **execution_context,
+                            **tool_search_call_context(
+                                visible_names=(
+                                    visible_names | disabled
+                                    if visible_names is not None
+                                    else None
+                                ),
+                                external_only=external_restricted,
                             ),
-                            external_only=external_restricted,
-                        )
+                        }
                     _args_preview = support.log_preview(tool_call.arguments, 120)
                     logger.info(
                         "[工具执行→] %s  args=%s", tool_call.name, _args_preview
@@ -513,7 +509,7 @@ class _PassiveReasoningLoopMixin:
                         lambda name, args: self._tools.execute(
                             name,
                             args,
-                            context=execution_context,
+                            context=call_context,
                         ),
                     )
                     if exec_result.status == "success":

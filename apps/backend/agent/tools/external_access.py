@@ -2,7 +2,7 @@
 
 外部上下文（群聊、陌生私聊）里，发送者不是已绑定用户的回合只能使用允许集合内的
 工具。允许集合只有一个来源：注册时声明 ``external_allowed`` 的工具（见
-``ToolRegistry.get_external_allowed_names``），每次查询现算。已绑定用户本人的
+``ToolRegistry.is_external_allowed``），每次都查当前注册表。已绑定用户本人的
 消息即使在群里也不受限。
 """
 

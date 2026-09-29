@@ -126,7 +126,8 @@ def test_tools_capability_plugin_tool_is_external_only_when_declared():
     capability.register(_PluginTool("undeclared"))
     capability.register(_PluginTool("declared"), external_allowed=True)
 
-    assert registry.get_external_allowed_names() == {"declared"}
+    assert registry.is_external_allowed("declared")
+    assert not registry.is_external_allowed("undeclared")
 
 
 def test_tools_capability_without_registry_raises():

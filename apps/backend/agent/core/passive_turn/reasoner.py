@@ -52,7 +52,6 @@ from agent.prompting import DEFAULT_CONTEXT_TRIM_PLANS
 from agent.provider import ContentSafetyError, ContextLengthError
 from agent.tool_hooks import ToolExecutor
 from agent.tools.external_access import external_tools_restricted
-from agent.tools.tool_search import ToolSearchTool
 from bus.event_bus import EventBus
 
 if TYPE_CHECKING:
@@ -186,12 +185,6 @@ class DefaultReasoner(
         self._prompt_render_plugin_modules: list[object] = []
         self._before_step_plugin_modules: list[object] = []
         self._after_step_plugin_modules: list[object] = []
-        # Direct reference to ToolSearchTool so we can pass excluded_names
-        # explicitly instead of routing through the ContextVar side-channel.
-        _ts = tools.get_tool("tool_search")
-        self._tool_search_tool: ToolSearchTool | None = (
-            _ts if isinstance(_ts, ToolSearchTool) else None
-        )
         self._tool_executor = ToolExecutor([])
         self._stream_sink_factory: (
             Callable[[object], Callable[[dict[str, str] | str], Awaitable[None]] | None]
@@ -397,11 +390,7 @@ class DefaultReasoner(
                         if self._tool_search_enabled
                         else None
                     ),
-                    allowed_names=(
-                        self._tools.get_external_allowed_names()
-                        if external_restricted
-                        else None
-                    ),
+                    external_only=external_restricted,
                 )
                 prompt_render = await self.render_prompt(
                     PromptRenderInput(

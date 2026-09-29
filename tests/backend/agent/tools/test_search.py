@@ -24,7 +24,7 @@ from agent.tools.base import Tool
 from agent.tools.external_access import EXTERNAL_TOOL_DENIED
 from agent.tools.registry import ToolRegistry
 from agent.tools.search_backend import _default_normalize
-from agent.tools.tool_search import ToolSearchTool
+from agent.tools.tool_search import ToolSearchTool, tool_search_call_context
 
 # ── 辅助工具桩 ────────────────────────────────────────────────────────────────
 
@@ -711,19 +711,19 @@ class TestToolSearchTool:
         assert all(r["name"] != "schedule" for r in results_a)
         assert any(r["name"] == "schedule" for r in results_b)
 
-    def test_set_excluded_names_reaches_keyword_search(self):
-        """set_excluded_names 设置的名单必须真的传到 registry.search 的 keyword 路径。"""
+    def test_visible_tool_names_reaches_keyword_search(self):
+        """按调用传入的已可见名单必须真的传到 registry.search 的 keyword 路径。"""
         reg = _make_registry()
         tool = ToolSearchTool(reg)
 
         before = json.loads(asyncio.run(tool.execute(query="定时任务", top_k=5)))
         assert any(m["name"] == "schedule" for m in before["matched"])
 
-        async def _run_excluded():
-            tool.set_excluded_names({"schedule"})
-            return await tool.execute(query="定时任务", top_k=5)
-
-        after = json.loads(asyncio.run(_run_excluded()))
+        after = json.loads(
+            asyncio.run(
+                tool.execute(query="定时任务", top_k=5, visible_tool_names={"schedule"})
+            )
+        )
         assert all(m["name"] != "schedule" for m in after["matched"])
 
     def test_external_only_cannot_find_or_unlock_restricted_tools(self):
@@ -732,21 +732,27 @@ class TestToolSearchTool:
         reg.register(ToolSearchTool(reg), always_on=True, external_allowed=True)
         reg.register(_StubTool("write_file", "将内容写入指定文件路径"), risk="write")
         reg.register(_StubTool("web_fetch", "读取网页文件内容"), external_allowed=True)
-        tool = ToolSearchTool(reg)
 
-        async def _run(query: str) -> dict[str, Any]:
-            tool.set_excluded_names(set(), external_only=True)
-            return json.loads(await tool.execute(query=query))
+        async def _run(query: str, *, external_only: bool) -> dict[str, Any]:
+            # 模型自带的受限参数被执行上下文覆盖，改写不了本次调用的受限状态。
+            result = await reg.execute(
+                "tool_search",
+                {"query": query, "external_tools_only": False},
+                context=tool_search_call_context(
+                    visible_names=set(), external_only=external_only
+                ),
+            )
+            return json.loads(str(result))
 
-        keyword = asyncio.run(_run("文件"))
+        keyword = asyncio.run(_run("文件", external_only=True))
         assert [m["name"] for m in keyword["matched"]] == ["web_fetch"]
-        select = asyncio.run(_run("select:write_file,web_fetch"))
+        select = asyncio.run(_run("select:write_file,web_fetch", external_only=True))
         assert select["unlocked"] == ["web_fetch"]
         assert f"write_file: {EXTERNAL_TOOL_DENIED}" in select["tip"]
-        deferred = cast(
-            dict[str, object],
-            reg.get_deferred_names(allowed=reg.get_external_allowed_names()),
-        )
+        # 受限状态按调用传递：随后不受限的调用不会沿用上一次的受限标志。
+        unrestricted = asyncio.run(_run("select:write_file", external_only=False))
+        assert unrestricted["unlocked"] == ["write_file"]
+        deferred = reg.get_deferred_names(external_only=True)
         assert deferred["builtin"] == ["web_fetch"]
 
     def test_get_deferred_names_excludes_visible(self):
@@ -776,11 +782,11 @@ class TestToolSearchTool:
         reg = _make_registry()
         tool = ToolSearchTool(reg)
 
-        async def _run():
-            tool.set_excluded_names({"schedule"})
-            return await tool.execute(query="select:schedule")
-
-        data = json.loads(asyncio.run(_run()))
+        data = json.loads(
+            asyncio.run(
+                tool.execute(query="select:schedule", visible_tool_names={"schedule"})
+            )
+        )
         assert all(r["name"] != "schedule" for r in data.get("matched", []))
         assert "tip" in data
         assert "schedule" in data["tip"]

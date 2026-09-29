@@ -82,7 +82,7 @@ version whose additions it uses.
 | `2.4.0` | renderer host services as an injected `host` prop, with `host.feedback` (host toasts), `host.ui.InlineError` (host inline error block) and `host.ui.ConfirmDialog` (host confirmation), all with an opt-in 看板娘 `persona` (generic or by scene key) | #362 follow-up (看板娘扩展) |
 | `2.5.0` | required `chat_types` session-type declarations on manifest `channels` entries (replacing the channel-level `chat_id_label` / `chat_id_hint`) | #397 |
 | `2.6.0` | the `accounts` capability: `ctx.accounts.register(...)` / `report(...)` for host-owned communication account registration and ownership, released with the plugin scope | #419 |
-| `2.7.0` | `ctx.tools.register(..., external_allowed=)` to declare a tool usable in external-context turns | #489 |
+| `2.7.0` | `ctx.tools.register(..., external_allowed=)` to declare a tool usable in external-context turns; from this host on, undeclared plugin tools are unavailable in restricted external-context turns, including tools of existing packages that require an older `runtime_api` (host policy, not an API break) | #489 |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -273,7 +273,7 @@ bound user themselves are never restricted, even in a group.
 Restricted tools are left out of the tool schemas sent to the model and out of
 `tool_search` results, `tool_search` cannot unlock them, and a call that still
 reaches one is rejected with a tool result telling the model only its user can
-ask for it. The allowed set is read from the registry on every check, so a tool
+ask for it. The declaration is read from the registry on every check, so a tool
 registered mid-turn without the declaration is excluded as well. MCP tools are
 dynamic and can never be declared: registering one with `external_allowed=True`
 raises. Declare it only for tools that are safe for strangers to trigger; the
@@ -282,6 +282,14 @@ outbound messages, schedule changes and memory stay undeclared.
 
 Packages that pass `external_allowed` must require
 `runtime_api: ">=2.7.0 <3.0.0"`; older hosts reject the keyword.
+
+This is a behavior change of 2.7.0 hosts: every plugin tool that does not
+declare `external_allowed` is unavailable in restricted external-context turns,
+including tools of existing packages that require an older `runtime_api` and
+therefore cannot declare it. The registration API itself is unchanged for them;
+this is host policy, not an API break. Such packages keep working everywhere
+else, and their tools become available in those turns once they declare
+`external_allowed=True` and require `runtime_api: ">=2.7.0 <3.0.0"`.
 
 ## Renderer artifacts and dependencies
 
