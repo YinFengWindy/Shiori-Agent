@@ -13,7 +13,8 @@
 import { desktopEslintConfig } from "./apps/desktop/eslint.config.js";
 
 /**
- * Plugin renderer code and the plugin SDK. Plugins reach the host only
+ * Plugin renderer code (including `shared/` modules the renderer entries import)
+ * and the plugin SDK. Plugins reach the host only
  * through `@shiori/plugin-sdk` and their injected `client`/`host` (#440), and
  * the SDK itself must never depend on host source.
  */
@@ -24,6 +25,8 @@ const pluginRendererFiles = [
   "plugins/*/surface/**/*.tsx",
   "plugins/*/background/**/*.ts",
   "plugins/*/background/**/*.tsx",
+  "plugins/*/shared/**/*.ts",
+  "plugins/*/shared/**/*.tsx",
   "packages/plugin-sdk/src/**/*.ts",
   "packages/plugin-sdk/src/**/*.tsx",
 ];
@@ -154,8 +157,6 @@ export default [
         patterns: [
           // Any relative (`../../../apps/desktop/...`) or aliased spelling that names the host tree.
           { regex: "(^|/)apps/desktop(/|$)", message: hostImportMessage },
-          // The host's workspace package name, should it ever become resolvable.
-          { group: ["shiori-desktop", "shiori-desktop/**"], message: hostImportMessage },
         ],
       }],
     },

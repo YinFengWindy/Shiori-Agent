@@ -21,7 +21,7 @@ test("plugin renderer and SDK code cannot import host source", async () => {
     'import type { BridgeEvent } from "../../../apps/desktop/src/bridge/shared";',
     'export { deferred } from "../../../../apps/desktop/renderer/src/shared/testing/deferred";',
   ];
-  for (const path of ["plugins/boundary_probe/ui/probe.tsx", "plugins/boundary_probe/background/probe.ts", "plugins/boundary_probe/surface/nested/probe.ts", "packages/plugin-sdk/src/probe.ts"]) {
+  for (const path of ["plugins/boundary_probe/ui/probe.tsx", "plugins/boundary_probe/background/probe.ts", "plugins/boundary_probe/surface/nested/probe.ts", "plugins/boundary_probe/shared/probe.ts", "packages/plugin-sdk/src/probe.ts"]) {
     for (const code of hostImports) assert.equal((await boundaryViolations(code, path)).length, 1, `${path}: ${code}`);
     assert.deepEqual(await boundaryViolations('import { PluginBridgeError } from "@shiori/plugin-sdk";\nimport { deferred } from "@shiori/plugin-sdk/testing";', path), []);
   }

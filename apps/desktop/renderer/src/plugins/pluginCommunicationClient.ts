@@ -1,19 +1,15 @@
-import type { BridgeEvent, PluginEventHandler, PluginPeer, PluginRpcClient } from "@shiori/plugin-sdk";
+import { PluginBridgeError as BridgeError, type BridgeEvent, type PluginEventHandler, type PluginPeer, type PluginRpcClient } from "@shiori/plugin-sdk";
 import { PluginBackgroundMethods } from "./pluginBackgroundMethods";
 import { pluginRuntimeChanged } from "./pluginRuntimeChanged";
 import { PluginCommunicationLifetime } from "./pluginCommunicationLifetime";
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
-import { PluginBridgeError as BridgeError } from "./pluginBridgeError";
-
-/** Injected cooperation API; the public contract is the SDK's `PluginRpcClient` (#440). */
-export type PluginCommunicationClient = PluginRpcClient;
 
 /** Creates one disposable UI/surface/background context over the existing bridge. */
 export function createPluginCommunicationClient(pluginId: string, options: {
   invoke?: DesktopInvoke;
   onEvent?: (listener: (event: BridgeEvent) => void) => () => void;
   background?: boolean;
-} = {}): PluginCommunicationClient {
+} = {}): PluginRpcClient {
   const owner = crypto.randomUUID();
   const lifetime = new PluginCommunicationLifetime();
   const subscriptions = new Set<{ target: string; name: string; handler: PluginEventHandler }>();

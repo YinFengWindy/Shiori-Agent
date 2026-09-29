@@ -1,3 +1,5 @@
+import type { BridgeEvent } from "@shiori/plugin-sdk";
+
 export type BridgeRequest = {
   id: string;
   method: string;
@@ -116,7 +118,6 @@ export type BridgeResponse = {
 };
 
 // Owned by the plugin SDK because plugin event handlers receive it (#440).
-import type { BridgeEvent } from "@shiori/plugin-sdk";
 export type { BridgeEvent };
 
 /** Public desktop-pet voice state used by the pet and settings surfaces. */
