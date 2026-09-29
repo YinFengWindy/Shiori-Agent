@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from agent.core.runtime_support import context_view_filter
 from agent.prompting import is_context_frame
 
 if TYPE_CHECKING:
@@ -20,15 +19,11 @@ def get_history_since_consolidated(
 ) -> list[dict]:
     """读取最近一次记忆整合之后、回合所在上下文可见的会话历史。"""
 
-    include = context_view_filter(context_view)
-    try:
-        return session.get_history(
-            max_messages=memory_window,
-            start_index=session.last_consolidated,
-            **include,
-        )
-    except TypeError:
-        return session.get_history(max_messages=memory_window, **include)
+    return session.get_history(
+        max_messages=memory_window,
+        start_index=session.last_consolidated,
+        include=context_view.includes if context_view is not None else None,
+    )
 
 
 def get_history_tool_names_since_consolidated(
@@ -41,7 +36,7 @@ def get_history_tool_names_since_consolidated(
     return session.get_history_tool_names(
         max_messages=memory_window,
         start_index=session.last_consolidated,
-        **context_view_filter(context_view),
+        include=context_view.includes if context_view is not None else None,
     )
 
 

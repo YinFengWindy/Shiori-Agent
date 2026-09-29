@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
+from agent.core.prompt_block import strip_recent_turns
 from agent.prompting import (
     PromptSectionRender,
     build_context_frame_content,
@@ -348,7 +349,9 @@ class DriftTurnPipeline:
                 bind_session_metadata({"role_id": role_id} if role_id else None)
             self_text = str(memory.read_self() or "").strip()
             memory_text = str(memory.read_long_term() or "").strip()
-            recent_context_text = str(memory.read_recent_context() or "").strip()
+            recent_context_text = strip_recent_turns(
+                str(memory.read_recent_context() or "")
+            )
 
         lines = []
         for skill in skills[:8]:

@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 
 import agent.core.passive_support as support
 from .helpers import get_session_metadata
-from agent.core.runtime_support import context_view_filter
 from agent.core.types import ContextBundle
 from agent.retrieval.protocol import RetrievalRequest, RetrievalResult
 
@@ -67,7 +66,11 @@ class DefaultContextStore(ContextStore):
         context_view: "ContextView | None" = None,
     ) -> ContextBundle:
         # 1. 先读取回合所在上下文可见的 session history，并转换成 retrieval pipeline 需要的结构。
-        raw_history = list(session.get_history(**context_view_filter(context_view)))
+        raw_history = list(
+            session.get_history(
+                include=context_view.includes if context_view is not None else None
+            )
+        )
         history_messages = support.to_history_messages(raw_history)
 
         # 2. 系统轮次可显式跳过预检索，避免污染检索诊断和激活状态。

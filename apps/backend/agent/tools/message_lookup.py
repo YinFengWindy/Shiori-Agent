@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, cast
 
 from agent.tools.base import Tool
+from conversation.context_scope import ContextView, session_context_view
 from session.store import SessionStore
 
 _MAX_CONTEXT = 10
@@ -56,8 +58,9 @@ class FetchMessagesTool(Tool):
         },
     }
 
-    def __init__(self, store: SessionStore) -> None:
+    def __init__(self, store: SessionStore, workspace: Path) -> None:
         self._store = store
+        self._workspace = workspace
 
     async def execute(
         self,
@@ -66,7 +69,7 @@ class FetchMessagesTool(Tool):
         source_refs: list[str] | None = None,
         evidence: list[dict[str, object]] | None = None,
         context: int = 0,
-        **_: Any,
+        **kwargs: Any,
     ) -> str:
         clean_ids = _resolve_fetch_ids(
             ids=ids or [],
@@ -79,10 +82,13 @@ class FetchMessagesTool(Tool):
                 {"count": 0, "matched_count": 0, "messages": []}, ensure_ascii=False
             )
 
+        scope = _turn_scope(self._workspace, kwargs)
         ctx = max(0, min(int(context), _MAX_CONTEXT))
         if ctx == 0:
             messages = [
-                _to_public_message(m) for m in self._store.fetch_by_ids(clean_ids)
+                _to_public_message(m)
+                for m in self._store.fetch_by_ids(clean_ids)
+                if _visible(m, scope)
             ]
             return json.dumps(
                 {
@@ -96,12 +102,39 @@ class FetchMessagesTool(Tool):
         messages = [
             _to_public_message(m)
             for m in self._store.fetch_by_ids_with_context(clean_ids, ctx)
+            if _visible(m, scope)
         ]
         matched = sum(1 for m in messages if m.get("in_source_ref"))
         return json.dumps(
             {"count": len(messages), "matched_count": matched, "messages": messages},
             ensure_ascii=False,
         )
+
+
+def _turn_scope(
+    workspace: Path, context: dict[str, Any]
+) -> tuple[str, ContextView] | None:
+    """当前回合在角色共享会话里时，返回该会话的键与回合的上下文视图。
+
+    回合身份来自工具上下文（``turn_session_key`` / ``role_id`` / ``thread_id``），
+    模型无法改写；非角色共享会话的回合返回 None，检索不受限。
+    """
+    session_key = str(context.get("turn_session_key") or "")
+    view = session_context_view(
+        workspace,
+        session_key=session_key,
+        role_id=str(context.get("role_id") or ""),
+        thread_id=str(context.get("thread_id") or ""),
+    )
+    return (session_key, view) if view is not None else None
+
+
+def _visible(message: dict[str, Any], scope: tuple[str, ContextView] | None) -> bool:
+    """角色回合只能读到本角色会话里、属于回合所在上下文的消息。"""
+    if scope is None:
+        return True
+    session_key, view = scope
+    return message.get("session_key") == session_key and view.includes(message)
 
 
 def _resolve_fetch_ids(
@@ -208,8 +241,9 @@ class SearchMessagesTool(Tool):
         "required": ["query"],
     }
 
-    def __init__(self, store: SessionStore) -> None:
+    def __init__(self, store: SessionStore, workspace: Path) -> None:
         self._store = store
+        self._workspace = workspace
 
     async def execute(self, query: str, **kwargs: Any) -> str:
         term = (query or "").strip()
@@ -230,12 +264,25 @@ class SearchMessagesTool(Tool):
         limit = max(1, min(int(kwargs.get("limit", 10)), 50))
         offset = max(0, int(kwargs.get("offset", 0)))
 
+        scope = _turn_scope(self._workspace, kwargs)
+        if scope is None:
+            session_key = (kwargs.get("session_key") or "").strip() or None
+            thread_ids = None
+        else:
+            # 角色回合只搜本角色会话，且只搜回合所在上下文的会话。
+            session_key, view = scope
+            thread_ids = [
+                thread_id
+                for thread_id in self._store.session_thread_ids(session_key)
+                if view.includes_thread(thread_id)
+            ]
         matched, total = self._store.search_messages(
             term,
-            session_key=(kwargs.get("session_key") or "").strip() or None,
+            session_key=session_key,
             role=(kwargs.get("role") or "").strip() or None,
             limit=limit,
             offset=offset,
+            thread_ids=thread_ids,
         )
         terms = [t for t in term.split() if t]
         messages = [_build_search_preview(message, terms) for message in matched]

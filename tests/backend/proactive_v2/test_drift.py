@@ -367,7 +367,7 @@ def test_drift_runtime_context_binds_role_memory_from_ctx(tmp_path: Path):
 
         def read_recent_context(self) -> str:
             role_id = str((self.bound or {}).get("role_id") or "")
-            return f"recent:{role_id}"
+            return f"recent:{role_id}\n\n## 最近的对话\n- user: 群里的原话"
 
     memory = _Memory()
     pipeline = _make_drift_pipeline(
@@ -392,6 +392,8 @@ def test_drift_runtime_context_binds_role_memory_from_ctx(tmp_path: Path):
     assert memory.bound == {"role_id": "mira"}
     assert "memory:mira" in content
     assert "recent:mira" in content
+    # Raw recent turns span every thread and never reach the drift prompt.
+    assert "群里的原话" not in content
 
 
 @pytest.mark.parametrize(

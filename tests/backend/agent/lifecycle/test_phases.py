@@ -260,7 +260,11 @@ class _DummySession:
         self.last_consolidated = 0
 
     def get_history(
-        self, max_messages: int = 500, *, start_index: int | None = None
+        self,
+        max_messages: int = 500,
+        *,
+        start_index: int | None = None,
+        include: object = None,
     ) -> list[dict[str, object]]:
         return list(self.messages)
 
@@ -327,7 +331,7 @@ async def test_before_turn_binds_message_role_id_to_session_before_context_prepa
     session_mgr = SimpleNamespace(
         get_or_create=lambda key: session,
         save=lambda value: saved.append(value),
-        role_session_key=lambda role_id: f"role:{role_id}",
+        workspace=Path("unused"),
     )
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
     phase = Phase(
@@ -559,7 +563,11 @@ async def test_before_turn_token_pressure_waits_for_consolidation_before_context
 
     class _TokenSession(_DummySession):
         def get_history(
-            self, max_messages: int = 500, *, start_index: int | None = None
+            self,
+            max_messages: int = 500,
+            *,
+            start_index: int | None = None,
+            include: object = None,
         ) -> list[dict[str, object]]:
             return list(self.messages[max(0, int(start_index or 0)) :])
 

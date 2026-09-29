@@ -204,7 +204,7 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot():
         key="telegram:123",
         metadata={"role_id": "mira"},
         last_consolidated=0,
-        get_history=lambda max_messages=500, start_index=None: [],
+        get_history=lambda max_messages=500, start_index=None, include=None: [],
         messages=[],
     )
     msg = InboundMessage(
@@ -499,7 +499,7 @@ def test_default_reasoner_observes_tool_lifecycle_events():
     session = SimpleNamespace(
         key="telegram:123",
         messages=[],
-        get_history=lambda max_messages=40: [],
+        get_history=lambda max_messages=40, start_index=None, include=None: [],
         last_consolidated=0,
     )
     msg = InboundMessage(
@@ -796,7 +796,9 @@ def test_default_reasoner_run_turn_uses_context_render():
     session = SimpleNamespace(
         key="cli:1",
         messages=[{"role": "assistant", "content": "old"}],
-        get_history=lambda max_messages=40: [{"role": "assistant", "content": "old"}],
+        get_history=lambda max_messages=40, start_index=None, include=None: [
+            {"role": "assistant", "content": "old"}
+        ],
         last_consolidated=0,
     )
     msg = InboundMessage(
@@ -844,7 +846,7 @@ def test_default_reasoner_run_turn_reports_llm_timeout():
     session = SimpleNamespace(
         key="cli:1",
         messages=[],
-        get_history=lambda max_messages=40: [],
+        get_history=lambda max_messages=40, start_index=None, include=None: [],
         last_consolidated=0,
     )
     msg = InboundMessage(

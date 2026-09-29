@@ -44,7 +44,13 @@ class _DummySession:
         ]
         self.last_consolidated = 0
 
-    def get_history(self, max_messages: int = 500) -> list[dict]:
+    def get_history(
+        self,
+        max_messages: int = 500,
+        *,
+        start_index: int | None = None,
+        include: object = None,
+    ) -> list[dict]:
         return self.messages[-max_messages:]
 
 

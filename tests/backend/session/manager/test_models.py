@@ -1,4 +1,9 @@
-from session.manager.models import Session
+from collections.abc import Mapping
+from typing import Any
+
+import pytest
+
+from session.manager.models import Session, message_thread_id, whole_session
 
 
 def test_history_retains_per_message_origin_without_replaying_context():
@@ -22,7 +27,7 @@ def test_history_retains_per_message_origin_without_replaying_context():
             llm_user_content="[当前消息时间: original]\nhello",
             llm_context_frame="old retrieved memory must not replay",
         )
-    history = session.get_history()
+    history = session.get_history(include=whole_session)
     for item, (channel, chat, chat_type, sender) in zip(history, sources):
         content = item["content"]
         assert f'"sender_id": "{sender}"' in content
@@ -39,7 +44,7 @@ def test_history_retains_per_message_origin_without_replaying_context():
 def test_legacy_history_marks_missing_origin_unknown():
     session = Session(key="role:mira", metadata={"transport_channel": "desktop"})
     session.add_message("user", "old message")
-    content = session.get_history()[0]["content"]
+    content = session.get_history(include=whole_session)[0]["content"]
     assert '"channel": null' in content
     assert '"sender_id": null' in content
     assert "desktop" not in content
@@ -64,7 +69,7 @@ def test_history_preserves_cached_multimodal_blocks_and_adds_source_once():
     )
 
     for _ in range(2):
-        content = session.get_history()[0]["content"]
+        content = session.get_history(include=whole_session)[0]["content"]
         assert content[0] == blocks[0]
         assert content[1]["text"].startswith("[当前消息时间: original]\n")
         assert '"sender_id": "42"' in content[1]["text"]
@@ -131,3 +136,37 @@ def test_get_history_tool_names_skips_proactive_tool_chain():
     )
 
     assert session.get_history_tool_names() == []
+
+
+def _thread_session(key: str) -> Session:
+    session = Session(key)
+    for index, thread in enumerate(["a", "b", "a", "b", "a"]):
+        session.add_message("user", f"m{index}", thread_id=thread)
+    return session
+
+
+def _in_thread_a(message: Mapping[str, Any]) -> bool:
+    return message_thread_id(message) == "a"
+
+
+def test_history_window_filters_before_taking_the_last_messages():
+    session = _thread_session("cli:1")
+
+    window = session.history_window(2, include=_in_thread_a)
+
+    # The limit counts visible messages: two of thread a, not the last two rows.
+    assert [message["content"] for message in window] == ["m2", "m4"]
+
+
+def test_role_session_history_needs_an_explicit_filter():
+    session = _thread_session("role:mira")
+
+    with pytest.raises(ValueError, match="上下文筛选"):
+        session.get_history()
+    assert len(session.history_window(500, include=whole_session)) == 5
+
+
+def test_message_thread_id_reads_stored_or_in_memory_threads():
+    assert message_thread_id({"thread_id": " t1 "}) == "t1"
+    assert message_thread_id({"metadata": {"thread_id": "t2"}}) == "t2"
+    assert message_thread_id({"metadata": "not a dict"}) == ""

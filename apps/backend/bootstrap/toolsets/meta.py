@@ -31,6 +31,7 @@ class CommonMetaToolsetProvider(ToolsetProvider):
             registry,
             self._readonly_tools,
             deps.session_store,
+            deps.workspace,
             push_tool=deps.push_tool,
         )
 

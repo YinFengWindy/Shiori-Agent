@@ -4,9 +4,13 @@ from pathlib import Path
 import pytest
 
 from agent.tools.message_lookup import FetchMessagesTool, SearchMessagesTool
+from conversation.service import desktop_thread_id, network_thread_id
 from prompts.agent import build_agent_behavior_rules_prompt
 from session.manager import SessionManager
 from session.store import SessionStore
+
+DESKTOP = desktop_thread_id("mira")
+GROUP = network_thread_id("mira", "qq", "group:7")
 
 
 def _setup_session(store: SessionStore, key: str, n_messages: int) -> None:
@@ -33,7 +37,7 @@ async def test_fetch_messages_returns_rows_in_input_order(tmp_path):
     store = SessionStore(tmp_path / "sessions.db")
     _setup_session(store, "tg:1", 2)
 
-    tool = FetchMessagesTool(store)
+    tool = FetchMessagesTool(store, tmp_path)
     payload = json.loads(await tool.execute(ids=["tg:1:1", "tg:1:0"]))
 
     assert payload["count"] == 2
@@ -61,7 +65,7 @@ async def test_fetch_messages_strips_internal_metadata(tmp_path):
         extra={"tools_used": ["fetch_messages"], "reasoning_content": "think"},
     )
 
-    tool = FetchMessagesTool(store)
+    tool = FetchMessagesTool(store, tmp_path)
     payload = json.loads(await tool.execute(ids=["tg:1:0"]))
 
     assert payload["messages"] == [
@@ -81,7 +85,7 @@ async def test_fetch_messages_with_context(tmp_path):
     store = SessionStore(tmp_path / "sessions.db")
     _setup_session(store, "tg:1", 7)  # seq 0..6
 
-    tool = FetchMessagesTool(store)
+    tool = FetchMessagesTool(store, tmp_path)
     # fetch seq=3, context=2 → expect seq 1..5
     payload = json.loads(await tool.execute(ids=["tg:1:3"], context=2))
 
@@ -106,7 +110,7 @@ async def test_fetch_messages_context_clamps_at_seq_zero(tmp_path):
     store = SessionStore(tmp_path / "sessions.db")
     _setup_session(store, "tg:1", 3)  # seq 0,1,2
 
-    tool = FetchMessagesTool(store)
+    tool = FetchMessagesTool(store, tmp_path)
     payload = json.loads(await tool.execute(ids=["tg:1:0"], context=3))
 
     # context before seq 0 is clamped; should get seq 0,1,2,3 — but only 0-2 exist
@@ -122,7 +126,7 @@ async def test_fetch_messages_context_clamps_at_max_window(tmp_path):
     store = SessionStore(tmp_path / "sessions.db")
     _setup_session(store, "tg:1", 30)  # seq 0..29
 
-    tool = FetchMessagesTool(store)
+    tool = FetchMessagesTool(store, tmp_path)
     payload = json.loads(await tool.execute(ids=["tg:1:11"], context=999))
 
     ids = [m["id"] for m in payload["messages"]]
@@ -139,7 +143,7 @@ async def test_fetch_messages_supports_window_source_ref(tmp_path):
     store = SessionStore(tmp_path / "sessions.db")
     _setup_session(store, "tg:1", 6)
 
-    tool = FetchMessagesTool(store)
+    tool = FetchMessagesTool(store, tmp_path)
     payload = json.loads(
         await tool.execute(source_ref='["tg:1:2","tg:1:3"]#profile', context=1)
     )
@@ -164,7 +168,7 @@ async def test_fetch_messages_supports_mixed_ids_and_source_refs(tmp_path):
     store = SessionStore(tmp_path / "sessions.db")
     _setup_session(store, "tg:1", 5)
 
-    tool = FetchMessagesTool(store)
+    tool = FetchMessagesTool(store, tmp_path)
     payload = json.loads(
         await tool.execute(
             ids=["tg:1:4"],
@@ -195,7 +199,7 @@ async def test_search_messages_returns_preview_with_source_ref(tmp_path):
         seq=0,
     )
 
-    tool = SearchMessagesTool(store)
+    tool = SearchMessagesTool(store, tmp_path)
     payload = json.loads(await tool.execute(query="benchmark", session_key="tg:1"))
 
     assert payload["count"] == 1
@@ -260,7 +264,7 @@ async def test_search_messages_supports_filters(tmp_path):
         seq=0,
     )
 
-    tool = SearchMessagesTool(store)
+    tool = SearchMessagesTool(store, tmp_path)
 
     payload = json.loads(
         await tool.execute(
@@ -297,7 +301,7 @@ async def test_search_messages_supports_offset_pagination(tmp_path):
             seq=seq,
         )
 
-    tool = SearchMessagesTool(store)
+    tool = SearchMessagesTool(store, tmp_path)
 
     first_page = json.loads(
         await tool.execute(query="benchmark", session_key="tg:1", limit=2)
@@ -355,7 +359,7 @@ async def test_search_messages_mixed_long_and_short_terms_keeps_short_only_hits(
         seq=2,
     )
 
-    tool = SearchMessagesTool(store)
+    tool = SearchMessagesTool(store, tmp_path)
     payload = json.loads(
         await tool.execute(query="phase 支付", session_key="tg:1", limit=10)
     )
@@ -372,7 +376,7 @@ async def test_search_messages_mixed_long_and_short_terms_keeps_short_only_hits(
 @pytest.mark.asyncio
 async def test_search_messages_empty_query_returns_empty(tmp_path):
     store = SessionStore(tmp_path / "sessions.db")
-    tool = SearchMessagesTool(store)
+    tool = SearchMessagesTool(store, tmp_path)
     payload = json.loads(await tool.execute(query="   "))
     assert payload == {
         "count": 0,
@@ -444,3 +448,38 @@ def test_behavior_rules_use_evidence_threshold_not_keyword_filtering():
     assert "如果答案取决于本轮外部证据" in prompt
     assert "我现在不能确认 / 我需要先查一下" in prompt
     assert "没有本轮证据就只能说记忆里的旧信息" in prompt
+
+
+def _role_session_with_desktop_and_group(tmp_path: Path) -> SessionManager:
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    session.add_message("user", "desktop secret plan", thread_id=DESKTOP)
+    session.add_message("user", "group secret chatter", thread_id=GROUP)
+    manager.save(session)
+    return manager
+
+
+def _turn(thread_id: str) -> dict[str, str]:
+    """The tool context a role turn in ``thread_id`` runs with."""
+    return {"turn_session_key": "role:mira", "role_id": "mira", "thread_id": thread_id}
+
+
+@pytest.mark.asyncio
+async def test_group_turn_cannot_search_or_fetch_user_context_messages(tmp_path):
+    manager = _role_session_with_desktop_and_group(tmp_path)
+    store = manager._store
+    search = SearchMessagesTool(store, tmp_path)
+    fetch = FetchMessagesTool(store, tmp_path)
+
+    found = json.loads(await search.execute(query="secret", **_turn(GROUP)))
+    fetched = json.loads(
+        await fetch.execute(ids=["role:mira:0", "role:mira:1"], **_turn(GROUP))
+    )
+    # Pagination counts only what the turn may see.
+    assert found["matched_count"] == 1
+    assert [m["preview"] for m in found["messages"]] == ["group secret chatter"]
+    assert [m["content"] for m in fetched["messages"]] == ["group secret chatter"]
+
+    desktop = json.loads(await search.execute(query="secret", **_turn(DESKTOP)))
+    assert [m["preview"] for m in desktop["messages"]] == ["desktop secret plan"]

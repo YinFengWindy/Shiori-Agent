@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, cast
 
+from agent.core.prompt_block import strip_recent_turns
 from agent.prompting import (
     PromptSectionRender,
     build_context_frame_content,
@@ -258,9 +259,9 @@ def build_runtime_context_message(
         except Exception:
             memory_block = ""
         try:
-            recent_context_block = str(
-                profile_memory.read_recent_context() or ""
-            ).strip()
+            recent_context_block = strip_recent_turns(
+                str(profile_memory.read_recent_context() or "")
+            )
         except Exception:
             recent_context_block = ""
 

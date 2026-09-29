@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from agent.llm_json import load_json_object_loose
 from agent.prompting import is_context_frame
 from agent.core.passive_support import estimate_messages_tokens
+from session.manager.models import whole_session
 
 from .contracts import _ConsolidationWindow
 
@@ -124,9 +125,11 @@ def _estimate_session_input_tokens(session: object, current_content: str = "") -
     if not isinstance(messages, list):
         return 0
     try:
+        # Consolidation spans every thread of the role session.
         history = session.get_history(
             max_messages=500,
             start_index=max(0, int(getattr(session, "last_consolidated", 0))),
+            include=whole_session,
         )
     except (AttributeError, TypeError):
         history = messages[max(0, int(getattr(session, "last_consolidated", 0))) :]

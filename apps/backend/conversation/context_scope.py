@@ -23,10 +23,11 @@ from typing import Any, Literal
 
 from conversation.service import (
     desktop_thread_id,
+    is_scheduler_thread,
     network_thread_id,
-    scheduler_thread_id,
 )
 from core.identity import UserIdentity, UserIdentityStore
+from session.manager.helpers import role_session_key
 from session.manager.models import message_thread_id
 
 ContextScope = Literal["user", "external"]
@@ -37,7 +38,7 @@ class UserContextThreads:
     """某角色此刻属于用户上下文的会话。
 
     ``bound_chat_thread_ids`` 是桌面会话与已绑定用户各已知私聊的会话 ID；
-    没有来源会话的计划任务按 ``scheduler_thread_id`` 的前缀识别。
+    没有来源会话的计划任务由 ``is_scheduler_thread`` 识别。
     """
 
     role_id: str
@@ -48,7 +49,7 @@ class UserContextThreads:
         return (
             not thread_id
             or thread_id in self.bound_chat_thread_ids
-            or thread_id.startswith(scheduler_thread_id(self.role_id, ""))
+            or is_scheduler_thread(self.role_id, thread_id)
         )
 
 
@@ -90,8 +91,11 @@ class ContextView:
 
     def includes(self, message: Mapping[str, Any]) -> bool:
         """``message`` 是否对本回合可见。"""
-        in_user_context = self.user_threads.contains(message_thread_id(message))
-        return in_user_context == (self.scope == "user")
+        return self.includes_thread(message_thread_id(message))
+
+    def includes_thread(self, thread_id: str) -> bool:
+        """会话 ``thread_id`` 的消息是否对本回合可见；空值代表旧消息。"""
+        return self.user_threads.contains(thread_id) == (self.scope == "user")
 
 
 def load_user_context_threads(workspace: Path, role_id: str) -> UserContextThreads:
@@ -123,3 +127,16 @@ def user_context_view(workspace: Path, role_id: str) -> ContextView:
     return ContextView(
         scope="user", user_threads=load_user_context_threads(workspace, role_id)
     )
+
+
+def session_context_view(
+    workspace: Path, *, session_key: str, role_id: str, thread_id: str
+) -> ContextView | None:
+    """一个回合在会话 ``session_key`` 里的历史视图。
+
+    只有角色共享会话混存多个会话的消息，需要划分；其他会话只有一段对话，
+    返回 None，不筛选。历史组装与消息检索工具都经由这里判定。
+    """
+    if not role_id or session_key != role_session_key(role_id):
+        return None
+    return turn_context_view(workspace, role_id, thread_id)

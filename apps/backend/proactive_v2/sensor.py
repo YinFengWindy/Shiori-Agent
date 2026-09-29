@@ -112,8 +112,9 @@ class Sensor:
         except Exception:
             return []
         view = user_context_view(self._sessions.workspace, self._cfg.role_id)
-        visible = [message for message in session.messages if view.includes(message)]
-        messages = visible[-self._cfg.recent_chat_messages :]
+        messages = session.history_window(
+            self._cfg.recent_chat_messages, include=view.includes
+        )
         results: list[dict] = []
         for message in messages:
             if message.get("role") not in ("user", "assistant"):

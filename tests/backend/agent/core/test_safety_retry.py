@@ -38,10 +38,10 @@ def _session():
     return SimpleNamespace(
         key="s:1",
         messages=[{"role": "user", "content": str(i)} for i in range(6)],
-        get_history=lambda max_messages: [
+        get_history=lambda max_messages, start_index=None, include=None: [
             {"role": "user", "content": str(i)} for i in range(6)
         ],
-        get_history_tool_names=lambda max_messages, start_index: [
+        get_history_tool_names=lambda max_messages, start_index, include=None: [
             "always",
             "x",
             "uninstalled",

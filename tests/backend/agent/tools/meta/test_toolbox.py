@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, cast
 import pytest
 from agent.tools.filesystem import ListDirTool, ReadFileTool
@@ -86,6 +87,7 @@ def test_register_meta_tool_helpers_mark_expected_tools_always_on():
         tools,
         readonly_tools,
         session_store=object(),
+        workspace=Path("."),
     )
     register_memory_meta_tools(
         tools,

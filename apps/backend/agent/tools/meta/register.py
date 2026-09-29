@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, cast
 
 from agent.tools.base import Tool
@@ -44,6 +45,7 @@ def register_common_meta_tools(
     tools: ToolRegistry,
     readonly_tools: dict[str, Tool],
     session_store: Any,
+    workspace: Path,
     push_tool: MessagePushTool | None = None,
 ) -> MessagePushTool:
     tools.register(ToolSearchTool(tools), always_on=True, risk="read-only")
@@ -89,13 +91,13 @@ def register_common_meta_tools(
         search_hint="ls 查看目录",
     )
     tools.register(
-        FetchMessagesTool(session_store),
+        FetchMessagesTool(session_store, workspace),
         always_on=True,
         risk="read-only",
         search_hint="消息回溯 按ID查对话原文 source_ref",
     )
     tools.register(
-        SearchMessagesTool(session_store),
+        SearchMessagesTool(session_store, workspace),
         always_on=True,
         risk="read-only",
         search_hint="你之前说 聊过什么 历史对话",

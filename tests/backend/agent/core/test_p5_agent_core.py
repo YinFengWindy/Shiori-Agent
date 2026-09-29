@@ -35,6 +35,7 @@ class _DummySession:
         max_messages: int = 500,
         *,
         start_index: int | None = None,
+        include: object = None,
     ) -> list[dict]:
         if start_index is not None:
             return self.messages[start_index:][-max_messages:]
@@ -129,6 +130,7 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
         channel="telegram",
         chat_id="123",
         session_key="telegram:123",
+        turn_session_key="telegram:123",
         role_id="",
         current_user_message="你好",
         role_config_version="",

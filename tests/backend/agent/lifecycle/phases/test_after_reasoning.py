@@ -18,6 +18,7 @@ from bus.event_bus import EventBus
 from bus.events import InboundMessage
 from core.roles.reply_state import InvalidRoleReply, RoleReply
 from session.manager import SessionManager, ConsolidationCommitRequest
+from session.manager.models import whole_session
 
 
 def phase(manager):
@@ -109,8 +110,14 @@ async def test_channel_user_source_survives_commit_and_reload(tmp_path):
         "sender_id": "456",
         "session_key": session.key,
     }
-    assert '"sender_id": "456"' in reloaded.get_history()[0]["content"]
-    assert '"chat_id": "gqq:123"' in reloaded.get_history()[0]["content"]
+    assert (
+        '"sender_id": "456"'
+        in reloaded.get_history(include=whole_session)[0]["content"]
+    )
+    assert (
+        '"chat_id": "gqq:123"'
+        in reloaded.get_history(include=whole_session)[0]["content"]
+    )
 
 
 @pytest.mark.parametrize("formal_reply", [True, False])
@@ -430,7 +437,10 @@ async def test_group_turn_keeps_via_account_and_hands_chosen_mentions_to_channel
     assert result.outbound.metadata["mention_ids"] == ["903"]
     reloaded = SessionManager(tmp_path).get_or_create(session.key)
     assert reloaded.messages[0]["metadata"]["via_account"] == via
-    assert "；经由账号: QQ 号「小栞」（101）]" in reloaded.get_history()[0]["content"]
+    assert (
+        "；经由账号: QQ 号「小栞」（101）]"
+        in reloaded.get_history(include=whole_session)[0]["content"]
+    )
 
 
 async def test_private_turn_never_hands_mentions_to_the_channel(tmp_path):

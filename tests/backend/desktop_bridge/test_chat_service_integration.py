@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from conversation.service import desktop_thread_id
+
 from agent.core.passive_turn.pipeline import AgentCoreDeps, PassiveTurnPipeline
 from agent.core.types import ContextBundle
 from agent.lifecycle.types import BeforeReasoningCtx, BeforeTurnCtx
@@ -58,7 +60,14 @@ async def test_pipeline_early_exit_emits_one_error_and_releases_desktop_turn(
         ):
             outbound = await pipeline.run(
                 InboundMessage(
-                    channel=channel, sender="user", chat_id=chat_id, content=content
+                    channel=channel,
+                    sender="user",
+                    chat_id=chat_id,
+                    content=content,
+                    metadata={
+                        "role_id": "mira",
+                        "thread_id": desktop_thread_id("mira"),
+                    },
                 ),
                 session_key,
                 dispatch_outbound=False,

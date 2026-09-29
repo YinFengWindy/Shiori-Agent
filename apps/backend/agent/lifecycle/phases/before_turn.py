@@ -5,7 +5,7 @@ import logging
 from typing import TYPE_CHECKING, Awaitable, Callable, Protocol, TypeAlias, cast
 
 from bus.event_bus import EventBus
-from agent.core.runtime_support import SessionLike, context_view_filter
+from agent.core.runtime_support import SessionLike
 from agent.core.types import ContextBundle
 from agent.lifecycle.phase import (
     PhaseFrame,
@@ -16,7 +16,7 @@ from agent.lifecycle.phase import (
 )
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
 from agent.core.passive_support import estimate_messages_tokens
-from conversation.context_scope import turn_context_view
+from conversation.context_scope import session_context_view
 
 if TYPE_CHECKING:
     from agent.core.passive_turn import ContextStore
@@ -87,14 +87,12 @@ class _AcquireSessionModule:
         state.session = session
         # 角色共享会话混存各渠道的消息，回合只看与所在会话同类上下文的历史；
         # 归属按此刻的身份绑定计算。其他会话只有一段对话，不需要划分。
-        role_id = message_role_id or session_role_id
-        if role_id and state.session_key == self._session_manager.role_session_key(
-            role_id
-        ):
-            state.context_view = turn_context_view(
+        if message_role_id or session_role_id:
+            state.context_view = session_context_view(
                 self._session_manager.workspace,
-                role_id,
-                str((state.msg.metadata or {}).get("thread_id") or ""),
+                session_key=state.session_key,
+                role_id=message_role_id or session_role_id,
+                thread_id=str((state.msg.metadata or {}).get("thread_id") or ""),
             )
         frame.slots[_SESSION_SLOT] = session
         return frame
@@ -361,15 +359,11 @@ def _estimate_session_input_tokens(
     Only history visible in the turn's context counts, since that is all the
     model will be sent.
     """
-    include = context_view_filter(context_view)
-    try:
-        history = session.get_history(
-            max_messages=500,
-            start_index=last_consolidated,
-            **include,
-        )
-    except TypeError:
-        history = session.get_history(max_messages=500, **include)
+    history = session.get_history(
+        max_messages=500,
+        start_index=last_consolidated,
+        include=context_view.includes if context_view is not None else None,
+    )
     return estimate_messages_tokens(
         [*history, {"role": "user", "content": current_content}]
     )

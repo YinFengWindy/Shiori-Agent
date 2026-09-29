@@ -3,13 +3,12 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
 from core.roles.reply_state import RoleReply
 
 if TYPE_CHECKING:
-    from conversation.context_scope import ContextView
     from session.manager.models import HistoryFilter
 
 
@@ -91,14 +90,6 @@ class SessionLike(Protocol):
         include: "HistoryFilter | None" = None,
     ) -> list[str]: ...
     def add_message(self, role: str, content: str, media=None, **kwargs) -> None: ...
-
-
-def context_view_filter(context_view: "ContextView | None") -> dict[str, Any]:
-    """把回合的上下文视图转成 ``SessionLike.get_history`` 的筛选参数。
-
-    非角色会话没有上下文视图，返回空参数，历史不筛选。
-    """
-    return {} if context_view is None else {"include": context_view.includes}
 
 
 @dataclass
