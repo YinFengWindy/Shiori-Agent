@@ -155,9 +155,12 @@ async def test_pipeline_commits_ordered_pushes_and_emits_complete_turn(
     assert reloaded.messages[2]["media"] == ["first.png"]
     assert result.committed_message_id == reloaded.messages[-1]["id"]
     assert len(runtime.emitted) == 1
-    assert [
-        row["content"] for row in runtime.emitted[0]["payload"]["messages"]
-    ] == expected
+    # The desktop timeline receives the desktop pushes, not the QQ turn itself.
+    assert [row["content"] for row in runtime.emitted[0]["payload"]["messages"]] == [
+        "first",
+        "",
+        "second",
+    ]
     # Older pages retain the same authoritative sequence after reopening.
     newest = runtime.manager._store.fetch_messages_page(runtime.session.key, limit=2)
     older = runtime.manager._store.fetch_messages_page(

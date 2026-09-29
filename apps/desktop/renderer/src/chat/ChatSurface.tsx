@@ -38,7 +38,6 @@ import {
   type ChatMessageNavigationScroller,
   useChatScrollController,
 } from "./useChatScrollController";
-import { useRoleChannelCatalog } from "../roles/useRoleChannelCatalog";
 import { cx, sidebarContentMotionClass, sidebarTrackMotionClass } from "../shared/styles";
 import { useLatestRef } from "../shared/useLatestRef";
 import { useWindowActivity } from "../shared/useWindowActivity";
@@ -154,7 +153,6 @@ export function ChatSurface({
   const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
   const [composerDraftRequest, setComposerDraftRequest] = useState<ChatComposerDraftRequest | null>(null);
   const [conversationPaneHeight, setConversationPaneHeight] = useState(0);
-  const channelCatalog = useRoleChannelCatalog();
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
   const hasStatusContent = hasStatusIllustration || Boolean(roleSelfView);
   const [sidebarMode, setSidebarMode] = useState<ChatSidebarMode>(
@@ -439,7 +437,6 @@ export function ChatSurface({
           enteringKeys={enteringMessageKeys}
           retryableKey={retryableMessageKey}
           sending={sending}
-          channelCatalog={channelCatalog}
           onBeginAttachmentDrag={onBeginAttachmentDrag}
           onContentSizeChange={handleChatContentSizeChange}
           onJumpToMessage={onJumpToMessage}

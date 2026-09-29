@@ -420,7 +420,9 @@ async def test_voice_delete_preserves_provider_and_ownership_guard(tmp_path) -> 
 
 
 @pytest.mark.asyncio
-async def test_external_turn_committed_broadcasts_role_session_once(tmp_path) -> None:
+async def test_external_turn_committed_refreshes_summary_without_its_messages(
+    tmp_path,
+) -> None:
     role_store = RoleStore(tmp_path)
     role_store.create_role(
         role_id="mira",
@@ -488,14 +490,9 @@ async def test_external_turn_committed_broadcasts_role_session_once(tmp_path) ->
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
     assert emitted[0]["payload"]["session"]["key"] == "role:mira"
-    assert [message["role"] for message in emitted[0]["payload"]["messages"]] == [
-        "user",
-        "assistant",
-    ]
-    assert [message["content"] for message in emitted[0]["payload"]["messages"]] == [
-        "hello",
-        "来自 Telegram",
-    ]
+    # The desktop timeline shows only the desktop conversation.
+    assert emitted[0]["payload"]["message"] is None
+    assert emitted[0]["payload"]["messages"] == []
 
     await event_bus.fanout(
         TurnCommitted(
@@ -561,7 +558,7 @@ async def test_external_proactive_media_commit_broadcasts_role_session(
 
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
-    assert emitted[0]["payload"]["message"]["media"] == ["D:\\media\\scene.png"]
+    assert emitted[0]["payload"]["message"] is None
 
     await event_bus.fanout(
         ProactiveMessageCommitted(
@@ -688,9 +685,13 @@ async def test_external_image_push_persists_and_broadcasts_desktop_session(
     )
 
     assert result == "图片已发送"
+    assert [
+        message["media"]
+        for message in session_manager._store.fetch_session_messages("role:mira")
+    ] == [[image]]
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
-    assert emitted[0]["payload"]["message"]["media"] == [image]
+    assert emitted[0]["payload"]["message"] is None
 
 
 @pytest.mark.asyncio
@@ -822,6 +823,97 @@ async def test_session_read_bridge_methods_return_bounded_desktop_projections(
     )
     assert invalid_page.error is not None
     assert invalid_page.error.code == "invalid_request"
+
+
+@pytest.mark.asyncio
+async def test_session_reads_show_only_the_desktop_conversation(tmp_path) -> None:
+    role_store = RoleStore(tmp_path)
+    for role_id in ("mira", "other"):
+        role_store.create_role(role_id=role_id, name=role_id, system_prompt="test")
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.get_or_create("role:mira")
+    for role, content, thread_id, media in [
+        ("user", "旧的天气", "", None),
+        ("user", "桌面天气", "thread:mira:desktop", ["desk.png"]),
+        ("user", "群里天气", "thread:mira:qq:group-1", ["group.png"]),
+        ("assistant", "私聊天气", "thread:mira:qq:user-1", ["private.png"]),
+        ("assistant", "提醒天气", "thread:mira:scheduler:job-1", None),
+        ("assistant", "桌面回复天气", "thread:mira:desktop", None),
+        ("user", "最新群消息", "thread:mira:qq:group-1", None),
+    ]:
+        session.add_message(
+            role,
+            content,
+            media=media,
+            metadata={"thread_id": thread_id} if thread_id else None,
+        )
+    session_manager.save(session)
+    other = session_manager.get_or_create("role:other")
+    other.add_message(
+        "user", "别人的桌面天气", metadata={"thread_id": "thread:other:desktop"}
+    )
+    other.add_message(
+        "user", "别人的群天气", metadata={"thread_id": "thread:other:qq:g"}
+    )
+    session_manager.save(other)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+
+    async def call(method: str, payload: dict):
+        response = await service.handle(
+            {"id": method, "method": method, "payload": payload}, emit_event=Mock()
+        )
+        return response
+
+    desktop_seqs = [0, 1, 4, 5]
+    page = (await call("session.messagesPage", {"role_id": "mira"})).payload["page"]
+    assert [message["seq"] for message in page["messages"]] == desktop_seqs
+    assert page["total_count"] == 4
+    newest = (
+        await call("session.messagesPage", {"role_id": "mira", "limit": 2})
+    ).payload["page"]
+    older = (
+        await call(
+            "session.messagesPage", {"role_id": "mira", "limit": 2, "before_seq": 4}
+        )
+    ).payload["page"]
+    assert [message["seq"] for message in newest["messages"]] == [4, 5]
+    assert newest["has_more"] is True
+    assert [message["seq"] for message in older["messages"]] == [0, 1]
+    assert older["has_more"] is False
+
+    around = await call(
+        "session.messagesAround", {"message_id": "role:mira:4", "context": 1}
+    )
+    assert [message["seq"] for message in around.payload["around"]["messages"]] == [
+        1,
+        4,
+        5,
+    ]
+    channel_target = await call("session.messagesAround", {"message_id": "role:mira:2"})
+    assert channel_target.error is not None
+
+    role_search = await call("session.search", {"role_id": "mira", "query": "天气"})
+    all_search = await call("session.search", {"query": "天气"})
+    assert sorted(hit["seq"] for hit in role_search.payload["results"]) == (
+        desktop_seqs
+    )
+    assert sorted(hit["id"] for hit in all_search.payload["results"]) == sorted(
+        [*(f"role:mira:{seq}" for seq in desktop_seqs), "role:other:0"]
+    )
+    assert all_search.payload["total_count"] == 5
+
+    images = await call("session.imageHistory", {"role_id": "mira"})
+    assert [item["media"] for item in images.payload["messages"]] == [["desk.png"]]
+
+    preview = service.session_presenter.last_message_preview("role:mira")
+    assert preview is not None
+    assert preview["content"] == "桌面回复天气"
 
 
 @pytest.mark.asyncio

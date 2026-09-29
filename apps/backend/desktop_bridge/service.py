@@ -632,6 +632,11 @@ class DesktopBridgeService:
             message = self._session_message_for_event(session, message_id)
             if message is not None:
                 changed_messages = [message]
+        # The desktop timeline shows only the desktop conversation: channel
+        # turns still refresh the summary but carry none of their messages.
+        changed_messages = self.session_presenter.desktop_messages(
+            session.key, changed_messages
+        )
         primary_message = changed_messages[-1] if changed_messages else None
         return {
             "session": self.session_presenter.serialize_summary(session),

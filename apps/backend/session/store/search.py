@@ -13,7 +13,7 @@ from infra.persistence.sqlite_like import (
     like_prefix,
 )
 
-from .common import _MESSAGE_SELECT_COLUMNS
+from .common import _MESSAGE_SELECT_COLUMNS, _thread_filter_sql
 
 
 class _SearchMixin:
@@ -79,6 +79,24 @@ class _SearchMixin:
             ).fetchall()
         return sorted({str(row["thread_id"] or "") for row in rows})
 
+    def thread_ids_by_session(self, session_prefix: str) -> dict[str, list[str]]:
+        """键以 ``session_prefix`` 开头的每个会话里出现过的 thread；"" 代表无 thread。"""
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT DISTINCT session_key, thread_id
+                FROM messages
+                WHERE session_key LIKE ? {LIKE_ESCAPE_CLAUSE}
+                """,
+                (like_prefix(session_prefix),),
+            ).fetchall()
+        threads: dict[str, set[str]] = {}
+        for row in rows:
+            threads.setdefault(str(row["session_key"]), set()).add(
+                str(row["thread_id"] or "")
+            )
+        return {key: sorted(values) for key, values in threads.items()}
+
     def fetch_by_ids(self, ids: list[str]) -> list[dict[str, Any]]:
         if not ids:
             return []
@@ -97,13 +115,22 @@ class _SearchMixin:
         message_id: str,
         *,
         context: int = 5,
+        thread_ids: Collection[str] | None = None,
     ) -> dict[str, Any]:
-        """Fetch a message and nearby persisted messages by its real id."""
+        """Fetch a message and nearby persisted messages by its real id.
+
+        ``thread_ids`` limits the target, its neighbours and the counts to those
+        threads (see ``_thread_filter_sql``); a target outside them is not found.
+        """
         safe_context = max(0, min(int(context), 100))
+        thread_sql, thread_params = (
+            _thread_filter_sql(thread_ids) if thread_ids is not None else ("1", [])
+        )
         with self._lock:
             target = self._conn.execute(
-                f"SELECT {_MESSAGE_SELECT_COLUMNS} FROM messages WHERE id = ?",
-                (message_id,),
+                f"SELECT {_MESSAGE_SELECT_COLUMNS} FROM messages "
+                f"WHERE id = ? AND {thread_sql}",
+                (message_id, *thread_params),
             ).fetchone()
             if target is None:
                 return {
@@ -119,27 +146,27 @@ class _SearchMixin:
                 f"""
                 SELECT {_MESSAGE_SELECT_COLUMNS}
                 FROM messages
-                WHERE session_key = ? AND seq < ?
+                WHERE session_key = ? AND seq < ? AND {thread_sql}
                 ORDER BY seq DESC LIMIT ?
                 """,
-                (session_key, target_seq, safe_context),
+                (session_key, target_seq, *thread_params, safe_context),
             ).fetchall()
             after_rows = self._conn.execute(
                 f"""
                 SELECT {_MESSAGE_SELECT_COLUMNS}
                 FROM messages
-                WHERE session_key = ? AND seq > ?
+                WHERE session_key = ? AND seq > ? AND {thread_sql}
                 ORDER BY seq ASC LIMIT ?
                 """,
-                (session_key, target_seq, safe_context),
+                (session_key, target_seq, *thread_params, safe_context),
             ).fetchall()
             rows = [*reversed(before_rows), target, *after_rows]
             stats = self._conn.execute(
-                """
+                f"""
                 SELECT COUNT(1) AS total_count, MIN(seq) AS oldest_seq, MAX(seq) AS newest_seq
-                FROM messages WHERE session_key = ?
+                FROM messages WHERE session_key = ? AND {thread_sql}
                 """,
-                (session_key,),
+                (session_key, *thread_params),
             ).fetchone()
         messages = [self._row_to_message(row) for row in rows]
         for message in messages:
@@ -179,13 +206,15 @@ class _SearchMixin:
         limit: int = 10,
         offset: int = 0,
         thread_ids: Collection[str] | None = None,
+        session_prefix: str | None = None,
         excluded_session_prefix: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """Searches message text; ``thread_ids`` limits hits to those threads.
 
         An empty string in ``thread_ids`` stands for messages stored without a
-        thread; an empty collection matches nothing. Sessions whose key starts
-        with ``excluded_session_prefix`` are left out.
+        thread; an empty collection matches nothing. Only sessions whose key
+        starts with ``session_prefix`` are searched, and those starting with
+        ``excluded_session_prefix`` are left out.
         """
         limit = max(1, min(int(limit), 100))
         offset = max(0, int(offset))
@@ -195,14 +224,12 @@ class _SearchMixin:
             where_parts.append("m.session_key = ?")
             params.append(session_key)
         if thread_ids is not None:
-            named = sorted({thread_id for thread_id in thread_ids if thread_id})
-            clauses = (
-                [f"m.thread_id IN ({','.join('?' for _ in named)})"] if named else []
-            )
-            if "" in thread_ids:
-                clauses.append("(m.thread_id IS NULL OR m.thread_id = '')")
-            where_parts.append(f"({' OR '.join(clauses)})" if clauses else "0")
-            params.extend(named)
+            thread_sql, thread_params = _thread_filter_sql(thread_ids, "m.thread_id")
+            where_parts.append(thread_sql)
+            params.extend(thread_params)
+        if session_prefix:
+            where_parts.append(f"m.session_key LIKE ? {LIKE_ESCAPE_CLAUSE}")
+            params.append(like_prefix(session_prefix))
         if excluded_session_prefix:
             where_parts.append(f"m.session_key NOT LIKE ? {LIKE_ESCAPE_CLAUSE}")
             params.append(like_prefix(excluded_session_prefix))
@@ -304,14 +331,22 @@ class _SearchMixin:
         limit: int = 20,
         offset: int = 0,
         preview_length: int = 240,
+        thread_ids: Collection[str] | None = None,
+        session_prefix: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
-        """Search messages for desktop navigation without returning heavy fields."""
+        """Search messages for desktop navigation without returning heavy fields.
+
+        ``thread_ids`` and ``session_prefix`` narrow the hits as in
+        ``search_messages``.
+        """
         messages, total = self.search_messages(
             query,
             session_key=session_key,
             role=role,
             limit=limit,
             offset=offset,
+            thread_ids=thread_ids,
+            session_prefix=session_prefix,
         )
         safe_length = max(40, min(int(preview_length), 1000))
         previews: list[dict[str, Any]] = []

@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
+from conversation.context_scope import desktop_view_thread_ids, in_desktop_view
 from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from session.manager import Session
+from session.manager.helpers import ROLE_SESSION_PREFIX, is_role_session_key
+from session.manager.models import message_thread_id
 
 # The chat list shows one line; the renderer strips Markdown from this prefix.
 _PREVIEW_MAX_CHARS = 200
 
 
 class DesktopSessionPresenter:
-    """Builds desktop session payloads from formal thread and runtime state."""
+    """Builds desktop session payloads from formal thread and runtime state.
+
+    A role session also stores the role's channel threads; every read here
+    shows only the desktop conversation (``in_desktop_view``).
+    """
 
     def __init__(
         self,
@@ -62,6 +70,7 @@ class DesktopSessionPresenter:
             session.key,
             before_seq=before_seq,
             limit=limit,
+            thread_ids=self._desktop_thread_ids(session.key),
         )
         page["messages"] = [
             self.serialize_message(message) for message in page["messages"]
@@ -74,10 +83,20 @@ class DesktopSessionPresenter:
         *,
         context: int = 5,
     ) -> dict[str, Any]:
-        """Serializes a message and nearby messages for search navigation."""
-        result = self._session_store().fetch_message_around(
+        """Serializes a message and nearby messages for search navigation.
+
+        A message outside the desktop conversation is not found.
+        """
+        store = self._session_store()
+        target = store.get_message(message_id)
+        result = store.fetch_message_around(
             message_id,
             context=context,
+            thread_ids=(
+                self._desktop_thread_ids(str(target["session_key"]))
+                if target is not None
+                else None
+            ),
         )
         result["messages"] = [
             self.serialize_message(message) for message in result["messages"]
@@ -93,13 +112,32 @@ class DesktopSessionPresenter:
         limit: int = 20,
         offset: int = 0,
     ) -> dict[str, Any]:
-        """Returns lightweight search results suitable for the renderer."""
-        results, total = self._session_store().search_message_previews(
+        """Returns lightweight search results suitable for the renderer.
+
+        Hits are limited to desktop conversations; without ``session_key`` every
+        role session is searched.
+        """
+        store = self._session_store()
+        if session_key:
+            thread_ids = self._desktop_thread_ids(session_key)
+            session_prefix = None
+        else:
+            thread_ids = frozenset(
+                thread_id
+                for key, threads in store.thread_ids_by_session(
+                    ROLE_SESSION_PREFIX
+                ).items()
+                for thread_id in desktop_view_thread_ids(_role_id(key), threads)
+            )
+            session_prefix = ROLE_SESSION_PREFIX
+        results, total = store.search_message_previews(
             query,
             session_key=session_key,
             role=role,
             limit=limit,
             offset=offset,
+            thread_ids=thread_ids,
+            session_prefix=session_prefix,
         )
         safe_limit = max(1, min(int(limit), 100))
         safe_offset = max(0, int(offset))
@@ -116,14 +154,18 @@ class DesktopSessionPresenter:
         """Returns media-only history without expanding the chat message window."""
         return {
             "session_key": session_key,
-            "messages": self._session_store().fetch_image_history(session_key),
+            "messages": self._session_store().fetch_image_history(
+                session_key, thread_ids=self._desktop_thread_ids(session_key)
+            ),
         }
 
     def last_message_preview(self, session_key: str) -> dict[str, Any] | None:
-        """Returns the newest message of a session as a light chat-list preview."""
-        messages = self._session_store().fetch_messages_page(session_key, limit=1)[
-            "messages"
-        ]
+        """Returns the newest desktop message as a light chat-list preview."""
+        messages = self._session_store().fetch_messages_page(
+            session_key,
+            limit=1,
+            thread_ids=self._desktop_thread_ids(session_key),
+        )["messages"]
         if not messages:
             return None
         message = messages[-1]
@@ -133,6 +175,27 @@ class DesktopSessionPresenter:
             "timestamp": str(message.get("timestamp") or ""),
             "has_media": bool(message.get("media")),
         }
+
+    def desktop_messages(
+        self, session_key: str, messages: Iterable[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Keeps the messages the desktop chat shows; other sessions keep all."""
+        if not is_role_session_key(session_key):
+            return list(messages)
+        role_id = _role_id(session_key)
+        return [
+            message
+            for message in messages
+            if in_desktop_view(role_id, message_thread_id(message))
+        ]
+
+    def _desktop_thread_ids(self, session_key: str) -> frozenset[str] | None:
+        """The threads of a role session the desktop chat shows; None elsewhere."""
+        if not is_role_session_key(session_key):
+            return None
+        return desktop_view_thread_ids(
+            _role_id(session_key), self._session_store().session_thread_ids(session_key)
+        )
 
     def _session_store(self):
         manager = getattr(self._conversation_service, "_session_manager", None)
@@ -235,3 +298,7 @@ class DesktopSessionPresenter:
                     }
                 )
         return groups
+
+
+def _role_id(session_key: str) -> str:
+    return session_key.removeprefix(ROLE_SESSION_PREFIX)

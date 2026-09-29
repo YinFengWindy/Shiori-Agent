@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from datetime import datetime
 from typing import Any
 
 from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
 
-from .common import _MESSAGE_SELECT_COLUMNS
+from .common import _MESSAGE_SELECT_COLUMNS, _thread_filter_sql
 from session.media_assets import preserve_media
 
 
@@ -220,12 +220,23 @@ class _MessageMixin:
         *,
         before_seq: int | None = None,
         limit: int = 50,
+        thread_ids: Collection[str] | None = None,
     ) -> dict[str, Any]:
-        """Fetch one desktop message page using a stable sequence cursor."""
+        """Fetch one desktop message page using a stable sequence cursor.
+
+        ``thread_ids`` limits the page and its counts to those threads (see
+        ``_thread_filter_sql``).
+        """
         safe_limit = max(1, min(int(limit), 100))
         clean_before = int(before_seq) if before_seq is not None else None
         where = "session_key = ?"
         params: list[Any] = [session_key]
+        if thread_ids is not None:
+            thread_sql, thread_params = _thread_filter_sql(thread_ids)
+            where += f" AND {thread_sql}"
+            params.extend(thread_params)
+        stats_where = where
+        stats_params = tuple(params)
         if clean_before is not None:
             where += " AND seq < ?"
             params.append(clean_before)
@@ -241,14 +252,14 @@ class _MessageMixin:
                 tuple([*params, safe_limit]),
             ).fetchall()
             stats = self._conn.execute(
-                """
+                f"""
                 SELECT COUNT(1) AS total_count,
                        MIN(seq) AS oldest_seq,
                        MAX(seq) AS newest_seq
                 FROM messages
-                WHERE session_key = ?
+                WHERE {stats_where}
                 """,
-                (session_key,),
+                stats_params,
             ).fetchone()
         messages = [self._row_to_message(row) for row in reversed(rows)]
         total_count = int((stats["total_count"] if stats else 0) or 0)
@@ -277,17 +288,25 @@ class _MessageMixin:
             "next_before_seq": returned_oldest,
         }
 
-    def fetch_image_history(self, session_key: str) -> list[dict[str, Any]]:
-        """Returns the lightweight media projection for every persisted message."""
+    def fetch_image_history(
+        self, session_key: str, *, thread_ids: Collection[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Returns the lightweight media projection for every persisted message.
+
+        ``thread_ids`` limits it to those threads (see ``_thread_filter_sql``).
+        """
+        thread_sql, thread_params = (
+            _thread_filter_sql(thread_ids) if thread_ids is not None else ("1", [])
+        )
         with self._lock:
             rows = self._conn.execute(
-                """
+                f"""
                 SELECT id, seq, ts, media
                 FROM messages
-                WHERE session_key = ? AND media IS NOT NULL
+                WHERE session_key = ? AND media IS NOT NULL AND {thread_sql}
                 ORDER BY seq ASC
                 """,
-                (session_key,),
+                (session_key, *thread_params),
             ).fetchall()
         history: list[dict[str, Any]] = []
         for row in rows:
