@@ -11,7 +11,7 @@ from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.accounts import AccountRegistry, AccountSnapshot, account_serves_channel
 from core.common.message_source import MessageSource
-from core.identity import UserIdentityStore, match_identity
+from core.identity import BoundUserSenders, UserIdentityStore
 from desktop_bridge.session_presenter import MESSAGE_PAGE_SIZE, message_preview
 from session.manager.helpers import role_session_key
 from session.manager.models import message_thread_id
@@ -212,15 +212,15 @@ class DesktopPhoneRequestHandler:
         account, none are. The bindings are read once for all rows.
         """
         session_key = role_session_key(role_id)
-        account = _account_for(self._accounts.list(role_id=role_id), thread)
-        identities = self._identities.list()
+        bound = BoundUserSenders(
+            identities=tuple(self._identities.list()),
+            accounts=tuple(
+                account.record for account in self._accounts.list(role_id=role_id)
+            ),
+        )
 
         def is_user(sender_id: str | None) -> bool:
-            return (
-                account is not None
-                and sender_id is not None
-                and match_identity(identities, account.record, sender_id) is not None
-            )
+            return sender_id is not None and bound.recognises(thread.channel, sender_id)
 
         return [
             phone_message(message, session_key=session_key, is_user=is_user)

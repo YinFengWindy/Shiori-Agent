@@ -16,7 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from core.accounts import AccountRecord
+from core.accounts import AccountRecord, account_serves_channel
 
 IdentityScope = Literal["platform", "account"]
 IDENTITY_SCOPES: tuple[IdentityScope, ...] = ("platform", "account")
@@ -169,3 +169,33 @@ def identities_for_account(
     bindings of its plugin and account-scope bindings of the account itself.
     """
     return [identity for identity in identities if identity.applies_to(record)]
+
+
+@dataclass(frozen=True)
+class BoundUserSenders:
+    """Which senders on a role's channels are the desktop user, per one read.
+
+    ``identities`` are the current bindings and ``accounts`` the role's
+    accounts. A sender on transport ``channel`` is the user when a binding
+    recognises its ID on the role's account carrying that channel; with no
+    such account, nobody there is. Callers checking many senders build this
+    once instead of re-reading the bindings per sender.
+    """
+
+    identities: tuple[UserIdentity, ...]
+    accounts: tuple[AccountRecord, ...]
+
+    def recognises(self, channel: str, sender_id: str) -> bool:
+        """Whether ``sender_id`` on ``channel`` is currently bound to the user."""
+        account = next(
+            (
+                record
+                for record in self.accounts
+                if account_serves_channel(record, channel)
+            ),
+            None,
+        )
+        return (
+            account is not None
+            and match_identity(self.identities, account, sender_id) is not None
+        )

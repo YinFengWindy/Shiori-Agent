@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from bus.event_bus import EventBus
     from agent.provider import LLMProvider
     from core.memory.group_environment import GroupEnvironment
+    from core.roles import RoleStore
 
 logger = logging.getLogger("memory.markdown")
 
@@ -99,6 +100,7 @@ class MarkdownMemoryMaintenance:
         ) = None
         self._after_consolidation: Callable[[object], Awaitable[None]] | None = None
         self._group_environment: GroupEnvironment | None = None
+        self._runtime_roles: RoleStore | None = None
         self._maintenance_queues: dict[str, deque[str]] = {}
         self._maintenance_tasks: dict[str, asyncio.Task[None]] = {}
         self._maintenance_locks: dict[str, asyncio.Lock] = {}
@@ -129,6 +131,7 @@ class MarkdownMemoryMaintenance:
         self._commit_consolidation = request.commit_consolidation
         self._after_consolidation = request.after_consolidation
         self._group_environment = request.group_environment
+        self._runtime_roles = request.runtime_roles
 
     def share_execution(self, previous: MarkdownMemoryMaintenance) -> None:
         """Serializes writes to shared sessions across configuration versions."""
@@ -328,10 +331,11 @@ class MarkdownMemoryMaintenance:
             for message in getattr(request.session, "messages", [])
         )
         expected_cursor = int(getattr(request.session, "last_consolidated", 0))
-        # 整理的提交与群环境层写入都由 bind_lifecycle 接入，未接入时直接失败。
+        # 整理的提交、群环境层写入与身份绑定都由 bind_lifecycle 接入，未接入时直接失败。
         commit = self._commit_consolidation
         group_environment = self._group_environment
-        if commit is None or group_environment is None:
+        runtime_roles = self._runtime_roles
+        if commit is None or group_environment is None or runtime_roles is None:
             raise RuntimeError("memory lifecycle is not bound")
         draft = await self._worker.prepare_consolidation(
             request.session,
@@ -343,6 +347,9 @@ class MarkdownMemoryMaintenance:
             user_threads=self._user_threads_for_session(request.session),
             group_environment=group_environment,
             member_profiles=self._member_profiles,
+            bound_senders=runtime_roles.bound_user_senders(
+                _session_role_id(request.session)
+            ),
         )
         if draft is None:
             if session_key:

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from core.accounts import AccountRegistry
-from core.identity import UserIdentityStore
+from core.identity import BoundUserSenders, UserIdentityStore
 
 from .assets import RoleAssetStore
 from .manifest import RoleManifestRepository
@@ -43,6 +43,19 @@ class RoleStore:
         # but shared through the same runtime store as the account index.
         self.identities = UserIdentityStore(workspace)
         self.accounts.add_deleted_listener(self.identities.forget_account)
+
+    def bound_user_senders(self, role_id: str) -> BoundUserSenders:
+        """The senders on ``role_id``'s channels bound to the user right now.
+
+        Reads the current bindings and the role's accounts once; only this
+        runtime store indexes the accounts.
+        """
+        return BoundUserSenders(
+            identities=tuple(self.identities.list()),
+            accounts=tuple(
+                account.record for account in self.accounts.list(role_id=role_id)
+            ),
+        )
 
     @property
     def lock(self):

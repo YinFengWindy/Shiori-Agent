@@ -3,12 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from core.memory.role_paths import role_memory_dir
 from core.memory.markdown_schema import (
     ensure_memory_documents,
     replace_memory_section,
 )
 
-from .models import RoleRecord, now_iso as _now_iso, normalize_role_id
+from .models import RoleRecord, now_iso as _now_iso
 from .self_seed_state import resolve_self_seed_state, self_fingerprint
 
 
@@ -27,7 +28,7 @@ class RoleMemoryService:
         self._workspace = Path(workspace)
 
     def memory_root(self, role_id: str) -> Path:
-        return self._workspace / "roles" / normalize_role_id(role_id) / "memory"
+        return role_memory_dir(self._workspace, role_id)
 
     def read_documents(self, role_id: str) -> list[dict[str, str]]:
         """Read the five role-owned documents without creating or changing them."""

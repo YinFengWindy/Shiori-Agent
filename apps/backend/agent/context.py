@@ -241,7 +241,7 @@ class ContextBuilder:
                 RecentContextPromptBlock(),
                 RecentActivityPromptBlock(),
                 GroupNotePromptBlock(),
-                MemberProfilesPromptBlock(),
+                MemberProfilesPromptBlock(runtime_roles),
                 SessionContextPromptBlock(),
                 UserIdentitiesPromptBlock(runtime_roles),
                 ActiveSkillsPromptBlock(),

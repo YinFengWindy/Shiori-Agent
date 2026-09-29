@@ -17,6 +17,7 @@ from bus.events_lifecycle import TurnCommitted
 from conversation.service import desktop_thread_id, network_thread_id
 from core.memory.events import ConsolidationCommitted
 from core.memory.member_profiles import MemberKey, MemberProfiles
+from core.roles import RoleStore
 from core.memory.group_environment import (
     SUMMARY_LABEL_KEY,
     SUMMARY_UPDATED_AT_KEY,
@@ -30,6 +31,7 @@ from core.memory.markdown import (
     MemoryLifecycleBindRequest,
 )
 from core.memory.markdown.contracts import ConsolidationSegments, _ConsolidationDraft
+from core.memory.markdown.external_segment import MEMBER_BATCH_SIZE
 from core.memory.markdown.formatting import (
     _build_consolidation_source_ref,
     _select_consolidation_window,
@@ -61,6 +63,7 @@ def _setup(tmp_path: Path):
             get_session=manager.get_or_create,
             commit_consolidation=manager.commit_consolidation,
             group_environment=GroupEnvironment(tmp_path, manager.conversation_store),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
     return manager, session, maintenance, event_bus
@@ -444,13 +447,17 @@ class _RecordingProvider:
         self.event_prompts: list[str] = []
         self.recent_context_prompts: list[str] = []
         self.environment_prompts: list[str] = []
+        self.environment_max_tokens: list[int] = []
         # 群环境整理按会话称呼给出回复；没给的会话回空对象（不更新）。
         self.environment_replies = environment_replies or {}
 
-    async def chat(self, *, messages: list[dict[str, str]], **_kwargs: Any):
+    async def chat(
+        self, *, messages: list[dict[str, str]], max_tokens: int, **_kwargs: Any
+    ):
         prompt = messages[-1]["content"]
         if prompt.startswith("群环境整理"):
             self.environment_prompts.append(prompt)
+            self.environment_max_tokens.append(max_tokens)
             reply = next(
                 (
                     content
@@ -495,6 +502,7 @@ def _recording_maintenance(
             get_session=manager.get_or_create,
             commit_consolidation=manager.commit_consolidation,
             group_environment=GroupEnvironment(tmp_path, manager.conversation_store),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
     return provider, event_bus, events, maintenance
@@ -811,3 +819,39 @@ async def test_external_segment_updates_member_profiles_but_never_the_users(
     assert telegram_member is not None and telegram_member.nicknames == ("Ming",)
     assert members.read("mira", MemberKey("qq", "902")) is None
     assert len(members.list("mira")) == 2
+
+
+@pytest.mark.asyncio
+async def test_many_members_are_consolidated_in_bounded_batches(tmp_path: Path):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    group = network_thread_id("mira", "qq", "g1")
+    for index in range(MEMBER_BATCH_SIZE + 2):
+        _member_message(
+            session,
+            "hi",
+            group,
+            channel="qq",
+            sender_id=str(index),
+            sender_name=f"人{index}",
+            group_name="猫猫群",
+        )
+    manager.save(session)
+    provider, event_bus, _events, maintenance = _recording_maintenance(
+        tmp_path, manager
+    )
+    try:
+        result = await maintenance.consolidate(
+            ConsolidateRequest(session=session, force=True)
+        )
+    finally:
+        await event_bus.aclose()
+
+    assert result.trace["mode"] == "markdown"
+    # 第一批带群环境，第二批只整理剩下的成员；每次输出上限不随成员数无限增长。
+    first, second = provider.environment_prompts
+    assert "现有群笔记" in first and "现有群笔记" not in second
+    assert "### 人9（9）" in second and "### 人9（9）" not in first
+    assert max(provider.environment_max_tokens) <= 2048 + 400 * MEMBER_BATCH_SIZE
+    assert len(MemberProfiles(tmp_path).list("mira")) == MEMBER_BATCH_SIZE + 2

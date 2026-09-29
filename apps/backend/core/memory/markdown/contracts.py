@@ -11,6 +11,7 @@ from session.manager.consolidation import ConsolidationCommitRequest
 if TYPE_CHECKING:
     from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
     from core.memory.member_profiles import MemberProfileUpdate
+    from core.roles import RoleStore
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,9 @@ class MemoryLifecycleBindRequest:
     after_consolidation: Callable[[object], Awaitable[None]] | None = None
     # 群环境层（#497）：整理外部段的产出写到这里；未绑定时整理直接失败。
     group_environment: "GroupEnvironment | None" = None
+    # 运行时共享的角色存储（#498）：按此刻身份绑定认出用户本人，不为其建成员档案；
+    # 未绑定时整理直接失败。
+    runtime_roles: "RoleStore | None" = None
 
 
 @runtime_checkable
@@ -91,6 +95,14 @@ class ConsolidationSegments:
 
     user_messages: list[dict]
     external_messages: list[dict]
+
+
+@dataclass(frozen=True)
+class ExternalLayerUpdates:
+    """外部段一次整理的产出：各会话的群环境层更新（#497）与成员档案更新（#498）。"""
+
+    group_environment: tuple["GroupEnvironmentUpdate", ...] = ()
+    member_profiles: tuple["MemberProfileUpdate", ...] = ()
 
 
 @dataclass(frozen=True)

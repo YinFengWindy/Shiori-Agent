@@ -37,6 +37,7 @@ from core.memory.markdown import (
     resolve_markdown_store,
 )
 from core.memory.plugin import MemoryPluginRuntime
+from core.roles import RoleStore
 from memory2.store import MemoryStore2
 from session.manager import Session, SessionManager
 
@@ -502,6 +503,7 @@ async def test_markdown_maintenance_records_background_consolidation_failure(
             get_session=lambda _key: session,
             commit_consolidation=AsyncMock(),
             group_environment=cast(Any, object()),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
 
@@ -544,6 +546,7 @@ async def test_markdown_maintenance_background_request_does_not_wait(tmp_path: P
             get_session=lambda _key: session,
             commit_consolidation=AsyncMock(),
             group_environment=cast(Any, object()),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
 
@@ -579,6 +582,7 @@ async def test_default_memory_engine_refreshes_recent_context_from_lifecycle_rol
             get_session=lambda _key: session,
             commit_consolidation=commit_consolidation,
             group_environment=cast(Any, object()),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
 
@@ -628,6 +632,7 @@ async def test_default_memory_engine_refreshes_role_recent_context_in_role_memor
             get_session=lambda _key: session,
             commit_consolidation=commit_consolidation,
             group_environment=cast(Any, object()),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
 
@@ -686,6 +691,7 @@ async def test_default_memory_engine_consolidates_ready_session_from_lifecycle(
             get_session=lambda _key: session,
             commit_consolidation=commit_consolidation,
             group_environment=cast(Any, object()),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
 
@@ -743,6 +749,7 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(
             get_session=manager.get_or_create,
             commit_consolidation=manager.commit_consolidation,
             group_environment=cast(Any, object()),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
     draft = _ConsolidationDraft(
@@ -794,6 +801,7 @@ async def test_markdown_consolidation_failure_trace_does_not_advance_cursor(
             get_session=lambda _key: session,
             commit_consolidation=AsyncMock(),
             group_environment=cast(Any, object()),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
     maintenance._worker.prepare_consolidation = AsyncMock(
@@ -861,6 +869,7 @@ async def test_markdown_consolidation_runs_post_consolidation_hook(tmp_path: Pat
             commit_consolidation=manager.commit_consolidation,
             after_consolidation=after_consolidation,
             group_environment=cast(Any, object()),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
 
@@ -920,6 +929,7 @@ async def test_markdown_consolidation_ignores_post_consolidation_hook_failure(
             commit_consolidation=manager.commit_consolidation,
             after_consolidation=_fail,
             group_environment=cast(Any, object()),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
 
@@ -966,6 +976,7 @@ async def test_default_memory_engine_serializes_lifecycle_maintenance(
             get_session=lambda _key: session,
             commit_consolidation=AsyncMock(),
             group_environment=cast(Any, object()),
+            runtime_roles=RoleStore(tmp_path),
         )
     )
 

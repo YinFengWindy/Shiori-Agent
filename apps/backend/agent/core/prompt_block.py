@@ -376,11 +376,18 @@ class GroupNotePromptBlock:
 
 
 class MemberProfilesPromptBlock:
-    """外部上下文回合按分层注入成员档案（#498）；用户上下文回合不注入。"""
+    """外部上下文回合按分层注入成员档案（#498）；用户上下文回合不注入。
+
+    ``roles`` 是运行时共享的角色存储：只有它索引角色的账号，据此按此刻的身份绑定
+    认出用户本人，不注入其档案。
+    """
 
     priority = 48
     label = "member_profiles"
     is_static = False
+
+    def __init__(self, roles: "RoleStore") -> None:
+        self._roles = roles
 
     def render(
         self, ctx: TurnContext, cached_signature: str | None = None
@@ -396,6 +403,7 @@ class MemberProfilesPromptBlock:
                 ctx.role_id,
                 trigger=ctx.message_source,
                 window=ctx.window_sources,
+                bound=self._roles.bound_user_senders(ctx.role_id),
             )
             or None
         )
