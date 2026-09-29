@@ -28,7 +28,6 @@ from agent.tool_runtime import (
     tool_call_batch_snapshot,
 )
 from agent.tools.base import normalize_tool_result
-from agent.tools.external_access import EXTERNAL_TOOL_DENIED
 from agent.tools.registry import ToolRegistry
 from agent.tools.tool_search import tool_search_call_context
 from agent.tools.turn_scope import tool_turn
@@ -221,7 +220,8 @@ class _PassiveReasoningLoopMixin:
                     list(visible_order) if visible_order is not None else None,
                     disabled=disabled,
                     external_restricted=external_restricted,
-                )
+                ),
+                external_only=external_restricted,
             )
             threshold = int(getattr(self, "_memory_input_token_threshold", 0))
             if (
@@ -277,11 +277,14 @@ class _PassiveReasoningLoopMixin:
                 iter_calls: list[dict[str, Any]] = []
                 for tool_batch_index, tool_call in enumerate(response.tool_calls):
                     # 6.0 受限工具直接回填拦截原因，独立于可见/解锁状态：
-                    # 外部上下文受限回合按允许集合拦，后台任务按 disabled 拦。
-                    blocked_result: str | None = None
-                    if _external_denied(tool_call.name):
-                        blocked_result = EXTERNAL_TOOL_DENIED
-                    elif tool_call.name in disabled:
+                    # 外部上下文受限回合按允许集合与参数限制拦，后台任务按
+                    # disabled 拦。
+                    blocked_result = (
+                        self._tools.external_denial(tool_call.name, tool_call.arguments)
+                        if external_restricted
+                        else None
+                    )
+                    if blocked_result is None and tool_call.name in disabled:
                         blocked_result = (
                             f"工具 '{tool_call.name}' 在当前后台任务中不可用。"
                             "请直接返回要发送的最终内容，不要主动推送。"

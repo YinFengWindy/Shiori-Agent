@@ -54,7 +54,7 @@ def _tools():
     return SimpleNamespace(
         get_always_on_names=lambda: {"always"},
         has_tool=lambda name: name != "uninstalled",
-        get_schemas=lambda names=None: [],
+        get_schemas=lambda names=None, external_only=False: [],
         get_registered_order=lambda names=None: sorted(names or ()),
         get_deferred_names=lambda visible=None, external_only=False: {
             "builtin": [],

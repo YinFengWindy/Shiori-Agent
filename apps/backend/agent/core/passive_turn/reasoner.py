@@ -426,7 +426,8 @@ class DefaultReasoner(
                         ),
                         disabled=disabled_tools,
                         external_restricted=external_restricted,
-                    )
+                    ),
+                    external_only=external_restricted,
                 )
                 request_tokens = passive_support.estimate_messages_tokens(
                     initial_messages, schemas

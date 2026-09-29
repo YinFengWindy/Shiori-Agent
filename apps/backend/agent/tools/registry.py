@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, TypedDict, cast
 
 from agent.tools.base import Tool, ToolResult
+from agent.tools.external_access import EXTERNAL_TOOL_DENIED, ExternalArgumentLimit
 from agent.tools.search_backend import KeywordSearchBackend, SearchBackend
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,8 @@ class ToolMeta:
     # 注册方显式声明：外部上下文里非用户本人发起的回合也能使用此工具（#489）。
     # 未声明即不可用，所以以后新增的工具默认被外部回合排除。
     external_allowed: bool = False
+    # 可选：外部可用工具在受限回合里的参数限制（#522），None 表示不限参数。
+    external_limit: ExternalArgumentLimit | None = None
 
 
 # ── ToolDocument ──────────────────────────────────────────────────────────────
@@ -155,20 +158,26 @@ class ToolRegistry:
         source_type: str = "builtin",
         source_name: str = "",
         external_allowed: bool = False,
+        external_limit: ExternalArgumentLimit | None = None,
     ) -> None:
         """注册工具。
 
         external_allowed: 声明外部上下文（群聊、陌生私聊）中非用户本人发起的回合
         也可使用此工具；未声明的工具在这类回合里不可用。MCP 动态工具不允许声明。
+        external_limit: 外部可用工具在这类回合里只接受的参数取值；必须同时声明
+        ``external_allowed``。
         """
         if external_allowed and source_type == "mcp":
             raise ValueError(f"MCP 工具不能声明外部上下文可用: {tool.name}")
+        if external_limit is not None and not external_allowed:
+            raise ValueError(f"参数限制只能用于外部上下文可用的工具: {tool.name}")
         self._tools[tool.name] = tool
         meta = ToolMeta(
             risk=risk,
             always_on=always_on,
             search_hint=search_hint,
             external_allowed=external_allowed,
+            external_limit=external_limit,
         )
         self._metadata[tool.name] = meta
         doc = ToolDocument.from_tool_and_meta(
@@ -198,27 +207,31 @@ class ToolRegistry:
     def get_schemas(
         self,
         names: AbstractSet[str] | Iterable[str] | None = None,
+        *,
+        external_only: bool = False,
     ) -> list[dict[str, Any]]:
         """返回 OpenAI function calling 格式的工具定义列表。
 
         names 为 None 时返回全量；传 set 时按注册顺序过滤；传 list/tuple 时按调用方顺序返回。
+        external_only: 外部上下文受限回合，带参数限制的工具按限制收窄 schema；
+        只改写 schema，不负责过滤工具名（见 ``turn_tool_names``）。
         """
         if names is None:
-            return [
-                _with_progress_description(t.to_schema(), t)
-                for t in self._tools.values()
+            tools = list(self._tools.values())
+        elif not isinstance(names, AbstractSet):
+            tools = [
+                tool for name in names if (tool := self._tools.get(name)) is not None
             ]
-        if not isinstance(names, AbstractSet):
-            return [
-                _with_progress_description(tool.to_schema(), tool)
-                for name in names
-                if (tool := self._tools.get(name)) is not None
-            ]
-        return [
-            _with_progress_description(t.to_schema(), t)
-            for name, t in self._tools.items()
-            if name in names
-        ]
+        else:
+            tools = [t for name, t in self._tools.items() if name in names]
+        return [self._model_schema(tool, external_only) for tool in tools]
+
+    def _model_schema(self, tool: Tool, external_only: bool) -> dict[str, Any]:
+        schema = _with_progress_description(tool.to_schema(), tool)
+        limit = self._metadata[tool.name].external_limit
+        if external_only and limit is not None:
+            limit.restrict_schema(schema)
+        return schema
 
     def get_registered_order(self, names: AbstractSet[str] | None = None) -> list[str]:
         if names is None:
@@ -236,6 +249,20 @@ class ToolRegistry:
         """
         meta = self._metadata.get(name)
         return meta is not None and meta.external_allowed
+
+    def external_denial(self, name: str, arguments: dict[str, Any]) -> str | None:
+        """外部上下文受限回合里这次调用的拦截原因；可以执行时返回 None。
+
+        未声明外部可用（或未注册）的工具一律拦截；带参数限制的工具按模型给出的
+        参数判断。每次都查当前注册表。
+        """
+        meta = self._metadata.get(name)
+        if meta is None or not meta.external_allowed:
+            return EXTERNAL_TOOL_DENIED
+        limit = meta.external_limit
+        if limit is not None and not limit.allows(arguments):
+            return limit.denied
+        return None
 
     def get_documents(self) -> list[ToolDocument]:
         """返回所有已注册工具的索引文档列表。"""
