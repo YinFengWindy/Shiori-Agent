@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { PluginNavPageComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
-import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
-import type { RoleRecord } from "../../../apps/desktop/renderer/src/shared/types";
+import { usePluginHostServices, type PluginNavPageComponentProps, type RoleRecord } from "@shiori/plugin-sdk";
 import { createStoryBridgeClient } from "./storyBridgeClient";
 import { useStoryController } from "./useStoryController";
 import { useStoryWorkspacePresentation } from "./useStoryWorkspacePresentation";

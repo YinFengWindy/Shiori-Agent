@@ -1,4 +1,4 @@
-import type { RoleRecord } from "../../../apps/desktop/renderer/src/shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
 import type { StoryDetails } from "./types";
 
 type StoryRoleSnapshot = StoryDetails["roleSnapshot"];

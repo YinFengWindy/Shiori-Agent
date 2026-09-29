@@ -1,17 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
-import { PluginHostServicesProvider } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
-import { pluginHostServicesFor, type PluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import { PluginHostServicesProvider, type PluginHostServices } from "@shiori/plugin-sdk";
+import { createFakeHostServices, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { useStoryGalleryRefresh } from "./useStoryGalleryRefresh";
 
 test("Story gallery refresh follows plugin events and releases its subscription when closed", async () => {
   type Listener = Parameters<PluginHostServices["onEvent"]>[0];
   const listeners = new Set<Listener>();
   const host: PluginHostServices = {
-    ...pluginHostServicesFor("story"),
-    listRoles: async () => [], pickImages: async () => [], pickFiles: async () => [],
+    ...createFakeHostServices().host,
     onEvent: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
   let refreshes = 0;

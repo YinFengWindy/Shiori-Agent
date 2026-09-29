@@ -1,4 +1,4 @@
-import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
+import { usePluginHostServices } from "@shiori/plugin-sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type StoryBridgeClient } from "./storyBridgeClient";
 import { replaceStorySummary } from "./selectors";

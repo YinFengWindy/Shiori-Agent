@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowLeft, ArrowRight, Check, CircleNotch, Sparkle } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
-import { cx } from "../../../apps/desktop/renderer/src/shared/styles";
+import { cx } from "@shiori/plugin-sdk";
 import type { StoryCreationInput, StoryRoleChoice } from "./types";
 import { createInitialStoryCreationInput, creationSteps, isCreationStepComplete, type CreationStep } from "./storyCreationWizard";
 import { StoryCreateStep } from "./StoryCreateStep";

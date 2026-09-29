@@ -1,9 +1,9 @@
 import { ArrowClockwise, ArrowLeft, ImageBroken, X } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useState } from "react";
+import { usePluginHostServices } from "@shiori/plugin-sdk";
 import type { StoryCgGallery, StoryResource } from "./types";
 import { StorySurface } from "./StorySurface";
-import { toFileUrl } from "../../../apps/desktop/renderer/src/shared/format";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 import { getStoryResourceErrorMessage } from "./selectors";
 
@@ -27,6 +27,7 @@ export function StoryCgGallerySurface({ stories, background, sharedBackdrop = fa
   const [selectedStoryId, setSelectedStoryId] = useState(stories[0]?.storyId ?? "");
   const [preview, setPreview] = useState<StoryResource | null>(null);
   const reducedMotion = useReducedMotion() ?? false;
+  const host = usePluginHostServices();
   const selectedStory = useMemo(
     () => stories.find((story) => story.storyId === selectedStoryId) ?? stories[0] ?? null,
     [selectedStoryId, stories],
@@ -67,7 +68,7 @@ export function StoryCgGallerySurface({ stories, background, sharedBackdrop = fa
                   const resourceErrorMessage = resource.status === "failed" ? getStoryResourceErrorMessage(resource.errorCode) : "";
                   return <figure key={resource.id} className="m-0 overflow-hidden border border-[#DDA9BE]/55 bg-[#FFF8FC]/55">
                     <button className="group relative aspect-video w-full overflow-hidden bg-[#5E2841]/10 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#E5A9C0]" type="button" disabled={busy || !canPreview} onClick={() => canPreview ? setPreview(resource) : undefined}>
-                      {canPreview ? <img className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" src={toFileUrl(resource.path || "")} alt={`${selectedStory.title} ${resourceLabel(resource, index)}`} /> : resource.status === "generating" ? <span className="grid h-full place-items-center gap-2 text-sm text-[#8B6676]">正在生成</span> : <span className="grid h-full place-items-center text-[#A23E69]" data-testid="story-cg-resource-failed" role="img" aria-label={resourceErrorMessage} title={resource.errorCode || resourceErrorMessage}><ImageBroken className="h-8 w-8" weight="duotone" /></span>}
+                      {canPreview ? <img className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" src={host.assets.url(resource.path || "")} alt={`${selectedStory.title} ${resourceLabel(resource, index)}`} /> : resource.status === "generating" ? <span className="grid h-full place-items-center gap-2 text-sm text-[#8B6676]">正在生成</span> : <span className="grid h-full place-items-center text-[#A23E69]" data-testid="story-cg-resource-failed" role="img" aria-label={resourceErrorMessage} title={resource.errorCode || resourceErrorMessage}><ImageBroken className="h-8 w-8" weight="duotone" /></span>}
                       {resource.status === "generating" ? <span className="absolute inset-x-0 bottom-0 bg-[#4A2738]/75 px-3 py-2 text-xs text-white">正在生成</span> : null}
                     </button>
                     <figcaption className="flex items-center justify-between gap-3 border-t border-[#DDA9BE]/45 px-3 py-2 text-xs text-[#765667]">
@@ -98,7 +99,7 @@ export function StoryCgGallerySurface({ stories, background, sharedBackdrop = fa
           <button className="absolute right-5 top-5 grid h-10 w-10 place-items-center rounded-md text-white/80 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70" type="button" aria-label="关闭 CG 预览" title="关闭 CG 预览" onClick={() => setPreview(null)}><X className="h-6 w-6" weight="bold" /></button>
           <motion.img
             className="max-h-full max-w-full object-contain shadow-[0_18px_70px_rgba(0,0,0,0.5)]"
-            src={toFileUrl(preview.path || "")}
+            src={host.assets.url(preview.path || "")}
             alt="CG 预览"
             initial={{ opacity: 0, transform: reducedMotion ? "scale(1)" : "scale(0.97)" }}
             animate={{ opacity: 1, transform: "scale(1)" }}

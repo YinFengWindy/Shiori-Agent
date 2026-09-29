@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { cx } from "../../../apps/desktop/renderer/src/shared/styles";
+import { cx } from "@shiori/plugin-sdk";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
