@@ -182,6 +182,7 @@ class TurnOrchestrator:
                         chat_id=chat_id,
                         assistant_response=content,
                         tools_used=("message_push",),
+                        message_id=str(message["id"]),
                     )
                 )
         else:

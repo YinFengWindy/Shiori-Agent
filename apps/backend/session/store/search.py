@@ -230,10 +230,9 @@ class _SearchMixin:
         if session_key:
             where_parts.append("m.session_key = ?")
             params.append(session_key)
-        if thread_ids is not None:
-            thread_sql, thread_params = thread_filter_sql(thread_ids, "m.thread_id")
-            where_parts.append(thread_sql)
-            params.extend(thread_params)
+        thread_sql, thread_params = thread_filter_sql(thread_ids, "m.thread_id")
+        where_parts.append(thread_sql)
+        params.extend(thread_params)
         if session_prefix:
             where_parts.append(f"m.session_key LIKE ? {LIKE_ESCAPE_CLAUSE}")
             params.append(like_prefix(session_prefix))

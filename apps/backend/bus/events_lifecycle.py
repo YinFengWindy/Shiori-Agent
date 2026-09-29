@@ -125,7 +125,11 @@ class RoleDeleted:
 
 @dataclass(frozen=True)
 class ProactiveMessageCommitted:
-    """Signals that a proactive role message is available in its shared session."""
+    """Signals that a proactive role message is available in its shared session.
+
+    ``message_id`` names the committed message, so listeners publish exactly it
+    instead of guessing from the session tail.
+    """
 
     session_key: str
     channel: str
@@ -133,6 +137,7 @@ class ProactiveMessageCommitted:
     chat_id: str = ""
     assistant_response: str = ""
     tools_used: tuple[str, ...] = ()
+    message_id: str = ""
 
 
 SceneTransition = Literal["started", "same", "changed", "closed", "none"]

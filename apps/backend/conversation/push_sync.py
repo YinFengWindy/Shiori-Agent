@@ -64,12 +64,14 @@ class ExternalImageSyncService:
             sender_role="assistant",
             metadata=metadata,
         )
-        await self._sessions.append_messages(session, session.messages[-1:])
+        pushed = session.messages[-1]
+        await self._sessions.append_messages(session, [pushed])
         await self._event_bus.fanout(
             ProactiveMessageCommitted(
                 session_key=event.session_key,
                 channel=event.channel,
                 role_id=event.role_id,
+                message_id=str(pushed["id"]),
             )
         )
         return event

@@ -72,6 +72,7 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
                 assistant_response="hello",
                 tools_used=[],
                 thinking=None,
+                extra={"committed_message_ids": [session.messages[-1]["id"]]},
             )
         )
         return "hello"

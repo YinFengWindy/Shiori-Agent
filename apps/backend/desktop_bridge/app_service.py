@@ -54,8 +54,13 @@ class DesktopAppService:
         media: list[str] | None = None,
         delivery_key: str = "",
         already_persisted: bool = False,
-    ) -> Session:
-        """Validates pushes and persists only deliveries not owned by a turn commit."""
+    ) -> tuple[Session, dict[str, Any]]:
+        """Validates pushes and persists only deliveries not owned by a turn commit.
+
+        Returns the session and the exact pushed message (the stored one for a
+        turn-owned or repeated delivery), so callers never guess it from the
+        session tail, where a channel message may have landed meanwhile.
+        """
         normalized_message = str(message or "")
         normalized_media = [item for item in (media or []) if str(item).strip()]
         if not normalized_message.strip() and not normalized_media:
@@ -66,16 +71,20 @@ class DesktopAppService:
         if already_persisted:
             # A turn commit owns this message. A missing commit is an error, not
             # permission for the transport to become a second persistence owner.
-            if not delivery_key or not self._has_delivery(session, delivery_key):
+            delivered = (
+                self._delivery_message(session, delivery_key) if delivery_key else None
+            )
+            if delivered is None:
                 raise ValueError("Desktop push references an uncommitted delivery")
-            return await self._finish_desktop_push(session, role_id=role_id)
-        if self._is_existing_desktop_push(
+            return await self._finish_desktop_push(session, role_id=role_id), delivered
+        existing = self._existing_desktop_push(
             session,
             message=normalized_message,
             media=normalized_media,
             delivery_key=delivery_key,
-        ):
-            return session
+        )
+        if existing is not None:
+            return session, existing
         original_length = len(session.messages)
         original_updated_at = session.updated_at
         draft = self.build_desktop_push_message(
@@ -85,13 +94,14 @@ class DesktopAppService:
             delivery_key=delivery_key,
         )
         session.add_message(**draft)
+        pushed = session.messages[original_length]
         try:
             await self.session_manager.save_async(session)
         except Exception:
             del session.messages[original_length:]
             session.updated_at = original_updated_at
             raise
-        return await self._finish_desktop_push(session, role_id=role_id)
+        return await self._finish_desktop_push(session, role_id=role_id), pushed
 
     def validate_desktop_push_target(self, chat_id: str) -> None:
         """Accept a turn-owned desktop delivery without exposing pending messages."""
@@ -247,33 +257,37 @@ class DesktopAppService:
         return session
 
     @staticmethod
-    def _has_delivery(session: Session, delivery_key: str) -> bool:
-        return any(
-            item.get("role") == "assistant"
-            and (item.get("metadata") or {}).get("delivery_key") == delivery_key
-            for item in session.messages
+    def _delivery_message(session: Session, delivery_key: str) -> dict[str, Any] | None:
+        return next(
+            (
+                item
+                for item in session.messages
+                if item.get("role") == "assistant"
+                and (item.get("metadata") or {}).get("delivery_key") == delivery_key
+            ),
+            None,
         )
 
     @staticmethod
-    def _is_existing_desktop_push(
+    def _existing_desktop_push(
         session: Session,
         *,
         message: str,
         media: list[str],
         delivery_key: str = "",
-    ) -> bool:
+    ) -> dict[str, Any] | None:
         if delivery_key:
-            return DesktopAppService._has_delivery(session, delivery_key)
+            return DesktopAppService._delivery_message(session, delivery_key)
         if not session.messages:
-            return False
+            return None
         last_message = session.messages[-1]
         if last_message.get("role") != "assistant" or not last_message.get("proactive"):
-            return False
+            return None
         if str(last_message.get("content") or "") != message:
-            return False
+            return None
         last_media = [
             str(item).strip()
             for item in list(last_message.get("media") or [])
             if str(item).strip()
         ]
-        return last_media == media
+        return last_message if last_media == media else None
