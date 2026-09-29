@@ -16,7 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from core.accounts import AccountRecord, account_serves_channel
+from core.accounts import AccountRecord, account_for_channel
 
 IdentityScope = Literal["platform", "account"]
 IDENTITY_SCOPES: tuple[IdentityScope, ...] = ("platform", "account")
@@ -187,14 +187,7 @@ class BoundUserSenders:
 
     def recognises(self, channel: str, sender_id: str) -> bool:
         """Whether ``sender_id`` on ``channel`` is currently bound to the user."""
-        account = next(
-            (
-                record
-                for record in self.accounts
-                if account_serves_channel(record, channel)
-            ),
-            None,
-        )
+        account = account_for_channel(self.accounts, channel)
         return (
             account is not None
             and match_identity(self.identities, account, sender_id) is not None

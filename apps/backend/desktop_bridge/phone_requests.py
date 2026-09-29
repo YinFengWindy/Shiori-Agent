@@ -9,7 +9,7 @@ from typing import Any, Protocol
 from conversation.context_scope import user_context_threads
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService
-from core.accounts import AccountRegistry, AccountSnapshot, account_serves_channel
+from core.accounts import AccountRegistry, account_for_channel
 from core.common.message_source import MessageSource
 from core.identity import BoundUserSenders, UserIdentityStore
 from desktop_bridge.session_presenter import MESSAGE_PAGE_SIZE, message_preview
@@ -40,20 +40,6 @@ class ThreadMessages(Protocol):
 def _message_time(message: dict[str, Any]) -> datetime:
     """When a stored message was sent; a naive legacy time is local time."""
     return datetime.fromisoformat(str(message["timestamp"])).astimezone()
-
-
-def _account_for(
-    accounts: list[AccountSnapshot], thread: ThreadRecord
-) -> AccountSnapshot | None:
-    """The role's account whose plugin carries ``thread``'s channel, if any."""
-    return next(
-        (
-            account
-            for account in accounts
-            if account_serves_channel(account.record, thread.channel)
-        ),
-        None,
-    )
 
 
 def _required(payload: dict[str, Any], key: str) -> str:
@@ -263,13 +249,15 @@ class DesktopPhoneRequestHandler:
             source = MessageSource.from_metadata(
                 message.get("metadata") or {}, session_key=session_key
             )
-            account = _account_for(accounts, thread)
+            account = account_for_channel(
+                (item.record for item in accounts), thread.channel
+            )
             rows.append(
                 (
                     _message_time(message),
                     {
                         "thread_id": thread.id,
-                        "account_id": account.record.id if account else None,
+                        "account_id": account.id if account else None,
                         "channel": thread.channel,
                         "chat_type": chat_types[thread.id],
                         "display_name": contact.display_name,

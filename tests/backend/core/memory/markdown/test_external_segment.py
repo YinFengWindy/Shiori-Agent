@@ -118,3 +118,41 @@ def test_members_skip_the_bound_user_and_take_the_latest_nickname_across_threads
         [member] = thread.members
         assert member.key == MemberKey("qq", "555")
         assert member.nicknames == ("阿明", "明哥", "小明")
+
+
+def test_a_sender_bound_after_the_message_is_rendered_as_the_user() -> None:
+    private = network_thread_id("mira", "qq", "902")
+    # 收到时还没绑定，消息没有标记；此刻的身份绑定认出他是用户本人。
+    message = {
+        "role": "user",
+        "content": "我明天去面试",
+        "timestamp": "2026-09-30T10:00:00",
+        "thread_id": private,
+        "metadata": {
+            "message_source": {
+                "channel": "qq",
+                "chat_type": "private",
+                "sender_id": "902",
+                "sender_name": "小风",
+            }
+        },
+    }
+    window = _ConsolidationWindow(
+        old_messages=[message], keep_count=0, consolidate_up_to=1
+    )
+    bound = BoundUserSenders(
+        identities=(
+            UserIdentity("i1", "qq", "902", "platform", "", "2026-09-30T00:00:00"),
+        ),
+        accounts=(AccountRecord("qq:1", "qq", "qq", "1", "cfg", role_id="mira"),),
+    )
+
+    [thread] = group_external_threads(
+        window,
+        ConsolidationSegments(user_messages=[], external_messages=[message]),
+        bound,
+    )
+
+    assert thread.label == "一段私聊"
+    assert "你的用户（小风）: 我明天去面试" in format_external_thread(thread)
+    assert "小风（902）" not in format_external_thread(thread)

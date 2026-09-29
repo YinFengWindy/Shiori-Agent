@@ -31,6 +31,7 @@ from core.memory.member_profiles import (
     call_name,
     member_of,
     merge_nicknames,
+    sent_by_user,
 )
 from session.manager.models import message_thread_id
 
@@ -68,12 +69,14 @@ class ExternalThread:
     """整理窗口里一个外部会话的消息（含用户本人在该会话的发言），保持原顺序。
 
     ``members`` 是该会话外部段里发过言的群友与陌生人（不含用户本人与角色），按
-    在该会话首次发言先后排列。
+    在该会话首次发言先后排列。``bound`` 是分组时此刻的身份绑定，渲染发言者时
+    与成员判定用同一规则认出用户本人。
     """
 
     thread_id: str
     label: str
     messages: list[dict]
+    bound: BoundUserSenders
     members: tuple[MemberSighting, ...] = ()
 
 
@@ -105,8 +108,9 @@ def group_external_threads(
         threads.append(
             ExternalThread(
                 thread_id=thread_id,
-                label=_thread_label(messages),
+                label=_thread_label(messages, bound),
                 messages=messages,
+                bound=bound,
                 members=tuple(
                     MemberSighting(key=key, nicknames=nicknames[key])
                     for key in _member_keys(
@@ -165,7 +169,7 @@ def member_batches(thread: ExternalThread) -> list[tuple[MemberSighting, ...]]:
     ]
 
 
-def _thread_label(messages: list[dict]) -> str:
+def _thread_label(messages: list[dict], bound: BoundUserSenders) -> str:
     """会话的称呼：群聊用群名，陌生私聊用对方昵称；都不知道时用会话类别。"""
     sources = [stored_message_source(message) for message in messages]
     group_names = [source.group_name for source in sources if source.group_name]
@@ -176,19 +180,19 @@ def _thread_label(messages: list[dict]) -> str:
     peer_names = [
         source.sender_name
         for source in sources
-        if source.sender_name and not source.sender_is_user
+        if source.sender_name and not sent_by_user(source, bound)
     ]
     if peer_names:
         return f"与「{peer_names[-1]}」的私聊"
     return "一段私聊"
 
 
-def _speaker(message: dict) -> str:
+def _speaker(message: dict, bound: BoundUserSenders) -> str:
     """第三人称的发言者标注：角色是「我」，用户本人是「你的用户」，其余用昵称。"""
     if str(message.get("role") or "").lower() == "assistant":
         return "我"
     source = stored_message_source(message)
-    if source.sender_is_user:
+    if sent_by_user(source, bound):
         return (
             f"{USER_SENDER_LABEL}（{source.sender_name}）"
             if source.sender_name
@@ -218,7 +222,7 @@ def format_external_thread(
         if not content:
             continue
         ts = str(message.get("timestamp", "?"))[:16]
-        lines.append(f"[{ts}] {_speaker(message)}: {content}")
+        lines.append(f"[{ts}] {_speaker(message, thread.bound)}: {content}")
     return "\n".join(lines)
 
 

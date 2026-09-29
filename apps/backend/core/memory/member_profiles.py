@@ -55,16 +55,23 @@ class MemberKey:
         return bound.recognises(self.channel, self.sender_id)
 
 
-def member_of(source: MessageSource, bound: BoundUserSenders) -> MemberKey | None:
-    """消息发送者对应的成员；发送者未知或是用户本人时为 None。
+def sent_by_user(source: MessageSource, bound: BoundUserSenders) -> bool:
+    """来源为 ``source`` 的消息是否是用户本人发的。
 
-    用户本人按两条判定：消息记下的 ``sender_is_user``（收到时已绑定），以及此刻的
-    身份绑定 ``bound``。整理与注入都经由这里排除用户本人。
+    两条判定：消息记下的 ``sender_is_user``（收到时已绑定），以及此刻的身份绑定
+    ``bound``（收到后才绑定的也算）。外部段整理、成员档案与注入都经由这里判定。
     """
+    if source.sender_is_user:
+        return True
     key = MemberKey.from_source(source)
-    if key is None or source.sender_is_user or key.is_user(bound):
+    return key is not None and key.is_user(bound)
+
+
+def member_of(source: MessageSource, bound: BoundUserSenders) -> MemberKey | None:
+    """消息发送者对应的成员；发送者未知或是用户本人（``sent_by_user``）时为 None。"""
+    if sent_by_user(source, bound):
         return None
-    return key
+    return MemberKey.from_source(source)
 
 
 def merge_nicknames(existing: Iterable[str], seen: Iterable[str]) -> tuple[str, ...]:
