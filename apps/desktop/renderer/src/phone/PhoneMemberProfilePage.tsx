@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { InlineError } from "../shared/feedback/InlineError";
 import { confirmPersonaLines } from "../shared/mascot/mascotLines";
-import { badgeClass, compactDangerTextButtonClass, compactPrimaryButtonClass, compactTextButtonClass, cx, inputClass, textareaClass } from "../shared/styles";
+import { badgeClass, cx, inputClass, textareaClass } from "@shiori/plugin-sdk";
+import { compactDangerTextButtonClass, compactPrimaryButtonClass, compactTextButtonClass } from "../shared/styles";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { useBusyAction } from "../shared/useBusyAction";
 import { useEditDraft } from "../shared/useEditDraft";
