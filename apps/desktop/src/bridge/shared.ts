@@ -1,4 +1,12 @@
-import type { BridgeEvent } from "@shiori/plugin-sdk/contract";
+import type {
+  BridgeEvent,
+  PluginBackgroundSettled,
+  SurfaceCreateResult as SurfaceCreateResultPayload,
+  SurfaceHandle,
+  SurfacePlacement as SurfacePlacementPayload,
+  SurfaceSpec as SurfaceSpecPayload,
+  VoiceStatePayload,
+} from "@shiori/plugin-sdk/contract";
 
 export type BridgeRequest = {
   id: string;
@@ -8,40 +16,17 @@ export type BridgeRequest = {
   timeoutMs?: number;
 };
 
-/** Where a surface's body ended up after the host clamped and settled it. */
-export type SurfacePlacementPayload = {
-  anchor: { x: number; y: number };
-  bodyOffset: { x: number; y: number };
-  workArea: { x: number; y: number; width: number; height: number };
-};
-
 /**
- * Where a freshly created surface landed, and which display it landed on.
- *
- * `displayId` rides along with the creation result rather than being a second
- * call because a plugin that remembers a position *per display* needs both in
- * one breath: it has to pick the remembered anchor before the surface has
- * painted anything, and a follow-up round trip would put a visible jump
- * between the fallback corner and the remembered position.
+ * The DesktopSurface payloads are owned by `@shiori/plugin-sdk` (#508): plugin
+ * surface and background code receives them. Re-exported under the bridge's
+ * payload names for host callers.
  */
-export type SurfaceCreateResultPayload = { x: number; y: number; displayId: string };
+export type { SurfaceCreateResultPayload, SurfacePlacementPayload, SurfaceSpecPayload };
 
-/** A settle reported to the owning plugin's `app.background` code. */
-export type SurfaceSettledPayload = {
+/** A settle reported to the owning plugin's `app.background` code, before the plugin-host filters it by owner. */
+export type SurfaceSettledPayload = PluginBackgroundSettled & {
   pluginId: string;
   surfaceId: string;
-  placement: SurfacePlacementPayload;
-  reason: import("../surface/host.js").SurfaceSettleReason;
-  displayId: string;
-};
-
-/** What a plugin declares when asking the host to create one of its windows. */
-export type SurfaceSpecPayload = {
-  body: { width: number; height: number };
-  transparent?: boolean;
-  alwaysOnTop?: boolean;
-  skipTaskbar?: boolean;
-  clickThrough?: boolean;
 };
 
 /**
@@ -74,37 +59,6 @@ export type DesktopSurfacesApi = {
   setState(pluginId: string, surfaceId: string, state: unknown): void;
 };
 
-/** One entry of a surface-owned native context menu. */
-export type SurfaceMenuItemPayload = { id: string; label: string };
-
-/**
- * Drives the surface window the caller is already inside.
- *
- * No surface is named: the host attributes each request to whichever surface
- * owns the sending window, so this half cannot address anything else.
- */
-export type DesktopSurfaceSelfApi = {
-  beginDrag(offset: { x: number; y: number }): void;
-  endDrag(velocity?: { x: number; y: number }): void;
-  setExtension(extension: { side: "above" | "below"; size: number }): void;
-  setClickThrough(clickThrough: boolean): void;
-  onPlacement(listener: (placement: SurfacePlacementPayload) => void): () => void;
-  /** Transient one-shot payloads from the plugin's own `surfaces.post`. */
-  onMessage(listener: (payload: unknown) => void): () => void;
-  /** Retained state from `surfaces.setState`, replayed after `ready()`. */
-  onState(listener: (state: unknown) => void): () => void;
-  /**
-   * Announces that this renderer has installed its listeners, so the host can
-   * replay the retained state and the current placement. Without it a surface
-   * that mounts after its state was set would come up blank.
-   */
-  ready(): void;
-  /** Opens a native context menu over this surface; resolves the chosen id, or null. */
-  showContextMenu(items: SurfaceMenuItemPayload[]): Promise<string | null>;
-  /** Brings the main application window forward. */
-  activateMainWindow(): void;
-};
-
 export type BridgeResponse = {
   id: string;
   type: "response";
@@ -120,25 +74,9 @@ export type BridgeResponse = {
 // Owned by the plugin SDK because plugin event handlers receive it (#440).
 export type { BridgeEvent };
 
-/** Public desktop-pet voice state used by the pet and settings surfaces. */
-export type VoiceStatePayload = {
-  status:
-    | "idle"
-    | "press_pending"
-    | "dragging"
-    | "recording"
-    | "transcribing"
-    | "sending"
-    | "waiting_reply"
-    | "speaking_prepare"
-    | "speaking"
-    | "finish_current_sentence_then_idle"
-    | "error";
-  source?: "pet" | "hotkey";
-  message?: string;
-};
+// Owned by the plugin SDK because the desktop pet's surface renders it (#508).
+export type { VoiceStatePayload };
 
-/** Commands sent from the Electron main process to the hidden capture page. */
 export type VoiceInputDevice = {
   deviceId: string;
   label: string;
@@ -365,7 +303,7 @@ export type DesktopApi = {
    * See `src/surface/ipc.ts`.
    */
   surfaces: DesktopSurfacesApi;
-  surface: DesktopSurfaceSelfApi;
+  surface: SurfaceHandle;
   /**
    * Reports every surface settle to whoever is listening in this window.
    *

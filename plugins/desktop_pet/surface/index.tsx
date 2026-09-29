@@ -1,3 +1,4 @@
+import type { PluginSurfaceModule } from "@shiori/plugin-sdk";
 import { DesktopPetSurface } from "./DesktopPetSurface";
 // Imported here rather than from the component so the component stays loadable
 // by the plain node:test runner, which has no CSS loader. Vite pulls this into
@@ -15,4 +16,4 @@ import "./styles.css";
 export default {
   pluginId: "desktop_pet",
   surface: { component: DesktopPetSurface },
-};
+} satisfies PluginSurfaceModule;

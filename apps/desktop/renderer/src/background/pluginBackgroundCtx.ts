@@ -170,11 +170,13 @@ export function createBackgroundCtx(options: {
   tray: TrayApi;
   onTrayEntryClicked: TrayClickSource;
   localAssetUrl: (path: string) => string;
+  /** The host's diagnostic sink (`reportBackgroundFailure` in production). */
+  reportFailure: (what: string, error: unknown) => void;
   scope: BackgroundEffectScope;
 }): BackgroundCtx {
   const {
     pluginId, surfaces, invoke, onEvent, onSurfaceSettled,
-    pluginData, tray, onTrayEntryClicked, localAssetUrl, scope,
+    pluginData, tray, onTrayEntryClicked, localAssetUrl, reportFailure, scope,
   } = options;
   const rpc = createPluginCommunicationClient(pluginId, { invoke, onEvent, background: true });
   scope.addEventEffect("plugin-communication", () => rpc.dispose());
@@ -197,6 +199,11 @@ export function createBackgroundCtx(options: {
     tray: createPluginBackgroundTray(pluginId, tray, onTrayEntryClicked, scope),
     effect(label, dispose) {
       scope.addEffect(label, dispose);
+    },
+    // Prefixed with the plugin id here, not by the plugin, so every entry in
+    // the diagnostic log says whose failure it was.
+    reportFailure(operation, error) {
+      reportFailure(`${pluginId} ${operation}`, error);
     },
   };
 }

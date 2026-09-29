@@ -1,14 +1,10 @@
-import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
+import type { SurfaceHandle, SurfacePlacement } from "@shiori/plugin-sdk";
+import { createFakePluginClient, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { DesktopPetSurface } from "./DesktopPetSurface";
 import { petBubbleGap } from "./bubbleExtension";
-import type {
-  SurfacePlacement,
-  SurfaceHandle,
-} from "../../../apps/desktop/renderer/src/surface/pluginSurfaceRegistry";
 
 type SurfaceCall = { name: string; args: unknown[] };
 
@@ -97,7 +93,7 @@ async function mountSurface() {
   const props = {
     surfaceId: "pet",
     surface: host.surface,
-    client: { ...createPluginRpcClient("desktop_pet"), call: async <T,>(method: string) => { rpcCalls.push(method); return { ok: true } as T; } },
+    client: createFakePluginClient({ call: async <T,>(method: string) => { rpcCalls.push(method); return { ok: true } as T; } }),
   };
   const view = await mountTestComponent(<DesktopPetSurface {...props} />, {
     windowGlobals: { miraDesktop: desktop.bridge },

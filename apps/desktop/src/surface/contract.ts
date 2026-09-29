@@ -14,11 +14,16 @@
  * package uses.
  */
 
+import type { SurfaceExtension, SurfaceSpec, SurfaceWorkArea } from "@shiori/plugin-sdk/contract";
+
+// What a plugin declares and receives about its window — the spec, the work
+// area and the extension (an extra panel on one side of the body, whose side
+// and size are the plugin's to choose) — is owned by `@shiori/plugin-sdk`
+// (#508); re-exported for host callers.
+export type { SurfaceExtension, SurfaceSpec, SurfaceWorkArea };
+
 /** A point in screen coordinates. */
 export type SurfacePoint = { x: number; y: number };
-
-/** A display's usable region, excluding taskbars and other reserved chrome. */
-export type SurfaceWorkArea = { x: number; y: number; width: number; height: number };
 
 /** A window rectangle in screen coordinates. */
 export type SurfaceBounds = { x: number; y: number; width: number; height: number };
@@ -30,35 +35,10 @@ export type SurfaceBounds = { x: number; y: number; width: number; height: numbe
  * only the body is clamped into the work area — otherwise a transient overlay
  * growing upward would drag the whole surface down the screen.
  */
-export type SurfaceBody = { width: number; height: number };
-
-/**
- * Extra window space attached to one side of the body.
- *
- * This is the generic form of "a panel that pops up above or below the
- * surface": the host grows the window and moves its origin so the body stays
- * visually put. Deciding *which* side to use, and how tall the panel is, is
- * the plugin's business — it queries `workArea` and calls `setExtension`.
- * The host has no notion of a speech bubble or any other content.
- */
-export type SurfaceExtension = { side: "above" | "below"; size: number };
+export type SurfaceBody = SurfaceSpec["body"];
 
 /** The neutral extension: window bounds equal body bounds. */
 export const noSurfaceExtension: SurfaceExtension = { side: "below", size: 0 };
-
-/** Everything a plugin declares when asking the host to create its window. */
-export type SurfaceSpec = {
-  /** Fixed body size; the window may exceed it only via an extension. */
-  body: SurfaceBody;
-  /** Defaults to true — the point of a surface is to sit over the desktop. */
-  transparent?: boolean;
-  /** Defaults to true. Never elevated to the screen-saver level. */
-  alwaysOnTop?: boolean;
-  /** Defaults to true — a surface is not an application window. */
-  skipTaskbar?: boolean;
-  /** Starts the surface click-through; can be toggled later. */
-  clickThrough?: boolean;
-};
 
 /**
  * Construction options for a surface window.

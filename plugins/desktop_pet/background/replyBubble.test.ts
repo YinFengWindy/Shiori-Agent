@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { BridgeEvent } from "../../../apps/desktop/src/bridge/shared";
+import type { BridgeEvent } from "@shiori/plugin-sdk";
 import type { PetReplyBubble } from "../shared/replyBubble";
 import { ReplyBubbleController } from "./replyBubble";
 

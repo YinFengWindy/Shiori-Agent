@@ -82,6 +82,7 @@ const host = new PluginBackgroundHost({
       tray: window.miraDesktop.tray,
       onTrayEntryClicked: window.miraDesktop.tray.onEntryClicked,
       localAssetUrl: (path) => window.miraDesktop.localAssetUrl(path),
+      reportFailure: reportBackgroundFailure,
       scope,
     });
   },
