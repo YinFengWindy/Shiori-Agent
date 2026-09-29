@@ -25,6 +25,8 @@ from bus.events_lifecycle import (
     TurnCommitted,
 )
 from conversation.service import ConversationService
+from core.memory.group_environment import GroupEnvironment
+from core.memory.member_profiles import MemberProfiles
 from core.roles import (
     RoleAggregateService,
     RoleRelationshipRuntimeService,
@@ -39,6 +41,7 @@ from desktop_bridge.chat_requests import DesktopChatRequestHandler
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.method_policy import MethodPolicy, resolve_plugin_method_policy
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
+from desktop_bridge.phone_memory_requests import DesktopPhoneMemoryRequestHandler
 from desktop_bridge.phone_requests import (
     PHONE_CONVERSATION_UPDATED,
     DesktopPhoneRequestHandler,
@@ -105,6 +108,7 @@ class DesktopBridgeService:
         activate_transport: bool = True,
         model_resolver: RoleModelRuntime | None = None,
         plugin_rpc_registry: PluginRpcRegistry | None = None,
+        group_environment: GroupEnvironment | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -232,6 +236,19 @@ class DesktopBridgeService:
             accounts=DesktopAccountRequestHandler(role_store.accounts),
             identities=DesktopIdentityRequestHandler(role_store.identities),
             phone=self.phone,
+            # Needs the runtime's shared group environment; a bare service
+            # without one serves no chat info requests.
+            phone_memory=(
+                DesktopPhoneMemoryRequestHandler(
+                    conversations=self.conversation_service,
+                    accounts=role_store.accounts,
+                    identities=role_store.identities,
+                    group_environment=group_environment,
+                    members=MemberProfiles(workspace),
+                )
+                if group_environment is not None
+                else None
+            ),
             roles=DesktopRoleRequestHandler(
                 role_service=self.role_service,
                 role_presenter=self.role_presenter,
