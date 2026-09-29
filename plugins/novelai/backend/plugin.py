@@ -138,6 +138,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         risk="external-side-effect",
         always_on=True,
         search_hint="生图 生成图片 NovelAI 立绘 场景图",
+        # 群聊等外部上下文里的其他人也能让角色生图（#489）。
+        external_allowed=True,
     )
 
     auto_cg = AutoCgPolicy(ctx.kv)

@@ -98,7 +98,13 @@ class ToolsCapability:
         risk: str = "read-write",
         always_on: bool = False,
         search_hint: str | None = None,
+        external_allowed: bool = False,
     ) -> None:
+        """注册插件工具。
+
+        external_allowed: 显式声明外部上下文（群聊、陌生私聊）里非用户本人发起的
+        回合也能使用此工具；默认不可用。
+        """
         if self._registry is None:
             raise RuntimeError(
                 f"插件 {self._plugin_id} 请求 tools 能力，但宿主未提供 ToolRegistry"
@@ -111,6 +117,7 @@ class ToolsCapability:
             always_on=always_on,
             search_hint=search_hint,
             source_type="plugin",
+            external_allowed=external_allowed,
             source_name=self._plugin_id,
         )
         # 工具除了从贡献清单移除，还要反注册出 ToolRegistry，故不复用列表 helper

@@ -38,6 +38,9 @@ def test_scheduler_toolset_provider_registers_expected_tools(tmp_path: Path):
         "cancel_schedule",
     }
     assert result.always_on_names == []
+    assert [
+        name for name in result.tool_names if registry.is_external_allowed(name)
+    ] == ["list_schedules"]
 
 
 def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Path):

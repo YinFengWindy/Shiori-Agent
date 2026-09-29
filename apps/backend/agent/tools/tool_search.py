@@ -1,11 +1,34 @@
 import json
+from collections.abc import Set as AbstractSet
 from typing import TYPE_CHECKING, Any
 
 from agent.tools.base import Tool
+from agent.tools.external_access import EXTERNAL_TOOL_DENIED
 from agent.tools.registry import _META_TOOLS
 
 if TYPE_CHECKING:
     from agent.tools.registry import ToolRegistry
+
+
+# 回合经执行上下文传给 tool_search 的两个键（见 ``tool_search_call_context``）。
+VISIBLE_TOOL_NAMES_KEY = "visible_tool_names"
+EXTERNAL_TOOLS_ONLY_KEY = "external_tools_only"
+
+
+def tool_search_call_context(
+    *, visible_names: AbstractSet[str] | None, external_only: bool
+) -> dict[str, Any]:
+    """一次 tool_search 调用的执行上下文补充项，由回合合并进执行上下文。
+
+    visible_names: 本回合已可见（或已禁用）的工具名，搜索与 select: 不再返回；
+    None 表示不排除。external_only: 本次调用来自外部上下文受限回合，只能搜索、
+    解锁声明外部可用的工具。两项都按调用传递，并且经 ``context_precedence``
+    只取自执行上下文，模型不能传入或改写。
+    """
+    context: dict[str, Any] = {EXTERNAL_TOOLS_ONLY_KEY: external_only}
+    if visible_names is not None:
+        context[VISIBLE_TOOL_NAMES_KEY] = frozenset(visible_names)
+    return context
 
 
 class ToolSearchTool(Tool):
@@ -14,18 +37,10 @@ class ToolSearchTool(Tool):
     调用此工具后，匹配到的工具将在本轮对话中解锁，可直接调用。
     """
 
+    context_precedence = frozenset({VISIBLE_TOOL_NAMES_KEY, EXTERNAL_TOOLS_ONLY_KEY})
+
     def __init__(self, registry: "ToolRegistry") -> None:
         self._registry = registry
-        self._excluded_names: set[str] | None = None
-
-    def set_excluded_names(self, names: set[str] | None) -> None:
-        """Explicitly set which tool names are already visible to the LLM.
-
-        Called by the Reasoner before dispatching each tool_search call.
-        Replaces the ContextVar mechanism (_excluded_names_ctx) which is now
-        kept only as a fallback for callers that have not yet migrated.
-        """
-        self._excluded_names = names
 
     @property
     def name(self) -> str:
@@ -82,11 +97,10 @@ class ToolSearchTool(Tool):
         query: str,
         top_k: int = 5,
         allowed_risk: list[str] | None = None,
+        visible_tool_names: AbstractSet[str] | None = None,
+        external_tools_only: bool = False,
         **_: Any,
     ) -> str:
-        # Consume-once: Reasoner calls set_excluded_names() before each dispatch.
-        excluded_names = self._excluded_names
-        self._excluded_names = None
 
         query = (query or "").strip()
         if not query:
@@ -105,7 +119,8 @@ class ToolSearchTool(Tool):
             return self._handle_select(
                 query[7:],
                 allowed_risk=allowed_risk,
-                excluded_names=excluded_names,
+                excluded_names=visible_tool_names,
+                external_only=external_tools_only,
             )
 
         # ── 关键词搜索路径 ────────────────────────────────────────────────
@@ -114,7 +129,8 @@ class ToolSearchTool(Tool):
             query=query,
             top_k=top_k,
             allowed_risk=allowed_risk,
-            excluded_names=excluded_names,
+            excluded_names=visible_tool_names,
+            external_only=external_tools_only,
         )
         if not results:
             return json.dumps(
@@ -150,11 +166,13 @@ class ToolSearchTool(Tool):
         names_str: str,
         *,
         allowed_risk: list[str] | None = None,
-        excluded_names: set[str] | None = None,
+        excluded_names: AbstractSet[str] | None = None,
+        external_only: bool = False,
     ) -> str:
         """处理 select:A,B,C 精确加载路径。
 
         与 search() 使用相同的过滤语义：
+        - external_only 时，未声明外部可用的工具不加载，回复受限提示
         - excluded_names 中的工具已可见，无需加载（返回 tip 提示直接调用）
         - allowed_risk 不为空时，风险等级不符的工具不返回
         """
@@ -177,9 +195,12 @@ class ToolSearchTool(Tool):
         found: list[str] = []
         missing: list[str] = []
         risk_blocked: list[str] = []
+        restricted: list[str] = []
 
         for name in requested:
-            if name in excluded:
+            if external_only and not self._registry.is_external_allowed(name):
+                restricted.append(name)
+            elif name in excluded:
                 already_loaded.append(name)
             elif not self._registry.has_tool(name):
                 missing.append(name)
@@ -213,6 +234,8 @@ class ToolSearchTool(Tool):
             tip_parts.append(
                 f"风险等级不符（allowed_risk={allowed_risk}）: {', '.join(risk_blocked)}"
             )
+        if restricted:
+            tip_parts.append(f"{', '.join(restricted)}: {EXTERNAL_TOOL_DENIED}")
         if tip_parts:
             result["tip"] = "; ".join(tip_parts)
 

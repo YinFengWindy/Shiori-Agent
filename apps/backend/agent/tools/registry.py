@@ -3,7 +3,7 @@ from contextvars import ContextVar
 from collections.abc import Iterable, Set as AbstractSet
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from agent.tools.base import Tool, ToolResult
 from agent.tools.search_backend import KeywordSearchBackend, SearchBackend
@@ -60,6 +60,13 @@ def _with_progress_description(schema: dict[str, Any], tool: Tool) -> dict[str, 
     return cloned
 
 
+class DeferredToolNames(TypedDict):
+    """``get_deferred_names`` 的结果：未加载 schema 的工具名，按来源分组。"""
+
+    builtin: list[str]
+    mcp: dict[str, list[str]]
+
+
 # ── ToolMeta ──────────────────────────────────────────────────────────────────
 
 
@@ -70,6 +77,9 @@ class ToolMeta:
     # 可选：3–10 词短语，补充工具名和描述中没有的别名或口语化表达。
     # 不需要重复名称或描述里已有的词——搜索后端自动索引 name + description。
     search_hint: str | None = None
+    # 注册方显式声明：外部上下文里非用户本人发起的回合也能使用此工具（#489）。
+    # 未声明即不可用，所以以后新增的工具默认被外部回合排除。
+    external_allowed: bool = False
 
 
 # ── ToolDocument ──────────────────────────────────────────────────────────────
@@ -88,7 +98,7 @@ class ToolDocument:
     risk: str
     always_on: bool
     search_hint: str | None
-    source_type: str  # "builtin" | "mcp"
+    source_type: str  # "builtin" | "mcp" | "plugin"
     source_name: str  # mcp server 名，builtin 为空字符串
 
     @classmethod
@@ -144,12 +154,21 @@ class ToolRegistry:
         search_hint: str | None = None,
         source_type: str = "builtin",
         source_name: str = "",
+        external_allowed: bool = False,
     ) -> None:
+        """注册工具。
+
+        external_allowed: 声明外部上下文（群聊、陌生私聊）中非用户本人发起的回合
+        也可使用此工具；未声明的工具在这类回合里不可用。MCP 动态工具不允许声明。
+        """
+        if external_allowed and source_type == "mcp":
+            raise ValueError(f"MCP 工具不能声明外部上下文可用: {tool.name}")
         self._tools[tool.name] = tool
         meta = ToolMeta(
             risk=risk,
             always_on=always_on,
             search_hint=search_hint,
+            external_allowed=external_allowed,
         )
         self._metadata[tool.name] = meta
         doc = ToolDocument.from_tool_and_meta(
@@ -210,14 +229,28 @@ class ToolRegistry:
         """返回标记为 always_on 的工具名称集合。"""
         return {name for name, meta in self._metadata.items() if meta.always_on}
 
+    def is_external_allowed(self, name: str) -> bool:
+        """``name`` 是否已注册且声明了外部上下文可用。
+
+        每次都查当前注册表，回合中途新注册的未声明工具天然返回 False。
+        """
+        meta = self._metadata.get(name)
+        return meta is not None and meta.external_allowed
+
     def get_documents(self) -> list[ToolDocument]:
         """返回所有已注册工具的索引文档列表。"""
         return list(self._documents.values())
 
-    def get_deferred_names(self, visible: set[str] | None = None) -> dict[str, object]:
+    def get_deferred_names(
+        self,
+        visible: set[str] | None = None,
+        *,
+        external_only: bool = False,
+    ) -> DeferredToolNames:
         """返回所有 deferred 工具名，按来源分组。
 
         visible: 当前 turn 已可见工具名（always_on + preloaded），从结果中排除。
+        external_only: 只列出声明外部上下文可用的工具（外部上下文受限回合）。
         deferred = 全量注册工具 - always_on - meta_tools - visible
         格式: {"builtin": [...], "mcp": {"server_name": [...], ...}}
         """
@@ -227,7 +260,9 @@ class ToolRegistry:
         mcp: dict[str, list[str]] = {}
 
         for name, doc in self._documents.items():
-            if name in excluded:
+            if name in excluded or (
+                external_only and not self.is_external_allowed(name)
+            ):
                 continue
             if doc.source_type == "mcp":
                 mcp.setdefault(doc.source_name, []).append(name)
@@ -313,13 +348,21 @@ class ToolRegistry:
         top_k: int = 5,
         allowed_risk: list[str] | None = None,
         excluded_names: AbstractSet[str] | None = None,
+        external_only: bool = False,
     ) -> list[dict[str, Any]]:
         """关键词搜索工具目录，返回匹配的工具信息列表。
 
         excluded_names: 调用方（当前 turn）传入的排除集合，通常为已可见工具名。
+        external_only: 只在声明外部上下文可用的工具里搜索。
         meta_tools 始终被排除。搜索逻辑委托给 SearchBackend。
         """
         excluded = _META_TOOLS | (excluded_names or set())
+        if external_only:
+            excluded |= {
+                name
+                for name, meta in self._metadata.items()
+                if not meta.external_allowed
+            }
         return cast(
             list[dict[str, Any]],
             self._backend.search(

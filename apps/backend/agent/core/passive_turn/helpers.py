@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Set as AbstractSet
 from typing import TYPE_CHECKING, Any
 
 from agent.prompting import is_context_frame
@@ -67,39 +68,60 @@ def extract_model_facing_turn(
     return user_content, None
 
 
+def turn_tool_names(
+    tools: "ToolRegistry",
+    names: Iterable[str] | None,
+    *,
+    disabled: AbstractSet[str],
+    external_restricted: bool,
+) -> list[str] | None:
+    """本回合可以发给模型的工具名，保持 ``names`` 的顺序。
+
+    ``names`` 为 None 表示全部已注册工具；没有任何限制时仍返回 None（全量）。
+    ``disabled`` 是后台任务禁用的工具；``external_restricted`` 为真时只保留
+    声明外部上下文可用的工具，逐个查当前注册表。
+    """
+    if names is None:
+        if not disabled and not external_restricted:
+            return None
+        names = tools.get_registered_order()
+    return [
+        name
+        for name in names
+        if name not in disabled
+        and (not external_restricted or tools.is_external_allowed(name))
+    ]
+
+
 def build_turn_injection_prompt(
     *,
     tools: "ToolRegistry",
     tool_search_enabled: bool,
     visible_names: set[str] | None,
+    external_only: bool = False,
 ) -> str:
-    """构造当前 turn 的延迟工具提示。"""
+    """构造当前 turn 的延迟工具提示。
+
+    ``external_only`` 为真时目录只列声明外部上下文可用的工具（受限回合）。
+    """
 
     if not tool_search_enabled:
         return ""
-    return build_deferred_tools_hint(tools, visible=visible_names)
+    return build_deferred_tools_hint(
+        tools, visible=visible_names, external_only=external_only
+    )
 
 
 def build_deferred_tools_hint(
     tools: "ToolRegistry",
     visible: set[str] | None = None,
+    external_only: bool = False,
 ) -> str:
     """将尚未加载 schema 的工具目录渲染为提示文本。"""
 
-    get_deferred_names = getattr(tools, "get_deferred_names", None)
-    if not callable(get_deferred_names):
-        return ""
-    deferred_raw = get_deferred_names(visible=visible)
-    if not isinstance(deferred_raw, dict):
-        return ""
-    builtin_raw = deferred_raw.get("builtin", [])
-    mcp_raw = deferred_raw.get("mcp", {})
-    builtin = [name for name in builtin_raw if isinstance(name, str)]
-    mcp = {
-        str(server): [name for name in names if isinstance(name, str)]
-        for server, names in mcp_raw.items()
-        if isinstance(server, str) and isinstance(names, list)
-    }
+    deferred = tools.get_deferred_names(visible=visible, external_only=external_only)
+    builtin = deferred["builtin"]
+    mcp = deferred["mcp"]
 
     if not builtin and not mcp:
         return ""
