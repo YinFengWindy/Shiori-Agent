@@ -18,6 +18,8 @@ from agent.core.proactive_turn import ProactiveTurnPipeline, ProactiveTurnPipeli
 from agent.core.proactive_turn.gates import ProactiveGateChain
 from agent.tools.base import Tool
 from agent.tools.message_lookup import SearchMessagesTool
+from agent.tools.recall_memory import RecallMemoryTool
+from core.memory.engine import MemoryQueryResult, MemoryToolSpec
 from conversation.service import desktop_thread_id, network_thread_id
 from core.accounts import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
@@ -1504,3 +1506,37 @@ async def test_drift_message_search_sees_the_user_context_only(tmp_path: Path):
         "secret in user dm",
         "secret on desktop",
     ]
+
+
+async def test_drift_recall_memory_searches_the_drifting_role(tmp_path: Path):
+    memory = AsyncMock()
+    memory.query.return_value = MemoryQueryResult()
+    shared = ToolRegistry()
+    shared.register(
+        RecallMemoryTool(
+            memory,
+            MemoryToolSpec(
+                description="recall",
+                parameters={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+            ),
+        )
+    )
+    tools = build_drift_tool_registry(
+        ctx=AgentTickContext(session_key="role:mira"),
+        deps=DriftToolDeps(
+            drift_dir=tmp_path, store=DriftStateStore(tmp_path), shared_tools=shared
+        ),
+    )
+
+    # Scope keys passed by the model cannot move recall to another role or session.
+    await tools.execute(
+        "recall_memory",
+        {"query": "猫", "role_id": "luna", "session_key": "role:luna"},
+    )
+
+    scope = memory.query.await_args.args[0].scope
+    assert (scope.role_id, scope.session_key) == ("mira", "")

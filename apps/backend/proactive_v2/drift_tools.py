@@ -332,6 +332,36 @@ class DriftWebFetchTool(Tool):
         return json.dumps(payload, ensure_ascii=False)
 
 
+class RoleMemoryTool(Tool):
+    """把记忆工具的角色身份固定为发呆所属的角色。
+
+    drift 的 registry 不设执行上下文，被包装工具声明的 ``context_precedence``
+    键（role_id、session_key 等）会被 registry 从模型参数里剔除；这里只补回
+    role_id，与主动推送同样按角色而不按会话检索。只包装记忆工具，其他工具
+    收到的上下文不变。
+    """
+
+    def __init__(self, wrapped: Tool, role_id: str) -> None:
+        self._wrapped = wrapped
+        self._role_id = role_id
+        self.context_precedence = wrapped.context_precedence
+
+    @property
+    def name(self) -> str:
+        return self._wrapped.name
+
+    @property
+    def description(self) -> str:
+        return self._wrapped.description
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return self._wrapped.parameters
+
+    async def execute(self, **kwargs: Any) -> str | ToolResult:
+        return await self._wrapped.execute(**{**kwargs, "role_id": self._role_id})
+
+
 class DriftReadFileTool(Tool):
     def __init__(self, drift_dir: Path, builtin_skills_dir: Path | None = None) -> None:
         self._drift_dir = drift_dir
@@ -384,6 +414,11 @@ def build_drift_tool_registry(
     tools.register(EditFileTool(allowed_dir=drift_dir), risk="write")
 
     shared = deps.shared_tools
+    role_id = (
+        ctx.session_key.removeprefix(ROLE_SESSION_PREFIX)
+        if is_role_session_key(ctx.session_key)
+        else ""
+    )
     for name in (
         "recall_memory",
         "web_fetch",
@@ -398,11 +433,14 @@ def build_drift_tool_registry(
         if tool is not None:
             if name == "web_fetch":
                 tool = DriftWebFetchTool(tool, deps.max_web_fetch_chars)
+            elif name == "recall_memory":
+                # 记忆按角色隔离；没有角色时不注入，工具照常因缺 role_id 失败。
+                if role_id:
+                    tool = RoleMemoryTool(tool, role_id)
             elif name in _MESSAGE_LOOKUP_TOOLS:
                 # drift 是主动类回合，消息检索只看角色的用户上下文；没有角色时
                 # 工具无法判定上下文，角色会话的消息一律不可见。
-                if is_role_session_key(ctx.session_key):
-                    role_id = ctx.session_key.removeprefix(ROLE_SESSION_PREFIX)
+                if role_id:
                     tool = UserContextMessageTool(tool, role_id)
             risk = "external-side-effect" if name == "shell" else "read-only"
             tools.register(tool, risk=risk)
