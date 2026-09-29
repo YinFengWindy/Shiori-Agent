@@ -8,6 +8,8 @@ from typing import Any
 
 from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains, like_prefix
 
+from .common import CONTEXT_CURSORS_METADATA_KEY, ContextScope
+
 
 class _SessionMixin:
     def session_exists(self, key: str) -> bool:
@@ -43,7 +45,14 @@ class _SessionMixin:
             if commit:
                 self._conn.commit()
 
-    def update_last_consolidated(self, key: str, last_consolidated: int) -> None:
+    def update_last_consolidated(
+        self,
+        key: str,
+        last_consolidated: int,
+        *,
+        context_cursors: dict[ContextScope, int] | None = None,
+    ) -> None:
+        """更新整理游标；给出 ``context_cursors`` 时同一事务写入按上下文的游标。"""
         now = datetime.now().astimezone().isoformat()
         with self._lock:
             self._conn.execute(
@@ -54,7 +63,28 @@ class _SessionMixin:
                 """,
                 (int(last_consolidated), now, key),
             )
+            if context_cursors is not None:
+                self.write_context_cursors(key, context_cursors)
             self._conn.commit()
+
+    def write_context_cursors(
+        self, key: str, context_cursors: dict[ContextScope, int]
+    ) -> None:
+        """把按上下文的整理游标写进会话元数据；不提交，调用方持锁并负责提交。"""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT metadata FROM sessions WHERE key = ?", (key,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"session 不存在: {key}")
+            metadata = json.loads(row["metadata"] or "{}")
+            metadata[CONTEXT_CURSORS_METADATA_KEY] = {
+                scope: int(cursor) for scope, cursor in context_cursors.items()
+            }
+            self._conn.execute(
+                "UPDATE sessions SET metadata = ? WHERE key = ?",
+                (json.dumps(metadata, ensure_ascii=False), key),
+            )
 
     def get_session_meta(self, key: str) -> dict[str, Any] | None:
         with self._lock:

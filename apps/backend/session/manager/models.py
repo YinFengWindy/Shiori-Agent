@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 from core.common.message_source import MessageSource, with_message_source
+from session.store.common import (
+    CONTEXT_CURSORS_METADATA_KEY,
+    CONTEXT_SCOPES,
+    ContextScope,
+)
 
 from .helpers import (
     _align_to_user_boundary,
@@ -45,6 +50,42 @@ def message_thread_id(message: Mapping[str, Any]) -> str:
     return str(
         message.get("thread_id") or typed_metadata.get("thread_id") or ""
     ).strip()
+
+
+def stored_context_cursors(
+    metadata: Mapping[str, Any],
+    last_consolidated: int,
+    scopes: Iterable[ContextScope] = CONTEXT_SCOPES,
+) -> dict[ContextScope, int]:
+    """元数据里记录的各上下文整理游标，只取 ``scopes``。
+
+    没有记录时（旧会话、非角色会话）各上下文都取 ``last_consolidated``，这就是
+    迁移规则：迁移前后每类上下文读历史的起点不变。记录缺了某个上下文或格式不对时
+    直接报错，不静默回退。
+    """
+    raw = metadata.get(CONTEXT_CURSORS_METADATA_KEY)
+    if raw is None:
+        return {scope: int(last_consolidated) for scope in scopes}
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"会话整理游标格式错误: {raw!r}")
+    return {scope: int(raw[scope]) for scope in scopes}
+
+
+def consolidation_cursor(session: Any, scope: ContextScope | None) -> int:
+    """回合读历史、估算预算时的整理游标：此前的消息已整理，不再原文发给模型。
+
+    ``scope`` 为 None 表示会话只有一段对话（非角色会话），用 ``last_consolidated``；
+    否则取角色会话里这类上下文自己的游标，见 ``stored_context_cursors``。
+    """
+    last_consolidated = int(getattr(session, "last_consolidated", 0))
+    if scope is None:
+        return last_consolidated
+    metadata = getattr(session, "metadata", None)
+    return stored_context_cursors(
+        metadata if isinstance(metadata, Mapping) else {},
+        last_consolidated,
+        (scope,),
+    )[scope]
 
 
 def build_session_message(
@@ -262,4 +303,5 @@ class Session:
         self.messages = []
         self.updated_at = datetime.now()
         self.last_consolidated = 0
+        self.metadata.pop(CONTEXT_CURSORS_METADATA_KEY, None)
         self.consolidation_requested = False

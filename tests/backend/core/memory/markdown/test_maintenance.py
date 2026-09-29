@@ -14,6 +14,8 @@ import agent.looping.core as loop_core
 from agent.looping.ports import SessionServices
 from bus.event_bus import EventBus
 from bus.events_lifecycle import TurnCommitted
+from agent.core.passive_turn.helpers import get_history_since_consolidated
+from conversation.context_scope import turn_context_view, user_context_view
 from conversation.service import desktop_thread_id, network_thread_id
 from core.memory.events import ConsolidationCommitted
 from core.memory.group_environment import (
@@ -37,6 +39,7 @@ from memory2.store import MemoryStore2
 from plugins.default_memory.backend.engine import DefaultMemoryEngine
 from plugins.plugin_undo.backend.plugin import PluginUndo
 from session.manager import Session, SessionManager
+from session.manager.models import consolidation_cursor
 
 
 def _setup(tmp_path: Path):
@@ -417,7 +420,7 @@ async def test_concurrent_ensure_consolidation_shares_in_flight_task(
     entered, release = asyncio.Event(), asyncio.Event()
     calls = 0
 
-    async def ensure_impl(_session_key: str, _current_content: str):
+    async def ensure_impl(_session_key: str, _current_content: str, _scope):
         nonlocal calls
         calls += 1
         entered.set()
@@ -476,6 +479,7 @@ def _recording_maintenance(
     tmp_path: Path,
     manager: SessionManager,
     environment_replies: dict[str, str] | None = None,
+    keep_count: int = 0,
 ):
     """接上真实会话提交、群环境层，记录提示词与引擎事件的整理服务。"""
     provider = _RecordingProvider(environment_replies)
@@ -486,7 +490,7 @@ def _recording_maintenance(
         store=MarkdownMemoryStore(tmp_path),
         provider=cast(LLMProvider, provider),
         model="test",
-        keep_count=0,
+        keep_count=keep_count,
         event_bus=event_bus,
     )
     maintenance.bind_lifecycle(
@@ -497,6 +501,75 @@ def _recording_maintenance(
         )
     )
     return provider, event_bus, events, maintenance
+
+
+def _add_group_turns(session: Session, group: str, count: int) -> None:
+    """群友与角色在群里的 ``count`` 轮对话。"""
+    for index in range(count):
+        session.add_message(
+            "user",
+            f"群友第 {index} 句",
+            thread_id=group,
+            metadata={"message_source": {"sender_id": "555", "group_name": "猫猫群"}},
+        )
+        session.add_message("assistant", f"回群友第 {index} 句", thread_id=group)
+
+
+@pytest.mark.asyncio
+async def test_external_growth_leaves_the_user_context_window_and_cursor_alone(
+    tmp_path: Path,
+):
+    """群里消息再多、整理再多次，桌面对话的原文窗口不被挤掉（#523）。"""
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    desktop = desktop_thread_id("mira")
+    group = network_thread_id("mira", "qq", "g1")
+    session.add_message("user", "我喜欢猫", thread_id=desktop)
+    _add_group_turns(session, group, 1)
+    session.add_message("assistant", "猫很可爱", thread_id=desktop)
+    _add_group_turns(session, group, 12)
+    manager.save(session)
+    user_view = user_context_view(tmp_path, "mira")
+    external_view = turn_context_view(tmp_path, "mira", group)
+    user_history = get_history_since_consolidated(session, 500, user_view)
+    provider, event_bus, _events, maintenance = _recording_maintenance(
+        tmp_path, manager, keep_count=4
+    )
+    try:
+        external = await maintenance.consolidate(ConsolidateRequest(session=session))
+        user_history_after_external = get_history_since_consolidated(
+            session, 500, user_view
+        )
+        # 桌面这边攒够一批（本类最后 4 条之外至少 5 条）才整理，只推进用户游标。
+        for index in range(4):
+            session.add_message("user", f"桌面第 {index} 句", thread_id=desktop)
+            session.add_message("assistant", f"回桌面第 {index} 句", thread_id=desktop)
+        await manager.save_async(session)
+        external_history = get_history_since_consolidated(session, 500, external_view)
+        user = await maintenance.consolidate(ConsolidateRequest(session=session))
+    finally:
+        await event_bus.aclose()
+
+    # 外部整理后用户上下文原文不变；用户整理后外部上下文原文不变。
+    assert len(user_history) == 2
+    assert user_history_after_external == user_history
+    assert external.consolidated_count == 22
+    assert user.consolidated_count == 6
+    assert provider.event_prompts and "群友" not in provider.event_prompts[0]
+    manager.invalidate(session.key)
+    reloaded = manager.get_or_create(session.key)
+    assert len(external_history) == 4
+    assert external_history[-1]["content"] == "回群友第 11 句"
+    assert get_history_since_consolidated(reloaded, 500, external_view) == (
+        external_history
+    )
+    user_history = get_history_since_consolidated(reloaded, 500, user_view)
+    assert len(user_history) == 4
+    assert user_history[-1]["content"] == "回桌面第 3 句"
+    assert consolidation_cursor(reloaded, "external") == 24
+    assert consolidation_cursor(reloaded, "user") == 32
+    assert reloaded.last_consolidated == 24
 
 
 @pytest.mark.asyncio

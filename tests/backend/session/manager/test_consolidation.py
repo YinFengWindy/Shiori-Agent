@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from session.manager import ConsolidationCommitRequest, SessionManager
+from session.store.common import CONTEXT_CURSORS_METADATA_KEY
 
 
 def _setup(tmp_path: Path):
@@ -125,3 +126,46 @@ async def test_failed_consumer_preserves_cursor_committed_after_memory_write(
     assert session.last_consolidated == 2
     manager.invalidate(session.key)
     assert manager.get_or_create(session.key).last_consolidated == 2
+
+
+@pytest.mark.asyncio
+async def test_context_cursors_commit_independently_and_repeat_is_rejected(
+    tmp_path: Path,
+):
+    """角色会话两个游标各自条件提交：另一类游标变了不影响本类，重复提交不生效。"""
+    manager, session, _ = _setup(tmp_path)
+    session.last_consolidated = 1
+    manager.save(session)
+    ids = tuple(message["id"] for message in session.messages)
+    user = ConsolidationCommitRequest(
+        session_key=session.key,
+        expected_message_ids=ids,
+        expected_context_cursors={"user": 1},
+        context_cursors={"user": 2},
+    )
+    external = ConsolidationCommitRequest(
+        session_key=session.key,
+        expected_message_ids=ids,
+        expected_context_cursors={"external": 1},
+        context_cursors={"external": 2},
+    )
+    write = AsyncMock()
+
+    # 旧会话首次提交：未推进的外部游标沿用原 last_consolidated。
+    assert await manager.commit_consolidation(user, write) is True
+    assert session.metadata[CONTEXT_CURSORS_METADATA_KEY] == {
+        "user": 2,
+        "external": 1,
+    }
+    assert session.last_consolidated == 1
+    assert await manager.commit_consolidation(user, write) is False
+    assert await manager.commit_consolidation(external, write) is True
+    assert await manager.commit_consolidation(external, write) is False
+    assert write.await_count == 2
+    manager.invalidate(session.key)
+    reloaded = manager.get_or_create(session.key)
+    assert reloaded.metadata[CONTEXT_CURSORS_METADATA_KEY] == {
+        "user": 2,
+        "external": 2,
+    }
+    assert reloaded.last_consolidated == 2

@@ -61,6 +61,7 @@ if TYPE_CHECKING:
     from agent.looping.ports import LLMConfig, LLMServices
     from agent.tool_hooks.base import ToolHook
     from agent.tools.registry import ToolRegistry
+    from session.store.common import ContextScope
     from conversation.context_scope import ContextView
     from session.manager import SessionManager
 
@@ -442,14 +443,19 @@ class DefaultReasoner(
                 if budget_repaired:
                     break
                 ensure = cast(
-                    "Callable[[str, str], Awaitable[bool]]",
+                    "Callable[[str, str, ContextScope | None], Awaitable[bool]]",
                     getattr(
                         self._memory_consolidator,
                         "ensure_memory_consolidation",
                         None,
                     ),
                 )
-                if not callable(ensure) or not await ensure(session.key, msg.content):
+                # 预算按本回合所在上下文估算，整理也只为这类上下文腾出空间。
+                if not callable(ensure) or not await ensure(
+                    session.key,
+                    msg.content,
+                    context_view.scope if context_view is not None else None,
+                ):
                     raise MemoryConsolidationFailedError(
                         "记忆整理没有可处理的历史或未产生进展，已停止发送超限上下文。"
                     )

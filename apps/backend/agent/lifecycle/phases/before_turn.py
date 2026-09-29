@@ -16,12 +16,17 @@ from agent.lifecycle.phase import (
 )
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
 from agent.core.passive_support import estimate_messages_tokens
-from conversation.context_scope import history_filter, session_context_view
+from conversation.context_scope import (
+    history_filter,
+    history_start,
+    session_context_view,
+)
 
 if TYPE_CHECKING:
     from agent.core.passive_turn import ContextStore
     from conversation.context_scope import ContextView
     from session.manager import SessionManager
+    from session.store.common import ContextScope
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +47,10 @@ class MemoryConsolidator(Protocol):
     def get_memory_consolidation_failure(self, session_key: str) -> str | None: ...
 
     async def ensure_memory_consolidation(
-        self, session_key: str, current_content: str = ""
+        self,
+        session_key: str,
+        current_content: str = "",
+        scope: ContextScope | None = None,
     ) -> bool: ...
 
 
@@ -146,11 +154,12 @@ class _MemoryContextGuardModule:
             return frame
         session = cast(SessionLike, frame.slots[_SESSION_SLOT])
         messages = list(getattr(session, "messages", []))
+        # 积压与预算都只看本回合所在上下文：从这类上下文自己的整理游标起算。
         last = _clamp_last_consolidated(
-            getattr(session, "last_consolidated", 0),
+            history_start(session, state.context_view),
             len(messages),
         )
-        pending = len(messages) - last
+        pending = _pending_messages(messages, last, state.context_view)
         input_tokens = _estimate_session_input_tokens(
             session, state.msg.content, last, state.context_view
         )
@@ -173,9 +182,12 @@ class _MemoryContextGuardModule:
                 ensure = getattr(
                     self._consolidator, "ensure_memory_consolidation", None
                 )
-                ensure_fn = cast("Callable[[str, str], Awaitable[bool]]", ensure)
+                ensure_fn = cast(
+                    "Callable[[str, str, ContextScope | None], Awaitable[bool]]",
+                    ensure,
+                )
                 if not callable(ensure) or not await ensure_fn(
-                    state.session_key, state.msg.content
+                    state.session_key, state.msg.content, state.context_scope
                 ):
                     raise MemoryConsolidationFailedError(
                         "记忆整理没有可处理的历史或未产生进展，已停止发送超限上下文。"
@@ -184,7 +196,7 @@ class _MemoryContextGuardModule:
                     session,
                     state.msg.content,
                     _clamp_last_consolidated(
-                        getattr(session, "last_consolidated", 0),
+                        history_start(session, state.context_view),
                         len(getattr(session, "messages", [])),
                     ),
                     state.context_view,
@@ -337,17 +349,18 @@ def default_before_turn_modules(
     )
 
 
-def _clamp_last_consolidated(value: object, total_messages: int) -> int:
-    if isinstance(value, int):
-        last = value
-    elif isinstance(value, str):
-        try:
-            last = int(value)
-        except ValueError:
-            last = 0
-    else:
-        last = 0
-    return min(max(0, last), max(0, int(total_messages)))
+def _clamp_last_consolidated(value: int, total_messages: int) -> int:
+    return min(max(0, value), max(0, int(total_messages)))
+
+
+def _pending_messages(
+    messages: list[dict], last_consolidated: int, context_view: ContextView | None
+) -> int:
+    """本回合所在上下文在整理游标之后尚未整理的消息数；非角色会话数整段。"""
+    tail = messages[last_consolidated:]
+    if context_view is None:
+        return len(tail)
+    return sum(1 for message in tail if context_view.includes(message))
 
 
 def _estimate_session_input_tokens(

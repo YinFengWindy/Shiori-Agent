@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from session.manager.consolidation import ConsolidationCommitRequest
+from session.store.common import ContextScope
 
 if TYPE_CHECKING:
     from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
@@ -18,6 +19,9 @@ class ConsolidateRequest:
     archive_all: bool = False
     force: bool = False
     current_content: str = ""
+    # 角色会话只整理这类上下文（按其预算判断）；None 表示各类上下文都看一遍。
+    # ``current_content`` 只计入这类上下文的预算。force 与 archive_all 总是两类一起推进。
+    scope: ContextScope | None = None
 
 
 @dataclass
@@ -77,6 +81,8 @@ class _ConsolidationWindow:
     old_messages: list[dict]
     keep_count: int
     consolidate_up_to: int
+    # 本窗口推进哪些上下文的游标（#523）；为空表示非角色会话，推进 last_consolidated。
+    scopes: tuple[ContextScope, ...] = ()
 
 
 @dataclass(frozen=True)

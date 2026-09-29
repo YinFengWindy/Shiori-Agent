@@ -2,6 +2,8 @@
 
 import asyncio
 
+from session.store.common import ContextScope
+
 from .assembly import _AssemblyMixin
 from .helpers import (
     StreamDelta,
@@ -68,13 +70,19 @@ class AgentLoop(
         self._markdown_memory.maintenance.request_background_consolidation(session_key)
 
     async def ensure_memory_consolidation(
-        self, session_key: str, current_content: str = ""
+        self,
+        session_key: str,
+        current_content: str = "",
+        scope: ContextScope | None = None,
     ) -> bool:
-        """Wait for token-triggered memory consolidation before a model request."""
+        """Wait for token-triggered memory consolidation before a model request.
+
+        ``scope`` 是回合所在的上下文，预算按这类上下文估算；非角色会话为 None。
+        """
         if self._markdown_memory is None:
             return False
         return await self._markdown_memory.maintenance.ensure_consolidation(
-            session_key, current_content
+            session_key, current_content, scope
         )
 
     def get_memory_consolidation_failure(self, session_key: str) -> str | None:

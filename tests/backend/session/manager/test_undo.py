@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from session.manager import SessionManager
+from session.store.common import CONTEXT_CURSORS_METADATA_KEY
 
 _FRAME = '<system-reminder data-system-context-frame="true">内部</system-reminder>'
 
@@ -300,3 +301,40 @@ async def test_undo_projection_failure_rolls_back_messages_cursor_all_states_and
     reloaded = manager.get_or_create(session.key)
     assert reloaded.messages == before_messages
     assert reloaded.last_consolidated == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("cursors", "expected"),
+    [
+        # 删掉的桌面回合已整理：用户游标退回重新整理，外部游标不动。
+        ({"user": 8, "external": 4}, {"user": 6, "external": 4}),
+        # 删掉的桌面回合未整理：用户游标不动，外部游标随删除平移。
+        ({"user": 4, "external": 8}, {"user": 4, "external": 6}),
+    ],
+)
+async def test_undo_rolls_back_each_context_cursor(
+    tmp_path: Path, cursors: dict[str, int], expected: dict[str, int]
+):
+    from conversation.service import desktop_thread_id, network_thread_id
+
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    group = network_thread_id("mira", "qq", "g1")
+    desktop = desktop_thread_id("mira")
+    for index, thread_id in enumerate((group, desktop, group, desktop)):
+        session.add_message("user", f"u{index}", thread_id=thread_id)
+        session.add_message("assistant", f"a{index}", thread_id=thread_id)
+    session.metadata[CONTEXT_CURSORS_METADATA_KEY] = cursors
+    session.last_consolidated = min(cursors.values())
+    manager.save(session)
+
+    result = await manager.undo_last_turn(session.key)
+
+    assert result is not None
+    assert result.deleted_ids == ["role:mira:6", "role:mira:7"]
+    manager.invalidate(session.key)
+    reloaded = manager.get_or_create(session.key)
+    assert reloaded.metadata[CONTEXT_CURSORS_METADATA_KEY] == expected
+    assert reloaded.last_consolidated == min(expected.values())
+    assert result.last_consolidated_after == min(expected.values())

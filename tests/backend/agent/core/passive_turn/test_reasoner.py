@@ -152,7 +152,7 @@ async def test_run_turn_repairs_rendered_input_budget_before_reasoning(tmp_path)
         timestamp=datetime.now(timezone.utc),
     )
 
-    async def consolidate(_session_key: str, _content: str) -> bool:
+    async def consolidate(_session_key: str, _content: str, _scope: object) -> bool:
         session.last_consolidated = len(session.messages)
         return True
 
@@ -184,7 +184,7 @@ async def test_run_turn_repairs_rendered_input_budget_before_reasoning(tmp_path)
 
     assert result.reply == "ok"
     reasoner._memory_consolidator.ensure_memory_consolidation.assert_awaited_once_with(
-        "cli:budget", "hello"
+        "cli:budget", "hello", None
     )
     assert reasoner.run.await_args.args[0] == [{"role": "user", "content": "hello"}]
 

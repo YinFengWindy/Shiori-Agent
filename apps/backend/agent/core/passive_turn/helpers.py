@@ -6,7 +6,7 @@ from collections.abc import Iterable, Set as AbstractSet
 from typing import TYPE_CHECKING, Any
 
 from agent.prompting import is_context_frame
-from conversation.context_scope import history_filter
+from conversation.context_scope import history_filter, history_start
 
 if TYPE_CHECKING:
     from agent.core.runtime_support import SessionLike
@@ -19,11 +19,11 @@ def get_history_since_consolidated(
     memory_window: int,
     context_view: "ContextView | None" = None,
 ) -> list[dict]:
-    """读取最近一次记忆整合之后、回合所在上下文可见的会话历史。"""
+    """读取回合所在上下文的整理游标之后、这类上下文可见的会话历史。"""
 
     return session.get_history(
         max_messages=memory_window,
-        start_index=session.last_consolidated,
+        start_index=history_start(session, context_view),
         include=history_filter(context_view),
     )
 
@@ -37,7 +37,7 @@ def get_history_tool_names_since_consolidated(
 
     return session.get_history_tool_names(
         max_messages=memory_window,
-        start_index=session.last_consolidated,
+        start_index=history_start(session, context_view),
         include=history_filter(context_view),
     )
 

@@ -543,6 +543,48 @@ async def test_before_turn_memory_context_guard_blocks_unconsolidated_tail():
 
 
 @pytest.mark.asyncio
+async def test_before_turn_memory_context_guard_counts_only_the_turn_context(tmp_path):
+    """群里积压再多，桌面回合只按用户上下文自己的游标算积压（#523）。"""
+    from conversation.service import desktop_thread_id, network_thread_id
+
+    session = _DummySession("role:mira")
+    session.metadata["role_id"] = "mira"
+    group = network_thread_id("mira", "qq", "g1")
+    session.messages = [
+        {"role": "user", "content": f"g{i}", "thread_id": group} for i in range(30)
+    ]
+    session.messages.append(
+        {"role": "user", "content": "hi", "thread_id": desktop_thread_id("mira")}
+    )
+    session_mgr = SimpleNamespace(get_or_create=lambda key: session, workspace=tmp_path)
+    ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
+    phase = Phase(
+        default_before_turn_modules(
+            EventBus(),
+            cast(SessionManager, session_mgr),
+            cast(ContextStore, ctx_store),
+            keep_count=20,
+        ),
+        frame_factory=BeforeTurnFrame,
+    )
+    msg = InboundMessage(
+        channel="desktop",
+        sender="user",
+        chat_id="mira",
+        content="hello",
+        metadata={"role_id": "mira", "thread_id": desktop_thread_id("mira")},
+    )
+
+    ctx = await phase.run(
+        TurnState(msg=msg, session_key="role:mira", dispatch_outbound=True)
+    )
+
+    assert ctx.context_scope == "user"
+    assert ctx.abort is False
+    ctx_store.prepare.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_before_turn_memory_context_guard_schedules_consolidation_without_blocking():
     bus = EventBus()
     session = _DummySession("telegram:123")
@@ -620,8 +662,9 @@ async def test_before_turn_token_pressure_waits_for_consolidation_before_context
             raise AssertionError("token pressure must use awaited consolidation")
 
         async def ensure_memory_consolidation(
-            self, session_key: str, current_content: str = ""
+            self, session_key: str, current_content: str = "", scope=None
         ) -> bool:
+            assert scope is None
             self.ensure_calls += 1
             session.last_consolidated = len(session.messages)
             return True

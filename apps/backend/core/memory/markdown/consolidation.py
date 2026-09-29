@@ -38,7 +38,7 @@ from .recent_context import _RecentContextWorkerMixin
 
 if TYPE_CHECKING:
     from agent.provider import LLMProvider
-    from conversation.context_scope import UserContextThreads
+    from conversation.context_scope import ContextView, UserContextThreads
     from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
     from .runtime import MarkdownMemoryStore
 
@@ -232,6 +232,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         force: bool = False,
         input_token_estimate: int | None = None,
         user_threads: "UserContextThreads | None" = None,
+        views: "tuple[ContextView, ...]" = (),
         *,
         group_environment: "GroupEnvironment",
     ) -> _ConsolidationDraft | _ConsolidationFailure | None:
@@ -240,7 +241,8 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         ``user_threads`` 是角色共享会话此刻的用户上下文会话；给出时窗口按发送者
         拆段，只有用户本人段进入用户层整理与引擎，RECENT_CONTEXT 只取用户上下文
         会话的消息。为 None 时会话没有划分，整个窗口都属于用户本人。外部段按会话
-        整理成 ``group_environment`` 的更新。
+        整理成 ``group_environment`` 的更新。``views`` 是本次推进游标的上下文（见
+        ``_select_consolidation_window``），非角色会话为空。
         """
         profile_maint = self._profile_maint
         # 1. 先决定这次要归档哪一段消息窗口；没有新窗口就直接返回。
@@ -250,12 +252,15 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
             consolidation_min_new_messages=self._consolidation_min_new_messages,
             input_token_threshold=self._input_token_threshold,
             input_token_estimate=(
-                _estimate_session_input_tokens(session)
+                _estimate_session_input_tokens(
+                    session, view=views[0] if len(views) == 1 else None
+                )
                 if input_token_estimate is None
                 else input_token_estimate
             ),
             archive_all=archive_all,
             force=force,
+            views=views,
         )
         if archive_all:
             logger.info(

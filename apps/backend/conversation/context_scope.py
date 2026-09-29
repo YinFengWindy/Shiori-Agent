@@ -24,7 +24,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from conversation.service import (
     desktop_thread_id,
@@ -34,9 +34,12 @@ from conversation.service import (
 from core.common.message_source import MessageSource
 from core.identity import UserIdentity, UserIdentityStore
 from session.manager.helpers import role_session_key
-from session.manager.models import HistoryFilter, message_thread_id
-
-ContextScope = Literal["user", "external"]
+from session.manager.models import (
+    HistoryFilter,
+    consolidation_cursor,
+    message_thread_id,
+)
+from session.store.common import CONTEXT_SCOPES, ContextScope
 
 
 @dataclass(frozen=True)
@@ -221,3 +224,19 @@ def session_context_view(
 def history_filter(view: ContextView | None) -> HistoryFilter | None:
     """``get_history`` 的 ``include`` 参数：有视图时按它筛选，非角色会话不筛选。"""
     return view.includes if view is not None else None
+
+
+def history_start(session: object, view: ContextView | None) -> int:
+    """回合历史的起点（``get_history`` 的 ``start_index``）：本回合所在上下文的整理游标。
+
+    每类上下文从自己的游标起读，另一类整理得再多也不会挤掉本类的原文；非角色会话
+    没有视图，用 ``last_consolidated``。
+    """
+    return consolidation_cursor(session, view.scope if view is not None else None)
+
+
+def role_context_views(user_threads: UserContextThreads) -> tuple[ContextView, ...]:
+    """角色会话每类上下文各一个视图，按 ``CONTEXT_SCOPES`` 的顺序。"""
+    return tuple(
+        ContextView(scope=scope, user_threads=user_threads) for scope in CONTEXT_SCOPES
+    )
