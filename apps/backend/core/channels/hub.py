@@ -16,7 +16,12 @@ from core.accounts import (
     delivered_via_account,
 )
 from conversation.service import ConversationService, LegacySessionDescriptor
-from core.common.message_source import SENDER_IS_USER_KEY
+from core.common.message_source import (
+    GROUP_NAME_KEY,
+    SENDER_IS_USER_KEY,
+    SENDER_NAME_KEY,
+    display_name,
+)
 from core.identity import IdentityChat, IdentityScope, UserIdentityStore
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
@@ -243,6 +248,17 @@ class ChannelHub:
             metadata["chat_type"] = self._channel_directory.default_chat_type(
                 message.channel
             )
+        # The contact list shows a group by its name and a private chat by
+        # the sender's name, whichever the plugin reported with this message.
+        # A replayed duplicate carries no newer name than the original did.
+        name_key = (
+            GROUP_NAME_KEY
+            if is_group_chat_type(metadata.get("chat_type"))
+            else SENDER_NAME_KEY
+        )
+        name = display_name(metadata.get(name_key))
+        if name is not None and not metadata.get("conversation_duplicate"):
+            self._conversation.remember_contact_name(thread, name)
         metadata.setdefault("source", "role_account")
         context = RoleExecutionContext.create(
             role=role,

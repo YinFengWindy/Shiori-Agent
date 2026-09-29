@@ -186,6 +186,15 @@ class ConversationService:
             and (not chat_id or thread.external_thread_id == chat_id)
         )
 
+    def remember_contact_name(self, thread: ThreadRecord, display_name: str) -> None:
+        """Names a network thread's contact by its latest platform name.
+
+        Callers pass an already normalized, non-blank name: the group name for
+        a group chat and the sender's name for a private chat.
+        """
+        if thread.thread_kind == "network":
+            self._store.rename_contact(thread.contact_id, display_name)
+
     def project_thread(self, thread: ThreadRecord) -> None:
         """Refreshes derived state without reassigning mixed-session messages."""
 
@@ -256,13 +265,17 @@ class ConversationService:
         updated_at: str,
         unresolved_thread_id: str = "",
     ) -> ThreadRecord:
+        contact_id = f"contact:{role_id}:{channel}:{chat_id}"
+        # A rebuilt thread keeps the platform name its contact already learned;
+        # a new contact starts with the chat ID until a name arrives.
+        known = self._store.get_contact(contact_id)
         contact = self._store.upsert_contact(
-            contact_id=f"contact:{role_id}:{channel}:{chat_id}",
+            contact_id=contact_id,
             role_id=role_id,
             kind="channel_peer",
             channel=channel,
             external_id=chat_id,
-            display_name=chat_id,
+            display_name=known.display_name if known is not None else chat_id,
             metadata={"scope": "network"},
         )
         thread_id = network_thread_id(role_id, channel, chat_id)

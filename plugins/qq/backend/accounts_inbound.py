@@ -6,6 +6,7 @@ from typing import Any
 
 from bus.events import InboundMessage
 from core.accounts import VIA_ACCOUNT_KEY
+from core.common.message_source import SENDER_NAME_KEY
 
 from .accounts_actions import qq_number
 from .channel.group_filter import is_at_bot
@@ -21,6 +22,18 @@ def is_real_private_chat(message: InboundMessage) -> bool:
     return metadata.get("chat_type") == "private" and not metadata.get(
         GROUP_TEMPORARY_KEY
     )
+
+
+def _sender_name(event: dict[str, Any]) -> str:
+    """The sender's display name: group card first, then QQ nickname."""
+    sender = event.get("sender")
+    if not isinstance(sender, dict):
+        return ""
+    for field in ("card", "nickname"):
+        value = sender.get(field)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
 
 
 def inbound_message(
@@ -57,6 +70,9 @@ def inbound_message(
         "external_message_id": str(event.get("message_id") or ""),
         VIA_ACCOUNT_KEY: via_account,
     }
+    sender_name = _sender_name(event)
+    if sender_name:
+        metadata[SENDER_NAME_KEY] = sender_name
     if kind == "private" and event.get("sub_type") == "group":
         metadata[GROUP_TEMPORARY_KEY] = True
     if kind == "group":

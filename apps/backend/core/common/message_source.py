@@ -17,6 +17,12 @@ _PREFIX = "[消息来源: "
 SENDER_IS_USER_KEY = "sender_is_user"
 # How the source prefix names a sender who is the desktop user.
 USER_SENDER_LABEL = "你的用户"
+# Inbound metadata contract for plugins: the platform's display names at the
+# time the message arrived. ``GROUP_NAME_KEY`` is the group chat's name;
+# ``SENDER_NAME_KEY`` is the sender's display name (group card or nickname).
+# Both are optional snapshots, stored with the message and never refreshed.
+GROUP_NAME_KEY = "group_name"
+SENDER_NAME_KEY = "sender_name"
 _TIME_PREFIX = "[当前消息时间:"
 
 
@@ -24,6 +30,17 @@ def _identifier(value: object) -> str | None:
     if isinstance(value, bool) or not isinstance(value, (str, int)):
         return None
     return str(value).strip() or None
+
+
+def display_name(value: object) -> str | None:
+    """Normalize a plugin-reported display name; anything but text is unknown.
+
+    The one place names from ``GROUP_NAME_KEY`` / ``SENDER_NAME_KEY`` are
+    stripped, so plugins may pass the platform's raw strings.
+    """
+    if not isinstance(value, str):
+        return None
+    return value.strip() or None
 
 
 def _via_account_prefix(metadata: Mapping[str, Any]) -> str | None:
@@ -47,6 +64,9 @@ class MessageSource:
     via_account: str | None = None
     # The sender is a platform identity bound to the desktop user.
     sender_is_user: bool = False
+    # Display-name snapshots the plugin reported with this message.
+    group_name: str | None = None
+    sender_name: str | None = None
 
     @classmethod
     def from_inbound(cls, message: InboundMessage) -> MessageSource:
@@ -59,6 +79,8 @@ class MessageSource:
             session_key=_identifier(message.session_key),
             via_account=_via_account_prefix(message.metadata),
             sender_is_user=message.metadata.get(SENDER_IS_USER_KEY) is True,
+            group_name=display_name(message.metadata.get(GROUP_NAME_KEY)),
+            sender_name=display_name(message.metadata.get(SENDER_NAME_KEY)),
         )
 
     @classmethod
@@ -76,6 +98,8 @@ class MessageSource:
                 session_key=_identifier(saved.get("session_key")),
                 via_account=_via_account_prefix(metadata),
                 sender_is_user=saved.get(SENDER_IS_USER_KEY) is True,
+                group_name=display_name(saved.get(GROUP_NAME_KEY)),
+                sender_name=display_name(saved.get(SENDER_NAME_KEY)),
             )
         return cls(
             channel=_identifier(metadata.get("transport_channel")),
@@ -99,14 +123,23 @@ class MessageSource:
         return stored
 
     def platform_fields(self) -> dict[str, str | None]:
-        """The platform provenance shown to the model as JSON."""
-        return {
+        """The platform provenance shown to the model as JSON.
+
+        Display names appear only when captured, so messages stored without
+        them keep their exact prefix.
+        """
+        fields: dict[str, str | None] = {
             "channel": self.channel,
             "chat_id": self.chat_id,
             "chat_type": self.chat_type,
             "sender_id": self.sender_id,
             "session_key": self.session_key,
         }
+        if self.group_name:
+            fields[GROUP_NAME_KEY] = self.group_name
+        if self.sender_name:
+            fields[SENDER_NAME_KEY] = self.sender_name
+        return fields
 
 
 def with_message_source(

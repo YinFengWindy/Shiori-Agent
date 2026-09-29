@@ -285,6 +285,20 @@ class ConversationStore:
             raise ValueError(f"contact upsert failed: {contact_id}")
         return self._row_to_contact(row)
 
+    def rename_contact(self, contact_id: str, display_name: str) -> None:
+        """Sets one contact's display name; an unchanged name writes nothing."""
+        now = datetime.now().astimezone().isoformat()
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE contacts
+                SET display_name = ?, updated_at = ?
+                WHERE id = ? AND display_name != ?
+                """,
+                (display_name, now, contact_id, display_name),
+            )
+            self._conn.commit()
+
     def upsert_thread(
         self,
         *,

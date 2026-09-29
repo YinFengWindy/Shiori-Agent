@@ -44,6 +44,19 @@ async def test_actions_query_fresh_lists_and_require_actual_send_receipt():
 
 
 @pytest.mark.asyncio
+async def test_group_name_comes_from_napcat_group_info():
+    socket = AsyncMock()
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+    socket.call.return_value = {"group_id": 777, "group_name": "读书会"}
+    assert await actions.group_name("account-a", "777") == "读书会"
+    socket.call.assert_awaited_with("get_group_info", {"group_id": 777})
+
+    socket.call.return_value = {"group_id": 777}
+    with pytest.raises(OneBotError, match="未返回群名"):
+        await actions.group_name("account-a", "777")
+
+
+@pytest.mark.asyncio
 async def test_group_mentions_and_temporary_sessions_use_napcat_targets():
     socket = AsyncMock()
     socket.call.return_value = {"message_id": 90}

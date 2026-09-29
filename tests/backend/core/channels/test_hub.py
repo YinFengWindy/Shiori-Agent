@@ -899,3 +899,64 @@ def test_private_replies_off_still_allow_pairing(tmp_path: Path) -> None:
     assert hub.claim_pairing(_private(account_id, code), scope="platform")
     [identity] = store.identities.list()
     assert identity.user_id == "902"
+
+
+def _contact_name(hub: ChannelHub, thread_id: str) -> str:
+    thread = hub._conversation.get_thread(thread_id)
+    assert thread is not None
+    contact = hub._conversation._store.get_contact(thread.contact_id)
+    assert contact is not None
+    return contact.display_name
+
+
+def test_contacts_are_named_by_the_latest_group_or_sender_name(
+    tmp_path: Path,
+) -> None:
+    hub, _, account_id = _hub_with_qq_account(tmp_path)
+
+    def group(**names: object) -> InboundMessage:
+        return InboundMessage(
+            channel="qq",
+            sender="902",
+            chat_id="gqq:777",
+            content="hello",
+            metadata={
+                "account_id": account_id,
+                "chat_type": "group",
+                "mentioned": True,
+                "sender_name": "小明",
+                **names,
+            },
+        )
+
+    hub.route_account_inbound(group())
+    assert _contact_name(hub, "thread:mira:qq:gqq:777") == "gqq:777"
+    first = hub.route_account_inbound(
+        group(group_name=" 读书会 ", external_message_id="m1")
+    )
+    assert _contact_name(hub, "thread:mira:qq:gqq:777") == "读书会"
+    # A replayed message that is already archived does not rename the contact.
+    assert first is not None
+    sessions = hub._service.sessions._session_manager
+    session = sessions.get_or_create(first.session_key)
+    session.add_message(
+        "user",
+        "hello",
+        thread_id=str(first.metadata["thread_id"]),
+        external_message_id="m1",
+    )
+    sessions.save(session)
+    replay = hub.route_account_inbound(
+        group(group_name="重投的群名", external_message_id="m1")
+    )
+    assert replay is not None and replay.metadata["conversation_duplicate"] is True
+    assert _contact_name(hub, "thread:mira:qq:gqq:777") == "读书会"
+    # A message whose group name could not be fetched keeps the known name.
+    hub.route_account_inbound(group())
+    hub.route_account_inbound(group(group_name="  "))
+    assert _contact_name(hub, "thread:mira:qq:gqq:777") == "读书会"
+    hub.route_account_inbound(group(group_name="新读书会"))
+    assert _contact_name(hub, "thread:mira:qq:gqq:777") == "新读书会"
+
+    hub.route_account_inbound(_private(account_id, "hello", sender_name="小明"))
+    assert _contact_name(hub, "thread:mira:qq:902") == "小明"

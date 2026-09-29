@@ -8,7 +8,12 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from .formatting import _build_inbound_text_with_reply
-from .identity import message_mentioned_bot, message_subject, message_topic_metadata
+from .identity import (
+    message_mentioned_bot,
+    message_names,
+    message_subject,
+    message_topic_metadata,
+)
 
 logger = logging.getLogger("plugins.telegram.channel")
 
@@ -82,7 +87,7 @@ class _MediaMixin:
                 "mentioned": message_mentioned_bot(msg, self._bot_username),
                 "sender_kind": sender_kind,
                 "chat_type": str(getattr(chat, "type", "private") or "private"),
-                "chat_title": str(getattr(chat, "title", "") or ""),
+                **message_names(chat, user),
                 "external_message_id": str(msg.message_id),
                 **message_topic_metadata(msg),
                 **reply_meta,
@@ -139,7 +144,7 @@ class _MediaMixin:
                 "mentioned": message_mentioned_bot(msg, self._bot_username),
                 "sender_kind": sender_kind,
                 "chat_type": str(getattr(chat, "type", "private") or "private"),
-                "chat_title": str(getattr(chat, "title", "") or ""),
+                **message_names(chat, user),
                 "external_message_id": str(msg.message_id),
                 **message_topic_metadata(msg),
                 "document_filename": doc.file_name or "",

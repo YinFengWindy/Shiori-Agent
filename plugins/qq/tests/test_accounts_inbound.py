@@ -87,3 +87,28 @@ def test_other_account_event_is_rejected():
         )
         is None
     )
+
+
+def test_sender_name_is_the_group_card_or_the_nickname():
+    def sender_name(kind: str, sender: object) -> object:
+        message = inbound_message(
+            account_id="a",
+            expected_uin="101",
+            via_account=_VIA,
+            event={
+                "post_type": "message",
+                "message_type": kind,
+                "self_id": 101,
+                "group_id": 777,
+                "user_id": 902,
+                "raw_message": "hello",
+                "sender": sender,
+            },
+        )
+        assert message is not None
+        return message.metadata.get("sender_name")
+
+    assert sender_name("group", {"card": "班长", "nickname": "小明"}) == "班长"
+    assert sender_name("group", {"card": "", "nickname": "小明"}) == "小明"
+    assert sender_name("private", {"nickname": "小明"}) == "小明"
+    assert sender_name("private", {"nickname": " "}) is None
