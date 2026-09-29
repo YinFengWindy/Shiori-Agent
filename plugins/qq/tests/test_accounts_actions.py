@@ -72,6 +72,42 @@ async def test_group_mentions_and_temporary_sessions_use_napcat_targets():
 
 
 @pytest.mark.asyncio
+async def test_images_follow_the_text_in_one_napcat_message(tmp_path):
+    socket = AsyncMock()
+    socket.call.return_value = {"message_id": 91}
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+    image = tmp_path / "sky.png"
+    image.write_bytes(b"png")
+
+    receipt = await actions.send_target(
+        "account-a",
+        "private",
+        "902",
+        "看天空",
+        images=(str(image), "https://x.test/a.png?w=1,h=2"),
+    )
+    assert receipt == {"message_id": "91"}
+    socket.call.assert_awaited_once_with(
+        "send_private_msg",
+        {
+            "user_id": 902,
+            "message": "看天空[CQ:image,file=base64://cG5n]"
+            "[CQ:image,file=https://x.test/a.png?w=1&#44;h=2]",
+        },
+    )
+    await actions.send_target("account-a", "private", "902", "", images=(str(image),))
+    socket.call.assert_awaited_with(
+        "send_private_msg",
+        {"user_id": 902, "message": "[CQ:image,file=base64://cG5n]"},
+    )
+    with pytest.raises(FileNotFoundError):
+        await actions.send_target(
+            "account-a", "private", "902", "hi", images=(str(tmp_path / "gone.png"),)
+        )
+    assert socket.call.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_actions_reject_invalid_directory_shape_and_propagate_api_failure():
     socket = AsyncMock()
     actions = QQAccountActions(lambda account_id: socket, AsyncMock())

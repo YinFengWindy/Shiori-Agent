@@ -10,6 +10,18 @@ from core.accounts import VIA_ACCOUNT_KEY
 from .accounts_actions import qq_number
 from .channel.group_filter import is_at_bot
 
+# Metadata flag of a private message that came through a group temporary
+# session (NapCat ``sub_type == "group"``) rather than a real private chat.
+GROUP_TEMPORARY_KEY = "group_temporary"
+
+
+def is_real_private_chat(message: InboundMessage) -> bool:
+    """Whether ``message`` is from a real private chat, not a group temp session."""
+    metadata = message.metadata or {}
+    return metadata.get("chat_type") == "private" and not metadata.get(
+        GROUP_TEMPORARY_KEY
+    )
+
 
 def inbound_message(
     *,
@@ -37,7 +49,7 @@ def inbound_message(
     )
     raw = event.get("raw_message")
     content = raw if isinstance(raw, str) else str(event.get("message") or "")
-    metadata = {
+    metadata: dict[str, object] = {
         "account_id": account_id,
         "platform_account_id": expected_uin,
         "chat_type": kind,
@@ -45,6 +57,8 @@ def inbound_message(
         "external_message_id": str(event.get("message_id") or ""),
         VIA_ACCOUNT_KEY: via_account,
     }
+    if kind == "private" and event.get("sub_type") == "group":
+        metadata[GROUP_TEMPORARY_KEY] = True
     if kind == "group":
         metadata["group_id"] = chat_id[4:]
         metadata["mentioned"] = is_at_bot(content, expected_uin)

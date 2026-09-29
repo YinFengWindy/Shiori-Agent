@@ -1,4 +1,4 @@
-"""Model-facing adapters for channel discovery and explicit text delivery.
+"""Model-facing adapters for channel discovery and explicit message delivery.
 
 The model picks a channel (a channel plugin's ID); account IDs never appear in
 arguments or results, because the role holds at most one account per channel.
@@ -11,7 +11,11 @@ from typing import Any
 
 from agent.account_delivery import AccountDelivery
 from agent.tools.base import Tool
-from core.accounts.target_contract import ACCOUNT_TARGET_PROPERTIES, AccountTarget
+from core.accounts.target_contract import (
+    ACCOUNT_TARGET_PROPERTIES,
+    AccountTarget,
+    account_send_media,
+)
 
 
 class AccountListTool(Tool):
@@ -77,10 +81,10 @@ def shared_account_delivery(tools: Any) -> AccountDelivery | None:
 
 
 class AccountSendTool(Tool):
-    """Sends a text message through the role's account on one channel."""
+    """Sends text and/or images through the role's account on one channel."""
 
     name = "account_send"
-    description = "通过当前角色在指定渠道的账号向一个明确目标发送文本，返回平台真实消息回执。先调用 account_targets 获取目标 ID；不接受模糊名称。target_kind、message_thread_id、group_id 和 mention_ids 的有效性由渠道插件校验。"
+    description = "通过当前角色在指定渠道的账号向一个明确目标发送文本和/或图片，返回平台真实消息回执。先调用 account_targets 获取目标 ID；不接受模糊名称。target_kind、message_thread_id、group_id 和 mention_ids 的有效性由渠道插件校验。"
     parameters = {
         "type": "object",
         "properties": {
@@ -89,9 +93,17 @@ class AccountSendTool(Tool):
                 "description": "渠道 ID，取自 account_list 的 channel。",
             },
             **ACCOUNT_TARGET_PROPERTIES,
-            "message": {"type": "string"},
+            "message": {
+                "type": "string",
+                "description": "要发送的文本；只发图片时可省略。",
+            },
+            "media": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "可选，要随消息发送的图片本地路径或 URL 列表。",
+            },
         },
-        "required": ["channel", "target_kind", "target_id", "message"],
+        "required": ["channel", "target_kind", "target_id"],
     }
     context_precedence = frozenset({"role_id"})
 
@@ -108,7 +120,8 @@ class AccountSendTool(Tool):
             str(kwargs["channel"]),
             str(kwargs.get("role_id") or ""),
             AccountTarget.from_arguments(kwargs),
-            str(kwargs["message"]),
+            str(kwargs.get("message") or ""),
+            media=list(account_send_media(kwargs)),
         )
         return json.dumps(
             {

@@ -26,8 +26,9 @@ export function formatCountdown(remainingMs: number) {
 }
 
 /**
- * Keys that change when an identity is newly bound or re-bound (a re-pair
- * refreshes `boundAt`), but not when only its known chats change.
+ * Keys that change when an identity is newly bound or re-bound (the host
+ * refreshes `boundAt` whenever a pairing code binds an existing identity),
+ * but not when only its known chats change.
  */
 export function identityBindingKeys(identities: UserIdentity[]) {
   return new Set(identities.map((item) => `${item.id}@${item.boundAt}`));

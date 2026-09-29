@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any
 
 from telegram.error import NetworkError, TelegramError
@@ -16,6 +17,7 @@ from core.accounts.target_contract import (
     ACCOUNT_TARGETS_METHOD,
     GROUP_MEMBER_TARGET,
     UncertainDeliveryError,
+    account_send_media,
 )
 from .channel.formatting import mention_markdown
 
@@ -88,8 +90,9 @@ class TelegramAccountApi:
     async def account_send(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Validate a selected Telegram chat, optional forum topic and mentions.
 
-        Group messages start with a mention of each ``mention_ids`` user; the
-        receipt carries the Bot's message snapshot.
+        Group messages start with a mention of each ``mention_ids`` user;
+        images follow the text as separate photos in the same topic. The
+        receipt is the first message's and carries the Bot's snapshot.
         """
         ref = self._ref_for_account(payload)
         target_kind = str(payload.get("target_kind") or "")
@@ -114,6 +117,7 @@ class TelegramAccountApi:
                 "chat_id": target_id,
                 "text": text,
                 "message_thread_id": payload.get("message_thread_id"),
+                "media": list(account_send_media(payload)),
             }
         )
         return {**result, VIA_ACCOUNT_KEY: via}
@@ -173,23 +177,51 @@ class TelegramAccountApi:
         }
 
     async def send_target(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Send to one explicit target through the selected connected Bot."""
+        """Send text and/or images to one explicit target through the selected Bot."""
         channel = self._channel(payload)
         if not channel.can_send():
             raise RuntimeError("Telegram Bot is not connected")
         chat_id = str(payload.get("chat_id") or "").strip()
         text = str(payload.get("text") or "")
+        media = account_send_media(payload)
         topic = payload.get("message_thread_id")
-        if not chat_id.lstrip("-").isdigit() or not text.strip():
-            raise ValueError("A numeric chat ID and message text are required")
+        if not chat_id.lstrip("-").isdigit() or (not text.strip() and not media):
+            raise ValueError(
+                "A numeric chat ID and message text or images are required"
+            )
         if topic is not None and (
             not isinstance(topic, int) or topic <= 0 or not chat_id.startswith("-")
         ):
             raise ValueError("A group topic requires a positive message_thread_id")
-        try:
-            receipt = await channel.send(chat_id, text, message_thread_id=topic)
-        except NetworkError as exc:
-            raise UncertainDeliveryError("Telegram 发送连接中断，结果不确定") from exc
-        if not receipt:
-            raise UncertainDeliveryError("Telegram 发送未返回消息 ID")
+        # Text, then each image as a photo in the same topic; the first ID is
+        # the receipt.
+        parts = [
+            *([(channel.send, text)] if text.strip() else []),
+            *((channel.send_image, image) for image in media),
+        ]
+        receipt = ""
+        for send, value in parts:
+            try:
+                message_id = await _confirmed(
+                    send(chat_id, value, message_thread_id=topic)
+                )
+            except Exception as exc:
+                if not receipt:
+                    raise
+                # The user already has part of the message: not a clean failure.
+                raise UncertainDeliveryError(
+                    "Telegram 消息已部分送达，后续图片发送失败"
+                ) from exc
+            receipt = receipt or message_id
         return {"chat_id": chat_id, "message_thread_id": topic, "message_id": receipt}
+
+
+async def _confirmed(sending: Awaitable[str | None]) -> str:
+    """One Telegram message's ID, with lost links and receipts as uncertain."""
+    try:
+        receipt = await sending
+    except NetworkError as exc:
+        raise UncertainDeliveryError("Telegram 发送连接中断，结果不确定") from exc
+    if not receipt:
+        raise UncertainDeliveryError("Telegram 发送未返回消息 ID")
+    return receipt

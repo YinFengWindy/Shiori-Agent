@@ -88,6 +88,12 @@ test("the shown pairing code goes away once a new identity arrives", async () =>
     await fake.updated();
     assert.equal(code(), undefined);
     assert.ok(buttonNamed(view.container, "生成配对码"));
+    // Re-pairing the same identity refreshes its bind time, which consumes the code too.
+    await act(async () => buttonNamed(view.container, "生成配对码")?.click());
+    assert.equal(code(), "ABCD2345");
+    fake.state.identities = [{ ...identity("1", "platform"), bound_at: "2026-09-29T08:10:00+00:00" }];
+    await fake.updated();
+    assert.equal(code(), undefined);
   } finally {
     await view.cleanup();
     pluginUiRegistry.unregisterPlugin("qq");

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { errorMessage } from "../shared/feedback/feedbackStore";
 import { createIdentityClient, type UserIdentity } from "./identityClient";
 
 const client = createIdentityClient();
@@ -26,7 +27,7 @@ export function useIdentityUnbind(onSettled: () => void) {
       await client.unbind(pending.id);
       setPending(null);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(errorMessage(failure));
     } finally {
       setBusy(false);
       onSettled();

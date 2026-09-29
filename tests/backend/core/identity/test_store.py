@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -102,13 +103,19 @@ def test_bindings_persist_and_unbind_removes_them(tmp_path: Path) -> None:
 def test_pairing_again_keeps_the_binding_and_records_the_new_chat(
     tmp_path: Path,
 ) -> None:
-    store = UserIdentityStore(tmp_path)
+    ticks = iter(
+        datetime(2026, 9, 29, 10, minute, tzinfo=timezone.utc) for minute in range(10)
+    )
+    now = next(ticks)
+    store = UserIdentityStore(tmp_path, clock=lambda: now)
     first = _pair(store, QQ_A, "902", "platform", ("qq", "902"))
+    now = next(ticks)
     second = _pair(store, QQ_B, "902", "platform", ("qq", "902"))
     assert first is not None and second is not None
 
     assert second.id == first.id
-    assert second.bound_at == first.bound_at
+    # A fresh bound_at tells the desktop the code it shows was used.
+    assert second.bound_at > first.bound_at
     assert {chat.account_id for chat in second.chats} == {QQ_A.id, QQ_B.id}
     assert store.list() == [second]
 
@@ -146,3 +153,16 @@ def test_forgetting_an_account_drops_its_bindings_and_chats(tmp_path: Path) -> N
     assert store.match(BOT_A, "open-1") is None
     # An account without bindings or chats changes nothing.
     assert len(changes) == 2
+
+
+def test_malformed_file_fails_without_using_up_the_code(tmp_path: Path) -> None:
+    store = UserIdentityStore(tmp_path)
+    code = store.create_pairing_code().code
+    path = tmp_path / "user_identities.json"
+    path.write_text('{"version": 99}', encoding="utf-8")
+    chat = IdentityChat(QQ_A.id, "qq", "902")
+
+    with pytest.raises(ValueError, match="格式无效"):
+        store.pair(code, record=QQ_A, user_id="902", scope="platform", chat=chat)
+    path.unlink()
+    assert store.pair(code, record=QQ_A, user_id="902", scope="platform", chat=chat)

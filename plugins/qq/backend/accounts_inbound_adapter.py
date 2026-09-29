@@ -11,7 +11,7 @@ from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
 
 from .accounts_actions import QQAccountActions, qq_chat_target
-from .accounts_inbound import inbound_message
+from .accounts_inbound import inbound_message, is_real_private_chat
 from .accounts_store import QQConnectionConfig
 from .channel.compat import download_to_temp, extract_cq_images
 from .channel.group_filter import strip_at_segments
@@ -87,10 +87,9 @@ class QQInboundAdapter:
             ) == "group" and not message.metadata.get("mentioned"):
                 return
         else:
-            # A QQ number is the same for every account.
-            if message.metadata.get(
-                "chat_type"
-            ) == "private" and await answer_pairing_code(
+            # A QQ number is the same for every account. Only a real private
+            # chat pairs; a group temporary session never does.
+            if is_real_private_chat(message) and await answer_pairing_code(
                 hub,
                 message,
                 scope="platform",

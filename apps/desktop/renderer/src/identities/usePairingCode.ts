@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { parseTimestamp } from "../shared/format";
+import { errorMessage } from "../shared/feedback/feedbackStore";
 import { createIdentityClient } from "./identityClient";
 
 const client = createIdentityClient();
@@ -39,7 +40,7 @@ export function usePairingCode() {
       setNow(Date.now());
       setShown({ code: next.code, expiresAtMs: expiresAt.getTime() });
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(errorMessage(failure));
     } finally {
       setBusy(false);
     }

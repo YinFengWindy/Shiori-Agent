@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any
 
 import httpx
 from core.accounts import VIA_ACCOUNT_KEY
-from core.accounts.target_contract import GROUP_MEMBER_TARGET, UncertainDeliveryError
+from core.accounts.target_contract import (
+    GROUP_MEMBER_TARGET,
+    UncertainDeliveryError,
+    account_send_media,
+)
 
 if TYPE_CHECKING:
     from .account_identity import QQBotAccountIdentity
@@ -22,7 +27,8 @@ class _AccountSendingMixin:
     async def account_send(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Adapt the shared account contract to QQBot's C2C OpenID send.
 
-        The receipt carries the application's message snapshot.
+        Text and each image go out as separate C2C messages; the receipt is
+        the first one's ID and carries the application's message snapshot.
         """
         if "target_kind" not in payload and "user_openid" in payload:
             return await self.send_target(payload)
@@ -41,12 +47,13 @@ class _AccountSendingMixin:
                 "account_id": payload.get("account_id"),
                 "user_openid": payload.get("target_id"),
                 "content": payload.get("message"),
+                "media": list(account_send_media(payload)),
             }
         )
         return {**result, VIA_ACCOUNT_KEY: via}
 
     async def send_target(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Send C2C content through the selected application account."""
+        """Send C2C content and optional images through the selected application."""
         app_id = self._identity.app_for_account(payload)
         channel = self._channels.get(app_id)
         if channel is None:
@@ -55,26 +62,50 @@ class _AccountSendingMixin:
         if not openid or ":" in openid:
             raise ValueError("无效的 QQBot 用户 OpenID")
         content = str(payload.get("content") or "").strip()
-        if not content:
+        media = account_send_media(payload)
+        if not content and not media:
             raise ValueError("发送内容不能为空")
-        try:
-            receipt = await channel.send(channel._chat_id(openid), content)
-        except httpx.TransportError as exc:
-            raise UncertainDeliveryError("QQBot 发送连接中断，结果不确定") from exc
-        except httpx.HTTPStatusError as exc:
+        chat_id = channel._chat_id(openid)
+        # Text, then each image, as separate C2C messages; the first ID is the receipt.
+        parts = [
+            *([(channel.send, content)] if content else []),
+            *((channel.send_image, image) for image in media),
+        ]
+        receipt = ""
+        for send, value in parts:
             try:
-                body = exc.response.json()
-            except ValueError:
-                body = {}
-            reason = (
-                str(body.get("message") or body.get("msg") or "").strip()
-                if isinstance(body, dict)
-                else ""
-            )
-            raise RuntimeError(
-                f"QQBot 平台拒绝发送 (HTTP {exc.response.status_code})"
-                + (f": {reason}" if reason else "")
-            ) from exc
-        if not receipt:
-            raise UncertainDeliveryError("QQBot 平台未返回消息 ID，发送结果不确定")
-        return {"message_id": receipt, "chat_id": channel._chat_id(openid)}
+                message_id = await _confirmed(send(chat_id, value))
+            except Exception as exc:
+                if not receipt:
+                    raise
+                # The user already has part of the message: not a clean failure.
+                raise UncertainDeliveryError(
+                    "QQBot 消息已部分送达，后续图片发送失败"
+                ) from exc
+            receipt = receipt or message_id
+        return {"message_id": receipt, "chat_id": chat_id}
+
+
+async def _confirmed(sending: Awaitable[str | None]) -> str:
+    """One C2C message's platform ID, with QQBot failures in contract terms."""
+    try:
+        receipt = await sending
+    except httpx.TransportError as exc:
+        raise UncertainDeliveryError("QQBot 发送连接中断，结果不确定") from exc
+    except httpx.HTTPStatusError as exc:
+        try:
+            body = exc.response.json()
+        except ValueError:
+            body = {}
+        reason = (
+            str(body.get("message") or body.get("msg") or "").strip()
+            if isinstance(body, dict)
+            else ""
+        )
+        raise RuntimeError(
+            f"QQBot 平台拒绝发送 (HTTP {exc.response.status_code})"
+            + (f": {reason}" if reason else "")
+        ) from exc
+    if not receipt:
+        raise UncertainDeliveryError("QQBot 平台未返回消息 ID，发送结果不确定")
+    return receipt

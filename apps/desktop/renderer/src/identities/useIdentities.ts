@@ -1,39 +1,34 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef } from "react";
+import type { BridgeEvent } from "../../../src/bridge/shared";
+import { useBridgeRefreshedValue } from "../shared/useBridgeRefreshedValue";
 import { createIdentityClient, type UserIdentity } from "./identityClient";
 import { identityBindingKeys } from "./identityPresentation";
 
 const client = createIdentityClient();
+const loadIdentities = () => client.list();
+
+/** The host pushes `identities.updated` on bind, unbind, or a newly known chat. */
+function identitiesMayHaveChanged(event: BridgeEvent) {
+  return event.method === "identities.updated";
+}
 
 /**
  * Keeps the bound identities current: loads on mount and reloads whenever the
- * host pushes `identities.updated` (bind, unbind, or a newly known chat).
- * `onBound` runs when a reload brings a binding the previous load did not
- * have — i.e. a pairing code was just used. It must be a stable callback.
+ * host pushes `identities.updated`. `onBound` runs when a reload brings a
+ * binding the previous load did not have — i.e. a pairing code was just used.
  */
 export function useIdentities(onBound: () => void) {
-  const [identities, setIdentities] = useState<UserIdentity[] | null>(null);
-  const [error, setError] = useState("");
-  const request = useRef(0);
   // Binding keys of the last successful load; null until the first one.
-  const known = useRef<Set<string> | null>(null);
-  const reload = useCallback(async () => {
-    const current = ++request.current;
-    try {
-      const next = await client.list();
-      if (current !== request.current) return;
-      const keys = identityBindingKeys(next);
-      const previous = known.current;
-      known.current = keys;
-      setIdentities(next);
-      setError("");
-      if (previous && [...keys].some((key) => !previous.has(key))) onBound();
-    } catch (failure) {
-      if (current === request.current) setError(failure instanceof Error ? failure.message : String(failure));
-    }
-  }, [onBound]);
-  useEffect(() => { void reload(); }, [reload]);
-  useEffect(() => window.miraDesktop.onEvent((event) => {
-    if (event.method === "identities.updated") void reload();
-  }), [reload]);
+  const previousBindingKeys = useRef<Set<string> | null>(null);
+  function detectNewBinding(loaded: UserIdentity[]) {
+    const keys = identityBindingKeys(loaded);
+    const previous = previousBindingKeys.current;
+    previousBindingKeys.current = keys;
+    if (previous && [...keys].some((key) => !previous.has(key))) onBound();
+  }
+  const { value: identities, error, refresh: reload } = useBridgeRefreshedValue({
+    load: loadIdentities, refreshEvents: identitiesMayHaveChanged, onLoaded: detectNewBinding,
+    refreshOnFocus: false, keepValueOnError: true,
+  });
   return { identities, error, reload };
 }

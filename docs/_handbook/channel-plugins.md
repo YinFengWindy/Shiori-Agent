@@ -168,9 +168,10 @@ async def stop(self):
 模型通过宿主的 `account_list`、`account_targets`、`account_send` 工具和 `message_push` 改投使用账号，参数里只有渠道 ID（插件 ID），宿主按「每个渠道一个账号」找到当前角色的账号，再以 `account_id` 调用插件 RPC。常量与请求形状在 `apps/backend/core/accounts/target_contract.py`：
 
 - `account.targets` 收到 `account_id`、`kind`、`group_id`、`member_id`。
-- `account.send` 收到 `account_id`、`message`，以及 `AccountTarget.to_payload()`：`target_kind`、`target_id`、`message_thread_id`（整数或 `None`）、`group_id`（仅 `group_member`，否则为空字符串）、`mention_ids`（仅 `group`，可为空列表）。
+- `account.send` 收到 `account_id`、`message`、`media`，以及 `AccountTarget.to_payload()`：`target_kind`、`target_id`、`message_thread_id`（整数或 `None`）、`group_id`（仅 `group_member`，否则为空字符串）、`mention_ids`（仅 `group`，可为空列表）。
 - 宿主只校验形状：`mention_ids` 只能用于 `target_kind="group"`；`target_kind="group_member"`（群临时会话，`target_id` 为成员 ID）必须带 `group_id`。平台能不能做由插件判断，做不到时明确报错，例如 QQBot、飞书没有群聊，收到 `mention_ids` 或 `group_member` 直接拒绝；Telegram 支持提及但没有群临时会话。
-- 返回平台真实的 `message_id`；拿不到回执时抛 `UncertainDeliveryError`，宿主把尝试记为「不确定」。
+- `media` 是要随消息发送的图片列表（按顺序，可为空列表），每项是本地图片路径或 http(s) URL，与主动推送、`message_push` 产出的形式相同；用 `account_send_media(payload)` 读取。`message` 与 `media` 可以有一个为空，但不会都为空。插件用自己平台的图片发送能力投递：能把文字和图片放进同一条消息的平台（如 QQ 的 CQ 图片码）发一条；否则由插件自己先发文字再逐张发图，已有部分送达后再失败时抛 `UncertainDeliveryError`（用户已收到一部分，不能记为未发送）。
+- 返回平台真实的 `message_id`（文字和图片分条发送时取第一条）；拿不到回执时抛 `UncertainDeliveryError`，宿主把尝试记为「不确定」。
 
 ## 6. 可选钩子
 

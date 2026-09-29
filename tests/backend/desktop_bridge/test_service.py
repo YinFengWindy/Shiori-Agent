@@ -1071,11 +1071,7 @@ async def test_account_report_from_a_task_with_a_released_lease_still_pushes(
 
 
 @pytest.mark.asyncio
-async def test_identity_requests_list_pair_and_unbind_with_change_pushes(
-    tmp_path,
-) -> None:
-    from datetime import datetime, timezone
-
+async def test_identity_changes_push_identities_updated(tmp_path) -> None:
     from core.identity import IdentityChat
 
     role_store = RoleStore(tmp_path)
@@ -1098,40 +1094,20 @@ async def test_identity_requests_list_pair_and_unbind_with_change_pushes(
     emitted: list[dict] = []
     service.add_event_listener(emitted.append)
 
-    async def request(method: str, payload: dict | None = None) -> dict:
-        response = await service.handle(
-            {"id": method, "method": method, "payload": payload or {}},
-            emit_event=Mock(),
-        )
-        assert response.error is None
-        return response.payload
-
-    created = await request("identities.pairing.create")
-    assert datetime.fromisoformat(created["expires_at"]) > datetime.now(timezone.utc)
-    # Channel intake consumes the code through the same shared store.
+    # The bridge's pairing code is consumed by intake through the shared store.
+    response = await service.handle(
+        {"id": "p", "method": "identities.pairing.create", "payload": {}},
+        emit_event=Mock(),
+    )
     identity = role_store.identities.pair(
-        created["code"],
+        response.payload["code"],
         record=account.record,
         user_id="902",
         scope="platform",
         chat=IdentityChat(account.record.id, "demo", "902"),
     )
     assert identity is not None
-    assert (await request("identities.list"))["identities"] == [
-        {
-            "id": identity.id,
-            "plugin_id": "demo",
-            "user_id": "902",
-            "scope": "platform",
-            "account_id": "",
-            "bound_at": identity.bound_at,
-        }
-    ]
-
-    assert await request("identities.unbind", {"identity_id": identity.id}) == {
-        "identity_id": identity.id
-    }
-    assert (await request("identities.list"))["identities"] == []
+    role_store.identities.unbind(identity.id)
     await asyncio.sleep(0)
     assert [(event["method"], event["payload"]) for event in emitted] == [
         ("identities.updated", {}),

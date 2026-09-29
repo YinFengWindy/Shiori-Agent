@@ -115,3 +115,74 @@ async def test_qqbot_transport_error_is_uncertain():
         await _Sending(channel).send_target(
             {"account_id": "account-100", "user_openid": "opaque", "content": "hi"}
         )
+
+
+@pytest.mark.asyncio
+async def test_images_follow_the_text_as_separate_c2c_messages():
+    sent = []
+
+    async def send(chat_id, content):
+        sent.append(("text", content))
+        return "text-id"
+
+    async def send_image(chat_id, image):
+        sent.append(("image", image))
+        return f"image-{len(sent)}"
+
+    channel = SimpleNamespace(
+        _chat_id=lambda openid: f"c2c:100:{openid}", send=send, send_image=send_image
+    )
+    result = await _Sending(channel).account_send(
+        {
+            "account_id": "account-100",
+            "target_kind": "private",
+            "target_id": "opaque",
+            "message": "看天空",
+            "media": ["D:/media/sky.png", "https://x.test/a.png"],
+        }
+    )
+    assert result["message_id"] == "text-id"
+    assert sent == [
+        ("text", "看天空"),
+        ("image", "D:/media/sky.png"),
+        ("image", "https://x.test/a.png"),
+    ]
+    sent.clear()
+    only_image = await _Sending(channel).account_send(
+        {
+            "account_id": "account-100",
+            "target_kind": "private",
+            "target_id": "opaque",
+            "message": "",
+            "media": ["D:/media/sky.png"],
+        }
+    )
+    assert (only_image["message_id"], sent) == (
+        "image-1",
+        [("image", "D:/media/sky.png")],
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_image_after_the_text_is_uncertain():
+    async def send(chat_id, content):
+        return "text-id"
+
+    async def broken_image(chat_id, image):
+        raise FileNotFoundError(image)
+
+    channel = SimpleNamespace(
+        _chat_id=lambda openid: f"c2c:100:{openid}", send=send, send_image=broken_image
+    )
+    payload = {
+        "account_id": "account-100",
+        "target_kind": "private",
+        "target_id": "opaque",
+        "message": "看天空",
+        "media": ["D:/media/sky.png"],
+    }
+    with pytest.raises(UncertainDeliveryError, match="部分送达"):
+        await _Sending(channel).account_send(payload)
+    # Nothing reached the user: the image's own error stands.
+    with pytest.raises(FileNotFoundError):
+        await _Sending(channel).account_send({**payload, "message": ""})

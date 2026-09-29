@@ -114,6 +114,60 @@ async def test_explicit_proactive_account_target_records_receipt_without_default
 
 
 @pytest.mark.asyncio
+async def test_proactive_images_reach_the_bound_private_chat(tmp_path) -> None:
+    accounts = AccountRegistry(lambda role_id: role_id == "mira")
+    account = accounts.register(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="bot",
+        config_ref="bot",
+        token="live",
+        role_id="mira",
+    )
+    accounts.report(account.record.id, "live", connection="online")
+    sent: list[dict[str, Any]] = []
+
+    async def send(payload):
+        sent.append(payload)
+        return {"message_id": "platform-9"}
+
+    rpc = SimpleNamespace(resolve=lambda name: ("chat", send))
+    session_manager = SessionManager(tmp_path)
+    session_manager.get_or_create("chat:user-1").metadata["role_id"] = "mira"
+    orchestrator = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            session=SessionServices(session_manager=cast(Any, session_manager)),
+            outbound=SimpleNamespace(dispatch=AsyncMock()),
+            account_delivery=AccountDelivery(
+                accounts, rpc, AccountDeliveryLedger(tmp_path)
+            ),
+            bound_chat_target=lambda role_id, channel, chat_id: (
+                channel,
+                AccountTarget("private", chat_id),
+            ),
+        )
+    )
+    result = TurnResult(
+        role_reply=RoleReply("", "平静", "我想给你看今天的天空。"),
+        reply_context=RoleReplyContext(("平静",), ""),
+        decision="reply",
+        outbound=TurnOutbound(
+            session_key="chat:user-1", content="", media=["D:/media/sky.png"]
+        ),
+    )
+
+    assert await orchestrator.handle_proactive_turn(
+        result=result, session_key="chat:user-1", channel="chat", chat_id="user-1"
+    )
+    [payload] = sent
+    assert (payload["target_kind"], payload["target_id"]) == ("private", "user-1")
+    assert (payload["message"], payload["media"]) == ("", ["D:/media/sky.png"])
+    [message] = session_manager.get_or_create("chat:user-1").messages
+    assert message["media"] == ["D:/media/sky.png"]
+    assert message["external_message_id"] == "platform-9"
+
+
+@pytest.mark.asyncio
 async def test_failed_proactive_target_remains_durable_without_turn_commit(
     tmp_path,
 ) -> None:

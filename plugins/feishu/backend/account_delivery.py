@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING
 
 import httpx
 
 from core.accounts import VIA_ACCOUNT_KEY
-from core.accounts.target_contract import GROUP_MEMBER_TARGET, UncertainDeliveryError
+from core.accounts.target_contract import (
+    GROUP_MEMBER_TARGET,
+    UncertainDeliveryError,
+    account_send_media,
+)
 
 from .accounts import FeishuAccounts
 
@@ -45,19 +50,36 @@ class FeishuAccountDelivery:
         return await self.profile({"ref": self._accounts.ref_for_account(payload)})
 
     async def send(self, payload: dict[str, object]) -> dict[str, object]:
-        """Sends a private message through one connected application."""
+        """Sends a private message and/or images through one connected application.
+
+        Text and each image are separate Feishu messages; the receipt is the
+        first one's ID.
+        """
         channel = self._accounts.channel(str(payload.get("ref") or ""))
         if channel is None:
             raise RuntimeError("飞书账号未连接")
-        try:
-            message_id = await channel.send(
-                str(payload.get("chat_id") or ""), str(payload.get("message") or "")
-            )
-        except httpx.TransportError as exc:
-            raise UncertainDeliveryError("飞书发送连接中断，结果不确定") from exc
-        if not message_id:
-            raise UncertainDeliveryError("飞书平台未返回回执")
-        return {"message_id": message_id}
+        chat_id = str(payload.get("chat_id") or "")
+        message = str(payload.get("message") or "")
+        media = account_send_media(payload)
+        if not message.strip() and not media:
+            raise ValueError("消息和图片不能都为空")
+        parts = [
+            *([(channel.send, message)] if message.strip() else []),
+            *((channel.send_image, image) for image in media),
+        ]
+        receipt = ""
+        for send, value in parts:
+            try:
+                message_id = await _confirmed(send(chat_id, value))
+            except Exception as exc:
+                if not receipt:
+                    raise
+                # The user already has part of the message: not a clean failure.
+                raise UncertainDeliveryError(
+                    "飞书消息已部分送达，后续图片发送失败"
+                ) from exc
+            receipt = receipt or message_id
+        return {"message_id": receipt}
 
     async def send_account(self, payload: dict[str, object]) -> dict[str, object]:
         """Validates the shared account-send contract before private delivery.
@@ -83,6 +105,18 @@ class FeishuAccountDelivery:
                 "ref": ref,
                 "chat_id": payload.get("target_id"),
                 "message": payload.get("message"),
+                "media": list(account_send_media(payload)),
             }
         )
         return {**result, VIA_ACCOUNT_KEY: via}
+
+
+async def _confirmed(sending: Awaitable[str | None]) -> str:
+    """One Feishu message's ID, with lost links and receipts as uncertain."""
+    try:
+        message_id = await sending
+    except httpx.TransportError as exc:
+        raise UncertainDeliveryError("飞书发送连接中断，结果不确定") from exc
+    if not message_id:
+        raise UncertainDeliveryError("飞书平台未返回回执")
+    return message_id

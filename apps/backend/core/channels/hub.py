@@ -78,19 +78,37 @@ class ChannelHub:
         owned account; the pairing chat is recorded with the binding. Returns
         True when the code was consumed, so the plugin confirms and drops the
         message; any other text binds nothing.
+
+        A sender on the account's blocklist cannot pair: its message is left
+        to normal routing, which drops it. Turning private replies off does
+        not stop pairing, since binding is not a conversation with the role.
         """
-        account_id = str((message.metadata or {}).get("account_id") or "").strip()
+        metadata = message.metadata or {}
+        account_id = str(metadata.get("account_id") or "").strip()
         account = self._live_owned_account(account_id, message.channel)
         if account is None:
+            return False
+        if self._account_sender_blocked(
+            account,
+            sender_id=message.sender,
+            sender_alias=str(metadata.get("username") or ""),
+        ):
             return False
         identity = self._identities.pair(
             message.content,
             record=account.record,
             user_id=str(message.sender or "").strip(),
             scope=scope,
-            chat=IdentityChat(account.record.id, message.channel, message.chat_id),
+            chat=self._identity_chat(account, message),
         )
         return identity is not None
+
+    @staticmethod
+    def _identity_chat(
+        account: AccountSnapshot, message: InboundMessage
+    ) -> IdentityChat:
+        """The private chat ``message`` arrived in, through ``account``."""
+        return IdentityChat(account.record.id, message.channel, message.chat_id)
 
     def route_account_inbound(self, message: InboundMessage) -> InboundMessage | None:
         """Admits only an owned, live receiving account under its response rules.
@@ -139,8 +157,7 @@ class ChannelHub:
                 # A private chat with the user is where proactive messages can
                 # reach them through this account.
                 self._identities.remember_chat(
-                    identity.id,
-                    IdentityChat(account.record.id, message.channel, message.chat_id),
+                    identity.id, self._identity_chat(account, message)
                 )
         metadata["source"] = "role_account"
         return self._route_for_role(message, role_id, metadata)

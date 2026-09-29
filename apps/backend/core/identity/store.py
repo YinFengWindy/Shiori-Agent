@@ -89,17 +89,20 @@ class UserIdentityStore:
 
         ``record`` is the account the code arrived through and ``chat`` the
         private chat it was sent in. Pairing an identity that is already bound
-        keeps the binding and only records the chat. Returns None, binding
-        nothing, for any other text.
+        keeps the binding, records the chat and refreshes ``bound_at``, so the
+        desktop sees the code was used. Returns None, binding nothing, for any
+        other text. The bindings file is read before the code is consumed, so
+        a malformed file raises without using up the code.
         """
         if not user_id.strip():
             raise ValueError("平台用户 ID 不能为空")
         if chat.account_id != record.id:
             raise ValueError("配对私聊必须属于接收账号")
         with self._lock:
+            identities = self._read()
             if not self._pairing.consume(text):
                 return None
-            identities = self._read()
+            bound_at = self._clock().isoformat()
             account_id = record.id if scope == "account" else ""
             existing = next(
                 (
@@ -110,13 +113,17 @@ class UserIdentityStore:
                 ),
                 None,
             )
-            identity = existing or UserIdentity(
-                id=uuid4().hex,
-                plugin_id=record.plugin_id,
-                user_id=user_id,
-                scope=scope,
-                account_id=account_id,
-                bound_at=self._clock().isoformat(),
+            identity = (
+                replace(existing, bound_at=bound_at)
+                if existing is not None
+                else UserIdentity(
+                    id=uuid4().hex,
+                    plugin_id=record.plugin_id,
+                    user_id=user_id,
+                    scope=scope,
+                    account_id=account_id,
+                    bound_at=bound_at,
+                )
             )
             identity = _with_chat(identity, chat)
             self._write(
