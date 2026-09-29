@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 from core.common.message_source import MessageSource
+from conversation.context_scope import ContextView, belongs_to_user
 from agent.core.passive_support import (
     build_session_runtime_metadata,
     update_session_runtime_metadata,
@@ -212,13 +214,6 @@ class _PersistUserMessageModule:
         omit_user_turn = bool((msg.metadata or {}).get("omit_user_turn"))
         if omit_user_turn:
             return frame
-        if self._session_services.presence:
-            self._session_services.presence.record_user_message(session.key)
-        relationship_runtime = getattr(
-            self._session_services, "relationship_runtime", None
-        )
-        if relationship_runtime is not None:
-            relationship_runtime.handle_user_message(session.key)
         user_kwargs: dict[str, object] = {}
         user_metadata = _build_synced_message_metadata(
             channel=msg.channel,
@@ -242,6 +237,8 @@ class _PersistUserMessageModule:
                 session=session,
             )
         )
+        if _is_user_authored_turn(state.context_view, user_kwargs):
+            self._record_user_activity(session.key)
         persisted_user_content = msg.metadata.get(_PERSISTED_USER_CONTENT_METADATA_KEY)
         user_content = (
             persisted_user_content
@@ -266,6 +263,29 @@ class _PersistUserMessageModule:
             )
             frame.slots["reply:messages"].append(session.messages[-1])
         return frame
+
+    def _record_user_activity(self, session_key: str) -> None:
+        """用户本人发来消息：刷新在场，并让关系状态（孤独值、等待回复）响应。"""
+        if self._session_services.presence:
+            self._session_services.presence.record_user_message(session_key)
+        relationship_runtime = getattr(
+            self._session_services, "relationship_runtime", None
+        )
+        if relationship_runtime is not None:
+            relationship_runtime.handle_user_message(session_key)
+
+
+def _is_user_authored_turn(
+    context_view: ContextView | None, user_kwargs: Mapping[str, Any]
+) -> bool:
+    """本回合的用户消息是否出自用户本人（规则见 ``belongs_to_user``）。
+
+    角色共享会话混存各渠道的消息，群友与陌生人的发言不能让角色觉得用户在陪它；
+    其他会话只有一段对话，没有划分，照旧视为用户本人。
+    """
+    if context_view is None:
+        return True
+    return belongs_to_user(user_kwargs, context_view.user_threads)
 
 
 class _PersistAssistantMessageModule:

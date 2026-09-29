@@ -13,6 +13,10 @@
 当前的身份绑定计算，绑定或解绑之后，相应私聊的历史随之改变可见性，消息本身不变。
 历史组装与主动消息都直接使用本模块，不各写一套规则。桌面聊天界面只显示其中
 桌面这一路（``in_desktop_view``），同样由本模块判定。
+
+另一条共享规则按发送者判定：消息是否属于用户本人（``belongs_to_user``）。它在
+上下文划分之外，额外认下已绑定用户在群聊等外部会话里的发言。孤独值、在场与
+关系快照只看用户本人的消息，不各写一套规则。
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from conversation.service import (
     is_scheduler_thread,
     network_thread_id,
 )
+from core.common.message_source import MessageSource
 from core.identity import UserIdentity, UserIdentityStore
 from session.manager.helpers import role_session_key
 from session.manager.models import HistoryFilter, message_thread_id
@@ -51,6 +56,28 @@ class UserContextThreads:
             in_desktop_view(self.role_id, thread_id)
             or thread_id in self.bound_chat_thread_ids
         )
+
+
+def belongs_to_user(
+    message: Mapping[str, Any], user_threads: UserContextThreads
+) -> bool:
+    """``message`` 是否属于用户本人：唯一的共享判定，调用方不另写规则。
+
+    两种情况成立：消息所在会话属于用户上下文（桌面、已绑定用户的私聊、计划任务、
+    没有 ``thread_id`` 的旧消息）；或消息来源记录了发送者是已绑定的用户本人
+    （``sender_is_user``，例如用户在群里的发言）。这个标记只在收到消息时为真才
+    写入，解绑后依旧保留，按“当时确实是用户本人说的”处理；而会话归属按此刻的
+    绑定计算。群友与陌生人的消息两者都不满足。
+
+    对角色自己的消息，这等于“是否在用户上下文里”：它们不带发送者标记。
+    """
+    if user_threads.contains(message_thread_id(message)):
+        return True
+    metadata = message.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return False
+    # session_key 只用于补全旧格式来源，这里只读发送者标记。
+    return MessageSource.from_metadata(metadata, session_key="").sender_is_user
 
 
 def in_desktop_view(role_id: str, thread_id: str) -> bool:
