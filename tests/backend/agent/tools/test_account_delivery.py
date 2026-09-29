@@ -8,13 +8,21 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.account_delivery import AccountSendReceipt
+from agent.account_delivery import AccountDelivery, AccountSendReceipt
 from agent.tools.account_delivery import (
     AccountListTool,
     AccountSendTool,
     AccountTargetsTool,
 )
+from agent.turns.turn_pushes import current_turn_pushes
+from bus.event_bus import EventBus
+from conversation.push_sync import ExternalPushSyncService
+from conversation.service import network_thread_id
+from core.accounts import AccountRegistry
+from core.accounts.delivery_ledger import AccountDeliveryLedger
 from core.accounts.target_contract import AccountTarget
+from core.identity import IdentityChat, UserIdentityStore
+from session.manager import SessionManager
 
 
 @pytest.mark.asyncio
@@ -41,7 +49,7 @@ async def test_account_tools_pass_the_channel_and_hide_account_ids() -> None:
         )
     )
     receipt = json.loads(
-        await AccountSendTool(delivery).execute(
+        await AccountSendTool(delivery, EventBus()).execute(
             channel="qq",
             role_id="mira",
             target_kind="group",
@@ -80,7 +88,7 @@ async def test_account_send_passes_images_without_text() -> None:
         ownership_current=True,
     )
     delivery = SimpleNamespace(send=AsyncMock(return_value=receipt))
-    await AccountSendTool(delivery).execute(
+    await AccountSendTool(delivery, EventBus()).execute(
         channel="qq",
         role_id="mira",
         target_kind="private",
@@ -95,10 +103,123 @@ async def test_account_send_passes_images_without_text() -> None:
         media=["D:/media/scene.png", "https://example.test/a.png"],
     )
     with pytest.raises(ValueError, match="media"):
-        await AccountSendTool(delivery).execute(
+        await AccountSendTool(delivery, EventBus()).execute(
             channel="qq",
             role_id="mira",
             target_kind="private",
             target_id="42",
             media="D:/media/scene.png",
         )
+
+
+_VIA = {
+    "platform": "qq",
+    "platform_account_id": "101",
+    "display_name": "Mira",
+    "prefix": "QQ「Mira」",
+}
+
+
+def _user_send_setup(tmp_path):
+    """Mira's online QQ account, the user bound to it, and a recording session."""
+    accounts = AccountRegistry(lambda role_id: role_id == "mira")
+    record = accounts.register(
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        token="live",
+        role_id="mira",
+    ).record
+    accounts.report(record.id, "live", connection="online")
+    identities = UserIdentityStore(tmp_path)
+    identity = identities.pair(
+        identities.create_pairing_code().code,
+        record=record,
+        user_id="3174898512",
+        scope="platform",
+        chat=IdentityChat(record.id, "qq", "3174898512"),
+    )
+    assert identity is not None
+    sent: list[dict] = []
+
+    async def send(payload: dict) -> dict:
+        sent.append(payload)
+        return {"message_id": "qq-9", "via_account": _VIA}
+
+    ledger = AccountDeliveryLedger(tmp_path)
+    delivery = AccountDelivery(
+        accounts, SimpleNamespace(resolve=lambda name: ("qq", send)), ledger, identities
+    )
+    session_manager = SessionManager(tmp_path)
+    session_manager.open_role_session("mira", role_name="Mira")
+    event_bus = EventBus()
+    _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes,
+        session_manager=session_manager,
+        event_bus=event_bus,
+    )
+    return AccountSendTool(delivery, event_bus), sent, ledger, session_manager
+
+
+@pytest.mark.asyncio
+async def test_user_target_reaches_the_users_private_chat_and_is_recorded(
+    tmp_path,
+) -> None:
+    tool, sent, ledger, session_manager = _user_send_setup(tmp_path)
+    image = "https://example.test/a.png"
+
+    receipt = json.loads(
+        await tool.execute(
+            channel="qq",
+            role_id="mira",
+            session_key="role:mira",
+            target_kind="user",
+            message="我在 QQ 上找你啦",
+            media=[image],
+        )
+    )
+
+    assert [(row["target_kind"], row["target_id"]) for row in sent] == [
+        ("private", "3174898512")
+    ]
+    assert receipt["target_id"] == "3174898512"
+    [attempt] = ledger.list_for_role("mira")
+    assert (attempt.status, attempt.platform_message_id) == ("sent", "qq-9")
+    # Stored in the role session under the QQ private chat's thread, so the
+    # chat (and the phone) shows it, with the account delivery facts.
+    [stored] = session_manager._store.fetch_session_messages("role:mira")
+    assert stored["content"] == "我在 QQ 上找你啦"
+    assert stored["media"] == [image]
+    assert stored["thread_id"] == network_thread_id("mira", "qq", "3174898512")
+    metadata = stored["metadata"]
+    assert metadata["source"] == "account_send"
+    assert metadata["chat_type"] == "private"
+    assert metadata["delivery_attempt_id"] == attempt.attempt_id
+    assert metadata["external_message_id"] == "qq-9"
+    assert metadata["via_account"] == _VIA
+
+
+@pytest.mark.asyncio
+async def test_user_target_refuses_a_specific_target_or_an_unbound_channel(
+    tmp_path,
+) -> None:
+    tool, sent, ledger, session_manager = _user_send_setup(tmp_path)
+    with pytest.raises(ValueError, match="target_id"):
+        await tool.execute(
+            channel="qq",
+            role_id="mira",
+            target_kind="user",
+            target_id="42",
+            message="hi",
+        )
+    store = UserIdentityStore(tmp_path)
+    for identity in store.list():
+        store.unbind(identity.id)
+    with pytest.raises(LookupError, match="没有在渠道 qq 绑定身份"):
+        await tool.execute(
+            channel="qq", role_id="mira", target_kind="user", message="hi"
+        )
+    assert sent == []
+    assert ledger.list_for_role("mira") == []
+    assert session_manager._store.fetch_session_messages("role:mira") == []

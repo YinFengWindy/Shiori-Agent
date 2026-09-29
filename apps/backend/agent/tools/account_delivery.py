@@ -11,11 +11,17 @@ from typing import Any
 
 from agent.account_delivery import AccountDelivery
 from agent.tools.base import Tool
+from agent.tools.message_push import record_delivered_push
+from bus.event_bus import EventBus
+from bus.events_lifecycle import ExternalTextPushed
 from core.accounts.target_contract import (
     ACCOUNT_TARGET_PROPERTIES,
+    USER_TARGET,
     AccountTarget,
     account_send_media,
+    is_user_target,
 )
+from core.common.channel_chat_types import CHAT_TYPE_PRIVATE
 
 
 class AccountListTool(Tool):
@@ -81,10 +87,22 @@ def shared_account_delivery(tools: Any) -> AccountDelivery | None:
 
 
 class AccountSendTool(Tool):
-    """Sends text and/or images through the role's account on one channel."""
+    """Sends text and/or images through the role's account on one channel.
+
+    The ``user`` target reaches the desktop user's private chat on the channel,
+    resolved from their bindings (``AccountDelivery.user_chat``); such a send
+    is also recorded in the role session under that chat's thread, like a
+    ``message_push`` delivery, so the chat shows it.
+    """
 
     name = "account_send"
-    description = "通过当前角色在指定渠道的账号向一个明确目标发送文本和/或图片，返回平台真实消息回执。先调用 account_targets 获取目标 ID；不接受模糊名称。target_kind、message_thread_id、group_id 和 mention_ids 的有效性由渠道插件校验。"
+    description = (
+        "通过当前角色在指定渠道的账号向一个明确目标发送文本和/或图片，返回平台真实消息回执。"
+        f"发给你的用户时用 target_kind={USER_TARGET}，只需指定 channel，"
+        "由系统按用户的身份绑定找到其私聊；用户在该渠道未绑定或还没私聊过你的账号时会报错。"
+        "其他目标先调用 account_targets 获取目标 ID；不接受模糊名称。"
+        "target_kind、message_thread_id、group_id 和 mention_ids 的有效性由渠道插件校验。"
+    )
     parameters = {
         "type": "object",
         "properties": {
@@ -93,6 +111,20 @@ class AccountSendTool(Tool):
                 "description": "渠道 ID，取自 account_list 的 channel。",
             },
             **ACCOUNT_TARGET_PROPERTIES,
+            "target_kind": {
+                "type": "string",
+                "description": (
+                    f"目标类型：{USER_TARGET}（你的用户，无需 target_id）、"
+                    "private（私聊）、group（群聊）或 group_member"
+                    "（群临时会话，需 group_id）；渠道是否支持由其插件校验。"
+                ),
+            },
+            "target_id": {
+                "type": "string",
+                "description": (
+                    f"目标 ID：私聊对象、群或群成员的平台 ID；{USER_TARGET} 目标不填。"
+                ),
+            },
             "message": {
                 "type": "string",
                 "description": "要发送的文本；只发图片时可省略。",
@@ -103,12 +135,17 @@ class AccountSendTool(Tool):
                 "description": "可选，要随消息发送的图片本地路径或 URL 列表。",
             },
         },
-        "required": ["channel", "target_kind", "target_id"],
+        "required": ["channel", "target_kind"],
     }
-    context_precedence = frozenset({"role_id"})
+    # The turn's session and whether its pushes commit with it come from the
+    # execution context, never from model arguments.
+    context_precedence = frozenset(
+        {"role_id", "session_key", "defer_push_session_sync"}
+    )
 
-    def __init__(self, delivery: AccountDelivery) -> None:
+    def __init__(self, delivery: AccountDelivery, event_bus: EventBus) -> None:
         self._delivery = delivery
+        self._event_bus = event_bus
 
     @property
     def delivery(self) -> AccountDelivery:
@@ -116,13 +153,44 @@ class AccountSendTool(Tool):
         return self._delivery
 
     async def execute(self, **kwargs: Any) -> str:
-        receipt = await self._delivery.send(
-            str(kwargs["channel"]),
-            str(kwargs.get("role_id") or ""),
-            AccountTarget.from_arguments(kwargs),
-            str(kwargs.get("message") or ""),
-            media=list(account_send_media(kwargs)),
+        channel = str(kwargs["channel"])
+        role_id = str(kwargs.get("role_id") or "")
+        message = str(kwargs.get("message") or "")
+        media = list(account_send_media(kwargs))
+        user_chat = (
+            self._delivery.user_chat(channel, role_id)
+            if is_user_target(kwargs)
+            else None
         )
+        target = (
+            user_chat.target
+            if user_chat is not None
+            else AccountTarget.from_arguments(kwargs)
+        )
+        receipt = await self._delivery.send(
+            channel, role_id, target, message, media=media
+        )
+        if user_chat is not None:
+            # Recorded like a pushed message: with the turn that sent it, or
+            # at once outside a live turn.
+            await record_delivered_push(
+                self._event_bus,
+                ExternalTextPushed(
+                    session_key=str(kwargs.get("session_key") or ""),
+                    role_id=role_id,
+                    channel=user_chat.chat.channel,
+                    chat_id=user_chat.chat.chat_id,
+                    text=message,
+                    in_turn=str(kwargs.get("defer_push_session_sync") or "") == "true",
+                    external_message_id=receipt.platform_message_id,
+                    tool=self.name,
+                    media=tuple(media),
+                    message_metadata={
+                        "chat_type": CHAT_TYPE_PRIVATE,
+                        **receipt.message_metadata(),
+                    },
+                ),
+            )
         return json.dumps(
             {
                 "attempt_id": receipt.attempt_id,

@@ -132,8 +132,7 @@ class ProactiveTargetResolver:
             for identity in self._roles.identities.list()
             for record in records
             if identity.applies_to(record)
-            for chat in identity.chats
-            if chat.account_id == record.id
+            and (chat := identity.chat_for(record.id)) is not None
         ]
 
     def resolve(

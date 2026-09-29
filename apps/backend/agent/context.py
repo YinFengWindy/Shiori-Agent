@@ -21,6 +21,7 @@ from agent.core.prompt_block import (
     SystemPromptBuildResult,
     SystemPromptBuilder,
     TurnContext,
+    UserIdentitiesPromptBlock,
 )
 from agent.prompting import (
     PromptAssembler,
@@ -42,6 +43,8 @@ from prompts.agent import (
 )
 
 if TYPE_CHECKING:
+    from core.accounts import AccountRegistry
+    from core.identity import UserIdentityStore
     from core.memory.markdown import MemoryProfileApi
 
 logger = logging.getLogger("agent.context")
@@ -220,6 +223,7 @@ class ContextBuilder:
         self.workspace = workspace
         self.skills = SkillsLoader(workspace)
         self.memory = memory
+        self._user_identities_block = UserIdentitiesPromptBlock()
         self._system_prompt_builder = SystemPromptBuilder(
             [
                 IdentityPromptBlock(render_fn=build_agent_static_identity_prompt),
@@ -229,6 +233,7 @@ class ContextBuilder:
                 SelfModelPromptBlock(),
                 RecentContextPromptBlock(),
                 SessionContextPromptBlock(),
+                self._user_identities_block,
                 ActiveSkillsPromptBlock(),
                 SkillsCatalogPromptBlock(render_fn=build_skills_catalog_prompt),
             ]
@@ -246,6 +251,16 @@ class ContextBuilder:
     def set_channel_directory(self, channel_directory: ChannelDirectory) -> None:
         """Resolves channel prompt hints through the published channel set."""
         self._envelope_builder.set_channel_directory(channel_directory)
+
+    def set_user_identity_sources(
+        self, accounts: "AccountRegistry", identities: "UserIdentityStore"
+    ) -> None:
+        """Lets every turn's prompt list the user's identities on the role's channels.
+
+        ``accounts`` must be the runtime's account index, the only place the
+        role's accounts are known.
+        """
+        self._user_identities_block.bind(accounts, identities)
 
     def set_media_capabilities(
         self,
@@ -318,6 +333,7 @@ class ContextBuilder:
             session_metadata=session_metadata,
         )
         assembled = self._assembler.assemble(
+            role_id=str((session_metadata or {}).get("role_id") or "").strip(),
             history=request.history,
             current_message=request.current_message,
             media=request.media,
@@ -350,6 +366,7 @@ class ContextBuilder:
         chat_id: str | None = None,
         retrieved_memory_block: str = "",
         disabled_sections: set[str] | None = None,
+        role_id: str = "",
     ) -> SystemPromptBuildResult:
         ctx = TurnContext(
             workspace=self.workspace,
@@ -359,6 +376,7 @@ class ContextBuilder:
             channel=channel,
             chat_id=chat_id,
             retrieved_memory_block=retrieved_memory_block,
+            role_id=role_id,
         )
         built = self._system_prompt_builder.build(
             ctx,

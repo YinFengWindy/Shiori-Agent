@@ -17,7 +17,6 @@ from conversation.service import (
     desktop_thread_id,
     network_thread_id,
 )
-from core.accounts import VIA_ACCOUNT_KEY
 from core.accounts.target_contract import AccountTarget
 from core.common.channel_chat_types import CHAT_TYPE_PRIVATE
 from core.common.channel_directory import DESKTOP_CHANNEL
@@ -258,19 +257,7 @@ class TurnOrchestrator:
             source="proactive",
             media=media,
         )
-        message["metadata"].update(
-            {
-                "delivery_attempt_id": receipt.attempt_id,
-                "delivery_account_id": receipt.account_id,
-                "delivery_target_kind": receipt.target_kind,
-                "delivery_target_id": receipt.target_id,
-                **(
-                    {VIA_ACCOUNT_KEY: receipt.via_account}
-                    if receipt.via_account is not None
-                    else {}
-                ),
-            }
-        )
+        message["metadata"].update(receipt.message_metadata())
         message["delivery_status"] = "sent"
         message["external_message_id"] = receipt.platform_message_id
         return True

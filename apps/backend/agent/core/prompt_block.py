@@ -6,15 +6,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from agent.prompting import PromptSectionMeta, PromptSectionRender, SectionCache
+from core.identity import identities_for_account
 from prompts.agent import (
+    UserChannelIdentity,
     build_agent_behavior_rules_prompt,
     build_agent_session_context_prompt,
     build_agent_static_identity_prompt,
     build_skills_catalog_prompt,
+    build_user_identities_prompt,
 )
 
 if TYPE_CHECKING:
     from agent.skills import SkillsLoader
+    from core.accounts import AccountRegistry
+    from core.identity import UserIdentityStore
     from core.memory.markdown import MemoryProfileApi
 
 logger = logging.getLogger("agent.core.prompt_block")
@@ -29,6 +34,8 @@ class TurnContext:
     channel: str | None
     chat_id: str | None
     retrieved_memory_block: str
+    # The role the turn speaks as; empty for a turn without a role.
+    role_id: str = ""
 
 
 class PromptBlock(Protocol):
@@ -62,6 +69,9 @@ class PromptBlock(Protocol):
 #  40 SessionContextPromptBlock→ 环境 + 当前 session
 #                              来源：platform.machine() + channel + chat_id
 #                              时机：切换机器架构、channel、chat_id 时才变；同 session 基本稳定
+#  42 UserIdentitiesPromptBlock→ 用户在各渠道的身份
+#                              来源：运行时账号索引（角色的账号）+ user_identities.json
+#                              时机：每轮读取时计算，绑定/解绑/新私聊后下一轮即变；无绑定时不出现
 #  45 RecentContextPromptBlock → roles/<role_id>/memory/RECENT_CONTEXT.md（裁掉 Recent Turns）
 #                              来源：memory.read_recent_context()（严格要求 role_id）
 #                              时机：近期语境压缩摘要更新时变化；每轮 Recent Turns 刷新不会直接进入这里
@@ -173,6 +183,75 @@ class SessionContextPromptBlock:
         return self._render_fn(
             channel=ctx.channel,
             chat_id=ctx.chat_id,
+        )
+
+    def cache_signature(self, ctx: TurnContext) -> str | None:
+        return None
+
+
+def build_role_user_identities_prompt(
+    role_id: str, accounts: "AccountRegistry", identities: "UserIdentityStore"
+) -> str | None:
+    """The prompt section listing the user's identities on ``role_id``'s channels.
+
+    The one rendering of the user's identities shared by every turn kind
+    (passive turns through ``UserIdentitiesPromptBlock``, proactive and drift
+    turns through their role prompt). Per account the role has in the
+    runtime index ``accounts``, it lists the current bindings applying to it
+    and whether a private chat through it is known; None without any.
+    """
+    bindings = identities.list()
+    return build_user_identities_prompt(
+        [
+            UserChannelIdentity(
+                channel=account.record.plugin_id,
+                user_id=identity.user_id,
+                platform_wide=identity.scope == "platform",
+                has_private_chat=identity.chat_for(account.record.id) is not None,
+            )
+            for account in accounts.list(role_id=role_id)
+            for identity in identities_for_account(bindings, account.record)
+        ]
+    )
+
+
+class UserIdentitiesPromptBlock:
+    """The desktop user's identities on the role's channels.
+
+    Lists, per channel the role has an account on, each binding that applies
+    to that account (platform-scope bindings of its plugin, account-scope
+    bindings of the account) and whether a private chat through the account
+    is known. Computed from the current bindings on every turn, user and
+    external context alike, so it is not a static (cached) block: an unbind,
+    a new binding or a newly known chat shows on the next turn.
+
+    The role's accounts live only in the runtime's account index, so the
+    block renders nothing until ``bind`` hands it that index and the
+    identity store (a context built outside the runtime has neither).
+    """
+
+    priority = 42
+    label = "user_identities"
+    is_static = False
+
+    def __init__(self) -> None:
+        self._accounts: AccountRegistry | None = None
+        self._identities: UserIdentityStore | None = None
+
+    def bind(
+        self, accounts: "AccountRegistry", identities: "UserIdentityStore"
+    ) -> None:
+        """Reads the role's accounts and the user's bindings from these owners."""
+        self._accounts = accounts
+        self._identities = identities
+
+    def render(
+        self, ctx: TurnContext, cached_signature: str | None = None
+    ) -> str | None:
+        if not ctx.role_id or self._accounts is None or self._identities is None:
+            return None
+        return build_role_user_identities_prompt(
+            ctx.role_id, self._accounts, self._identities
         )
 
     def cache_signature(self, ctx: TurnContext) -> str | None:

@@ -8,6 +8,7 @@ from agent.prompting import SYSTEM_CONTEXT_FRAME_MARKER
 from bus.events import InboundMessage
 from core.common.channel_directory import ChannelDirectory
 from core.common.message_source import MessageSource
+from core.identity import IdentityChat
 from core.roles import RoleStore
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 from session.manager.models import Session, whole_session
@@ -494,3 +495,89 @@ def test_context_builder_reproduces_temporal_conflict_baseline(
     assert "weekday=Wednesday" in user_message
     assert "相对时间以此为准" in user_message
     assert user_message.endswith("你还记得明天什么时候面试吗")
+
+
+class _EmptySkills:
+    def __init__(self, workspace: Path) -> None:
+        self.workspace = workspace
+
+    def get_always_skills(self) -> list[str]:
+        return []
+
+    def load_skills_for_context(self, names: list[str]) -> str:
+        return ""
+
+    def build_skills_summary(self) -> str:
+        return ""
+
+
+class _EmptyMemory:
+    def read_profile(self) -> str:
+        return ""
+
+    def read_self(self) -> str:
+        return ""
+
+    def read_recent_context(self) -> str:
+        return ""
+
+    def get_memory_context(self) -> str:
+        return ""
+
+
+def test_every_turn_lists_the_users_current_channel_identities(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.setattr("agent.context.SkillsLoader", _EmptySkills)
+    store = RoleStore(tmp_path)
+    for role_id in ("mira", "other"):
+        store.create_role(role_id=role_id, name=role_id, system_prompt="test role")
+    records = {
+        (plugin_id, role_id): store.accounts.register(
+            plugin_id=plugin_id,
+            platform=plugin_id,
+            platform_account_id=f"{plugin_id}-{role_id}",
+            config_ref=f"{plugin_id}-{role_id}",
+            token="live",
+            role_id=role_id,
+        ).record
+        for plugin_id, role_id in (("qq", "mira"), ("feishu", "other"))
+    }
+    builder = ContextBuilder(tmp_path, _EmptyMemory())  # type: ignore[arg-type]
+    builder.set_user_identity_sources(store.accounts, store.identities)
+
+    def pair(plugin_id: str, role_id: str, user_id: str, scope) -> None:
+        record = records[(plugin_id, role_id)]
+        store.identities.pair(
+            store.identities.create_pairing_code().code,
+            record=record,
+            user_id=user_id,
+            scope=scope,
+            chat=IdentityChat(record.id, plugin_id, user_id),
+        )
+
+    def system_prompt(channel: str, chat_id: str) -> str:
+        return builder.render(
+            ContextRequest(
+                history=[], current_message="在吗", channel=channel, chat_id=chat_id
+            ),
+            session_metadata={"role_id": "mira"},
+        ).system_prompt
+
+    line = "- 渠道 qq：3174898512（整个平台通用；已有私聊）"
+    assert "你的用户在各渠道的身份" not in system_prompt("desktop", "role:mira")
+
+    pair("qq", "mira", "3174898512", "platform")
+    # Another role's account-scoped ID means nothing to Mira's accounts.
+    pair("feishu", "other", "ou_other", "account")
+    # User context (desktop) and external context (a QQ group) alike.
+    for channel, chat_id in (("desktop", "role:mira"), ("qq", "gqq:5")):
+        prompt = system_prompt(channel, chat_id)
+        assert line in prompt
+        assert "ou_other" not in prompt
+
+    [bound] = [item for item in store.identities.list() if item.user_id == "3174898512"]
+    store.identities.unbind(bound.id)
+    assert "3174898512" not in system_prompt("desktop", "role:mira")
+    pair("qq", "mira", "3174898512", "platform")
+    assert line in system_prompt("desktop", "role:mira")

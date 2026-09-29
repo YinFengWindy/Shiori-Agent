@@ -331,6 +331,11 @@ def _build_loop_deps(
         )
         if channel_directory is not None:
             context.set_channel_directory(channel_directory)
+        if role_runtime_registry is not None:
+            role_store = role_runtime_registry.repository.store
+            context.set_user_identity_sources(
+                role_store.accounts, role_store.identities
+            )
     memory_engine = memory_runtime.engine
     light = light_provider or provider
     llm_services = LLMServices(provider=provider, light_provider=light)
@@ -632,7 +637,10 @@ def build_core_runtime(
         strict=shared is not None,
     )
     account_delivery = AccountDelivery(
-        role_store.accounts, plugin_manager.rpc, AccountDeliveryLedger(workspace)
+        role_store.accounts,
+        plugin_manager.rpc,
+        AccountDeliveryLedger(workspace),
+        role_store.identities,
     )
     # 账号查询在外部上下文受限回合也可用（#489），发送不行。
     tools.register(
@@ -641,7 +649,10 @@ def build_core_runtime(
     tools.register(
         AccountTargetsTool(account_delivery), risk="read-only", external_allowed=True
     )
-    tools.register(AccountSendTool(account_delivery), risk="external-side-effect")
+    tools.register(
+        AccountSendTool(account_delivery, event_outlet or event_bus),
+        risk="external-side-effect",
+    )
 
     return CoreRuntime(
         config=config,

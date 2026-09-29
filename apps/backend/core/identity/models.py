@@ -96,6 +96,16 @@ class UserIdentity:
             self.scope == "platform" or record.id == self.account_id
         )
 
+    def chat_for(self, account_id: str) -> IdentityChat | None:
+        """The known private chat with the user through account ``account_id``.
+
+        A binding keeps at most one chat per account (the latest), so this is
+        the chat a message to the user through that account belongs to.
+        """
+        return next(
+            (chat for chat in self.chats if chat.account_id == account_id), None
+        )
+
     def to_dict(self) -> dict[str, Any]:
         """The JSON form stored in the identity file."""
         return {
@@ -148,3 +158,14 @@ def match_identity(
         ),
         None,
     )
+
+
+def identities_for_account(
+    identities: Iterable[UserIdentity], record: AccountRecord
+) -> list[UserIdentity]:
+    """The bindings among ``identities`` that apply to account ``record``, in order.
+
+    These are the user's identities as that account sees them: platform-scope
+    bindings of its plugin and account-scope bindings of the account itself.
+    """
+    return [identity for identity in identities if identity.applies_to(record)]

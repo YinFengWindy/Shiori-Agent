@@ -28,6 +28,12 @@ ACCOUNT_SEND_MEDIA_KEY = "media"
 
 # A group member reached through a group temporary session; needs group_id.
 GROUP_MEMBER_TARGET = "group_member"
+# The desktop user, a model-facing ``account_send`` target kind only: the host
+# resolves it from the user's bindings to a private target before sending, so
+# plugins never receive it.
+USER_TARGET = "user"
+# The fields naming a specific target, which a ``user`` target must not carry.
+_SPECIFIC_TARGET_KEYS = ("target_id", "message_thread_id", "group_id", "mention_ids")
 # The only target kind whose message may mention members.
 GROUP_TARGET = "group"
 
@@ -86,6 +92,24 @@ def _text(value: object, label: str) -> str:
     if isinstance(value, bool) or not isinstance(value, (str, int)):
         raise ValueError(f"{label} 必须是文本")
     return str(value).strip()
+
+
+def is_user_target(arguments: Mapping[str, Any]) -> bool:
+    """Whether ``arguments`` select the ``user`` target.
+
+    Raises ValueError when they select it but also name a specific target,
+    since the host alone decides where the user is reached.
+    """
+    if _text(arguments.get("target_kind"), "target_kind") != USER_TARGET:
+        return False
+    extra = [
+        key for key in _SPECIFIC_TARGET_KEYS if arguments.get(key) not in (None, "", [])
+    ]
+    if extra:
+        raise ValueError(
+            f"target_kind={USER_TARGET} 由宿主按身份绑定解析，不能再指定 {'、'.join(extra)}"
+        )
+    return True
 
 
 @dataclass(frozen=True)
