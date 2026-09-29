@@ -2,6 +2,7 @@
 
 from .models import (
     IDENTITY_SCOPES,
+    BoundUserSenders,
     IdentityChat,
     IdentityScope,
     UserIdentity,
@@ -13,6 +14,7 @@ from .pairing import PAIRING_CODE_TTL, PairingCode
 from .store import IDENTITIES_FILE, IdentityChangeListener, UserIdentityStore
 
 __all__ = [
+    "BoundUserSenders",
     "IDENTITIES_FILE",
     "IDENTITY_SCOPES",
     "IdentityChangeListener",

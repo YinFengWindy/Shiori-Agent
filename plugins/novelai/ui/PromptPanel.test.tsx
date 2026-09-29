@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 import type React from "react";
 import { act } from "react";
-import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
-import { chooseSelectOption } from "../../../apps/desktop/renderer/src/shared/testing/selectTestActions";
-import type { RoleRecord } from "../../../apps/desktop/renderer/src/shared/types";
+import { PluginHostServicesProvider, type RoleRecord } from "@shiori/plugin-sdk";
+import { chooseSelectOption, createFakeHostServices, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { initialStudioForm } from "./novelAiPageStore";
 import type { ImageStudioFormState } from "./types";
 import type { NovelAiPromptSettings } from "./useNovelAiPromptSettings";
@@ -17,12 +16,15 @@ before(async () => {
   await environment.cleanup();
 });
 
-/** Mounts inside a DOM whose bridge can turn file paths into asset URLs (role avatars). */
+const { host } = createFakeHostServices();
+
+/** Renders under host services that turn file paths into asset URLs (role avatars). */
+function withHost(element: React.ReactElement) {
+  return <PluginHostServicesProvider services={host}>{element}</PluginHostServicesProvider>;
+}
+
 async function mountPanel(element: React.ReactElement) {
-  const view = await mountTestComponent(null);
-  Object.defineProperty(window, "miraDesktop", { configurable: true, value: { localAssetUrl: (path: string) => `asset://${path}` } });
-  await view.render(element);
-  return view;
+  return await mountTestComponent(withHost(element));
 }
 
 const roles = [
@@ -59,9 +61,9 @@ describe("PromptPanel", () => {
       await chooseSelectOption("尺寸", "竖图 · 832 × 1216");
       await chooseSelectOption("生成角色", "雨宫凛");
       assert.deepEqual(changes, [{ sizePreset: "portrait" }, { roleId: "rin" }]);
-      await view.render(panel("rin"));
+      await view.render(withHost(panel("rin")));
       const trigger = document.querySelector('[role="combobox"][aria-label="生成角色"]');
-      assert.ok(trigger?.querySelector("img"), "the role picker shows the selected role's avatar");
+      assert.equal(trigger?.querySelector("img")?.getAttribute("src"), "fake-asset://D:/a/rin.webp", "the role picker shows the selected role's avatar through host.assets");
     } finally { await view.cleanup(); }
   });
 

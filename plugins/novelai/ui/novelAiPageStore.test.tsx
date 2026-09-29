@@ -1,8 +1,8 @@
-import { pluginHostServicesFor } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
+import type { RoleRecord } from "@shiori/plugin-sdk";
+import { createFakeHostServices, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import {
   backToStudio,
   clearFailure,
@@ -20,15 +20,9 @@ import {
 
 type Snapshot = ReturnType<typeof useNovelAiPageStore>;
 
-function fakeMiraDesktop(roles: Array<{ id: string; name: string }>) {
-  return {
-    invoke: async ({ method }: { method: string }) => {
-      if (method !== "roles.list") {
-        return { id: "1", type: "response", method, error: { code: "unknown_method", message: "" }, payload: null };
-      }
-      return { id: "1", type: "response", method, error: null, payload: { roles } };
-    },
-  };
+/** Host services whose `listRoles` answers with `roles`. */
+function hostWithRoles(roles: Array<{ id: string; name: string }>) {
+  return createFakeHostServices({ listRoles: async () => roles as RoleRecord[] }).host;
 }
 
 /** Mounts two independent sibling subscribers — mirrors the host mounting `NovelAIPage` and `NovelAIPageSidebar` separately. */
@@ -90,23 +84,21 @@ describe("novelAiPageStore (issue #226 gap A's 'real complication')", () => {
 
   it("selectBlockedReasonForNovelAiPage fails open before the roster has loaded, then reflects the real roster", async () => {
     resetNovelAiPageStoreForTests();
-    const originalWindow = (globalThis as { window?: { miraDesktop?: unknown } }).window;
     try {
-      (globalThis as { window?: { miraDesktop?: unknown } }).window = { miraDesktop: fakeMiraDesktop([]) };
-      assert.equal(selectBlockedReasonForNovelAiPage(pluginHostServicesFor("novelai")), null, "must fail open before the roster is known");
-      await refreshRoles(pluginHostServicesFor("novelai"));
+      const noRoles = hostWithRoles([]);
+      assert.equal(selectBlockedReasonForNovelAiPage(noRoles), null, "must fail open before the roster is known");
+      await refreshRoles(noRoles);
       assert.equal(
-        selectBlockedReasonForNovelAiPage(pluginHostServicesFor("novelai")),
+        selectBlockedReasonForNovelAiPage(noRoles),
         "请先创建至少一个角色，再进入生图。",
         "zero roles once loaded must block navigation with the pre-migration message, verbatim",
       );
 
       resetNovelAiPageStoreForTests();
-      (globalThis as { window?: { miraDesktop?: unknown } }).window = { miraDesktop: fakeMiraDesktop([{ id: "role-1", name: "Ada" }]) };
-      await refreshRoles(pluginHostServicesFor("novelai"));
-      assert.equal(selectBlockedReasonForNovelAiPage(pluginHostServicesFor("novelai")), null, "a non-empty roster must allow navigation");
+      const oneRole = hostWithRoles([{ id: "role-1", name: "Ada" }]);
+      await refreshRoles(oneRole);
+      assert.equal(selectBlockedReasonForNovelAiPage(oneRole), null, "a non-empty roster must allow navigation");
     } finally {
-      (globalThis as { window?: unknown }).window = originalWindow;
       resetNovelAiPageStoreForTests();
     }
   });

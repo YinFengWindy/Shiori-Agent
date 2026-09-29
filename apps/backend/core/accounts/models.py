@@ -8,7 +8,7 @@ the accounts its loaded plugins registered.
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import asdict, dataclass
 from typing import Literal
 
@@ -154,6 +154,20 @@ def account_serves_channel(record: AccountRecord, channel: str) -> bool:
         channel == platform
         or channel.startswith(f"{platform}:")
         or channel.startswith(f"{platform}_")
+    )
+
+
+def account_for_channel(
+    records: Iterable[AccountRecord], channel: str
+) -> AccountRecord | None:
+    """The account among one role's ``records`` carrying transport ``channel``.
+
+    A role holds at most one account per plugin, so ``account_serves_channel``
+    picks out at most one; None when the role has no account there.
+    """
+    return next(
+        (record for record in records if account_serves_channel(record, channel)),
+        None,
     )
 
 

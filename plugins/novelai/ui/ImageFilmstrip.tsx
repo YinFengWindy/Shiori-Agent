@@ -1,5 +1,4 @@
-import { toFileUrl } from "../../../apps/desktop/renderer/src/shared/format";
-import { cx, pressableClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { cx, pressableClass, usePluginHostServices } from "@shiori/plugin-sdk";
 import type { ImageHistoryRecord } from "./types";
 
 type ImageFilmstripProps = {
@@ -19,6 +18,7 @@ function formatCreatedAt(value: string): string {
 
 /** This role's recent generations as a strip under the canvas; the selected one is on the stage. */
 export function ImageFilmstrip({ items, selectedRecordId, revealRecordId, onSelect }: ImageFilmstripProps) {
+  const { assets } = usePluginHostServices();
   if (!items.length) return null;
   const activeId = items.some((item) => item.id === selectedRecordId) ? selectedRecordId : items[0].id;
   return (
@@ -47,7 +47,7 @@ export function ImageFilmstrip({ items, selectedRecordId, revealRecordId, onSele
               title={item.prompt}
               onClick={() => onSelect(item.id)}
             >
-              {preview ? <img className="h-full w-full object-cover" src={toFileUrl(preview)} alt="" /> : null}
+              {preview ? <img className="h-full w-full object-cover" src={assets.url(preview)} alt="" /> : null}
             </button>
           );
         })}

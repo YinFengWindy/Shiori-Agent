@@ -6,10 +6,16 @@ from collections.abc import Iterable, Set as AbstractSet
 from typing import TYPE_CHECKING, Any
 
 from agent.prompting import is_context_frame
-from conversation.context_scope import history_filter, history_start
+from conversation.context_scope import (
+    belongs_to_user,
+    history_filter,
+    history_start,
+    stored_message_source,
+)
 
 if TYPE_CHECKING:
     from agent.core.runtime_support import SessionLike
+    from core.common.message_source import MessageSource
     from conversation.context_scope import ContextView
     from agent.tools.registry import ToolRegistry
 
@@ -39,6 +45,30 @@ def get_history_tool_names_since_consolidated(
         max_messages=memory_window,
         start_index=history_start(session, context_view),
         include=history_filter(context_view),
+    )
+
+
+def get_window_sources_since_consolidated(
+    session: "SessionLike",
+    memory_window: int,
+    context_view: "ContextView | None",
+) -> "tuple[MessageSource, ...]":
+    """与 get_history_since_consolidated 同一窗口里，非用户本人消息的来源，旧的在前。
+
+    只有外部上下文回合需要（注入成员档案，#498）；其他回合返回空。用户本人按
+    ``belongs_to_user`` 共享判定排除。
+    """
+    if context_view is None or context_view.scope != "external":
+        return ()
+    return tuple(
+        stored_message_source(message)
+        for message in session.history_window(
+            memory_window,
+            start_index=session.last_consolidated,
+            include=context_view.includes,
+        )
+        if message.get("role") == "user"
+        and not belongs_to_user(message, context_view.user_threads)
     )
 
 

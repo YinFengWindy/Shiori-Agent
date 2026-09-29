@@ -1,65 +1,13 @@
 import type React from "react";
-import type { PluginRpcClient } from "../plugins/pluginBridgeClient";
+import type { PluginSurfaceComponentProps } from "@shiori/plugin-sdk";
 import { PluginContributionRegistry } from "../plugins/pluginContributionRegistry";
 
 /**
- * Placement the host pushes after a surface settles: where the body ended up,
- * where it sits inside its own window, and the work area it was clamped into.
+ * The `desktop.surface` contract (the self-directed `SurfaceHandle` and the
+ * component props) is owned by `@shiori/plugin-sdk` (#508); re-exported for
+ * host callers.
  */
-export type SurfacePlacement = {
-  anchor: { x: number; y: number };
-  bodyOffset: { x: number; y: number };
-  workArea: { x: number; y: number; width: number; height: number };
-};
-
-/** One entry of the native context menu a surface can ask the host to open. */
-export type SurfaceMenuItem = { id: string; label: string };
-
-/**
- * The self-directed half of the DesktopSurface capability, handed to a
- * plugin's surface component.
- *
- * Every call acts on the window the component is already rendering inside —
- * there is no surface id to pass, because the host attributes the request by
- * window identity rather than by anything the renderer claims.
- */
-export type SurfaceHandle = {
-  /** Starts host-driven cursor following; `offset` is where inside the body the pointer grabbed. */
-  beginDrag(offset: { x: number; y: number }): void;
-  /** Releases the drag, optionally handing over a velocity (px/s) for the host to glide out. */
-  endDrag(velocity?: { x: number; y: number }): void;
-  /** Grows or shrinks the window on one side without moving the body. */
-  setExtension(extension: { side: "above" | "below"; size: number }): void;
-  setClickThrough(clickThrough: boolean): void;
-  /** Subscribes to placement updates; returns an unsubscribe function. */
-  onPlacement(listener: (placement: SurfacePlacement) => void): () => void;
-  /** Subscribes to transient one-shot payloads relayed to this surface. */
-  onMessage(listener: (payload: unknown) => void): () => void;
-  /** Subscribes to retained state, which the host replays after `ready()`. */
-  onState(listener: (state: unknown) => void): () => void;
-  /**
-   * Announces that this component has installed its listeners, so the host
-   * replays the retained state and the current placement. A surface that never
-   * calls this comes up blank whenever it mounts after its state was set.
-   */
-  ready(): void;
-  /** Opens a native context menu over this surface; resolves the chosen id, or null. */
-  showContextMenu(items: SurfaceMenuItem[]): Promise<string | null>;
-  /** Brings the main application window forward. */
-  activateMainWindow(): void;
-};
-
-/** Props a plugin-authored surface component receives. */
-export type PluginSurfaceComponentProps = {
-  surfaceId: string;
-  surface: SurfaceHandle;
-  client: PluginRpcClient;
-};
-
-/** One plugin's `desktop.surface` contribution. */
-export type PluginSurfaceContribution = {
-  component: React.ComponentType<PluginSurfaceComponentProps>;
-};
+export type { PluginSurfaceComponentProps, SurfaceHandle } from "@shiori/plugin-sdk";
 
 export type PluginSurfaceEntry = {
   slot: "desktop.surface";

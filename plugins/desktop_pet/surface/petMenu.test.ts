@@ -1,13 +1,13 @@
-import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { SurfaceHandle } from "@shiori/plugin-sdk";
+import { createFakePluginClient } from "@shiori/plugin-sdk/testing";
 import {
   openPetContextMenu,
   petContextMenuItems,
   petMenuHidePetId,
   petMenuMainWindowId,
 } from "./petMenu";
-import type { SurfaceHandle } from "../../../apps/desktop/renderer/src/surface/pluginSurfaceRegistry";
 
 function fakeSurface(choice: string | null) {
   const calls: string[] = [];
@@ -24,13 +24,12 @@ function fakeSurface(choice: string | null) {
 }
 
 function fakeHost(calls: string[]) {
-  return {
-    ...createPluginRpcClient("desktop_pet"),
+  return createFakePluginClient({
     background: { call: async <T,>(_name: string, payload?: Record<string, unknown>) => {
       calls.push(`sync:${String(payload?.forceVisible)}`);
       return undefined as T;
     } },
-  };
+  });
 }
 
 test("the plugin owns the menu items, not the host", () => {

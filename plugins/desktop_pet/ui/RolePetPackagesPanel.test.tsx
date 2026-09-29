@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { act } from "react";
-import { PluginHostServicesProvider } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
-import { pluginHostServicesFor, type PluginHostServices } from "../../../apps/desktop/renderer/src/plugins/pluginHostServices";
+import {
+  PluginHostServicesProvider,
+  type PluginHostServices,
+  type PluginRoleAssetsComponentProps,
+  type PluginRpcClient,
+} from "@shiori/plugin-sdk";
+import { createFakeHostServices, createFakePluginClient, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { RolePetPackagesPanel as PetPackagesPanel } from "./RolePetPackagesPanel";
-import type { PluginRoleAssetsComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
-import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
-import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 
 function RolePetPackagesPanel({ pickFiles = async () => [], ...props }: Omit<PluginRoleAssetsComponentProps, "host"> & { pickFiles?: PluginHostServices["pickFiles"] }) {
-  return <PluginHostServicesProvider services={{ ...pluginHostServicesFor("desktop_pet"), pickFiles }}>
+  const { host } = createFakeHostServices({ pickFiles, assetUrl: (path) => `shiori-asset://local/${path}` });
+  return <PluginHostServicesProvider services={host}>
     <PetPackagesPanel {...props} />
   </PluginHostServicesProvider>;
 }
@@ -36,8 +39,7 @@ const listPayload = {
 };
 
 function fakeClient(answers: Record<string, unknown>, calls: Call[]): PluginRpcClient {
-  return {
-    ...createPluginRpcClient("fixture"),
+  return createFakePluginClient({
     background: { call: async <T,>() => { calls.push({ method: "background.sync", payload: undefined }); return undefined as T; } },
     call: <T,>(method: string, payload?: Record<string, unknown>) => {
       calls.push({ method, payload });
@@ -45,23 +47,21 @@ function fakeClient(answers: Record<string, unknown>, calls: Call[]): PluginRpcC
       if (answer instanceof Error) return Promise.reject(answer);
       return Promise.resolve((answer ?? listPayload) as T);
     },
-  };
+  });
 }
 
 /**
- * Installs the preload API the panel reaches for.
+ * Installs a preload API that fails every call the panel used to make on it,
+ * so image URLs and file picking provably go through the injected host
+ * services (`host.assets`, `host.pickFiles`) instead.
  *
  * Must run *after* `mountTestComponent`: the harness is what creates `window`,
- * so stubbing before it means writing onto nothing and the panel fails with
- * "Cannot read properties of undefined".
+ * so stubbing before it means writing onto nothing.
  */
-function stubDesktopApi(overrides: Partial<Record<string, unknown>> = {}) {
+function stubDesktopApi() {
   const host = globalThis as { window?: { miraDesktop?: unknown } };
-  const miraDesktop = {
-    localAssetUrl: (path: string) => `shiori-asset://local/${path}`,
-
-    ...overrides,
-  };
+  const mustUseInjectedServices = () => { throw new Error("must use injected services"); };
+  const miraDesktop = { localAssetUrl: mustUseInjectedServices, pickFiles: mustUseInjectedServices };
   if (!host.window) throw new Error("stubDesktopApi must run after mountTestComponent");
   host.window.miraDesktop = miraDesktop;
   return miraDesktop;
@@ -198,14 +198,14 @@ it("a response for the previous role is discarded rather than shown under the ne
   const view = await mountTestComponent(null);
   stubDesktopApi();
   let releaseFirst: (() => void) | null = null;
-  const slowClient: PluginRpcClient = { ...createPluginRpcClient("fixture"),
+  const slowClient: PluginRpcClient = createFakePluginClient({
     call: <T,>() => new Promise<T>((resolve) => {
       releaseFirst = () => resolve({
         selected_package_id: "old-pet",
         packages: [{ id: "old-pet", display_name: "旧角色的包", preview_abs: null }],
       } as T);
     }),
-  };
+  });
   try {
     await view.render(<RolePetPackagesPanel
       roleId="mira" disabled={false} client={slowClient} onRoleDataChanged={() => undefined}
@@ -234,7 +234,7 @@ it("imports through the injected picker and retains the pets.import role/source 
   const selected: unknown[] = [];
   let refreshed = 0;
   const view = await mountTestComponent(null);
-  stubDesktopApi({ pickFiles: () => { throw new Error("must use injected services"); } });
+  stubDesktopApi();
   try {
     await view.render(<RolePetPackagesPanel roleId="mira" disabled={false} client={fakeClient({}, calls)}
       onRoleDataChanged={() => { refreshed += 1; }}

@@ -21,6 +21,7 @@ from .helpers import (
     get_history_since_consolidated,
     get_history_tool_names_since_consolidated,
     get_session_metadata,
+    get_window_sources_since_consolidated,
 )
 from .reasoning_loop import _PassiveReasoningLoopMixin
 from .reasoning_result import _PassiveReasoningResultMixin
@@ -324,6 +325,10 @@ class DefaultReasoner(
             )
         )
         total_history = len(source_history)
+        # 与历史同一窗口里非用户本人消息的来源，外部回合据此注入成员档案（#498）。
+        window_sources = get_window_sources_since_consolidated(
+            session, self._memory_window, context_view
+        )
         preloaded: set[str] | None = None
         preloaded_order: list[str] = []
         if self._tool_search_enabled:
@@ -414,6 +419,7 @@ class DefaultReasoner(
                             context_view.scope if context_view is not None else None
                         ),
                         thread_id=inbound_thread_id(msg),
+                        window_sources=window_sources,
                     )
                 )
                 initial_messages = prompt_render.messages

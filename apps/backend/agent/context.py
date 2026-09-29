@@ -14,6 +14,7 @@ from agent.core.prompt_block import (
     GroupNotePromptBlock,
     IdentityPromptBlock,
     LongTermMemoryPromptBlock,
+    MemberProfilesPromptBlock,
     MemoryBlockPromptBlock,
     RecentActivityPromptBlock,
     RecentContextPromptBlock,
@@ -240,6 +241,7 @@ class ContextBuilder:
                 RecentContextPromptBlock(),
                 RecentActivityPromptBlock(),
                 GroupNotePromptBlock(),
+                MemberProfilesPromptBlock(runtime_roles),
                 SessionContextPromptBlock(),
                 UserIdentitiesPromptBlock(runtime_roles),
                 ActiveSkillsPromptBlock(),
@@ -350,6 +352,7 @@ class ContextBuilder:
             disabled_sections=request.disabled_sections,
             context_scope=request.context_scope,
             thread_id=request.thread_id,
+            window_sources=request.window_sources,
             turn_injection_context=turn_injection_context,
             system_sections_top=merged_top,
             system_sections_bottom=system_sections_bottom,
@@ -375,6 +378,8 @@ class ContextBuilder:
         role_id: str = "",
         context_scope: "ContextScope | None" = None,
         thread_id: str = "",
+        message_source: MessageSource | None = None,
+        window_sources: tuple[MessageSource, ...] = (),
     ) -> SystemPromptBuildResult:
         ctx = TurnContext(
             workspace=self.workspace,
@@ -388,6 +393,8 @@ class ContextBuilder:
             context_scope=context_scope,
             thread_id=thread_id,
             group_environment=self._group_environment,
+            message_source=message_source,
+            window_sources=window_sources,
         )
         built = self._system_prompt_builder.build(
             ctx,

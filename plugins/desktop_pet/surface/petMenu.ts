@@ -1,5 +1,4 @@
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import type { SurfaceHandle } from "../../../apps/desktop/renderer/src/surface/pluginSurfaceRegistry";
+import type { PluginRpcClient, SurfaceHandle } from "@shiori/plugin-sdk";
 
 /**
  * The pet's own right-click menu.

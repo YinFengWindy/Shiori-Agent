@@ -160,3 +160,26 @@ def test_messages_without_display_names_keep_their_exact_prefix():
         '[消息来源: {"channel": "qq", "chat_id": "gqq:777", "chat_type": null, '
         '"sender_id": null, "session_key": null}]\nhello'
     )
+
+
+def test_structured_mentions_and_reply_target_are_stored_with_the_message():
+    inbound = InboundMessage(
+        channel="qq",
+        chat_id="gqq:777",
+        sender="902",
+        content="@阿明 你说呢",
+        metadata={
+            "chat_type": "group",
+            "mentioned_ids": ["555", 666, "", True],
+            "reply_to_sender_id": "777",
+        },
+    )
+    stored = MessageSource.from_metadata(
+        {"message_source": MessageSource.from_inbound(inbound).to_metadata()},
+        session_key="role:mira",
+    )
+
+    assert stored.mentioned_ids == ("555", "666")
+    assert stored.reply_to_sender_id == "777"
+    # 只随消息存下，不出现在给模型看的来源前缀里。
+    assert "555" not in with_message_source("hi", stored)

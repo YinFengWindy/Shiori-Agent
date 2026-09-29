@@ -1,3 +1,8 @@
+import type {
+  SurfaceMenuItem,
+  SurfacePlacement as SurfacePlacementInfo,
+  SurfaceSettleReason,
+} from "@shiori/plugin-sdk/contract";
 import {
   noSurfaceExtension,
   type SurfaceBounds,
@@ -50,29 +55,13 @@ export type SurfaceWindowHandle = {
 type TimerHandle = { readonly __surfaceTimer?: never } | ReturnType<typeof setTimeout>;
 
 /**
- * Why a surface came to rest, for the in-process settle observer.
- *
- * A plugin's host-side code often wants to remember where its surface ended
- * up, but only some of these reasons represent the user moving it: growing a
- * panel or replaying state on reload lands the surface at the position it
- * already had, and treating those as a move means rewriting persisted state
- * every time a bubble appears.
+ * Why a surface came to rest (`SurfaceSettleReason`), where it settled
+ * (`SurfacePlacementInfo`, reported to both the renderer and the settle
+ * observer) and the native menu entries it may ask for are owned by
+ * `@shiori/plugin-sdk` (#508), because the owning plugin receives them;
+ * re-exported for host callers.
  */
-export type SurfaceSettleReason =
-  | "create"
-  | "position"
-  | "extension"
-  | "drag"
-  | "momentum"
-  | "move"
-  | "ready";
-
-/** Where a surface settled, as reported to both the renderer and the settle observer. */
-export type SurfacePlacementInfo = {
-  anchor: SurfacePoint;
-  bodyOffset: SurfacePoint;
-  workArea: SurfaceWorkArea;
-};
+export type { SurfaceMenuItem, SurfacePlacementInfo, SurfaceSettleReason };
 
 export type DesktopSurfaceHostOptions = {
   createWindow(key: SurfaceKey, spec: SurfaceSpec): SurfaceWindowHandle;
@@ -109,9 +98,6 @@ export type DesktopSurfaceHostOptions = {
   setTimer?: (callback: () => void, delayMs: number) => TimerHandle;
   clearTimer?: (handle: TimerHandle) => void;
 };
-
-/** One entry of a surface-owned native context menu. */
-export type SurfaceMenuItem = { id: string; label: string };
 
 /** Identifies one surface: a plugin may own more than one. */
 export type SurfaceKey = { pluginId: string; surfaceId: string };

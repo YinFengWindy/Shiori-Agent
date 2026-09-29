@@ -1,7 +1,5 @@
-import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
+import { PetalIcon, usePluginHostServices, type PluginNavPageComponentProps } from "@shiori/plugin-sdk";
 import { useEffect } from "react";
-import type { PluginNavPageComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
-import { PetalIcon } from "../../../apps/desktop/renderer/src/shared/ui/icons";
 import { ImageStudioPage } from "./ImageStudioPage";
 import { PromptTagLibraryPage } from "./PromptTagLibraryPage";
 import { openPromptTagWorkspaceSection, refreshRoles, reportPageError, useNovelAiPageStore } from "./novelAiPageStore";

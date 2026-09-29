@@ -23,6 +23,11 @@ USER_SENDER_LABEL = "你的用户"
 # Both are optional snapshots, stored with the message and never refreshed.
 GROUP_NAME_KEY = "group_name"
 SENDER_NAME_KEY = "sender_name"
+# Optional inbound metadata contract for plugins: the platform member IDs the
+# message structurally mentions (@), and the member ID of the message it
+# replies to. Plain-text names are never member IDs; leave these unset then.
+MENTIONED_IDS_KEY = "mentioned_ids"
+REPLY_TO_SENDER_ID_KEY = "reply_to_sender_id"
 _TIME_PREFIX = "[当前消息时间:"
 
 
@@ -43,6 +48,14 @@ def display_name(value: object) -> str | None:
     return value.strip() or None
 
 
+def _identifiers(value: object) -> tuple[str, ...]:
+    """Normalize a plugin-reported member ID list; entries that are not IDs are unknown."""
+    if not isinstance(value, list):
+        return ()
+    ids = (_identifier(item) for item in value)
+    return tuple(dict.fromkeys(item for item in ids if item is not None))
+
+
 def _via_account_prefix(metadata: Mapping[str, Any]) -> str | None:
     """The plugin's 「经由账号」 text; messages stored before snapshots have none."""
     if VIA_ACCOUNT_KEY not in metadata:
@@ -52,7 +65,7 @@ def _via_account_prefix(metadata: Mapping[str, Any]) -> str | None:
 
 @dataclass(frozen=True)
 class MessageSource:
-    """Immutable origin; channel and sender_id form a future member-profile key."""
+    """Immutable origin; channel and sender_id form the member-profile key (#498)."""
 
     channel: str | None = None
     chat_id: str | None = None
@@ -67,6 +80,11 @@ class MessageSource:
     # Display-name snapshots the plugin reported with this message.
     group_name: str | None = None
     sender_name: str | None = None
+    # Member IDs the message structurally mentions and the member it replies
+    # to, as the plugin reported them; stored with the message, not shown in
+    # the source prefix.
+    mentioned_ids: tuple[str, ...] = ()
+    reply_to_sender_id: str | None = None
 
     @classmethod
     def from_inbound(cls, message: InboundMessage) -> MessageSource:
@@ -81,6 +99,10 @@ class MessageSource:
             sender_is_user=message.metadata.get(SENDER_IS_USER_KEY) is True,
             group_name=display_name(message.metadata.get(GROUP_NAME_KEY)),
             sender_name=display_name(message.metadata.get(SENDER_NAME_KEY)),
+            mentioned_ids=_identifiers(message.metadata.get(MENTIONED_IDS_KEY)),
+            reply_to_sender_id=_identifier(
+                message.metadata.get(REPLY_TO_SENDER_ID_KEY)
+            ),
         )
 
     @classmethod
@@ -100,6 +122,8 @@ class MessageSource:
                 sender_is_user=saved.get(SENDER_IS_USER_KEY) is True,
                 group_name=display_name(saved.get(GROUP_NAME_KEY)),
                 sender_name=display_name(saved.get(SENDER_NAME_KEY)),
+                mentioned_ids=_identifiers(saved.get(MENTIONED_IDS_KEY)),
+                reply_to_sender_id=_identifier(saved.get(REPLY_TO_SENDER_ID_KEY)),
             )
         return cls(
             channel=_identifier(metadata.get("transport_channel")),
@@ -111,15 +135,20 @@ class MessageSource:
             sender_is_user=metadata.get(SENDER_IS_USER_KEY) is True,
         )
 
-    def to_metadata(self) -> dict[str, str | bool | None]:
+    def to_metadata(self) -> dict[str, str | bool | list[str] | None]:
         """Serialize the captured source for durable per-message storage.
 
         The user flag is stored only when set, so it stays with the message
-        after the identity is unbound.
+        after the identity is unbound. Mentions and the reply target are
+        stored only when reported.
         """
-        stored: dict[str, str | bool | None] = {**self.platform_fields()}
+        stored: dict[str, str | bool | list[str] | None] = {**self.platform_fields()}
         if self.sender_is_user:
             stored[SENDER_IS_USER_KEY] = True
+        if self.mentioned_ids:
+            stored[MENTIONED_IDS_KEY] = list(self.mentioned_ids)
+        if self.reply_to_sender_id:
+            stored[REPLY_TO_SENDER_ID_KEY] = self.reply_to_sender_id
         return stored
 
     def platform_fields(self) -> dict[str, str | None]:

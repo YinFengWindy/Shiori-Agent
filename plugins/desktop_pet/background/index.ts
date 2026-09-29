@@ -1,18 +1,10 @@
-import { reportBackgroundFailure } from "../../../apps/desktop/renderer/src/background/backgroundDiagnostics";
-import type { BackgroundCtx } from "../../../apps/desktop/renderer/src/background/pluginBackgroundRegistry";
+import type { PluginBackgroundContribution } from "@shiori/plugin-sdk";
 import { readDesktopPetBinding } from "./binding";
 import { DesktopPetController, desktopPetSurfaceId } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";
 
 /** Identifies the pet's own item in the host tray menu. */
 export const desktopPetTrayEntryId = "toggle";
-
-function reportError(operation: string, error: unknown): void {
-  // Routed to the host's diagnostic log rather than to this window's console,
-  // which nobody can open: `show` failing is exactly what the user is looking
-  // at when they report "点了托盘没反应".
-  reportBackgroundFailure(`desktop_pet ${operation}`, error);
-}
 
 /**
  * The desktop pet's `app.background` contribution: its always-resident
@@ -26,9 +18,14 @@ function reportError(operation: string, error: unknown): void {
  * registered in (#227), so the `effect`/`on` ordering here is a readability
  * choice, not a correctness one.
  */
-export default {
+const desktopPetBackground = {
   pluginId: "desktop_pet",
-  async setup(ctx: BackgroundCtx): Promise<void> {
+  async setup(ctx) {
+    // Routed to the host's diagnostic log rather than to this window's console,
+    // which nobody can open: `show` failing is exactly what the user is looking
+    // at when they report "点了托盘没反应".
+    const reportError = (operation: string, error: unknown) => ctx.reportFailure(operation, error);
+
     const controller = new DesktopPetController({
       surfaces: ctx.surfaces,
       settings: normalizeDesktopPetSettings(await ctx.store.read()),
@@ -92,4 +89,6 @@ export default {
       reportError("restore", error);
     }
   },
-};
+} satisfies PluginBackgroundContribution;
+
+export default desktopPetBackground;

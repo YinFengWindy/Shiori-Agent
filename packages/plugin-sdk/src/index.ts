@@ -15,7 +15,7 @@
 export { BridgeError, PluginBridgeError } from "./errors";
 export type { BridgeEvent, PluginBackgroundHandler, PluginEventHandler, PluginPeer, PluginRpcClient } from "./rpc";
 
-// From here to the 2.10.0 block at the end: runtime API 2.9.0 (#504).
+// From here to the 2.10.0 block below: runtime API 2.9.0 (#504).
 
 // Pure helpers and hooks.
 export { errorMessage } from "./errors";
@@ -145,3 +145,31 @@ export type {
 // and plugins, so a component anywhere below a mounted contribution reads the
 // services that contribution was injected with.
 export { PluginHostServicesProvider, usePluginHostServices } from "./hostServicesContext";
+
+// Type-only (#508): the desktop.surface and app.background contribution
+// contracts, the surface payloads the main process shares, and the voice state
+// the host pushes to the pet. `BackgroundCtx.reportFailure` is runtime API 2.11.0.
+export type {
+  PluginSurfaceComponentProps,
+  SurfaceCreateResult,
+  SurfaceExtension,
+  SurfaceHandle,
+  SurfaceMenuItem,
+  SurfacePlacement,
+  SurfaceSettleReason,
+  SurfaceSpec,
+  SurfaceWorkArea,
+} from "./contract/surface";
+export type { PluginSurfaceContribution, PluginSurfaceModule } from "./contract/surfaceModule";
+export type {
+  BackgroundCtx,
+  BackgroundEffectDispose,
+  PluginBackgroundAssets,
+  PluginBackgroundContribution,
+  PluginBackgroundEvents,
+  PluginBackgroundSettled,
+  PluginBackgroundStore,
+  PluginBackgroundSurfaces,
+  PluginBackgroundTray,
+} from "./contract/background";
+export type { VoiceStatePayload } from "./contract/voice";

@@ -37,6 +37,7 @@ def test_memory_lifecycle_binds_the_session_owner_commit_operation(tmp_path: Pat
         ),
         relationship_optimizer=cast(Any, object()),
         group_environment=cast(Any, object()),
+        runtime_roles=RoleStore(tmp_path),
     )
 
     assert maintenance._get_session == manager.get_or_create

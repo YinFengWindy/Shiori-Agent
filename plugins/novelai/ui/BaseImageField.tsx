@@ -1,6 +1,5 @@
 import { ArrowsClockwise, ImageSquare, X } from "@phosphor-icons/react";
-import { toFileUrl } from "../../../apps/desktop/renderer/src/shared/format";
-import { compactPressableClass, cx, pressableClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { compactPressableClass, cx, pressableClass, usePluginHostServices } from "@shiori/plugin-sdk";
 import type { ImageStudioFormState } from "./types";
 
 type BaseImageFieldProps = {
@@ -40,6 +39,7 @@ function Slider({ label, value, min, max, onChange }: { label: string; value: nu
 
 /** Optional reference image for img2img: an add button, or the picked image with its strength/noise. */
 export function BaseImageField({ form, onPick, onChange }: BaseImageFieldProps) {
+  const { assets } = usePluginHostServices();
   if (!form.baseImagePath) {
     return (
       <button
@@ -59,7 +59,7 @@ export function BaseImageField({ form, onPick, onChange }: BaseImageFieldProps) 
   return (
     <div className="grid gap-3 rounded-lg border border-line-soft bg-surface p-2.5" data-testid="novelai-base-image">
       <div className="relative overflow-hidden rounded-md bg-surface-soft">
-        <img className="block h-36 w-full object-cover" src={toFileUrl(form.baseImagePath)} alt="参考图" />
+        <img className="block h-36 w-full object-cover" src={assets.url(form.baseImagePath)} alt="参考图" />
         <div className="absolute right-1.5 top-1.5 flex gap-1.5">
           <button className={overlayButtonClass} type="button" aria-label="更换参考图" title="更换参考图" onClick={onPick}>
             <ArrowsClockwise className="h-4 w-4" aria-hidden="true" />

@@ -1,23 +1,17 @@
-import {
-  pluginBackgroundRegistry,
-  type BackgroundCtx,
-  type PluginBackgroundRegistry,
-} from "./pluginBackgroundRegistry";
+import type { PluginBackgroundContribution } from "@shiori/plugin-sdk";
+import { pluginBackgroundRegistry, type PluginBackgroundRegistry } from "./pluginBackgroundRegistry";
 
 /**
- * The shape a plugin's `background/index.ts` default-exports to own an
- * always-resident `app.background` contribution.
+ * The shape a plugin's `background/index.ts` default-exports is owned by
+ * `@shiori/plugin-sdk` (#508); re-exported for host callers.
  *
- * This lives in its own `background/` directory, deliberately separate from
+ * It lives in its own `background/` directory, deliberately separate from
  * `ui/` and `surface/` — same reasoning `pluginSurfaceRegistry.ts` documents
  * for not reusing `pluginUiRegistry`: hanging this off `ui/index.tsx` would
  * pull the whole settings/nav UI module graph into the `plugin-host.html`
  * bundle, which has no DOM to render any of it into.
  */
-export type PluginBackgroundContribution = {
-  pluginId: string;
-  setup(ctx: BackgroundCtx): void | Promise<void>;
-};
+export type { PluginBackgroundContribution };
 
 /**
  * Narrows an unknown default export down to a well-formed

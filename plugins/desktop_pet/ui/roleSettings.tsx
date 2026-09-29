@@ -1,8 +1,11 @@
 import { Monitor } from "@phosphor-icons/react";
-import type { PluginRoleSettingsContribution, PluginRoleSettingsProps } from "../../../apps/desktop/renderer/src/plugins/pluginFeatureRegistry";
-import { RoleCapabilityCard } from "../../../apps/desktop/renderer/src/roles/RoleCapabilityCard";
-import { roleToggleStatus } from "../../../apps/desktop/renderer/src/roles/roleCapabilityStatus";
-import { SettingsToggleCard } from "../../../apps/desktop/renderer/src/settings/SettingsToggleCard";
+import {
+  RoleCapabilityCard,
+  roleToggleStatus,
+  SettingsToggleCard,
+  type PluginRoleSettingsContribution,
+  type PluginRoleSettingsProps,
+} from "@shiori/plugin-sdk";
 
 /** The pet switch edits a draft; only the role editor's Save persists it. */
 export function DesktopPetRoleSettings({ values, snapshot, disabled, onChange }: PluginRoleSettingsProps) {
