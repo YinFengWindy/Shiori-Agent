@@ -74,7 +74,12 @@ class QQOutboundAdapter:
         return (await self.send_target(account_id, kind, target, message))["message_id"]
 
     async def _on_response(self, msg: OutboundMessage) -> None:
-        """Sends a role reply; a group reply @s its trigger and chosen members."""
+        """Sends a role reply; a group reply @s its trigger and chosen members.
+
+        The reply's images go in the same QQ message as its text, so an
+        image-only reply still sends; an image that fails validation fails
+        the whole reply instead of being dropped.
+        """
         try:
             account_id = self._sending_account(msg.metadata)
             via = self.via_account(account_id)
@@ -88,7 +93,12 @@ class QQOutboundAdapter:
                 mentions = tuple(dict.fromkeys(i for i in [trigger, *chosen] if i))
             message_id = (
                 await self.send_target(
-                    account_id, kind, target, msg.content, mention_ids=mentions
+                    account_id,
+                    kind,
+                    target,
+                    msg.content,
+                    mention_ids=mentions,
+                    images=tuple(msg.media),
                 )
             )["message_id"]
         except Exception:
