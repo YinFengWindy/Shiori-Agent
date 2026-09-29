@@ -6,6 +6,8 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 
+from websockets.exceptions import ConnectionClosed
+
 from .onebot import OneBotError
 
 logger = logging.getLogger(__name__)
@@ -36,7 +38,9 @@ class QQGroupNames:
         """The group's name, or None when it is blank or NapCat cannot tell.
 
         A failed query only costs the message its group name: it is logged
-        and the message proceeds without one.
+        and the message proceeds without one. Failures are NapCat errors
+        (including an offline account and an in-flight reply lost to a
+        disconnect), a reply timeout, or the socket closing while sending.
         """
         groups = self._names.setdefault(account_id, {})
         cached = groups.get(group_id)
@@ -44,8 +48,8 @@ class QQGroupNames:
         if cached is not None and now - cached[1] < self._ttl:
             return cached[0] or None
         try:
-            name = (await self._fetch(account_id, group_id)).strip()
-        except (OneBotError, TimeoutError) as exc:
+            name = await self._fetch(account_id, group_id)
+        except (OneBotError, TimeoutError, ConnectionClosed) as exc:
             logger.warning(
                 "[qq] 账号 %s 群 %s 名称查询失败，消息不带群名: %s",
                 account_id,

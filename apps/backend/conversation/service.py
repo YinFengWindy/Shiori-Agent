@@ -189,12 +189,11 @@ class ConversationService:
     def remember_contact_name(self, thread: ThreadRecord, display_name: str) -> None:
         """Names a network thread's contact by its latest platform name.
 
-        Callers pass the group name for a group chat and the sender's name for
-        a private chat; a blank name keeps whatever name is already stored.
+        Callers pass an already normalized, non-blank name: the group name for
+        a group chat and the sender's name for a private chat.
         """
-        name = display_name.strip()
-        if thread.thread_kind == "network" and name:
-            self._store.rename_contact(thread.contact_id, name)
+        if thread.thread_kind == "network":
+            self._store.rename_contact(thread.contact_id, display_name)
 
     def project_thread(self, thread: ThreadRecord) -> None:
         """Refreshes derived state without reassigning mixed-session messages."""

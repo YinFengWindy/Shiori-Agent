@@ -32,7 +32,7 @@ def _sender_name(event: dict[str, Any]) -> str:
     for field in ("card", "nickname"):
         value = sender.get(field)
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            return value
     return ""
 
 

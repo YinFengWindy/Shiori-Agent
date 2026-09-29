@@ -11,6 +11,7 @@ from plugins.qq.backend.accounts_inbound_adapter import QQInboundAdapter
 from plugins.qq.backend.accounts_group_names import QQGroupNames
 from plugins.qq.backend.accounts_store import QQConnectionConfig
 from plugins.qq.backend.onebot import OneBotError
+from websockets.exceptions import ConnectionClosed
 
 
 def _group_message(mentioned: bool):
@@ -217,11 +218,21 @@ async def test_group_message_carries_the_group_name_to_the_host():
 
 
 @pytest.mark.asyncio
-async def test_group_message_is_routed_without_a_name_when_lookup_fails(caplog):
+@pytest.mark.parametrize(
+    "failure",
+    [
+        # ``_socket_for`` when the account has no live socket.
+        OneBotError("QQ 账号不在线"),
+        # ``OneBotSocket.call`` when the socket closes while sending.
+        ConnectionClosed(None, None),
+        TimeoutError(),
+    ],
+)
+async def test_group_message_is_routed_without_a_name_when_lookup_fails(
+    caplog, failure
+):
     adapter = QQInboundAdapter()
-    adapter._group_names = QQGroupNames(
-        AsyncMock(side_effect=OneBotError("QQ 账号不在线"))
-    )
+    adapter._group_names = QQGroupNames(AsyncMock(side_effect=failure))
     bus = SimpleNamespace(publish_inbound=AsyncMock())
     adapter._ctx = SimpleNamespace(
         bus=bus,
@@ -234,4 +245,4 @@ async def test_group_message_is_routed_without_a_name_when_lookup_fails(caplog):
 
     [call] = bus.publish_inbound.await_args_list
     assert "group_name" not in call.args[0].metadata
-    assert "QQ 账号不在线" in caplog.text
+    assert "名称查询失败" in caplog.text

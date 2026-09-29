@@ -931,10 +931,29 @@ def test_contacts_are_named_by_the_latest_group_or_sender_name(
 
     hub.route_account_inbound(group())
     assert _contact_name(hub, "thread:mira:qq:gqq:777") == "gqq:777"
-    hub.route_account_inbound(group(group_name="读书会"))
+    first = hub.route_account_inbound(
+        group(group_name=" 读书会 ", external_message_id="m1")
+    )
+    assert _contact_name(hub, "thread:mira:qq:gqq:777") == "读书会"
+    # A replayed message that is already archived does not rename the contact.
+    assert first is not None
+    sessions = hub._service.sessions._session_manager
+    session = sessions.get_or_create(first.session_key)
+    session.add_message(
+        "user",
+        "hello",
+        thread_id=str(first.metadata["thread_id"]),
+        external_message_id="m1",
+    )
+    sessions.save(session)
+    replay = hub.route_account_inbound(
+        group(group_name="重投的群名", external_message_id="m1")
+    )
+    assert replay is not None and replay.metadata["conversation_duplicate"] is True
     assert _contact_name(hub, "thread:mira:qq:gqq:777") == "读书会"
     # A message whose group name could not be fetched keeps the known name.
     hub.route_account_inbound(group())
+    hub.route_account_inbound(group(group_name="  "))
     assert _contact_name(hub, "thread:mira:qq:gqq:777") == "读书会"
     hub.route_account_inbound(group(group_name="新读书会"))
     assert _contact_name(hub, "thread:mira:qq:gqq:777") == "新读书会"

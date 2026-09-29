@@ -32,8 +32,12 @@ def _identifier(value: object) -> str | None:
     return str(value).strip() or None
 
 
-def _display_name(value: object) -> str | None:
-    """A platform display name; anything but non-blank text is unknown."""
+def display_name(value: object) -> str | None:
+    """Normalize a plugin-reported display name; anything but text is unknown.
+
+    The one place names from ``GROUP_NAME_KEY`` / ``SENDER_NAME_KEY`` are
+    stripped, so plugins may pass the platform's raw strings.
+    """
     if not isinstance(value, str):
         return None
     return value.strip() or None
@@ -75,8 +79,8 @@ class MessageSource:
             session_key=_identifier(message.session_key),
             via_account=_via_account_prefix(message.metadata),
             sender_is_user=message.metadata.get(SENDER_IS_USER_KEY) is True,
-            group_name=_display_name(message.metadata.get(GROUP_NAME_KEY)),
-            sender_name=_display_name(message.metadata.get(SENDER_NAME_KEY)),
+            group_name=display_name(message.metadata.get(GROUP_NAME_KEY)),
+            sender_name=display_name(message.metadata.get(SENDER_NAME_KEY)),
         )
 
     @classmethod
@@ -94,8 +98,8 @@ class MessageSource:
                 session_key=_identifier(saved.get("session_key")),
                 via_account=_via_account_prefix(metadata),
                 sender_is_user=saved.get(SENDER_IS_USER_KEY) is True,
-                group_name=_display_name(saved.get(GROUP_NAME_KEY)),
-                sender_name=_display_name(saved.get(SENDER_NAME_KEY)),
+                group_name=display_name(saved.get(GROUP_NAME_KEY)),
+                sender_name=display_name(saved.get(SENDER_NAME_KEY)),
             )
         return cls(
             channel=_identifier(metadata.get("transport_channel")),
