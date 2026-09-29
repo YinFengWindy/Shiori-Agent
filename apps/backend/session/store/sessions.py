@@ -9,9 +9,8 @@ from typing import Any
 from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains, like_prefix
 
 from .common import (
-    CONTEXT_CURSOR_ASSIGNMENTS,
     ContextScope,
-    context_cursor_values,
+    context_cursor_assignments,
     row_context_cursors,
 )
 
@@ -69,18 +68,27 @@ class _SessionMixin:
                 (int(last_consolidated), now, key),
             )
             if context_cursors is not None:
-                self.write_context_cursors(key, context_cursors)
+                try:
+                    self.write_context_cursors(key, context_cursors)
+                except Exception:
+                    self._conn.rollback()
+                    raise
             self._conn.commit()
 
     def write_context_cursors(
         self, key: str, context_cursors: dict[ContextScope, int] | None
     ) -> None:
-        """写入按上下文的整理游标列（None 写回未迁移）；不提交，调用方负责提交。"""
+        """写入按上下文的整理游标列（None 写回未迁移）；不提交，调用方负责提交。
+
+        会话不存在时报错，由调用方回滚。
+        """
+        assignments, values = context_cursor_assignments(context_cursors)
         with self._lock:
-            self._conn.execute(
-                f"UPDATE sessions SET {CONTEXT_CURSOR_ASSIGNMENTS} WHERE key = ?",
-                (*context_cursor_values(context_cursors), key),
+            cur = self._conn.execute(
+                f"UPDATE sessions SET {assignments} WHERE key = ?", (*values, key)
             )
+        if cur.rowcount <= 0:
+            raise ValueError(f"session 不存在: {key}")
 
     def get_session_meta(self, key: str) -> dict[str, Any] | None:
         with self._lock:

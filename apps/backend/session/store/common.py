@@ -60,17 +60,15 @@ def row_context_cursors(row: Mapping[str, Any]) -> dict[ContextScope, int] | Non
     return cursors
 
 
-def context_cursor_values(
+def context_cursor_assignments(
     cursors: Mapping[ContextScope, int] | None,
-) -> tuple[int | None, ...]:
-    """按 ``CONTEXT_CURSOR_COLUMNS`` 顺序给出要写入的列值；None 表示未迁移。"""
-    return tuple(
-        None if cursors is None else int(cursors[scope])
-        for scope in CONTEXT_CURSOR_COLUMNS
+) -> tuple[str, tuple[int | None, ...]]:
+    """写入全部按上下文游标列的 UPDATE ``SET`` 片段及其参数，两者逐列一一对应。
+
+    ``cursors`` 为 None 表示写回未迁移（全部为 NULL）。
+    """
+    columns = CONTEXT_CURSOR_COLUMNS.items()
+    return (
+        ", ".join(f"{column} = ?" for _, column in columns),
+        tuple(None if cursors is None else int(cursors[scope]) for scope, _ in columns),
     )
-
-
-# UPDATE 语句里写入全部按上下文游标列的片段，参数见 ``context_cursor_values``。
-CONTEXT_CURSOR_ASSIGNMENTS = ", ".join(
-    f"{column} = ?" for column in CONTEXT_CURSOR_COLUMNS.values()
-)
