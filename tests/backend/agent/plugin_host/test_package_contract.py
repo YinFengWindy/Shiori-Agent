@@ -147,5 +147,5 @@ def test_external_channel_declaration_errors_block_the_package(contract_package)
     assert "desktop" in caught.value.diagnostic.reason
 
 
-def test_host_advertises_runtime_api_with_external_tool_declaration():
-    assert HostRuntimeContract().runtime_api == "2.7.0"
+def test_host_advertises_runtime_api_with_plugin_sdk_peer():
+    assert HostRuntimeContract().runtime_api == "2.8.0"

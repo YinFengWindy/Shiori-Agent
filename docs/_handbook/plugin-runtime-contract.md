@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.7.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.8.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -83,6 +83,7 @@ version whose additions it uses.
 | `2.5.0` | required `chat_types` session-type declarations on manifest `channels` entries (replacing the channel-level `chat_id_label` / `chat_id_hint`) | #397 |
 | `2.6.0` | the `accounts` capability: `ctx.accounts.register(...)` / `report(...)` for host-owned communication account registration and ownership, released with the plugin scope | #419 |
 | `2.7.0` | `ctx.tools.register(..., external_allowed=)` to declare a tool usable in external-context turns; from this host on, undeclared plugin tools are unavailable in restricted external-context turns, including tools of existing packages that require an older `runtime_api` (host policy, not an API break) | #489 |
+| `2.8.0` | the `@shiori/plugin-sdk` renderer peer, resolved to the host's own instance through the renderer import map (see [Runtime API 2.8 plugin SDK peer](#runtime-api-28-plugin-sdk-peer)) | #503 (#440 T1) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -291,6 +292,30 @@ this is host policy, not an API break. Such packages keep working everywhere
 else, and their tools become available in those turns once they declare
 `external_allowed=True` and require `runtime_api: ">=2.7.0 <3.0.0"`.
 
+## Runtime API 2.8 plugin SDK peer
+
+API 2.8 adds `@shiori/plugin-sdk` as a renderer peer next to React. It is the
+public renderer contract between plugins and the host (#440): contract types
+and, in later 2.x minors, the shared components, style class names and pure
+helpers plugins may use. A precompiled package externalizes `@shiori/plugin-sdk`
+exactly like `react`; the renderer import map resolves it to a host-served
+wrapper around the **host's own instance**, so `instanceof` checks and shared
+state behave exactly as they do for built-in plugins. The SDK is not a
+`peer_dependencies` entry: it is versioned by the runtime API, so a package using
+it declares `runtime_api: ">=2.8.0 <3.0.0"` (or the lowest 2.x minor whose SDK
+exports it uses).
+
+The runtime exports are exactly those listed for `@shiori/plugin-sdk` in the
+renderer peer ABI (`pluginUiPeerExports` in
+`apps/desktop/src/plugins/uiContract.ts`); at 2.8.0 they are `BridgeError` and
+`PluginBridgeError`. Type-only exports (such as `PluginRpcClient`, the type of
+the injected `client`) have no runtime presence. Adding an export is a new
+minor version.
+
+The `@shiori/plugin-sdk/testing` subpath is development-only test support. It is
+**not** part of the runtime API or the import map; production renderer code must
+not import it.
+
 ## Renderer artifacts and dependencies
 
 The plugin's own build emits browser ESM, with a default export (direct or
@@ -340,8 +365,9 @@ ABI currently guarantees `19.2.0` for both (a compatibility floor rather than
 probing developer `node_modules`); a host may explicitly advertise a newer peer
 version via `HostRuntimeContract`. External resolution must use the host's single
 React/React DOM instances, including their public subpaths such as
-`react/jsx-runtime` and `react-dom/client`. No other bare npm runtime dependency is
-part of v1. Plugins may use build tools in their own repository, but must not ship
+`react/jsx-runtime` and `react-dom/client`. From runtime API 2.8 the
+`@shiori/plugin-sdk` main entry is a peer resolved the same way; no other bare npm
+runtime dependency is part of v1. Plugins may use build tools in their own repository, but must not ship
 or request installation of private npm/Python runtime dependencies. CSS is shipped
 by the plugin and scoped to its own classes. Relative resource references must
 stay inside the package; declared `assets` are validated as required files.
@@ -367,8 +393,9 @@ runtime. For example, declare `entry: ui/dist/index.mjs` and
 `css: [ui/dist/style.css]`; the directory name is not fixed. The plugin author
 runs the build. The application carries no plugin compiler and does not invoke
 the user's Node/npm installation. Externalize `react`, `react/jsx-runtime`,
-`react-dom`, and `react-dom/client` in that build; bundle other browser libraries.
-An import map resolves these peers to the same instances used by the host.
+`react-dom`, `react-dom/client` and (runtime API 2.8+) `@shiori/plugin-sdk` in that
+build; bundle other browser libraries. An import map resolves these peers to the
+same instances used by the host.
 
 Only a unique, enabled `ACTIVE` workspace candidate receives a resource grant.
 Main-process `plugins.list` responses contain the granted entry/CSS URLs alongside
@@ -504,8 +531,8 @@ roster refresh notifications. There is no store, automatic update, package-level
 HMR, dependency installer or additional sandbox.
 
 Focused Electron verification builds a separate test renderer, uses a fixture
-`ACTIVE` roster, and checks actual `file://` ESM loading, shared React hooks,
-relative chunks, CSS, failure isolation, disable/re-enable cleanup, protocol
+`ACTIVE` roster, and checks actual `file://` ESM loading, shared React hooks, the
+host's `@shiori/plugin-sdk` instance reached through the import map, relative chunks, CSS, failure isolation, disable/re-enable cleanup, protocol
 rejection and CSP rejection. It does not prove workspace trust. Run after the
 desktop main/preload build:
 
@@ -583,7 +610,7 @@ active or ready to run in every renderer.
 ## Independent example and validation
 
 Copy `tests/fixtures/external-plugin/` to a directory outside Shiori. Its pinned
-pnpm/esbuild build compiles TSX/TS into ESM, externalizes React peers, copies its
+pnpm/esbuild build compiles TSX/TS into ESM, externalizes the host peers, copies its
 backend/CSS/assets and produces the package root. No host npm package, Vite build,
 private path or source checkout is needed to **build** it. See the fixture README
 for commands and how to validate its directory/zip from a host environment.

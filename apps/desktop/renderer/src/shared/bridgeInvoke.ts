@@ -1,3 +1,5 @@
+import { BridgeError } from "@shiori/plugin-sdk";
+
 /** The renderer-side desktop bridge's `invoke` function, shared by every per-domain client. */
 export type DesktopInvoke = typeof window.miraDesktop.invoke;
 
@@ -5,18 +7,11 @@ export type DesktopInvoke = typeof window.miraDesktop.invoke;
  * Stable error raised when a bridge method responds with an error envelope.
  * Domain clients (`pluginBridgeClient.ts`, `storyBridgeClient.ts`, ...)
  * subclass this so `instanceof` checks stay scoped to their own domain while
- * sharing one implementation of the message/code/details shape.
+ * sharing one implementation of the message/code/details shape. The class is
+ * owned by the plugin SDK (#440), because plugin errors derive from it; host
+ * callers keep importing it from here.
  */
-export class BridgeError extends Error {
-  constructor(
-    message: string,
-    readonly code: string,
-    readonly details?: Record<string, unknown>,
-  ) {
-    super(message);
-    this.name = "BridgeError";
-  }
-}
+export { BridgeError };
 
 /**
  * Invokes one bridge method and unwraps its payload, throwing `errorClass`

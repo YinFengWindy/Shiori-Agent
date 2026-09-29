@@ -1,11 +1,6 @@
 /** Controlled origin for admitted, precompiled plugin renderer resources. */
 export const pluginUiScheme = "shiori-plugin";
 
-/** The browser resolves React peers to wrappers around the host's own instances. */
-export const pluginUiImportMap = JSON.stringify({ imports: Object.fromEntries(
-  ["react", "react/jsx-runtime", "react-dom", "react-dom/client"].map((name) => [name, `${pluginUiScheme}://host/${name}.mjs`]),
-) });
-
 /**
  * One admitted (or failed-to-admit) workspace renderer entry returned by the
  * main process. The same shape serves all three renderer contribution
@@ -35,10 +30,26 @@ export type PluginRendererKind = "ui" | "background" | "surface";
 /** One `RuntimePluginUi` grant tagged with which renderer contribution point it admits. */
 export type RuntimePluginRendererEntry = RuntimePluginUi & { kind: PluginRendererKind };
 
-/** Module export names guaranteed by the renderer peer ABI. */
+/**
+ * Module export names guaranteed by the renderer peer ABI, keyed by the bare
+ * specifier a precompiled plugin imports. Adding a peer or an export name is a
+ * runtime API change (`RUNTIME_API_VERSION` in `host_contract.py`); every
+ * key must also be installed by `runtimePluginPeers.ts`.
+ */
 export const pluginUiPeerExports: Record<string, string[]> = {
   "react": ["Children", "Component", "Fragment", "Profiler", "PureComponent", "StrictMode", "Suspense", "Activity", "cache", "cacheSignal", "cloneElement", "createContext", "createElement", "createRef", "forwardRef", "isValidElement", "lazy", "memo", "startTransition", "use", "useActionState", "useCallback", "useContext", "useDebugValue", "useDeferredValue", "useEffect", "useEffectEvent", "useId", "useImperativeHandle", "useInsertionEffect", "useLayoutEffect", "useMemo", "useOptimistic", "useReducer", "useRef", "useState", "useSyncExternalStore", "useTransition", "version"],
   "react/jsx-runtime": ["Fragment", "jsx", "jsxs"],
   "react-dom": ["createPortal", "flushSync", "preconnect", "prefetchDNS", "preinit", "preinitModule", "preload", "preloadModule", "requestFormReset", "unstable_batchedUpdates", "useFormState", "useFormStatus", "version"],
   "react-dom/client": ["createRoot", "hydrateRoot", "version"],
+  // Runtime API 2.8.0 (#503). Only the main entry: `@shiori/plugin-sdk/testing` is development-only.
+  "@shiori/plugin-sdk": ["BridgeError", "PluginBridgeError"],
 };
+
+/**
+ * The browser resolves every renderer peer to a wrapper around the host's own
+ * instance (served by `PluginUiResources.load`), so a precompiled plugin shares
+ * the host's React and plugin SDK instead of bundling copies.
+ */
+export const pluginUiImportMap = JSON.stringify({ imports: Object.fromEntries(
+  Object.keys(pluginUiPeerExports).map((name) => [name, `${pluginUiScheme}://host/${name}.mjs`]),
+) });
