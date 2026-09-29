@@ -64,7 +64,7 @@ def get_window_sources_since_consolidated(
         stored_message_source(message)
         for message in session.history_window(
             memory_window,
-            start_index=session.last_consolidated,
+            start_index=history_start(session, context_view),
             include=context_view.includes,
         )
         if message.get("role") == "user"
