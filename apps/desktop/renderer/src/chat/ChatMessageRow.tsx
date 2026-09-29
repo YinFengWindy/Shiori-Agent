@@ -9,8 +9,7 @@ import {
 } from "./chatMessageContextMenuPlacement";
 import { getChatMessageDomKey } from "./chatMessageIdentity";
 import { formatTimestamp, toFileUrl } from "../shared/format";
-import { cx } from "../shared/styles";
-import type { RoleRecord, SessionMessage } from "../shared/types";
+import { cx, type RoleRecord, type SessionMessage } from "@shiori/plugin-sdk";
 
 export type ChatMessageRowProps = {
   activeRole: RoleRecord | null;

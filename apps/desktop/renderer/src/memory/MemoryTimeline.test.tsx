@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { before, it } from "node:test";
 import { act } from "react";
 import { formatTimestamp } from "../shared/format";
-import { changeInputValue, mountTestComponent } from "../shared/testing/domTestHarness";
+import { changeInputValue, mountTestComponent, chooseSelectOption } from "@shiori/plugin-sdk/testing";
 import { createPluginRpcTestClient, type PluginRpcTestResponder } from "../shared/testing/pluginRpcTestBridge";
-import { chooseSelectOption } from "../shared/testing/selectTestActions";
 import type { RoleSemanticFilters, RoleSemanticItem } from "./roleSemanticMemory";
 
 // Base UI binds DOM globals at import time, so the timeline loads inside a test window.

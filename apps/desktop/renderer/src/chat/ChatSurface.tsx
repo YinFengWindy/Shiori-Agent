@@ -40,10 +40,17 @@ import {
 } from "./useChatScrollController";
 import { PhonePanel } from "../phone/PhonePanel";
 import { PhoneToggle } from "../phone/PhoneToggle";
-import { cx, sidebarContentMotionClass, sidebarTrackMotionClass } from "../shared/styles";
-import { useLatestRef } from "../shared/useLatestRef";
+import {
+  cx,
+  sidebarContentMotionClass,
+  useLatestRef,
+  type RoleRecord,
+  type SessionMessage,
+  type SessionPayload,
+} from "@shiori/plugin-sdk";
+import { sidebarTrackMotionClass } from "../shared/styles";
 import { useWindowActivity } from "../shared/useWindowActivity";
-import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
+import type { ChatReplyTarget, ChatSendRequest } from "../shared/types";
 
 type ChatSurfaceProps = {
   activeRole: RoleRecord | null;

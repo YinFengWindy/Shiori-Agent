@@ -21,7 +21,15 @@ import {
 } from "../chat/roleSessionCache";
 import { getRoleIdFromSession } from "./appState";
 import type { ChatSendFailure } from "../chat/chatSendFailure";
-import { errorMessage, type FeedbackReporter } from "../shared/feedback/feedbackStore";
+import {
+  errorMessage,
+  type RoleRecord,
+  type SessionMessage,
+  type SessionMessagePage,
+  type SessionMessageUpdatePayload,
+  type SessionPayload,
+} from "@shiori/plugin-sdk";
+import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 import {
   getSessionPaginationState,
   mergeOpenedSessionSnapshot,
@@ -36,15 +44,7 @@ export {
   parseSessionMessagePage,
 } from "./sessionMessagePagination";
 import { reconcileRoles } from "../roles/roleListState";
-import type {
-  AppMainView,
-  ChatSendRequest,
-  RoleRecord,
-  SessionMessage,
-  SessionMessagePage,
-  SessionMessageUpdatePayload,
-  SessionPayload,
-} from "../shared/types";
+import type { AppMainView, ChatSendRequest } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";
 import { isRecord } from "../shared/isRecord";

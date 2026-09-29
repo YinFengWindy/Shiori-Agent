@@ -1,4 +1,5 @@
-import type { RoleFormState, RoleProactiveConfig, RoleRecord } from "../shared/types";
+import type { RoleProactiveConfig, RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleFormState } from "../shared/types";
 
 /** Stable defaults for the role-owned proactive editor contract. */
 export const roleProactiveDefaults = Object.freeze({

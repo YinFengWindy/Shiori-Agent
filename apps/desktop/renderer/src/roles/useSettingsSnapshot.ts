@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SettingsFormData } from "../../../src/bridge/shared";
-import { errorMessage } from "../shared/feedback/feedbackStore";
+import { errorMessage } from "@shiori/plugin-sdk";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 
 /**

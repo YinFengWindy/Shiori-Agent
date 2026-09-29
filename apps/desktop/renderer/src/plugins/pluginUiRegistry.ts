@@ -11,9 +11,6 @@ import type {
   SettingsSubsection,
 } from "../settings/settingsPageTypes";
 
-/** The slot props plugins receive are owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
-export type { PluginAccountDetailProps, PluginNavPageProps, PluginNavPageSidebarProps, PluginRoleAssetsProps };
-
 /**
  * The UI extension points a plugin (or the core) can contribute to.
  *

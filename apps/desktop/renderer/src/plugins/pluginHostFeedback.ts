@@ -2,9 +2,6 @@ import type { FeedbackTone, PluginFeedbackOptions, PluginHostFeedback, PluginPer
 import { showFeedback } from "../shared/feedback/feedbackStore";
 import { feedbackTonePersona } from "../shared/mascot/mascotFeedback";
 
-/** The plugin feedback contract is owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
-export type { PluginFeedbackOptions, PluginHostFeedback, PluginPersona };
-
 /*
  * 吟风 for plugin UIs (runtime API 2.4.0). A plugin opts in per call with
  * `persona`: `true` / `"generic"` for the surface's generic line, or a scene

@@ -1,4 +1,5 @@
-import { applyPluginBackgroundModules, type PluginBackgroundContribution } from "./pluginBackgroundContract";
+import type { PluginBackgroundContribution } from "@shiori/plugin-sdk";
+import { applyPluginBackgroundModules } from "./pluginBackgroundContract";
 
 /**
  * Compiles every plugin's headless background entry point into the

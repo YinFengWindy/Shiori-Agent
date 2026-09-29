@@ -2,7 +2,7 @@ import { TrashIcon } from "@phosphor-icons/react";
 import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { compactDangerTextButtonClass } from "../shared/styles";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
-import type { AccountSnapshot } from "./accountClient";
+import type { AccountSnapshot } from "@shiori/plugin-sdk";
 import { accountDeletionDescription } from "./accountPresentation";
 import { useAccountDeletion } from "./useAccountDeletion";
 

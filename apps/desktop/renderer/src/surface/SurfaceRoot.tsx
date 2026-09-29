@@ -6,12 +6,8 @@ import { SurfaceErrorBoundary } from "./SurfaceErrorBoundary";
 // sides from drifting. `entry.ts` only imports a *type* from `host.ts`, so
 // nothing main-process-only is pulled into the surface bundle.
 import { surfaceKeyFromSearch } from "../../../src/surface/entry";
-import {
-  pluginSurfaceRegistry,
-  type PluginSurfaceRegistry,
-  type SurfaceHandle,
-  type PluginSurfaceComponentProps,
-} from "./pluginSurfaceRegistry";
+import type { SurfaceHandle, PluginSurfaceComponentProps } from "@shiori/plugin-sdk";
+import { pluginSurfaceRegistry, type PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 
 /**
  * Mounts whichever plugin owns this surface window.

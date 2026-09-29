@@ -1,5 +1,6 @@
 import type { DesktopApi } from "../../../src/bridge/shared";
-import type { NewRoleFormState, RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { NewRoleFormState } from "../shared/types";
 
 /** Builds the shared manual/import request and validates required role fields. */
 export function buildRoleCreationRequest(form: NewRoleFormState) {

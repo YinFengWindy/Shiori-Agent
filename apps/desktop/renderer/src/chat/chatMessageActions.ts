@@ -1,7 +1,8 @@
 import { isChatImageAsset } from "./chatImageHistory";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { normalizeSessionMediaPaths } from "./chatMedia";
-import type { ChatReplyTarget, SessionMessage } from "../shared/types";
+import type { SessionMessage } from "@shiori/plugin-sdk";
+import type { ChatReplyTarget } from "../shared/types";
 
 export type MessageContextMenuState = {
   x: number;

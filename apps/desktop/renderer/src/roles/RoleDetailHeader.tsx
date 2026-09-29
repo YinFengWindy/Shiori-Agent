@@ -1,7 +1,13 @@
 import { ImageSquare, Smiley } from "@phosphor-icons/react";
 import { toFileUrl } from "../shared/format";
-import { badgeClass, compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "../shared/styles";
-import type { RoleFormState, RoleRecord } from "../shared/types";
+import {
+  badgeClass,
+  compactButtonSizeClass,
+  cx,
+  ghostButtonSurfaceClass,
+  type RoleRecord,
+} from "@shiori/plugin-sdk";
+import type { RoleFormState } from "../shared/types";
 import { roleIdentityInputClass } from "./roleEditorStyles";
 
 type RoleDetailHeaderProps = {

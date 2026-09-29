@@ -1,6 +1,7 @@
 import { loadRuntimePluginModules } from "../plugins/runtimePluginModuleLoader";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
-import { isPluginBackgroundModule, type PluginBackgroundContribution } from "./pluginBackgroundContract";
+import type { PluginBackgroundContribution } from "@shiori/plugin-sdk";
+import { isPluginBackgroundModule } from "./pluginBackgroundContract";
 import { pluginBackgroundRegistry, type PluginBackgroundRegistry } from "./pluginBackgroundRegistry";
 
 /** Loader boundaries the plugin-host window's bootstrap supplies. */

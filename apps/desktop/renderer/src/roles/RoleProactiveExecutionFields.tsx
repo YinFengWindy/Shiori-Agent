@@ -1,5 +1,5 @@
 import type React from "react";
-import { SettingsToggleCard } from "../settings/SettingsToggleCard";
+import { SettingsToggleCard } from "@shiori/plugin-sdk";
 import type { RoleFormState } from "../shared/types";
 import { roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";
 import { roleProactiveDefaults } from "./roleProactiveDefaults";

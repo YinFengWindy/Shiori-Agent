@@ -1,5 +1,5 @@
 import { invokeBridgeOrThrow } from "../bridge/bridgeRequest.js";
-import type { BridgeEvent } from "../bridge/shared.js";
+import type { BridgeEvent } from "@shiori/plugin-sdk/contract";
 import type { VoiceBridge } from "./controller.js";
 import type { VoicePlaybackCallbacks, VoicePlaybackItem } from "./playback.js";
 

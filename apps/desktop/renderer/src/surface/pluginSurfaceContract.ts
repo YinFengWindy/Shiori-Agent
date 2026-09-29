@@ -1,9 +1,6 @@
 import type { PluginSurfaceModule } from "@shiori/plugin-sdk";
 import { pluginSurfaceRegistry, type PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 
-/** What a plugin's `surface/index.tsx` default-exports is owned by `@shiori/plugin-sdk` (#508); re-exported for host callers. */
-export type { PluginSurfaceModule };
-
 /**
  * Narrows an unknown default export without an unsafe cast. Exported so
  * `runtimePluginSurface.ts` can apply the identical structural check to a

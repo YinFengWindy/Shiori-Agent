@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { parseTimestamp } from "../shared/format";
-import { errorMessage } from "../shared/feedback/feedbackStore";
+import { errorMessage } from "@shiori/plugin-sdk";
 import { createIdentityClient } from "./identityClient";
 
 const client = createIdentityClient();

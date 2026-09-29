@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mountTestComponent } from "./testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { CrossfadeLayers } from "./CrossfadeLayers";
 
 const layers = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLElement>("[data-value]")).map((element) => ({

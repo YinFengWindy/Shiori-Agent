@@ -1,5 +1,5 @@
 import { InlineError } from "../shared/feedback/InlineError";
-import { compactGhostButtonClass } from "../shared/styles";
+import { compactGhostButtonClass } from "@shiori/plugin-sdk";
 
 /** A phone screen whose data failed to load: the error and a 「重试」 button. */
 export function PhoneLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {

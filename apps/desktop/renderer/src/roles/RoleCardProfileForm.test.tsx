@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { changeInputValue, mountTestComponent } from "../shared/testing/domTestHarness";
+import { changeInputValue, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import type { RoleProfileDraft } from "../shared/types";
 import { RoleCardProfileForm } from "./RoleCardProfileForm";
 

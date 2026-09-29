@@ -1,5 +1,5 @@
 import { Images, ListChecks, SidebarSimple, Smiley, type Icon } from "@phosphor-icons/react";
-import { compactPressableClass, cx } from "../shared/styles";
+import { compactPressableClass, cx } from "@shiori/plugin-sdk";
 import { Tooltip } from "../shared/ui/Tooltip";
 import type { ChatPanelBadges } from "./chatPanelBadges";
 import type { ChatSidebarMode } from "./ChatRightSidebar";

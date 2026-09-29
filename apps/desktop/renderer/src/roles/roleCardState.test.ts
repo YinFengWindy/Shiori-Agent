@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
 import { resolveRoleCardCover, selectRoleCardView } from "./roleCardState";
 
 function role(overrides: Partial<RoleRecord> = {}): RoleRecord {

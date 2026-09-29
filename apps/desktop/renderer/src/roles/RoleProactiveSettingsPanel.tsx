@@ -1,12 +1,9 @@
-import { Select } from "../shared/ui/Select";
+import { Select, SettingsToggleCard, cardClass, cx, roleToggleStatus } from "@shiori/plugin-sdk";
 import { CaretDown } from "@phosphor-icons/react";
 import type React from "react";
 import { useState } from "react";
-import { SettingsToggleCard } from "../settings/SettingsToggleCard";
-import { cardClass, cx } from "../shared/styles";
 import type { RoleFormState } from "../shared/types";
-import { RoleCapabilityBadge } from "./RoleCapabilityCard";
-import { roleToggleStatus } from "./roleCapabilityStatus";
+import { RoleCapabilityBadge } from "@shiori/plugin-sdk/host-internal";
 import { roleFieldClass, roleFieldLabelClass, rolePanelGhostButtonClass } from "./roleEditorStyles";
 import { RoleEditorSection } from "./RoleEditorSection";
 import { RoleProactiveExecutionFields } from "./RoleProactiveExecutionFields";

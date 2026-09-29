@@ -1,11 +1,16 @@
 import { WarningCircle, X } from "@phosphor-icons/react";
 import { useState } from "react";
-import type { HostInlineErrorProps } from "@shiori/plugin-sdk";
+import { type HostInlineErrorProps, type PersonaSceneKey, cx } from "@shiori/plugin-sdk";
 import { MascotFaceAvatar } from "../mascot/MascotFigure";
 import { useMascotCameoAllowed } from "../mascot/MascotOnStage";
 import { MascotSpeechBubble } from "../mascot/MascotSpeech";
-import { inlineErrorLines, isPersonaSceneKey, personaSceneLines, type InlineErrorPersona, type PersonaSceneKey } from "../mascot/mascotLines";
-import { compactIconButtonClass, cx } from "../styles";
+import {
+  inlineErrorLines,
+  isPersonaSceneKey,
+  personaSceneLines,
+  type InlineErrorPersona,
+} from "../mascot/mascotLines";
+import { compactIconButtonClass } from "../styles";
 import { FeedbackDetail } from "./FeedbackDetail";
 
 /**

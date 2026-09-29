@@ -1,5 +1,4 @@
-import type { BridgeEvent, PluginBackgroundHandler } from "@shiori/plugin-sdk";
-import { PluginBridgeError } from "./pluginBridgeError";
+import { type BridgeEvent, type PluginBackgroundHandler, PluginBridgeError } from "@shiori/plugin-sdk";
 
 /** Owns renderer handlers independently of the client transport/session lifetime. */
 export class PluginBackgroundMethods {

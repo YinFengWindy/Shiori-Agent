@@ -1,10 +1,11 @@
 import type {
   BridgeEvent,
+  NativeFilePickerOptions,
   PluginBackgroundSettled,
-  SurfaceCreateResult as SurfaceCreateResultPayload,
+  SurfaceCreateResult,
   SurfaceHandle,
-  SurfacePlacement as SurfacePlacementPayload,
-  SurfaceSpec as SurfaceSpecPayload,
+  SurfacePlacement,
+  SurfaceSpec,
   VoiceStatePayload,
 } from "@shiori/plugin-sdk/contract";
 
@@ -15,13 +16,6 @@ export type BridgeRequest = {
   /** Optional caller-owned deadline, consumed locally by the bridge transport. */
   timeoutMs?: number;
 };
-
-/**
- * The DesktopSurface payloads are owned by `@shiori/plugin-sdk` (#508): plugin
- * surface and background code receives them. Re-exported under the bridge's
- * payload names for host callers.
- */
-export type { SurfaceCreateResultPayload, SurfacePlacementPayload, SurfaceSpecPayload };
 
 /** A settle reported to the owning plugin's `app.background` code, before the plugin-host filters it by owner. */
 export type SurfaceSettledPayload = PluginBackgroundSettled & {
@@ -40,13 +34,13 @@ export type DesktopSurfacesApi = {
   create(
     pluginId: string,
     surfaceId: string,
-    spec: SurfaceSpecPayload,
+    spec: SurfaceSpec,
     anchor: { x: number; y: number },
-  ): Promise<SurfaceCreateResultPayload>;
+  ): Promise<SurfaceCreateResult>;
   destroy(pluginId: string, surfaceId: string): Promise<void>;
   show(pluginId: string, surfaceId: string): void;
   hide(pluginId: string, surfaceId: string): void;
-  workArea(pluginId: string, surfaceId: string): Promise<SurfacePlacementPayload["workArea"]>;
+  workArea(pluginId: string, surfaceId: string): Promise<SurfacePlacement["workArea"]>;
   setPosition(pluginId: string, surfaceId: string, position: { x: number; y: number }): void;
   moveTo(pluginId: string, surfaceId: string, position: { x: number; y: number }, durationMs: number): void;
   /** Relays a transient payload to the surface renderer, delivered on `onMessage`. */
@@ -70,12 +64,6 @@ export type BridgeResponse = {
     details?: Record<string, unknown>;
   } | null;
 };
-
-// Owned by the plugin SDK because plugin event handlers receive it (#440).
-export type { BridgeEvent };
-
-// Owned by the plugin SDK because the desktop pet's surface renders it (#508).
-export type { VoiceStatePayload };
 
 export type VoiceInputDevice = {
   deviceId: string;
@@ -265,7 +253,7 @@ export type DesktopApi = {
   /** Opens an http, https, or mailto link through the operating system. */
   openExternal(url: string): Promise<ExternalLinkOpenResult>;
   /** Stages a native file selection without treating arbitrary formats as media. */
-  pickFiles(options: import("../assets/filePickerContract.js").NativeFilePickerOptions): Promise<string[]>;
+  pickFiles(options: NativeFilePickerOptions): Promise<string[]>;
   /** Resolves a previously transported local path to its opaque asset URL. */
   localAssetUrl(path: string): string;
   startAttachmentDrag(request: StartAttachmentDragRequest): void;

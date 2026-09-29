@@ -4,9 +4,14 @@ import { emptyStateLines } from "../shared/mascot/mascotLines";
 import { MascotEmptyState } from "../shared/mascot/MascotSpeech";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
 import { SidebarResizeHandle } from "../shared/SidebarResizeHandle";
-import { cx, pressableClass, sidebarContentMotionClass, sidebarNavItemClass } from "../shared/styles";
-import type { RoleRecord } from "../shared/types";
-import { PetalIcon } from "../shared/ui/icons";
+import {
+  cx,
+  pressableClass,
+  sidebarContentMotionClass,
+  sidebarNavItemClass,
+  type RoleRecord,
+  PetalIcon,
+} from "@shiori/plugin-sdk";
 import { RoleAvatar } from "./RoleAvatar";
 import { formatChatListTime, previewFromRoleLastMessage, type RoleChatPreview } from "./roleChatPreview";
 

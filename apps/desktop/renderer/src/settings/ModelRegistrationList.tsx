@@ -1,7 +1,14 @@
 import { CaretRight, Plus } from "@phosphor-icons/react";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { modelEffortLabels } from "../shared/modelEffortLabels";
-import { badgeClass, cardClass, compactButtonSizeClass, cx, pressableClass, primaryButtonSurfaceClass } from "../shared/styles";
+import {
+  badgeClass,
+  cardClass,
+  compactButtonSizeClass,
+  cx,
+  pressableClass,
+  primaryButtonSurfaceClass,
+} from "@shiori/plugin-sdk";
 import { registrationHost, registrationInitials, registrationProviderLabel } from "./modelRegistrationSummary";
 
 type ModelRegistrationListProps = {

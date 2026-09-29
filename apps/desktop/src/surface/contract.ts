@@ -14,13 +14,7 @@
  * package uses.
  */
 
-import type { SurfaceExtension, SurfaceSpec, SurfaceWorkArea } from "@shiori/plugin-sdk/contract";
-
-// What a plugin declares and receives about its window — the spec, the work
-// area and the extension (an extra panel on one side of the body, whose side
-// and size are the plugin's to choose) — is owned by `@shiori/plugin-sdk`
-// (#508); re-exported for host callers.
-export type { SurfaceExtension, SurfaceSpec, SurfaceWorkArea };
+import type { SurfaceExtension, SurfaceSpec } from "@shiori/plugin-sdk/contract";
 
 /** A point in screen coordinates. */
 export type SurfacePoint = { x: number; y: number };

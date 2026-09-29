@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type React from "react";
 import type { BridgeResponse } from "../../../src/bridge/shared";
-import type { AppMainView, NewRoleFormState, PendingRoleCardAction, RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { AppMainView, NewRoleFormState, PendingRoleCardAction } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import { createFeedbackRecorder } from "../shared/testing/feedbackRecorder";
 import {

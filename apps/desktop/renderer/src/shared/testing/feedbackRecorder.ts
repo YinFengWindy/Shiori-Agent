@@ -1,4 +1,5 @@
-import type { FeedbackOptions, FeedbackReporter, FeedbackTone } from "../feedback/feedbackStore";
+import type { FeedbackTone } from "@shiori/plugin-sdk";
+import type { FeedbackOptions, FeedbackReporter } from "../feedback/feedbackStore";
 
 /** One reporter call captured by `createFeedbackRecorder`. */
 export type RecordedFeedback = { tone: FeedbackTone; message: string; options?: FeedbackOptions };

@@ -1,5 +1,6 @@
 import { createPluginRpcClient } from "./pluginBridgeClient";
-import { pluginRoleSettingsRegistry, type PluginRoleValues } from "./pluginFeatureRegistry";
+import type { PluginRoleValues } from "@shiori/plugin-sdk";
+import { pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { isPluginEnabled } from "./pluginEnabledStateStore";
 
 /** All plugin-owned role drafts, keyed by the contributing plugin id. */

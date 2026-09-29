@@ -2,9 +2,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createElement, isValidElement, type ReactElement } from "react";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { applyPluginUiModules, type PluginUiModule } from "./pluginUiModuleContract.js";
+import type { PluginUiModule, PluginRpcClient } from "@shiori/plugin-sdk";
+import { applyPluginUiModules } from "./pluginUiModuleContract.js";
 import { PluginUiRegistry } from "./pluginUiRegistry.js";
-import type { PluginRpcClient } from "./pluginBridgeClient.js";
 import { pluginHostServicesFor } from "./pluginHostServices.js";
 
 /**

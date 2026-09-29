@@ -3,16 +3,12 @@ import { createRoot } from "react-dom/client";
 import "../styles.css";
 import * as Icons from "../shared/ui/icons";
 import { SelectExamples } from "./SelectExamples";
+import { PetalIcon, SparkleIcon, badgeClass, cardClass, ghostButtonClass, inputClass, textareaClass } from "@shiori/plugin-sdk";
 import {
-  badgeClass,
-  cardClass,
   dangerButtonClass,
   dangerGhostButtonClass,
-  ghostButtonClass,
-  inputClass,
   panelTitleClass,
   primaryButtonClass,
-  textareaClass,
 } from "../shared/styles";
 
 const RAMPS: Record<string, string[]> = {
@@ -52,7 +48,7 @@ const FONT_CANDIDATES = [
 const SAMPLE_TEXT = "让角色拥有自己的生活——吟风等你回来,记得汇报今天的锻炼。0123456789 AaGg";
 
 function App() {
-  const brand = Object.entries(Icons).filter(
+  const brand = Object.entries({ ...Icons, PetalIcon, SparkleIcon }).filter(
     ([name, value]) => name.endsWith("Icon") && typeof value === "function",
   ) as Array<[string, React.ComponentType<{ className?: string }>]>;
 
@@ -125,7 +121,7 @@ function App() {
               <button className={dangerGhostButtonClass}>移除素材</button>
               <button className={primaryButtonClass} disabled>禁用状态</button>
               <span className={badgeClass}>
-                <Icons.SparkleIcon className="h-3 w-3" />
+                <SparkleIcon className="h-3 w-3" />
                 害羞
               </span>
             </div>

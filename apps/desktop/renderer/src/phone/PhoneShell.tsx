@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { formatHourMinute } from "../shared/format";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
-import { PetalIcon, RibbonIcon, SparkleIcon } from "../shared/ui/icons";
+import { PetalIcon, SparkleIcon } from "@shiori/plugin-sdk";
+import { RibbonIcon } from "../shared/ui/icons";
 
 /**
  * 吟风's skin: a bow charm on the top edge, sparkles on the sides and petals

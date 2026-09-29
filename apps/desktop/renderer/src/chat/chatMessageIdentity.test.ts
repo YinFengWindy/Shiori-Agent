@@ -8,7 +8,7 @@ import {
   getChatMessageReactKey,
   reconcileSessionMessageRenderIds,
 } from "./chatMessageIdentity";
-import type { SessionMessage, SessionPayload } from "../shared/types";
+import type { SessionMessage, SessionPayload } from "@shiori/plugin-sdk";
 
 function createSession(messages: SessionMessage[]): SessionPayload {
   return {

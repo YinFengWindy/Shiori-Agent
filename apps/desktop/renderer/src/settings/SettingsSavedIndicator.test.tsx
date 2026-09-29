@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act, useState } from "react";
-import { mockableWindowTimers, mountTestComponent } from "../shared/testing/domTestHarness";
+import { mockableWindowTimers, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import type { SettingsSavePhase } from "./settingsPageTypes";
 import { SettingsSavedIndicator } from "./SettingsSavedIndicator";
 import { settingsSavedIndicatorMs } from "./settingsSaveState";

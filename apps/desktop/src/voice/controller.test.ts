@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { BridgeResponse, VoiceStatePayload } from "../bridge/shared.js";
+import type { VoiceStatePayload } from "@shiori/plugin-sdk/contract";
+import type { BridgeResponse } from "../bridge/shared.js";
 import { DesktopVoiceController, type VoiceRecorder } from "./controller.js";
 
 class FakeRecorder implements VoiceRecorder {

@@ -7,21 +7,6 @@ import { createPluginSchemaSettingsSection } from "./pluginSchemaSettingsSection
 import { retiredPluginUiContribution } from "./runtimePluginUiValidation";
 import { pluginUiRegistry } from "./pluginUiRegistry";
 
-/** The UI module contract is owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
-export type {
-  PluginAccountDetailComponentProps,
-  PluginAccountDetailContribution,
-  PluginInjectedProps,
-  PluginNavPageComponentProps,
-  PluginNavPageContribution,
-  PluginNavPageSidebarComponentProps,
-  PluginRoleAssetsComponentProps,
-  PluginRoleAssetsContribution,
-  PluginSettingsSectionComponentProps,
-  PluginSettingsSectionContribution,
-  PluginUiModule,
-} from "@shiori/plugin-sdk";
-
 /** Narrows an unknown default export down to a well-formed PluginUiModule, without an unsafe cast. */
 function isPluginUiModule(value: unknown): value is PluginUiModule {
   if (value === null || typeof value !== "object") return false;

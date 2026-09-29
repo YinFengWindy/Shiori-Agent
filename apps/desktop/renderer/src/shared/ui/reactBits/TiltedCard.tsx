@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type React from "react";
-import { cx } from "../../styles";
+import { cx } from "@shiori/plugin-sdk";
 import { canTilt, tiltFromPointer } from "../../tilt";
 
 /**

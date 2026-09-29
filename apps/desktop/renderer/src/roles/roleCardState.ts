@@ -1,4 +1,5 @@
-import type { PendingRoleCardAction, RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { PendingRoleCardAction } from "../shared/types";
 import { resolveMoodIllustration } from "./roleMoodSelectors";
 
 /** What one role card in the management grid shows. */

@@ -1,4 +1,4 @@
-import { brandMotifPaths, type BrandMotif } from "../shared/ui/icons";
+import { brandMotifPaths, type BrandMotif } from "@shiori/plugin-sdk/host-internal";
 import type { MoodTone } from "./moodTone";
 
 /**

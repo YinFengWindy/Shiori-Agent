@@ -11,7 +11,7 @@ import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 import { useModelRegistrationDraft } from "./useModelRegistrationDraft";
 import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
-import { errorMessage } from "../shared/feedback/feedbackStore";
+import { errorMessage } from "@shiori/plugin-sdk";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 
 /** Renders the model registration catalog as list and detail views. */

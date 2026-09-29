@@ -1,4 +1,5 @@
-import { cx, focusResetClass } from "../shared/styles";
+import { cx } from "@shiori/plugin-sdk";
+import { focusResetClass } from "../shared/styles";
 
 /** Shared field styling for task form controls. */
 export const roleTaskFieldClass =

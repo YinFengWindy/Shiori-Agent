@@ -1,46 +1,8 @@
-import type {
-  ChatToolCall,
-  ChatToolCallGroup,
-  LonelinessRuntime,
-  RelationshipSnapshot,
-  RoleAssetCategory,
-  RoleLastMessage,
-  RoleProactiveCandidate,
-  RoleProactiveConfig,
-  RoleRecord,
-  SessionMessage,
-  SessionMessagePage,
-  SessionMessageUpdatePayload,
-  SessionPaginationState,
-  SessionPayload,
-  SessionSummary,
-} from "@shiori/plugin-sdk";
+import type { SessionMessagePage, SessionSummary } from "@shiori/plugin-sdk";
 import type {
   SettingsFormData,
   SettingsSnapshot,
 } from "../../../src/bridge/shared.js";
-
-/*
- * Role and session types plugins also see are owned by `@shiori/plugin-sdk`
- * (#440) and re-exported here for host callers.
- */
-export type {
-  ChatToolCall,
-  ChatToolCallGroup,
-  LonelinessRuntime,
-  RelationshipSnapshot,
-  RoleAssetCategory,
-  RoleLastMessage,
-  RoleProactiveCandidate,
-  RoleProactiveConfig,
-  RoleRecord,
-  SessionMessage,
-  SessionMessagePage,
-  SessionMessageUpdatePayload,
-  SessionPaginationState,
-  SessionPayload,
-  SessionSummary,
-};
 
 /** Session type a channel declares; the desktop session is private. */
 export type RoleChatType = "private" | "group";

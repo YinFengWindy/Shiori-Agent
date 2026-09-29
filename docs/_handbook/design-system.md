@@ -26,8 +26,8 @@ Shiori 的视觉是**三层单向依赖**：色阶原语 → 语义 token → Ta
 |---|---|
 | `apps/desktop/renderer/src/styles.css` | 全部 token 定义、全局 base 规则、工具类、动效 |
 | `apps/desktop/renderer/tailwind.config.ts` | token → Tailwind 语义类的映射、排版阶梯 |
-| `apps/desktop/renderer/src/shared/styles.ts` | 组件级共享类名常量 |
-| `packages/plugin-sdk/src/styles.ts`、`menuStyles.ts`、`components/`、`icons/` | 插件也在用的共享类名、菜单词汇、通用组件与图标的唯一实现（#440）；宿主原模块 re-export，宿主代码照旧从 `shared/` 导入 |
+| `apps/desktop/renderer/src/shared/styles.ts` | 宿主专用的组件级共享类名常量 |
+| `packages/plugin-sdk/src/styles.ts`、`menuStyles.ts`、`components/`、`icons/` | 插件也在用的共享类名、菜单词汇、通用组件与图标的唯一实现（#440）；宿主代码直接从 `@shiori/plugin-sdk` 导入 |
 | `apps/desktop/renderer/src/shared/ui/icons/SPEC.md` | 品牌母题图形的绘制规则 |
 
 **活的样式手册**：`apps/desktop/renderer/styleguide.html`（入口 `src/styleguide/main.tsx`）能把全部色阶、
@@ -120,9 +120,9 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 
 碰到就顺手换成语义写法，但不要为此单开重构。
 
-## 共享类名（`shared/styles.ts`）
+## 共享类名（`@shiori/plugin-sdk` 与 `shared/styles.ts`）
 
-控件外观的唯一来源，**不要在组件里另起一套手写串**。
+控件外观的唯一来源，**不要在组件里另起一套手写串**。插件也在用的类名（`cx`、`inputClass`、`textareaClass`、`ghostButtonClass`、`iconButtonClass`、`cardClass`、`badgeClass`、`sidebarNavItemClass`、`secondarySidebarSurfaceClass`、`primaryButtonSurfaceClass` / `ghostButtonSurfaceClass`、`compactButtonSizeClass`、`pressableClass` / `compactPressableClass` 等）从 `@shiori/plugin-sdk` 导入，其余从 `shared/styles.ts` 导入。
 
 | 常量 | 用途 |
 |---|---|
@@ -148,7 +148,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 不要复制粘贴整串再改。**只叠加不冲突的类**：同一属性的两个工具类（如 `px-[18px]` 和 `px-3.5`）都会落到元素上、由样式表顺序决定谁赢，
 要换尺寸就用上面的 `*SurfaceClass` 自己配尺寸。
 
-溢出菜单（「…」）用 `shared/ui/ActionMenu`（Base UI Menu + `Menu.tsx` 的视觉词汇）。
+溢出菜单（「…」）用 `@shiori/plugin-sdk` 的 `ActionMenu`（Base UI Menu + `Menu.tsx` 的视觉词汇）。
 聊天输入框上的弹层（模型菜单、常用表情面板）用 `chat/useChatComposerPopover`：渲染进 body portal、`position: fixed` 定位在按钮上方，
 高度不超过按钮到窗口顶部的空间、放不下就在面板内滚动。输入框卡片是 `overflow: hidden` 且带 `backdrop-filter`（会成为 fixed 后代的包含块），
 在卡片里面绝对定位的弹层一定会被裁掉。手写菜单的方向键 / Home / End 焦点移动用 `Menu.tsx` 的 `moveMenuFocus`。
@@ -228,7 +228,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
   `--ease-drawer`（`ease-drawer`）只给侧栏开合这类抽屉；`--ease-in-out-soft` 只给两端都在屏幕上的对称切换（交叉淡入）
 - 聊天新消息入场只对「当前会话挂载后追加的消息」播一次，由 `chat/chatMessageEnterState.ts` 判定：
   切会话、翻历史、虚拟化重挂载都不播
-- 按压反馈用 `shared/styles.ts` 的 `pressableClass`（0.97）/ `compactPressableClass`（30px 及以下的图标按钮，0.96）。
+- 按压反馈用 `@shiori/plugin-sdk` 的 `pressableClass`（0.97）/ `compactPressableClass`（30px 及以下的图标按钮，0.96）。
   它接管元素的整条 transition，不要再和别的 `transition*` 类叠加。共享按钮类已经带上了
 - 弹出层：Base UI 的 Select / Dialog 用 `motion-popup` / `motion-dialog` / `motion-backdrop`，进出场都有；
   手写弹层用 `motion-popover-enter` / `motion-dialog-enter` / `motion-fade-enter`（`@starting-style`），
@@ -249,7 +249,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 | 来源 | 内容 | 规则 |
 |---|---|---|
 | `shared/icons.tsx` + `@phosphor-icons/react` | 功能图标（保存、删除、上传、发送、关闭……） | **一律复用，不要自绘。** 2026-09 视觉验收时自绘功能图标被逐一打回 |
-| `shared/ui/icons`（`brand.tsx`） | 品牌装饰母题：星芒、恶魔翅膀、蝴蝶结、樱瓣 | 只用于空状态、加载、成就等情绪点缀。几何统一在 `brandMotifPaths`（另含只作粒子用的心形、水滴），心情粒子和打字星芒都从这里取形 |
+| `shared/ui/icons`（`brand.tsx`）与 `@shiori/plugin-sdk`（星芒 `SparkleIcon`、樱瓣 `PetalIcon`） | 品牌装饰母题：星芒、恶魔翅膀、蝴蝶结、樱瓣 | 只用于空状态、加载、成就等情绪点缀。几何统一在 `brandMotifPaths`（`@shiori/plugin-sdk/host-internal`；另含只作粒子用的心形、水滴），心情粒子和打字星芒都从这里取形 |
 
 **导航栏图标**是两者的组合（`shared/ui/icons/navGlyphs.tsx`）：Phosphor **regular** 原图，外轮廓不改，里面嵌**一个**品牌小元素。
 小元素是独立的 `<g class="nav-glyph-motif">`，平时 `--color-motif`（pink-500），选中时换品牌渐变（渐变 id 每个实例用 `useId` 生成）；

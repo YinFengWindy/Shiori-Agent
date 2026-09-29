@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { errorMessage } from "../shared/feedback/feedbackStore";
+import { errorMessage } from "@shiori/plugin-sdk";
 import { createIdentityClient, type UserIdentity } from "./identityClient";
 
 const client = createIdentityClient();

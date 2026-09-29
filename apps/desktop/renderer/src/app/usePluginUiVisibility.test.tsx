@@ -6,7 +6,7 @@ import {
   resetPluginEnabledStateForTests,
   setPluginEnabledSnapshot,
 } from "../plugins/pluginEnabledStateStore";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { usePluginUiVisibility, type PluginUiVisibility } from "./usePluginUiVisibility";
 
 function registerDemoPlugin(pluginId: string) {

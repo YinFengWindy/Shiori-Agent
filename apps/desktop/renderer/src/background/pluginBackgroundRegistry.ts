@@ -1,19 +1,6 @@
 import type { BackgroundCtx } from "@shiori/plugin-sdk";
 import { PluginContributionRegistry } from "../plugins/pluginContributionRegistry";
 
-/**
- * The `ctx` a plugin's background `setup` receives, and each capability on it,
- * is owned by `@shiori/plugin-sdk` (#508); re-exported for host callers.
- * `pluginBackgroundCtx.ts` builds it.
- */
-export type {
-  BackgroundCtx,
-  PluginBackgroundAssets,
-  PluginBackgroundStore,
-  PluginBackgroundSurfaces,
-  PluginBackgroundTray,
-} from "@shiori/plugin-sdk";
-
 /** One plugin's `app.background` contribution: its always-resident setup function. */
 export type PluginBackgroundEntry = {
   slot: "app.background";

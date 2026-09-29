@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLatestRef } from "../shared/useLatestRef";
+import { useLatestRef } from "@shiori/plugin-sdk";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { modelConnectionKey, selectModelConnectionTestView, testModelConnection, type ModelConnectionTestOutcome, type ModelConnectionTestRecord } from "./modelConnectionTest";
 

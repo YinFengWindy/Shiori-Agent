@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { RoleRecord, SessionPayload } from "../shared/types";
+import type { RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
 import { chooseRoleIllustration } from "./useRolePresentation";
 
 const role = {

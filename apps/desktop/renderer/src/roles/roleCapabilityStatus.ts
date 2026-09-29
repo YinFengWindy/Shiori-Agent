@@ -1,13 +1,6 @@
 import type { RoleCapabilityStatus } from "@shiori/plugin-sdk";
 import type { SettingsFormData } from "../../../src/bridge/shared";
 
-/*
- * The badge vocabulary and `roleToggleStatus` are owned by
- * `@shiori/plugin-sdk` (#440) and re-exported here; the voice statuses below
- * read host settings and stay host-only.
- */
-export { roleToggleStatus, type RoleCapabilityStatus, type RoleCapabilityTone } from "@shiori/plugin-sdk";
-
 /**
  * Whether spoken replies are on globally: the desktop voice switch and the
  * TTS provider switch (which falls back to the voice switch when unset, as

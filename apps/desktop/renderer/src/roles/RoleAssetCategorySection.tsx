@@ -1,7 +1,6 @@
 import { CaretRight, PaperPlaneTilt, Trash, UploadSimple } from "@phosphor-icons/react";
 import { toFileUrl } from "../shared/format";
-import { compactPressableClass, cx } from "../shared/styles";
-import type { RoleAssetCategory } from "../shared/types";
+import { compactPressableClass, cx, type RoleAssetCategory } from "@shiori/plugin-sdk";
 import type { RoleAssetPair } from "./roleAssetCategories";
 
 type RoleAssetCategorySectionProps = {

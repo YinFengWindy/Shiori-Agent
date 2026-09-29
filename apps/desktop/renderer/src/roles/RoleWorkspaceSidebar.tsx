@@ -1,8 +1,14 @@
 import type React from "react";
 import { Plus, SquaresFour, UploadSimple } from "@phosphor-icons/react";
 import { SidebarResizeHandle } from "../shared/SidebarResizeHandle";
-import { cx, pressableClass, secondarySidebarSurfaceClass, sidebarContentMotionClass, sidebarNavItemClass } from "../shared/styles";
-import type { RoleRecord } from "../shared/types";
+import {
+  cx,
+  pressableClass,
+  secondarySidebarSurfaceClass,
+  sidebarContentMotionClass,
+  sidebarNavItemClass,
+  type RoleRecord,
+} from "@shiori/plugin-sdk";
 import { RoleAvatar } from "./RoleAvatar";
 
 export type RoleWorkspaceSectionId = "roles-list" | "role-create" | "role-detail" | "role-assets";

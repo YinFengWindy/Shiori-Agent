@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { SessionMessage, SessionPayload, SessionSummary } from "../shared/types";
+import type { SessionMessage, SessionPayload, SessionSummary } from "@shiori/plugin-sdk";
 import { applySessionMessageUpdate } from "./applySessionMessageUpdate";
 
 function session(key: string, imagePath: string): SessionPayload {

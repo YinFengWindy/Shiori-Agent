@@ -1,6 +1,6 @@
 import React from "react";
 import { CaretDown, Sparkle } from "@phosphor-icons/react";
-import { cx } from "../shared/styles";
+import { cx } from "@shiori/plugin-sdk";
 import { formatThinkingDuration } from "./chatTurnMetrics";
 
 type ChatThinkingBlockProps = {

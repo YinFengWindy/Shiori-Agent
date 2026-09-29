@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
 import type { useDesktopBridgeLifecycle } from "../app/useDesktopBridgeLifecycle";
 import { useOnboardingSnapshot } from "./useOnboardingSnapshot";
 import { completeOnboarding, onboardingSkipKey, onboardingStorageKey, onboardingVersion, readOnboardingProgress, reconcileOnboarding } from "./onboardingState";

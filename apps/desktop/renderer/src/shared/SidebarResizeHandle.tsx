@@ -1,5 +1,5 @@
 import type React from "react";
-import { cx } from "./styles";
+import { cx } from "@shiori/plugin-sdk";
 
 /**
  * The drag strip along a left sidebar's trailing edge.

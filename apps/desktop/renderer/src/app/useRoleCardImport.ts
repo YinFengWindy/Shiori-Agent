@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { NewRoleFormState } from "../shared/types";
-import { useLatestRef } from "../shared/useLatestRef";
+import { useLatestRef, errorMessage } from "@shiori/plugin-sdk";
 import { createRoleFormFromImport, idleRoleCardImport, readRoleCardImportPreview } from "./roleCardImportState";
 import type { RoleCardImportState } from "./roleCardImportState";
-import { errorMessage, type FeedbackOptions } from "../shared/feedback/feedbackStore";
+import type { FeedbackOptions } from "../shared/feedback/feedbackStore";
 import { describeRoleCardImportError } from "../roles/roleCardImportErrors";
 
 type ImportControllerArgs = {

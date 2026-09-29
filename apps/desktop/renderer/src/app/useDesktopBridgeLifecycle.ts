@@ -7,7 +7,7 @@ import {
   failChatStream,
   finishChatStream,
 } from "../chat/chatStreamingState";
-import { useLatestRef } from "../shared/useLatestRef";
+import { useLatestRef, type RoleRecord, type SessionPayload, errorMessage } from "@shiori/plugin-sdk";
 import { parseChatTurnMetrics } from "../chat/chatTurnMetrics";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";
@@ -15,8 +15,8 @@ import {
   mergeSessionSummaryAndMessage,
   parseSessionMessageUpdatePayload,
 } from "./useDesktopSessionState";
-import type { RoleRecord, SessionPayload, AppMainView } from "../shared/types";
-import { errorMessage, type FeedbackReporter } from "../shared/feedback/feedbackStore";
+import type { AppMainView } from "../shared/types";
+import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 type UseDesktopBridgeLifecycleArgs = {
   activeRoleId: string;

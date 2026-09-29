@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { act } from "react";
 import type { DesktopUpdateApi, DesktopUpdateState } from "../../../src/updateContract.js";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { useDesktopUpdates } from "./useDesktopUpdates";
 
 test("a late initial snapshot cannot overwrite a newer update event and subscriptions are cleaned up", async () => {

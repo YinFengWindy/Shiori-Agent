@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { appearancePrefsStorageKey } from "../shared/appearancePrefs";
 import { resetAppearancePrefsCache } from "../shared/useAppearancePrefs";
 import type { SettingsFormData } from "../shared/types";

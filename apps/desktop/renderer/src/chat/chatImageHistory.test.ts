@@ -12,7 +12,7 @@ import {
   isChatImageAsset,
   resolveChatImageSelectionKey,
 } from "./chatImageHistory";
-import type { SessionPayload } from "../shared/types";
+import type { SessionPayload } from "@shiori/plugin-sdk";
 
 function createSession(messages: SessionPayload["messages"]): SessionPayload {
   return {

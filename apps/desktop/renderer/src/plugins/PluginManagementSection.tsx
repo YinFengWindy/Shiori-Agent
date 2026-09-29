@@ -1,8 +1,12 @@
 import { useRef, useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { settingsGroupStackClass } from "../settings/SettingsFieldPrimitives";
-import type { StandaloneSettingsSectionProps } from "../settings/settingsPageTypes";
-import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "../shared/styles";
+import {
+  type StandaloneSettingsSectionProps,
+  compactButtonSizeClass,
+  cx,
+  ghostButtonSurfaceClass,
+} from "@shiori/plugin-sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 import { usePluginManagementController } from "./usePluginManagementController";
 import { PluginTrustDialog } from "./PluginTrustDialog";

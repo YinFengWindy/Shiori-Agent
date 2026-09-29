@@ -4,7 +4,7 @@ import { SettingsSectionCard } from "../settings/SettingsFieldPrimitives";
 import { SettingsSaveFeedback } from "../settings/SettingsSaveFeedback";
 import { SettingsSavedIndicator } from "../settings/SettingsSavedIndicator";
 import { SettingsStatus } from "../settings/SettingsStatusSlot";
-import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "../shared/styles";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "@shiori/plugin-sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 import { describePluginConfigFields, partitionPluginConfigFields, type PluginConfigField } from "./jsonSchemaForm";
 import { PluginConfigFieldRow } from "./PluginConfigFieldRow";

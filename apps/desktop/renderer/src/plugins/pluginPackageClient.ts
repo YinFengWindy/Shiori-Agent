@@ -1,5 +1,5 @@
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
-import { PluginBridgeError } from "./pluginBridgeError";
+import { PluginBridgeError } from "@shiori/plugin-sdk";
 
 /** Validated immutable package identity shown before explicit trust approval. */
 export type PluginPackagePreview = {

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act, useEffect } from "react";
-import type { BridgeEvent } from "../../../src/bridge/shared";
-import { mountTestComponent } from "./testing/domTestHarness";
+import type { BridgeEvent } from "@shiori/plugin-sdk";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { useBridgeRefreshedValue } from "./useBridgeRefreshedValue";
 
 type Snapshot = ReturnType<typeof useBridgeRefreshedValue<string>>;

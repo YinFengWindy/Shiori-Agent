@@ -1,6 +1,6 @@
 import { ArrowDown } from "@phosphor-icons/react";
 import { chatContentTrackMaxWidthPx } from "./ChatMessageList";
-import { compactPressableClass, cx } from "../shared/styles";
+import { compactPressableClass, cx } from "@shiori/plugin-sdk";
 
 /**
  * Jumps back to the newest message. It floats just above the composer

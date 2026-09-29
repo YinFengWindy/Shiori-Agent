@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { act, createElement } from "react";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { memoryPluginId, readMemoryPluginId, useConfiguredMemoryPlugin } from "./useConfiguredMemoryPlugin";
 
 it("maps the saved engine to its exact owner", () => {

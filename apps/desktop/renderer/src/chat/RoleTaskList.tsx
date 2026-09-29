@@ -1,6 +1,7 @@
 import { Brain, CalendarDots, CaretRight, Plus, Robot } from "@phosphor-icons/react";
 import type { RoleTask } from "../shared/types";
-import { cx, focusResetClass } from "../shared/styles";
+import { cx } from "@shiori/plugin-sdk";
+import { focusResetClass } from "../shared/styles";
 import { groupRoleTasks, taskKindLabels } from "./roleTaskPanelState";
 import { chatSidebarHeaderClass, chatSidebarPanelClass, chatSidebarScrollableClass } from "./chatSidebarStyles";
 

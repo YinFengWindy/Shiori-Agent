@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { toFileUrl } from "../shared/format";
-import { cx } from "../shared/styles";
-import type { RoleFormState, RoleRecord } from "../shared/types";
+import { cx, type RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleFormState } from "../shared/types";
 import { RoleCapabilitiesPanel } from "./RoleCapabilitiesPanel";
 import { resolveRoleCardCover } from "./roleCardState";
 import { captureRoleDetailScrollTop, restoreRoleDetailScrollTop } from "./roleDetailScrollState";
