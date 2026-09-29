@@ -16,7 +16,7 @@ from agent.lifecycle.phase import (
 )
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
 from agent.core.passive_support import estimate_messages_tokens
-from conversation.context_scope import session_context_view
+from conversation.context_scope import history_filter, session_context_view
 
 if TYPE_CHECKING:
     from agent.core.passive_turn import ContextStore
@@ -362,7 +362,7 @@ def _estimate_session_input_tokens(
     history = session.get_history(
         max_messages=500,
         start_index=last_consolidated,
-        include=context_view.includes if context_view is not None else None,
+        include=history_filter(context_view),
     )
     return estimate_messages_tokens(
         [*history, {"role": "user", "content": current_content}]

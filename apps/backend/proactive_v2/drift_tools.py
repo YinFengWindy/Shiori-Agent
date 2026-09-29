@@ -8,11 +8,15 @@ from typing import Any
 
 from agent.tools.base import Tool, ToolResult
 from agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
+from agent.tools.message_lookup import UserContextMessageTool
 from agent.tools.registry import ToolRegistry
 from proactive_v2.context import AgentTickContext
 from proactive_v2.drift_state import DriftStateStore
 from proactive_v2.outbound_text import normalize_outbound_text
 from proactive_v2.reply_output import parse_push_reply, reply_properties
+from session.manager.helpers import ROLE_SESSION_PREFIX, is_role_session_key
+
+_MESSAGE_LOOKUP_TOOLS = frozenset({"fetch_messages", "search_messages"})
 
 logger = logging.getLogger(__name__)
 
@@ -394,6 +398,12 @@ def build_drift_tool_registry(
         if tool is not None:
             if name == "web_fetch":
                 tool = DriftWebFetchTool(tool, deps.max_web_fetch_chars)
+            elif name in _MESSAGE_LOOKUP_TOOLS:
+                # drift 是主动类回合，消息检索只看角色的用户上下文；没有角色时
+                # 工具无法判定上下文，角色会话的消息一律不可见。
+                if is_role_session_key(ctx.session_key):
+                    role_id = ctx.session_key.removeprefix(ROLE_SESSION_PREFIX)
+                    tool = UserContextMessageTool(tool, role_id)
             risk = "external-side-effect" if name == "shell" else "read-only"
             tools.register(tool, risk=risk)
 

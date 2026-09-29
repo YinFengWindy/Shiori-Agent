@@ -28,7 +28,7 @@ from conversation.service import (
 )
 from core.identity import UserIdentity, UserIdentityStore
 from session.manager.helpers import role_session_key
-from session.manager.models import message_thread_id
+from session.manager.models import HistoryFilter, message_thread_id
 
 ContextScope = Literal["user", "external"]
 
@@ -140,3 +140,8 @@ def session_context_view(
     if not role_id or session_key != role_session_key(role_id):
         return None
     return turn_context_view(workspace, role_id, thread_id)
+
+
+def history_filter(view: ContextView | None) -> HistoryFilter | None:
+    """``get_history`` 的 ``include`` 参数：有视图时按它筛选，非角色会话不筛选。"""
+    return view.includes if view is not None else None

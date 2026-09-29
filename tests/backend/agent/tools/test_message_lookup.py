@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from agent.tools.message_lookup import FetchMessagesTool, SearchMessagesTool
+from agent.tools.registry import ToolRegistry
 from conversation.service import desktop_thread_id, network_thread_id
 from prompts.agent import build_agent_behavior_rules_prompt
 from session.manager import SessionManager
@@ -483,3 +484,67 @@ async def test_group_turn_cannot_search_or_fetch_user_context_messages(tmp_path)
 
     desktop = json.loads(await search.execute(query="secret", **_turn(DESKTOP)))
     assert [m["preview"] for m in desktop["messages"]] == ["desktop secret plan"]
+
+
+def _registry(store: SessionStore, workspace: Path) -> ToolRegistry:
+    tools = ToolRegistry()
+    tools.register(SearchMessagesTool(store, workspace))
+    tools.register(FetchMessagesTool(store, workspace))
+    return tools
+
+
+# Arguments a model could send to try to reach the user context.
+_WIDENING_ARGS = {
+    "turn_session_key": "role:mira",
+    "role_id": "mira",
+    "thread_id": DESKTOP,
+}
+
+
+@pytest.mark.asyncio
+async def test_model_arguments_cannot_widen_a_group_turn(tmp_path):
+    manager = _role_session_with_desktop_and_group(tmp_path)
+    tools = _registry(manager._store, tmp_path)
+
+    for widening in (_WIDENING_ARGS, {"role_id": ""}, {"turn_session_key": ""}):
+        found = json.loads(
+            str(
+                await tools.execute(
+                    "search_messages",
+                    {"query": "secret", **widening},
+                    context=_turn(GROUP),
+                )
+            )
+        )
+        assert [m["preview"] for m in found["messages"]] == ["group secret chatter"]
+
+
+@pytest.mark.asyncio
+async def test_turn_without_a_known_context_never_reads_role_sessions(tmp_path):
+    manager = _role_session_with_desktop_and_group(tmp_path)
+    _setup_session(manager._store, "desktop:role:mira", 1)
+    tools = _registry(manager._store, tmp_path)
+    # A spawn completion runs outside the role session with no thread.
+    completion = {"turn_session_key": "desktop:role:mira", "thread_id": ""}
+
+    for context in (completion, {}):
+        found = json.loads(
+            str(
+                await tools.execute(
+                    "search_messages",
+                    {"query": "secret", **_WIDENING_ARGS},
+                    context=context,
+                )
+            )
+        )
+        fetched = json.loads(
+            str(
+                await tools.execute(
+                    "fetch_messages",
+                    {"ids": ["role:mira:0", "desktop:role:mira:0"], **_WIDENING_ARGS},
+                    context=context,
+                )
+            )
+        )
+        assert found["messages"] == []
+        assert [m["id"] for m in fetched["messages"]] == ["desktop:role:mira:0"]

@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 _TOOL_RESULT_CHAR_BUDGET = 10000
 _PROACTIVE_HISTORY_CHAR_BUDGET = 360
 _PROACTIVE_META_HISTORY_CHAR_BUDGET = 1200
-_ROLE_SESSION_PREFIX = "role:"
+# Every role's shared session key starts with this.
+ROLE_SESSION_PREFIX = "role:"
+_ROLE_SESSION_PREFIX = ROLE_SESSION_PREFIX
 
 
 def role_session_key(role_id: str) -> str:

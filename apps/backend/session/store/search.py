@@ -7,7 +7,11 @@ import sqlite3
 from collections.abc import Collection
 from typing import Any
 
-from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
+from infra.persistence.sqlite_like import (
+    LIKE_ESCAPE_CLAUSE,
+    like_contains,
+    like_prefix,
+)
 
 from .common import _MESSAGE_SELECT_COLUMNS
 
@@ -175,11 +179,13 @@ class _SearchMixin:
         limit: int = 10,
         offset: int = 0,
         thread_ids: Collection[str] | None = None,
+        excluded_session_prefix: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """Searches message text; ``thread_ids`` limits hits to those threads.
 
         An empty string in ``thread_ids`` stands for messages stored without a
-        thread; an empty collection matches nothing.
+        thread; an empty collection matches nothing. Sessions whose key starts
+        with ``excluded_session_prefix`` are left out.
         """
         limit = max(1, min(int(limit), 100))
         offset = max(0, int(offset))
@@ -194,9 +200,12 @@ class _SearchMixin:
                 [f"m.thread_id IN ({','.join('?' for _ in named)})"] if named else []
             )
             if "" in thread_ids:
-                clauses.append("m.thread_id IS NULL")
+                clauses.append("(m.thread_id IS NULL OR m.thread_id = '')")
             where_parts.append(f"({' OR '.join(clauses)})" if clauses else "0")
             params.extend(named)
+        if excluded_session_prefix:
+            where_parts.append(f"m.session_key NOT LIKE ? {LIKE_ESCAPE_CLAUSE}")
+            params.append(like_prefix(excluded_session_prefix))
         if role:
             where_parts.append("m.role = ?")
             params.append(role)
