@@ -282,6 +282,7 @@ Phosphor 在 `vite.config.ts:25` 被单独拆成 `icons-vendor` chunk，按需�
 |---|---|---|
 | 启动画面（后端启动超过 400ms 才出现，超过 8 秒换一句，启动失败给「重启连接」） | 半身立绘 + 台词气泡 + 星芒加载，时间段风景背景 | `app/StartupSplash.tsx`，时机在 `app/startupSplashPhase.ts` |
 | 空状态：没有角色（聊天侧栏、角色页）、搜索没有结果 | 中尺寸立绘 + 台词气泡 + 该处原有的操作按钮 | `shared/mascot/MascotSpeech` 的 `MascotEmptyState` |
+| 小手机（聊天页顶栏打开的角色手机）：机身皮肤；空状态（角色没有账号、app 里没有会话） | 机身用吟风配色（`--phone-body-yinfeng`）并挂品牌母题（蝴蝶结、星芒、樱瓣）；空状态是中尺寸立绘（`stack` 版式）+ 台词气泡。看板娘关掉时换普通机身（`--phone-body-plain`），空状态只留樱瓣标记和一句事实 | `phone/PhoneShell.tsx`、`phone/PhoneEmptyState.tsx`（台词 `emptyStateLines.phoneNoAccounts` / `phoneNoConversations`） |
 | 连接断开横幅 | 小头像 + 她的一句话作第一句，原来的说明在后 | `app/BridgeOfflineBanner.tsx` |
 | 全部提示（toast） | 小头像替换语气图标；报错 / 警告她先说一句，原文在后，技术细节仍在「详情」；成功 / 普通提示只露脸（规则见下） | `feedbackStore` 的 `persona`，宿主出口 `shared/mascot/mascotFeedback.ts` |
 | 确认弹窗 | 标题下一行：大号小头像 `lg` + 台词气泡作弹窗的第一句，表情按意图（删除 → 担心，放弃修改 → 鼓脸，重启 → 惊讶，信任 / 安装 → 疑惑 / 普通）；原来的事实说明（删什么、何时生效）照旧在后 | `shared/ui/ConfirmDialog` 的 `persona`（传 `confirmPersonaLines` 里的一句） |

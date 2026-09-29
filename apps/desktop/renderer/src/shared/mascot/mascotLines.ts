@@ -50,6 +50,10 @@ export const emptyStateLines = {
   noRoles: line("pout", "一个角色都没有？那……先陪我待会儿也行。"),
   /** Search found nothing. */
   noSearchResults: line("confused", "没找到耶，换个关键词试试？"),
+  /** The role's phone: the role has no account, so the home screen has no app. */
+  phoneNoAccounts: line("smug", "手机里一个号都没有？去角色的账号页登一个嘛。"),
+  /** The role's phone: an app whose account has no conversation yet. */
+  phoneNoConversations: line("confused", "还没人来找过呢……安静得有点寂寞。"),
 } satisfies Record<string, MascotLine>;
 
 /** The connection-lost banner, in front of its 「重启连接」 button. */

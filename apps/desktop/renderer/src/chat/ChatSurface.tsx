@@ -38,6 +38,8 @@ import {
   type ChatMessageNavigationScroller,
   useChatScrollController,
 } from "./useChatScrollController";
+import { PhonePanel } from "../phone/PhonePanel";
+import { PhoneToggle } from "../phone/PhoneToggle";
 import { cx, sidebarContentMotionClass, sidebarTrackMotionClass } from "../shared/styles";
 import { useLatestRef } from "../shared/useLatestRef";
 import { useWindowActivity } from "../shared/useWindowActivity";
@@ -153,6 +155,7 @@ export function ChatSurface({
   const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
   const [composerDraftRequest, setComposerDraftRequest] = useState<ChatComposerDraftRequest | null>(null);
   const [conversationPaneHeight, setConversationPaneHeight] = useState(0);
+  const [phoneOpen, setPhoneOpen] = useState(false);
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
   const hasStatusContent = hasStatusIllustration || Boolean(roleSelfView);
   const [sidebarMode, setSidebarMode] = useState<ChatSidebarMode>(
@@ -422,6 +425,10 @@ export function ChatSurface({
         detailRole={detailRole}
         title={headerTitle}
         typing={sending}
+        actions={activeRole ? (
+          // Clears the role panel toggle, which floats over the header's end while the panel is shut.
+          <PhoneToggle open={phoneOpen} onToggle={() => setPhoneOpen((open) => !open)} className={panelOpen ? undefined : "mr-7"} />
+        ) : null}
         onOpenRoleDetail={handleOpenRoleDetail}
       />
       <section ref={conversationPanelRef} className="conversation-panel relative z-[1] h-full min-h-0 overflow-hidden bg-transparent" data-chat-conversation="">
@@ -464,6 +471,11 @@ export function ChatSurface({
           onHeightChange={handleComposerHeightChange}
         />
       </section>
+      {phoneOpen && activeRole ? (
+        <div className="pointer-events-none absolute bottom-4 right-4 top-[67px] z-[4]">
+          <PhonePanel key={activeRole.id} role={activeRole} />
+        </div>
+      ) : null}
       </div>
       <div
         className={cx(

@@ -14,6 +14,7 @@ from .models import (
     VIA_ACCOUNT_KEY,
     ViaAccount,
     account_id_for,
+    account_serves_channel,
     delivered_via_account,
 )
 from .registry import AccountRegistry
@@ -38,6 +39,7 @@ __all__ = [
     "VIA_ACCOUNT_KEY",
     "ViaAccount",
     "account_id_for",
+    "account_serves_channel",
     "delivered_via_account",
     "response_rules_from_dict",
     "response_rules_to_dict",

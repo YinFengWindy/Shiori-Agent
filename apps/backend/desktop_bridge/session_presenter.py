@@ -17,6 +17,16 @@ from session.manager.models import message_thread_id
 _PREVIEW_MAX_CHARS = 200
 
 
+def message_preview(message: dict[str, Any]) -> dict[str, Any]:
+    """A stored message as a light chat-list preview (content capped)."""
+    return {
+        "role": str(message.get("role") or ""),
+        "content": str(message.get("content") or "")[:_PREVIEW_MAX_CHARS],
+        "timestamp": str(message.get("timestamp") or ""),
+        "has_media": bool(message.get("media")),
+    }
+
+
 class DesktopSessionPresenter:
     """Builds desktop session payloads from formal thread and runtime state.
 
@@ -161,20 +171,24 @@ class DesktopSessionPresenter:
 
     def last_message_preview(self, session_key: str) -> dict[str, Any] | None:
         """Returns the newest desktop message as a light chat-list preview."""
+        message = self._newest_message(
+            session_key, self._desktop_thread_ids(session_key)
+        )
+        return message_preview(message) if message is not None else None
+
+    def newest_thread_message(
+        self, session_key: str, thread_id: str
+    ) -> dict[str, Any] | None:
+        """The newest stored message of one thread in session ``session_key``."""
+        return self._newest_message(session_key, frozenset({thread_id}))
+
+    def _newest_message(
+        self, session_key: str, thread_ids: frozenset[str] | None
+    ) -> dict[str, Any] | None:
         messages = self._session_store().fetch_messages_page(
-            session_key,
-            limit=1,
-            thread_ids=self._desktop_thread_ids(session_key),
+            session_key, limit=1, thread_ids=thread_ids
         )["messages"]
-        if not messages:
-            return None
-        message = messages[-1]
-        return {
-            "role": str(message.get("role") or ""),
-            "content": str(message.get("content") or "")[:_PREVIEW_MAX_CHARS],
-            "timestamp": str(message.get("timestamp") or ""),
-            "has_media": bool(message.get("media")),
-        }
+        return messages[-1] if messages else None
 
     def desktop_messages(
         self, session_key: str, messages: Iterable[dict[str, Any]]

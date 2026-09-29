@@ -262,6 +262,33 @@
     --mascot-bubble-edge: rgb(255 184 209 / 45%); /* pink-300 hairline */
     --mascot-enter-rise: 10px; /* her entrance: fade + this rise, on --duration-stage */
 
+    /* ---------- 小手机 (phone/) ----------
+       The role's phone floating over the chat. The body and screen radii
+       are a device silhouette, not a control corner, so they sit outside
+       the --radius-* ladder. Body skins: 吟风 (pink / lavender, with her
+       brand motifs) while the 看板娘 is on, plain grey when she is off.
+       The wallpaper tint lies over the role's blurred avatar (decorative, no
+       contrast target of its own: text above it sits on --color-bg-glass). */
+    --phone-width: 18.5rem;
+    --phone-max-height: 40rem;
+    --phone-bezel: 0.45rem;
+    --phone-body-radius: 2.6rem;
+    --phone-screen-radius: calc(var(--phone-body-radius) - var(--phone-bezel));
+    --phone-body-yinfeng: linear-gradient(160deg in oklab, var(--pink-200), var(--lavender-200) 55%, var(--pink-300));
+    --phone-body-plain: linear-gradient(160deg in oklab, var(--neutral-200), var(--neutral-300));
+    --phone-wallpaper-blur: 22px;
+    --phone-wallpaper-tint: linear-gradient(
+      170deg in oklab,
+      color-mix(in srgb, var(--blue-100) 70%, transparent),
+      color-mix(in srgb, var(--lavender-50) 62%, transparent) 50%,
+      color-mix(in srgb, var(--pink-100) 78%, transparent)
+    );
+    --phone-view-shift: 18px; /* a screen sliding in when going deeper / back */
+    /* 吟风 skin motifs on the bezel: the bow charm, then large / small sparkles and petals */
+    --phone-motif-bow-size: 3rem;
+    --phone-motif-lg-size: 1.9rem;
+    --phone-motif-sm-size: 1.5rem;
+
     /* ---------- legacy aliases (pre-restyle var names still used
        by tailwind.config + older components; keep pointing at the
        semantic tier so both routes render identically) ---------- */
@@ -1329,6 +1356,119 @@ button[role="combobox"]:focus-visible {
   to { opacity: 0; }
 }
 
+/* ---------- 小手机 (phone/PhoneShell.tsx) ----------
+   A device body (skin via data-skin) around a rounded screen: wallpaper at
+   the back, the status bar, the current screen and the home bar. The body
+   rises in when the phone opens; each screen slides in from the side it
+   comes from (data-direction). */
+.phone-body {
+  position: relative;
+  display: grid;
+  width: var(--phone-width);
+  height: min(100%, var(--phone-max-height));
+  padding: var(--phone-bezel);
+  border-radius: var(--phone-body-radius);
+  background: var(--phone-body-plain);
+  box-shadow: var(--shadow-pop), inset 0 0 0 1px var(--color-bg-glass);
+  animation: phone-rise var(--duration-base) var(--ease-out-soft) both;
+}
+
+.phone-body[data-skin="yinfeng"] {
+  background: var(--phone-body-yinfeng);
+}
+
+.phone-motif-bow {
+  width: var(--phone-motif-bow-size);
+  height: var(--phone-motif-bow-size);
+}
+
+.phone-motif-lg {
+  width: var(--phone-motif-lg-size);
+  height: var(--phone-motif-lg-size);
+}
+
+.phone-motif-sm {
+  width: var(--phone-motif-sm-size);
+  height: var(--phone-motif-sm-size);
+}
+
+.phone-screen {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--phone-screen-radius);
+  isolation: isolate;
+}
+
+/* The theme gradient, with the role's avatar blown up and blurred on it
+   when there is one, all under the theme tint. */
+.phone-wallpaper {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background: var(--gradient-app);
+}
+
+.phone-wallpaper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--phone-wallpaper-tint);
+}
+
+.phone-wallpaper-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(var(--phone-wallpaper-blur)) saturate(1.1);
+  transform: scale(1.25);
+}
+
+/* Text blocks over the wallpaper sit on glass so they read over any picture. */
+.phone-glass {
+  background: var(--color-bg-glass);
+  backdrop-filter: blur(12px);
+}
+
+.phone-home-bar {
+  justify-self: center;
+  width: 34%;
+  height: 0.3rem;
+  margin: 0.4rem 0 0.5rem;
+  border-radius: 9999px;
+  background: var(--color-text-secondary);
+  opacity: 0.55;
+}
+
+.phone-view {
+  min-height: 0;
+}
+
+.phone-view[data-direction="forward"] {
+  animation: phone-view-forward var(--duration-base) var(--ease-out-soft) both;
+}
+
+.phone-view[data-direction="back"] {
+  animation: phone-view-back var(--duration-base) var(--ease-out-soft) both;
+}
+
+@keyframes phone-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+}
+
+@keyframes phone-view-forward {
+  from { opacity: 0; transform: translateX(var(--phone-view-shift)); }
+}
+
+@keyframes phone-view-back {
+  from { opacity: 0; transform: translateX(calc(-1 * var(--phone-view-shift))); }
+}
+
 /* ---------- 设置 › 关于 with 吟风 (settings/AboutMascot.tsx) ----------
    Version card and her line on the left, her half-body on the right; a
    click on her draws another line. Her column shrinks with the page. */
@@ -1478,6 +1618,13 @@ button[role="combobox"]:focus-visible {
      click on her in 关于 does not press her down; her faces still cross-fade. */
   .about-mascot-figure:active {
     transform: none;
+  }
+
+  /* 小手机: opening the phone and moving between its screens only fade. */
+  .phone-body,
+  .phone-view[data-direction="forward"],
+  .phone-view[data-direction="back"] {
+    animation: motion-fade-in var(--duration-quick) var(--ease-out-soft) both;
   }
 
   /* View transitions name nothing under reduced motion (shared/viewTransition.ts);

@@ -551,6 +551,27 @@ class ConversationStore:
             for row in rows
         ]
 
+    def thread_chat_types(self, thread_id: str) -> set[str]:
+        """The distinct ``chat_type`` values recorded on one thread's messages.
+
+        Reads the message's platform source (``message_source.chat_type``)
+        and falls back to the message metadata's own ``chat_type``; messages
+        recording neither contribute nothing.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT DISTINCT COALESCE(
+                    json_extract(extra, '$.metadata.message_source.chat_type'),
+                    json_extract(extra, '$.metadata.chat_type')
+                ) AS chat_type
+                FROM messages
+                WHERE thread_id = ?
+                """,
+                (thread_id,),
+            ).fetchall()
+        return {str(row["chat_type"]) for row in rows if row["chat_type"]}
+
     def last_user_message_at(self, thread_id: str) -> str | None:
         """Returns the ``ts`` of the newest user message in one thread, if any.
 

@@ -39,6 +39,7 @@ from desktop_bridge.chat_requests import DesktopChatRequestHandler
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.method_policy import MethodPolicy, resolve_plugin_method_policy
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
+from desktop_bridge.phone_requests import DesktopPhoneRequestHandler
 from desktop_bridge.plugin_requests import DesktopPluginRequestHandler
 from desktop_bridge.request_router import DesktopBridgeRequestRouter
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
@@ -221,6 +222,12 @@ class DesktopBridgeService:
         self.request_router = DesktopBridgeRequestRouter(
             accounts=DesktopAccountRequestHandler(role_store.accounts),
             identities=DesktopIdentityRequestHandler(role_store.identities),
+            phone=DesktopPhoneRequestHandler(
+                conversations=self.conversation_service,
+                accounts=role_store.accounts,
+                identities=role_store.identities,
+                messages=self.session_presenter,
+            ),
             roles=DesktopRoleRequestHandler(
                 role_service=self.role_service,
                 role_presenter=self.role_presenter,
