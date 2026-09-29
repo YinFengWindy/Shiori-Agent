@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { BridgeEvent } from "../../../apps/desktop/src/bridge/shared";
+import type { BridgeEvent } from "@shiori/plugin-sdk";
 import { readRoleReply } from "./roleReply";
 
 function event(method: string, payload: Record<string, unknown>, id = "proactive"): BridgeEvent {

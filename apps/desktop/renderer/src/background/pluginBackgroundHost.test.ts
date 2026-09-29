@@ -14,6 +14,7 @@ function fakeCtx(pluginId: string, scope: BackgroundEffectScope, log: string[]):
     store: { read: () => Promise.resolve(null), write: () => Promise.resolve() },
     assets: { url: () => null },
     tray: { setEntry: () => {}, removeEntry: () => {} },
+    reportFailure: () => {},
     effect(label, dispose) {
       scope.addEffect(label, () => { log.push(`${pluginId}:dispose:${label}`); return dispose(); });
     },

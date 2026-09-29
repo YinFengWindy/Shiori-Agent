@@ -1,6 +1,6 @@
-/** A registered side effect: a diagnostic label plus the function that undoes it. */
-export type BackgroundEffectDispose = () => void | Promise<void>;
+import type { BackgroundEffectDispose } from "@shiori/plugin-sdk";
 
+/** A registered side effect: a diagnostic label plus the function that undoes it. */
 type Effect = { label: string; dispose: BackgroundEffectDispose };
 
 /**

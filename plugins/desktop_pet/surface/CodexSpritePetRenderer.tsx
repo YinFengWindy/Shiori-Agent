@@ -3,9 +3,8 @@ import { X } from "@phosphor-icons/react";
 import { spriteActionDurationMs, spriteCell, spriteFramePosition, spritePlaybackFrameAt, type SpriteState } from "./spriteContract";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
 import { noPetBubble, type PetBubblePlacement } from "./bubbleExtension";
-import type { SurfaceHandle } from "../../../apps/desktop/renderer/src/surface/pluginSurfaceRegistry";
 import type { PetReplyBubble } from "../shared/replyBubble";
-import type { VoiceStatePayload } from "../../../apps/desktop/src/bridge/shared";
+import type { SurfaceHandle, VoiceStatePayload } from "@shiori/plugin-sdk";
 
 type CodexSpritePetRendererProps = {
   /** Opens the owning plugin menu through its injected communication client. */

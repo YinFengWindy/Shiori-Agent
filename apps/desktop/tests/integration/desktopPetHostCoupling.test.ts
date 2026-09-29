@@ -4,13 +4,18 @@ import {
   desktopPetPluginId,
   desktopPetSurfaceKey,
   readDesktopPetPresence,
-} from "../../../apps/desktop/src/pluginCoupling/desktopPet";
-import petBackground from "./index";
-import { desktopPetSurfaceId } from "./controller";
-import { desktopPetBindingPatch, normalizeDesktopPetSettings } from "./settings";
+} from "../../src/pluginCoupling/desktopPet";
+import petBackground from "../../../../plugins/desktop_pet/background/index";
+import { desktopPetSurfaceId } from "../../../../plugins/desktop_pet/background/controller";
+import { desktopPetBindingPatch, normalizeDesktopPetSettings } from "../../../../plugins/desktop_pet/background/settings";
 
 /**
  * Pins the host's copy of the pet coupling to the plugin's.
+ *
+ * Moved here from `plugins/desktop_pet/background/hostContract.test.ts` in
+ * #508: plugin code may no longer import host source, and this test exists
+ * precisely to cross that boundary, so it lives with the host's integration
+ * tests.
  *
  * The two sides declare these strings separately on purpose — sharing them
  * would mean the host importing from a plugin — which leaves exactly one
@@ -19,9 +24,9 @@ import { desktopPetBindingPatch, normalizeDesktopPetSettings } from "./settings"
  * at runtime, with no error anywhere. A test is the only thing that catches it,
  * and a test may import across a boundary that a dependency must not.
  *
- * It lives on the plugin side rather than next to `pluginCoupling/desktopPet.ts`
- * because that file is in the main-process tsc program, which has no DOM lib
- * and a `rootDir` of `apps/desktop/src` — it cannot reach renderer code at all.
+ * It does not live next to `pluginCoupling/desktopPet.ts` because that file is
+ * in the main-process tsc program, which has no DOM lib and a `rootDir` of
+ * `apps/desktop/src` — it cannot reach renderer code at all.
  */
 
 test("the host and the plugin agree on the pet's identity and event names", () => {

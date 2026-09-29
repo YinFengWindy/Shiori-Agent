@@ -6,14 +6,14 @@ import {
   surfacePositionChannel,
   surfaceStateChannel,
   type SurfaceWindowHandle,
-} from "../../../apps/desktop/src/surface/host";
+} from "../../src/surface/host";
 import {
   DesktopPetController,
   desktopPetAgentMoveDurationMs,
   desktopPetSurfaceId,
   type DesktopPetSurfaces,
-} from "./controller";
-import { desktopPetBody, type DesktopPetSettings } from "./types";
+} from "../../../../plugins/desktop_pet/background/controller";
+import { desktopPetBody, type DesktopPetSettings } from "../../../../plugins/desktop_pet/background/types";
 
 /**
  * These tests drive the *real* `DesktopSurfaceHost` over fake window handles
@@ -28,7 +28,9 @@ import { desktopPetBody, type DesktopPetSettings } from "./types";
  * What the fake *does* stand in for is the IPC hop: `ctx.surfaces` answers
  * asynchronously, and `create` carries the display id back with the anchor.
  * Ported from `apps/desktop/src/pet/controller.test.ts`, which #181-C deleted
- * along with the main-process controller it covered.
+ * along with the main-process controller it covered. It lived beside the
+ * controller in the plugin until #508 barred plugin code from importing host
+ * source; driving the real host is the point, so it is a host integration test.
  */
 
 const workArea = { x: 0, y: 0, width: 1920, height: 1080 };

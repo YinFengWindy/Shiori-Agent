@@ -104,6 +104,7 @@ function makeCtx(overrides: Partial<Parameters<typeof createBackgroundCtx>[0]> =
     tray: fakeTray().api,
     onTrayEntryClicked: () => () => {},
     localAssetUrl: () => unavailableLocalAssetUrl,
+    reportFailure: () => {},
     ...overrides,
     scope,
   });
@@ -278,6 +279,18 @@ test("ctx.assets.url answers null for a path the host never granted", () => {
   // show a package must not mistake it for one.
   assert.equal(ctx.assets.url("C:/roles/mira/missing.webp"), null);
   assert.equal(ctx.assets.url(""), null);
+});
+
+test("ctx.reportFailure hands the failure to the host's diagnostic sink, naming the plugin", () => {
+  const reported: [string, unknown][] = [];
+  const ctx = makeCtx({ reportFailure: (what, error) => { reported.push([what, error]); } });
+  const failure = new Error("bridge 还没起来");
+
+  ctx.reportFailure("restore", failure);
+
+  // The plugin passes only its operation; the host adds whose it was, so a
+  // plugin cannot log under another plugin's name or forget its own.
+  assert.deepEqual(reported, [["demo restore", failure]]);
 });
 
 test("ctx.tray binds the plugin id and routes clicks to the right handler", () => {

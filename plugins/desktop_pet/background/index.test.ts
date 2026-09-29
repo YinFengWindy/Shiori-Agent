@@ -1,10 +1,7 @@
-import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import assert from "node:assert/strict";
 import test from "node:test";
-import type {
-  BackgroundCtx,
-  PluginBackgroundSettled,
-} from "../../../apps/desktop/renderer/src/background/pluginBackgroundRegistry";
+import type { BackgroundCtx, PluginBackgroundSettled } from "@shiori/plugin-sdk";
+import { createFakePluginClient } from "@shiori/plugin-sdk/testing";
 import petBackground, {
   desktopPetTrayEntryId,
 } from "./index";
@@ -13,8 +10,8 @@ import { desktopPetSurfaceId } from "./controller";
 /**
  * Covers the wiring, not the behaviour behind it.
  *
- * `controller.test.ts` proves that a correctly-wired controller does the right
- * thing; this file proves the wiring exists and routes correctly, which is the
+ * `apps/desktop/tests/integration/desktopPetSurfaceController.test.ts` proves
+ * that a correctly-wired controller does the right thing; this file proves the wiring exists and routes correctly, which is the
  * part #181-C actually wrote from scratch. The two failure modes it exists for
  * are both invisible to every other test and to the type checker: dropping one
  * of the four registrations (the `ctx.effect` one is what makes "停用即回收"
@@ -39,6 +36,8 @@ type Recorder = {
   rpcCalls: string[];
   trayEntries: Map<string, { label: string; enabled: boolean }>;
   trayHandlers: Map<string, () => void>;
+  /** What reached `ctx.reportFailure`, the host's diagnostic log. */
+  failures: [string, unknown][];
   state: RecorderState;
 };
 
@@ -50,6 +49,7 @@ function recorder(overrides: Partial<RecorderState> = {}): Recorder {
   const rpcCalls: string[] = [];
   const trayEntries = new Map<string, { label: string; enabled: boolean }>();
   const trayHandlers = new Map<string, () => void>();
+  const failures: [string, unknown][] = [];
   const state: RecorderState = {
     stored: overrides.stored ?? null,
     bindingAnswer: overrides.bindingAnswer ?? (() => ({
@@ -68,6 +68,7 @@ function recorder(overrides: Partial<RecorderState> = {}): Recorder {
     rpcCalls,
     trayEntries,
     trayHandlers,
+    failures,
     state,
     ctx: {
       surfaces: {
@@ -85,14 +86,13 @@ function recorder(overrides: Partial<RecorderState> = {}): Recorder {
         setState: (surfaceId) => { surfaceCalls.push(["setState", surfaceId]); },
         onSettled: (surfaceId, handler) => { settled.set(surfaceId, handler); },
       },
-      rpc: {
-        ...createPluginRpcClient("desktop_pet"),
+      rpc: createFakePluginClient({
         handle: async (name, handler) => { events.set(name, handler); },
         call: <T,>(method: string) => {
           rpcCalls.push(method);
           return Promise.resolve(state.bindingAnswer() as T);
         },
-      },
+      }),
       events: { on: async (method, handler) => { events.set(method, (payload) => handler(payload, { id: "test", type: "event", method, payload })); return () => { events.delete(method); }; } },
       hostEvents: { on: (method, handler) => { events.set(method, (payload) => handler(payload, { id: "test", type: "event", method, payload })); } },
       store: {
@@ -108,6 +108,7 @@ function recorder(overrides: Partial<RecorderState> = {}): Recorder {
         removeEntry: (entryId) => { trayEntries.delete(entryId); trayHandlers.delete(entryId); },
       },
       effect: (label) => { effects.push(label); },
+      reportFailure: (operation, error) => { failures.push([operation, error]); },
     },
   };
 }
@@ -162,6 +163,9 @@ test("a failed restore is reported, not rethrown, so the contribution stays aliv
   await assert.doesNotReject(petBackground.setup(fake.ctx));
   assert.deepEqual(fake.effects, ["desktop_pet_controller"]);
   assert.deepEqual([...fake.events.keys()].length, 6);
+  // Reported to the host's diagnostic log: the plugin-host window is hidden,
+  // so a failure that only reached its console would be invisible.
+  assert.deepEqual(fake.failures.map(([operation, error]) => [operation, (error as Error).message]), [["restore", "bridge 还没起来"]]);
 });
 
 test("a sync command carries forceVisible through, and only when it is a boolean", async () => {

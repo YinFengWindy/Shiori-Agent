@@ -11,7 +11,7 @@ import type { SurfaceKey } from "../surface/host.js";
 
 // The half of this coupling that pins the host's copy of the pet's identity
 // and event names against the plugin's own lives in
-// `plugins/desktop_pet/background/hostContract.test.ts`. It cannot live here:
+// `tests/integration/desktopPetHostCoupling.test.ts`. It cannot live here:
 // this file is in the *main-process* tsc program (`tsconfig.main.json`), which
 // has no DOM lib and a `rootDir` of `src/`, and the plugin is renderer code.
 

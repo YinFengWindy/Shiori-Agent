@@ -1,9 +1,8 @@
-import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
+import { createFakePluginClient, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { DesktopPetRoleSettings, desktopPetRoleSettings } from "./roleSettings";
-import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
 
 test("pet toggle edits only its draft and gates enablement on selected packages", async () => {
   const changes: unknown[] = [];
@@ -19,7 +18,7 @@ test("pet toggle edits only its draft and gates enablement on selected packages"
     await act(async () => { toggle.click(); });
     assert.deepEqual(changes, [{ enabled: true }]);
     assert.equal(synced.length, 0);
-    await desktopPetRoleSettings.afterSave?.({ enabled: true }, { ...createPluginRpcClient("desktop_pet"), background: { call: async <T,>(_name: string, payload?: Record<string, unknown>) => { synced.push(payload?.forceVisible); return undefined as T; } } });
+    await desktopPetRoleSettings.afterSave?.({ enabled: true }, createFakePluginClient({ background: { call: async <T,>(_name: string, payload?: Record<string, unknown>) => { synced.push(payload?.forceVisible); return undefined as T; } } }));
     assert.deepEqual(synced, [true]);
   } finally { await view.cleanup(); }
 });

@@ -9,7 +9,7 @@ import {
   type PetPointerSample,
 } from "./interactionContract";
 import type { SpriteState } from "./spriteContract";
-import type { SurfaceHandle } from "../../../apps/desktop/renderer/src/surface/pluginSurfaceRegistry";
+import type { SurfaceHandle } from "@shiori/plugin-sdk";
 
 /**
  * The host voice gesture a pet press doubles as.

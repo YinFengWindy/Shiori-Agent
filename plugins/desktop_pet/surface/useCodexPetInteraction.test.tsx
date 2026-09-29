@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
+import type { SurfaceHandle } from "@shiori/plugin-sdk";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
-import type { SurfaceHandle } from "../../../apps/desktop/renderer/src/surface/pluginSurfaceRegistry";
 
 type BridgeCall = { name: string; args: unknown[] };
 

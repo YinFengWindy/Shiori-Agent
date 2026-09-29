@@ -1,18 +1,8 @@
-import {
-  pluginSurfaceRegistry,
-  type PluginSurfaceContribution,
-  type PluginSurfaceRegistry,
-} from "./pluginSurfaceRegistry";
+import type { PluginSurfaceModule } from "@shiori/plugin-sdk";
+import { pluginSurfaceRegistry, type PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 
-/**
- * The shape a plugin's `surface/index.tsx` default-exports to own a desktop
- * window. A plugin id is required: it scopes the plugin's RPC namespace and is
- * how the host tells one surface window from another.
- */
-export type PluginSurfaceModule = {
-  pluginId: string;
-  surface: PluginSurfaceContribution;
-};
+/** What a plugin's `surface/index.tsx` default-exports is owned by `@shiori/plugin-sdk` (#508); re-exported for host callers. */
+export type { PluginSurfaceModule };
 
 /**
  * Narrows an unknown default export without an unsafe cast. Exported so

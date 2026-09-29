@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.10.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.11.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -86,6 +86,7 @@ version whose additions it uses.
 | `2.8.0` | the `@shiori/plugin-sdk` renderer peer, resolved to the host's own instance through the renderer import map (see [Runtime API 2.8 plugin SDK peer](#runtime-api-28-plugin-sdk-peer)) | #503 (#440 T1) |
 | `2.9.0` | `@shiori/plugin-sdk` shared renderer primitives: components, class names, icons, pure helpers and hooks, plus the UI module, host service, account and role contract types (see [Runtime API 2.9 plugin SDK primitives](#runtime-api-29-plugin-sdk-primitives)) | #504 (#440 T2) |
 | `2.10.0` | the host services context (`PluginHostServicesProvider` / `usePluginHostServices`) exported by `@shiori/plugin-sdk`, plus `host.config` (the plugin's own config: read, save a patch, subscribe) and `host.assets` (local path to displayable URL) (see [Runtime API 2.10 host services context, config and assets](#runtime-api-210-host-services-context-config-and-assets)) | #505 (#440 T3) |
+| `2.11.0` | `ctx.reportFailure(operation, error)` on the background `setup(ctx)`: a handled background failure recorded in the host's desktop diagnostic log; `@shiori/plugin-sdk` also becomes the source of the `desktop.surface` and `app.background` contract types (see [Runtime API 2.11 background failure reporting and surface/background types](#runtime-api-211-background-failure-reporting-and-surfacebackground-types)) | #508 (#440) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -403,6 +404,45 @@ fake services.
 The host store behind any of this (plugin enablement, feedback queue, registries,
 appearance preferences) stays private; accounts still arrive through the
 `account.detail` props and `host.ui`.
+
+## Runtime API 2.11 background failure reporting and surface/background types
+
+API 2.11 adds one member to the `ctx` a background module's `setup(ctx)`
+receives; a package that calls it declares `runtime_api: ">=2.11.0 <3.0.0"`.
+
+- **`ctx.reportFailure(operation, error)`** records a failure the plugin
+  handled but a human should still see — a fire-and-forget operation with no
+  caller to throw at (a tray click, a surface command), or a step `setup`
+  deliberately survives — in the host's desktop diagnostic log, the same place
+  a failed `setup` itself is recorded. The background window is hidden and its
+  console is out of reach, so this is the only way such a failure is found
+  later. The host prefixes the entry with the plugin's id; `operation` names
+  what failed (`"restore"`, `"show"`). It returns nothing and never throws.
+
+It is an injected capability rather than an SDK function because it writes to
+host state (the diagnostic log behind the preload bridge), and the SDK holds no
+host state; like `ctx.store` and `ctx.tray` it is bound to the plugin.
+
+There are no new runtime exports, so `pluginUiPeerExports` is unchanged. The
+contract types of the other renderer contribution points move into
+`@shiori/plugin-sdk` as type-only exports, describing the existing behaviour
+unchanged (the host's own modules re-export them):
+
+- `desktop.surface`: `PluginSurfaceModule` (the entry's default export),
+  `PluginSurfaceContribution`, `PluginSurfaceComponentProps`, the
+  self-directed `SurfaceHandle` and what it reports and accepts
+  (`SurfacePlacement`, `SurfaceWorkArea`, `SurfaceExtension`,
+  `SurfaceMenuItem`).
+- `app.background`: `PluginBackgroundContribution` (the entry's default
+  export), `BackgroundCtx` and its capabilities (`PluginBackgroundSurfaces`,
+  `PluginBackgroundStore`, `PluginBackgroundTray`, `PluginBackgroundAssets`,
+  `PluginBackgroundEvents`, `BackgroundEffectDispose`), plus the surface
+  vocabulary they use (`SurfaceSpec`, `SurfaceCreateResult`,
+  `PluginBackgroundSettled`, `SurfaceSettleReason`).
+- `VoiceStatePayload`, the host's voice state pushed to the desktop pet.
+
+The React-free ones are also available from `@shiori/plugin-sdk/contract` for
+the host's main process and preload.
 
 ### Test entry
 

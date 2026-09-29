@@ -9,3 +9,16 @@
  */
 export type { NativeFilePickerOptions } from "./contract/filePicker";
 export type { BridgeEvent, PluginBackgroundHandler, PluginEventHandler, PluginPeer, PluginRpcClient } from "./rpc";
+export type {
+  PluginSurfaceComponentProps,
+  SurfaceCreateResult,
+  SurfaceExtension,
+  SurfaceHandle,
+  SurfaceMenuItem,
+  SurfacePlacement,
+  SurfaceSettleReason,
+  SurfaceSpec,
+  SurfaceWorkArea,
+} from "./contract/surface";
+export type { PluginBackgroundSettled } from "./contract/background";
+export type { VoiceStatePayload } from "./contract/voice";

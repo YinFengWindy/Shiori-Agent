@@ -1,19 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import { usePluginHostServices } from "../../../apps/desktop/renderer/src/plugins/PluginHostServicesProvider";
-import type { PluginRoleAssetsComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
+import { usePluginHostServices, type PluginRoleAssetsComponentProps } from "@shiori/plugin-sdk";
 import { noPetPackages, readPetPackages, type PetPackages } from "./petPackages";
 import { pickPetPackageFile } from "./petPackagePicker";
 
 /** Loads and mutates this role's packages, then refreshes both form and pet projections. */
 export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: Omit<PluginRoleAssetsComponentProps, "host">) {
-  const { pickFiles } = usePluginHostServices();
+  const { pickFiles, assets } = usePluginHostServices();
   const [state, setState] = useState<PetPackages>(noPetPackages);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const parse = useCallback(
-    (payload: unknown) => readPetPackages(payload, (path) => window.miraDesktop.localAssetUrl(path)),
-    [],
+    (payload: unknown) => readPetPackages(payload, (path) => assets.url(path)),
+    [assets],
   );
 
   // `disabled` is a dependency on purpose: it falls when the bridge comes up
