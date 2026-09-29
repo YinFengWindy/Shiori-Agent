@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
+import type { PluginRpcClient } from "@shiori/plugin-sdk";
 
 type ConnectionSettings = { ref: string };
 

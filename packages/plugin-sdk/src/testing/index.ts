@@ -15,3 +15,4 @@ export {
   type FakeHostServicesOptions,
 } from "./fakeHostServices";
 export type { FakeHostUiRenders } from "./fakeHostUi";
+export { createFakePluginClient } from "./fakePluginClient";

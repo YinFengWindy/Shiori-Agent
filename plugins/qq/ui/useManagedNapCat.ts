@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
+import type { PluginRpcClient } from "@shiori/plugin-sdk";
 import { napCatPreparing } from "./qqStatusPresentation";
 
 /** One managed instance's preparation, QR login, and connection state. */

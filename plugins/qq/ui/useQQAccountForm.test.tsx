@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import React, { act } from "react";
-import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
+import { createFakePluginClient, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { useQQAccountForm } from "./useQQAccountForm";
 
 test("a temporary QQ login begins only when the user connects", async () => {
   const calls: Array<{ method: string; payload?: Record<string, unknown> }> = [];
-  const client = {
-    ...createPluginRpcClient("qq"),
+  const client = createFakePluginClient({
     async call<T>(method: string, payload?: Record<string, unknown>): Promise<T> {
       calls.push({ method, payload });
       if (method === "accounts.settings") return { managed_available: true } as T;
@@ -16,7 +14,7 @@ test("a temporary QQ login begins only when the user connects", async () => {
       if (method === "accounts.start") return { ref: "temporary-1", account_id: "" } as T;
       throw new Error(method);
     },
-  };
+  });
   function Probe() {
     const form = useQQAccountForm({ roleId: "mira", client, onChanged: () => undefined,
       onCleanupError: (failure) => { throw failure; },
@@ -37,8 +35,7 @@ test("a temporary QQ login begins only when the user connects", async () => {
 test("closing before begin returns cancels the late temporary login", async () => {
   const calls: Array<{ method: string; payload?: Record<string, unknown> }> = [];
   let finishBegin!: (result: { ref: string }) => void;
-  const client = {
-    ...createPluginRpcClient("qq"),
+  const client = createFakePluginClient({
     async call<T>(method: string, payload?: Record<string, unknown>): Promise<T> {
       calls.push({ method, payload });
       if (method === "accounts.settings") return { managed_available: true } as T;
@@ -48,7 +45,7 @@ test("closing before begin returns cancels the late temporary login", async () =
       if (method === "accounts.cancel") return {} as T;
       throw new Error(method);
     },
-  };
+  });
   function Probe() {
     const form = useQQAccountForm({ roleId: "mira", client, onChanged: () => undefined,
       onCleanupError: (failure) => { throw failure; },
