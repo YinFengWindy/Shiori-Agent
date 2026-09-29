@@ -165,6 +165,7 @@ def test_build_proactive_runtime_accepts_light_agent_loop_stub(tmp_path):
         presence=cast(Any, SimpleNamespace()),
         agent_loop=cast(Any, SimpleNamespace(processing_state=None)),
         desktop_presence=DesktopPresence(),
+        group_environment=cast(Any, SimpleNamespace()),
     )
     assert tasks == []
     assert loops == {}

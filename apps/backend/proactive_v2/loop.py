@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Callable, cast
 
 if TYPE_CHECKING:
     from core.memory.engine import MemoryRetrievalApi
+    from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
 
 from bus.event_bus import EventBus
@@ -94,9 +95,12 @@ class ProactiveLoop:
         role_prompt_fn: Callable[[], str] | None = None,
         desktop_presence: DesktopPresence | None = None,
         role_store: RoleStore | None = None,
+        group_environment: "GroupEnvironment | None" = None,
     ) -> None:
         """``role_store`` is the runtime's shared store; its account index and
-        user identities decide where each proactive message can go."""
+        user identities decide where each proactive message can go.
+        ``group_environment`` supplies the recent activity of external chats
+        injected into proactive and drift turns (#497)."""
         self._sessions = session_manager
         self._provider = provider
         self._push = push_tool
@@ -119,6 +123,7 @@ class ProactiveLoop:
         self._event_bus = event_bus
         self._desktop_presence = desktop_presence
         self._role_store = role_store
+        self._group_environment = group_environment
         if role_prompt_fn is None:
             raise ValueError("role_prompt_fn required for proactive loop")
         self._role_prompt_fn = role_prompt_fn
@@ -230,6 +235,7 @@ class ProactiveLoop:
                 pool=self._mcp_pool,
                 tool_hooks=self._tool_hooks,
                 proactive_gates=self._proactive_gates,
+                group_environment=self._group_environment,
             )
         ).build()
 

@@ -11,9 +11,11 @@ from agent.core.types import ContextRenderResult, ContextRequest
 from agent.core.prompt_block import (
     ActiveSkillsPromptBlock,
     BehaviorRulesPromptBlock,
+    GroupNotePromptBlock,
     IdentityPromptBlock,
     LongTermMemoryPromptBlock,
     MemoryBlockPromptBlock,
+    RecentActivityPromptBlock,
     RecentContextPromptBlock,
     SelfModelPromptBlock,
     SessionContextPromptBlock,
@@ -44,6 +46,7 @@ from prompts.agent import (
 
 if TYPE_CHECKING:
     from conversation.context_scope import ContextScope
+    from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
     from core.roles import RoleStore
 
@@ -235,6 +238,8 @@ class ContextBuilder:
                 LongTermMemoryPromptBlock(),
                 SelfModelPromptBlock(),
                 RecentContextPromptBlock(),
+                RecentActivityPromptBlock(),
+                GroupNotePromptBlock(),
                 SessionContextPromptBlock(),
                 UserIdentitiesPromptBlock(runtime_roles),
                 ActiveSkillsPromptBlock(),
@@ -246,6 +251,8 @@ class ContextBuilder:
             multimodal=multimodal,
         )
         self._assembler = PromptAssembler(self)
+        # 群环境层（#497）：最近动态与群笔记的来源；未设置时不注入这两段。
+        self._group_environment: GroupEnvironment | None = None
         self._last_debug_breakdown: list[PromptSectionMeta] = []
         self._last_assembled_contexts: dict[str, dict[str, str]] = {
             "turn_injection_context": {},
@@ -263,6 +270,10 @@ class ContextBuilder:
         self._envelope_builder.set_media_capabilities(
             multimodal=multimodal,
         )
+
+    def set_group_environment(self, group_environment: "GroupEnvironment") -> None:
+        """接入群环境层，供提示块注入最近动态与当前会话的群笔记。"""
+        self._group_environment = group_environment
 
     @property
     def last_debug_breakdown(self) -> list[PromptSectionMeta]:
@@ -338,6 +349,7 @@ class ContextBuilder:
             retrieved_memory_block=request.retrieved_memory_block,
             disabled_sections=request.disabled_sections,
             context_scope=request.context_scope,
+            thread_id=request.thread_id,
             turn_injection_context=turn_injection_context,
             system_sections_top=merged_top,
             system_sections_bottom=system_sections_bottom,
@@ -362,6 +374,7 @@ class ContextBuilder:
         disabled_sections: set[str] | None = None,
         role_id: str = "",
         context_scope: "ContextScope | None" = None,
+        thread_id: str = "",
     ) -> SystemPromptBuildResult:
         ctx = TurnContext(
             workspace=self.workspace,
@@ -373,6 +386,8 @@ class ContextBuilder:
             retrieved_memory_block=retrieved_memory_block,
             role_id=role_id,
             context_scope=context_scope,
+            thread_id=thread_id,
+            group_environment=self._group_environment,
         )
         built = self._system_prompt_builder.build(
             ctx,

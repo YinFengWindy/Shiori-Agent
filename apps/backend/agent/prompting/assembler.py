@@ -52,6 +52,9 @@ class SectionCache:
 _CONTEXT_FRAME_SECTIONS = {
     "active_skills",
     "recent_context",
+    # 群环境层（#497）随整理变化，与 recent_context 一样放进 context frame。
+    "recent_activity",
+    "group_note",
     "retrieved_memory",
 }
 SYSTEM_CONTEXT_FRAME_MARKER = '<system-reminder data-system-context-frame="true">'
@@ -101,6 +104,7 @@ class PromptAssembler:
         retrieved_memory_block: str = "",
         disabled_sections: set[str] | None = None,
         context_scope: ContextScope | None = None,
+        thread_id: str = "",
         turn_injection_context: dict[str, str] | None = None,
         system_sections_top: list[PromptSectionRender] | None = None,
         system_sections_bottom: list[PromptSectionRender] | None = None,
@@ -116,6 +120,7 @@ class PromptAssembler:
             disabled_sections=disabled_sections,
             role_id=role_id,
             context_scope=context_scope,
+            thread_id=thread_id,
         )
         injection_context = turn_injection_context or {}
         disabled = disabled_sections or set()

@@ -14,6 +14,7 @@ from agent.tools.message_push import MessagePushTool
 from conversation.service import desktop_chat_id, desktop_thread_id
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.desktop_presence import DesktopPresence
+from core.memory.group_environment import GroupEnvironment
 from core.roles import RoleRecord, RoleStore
 from core.roles.model_runtime import RoleAwareProvider
 from core.roles.role_prompt_compiler import RolePromptCompiler
@@ -67,11 +68,13 @@ def build_proactive_runtime(
     event_bus: "EventBus | None" = None,
     provider_consumer: Callable[[LLMProvider], None] | None = None,
     desktop_presence: DesktopPresence,
+    group_environment: GroupEnvironment,
 ) -> tuple[list, dict[str, ProactiveLoop]]:
     """Builds one proactive loop per enabled role.
 
     ``desktop_presence`` is the app-level report the loops read when choosing
-    where each proactive message goes.
+    where each proactive message goes. ``group_environment`` is the runtime's
+    shared group environment layer (#497), read for recent external activity.
     """
     tasks: list = []
     roles = [
@@ -123,6 +126,7 @@ def build_proactive_runtime(
             ),
             desktop_presence=desktop_presence,
             role_store=role_runtime_registry.repository.store,
+            group_environment=group_environment,
         )
         loops[role.id] = loop
         tasks.append(loop.run())

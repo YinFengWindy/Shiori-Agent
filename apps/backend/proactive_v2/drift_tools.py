@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent.tools.base import Tool, ToolResult
 from agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
@@ -15,6 +15,9 @@ from proactive_v2.drift_state import DriftStateStore
 from proactive_v2.outbound_text import normalize_outbound_text
 from proactive_v2.reply_output import parse_push_reply, reply_properties
 from session.manager.helpers import ROLE_SESSION_PREFIX, is_role_session_key
+
+if TYPE_CHECKING:
+    from core.memory.group_environment import GroupEnvironment
 
 _MESSAGE_LOOKUP_TOOLS = frozenset({"fetch_messages", "search_messages"})
 
@@ -30,6 +33,8 @@ class DriftToolDeps:
     shared_tools: ToolRegistry | None = None
     send_message_fn: Any = None
     max_web_fetch_chars: int = 8_000
+    # 群环境层（#497）：发呆回合注入各外部会话的最近动态。
+    group_environment: "GroupEnvironment | None" = None
 
 
 class SendMessageTool(Tool):

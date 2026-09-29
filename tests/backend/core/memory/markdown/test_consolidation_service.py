@@ -43,6 +43,7 @@ class _FixedPayloadHarness:
         self.last_draft = await self._consolidation.prepare_consolidation(
             session,
             archive_all=archive_all,
+            group_environment=cast(Any, object()),
         )
 
 
@@ -83,6 +84,7 @@ def _prepare(
             session,
             archive_all=archive_all,
             force=force,
+            group_environment=cast(Any, object()),
         )
     )
 

@@ -67,6 +67,7 @@ from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from bus.queue import MessageBus
 from core.common.channel_directory import ChannelDirectory
+from core.memory.group_environment import GroupEnvironment
 from core.memory.markdown import MemoryLifecycleBindRequest, MarkdownMemoryMaintenance
 from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
@@ -106,6 +107,8 @@ class CoreRuntime:
     presence: PresenceStore
     relationship_runtime: RoleRelationshipRuntimeService
     role_runtime_registry: RoleRuntimeRegistry
+    # 群环境层（#497）：被动回合、记忆整理与主动/发呆回合共用这一个实例。
+    group_environment: GroupEnvironment
     scene_service: SceneObservationService | None = None
     image_sync_service: ExternalPushSyncService | None = None
     agent_provider: LLMProvider | None = None
@@ -319,6 +322,7 @@ def _build_loop_deps(
     memory_runtime: MemoryRuntime,
     relationship_runtime: RoleRelationshipRuntimeService,
     runtime_roles: RoleStore,
+    group_environment: GroupEnvironment,
     role_runtime_registry: RoleRuntimeRegistry | None = None,
     channel_directory: ChannelDirectory | None = None,
 ) -> AgentLoopDeps:
@@ -332,6 +336,7 @@ def _build_loop_deps(
         context.set_media_capabilities(
             multimodal=config.multimodal,
         )
+        context.set_group_environment(group_environment)
         if channel_directory is not None:
             context.set_channel_directory(channel_directory)
     memory_engine = memory_runtime.engine
@@ -354,6 +359,7 @@ def _build_loop_deps(
         session_manager=session_manager,
         relationship_runtime=relationship_runtime,
         relationship_optimizer=relationship_optimizer,
+        group_environment=group_environment,
     )
     retrieval_pipeline = DefaultMemoryRetrievalPipeline(
         memory=memory_services,
@@ -386,6 +392,7 @@ def _bind_memory_lifecycle_if_supported(
     session_manager: SessionManager,
     relationship_runtime: RoleRelationshipRuntimeService,
     relationship_optimizer: RelationshipSnapshotOptimizer,
+    group_environment: GroupEnvironment,
 ) -> None:
     async def _after_consolidation(session: object) -> None:
         await relationship_runtime.refresh_snapshot_after_consolidation(
@@ -398,6 +405,7 @@ def _bind_memory_lifecycle_if_supported(
             get_session=session_manager.get_or_create,
             commit_consolidation=session_manager.commit_consolidation,
             after_consolidation=_after_consolidation,
+            group_environment=group_environment,
         )
     )
 
@@ -521,10 +529,12 @@ def build_core_runtime(
     channel_directory = (
         shared.channel_directory if shared is not None else ChannelDirectory()
     )
+    group_environment = GroupEnvironment(workspace, session_manager.conversation_store)
     loop_deps = _build_loop_deps(
         config=config,
         workspace=workspace,
         runtime_roles=role_store,
+        group_environment=group_environment,
         bus=bus,
         provider=loop_provider,
         light_provider=light_provider,
@@ -674,6 +684,7 @@ def build_core_runtime(
         presence=presence,
         relationship_runtime=relationship_runtime,
         role_runtime_registry=role_runtime_registry,
+        group_environment=group_environment,
         plugin_manager=plugin_manager,
         scene_service=scene_service,
         channel_directory=channel_directory,

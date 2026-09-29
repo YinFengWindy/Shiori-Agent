@@ -30,6 +30,14 @@ def _empty_prompt_sections() -> list[PromptSectionRender]:
     return []
 
 
+def inbound_thread_id(msg: InboundMessage) -> str:
+    """入站消息所在会话（thread）；渠道中枢与桌面入口写在 metadata 里，没有时为空串。
+
+    回合装配（可见历史、提示词渲染与预热、用户本人判定）都从这里取，保证同一来源。
+    """
+    return str((msg.metadata or {}).get("thread_id") or "").strip()
+
+
 @dataclass
 class TurnState:
     msg: InboundMessage
@@ -47,6 +55,11 @@ class TurnState:
         """回合所在的上下文；非角色共享会话为 None。"""
         return self.context_view.scope if self.context_view is not None else None
 
+    @property
+    def thread_id(self) -> str:
+        """回合所在会话（见 ``inbound_thread_id``）。"""
+        return inbound_thread_id(self.msg)
+
     def is_user_authored(self) -> bool:
         """本回合的来信是否出自用户本人（规则见 ``source_belongs_to_user``）。
 
@@ -56,7 +69,7 @@ class TurnState:
         if self.context_view is None:
             return True
         return source_belongs_to_user(
-            str((self.msg.metadata or {}).get("thread_id") or "").strip(),
+            self.thread_id,
             MessageSource.from_inbound(self.msg),
             self.context_view.user_threads,
         )
@@ -125,6 +138,8 @@ class PromptRenderInput:
     session_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
     # 回合所在的上下文，取自 TurnState.context_scope；决定注入哪些记忆。
     context_scope: ContextScope | None = None
+    # 回合所在会话（thread）；外部回合据此注入当前会话的群笔记（#497）。
+    thread_id: str = ""
 
 
 @dataclass

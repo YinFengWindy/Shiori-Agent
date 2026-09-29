@@ -94,6 +94,8 @@ class ContextRequest:
     turn_injection_prompt: str | None = None
     # 回合所在的上下文；外部上下文不注入用户层记忆（见 agent.core.prompt_block）。
     context_scope: ContextScope | None = None
+    # 回合所在会话（thread）；外部回合据此注入当前会话的群笔记（#497）。
+    thread_id: str = ""
 
 
 @dataclass

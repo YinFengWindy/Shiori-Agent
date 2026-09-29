@@ -210,6 +210,14 @@ _NSFW_MEMORY_DEPENDENCY_RE = re.compile(
 _NSFW_MEMORY_SHY_RE = re.compile(r"(害羞|脸红|耳尖|轻哼|别误会|嘴硬)", re.I)
 
 
+def _session_role_id(session: object) -> str:
+    """会话元数据里记录的角色 ID；没有时为空串。"""
+    metadata = getattr(session, "metadata", {})
+    if not isinstance(metadata, dict):
+        return ""
+    return str(metadata.get("role_id") or "").strip()
+
+
 def _session_role_runtime_config(session: object) -> dict[str, Any]:
     metadata = getattr(session, "metadata", None)
     if not isinstance(metadata, dict):

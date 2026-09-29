@@ -185,6 +185,7 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
         proactive_motives=[motive],
         event_bus=event_bus,
         desktop_presence=presence,
+        group_environment=MagicMock(),
     )
 
     assert tasks == ["run:mira", "run:luna"]
@@ -237,6 +238,7 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
         "presence": MagicMock(),
         "agent_loop": agent_loop,
         "desktop_presence": DesktopPresence(),
+        "group_environment": MagicMock(),
     }
     tasks, loops = build_proactive_runtime(config, tmp_path, **dependencies)
     assert tasks == [] and loops == {}

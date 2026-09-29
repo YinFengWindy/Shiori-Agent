@@ -18,6 +18,7 @@ from .gates import ProactiveMode, resolve_gate_attempt_index
 from proactive_v2.contracts import normalize_alert, normalize_content, normalize_context
 from proactive_v2.gateway import GatewayResult
 from proactive_v2.time import to_beijing_time
+from session.manager.helpers import role_id_from_session_key
 
 _RELATIONSHIP_FALLBACK_ROLE_HINTS = {
     "role-0424dd696dd6": (
@@ -242,12 +243,10 @@ def build_runtime_context_message(
     self_content = ""
     memory_block = ""
     recent_context_block = ""
+    role_id = role_id_from_session_key(session_key)
     if tool_deps.memory is not None:
         profile_memory = cast(MemoryProfileApi, tool_deps.memory)
         bind_session_metadata = getattr(profile_memory, "bind_session_metadata", None)
-        role_id = (
-            session_key.split(":", 1)[1] if session_key.startswith("role:") else ""
-        )
         if callable(bind_session_metadata):
             bind_session_metadata({"role_id": role_id} if role_id else None)
         try:
@@ -264,11 +263,19 @@ def build_runtime_context_message(
             )
         except Exception:
             recent_context_block = ""
+    # 主动消息发给用户，属于用户上下文：注入各外部会话的最近动态（#497）。
+    group_environment = tool_deps.group_environment
+    recent_activity_block = (
+        group_environment.render_recent_activity(role_id, now=ctx.now_utc)
+        if group_environment is not None and role_id
+        else ""
+    )
 
     for name, content in (
         ("self_model", self_content),
         ("long_term_memory", memory_block),
         ("recent_context", recent_context_block),
+        ("recent_activity", recent_activity_block),
         ("proactive_alerts", render_alert_block(gateway_result.alerts).strip()),
         (
             "proactive_content",
@@ -321,5 +328,5 @@ def allow_relationship_only_fallback(
 def relationship_fallback_style_hint(session_key: str) -> str:
     """返回当前角色的关系向 fallback 语气约束。"""
 
-    role_id = session_key.split(":", 1)[1] if session_key.startswith("role:") else ""
+    role_id = role_id_from_session_key(session_key)
     return _RELATIONSHIP_FALLBACK_ROLE_HINTS.get(role_id, "")
