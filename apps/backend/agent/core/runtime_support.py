@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
 from core.roles.reply_state import RoleReply
+
+if TYPE_CHECKING:
+    from session.manager.models import HistoryFilter
 
 
 @dataclass
@@ -77,12 +80,14 @@ class SessionLike(Protocol):
         max_messages: int = 500,
         *,
         start_index: int | None = None,
+        include: "HistoryFilter | None" = None,
     ) -> list[dict]: ...
     def get_history_tool_names(
         self,
         max_messages: int = 500,
         *,
         start_index: int | None = None,
+        include: "HistoryFilter | None" = None,
     ) -> list[str]: ...
     def add_message(self, role: str, content: str, media=None, **kwargs) -> None: ...
 

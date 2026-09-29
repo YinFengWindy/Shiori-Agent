@@ -20,7 +20,22 @@ logger = logging.getLogger(__name__)
 _TOOL_RESULT_CHAR_BUDGET = 10000
 _PROACTIVE_HISTORY_CHAR_BUDGET = 360
 _PROACTIVE_META_HISTORY_CHAR_BUDGET = 1200
-_ROLE_SESSION_PREFIX = "role:"
+# Every role's shared session key starts with this.
+ROLE_SESSION_PREFIX = "role:"
+_ROLE_SESSION_PREFIX = ROLE_SESSION_PREFIX
+
+
+def role_session_key(role_id: str) -> str:
+    """The key of one role's shared session, which holds all of its threads."""
+    clean_role_id = str(role_id).strip()
+    if not clean_role_id:
+        raise ValueError("role_id 不能为空")
+    return f"{_ROLE_SESSION_PREFIX}{clean_role_id}"
+
+
+def is_role_session_key(key: str) -> bool:
+    """Whether ``key`` names a role's shared session."""
+    return key.startswith(_ROLE_SESSION_PREFIX) and len(key) > len(_ROLE_SESSION_PREFIX)
 
 
 def _truncate_tool_result(content: object) -> str:

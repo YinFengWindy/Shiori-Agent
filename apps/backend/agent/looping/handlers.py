@@ -83,6 +83,10 @@ async def process_spawn_completion_event(
         channel=item.channel,
         chat_id=item.chat_id,
         session_key=key,
+        # set_context 会与已有上下文合并；显式写入回合身份，不继承上一回合的值。
+        # 回传不在角色共享会话里，没有所在会话，消息检索按判定不了处理。
+        turn_session_key=key,
+        thread_id="",
         role_id=str(session_metadata.get("role_id") or "").strip(),
         current_timestamp=item.timestamp.isoformat(),
         current_user_source_ref=predict_current_user_source_ref(

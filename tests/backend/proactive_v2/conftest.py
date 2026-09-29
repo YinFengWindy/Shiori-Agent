@@ -162,7 +162,13 @@ class _FakeSession:
         self.metadata: dict[str, Any] = {}
         self.last_consolidated = 0
 
-    def get_history(self, max_messages: int = 500) -> list[dict[str, object]]:
+    def get_history(
+        self,
+        max_messages: int = 500,
+        *,
+        start_index: int | None = None,
+        include: object = None,
+    ) -> list[dict[str, object]]:
         return self.messages[-max_messages:]
 
     def add_message(self, role: str, content: str, media=None, **kwargs) -> None:

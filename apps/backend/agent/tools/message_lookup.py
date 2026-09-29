@@ -3,10 +3,21 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, cast
 
-from agent.tools.base import Tool
+from agent.tools.base import Tool, ToolResult
+from conversation.context_scope import ContextView, session_context_view
+from conversation.service import desktop_thread_id
+from session.manager.helpers import (
+    ROLE_SESSION_PREFIX,
+    is_role_session_key,
+    role_session_key,
+)
 from session.store import SessionStore
+
+# 决定检索范围的回合身份：只从执行上下文取，模型传同名参数无效。
+_TURN_SCOPE_KEYS = frozenset({"turn_session_key", "role_id", "thread_id"})
 
 _MAX_CONTEXT = 10
 _MAX_PREVIEW_LINES = 50
@@ -14,6 +25,7 @@ _MAX_PREVIEW_LINES = 50
 
 class FetchMessagesTool(Tool):
     name = "fetch_messages"
+    context_precedence = _TURN_SCOPE_KEYS
     description = (
         "fetch_messages 根据消息 ID 或 source_ref 读取原始历史消息原文与上下文。\n"
         "这是 recall_memory / search_messages / 记忆注入三条路里唯一可以直接作为最终证据的工具。\n"
@@ -56,8 +68,9 @@ class FetchMessagesTool(Tool):
         },
     }
 
-    def __init__(self, store: SessionStore) -> None:
+    def __init__(self, store: SessionStore, workspace: Path) -> None:
         self._store = store
+        self._workspace = workspace
 
     async def execute(
         self,
@@ -66,7 +79,7 @@ class FetchMessagesTool(Tool):
         source_refs: list[str] | None = None,
         evidence: list[dict[str, object]] | None = None,
         context: int = 0,
-        **_: Any,
+        **kwargs: Any,
     ) -> str:
         clean_ids = _resolve_fetch_ids(
             ids=ids or [],
@@ -79,10 +92,13 @@ class FetchMessagesTool(Tool):
                 {"count": 0, "matched_count": 0, "messages": []}, ensure_ascii=False
             )
 
+        scope = _turn_scope(self._workspace, kwargs)
         ctx = max(0, min(int(context), _MAX_CONTEXT))
         if ctx == 0:
             messages = [
-                _to_public_message(m) for m in self._store.fetch_by_ids(clean_ids)
+                _to_public_message(m)
+                for m in self._store.fetch_by_ids(clean_ids)
+                if _visible(m, scope)
             ]
             return json.dumps(
                 {
@@ -96,12 +112,72 @@ class FetchMessagesTool(Tool):
         messages = [
             _to_public_message(m)
             for m in self._store.fetch_by_ids_with_context(clean_ids, ctx)
+            if _visible(m, scope)
         ]
         matched = sum(1 for m in messages if m.get("in_source_ref"))
         return json.dumps(
             {"count": len(messages), "matched_count": matched, "messages": messages},
             ensure_ascii=False,
         )
+
+
+class UserContextMessageTool(Tool):
+    """把一个消息检索工具固定在某角色的用户上下文里。
+
+    主动类回合（如 drift）不在任何会话里回复，按约定使用用户上下文：这里以
+    角色共享会话和桌面会话作为回合身份，可见范围仍由 ``context_scope`` 判定。
+    模型传入的同名参数会被覆盖；只包装消息工具，不影响其他工具收到的上下文。
+    """
+
+    def __init__(self, wrapped: Tool, role_id: str) -> None:
+        self._wrapped = wrapped
+        self._scope = {
+            "turn_session_key": role_session_key(role_id),
+            "role_id": role_id,
+            "thread_id": desktop_thread_id(role_id),
+        }
+
+    @property
+    def name(self) -> str:
+        return self._wrapped.name
+
+    @property
+    def description(self) -> str:
+        return self._wrapped.description
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return self._wrapped.parameters
+
+    async def execute(self, **kwargs: Any) -> str | ToolResult:
+        return await self._wrapped.execute(**{**kwargs, **self._scope})
+
+
+def _turn_scope(
+    workspace: Path, context: dict[str, Any]
+) -> tuple[str, ContextView] | None:
+    """当前回合在角色共享会话里时，返回该会话的键与回合的上下文视图。
+
+    回合身份只取自工具上下文（``turn_session_key`` / ``role_id`` / ``thread_id``，
+    见 ``_TURN_SCOPE_KEYS``），模型无法改写。其余回合返回 None，这时无法判定
+    上下文，角色共享会话的消息一律不可见。
+    """
+    session_key = str(context.get("turn_session_key") or "")
+    view = session_context_view(
+        workspace,
+        session_key=session_key,
+        role_id=str(context.get("role_id") or ""),
+        thread_id=str(context.get("thread_id") or ""),
+    )
+    return (session_key, view) if view is not None else None
+
+
+def _visible(message: dict[str, Any], scope: tuple[str, ContextView] | None) -> bool:
+    """角色回合只能读到本角色会话里、属于回合所在上下文的消息。"""
+    if scope is None:
+        return not is_role_session_key(str(message.get("session_key") or ""))
+    session_key, view = scope
+    return message.get("session_key") == session_key and view.includes(message)
 
 
 def _resolve_fetch_ids(
@@ -171,6 +247,7 @@ def _to_public_message(message: dict[str, Any]) -> dict[str, Any]:
 
 class SearchMessagesTool(Tool):
     name = "search_messages"
+    context_precedence = _TURN_SCOPE_KEYS
     description = (
         "对原始历史消息做 grep 式搜索，返回命中候选消息的预览和 source_ref。\n"
         "适合查找某个词、句子、文件名、报错、命令、配置项曾出现在哪些消息里——它是文本定位工具。\n"
@@ -208,34 +285,43 @@ class SearchMessagesTool(Tool):
         "required": ["query"],
     }
 
-    def __init__(self, store: SessionStore) -> None:
+    def __init__(self, store: SessionStore, workspace: Path) -> None:
         self._store = store
+        self._workspace = workspace
 
     async def execute(self, query: str, **kwargs: Any) -> str:
         term = (query or "").strip()
         if not term:
-            return json.dumps(
-                {
-                    "count": 0,
-                    "matched_count": 0,
-                    "limit": 10,
-                    "offset": 0,
-                    "has_more": False,
-                    "next_offset": None,
-                    "messages": [],
-                },
-                ensure_ascii=False,
-            )
+            return _empty_search_result(10, 0)
 
         limit = max(1, min(int(kwargs.get("limit", 10)), 50))
         offset = max(0, int(kwargs.get("offset", 0)))
 
+        scope = _turn_scope(self._workspace, kwargs)
+        excluded_prefix: str | None = None
+        if scope is None:
+            # 判定不了上下文时不碰任何角色共享会话。
+            session_key = (kwargs.get("session_key") or "").strip() or None
+            if session_key is not None and is_role_session_key(session_key):
+                return _empty_search_result(limit, offset)
+            thread_ids = None
+            excluded_prefix = ROLE_SESSION_PREFIX
+        else:
+            # 角色回合只搜本角色会话，且只搜回合所在上下文的会话。
+            session_key, view = scope
+            thread_ids = [
+                thread_id
+                for thread_id in self._store.session_thread_ids(session_key)
+                if view.includes_thread(thread_id)
+            ]
         matched, total = self._store.search_messages(
             term,
-            session_key=(kwargs.get("session_key") or "").strip() or None,
+            session_key=session_key,
             role=(kwargs.get("role") or "").strip() or None,
             limit=limit,
             offset=offset,
+            thread_ids=thread_ids,
+            excluded_session_prefix=excluded_prefix,
         )
         terms = [t for t in term.split() if t]
         messages = [_build_search_preview(message, terms) for message in matched]
@@ -255,6 +341,21 @@ class SearchMessagesTool(Tool):
             },
             ensure_ascii=False,
         )
+
+
+def _empty_search_result(limit: int, offset: int) -> str:
+    return json.dumps(
+        {
+            "count": 0,
+            "matched_count": 0,
+            "limit": limit,
+            "offset": offset,
+            "has_more": False,
+            "next_offset": None,
+            "messages": [],
+        },
+        ensure_ascii=False,
+    )
 
 
 def _build_search_preview(

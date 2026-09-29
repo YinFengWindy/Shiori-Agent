@@ -257,9 +257,13 @@ class ToolRegistry:
                 **execution_context,
                 **arguments,
             }
+            # 由上下文决定的键只取自执行上下文：模型传同名参数不能改写，
+            # 上下文里没有时也不能由模型补上。
             for key in getattr(tool, "context_precedence", frozenset()):
                 if key in execution_context:
                     merged[key] = execution_context[key]
+                else:
+                    merged.pop(key, None)
             if not _tool_defines_parameter(tool, _PROGRESS_DESCRIPTION_FIELD):
                 merged.pop(_PROGRESS_DESCRIPTION_FIELD, None)
             return await tool.execute(**merged)

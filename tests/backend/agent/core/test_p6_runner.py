@@ -130,6 +130,8 @@ async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
         channel="telegram",
         chat_id="123",
         session_key="scheduler:job-1",
+        turn_session_key="scheduler:job-1",
+        thread_id="",
         role_id="mira",
         current_timestamp=item.timestamp.isoformat(),
         current_user_source_ref="telegram:123:9",

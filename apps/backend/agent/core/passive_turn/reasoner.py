@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from agent.looping.ports import LLMConfig, LLMServices
     from agent.tool_hooks.base import ToolHook
     from agent.tools.registry import ToolRegistry
+    from conversation.context_scope import ContextView
     from session.manager import SessionManager
 
 logger = logging.getLogger("agent.core.passive_turn")
@@ -108,8 +109,12 @@ class Reasoner(ABC):
         base_history: list[dict] | None = None,
         retrieved_memory_block: str = "",
         extra_hints: list[str] | None = None,
+        context_view: "ContextView | None" = None,
     ) -> "TurnRunResult":
-        """执行完整被动 turn，包括 retry / trim / tool loop。"""
+        """执行完整被动 turn，包括 retry / trim / tool loop。
+
+        ``context_view`` 限定从会话读取的历史只含回合所在上下文的消息。
+        """
 
     def add_tool_hooks(self, hooks: list["ToolHook"]) -> None:
         """子类可重写以注入 tool hooks。默认 no-op。"""
@@ -290,6 +295,7 @@ class DefaultReasoner(
         base_history: list[dict] | None = None,
         retrieved_memory_block: str = "",
         extra_hints: list[str] | None = None,
+        context_view: "ContextView | None" = None,
     ) -> "TurnRunResult":
         from agent.core.runtime_support import TurnRunResult
 
@@ -312,7 +318,9 @@ class DefaultReasoner(
         source_history = (
             base_history
             if base_history is not None
-            else get_history_since_consolidated(session, self._memory_window)
+            else get_history_since_consolidated(
+                session, self._memory_window, context_view
+            )
         )
         total_history = len(source_history)
         preloaded: set[str] | None = None
@@ -323,7 +331,7 @@ class DefaultReasoner(
             preloaded_order = [
                 name
                 for name in get_history_tool_names_since_consolidated(
-                    session, self._memory_window
+                    session, self._memory_window, context_view
                 )
                 if name not in always_on and self._tools.has_tool(name)
             ]
@@ -446,7 +454,7 @@ class DefaultReasoner(
                     )
                 budget_repaired = True
                 source_history = get_history_since_consolidated(
-                    session, self._memory_window
+                    session, self._memory_window, context_view
                 )
                 history_for_attempt = self._slice_history(
                     source_history,

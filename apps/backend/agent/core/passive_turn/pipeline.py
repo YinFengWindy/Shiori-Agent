@@ -404,6 +404,7 @@ class PassiveTurnPipeline:
                         base_history=None,
                         retrieved_memory_block=before_reasoning.retrieved_memory_block,
                         extra_hints=list(before_reasoning.extra_hints) or None,
+                        context_view=state.context_view,
                     )
                 logger.info(
                     diagnostic_line(

@@ -16,9 +16,11 @@ from agent.lifecycle.phase import (
 )
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
 from agent.core.passive_support import estimate_messages_tokens
+from conversation.context_scope import history_filter, session_context_view
 
 if TYPE_CHECKING:
     from agent.core.passive_turn import ContextStore
+    from conversation.context_scope import ContextView
     from session.manager import SessionManager
 
 logger = logging.getLogger(__name__)
@@ -83,6 +85,15 @@ class _AcquireSessionModule:
             if callable(save):
                 save(session)
         state.session = session
+        # 角色共享会话混存各渠道的消息，回合只看与所在会话同类上下文的历史；
+        # 归属按此刻的身份绑定计算。其他会话只有一段对话，不需要划分。
+        if message_role_id or session_role_id:
+            state.context_view = session_context_view(
+                self._session_manager.workspace,
+                session_key=state.session_key,
+                role_id=message_role_id or session_role_id,
+                thread_id=str((state.msg.metadata or {}).get("thread_id") or ""),
+            )
         frame.slots[_SESSION_SLOT] = session
         return frame
 
@@ -104,6 +115,7 @@ class _PrepareContextModule:
             msg=state.msg,
             session_key=state.session_key,
             session=session,
+            context_view=state.context_view,
         )
         frame.slots[_CONTEXT_BUNDLE_SLOT] = bundle
         return frame
@@ -139,7 +151,9 @@ class _MemoryContextGuardModule:
             len(messages),
         )
         pending = len(messages) - last
-        input_tokens = _estimate_session_input_tokens(session, state.msg.content, last)
+        input_tokens = _estimate_session_input_tokens(
+            session, state.msg.content, last, state.context_view
+        )
         token_pressure = (
             self._input_token_threshold > 0
             and input_tokens >= self._input_token_threshold
@@ -173,6 +187,7 @@ class _MemoryContextGuardModule:
                         getattr(session, "last_consolidated", 0),
                         len(getattr(session, "messages", [])),
                     ),
+                    state.context_view,
                 )
                 if input_tokens >= self._input_token_threshold:
                     raise MemoryConsolidationFailedError(
@@ -337,15 +352,18 @@ def _estimate_session_input_tokens(
     session: SessionLike,
     current_content: str,
     last_consolidated: int,
+    context_view: ContextView | None,
 ) -> int:
-    """Estimate the next model input from unarchived history and current turn."""
-    try:
-        history = session.get_history(
-            max_messages=500,
-            start_index=last_consolidated,
-        )
-    except TypeError:
-        history = session.get_history(max_messages=500)
+    """Estimate the next model input from unarchived history and current turn.
+
+    Only history visible in the turn's context counts, since that is all the
+    model will be sent.
+    """
+    history = session.get_history(
+        max_messages=500,
+        start_index=last_consolidated,
+        include=history_filter(context_view),
+    )
     return estimate_messages_tokens(
         [*history, {"role": "user", "content": current_content}]
     )

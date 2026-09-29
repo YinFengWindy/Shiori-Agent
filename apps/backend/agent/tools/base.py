@@ -32,6 +32,7 @@ class Tool(ABC):
     name: str
     description: str
     parameters: dict[str, Any]
+    # Keys taken only from the execution context, never from model arguments.
     context_precedence: frozenset[str] = frozenset()
 
     # JSON Schema 类型 → Python 类型映射

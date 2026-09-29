@@ -28,6 +28,17 @@ def network_thread_id(role_id: str, channel: str, chat_id: str) -> str:
     return f"thread:{role_id}:{channel}:{chat_id}"
 
 
+def scheduler_thread_id(role_id: str, job_id: str) -> str:
+    """Returns the thread ID of a scheduled job created without a source thread."""
+    return f"thread:{role_id}:scheduler:{job_id}"
+
+
+def is_scheduler_thread(role_id: str, thread_id: str) -> bool:
+    """Whether ``thread_id`` is one of ``role_id``'s ``scheduler_thread_id`` threads."""
+    prefix = f"thread:{role_id}:scheduler:"
+    return thread_id.startswith(prefix) and len(thread_id) > len(prefix)
+
+
 @dataclass(frozen=True)
 class LegacySessionDescriptor:
     """Describes a legacy `session_key` that should resolve to a formal thread."""

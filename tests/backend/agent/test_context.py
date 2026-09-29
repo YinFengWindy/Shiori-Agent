@@ -10,7 +10,7 @@ from core.common.channel_directory import ChannelDirectory
 from core.common.message_source import MessageSource
 from core.roles import RoleStore
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
-from session.manager.models import Session
+from session.manager.models import Session, whole_session
 
 
 def test_message_envelope_preserves_group_members_across_desktop_followup():
@@ -35,7 +35,7 @@ def test_message_envelope_preserves_group_members_across_desktop_followup():
     )
 
     messages = MessageEnvelopeBuilder().build(
-        history=session.get_history(),
+        history=session.get_history(include=whole_session),
         current_message=desktop_message.content,
         system_prompt="role",
         context_frame="",

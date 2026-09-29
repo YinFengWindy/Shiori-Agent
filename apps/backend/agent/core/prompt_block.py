@@ -179,6 +179,22 @@ class SessionContextPromptBlock:
         return None
 
 
+def strip_recent_turns(recent_context: str) -> str:
+    """RECENT_CONTEXT.md without its raw "recent turns" section.
+
+    That section copies the newest raw messages of the whole role session,
+    across every thread, so no model prompt shows it: passive turns get those
+    messages through their context-filtered history window, and proactive
+    turns read the user context through ``get_recent_chat``.
+    """
+    cuts = [
+        cut
+        for marker in ("\n## 最近的对话", "\n## Recent Turns")
+        if (cut := recent_context.find(marker)) != -1
+    ]
+    return (recent_context[: min(cuts)] if cuts else recent_context).strip()
+
+
 class RecentContextPromptBlock:
     priority = 45
     label = "recent_context"
@@ -187,18 +203,7 @@ class RecentContextPromptBlock:
     def render(
         self, ctx: TurnContext, cached_signature: str | None = None
     ) -> str | None:
-        content = ctx.memory.read_recent_context()
-        if not content:
-            return None
-        # The recent-turn section mirrors the sliding window and would duplicate it.
-        cuts = [
-            cut
-            for marker in ("\n## 最近的对话", "\n## Recent Turns")
-            if (cut := content.find(marker)) != -1
-        ]
-        cut = min(cuts) if cuts else -1
-        trimmed = content[:cut].strip() if cut != -1 else content.strip()
-        return trimmed if trimmed else None
+        return strip_recent_turns(ctx.memory.read_recent_context() or "") or None
 
     def cache_signature(self, ctx: TurnContext) -> str | None:
         return None

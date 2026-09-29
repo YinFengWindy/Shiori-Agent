@@ -17,6 +17,10 @@ from agent.skills import BUILTIN_SKILLS_DIR
 from agent.core.proactive_turn import ProactiveTurnPipeline, ProactiveTurnPipelineDeps
 from agent.core.proactive_turn.gates import ProactiveGateChain
 from agent.tools.base import Tool
+from agent.tools.message_lookup import SearchMessagesTool
+from conversation.service import desktop_thread_id, network_thread_id
+from core.accounts import AccountRecord
+from core.identity import IdentityChat, UserIdentityStore
 from agent.tools.registry import ToolRegistry
 from agent.looping.ports import SessionServices
 from tests.support.bound_chat_delivery import (
@@ -367,7 +371,7 @@ def test_drift_runtime_context_binds_role_memory_from_ctx(tmp_path: Path):
 
         def read_recent_context(self) -> str:
             role_id = str((self.bound or {}).get("role_id") or "")
-            return f"recent:{role_id}"
+            return f"recent:{role_id}\n\n## 最近的对话\n- user: 群里的原话"
 
     memory = _Memory()
     pipeline = _make_drift_pipeline(
@@ -392,6 +396,8 @@ def test_drift_runtime_context_binds_role_memory_from_ctx(tmp_path: Path):
     assert memory.bound == {"role_id": "mira"}
     assert "memory:mira" in content
     assert "recent:mira" in content
+    # Raw recent turns span every thread and never reach the drift prompt.
+    assert "群里的原话" not in content
 
 
 @pytest.mark.parametrize(
@@ -1448,3 +1454,53 @@ async def test_factory_drift_send_message_uses_bound_transport_from_role(
 
     assert ok is True
     assert [target[1:] for target in delivery.targets] == [("qq", "902")]
+
+
+async def test_drift_message_search_sees_the_user_context_only(tmp_path: Path):
+    account = AccountRecord(
+        id="qq:101",
+        plugin_id="qq",
+        platform="qq",
+        platform_account_id="101",
+        config_ref="101",
+        role_id="mira",
+    )
+    identities = UserIdentityStore(tmp_path)
+    assert identities.pair(
+        identities.create_pairing_code().code,
+        record=account,
+        user_id="902",
+        scope="platform",
+        chat=IdentityChat(account.id, "qq", "902"),
+    )
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    for text, thread in (
+        ("secret on desktop", desktop_thread_id("mira")),
+        ("secret in user dm", network_thread_id("mira", "qq", "902")),
+        ("secret in group", network_thread_id("mira", "qq", "group:7")),
+    ):
+        session.add_message("user", text, thread_id=thread)
+    manager.save(session)
+    shared = ToolRegistry()
+    shared.register(SearchMessagesTool(manager._store, tmp_path))
+    store = DriftStateStore(tmp_path)
+    tools = build_drift_tool_registry(
+        ctx=AgentTickContext(session_key="role:mira"),
+        deps=DriftToolDeps(drift_dir=tmp_path, store=store, shared_tools=shared),
+    )
+
+    # A group thread passed by the model does not move drift out of the user context.
+    found = json.loads(
+        str(
+            await tools.execute(
+                "search_messages",
+                {"query": "secret", "thread_id": network_thread_id("mira", "qq", "g")},
+            )
+        )
+    )
+
+    assert sorted(m["preview"] for m in found["messages"]) == [
+        "secret in user dm",
+        "secret on desktop",
+    ]

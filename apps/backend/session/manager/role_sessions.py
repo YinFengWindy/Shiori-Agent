@@ -6,15 +6,12 @@ from typing import Any
 
 from .models import Session
 
-from .helpers import _ROLE_SESSION_PREFIX
+from .helpers import role_session_key
 
 
 class _RoleSessionsMixin:
     def role_session_key(self, role_id: str) -> str:
-        clean_role_id = str(role_id).strip()
-        if not clean_role_id:
-            raise ValueError("role_id 不能为空")
-        return f"{_ROLE_SESSION_PREFIX}{clean_role_id}"
+        return role_session_key(role_id)
 
     def open_role_session(
         self,

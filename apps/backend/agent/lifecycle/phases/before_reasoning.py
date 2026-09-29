@@ -59,6 +59,8 @@ class _SyncToolContextModule:
             channel=before_turn.channel,
             chat_id=before_turn.chat_id,
             session_key=before_turn.session_key,
+            # 模型可以用 session_key 参数改写检索范围，回合自身的会话另存一份。
+            turn_session_key=before_turn.session_key,
             role_id=role_id,
             current_user_message=before_turn.content,
             role_config_version=str(message_metadata.get("role_config_version") or ""),

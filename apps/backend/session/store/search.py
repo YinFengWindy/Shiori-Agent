@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Collection
 from typing import Any
 
-from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
+from infra.persistence.sqlite_like import (
+    LIKE_ESCAPE_CLAUSE,
+    like_contains,
+    like_prefix,
+)
 
 from .common import _MESSAGE_SELECT_COLUMNS
 
@@ -64,6 +69,15 @@ class _SearchMixin:
                     msg["in_source_ref"] = msg["id"] in id_set
                     results.append(msg)
         return results
+
+    def session_thread_ids(self, session_key: str) -> list[str]:
+        """The distinct threads of one session's messages; "" for unthreaded ones."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT DISTINCT thread_id FROM messages WHERE session_key = ?",
+                (session_key,),
+            ).fetchall()
+        return sorted({str(row["thread_id"] or "") for row in rows})
 
     def fetch_by_ids(self, ids: list[str]) -> list[dict[str, Any]]:
         if not ids:
@@ -164,7 +178,15 @@ class _SearchMixin:
         role: str | None = None,
         limit: int = 10,
         offset: int = 0,
+        thread_ids: Collection[str] | None = None,
+        excluded_session_prefix: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
+        """Searches message text; ``thread_ids`` limits hits to those threads.
+
+        An empty string in ``thread_ids`` stands for messages stored without a
+        thread; an empty collection matches nothing. Sessions whose key starts
+        with ``excluded_session_prefix`` are left out.
+        """
         limit = max(1, min(int(limit), 100))
         offset = max(0, int(offset))
         params: list[Any] = []
@@ -172,6 +194,18 @@ class _SearchMixin:
         if session_key:
             where_parts.append("m.session_key = ?")
             params.append(session_key)
+        if thread_ids is not None:
+            named = sorted({thread_id for thread_id in thread_ids if thread_id})
+            clauses = (
+                [f"m.thread_id IN ({','.join('?' for _ in named)})"] if named else []
+            )
+            if "" in thread_ids:
+                clauses.append("(m.thread_id IS NULL OR m.thread_id = '')")
+            where_parts.append(f"({' OR '.join(clauses)})" if clauses else "0")
+            params.extend(named)
+        if excluded_session_prefix:
+            where_parts.append(f"m.session_key NOT LIKE ? {LIKE_ESCAPE_CLAUSE}")
+            params.append(like_prefix(excluded_session_prefix))
         if role:
             where_parts.append("m.role = ?")
             params.append(role)
