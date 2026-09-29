@@ -16,7 +16,10 @@ from agent.core.prompt_block import (
     SystemPromptBuilder,
     TurnContext,
     UserIdentitiesPromptBlock,
+    build_role_user_identities_prompt,
 )
+from core.identity import IdentityChat
+from core.roles import RoleStore
 from prompts.agent import build_agent_static_identity_prompt
 
 
@@ -125,3 +128,82 @@ def test_prompt_block_priorities_leave_spacing_for_future_inserts():
         ("active_skills", 50),
         ("retrieved_memory", 55),
     ]
+
+
+def _pair(store: RoleStore, record, user_id: str, scope, chat_id: str) -> None:
+    identity = store.identities.pair(
+        store.identities.create_pairing_code().code,
+        record=record,
+        user_id=user_id,
+        scope=scope,
+        chat=IdentityChat(record.id, record.plugin_id, chat_id),
+    )
+    assert identity is not None
+
+
+def _roles(tmp_path: Path) -> tuple[RoleStore, dict[tuple[str, str], Any]]:
+    """Mira owns QQ and QQBot accounts; Other owns QQ, Feishu and Telegram ones."""
+    store = RoleStore(tmp_path)
+    for role_id in ("mira", "other"):
+        store.create_role(role_id=role_id, name=role_id, system_prompt="role")
+    records = {
+        (plugin_id, role_id): store.accounts.register(
+            plugin_id=plugin_id,
+            platform=plugin_id,
+            platform_account_id=f"{plugin_id}-{role_id}",
+            config_ref=f"{plugin_id}-{role_id}",
+            token="live",
+            role_id=role_id,
+        ).record
+        for plugin_id, role_id in (
+            ("qq", "mira"),
+            ("qqbot", "mira"),
+            ("qq", "other"),
+            ("feishu", "other"),
+            ("telegram", "other"),
+        )
+    }
+    return store, records
+
+
+def test_user_identities_prompt_lists_the_bindings_reaching_the_roles_accounts(
+    tmp_path: Path,
+):
+    store, records = _roles(tmp_path)
+    # Platform-wide, but paired through Other's QQ account: no chat with Mira's.
+    _pair(store, records[("qq", "other")], "3174898512", "platform", "3174898512")
+    _pair(store, records[("qqbot", "mira")], "openid-1", "account", "c2c:app:openid-1")
+    # Account-scoped to Other's account, or on a channel Mira has no account on.
+    _pair(store, records[("feishu", "other")], "ou_other", "account", "oc_1")
+    _pair(store, records[("telegram", "other")], "555", "platform", "555")
+
+    assert build_role_user_identities_prompt("mira", store) == (
+        "## 你的用户在各渠道的身份\n"
+        "- 渠道 qq：3174898512（整个平台通用；尚无私聊）\n"
+        "- 渠道 qqbot：openid-1（仅限你在该渠道的账号；私聊 qqbot:c2c:app:openid-1）\n"
+        "群聊里有人提到或 @ 这些 ID 时，指的就是你的用户。"
+    )
+
+
+def test_user_identities_block_renders_nothing_without_a_role_or_bindings(
+    tmp_path: Path,
+):
+    store, records = _roles(tmp_path)
+    block = UserIdentitiesPromptBlock(store)
+
+    def ctx(role_id: str) -> TurnContext:
+        return TurnContext(
+            workspace=tmp_path,
+            memory=cast(Any, _Memory()),
+            skills=cast(Any, _Skills()),
+            skill_names=[],
+            channel=None,
+            chat_id=None,
+            retrieved_memory_block="",
+            role_id=role_id,
+        )
+
+    assert block.render(ctx("mira")) is None
+    _pair(store, records[("qq", "mira")], "3174898512", "platform", "3174898512")
+    assert block.render(ctx("")) is None
+    assert "3174898512" in (block.render(ctx("mira")) or "")

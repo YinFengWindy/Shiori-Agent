@@ -194,14 +194,14 @@ class UserChannelIdentity:
     """用户在某渠道的一个已绑定身份，提示词里的一行。
 
     ``channel`` 是渠道 ID（account_send 的 channel），``platform_wide`` 表示该 ID
-    在整个平台通用（否则只对角色在该渠道的账号有效），``has_private_chat`` 表示
-    用户已私聊过角色在该渠道的账号。
+    在整个平台通用（否则只对角色在该渠道的账号有效），``private_chat`` 是用户与
+    角色在该渠道账号的已知私聊（``会话渠道:会话 ID``），没有时为 None。
     """
 
     channel: str
     user_id: str
     platform_wide: bool
-    has_private_chat: bool
+    private_chat: str | None
 
 
 def build_user_identities_prompt(
@@ -213,7 +213,7 @@ def build_user_identities_prompt(
     lines = [
         f"- 渠道 {item.channel}：{item.user_id}"
         f"（{'整个平台通用' if item.platform_wide else '仅限你在该渠道的账号'}；"
-        f"{'已有私聊' if item.has_private_chat else '尚无私聊'}）"
+        f"{f'私聊 {item.private_chat}' if item.private_chat else '尚无私聊'}）"
         for item in identities
     ]
     return "\n".join(

@@ -17,7 +17,11 @@ from agent.tools.account_delivery import (
 from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus
 from conversation.push_sync import ExternalPushSyncService
-from conversation.service import network_thread_id
+from conversation.service import (
+    ConversationService,
+    LegacySessionDescriptor,
+    network_thread_id,
+)
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from core.accounts.target_contract import AccountTarget
@@ -120,12 +124,15 @@ _VIA = {
 }
 
 
-def _user_send_setup(tmp_path):
-    """Mira's online QQ account, the user bound to it, and a recording session."""
+def _user_send_setup(
+    tmp_path, *, plugin_id="qq", user_id="3174898512", chat_channel="qq"
+):
+    """Mira's online account, the user bound to it with a private chat on
+    transport ``chat_channel``, and a recording session."""
     accounts = AccountRegistry(lambda role_id: role_id == "mira")
     record = accounts.register(
-        plugin_id="qq",
-        platform="qq",
+        plugin_id=plugin_id,
+        platform=plugin_id,
         platform_account_id="101",
         config_ref="101",
         token="live",
@@ -136,9 +143,9 @@ def _user_send_setup(tmp_path):
     identity = identities.pair(
         identities.create_pairing_code().code,
         record=record,
-        user_id="3174898512",
+        user_id=user_id,
         scope="platform",
-        chat=IdentityChat(record.id, "qq", "3174898512"),
+        chat=IdentityChat(record.id, chat_channel, user_id),
     )
     assert identity is not None
     sent: list[dict] = []
@@ -149,7 +156,10 @@ def _user_send_setup(tmp_path):
 
     ledger = AccountDeliveryLedger(tmp_path)
     delivery = AccountDelivery(
-        accounts, SimpleNamespace(resolve=lambda name: ("qq", send)), ledger, identities
+        accounts,
+        SimpleNamespace(resolve=lambda name: (plugin_id, send)),
+        ledger,
+        identities,
     )
     session_manager = SessionManager(tmp_path)
     session_manager.open_role_session("mira", role_name="Mira")
@@ -223,3 +233,32 @@ async def test_user_target_refuses_a_specific_target_or_an_unbound_channel(
     assert sent == []
     assert ledger.list_for_role("mira") == []
     assert session_manager._store.fetch_session_messages("role:mira") == []
+
+
+@pytest.mark.asyncio
+async def test_user_target_on_a_telegram_bot_is_recorded_in_its_inbound_thread(
+    tmp_path,
+) -> None:
+    # A Telegram Bot names its transport channel per instance (telegram_<ref>).
+    tool, sent, _ledger, session_manager = _user_send_setup(
+        tmp_path, plugin_id="telegram", user_id="555", chat_channel="telegram_mira"
+    )
+
+    await tool.execute(
+        channel="telegram", role_id="mira", target_kind="user", message="在吗"
+    )
+
+    assert [(row["target_kind"], row["target_id"]) for row in sent] == [
+        ("private", "555")
+    ]
+    # The thread the user's own messages in that chat are routed to.
+    inbound_thread = ConversationService(session_manager).ensure_thread_for_session(
+        LegacySessionDescriptor(
+            session_key="telegram_mira:555",
+            role_id="mira",
+            channel="telegram_mira",
+            chat_id="555",
+        )
+    )
+    [stored] = session_manager._store.fetch_session_messages("role:mira")
+    assert stored["thread_id"] == inbound_thread.id

@@ -110,20 +110,20 @@ class AccountSendTool(Tool):
                 "type": "string",
                 "description": "渠道 ID，取自 account_list 的 channel。",
             },
+            # The shared target fields plus the ``user`` kind. That kind is
+            # model-only: this tool resolves it from the user's bindings before
+            # sending, so it stays out of the shared schema (message_push
+            # retargeting and plugins never resolve it).
             **ACCOUNT_TARGET_PROPERTIES,
             "target_kind": {
                 "type": "string",
-                "description": (
-                    f"目标类型：{USER_TARGET}（你的用户，无需 target_id）、"
-                    "private（私聊）、group（群聊）或 group_member"
-                    "（群临时会话，需 group_id）；渠道是否支持由其插件校验。"
-                ),
+                "description": ACCOUNT_TARGET_PROPERTIES["target_kind"]["description"]
+                + f"另可用 {USER_TARGET}：你的用户，按身份绑定发到其私聊，无需 target_id。",
             },
             "target_id": {
                 "type": "string",
-                "description": (
-                    f"目标 ID：私聊对象、群或群成员的平台 ID；{USER_TARGET} 目标不填。"
-                ),
+                "description": ACCOUNT_TARGET_PROPERTIES["target_id"]["description"]
+                + f"{USER_TARGET} 目标不填。",
             },
             "message": {
                 "type": "string",

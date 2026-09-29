@@ -146,9 +146,7 @@ def _build_role_prompt_resolver(
         prompt = RolePromptCompiler().compile(role).content.strip()
         if not prompt:
             raise ValueError(f"role.system_prompt required: {role_id}")
-        identities = build_role_user_identities_prompt(
-            role_id, runtime_roles.accounts, runtime_roles.identities
-        )
+        identities = build_role_user_identities_prompt(role_id, runtime_roles)
         return f"{prompt}\n\n{identities}" if identities else prompt
 
     return resolve

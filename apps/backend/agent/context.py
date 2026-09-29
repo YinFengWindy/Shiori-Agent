@@ -43,9 +43,8 @@ from prompts.agent import (
 )
 
 if TYPE_CHECKING:
-    from core.accounts import AccountRegistry
-    from core.identity import UserIdentityStore
     from core.memory.markdown import MemoryProfileApi
+    from core.roles import RoleStore
 
 logger = logging.getLogger("agent.context")
 
@@ -217,13 +216,16 @@ class ContextBuilder:
         workspace: Path,
         memory: "MemoryProfileApi",
         *,
+        runtime_roles: "RoleStore",
         multimodal: bool = True,
         channel_directory: ChannelDirectory | None = None,
     ):
+        """``runtime_roles`` is the runtime's shared role store: every turn's
+        prompt lists the user's identities on the role's channels from its
+        account index and identity bindings (``UserIdentitiesPromptBlock``)."""
         self.workspace = workspace
         self.skills = SkillsLoader(workspace)
         self.memory = memory
-        self._user_identities_block = UserIdentitiesPromptBlock()
         self._system_prompt_builder = SystemPromptBuilder(
             [
                 IdentityPromptBlock(render_fn=build_agent_static_identity_prompt),
@@ -233,7 +235,7 @@ class ContextBuilder:
                 SelfModelPromptBlock(),
                 RecentContextPromptBlock(),
                 SessionContextPromptBlock(),
-                self._user_identities_block,
+                UserIdentitiesPromptBlock(runtime_roles),
                 ActiveSkillsPromptBlock(),
                 SkillsCatalogPromptBlock(render_fn=build_skills_catalog_prompt),
             ]
@@ -251,16 +253,6 @@ class ContextBuilder:
     def set_channel_directory(self, channel_directory: ChannelDirectory) -> None:
         """Resolves channel prompt hints through the published channel set."""
         self._envelope_builder.set_channel_directory(channel_directory)
-
-    def set_user_identity_sources(
-        self, accounts: "AccountRegistry", identities: "UserIdentityStore"
-    ) -> None:
-        """Lets every turn's prompt list the user's identities on the role's channels.
-
-        ``accounts`` must be the runtime's account index, the only place the
-        role's accounts are known.
-        """
-        self._user_identities_block.bind(accounts, identities)
 
     def set_media_capabilities(
         self,

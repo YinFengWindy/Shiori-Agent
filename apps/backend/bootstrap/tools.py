@@ -317,6 +317,7 @@ def _build_loop_deps(
     event_bus: EventBus,
     memory_runtime: MemoryRuntime,
     relationship_runtime: RoleRelationshipRuntimeService,
+    runtime_roles: RoleStore,
     role_runtime_registry: RoleRuntimeRegistry | None = None,
     channel_directory: ChannelDirectory | None = None,
 ) -> AgentLoopDeps:
@@ -324,6 +325,7 @@ def _build_loop_deps(
     context = resolve_context_factory(wiring.context)(
         workspace,
         memory_runtime.markdown.store,
+        runtime_roles,
     )
     if isinstance(context, ContextBuilder):
         context.set_media_capabilities(
@@ -331,11 +333,6 @@ def _build_loop_deps(
         )
         if channel_directory is not None:
             context.set_channel_directory(channel_directory)
-        if role_runtime_registry is not None:
-            role_store = role_runtime_registry.repository.store
-            context.set_user_identity_sources(
-                role_store.accounts, role_store.identities
-            )
     memory_engine = memory_runtime.engine
     light = light_provider or provider
     llm_services = LLMServices(provider=provider, light_provider=light)
@@ -526,6 +523,7 @@ def build_core_runtime(
     loop_deps = _build_loop_deps(
         config=config,
         workspace=workspace,
+        runtime_roles=role_store,
         bus=bus,
         provider=loop_provider,
         light_provider=light_provider,
