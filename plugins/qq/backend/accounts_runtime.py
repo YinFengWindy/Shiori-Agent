@@ -44,6 +44,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._ctx: ChannelContext | None = None
         self._stopping = False
         self._intakes: dict[str, ChannelIntake] = {}
+        self._intake_paused = False
         self._actions = QQAccountActions(self._socket_for, self._ensure_online)
         self._avatar_tasks: dict[str, asyncio.Task[None]] = {}
 
@@ -79,6 +80,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         """Starts saved accounts without blocking the rest of the host startup."""
         self._ctx = ctx
         self._stopping = False
+        self._intake_paused = ctx.intake_paused
         for ref in self._configs:
             self._start_intake(ref)
         ctx.bus.subscribe_outbound(self.name, self._on_response)

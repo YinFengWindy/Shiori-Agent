@@ -442,3 +442,78 @@ async def test_pending_login_is_rechecked_quickly_without_flapping(
     assert [state for _, state, _ in accounts.reports] == ["connecting"] + [
         "login_required"
     ] * 3
+
+
+@pytest.mark.asyncio
+async def test_account_added_after_handover_resume_receives_private_messages(
+    monkeypatch, tmp_path
+):
+    """A runtime handover starts the channel paused, then resumes it; an account
+    verified afterwards through the add flow must not start its intake paused.
+    """
+    monkeypatch.setattr(
+        "plugins.qq.backend.accounts_settings.managed_available", lambda: True
+    )
+    runtime = QQAccountsRuntime(QQAccountsStore(tmp_path), _Accounts())
+    monkeypatch.setattr(runtime._managed, "start", AsyncMock())
+    monkeypatch.setattr(
+        runtime._managed,
+        "login_status",
+        AsyncMock(return_value={"phase": "online", "qrcode": "", "error": ""}),
+    )
+    socket = _Socket("101")
+    socket.open = AsyncMock()
+    callbacks = []
+
+    def open_socket(_uri, _token, _timeout, on_event):
+        callbacks.append(on_event)
+        return socket
+
+    monkeypatch.setattr("plugins.qq.backend.accounts_runtime.OneBotSocket", open_socket)
+    routed = []
+    bus = SimpleNamespace(
+        publish_inbound=AsyncMock(),
+        subscribe_outbound=lambda *_args: None,
+        unsubscribe_outbound=lambda *_args: None,
+    )
+    ctx = SimpleNamespace(
+        bus=bus,
+        push_tool=SimpleNamespace(
+            register_channel=lambda *_args, **_kwargs: None,
+            unregister_channel=lambda *_args: None,
+        ),
+        channel_hub=SimpleNamespace(
+            claim_pairing=lambda _message, *, scope: False,
+            route_account_inbound=lambda message: routed.append(message) or message,
+        ),
+        http_resources=SimpleNamespace(),
+        attachment_store=SimpleNamespace(),
+        intake_paused=True,
+    )
+    await runtime.start(ctx)  # type: ignore[arg-type]
+    runtime.resume_intake()
+
+    ref = (await runtime.begin_login({"role_id": "mira"}))["ref"]
+    await runtime.start_login(ref, "mira")
+    for _ in range(50):
+        if runtime._states.get(ref, ("", ""))[0] == "online":
+            break
+        await asyncio.sleep(0.01)
+    assert runtime._states[ref] == ("online", "")
+
+    [on_event] = callbacks
+    await on_event(
+        {
+            "post_type": "message",
+            "message_type": "private",
+            "self_id": 101,
+            "user_id": 902,
+            "message_id": 1,
+            "raw_message": "你好",
+        }
+    )
+
+    assert [message.content for message in routed] == ["你好"]
+    [call] = bus.publish_inbound.await_args_list
+    assert call.args[0].metadata["account_id"] == "qq-101"
+    await runtime.stop()

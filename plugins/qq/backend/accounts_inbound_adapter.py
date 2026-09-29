@@ -27,16 +27,22 @@ class QQInboundAdapter:
     _ids: dict[str, str]
     _sockets: dict[str, OneBotSocket]
     _intakes: dict[str, ChannelIntake]
+    # The host's current admission gate. ``ctx.intake_paused`` only describes
+    # how the channel was started (True under a runtime handover) and goes
+    # stale once the host resumes it, so an account activated later reads this.
+    _intake_paused: bool
     _ctx: ChannelContext | None
     _actions: QQAccountActions
 
     def pause_intake(self) -> None:
         """Buffers incoming messages during host generation replacement."""
+        self._intake_paused = True
         for intake in self._intakes.values():
             intake.pause()
 
     def resume_intake(self) -> None:
         """Resumes incoming messages after host generation replacement."""
+        self._intake_paused = False
         for intake in self._intakes.values():
             intake.resume()
 
@@ -51,7 +57,7 @@ class QQInboundAdapter:
             )["message_id"]
 
         intake = ChannelIntake(self._accept_inbound, send_notice)
-        intake.start(paused=self._ctx.intake_paused if self._ctx else False)
+        intake.start(paused=self._intake_paused)
         self._intakes[ref] = intake
 
     async def _on_event(self, ref: str, event: dict[str, Any]) -> None:
