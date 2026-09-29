@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it, type TestContext } from "node:test";
 import { act } from "react";
 import { mockableWindowTimers, mountTestComponent } from "../shared/testing/domTestHarness";
-import { startupSplashDelayMs, startupSplashExitMs } from "./startupSplashPhase";
+import { startupSplashExitMs, startupSplashMinMs } from "./startupSplashPhase";
 import { useStartupSplash } from "./useStartupSplash";
 
 function Probe({ health, enabled }: { health: string; enabled: boolean }) {
@@ -27,14 +27,17 @@ function read(container: HTMLElement) {
 }
 
 describe("useStartupSplash", () => {
-  it("waits out the delay, then greets, and fades out once the backend answers", async (t) => {
+  it("greets at once and holds a quick startup until 3 seconds after launch, then fades out", async (t) => {
     const wait = fakeClock(t);
     const view = await mountTestComponent(<Probe health="connecting" enabled />, { windowGlobals: mockableWindowTimers });
     try {
-      assert.equal(read(view.container).phase, "none");
-      await wait(startupSplashDelayMs + 80);
       assert.equal(read(view.container).phase, "booting");
+      await wait(1000);
       await view.render(<Probe health="online" enabled />);
+      assert.deepEqual(read(view.container), { phase: "booting", leaving: "false" });
+      await wait(startupSplashMinMs - 1000 - 80);
+      assert.deepEqual(read(view.container), { phase: "booting", leaving: "false" });
+      await wait(80);
       assert.deepEqual(read(view.container), { phase: "booting", leaving: "true" });
       await wait(startupSplashExitMs + 80);
       assert.equal(read(view.container).phase, "none");
@@ -46,25 +49,27 @@ describe("useStartupSplash", () => {
     }
   });
 
-  it("never appears for a startup quicker than the delay", async (t) => {
+  it("fades out at once for a startup slower than 3 seconds", async (t) => {
     const wait = fakeClock(t);
     const view = await mountTestComponent(<Probe health="connecting" enabled />, { windowGlobals: mockableWindowTimers });
     try {
-      await wait(startupSplashDelayMs / 2);
+      await wait(startupSplashMinMs + 500);
       await view.render(<Probe health="online" enabled />);
-      await wait(startupSplashDelayMs);
-      assert.equal(read(view.container).phase, "none");
+      assert.deepEqual(read(view.container), { phase: "booting", leaving: "true" });
     } finally {
       await view.cleanup();
     }
   });
 
-  it("shows a failed startup at once and keeps it up through a restart", async () => {
-    const view = await mountTestComponent(<Probe health="offline" enabled />);
+  it("shows a failed startup at once, keeps it up through a restart, and fades out as soon as that answers", async (t) => {
+    fakeClock(t);
+    const view = await mountTestComponent(<Probe health="offline" enabled />, { windowGlobals: mockableWindowTimers });
     try {
       assert.equal(read(view.container).phase, "failed");
       await view.render(<Probe health="connecting" enabled />);
       assert.deepEqual(read(view.container), { phase: "booting", leaving: "false" });
+      await view.render(<Probe health="online" enabled />);
+      assert.deepEqual(read(view.container), { phase: "booting", leaving: "true" });
     } finally {
       await view.cleanup();
     }
@@ -76,7 +81,7 @@ describe("useStartupSplash", () => {
     try {
       assert.equal(read(view.container).phase, "none");
       await view.render(<Probe health="connecting" enabled={false} />);
-      await wait(startupSplashDelayMs + 80);
+      await wait(startupSplashMinMs + 80);
       assert.equal(read(view.container).phase, "none");
     } finally {
       await view.cleanup();
