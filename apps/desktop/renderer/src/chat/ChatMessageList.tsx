@@ -3,7 +3,6 @@ import { ChatMessageRow, type ChatMessageRowProps } from "./ChatMessageRow";
 import { useChatMessageVirtualization } from "./useChatMessageVirtualization";
 import { getChatMessageDomKey, getChatMessageReactKey } from "./chatMessageIdentity";
 import type { getVisibleChatMessages } from "./chatMessageWindow";
-import type { RoleChannelCatalog } from "../roles/roleChannelCatalog";
 import { cx } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
 
@@ -21,7 +20,6 @@ type ChatMessageListProps = {
   /** Render key of the latest failed turn's error row, when it can be retried. */
   retryableKey?: string;
   sending?: boolean;
-  channelCatalog?: RoleChannelCatalog;
   onBeginAttachmentDrag: (path: string) => void;
   onContentSizeChange?: () => void;
   onJumpToMessage: (messageKey: string) => void;
@@ -51,7 +49,6 @@ export const ChatMessageList = React.memo(function ChatMessageList({
   enteringKeys = noEnteringKeys,
   retryableKey = "",
   sending = false,
-  channelCatalog = null,
   onBeginAttachmentDrag,
   onContentSizeChange,
   onJumpToMessage,
@@ -99,7 +96,6 @@ export const ChatMessageList = React.memo(function ChatMessageList({
                 animateEnter={enteringKeys.has(renderKey)}
                 sending={sending}
                 retryable={renderKey === retryableKey}
-                channelCatalog={channelCatalog}
                 onBeginAttachmentDrag={onBeginAttachmentDrag}
                 onJumpToMessage={onJumpToMessage}
                 onMeasureElement={observeMessageElement}

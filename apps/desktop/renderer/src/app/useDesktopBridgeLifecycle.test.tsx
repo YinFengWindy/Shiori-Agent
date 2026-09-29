@@ -7,7 +7,7 @@ import { mountTestComponent } from "../shared/testing/domTestHarness";
 import { createFeedbackRecorder } from "../shared/testing/feedbackRecorder";
 import { useDesktopBridgeLifecycle } from "./useDesktopBridgeLifecycle";
 
-async function mountLifecycle({ cancelling = false, health = "online" } = {}) {
+async function mountLifecycle({ cancelling = false, health = "online", viewKind = "chat" } = {}) {
   let listener!: (event: BridgeEvent) => void;
   const activeSessionRef: React.MutableRefObject<SessionPayload | null> = { current: {
     key: "role:mira", created_at: "", updated_at: "", last_consolidated: 0,
@@ -20,6 +20,7 @@ async function mountLifecycle({ cancelling = false, health = "online" } = {}) {
   const healthChanges: string[] = [];
   const invokedMethods: string[] = [];
   const openedRoles: string[] = [];
+  let unreadCounts: Record<string, number> = {};
   const ignore = () => {};
   const args: Parameters<typeof useDesktopBridgeLifecycle>[0] = {
     activeRoleId: "mira", activeIllustration: "",
@@ -31,9 +32,9 @@ async function mountLifecycle({ cancelling = false, health = "online" } = {}) {
     },
     setBridgeError: ignore, feedback: feedback.reporter, healthRef,
     setWindowMaximized: ignore, setWindowVisible: ignore,
-    setUnreadCounts: ignore,
+    setUnreadCounts: (value) => { unreadCounts = typeof value === "function" ? value(unreadCounts) : value; },
     activeRoleIdRef: { current: "mira" }, activeSessionRef,
-    mainViewRef: { current: { kind: "chat" } }, rolesRef: { current: [] },
+    mainViewRef: { current: { kind: viewKind } as never }, rolesRef: { current: [] },
     chooseIllustration: () => "", cacheRoleSession: ignore,
     clearAllSendingSessions: ignore, clearSessionSending: ignore,
     completeChatTurn: (_key, turn) => { completions.push(turn); },
@@ -67,8 +68,9 @@ async function mountLifecycle({ cancelling = false, health = "online" } = {}) {
   await view.render(<Harness />);
   return {
     ...view, activeSessionRef, completions, statesAtError, feedback, healthRef, healthChanges, invokedMethods, openedRoles,
-    async emit(method: string, payload: BridgeEvent["payload"] = {}) {
-      await act(async () => listener({ id: "request-1", type: "event", method, payload: {
+    unreadCounts: () => unreadCounts,
+    async emit(method: string, payload: BridgeEvent["payload"] = {}, id = "request-1") {
+      await act(async () => listener({ id, type: "event", method, payload: {
         session_key: "role:mira", turn_id: "turn-1", ...payload,
       } }));
     },
@@ -184,6 +186,19 @@ describe("useDesktopBridgeLifecycle", () => {
       assert.equal(view.activeSessionRef.current, streaming);
       assert.deepEqual(view.feedback.entries, []);
       assert.deepEqual(view.completions, ["turn-1"]);
+    } finally { await view.cleanup(); }
+  });
+
+  it("counts unread only for a proactive update that carries a desktop message", async () => {
+    const view = await mountLifecycle({ viewKind: "settings" });
+    try {
+      const pushed = { id: "assistant-1", seq: 1, role: "assistant", content: "在吗", metadata: { proactive: true } };
+      const summary = { key: "role:mira", created_at: "", updated_at: "", last_consolidated: 0, metadata: {} };
+      await view.emit("session.updated", { session: summary, message: pushed, messages: [pushed] }, "proactive");
+      assert.deepEqual(view.unreadCounts(), { mira: 1 });
+      // A channel update keeps the proactive desktop message last but adds nothing new.
+      await view.emit("session.updated", { session: summary, message: null, messages: [] }, "proactive");
+      assert.deepEqual(view.unreadCounts(), { mira: 1 });
     } finally { await view.cleanup(); }
   });
 

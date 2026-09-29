@@ -27,7 +27,6 @@ function Harness({ log }: { log: string[] }) {
         animateEnter={false}
         sending={false}
         retryable={false}
-        channelCatalog={null}
         onBeginAttachmentDrag={() => undefined}
         onJumpToMessage={() => undefined}
         onOpenContextMenu={contextMenu.open}

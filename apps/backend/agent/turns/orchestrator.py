@@ -12,7 +12,11 @@ from agent.account_delivery import AccountDelivery
 from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
-from conversation.service import LegacySessionDescriptor, network_thread_id
+from conversation.service import (
+    LegacySessionDescriptor,
+    desktop_thread_id,
+    network_thread_id,
+)
 from core.accounts import VIA_ACCOUNT_KEY
 from core.accounts.target_contract import AccountTarget
 from core.common.channel_chat_types import CHAT_TYPE_PRIVATE
@@ -179,6 +183,7 @@ class TurnOrchestrator:
                         assistant_response=content,
                         tools_used=("message_push",),
                         thread_id=source_metadata.get("thread_id", ""),
+                        message_id=str(message["id"]),
                     )
                 )
         else:
@@ -335,7 +340,11 @@ class TurnOrchestrator:
                     )
                 ).id
         else:
-            thread_id = network_thread_id(role_id, channel, chat_id)
+            thread_id = (
+                desktop_thread_id(role_id)
+                if channel == DESKTOP_CHANNEL
+                else network_thread_id(role_id, channel, chat_id)
+            )
         metadata.update(
             {
                 "role_id": role_id,

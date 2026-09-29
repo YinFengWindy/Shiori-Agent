@@ -2,16 +2,12 @@ import React, { useCallback } from "react";
 import { ChatErrorRow } from "./ChatErrorRow";
 import { ChatMessageAttachments } from "./ChatMessageAttachments";
 import { ChatMessageBubbleBody, hasChatMessageBubbleContent } from "./ChatMessageBubbleBody";
-import {
-  getChatMessageActionAvailability,
-  getChatMessageSourceLabel,
-} from "./chatMessageActions";
+import { getChatMessageActionAvailability } from "./chatMessageActions";
 import {
   chatMessageContextMenuKeyShortcuts,
   isChatMessageContextMenuKey,
 } from "./chatMessageContextMenuPlacement";
 import { getChatMessageDomKey } from "./chatMessageIdentity";
-import type { RoleChannelCatalog } from "../roles/roleChannelCatalog";
 import { formatTimestamp, toFileUrl } from "../shared/format";
 import { cx } from "../shared/styles";
 import type { RoleRecord, SessionMessage } from "../shared/types";
@@ -29,7 +25,6 @@ export type ChatMessageRowProps = {
   sending: boolean;
   /** This is the latest failed turn and can be retried. */
   retryable: boolean;
-  channelCatalog: RoleChannelCatalog;
   onBeginAttachmentDrag: (path: string) => void;
   onJumpToMessage: (messageKey: string) => void;
   onMeasureElement?: (message: SessionMessage, index: number, element: HTMLElement | null) => void;
@@ -77,7 +72,6 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
   animateEnter,
   sending,
   retryable,
-  channelCatalog,
   onBeginAttachmentDrag,
   onJumpToMessage,
   onMeasureElement,
@@ -89,7 +83,6 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
   const isError = message.role === "error";
   const authorLabel = isError ? "系统提示" : (isUser ? "你" : (activeRole?.name || "角色"));
   const messageDomKey = getChatMessageDomKey(message, index);
-  const sourceLabel = getChatMessageSourceLabel(message, channelCatalog);
   const availability = getChatMessageActionAvailability(message, { sending, retryable });
   const measureElement = useCallback((element: HTMLElement | null) => {
     onMeasureElement?.(message, index, element);
@@ -159,10 +152,9 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
             onBeginAttachmentDrag={onBeginAttachmentDrag}
             onOpenImagePreview={onOpenImagePreview}
           />
-          {message.timestamp || sourceLabel ? (
+          {message.timestamp ? (
             <div className={cx("message-time mt-1 flex items-center gap-2 text-ink-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100", chatMinorTextClass)}>
-              {message.timestamp ? <span>{formatTimestamp(message.timestamp)}</span> : null}
-              {sourceLabel ? <span>{`来自${sourceLabel}`}</span> : null}
+              <span>{formatTimestamp(message.timestamp)}</span>
             </div>
           ) : null}
         </div>

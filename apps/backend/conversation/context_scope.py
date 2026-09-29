@@ -11,7 +11,8 @@
 
 划分按会话而不是按发送者：已绑定用户在群里的发言属于外部上下文。归属在读取时按
 当前的身份绑定计算，绑定或解绑之后，相应私聊的历史随之改变可见性，消息本身不变。
-历史组装与主动消息都直接使用本模块，不各写一套规则。
+历史组装与主动消息都直接使用本模块，不各写一套规则。桌面聊天界面只显示其中
+桌面这一路（``in_desktop_view``），同样由本模块判定。
 """
 
 from __future__ import annotations
@@ -47,10 +48,30 @@ class UserContextThreads:
     def contains(self, thread_id: str) -> bool:
         """``thread_id`` 是否属于用户上下文；空值代表统一会话之前的旧消息。"""
         return (
-            not thread_id
+            in_desktop_view(self.role_id, thread_id)
             or thread_id in self.bound_chat_thread_ids
-            or is_scheduler_thread(self.role_id, thread_id)
         )
+
+
+def in_desktop_view(role_id: str, thread_id: str) -> bool:
+    """桌面聊天界面是否显示会话 ``thread_id`` 的消息。
+
+    桌面聊天只显示桌面这一路对话：桌面会话、没有来源会话的计划任务（结果交给
+    桌面），以及统一会话之前没有 ``thread_id`` 的旧消息（它们就是桌面对话）。
+    渠道私聊与群聊一律不显示，即使对方是已绑定用户。这些会话都属于用户上下文。
+    """
+    return (
+        not thread_id
+        or thread_id == desktop_thread_id(role_id)
+        or is_scheduler_thread(role_id, thread_id)
+    )
+
+
+def desktop_view_thread_ids(role_id: str, thread_ids: Iterable[str]) -> frozenset[str]:
+    """从角色会话已有的 ``thread_ids`` 中挑出桌面聊天显示的那些（见 ``in_desktop_view``）。"""
+    return frozenset(
+        thread_id for thread_id in thread_ids if in_desktop_view(role_id, thread_id)
+    )
 
 
 def user_context_threads(

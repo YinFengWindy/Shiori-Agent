@@ -1,8 +1,7 @@
 import { isChatImageAsset } from "./chatImageHistory";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { normalizeSessionMediaPaths } from "./chatMedia";
-import { roleChannelLabel, type RoleChannelCatalog } from "../roles/roleChannelCatalog";
-import type { ChatReplyTarget, SessionMessage, SessionPayload } from "../shared/types";
+import type { ChatReplyTarget, SessionMessage } from "../shared/types";
 
 export type MessageContextMenuState = {
   x: number;
@@ -24,23 +23,6 @@ export type ChatMessageActionAvailability = {
 /** Returns the display name for an attachment path. */
 export function getChatAttachmentName(path: string): string {
   return path.split(/[\\/]/).pop() || path;
-}
-
-/**
- * Resolves the channel label shown beneath one chat message (「桌面端」,
- * 「QQ」…), through the same `channels.list` catalog the role delivery panels
- * use; an unknown channel falls back to its raw name.
- */
-export function getChatMessageSourceLabel(
-  message: SessionPayload["messages"][number],
-  catalog: RoleChannelCatalog = null,
-): string | null {
-  const metadata = message.metadata ?? {};
-  const transportChannel = String(
-    metadata.transport_channel ?? metadata.context_channel ?? metadata.source_channel ?? "",
-  ).trim();
-  if (transportChannel) return roleChannelLabel(transportChannel.toLowerCase(), catalog);
-  return String(metadata.source ?? "").trim() === "desktop" ? roleChannelLabel("desktop", catalog) : null;
 }
 
 /** Returns copyable text for a chat message. */

@@ -4,6 +4,7 @@ from agent.plugin_host.bridge_events import PluginBridgeEvent, PluginRpcError
 
 from contextlib import ExitStack
 from core.accounts import AccountDeletingError, AccountNotFoundError
+from core.common.channel_directory import DESKTOP_CHANNEL
 from core.common.cleanup import run_cleanup_steps
 from core.common.task_collector import TaskCollector
 
@@ -254,7 +255,7 @@ class DesktopBridgeService:
         """Broadcasts external role turns after their shared session is committed."""
 
         role_id = str(event.role_id or "").strip()
-        if not role_id or event.channel == "desktop":
+        if not role_id or event.channel == DESKTOP_CHANNEL:
             return
         session_key = self.role_service.sessions.derive_session_key(role_id)
         session = self.session_manager.get_or_create(session_key)
@@ -264,7 +265,10 @@ class DesktopBridgeService:
         await self._broadcast_session_updated(
             request_id=request_id,
             session=session,
-            messages=self._session_messages_for_turn(session, event),
+            # Only the rows the turn committed; a turn that committed none sends
+            # the summary alone. Its channel rows are stripped from the desktop
+            # timeline anyway, only desktop pushes it made remain.
+            messages=committed_turn_messages(session, event) or [],
         )
 
     async def _on_proactive_message_committed(
@@ -279,10 +283,26 @@ class DesktopBridgeService:
         session_key = self.role_service.sessions.derive_session_key(role_id)
         if event.session_key != session_key:
             return
+        # Raised inside a bus observer: EventBus.fanout logs it and carries on,
+        # so a malformed event is visible without breaking other listeners.
+        if not event.message_id:
+            raise ValueError("ProactiveMessageCommitted 缺少 message_id")
         session = self.session_manager.get_or_create(session_key)
+        message = next(
+            (
+                item
+                for item in session.messages
+                if str(item.get("id") or "") == event.message_id
+            ),
+            None,
+        )
+        if message is None:
+            # Also logged by EventBus.fanout, like the missing-id error above.
+            raise ValueError(f"主动消息不在角色会话中: {event.message_id}")
         await self._broadcast_session_updated(
             request_id=f"proactive:{role_id}",
             session=session,
+            messages=[message],
         )
 
     def _on_account_change(self, account_id: str) -> None:
@@ -444,7 +464,7 @@ class DesktopBridgeService:
                 )
                 metadata["queued"] = True
                 return
-            session = await self.app_service.apply_desktop_push(
+            session, pushed = await self.app_service.apply_desktop_push(
                 chat_id,
                 message=message,
                 media=media,
@@ -452,7 +472,7 @@ class DesktopBridgeService:
                 already_persisted=(metadata or {}).get("already_persisted") is True,
             )
             await self._broadcast_session_updated(
-                request_id="proactive", session=session
+                request_id="proactive", session=session, messages=[pushed]
             )
 
         push_tool.register_channel(
@@ -479,11 +499,12 @@ class DesktopBridgeService:
         message: str = "",
         media: list[str] | None = None,
     ) -> Session:
-        return await self.app_service.apply_desktop_push(
+        session, _pushed = await self.app_service.apply_desktop_push(
             chat_id,
             message=message,
             media=media,
         )
+        return session
 
     def _start_chat_turn(
         self,
@@ -550,21 +571,16 @@ class DesktopBridgeService:
         request_id: str,
         session: Session,
         emit_event,
-        message_id: str | None = None,
         change: str = "message_appended",
-        include_message: bool = True,
         messages: list[dict[str, Any]] | None = None,
     ) -> None:
+        """Emits ``session.updated`` carrying exactly ``messages`` (none by default)."""
         event = BridgeEvent(
             id=request_id,
             type="event",
             method="session.updated",
             payload=self._build_session_update_payload(
-                session,
-                message_id=message_id,
-                change=change,
-                include_message=include_message,
-                messages=messages,
+                session, change=change, messages=messages or []
             ),
         )
         await self._emit_event(emit_event, event.to_dict())
@@ -599,21 +615,16 @@ class DesktopBridgeService:
         *,
         request_id: str,
         session: Session,
-        message_id: str | None = None,
         change: str = "message_appended",
-        include_message: bool = True,
         messages: list[dict[str, Any]] | None = None,
     ) -> None:
+        """Broadcasts ``session.updated`` carrying exactly ``messages``."""
         event = BridgeEvent(
             id=request_id,
             type="event",
             method="session.updated",
             payload=self._build_session_update_payload(
-                session,
-                message_id=message_id,
-                change=change,
-                include_message=include_message,
-                messages=messages,
+                session, change=change, messages=messages or []
             ),
         )
         await self._broadcast_event(event.to_dict())
@@ -622,16 +633,14 @@ class DesktopBridgeService:
         self,
         session: Session,
         *,
-        message_id: str | None,
         change: str,
-        include_message: bool,
-        messages: list[dict[str, Any]] | None,
+        messages: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        changed_messages = list(messages or []) if include_message else []
-        if include_message and messages is None:
-            message = self._session_message_for_event(session, message_id)
-            if message is not None:
-                changed_messages = [message]
+        # The desktop timeline shows only the desktop conversation: channel
+        # turns still refresh the summary but carry none of their messages.
+        changed_messages = self.session_presenter.desktop_messages(
+            session.key, messages
+        )
         primary_message = changed_messages[-1] if changed_messages else None
         return {
             "session": self.session_presenter.serialize_summary(session),
@@ -648,49 +657,6 @@ class DesktopBridgeService:
             "session_key": session.key,
             "role_id": self._role_id_from_desktop_session_key(session.key),
         }
-
-    @staticmethod
-    def _session_messages_for_turn(
-        session: Session,
-        event: TurnCommitted,
-    ) -> list[dict[str, Any]]:
-        """Returns the exact ordered turn when commit identity is available."""
-        messages = committed_turn_messages(session, event)
-        if messages is not None:
-            return messages
-        assistant_index = next(
-            (
-                index
-                for index in range(len(session.messages) - 1, -1, -1)
-                if session.messages[index].get("role") == "assistant"
-                and str(session.messages[index].get("content") or "")
-                == event.assistant_response
-            ),
-            -1,
-        )
-        if assistant_index < 0:
-            return [session.messages[-1]] if session.messages else []
-
-        first_index = assistant_index
-        if event.persisted_user_message is not None and assistant_index > 0:
-            previous = session.messages[assistant_index - 1]
-            if (
-                previous.get("role") == "user"
-                and str(previous.get("content") or "") == event.persisted_user_message
-            ):
-                first_index -= 1
-        return session.messages[first_index : assistant_index + 1]
-
-    @staticmethod
-    def _session_message_for_event(
-        session: Session,
-        message_id: str | None,
-    ) -> dict[str, Any] | None:
-        if message_id:
-            for message in session.messages:
-                if str(message.get("id") or "") == message_id:
-                    return message
-        return session.messages[-1] if session.messages else None
 
     def _normalize_desktop_session_key(self, chat_id: str) -> str:
         return self.app_service.normalize_desktop_session_key(chat_id)

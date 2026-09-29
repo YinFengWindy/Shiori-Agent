@@ -190,7 +190,6 @@ class DesktopSessionTaskRequestHandler:
             session=session,
             emit_event=emit_event,
             change="metadata_updated",
-            include_message=False,
         )
         return {
             "session": self._session_presenter.serialize_summary(session),

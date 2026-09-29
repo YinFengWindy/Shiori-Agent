@@ -420,7 +420,9 @@ async def test_voice_delete_preserves_provider_and_ownership_guard(tmp_path) -> 
 
 
 @pytest.mark.asyncio
-async def test_external_turn_committed_broadcasts_role_session_once(tmp_path) -> None:
+async def test_external_turn_committed_refreshes_summary_without_its_messages(
+    tmp_path,
+) -> None:
     role_store = RoleStore(tmp_path)
     role_store.create_role(
         role_id="mira",
@@ -489,14 +491,9 @@ async def test_external_turn_committed_broadcasts_role_session_once(tmp_path) ->
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
     assert emitted[0]["payload"]["session"]["key"] == "role:mira"
-    assert [message["role"] for message in emitted[0]["payload"]["messages"]] == [
-        "user",
-        "assistant",
-    ]
-    assert [message["content"] for message in emitted[0]["payload"]["messages"]] == [
-        "hello",
-        "来自 Telegram",
-    ]
+    # The desktop timeline shows only the desktop conversation.
+    assert emitted[0]["payload"]["message"] is None
+    assert emitted[0]["payload"]["messages"] == []
 
     await event_bus.fanout(
         TurnCommitted(
@@ -540,6 +537,12 @@ async def test_external_proactive_media_commit_broadcasts_role_session(
     session = session_manager.get_or_create("role:mira")
     session.add_message(
         "assistant",
+        "晚安",
+        proactive=True,
+        metadata={"role_id": "mira", "thread_id": "thread:mira:desktop"},
+    )
+    session.add_message(
+        "assistant",
         "给你看张图",
         media=["D:\\media\\scene.png"],
         proactive=True,
@@ -551,6 +554,7 @@ async def test_external_proactive_media_commit_broadcasts_role_session(
         },
     )
     session_manager.save(session)
+    desktop_id, telegram_id = (message["id"] for message in session.messages)
 
     await event_bus.fanout(
         ProactiveMessageCommitted(
@@ -558,22 +562,69 @@ async def test_external_proactive_media_commit_broadcasts_role_session(
             channel="telegram",
             role_id="mira",
             thread_id="thread:mira:telegram:1",
+            message_id=telegram_id,
         )
     )
 
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
-    assert emitted[0]["payload"]["message"]["media"] == ["D:\\media\\scene.png"]
+    assert emitted[0]["payload"]["message"] is None
 
+    # The desktop commit is published exactly, though a channel message came after.
     await event_bus.fanout(
         ProactiveMessageCommitted(
             session_key="role:mira",
             channel="desktop",
             role_id="mira",
             thread_id="thread:mira:desktop",
+            message_id=desktop_id,
         )
     )
     assert len(emitted) == 2
+    assert emitted[1]["payload"]["message"]["content"] == "晚安"
+
+
+@pytest.mark.asyncio
+async def test_desktop_push_publishes_its_message_after_a_channel_message(tmp_path):
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    sessions = SessionManager(tmp_path)
+    session = sessions.open_role_session("mira", role_name="Mira")
+    # A turn committed the desktop reminder; a group message landed before its push.
+    session.add_message(
+        "assistant",
+        "记得喝水",
+        proactive=True,
+        metadata={"thread_id": "thread:mira:desktop", "delivery_key": "remind-1"},
+    )
+    session.add_message(
+        "user", "群消息", metadata={"thread_id": "thread:mira:qq:group-1"}
+    )
+    sessions.save(session)
+    bus = EventBus()
+    push = MessagePushTool(event_bus=bus)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=roles,
+        session_manager=sessions,
+        agent_loop=SimpleNamespace(),
+        event_bus=bus,
+        push_tool=push,
+    )
+    emitted: list[dict] = []
+    service.add_event_listener(emitted.append)
+
+    await push.execute(
+        channel="desktop",
+        chat_id="role:mira",
+        message="记得喝水",
+        role_id="mira",
+        push_delivery_key="remind-1",
+        push_message_already_persisted=True,
+    )
+
+    assert [event["payload"]["message"]["content"] for event in emitted] == ["记得喝水"]
+    await service.aclose()
 
 
 @pytest.mark.asyncio
@@ -691,9 +742,13 @@ async def test_external_image_push_persists_and_broadcasts_desktop_session(
     )
 
     assert result == "图片已发送"
+    assert [
+        message["media"]
+        for message in session_manager._store.fetch_session_messages("role:mira")
+    ] == [[image]]
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
-    assert emitted[0]["payload"]["message"]["media"] == [image]
+    assert emitted[0]["payload"]["message"] is None
 
 
 @pytest.mark.asyncio

@@ -6,7 +6,6 @@ import {
   getChatAttachmentName,
   getChatMessageCopyText,
   getChatMessageReplyContent,
-  getChatMessageSourceLabel,
   getChatMessageActionAvailability,
   getStoredChatReplyPreview,
   isInterruptedChatMessage,
@@ -30,20 +29,6 @@ describe("chatMessageActions", () => {
     assert.equal(getChatMessageReplyContent({ role: "assistant", content: "", media: [] }), "");
   });
 
-  it("resolves transport labels by metadata priority", () => {
-    assert.equal(getChatMessageSourceLabel({
-      role: "assistant",
-      content: "hello",
-      metadata: { transport_channel: "telegram", source: "desktop" },
-    }), "telegram");
-    assert.equal(getChatMessageSourceLabel({
-      role: "assistant",
-      content: "hello",
-      metadata: { source: "desktop" },
-    }), "桌面端");
-    assert.equal(getChatMessageSourceLabel({ role: "assistant", content: "hello" }), null);
-  });
-
   it("normalizes persisted reply metadata into a composer preview", () => {
     assert.deepEqual(getStoredChatReplyPreview({
       role: "assistant",
@@ -60,17 +45,6 @@ describe("chatMessageActions", () => {
       preview: "quoted content",
     });
     assert.equal(getStoredChatReplyPreview({ role: "assistant", content: "reply" }), null);
-  });
-});
-
-describe("chat message source label", () => {
-  it("labels a plugin channel from the channels.list catalog", () => {
-    const catalog = [{ name: "qqbot", label: "QQ 机器人" }] as unknown as Parameters<typeof getChatMessageSourceLabel>[1];
-    assert.equal(getChatMessageSourceLabel({
-      role: "user",
-      content: "hi",
-      metadata: { transport_channel: "QQBot" },
-    }, catalog), "QQ 机器人");
   });
 });
 

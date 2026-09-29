@@ -172,6 +172,29 @@ async def test_retry_refuses_a_turn_the_conversation_has_moved_past():
 
 
 @pytest.mark.asyncio
+async def test_retry_ignores_channel_messages_stored_after_the_failed_turn():
+    session = _failed_turn_session()
+    session.add_message(
+        "user",
+        "群里的新消息",
+        id="group-id",
+        seq=3,
+        metadata={"thread_id": "thread:mira:qq:group-1"},
+    )
+    handler, _, start_chat_turn = _retry_handler(session)
+
+    response = await handler.handle(
+        "chat.retry",
+        {"role_id": "mira", "turn_id": "turn-retry", "user_message_id": "user-id"},
+        request_id="request-retry",
+        emit_event=AsyncMock(),
+    )
+
+    assert response["message"]["id"] == "user-id"
+    start_chat_turn.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_retry_refuses_a_stale_user_message_id():
     handler, _, start_chat_turn = _retry_handler(_failed_turn_session())
 
