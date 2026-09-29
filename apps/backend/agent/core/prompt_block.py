@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from agent.prompting import PromptSectionMeta, PromptSectionRender, SectionCache
 from core.identity import identities_for_account
+from core.memory.member_profiles import MemberProfiles, render_member_profiles
 from core.memory.markdown_schema import (
     SELF_PERSONA_SECTION,
     SELF_RELATIONSHIP_SECTION,
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from agent.skills import SkillsLoader
     from core.roles import RoleStore
     from conversation.context_scope import ContextScope
+    from core.common.message_source import MessageSource
     from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
 
@@ -48,6 +50,10 @@ class TurnContext:
     # 回合所在会话与群环境层（#497）；未接入群环境层时为 None。
     thread_id: str = ""
     group_environment: "GroupEnvironment | None" = None
+    # 触发本回合的消息来源，与本回合可见历史窗口里非用户本人消息的来源（旧的在前）；
+    # 外部回合据此注入成员档案（#498）。
+    message_source: "MessageSource | None" = None
+    window_sources: "tuple[MessageSource, ...]" = ()
 
 
 def is_external_turn(ctx: TurnContext) -> bool:
@@ -108,6 +114,9 @@ class PromptBlock(Protocol):
 #  47 GroupNotePromptBlock     → 当前外部会话的群笔记（只在外部回合注入，不注入其他会话的）
 #                              来源：roles/<role_id>/memory/groups/*.md
 #                              时机：记忆整理外部段后变化
+#  48 MemberProfilesPromptBlock→ 触发者与 @/回复对象的完整档案、窗口内其他成员的速记（只在外部回合注入，放 context frame）
+#                              来源：roles/<role_id>/memory/members/*.md，合计约 1500 字
+#                              时机：记忆整理外部段后变化；每轮随触发者与历史窗口变化
 #  50 ActiveSkillsPromptBlock  → active skill 内容
 #                              来源：always skills + 本轮命中的 skill_names
 #                              时机：本轮技能命中集合变化时就会变，中频
@@ -360,6 +369,43 @@ class GroupNotePromptBlock:
             raise ValueError("外部回合缺少 role_id 或 thread_id，无法读取群笔记")
         return (
             ctx.group_environment.render_group_note(ctx.role_id, ctx.thread_id) or None
+        )
+
+    def cache_signature(self, ctx: TurnContext) -> str | None:
+        return None
+
+
+class MemberProfilesPromptBlock:
+    """外部上下文回合按分层注入成员档案（#498）；用户上下文回合不注入。
+
+    ``roles`` 是运行时共享的角色存储：只有它索引角色的账号，据此按此刻的身份绑定
+    认出用户本人，不注入其档案。
+    """
+
+    priority = 48
+    label = "member_profiles"
+    is_static = False
+
+    def __init__(self, roles: "RoleStore") -> None:
+        self._roles = roles
+
+    def render(
+        self, ctx: TurnContext, cached_signature: str | None = None
+    ) -> str | None:
+        # 预热渲染没有触发消息，没有可注入的成员。
+        if not is_external_turn(ctx) or ctx.message_source is None:
+            return None
+        if not ctx.role_id:
+            raise ValueError("外部回合缺少 role_id，无法读取成员档案")
+        return (
+            render_member_profiles(
+                MemberProfiles(ctx.workspace),
+                ctx.role_id,
+                trigger=ctx.message_source,
+                window=ctx.window_sources,
+                bound=self._roles.bound_user_senders(ctx.role_id),
+            )
+            or None
         )
 
     def cache_signature(self, ctx: TurnContext) -> str | None:

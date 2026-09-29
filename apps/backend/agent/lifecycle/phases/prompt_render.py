@@ -99,6 +99,7 @@ class _RenderPromptModule:
                 turn_injection_prompt=ctx.turn_injection_prompt,
                 context_scope=frame.input.context_scope,
                 thread_id=frame.input.thread_id,
+                window_sources=frame.input.window_sources,
             ),
             system_sections_top=ctx.system_sections_top,
             system_sections_bottom=ctx.system_sections_bottom,

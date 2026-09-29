@@ -360,6 +360,7 @@ def _build_loop_deps(
         relationship_runtime=relationship_runtime,
         relationship_optimizer=relationship_optimizer,
         group_environment=group_environment,
+        runtime_roles=runtime_roles,
     )
     retrieval_pipeline = DefaultMemoryRetrievalPipeline(
         memory=memory_services,
@@ -393,6 +394,7 @@ def _bind_memory_lifecycle_if_supported(
     relationship_runtime: RoleRelationshipRuntimeService,
     relationship_optimizer: RelationshipSnapshotOptimizer,
     group_environment: GroupEnvironment,
+    runtime_roles: RoleStore,
 ) -> None:
     async def _after_consolidation(session: object) -> None:
         await relationship_runtime.refresh_snapshot_after_consolidation(
@@ -406,6 +408,7 @@ def _bind_memory_lifecycle_if_supported(
             commit_consolidation=session_manager.commit_consolidation,
             after_consolidation=_after_consolidation,
             group_environment=group_environment,
+            runtime_roles=runtime_roles,
         )
     )
 

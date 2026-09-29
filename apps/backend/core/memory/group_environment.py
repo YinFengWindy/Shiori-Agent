@@ -12,14 +12,13 @@
 
 from __future__ import annotations
 
-import hashlib
-import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from conversation.context_scope import load_user_context_threads
 from conversation.store import ConversationStore
+from core.memory.role_paths import keyed_markdown_name, role_memory_dir
 from utils.helpers import ensure_dir
 
 # 用户上下文注入最近动态的时间窗与数量上限。
@@ -28,8 +27,6 @@ RECENT_ACTIVITY_LIMIT = 5
 # thread_state.metadata 里与最近动态一同写入的字段。
 SUMMARY_UPDATED_AT_KEY = "summary_updated_at"
 SUMMARY_LABEL_KEY = "summary_label"
-
-_UNSAFE_FILENAME_CHARS = re.compile(r"[^0-9A-Za-z._-]+")
 
 
 @dataclass(frozen=True)
@@ -73,9 +70,7 @@ class GroupEnvironment:
 
     def note_path(self, role_id: str, thread_id: str) -> Path:
         """会话 ``thread_id`` 的群笔记文件；文件名由会话 ID 转成安全字符并加短哈希。"""
-        digest = hashlib.sha1(thread_id.encode("utf-8")).hexdigest()[:8]
-        stem = _UNSAFE_FILENAME_CHARS.sub("_", thread_id).strip("_")
-        return self._groups_dir(role_id) / f"{stem}-{digest}.md"
+        return self._groups_dir(role_id) / keyed_markdown_name(thread_id)
 
     def read_note(self, role_id: str, thread_id: str) -> str:
         """会话的群笔记；还没有时为空串。"""
@@ -164,7 +159,4 @@ class GroupEnvironment:
         return f"## 我对这个会话的群笔记\n\n{note}"
 
     def _groups_dir(self, role_id: str) -> Path:
-        clean_role_id = role_id.strip()
-        if not clean_role_id:
-            raise ValueError("role_id required for group environment access")
-        return self._workspace / "roles" / clean_role_id / "memory" / "groups"
+        return role_memory_dir(self._workspace, role_id) / "groups"

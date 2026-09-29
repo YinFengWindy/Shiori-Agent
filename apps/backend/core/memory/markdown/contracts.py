@@ -10,6 +10,8 @@ from session.manager.consolidation import ConsolidationCommitRequest
 
 if TYPE_CHECKING:
     from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
+    from core.memory.member_profiles import MemberProfileUpdate
+    from core.roles import RoleStore
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,9 @@ class MemoryLifecycleBindRequest:
     after_consolidation: Callable[[object], Awaitable[None]] | None = None
     # 群环境层（#497）：整理外部段的产出写到这里；未绑定时整理直接失败。
     group_environment: "GroupEnvironment | None" = None
+    # 运行时共享的角色存储（#498）：按此刻身份绑定认出用户本人，不为其建成员档案；
+    # 未绑定时整理直接失败。
+    runtime_roles: "RoleStore | None" = None
 
 
 @runtime_checkable
@@ -85,11 +90,19 @@ class ConsolidationSegments:
 
     ``user_messages`` 属于用户本人（见 ``conversation.context_scope.belongs_to_user``），
     走用户层整理；``external_messages`` 是群友、陌生人的发言以及角色在外部会话里的
-    回复，按会话整理成群环境层（#497），不交给记忆引擎。游标仍按整个窗口推进。
+    回复，按会话整理成群环境层（#497）与成员层（#498），不交给记忆引擎。游标仍按整个窗口推进。
     """
 
     user_messages: list[dict]
     external_messages: list[dict]
+
+
+@dataclass(frozen=True)
+class ExternalLayerUpdates:
+    """外部段一次整理的产出：各会话的群环境层更新（#497）与成员档案更新（#498）。"""
+
+    group_environment: tuple["GroupEnvironmentUpdate", ...] = ()
+    member_profiles: tuple["MemberProfileUpdate", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -106,6 +119,8 @@ class _ConsolidationDraft:
     archive_all: bool = False
     # 外部段整理出的各会话群环境层更新，提交时由宿主写入，不发给引擎。
     group_environment_updates: tuple["GroupEnvironmentUpdate", ...] = ()
+    # 外部段整理出的成员档案更新（#498），提交时由宿主写入，不发给引擎。
+    member_profile_updates: tuple["MemberProfileUpdate", ...] = ()
 
 
 @dataclass(frozen=True)
