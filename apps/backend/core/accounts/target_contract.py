@@ -1,14 +1,16 @@
 """Plugin RPC names and payload shape for account-scoped targets and sends.
 
 ``account.targets`` receives account_id, kind, group_id, and member_id.
-``account.send`` receives account_id, message and ``AccountTarget.to_payload()``:
-target_kind, target_id, message_thread_id (int or None), group_id (the group
-of a ``group_member`` temporary session, else "") and mention_ids (member IDs
-to mention in a ``group`` target, possibly empty). The host checks only this
-shape; plugins own capability and target validation and must refuse clearly
-what their platform cannot do (e.g. mentions or group temporary sessions).
-The result carries the platform's actual ``message_id`` and, optionally, the
-plugin's ``ViaAccount`` snapshot under ``VIA_ACCOUNT_KEY``.
+``account.send`` receives account_id, message (possibly empty when media is
+not), media (image attachments, see ``account_send_media``) and
+``AccountTarget.to_payload()``: target_kind, target_id, message_thread_id (int
+or None), group_id (the group of a ``group_member`` temporary session, else "")
+and mention_ids (member IDs to mention in a ``group`` target, possibly empty).
+The host checks only this shape; plugins own capability and target validation
+and must refuse clearly what their platform cannot do (e.g. mentions or group
+temporary sessions). The result carries the platform's actual ``message_id``
+(the first platform message when text and images go out separately) and,
+optionally, the plugin's ``ViaAccount`` snapshot under ``VIA_ACCOUNT_KEY``.
 """
 
 from __future__ import annotations
@@ -21,6 +23,8 @@ from core.common.channel_chat_types import parse_mention_ids
 
 ACCOUNT_TARGETS_METHOD = "account.targets"
 ACCOUNT_SEND_METHOD = "account.send"
+# ``account.send`` payload key of the image attachments.
+ACCOUNT_SEND_MEDIA_KEY = "media"
 
 # A group member reached through a group temporary session; needs group_id.
 GROUP_MEMBER_TARGET = "group_member"
@@ -57,6 +61,23 @@ ACCOUNT_TARGET_PROPERTIES: dict[str, Any] = {
 
 class UncertainDeliveryError(RuntimeError):
     """The platform may have accepted a send but did not confirm a receipt."""
+
+
+def account_send_media(payload: Mapping[str, Any]) -> tuple[str, ...]:
+    """The image attachments of an ``account.send`` request, in sending order.
+
+    Each item is a local image file path or an http(s) URL, the same form the
+    proactive outbound path produces; a missing key means none. Raises
+    ValueError for anything but a list of non-empty strings.
+    """
+    media = payload.get(ACCOUNT_SEND_MEDIA_KEY)
+    if media is None:
+        return ()
+    if not isinstance(media, list) or any(
+        not isinstance(item, str) or not item.strip() for item in media
+    ):
+        raise ValueError("media 必须是图片路径或 URL 的列表")
+    return tuple(item.strip() for item in media)
 
 
 def _text(value: object, label: str) -> str:

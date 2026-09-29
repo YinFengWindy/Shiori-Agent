@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.accounts.target_contract import AccountTarget
+from core.accounts.target_contract import AccountTarget, account_send_media
 
 
 def test_target_options_travel_to_the_plugin_payload() -> None:
@@ -42,3 +42,14 @@ def test_target_options_travel_to_the_plugin_payload() -> None:
 def test_misplaced_or_malformed_options_are_refused(arguments, error) -> None:
     with pytest.raises(ValueError, match=error):
         AccountTarget.from_arguments(arguments)
+
+
+def test_send_media_is_a_list_of_image_sources() -> None:
+    assert account_send_media({}) == ()
+    assert account_send_media({"media": [" a.png ", "https://x/b.png"]}) == (
+        "a.png",
+        "https://x/b.png",
+    )
+    for bad in ("a.png", [""], [1]):
+        with pytest.raises(ValueError, match="media"):
+            account_send_media({"media": bad})

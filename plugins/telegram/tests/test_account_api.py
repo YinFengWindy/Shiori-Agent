@@ -10,6 +10,13 @@ from plugins.telegram.backend.account_api import TelegramAccountApi
 from core.accounts.target_contract import UncertainDeliveryError
 
 
+def _png(tmp_path) -> str:
+    """A real PNG file on disk, as a local image path."""
+    path = tmp_path / "sky.png"
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"body")
+    return str(path)
+
+
 @pytest.fixture
 def account_api():
     store = Mock()
@@ -31,6 +38,7 @@ def account_api():
         mark_online=Mock(),
         bot=SimpleNamespace(get_chat_member=AsyncMock()),
         send=AsyncMock(return_value="77"),
+        send_image=AsyncMock(return_value="78"),
         via_account=Mock(return_value={"platform_account_id": "123"}),
     )
     second = SimpleNamespace(
@@ -186,3 +194,46 @@ async def test_group_send_mentions_members_but_temporary_sessions_are_refused(
     with pytest.raises(ValueError, match="数字用户 ID"):
         await api.account_send({**group, "mention_ids": ["@someone"]})
     assert first.send.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_images_follow_the_text_in_the_same_topic(account_api, tmp_path):
+    sky = _png(tmp_path)
+    api, first = account_api
+    group = {
+        "account_id": "account-first",
+        "target_kind": "group",
+        "target_id": "-1001",
+        "message": "看天空",
+        "message_thread_id": 42,
+        "media": [sky],
+    }
+    receipt = await api.account_send(group)
+    assert receipt["message_id"] == "77"
+    first.send.assert_awaited_once_with("-1001", "看天空", message_thread_id=42)
+    first.send_image.assert_awaited_once_with("-1001", sky, message_thread_id=42)
+    only_image = await api.account_send({**group, "message": ""})
+    assert only_image["message_id"] == "78"
+    assert first.send.await_count == 1
+
+    # The text already reached the chat: a failed photo leaves it uncertain.
+    first.send_image.side_effect = FileNotFoundError("sky.png")
+    with pytest.raises(UncertainDeliveryError, match="部分送达"):
+        await api.account_send(group)
+
+
+@pytest.mark.asyncio
+async def test_invalid_local_image_is_refused_before_any_send(account_api, tmp_path):
+    api, first = account_api
+    with pytest.raises(ValueError, match="图片文件不存在"):
+        await api.account_send(
+            {
+                "account_id": "account-first",
+                "target_kind": "private",
+                "target_id": "123",
+                "message": "看天空",
+                "media": [str(tmp_path / "gone.png")],
+            }
+        )
+    first.send.assert_not_awaited()
+    first.send_image.assert_not_awaited()

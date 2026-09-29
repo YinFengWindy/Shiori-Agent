@@ -99,8 +99,17 @@ async def test_shared_account_send_adapts_target_and_rejects_topic() -> None:
         "via_account": via,
     }
     runtime.send_target.assert_awaited_once_with(
-        "account-1", "group", "42", "hello", group_id="", mention_ids=("902",)
+        "account-1",
+        "group",
+        "42",
+        "hello",
+        group_id="",
+        mention_ids=("902",),
+        images=(),
     )
+    runtime.send_target.reset_mock()
+    await _send_account(runtime, {**payload, "media": ["https://x.test/a.png"]})
+    assert runtime.send_target.await_args.kwargs["images"] == ("https://x.test/a.png",)
     with pytest.raises(ValueError, match="话题"):
         await _send_account(runtime, {**payload, "message_thread_id": 7})
 

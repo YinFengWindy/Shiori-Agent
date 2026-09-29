@@ -19,6 +19,7 @@ from core.accounts import (
 )
 from core.accounts.delivery_ledger import AccountDeliveryAttempt, AccountDeliveryLedger
 from core.accounts.target_contract import (
+    ACCOUNT_SEND_MEDIA_KEY,
     ACCOUNT_SEND_METHOD,
     ACCOUNT_TARGETS_METHOD,
     AccountTarget,
@@ -173,6 +174,9 @@ class AccountDelivery:
     ) -> AccountSendReceipt:
         """Persist an attempt before sending, then record a real receipt or failure.
 
+        ``media`` holds image attachments (local paths or http(s) URLs) that
+        the plugin sends with the text; either may be empty, not both.
+
         Every attempt is recorded, including one the role has no account for
         on ``channel`` (with an empty account ID). Once the platform returns
         a receipt the send is recorded and returned as sent; an invalid
@@ -199,10 +203,8 @@ class AccountDelivery:
             source=source,
         )
         try:
-            if not message.strip():
-                raise ValueError("消息不能为空")
-            if media:
-                raise ValueError("账号目标发送暂不支持媒体")
+            if not message.strip() and not media:
+                raise ValueError("消息和图片不能都为空")
             access = self._authorize(account, role_id)
         except Exception as exc:
             self._ledger.mark_failed(attempt.attempt_id, type(exc).__name__)
@@ -212,7 +214,12 @@ class AccountDelivery:
             result = await self._call(
                 account.record.plugin_id,
                 ACCOUNT_SEND_METHOD,
-                {"account_id": account_id, "message": message, **target.to_payload()},
+                {
+                    "account_id": account_id,
+                    "message": message,
+                    ACCOUNT_SEND_MEDIA_KEY: list(media or ()),
+                    **target.to_payload(),
+                },
             )
         except asyncio.CancelledError:
             mark_account_delivery_sent()

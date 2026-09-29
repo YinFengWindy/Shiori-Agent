@@ -1068,3 +1068,49 @@ async def test_account_report_from_a_task_with_a_released_lease_still_pushes(
     await service.aclose()
     await event_bus.aclose()
     await outlet.aclose()
+
+
+@pytest.mark.asyncio
+async def test_identity_changes_push_identities_updated(tmp_path) -> None:
+    from core.identity import IdentityChat
+
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="m")
+    account = role_store.accounts.register(
+        plugin_id="demo",
+        platform="demo",
+        platform_account_id="1",
+        config_ref="a",
+        token="t",
+        role_id="mira",
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    emitted: list[dict] = []
+    service.add_event_listener(emitted.append)
+
+    # The bridge's pairing code is consumed by intake through the shared store.
+    response = await service.handle(
+        {"id": "p", "method": "identities.pairing.create", "payload": {}},
+        emit_event=Mock(),
+    )
+    identity = role_store.identities.pair(
+        response.payload["code"],
+        record=account.record,
+        user_id="902",
+        scope="platform",
+        chat=IdentityChat(account.record.id, "demo", "902"),
+    )
+    assert identity is not None
+    role_store.identities.unbind(identity.id)
+    await asyncio.sleep(0)
+    assert [(event["method"], event["payload"]) for event in emitted] == [
+        ("identities.updated", {}),
+        ("identities.updated", {}),
+    ]
+    await service.aclose()

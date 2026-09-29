@@ -6,6 +6,7 @@ from typing import Any
 from bus.events import InboundMessage
 from core.accounts import VIA_ACCOUNT_KEY
 from core.channels.chat_id_command import answer_chat_id_command
+from core.channels.pairing_command import answer_pairing_code
 from core.common.channel_chat_types import is_chat_id_command
 
 from .formatting import CHANNEL, as_dict
@@ -118,6 +119,14 @@ class _InboundMixin:
             if "account_id" in message.metadata and callable(
                 getattr(self._channel_hub, "route_account_inbound", None)
             ):
+                # QQBot only has private chats; an openid is scoped to the app.
+                if await answer_pairing_code(
+                    self._channel_hub,
+                    message,
+                    scope="account",
+                    send=lambda text: self.send(message.chat_id, text),
+                ):
+                    return
                 routed = self._channel_hub.route_account_inbound(message)
                 if routed is None:
                     return

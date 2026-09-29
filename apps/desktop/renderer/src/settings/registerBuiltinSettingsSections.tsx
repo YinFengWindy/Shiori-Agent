@@ -1,3 +1,4 @@
+import { IdentitySettingsSection } from "../identities/IdentitySettingsSection";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { PluginManagementSection } from "../plugins/PluginManagementSection";
 import { AboutSettingsPage } from "./AboutSettingsPage";
@@ -15,7 +16,7 @@ function AboutSection() {
 let registered = false;
 
 /**
- * Registers the seven built-in settings domains as ordinary registry
+ * Registers the eight built-in settings domains as ordinary registry
  * entries instead of a hand-written switch. This both dynamizes the
  * settings page (a plugin's own settings.section slots into the same list)
  * and gives the slot mechanism a real, always-present consumer. Idempotent
@@ -59,6 +60,12 @@ export function registerBuiltinSettingsSections(): void {
     kind: "editor", slot: "settings.section", id: "advanced", label: "高级",
     subsections: [{ id: "general", label: "基础" }],
     Component: AdvancedSettingsSection,
+  }, "builtin");
+
+  pluginUiRegistry.registerSettingsSection({
+    kind: "standalone", slot: "settings.section", id: "identities", label: "我的身份",
+    subsections: [{ id: "bound", label: "已绑定" }],
+    Component: IdentitySettingsSection,
   }, "builtin");
 
   pluginUiRegistry.registerSettingsSection({

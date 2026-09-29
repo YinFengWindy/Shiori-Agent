@@ -6,6 +6,7 @@ from typing import Any
 
 from .chat_requests import DesktopChatRequestHandler
 from .account_requests import DesktopAccountRequestHandler
+from .identity_requests import DesktopIdentityRequestHandler
 from .model_connection_probe import probe_model_connection
 from .plugin_requests import DesktopPluginRequestHandler
 from .role_requests import DesktopRoleRequestHandler
@@ -27,6 +28,7 @@ class DesktopBridgeRequestRouter:
         voice: DesktopVoiceHandler,
         plugins: DesktopPluginRequestHandler,
         accounts: DesktopAccountRequestHandler | None = None,
+        identities: DesktopIdentityRequestHandler | None = None,
     ) -> None:
         self._roles = roles
         self._sessions_and_tasks = sessions_and_tasks
@@ -34,6 +36,7 @@ class DesktopBridgeRequestRouter:
         self._voice = voice
         self._plugins = plugins
         self._accounts = accounts
+        self._identities = identities
 
     async def dispatch(
         self,
@@ -55,6 +58,10 @@ class DesktopBridgeRequestRouter:
             account_result = await self._accounts.handle(method, payload)
             if account_result is not None:
                 return account_result
+        if self._identities is not None:
+            identity_result = await self._identities.handle(method, payload)
+            if identity_result is not None:
+                return identity_result
         voice_result = await self._voice.handle(method, payload)
         if voice_result is not None:
             return voice_result

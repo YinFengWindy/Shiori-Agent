@@ -44,6 +44,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._ctx: ChannelContext | None = None
         self._stopping = False
         self._intakes: dict[str, ChannelIntake] = {}
+        self._intake_paused = False
         self._actions = QQAccountActions(self._socket_for, self._ensure_online)
         self._avatar_tasks: dict[str, asyncio.Task[None]] = {}
 
@@ -79,6 +80,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         """Starts saved accounts without blocking the rest of the host startup."""
         self._ctx = ctx
         self._stopping = False
+        self._intake_paused = ctx.intake_paused
         for ref in self._configs:
             self._start_intake(ref)
         ctx.bus.subscribe_outbound(self.name, self._on_response)
@@ -473,6 +475,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         *,
         group_id: str = "",
         mention_ids: tuple[str, ...] = (),
+        images: tuple[str, ...] = (),
     ) -> dict[str, str]:
         """Dispatches a target send through this account's socket."""
         return await self._actions.send_target(
@@ -482,6 +485,7 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
             message,
             group_id=group_id,
             mention_ids=mention_ids,
+            images=images,
         )
 
     def via_account(self, account_id: str) -> dict[str, str]:

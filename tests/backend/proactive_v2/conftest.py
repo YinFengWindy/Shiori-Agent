@@ -13,7 +13,6 @@ from proactive_v2.config import ProactiveConfig
 from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
 from agent.looping.ports import SessionServices
-from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import DeliveryReceipt, OutboundDispatch
 from agent.core.proactive_turn.gates import (
     ProactiveGateAdapter,
@@ -24,6 +23,7 @@ from agent.core.proactive_turn.gates import (
     ProactiveMode,
 )
 from agent.core.proactive_turn.strategies import RelationshipStrategy
+from tests.support.bound_chat_delivery import bound_chat_orchestrator
 
 # ── FakeStateStore ────────────────────────────────────────────────────────
 
@@ -347,11 +347,10 @@ def make_proactive_pipeline(
             sent = await sender.send(outbound.content)
             return DeliveryReceipt.sent() if sent else None
 
-    orchestrator = TurnOrchestrator(
-        TurnOrchestratorDeps(
-            session=session_svc,
-            outbound=_Outbound(),
-        )
+    # The default "telegram" target is a bound private chat: the account sends
+    # it through ``sender`` just as the outbound port does for the desktop.
+    orchestrator, _ = bound_chat_orchestrator(
+        session_svc, _Outbound(), deliver=lambda content: sender.send(content)
     )
 
     return ProactiveTurnPipeline(

@@ -303,3 +303,25 @@ async def test_chatid_answers_without_entering_the_role(
     assert harness.interrupts.requests == []
     # Not the unbound-message path: nothing is recorded for the status.
     assert "chat_id=" not in str(harness.channel.status().get("detail") or "")
+
+
+async def test_pairing_code_binds_with_app_scope_without_entering_the_role(
+    make_harness: Any, make_event: Any, monkeypatch: Any
+) -> None:
+    harness = make_harness()
+    harness.hub.pairing_code = "K7M2Q9XZ"
+    monkeypatch.setattr(
+        harness.hub, "route_account_inbound", harness.hub.route_inbound, raising=False
+    )
+    connection = await harness.start()
+
+    connection.emit(make_event(content={"text": "K7M2Q9XZ"}))
+    await harness.settle()
+
+    assert harness.hub.pairings == [("K7M2Q9XZ", "account")]
+    assert harness.api.sent_texts() == ["已绑定"]
+    assert harness.bus.inbound == []
+
+    connection.emit(make_event(message_id="om_in_2", event_id="ev_2"))
+    await harness.settle()
+    assert len(harness.bus.inbound) == 1

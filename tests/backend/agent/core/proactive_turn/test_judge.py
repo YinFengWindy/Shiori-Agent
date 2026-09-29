@@ -11,8 +11,7 @@ from proactive_v2.context import AgentTickContext
 from proactive_v2.tools import ToolDeps
 from agent.core.proactive_turn.judge import run_tool_step
 from agent.looping.ports import SessionServices
-from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
-from agent.turns.outbound import DeliveryReceipt
+from tests.support.bound_chat_delivery import bound_chat_orchestrator
 from session.manager import SessionManager
 from session.manager.models import build_session_message
 from types import SimpleNamespace
@@ -177,8 +176,12 @@ async def test_tick_captures_state_before_generation_and_does_not_send_stale_rep
 ):
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
-    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=DeliveryReceipt.sent()))
-    owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
+    deliver = AsyncMock(return_value=True)
+    owner, _ = bound_chat_orchestrator(
+        SessionServices(sessions),
+        SimpleNamespace(dispatch=AsyncMock()),
+        deliver=deliver,
+    )
     calls = 0
 
     async def llm(_messages, _schemas, _tool_choice):
@@ -216,15 +219,19 @@ async def test_tick_captures_state_before_generation_and_does_not_send_stale_rep
     assert pipeline.last_ctx.reply_context.previous_updated_at == ""
     assert session.metadata["current_thought"] == "我已经回来了。"
     assert [m["content"] for m in session.messages] == ["new passive"]
-    outbound.dispatch.assert_not_awaited()
+    deliver.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_normal_tick_corrects_state_without_replaying_earlier_tool(tmp_path):
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
-    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=DeliveryReceipt.sent()))
-    owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
+    deliver = AsyncMock(return_value=True)
+    owner, _ = bound_chat_orchestrator(
+        SessionServices(sessions),
+        SimpleNamespace(dispatch=AsyncMock()),
+        deliver=deliver,
+    )
     llm = _ScriptedLlm(
         [
             {"name": "get_recent_chat", "input": {}},
@@ -252,4 +259,4 @@ async def test_normal_tick_corrects_state_without_replaying_earlier_tool(tmp_pat
     assert pipeline.last_ctx.steps_taken == 4
     assert session.metadata["current_thought"] == "我放心了。"
     assert session.messages[-1]["content"] == "hi"
-    assert outbound.dispatch.await_args.args[0].content == "hi"
+    deliver.assert_awaited_once_with("hi")

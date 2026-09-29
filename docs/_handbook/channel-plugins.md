@@ -127,6 +127,19 @@ ViaAccount(
 - 宿主用同一套规则（`ViaAccount.for_account`）校验三条路径的快照：形状正确，且 `platform` / `platform_account_id` 与该账号登记的一致。入站快照不合格时拒收这条消息；发送后的快照（`mark_delivery`、`account.send` 回执）不合格时，消息照常记为已发送，只是不带快照，宿主记一条 error 日志指出插件缺陷。
 - 模型看到的来源前缀直接使用 `prefix`：`[消息来源: {...}；经由账号: QQ 号「小栞」（101）]`。现有文案：QQ `QQ 号「昵称」（QQ 号）`、QQBot `QQ 机器人「机器人名」（AppID ...）`、Telegram `Telegram 机器人「名称」（@用户名）`、飞书 `飞书应用「应用名」（<区域>:<app_id>）`。
 
+### 身份配对与「你的用户」
+
+桌面端用户在「我的身份」里生成一次性配对码（10 分钟有效，只存在内存中，重启后失效），再用自己的平台账号私聊发给任一角色的账号，宿主据此记住用户在该平台的身份（`core/identity`，存于工作区 `user_identities.json`）。插件只负责：
+
+- **识别私聊并声明作用域**：私聊消息交给 `route_account_inbound` 之前，调用 `core.channels.pairing_command.answer_pairing_code(hub, message, scope=..., send=...)`；返回 `True` 时丢弃这条消息（不进入会话、不触发角色回复），宿主已经通过 `send` 回复「已绑定」。群聊消息不调用。`message.sender` 是要绑定的平台用户 ID，`message.metadata` 必须带接收账号的 `account_id`。
+- **`scope` 按平台决定**：`"platform"` 表示用户 ID 在整个平台内唯一（QQ 号、Telegram 用户 ID），绑定对该插件的所有账号生效；`"account"` 表示 ID 只对接收它的应用有效（飞书 open_id、QQBot openid），绑定只对这个账号生效。
+
+其余由宿主完成：`ChannelHub.claim_pairing` 校验配对码（错误、过期、已用都不绑定）并记下配对所在的私聊；`route_account_inbound` 给已绑定的发送者（按作用域匹配）写入 `metadata["sender_is_user"] = True`（插件自带的该字段会被丢弃），来源前缀随之显示 `；发送者: 你的用户`，并记下这位用户之后私聊过的会话。
+
+删除账号（包括删除角色时随之删除的账号）会移除只对该账号生效的绑定，并从平台级绑定里去掉这个账号的私聊记录；同一账号重新添加后需要重新配对。
+
+用户不在桌面前时，主动推送可以按在场与最近对话规则选中这些私聊，经 `account.send` 以 `target_kind="private"`、`target_id=<平台用户 ID>` 投递。因此**绑定的平台用户 ID 必须能直接作为该账号的私聊发送目标**。
+
 ## 5. 出站与 `message_push`
 
 ```python
@@ -155,9 +168,10 @@ async def stop(self):
 模型通过宿主的 `account_list`、`account_targets`、`account_send` 工具和 `message_push` 改投使用账号，参数里只有渠道 ID（插件 ID），宿主按「每个渠道一个账号」找到当前角色的账号，再以 `account_id` 调用插件 RPC。常量与请求形状在 `apps/backend/core/accounts/target_contract.py`：
 
 - `account.targets` 收到 `account_id`、`kind`、`group_id`、`member_id`。
-- `account.send` 收到 `account_id`、`message`，以及 `AccountTarget.to_payload()`：`target_kind`、`target_id`、`message_thread_id`（整数或 `None`）、`group_id`（仅 `group_member`，否则为空字符串）、`mention_ids`（仅 `group`，可为空列表）。
+- `account.send` 收到 `account_id`、`message`、`media`，以及 `AccountTarget.to_payload()`：`target_kind`、`target_id`、`message_thread_id`（整数或 `None`）、`group_id`（仅 `group_member`，否则为空字符串）、`mention_ids`（仅 `group`，可为空列表）。
 - 宿主只校验形状：`mention_ids` 只能用于 `target_kind="group"`；`target_kind="group_member"`（群临时会话，`target_id` 为成员 ID）必须带 `group_id`。平台能不能做由插件判断，做不到时明确报错，例如 QQBot、飞书没有群聊，收到 `mention_ids` 或 `group_member` 直接拒绝；Telegram 支持提及但没有群临时会话。
-- 返回平台真实的 `message_id`；拿不到回执时抛 `UncertainDeliveryError`，宿主把尝试记为「不确定」。
+- `media` 是要随消息发送的图片列表（按顺序，可为空列表），每项是本地图片路径或 http(s) URL，与主动推送、`message_push` 产出的形式相同；用 `account_send_media(payload)` 读取。`message` 与 `media` 可以有一个为空，但不会都为空。插件用自己平台的图片发送能力投递：能把文字和图片放进同一条消息的平台（如 QQ 的 CQ 图片码）发一条；否则由插件自己先发文字再逐张发图，已有部分送达后再失败时抛 `UncertainDeliveryError`（用户已收到一部分，不能记为未发送）。
+- 返回平台真实的 `message_id`（文字和图片分条发送时取第一条）；拿不到回执时抛 `UncertainDeliveryError`，宿主把尝试记为「不确定」。
 
 ## 6. 可选钩子
 
@@ -218,6 +232,7 @@ uv run python scripts/verify_plugin_tests.py --plugins <id>
 - [ ] `start`/`stop` 可重复调用；`stop` 先断来源再排空任务；出站和推送注册在 `stop` 里撤销。
 - [ ] 入站带已登记的 `account_id`，经 `is_sender_allowed(..., account_id=...)` → `route_account_inbound` → 去重 → `publish_inbound`；用 `ChannelIntake` 处理换代暂停。
 - [ ] 入站、回复送达和 `account.send` 回执都附上 `ViaAccount` 快照；不支持的 `mention_ids` / `group_member` 明确报错。
+- [ ] 私聊入站在路由前交给 `answer_pairing_code` 并声明 `scope`；绑定的平台用户 ID 可直接作为 `account.send` 的私聊目标。
 - [ ] 开了流式就消费事件并在最终回复时收尾；失败时退回普通发送。
 - [ ] `register_channel(..., description=)` 写清 chat_id 格式。
 - [ ] 测试离线，`verify_plugin_tests.py --plugins <id>` 通过。

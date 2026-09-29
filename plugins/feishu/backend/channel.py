@@ -22,6 +22,7 @@ from bus.queue import MessageBus
 from core.accounts import VIA_ACCOUNT_KEY, ViaAccount
 from core.channels import ChannelHub
 from core.channels.chat_id_command import answer_chat_id_command
+from core.channels.pairing_command import answer_pairing_code
 from core.common.channel_chat_types import ChatTypeDeclaration, is_chat_id_command
 from infra.channels.contract import ChannelContext, ChannelStatus
 from infra.channels.intake import ChannelIntake
@@ -506,6 +507,14 @@ class FeishuChannel:
             if "account_id" in message.metadata and callable(
                 getattr(self._channel_hub, "route_account_inbound", None)
             ):
+                # Feishu only has private chats; an open_id is scoped to the app.
+                if await answer_pairing_code(
+                    self._channel_hub,
+                    message,
+                    scope="account",
+                    send=lambda text: self.send(message.chat_id, text),
+                ):
+                    return
                 routed = self._channel_hub.route_account_inbound(message)
                 if routed is None:
                     self._record_rejected_chat(message.chat_id, message.sender)

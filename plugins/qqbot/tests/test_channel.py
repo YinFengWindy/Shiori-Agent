@@ -583,3 +583,43 @@ async def test_qqbot_stream_fallback_returns_the_plain_message_id() -> None:
 
     # No inbound message to anchor a stream: sent as a plain message.
     assert await channel.send_stream("c2c:app:user-1", "回复") == "plain-id"
+
+
+class _PairingHub(_Hub):
+    """An account-routing hub whose pending pairing code is ``PAIR1234``."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.pairings: list[tuple[str, str, str]] = []
+
+    def route_account_inbound(self, message: InboundMessage) -> InboundMessage:
+        return self.route_inbound(message)
+
+    def claim_pairing(self, message: InboundMessage, *, scope: str) -> bool:
+        self.pairings.append((message.sender, message.content, scope))
+        return message.content == "PAIR1234"
+
+
+@pytest.mark.asyncio
+async def test_qqbot_pairing_code_binds_with_app_scope_without_entering_the_role() -> (
+    None
+):
+    bus = _Bus()
+    hub = _PairingHub()
+    channel = QQBotChannel("app-1", "secret", account_id="account-1")
+    channel._bus = bus
+    channel._channel_hub = hub
+    channel._send_input_notify = AsyncMock()
+    channel.send = AsyncMock()
+
+    for message_id, content in (("m1", "PAIR1234"), ("m2", "你好")):
+        await channel._handle_c2c(
+            {"id": message_id, "author": {"user_openid": "user-1"}, "content": content}
+        )
+
+    assert hub.pairings == [
+        ("user-1", "PAIR1234", "account"),
+        ("user-1", "你好", "account"),
+    ]
+    channel.send.assert_awaited_once_with("c2c:app-1:user-1", "已绑定")
+    assert [message.content for message in bus.inbound] == ["你好"]

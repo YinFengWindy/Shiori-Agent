@@ -126,3 +126,34 @@ test("does not load while disabled", async () => {
     await probe.view.cleanup();
   }
 });
+
+test("a predicate with keepValueOnError keeps the last value on failure and skips focus when asked", async () => {
+  const pending: Array<{ resolve: (value: string) => void; reject: (error: Error) => void }> = [];
+  const load = () => new Promise<string>((resolve, reject) => { pending.push({ resolve, reject }); });
+  const refreshOn = (event: BridgeEvent) => event.method === "items.updated";
+  const listeners = new Set<(event: BridgeEvent) => void>();
+  function View() {
+    const { value, error } = useBridgeRefreshedValue({ load, refreshEvents: refreshOn, refreshOnFocus: false, keepValueOnError: true });
+    return <span>{`${value ?? "none"}|${error}`}</span>;
+  }
+  const view = await mountTestComponent(<View />, { windowGlobals: { miraDesktop: {
+    onEvent: (listener: (event: BridgeEvent) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  } } });
+  const emit = (method: string) => act(async () => {
+    for (const listener of [...listeners]) listener({ id: "e", type: "event", method, payload: {} } as BridgeEvent);
+  });
+  try {
+    await act(async () => pending[0].resolve("first"));
+    await emit("items.updated");
+    await emit("other");
+    await act(async () => { view.window.dispatchEvent(new view.window.Event("focus")); });
+    assert.equal(pending.length, 2);
+    await act(async () => pending[1].reject(new Error("offline")));
+    assert.equal(view.container.textContent, "first|offline");
+    // The error stays while the next reload is in flight.
+    await emit("items.updated");
+    assert.equal(view.container.textContent, "first|offline");
+    await act(async () => pending[2].resolve("second"));
+    assert.equal(view.container.textContent, "second|");
+  } finally { await view.cleanup(); }
+});

@@ -155,6 +155,7 @@ async def test_channel_send_uses_the_roles_account_and_keeps_plugin_snapshot(
     assert payload == {
         "account_id": account_id,
         "message": "hello",
+        "media": [],
         "target_kind": "group",
         "target_id": "room-1",
         "message_thread_id": None,
@@ -165,6 +166,26 @@ async def test_channel_send_uses_the_roles_account_and_keeps_plugin_snapshot(
     assert receipt.via_account == _VIA
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert attempt.target_options["mention_ids"] == ["member-2"]
+
+
+@pytest.mark.asyncio
+async def test_images_reach_the_plugin_and_need_no_text(tmp_path) -> None:
+    service, _accounts, rpc, _ledger, _account_id = _service(tmp_path)
+    receipt = await service.send(
+        "chat",
+        "mira",
+        AccountTarget("private", "42"),
+        "",
+        source="proactive",
+        media=["D:/media/scene.png"],
+    )
+    [(_name, payload)] = rpc.calls
+    assert (payload["message"], payload["media"]) == ("", ["D:/media/scene.png"])
+    assert receipt.platform_message_id == "receipt-1"
+
+    with pytest.raises(ValueError, match="不能都为空"):
+        await service.send("chat", "mira", AccountTarget("private", "42"), " ")
+    assert len(rpc.calls) == 1
 
 
 @pytest.mark.asyncio

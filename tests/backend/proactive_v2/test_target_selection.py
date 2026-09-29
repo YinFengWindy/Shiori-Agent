@@ -7,7 +7,9 @@ from types import SimpleNamespace
 import pytest
 
 from conversation.store import ConversationStore
+from core.accounts.target_contract import AccountTarget
 from core.desktop_presence import DesktopPresence
+from core.identity import IdentityChat
 from core.roles import RoleProactiveCandidate, RoleStore
 from proactive_v2.target_selection import (
     ProactiveTargetResolver,
@@ -174,3 +176,69 @@ def test_resolver_has_no_target_for_a_role_without_candidates(tmp_path: Path) ->
     assert resolver.resolve_saved("mira") is None
     with pytest.raises(KeyError, match="角色不存在"):
         _ = resolver.resolve_saved("luna")
+
+
+def _bound_resolver(
+    tmp_path: Path, presence: DesktopPresence
+) -> tuple[ProactiveTargetResolver, RoleStore, str, str]:
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="mira")
+    roles.update_role("mira", proactive={"enabled": True})
+    account = roles.accounts.register(
+        plugin_id="qqbot",
+        platform="qqbot",
+        platform_account_id="app",
+        config_ref="app",
+        token="live",
+        role_id="mira",
+    )
+    roles.accounts.report(account.record.id, "live", connection="online")
+    # The user paired through the account, so its private chat is known.
+    identity = roles.identities.pair(
+        roles.identities.create_pairing_code().code,
+        record=account.record,
+        user_id="open-1",
+        scope="account",
+        chat=IdentityChat(account.record.id, "qqbot", "c2c:open-1"),
+    )
+    assert identity is not None
+    resolver = ProactiveTargetResolver(
+        roles=roles,
+        conversations=SimpleNamespace(last_user_message_at=lambda thread_id: None),
+        desktop_presence=presence,
+    )
+    return resolver, roles, account.record.id, identity.id
+
+
+BOUND = RoleProactiveCandidate("qqbot", "c2c:open-1")
+
+
+def test_absent_user_is_reached_in_the_bound_private_chat(tmp_path: Path) -> None:
+    presence = DesktopPresence()
+    resolver, _, _, _ = _bound_resolver(tmp_path, presence)
+
+    assert resolver.resolve_saved("mira") == DESKTOP
+    presence.report(False)
+    assert resolver.resolve_saved("mira") == BOUND
+    assert resolver.bound_chat_target("mira", "qqbot", "c2c:open-1") == (
+        "qqbot",
+        AccountTarget("private", "open-1"),
+    )
+
+
+def test_unbinding_or_an_offline_account_removes_the_bound_chat(
+    tmp_path: Path,
+) -> None:
+    presence = DesktopPresence()
+    presence.report(False)
+    resolver, roles, account_id, identity_id = _bound_resolver(tmp_path, presence)
+
+    roles.accounts.report(account_id, "live", connection="offline")
+    assert resolver.resolve_saved("mira") == DESKTOP
+    roles.accounts.report(account_id, "live", connection="online")
+    assert resolver.resolve_saved("mira") == BOUND
+
+    roles.identities.unbind(identity_id)
+    assert resolver.resolve_saved("mira") == DESKTOP
+    with pytest.raises(LookupError):
+        resolver.bound_chat_target("mira", "qqbot", "c2c:open-1")

@@ -10,6 +10,13 @@ from core.accounts.target_contract import UncertainDeliveryError
 from plugins.feishu.backend.account_delivery import FeishuAccountDelivery
 
 
+def _png(tmp_path) -> str:
+    """A real PNG file on disk, as a local image path."""
+    path = tmp_path / "sky.png"
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"body")
+    return str(path)
+
+
 class _KV:
     def __init__(self) -> None:
         self.data = {
@@ -87,3 +94,62 @@ async def test_account_send_requires_private_target_and_certain_receipt() -> Non
     channel.send.side_effect = httpx.ReadTimeout("lost")
     with pytest.raises(UncertainDeliveryError, match="结果不确定"):
         await delivery.send_account(payload)
+
+
+@pytest.mark.asyncio
+async def test_account_send_delivers_images_after_the_text(tmp_path) -> None:
+    sky = _png(tmp_path)
+    channel = SimpleNamespace(
+        send=AsyncMock(return_value="om_text"),
+        send_image=AsyncMock(return_value="om_image"),
+        via_account=lambda: {},
+    )
+    accounts = SimpleNamespace(
+        channel=lambda ref: channel, ref_for_account=lambda payload: "feishu:app"
+    )
+    delivery = FeishuAccountDelivery(SimpleNamespace(kv=_KV()), accounts)
+    payload = {
+        "account_id": "feishu:feishu:app",
+        "target_kind": "private",
+        "target_id": "oc_a",
+        "message": "看天空",
+        "media": [sky],
+    }
+    assert (await delivery.send_account(payload))["message_id"] == "om_text"
+    channel.send.assert_awaited_once_with("oc_a", "看天空")
+    channel.send_image.assert_awaited_once_with("oc_a", sky)
+    only_image = await delivery.send_account({**payload, "message": ""})
+    assert only_image["message_id"] == "om_image"
+    channel.send.assert_awaited_once()
+
+    # The text already reached the chat: a failed image leaves it uncertain.
+    channel.send_image.side_effect = FileNotFoundError("sky.png")
+    with pytest.raises(UncertainDeliveryError, match="部分送达"):
+        await delivery.send_account(payload)
+    with pytest.raises(FileNotFoundError):
+        await delivery.send_account({**payload, "message": ""})
+
+
+@pytest.mark.asyncio
+async def test_invalid_local_image_is_refused_before_any_send(tmp_path) -> None:
+    channel = SimpleNamespace(
+        send=AsyncMock(return_value="om_text"),
+        send_image=AsyncMock(return_value="om_image"),
+        via_account=lambda: {},
+    )
+    accounts = SimpleNamespace(
+        channel=lambda ref: channel, ref_for_account=lambda payload: "feishu:app"
+    )
+    delivery = FeishuAccountDelivery(SimpleNamespace(kv=_KV()), accounts)
+    with pytest.raises(ValueError, match="图片文件不存在"):
+        await delivery.send_account(
+            {
+                "account_id": "feishu:feishu:app",
+                "target_kind": "private",
+                "target_id": "oc_a",
+                "message": "看天空",
+                "media": [str(tmp_path / "gone.png")],
+            }
+        )
+    channel.send.assert_not_awaited()
+    channel.send_image.assert_not_awaited()

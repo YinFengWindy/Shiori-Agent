@@ -45,6 +45,7 @@ class QQOutboundAdapter:
         *,
         group_id: str = "",
         mention_ids: tuple[str, ...] = (),
+        images: tuple[str, ...] = (),
     ) -> dict[str, str]:
         """The owning runtime supplies account-targeted sending."""
         raise NotImplementedError

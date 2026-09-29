@@ -57,8 +57,48 @@ async def test_account_tools_pass_the_channel_and_hide_account_ids() -> None:
     assert receipt["channel"] == "qq"
     assert "qq:101" not in json.dumps(receipt)
     delivery.send.assert_awaited_once_with(
-        "qq", "mira", AccountTarget("group", "42", mention_ids=("902",)), "hello"
+        "qq",
+        "mira",
+        AccountTarget("group", "42", mention_ids=("902",)),
+        "hello",
+        media=[],
     )
     for tool in (AccountTargetsTool, AccountSendTool):
         assert "account_id" not in tool.parameters["properties"]
         assert "channel" in tool.parameters["required"]
+
+
+@pytest.mark.asyncio
+async def test_account_send_passes_images_without_text() -> None:
+    receipt = AccountSendReceipt(
+        attempt_id="attempt-1",
+        account_id="qq:101",
+        channel="qq",
+        target_kind="private",
+        target_id="42",
+        platform_message_id="platform-9",
+        ownership_current=True,
+    )
+    delivery = SimpleNamespace(send=AsyncMock(return_value=receipt))
+    await AccountSendTool(delivery).execute(
+        channel="qq",
+        role_id="mira",
+        target_kind="private",
+        target_id="42",
+        media=["D:/media/scene.png", "https://example.test/a.png"],
+    )
+    delivery.send.assert_awaited_once_with(
+        "qq",
+        "mira",
+        AccountTarget("private", "42"),
+        "",
+        media=["D:/media/scene.png", "https://example.test/a.png"],
+    )
+    with pytest.raises(ValueError, match="media"):
+        await AccountSendTool(delivery).execute(
+            channel="qq",
+            role_id="mira",
+            target_kind="private",
+            target_id="42",
+            media="D:/media/scene.png",
+        )

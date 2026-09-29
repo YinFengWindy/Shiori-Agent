@@ -93,7 +93,10 @@ class ProactiveLoop:
         event_bus: EventBus | None = None,
         role_prompt_fn: Callable[[], str] | None = None,
         desktop_presence: DesktopPresence | None = None,
+        role_store: RoleStore | None = None,
     ) -> None:
+        """``role_store`` is the runtime's shared store; its account index and
+        user identities decide where each proactive message can go."""
         self._sessions = session_manager
         self._provider = provider
         self._push = push_tool
@@ -115,6 +118,7 @@ class ProactiveLoop:
         self._tick_dispatcher = tick_dispatcher
         self._event_bus = event_bus
         self._desktop_presence = desktop_presence
+        self._role_store = role_store
         if role_prompt_fn is None:
             raise ValueError("role_prompt_fn required for proactive loop")
         self._role_prompt_fn = role_prompt_fn
@@ -162,6 +166,7 @@ class ProactiveLoop:
                 ),
                 event_bus=self._event_bus,
                 account_delivery=shared_account_delivery(self._shared_tools),
+                bound_chat_target=self._target_resolver.bound_chat_target,
             )
         )
 
@@ -184,15 +189,17 @@ class ProactiveLoop:
             memory=cast("MemoryProfileApi | None", self._memory),
             presence=self._presence,
             rng=self._rng,
-            target_resolver=self._build_target_resolver(),
+            target_resolver=self._target_resolver,
         )
 
     def _build_target_resolver(self) -> ProactiveTargetResolver:
         """Selects each message's target from the role's live candidate sessions."""
         if self._desktop_presence is None:
             raise ValueError("desktop_presence required for proactive loop")
+        if self._role_store is None:
+            raise ValueError("role_store required for proactive loop")
         return ProactiveTargetResolver(
-            roles=RoleStore(Path(self._sessions.workspace)),
+            roles=self._role_store,
             conversations=self._sessions.conversation_store,
             desktop_presence=self._desktop_presence,
         )
@@ -240,7 +247,8 @@ class ProactiveLoop:
         self._ensure_workspace_proactive_context_file()
         # 2. 预读规则面板内容并做缓存。
         self._read_workspace_proactive_context()
-        # 3. 构建发送编排器、前置 gate、传感器、去重器和主动链路 pipeline。
+        # 3. 构建目标选择、发送编排器、前置 gate、传感器、去重器和主动链路 pipeline。
+        self._target_resolver = self._build_target_resolver()
         self._turn_orchestrator = self._build_turn_orchestrator()
         self._sense = self._build_sense()
         self._message_deduper = self._build_message_deduper()

@@ -16,6 +16,8 @@ from core.accounts import (
     delivered_via_account,
 )
 from conversation.service import ConversationService, LegacySessionDescriptor
+from core.common.message_source import SENDER_IS_USER_KEY
+from core.identity import IdentityChat, IdentityScope, UserIdentityStore
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
 from core.roles.role_runtime import RoleExecutionContext
@@ -32,10 +34,12 @@ class ChannelHub:
         *,
         channel_directory: ChannelDirectory | None = None,
         accounts: AccountRegistry | None = None,
+        identities: UserIdentityStore | None = None,
     ) -> None:
         self._service = service
         self._channel_directory = channel_directory or ChannelDirectory()
         self._accounts = accounts or service.repository.store.accounts
+        self._identities = identities or service.repository.store.identities
         self._conversation = ConversationService(service.sessions._session_manager)
 
     @classmethod
@@ -66,9 +70,54 @@ class ChannelHub:
             raise PermissionError("接收账号未授权此消息")
         return routed
 
+    def claim_pairing(self, message: InboundMessage, *, scope: IdentityScope) -> bool:
+        """Binds the sender when a private message is the pending pairing code.
+
+        The receiving plugin calls this for private chats only, with the scope
+        its platform user IDs have. The message must come through a live
+        owned account; the pairing chat is recorded with the binding. Returns
+        True when the code was consumed, so the plugin confirms and drops the
+        message; any other text binds nothing.
+
+        A sender on the account's blocklist cannot pair: its message is left
+        to normal routing, which drops it. Turning private replies off does
+        not stop pairing, since binding is not a conversation with the role.
+        """
+        metadata = message.metadata or {}
+        account_id = str(metadata.get("account_id") or "").strip()
+        account = self._live_owned_account(account_id, message.channel)
+        if account is None:
+            return False
+        if self._account_sender_blocked(
+            account,
+            sender_id=message.sender,
+            sender_alias=str(metadata.get("username") or ""),
+        ):
+            return False
+        identity = self._identities.pair(
+            message.content,
+            record=account.record,
+            user_id=str(message.sender or "").strip(),
+            scope=scope,
+            chat=self._identity_chat(account, message),
+        )
+        return identity is not None
+
+    @staticmethod
+    def _identity_chat(
+        account: AccountSnapshot, message: InboundMessage
+    ) -> IdentityChat:
+        """The private chat ``message`` arrived in, through ``account``."""
+        return IdentityChat(account.record.id, message.channel, message.chat_id)
+
     def route_account_inbound(self, message: InboundMessage) -> InboundMessage | None:
-        """Admits only an owned, live receiving account under its response rules."""
+        """Admits only an owned, live receiving account under its response rules.
+
+        A sender bound to the desktop user is marked with ``SENDER_IS_USER_KEY``;
+        a plugin cannot claim that flag itself.
+        """
         metadata = dict(message.metadata or {})
+        metadata.pop(SENDER_IS_USER_KEY, None)
         account_id = str(metadata.get("account_id") or "").strip()
         if not account_id or not str(message.sender or "").strip():
             return None
@@ -101,6 +150,15 @@ class ChannelHub:
         claimed_role = str(metadata.get("role_id") or "").strip()
         if claimed_role and claimed_role != role_id:
             return None
+        identity = self._identities.match(account.record, message.sender)
+        if identity is not None:
+            metadata[SENDER_IS_USER_KEY] = True
+            if not group:
+                # A private chat with the user is where proactive messages can
+                # reach them through this account.
+                self._identities.remember_chat(
+                    identity.id, self._identity_chat(account, message)
+                )
         metadata["source"] = "role_account"
         return self._route_for_role(message, role_id, metadata)
 
