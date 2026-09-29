@@ -19,6 +19,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from bus.events import InboundMessage
+from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
 from conversation.service import (
     desktop_thread_id,
@@ -448,7 +449,11 @@ async def test_input_budget_counts_only_the_turn_context(tmp_path):
 async def test_channel_pushes_during_a_turn_are_committed_with_it_under_their_chat(
     runtime,
 ):
-    _ = ExternalPushSyncService(session_manager=runtime.manager, event_bus=runtime.bus)
+    _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes,
+        session_manager=runtime.manager,
+        event_bus=runtime.bus,
+    )
     runtime.push.register_channel("qq", text=AsyncMock(return_value="qq-msg-1"))
     runtime.push.register_channel(
         "qqfail", text=AsyncMock(side_effect=OSError("offline"))
@@ -487,3 +492,29 @@ async def test_channel_pushes_during_a_turn_are_committed_with_it_under_their_ch
         (update["thread_id"], [row["id"] for row in update["messages"]])
         for update in phone
     ] == [(target, [stored[1]["id"]])]
+
+
+async def test_a_failed_turn_still_records_the_channel_push_it_delivered(runtime):
+    _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes,
+        session_manager=runtime.manager,
+        event_bus=runtime.bus,
+    )
+    runtime.push.register_channel("qq", text=AsyncMock(return_value="qq-msg-1"))
+
+    async def reasoning(**_kwargs):
+        assert "已发送" in await runtime.call(
+            channel="qq", chat_id="gqq:6", message="去另一个群说一声"
+        )
+        assert "已排队" in await runtime.call(message="never delivered")
+        raise RuntimeError("turn failed")
+
+    await runtime.pipeline(reasoning).run(
+        incoming(), runtime.session.key, dispatch_outbound=False
+    )
+
+    # The desktop draft was never sent and is dropped; the delivered push is kept.
+    stored = runtime.manager._store.fetch_session_messages(runtime.session.key)
+    assert [(row["content"], row["thread_id"]) for row in stored] == [
+        ("去另一个群说一声", network_thread_id("mira", "qq", "gqq:6"))
+    ]

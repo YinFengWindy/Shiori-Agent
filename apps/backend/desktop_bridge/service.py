@@ -17,7 +17,7 @@ from typing import Any
 from agent.looping.core import AgentLoop
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.tools.message_push import MessagePushTool
-from agent.turns.desktop_pushes import current_desktop_pushes
+from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
     ProactiveMessageCommitted,
@@ -482,7 +482,7 @@ class DesktopBridgeService:
                 self.app_service.validate_desktop_push_target(chat_id)
                 return
             session_key = self.app_service.normalize_desktop_session_key(chat_id)
-            drafts = current_desktop_pushes(session_key)
+            drafts = current_turn_pushes(session_key)
             if (
                 drafts is not None
                 and metadata is not None

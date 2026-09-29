@@ -79,6 +79,7 @@ from core.roles import (
 from core.roles.model_runtime import RoleModelRuntime
 from core.roles.self_initializer import RoleSelfInitializer
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
+from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
@@ -502,6 +503,7 @@ def build_core_runtime(
         else ExternalPushSyncService(
             session_manager=session_manager,
             event_bus=event_outlet or event_bus,
+            live_turn_pushes=current_turn_pushes,
         )
     )
     if shared is None:

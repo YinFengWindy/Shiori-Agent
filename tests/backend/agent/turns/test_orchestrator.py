@@ -27,6 +27,7 @@ from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from core.accounts.target_contract import AccountTarget
 from agent.turns.outbound import PushToolOutboundPort
+from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
 from session.manager.models import build_session_message
 from core.roles.reply_state import reply_state_metadata
@@ -695,7 +696,9 @@ async def test_image_transport_lock_and_formal_delivery_do_not_deadlock(tmp_path
     sessions = SessionManager(tmp_path)
     session = sessions.open_role_session("mira", role_name="Mira")
     bus = EventBus()
-    ExternalPushSyncService(session_manager=sessions, event_bus=bus)
+    ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes, session_manager=sessions, event_bus=bus
+    )
     push = MessagePushTool(event_bus=bus)
     push.set_transport_lock(asyncio.Lock())
     image_started, release_image, formal_started = (

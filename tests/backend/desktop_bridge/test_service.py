@@ -18,6 +18,7 @@ from agent.turns.result import TurnResult, TurnOutbound
 from core.roles.reply_state import RoleReply
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted, RoleDeleted, TurnCommitted
+from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
 from conversation.service import LegacySessionDescriptor, network_thread_id
 from core.common.message_source import MessageSource
@@ -715,6 +716,7 @@ async def test_external_image_push_persists_and_broadcasts_desktop_session(
     session_manager.open_role_session("mira", role_name="Mira")
     event_bus = EventBus()
     _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes,
         session_manager=session_manager,
         event_bus=event_bus,
     )
@@ -844,7 +846,11 @@ async def test_host_text_push_to_a_channel_reaches_the_phone(tmp_path) -> None:
     session_manager = SessionManager(tmp_path)
     session_manager.open_role_session("mira", role_name="Mira")
     event_bus = EventBus()
-    _ = ExternalPushSyncService(session_manager=session_manager, event_bus=event_bus)
+    _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes,
+        session_manager=session_manager,
+        event_bus=event_bus,
+    )
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,

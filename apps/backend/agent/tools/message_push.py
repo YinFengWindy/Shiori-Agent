@@ -290,6 +290,15 @@ class MessagePushTool(Tool):
             if message_id is not None:
                 external_ids.append(message_id)
 
+        # Decided before sending: whether the role's session records this delivery
+        # afterwards (it needs the role; pending deliveries have their owner).
+        records_delivery = bool(
+            channel != "desktop"
+            and role_id
+            and session_key
+            and self._event_bus is not None
+            and not pending_commit
+        )
         image_sent = False
         text_sent = False
         text_message_id: str | None = None
@@ -346,18 +355,14 @@ class MessagePushTool(Tool):
 
         # A delivered text is recorded in the role's session: with the turn that
         # pushed it (``in_turn``), or at once for a host-owned send (a scheduled
-        # job). Pending and already-persisted deliveries have their owners.
+        # job). Already-persisted deliveries have their owner.
         if (
-            text_sent
+            records_delivery
+            and text_sent
             and message
-            and channel != "desktop"
-            and role_id
-            and session_key
-            and self._event_bus is not None
-            and not pending_commit
             and not delivery_metadata["already_persisted"]
         ):
-            _ = await self._event_bus.emit(
+            await self._record_delivery(
                 ExternalTextPushed(
                     session_key=session_key,
                     role_id=role_id,
@@ -370,16 +375,8 @@ class MessagePushTool(Tool):
                 )
             )
 
-        if (
-            image_sent
-            and image
-            and channel != "desktop"
-            and role_id
-            and session_key
-            and self._event_bus is not None
-            and not pending_commit
-        ):
-            _ = await self._event_bus.emit(
+        if records_delivery and image_sent and image:
+            await self._record_delivery(
                 ExternalImagePushed(
                     session_key=session_key,
                     role_id=role_id,
@@ -397,6 +394,25 @@ class MessagePushTool(Tool):
             "；".join(results) if results else f"渠道 {channel!r} 没有可用的 sender",
             tuple(external_ids),
         )
+
+    async def _record_delivery(
+        self, event: ExternalTextPushed | ExternalImagePushed
+    ) -> None:
+        """Has the push sync record a delivery the platform already accepted.
+
+        Boundary: the send happened, so a failure to record it is logged and
+        never reported as a failed send (the model would send it again).
+        """
+        if self._event_bus is None:  # records_delivery implies a bus
+            return
+        try:
+            _ = await self._event_bus.emit(event)
+        except Exception:
+            logger.exception(
+                "[message_push] 已发送但未能记入角色会话 %s:%s",
+                event.channel,
+                event.chat_id,
+            )
 
 
 def _normalize_message_id(sent: SenderResult) -> str | None:

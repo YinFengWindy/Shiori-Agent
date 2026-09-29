@@ -33,7 +33,7 @@ from agent.lifecycle.types import (
     TurnSnapshot,
     TurnState,
 )
-from agent.turns.desktop_pushes import DesktopPushDrafts
+from agent.turns.turn_pushes import TurnPushDrafts
 from agent.turns.outbound import DeliveryReceipt, OutboundDispatch, OutboundPort
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
@@ -285,14 +285,25 @@ class PassiveTurnPipeline:
         *,
         dispatch_outbound: bool = True,
     ) -> OutboundMessage:
-        started = time.perf_counter()
-        turn_id = _turn_log_id(key, msg)
+        pushes = TurnPushDrafts(key)
         state = TurnState(
             msg=msg,
             session_key=key,
             dispatch_outbound=dispatch_outbound,
-            desktop_pushes=DesktopPushDrafts(key),
+            turn_pushes=pushes,
         )
+        try:
+            return await self._run(state, msg, key)
+        finally:
+            # A turn that did not commit still recorded what it already delivered
+            # (no-op after a commit).
+            await pushes.abandoned()
+
+    async def _run(
+        self, state: TurnState, msg: InboundMessage, key: str
+    ) -> OutboundMessage:
+        started = time.perf_counter()
+        turn_id = _turn_log_id(key, msg)
         with diagnostic_context(session=key, flow="passive", turn=turn_id):
             logger.info(
                 diagnostic_line(
@@ -392,10 +403,10 @@ class PassiveTurnPipeline:
                 session = state.session
                 if session is None:
                     raise RuntimeError("Passive turn requires TurnState.session")
-                assert state.desktop_pushes is not None
+                assert state.turn_pushes is not None
                 with (
                     diagnostic_context(phase="reasoner"),
-                    state.desktop_pushes.collect(),
+                    state.turn_pushes.collect(),
                 ):
                     turn_result = await self._reasoner.run_turn(
                         msg=msg,
