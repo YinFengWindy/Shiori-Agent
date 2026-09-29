@@ -42,6 +42,7 @@ from prompts.agent import (
 )
 
 if TYPE_CHECKING:
+    from conversation.context_scope import ContextScope
     from core.memory.markdown import MemoryProfileApi
 
 logger = logging.getLogger("agent.context")
@@ -328,6 +329,7 @@ class ContextBuilder:
             message_source=request.message_source,
             retrieved_memory_block=request.retrieved_memory_block,
             disabled_sections=request.disabled_sections,
+            context_scope=request.context_scope,
             turn_injection_context=turn_injection_context,
             system_sections_top=merged_top,
             system_sections_bottom=system_sections_bottom,
@@ -350,6 +352,7 @@ class ContextBuilder:
         chat_id: str | None = None,
         retrieved_memory_block: str = "",
         disabled_sections: set[str] | None = None,
+        context_scope: "ContextScope | None" = None,
     ) -> SystemPromptBuildResult:
         ctx = TurnContext(
             workspace=self.workspace,
@@ -359,6 +362,7 @@ class ContextBuilder:
             channel=channel,
             chat_id=chat_id,
             retrieved_memory_block=retrieved_memory_block,
+            context_scope=context_scope,
         )
         built = self._system_prompt_builder.build(
             ctx,

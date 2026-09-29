@@ -368,3 +368,89 @@ def test_memory_optimizer_loop_catches_up_overdue_roles_on_start(tmp_path):
     asyncio.run(loop._catch_up_overdue_roles())
 
     assert calls == ["mira"]
+
+
+_REWRITTEN_SELF = (
+    "# 我是谁\n\n"
+    "## 我的性格与形象\n\n- 新形象\n\n"
+    "## 我对你的理解\n\n- 新理解\n\n"
+    "## 我们的关系\n\n- 我叫你前辈\n"
+)
+
+
+def test_self_update_prompt_keeps_private_facts_out_of_group_visible_sections(
+    tmp_path,
+):
+    memory = MarkdownMemoryStore(tmp_path)
+    role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    role_memory.write_self("# 我是谁\n\n## 我们的关系\n- 旧关系\n")
+    provider = _provider_with_responses(_REWRITTEN_SELF)
+    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
+
+    asyncio.run(
+        optimizer._update_self(
+            role_memory, "", provider=cast(Any, provider), model="test-model"
+        )
+    )
+
+    prompt = provider.chat.await_args.kwargs["messages"][1]["content"]
+    assert "只写关系定位和角色对用户的称呼" in prompt
+    assert "可以吸收角色在群聊等外部场合的经历" in prompt
+    assert "一次性重写" not in prompt
+
+
+def _self_prompts(provider: Any) -> list[str]:
+    return [
+        call.kwargs["messages"][1]["content"]
+        for call in provider.chat.await_args_list
+        if "SELF.md" in call.kwargs["messages"][0]["content"]
+    ]
+
+
+def test_optimize_rewrites_existing_self_under_new_rules_only_once(tmp_path):
+    _ = RoleStore(tmp_path).create_role(
+        role_id="mira", name="Mira", description="", system_prompt="you are mira"
+    )
+    role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    role_memory.write_self("# 我是谁\n\n## 我们的关系\n- 你在杭州做设计，最近在减肥\n")
+    memory_reply = "# 我的长期记忆\n\n## 关于你\n- 你在杭州做设计\n"
+    provider = _provider_with_responses(
+        memory_reply, _REWRITTEN_SELF, memory_reply, _REWRITTEN_SELF
+    )
+    optimizer = MemoryOptimizer(
+        MarkdownMemoryStore(tmp_path), cast(Any, provider), "test-model", tmp_path
+    )
+    optimizer._STEP_DELAY_SECONDS = 0
+
+    asyncio.run(optimizer.optimize(role_id="mira"))
+    asyncio.run(optimizer.optimize(role_id="mira"))
+
+    first, second = _self_prompts(provider)
+    assert "本轮是按上述规则的一次性重写" in first
+    assert "你在杭州做设计" in first
+    assert "一次性重写" not in second
+    assert "我叫你前辈" in role_memory.read_self()
+
+
+def test_optimize_does_not_rewrite_unseeded_default_self(tmp_path):
+    _ = RoleStore(tmp_path).create_role(
+        role_id="mira", name="Mira", description="", system_prompt="you are mira"
+    )
+    role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    role_memory.append_pending("- [identity] 新事实")
+    provider = _provider_with_responses(
+        "# 我的长期记忆\n\n## 关于你\n- 新事实\n", _REWRITTEN_SELF
+    )
+    optimizer = MemoryOptimizer(
+        MarkdownMemoryStore(tmp_path), cast(Any, provider), "test-model", tmp_path
+    )
+    optimizer._STEP_DELAY_SECONDS = 0
+
+    asyncio.run(optimizer.optimize(role_id="mira"))
+
+    assert "一次性重写" not in _self_prompts(provider)[0]
+    role = RoleStore(tmp_path).get_role("mira")
+    assert role is not None
+    assert not MemoryOptimizerLoop(None)._is_role_overdue(
+        role, now=datetime.now().astimezone()
+    )

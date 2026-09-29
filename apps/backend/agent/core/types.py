@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.common.message_source import MessageSource
 from bus.events import InboundMessage
+
+if TYPE_CHECKING:
+    from conversation.context_scope import ContextScope
 
 
 @dataclass
@@ -89,6 +92,8 @@ class ContextRequest:
     retrieved_memory_block: str = ""
     disabled_sections: set[str] | None = None
     turn_injection_prompt: str | None = None
+    # 回合所在的上下文；外部上下文不注入用户层记忆（见 agent.core.prompt_block）。
+    context_scope: ContextScope | None = None
 
 
 @dataclass
