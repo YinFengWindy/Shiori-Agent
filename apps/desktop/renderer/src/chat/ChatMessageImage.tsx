@@ -4,10 +4,12 @@ import { fitChatMessageImage, type ChatMessageImageSize } from "./chatMessageIma
 
 type ChatMessageImageProps = {
   imagePath: string;
+  /** Largest display size; the desktop chat's when absent. */
+  bounds?: ChatMessageImageSize;
 };
 
 /** Renders a chat attachment at a bounded size derived from its intrinsic dimensions. */
-export function ChatMessageImage({ imagePath }: ChatMessageImageProps) {
+export function ChatMessageImage({ imagePath, bounds }: ChatMessageImageProps) {
   const [displaySize, setDisplaySize] = useState<ChatMessageImageSize | null>(null);
 
   return (
@@ -20,7 +22,7 @@ export function ChatMessageImage({ imagePath }: ChatMessageImageProps) {
         const nextSize = fitChatMessageImage({
           width: event.currentTarget.naturalWidth,
           height: event.currentTarget.naturalHeight,
-        });
+        }, bounds);
         setDisplaySize((currentSize) => (
           currentSize?.width === nextSize.width && currentSize.height === nextSize.height
             ? currentSize

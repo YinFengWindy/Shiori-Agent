@@ -168,6 +168,7 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
     "identities.pairing.create": MethodPolicy(),
     "identities.unbind": MethodPolicy(),
     "phone.conversations.list": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "phone.conversation.messages": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "session.messagesPage": MethodPolicy(
         concurrency=Concurrency.READ_ONLY, admission_exempt=True
     ),

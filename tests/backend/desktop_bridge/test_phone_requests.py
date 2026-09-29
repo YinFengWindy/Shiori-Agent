@@ -258,3 +258,127 @@ async def test_requires_a_role_and_leaves_other_methods_alone(
     with pytest.raises(ValueError, match="role_id"):
         _ = await handler.handle("phone.conversations.list", {"role_id": " "})
     assert await handler.handle("accounts.list", {}) is None
+
+
+def _handler(tmp_path: Path, conversation: ConversationService):
+    return DesktopPhoneRequestHandler(
+        conversations=conversation,
+        accounts=AccountRegistry({"mira", "other"}.__contains__),
+        identities=UserIdentityStore(tmp_path),
+        messages=DesktopSessionPresenter(conversation),
+    )
+
+
+def _group_message(
+    thread: ThreadRecord, *, sender_id: str, name: str, is_user: bool = False
+) -> dict[str, Any]:
+    source = MessageSource(
+        channel=thread.channel,
+        chat_id=thread.external_thread_id,
+        chat_type="group",
+        sender_id=sender_id,
+        sender_name=name,
+        sender_is_user=is_user,
+    )
+    return {"thread_id": thread.id, "message_source": source.to_metadata()}
+
+
+@pytest.mark.asyncio
+async def test_reads_one_conversation_page_by_page_from_the_roles_view(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    conversation = ConversationService(manager)
+    group = _thread(conversation, role_id="mira", channel="qq", chat_id="gqq:5")
+    other_group = _thread(conversation, role_id="mira", channel="qq", chat_id="gqq:6")
+    session = manager.get_or_create("role:mira")
+    session.add_message(
+        "user",
+        "谁来开黑",
+        timestamp="2026-09-29T10:00:00+08:00",
+        metadata=_group_message(group, sender_id="42", name="阿花"),
+    )
+    session.add_message("user", "桌面消息")
+    session.add_message(
+        "user", "别的群", metadata=_group_message(other_group, sender_id="7", name="x")
+    )
+    session.add_message(
+        "user",
+        "我也来",
+        media=["photo.png"],
+        timestamp="2026-09-29T10:01:00+08:00",
+        metadata=_group_message(group, sender_id="100", name="主人", is_user=True),
+    )
+    session.add_message(
+        "assistant",
+        "我来",
+        timestamp="2026-09-29T10:02:00+08:00",
+        metadata={"thread_id": group.id},
+    )
+    manager.save(session)
+    handler = _handler(tmp_path, conversation)
+
+    newest = await handler.handle(
+        "phone.conversation.messages",
+        {"role_id": "mira", "thread_id": group.id, "limit": 2},
+    )
+    assert newest is not None
+    assert newest["has_more"] is True
+    assert [
+        {key: row[key] for key in row if key not in {"id", "seq"}}
+        for row in newest["messages"]
+    ] == [
+        {
+            "sender": "other",
+            "sender_id": "100",
+            "sender_name": "主人",
+            "sender_is_user": True,
+            "content": "我也来",
+            "media": ["photo.png"],
+            "timestamp": "2026-09-29T10:01:00+08:00",
+        },
+        {
+            "sender": "role",
+            "sender_id": None,
+            "sender_name": None,
+            "sender_is_user": False,
+            "content": "我来",
+            "media": [],
+            "timestamp": "2026-09-29T10:02:00+08:00",
+        },
+    ]
+    assert newest["next_before_seq"] == newest["messages"][0]["seq"]
+
+    older = await handler.handle(
+        "phone.conversation.messages",
+        {
+            "role_id": "mira",
+            "thread_id": group.id,
+            "before_seq": newest["next_before_seq"],
+            "limit": 2,
+        },
+    )
+    assert older is not None
+    # Only this conversation's rows: the desktop and the other group's are skipped.
+    assert [row["content"] for row in older["messages"]] == ["谁来开黑"]
+    assert older["messages"][0]["sender_name"] == "阿花"
+    assert older["messages"][0]["sender_is_user"] is False
+    assert older["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_reads_only_the_roles_own_channel_conversations(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    conversation = ConversationService(manager)
+    others = _thread(conversation, role_id="other", channel="qq", chat_id="gqq:9")
+    desktop = conversation.ensure_desktop_thread("mira")
+    handler = _handler(tmp_path, conversation)
+
+    for thread_id in (others.id, desktop.id, "thread:mira:qq:missing"):
+        with pytest.raises(ValueError, match="不属于"):
+            _ = await handler.handle(
+                "phone.conversation.messages",
+                {"role_id": "mira", "thread_id": thread_id},
+            )
