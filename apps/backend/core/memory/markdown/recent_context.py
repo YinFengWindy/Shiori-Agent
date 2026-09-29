@@ -7,7 +7,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from session.manager.models import message_thread_id
+from conversation.context_scope import UserContextThreads, in_user_context
 
 from .contracts import _ConsolidationFailure, _ConsolidationWindow
 from .formatting import (
@@ -19,7 +19,7 @@ from .formatting import (
 )
 
 if TYPE_CHECKING:
-    from conversation.context_scope import UserContextThreads
+    pass
 
 logger = logging.getLogger("memory.markdown")
 
@@ -35,7 +35,7 @@ def _message_time(message: dict) -> str:
 
 
 def _user_context_messages(
-    messages: list[dict], user_threads: "UserContextThreads | None"
+    messages: list[dict], user_threads: UserContextThreads | None
 ) -> list[dict]:
     """RECENT_CONTEXT 的输入只取用户上下文会话的消息。
 
@@ -45,11 +45,7 @@ def _user_context_messages(
     """
     if user_threads is None:
         return list(messages)
-    return [
-        message
-        for message in messages
-        if user_threads.contains(message_thread_id(message))
-    ]
+    return [message for message in messages if in_user_context(message, user_threads)]
 
 
 def _format_recent_context_messages(
@@ -332,7 +328,7 @@ ongoing_threads 严格限制：
         window: _ConsolidationWindow | None,
         archive_all: bool,
         nsfw_memory_enabled: bool = False,
-        user_threads: "UserContextThreads | None" = None,
+        user_threads: UserContextThreads | None = None,
     ) -> str | _ConsolidationFailure:
         session_messages = _user_context_messages(list(session.messages), user_threads)
         tail = session_messages[-self._keep_count :] if self._keep_count > 0 else []
@@ -456,7 +452,7 @@ ongoing_threads 严格限制：
         *,
         session,
         profile_maint=None,
-        user_threads: "UserContextThreads | None" = None,
+        user_threads: UserContextThreads | None = None,
     ) -> None:
         """只刷新 RECENT_CONTEXT 的“最近的对话”块；输入规则见 ``_user_context_messages``。"""
         profile = profile_maint or self._profile_maint

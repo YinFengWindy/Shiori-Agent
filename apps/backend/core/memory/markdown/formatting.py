@@ -5,15 +5,18 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from agent.llm_json import load_json_object_loose
 from agent.prompting import is_context_frame
 from agent.core.passive_support import estimate_messages_tokens
-from conversation.context_scope import UserContextThreads, belongs_to_user
-from core.common.message_source import MessageSource
-from session.manager.models import message_thread_id, whole_session
+from conversation.context_scope import (
+    UserContextThreads,
+    belongs_to_user,
+    in_user_context,
+    stored_message_source,
+)
+from session.manager.models import whole_session
 
 from .contracts import ConsolidationSegments, _ConsolidationWindow
 
@@ -295,14 +298,9 @@ def _normalize_memory_content(
 def _speaker_label(message: dict, user_threads: UserContextThreads | None) -> str:
     """整理输入里的说话人标记；用户本人在外部会话（群聊）的发言带上群名。"""
     role = str(message.get("role", "")).upper()
-    if user_threads is None or user_threads.contains(message_thread_id(message)):
+    if user_threads is None or in_user_context(message, user_threads):
         return role
-    metadata = message.get("metadata")
-    group_name = (
-        MessageSource.from_metadata(metadata, session_key="").group_name
-        if isinstance(metadata, Mapping)
-        else None
-    )
+    group_name = stored_message_source(message).group_name
     return f"{role}（在群「{group_name}」里）" if group_name else f"{role}（在群聊里）"
 
 

@@ -51,6 +51,14 @@ def _session_input_over_budget(
     )
 
 
+def _session_role_id(session: object) -> str:
+    """会话元数据里记录的角色 ID；没有时为空串。"""
+    metadata = getattr(session, "metadata", {})
+    if not isinstance(metadata, dict):
+        return ""
+    return str(metadata.get("role_id") or "").strip()
+
+
 class MarkdownMemoryMaintenance:
     def __init__(
         self,
@@ -112,12 +120,7 @@ class MarkdownMemoryMaintenance:
 
         只有 ``role:<id>`` 会话混存多个会话的消息；其他会话没有划分，返回 None。
         """
-        metadata = getattr(session, "metadata", {})
-        role_id = (
-            str(metadata.get("role_id") or "").strip()
-            if isinstance(metadata, dict)
-            else ""
-        )
+        role_id = _session_role_id(session)
         if not role_id or getattr(session, "key", "") != role_session_key(role_id):
             return None
         return load_user_context_threads(self._workspace, role_id)
@@ -431,7 +434,7 @@ class MarkdownMemoryMaintenance:
         # 引擎只收用户本人段；窗口里没有用户本人的发言时没有可交给引擎的内容。
         if not draft.conversation:
             return
-        role_id = str(getattr(session, "metadata", {}).get("role_id") or "").strip()
+        role_id = _session_role_id(session)
         if self._event_bus is not None:
             await self._event_bus.emit(
                 ConsolidationCommitted(

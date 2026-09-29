@@ -452,6 +452,28 @@ class _RecordingProvider:
         )
 
 
+def _recording_maintenance(tmp_path: Path, manager: SessionManager):
+    """接上真实会话提交、记录提示词与引擎事件的整理服务。"""
+    provider = _RecordingProvider()
+    event_bus = EventBus()
+    events: list[ConsolidationCommitted] = []
+    event_bus.on(ConsolidationCommitted, lambda event: events.append(event))
+    maintenance = MarkdownMemoryMaintenance(
+        store=MarkdownMemoryStore(tmp_path),
+        provider=cast(LLMProvider, provider),
+        model="test",
+        keep_count=0,
+        event_bus=event_bus,
+    )
+    maintenance.bind_lifecycle(
+        MemoryLifecycleBindRequest(
+            get_session=manager.get_or_create,
+            commit_consolidation=manager.commit_consolidation,
+        )
+    )
+    return provider, event_bus, events, maintenance
+
+
 @pytest.mark.asyncio
 async def test_group_members_stay_out_of_the_user_layer_while_the_cursor_covers_them(
     tmp_path: Path,
@@ -483,23 +505,7 @@ async def test_group_members_stay_out_of_the_user_layer_while_the_cursor_covers_
         },
     )
     manager.save(session)
-    provider = _RecordingProvider()
-    event_bus = EventBus()
-    events: list[ConsolidationCommitted] = []
-    event_bus.on(ConsolidationCommitted, lambda event: events.append(event))
-    maintenance = MarkdownMemoryMaintenance(
-        store=MarkdownMemoryStore(tmp_path),
-        provider=cast(LLMProvider, provider),
-        model="test",
-        keep_count=0,
-        event_bus=event_bus,
-    )
-    maintenance.bind_lifecycle(
-        MemoryLifecycleBindRequest(
-            get_session=manager.get_or_create,
-            commit_consolidation=manager.commit_consolidation,
-        )
-    )
+    provider, event_bus, events, maintenance = _recording_maintenance(tmp_path, manager)
     try:
         result = await maintenance.consolidate(
             ConsolidateRequest(session=session, force=True)
@@ -529,6 +535,37 @@ async def test_group_members_stay_out_of_the_user_layer_while_the_cursor_covers_
     assert repeated.trace == {"mode": "skipped"}
     manager.invalidate(session.key)
     assert manager.get_or_create(session.key).last_consolidated == 5
+
+
+@pytest.mark.asyncio
+async def test_window_of_only_group_members_skips_extraction_but_moves_the_cursor(
+    tmp_path: Path,
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    group = network_thread_id("mira", "qq", "g1")
+    session.add_message(
+        "user",
+        "我是阿明，我最喜欢狗",
+        thread_id=group,
+        metadata={"message_source": {"sender_id": "555", "group_name": "猫猫群"}},
+    )
+    session.add_message("assistant", "阿明好", thread_id=group)
+    manager.save(session)
+    provider, event_bus, events, maintenance = _recording_maintenance(tmp_path, manager)
+    try:
+        result = await maintenance.consolidate(
+            ConsolidateRequest(session=session, force=True)
+        )
+    finally:
+        await event_bus.aclose()
+
+    assert provider.event_prompts == []
+    assert events == []
+    assert result.consolidated_count == 2
+    manager.invalidate(session.key)
+    assert manager.get_or_create(session.key).last_consolidated == 2
 
 
 def test_group_member_turn_still_triggers_consolidation():
