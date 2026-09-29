@@ -417,7 +417,7 @@ receives; a package that calls it declares `runtime_api: ">=2.11.0 <3.0.0"`.
   a failed `setup` itself is recorded. The background window is hidden and its
   console is out of reach, so this is the only way such a failure is found
   later. The host prefixes the entry with the plugin's id; `operation` names
-  what failed (`"restore"`, `"show"`). It returns nothing and never throws.
+  what failed (`"restore"`, `"show"`). It returns nothing; the host does not swallow a failure of the diagnostic channel itself.
 
 It is an injected capability rather than an SDK function because it writes to
 host state (the diagnostic log behind the preload bridge), and the SDK holds no
