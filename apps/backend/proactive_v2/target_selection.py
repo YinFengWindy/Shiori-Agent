@@ -128,15 +128,18 @@ class ProactiveTargetResolver:
             if account.runtime_active and account.connection == "online"
         ]
         bindings = self._roles.identities.list()
-        chats = [
-            (record, identity, chat)
-            for record in records
-            for identity in identities_for_account(bindings, record)
-            if (chat := identity.chat_for(record.id)) is not None
-        ]
+        applicable = {
+            record.id: identities_for_account(bindings, record) for record in records
+        }
         # Candidates follow binding order (``select_proactive_target`` falls
-        # back to the first); the stable sort keeps account order within one.
-        return sorted(chats, key=lambda item: bindings.index(item[1]))
+        # back to the first), then account order within one binding.
+        return [
+            (record, identity, chat)
+            for identity in bindings
+            for record in records
+            if identity in applicable[record.id]
+            and (chat := identity.chat_for(record.id)) is not None
+        ]
 
     def resolve(
         self, role_id: str, candidates: Sequence[RoleProactiveCandidate]

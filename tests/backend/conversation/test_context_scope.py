@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from conversation.context_scope import (
     ContextView,
+    belongs_to_user,
     desktop_view_thread_ids,
     in_desktop_view,
+    load_user_context_threads,
     turn_context_view,
     user_context_view,
 )
@@ -94,3 +98,32 @@ def test_desktop_view_is_only_the_desktop_conversation(tmp_path: Path) -> None:
     assert not in_desktop_view("mira", USER_DM)
     assert desktop_view_thread_ids("mira", threads) == {"", DESKTOP, scheduler}
     assert not in_desktop_view("mira", desktop_thread_id("other"))
+
+
+@pytest.mark.parametrize(
+    ("thread_id", "sender_is_user", "expected"),
+    [
+        (DESKTOP, False, True),
+        (USER_DM, False, True),
+        (STRANGER_DM, False, False),
+        (GROUP, True, True),
+        (GROUP, False, False),
+    ],
+    ids=["desktop", "bound-dm", "stranger-dm", "user-in-group", "group-member"],
+)
+def test_belongs_to_user_by_thread_or_sender_flag(
+    tmp_path: Path, thread_id: str, sender_is_user: bool, expected: bool
+) -> None:
+    _bind(tmp_path, "902")
+    source: dict[str, object] = {"channel": "qq", "sender_id": "902"}
+    if sender_is_user:
+        source["sender_is_user"] = True
+    message = {
+        "role": "user",
+        "thread_id": thread_id,
+        "metadata": {"message_source": source},
+    }
+
+    user_threads = load_user_context_threads(tmp_path, "mira")
+
+    assert belongs_to_user(message, user_threads) is expected

@@ -2,6 +2,7 @@
 
 import asyncio
 import sqlite3
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -16,7 +17,11 @@ from agent.lifecycle.phases.after_reasoning import (
 from agent.lifecycle.types import AfterReasoningInput, TurnState
 from bus.event_bus import EventBus
 from bus.events import InboundMessage
+from conversation.context_scope import turn_context_view
+from conversation.service import network_thread_id
+from core.roles import RoleRelationshipRuntimeService, RoleStore
 from core.roles.reply_state import InvalidRoleReply, RoleReply
+from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager, ConsolidationCommitRequest
 from session.manager.models import whole_session
 
@@ -457,3 +462,65 @@ async def test_private_turn_never_hands_mentions_to_the_channel(tmp_path):
     result = await phase(manager).run(request)
 
     assert "mention_ids" not in result.outbound.metadata
+
+
+@pytest.mark.parametrize("sender_is_user", [False, True])
+async def test_only_the_users_own_group_message_updates_relationship_state(
+    tmp_path, sender_is_user
+):
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    presence = PresenceStore(manager._store)
+    relationship = RoleRelationshipRuntimeService(
+        tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=manager,
+        presence=presence,
+    )
+    relationship.write_snapshot(
+        "yin",
+        {
+            "role_self_view": "我在想你。",
+            "internal_profile": {"relation_state": {"closeness": 0.9}},
+        },
+    )
+    now = datetime.now().astimezone().isoformat()
+    relationship.write_loneliness_runtime(
+        "yin",
+        {
+            "loneliness_value": 80,
+            "last_calculated_at": now,
+            "awaiting_reply_after_proactive": True,
+            "awaiting_reply_since": now,
+        },
+    )
+    group = network_thread_id("yin", "qq", "gqq:123")
+    request = turn(session)
+    request.state.context_view = turn_context_view(tmp_path, "yin", group)
+    request.state.msg.channel = "qq"
+    request.state.msg.chat_id = "gqq:123"
+    request.state.msg.sender = "456"
+    request.state.msg.metadata.update(
+        {"chat_type": "group", "thread_id": group}
+        | ({"sender_is_user": True} if sender_is_user else {})
+    )
+    services = SimpleNamespace(
+        session_manager=manager, presence=presence, relationship_runtime=relationship
+    )
+
+    await Phase(
+        default_after_reasoning_modules(EventBus(), services),
+        frame_factory=AfterReasoningFrame,
+    ).run(request)
+
+    runtime = relationship.read_loneliness_runtime("yin")
+    assert runtime is not None
+    last_user_at = presence.get_last_user_at(session.key)
+    if sender_is_user:
+        assert runtime["loneliness_value"] < 80
+        assert runtime["awaiting_reply_after_proactive"] is False
+        assert last_user_at is not None
+    else:
+        assert runtime["loneliness_value"] == 80
+        assert runtime["awaiting_reply_after_proactive"] is True
+        assert last_user_at is None

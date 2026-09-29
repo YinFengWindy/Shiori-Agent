@@ -97,6 +97,7 @@ class _RenderPromptModule:
                 retrieved_memory_block=ctx.retrieved_memory_block,
                 disabled_sections=ctx.disabled_sections,
                 turn_injection_prompt=ctx.turn_injection_prompt,
+                context_scope=frame.input.context_scope,
             ),
             system_sections_top=ctx.system_sections_top,
             system_sections_bottom=ctx.system_sections_bottom,

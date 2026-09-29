@@ -14,7 +14,9 @@ for (const id of ["demo", "broken"]) {
   await writeFile(resolve(directory, "lazy.mjs"), `globalThis.pluginUiQaLazyVersion = 1; export default 1;`, "utf8");
   await writeFile(resolve(directory, "index.mjs"), id === "broken" ? "export default syntax is broken" : `
 import React, { useState } from "react";
+import { PluginBridgeError } from "@shiori/plugin-sdk";
 import { label } from "./chunk.mjs";
+globalThis.pluginUiQaSdkError = PluginBridgeError;
 globalThis.pluginUiQaEvaluations = (globalThis.pluginUiQaEvaluations ?? 0) + 1;
 export default { pluginId: "demo", navPage: { label, component: function Demo() {
   const [count, setCount] = useState(0);
@@ -36,6 +38,8 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.getByRole("button", { name: "Runtime hooks 0" }).waitFor();
   assert.equal(await page.evaluate(() => Reflect.get(globalThis, "pluginUiQaEvaluations")), 1);
+  // The precompiled plugin's SDK import resolves through the import map to the host's own class, not a copy.
+  assert.equal(await page.evaluate(() => Reflect.get(globalThis, "pluginUiQaSdkError") === Reflect.get(globalThis, "hostPluginBridgeError")), true);
   await page.getByRole("button").click();
   await page.getByRole("button", { name: "Runtime hooks 1" }).waitFor();
   assert.equal(await page.getByRole("button").evaluate((element) => getComputedStyle(element).color), "rgb(13, 27, 42)");
@@ -70,5 +74,5 @@ try {
   });
   assert.deepEqual(csp, { blocked: true, directive: "script-src-elem", executed: false });
   assert.deepEqual(errors, []);
-  console.log("PASS: file renderer, shared React hooks, relative ESM chunk, changed lazy chunk rejected before first import, CSS, isolated syntax failure, stable repeated refresh, disable cleanup, reenable without ESM reevaluation, ungranted resource rejection, real CSP rejects data-module execution. ACTIVE roster is a fixture; workspace trust is not implemented by this test.");
+  console.log("PASS: file renderer, shared React hooks, host plugin SDK instance via import map, relative ESM chunk, changed lazy chunk rejected before first import, CSS, isolated syntax failure, stable repeated refresh, disable cleanup, reenable without ESM reevaluation, ungranted resource rejection, real CSP rejects data-module execution. ACTIVE roster is a fixture; workspace trust is not implemented by this test.");
 } finally { await app.close(); }

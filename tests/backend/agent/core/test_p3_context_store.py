@@ -248,3 +248,48 @@ def test_build_post_reply_context_budget_combines_history_and_prompt():
     assert budget["history_tokens"] == max(1, budget["history_chars"] // 3)
     assert budget["prompt_tokens"] == 350
     assert budget["next_turn_baseline_tokens"] == (budget["history_tokens"] + 350)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("scope", "queried"), [("external", False), ("user", True)], ids=str
+)
+async def test_default_context_store_queries_memory_engine_only_in_user_context(
+    scope: str, queried: bool
+):
+    from agent.looping.ports import MemoryServices
+    from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
+    from conversation.context_scope import ContextView, UserContextThreads
+    from core.memory.engine import MemoryQueryResult
+
+    engine = SimpleNamespace(
+        query=AsyncMock(return_value=MemoryQueryResult(text_block="你的私人记忆"))
+    )
+    store = DefaultContextStore(
+        retrieval=DefaultMemoryRetrievalPipeline(
+            MemoryServices(engine=cast(Any, engine))
+        ),
+        context=cast(
+            Any,
+            SimpleNamespace(
+                skills=SimpleNamespace(list_skills=MagicMock(return_value=[]))
+            ),
+        ),
+    )
+    view = ContextView(
+        scope=cast(Any, scope),
+        user_threads=UserContextThreads(
+            role_id="mira", bound_chat_thread_ids=frozenset()
+        ),
+    )
+    msg = InboundMessage(channel="qq", sender="42", chat_id="g1", content="你好")
+
+    bundle = await store.prepare(
+        msg=msg,
+        session_key="role:mira",
+        session=cast(Any, _DummySession()),
+        context_view=view,
+    )
+
+    assert engine.query.await_count == (1 if queried else 0)
+    assert (bundle.retrieved_memory_block == "你的私人记忆") is queried

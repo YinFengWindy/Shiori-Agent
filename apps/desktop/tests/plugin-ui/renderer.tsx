@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import { PluginBridgeError } from "@shiori/plugin-sdk";
 import { initializeRuntimePluginUi } from "../../renderer/src/plugins/runtimePluginUiBootstrap";
 import { refreshPluginEnabledState } from "../../renderer/src/plugins/pluginEnabledStateStore";
 import { pluginUiRegistry } from "../../renderer/src/plugins/pluginUiRegistry";
@@ -11,5 +12,6 @@ const refresh = async () => {
   root.render(entry ? <entry.Component pageId="demo" /> : <p>No plugin UI</p>);
   return plugins;
 };
-Object.assign(globalThis, { refreshPluginUiQa: refresh });
+// The host's SDK class, compared with what the precompiled plugin imported.
+Object.assign(globalThis, { refreshPluginUiQa: refresh, hostPluginBridgeError: PluginBridgeError });
 void refresh();

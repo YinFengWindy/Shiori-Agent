@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from agent.context import ContextBuilder
+    from conversation.context_scope import ContextScope
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,7 @@ class PromptAssembler:
         message_source: MessageSource | None = None,
         retrieved_memory_block: str = "",
         disabled_sections: set[str] | None = None,
+        context_scope: ContextScope | None = None,
         turn_injection_context: dict[str, str] | None = None,
         system_sections_top: list[PromptSectionRender] | None = None,
         system_sections_bottom: list[PromptSectionRender] | None = None,
@@ -113,6 +115,7 @@ class PromptAssembler:
             retrieved_memory_block=retrieved_memory_block,
             disabled_sections=disabled_sections,
             role_id=role_id,
+            context_scope=context_scope,
         )
         injection_context = turn_injection_context or {}
         disabled = disabled_sections or set()
