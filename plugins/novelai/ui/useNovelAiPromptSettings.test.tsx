@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import { PluginBridgeError, PluginHostServicesProvider, type PluginConfigValues } from "@shiori/plugin-sdk";
+import { PluginBridgeError, PluginHostServicesProvider, type PluginConfigValues, type PluginHostConfig } from "@shiori/plugin-sdk";
 import { createFakeHostServices, deferred, mountTestComponent, type FakeHostServicesOptions } from "@shiori/plugin-sdk/testing";
 import { useNovelAiPromptSettings, type NovelAiPromptSettings } from "./useNovelAiPromptSettings";
 
 /** Mounts the hook under fake host services; `latest()` is the settings of the last render. */
-async function mountSettings(options: FakeHostServicesOptions) {
+async function mountSettings(options: FakeHostServicesOptions, config: Partial<PluginHostConfig> = {}) {
   const fake = createFakeHostServices(options);
+  // `config` replaces parts of the fake `host.config`, e.g. to hold the initial read.
+  fake.host.config = { ...fake.host.config, ...config };
   let current: NovelAiPromptSettings | null = null;
   function Probe() {
     current = useNovelAiPromptSettings();
@@ -72,6 +74,35 @@ describe("useNovelAiPromptSettings", () => {
       await act(async () => saves.held[1]?.resolve());
       assert.equal(fake.config().nsfw_enabled, false);
       assert.equal(latest().nsfwEnabled, false);
+    } finally { await view.cleanup(); }
+  });
+
+  it("keeps a saved value even when the host has not broadcast it yet", async () => {
+    // A host whose broadcast of this save has not reached the popover: the resolved values alone must hold the switch.
+    const { view, latest } = await mountSettings({ config: { nsfw_enabled: false } }, { subscribe: () => () => undefined });
+    try {
+      await act(async () => latest().setNsfwEnabled(true));
+      assert.equal(latest().nsfwEnabled, true);
+    } finally { await view.cleanup(); }
+  });
+
+  it("drops an initial read that a newer stored result overtook", async () => {
+    const read = deferred<PluginConfigValues>();
+    const { view, fake, latest } = await mountSettings({ config: { nsfw_enabled: false } }, { get: () => read.promise });
+    try {
+      // Saved elsewhere while the first read is still on its way; that read predates the save.
+      await act(async () => { await fake.host.config.save({ nsfw_enabled: true }); });
+      await act(async () => read.resolve({ nsfw_enabled: false }));
+      assert.equal(latest().nsfwEnabled, true);
+    } finally { await view.cleanup(); }
+  });
+
+  it("says why the config could not be read", async () => {
+    const { view, fake } = await mountSettings({}, { get: async () => { throw new PluginBridgeError("配置文件损坏", "plugin_config_unreadable"); } });
+    try {
+      assert.deepEqual(fake.feedback.map(({ tone, message, options }) => [tone, message, options?.detail]), [
+        ["error", "生成设置加载失败", "配置文件损坏"],
+      ]);
     } finally { await view.cleanup(); }
   });
 
