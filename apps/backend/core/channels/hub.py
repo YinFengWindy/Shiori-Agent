@@ -1,16 +1,26 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from bus.events import InboundMessage, OutboundMessage
 from core.common.channel_directory import ChannelDirectory
+from core.common.channel_chat_types import is_group_chat_type
 from core.common.channel_identifiers import normalize_sender_id
-from core.accounts import AccountRegistry, AccountSnapshot
+from core.accounts import (
+    VIA_ACCOUNT_KEY,
+    AccountRegistry,
+    AccountSnapshot,
+    ViaAccount,
+    delivered_via_account,
+)
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
 from core.roles.role_runtime import RoleExecutionContext
+
+logger = logging.getLogger(__name__)
 
 
 class ChannelHub:
@@ -65,12 +75,15 @@ class ChannelHub:
         account = self._live_owned_account(account_id, message.channel)
         if account is None:
             return None
+        if VIA_ACCOUNT_KEY in metadata:
+            metadata[VIA_ACCOUNT_KEY] = ViaAccount.for_account(
+                metadata[VIA_ACCOUNT_KEY], account.record
+            ).to_metadata()
         role_id = account.record.role_id
         if role_id is None:
             return None
         rules = account.record.response_rules
-        chat_type = str(metadata.get("chat_type") or "private").lower()
-        group = chat_type in {"group", "supergroup"}
+        group = is_group_chat_type(metadata.get("chat_type"))
         # Every group chat follows the account-wide group switch and @ requirement.
         if group:
             if not rules.group_enabled:
@@ -245,8 +258,15 @@ class ChannelHub:
         default_channel: str,
         delivery_status: str,
         external_message_id: str = "",
+        via_account: dict[str, str] | None = None,
     ) -> dict[str, Any] | None:
         """Writes delivery state to the message this outbound was committed as.
+
+        ``via_account`` is the sending plugin's ``ViaAccount`` snapshot; it is
+        stored with the message as-is under ``VIA_ACCOUNT_KEY`` after the same
+        account check as inbound snapshots, against the outbound's
+        ``account_id``. The message was already sent, so an invalid snapshot
+        is logged and left out rather than failing the delivery write.
 
         An outbound without a committed message id returns early without
         touching or validating anything: there is no row to mark, so the
@@ -281,10 +301,30 @@ class ChannelHub:
             or thread.external_thread_id != message.chat_id
         ):
             raise ValueError("出站消息 transport target 与 thread_id 不匹配")
+        via = self._delivered_via(metadata, via_account)
         return self._service.sessions.mark_message_delivery(
             session_key,
             message_id=committed_message_id,
             thread_id=thread_id,
             delivery_status=delivery_status,
             external_message_id=external_message_id,
+            metadata_updates={VIA_ACCOUNT_KEY: via} if via is not None else None,
         )
+
+    def _delivered_via(
+        self, metadata: dict[str, Any], via_account: dict[str, str] | None
+    ) -> dict[str, str] | None:
+        """The checked snapshot of the outbound's sending account, or None."""
+        if via_account is None:
+            return None
+        account_id = str(metadata.get("account_id") or "").strip()
+        try:
+            account = self._accounts.get(account_id)
+        except KeyError:
+            logger.error(
+                "出站消息的发送账号 %r 未加载，无法核对经由账号快照，不予记录: %r",
+                account_id,
+                via_account,
+            )
+            return None
+        return delivered_via_account(via_account, account.record)

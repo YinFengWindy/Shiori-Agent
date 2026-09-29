@@ -399,3 +399,51 @@ async def test_queued_save_cannot_persist_private_formal_turn_during_consolidati
         assert len(reloaded.messages) == len(old_ids) + 2
         assert reloaded.messages[-1]["metadata"]["mood"] == "平静"
         assert reloaded.metadata["current_mood"] == "平静"
+
+
+async def test_group_turn_keeps_via_account_and_hands_chosen_mentions_to_channel(
+    tmp_path,
+):
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    via = {
+        "platform": "qq",
+        "platform_account_id": "101",
+        "display_name": "小栞",
+        "prefix": "QQ 号「小栞」（101）",
+    }
+    request = turn(
+        session,
+        role_reply=RoleReply(
+            content="好", mood="平静", thought="我放心了。", mention_ids=("903",)
+        ),
+    )
+    request.state.msg.channel = "qq"
+    request.state.msg.chat_id = "gqq:123"
+    request.state.msg.sender = "456"
+    request.state.msg.metadata.update(
+        {"chat_type": "group", "sender_id": "456", "via_account": via}
+    )
+
+    result = await phase(manager).run(request)
+
+    assert result.outbound.metadata["mention_ids"] == ["903"]
+    reloaded = SessionManager(tmp_path).get_or_create(session.key)
+    assert reloaded.messages[0]["metadata"]["via_account"] == via
+    assert "；经由账号: QQ 号「小栞」（101）]" in reloaded.get_history()[0]["content"]
+
+
+async def test_private_turn_never_hands_mentions_to_the_channel(tmp_path):
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    request = turn(
+        session,
+        role_reply=RoleReply(
+            content="好", mood="平静", thought="我放心了。", mention_ids=("903",)
+        ),
+    )
+    request.state.msg.metadata.update({"chat_type": "private"})
+
+    result = await phase(manager).run(request)
+
+    assert "mention_ids" not in result.outbound.metadata

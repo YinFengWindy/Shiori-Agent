@@ -19,6 +19,43 @@ CHAT_TYPE_PRIVATE: ChatType = "private"
 CHAT_TYPE_GROUP: ChatType = "group"
 CHAT_TYPES: tuple[ChatType, ...] = (CHAT_TYPE_PRIVATE, CHAT_TYPE_GROUP)
 
+# Inbound ``chat_type`` values naming a group conversation (Telegram also
+# reports ``supergroup``).
+_GROUP_CHAT_TYPES = frozenset({"group", "supergroup"})
+
+# Outbound reply metadata key: extra member IDs the role chose to mention in a
+# group reply. Channel plugins also address the triggering sender by their
+# platform's convention; private replies never carry it.
+REPLY_MENTION_IDS_KEY = "mention_ids"
+
+
+def parse_mention_ids(value: object) -> tuple[str, ...]:
+    """Member IDs to mention: a list of non-empty strings or integers.
+
+    The single host rule for model-chosen mentions, shared by account target
+    arguments and group replies. Returns the stripped, deduplicated IDs in
+    order (empty for None or an empty list); raises ``ValueError`` otherwise.
+    Whether an ID is usable on a platform is its channel plugin's check.
+    """
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError("mention_ids 必须是成员 ID 列表")
+    ids: list[str] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, (str, int)):
+            raise ValueError("mention_ids 必须是成员 ID 列表")
+        member = str(item).strip()
+        if not member:
+            raise ValueError("mention_ids 不能包含空成员 ID")
+        ids.append(member)
+    return tuple(dict.fromkeys(ids))
+
+
+def is_group_chat_type(value: object) -> bool:
+    """Whether an inbound message's ``chat_type`` names a group conversation."""
+    return str(value or "").strip().lower() in _GROUP_CHAT_TYPES
+
 
 def parse_chat_type(value: object, field_name: str) -> ChatType:
     """Returns ``value`` as a session type; raises ``ValueError`` naming ``field_name``.

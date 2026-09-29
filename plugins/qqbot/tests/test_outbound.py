@@ -72,6 +72,7 @@ async def test_cancelled_delivery_retains_only_completed_receipt(terminal):
             default_channel="qqbot",
             delivery_status="failed",
             external_message_id="outgoing-stream" if terminal else "",
+            via_account=None,
         )
         assert recalls == (
             [] if terminal else ["/v2/users/user/messages/outgoing-stream"]
@@ -109,7 +110,13 @@ async def test_reply_records_retained_receipt_instead_of_turn_id(mode):
         receipts.append(message_id)
         return httpx.Response(200, json={"id": message_id})
 
-    channel = QQBotChannel("app", "secret")
+    via = {
+        "platform": "qqbot",
+        "platform_account_id": "app",
+        "display_name": "Bot",
+        "prefix": "QQ 机器人「Bot」（AppID app）",
+    }
+    channel = QQBotChannel("app", "secret", via_account=lambda: via)
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     hub = Mock()
     channel._channel_hub = hub
@@ -147,6 +154,8 @@ async def test_reply_records_retained_receipt_instead_of_turn_id(mode):
             default_channel="qqbot",
             delivery_status="failed" if mode == "failed" else "sent",
             external_message_id=receipts[0] if receipts else "",
+            # Only a sent reply records the account it went out through.
+            via_account=None if mode == "failed" else via,
         )
         if mode == "fallback":
             assert receipts == ["sent-1"]

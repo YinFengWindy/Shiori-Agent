@@ -1,4 +1,4 @@
-"""Account model tools serialize structured service results without losing IDs."""
+"""Account model tools select a channel and never show the model account IDs."""
 
 from __future__ import annotations
 
@@ -14,18 +14,20 @@ from agent.tools.account_delivery import (
     AccountSendTool,
     AccountTargetsTool,
 )
+from core.accounts.target_contract import AccountTarget
 
 
 @pytest.mark.asyncio
-async def test_account_tools_expose_structured_service_results() -> None:
+async def test_account_tools_pass_the_channel_and_hide_account_ids() -> None:
     delivery = SimpleNamespace(
-        list_accounts=lambda role_id: [{"account_id": "one", "online": True}],
+        list_channels=lambda role_id: [{"channel": "qq", "online": True}],
         targets=AsyncMock(return_value={"scope": "known", "items": [{"id": "42"}]}),
         send=AsyncMock(
             return_value=AccountSendReceipt(
                 attempt_id="attempt-1",
-                account_id="one",
-                target_kind="private",
+                account_id="qq:101",
+                channel="qq",
+                target_kind="group",
                 target_id="42",
                 platform_message_id="platform-9",
                 ownership_current=True,
@@ -35,22 +37,28 @@ async def test_account_tools_expose_structured_service_results() -> None:
     listed = json.loads(await AccountListTool(delivery).execute(role_id="mira"))
     targets = json.loads(
         await AccountTargetsTool(delivery).execute(
-            account_id="one", role_id="mira", kind="known"
+            channel="qq", role_id="mira", kind="known"
         )
     )
     receipt = json.loads(
         await AccountSendTool(delivery).execute(
-            account_id="one",
+            channel="qq",
             role_id="mira",
-            target_kind="private",
+            target_kind="group",
             target_id="42",
             message="hello",
+            mention_ids=["902"],
         )
     )
-    assert listed == [{"account_id": "one", "online": True}]
+    assert listed == [{"channel": "qq", "online": True}]
     assert targets["items"] == [{"id": "42"}]
-    assert receipt["attempt_id"] == "attempt-1"
+    delivery.targets.assert_awaited_once_with("qq", "mira", "known", "", "")
     assert receipt["platform_message_id"] == "platform-9"
+    assert receipt["channel"] == "qq"
+    assert "qq:101" not in json.dumps(receipt)
     delivery.send.assert_awaited_once_with(
-        "one", "mira", "private", "42", "hello", None
+        "qq", "mira", AccountTarget("group", "42", mention_ids=("902",)), "hello"
     )
+    for tool in (AccountTargetsTool, AccountSendTool):
+        assert "account_id" not in tool.parameters["properties"]
+        assert "channel" in tool.parameters["required"]

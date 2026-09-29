@@ -84,20 +84,49 @@ class QQAccountActions:
         }
 
     async def send_target(
-        self, account_id: str, kind: str, target_id: str, message: str
+        self,
+        account_id: str,
+        kind: str,
+        target_id: str,
+        message: str,
+        *,
+        group_id: str = "",
+        mention_ids: tuple[str, ...] = (),
     ) -> dict[str, str]:
-        """Sends via one verified account and requires NapCat's real receipt."""
+        """Sends via one verified account and requires NapCat's real receipt.
+
+        ``group`` messages start with an @ of each ``mention_ids`` member;
+        ``group_member`` is a group temporary session with ``target_id`` in
+        group ``group_id``.
+        """
         await self._ensure_online(account_id)
         socket = self._socket_for(account_id)
         if not message.strip():
             raise ValueError("消息不能为空")
         number = int(qq_number(target_id, "目标 ID"))
+        if mention_ids and kind != "group":
+            raise ValueError("QQ 只有群消息可以 @ 成员")
+        if group_id and kind != "group_member":
+            raise ValueError("QQ 只有群临时会话需要群号")
         if kind == "private":
             action, params = "send_private_msg", {"user_id": number, "message": message}
         elif kind == "group":
-            action, params = "send_group_msg", {"group_id": number, "message": message}
+            mentions = "".join(
+                f"[CQ:at,qq={qq_number(member, '@ 成员')}] " for member in mention_ids
+            )
+            action, params = "send_group_msg", {
+                "group_id": number,
+                "message": mentions + message,
+            }
+        elif kind == "group_member":
+            # NapCat reaches a non-friend group member through a temporary session.
+            action, params = "send_private_msg", {
+                "user_id": number,
+                "group_id": int(qq_number(group_id, "群号")),
+                "message": message,
+            }
         else:
-            raise ValueError("QQ 目标类型必须是 private 或 group")
+            raise ValueError("QQ 目标类型必须是 private、group 或 group_member")
         try:
             data = await socket.call(action, params)
         except OneBotDisconnected as exc:

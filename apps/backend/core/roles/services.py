@@ -121,6 +121,7 @@ class RoleSessionService:
         thread_id: str,
         delivery_status: str,
         external_message_id: str = "",
+        metadata_updates: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Updates delivery bookkeeping on the exact committed message it belongs to."""
 
@@ -130,6 +131,7 @@ class RoleSessionService:
             thread_id=thread_id,
             delivery_status=delivery_status,
             external_message_id=external_message_id,
+            metadata_updates=metadata_updates,
         )
 
     def load_history(self, role_id: str) -> list[dict[str, Any]]:

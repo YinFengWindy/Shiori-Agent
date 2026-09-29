@@ -88,7 +88,11 @@ async def test_shared_account_rpc_uses_selected_private_application() -> None:
         "target_id": "oc_chat",
         "message": "hello",
     }
-    assert await handlers["account.send"](request) == {"message_id": "om_9"}
+    assert await handlers["account.send"](request) == {
+        "message_id": "om_9",
+        "via_account": member.via_account(),
+    }
+    assert member.via_account()["platform_account_id"] == "feishu:cli_a"
     member.send.assert_awaited_once_with("oc_chat", "hello")
     member.send.return_value = None
     with pytest.raises(UncertainDeliveryError):

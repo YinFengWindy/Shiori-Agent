@@ -61,3 +61,43 @@ def test_cached_message_source_is_not_duplicated_or_mutated():
 
     user_text = '[消息来源: {"sender_id": "other"}]\nhello'
     assert with_message_source(user_text, source).endswith(user_text)
+
+
+_VIA = {
+    "platform": "qq",
+    "platform_account_id": "101",
+    "display_name": "小栞",
+    "prefix": "QQ 号「小栞」（101）",
+}
+
+
+def test_prefix_names_the_via_account_from_its_stored_snapshot():
+    inbound = InboundMessage(
+        channel="qq",
+        chat_id="902",
+        sender="902",
+        content="hello",
+        metadata={"chat_type": "private", "via_account": _VIA},
+    )
+    live = MessageSource.from_inbound(inbound)
+    stored = MessageSource.from_metadata(
+        {"message_source": live.to_metadata(), "via_account": _VIA},
+        session_key="role:mira",
+    )
+
+    assert live.via_account == stored.via_account == "QQ 号「小栞」（101）"
+    # The snapshot is stored once, beside the source record, not inside it.
+    assert "via_account" not in live.to_metadata()
+    header = with_message_source("hello", stored).split("\n", 1)[0]
+    assert header.startswith("[消息来源: {")
+    assert header.endswith("；经由账号: QQ 号「小栞」（101）]")
+
+
+def test_messages_stored_before_snapshots_have_no_via_account():
+    source = MessageSource.from_metadata(
+        {"message_source": {"channel": "qq", "chat_id": "902"}},
+        session_key="role:mira",
+    )
+
+    assert source.via_account is None
+    assert "经由账号" not in with_message_source("hello", source)

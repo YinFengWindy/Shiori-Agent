@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Mapping
+
+from core.accounts.models import VIA_ACCOUNT_KEY, ViaAccount
 
 if TYPE_CHECKING:
     from bus.events import InboundMessage
@@ -19,6 +21,13 @@ def _identifier(value: object) -> str | None:
     return str(value).strip() or None
 
 
+def _via_account_prefix(metadata: Mapping[str, Any]) -> str | None:
+    """The plugin's 「经由账号」 text; messages stored before snapshots have none."""
+    if VIA_ACCOUNT_KEY not in metadata:
+        return None
+    return ViaAccount.from_metadata(metadata[VIA_ACCOUNT_KEY]).prefix
+
+
 @dataclass(frozen=True)
 class MessageSource:
     """Immutable origin; channel and sender_id form a future member-profile key."""
@@ -28,6 +37,9 @@ class MessageSource:
     chat_type: str | None = None
     sender_id: str | None = None
     session_key: str | None = None
+    # Plugin-formatted text of the account the message came through; the
+    # snapshot itself is stored under ``VIA_ACCOUNT_KEY``, not in this record.
+    via_account: str | None = None
 
     @classmethod
     def from_inbound(cls, message: InboundMessage) -> MessageSource:
@@ -38,6 +50,7 @@ class MessageSource:
             chat_type=_identifier(message.metadata.get("chat_type")),
             sender_id=_identifier(message.sender),
             session_key=_identifier(message.session_key),
+            via_account=_via_account_prefix(message.metadata),
         )
 
     @classmethod
@@ -53,6 +66,7 @@ class MessageSource:
                 chat_type=_identifier(saved.get("chat_type")),
                 sender_id=_identifier(saved.get("sender_id")),
                 session_key=_identifier(saved.get("session_key")),
+                via_account=_via_account_prefix(metadata),
             )
         return cls(
             channel=_identifier(metadata.get("transport_channel")),
@@ -60,18 +74,30 @@ class MessageSource:
             chat_type=_identifier(metadata.get("chat_type")),
             sender_id=_identifier(metadata.get("sender_id")),
             session_key=session_key,
+            via_account=_via_account_prefix(metadata),
         )
 
     def to_metadata(self) -> dict[str, str | None]:
         """Serialize the captured source for durable per-message storage."""
-        return asdict(self)
+        return {
+            "channel": self.channel,
+            "chat_id": self.chat_id,
+            "chat_type": self.chat_type,
+            "sender_id": self.sender_id,
+            "session_key": self.session_key,
+        }
 
 
 def with_message_source(
     content: str | list[dict[str, Any]], source: MessageSource
 ) -> str | list[dict[str, Any]]:
-    """Add one source envelope without altering cached text or media blocks."""
-    header = f"{_PREFIX}{json.dumps(source.to_metadata(), ensure_ascii=False)}]\n"
+    """Add one source envelope without altering cached text or media blocks.
+
+    A message that came through a plugin account also names it:
+    ``[消息来源: {...}；经由账号: <plugin prefix>]``.
+    """
+    via = f"；经由账号: {source.via_account}" if source.via_account else ""
+    header = f"{_PREFIX}{json.dumps(source.to_metadata(), ensure_ascii=False)}{via}]\n"
     if isinstance(content, str):
         return _with_text_source(content, header)
     blocks = [dict(block) for block in content]

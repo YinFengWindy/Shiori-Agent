@@ -19,6 +19,7 @@ from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import StreamDeltaReady, TurnStarted
 from bus.queue import MessageBus
+from core.accounts import VIA_ACCOUNT_KEY, ViaAccount
 from core.channels import ChannelHub
 from core.channels.chat_id_command import answer_chat_id_command
 from core.common.channel_chat_types import ChatTypeDeclaration, is_chat_id_command
@@ -165,6 +166,21 @@ class FeishuChannel:
             detail = f"{detail}；{self._last_rejected}"
         result["detail"] = detail
         return result
+
+    def via_account(self) -> dict[str, str]:
+        """This application's message snapshot, named as Feishu names bot apps."""
+        name = self._bot_name.strip()
+        ref = self._profile_ref
+        return ViaAccount(
+            platform="feishu",
+            platform_account_id=ref,
+            display_name=name,
+            prefix=f"飞书应用「{name}」（{ref}）" if name else f"飞书应用 {ref}",
+        ).to_metadata()
+
+    def _via_metadata(self) -> dict[str, dict[str, str]]:
+        """The snapshot entry for an account-backed channel; none without one."""
+        return {VIA_ACCOUNT_KEY: self.via_account()} if self.account_id else {}
 
     def known_private_targets(self) -> list[dict[str, str]]:
         """Returns observed private chats; this is not a tenant contact list."""
@@ -477,6 +493,7 @@ class FeishuChannel:
                     "message_id": message.message_id,
                     "message_type": message.message_type,
                     "external_message_id": message.message_id,
+                    **self._via_metadata(),
                     **payload.metadata,
                 },
             )
@@ -632,6 +649,9 @@ class FeishuChannel:
             default_channel=self.name,
             delivery_status=status,
             external_message_id=external_message_id or "",
+            via_account=(
+                self._via_metadata().get(VIA_ACCOUNT_KEY) if status == "sent" else None
+            ),
         )
 
     async def send(self, chat_id: str, message: str) -> str | None:

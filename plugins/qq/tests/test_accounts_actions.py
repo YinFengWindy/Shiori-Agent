@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from core.accounts.target_contract import UncertainDeliveryError
+from core.accounts.target_contract import AccountTarget, UncertainDeliveryError
 from agent.account_delivery import AccountDelivery
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
@@ -39,6 +39,36 @@ async def test_actions_query_fresh_lists_and_require_actual_send_receipt():
     socket.call.return_value = {"message_id": 89}
     with pytest.raises(ValueError, match="目标 ID"):
         await actions.send_target("account-a", "group", "gqq:777", "hi")
+
+
+@pytest.mark.asyncio
+async def test_group_mentions_and_temporary_sessions_use_napcat_targets():
+    socket = AsyncMock()
+    socket.call.return_value = {"message_id": 90}
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+
+    await actions.send_target(
+        "account-a", "group", "777", "开会", mention_ids=("902", "903")
+    )
+    socket.call.assert_awaited_with(
+        "send_group_msg",
+        {"group_id": 777, "message": "[CQ:at,qq=902] [CQ:at,qq=903] 开会"},
+    )
+    await actions.send_target("account-a", "group_member", "902", "hi", group_id="777")
+    socket.call.assert_awaited_with(
+        "send_private_msg", {"user_id": 902, "group_id": 777, "message": "hi"}
+    )
+
+    sends = socket.call.await_count
+    with pytest.raises(ValueError, match="只有群消息"):
+        await actions.send_target(
+            "account-a", "private", "902", "hi", mention_ids=("1",)
+        )
+    with pytest.raises(ValueError, match="群号"):
+        await actions.send_target("account-a", "group_member", "902", "hi")
+    with pytest.raises(ValueError, match="@ 成员"):
+        await actions.send_target("account-a", "group", "777", "hi", mention_ids=("x",))
+    assert socket.call.await_count == sends
 
 
 @pytest.mark.asyncio
@@ -77,15 +107,17 @@ async def test_disconnect_is_pending_but_onebot_rejection_is_failed(tmp_path):
             payload["message"],
         )
 
+    target = AccountTarget("private", "901")
+
     rpc = type("Rpc", (), {"resolve": lambda self, name: ("qq", send)})()
     ledger = AccountDeliveryLedger(tmp_path)
     delivery = AccountDelivery(accounts, rpc, ledger)
     socket.call.side_effect = OneBotDisconnected("NapCat WebSocket 已断开")
     with pytest.raises(UncertainDeliveryError):
-        await delivery.send(account_id, "mira", "private", "901", "hi", None)
+        await delivery.send("qq", "mira", target, "hi")
     socket.call.side_effect = OneBotError("NapCat send_private_msg 失败: denied")
     with pytest.raises(OneBotError, match="denied"):
-        await delivery.send(account_id, "mira", "private", "901", "hi", None)
+        await delivery.send("qq", "mira", target, "hi")
 
     attempts = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert [(row.status, row.error) for row in attempts] == [

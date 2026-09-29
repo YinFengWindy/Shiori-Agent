@@ -31,6 +31,7 @@ def account_api():
         mark_online=Mock(),
         bot=SimpleNamespace(get_chat_member=AsyncMock()),
         send=AsyncMock(return_value="77"),
+        via_account=Mock(return_value={"platform_account_id": "123"}),
     )
     second = SimpleNamespace(
         _account_id="account-second", can_send=Mock(return_value=True), bot=Mock()
@@ -119,6 +120,7 @@ async def test_shared_account_contract_preserves_bot_and_topic(account_api):
         }
     )
     assert receipt["message_id"] == "77"
+    assert receipt["via_account"] == {"platform_account_id": "123"}
     first.send.assert_awaited_once_with("-1001", "hello", message_thread_id=42)
     with pytest.raises(ValueError, match="目标类型"):
         await api.account_send(
@@ -159,3 +161,28 @@ async def test_telegram_network_error_is_uncertain(account_api):
                 "message": "hello",
             }
         )
+
+
+@pytest.mark.asyncio
+async def test_group_send_mentions_members_but_temporary_sessions_are_refused(
+    account_api,
+):
+    api, first = account_api
+    group = {
+        "account_id": "account-first",
+        "target_kind": "group",
+        "target_id": "-1001",
+        "message": "开会",
+        "mention_ids": ["902"],
+    }
+    await api.account_send(group)
+    first.send.assert_awaited_once_with(
+        "-1001", "[@902](tg://user?id=902) 开会", message_thread_id=None
+    )
+    with pytest.raises(ValueError, match="群临时会话"):
+        await api.account_send(
+            {**group, "target_kind": "group_member", "mention_ids": []}
+        )
+    with pytest.raises(ValueError, match="数字用户 ID"):
+        await api.account_send({**group, "mention_ids": ["@someone"]})
+    assert first.send.await_count == 1

@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from bus.events import InboundMessage
+from core.accounts import VIA_ACCOUNT_KEY
 from core.channels.chat_id_command import answer_chat_id_command
 from core.common.channel_chat_types import is_chat_id_command
 
@@ -62,6 +63,11 @@ class _InboundMixin:
                     "account_id": self._account_id,
                     "message_id": message_id,
                     "external_message_id": message_id,
+                    **(
+                        {VIA_ACCOUNT_KEY: self._via_account()}
+                        if self._via_account is not None
+                        else {}
+                    ),
                 },
             )
         )

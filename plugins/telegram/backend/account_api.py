@@ -10,11 +10,14 @@ from telegram.error import NetworkError, TelegramError
 from desktop_bridge.method_policy import Concurrency
 
 from .credentials import verify_bot_token
+from core.accounts import VIA_ACCOUNT_KEY
 from core.accounts.target_contract import (
     ACCOUNT_SEND_METHOD,
     ACCOUNT_TARGETS_METHOD,
+    GROUP_MEMBER_TARGET,
     UncertainDeliveryError,
 )
+from .channel.formatting import mention_markdown
 
 if TYPE_CHECKING:
     from agent.plugin_host.capabilities import RpcCapability
@@ -83,22 +86,37 @@ class TelegramAccountApi:
         raise ValueError("Telegram 仅支持已知会话和指定成员查询")
 
     async def account_send(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Validate a selected Telegram chat and optional forum topic."""
+        """Validate a selected Telegram chat, optional forum topic and mentions.
+
+        Group messages start with a mention of each ``mention_ids`` user; the
+        receipt carries the Bot's message snapshot.
+        """
         ref = self._ref_for_account(payload)
         target_kind = str(payload.get("target_kind") or "")
         target_id = str(payload.get("target_id") or "")
+        if target_kind == GROUP_MEMBER_TARGET:
+            raise ValueError("Telegram 不支持群临时会话")
         if target_kind not in {"private", "group"} or (
             target_id.startswith("-") != (target_kind == "group")
         ):
             raise ValueError("Telegram 目标类型与会话 ID 不匹配")
-        return await self.send_target(
+        text = str(payload.get("message") or "")
+        mentions = payload.get("mention_ids") or []
+        if mentions:
+            if target_kind != "group":
+                raise ValueError("Telegram 只有群消息可以提及成员")
+            text = mention_markdown(mentions) + text
+        # Taken before sending so a completed send always returns its snapshot.
+        via = self._channel({"ref": ref}).via_account()
+        result = await self.send_target(
             {
                 "ref": ref,
                 "chat_id": target_id,
-                "text": payload.get("message"),
+                "text": text,
                 "message_thread_id": payload.get("message_thread_id"),
             }
         )
+        return {**result, VIA_ACCOUNT_KEY: via}
 
     def _channel(self, payload: dict[str, Any]) -> TelegramChannel:
         channel = self._bots.channel(str(payload.get("ref") or ""))

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.accounts import AccountDeletionPlan
+from core.accounts import VIA_ACCOUNT_KEY, AccountDeletionPlan
 from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 
 if TYPE_CHECKING:
@@ -126,15 +126,22 @@ async def _send(runtime, payload: dict) -> dict:
 
 
 async def _send_account(runtime, payload: dict) -> dict:
-    """Translate the shared account request into QQ's native target operation."""
+    """Translate the shared account request into QQ's native target operation.
+
+    Group mentions and group temporary sessions are QQ-native; the receipt
+    carries the sending account's snapshot.
+    """
     if payload.get("message_thread_id") is not None:
         raise ValueError("QQ 不支持话题目标")
-    return await _send(
-        runtime,
-        {
-            "account_id": payload["account_id"],
-            "kind": payload["target_kind"],
-            "target_id": payload["target_id"],
-            "message": payload["message"],
-        },
+    account_id = str(payload["account_id"])
+    # Taken before sending so a completed send always returns its snapshot.
+    via = runtime.via_account(account_id)
+    result = await runtime.send_target(
+        account_id,
+        str(payload["target_kind"]),
+        str(payload["target_id"]),
+        str(payload["message"]),
+        group_id=str(payload.get("group_id") or ""),
+        mention_ids=tuple(payload.get("mention_ids") or ()),
     )
+    return {**result, VIA_ACCOUNT_KEY: via}

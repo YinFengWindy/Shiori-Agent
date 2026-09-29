@@ -180,3 +180,36 @@ def test_delete_rolls_back_when_database_skips_one_selected_row(tmp_path: Path):
         assert store.get_session_meta("session") == before
     finally:
         store.close()
+
+
+def test_update_message_delivery_merges_metadata_into_the_same_row(tmp_path: Path):
+    store = SessionStore(tmp_path / "sessions.db")
+    try:
+        store.create_session(key="session", metadata={})
+        store.insert_message(
+            "session",
+            role="assistant",
+            content="reply",
+            ts="2026-09-28",
+            seq=0,
+            thread_id="thread-1",
+            extra={"metadata": {"mood": "平静"}},
+        )
+
+        store.update_message_delivery(
+            "session:0",
+            session_key="session",
+            thread_id="thread-1",
+            delivery_status="sent",
+            metadata_updates={"via_account": {"prefix": "QQ 号 101"}},
+        )
+
+        stored = store.get_message("session:0")
+        assert stored is not None
+        assert stored["delivery_status"] == "sent"
+        assert stored["metadata"] == {
+            "mood": "平静",
+            "via_account": {"prefix": "QQ 号 101"},
+        }
+    finally:
+        store.close()

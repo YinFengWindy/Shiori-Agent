@@ -18,6 +18,8 @@ async def test_anonymous_group_message_keeps_chat_subject_and_topic():
     channel._remember_username = AsyncMock()
     channel._safe_send_typing = AsyncMock()
     channel._publish_inbound = AsyncMock()
+    channel._account_id = "telegram:123"
+    channel.via_account = Mock(return_value={"platform_account_id": "123"})
     sender_chat = SimpleNamespace(id=-1009, username="anonymous")
     update = SimpleNamespace(
         effective_message=SimpleNamespace(
@@ -37,6 +39,8 @@ async def test_anonymous_group_message_keeps_chat_subject_and_topic():
     assert sent.sender == "chat:-1009"
     assert sent.metadata["sender_kind"] == "chat"
     assert sent.metadata["message_thread_id"] == 42
+    assert sent.metadata["account_id"] == "telegram:123"
+    assert sent.metadata["via_account"] == {"platform_account_id": "123"}
     channel._is_sender_admitted.assert_called_once_with(
         update.effective_chat, sender_chat, "消息", sender_id="chat:-1009"
     )

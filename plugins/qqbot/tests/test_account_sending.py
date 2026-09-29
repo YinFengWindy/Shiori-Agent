@@ -15,7 +15,8 @@ class _Sending(_AccountSendingMixin):
         self._identity = SimpleNamespace(
             app_for_account=lambda payload: (
                 "100" if payload["account_id"] == "account-100" else None
-            )
+            ),
+            via_account=lambda app_id: {"platform_account_id": app_id},
         )
 
 
@@ -46,6 +47,7 @@ async def test_send_returns_official_receipt_from_selected_application():
         }
     )
     assert shared["message_id"] == "platform-message-id"
+    assert shared["via_account"] == {"platform_account_id": "100"}
     assert sent[-1] == ("c2c:100:opaque", "again")
     legacy = await _Sending(channel).account_send(
         {"account_id": "account-100", "user_openid": "opaque", "content": "old"}
@@ -56,6 +58,16 @@ async def test_send_returns_official_receipt_from_selected_application():
         await _Sending(channel).account_send(
             {"account_id": "account-100", "target_kind": "group"}
         )
+    # No group chats: mentions and group temporary sessions are refused clearly.
+    with pytest.raises(ValueError, match="不支持 @ 成员"):
+        await _Sending(channel).account_send(
+            {"account_id": "account-100", "target_kind": "group", "mention_ids": ["1"]}
+        )
+    with pytest.raises(ValueError, match="群临时会话"):
+        await _Sending(channel).account_send(
+            {"account_id": "account-100", "target_kind": "group_member"}
+        )
+    assert len(sent) == 3
 
 
 @pytest.mark.asyncio

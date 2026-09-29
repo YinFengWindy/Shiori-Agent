@@ -5,15 +5,23 @@ from __future__ import annotations
 from typing import Any
 
 from bus.events import InboundMessage
+from core.accounts import VIA_ACCOUNT_KEY
 
 from .accounts_actions import qq_number
 from .channel.group_filter import is_at_bot
 
 
 def inbound_message(
-    *, account_id: str, expected_uin: str, event: dict[str, Any]
+    *,
+    account_id: str,
+    expected_uin: str,
+    via_account: dict[str, str],
+    event: dict[str, Any],
 ) -> InboundMessage | None:
-    """Rejects other-account events and preserves actual chat/member IDs."""
+    """Rejects other-account events and preserves actual chat/member IDs.
+
+    ``via_account`` is the receiving account's snapshot for the host to store.
+    """
     if event.get("post_type") != "message":
         return None
     if str(event.get("self_id") or "") != expected_uin:
@@ -35,6 +43,7 @@ def inbound_message(
         "chat_type": kind,
         "sender_id": sender,
         "external_message_id": str(event.get("message_id") or ""),
+        VIA_ACCOUNT_KEY: via_account,
     }
     if kind == "group":
         metadata["group_id"] = chat_id[4:]

@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, replace
 from typing import Any
+
+from core.common.channel_chat_types import parse_mention_ids
+
+logger = logging.getLogger(__name__)
 
 
 class InvalidRoleReply(ValueError):
@@ -12,11 +17,16 @@ class InvalidRoleReply(ValueError):
 
 @dataclass(frozen=True)
 class RoleReply:
-    """Validated dialogue and the role's own mood and first-person thought."""
+    """Validated dialogue and the role's own mood and first-person thought.
+
+    ``mention_ids`` are extra group members the role chose to mention in a
+    group reply (set only by ``with_group_mentions``); empty elsewhere.
+    """
 
     content: str
     mood: str
     thought: str
+    mention_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -61,18 +71,27 @@ def role_reply_prompt(moods: tuple[str, ...]) -> str:
     )
 
 
-def role_mood_prompt(moods: tuple[str, ...]) -> str:
+def role_mood_prompt(moods: tuple[str, ...], *, group: bool = False) -> str:
     """Ask, after a reply is already sent, what mood and thought followed it.
 
     Used only by the passive turn's post-reply mood call: content is fixed
     already, so this only asks for `{mood, thought}`, keeping the reply's own
-    text completely free of JSON formatting constraints.
+    text completely free of JSON formatting constraints. A group reply may
+    also name extra members to mention (`mention_ids`); it is delivered
+    after this call, and the triggering sender is addressed anyway.
     """
+    mentions = (
+        '群聊回复可选再加 "mention_ids":["<成员 ID>"]，列出这条回复要额外 @ 的群成员'
+        "（触发你回复的人会自动被点名，不必列出）；不需要时省略该字段。\n"
+        if group
+        else ""
+    )
     return (
         "刚才那段回复已经说出口。现在请回顾自己说完这句话时的心情和当下想法，"
         "只输出一个 JSON 对象，不要输出 JSON 之外的解释、markdown 或代码块，"
         "不要重复或改写正文内容。\n"
         'JSON 结构固定为：{"mood":"<当前心情>","thought":"<当下想法>"}\n'
+        f"{mentions}"
         f"mood 必须从角色心情目录选择：{'、'.join(moods)}。\n"
         "thought 必须是包含“我”的第一人称当下想法，1–2 句，40–70 字。"
     )
@@ -96,6 +115,21 @@ def validate_role_reply(
     if len(thought) > 100 or "我" not in thought:
         raise InvalidRoleReply("thought 必须是包含“我”的简短当下想法，不能超过 100 字")
     return RoleReply(content=payload["content"], mood=mood, thought=thought)
+
+
+def with_group_mentions(reply: RoleReply, value: object) -> RoleReply:
+    """``reply`` plus the extra members a group reply's mood output named.
+
+    Only group reply turns call this; every other reply keeps no mentions.
+    Mentions are optional extras, so a malformed list is dropped with a
+    warning and the validated mood and thought are kept.
+    """
+    try:
+        mention_ids = parse_mention_ids(value)
+    except ValueError as exc:
+        logger.warning("群聊回复的 mention_ids 无效，已忽略: %s; 值=%r", exc, value)
+        return reply
+    return replace(reply, mention_ids=mention_ids)
 
 
 def reply_state_metadata(reply: RoleReply, *, updated_at: str) -> dict[str, str]:

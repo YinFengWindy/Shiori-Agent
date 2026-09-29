@@ -81,3 +81,18 @@ def test_candidate_ready_identity_is_not_persisted_before_handover(tmp_path):
     assert identity.pending_identity("100") == ("Replacement", "new-bot")
     assert "bot_id" not in store.get("100")
     identity.end_handoff("100")
+
+
+def test_via_account_names_the_application_and_its_bot(tmp_path):
+    store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
+    store.save({"app_id": "100", "client_secret": "s", "role_id": "mira"})
+    identity = QQBotAccountIdentity(SimpleNamespace(accounts=_Accounts()), store)
+    assert identity.via_account("100")["prefix"] == "QQ 机器人（AppID 100）"
+
+    identity.report("100", "online", "", "Bot One", "bot-one")
+    assert identity.via_account("100") == {
+        "platform": "qqbot",
+        "platform_account_id": "100",
+        "display_name": "Bot One",
+        "prefix": "QQ 机器人「Bot One」（AppID 100）",
+    }

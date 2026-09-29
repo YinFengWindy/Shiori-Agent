@@ -45,6 +45,7 @@ class QQBotChannel(
         account_id: str = "",
         on_status: Callable[[str, str, str, str], None] | None = None,
         on_target: Callable[[str], None] | None = None,
+        via_account: Callable[[], dict[str, str]] | None = None,
     ) -> None:
         self._app_id = app_id
         # The manifest's session types, for answering ``/chatid``.
@@ -53,6 +54,9 @@ class QQBotChannel(
         self._account_id = account_id
         self._on_status = on_status
         self._on_target = on_target
+        # The application account's current message snapshot; None when the
+        # channel runs without a host account.
+        self._via_account = via_account
         self._public_hooks = False
         self._bus: MessageBus | None = None
         self._interrupt_controller: InterruptController | None = None

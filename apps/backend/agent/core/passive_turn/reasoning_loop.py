@@ -68,6 +68,7 @@ class _PassiveReasoningLoopMixin:
         tool_execution_context: dict[str, Any] | None = None,
         disabled_tools: set[str] | None = None,
         reply_moods: tuple[str, ...] | None = None,
+        group_reply: bool = False,
         previous_mood: str = "",
         previous_thought: str = "",
     ) -> ReasonerResult:
@@ -764,6 +765,7 @@ class _PassiveReasoningLoopMixin:
                     messages=messages,
                     content=final_content,
                     moods=reply_moods,
+                    group=group_reply,
                 )
                 role_reply_mood_fresh = role_reply is not None
                 if role_reply is None:

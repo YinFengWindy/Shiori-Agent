@@ -22,6 +22,7 @@ from bus.events_lifecycle import (
     TurnStarted,
 )
 from bus.queue import MessageBus
+from core.accounts import ViaAccount
 from core.channels import ChannelHub
 from core.common.channel_chat_types import CHAT_ID_COMMANDS, ChatTypeDeclaration
 from infra.channels.base import AttachmentStore, MessageDeduper, SessionIdentityIndex
@@ -107,6 +108,8 @@ class TelegramChannel(
         self._avatar_task: asyncio.Task[None] | None = None
         self._online = False
         self._bot_username = ""
+        # The Bot's display name from its last verified identity.
+        self._bot_name = ""
         # The manifest's session types, for answering ``/chatid``.
         self._chat_types = chat_types
         self._bus: MessageBus | None = bus
@@ -229,6 +232,7 @@ class TelegramChannel(
             if self._accounts is not None:
                 identity = await self._app.bot.get_me()
                 self._bot_username = identity.username or ""
+                self._bot_name = identity.full_name or ""
                 if str(identity.id) != candidate_id:
                     raise ValueError("Bot Token identity does not match its account")
                 if self._known_store is not None:
@@ -293,6 +297,20 @@ class TelegramChannel(
             role_id=self._role_id,
             avatar_url=avatar,
         )
+
+    def via_account(self) -> dict[str, str]:
+        """This Bot's message snapshot, named as Telegram names bots."""
+        bot_id = bot_account_id(self._token)
+        name = self._bot_name.strip()
+        label = (f"「{name}」" if name else "") + (
+            f"（@{self._bot_username}）" if self._bot_username else ""
+        )
+        return ViaAccount(
+            platform="telegram",
+            platform_account_id=bot_id,
+            display_name=name,
+            prefix=f"Telegram 机器人{label or ' ' + bot_id}",
+        ).to_metadata()
 
     def _report_account(self, connection: ConnectionState, error: str = "") -> None:
         if self._accounts is not None and self._account_id is not None:

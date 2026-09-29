@@ -12,6 +12,7 @@ from agent.core.passive_support import (
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY, build_session_message
 from agent.core.response_parser import parse_response, ParsedResponse, ResponseMetadata
 from core.roles.reply_state import InvalidRoleReply, RoleReply, reply_state_metadata
+from core.common.channel_chat_types import REPLY_MENTION_IDS_KEY, is_group_chat_type
 from agent.lifecycle.phase import (
     PhaseFrame,
     PhaseModule,
@@ -111,6 +112,7 @@ class _BuildAfterReasoningCtxModule:
             raw_reply = "I've completed processing but have no response to give."
         tool_chain = cast(list[dict[str, object]], turn_result.tool_chain)
         session = input.state.session
+        mention_ids: tuple[str, ...] = ()
         if session is not None and turn_result.context_retry.get("formal_role_reply"):
             # The reasoner already produced content plus a validated (or
             # degraded, previous-turn) RoleReply; no JSON parsing here. Kept
@@ -119,6 +121,9 @@ class _BuildAfterReasoningCtxModule:
             if not isinstance(turn_result.role_reply, RoleReply):
                 raise InvalidRoleReply("角色回复缺少已生成的心情/想法状态")
             reply = turn_result.role_reply
+            # Mentions belong to group replies only; no other reply carries them.
+            if is_group_chat_type((msg.metadata or {}).get("chat_type")):
+                mention_ids = reply.mention_ids
             parsed = ParsedResponse(
                 clean_text=reply.content,
                 metadata=ResponseMetadata(
@@ -168,6 +173,8 @@ class _BuildAfterReasoningCtxModule:
                     else {}
                 ),
                 **({"turn_metrics": turn_metrics} if turn_metrics else {}),
+                # Extra group members the role chose to mention in this reply.
+                **({REPLY_MENTION_IDS_KEY: list(mention_ids)} if mention_ids else {}),
             },
         )
         return frame
