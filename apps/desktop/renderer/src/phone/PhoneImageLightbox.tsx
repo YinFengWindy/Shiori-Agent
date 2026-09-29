@@ -1,7 +1,8 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { XIcon } from "@phosphor-icons/react";
 import { toFileUrl } from "../shared/format";
-import { compactIconButtonClass, cx, dialogBackdropClass } from "../shared/styles";
+import { cx } from "@shiori/plugin-sdk";
+import { compactIconButtonClass, dialogBackdropClass } from "../shared/styles";
 
 /**
  * A phone picture enlarged over the whole window, view only. Esc, the close

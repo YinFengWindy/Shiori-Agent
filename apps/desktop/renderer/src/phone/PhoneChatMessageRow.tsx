@@ -3,8 +3,7 @@ import { ChatFileChipContent, chatFileChipClass } from "../chat/ChatMessageAttac
 import { ChatMessageImage } from "../chat/ChatMessageImage";
 import { isChatImageAsset } from "../chat/chatImageHistory";
 import { RoleAvatar } from "../roles/RoleAvatar";
-import { badgeClass, cx, pressableClass } from "../shared/styles";
-import type { RoleRecord } from "../shared/types";
+import { badgeClass, cx, pressableClass, type RoleRecord } from "@shiori/plugin-sdk";
 import type { PhoneChatItem } from "./phoneChatPresentation";
 
 // Pictures stay inside the bubble column of the phone's narrow screen.

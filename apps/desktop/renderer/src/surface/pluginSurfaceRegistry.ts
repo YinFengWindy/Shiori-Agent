@@ -2,13 +2,6 @@ import type React from "react";
 import type { PluginSurfaceComponentProps } from "@shiori/plugin-sdk";
 import { PluginContributionRegistry } from "../plugins/pluginContributionRegistry";
 
-/**
- * The `desktop.surface` contract (the self-directed `SurfaceHandle` and the
- * component props) is owned by `@shiori/plugin-sdk` (#508); re-exported for
- * host callers.
- */
-export type { PluginSurfaceComponentProps, SurfaceHandle } from "@shiori/plugin-sdk";
-
 export type PluginSurfaceEntry = {
   slot: "desktop.surface";
   pluginId: string;

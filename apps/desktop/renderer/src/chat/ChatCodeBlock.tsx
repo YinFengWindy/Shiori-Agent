@@ -1,6 +1,6 @@
 import React from "react";
 import { Check, Copy } from "@phosphor-icons/react";
-import { compactPressableClass, cx } from "../shared/styles";
+import { compactPressableClass, cx } from "@shiori/plugin-sdk";
 import { useCopyText } from "../shared/useCopyText";
 import { useHighlightedChatCode } from "./chatCodeHighlight";
 

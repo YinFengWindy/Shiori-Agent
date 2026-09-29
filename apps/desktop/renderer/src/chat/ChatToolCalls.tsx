@@ -9,8 +9,7 @@ import {
   WarningCircle,
   Wrench,
 } from "@phosphor-icons/react";
-import type { ChatToolCall, ChatToolCallGroup } from "../shared/types";
-import { cx } from "../shared/styles";
+import { type ChatToolCall, type ChatToolCallGroup, cx } from "@shiori/plugin-sdk";
 
 type ChatToolCallsProps = {
   groups: ChatToolCallGroup[];

@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import type { BridgeEvent } from "../../../src/bridge/shared";
-import type { SessionPayload } from "../shared/types";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import type { BridgeEvent, SessionPayload } from "@shiori/plugin-sdk";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { createFeedbackRecorder } from "../shared/testing/feedbackRecorder";
 import { useDesktopBridgeLifecycle } from "./useDesktopBridgeLifecycle";
 

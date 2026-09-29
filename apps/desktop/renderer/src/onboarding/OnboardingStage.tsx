@@ -4,7 +4,7 @@ import { AdvDialogueBox } from "../shared/adv/AdvDialogueBox";
 import { useAdvKeyboard } from "../shared/adv/useAdvKeyboard";
 import { mascotName } from "../shared/mascot/mascotExpressions";
 import { mascotSprites } from "../shared/mascot/mascotSprites";
-import { cx } from "../shared/styles";
+import { cx } from "@shiori/plugin-sdk";
 import { OnboardingMascot } from "./OnboardingMascot";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { OnboardingStepCard } from "./OnboardingStepCard";

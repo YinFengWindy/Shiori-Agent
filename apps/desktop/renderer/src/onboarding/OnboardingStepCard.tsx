@@ -1,4 +1,4 @@
-import type { RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
 import { OnboardingErrorCard } from "./OnboardingErrorCard";
 import { OnboardingModelStep } from "./OnboardingModelStep";
 import { OnboardingRoleStep } from "./OnboardingRoleStep";

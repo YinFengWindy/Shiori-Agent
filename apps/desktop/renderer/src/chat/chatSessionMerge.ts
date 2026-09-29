@@ -1,4 +1,4 @@
-import type { SessionMessage, SessionPayload } from "../shared/types.js";
+import type { SessionMessage, SessionPayload } from "@shiori/plugin-sdk";
 import { normalizeSessionMediaPaths } from "./chatMedia.js";
 import { getChatMessageMatchStrength } from "./chatMessageMatching";
 

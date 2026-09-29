@@ -13,5 +13,5 @@ export { RoleCapabilityBadge } from "./components/RoleCapabilityCard";
 export { brandMotifPaths, type BrandMotif } from "./icons/brand";
 export { menuItemClass, menuItemSelectedClass } from "./menuStyles";
 export {
-  accountCardActionLabels, accountCardView, accountStatus, accountStatusView, pendingAccountStatus,
+  accountCardActionLabels, accountCardView, accountStatusView,
 } from "./account/account";

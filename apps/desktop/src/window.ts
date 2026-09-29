@@ -1,7 +1,8 @@
 import { BrowserWindow } from "electron";
 import { logDesktopDiagnostic } from "./diagnostics.js";
 import { desktopWindowIcon, preloadScript, rendererDevServerUrl, rendererDist } from "./paths.js";
-import type { BridgeEvent, LocalAssetTransport } from "./bridge/shared.js";
+import type { BridgeEvent } from "@shiori/plugin-sdk/contract";
+import type { LocalAssetTransport } from "./bridge/shared.js";
 import {
   attachDesktopWindowSecurity,
   resolveRendererEntryUrl,

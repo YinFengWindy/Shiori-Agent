@@ -1,10 +1,11 @@
 import type React from "react";
 import type { BridgeResponse } from "../../../src/bridge/shared";
-import type { AppMainView, NewRoleFormState, PendingRoleCardAction, RoleRecord } from "../shared/types";
+import { type RoleRecord, errorMessage } from "@shiori/plugin-sdk";
+import type { AppMainView, NewRoleFormState, PendingRoleCardAction } from "../shared/types";
 import { createEmptyNewRoleForm, createPendingRoleRecord, waitForMinimumRoleCardBusy } from "./appState";
 import type { NavigationEntry } from "./appState";
 import { buildRoleCreationRequest, createRoleFromDraft } from "../roles/roleCreation";
-import { errorMessage, type FeedbackReporter } from "../shared/feedback/feedbackStore";
+import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 /** Workspace dependencies used to activate and navigate to a created role. */
 export type RoleCreationControllerArgs = {

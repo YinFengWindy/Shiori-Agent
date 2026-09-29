@@ -5,7 +5,7 @@ import {
   clampChatMessageContextMenuPoint,
   getKeyboardChatMessageContextMenuPoint,
 } from "./chatMessageContextMenuPlacement";
-import type { SessionMessage } from "../shared/types";
+import type { SessionMessage } from "@shiori/plugin-sdk";
 
 /**
  * Owns the chat message context menu: where it opens and every way it closes.

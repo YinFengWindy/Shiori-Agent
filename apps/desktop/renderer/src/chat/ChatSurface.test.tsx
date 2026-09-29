@@ -5,9 +5,9 @@ import { describe, it } from "node:test";
 import React from "react";
 import { act } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { ChatSurface } from "./ChatSurface";
-import type { RoleRecord, SessionPayload } from "../shared/types";
+import type { RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
 
 function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
   return {

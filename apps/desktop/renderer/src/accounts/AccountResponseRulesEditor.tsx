@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { InlineError } from "../shared/feedback/InlineError";
-import { textareaClass } from "../shared/styles";
-import { createAccountClient, type AccountResponseRules, type AccountSnapshot } from "./accountClient";
+import { textareaClass, type AccountResponseRules, type AccountSnapshot } from "@shiori/plugin-sdk";
+import { createAccountClient } from "./accountClient";
 
 const client = createAccountClient();
 

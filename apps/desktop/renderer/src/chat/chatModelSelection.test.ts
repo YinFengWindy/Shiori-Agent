@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared.js";
-import type { RoleRecord } from "../shared/types.js";
+import type { RoleRecord } from "@shiori/plugin-sdk";
 import { runtimeConfigForSelection, selectionFromRole } from "./chatModelSelection.js";
 
 const registrations: ModelRegistrationFormData[] = [

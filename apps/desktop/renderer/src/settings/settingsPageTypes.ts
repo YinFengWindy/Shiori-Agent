@@ -21,6 +21,3 @@ export type SettingsSubsection = {
   id: string;
   label: string;
 };
-
-/** Owned by `@shiori/plugin-sdk` (#440; custom plugin settings sections receive it); re-exported for host callers. */
-export type { StandaloneSettingsSectionProps } from "@shiori/plugin-sdk";

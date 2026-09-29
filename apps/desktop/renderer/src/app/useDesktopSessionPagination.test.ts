@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type React from "react";
 import type { DesktopApi, BridgeResponse } from "../../../src/bridge/shared";
-import type { SessionMessage, SessionPayload } from "../shared/types";
+import type { SessionMessage, SessionPayload } from "@shiori/plugin-sdk";
 import { createDesktopSessionPaginationController } from "./useDesktopSessionPagination";
 
 type InvokeRequest = Parameters<DesktopApi["invoke"]>[0];

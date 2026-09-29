@@ -5,7 +5,7 @@ import {
   isPluginRosterLoaded,
   subscribePluginEnabledState,
 } from "./pluginEnabledStateStore";
-import { errorMessage } from "../shared/feedback/feedbackStore";
+import { errorMessage } from "@shiori/plugin-sdk";
 
 /**
  * Subscribes to the shared plugin-enabled cache and triggers its first

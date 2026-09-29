@@ -328,9 +328,9 @@ renderer code is barred from importing it.
 ## Runtime API 2.9 plugin SDK primitives
 
 API 2.9 moves the shared renderer primitives that plugins use into
-`@shiori/plugin-sdk`, which now owns their only implementation (the host's own
-modules re-export them, so host and plugins render the same components and
-class names). A precompiled package that imports any of the exports below
+`@shiori/plugin-sdk`, which now owns their only implementation (the host
+imports them from the SDK too, so host and plugins render the same components
+and class names). A precompiled package that imports any of the exports below
 declares `runtime_api: ">=2.9.0 <3.0.0"`; on a 2.8 host those names are missing
 from the served peer wrapper and the package fails to load.
 
@@ -396,7 +396,9 @@ fake services.
 - **`host.assets.url(path)`** turns a local path the host handed to the plugin
   (in a bridge or RPC response) into a URL for `<img src>` or CSS, exactly as
   the host renders its own images. A path the host granted no access to yields
-  the host's placeholder URL rather than throwing. The background
+  the host's placeholder URL rather than throwing. `url` does not depend on
+  `this` and keeps one identity while the plugin is loaded, so it can be passed
+  on as a bare function (a hook argument or effect dependency). The background
   `ctx.assets.url` resolves through the same host bridge
   but answers `null` for such a path, because background code decides whether
   to show something at all.
@@ -426,7 +428,7 @@ host state; like `ctx.store` and `ctx.tray` it is bound to the plugin.
 There are no new runtime exports, so `pluginUiPeerExports` is unchanged. The
 contract types of the other renderer contribution points move into
 `@shiori/plugin-sdk` as type-only exports, describing the existing behaviour
-unchanged (the host's own modules re-export them):
+unchanged (the host uses the same SDK types):
 
 - `desktop.surface`: `PluginSurfaceModule` (the entry's default export),
   `PluginSurfaceContribution`, `PluginSurfaceComponentProps`, the
@@ -441,8 +443,8 @@ unchanged (the host's own modules re-export them):
   `PluginBackgroundSettled`, `SurfaceSettleReason`).
 - `VoiceStatePayload`, the host's voice state pushed to the desktop pet.
 
-The React-free ones are also available from `@shiori/plugin-sdk/contract` for
-the host's main process and preload.
+The React-free ones the host's main process and preload use are also available
+from `@shiori/plugin-sdk/contract`.
 
 ### Test entry
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { createAccountClient, type AccountSnapshot } from "./accountClient";
+import type { AccountSnapshot } from "@shiori/plugin-sdk";
+import { createAccountClient } from "./accountClient";
 
 const client = createAccountClient();
 

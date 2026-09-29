@@ -58,7 +58,7 @@
 
 - 设计系统（三层 token、共享类名、排版阶梯、legacy 别名清单）详见 `docs/_handbook/design-system.md`；下面几条是必须记住的硬约束。
 - 前端页面不要产生对功能进行叙述的文字。
-- 表单控件、按钮、卡片优先复用 `renderer/src/shared/styles.ts` 里的共享类名（`inputClass`、`textareaClass`、`primaryButtonClass`、`ghostButtonClass`、`cardClass` 等），不要另起一套手写 Tailwind 串。
+- 表单控件、按钮、卡片优先复用共享类名，不要另起一套手写 Tailwind 串：插件也能用的在 `@shiori/plugin-sdk`（`inputClass`、`textareaClass`、`ghostButtonClass`、`cardClass` 等），宿主专用的在 `renderer/src/shared/styles.ts`（`primaryButtonClass` 等）。
 - 颜色、圆角、阴影、动效一律走语义 token 或 Tailwind 语义类（`bg-surface`、`text-ink-muted`、`rounded-md`、`shadow-soft`），不要写死色值；`--bg`、`--panel`、`--accent`、`*-primary` 这类是 restyle 前的 legacy 别名，新代码不要再用。
 - 字段 focus 态由 `styles.css` 里全局的 `input/textarea/select:focus` 规则统一提供，组件里不要再手写 `focus:ring-*` / `focus:border-*` 覆盖；确有理由退出的（如 chat composer 的 `ring-0`）需在注释里说明。
 - 默认圆角使用 rounded-md（对应 `--radius-md`）；纯圆形与胶囊用 rounded-full。

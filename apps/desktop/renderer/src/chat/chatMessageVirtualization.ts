@@ -1,4 +1,4 @@
-import type { SessionMessage } from "../shared/types";
+import type { SessionMessage } from "@shiori/plugin-sdk";
 
 export const chatMessageVirtualOverscanPixels = 720;
 export const chatMessageVirtualFallbackViewportHeight = 720;

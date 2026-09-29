@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { toFileUrl } from "../shared/format";
-import { cx } from "../shared/styles";
-import type { RoleRecord } from "../shared/types";
+import { cx, type RoleRecord } from "@shiori/plugin-sdk";
 import { ChatTypingSparkles } from "./ChatTypingSparkles";
 
 type ChatHeaderProps = {

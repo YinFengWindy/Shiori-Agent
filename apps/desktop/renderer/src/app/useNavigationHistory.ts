@@ -5,7 +5,7 @@ import {
   navigationEntriesEqual,
   type NavigationEntry,
 } from "./appState";
-import type { RoleRecord, SessionPayload } from "../shared/types";
+import type { RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
 import type { AppMainView } from "../shared/types";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";
 import type { SettingsSubsectionMemory } from "../settings/useSettingsSubsectionMemory";

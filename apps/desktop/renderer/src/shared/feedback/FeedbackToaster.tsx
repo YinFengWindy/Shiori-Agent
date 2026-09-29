@@ -4,14 +4,13 @@ import { FeedbackDetail } from "./FeedbackDetail";
 import { MascotFaceAvatar } from "../mascot/MascotFigure";
 import { feedbackPersonaCue } from "../mascot/mascotFeedback";
 import { useMascotEnabled } from "../mascot/useMascotEnabled";
-import { cx } from "../styles";
+import { cx, type FeedbackTone } from "@shiori/plugin-sdk";
 import {
   dismissFeedback,
   feedbackDurationMs,
   getFeedbackSnapshot,
   subscribeFeedback,
   type FeedbackToast,
-  type FeedbackTone,
 } from "./feedbackStore";
 
 const toneIcon: Record<FeedbackTone, Icon> = {

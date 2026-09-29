@@ -1,4 +1,10 @@
-import { createFeedbackReporter, type FeedbackOptions, type FeedbackToast, type FeedbackTone, type ToastPersona } from "../feedback/feedbackStore";
+import type { FeedbackTone } from "@shiori/plugin-sdk";
+import {
+  createFeedbackReporter,
+  type FeedbackOptions,
+  type FeedbackToast,
+  type ToastPersona,
+} from "../feedback/feedbackStore";
 import { feedbackPersonaLines, isPersonaSceneKey, personaSceneLines, type FeedbackPersona, type MascotCue } from "./mascotLines";
 
 /**

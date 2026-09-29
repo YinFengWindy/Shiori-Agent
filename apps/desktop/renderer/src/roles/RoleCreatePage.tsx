@@ -1,6 +1,12 @@
 import { ArrowCounterClockwise, Plus } from "@phosphor-icons/react";
 import { BackIcon, SpinnerIcon } from "../shared/icons";
-import { compactButtonSizeClass, cx, ghostButtonSurfaceClass, iconButtonClass, primaryButtonSurfaceClass } from "../shared/styles";
+import {
+  compactButtonSizeClass,
+  cx,
+  ghostButtonSurfaceClass,
+  iconButtonClass,
+  primaryButtonSurfaceClass,
+} from "@shiori/plugin-sdk";
 import type { NewRoleFormState } from "../shared/types";
 import type { RoleCardImportState } from "../app/roleCardImportState";
 import { RoleCreateFields } from "./RoleCreateFields";

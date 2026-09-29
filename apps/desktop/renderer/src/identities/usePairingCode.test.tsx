@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { mockableWindowTimers, mountTestComponent } from "../shared/testing/domTestHarness";
+import { mockableWindowTimers, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { usePairingCode } from "./usePairingCode";
 
 const start = Date.parse("2026-09-29T08:00:00Z");

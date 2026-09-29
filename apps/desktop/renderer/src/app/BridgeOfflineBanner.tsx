@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { MascotFaceAvatar } from "../shared/mascot/MascotFigure";
 import { bridgeOfflineLine } from "../shared/mascot/mascotLines";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
-import { cx } from "../shared/styles";
+import { cx } from "@shiori/plugin-sdk";
 import { useBridgeOfflineFeedbackFilter } from "./bridgeOfflineFeedback";
 
 type BridgeOfflineBannerProps = {

@@ -1,4 +1,4 @@
-import type { SelectOption } from "../shared/ui/Select";
+import type { SelectOption } from "@shiori/plugin-sdk";
 
 const everydayProfiles: SelectOption[] = [
   { value: "daily", label: "日常" },

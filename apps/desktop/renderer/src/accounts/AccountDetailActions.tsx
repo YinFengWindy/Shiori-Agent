@@ -1,11 +1,8 @@
 import { createContext, useContext } from "react";
 import { createPortal } from "react-dom";
-import type { AccountDetailAction, AccountDetailActionsProps } from "@shiori/plugin-sdk";
+import type { AccountDetailActionsProps } from "@shiori/plugin-sdk";
 import { SpinnerIcon } from "../shared/icons";
 import { compactTextButtonClass } from "../shared/styles";
-
-/** The action contract is owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
-export type { AccountDetailAction, AccountDetailActionsProps };
 
 const ActionsTargetContext = createContext<HTMLElement | null>(null);
 

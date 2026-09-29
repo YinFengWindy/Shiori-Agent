@@ -1,12 +1,7 @@
 import { readPluginRoleSettings } from "../plugins/pluginRoleSettings";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";
-import type {
-  AppMainView,
-  NewRoleFormState,
-  RoleFormState,
-  RoleRecord,
-  SessionPayload,
-} from "../shared/types";
+import type { RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
+import type { AppMainView, NewRoleFormState, RoleFormState } from "../shared/types";
 import { createDefaultRoleProactiveForm } from "../roles/roleProactiveDefaults";
 
 export const sidebarMinWidth = 220;

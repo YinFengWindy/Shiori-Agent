@@ -2,7 +2,12 @@ import type React from "react";
 import { Brain, BookBookmark, IdentificationCardIcon, Info, Microphone, Palette, PuzzlePiece, SlidersHorizontal, type Icon } from "@phosphor-icons/react";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { SidebarResizeHandle } from "../shared/SidebarResizeHandle";
-import { cx, secondarySidebarSurfaceClass, sidebarContentMotionClass, sidebarNavItemClass } from "../shared/styles";
+import {
+  cx,
+  secondarySidebarSurfaceClass,
+  sidebarContentMotionClass,
+  sidebarNavItemClass,
+} from "@shiori/plugin-sdk";
 import { registerBuiltinSettingsSections } from "./registerBuiltinSettingsSections";
 
 registerBuiltinSettingsSections();

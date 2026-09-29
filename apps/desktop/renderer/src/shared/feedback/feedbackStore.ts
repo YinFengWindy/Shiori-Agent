@@ -1,8 +1,5 @@
-import type { FeedbackAction, FeedbackTone } from "@shiori/plugin-sdk";
-import type { FeedbackPersona, PersonaSceneKey } from "../mascot/mascotLines";
-
-/** The tone and action vocabulary is owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
-export type { FeedbackAction, FeedbackTone };
+import type { FeedbackAction, FeedbackTone, PersonaSceneKey } from "@shiori/plugin-sdk";
+import type { FeedbackPersona } from "../mascot/mascotLines";
 
 /** Who fronts a toast: one of the host's toast personas, or a plugin-named scene (runtime API 2.4.0). */
 export type ToastPersona = FeedbackPersona | PersonaSceneKey;
@@ -167,6 +164,3 @@ export function createFeedbackReporter(defaults: Partial<Record<FeedbackTone, Fe
  * through their injected `host.feedback` (she appears only on `persona: true`).
  */
 export const feedback: FeedbackReporter = createFeedbackReporter();
-
-/** Owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
-export { errorMessage } from "@shiori/plugin-sdk";

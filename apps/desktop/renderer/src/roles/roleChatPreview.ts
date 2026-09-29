@@ -1,6 +1,6 @@
 import { normalizeSessionMediaPaths } from "../chat/chatMedia";
 import { formatHourMinute } from "../shared/format";
-import type { RoleLastMessage, SessionMessage } from "../shared/types";
+import type { RoleLastMessage, SessionMessage } from "@shiori/plugin-sdk";
 
 /** One chat-list row's second line: the newest message, flattened, and when it was sent. */
 export type RoleChatPreview = {

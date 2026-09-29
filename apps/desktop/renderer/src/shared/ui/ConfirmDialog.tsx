@@ -1,12 +1,12 @@
 import { useState } from "react";
-import type { HostConfirmDialogProps } from "@shiori/plugin-sdk";
+import { type HostConfirmDialogProps, ghostButtonClass } from "@shiori/plugin-sdk";
 import { Dialog } from "@base-ui/react/dialog";
 import { InlineError } from "../feedback/InlineError";
 import { MascotFaceAvatar } from "../mascot/MascotFigure";
 import { MascotOnStage, useMascotCameoAllowed } from "../mascot/MascotOnStage";
 import { MascotSpeechBubble } from "../mascot/MascotSpeech";
 import type { MascotLine } from "../mascot/mascotLines";
-import { dangerButtonClass, ghostButtonClass, primaryButtonClass, dialogBackdropClass } from "../styles";
+import { dangerButtonClass, primaryButtonClass, dialogBackdropClass } from "../styles";
 
 /** Props of `ConfirmDialog` (plugins get it as `PluginHostServices.ui.ConfirmDialog`, with a plugin persona instead). */
 export type ConfirmDialogProps = Omit<HostConfirmDialogProps, "persona"> & {

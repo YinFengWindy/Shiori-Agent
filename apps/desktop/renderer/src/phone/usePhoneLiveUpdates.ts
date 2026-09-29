@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLatestRef } from "../shared/useLatestRef";
+import { useLatestRef } from "@shiori/plugin-sdk";
 import type { PhoneConversationUpdate } from "./phoneClient";
 import { phoneConversationUpdateOf } from "./phonePayloads";
 

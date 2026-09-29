@@ -20,7 +20,8 @@ import { previewFromSessionMessages } from "../roles/roleChatPreview";
 import { usePluginUiVisibility } from "./usePluginUiVisibility";
 import { SettingsPage } from "../settings/SettingsPage";
 import { type SettingsSectionId } from "../settings/SettingsSidebar";
-import { cx, ghostButtonClass, sidebarTrackMotionClass } from "../shared/styles";
+import { cx, ghostButtonClass, type RoleAssetCategory, type RoleRecord, type SessionPayload } from "@shiori/plugin-sdk";
+import { sidebarTrackMotionClass } from "../shared/styles";
 import { buildNavRailViews, NavRail, pluginNavRailViewId, type NavRailViewId } from "../shell/NavRail";
 import { useGlobalShortcuts } from "../shell/useGlobalShortcuts";
 import type {
@@ -29,9 +30,7 @@ import type {
   NewRoleFormState,
   PendingRoleCardAction,
   RoleFormState,
-  RoleRecord,
   RoleSearchResult,
-  SessionPayload,
 } from "../shared/types";
 import type { RoleCardImportState } from "./roleCardImportState";
 import { TitleBar } from "../shell/TitleBar";
@@ -153,7 +152,7 @@ type DesktopAppFrameProps = {
   selectedChatBackground: string;
   onBackToRoleDetail: () => void;
   onPickRoleAssets: (categoryId: string) => void;
-  onUpdateRoleAssetOrganization: (categories: import("../shared/types").RoleAssetCategory[], bindings: Record<string, string>, removedIllustrations?: string[]) => Promise<boolean>;
+  onUpdateRoleAssetOrganization: (categories: RoleAssetCategory[], bindings: Record<string, string>, removedIllustrations?: string[]) => Promise<boolean>;
   onRemoveRoleAsset: (path: string) => void;
   onPluginRoleDataChanged: () => void;
   onSelectAvatarAsset: (path: string) => void;

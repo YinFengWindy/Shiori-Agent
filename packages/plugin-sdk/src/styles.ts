@@ -1,7 +1,7 @@
 /**
  * Shared component class names of the Shiori design system that plugins use
- * (see docs/_handbook/design-system.md). The host's `shared/styles.ts`
- * re-exports these and adds its own host-only class names on top.
+ * (see docs/_handbook/design-system.md). The host imports these from here;
+ * its `shared/styles.ts` holds only the host-only class names built on them.
  */
 
 /** Joins conditional Tailwind class names without pulling in a runtime dependency. */

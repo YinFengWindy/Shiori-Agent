@@ -2,7 +2,8 @@ import { buildPluginRoleDraftUpdates, notifyPluginRoleSaved, writePluginRoleSett
 import type React from "react";
 import { useRolePluginRefresh } from "./useRolePluginRefresh";
 import { waitForMinimumRoleCardBusy } from "./appState";
-import type { RoleAssetCategory, RoleRecord, RoleFormState, PendingRoleCardAction, SessionPayload } from "../shared/types";
+import type { RoleAssetCategory, RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
+import type { RoleFormState, PendingRoleCardAction } from "../shared/types";
 import type { AppMainView } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import { writeRoleMoodConfigToRuntimeConfig } from "../roles/roleMoodConfig";

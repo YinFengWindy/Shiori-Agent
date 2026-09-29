@@ -2,18 +2,6 @@ import type { PluginBackgroundContribution } from "@shiori/plugin-sdk";
 import { pluginBackgroundRegistry, type PluginBackgroundRegistry } from "./pluginBackgroundRegistry";
 
 /**
- * The shape a plugin's `background/index.ts` default-exports is owned by
- * `@shiori/plugin-sdk` (#508); re-exported for host callers.
- *
- * It lives in its own `background/` directory, deliberately separate from
- * `ui/` and `surface/` — same reasoning `pluginSurfaceRegistry.ts` documents
- * for not reusing `pluginUiRegistry`: hanging this off `ui/index.tsx` would
- * pull the whole settings/nav UI module graph into the `plugin-host.html`
- * bundle, which has no DOM to render any of it into.
- */
-export type { PluginBackgroundContribution };
-
-/**
  * Narrows an unknown default export down to a well-formed
  * PluginBackgroundContribution. Exported so `runtimePluginBackground.ts` can
  * apply the identical structural check to a runtime-loaded module, not a

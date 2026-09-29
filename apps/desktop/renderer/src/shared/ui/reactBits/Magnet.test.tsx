@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "../../testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { getMagnetOffset, Magnet } from "./Magnet";
 
 const rect = { left: 100, top: 100, width: 40, height: 40 };

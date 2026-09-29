@@ -5,12 +5,12 @@
  * so cannot load the main entry's components).
  *
  * Type-only: it has no runtime presence and is not part of the renderer import
- * map. Plugins import the same types from the main entry.
+ * map. It carries only the types that host code actually uses; plugins import
+ * the same types from the main entry.
  */
 export type { NativeFilePickerOptions } from "./contract/filePicker";
-export type { BridgeEvent, PluginBackgroundHandler, PluginEventHandler, PluginPeer, PluginRpcClient } from "./rpc";
+export type { BridgeEvent } from "./rpc";
 export type {
-  PluginSurfaceComponentProps,
   SurfaceCreateResult,
   SurfaceExtension,
   SurfaceHandle,

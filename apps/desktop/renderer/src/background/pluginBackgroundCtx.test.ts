@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { BridgeEvent } from "@shiori/plugin-sdk";
 import type {
-  BridgeEvent,
   DesktopApi,
   DesktopSurfacesApi,
   SurfaceSettledPayload,

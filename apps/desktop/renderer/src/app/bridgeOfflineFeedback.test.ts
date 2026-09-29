@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { feedback, getFeedbackSnapshot, resetFeedback, setFeedbackFilter } from "../shared/feedback/feedbackStore.js";
 import { createElement } from "react";
-import { mountTestComponent } from "../shared/testing/domTestHarness.js";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { createBridgeFeedbackFilter, isBridgeUnavailableMessage, localizeBridgeMessage, useBridgeOfflineFeedbackFilter } from "./bridgeOfflineFeedback.js";
 
 afterEach(() => resetFeedback());

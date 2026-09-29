@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
-import type { AccountSnapshot } from "../accounts/accountClient";
-import { accountChannelLabel, accountOnline } from "../accounts/accountPresentation";
+import { type AccountSnapshot, accountOnline } from "@shiori/plugin-sdk";
+import { accountChannelLabel } from "../accounts/accountPresentation";
 import { extractChatPreviewText } from "../roles/roleChatPreview";
 import type { PhoneConversation } from "./phoneClient";
 

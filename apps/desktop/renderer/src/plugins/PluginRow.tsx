@@ -1,7 +1,12 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { GearSix, WarningCircle } from "@phosphor-icons/react";
-import { SettingsToggleCard } from "../settings/SettingsToggleCard";
-import { compactButtonSizeClass, cx, ghostButtonSurfaceClass, sidebarNavItemClass } from "../shared/styles";
+import {
+  SettingsToggleCard,
+  compactButtonSizeClass,
+  cx,
+  ghostButtonSurfaceClass,
+  sidebarNavItemClass,
+} from "@shiori/plugin-sdk";
 import type { PluginSummary } from "./pluginBridgeClient";
 import { pluginDisplayName, pluginProblem, pluginStateLabel } from "./pluginPresentation";
 

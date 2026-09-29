@@ -1,15 +1,5 @@
-import type { AccountPendingAction, AccountSnapshot, AccountStatusTone, AccountStatusView } from "@shiori/plugin-sdk";
+import type { AccountSnapshot } from "@shiori/plugin-sdk";
 import { prettifyPluginId } from "../plugins/pluginPresentation";
-
-/*
- * The status vocabulary, `accountOnline` and the host's status wording are
- * owned by `@shiori/plugin-sdk` (#440; the wording through its host-only
- * entry, shared with the testing entry's stand-in card) and re-exported here
- * for host callers.
- */
-export { accountOnline } from "@shiori/plugin-sdk";
-export { accountStatus, accountStatusView, pendingAccountStatus } from "@shiori/plugin-sdk/host-internal";
-export type { AccountPendingAction, AccountStatusTone, AccountStatusView };
 
 type AccountIdentity = Pick<AccountSnapshot, "platform" | "displayName" | "platformAccountId">;
 

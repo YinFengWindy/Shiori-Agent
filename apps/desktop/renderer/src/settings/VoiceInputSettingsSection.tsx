@@ -1,4 +1,4 @@
-import { Select } from "../shared/ui/Select";
+import { Select, cx } from "@shiori/plugin-sdk";
 import { useEffect, useRef, useState } from "react";
 import { Microphone, Stop } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";
@@ -12,7 +12,6 @@ import {
 } from "./SettingsFieldPrimitives";
 import type { SettingsFormData } from "../../../src/bridge/shared.js";
 import type { SettingsDraftUpdater } from "./settingsPageTypes";
-import { cx } from "../shared/styles";
 
 type VoiceInputSettingsSectionProps = {
   draft: Pick<SettingsFormData, "voice">;

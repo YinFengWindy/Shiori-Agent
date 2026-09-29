@@ -1,4 +1,4 @@
-import { PluginBridgeError as BridgeError, type BridgeEvent, type PluginEventHandler, type PluginPeer, type PluginRpcClient } from "@shiori/plugin-sdk";
+import { PluginBridgeError, type BridgeEvent, type PluginEventHandler, type PluginPeer, type PluginRpcClient } from "@shiori/plugin-sdk";
 import { PluginBackgroundMethods } from "./pluginBackgroundMethods";
 import { pluginRuntimeChanged } from "./pluginRuntimeChanged";
 import { PluginCommunicationLifetime } from "./pluginCommunicationLifetime";
@@ -20,7 +20,7 @@ export function createPluginCommunicationClient(pluginId: string, options: {
   let disposed = false;
   let closing: Promise<void> | undefined;
   const invoke = <T,>(method: string, payload: Record<string, unknown>, callOptions?: { timeoutMs?: number }) =>
-    invokeBridgePayload<T>(options.invoke ?? window.miraDesktop.invoke, method, payload, BridgeError, callOptions);
+    invokeBridgePayload<T>(options.invoke ?? window.miraDesktop.invoke, method, payload, PluginBridgeError, callOptions);
   const assertActive = () => lifetime.assertActive();
   const connect = () => {
     assertActive();
@@ -39,7 +39,7 @@ export function createPluginCommunicationClient(pluginId: string, options: {
       ...payload, plugin_id: pluginId, generation: token, owner,
     }, { timeoutMs: 20_000 }));
     assertActive();
-    if (token !== currentGeneration) throw new BridgeError("插件运行代际已替换", "plugin_unavailable");
+    if (token !== currentGeneration) throw new PluginBridgeError("插件运行代际已替换", "plugin_unavailable");
     return result;
   };
   const closeContext = (remote = true) => {
@@ -88,13 +88,13 @@ export function createPluginCommunicationClient(pluginId: string, options: {
         ...payload, __plugin_context: { plugin_id: pluginId, generation: token },
       }, callOptions));
       assertActive();
-      if (token !== currentGeneration) throw new BridgeError("插件运行代际已替换", "plugin_unavailable");
+      if (token !== currentGeneration) throw new PluginBridgeError("插件运行代际已替换", "plugin_unavailable");
       return result;
     },
     events: { async on(name, handler) {
       validateName(name);
       const result = await transport<{ available: boolean }>("resolve", { target });
-      if (!result.available) throw new BridgeError(`插件 ${target} 不可用`, "plugin_unavailable");
+      if (!result.available) throw new PluginBridgeError(`插件 ${target} 不可用`, "plugin_unavailable");
       const entry = { target, name, handler };
       subscriptions.add(entry);
       return () => { subscriptions.delete(entry); };
@@ -112,7 +112,7 @@ export function createPluginCommunicationClient(pluginId: string, options: {
       return result.available ? peer(target) : null;
     },
     async handle(name, handler) {
-      if (!options.background) throw new BridgeError("仅后台可以注册方法", "plugin_invalid_registration");
+      if (!options.background) throw new PluginBridgeError("仅后台可以注册方法", "plugin_invalid_registration");
       validateName(name);
       await methods.register(name, handler, () => transport("register", { name }));
     },
@@ -122,6 +122,6 @@ export function createPluginCommunicationClient(pluginId: string, options: {
 
 function validateName(name: string) {
   if (!/^[a-zA-Z]\w*(?:\.\w+)*$/.test(name) || name.startsWith("plugin.")) {
-    throw new BridgeError("请使用插件内的局部名称", "plugin_invalid_name");
+    throw new PluginBridgeError("请使用插件内的局部名称", "plugin_invalid_name");
   }
 }

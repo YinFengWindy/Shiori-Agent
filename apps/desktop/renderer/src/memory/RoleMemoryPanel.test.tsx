@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, it } from "node:test";
 import { act } from "react";
 import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { createPluginRpcTestInvoke } from "../shared/testing/pluginRpcTestBridge";
 
 // Base UI binds DOM globals at import time, so the panel loads inside a test window.

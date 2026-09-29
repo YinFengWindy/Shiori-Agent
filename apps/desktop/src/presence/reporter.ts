@@ -1,5 +1,5 @@
 import { invokeBridgeOrThrow, type BridgeInvoker } from "../bridge/bridgeRequest.js";
-import type { BridgeEvent } from "../bridge/shared.js";
+import type { BridgeEvent } from "@shiori/plugin-sdk/contract";
 import {
   DesktopPresenceTracker,
   desktopPresenceIdleThresholdSeconds,

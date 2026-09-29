@@ -51,17 +51,15 @@ import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { useRoleFormAdapters } from "./roles/useRoleFormAdapters";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
 import { useSettingsSubsectionMemory } from "./settings/useSettingsSubsectionMemory";
-import { useLatestRef } from "./shared/useLatestRef";
+import { useLatestRef, type RoleRecord, type SessionPayload } from "@shiori/plugin-sdk";
 import { setInFlightChatTurns } from "./shared/chatTurnActivity";
 import { useLeftSidebarState } from "./shared/useLeftSidebarState";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
 import type {
   AppMainView,
   PendingRoleCardAction,
-  RoleRecord,
   RoleSearchResult,
   SessionImageHistoryMessage,
-  SessionPayload,
 } from "./shared/types";
 import "./styles.css";
 import "./shared/adv/adv.css";

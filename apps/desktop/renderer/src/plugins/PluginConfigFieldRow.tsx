@@ -7,8 +7,7 @@ import {
   settingsIconButtonClass,
   settingsInputClass,
 } from "../settings/SettingsFieldPrimitives";
-import { cx, textareaClass } from "../shared/styles";
-import { Select } from "../shared/ui/Select";
+import { cx, textareaClass, Select } from "@shiori/plugin-sdk";
 import { StringListInput } from "../shared/ui/StringListInput";
 import { readStringList, type PluginConfigField } from "./jsonSchemaForm";
 import { PluginEnvReferenceInput } from "./PluginEnvReferenceInput";

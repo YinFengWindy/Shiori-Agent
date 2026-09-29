@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createChatMessageMatcher, getChatMessageMatchStrength } from "./chatMessageMatching";
-import type { SessionMessage } from "../shared/types";
+import type { SessionMessage } from "@shiori/plugin-sdk";
 
 describe("getChatMessageMatchStrength", () => {
   it("rejects conflicting durable identities even for the same assistant turn or render key", () => {

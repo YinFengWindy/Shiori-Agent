@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
 import type { PluginConfigValues } from "@shiori/plugin-sdk";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { createPluginHostConfig } from "./pluginHostConfig";
 import { usePluginConfigController } from "./usePluginConfigController";
 

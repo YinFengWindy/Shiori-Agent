@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BridgeEvent } from "../../../src/bridge/shared";
-import { errorMessage } from "./feedback/feedbackStore";
-import { useLatestRef } from "./useLatestRef";
+import { type BridgeEvent, errorMessage, useLatestRef } from "@shiori/plugin-sdk";
 
 type BridgeRefreshedValueOptions<T> = {
   /** Loads and refreshes only while enabled (default true); the last value is kept when disabled. */

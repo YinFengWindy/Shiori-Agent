@@ -2,7 +2,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { RoleFormState, RoleRecord, SessionPayload } from "../shared/types";
+import type { RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
+import type { RoleFormState } from "../shared/types";
 import { resolveCurrentMood, resolveCurrentThought, resolveMoodIllustration } from "./roleMoodSelectors";
 
 function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {

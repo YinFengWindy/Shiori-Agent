@@ -1,6 +1,7 @@
 import { usePluginRpcClient } from "./usePluginRpcClient";
 import type { ComponentType } from "react";
-import { pluginChatImageActionsRegistry, type PluginChatImageActionProps } from "./pluginFeatureRegistry";
+import type { PluginChatImageActionProps } from "@shiori/plugin-sdk";
+import { pluginChatImageActionsRegistry } from "./pluginFeatureRegistry";
 import { usePluginEnabledState } from "./usePluginEnabledState";
 
 /** Mounts plugin-authored image actions, removing them when their plugin becomes unavailable. */

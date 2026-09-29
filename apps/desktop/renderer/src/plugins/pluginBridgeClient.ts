@@ -1,12 +1,9 @@
-import type { PluginRpcClient } from "@shiori/plugin-sdk";
+import { type PluginRpcClient, PluginBridgeError } from "@shiori/plugin-sdk";
 import { createPluginCommunicationClient } from "./pluginCommunicationClient";
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 import type { JsonSchema } from "./jsonSchemaForm";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 import type { RoleChatType } from "../shared/types";
-
-import { PluginBridgeError } from "./pluginBridgeError";
-export { PluginBridgeError } from "./pluginBridgeError";
 
 /**
  * Whether a field's `${NAME}` reference resolves in Shiori's environment
@@ -341,9 +338,6 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
     },
   };
 }
-
-/** Namespace-bound calls, events, declared peers and background requests; owned by the plugin SDK (#440). */
-export type { PluginRpcClient };
 
 /** Creates a lazy, disposable plugin communication context. */
 export function createPluginRpcClient(pluginId: string, invoke?: DesktopInvoke): PluginRpcClient {

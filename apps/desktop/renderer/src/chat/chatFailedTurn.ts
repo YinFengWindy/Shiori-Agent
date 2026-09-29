@@ -1,5 +1,5 @@
 import { getChatMessageReactKey } from "./chatMessageIdentity";
-import type { SessionMessage } from "../shared/types";
+import type { SessionMessage } from "@shiori/plugin-sdk";
 
 /** Longest error text shown inline when no separate detail exists; longer or multi-line text moves behind 「详情」. */
 const inlineErrorMaxLength = 80;

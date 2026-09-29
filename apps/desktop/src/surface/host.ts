@@ -1,16 +1,12 @@
 import type {
   SurfaceMenuItem,
-  SurfacePlacement as SurfacePlacementInfo,
+  SurfacePlacement,
   SurfaceSettleReason,
+  SurfaceExtension,
+  SurfaceSpec,
+  SurfaceWorkArea,
 } from "@shiori/plugin-sdk/contract";
-import {
-  noSurfaceExtension,
-  type SurfaceBounds,
-  type SurfaceExtension,
-  type SurfacePoint,
-  type SurfaceSpec,
-  type SurfaceWorkArea,
-} from "./contract.js";
+import { noSurfaceExtension, type SurfaceBounds, type SurfacePoint } from "./contract.js";
 import {
   clampSurfaceAnchor,
   surfaceAnchorFromCursor,
@@ -54,15 +50,6 @@ export type SurfaceWindowHandle = {
 
 type TimerHandle = { readonly __surfaceTimer?: never } | ReturnType<typeof setTimeout>;
 
-/**
- * Why a surface came to rest (`SurfaceSettleReason`), where it settled
- * (`SurfacePlacementInfo`, reported to both the renderer and the settle
- * observer) and the native menu entries it may ask for are owned by
- * `@shiori/plugin-sdk` (#508), because the owning plugin receives them;
- * re-exported for host callers.
- */
-export type { SurfaceMenuItem, SurfacePlacementInfo, SurfaceSettleReason };
-
 export type DesktopSurfaceHostOptions = {
   createWindow(key: SurfaceKey, spec: SurfaceSpec): SurfaceWindowHandle;
   workAreaFor(window: SurfaceWindowHandle): SurfaceWorkArea;
@@ -85,7 +72,7 @@ export type DesktopSurfaceHostOptions = {
    * decide whether the new position is worth remembering (#181-C). Never
    * called from a drag, glide or tween frame.
    */
-  onSettled?(key: SurfaceKey, placement: SurfacePlacementInfo, reason: SurfaceSettleReason): void;
+  onSettled?(key: SurfaceKey, placement: SurfacePlacement, reason: SurfaceSettleReason): void;
   /** Opens a native context menu over a surface; resolves the chosen id, or null. */
   showContextMenu?(
     window: SurfaceWindowHandle,
@@ -525,7 +512,7 @@ export class DesktopSurfaceHost {
   private notifyPlacement(record: SurfaceRecord, reason: SurfaceSettleReason): void {
     const window = record.window;
     if (window.isDestroyed()) return;
-    const placement: SurfacePlacementInfo = {
+    const placement: SurfacePlacement = {
       anchor: record.anchor,
       bodyOffset: surfaceBodyOffset(record.extension),
       workArea: this.options.workAreaFor(window),

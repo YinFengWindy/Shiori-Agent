@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import type React from "react";
 import { getChatMessageDomKey, getChatMessageReactKey } from "./chatMessageIdentity";
 import { estimateChatMessageHeight } from "./chatMessageVirtualization";
-import type { SessionMessage } from "../shared/types";
+import type { SessionMessage } from "@shiori/plugin-sdk";
 
 const emptyMeasurements = new Map<string, number>();
 

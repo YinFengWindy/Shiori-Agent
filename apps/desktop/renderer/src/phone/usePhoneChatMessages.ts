@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage } from "../shared/feedback/feedbackStore";
+import { errorMessage } from "@shiori/plugin-sdk";
 import { createPhoneClient, type PhoneMessage } from "./phoneClient";
 import { mergePhoneMessages } from "./phoneChatPresentation";
 import { usePhoneLiveUpdates } from "./usePhoneLiveUpdates";

@@ -1,4 +1,5 @@
-import { applyPluginSurfaceModules, type PluginSurfaceModule } from "./pluginSurfaceContract";
+import type { PluginSurfaceModule } from "@shiori/plugin-sdk";
+import { applyPluginSurfaceModules } from "./pluginSurfaceContract";
 
 /**
  * Compiles every plugin's desktop-surface entry point into the shared

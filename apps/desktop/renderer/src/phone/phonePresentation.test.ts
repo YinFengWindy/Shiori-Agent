@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { AccountSnapshot } from "../accounts/accountClient";
+import type { AccountSnapshot } from "@shiori/plugin-sdk";
 import type { PhoneConversation } from "./phoneClient";
 import { accountConversations, phoneApps, phoneConversationPreview } from "./phonePresentation";
 

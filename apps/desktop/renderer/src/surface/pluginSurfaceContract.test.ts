@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { applyPluginSurfaceModules, type PluginSurfaceModule } from "./pluginSurfaceContract";
+import type { PluginSurfaceModule } from "@shiori/plugin-sdk";
+import { applyPluginSurfaceModules } from "./pluginSurfaceContract";
 import { PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 
 const component = () => null;

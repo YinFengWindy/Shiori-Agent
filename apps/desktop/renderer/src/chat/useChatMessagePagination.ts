@@ -10,7 +10,7 @@ import {
   getPrependAnchorScrollTop,
   triggerOlderChatMessagesLoad,
 } from "./chatMessagePaginationState";
-import type { SessionPayload } from "../shared/types";
+import type { SessionPayload } from "@shiori/plugin-sdk";
 
 const emptySessionMessages: SessionPayload["messages"] = [];
 

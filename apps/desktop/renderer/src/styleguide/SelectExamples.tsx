@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Select } from "../shared/ui/Select";
+import { Select } from "@shiori/plugin-sdk";
 
 const deviceOptions = [
   { value: "", label: "系统默认设备" },

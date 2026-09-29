@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { unavailableLocalAssetUrl } from "../../../src/assets/localAssetContract";
-import type { NativeFilePickerOptions } from "../../../src/assets/filePickerContract";
+import type { NativeFilePickerOptions } from "@shiori/plugin-sdk";
 import { toFileUrl } from "../shared/format";
 import { pluginHostServicesFor } from "./pluginHostServices";
 
@@ -43,6 +43,10 @@ test("host.assets.url resolves a path exactly as the host's toFileUrl, placehold
   }
   assert.equal(assets.url("C:/granted/avatar.png"), "shiori-asset://local/C%3A%2Fgranted%2Favatar.png");
   assert.equal(assets.url("C:/elsewhere/secret.png"), unavailableLocalAssetUrl);
+  // Contract: `url` is `this`-free and keeps its identity, so plugins pass it as a bare function.
+  const { url } = assets;
+  assert.equal(url("C:/granted/avatar.png"), "shiori-asset://local/C%3A%2Fgranted%2Favatar.png");
+  assert.equal(pluginHostServicesFor("novelai").assets.url, url);
 });
 
 test("each plugin gets one stable services object whose config reaches only that plugin's table", async () => {

@@ -5,7 +5,7 @@ import {
   getVirtualChatMessageWindow,
 } from "./chatMessageVirtualization";
 import { useChatMessageMeasurements } from "./useChatMessageMeasurements";
-import type { SessionMessage } from "../shared/types";
+import type { SessionMessage } from "@shiori/plugin-sdk";
 
 type UseChatMessageVirtualizationArgs = {
   sessionKey: string;

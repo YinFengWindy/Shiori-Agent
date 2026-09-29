@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { before, it } from "node:test";
 import { act } from "react";
-import { deferred } from "../shared/testing/deferred";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { deferred, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { createPluginRpcTestClient, type PluginRpcTestResponder } from "../shared/testing/pluginRpcTestBridge";
 import type { RoleSemanticItem } from "./roleSemanticMemory";
 

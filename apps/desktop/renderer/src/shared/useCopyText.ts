@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { copyTextToClipboard } from "./clipboard";
-import { errorMessage } from "./feedback/feedbackStore";
+import { errorMessage } from "@shiori/plugin-sdk";
 import { mascotFeedback as feedback } from "./mascot/mascotFeedback";
 
 /** How long a copy button shows its 「已复制」 confirmation. */

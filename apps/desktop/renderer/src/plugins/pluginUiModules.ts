@@ -1,4 +1,5 @@
-import { applyPluginUiModules, type PluginUiModule } from "./pluginUiModuleContract";
+import type { PluginUiModule } from "@shiori/plugin-sdk";
+import { applyPluginUiModules } from "./pluginUiModuleContract";
 
 /**
  * Compiles every plugin's UI entry point straight into the renderer bundle

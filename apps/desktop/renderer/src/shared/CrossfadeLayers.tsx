@@ -7,7 +7,7 @@ import {
   type CrossfadeLayer,
   type CrossfadeVariant,
 } from "./crossfadeLayerState";
-import { cx } from "./styles";
+import { cx } from "@shiori/plugin-sdk";
 
 type CrossfadeLayersProps = {
   /** The visual value (usually an image URL); empty renders nothing. */

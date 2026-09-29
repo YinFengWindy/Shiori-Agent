@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { formatClock } from "../shared/format";
-import { badgeClass, cx, sidebarNavItemClass } from "../shared/styles";
+import { badgeClass, cx, sidebarNavItemClass } from "@shiori/plugin-sdk";
 import type { RoleSemanticItem } from "./roleSemanticMemory";
 import { emptySummaryLabel, groupTimeline, isSuperseded, itemOccurredAt } from "./timelineSelectors";
 

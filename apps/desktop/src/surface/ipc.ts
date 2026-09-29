@@ -1,10 +1,11 @@
-import type { SurfaceExtension, SurfacePoint, SurfaceSpec, SurfaceWorkArea } from "./contract.js";
-import {
-  DesktopSurfaceError,
-  type DesktopSurfaceHost,
-  type SurfaceKey,
-  type SurfaceMenuItem,
-} from "./host.js";
+import type {
+  SurfaceExtension,
+  SurfaceSpec,
+  SurfaceWorkArea,
+  SurfaceMenuItem,
+} from "@shiori/plugin-sdk/contract";
+import type { SurfacePoint } from "./contract.js";
+import { DesktopSurfaceError, type DesktopSurfaceHost, type SurfaceKey } from "./host.js";
 
 /**
  * IPC channels for the DesktopSurface capability.
@@ -95,7 +96,7 @@ export function registerSurfaceIpc(host: SurfaceIpcHost, options: RegisterSurfac
     const anchor = surfaces.create(request.key, request.spec, request.anchor);
     // `displayId` is answered here rather than on a channel of its own so a
     // plugin that remembers a per-display position can apply it before the
-    // window has painted — see `SurfaceCreateResultPayload`.
+    // window has painted — see `SurfaceCreateResult`.
     return { ...anchor, displayId: surfaces.displayId(request.key) };
   });
 

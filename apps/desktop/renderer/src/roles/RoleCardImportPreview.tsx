@@ -1,7 +1,13 @@
 import { useEffect } from "react";
 
 import { CloseIcon, DocumentIcon } from "../shared/icons";
-import { compactButtonSizeClass, compactPressableClass, cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass } from "../shared/styles";
+import {
+  compactButtonSizeClass,
+  compactPressableClass,
+  cx,
+  ghostButtonSurfaceClass,
+  primaryButtonSurfaceClass,
+} from "@shiori/plugin-sdk";
 import type { RoleCardImportPreview } from "../shared/types";
 import { RoleCardImportAssets } from "./RoleCardImportAssets";
 import { hasUnselectedEmotions } from "./roleCardImportSelectors";

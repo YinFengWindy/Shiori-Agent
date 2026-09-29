@@ -5,12 +5,10 @@ import {
   cardClass,
   compactButtonSizeClass,
   cx,
-  dangerGhostButtonSurfaceClass,
   ghostButtonSurfaceClass,
   primaryButtonSurfaceClass,
-  segmentedTabClass,
-  segmentedTabListClass,
-} from "../shared/styles";
+} from "@shiori/plugin-sdk";
+import { dangerGhostButtonSurfaceClass, segmentedTabClass, segmentedTabListClass } from "../shared/styles";
 import type { RoleAssetMode, RoleAssetPreview } from "./roleAssetPreview";
 import { roleAssetModes } from "./roleAssetPreview";
 import { RoleMoodBindingsPanel } from "./RoleMoodBindingsPanel";

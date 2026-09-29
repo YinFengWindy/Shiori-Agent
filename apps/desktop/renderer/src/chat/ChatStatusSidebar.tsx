@@ -1,6 +1,6 @@
 import React, { useRef } from "react";
 import { CrossfadeLayers } from "../shared/CrossfadeLayers";
-import { cx } from "../shared/styles";
+import { cx } from "@shiori/plugin-sdk";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
 import { moodTone } from "./moodTone";
 import { useMoodChangeCue } from "./useMoodChangeCue";
