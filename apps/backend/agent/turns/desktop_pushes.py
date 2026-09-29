@@ -1,4 +1,9 @@
-"""Private desktop drafts owned by one passive reasoning task."""
+"""Private push drafts owned by one passive reasoning task.
+
+Desktop pushes are held here and delivered once the turn commits; texts the
+turn already delivered through an external channel are held here too, so
+they are recorded with the turn (in its commit and ``committed_message_ids``).
+"""
 
 import asyncio
 from collections.abc import Awaitable, Callable, Iterator
@@ -37,13 +42,18 @@ class DesktopPushDrafts:
         message: dict[str, Any],
         *,
         owner: object,
-        after_commit: Callable[[], Awaitable[None]],
+        after_commit: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
-        """Registers one draft and deduplicates its transport's commit effects."""
+        """Registers one draft and deduplicates its transport's commit effects.
+
+        ``after_commit`` is the transport's effect once the turn is durable
+        (e.g. delivering desktop pushes); a draft already delivered has none.
+        """
         if not self._active or self._task is not asyncio.current_task():
             raise RuntimeError("桌面推送回合已结束")
         self.messages.append(message)
-        self._effects[owner] = after_commit
+        if after_commit is not None:
+            self._effects[owner] = after_commit
 
     async def committed(self) -> None:
         """Applies transport effects once, only after durable message publication."""

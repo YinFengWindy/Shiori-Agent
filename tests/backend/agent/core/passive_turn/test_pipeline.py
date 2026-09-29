@@ -19,6 +19,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from bus.events import InboundMessage
+from conversation.push_sync import ExternalPushSyncService
 from conversation.service import (
     desktop_thread_id,
     network_thread_id,
@@ -38,7 +39,7 @@ async def runtime(tmp_path):
     roles.create_role(role_id="mira", name="Mira", system_prompt="test")
     manager = SessionManager(tmp_path)
     bus = EventBus()
-    push = MessagePushTool()
+    push = MessagePushTool(event_bus=bus)
     bridge = DesktopBridgeService(
         workspace=tmp_path,
         role_store=roles,
@@ -92,6 +93,7 @@ async def runtime(tmp_path):
         call=call,
         pipeline=pipeline,
         push=push,
+        bus=bus,
     )
     await bridge.aclose()
 
@@ -441,3 +443,47 @@ async def test_input_budget_counts_only_the_turn_context(tmp_path):
         # The large group message only weighs on external turns, where the
         # context guard stops the turn before the model is called.
         assert reasoner.run.await_count == (1 if runs else 0)
+
+
+async def test_channel_pushes_during_a_turn_are_committed_with_it_under_their_chat(
+    runtime,
+):
+    _ = ExternalPushSyncService(session_manager=runtime.manager, event_bus=runtime.bus)
+    runtime.push.register_channel("qq", text=AsyncMock(return_value="qq-msg-1"))
+    runtime.push.register_channel(
+        "qqfail", text=AsyncMock(side_effect=OSError("offline"))
+    )
+    target = network_thread_id("mira", "qq", "gqq:6")
+
+    async def reasoning(**_kwargs):
+        assert "已发送" in await runtime.call(
+            channel="qq", chat_id="gqq:6", message="去另一个群说一声"
+        )
+        assert "发送失败" in await runtime.call(
+            channel="qqfail", chat_id="gqq:7", message="没发出去"
+        )
+        # Not recorded before the turn commits.
+        assert runtime.manager._store.fetch_session_messages(runtime.session.key) == []
+        return reply()
+
+    await runtime.pipeline(reasoning).run(
+        incoming(), runtime.session.key, dispatch_outbound=False
+    )
+
+    stored = runtime.manager._store.fetch_session_messages(runtime.session.key)
+    assert [(row["content"], row["thread_id"]) for row in stored] == [
+        ("send to desktop", network_thread_id("mira", "qqbot", "friend")),
+        ("去另一个群说一声", target),
+        ("done", network_thread_id("mira", "qqbot", "friend")),
+    ]
+    assert stored[1]["metadata"]["external_message_id"] == "qq-msg-1"
+    # The turn's commit carries it, so the phone hears about the target chat.
+    phone = [
+        event["payload"]
+        for event in runtime.emitted
+        if event["method"] == "phone.conversation.updated"
+    ]
+    assert [
+        (update["thread_id"], [row["id"] for row in update["messages"]])
+        for update in phone
+    ] == [(target, [stored[1]["id"]])]

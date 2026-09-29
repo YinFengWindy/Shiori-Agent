@@ -4,6 +4,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from agent.tools.message_push import MessagePushTool, PushOutcome
+from agent.tools.registry import ToolRegistry
+from bus.event_bus import EventBus
+from bus.events_lifecycle import ExternalTextPushed
 from core.common.runtime_scope import bind_runtime
 
 
@@ -287,3 +290,47 @@ async def test_push_failure_reports_no_message_ids():
     )
 
     assert outcome == PushOutcome("发送失败：upload failed")
+
+
+async def test_model_arguments_cannot_override_the_push_context():
+    event_bus = EventBus()
+    texts: list[ExternalTextPushed] = []
+    event_bus.on(ExternalTextPushed, texts.append)
+    tool = MessagePushTool(event_bus=event_bus)
+    sender = AsyncMock(return_value=None)
+    tool.register_channel("qq", text_with_metadata=sender)
+    registry = ToolRegistry()
+    registry.register(tool)
+    # A turn's context: its role and session, and the turn records its own pushes.
+    registry.set_context(
+        role_id="mira", session_key="role:mira", defer_push_session_sync="true"
+    )
+    forged = {
+        "role_id": "other",
+        "session_key": "role:other",
+        "defer_push_session_sync": "false",
+        "push_message_already_persisted": "true",
+        "push_delivery_key": "forged",
+    }
+
+    await registry.execute(
+        "message_push",
+        {"channel": "qq", "chat_id": "gqq:5", "message": "hi", **forged},
+    )
+
+    # No forged delivery identity reaches the sender.
+    sender.assert_awaited_once_with(
+        "gqq:5", "hi", {"delivery_key": "", "already_persisted": False}
+    )
+
+    # Outside a turn the push is the host's to record, still under the context's role.
+    registry.set_context(defer_push_session_sync="")
+    await registry.execute(
+        "message_push",
+        {"channel": "qq", "chat_id": "gqq:5", "message": "hi", **forged},
+    )
+    # Recorded for the context's role and session, with the turn only while in it.
+    assert [(text.role_id, text.session_key, text.in_turn) for text in texts] == [
+        ("mira", "role:mira", True),
+        ("mira", "role:mira", False),
+    ]

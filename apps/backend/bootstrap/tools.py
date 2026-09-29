@@ -79,7 +79,7 @@ from core.roles import (
 from core.roles.model_runtime import RoleModelRuntime
 from core.roles.self_initializer import RoleSelfInitializer
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
-from conversation.push_sync import ExternalImageSyncService
+from conversation.push_sync import ExternalPushSyncService
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
 
@@ -105,7 +105,7 @@ class CoreRuntime:
     relationship_runtime: RoleRelationshipRuntimeService
     role_runtime_registry: RoleRuntimeRegistry
     scene_service: SceneObservationService | None = None
-    image_sync_service: ExternalImageSyncService | None = None
+    image_sync_service: ExternalPushSyncService | None = None
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginKernel | None" = None
     memory_optimizer: Any | None = None
@@ -499,7 +499,7 @@ def build_core_runtime(
     image_sync_service = (
         shared.image_sync_service
         if shared is not None
-        else ExternalImageSyncService(
+        else ExternalPushSyncService(
             session_manager=session_manager,
             event_bus=event_outlet or event_bus,
         )

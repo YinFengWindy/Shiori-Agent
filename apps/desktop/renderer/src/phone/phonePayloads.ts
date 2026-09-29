@@ -58,7 +58,7 @@ function isMessagePayload(value: unknown): value is PhoneMessagePayload {
 }
 
 /** A bridge list row in the renderer's shape. */
-export function mapConversation(row: PhoneConversationPayload): PhoneConversation {
+export function mapConversation(row: PhoneConversationPayload) {
   return {
     threadId: row.thread_id,
     accountId: row.account_id,
@@ -73,11 +73,11 @@ export function mapConversation(row: PhoneConversationPayload): PhoneConversatio
       hasMedia: row.last_message.has_media,
       senderName: row.last_message.sender_name,
     },
-  };
+  } satisfies PhoneConversation;
 }
 
 /** A bridge message row in the renderer's shape. */
-export function mapMessage(row: PhoneMessagePayload): PhoneMessage {
+export function mapMessage(row: PhoneMessagePayload) {
   return {
     id: row.id,
     seq: row.seq,
@@ -88,19 +88,22 @@ export function mapMessage(row: PhoneMessagePayload): PhoneMessage {
     content: row.content,
     media: row.media,
     timestamp: row.timestamp,
-  };
+  } satisfies PhoneMessage;
 }
 
 /**
  * The update a `phone.conversation.updated` event carries; null for any
- * other event, and for one whose payload does not have the update's shape.
+ * other event. A payload without the update's shape is a bridge contract
+ * break and throws.
  */
-export function phoneConversationUpdateOf(event: BridgeEvent): PhoneConversationUpdate | null {
+export function phoneConversationUpdateOf(event: BridgeEvent) {
   if (event.method !== phoneConversationUpdatedEvent) return null;
   const { role_id: roleId, thread_id: threadId, conversation, messages } = event.payload;
   if (!isText(roleId) || !isText(threadId) || !isConversationPayload(conversation)
     || !Array.isArray(messages) || !messages.every(isMessagePayload)) {
-    return null;
+    throw new Error(`${phoneConversationUpdatedEvent} 的负载格式不符`);
   }
-  return { roleId, threadId, conversation: mapConversation(conversation), messages: messages.map(mapMessage) };
+  return {
+    roleId, threadId, conversation: mapConversation(conversation), messages: messages.map(mapMessage),
+  } satisfies PhoneConversationUpdate;
 }

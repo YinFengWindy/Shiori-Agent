@@ -18,16 +18,12 @@ from agent.turns.result import TurnResult, TurnOutbound
 from core.roles.reply_state import RoleReply
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted, RoleDeleted, TurnCommitted
-from conversation.push_sync import ExternalImageSyncService
-from conversation.service import LegacySessionDescriptor
+from conversation.push_sync import ExternalPushSyncService
+from conversation.service import LegacySessionDescriptor, network_thread_id
 from core.common.message_source import MessageSource
 from core.roles import RoleStore
 from core.roles.services import RoleAggregateService
-from agent.scheduler import SchedulerService
-from conversation.service import network_thread_id
-from datetime import datetime, timedelta, timezone
 from desktop_bridge.service import DesktopBridgeService
-from tests.support.scheduler import make_job
 from desktop_bridge.voice.voice_service import (
     VoiceOperationMetrics,
     VoiceServiceError,
@@ -718,7 +714,7 @@ async def test_external_image_push_persists_and_broadcasts_desktop_session(
     session_manager = SessionManager(tmp_path)
     session_manager.open_role_session("mira", role_name="Mira")
     event_bus = EventBus()
-    _ = ExternalImageSyncService(
+    _ = ExternalPushSyncService(
         session_manager=session_manager,
         event_bus=event_bus,
     )
@@ -842,15 +838,13 @@ async def test_channel_turn_commit_sends_the_phone_exactly_its_rows(tmp_path) ->
 
 
 @pytest.mark.asyncio
-async def test_scheduled_text_to_a_channel_is_recorded_once_and_reaches_the_phone(
-    tmp_path,
-) -> None:
+async def test_host_text_push_to_a_channel_reaches_the_phone(tmp_path) -> None:
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="test")
     session_manager = SessionManager(tmp_path)
     session_manager.open_role_session("mira", role_name="Mira")
     event_bus = EventBus()
-    _ = ExternalImageSyncService(session_manager=session_manager, event_bus=event_bus)
+    _ = ExternalPushSyncService(session_manager=session_manager, event_bus=event_bus)
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
@@ -861,44 +855,27 @@ async def test_scheduled_text_to_a_channel_is_recorded_once_and_reaches_the_phon
     emitted: list[dict] = []
     service.add_event_listener(emitted.append)
     push_tool = MessagePushTool(event_bus=event_bus)
-    sent: list[tuple[str, str]] = []
+    push_tool.register_channel("qq", text=AsyncMock(return_value="qq-1"))
 
-    async def send_text(chat_id: str, text: str) -> str:
-        sent.append((chat_id, text))
-        return f"qq-{len(sent)}"
-
-    push_tool.register_channel("qq", text=send_text)
-    now = datetime(2026, 9, 29, 12, 0, tzinfo=timezone.utc)
-
-    async def run_role_operation(_metadata, operation):
-        return await operation()
-
-    scheduler = SchedulerService(
-        store_path=tmp_path / "jobs.json",
-        push_tool=push_tool,
-        agent_loop=SimpleNamespace(run_role_operation=run_role_operation),
-        _now_fn=lambda: now,
-    )
-    job = make_job(
-        tier="instant",
-        fire_at=now - timedelta(seconds=1),
+    # As a scheduled job sends it: outside any turn, under the role's session.
+    await push_tool.execute(
         channel="qq",
         chat_id="gqq:5",
         message="该喝水啦",
+        role_id="mira",
+        session_key="role:mira",
+        push_delivery_key="scheduler:job:1",
     )
 
-    await scheduler._execute(job)
-    # A retry of the same occurrence (same delivery key) sends again but stores nothing new.
-    await scheduler._execute(job)
-
-    assert sent == [("gqq:5", "该喝水啦"), ("gqq:5", "该喝水啦")]
     thread_id = network_thread_id("mira", "qq", "gqq:5")
-    stored = [
-        message
-        for message in session_manager._store.fetch_session_messages("role:mira")
-        if message.get("thread_id") == thread_id
+    phone = [
+        event["payload"]
+        for event in emitted
+        if event["method"] == "phone.conversation.updated"
     ]
-    assert [message["content"] for message in stored] == ["该喝水啦"]
+    assert [
+        (update["thread_id"], update["messages"][0]["content"]) for update in phone
+    ] == [(thread_id, "该喝水啦")]
     page = await service.handle(
         {
             "id": "page",
@@ -909,14 +886,6 @@ async def test_scheduled_text_to_a_channel_is_recorded_once_and_reaches_the_phon
     )
     assert [(row["sender"], row["content"]) for row in page.payload["messages"]] == [
         ("role", "该喝水啦")
-    ]
-    phone = [
-        event["payload"]
-        for event in emitted
-        if event["method"] == "phone.conversation.updated"
-    ]
-    assert [[row["content"] for row in update["messages"]] for update in phone] == [
-        ["该喝水啦"]
     ]
     await service.aclose()
 

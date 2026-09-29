@@ -37,6 +37,20 @@ class PushOutcome:
 
 class MessagePushTool(Tool):
     name = "message_push"
+    # Who is sending, from which session, and who records the delivery belong
+    # to the caller's execution context; a model argument of the same name
+    # must not reroute persistence or cause a second write. Only the target
+    # (channel, chat_id) and the payload are the model's.
+    context_precedence = frozenset(
+        {
+            "role_id",
+            "session_key",
+            "push_delivery_key",
+            "push_message_already_persisted",
+            "defer_push_session_sync",
+            "_pending_turn_delivery",
+        }
+    )
     parameters = {
         "type": "object",
         "properties": {
@@ -278,19 +292,20 @@ class MessagePushTool(Tool):
 
         image_sent = False
         text_sent = False
+        text_message_id: str | None = None
         try:
             if message:
                 if "text_with_metadata" in senders:
-                    record_external_id(
-                        await senders["text_with_metadata"](
-                            chat_id,
-                            message,
-                            delivery_metadata,
-                        )
+                    text_result = await senders["text_with_metadata"](
+                        chat_id,
+                        message,
+                        delivery_metadata,
                     )
                 else:
                     sender_name = "stream_text" if "stream_text" in senders else "text"
-                    record_external_id(await senders[sender_name](chat_id, message))
+                    text_result = await senders[sender_name](chat_id, message)
+                record_external_id(text_result)
+                text_message_id = _normalize_message_id(text_result)
                 preview = message[:60] + "..." if len(message) > 60 else message
                 logger.info(f"[message_push] {channel}:{chat_id} ← text: {preview!r}")
                 text_sent = True
@@ -329,8 +344,9 @@ class MessagePushTool(Tool):
             logger.error(f"[message_push] 发送失败 {channel}:{chat_id}: {e}")
             return PushOutcome(f"发送失败：{e}")
 
-        # A host-owned text send outside any turn (a scheduled job) is recorded in
-        # the role's session; turn pushes and persisted deliveries have owners.
+        # A delivered text is recorded in the role's session: with the turn that
+        # pushed it (``in_turn``), or at once for a host-owned send (a scheduled
+        # job). Pending and already-persisted deliveries have their owners.
         if (
             text_sent
             and message
@@ -340,7 +356,6 @@ class MessagePushTool(Tool):
             and self._event_bus is not None
             and not pending_commit
             and not delivery_metadata["already_persisted"]
-            and not _is_truthy(kwargs.get("defer_push_session_sync"))
         ):
             _ = await self._event_bus.emit(
                 ExternalTextPushed(
@@ -350,6 +365,8 @@ class MessagePushTool(Tool):
                     chat_id=chat_id,
                     text=message,
                     delivery_key=str(delivery_metadata["delivery_key"]),
+                    in_turn=_is_truthy(kwargs.get("defer_push_session_sync")),
+                    external_message_id=text_message_id or "",
                 )
             )
 

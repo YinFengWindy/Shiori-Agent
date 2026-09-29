@@ -6,8 +6,11 @@ import pytest
 
 from agent.lifecycle.types import AfterReasoningCtx
 from agent.tools.message_push import MessagePushTool
+from agent.turns.desktop_pushes import DesktopPushDrafts
 from bus.event_bus import EventBus
-from conversation.push_sync import ExternalImageSyncService
+from bus.events_lifecycle import ExternalTextPushed, ProactiveMessageCommitted
+from conversation.service import network_thread_id
+from conversation.push_sync import ExternalPushSyncService
 from session.manager import SessionManager
 
 
@@ -18,7 +21,7 @@ async def test_turn_image_is_reserved_for_persistence_without_immediate_append(
     session_manager = SessionManager(tmp_path)
     session_manager.open_role_session("mira", role_name="Mira")
     event_bus = EventBus()
-    _ = ExternalImageSyncService(
+    _ = ExternalPushSyncService(
         session_manager=session_manager,
         event_bus=event_bus,
     )
@@ -77,7 +80,7 @@ async def test_pre_persisted_proactive_image_is_not_duplicated(tmp_path: Path) -
     )
     await session_manager.append_messages(session, session.messages[-1:])
     event_bus = EventBus()
-    _ = ExternalImageSyncService(
+    _ = ExternalPushSyncService(
         session_manager=session_manager,
         event_bus=event_bus,
     )
@@ -121,7 +124,7 @@ async def test_pre_persisted_proactive_image_allows_retry_transport(
     )
     await session_manager.append_messages(session, session.messages[-1:])
     event_bus = EventBus()
-    _ = ExternalImageSyncService(
+    _ = ExternalPushSyncService(
         session_manager=session_manager,
         event_bus=event_bus,
     )
@@ -143,3 +146,74 @@ async def test_pre_persisted_proactive_image_allows_retry_transport(
 
     assert result == "图片已发送"
     assert len(session_manager.get_or_create("role:mira").messages) == 1
+
+
+def _text_sync(tmp_path: Path):
+    """A role session, the sync service on its bus, a QQ push tool, and the events seen."""
+    session_manager = SessionManager(tmp_path)
+    session_manager.open_role_session("mira", role_name="Mira")
+    event_bus = EventBus()
+    _ = ExternalPushSyncService(session_manager=session_manager, event_bus=event_bus)
+    committed: list[ProactiveMessageCommitted] = []
+    texts: list[ExternalTextPushed] = []
+    event_bus.on(ProactiveMessageCommitted, committed.append)
+    event_bus.on(ExternalTextPushed, texts.append)
+    push_tool = MessagePushTool(event_bus=event_bus)
+
+    async def send_text(_chat_id: str, _text: str) -> str:
+        return "qq-1"
+
+    push_tool.register_channel("qq", text=send_text)
+    return session_manager, push_tool, committed, texts
+
+
+@pytest.mark.asyncio
+async def test_host_text_push_is_stored_once_under_the_chats_thread(
+    tmp_path: Path,
+) -> None:
+    session_manager, push_tool, committed, _ = _text_sync(tmp_path)
+
+    for _attempt in range(2):
+        # A retried delivery carries the same key.
+        await push_tool.execute(
+            channel="qq",
+            chat_id="gqq:5",
+            message="该喝水啦",
+            role_id="mira",
+            session_key="role:mira",
+            push_delivery_key="scheduler:job:1",
+        )
+
+    stored = session_manager._store.fetch_session_messages("role:mira")
+    assert [
+        (message["role"], message["content"], message["thread_id"])
+        for message in stored
+    ] == [("assistant", "该喝水啦", network_thread_id("mira", "qq", "gqq:5"))]
+    assert stored[0]["metadata"]["delivery_key"] == "scheduler:job:1"
+    assert [event.message_id for event in committed] == [stored[0]["id"]]
+
+
+@pytest.mark.asyncio
+async def test_turn_text_push_becomes_one_draft_of_its_turn(tmp_path: Path) -> None:
+    session_manager, push_tool, committed, _ = _text_sync(tmp_path)
+    drafts = DesktopPushDrafts("role:mira")
+
+    with drafts.collect():
+        for _attempt in range(2):
+            # The same platform message reported twice is one delivery.
+            await push_tool.execute(
+                channel="qq",
+                chat_id="gqq:5",
+                message="顺便说一声",
+                role_id="mira",
+                session_key="role:mira",
+                defer_push_session_sync="true",
+            )
+
+    # Left to the turn's commit: nothing stored or announced yet.
+    assert committed == []
+    assert session_manager._store.fetch_session_messages("role:mira") == []
+    assert [
+        (draft["content"], draft["thread_id"], draft["metadata"]["external_message_id"])
+        for draft in drafts.messages
+    ] == [("顺便说一声", network_thread_id("mira", "qq", "gqq:5"), "qq-1")]
