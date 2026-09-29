@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 DOCUMENT_DEFAULTS = {
@@ -40,11 +41,16 @@ DOCUMENT_DEFAULTS = {
     "PENDING.md": "# 待整理的记忆\n",
 }
 
+# SELF.md 的三个规范段落标题。
+SELF_PERSONA_SECTION = "## 我的性格与形象"
+SELF_UNDERSTANDING_SECTION = "## 我对你的理解"
+SELF_RELATIONSHIP_SECTION = "## 我们的关系"
+
 DOCUMENT_SECTIONS = {
     "SELF.md": (
-        "## 我的性格与形象",
-        "## 我对你的理解",
-        "## 我们的关系",
+        SELF_PERSONA_SECTION,
+        SELF_UNDERSTANDING_SECTION,
+        SELF_RELATIONSHIP_SECTION,
     ),
     "MEMORY.md": (
         "## 关于你",
@@ -52,6 +58,32 @@ DOCUMENT_SECTIONS = {
         "## 你希望我记住的事",
     ),
 }
+
+
+def select_memory_sections(filename: str, content: str, headings: Iterable[str]) -> str:
+    """Returns only the chosen canonical sections of a SELF or MEMORY document.
+
+    Sections are located by their canonical headings (``DOCUMENT_SECTIONS``); each
+    one runs until the next canonical heading, so nested sub-headings stay with
+    their section. Everything else is dropped: the document title, text before the
+    first canonical heading, and the unselected sections. Kept sections appear in
+    document order. Returns an empty string when none of them is present.
+    """
+
+    sections = DOCUMENT_SECTIONS.get(filename)
+    wanted = set(headings)
+    if sections is None or not wanted.issubset(sections):
+        raise ValueError(f"unsupported memory section: {filename} {sorted(wanted)}")
+    kept: list[str] = []
+    current: str | None = None
+    for line in str(content or "").replace("\r\n", "\n").splitlines():
+        stripped = line.strip()
+        # 只有规范标题切换段落；其他行归属当前段落。
+        if stripped in sections:
+            current = stripped
+        if current in wanted:
+            kept.append(line)
+    return "\n".join(kept).strip()
 
 
 def ensure_memory_documents(memory_dir: Path) -> None:

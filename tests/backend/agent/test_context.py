@@ -6,6 +6,7 @@ import pytest
 from agent.context import ContextBuilder, ContextRequest, MessageEnvelopeBuilder
 from agent.prompting import SYSTEM_CONTEXT_FRAME_MARKER
 from bus.events import InboundMessage
+from conversation.context_scope import ContextScope
 from core.common.channel_directory import ChannelDirectory
 from core.common.message_source import MessageSource
 from core.roles import RoleStore
@@ -494,3 +495,63 @@ def test_context_builder_reproduces_temporal_conflict_baseline(
     assert "weekday=Wednesday" in user_message
     assert "相对时间以此为准" in user_message
     assert user_message.endswith("你还记得明天什么时候面试吗")
+
+
+def test_context_builder_external_turn_injects_only_public_self_sections(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    class _Skills:
+        def __init__(self, workspace: Path) -> None:
+            self.workspace = workspace
+
+        def get_always_skills(self) -> list[str]:
+            return []
+
+        def load_skills_for_context(self, names: list[str]) -> str:
+            return ""
+
+        def build_skills_summary(self) -> str:
+            return ""
+
+    class _Memory:
+        def read_self(self) -> str:
+            return (
+                "# 我是谁\n\n"
+                "## 我的性格与形象\n- 形象条目\n\n"
+                "## 我对你的理解\n- 理解条目\n\n"
+                "## 我们的关系\n- 关系条目\n"
+            )
+
+        def read_recent_context(self) -> str:
+            return "# 最近发生的事\n\n## 最近聊过的事\n- 近期语境条目\n"
+
+        def get_memory_context(self) -> str:
+            return "## Long-term Memory\n- 长期记忆条目"
+
+    monkeypatch.setattr("agent.context.SkillsLoader", _Skills)
+    RoleStore(tmp_path).create_role(
+        role_id="mira", name="Mira", system_prompt="test role"
+    )
+    builder = ContextBuilder(tmp_path, _Memory())  # type: ignore[arg-type]
+
+    def model_input(scope: ContextScope) -> str:
+        result = builder.render(
+            ContextRequest(
+                history=[],
+                current_message="你好",
+                retrieved_memory_block="检索条目",
+                context_scope=scope,
+            ),
+            session_metadata={"role_id": "mira"},
+        )
+        return "\n".join(str(message["content"]) for message in result.messages)
+
+    external = model_input("external")
+    user = model_input("user")
+
+    for injected in ("形象条目", "关系条目"):
+        assert injected in external
+        assert injected in user
+    for private in ("理解条目", "近期语境条目", "长期记忆条目", "检索条目"):
+        assert private not in external
+        assert private in user

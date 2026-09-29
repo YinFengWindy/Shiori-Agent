@@ -108,6 +108,8 @@ class PromptRenderInput:
     extra_hints: list[str] | None = None
     message_source: MessageSource | None = None
     session_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
+    # 回合所在的上下文，取自 TurnState.context_scope；决定注入哪些记忆。
+    context_scope: ContextScope | None = None
 
 
 @dataclass

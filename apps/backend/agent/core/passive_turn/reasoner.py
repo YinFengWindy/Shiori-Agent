@@ -408,6 +408,9 @@ class DefaultReasoner(
                         turn_injection_prompt=turn_injection_prompt,
                         extra_hints=extra_hints,
                         session_metadata=get_session_metadata(session),
+                        context_scope=(
+                            context_view.scope if context_view is not None else None
+                        ),
                     )
                 )
                 initial_messages = prompt_render.messages

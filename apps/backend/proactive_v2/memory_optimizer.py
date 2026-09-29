@@ -4,6 +4,9 @@ proactive/memory_optimizer.py — 记忆质量优化器
 每轮运行两步：
   1. 重写 MEMORY.md：把 PENDING 事实整理为角色相对视角的长期记忆
   2. 更新 SELF.md：只改写约定的三个 section
+
+SELF.md 的写入规则有版本号（``SELF_RULES_VERSION``）。角色记录的版本落后时，下一次
+优化把 SELF 步骤换成按新规则的一次性重写，成功后记下版本，之后不再重写。
 """
 
 from __future__ import annotations
@@ -12,19 +15,28 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from core.memory.markdown import MarkdownMemoryStore
+    from core.roles.models import RoleRecord
     from core.roles.role_runtime import RoleRuntimeRegistry
 
 from agent.memory import DEFAULT_SELF_MD
 from agent.provider import LLMProvider
 from core.memory.markdown import resolve_markdown_store
 from core.roles import RoleStore
+from core.roles.self_seed_state import resolve_self_seed_state
 
 logger = logging.getLogger(__name__)
 _LAST_OPTIMIZED_STATE_KEY = "last_memory_optimized_at"
+# 角色 memory_init_state 里记录“SELF.md 已按哪一版写入规则重写”的键。
+_SELF_RULES_VERSION_STATE_KEY = "self_rules_version"
+# SELF.md 写入规则的当前版本。
+# 2（#495）：「我们的关系」只写关系定位与称呼，SELF 不含用户私人事实，因为
+# 「我的性格与形象」与「我们的关系」会在群聊等外部上下文注入。
+SELF_RULES_VERSION = 2
 
 
 class MemoryOptimizerBusy(RuntimeError):
@@ -171,6 +183,12 @@ _SELF_PROMPT = """\
   - `## 我们的关系`
 - 绝对禁止新增任何其他 section，尤其禁止出现 `## 关系演进记录`
 
+## 各 section 的写法
+`## 我的性格与形象` 与 `## 我们的关系` 会在群聊、陌生人私聊等外部场合注入，群友和陌生人都可能看到据此说出的话；`## 我对你的理解` 只在和用户本人的对话里使用。
+- `## 我的性格与形象`：当前角色的人格定位、说话风格、交互边界与自我形象；可以吸收角色在群聊等外部场合的经历（在群里形成的定位、习惯、被别人怎样看待），但不得写任何关于用户的私人事实
+- `## 我对你的理解`：当前角色对用户的稳定理解
+- `## 我们的关系`：只写关系定位和角色对用户的称呼（例如“我们是……”“我叫你……”）；关于用户的私人事实（身份、经历、偏好、健康、近况、共同经历的细节等）一律不写在这里，它们留在长期记忆里
+
 ## 更新原则
 - 当前 SELF.md 是主文本，优先保留其已有的自我认知、语气和关系定义；不要把待合并事实机械改写进 SELF
 - 待合并事实只是辅助证据，只能在它们确实帮助澄清以下内容时少量吸收：
@@ -185,10 +203,10 @@ _SELF_PROMPT = """\
   - 工具规范、SOP、调用规则、执行流程
   - 对话事件复盘、事件流水账、阶段性经历总结
 - 不要把角色写成“内部底座”“系统本体”“真正身份是 Shiori”“我只是外壳”这类元叙事
-- 不要把用户偏好直接抄进 `## 我对当前用户的理解`；只有当某条偏好已经稳定影响角色如何理解、靠近或回应用户时，才允许上收为更高层的关系理解
+- 不要把用户偏好直接抄进 `## 我对你的理解`；只有当某条偏好已经稳定影响角色如何理解、靠近或回应用户时，才允许上收为更高层的关系理解
 - 如果没有足够高价值的新信息，宁可输出与当前 SELF.md 基本一致的版本
 - 保持语气稳定、简洁、有立场；它是自我认知，不是用户档案，也不是工作日志
-
+{rewrite_note}
 ## 输出约束
 - 输出必须以 `# 我是谁` 开头
 - 只能包含标题和 bullet 列表
@@ -202,6 +220,21 @@ _SELF_PROMPT = """\
 待合并事实：
 {pending}
 """
+
+# 按新规则一次性重写 SELF.md 时追加到 _SELF_PROMPT 的要求。
+_SELF_REWRITE_NOTE = """
+## 本轮是按上述规则的一次性重写
+- 逐段检查当前 SELF.md 是否符合「各 section 的写法」，把不符合的内容改正，而不是只做少量增补
+- `## 我们的关系` 与 `## 我的性格与形象` 里关于用户的私人事实要移出：仍有价值的并入 `## 我对你的理解`，不要直接丢弃
+- 除此之外保持原有的自我认知、语气和立场
+"""
+
+
+def self_rewrite_pending(memory_init_state: Mapping[str, object]) -> bool:
+    """角色的 SELF.md 是否还没按当前写入规则（``SELF_RULES_VERSION``）重写过。"""
+    version = memory_init_state.get(_SELF_RULES_VERSION_STATE_KEY)
+    return not isinstance(version, int) or version < SELF_RULES_VERSION
+
 
 # ── MemoryOptimizer ───────────────────────────────────────────────
 
@@ -285,12 +318,34 @@ class MemoryOptimizer:
             default_store=self._memory,
             role_id=clean_role_id,
         )
+        role_store = RoleStore(self._workspace)
+        role = role_store.get_role(clean_role_id)
+        rewrite_self = False
+        if role is not None and self_rewrite_pending(role.memory_init_state):
+            seed = resolve_self_seed_state(role, memory_store.read_self())
+            if seed["status"] == "pending":
+                # 还没生成首版 SELF 的角色只有默认模板，没有需要按新规则整理的内容；
+                # 此时改写 SELF 还会让首版生成误判为用户编辑而放弃。
+                self._mark_self_rewritten(role_store, clean_role_id)
+            else:
+                rewrite_self = True
         # ── Step 1: MEMORY.md 合并 ────────────────────────────────
         pending = memory_store.snapshot_pending()
         current_memory = memory_store.read_long_term().strip()
 
         if not current_memory and not pending:
-            logger.info("[memory_optimizer] 记忆和 pending 均为空，跳过优化")
+            if not rewrite_self:
+                logger.info("[memory_optimizer] 记忆和 pending 均为空，跳过优化")
+                return
+            # 记忆为空也要完成 SELF.md 的一次性重写。
+            if await self._update_self(
+                memory_store,
+                "",
+                provider=active_provider,
+                model=active_model,
+                rewrite=True,
+            ):
+                self._mark_self_rewritten(role_store, clean_role_id)
             return
 
         merged_memory = await self._merge_memory(
@@ -322,13 +377,16 @@ class MemoryOptimizer:
 
         # ── Step 2: SELF.md 更新 ──────────────────────────────────
         await asyncio.sleep(self._STEP_DELAY_SECONDS)
-        await self._update_self(
+        self_written = await self._update_self(
             memory_store,
             pending,
             provider=active_provider,
             model=active_model,
+            rewrite=rewrite_self,
         )
-        self._mark_role_optimized(clean_role_id)
+        if rewrite_self and self_written:
+            self._mark_self_rewritten(role_store, clean_role_id)
+        self._mark_role_optimized(role_store, clean_role_id)
 
     async def _merge_memory(
         self,
@@ -363,15 +421,20 @@ class MemoryOptimizer:
         *,
         provider: LLMProvider,
         model: str,
-    ) -> None:
-        """只更新 SELF.md 现有保留的三段，不新增 section。"""
+        rewrite: bool = False,
+    ) -> bool:
+        """只更新 SELF.md 现有保留的三段，不新增 section；返回是否写入了新内容。
+
+        ``rewrite`` 为真时要求模型按当前写入规则整体重写一次（见 ``SELF_RULES_VERSION``）。
+        """
         self_content = memory_store.read_self().strip() or DEFAULT_SELF_MD.strip()
         if not self_content:
             logger.info("[memory_optimizer] SELF.md 不存在或为空，跳过更新")
-            return
+            return False
         prompt = _SELF_PROMPT.format(
             self_content=self_content,
             pending=pending or "（无新内容）",
+            rewrite_note=_SELF_REWRITE_NOTE if rewrite else "",
         )
         try:
             updated = await self._request_text_response(
@@ -383,9 +446,11 @@ class MemoryOptimizer:
             )
             if updated:
                 memory_store.write_self(updated)
-                logger.info("[memory_optimizer] SELF.md 已更新")
+                logger.info("[memory_optimizer] SELF.md 已更新 rewrite=%s", rewrite)
+                return True
         except Exception as e:
             logger.error("[memory_optimizer] SELF.md 更新失败: %s", e)
+        return False
 
     async def _request_text_response(
         self,
@@ -407,19 +472,39 @@ class MemoryOptimizer:
         )
         return (resp.content or "").strip()
 
-    def _mark_role_optimized(self, role_id: str) -> None:
-        clean_role_id = str(role_id or "").strip()
-        if not clean_role_id:
-            return
-        store = RoleStore(self._workspace)
-        role = store.get_role(clean_role_id)
+    @staticmethod
+    def _mark_self_rewritten(store: RoleStore, role_id: str) -> None:
+        """记下角色 SELF.md 已按当前写入规则重写，之后不再触发一次性重写。"""
+        _set_role_memory_state(
+            store, role_id, _SELF_RULES_VERSION_STATE_KEY, SELF_RULES_VERSION
+        )
+
+    @staticmethod
+    def _mark_role_optimized(store: RoleStore, role_id: str) -> None:
+        """记下角色本次优化完成的时间，供启动补跑判断是否过期。"""
+        _set_role_memory_state(
+            store,
+            role_id,
+            _LAST_OPTIMIZED_STATE_KEY,
+            datetime.now().astimezone().isoformat(),
+        )
+
+
+def _set_role_memory_state(
+    store: RoleStore, role_id: str, key: str, value: object
+) -> None:
+    """在角色 ``memory_init_state`` 里写入一个键；角色已不存在时不写。
+
+    优化期间要等待模型调用，其他流程（如 SELF 首版生成）可能已改写同一份状态，
+    所以写入前在存储锁内重新读取角色，只改这一个键。
+    """
+    with store.lock:
+        role = store.get_role(role_id)
         if role is None:
             return
-        next_state = dict(role.memory_init_state or {})
-        next_state[_LAST_OPTIMIZED_STATE_KEY] = datetime.now().astimezone().isoformat()
-        if next_state == role.memory_init_state:
-            return
-        store.update_role(clean_role_id, memory_init_state=next_state)
+        next_state: dict[str, object] = {**role.memory_init_state, key: value}
+        if next_state != role.memory_init_state:
+            _ = store.update_role(role_id, memory_init_state=next_state)
 
 
 # ── MemoryOptimizerLoop ───────────────────────────────────────────
@@ -500,10 +585,13 @@ class MemoryOptimizerLoop:
             except Exception:
                 logger.exception("[memory_optimizer] 启动补跑角色失败: %s", role.id)
 
-    def _is_role_overdue(self, role, *, now: datetime) -> bool:
+    def _is_role_overdue(self, role: RoleRecord, *, now: datetime) -> bool:
         state = (
             role.memory_init_state if isinstance(role.memory_init_state, dict) else {}
         )
+        # SELF.md 还没按当前写入规则重写的角色，启动时就补跑一次。
+        if self_rewrite_pending(state):
+            return True
         raw = str(state.get(_LAST_OPTIMIZED_STATE_KEY) or "").strip()
         if not raw:
             return True

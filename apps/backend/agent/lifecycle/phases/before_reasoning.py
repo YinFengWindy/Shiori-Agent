@@ -134,6 +134,7 @@ class _PromptWarmupModule:
                 chat_id=ctx.chat_id,
                 message_timestamp=ctx.timestamp,
                 retrieved_memory_block=ctx.retrieved_memory_block,
+                context_scope=frame.input.state.context_scope,
             ),
             session_metadata=(
                 dict(frame.input.state.session.metadata)
