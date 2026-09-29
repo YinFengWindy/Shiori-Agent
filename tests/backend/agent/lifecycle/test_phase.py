@@ -189,6 +189,7 @@ def _before_turn_ctx(**kwargs: object) -> BeforeTurnCtx:
         retrieved_memory_block="",
         retrieval_trace_raw=None,
         history_messages=(),
+        context_scope=None,
     )
 
 

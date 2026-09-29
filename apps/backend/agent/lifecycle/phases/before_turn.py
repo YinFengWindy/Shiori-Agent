@@ -220,6 +220,7 @@ class _MemoryContextGuardModule:
             retrieved_memory_block="",
             retrieval_trace_raw=None,
             history_messages=(),
+            context_scope=state.context_scope,
             abort=True,
             abort_reply=_memory_context_guard_reply(
                 pending=pending,
@@ -261,6 +262,7 @@ class _BuildBeforeTurnCtxModule:
             retrieved_memory_block=bundle.retrieved_memory_block,
             retrieval_trace_raw=bundle.retrieval_trace_raw,
             history_messages=tuple(bundle.history_messages),
+            context_scope=state.context_scope,
         )
         return frame
 

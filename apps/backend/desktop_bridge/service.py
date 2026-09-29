@@ -265,7 +265,10 @@ class DesktopBridgeService:
         await self._broadcast_session_updated(
             request_id=request_id,
             session=session,
-            messages=self._session_messages_for_turn(session, event),
+            # Only the rows the turn committed; a turn that committed none sends
+            # the summary alone. Its channel rows are stripped from the desktop
+            # timeline anyway, only desktop pushes it made remain.
+            messages=committed_turn_messages(session, event) or [],
         )
 
     async def _on_proactive_message_committed(
@@ -280,6 +283,8 @@ class DesktopBridgeService:
         session_key = self.role_service.sessions.derive_session_key(role_id)
         if event.session_key != session_key:
             return
+        # Raised inside a bus observer: EventBus.fanout logs it and carries on,
+        # so a malformed event is visible without breaking other listeners.
         if not event.message_id:
             raise ValueError("ProactiveMessageCommitted 缺少 message_id")
         session = self.session_manager.get_or_create(session_key)
@@ -292,6 +297,7 @@ class DesktopBridgeService:
             None,
         )
         if message is None:
+            # Also logged by EventBus.fanout, like the missing-id error above.
             raise ValueError(f"主动消息不在角色会话中: {event.message_id}")
         await self._broadcast_session_updated(
             request_id=f"proactive:{role_id}",
@@ -651,38 +657,6 @@ class DesktopBridgeService:
             "session_key": session.key,
             "role_id": self._role_id_from_desktop_session_key(session.key),
         }
-
-    @staticmethod
-    def _session_messages_for_turn(
-        session: Session,
-        event: TurnCommitted,
-    ) -> list[dict[str, Any]]:
-        """Returns the exact ordered turn when commit identity is available."""
-        messages = committed_turn_messages(session, event)
-        if messages is not None:
-            return messages
-        assistant_index = next(
-            (
-                index
-                for index in range(len(session.messages) - 1, -1, -1)
-                if session.messages[index].get("role") == "assistant"
-                and str(session.messages[index].get("content") or "")
-                == event.assistant_response
-            ),
-            -1,
-        )
-        if assistant_index < 0:
-            return [session.messages[-1]] if session.messages else []
-
-        first_index = assistant_index
-        if event.persisted_user_message is not None and assistant_index > 0:
-            previous = session.messages[assistant_index - 1]
-            if (
-                previous.get("role") == "user"
-                and str(previous.get("content") or "") == event.persisted_user_message
-            ):
-                first_index -= 1
-        return session.messages[first_index : assistant_index + 1]
 
     def _normalize_desktop_session_key(self, chat_id: str) -> str:
         return self.app_service.normalize_desktop_session_key(chat_id)

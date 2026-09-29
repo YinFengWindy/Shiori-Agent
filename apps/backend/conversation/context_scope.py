@@ -144,7 +144,11 @@ def turn_context_view(workspace: Path, role_id: str, thread_id: str) -> ContextV
 
 
 def user_context_view(workspace: Path, role_id: str) -> ContextView:
-    """用户上下文的历史视图；主动消息只面向用户，始终使用它。"""
+    """用户上下文的历史视图。
+
+    主动回合组装提示词时使用它（例如收集最近对话）；已提交的主动消息事件则按消息
+    所在会话判定上下文，见 ``session_context_view``。
+    """
     return ContextView(
         scope="user", user_threads=load_user_context_threads(workspace, role_id)
     )

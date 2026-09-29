@@ -41,6 +41,7 @@ def _event(text="少女站在雨夜里"):
         channel="desktop",
         role_id="mira",
         assistant_response=text,
+        thread_id="thread:mira:desktop",
     )
 
 
