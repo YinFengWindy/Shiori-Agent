@@ -1,50 +1,125 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol, cast
 
 from agent.lifecycle.types import AfterReasoningCtx
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ExternalImagePushed, ProactiveMessageCommitted
+from bus.events_lifecycle import (
+    ExternalImagePushed,
+    ExternalTextPushed,
+    ProactiveMessageCommitted,
+)
 from conversation.service import ConversationService, LegacySessionDescriptor
 from session.manager import Session, SessionManager
+from session.manager.models import build_session_message
 
 
-class ExternalImageSyncService:
-    """Persists externally pushed images into their authoritative role session."""
+class LiveTurnPushes(Protocol):
+    """The pushes a live turn holds until it commits (the agent's turn push drafts)."""
+
+    def append(
+        self,
+        message: dict[str, Any],
+        *,
+        owner: object,
+        if_abandoned: Callable[[], Awaitable[None]] | None = None,
+    ) -> None: ...
+
+
+class ExternalPushSyncService:
+    """Records pushes delivered through external channels in the role's session.
+
+    The role owns the chat it pushed to, so a push is stored in the role's
+    session (``role_session_key(role_id)``, whatever session the sender ran
+    in) under the network thread of that chat, and announced with
+    ``ProactiveMessageCommitted``. A push a live turn owns is committed with
+    that turn instead: ``live_turn_pushes(session_key)`` finds it.
+    """
 
     def __init__(
         self,
         *,
         session_manager: SessionManager,
         event_bus: EventBus,
+        live_turn_pushes: Callable[[str], LiveTurnPushes | None],
         conversation_service: ConversationService | None = None,
     ) -> None:
         self._sessions = session_manager
         self._event_bus = event_bus
+        self._live_turn_pushes = live_turn_pushes
         self._conversations = conversation_service or ConversationService(
             session_manager
         )
         self._pending_turn_images: dict[str, list[str]] = {}
         event_bus.on(ExternalImagePushed, self.handle_image_pushed)
+        event_bus.on(ExternalTextPushed, self.handle_text_pushed)
         event_bus.on(AfterReasoningCtx, self.attach_turn_images)
 
     async def handle_image_pushed(
         self,
         event: ExternalImagePushed,
     ) -> ExternalImagePushed:
-        """Queues turn-owned images or persists background deliveries immediately."""
+        """Queues turn-owned images or persists background deliveries immediately.
 
-        self._validate_role_session(event)
+        An image pushed from a turn no live turn owns (e.g. a background
+        task's report) is a background delivery too.
+        """
+
         if event.already_persisted:
             self._validate_existing_message(event)
             return event
-        if event.attach_to_turn:
+        if event.attach_to_turn and self._live_turn_pushes(event.session_key):
             pending = self._pending_turn_images.setdefault(event.session_key, [])
             if event.image not in pending:
                 pending.append(event.image)
             return event
 
-        session = self._sessions.get_or_create(event.session_key)
+        await self._persist_push(event, content="", media=[event.image])
+        return event
+
+    async def handle_text_pushed(self, event: ExternalTextPushed) -> ExternalTextPushed:
+        """Records a delivered text once, with its turn or at once.
+
+        A push made during a live turn becomes one of that turn's drafts,
+        committed with its messages (and still recorded if the turn fails). A
+        host-owned send, or a turn push no live turn owns (e.g. a background
+        task's report), is stored at once. A delivery whose ``delivery_key``
+        the role session already holds is not stored again.
+        """
+        drafts = self._live_turn_pushes(event.session_key) if event.in_turn else None
+        if drafts is not None:
+            drafts.append(
+                self._push_message(event, content=event.text),
+                owner=self,
+                if_abandoned=lambda: self._persist_text(event),
+            )
+            return event
+        await self._persist_text(event)
+        return event
+
+    async def _persist_text(self, event: ExternalTextPushed) -> None:
+        session = self._sessions.get_or_create(self._role_session_key(event))
+        if event.delivery_key and any(
+            (message.get("metadata") or {}).get("delivery_key") == event.delivery_key
+            for message in session.messages
+        ):
+            # A retried delivery: the first send is already recorded.
+            return
+        await self._persist_push(event, content=event.text, media=None)
+
+    def _role_session_key(self, event: ExternalImagePushed | ExternalTextPushed) -> str:
+        """The role's session, which records every push of the role."""
+        return self._sessions.role_session_key(event.role_id)
+
+    def _push_message(
+        self,
+        event: ExternalImagePushed | ExternalTextPushed,
+        *,
+        content: str,
+        media: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """A delivered push as a role message under the target chat's thread."""
         thread = self._conversations.ensure_thread_for_session(
             LegacySessionDescriptor(
                 session_key=f"{event.channel}:{event.chat_id}",
@@ -54,28 +129,44 @@ class ExternalImageSyncService:
             )
         )
         metadata = self._build_source_metadata(event, thread_id=thread.id)
-        session.add_message(
+        if isinstance(event, ExternalTextPushed):
+            if event.delivery_key:
+                metadata["delivery_key"] = event.delivery_key
+            if event.external_message_id:
+                metadata["external_message_id"] = event.external_message_id
+        return build_session_message(
             "assistant",
-            "",
-            media=[event.image],
+            content,
+            media=media,
             proactive=True,
             tools_used=["message_push"],
             thread_id=thread.id,
             sender_role="assistant",
             metadata=metadata,
         )
+
+    async def _persist_push(
+        self,
+        event: ExternalImagePushed | ExternalTextPushed,
+        *,
+        content: str,
+        media: list[str] | None,
+    ) -> None:
+        """Appends one delivered push to the role session under the chat's thread."""
+        session_key = self._role_session_key(event)
+        session = self._sessions.get_or_create(session_key)
+        session.add_message(**self._push_message(event, content=content, media=media))
         pushed = session.messages[-1]
         await self._sessions.append_messages(session, [pushed])
         await self._event_bus.fanout(
             ProactiveMessageCommitted(
-                session_key=event.session_key,
+                session_key=session_key,
                 channel=event.channel,
                 role_id=event.role_id,
-                thread_id=thread.id,
+                thread_id=str(pushed["thread_id"]),
                 message_id=str(pushed["id"]),
             )
         )
-        return event
 
     def attach_turn_images(self, ctx: AfterReasoningCtx) -> AfterReasoningCtx:
         """Attaches already-delivered images to persistence without resending them."""
@@ -86,15 +177,8 @@ class ExternalImageSyncService:
                 ctx.persisted_media.append(image)
         return ctx
 
-    def _validate_role_session(self, event: ExternalImagePushed) -> None:
-        expected = self._sessions.role_session_key(event.role_id)
-        if event.session_key != expected:
-            raise ValueError(
-                f"外部图片推送 session 不属于角色 {event.role_id}: {event.session_key}"
-            )
-
     def _validate_existing_message(self, event: ExternalImagePushed) -> None:
-        session = self._sessions.get_or_create(event.session_key)
+        session = self._sessions.get_or_create(self._role_session_key(event))
         if self._last_message_contains(session, event):
             return
         raise RuntimeError("外部图片已发送，但预写入的共享会话消息不存在")
@@ -120,9 +204,9 @@ class ExternalImageSyncService:
             and (same_transport or multi_transport_proactive)
         )
 
-    @staticmethod
     def _build_source_metadata(
-        event: ExternalImagePushed,
+        self,
+        event: ExternalImagePushed | ExternalTextPushed,
         *,
         thread_id: str,
     ) -> dict[str, str]:
@@ -136,5 +220,5 @@ class ExternalImageSyncService:
             "transport_chat_id": event.chat_id,
             "role_id": event.role_id,
             "thread_id": thread_id,
-            "session_key_override": event.session_key,
+            "session_key_override": self._role_session_key(event),
         }

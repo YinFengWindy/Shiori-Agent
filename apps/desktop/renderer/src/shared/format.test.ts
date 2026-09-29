@@ -2,7 +2,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { formatClock, formatDate, formatTimestamp, parseTimestamp, toFileUrl } from "./format";
+import { formatClock, formatDate, formatHourMinute, formatTimestamp, parseTimestamp, toFileUrl } from "./format";
 
 describe("parseTimestamp", () => {
   it("reads naive date-times and bare dates as local wall-clock time", () => {
@@ -62,5 +62,12 @@ describe("toFileUrl", () => {
 
     assert.equal(result, opaqueUrl);
     assert.equal(result.includes(absolutePath), false);
+  });
+});
+
+describe("formatHourMinute", () => {
+  it("is local 24-hour time with padded hours and minutes", () => {
+    assert.equal(formatHourMinute(new Date(2026, 8, 29, 7, 5)), "07:05");
+    assert.equal(formatHourMinute(new Date(2026, 8, 29, 23, 59)), "23:59");
   });
 });

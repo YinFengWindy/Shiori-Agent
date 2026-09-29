@@ -12,6 +12,7 @@ declares how far a platform user ID reaches:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -129,3 +130,21 @@ class UserIdentity:
         if (identity.scope == "account") != bool(identity.account_id):
             raise ValueError("只有按账号作用域的身份绑定带账号 ID")
         return identity
+
+
+def match_identity(
+    identities: Iterable[UserIdentity], record: AccountRecord, user_id: str
+) -> UserIdentity | None:
+    """The binding among ``identities`` recognising ``user_id`` on account ``record``.
+
+    Callers holding one read of the bindings (e.g. for a page of messages)
+    match against it without re-reading the identity file per message.
+    """
+    return next(
+        (
+            identity
+            for identity in identities
+            if identity.user_id == user_id and identity.applies_to(record)
+        ),
+        None,
+    )

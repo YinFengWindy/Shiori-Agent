@@ -1,7 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useState, type RefObject } from "react";
 import { CaretRight, WarningCircle, XIcon } from "@phosphor-icons/react";
-import { dangerGhostButtonClass, ghostButtonClass, iconButtonClass } from "../shared/styles";
+import { dangerGhostButtonClass, ghostButtonClass, iconButtonClass, dialogBackdropClass } from "../shared/styles";
 import { InlineError } from "../shared/feedback/InlineError";
 import type { PluginSummary } from "./pluginBridgeClient";
 import { canManagePluginPackage } from "./pluginPackageState";
@@ -29,7 +29,7 @@ export function PluginDetailsDialog({ plugin: currentPlugin, busy, error, popupR
   const pendingTrust = plugin?.trustPendingRestart && plugin.diagnostic?.code === "trust_required";
   const problem = plugin ? pluginProblem(plugin) : null;
   return <Dialog.Portal>
-    <Dialog.Backdrop className="confirm-dialog-backdrop motion-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm" />
+    <Dialog.Backdrop className={dialogBackdropClass} />
     <Dialog.Popup ref={popupRef} className="confirm-dialog motion-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(40rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-5 rounded-md border border-line bg-surface p-6 shadow-panel">
       <div className="flex items-start justify-between gap-4">
         <Dialog.Title className="min-w-0 break-words font-display text-title font-semibold text-ink">{plugin ? pluginDisplayName(plugin) : null}</Dialog.Title>

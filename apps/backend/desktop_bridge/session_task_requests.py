@@ -9,7 +9,7 @@ from session.manager import Session
 
 from .app_service import DesktopAppService
 from .role_task_service import RoleTaskService
-from .session_presenter import DesktopSessionPresenter
+from .session_presenter import MESSAGE_PAGE_SIZE, DesktopSessionPresenter
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 EmitSessionUpdated = Callable[..., Awaitable[None]]
@@ -77,7 +77,7 @@ class DesktopSessionTaskRequestHandler:
                 "page": self._session_presenter.serialize_page(
                     session,
                     before_seq=parsed_before,
-                    limit=int(payload.get("limit") or 50),
+                    limit=int(payload.get("limit") or MESSAGE_PAGE_SIZE),
                 ),
             }
         if method == "session.messagesAround":

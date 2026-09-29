@@ -17,7 +17,7 @@ from typing import Any
 from agent.looping.core import AgentLoop
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.tools.message_push import MessagePushTool
-from agent.turns.desktop_pushes import current_desktop_pushes
+from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
     ProactiveMessageCommitted,
@@ -39,7 +39,10 @@ from desktop_bridge.chat_requests import DesktopChatRequestHandler
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.method_policy import MethodPolicy, resolve_plugin_method_policy
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
-from desktop_bridge.phone_requests import DesktopPhoneRequestHandler
+from desktop_bridge.phone_requests import (
+    PHONE_CONVERSATION_UPDATED,
+    DesktopPhoneRequestHandler,
+)
 from desktop_bridge.plugin_requests import DesktopPluginRequestHandler
 from desktop_bridge.request_router import DesktopBridgeRequestRouter
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
@@ -219,15 +222,16 @@ class DesktopBridgeService:
         )
         self.voice_assets = self.voice_handler.assets
         self.plugin_rpc_registry = plugin_rpc_registry
+        self.phone = DesktopPhoneRequestHandler(
+            conversations=self.conversation_service,
+            accounts=role_store.accounts,
+            identities=role_store.identities,
+            messages=self.session_presenter,
+        )
         self.request_router = DesktopBridgeRequestRouter(
             accounts=DesktopAccountRequestHandler(role_store.accounts),
             identities=DesktopIdentityRequestHandler(role_store.identities),
-            phone=DesktopPhoneRequestHandler(
-                conversations=self.conversation_service,
-                accounts=role_store.accounts,
-                identities=role_store.identities,
-                messages=self.session_presenter,
-            ),
+            phone=self.phone,
             roles=DesktopRoleRequestHandler(
                 role_service=self.role_service,
                 role_presenter=self.role_presenter,
@@ -259,24 +263,30 @@ class DesktopBridgeService:
             self.register_desktop_push_channel(push_tool)
 
     async def _on_turn_committed(self, event: TurnCommitted) -> None:
-        """Broadcasts external role turns after their shared session is committed."""
+        """Broadcasts a role turn's committed rows once its shared session is saved.
+
+        External turns refresh the desktop session; rows the turn wrote to the
+        role's channel conversations also go to the phone.
+        """
 
         role_id = str(event.role_id or "").strip()
-        if not role_id or event.channel == DESKTOP_CHANNEL:
+        if not role_id:
             return
         session_key = self.role_service.sessions.derive_session_key(role_id)
         session = self.session_manager.get_or_create(session_key)
-        request_id = str(event.request_id or "").strip()
-        if not request_id:
-            request_id = f"turn:{role_id}:{event.thread_id}:{event.timestamp or ''}"
-        await self._broadcast_session_updated(
-            request_id=request_id,
-            session=session,
-            # Only the rows the turn committed; a turn that committed none sends
-            # the summary alone. Its channel rows are stripped from the desktop
-            # timeline anyway, only desktop pushes it made remain.
-            messages=committed_turn_messages(session, event) or [],
-        )
+        # Only the rows the turn committed; a turn that committed none sends
+        # the summary alone.
+        messages = committed_turn_messages(session, event) or []
+        if event.channel != DESKTOP_CHANNEL:
+            request_id = str(event.request_id or "").strip()
+            if not request_id:
+                request_id = f"turn:{role_id}:{event.thread_id}:{event.timestamp or ''}"
+            # Its channel rows are stripped from the desktop timeline, only
+            # desktop pushes it made remain.
+            await self._broadcast_session_updated(
+                request_id=request_id, session=session, messages=messages
+            )
+        await self._broadcast_phone_updates(role_id, messages)
 
     async def _on_proactive_message_committed(
         self,
@@ -311,6 +321,28 @@ class DesktopBridgeService:
             session=session,
             messages=[message],
         )
+        await self._broadcast_phone_updates(role_id, [message])
+
+    async def _broadcast_phone_updates(
+        self, role_id: str, messages: list[dict[str, Any]]
+    ) -> None:
+        """Sends ``phone.conversation.updated`` for committed channel rows.
+
+        One event per channel conversation among ``messages``, carrying
+        exactly those rows and the conversation's refreshed list row; nothing
+        when no desktop client listens.
+        """
+        if not self._event_listeners or not messages:
+            return
+        for update in self.phone.conversation_updates(role_id, messages):
+            await self._broadcast_event(
+                BridgeEvent(
+                    id=f"phone:{update['thread_id']}",
+                    type="event",
+                    method=PHONE_CONVERSATION_UPDATED,
+                    payload=update,
+                ).to_dict()
+            )
 
     def _on_account_change(self, account_id: str) -> None:
         """Pushes ``accounts.updated`` so account views refresh without polling."""
@@ -450,7 +482,7 @@ class DesktopBridgeService:
                 self.app_service.validate_desktop_push_target(chat_id)
                 return
             session_key = self.app_service.normalize_desktop_session_key(chat_id)
-            drafts = current_desktop_pushes(session_key)
+            drafts = current_turn_pushes(session_key)
             if (
                 drafts is not None
                 and metadata is not None

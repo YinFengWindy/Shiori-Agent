@@ -5,6 +5,7 @@ from .models import (
     IdentityChat,
     IdentityScope,
     UserIdentity,
+    match_identity,
     parse_identity_scope,
 )
 from .pairing import PAIRING_CODE_TTL, PairingCode
@@ -20,5 +21,6 @@ __all__ = [
     "PairingCode",
     "UserIdentity",
     "UserIdentityStore",
+    "match_identity",
     "parse_identity_scope",
 ]

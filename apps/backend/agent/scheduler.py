@@ -28,6 +28,7 @@ from typing import Any, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from conversation.service import scheduler_thread_id
+from session.manager.helpers import role_session_key
 from core.common.timekit import parse_iso as _parse_iso
 from infra.persistence.json_store import atomic_save_json, load_json
 from agent.scheduler_cron import is_cron_expr, next_cron_fire
@@ -617,6 +618,8 @@ class SchedulerService:
                     chat_id=job.chat_id,
                     message=job.message,
                     role_id=job.role_id,
+                    # The role's session records the delivered text (no turn owns it).
+                    session_key=role_session_key(job.role_id),
                     push_delivery_key=self._job_role_metadata(job)["delivery_key"],
                 ),
             )

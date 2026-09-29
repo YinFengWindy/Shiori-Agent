@@ -1,4 +1,5 @@
 import { normalizeSessionMediaPaths } from "../chat/chatMedia";
+import { formatHourMinute } from "../shared/format";
 import type { RoleLastMessage, SessionMessage } from "../shared/types";
 
 /** One chat-list row's second line: the newest message, flattened, and when it was sent. */
@@ -74,20 +75,26 @@ function startOfDay(date: Date): number {
 }
 
 /**
- * Compact chat-list time: 「14:05」 today, 「昨天」, a weekday within the
- * last week, 「9/20」 this year, 「2025/9/20」 before. Empty for a missing or
- * unreadable timestamp.
+ * The day of `date` as the chat list names it relative to `now`: 「昨天」, a
+ * weekday within the last week, 「9/20」 this year, 「2025/9/20」 before;
+ * null for today (or a later day).
+ */
+export function chatListDayLabel(date: Date, now: Date): string | null {
+  const dayDiff = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
+  if (dayDiff <= 0) return null;
+  if (dayDiff === 1) return "昨天";
+  if (dayDiff < 7) return weekdayLabels[date.getDay()]!;
+  if (date.getFullYear() === now.getFullYear()) return `${date.getMonth() + 1}/${date.getDate()}`;
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+/**
+ * Compact chat-list time: 「14:05」 today, otherwise the day
+ * (`chatListDayLabel`). Empty for a missing or unreadable timestamp.
  */
 export function formatChatListTime(timestamp: string, now: Date): string {
   if (!timestamp) return "";
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "";
-  const dayDiff = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
-  if (dayDiff <= 0) {
-    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  }
-  if (dayDiff === 1) return "昨天";
-  if (dayDiff < 7) return weekdayLabels[date.getDay()]!;
-  if (date.getFullYear() === now.getFullYear()) return `${date.getMonth() + 1}/${date.getDate()}`;
-  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+  return chatListDayLabel(date, now) ?? formatHourMinute(date);
 }

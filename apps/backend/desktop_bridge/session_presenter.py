@@ -15,6 +15,8 @@ from session.manager.models import message_thread_id
 
 # The chat list shows one line; the renderer strips Markdown from this prefix.
 _PREVIEW_MAX_CHARS = 200
+# Messages per page when a chat (desktop or phone) asks without a limit.
+MESSAGE_PAGE_SIZE = 50
 
 
 def message_preview(message: dict[str, Any]) -> dict[str, Any]:
@@ -76,7 +78,7 @@ class DesktopSessionPresenter:
         session: Session,
         *,
         before_seq: int | None = None,
-        limit: int = 50,
+        limit: int = MESSAGE_PAGE_SIZE,
     ) -> dict[str, Any]:
         """Reads a bounded message page directly from the session store."""
         store = self._session_store()
@@ -184,6 +186,23 @@ class DesktopSessionPresenter:
         """The newest stored message of each thread in ``session_key``, by thread."""
         return self._session_store().fetch_newest_thread_messages(
             session_key, thread_ids
+        )
+
+    def thread_messages_page(
+        self,
+        session_key: str,
+        thread_id: str,
+        *,
+        before_seq: int | None = None,
+        limit: int = MESSAGE_PAGE_SIZE,
+    ) -> dict[str, Any]:
+        """One page of a single thread's stored messages in ``session_key``.
+
+        Raw store rows, oldest first, with the store's ``has_more`` and
+        ``next_before_seq`` cursor (see ``fetch_messages_page``).
+        """
+        return self._session_store().fetch_messages_page(
+            session_key, before_seq=before_seq, limit=limit, thread_ids=[thread_id]
         )
 
     def desktop_messages(

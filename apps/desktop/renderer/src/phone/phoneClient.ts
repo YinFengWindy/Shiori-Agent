@@ -1,4 +1,5 @@
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
+import { mapConversation, mapMessage, type PhoneConversationPayload, type PhoneMessagePayload } from "./phonePayloads";
 
 /** Whether a channel conversation is a group chat or a private one. */
 export type PhoneChatType = "group" | "private";
@@ -29,35 +30,41 @@ export type PhoneConversation = {
   lastMessage: PhoneLastMessage;
 };
 
-type PhoneConversationPayload = {
-  thread_id: string;
-  account_id: string | null;
-  channel: string;
-  chat_type: PhoneChatType | null;
-  display_name: string;
-  is_user_chat: boolean;
-  last_message: {
-    role: string; content: string; timestamp: string; has_media: boolean; sender_name: string | null;
-  };
+/** One message of a conversation, from the role's point of view. */
+export type PhoneMessage = {
+  id: string;
+  /** Store order; absent on a live row the bridge sent before it was read back. */
+  seq: number | null;
+  /** `role` is the role itself, `other` anyone else in the chat. */
+  sender: "role" | "other";
+  /** The other sender's platform ID; null for the role or when unrecorded. */
+  senderId: string | null;
+  /** The other sender's name as the platform reported it with this message; null for the role or when unrecorded. */
+  senderName: string | null;
+  /** The sender is the desktop user: a binding recognises them now (read time, not when the message arrived). */
+  senderIsUser: boolean;
+  content: string;
+  /** Local file paths of attached media. */
+  media: string[];
+  timestamp: string;
 };
 
-function mapConversation(row: PhoneConversationPayload): PhoneConversation {
-  return {
-    threadId: row.thread_id,
-    accountId: row.account_id,
-    channel: row.channel,
-    chatType: row.chat_type,
-    displayName: row.display_name,
-    isUserChat: row.is_user_chat,
-    lastMessage: {
-      role: row.last_message.role,
-      content: row.last_message.content,
-      timestamp: row.last_message.timestamp,
-      hasMedia: row.last_message.has_media,
-      senderName: row.last_message.sender_name,
-    },
-  };
-}
+/** One page of a conversation, oldest first. */
+export type PhoneMessagePage = {
+  messages: PhoneMessage[];
+  /** Older messages remain before this page. */
+  hasMore: boolean;
+  /** Cursor for the older page (`beforeSeq`); null when the page is empty. */
+  nextBeforeSeq: number | null;
+};
+
+/** Messages newly committed to one conversation, with its refreshed list row (`phone.conversation.updated`). */
+export type PhoneConversationUpdate = {
+  roleId: string;
+  threadId: string;
+  conversation: PhoneConversation;
+  messages: PhoneMessage[];
+};
 
 /** Bridge client for the phone panel's reads. */
 export function createPhoneClient(invoke?: DesktopInvoke) {
@@ -68,6 +75,14 @@ export function createPhoneClient(invoke?: DesktopInvoke) {
     async listConversations(roleId: string) {
       const result = await call<{ conversations: PhoneConversationPayload[] }>("phone.conversations.list", { role_id: roleId });
       return result.conversations.map(mapConversation);
+    },
+    /** One page of a conversation of the role, the newest one unless `beforeSeq` asks for older. */
+    async listMessages(roleId: string, threadId: string, beforeSeq: number | null): Promise<PhoneMessagePage> {
+      const result = await call<{ messages: PhoneMessagePayload[]; has_more: boolean; next_before_seq: number | null }>(
+        "phone.conversation.messages",
+        { role_id: roleId, thread_id: threadId, ...(beforeSeq === null ? {} : { before_seq: beforeSeq }) },
+      );
+      return { messages: result.messages.map(mapMessage), hasMore: result.has_more, nextBeforeSeq: result.next_before_seq };
     },
   };
 }

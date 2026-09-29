@@ -5,7 +5,7 @@ import { MascotFaceAvatar } from "../mascot/MascotFigure";
 import { MascotOnStage, useMascotCameoAllowed } from "../mascot/MascotOnStage";
 import { MascotSpeechBubble } from "../mascot/MascotSpeech";
 import type { MascotLine } from "../mascot/mascotLines";
-import { dangerButtonClass, ghostButtonClass, primaryButtonClass } from "../styles";
+import { dangerButtonClass, ghostButtonClass, primaryButtonClass, dialogBackdropClass } from "../styles";
 
 /** Props of `ConfirmDialog` (plugins get it as `PluginHostServices.ui.ConfirmDialog`, with a plugin persona instead). */
 export type ConfirmDialogProps = {
@@ -38,7 +38,7 @@ export function ConfirmDialog({ open, title, description, confirmLabel, children
   const lead = useMascotCameoAllowed() ? content.persona : undefined;
   return <Dialog.Root open={open} onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
     <Dialog.Portal>
-      <Dialog.Backdrop className="confirm-dialog-backdrop motion-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm" />
+      <Dialog.Backdrop className={dialogBackdropClass} />
       <Dialog.Popup finalFocus={finalFocus} className="confirm-dialog motion-dialog fixed left-1/2 top-1/2 z-50 grid w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-line bg-surface p-6 shadow-panel">
         <Dialog.Title className="font-display text-title font-semibold text-ink">{content.title}</Dialog.Title>
         {lead ? (

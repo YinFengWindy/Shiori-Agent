@@ -182,6 +182,28 @@ class ExternalImagePushed:
 
 
 @dataclass(frozen=True)
+class ExternalTextPushed:
+    """One text ``message_push`` delivered through an external channel.
+
+    ``in_turn`` marks a push the model made during a turn: it is committed
+    with that turn. Otherwise a host-owned send (e.g. a scheduled job) is
+    stored at once. Already-persisted and still-pending deliveries never
+    raise it. ``delivery_key`` (host sends) and ``external_message_id`` (the
+    platform's ID, when the sender reported one) identify the delivery, so it
+    is stored once.
+    """
+
+    session_key: str
+    role_id: str
+    channel: str
+    chat_id: str
+    text: str
+    delivery_key: str = ""
+    in_turn: bool = False
+    external_message_id: str = ""
+
+
+@dataclass(frozen=True)
 class ToolCallStarted:
     session_key: str
     channel: str

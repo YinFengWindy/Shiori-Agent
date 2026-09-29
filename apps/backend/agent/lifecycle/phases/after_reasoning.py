@@ -137,7 +137,7 @@ class _BuildAfterReasoningCtxModule:
             frame.slots["reply:previous_metadata"] = dict(session.metadata)
             frame.slots["reply:messages"] = []
             frame.slots["reply:private"] = "reply:state" in frame.slots or bool(
-                input.state.desktop_pushes and input.state.desktop_pushes.messages
+                input.state.turn_pushes and input.state.turn_pushes.messages
             )
         raw_turn_metrics = turn_result.context_retry.get("turn_metrics")
         turn_metrics = (
@@ -278,7 +278,7 @@ class _PersistAssistantMessageModule:
         if raw_session is None:
             raise RuntimeError("AfterReasoning requires TurnState.session")
         session = cast("Session", raw_session)
-        drafts = frame.input.state.desktop_pushes
+        drafts = frame.input.state.turn_pushes
         if drafts is not None:
             frame.slots["reply:messages"].extend(drafts.messages)
         assistant_kwargs: dict[str, Any] = {
@@ -460,8 +460,8 @@ class _AppendMessagesModule:
         state.committed_message_ids = tuple(
             str(message["id"]) for message in owned_messages if message.get("id")
         )
-        if state.desktop_pushes is not None:
-            await state.desktop_pushes.committed()
+        if state.turn_pushes is not None:
+            await state.turn_pushes.committed()
         return frame
 
 

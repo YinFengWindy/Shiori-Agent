@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { AccountSnapshot } from "../accounts/accountClient";
 import type { PhoneConversation } from "./phoneClient";
-import { accountConversations, phoneApps, phoneConversationPreview, phoneStatusTime } from "./phonePresentation";
+import { accountConversations, phoneApps, phoneConversationPreview } from "./phonePresentation";
 
 const account = (id: string, patch: Partial<AccountSnapshot> = {}): AccountSnapshot => ({
   id, pluginId: "qq", platform: "qq", platformAccountId: id, configRef: id,
@@ -66,9 +66,4 @@ test("group previews name the other sender; the role's own and private messages 
     phoneConversationPreview({ ...privateChat, lastMessage: { ...privateChat.lastMessage, content: "", hasMedia: true, senderName: "小明" } }),
     "[图片]",
   );
-});
-
-test("status bar clock is local 24-hour time", () => {
-  assert.equal(phoneStatusTime(new Date(2026, 8, 29, 7, 5)), "07:05");
-  assert.equal(phoneStatusTime(new Date(2026, 8, 29, 23, 59)), "23:59");
 });

@@ -59,6 +59,7 @@ async def test_instant_push_receives_correct_args(
         chat_id="999",
         message="喝水了",
         role_id="mira",
+        session_key="role:mira",
         push_delivery_key=svc._job_role_metadata(job)["delivery_key"],
     )
 

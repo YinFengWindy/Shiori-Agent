@@ -18,7 +18,10 @@ from agent.turns.result import TurnResult, TurnOutbound
 from core.roles.reply_state import RoleReply
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted, RoleDeleted, TurnCommitted
-from conversation.push_sync import ExternalImageSyncService
+from agent.turns.turn_pushes import current_turn_pushes
+from conversation.push_sync import ExternalPushSyncService
+from conversation.service import LegacySessionDescriptor, network_thread_id
+from core.common.message_source import MessageSource
 from core.roles import RoleStore
 from core.roles.services import RoleAggregateService
 from desktop_bridge.service import DesktopBridgeService
@@ -712,7 +715,8 @@ async def test_external_image_push_persists_and_broadcasts_desktop_session(
     session_manager = SessionManager(tmp_path)
     session_manager.open_role_session("mira", role_name="Mira")
     event_bus = EventBus()
-    _ = ExternalImageSyncService(
+    _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes,
         session_manager=session_manager,
         event_bus=event_bus,
     )
@@ -746,9 +750,150 @@ async def test_external_image_push_persists_and_broadcasts_desktop_session(
         message["media"]
         for message in session_manager._store.fetch_session_messages("role:mira")
     ] == [[image]]
-    assert len(emitted) == 1
-    assert emitted[0]["method"] == "session.updated"
+    assert [event["method"] for event in emitted] == [
+        "session.updated",
+        "phone.conversation.updated",
+    ]
     assert emitted[0]["payload"]["message"] is None
+    # The phone gets the synced image in its conversation.
+    phone = emitted[1]["payload"]
+    assert phone["conversation"]["thread_id"] == phone["thread_id"]
+    assert phone["conversation"]["last_message"]["has_media"] is True
+    assert [(row["sender"], row["media"]) for row in phone["messages"]] == [
+        ("role", [image])
+    ]
+
+
+@pytest.mark.asyncio
+async def test_channel_turn_commit_sends_the_phone_exactly_its_rows(tmp_path) -> None:
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="test")
+    session_manager = SessionManager(tmp_path)
+    event_bus = EventBus()
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(),
+        event_bus=event_bus,
+    )
+    emitted: list[dict] = []
+    service.add_event_listener(emitted.append)
+    group = service.conversation_service.ensure_thread_for_session(
+        LegacySessionDescriptor(
+            session_key="qq:gqq:5", role_id="mira", channel="qq", chat_id="gqq:5"
+        )
+    )
+    service.conversation_service.remember_contact_name(group, "摸鱼群")
+    session = session_manager.get_or_create("role:mira")
+    session.add_message("user", "更早的群消息", metadata={"thread_id": group.id})
+    session.add_message(
+        "user",
+        "谁来开黑",
+        metadata={
+            "thread_id": group.id,
+            "message_source": MessageSource(
+                channel="qq", chat_type="group", sender_id="42", sender_name="阿花"
+            ).to_metadata(),
+        },
+    )
+    session.add_message("assistant", "我来", metadata={"thread_id": group.id})
+    # A desktop push the same turn made is not the phone's.
+    session.add_message(
+        "assistant", "桌面提醒", metadata={"thread_id": "thread:mira:desktop"}
+    )
+    session_manager.save(session)
+    committed = [message["id"] for message in session.messages[1:]]
+
+    await event_bus.fanout(
+        TurnCommitted(
+            session_key="role:mira",
+            channel="qq",
+            chat_id="gqq:5",
+            input_message="谁来开黑",
+            persisted_user_message="谁来开黑",
+            assistant_response="我来",
+            tools_used=[],
+            role_id="mira",
+            thread_id=group.id,
+            extra={"committed_message_ids": committed},
+        )
+    )
+
+    assert [event["method"] for event in emitted] == [
+        "session.updated",
+        "phone.conversation.updated",
+    ]
+    phone = emitted[1]["payload"]
+    assert phone["role_id"] == "mira"
+    assert phone["thread_id"] == group.id
+    assert [
+        (row["id"], row["sender"], row["sender_name"], row["content"])
+        for row in phone["messages"]
+    ] == [
+        (committed[0], "other", "阿花", "谁来开黑"),
+        (committed[1], "role", None, "我来"),
+    ]
+    assert phone["conversation"]["display_name"] == "摸鱼群"
+    assert phone["conversation"]["last_message"]["content"] == "我来"
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_host_text_push_to_a_channel_reaches_the_phone(tmp_path) -> None:
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="test")
+    session_manager = SessionManager(tmp_path)
+    session_manager.open_role_session("mira", role_name="Mira")
+    event_bus = EventBus()
+    _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes,
+        session_manager=session_manager,
+        event_bus=event_bus,
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(),
+        event_bus=event_bus,
+    )
+    emitted: list[dict] = []
+    service.add_event_listener(emitted.append)
+    push_tool = MessagePushTool(event_bus=event_bus)
+    push_tool.register_channel("qq", text=AsyncMock(return_value="qq-1"))
+
+    # As a scheduled job sends it: outside any turn, under the role's session.
+    await push_tool.execute(
+        channel="qq",
+        chat_id="gqq:5",
+        message="该喝水啦",
+        role_id="mira",
+        session_key="role:mira",
+        push_delivery_key="scheduler:job:1",
+    )
+
+    thread_id = network_thread_id("mira", "qq", "gqq:5")
+    phone = [
+        event["payload"]
+        for event in emitted
+        if event["method"] == "phone.conversation.updated"
+    ]
+    assert [
+        (update["thread_id"], update["messages"][0]["content"]) for update in phone
+    ] == [(thread_id, "该喝水啦")]
+    page = await service.handle(
+        {
+            "id": "page",
+            "method": "phone.conversation.messages",
+            "payload": {"role_id": "mira", "thread_id": thread_id},
+        },
+        emit_event=emitted.append,
+    )
+    assert [(row["sender"], row["content"]) for row in page.payload["messages"]] == [
+        ("role", "该喝水啦")
+    ]
+    await service.aclose()
 
 
 @pytest.mark.asyncio

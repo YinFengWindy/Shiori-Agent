@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
+import { formatHourMinute } from "../shared/format";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
 import { PetalIcon, RibbonIcon, SparkleIcon } from "../shared/ui/icons";
-import { phoneStatusTime } from "./phonePresentation";
 
 /**
  * 吟风's skin: a bow charm on the top edge, sparkles on the sides and petals
@@ -45,7 +45,7 @@ export function PhoneShell({ avatarUrl, now, children }: {
         </div>
         <div className="flex h-8 items-end justify-center px-6 pb-0.5">
           <time className="text-caption font-semibold tabular-nums text-ink" dateTime={now.toISOString()}>
-            {phoneStatusTime(now)}
+            {formatHourMinute(now)}
           </time>
         </div>
         <div className="min-h-0 overflow-hidden">{children}</div>
