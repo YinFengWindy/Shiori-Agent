@@ -7,9 +7,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./contract": "./src/contract.ts",
+    "./host-internal": "./src/hostInternal.ts",
     "./testing": "./src/testing/index.ts"
   },
-  "//exports": "Source-only workspace package (#440): built-in plugins and the host compile it straight into the renderer bundle, and tsc, the tsx test runner and Vite all resolve these .ts entries through the workspace link, so there is no build step and exactly one implementation. External precompiled plugins never resolve this package: the main entry reaches them as a host peer through the renderer import map (apps/desktop/src/plugins/uiContract.ts). ./contract is a type-only, React- and DOM-free view of the contract types for host code compiled outside the renderer (main process, preload). The ./testing entry is development-only. Neither subpath is in that import map.",
+  "//exports": "Source-only workspace package (#440): built-in plugins and the host compile it straight into the renderer bundle, and tsc, the tsx test runner and Vite all resolve these .ts entries through the workspace link, so there is no build step and exactly one implementation. External precompiled plugins never resolve this package: the main entry reaches them as a host peer through the renderer import map (apps/desktop/src/plugins/uiContract.ts). ./contract is a type-only, React- and DOM-free view of the contract types for host code compiled outside the renderer (main process, preload). ./host-internal exposes SDK internals the host shares with the SDK but no plugin uses; it is host-only, not plugin contract, and plugin renderer code is barred from it by ESLint. The ./testing entry is development-only. None of these subpaths is in that import map.",
   "dependencies": {
     "@base-ui/react": "1.8.0",
     "@phosphor-icons/react": "^2.1.10"

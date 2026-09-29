@@ -6,7 +6,9 @@
  * must also be listed in the renderer peer ABI
  * (`pluginUiPeerExports["@shiori/plugin-sdk"]` in
  * `apps/desktop/src/plugins/uiContract.ts`), and changing that list is a
- * runtime API change. This package must never import host source.
+ * runtime API change. This package must never import host source. Host-only
+ * internals shared with the SDK live in `./hostInternal.ts`
+ * (`@shiori/plugin-sdk/host-internal`), outside the plugin contract.
  */
 
 // Errors and the injected RPC client (runtime API 2.8.0).
@@ -48,19 +50,19 @@ export {
   sidebarNavItemClass,
   textareaClass,
 } from "./styles";
-export { menuItemClass, menuItemSelectedClass, menuPanelClass, menuSeparatorClass } from "./menuStyles";
+export { menuPanelClass, menuSeparatorClass } from "./menuStyles";
 
 // Components.
 export { ActionMenu, type ActionMenuItem } from "./components/ActionMenu";
 export { AutosizeTextarea } from "./components/AutosizeTextarea";
-export { RoleCapabilityBadge, RoleCapabilityCard } from "./components/RoleCapabilityCard";
+export { RoleCapabilityCard } from "./components/RoleCapabilityCard";
 export { Select, type SelectOption, type SelectProps } from "./components/Select";
 export { SettingsToggleCard } from "./components/SettingsToggleCard";
 
 // Icons.
 export type { IconProps } from "./icons/types";
 export { UploadIcon } from "./icons/UploadIcon";
-export { brandMotifPaths, PetalIcon, SparkleIcon, type BrandMotif } from "./icons/brand";
+export { PetalIcon, SparkleIcon } from "./icons/brand";
 export { navMotifs, withMotif, type NavGlyphMotion } from "./icons/navGlyphs";
 
 // Domain types.

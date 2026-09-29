@@ -10,6 +10,37 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 register("./test-unit-loader-hooks.mjs", import.meta.url);
 
+/** Base UI's utility modules that answer an environment question at load time. */
+const baseUiProbeSubpaths = ["./useIsoLayoutEffect", "./platform"];
+
+/** Fails the test process with the fix to make, rather than an opaque TypeError. */
+function baseUiProbeError(detail) {
+  return new Error(`test-unit-loader: ${detail}. A Base UI upgrade changed its internal environment probe modules; update settleBaseUiEnvironmentProbes() in apps/desktop/scripts/test-unit-loader.mjs to match.`);
+}
+
+/**
+ * ESM URLs of the probe modules in the very Base UI copy the plugin SDK
+ * loads: resolved from the SDK package itself (which owns `Select` and
+ * `ActionMenu`), so a second copy elsewhere in the tree cannot be settled
+ * in its place.
+ */
+async function baseUiProbeUrls() {
+  // The main entry is `src/index.ts`, one level below the package root.
+  const sdkManifestPath = join(dirname(fileURLToPath(import.meta.resolve("@shiori/plugin-sdk"))), "..", "package.json");
+  if (JSON.parse(await readFile(sdkManifestPath, "utf8")).name !== "@shiori/plugin-sdk") {
+    throw new Error(`test-unit-loader: ${sdkManifestPath} is not the plugin SDK manifest; the SDK main entry moved, update baseUiProbeUrls().`);
+  }
+  const baseUiManifestPath = createRequire(sdkManifestPath).resolve("@base-ui/react/package.json");
+  const utilsManifestPath = createRequire(baseUiManifestPath).resolve("@base-ui/utils/package.json");
+  const { exports } = JSON.parse(await readFile(utilsManifestPath, "utf8"));
+  if (!exports || typeof exports !== "object") throw baseUiProbeError(`${utilsManifestPath} has no "exports" map`);
+  return baseUiProbeSubpaths.map((subpath) => {
+    const target = exports[subpath]?.import?.default;
+    if (typeof target !== "string") throw baseUiProbeError(`@base-ui/utils no longer exports an ESM "${subpath}"`);
+    return pathToFileURL(join(dirname(utilsManifestPath), target)).href;
+  });
+}
+
 /**
  * Base UI answers two questions once, when its utility modules first load:
  * whether layout effects run at all (`useIsoLayoutEffect`: is there a
@@ -28,11 +59,7 @@ register("./test-unit-loader-hooks.mjs", import.meta.url);
  * them. Importing happy-dom itself here would cost every test process ~0.2 s.
  */
 async function settleBaseUiEnvironmentProbes() {
-  const selectPath = fileURLToPath(import.meta.resolve("@base-ui/react/select"));
-  const utilsManifestPath = createRequire(selectPath).resolve("@base-ui/utils/package.json");
-  const { exports } = JSON.parse(await readFile(utilsManifestPath, "utf8"));
-  const probeUrls = ["./useIsoLayoutEffect", "./platform"].map((subpath) =>
-    pathToFileURL(join(dirname(utilsManifestPath), exports[subpath].import.default)).href);
+  const probeUrls = await baseUiProbeUrls();
   const standIns = {
     document: {},
     navigator: {

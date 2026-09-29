@@ -318,7 +318,10 @@ The `@shiori/plugin-sdk/testing` subpath is development-only test support. It is
 not import it. The `@shiori/plugin-sdk/contract` subpath is a type-only,
 React- and DOM-free view of contract types for host code compiled outside the
 renderer (main process, preload); it has no runtime presence, is not in the
-import map, and plugins import the same types from the main entry.
+import map, and plugins import the same types from the main entry. The
+`@shiori/plugin-sdk/host-internal` subpath is host-only and **not** part of the
+plugin contract: it is not in the peer ABI or the import map, and plugin
+renderer code is barred from importing it.
 
 ## Runtime API 2.9 plugin SDK primitives
 
@@ -334,9 +337,9 @@ Runtime exports added in 2.9.0 (all are listed in `pluginUiPeerExports`):
 | Group | Exports |
 | --- | --- |
 | Helpers and hooks | `errorMessage`, `useLatestRef`, `roleToggleStatus`, `accountOnline`, `useAccountAction` |
-| Class names | `cx`, `cardClass`, `badgeClass`, `inputClass`, `textareaClass`, `pressableClass`, `compactPressableClass`, `primaryButtonSurfaceClass`, `ghostButtonSurfaceClass`, `ghostButtonClass`, `compactButtonSizeClass`, `compactGhostButtonClass`, `iconButtonClass`, `secondarySidebarSurfaceClass`, `sidebarNavItemClass`, `sidebarContentMotionClass`, `menuPanelClass`, `menuItemClass`, `menuItemSelectedClass`, `menuSeparatorClass` |
-| Components | `Select`, `ActionMenu`, `AutosizeTextarea`, `SettingsToggleCard`, `RoleCapabilityCard`, `RoleCapabilityBadge` |
-| Icons | `UploadIcon`, `SparkleIcon`, `PetalIcon`, `brandMotifPaths`, `withMotif`, `navMotifs` |
+| Class names | `cx`, `cardClass`, `badgeClass`, `inputClass`, `textareaClass`, `pressableClass`, `compactPressableClass`, `primaryButtonSurfaceClass`, `ghostButtonSurfaceClass`, `ghostButtonClass`, `compactButtonSizeClass`, `compactGhostButtonClass`, `iconButtonClass`, `secondarySidebarSurfaceClass`, `sidebarNavItemClass`, `sidebarContentMotionClass`, `menuPanelClass`, `menuSeparatorClass` |
+| Components | `Select`, `ActionMenu`, `AutosizeTextarea`, `SettingsToggleCard`, `RoleCapabilityCard` |
+| Icons | `UploadIcon`, `SparkleIcon`, `PetalIcon`, `withMotif`, `navMotifs` |
 
 The class names are Tailwind utility strings resolved against the host's
 stylesheet; an external package's own CSS does not need to repeat them.

@@ -1,5 +1,5 @@
 import React from "react";
-import { brandMotifPaths } from "@shiori/plugin-sdk";
+import { brandMotifPaths } from "@shiori/plugin-sdk/host-internal";
 import type { IconProps } from "./types";
 
 /*
@@ -7,7 +7,8 @@ import type { IconProps } from "./types";
  * (`SparkleIcon`, `PetalIcon`) are owned by `@shiori/plugin-sdk` (#440) and
  * re-exported here; the wing and ribbon icons stay host-only.
  */
-export { brandMotifPaths, PetalIcon, SparkleIcon, type BrandMotif } from "@shiori/plugin-sdk";
+export { PetalIcon, SparkleIcon } from "@shiori/plugin-sdk";
+export { brandMotifPaths, type BrandMotif } from "@shiori/plugin-sdk/host-internal";
 
 /** Little-devil wing, lifted from the app icon's hair ornament. Brand motif. */
 export function WingIcon({ className = "h-4 w-4" }: IconProps) {
