@@ -51,6 +51,7 @@ async def test_undo_command_aborts_without_running_llm(tmp_path):
     state = SimpleNamespace(
         session_key="cli:1",
         session=session,
+        context_scope=None,
         msg=SimpleNamespace(
             content=" /UNDO@ShioriBot ",
             channel="cli",
@@ -131,6 +132,7 @@ async def test_scoped_setup_unload_and_restart_remove_and_restore_single_contrib
             frame = SimpleNamespace(
                 input=SimpleNamespace(
                     session_key="cli:1",
+                    context_scope=None,
                     msg=SimpleNamespace(
                         content="/undo",
                         channel="cli",

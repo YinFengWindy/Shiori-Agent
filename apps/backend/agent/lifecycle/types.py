@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from agent.turns.desktop_pushes import DesktopPushDrafts
     from agent.core.response_parser import ResponseMetadata
     from agent.core.runtime_support import SessionLike, TurnRunResult
-    from conversation.context_scope import ContextView
+    from conversation.context_scope import ContextScope, ContextView
 
 
 # 1. 工厂函数：给 dataclass field(default_factory=...) 提供显式类型签名，消除 pyright Unknown 推断。
@@ -40,6 +40,11 @@ class TurnState:
     # 角色共享会话里的回合按所在会话算出的可见历史范围；其他会话为 None，历史不筛选。
     context_view: ContextView | None = None
 
+    @property
+    def context_scope(self) -> ContextScope | None:
+        """回合所在的上下文；非角色共享会话为 None。"""
+        return self.context_view.scope if self.context_view is not None else None
+
 
 @dataclass
 class BeforeTurnCtx:
@@ -53,6 +58,8 @@ class BeforeTurnCtx:
     retrieved_memory_block: str
     retrieval_trace_raw: object | None
     history_messages: tuple[Any, ...]
+    # 回合所在的上下文（用户 / 外部），取自 TurnState.context_scope；非角色共享会话为 None。
+    context_scope: ContextScope | None = None
     # writable
     skill_names: list[str] = field(default_factory=_empty_str_list)
     abort: bool = False

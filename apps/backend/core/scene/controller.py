@@ -6,6 +6,8 @@ from dataclasses import dataclass, replace
 from typing import Any
 from collections.abc import Callable
 
+from agent.core.passive_support import to_history_messages
+from agent.core.types import HistoryMessage
 from agent.lifecycle.types import AfterTurnCtx, BeforeTurnCtx
 from core.scene.state import SceneStateStore
 from core.roles.models import RoleRecord
@@ -82,8 +84,15 @@ class SceneAwarenessController:
         return dict(self._tasks)
 
     def capture_passive_turn(self, ctx: BeforeTurnCtx) -> None:
-        """Capture the user-side context needed after passive reasoning completes."""
+        """Capture the user-side context needed after passive reasoning completes.
 
+        外部上下文的回合不观察：场景状态按角色共享，群聊与陌生私聊会污染用户的
+        场景。同时丢掉可能残留的待观察回合，免得它配上外部回合的回复被调度。
+        """
+
+        if ctx.context_scope == "external":
+            self._pending_turns.pop(ctx.session_key, None)
+            return
         self._cancel_pending_task(ctx.session_key)
         pending = self._build_pending_turn(
             session_key=ctx.session_key,
@@ -116,11 +125,24 @@ class SceneAwarenessController:
         )
 
     def schedule_proactive_turn(self, event: ProactiveMessageCommitted) -> None:
-        """Schedule scene observation for one committed proactive text message."""
+        """Schedule scene observation for one committed proactive text message.
+
+        按事件自带的 ``thread_id`` 判定上下文，外部上下文不观察；角色共享会话缺少
+        ``thread_id`` 时 ``session_context_view`` 直接报错。
+        """
 
         if not event.assistant_response.strip():
             return
+        view = session_context_view(
+            self._session_manager.workspace,
+            session_key=event.session_key,
+            role_id=event.role_id,
+            thread_id=event.thread_id,
+        )
+        if view is not None and view.scope == "external":
+            return
         self._cancel_pending_task(event.session_key)
+        session = self._session_manager.get_or_create(event.session_key)
         pending = self._build_pending_turn(
             session_key=event.session_key,
             channel=event.channel,
@@ -128,7 +150,13 @@ class SceneAwarenessController:
             role_id=event.role_id,
             source="proactive",
             user_message="",
-            history_messages=self._proactive_history(event),
+            history_messages=tuple(
+                to_history_messages(
+                    session.history_window(
+                        _RECENT_HISTORY_LIMIT, include=history_filter(view)
+                    )
+                )
+            ),
             tools_used=event.tools_used,
         )
         if pending is None:
@@ -156,7 +184,7 @@ class SceneAwarenessController:
         role_id: str,
         source: SceneTurnSource,
         user_message: str,
-        history_messages: tuple[Any, ...],
+        history_messages: tuple[HistoryMessage, ...],
         tools_used: tuple[str, ...] = (),
     ) -> _PendingTurn | None:
         if (
@@ -263,24 +291,6 @@ class SceneAwarenessController:
             )
             raise
 
-    def _proactive_history(self, event: ProactiveMessageCommitted) -> tuple[Any, ...]:
-        """主动消息所在会话同类上下文里的最近消息。
-
-        该事件既来自主动回合，也来自消息推送同步，发送目标不一定属于用户上下文，
-        所以不固定取用户上下文，而是按事件自带的 ``thread_id`` 判定；缺少时
-        ``session_context_view`` 直接报错，不读取未筛选的角色会话。
-        """
-        view = session_context_view(
-            self._session_manager.workspace,
-            session_key=event.session_key,
-            role_id=event.role_id,
-            thread_id=event.thread_id,
-        )
-        session = self._session_manager.get_or_create(event.session_key)
-        return tuple(
-            session.history_window(_RECENT_HISTORY_LIMIT, include=history_filter(view))
-        )
-
     def _cancel_pending_task(self, session_key: str) -> None:
         task = self._tasks.pop(session_key, None)
         if task is not None and not task.done():
@@ -302,13 +312,14 @@ class SceneAwarenessController:
             )
 
 
-def _compact_history(items: tuple[Any, ...]) -> tuple[dict[str, str], ...]:
+def _compact_history(
+    items: tuple[HistoryMessage, ...],
+) -> tuple[dict[str, str], ...]:
+    """最近几条消息压成观察调用用的 role/content 对；两条路径都先转成 HistoryMessage。"""
     history: list[dict[str, str]] = []
     for item in items[-_RECENT_HISTORY_LIMIT:]:
-        if not isinstance(item, dict):
-            continue
-        role = str(item.get("role") or "").strip()
-        content = str(item.get("content") or "").strip()
+        role = item.role.strip()
+        content = item.content.strip()
         if role and content:
             history.append({"role": role, "content": content[:1000]})
     return tuple(history)

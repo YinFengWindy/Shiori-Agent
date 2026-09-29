@@ -324,6 +324,35 @@ async def test_before_turn_setup_fills_turn_state():
 
 
 @pytest.mark.asyncio
+async def test_before_turn_ctx_carries_context_scope_of_turn_thread(tmp_path):
+    session = _DummySession("role:mira")
+    session.metadata["role_id"] = "mira"
+    session_mgr = SimpleNamespace(get_or_create=lambda key: session, workspace=tmp_path)
+    ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
+    phase = Phase(
+        default_before_turn_modules(
+            EventBus(),
+            cast(SessionManager, session_mgr),
+            cast(ContextStore, ctx_store),
+        ),
+        frame_factory=BeforeTurnFrame,
+    )
+    msg = InboundMessage(
+        channel="qq",
+        sender="user",
+        chat_id="group-1",
+        content="hello",
+        metadata={"role_id": "mira", "thread_id": "thread:mira:qq:group-1"},
+    )
+
+    ctx = await phase.run(
+        TurnState(msg=msg, session_key="role:mira", dispatch_outbound=True)
+    )
+
+    assert ctx.context_scope == "external"
+
+
+@pytest.mark.asyncio
 async def test_before_turn_binds_message_role_id_to_session_before_context_prepare():
     bus = EventBus()
     session = _DummySession("lme:e47becba:qa")

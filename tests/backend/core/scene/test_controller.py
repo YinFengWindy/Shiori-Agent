@@ -4,11 +4,12 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, Literal, cast
 from unittest.mock import AsyncMock
 
 import pytest
 
+from agent.core.types import HistoryMessage
 from agent.lifecycle.types import AfterTurnCtx, BeforeTurnCtx
 from core.scene.state import SceneStateStore
 from bus.event_bus import EventBus
@@ -348,17 +349,97 @@ async def test_proactive_message_is_observed_with_shared_scene_state(
     await controller.terminate()
 
 
+def _run_passive_turn(
+    controller: SceneAwarenessController,
+    *,
+    context_scope: Literal["user", "external"],
+    history_messages: tuple[HistoryMessage, ...] = (),
+) -> None:
+    controller.capture_passive_turn(
+        BeforeTurnCtx(
+            session_key="role:mira",
+            channel="qq",
+            chat_id="group-1",
+            content="看海吗？",
+            timestamp=datetime.now(),
+            retrieved_memory_block="",
+            retrieval_trace_raw=None,
+            history_messages=history_messages,
+            context_scope=context_scope,
+        )
+    )
+    controller.schedule_passive_turn(
+        AfterTurnCtx(
+            session_key="role:mira",
+            channel="qq",
+            chat_id="group-1",
+            reply="她望向海边。",
+            tools_used=(),
+            thinking=None,
+            will_dispatch=True,
+        )
+    )
+
+
+def _proactive_event(thread_id: str) -> ProactiveMessageCommitted:
+    return ProactiveMessageCommitted(
+        session_key="role:mira",
+        channel="desktop",
+        role_id="mira",
+        assistant_response="她看向你。",
+        thread_id=thread_id,
+    )
+
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("thread_id", "visible", "hidden"),
-    [
-        ("thread:mira:qq:group-1", "群里在聊游戏", "桌面上说想去看海"),
-        ("thread:mira:desktop", "桌面上说想去看海", "群里在聊游戏"),
-    ],
-    ids=["group-origin", "desktop-origin"],
-)
-async def test_proactive_observation_only_sees_its_own_thread_context(
-    tmp_path: Path, thread_id: str, visible: str, hidden: str
+async def test_external_context_passive_turn_is_not_observed(tmp_path: Path) -> None:
+    decide = AsyncMock(return_value=SceneDecision("started", "sea", "sea", "海边"))
+    controller = _controller(tmp_path, event_bus=EventBus(), decision_provider=decide)
+
+    _run_passive_turn(controller, context_scope="external")
+    await asyncio.gather(*controller.tasks.values())
+
+    decide.assert_not_awaited()
+    assert controller.state.is_current("role:mira", 0)
+    await controller.terminate()
+
+
+@pytest.mark.asyncio
+async def test_user_context_passive_turn_sees_recent_history(tmp_path: Path) -> None:
+    decide = AsyncMock(return_value=SceneDecision("started", "sea", "sea", "海边"))
+    controller = _controller(tmp_path, event_bus=EventBus(), decision_provider=decide)
+
+    _run_passive_turn(
+        controller,
+        context_scope="user",
+        history_messages=(HistoryMessage(role="user", content="想去看海"),),
+    )
+    await asyncio.gather(*controller.tasks.values())
+
+    assert decide.await_args.kwargs["decision_input"].recent_history == (
+        {"role": "user", "content": "想去看海"},
+    )
+    await controller.terminate()
+
+
+@pytest.mark.asyncio
+async def test_external_context_proactive_message_is_not_observed(
+    tmp_path: Path,
+) -> None:
+    decide = AsyncMock(return_value=SceneDecision("started", "sea", "sea", "海边"))
+    controller = _controller(tmp_path, event_bus=EventBus(), decision_provider=decide)
+
+    controller.schedule_proactive_turn(_proactive_event("thread:mira:qq:group-1"))
+    await asyncio.gather(*controller.tasks.values())
+
+    decide.assert_not_awaited()
+    assert controller.state.is_current("role:mira", 0)
+    await controller.terminate()
+
+
+@pytest.mark.asyncio
+async def test_user_context_proactive_message_only_sees_user_context(
+    tmp_path: Path,
 ) -> None:
     decide = AsyncMock(return_value=SceneDecision("started", "sea", "sea", "海边"))
     controller = _controller(tmp_path, event_bus=EventBus(), decision_provider=decide)
@@ -366,19 +447,10 @@ async def test_proactive_observation_only_sees_its_own_thread_context(
     session.add_message("user", "桌面上说想去看海", thread_id="thread:mira:desktop")
     session.add_message("user", "群里在聊游戏", thread_id="thread:mira:qq:group-1")
 
-    controller.schedule_proactive_turn(
-        ProactiveMessageCommitted(
-            session_key="role:mira",
-            channel="desktop",
-            role_id="mira",
-            assistant_response="她看向你。",
-            thread_id=thread_id,
-        )
-    )
+    controller.schedule_proactive_turn(_proactive_event("thread:mira:desktop"))
     await asyncio.gather(*controller.tasks.values())
 
-    history = decide.await_args.kwargs["decision_input"].recent_history
-    contents = [item["content"] for item in history]
-    assert visible in contents
-    assert hidden not in contents
+    assert decide.await_args.kwargs["decision_input"].recent_history == (
+        {"role": "user", "content": "桌面上说想去看海"},
+    )
     await controller.terminate()
