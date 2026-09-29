@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PluginConfigValues } from "@shiori/plugin-sdk";
 import { SerialDraftQueue, type DraftSavePhase } from "../shared/serialDraftQueue";
 import { PluginBridgeError, createPluginBridgeClient, type PluginConfigSaveResult, type PluginConfigSnapshot } from "./pluginBridgeClient";
 import { pluginConfigChanges } from "./pluginConfigChanges";
-
-type PluginConfigValues = Record<string, unknown>;
 
 // A validation rejection is the only failure the user can fix by editing
 // further without reloading; anything else (TOML round-trip issues,
