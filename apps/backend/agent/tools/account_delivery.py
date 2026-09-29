@@ -11,6 +11,7 @@ from typing import Any
 
 from agent.account_delivery import AccountDelivery
 from agent.tools.base import Tool
+from agent.tools.external_access import ExternalArgumentLimit
 from agent.tools.message_push import record_delivered_push
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ExternalTextPushed
@@ -84,6 +85,15 @@ def shared_account_delivery(tools: Any) -> AccountDelivery | None:
     """
     tool = tools.get_tool(AccountSendTool.name) if tools is not None else None
     return tool.delivery if isinstance(tool, AccountSendTool) else None
+
+
+# 外部上下文受限回合里 account_send 只能发给用户（#522），由注册处声明。
+ACCOUNT_SEND_EXTERNAL_LIMIT = ExternalArgumentLimit(
+    argument="target_kind",
+    values=frozenset({USER_TARGET}),
+    denied="这个工具在这里只能用来发给你的用户",
+    note=f"在这里只能发给你的用户：target_kind 只能是 {USER_TARGET}。",
+)
 
 
 class AccountSendTool(Tool):

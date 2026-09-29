@@ -34,6 +34,7 @@ from agent.scheduler import SchedulerService
 from agent.tools.message_push import MessagePushTool
 from agent.account_delivery import AccountDelivery
 from agent.tools.account_delivery import (
+    ACCOUNT_SEND_EXTERNAL_LIMIT,
     AccountListTool,
     AccountTargetsTool,
     AccountSendTool,
@@ -640,7 +641,7 @@ def build_core_runtime(
         AccountDeliveryLedger(workspace),
         role_store.identities,
     )
-    # 账号查询在外部上下文受限回合也可用（#489），发送不行。
+    # 账号查询在外部上下文受限回合也可用（#489）；发送只能发给用户（#522）。
     tools.register(
         AccountListTool(account_delivery), risk="read-only", external_allowed=True
     )
@@ -650,6 +651,8 @@ def build_core_runtime(
     tools.register(
         AccountSendTool(account_delivery, event_outlet or event_bus),
         risk="external-side-effect",
+        external_allowed=True,
+        external_limit=ACCOUNT_SEND_EXTERNAL_LIMIT,
     )
 
     return CoreRuntime(

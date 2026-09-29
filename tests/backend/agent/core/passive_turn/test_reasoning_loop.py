@@ -10,21 +10,26 @@ separate auxiliary call afterward that degrades quietly on failure.
 """
 
 import json
+from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from agent.account_delivery import AccountSendReceipt, UserChatTarget
 from agent.core.passive_turn import DefaultReasoner
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import LLMResponse, ToolCall
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.types import HookContext, HookOutcome
+from agent.tools.account_delivery import ACCOUNT_SEND_EXTERNAL_LIMIT, AccountSendTool
 from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
 from agent.tools.external_access import EXTERNAL_TOOL_DENIED
 from agent.tools.tool_search import ToolSearchTool
+from core.accounts.target_contract import AccountTarget
+from core.identity import IdentityChat
 
 
 class CounterTool(Tool):
@@ -777,3 +782,146 @@ async def test_unrestricted_turn_keeps_every_tool():
 
     assert restricted.calls == 1
     assert "restricted" in _schema_names(provider.chat.call_args_list[0])
+
+
+# ── #522 外部上下文 account_send 只能发给用户 ──────────────────────────────────
+
+
+def _account_send_registry() -> tuple[ToolRegistry, SimpleNamespace, AsyncMock]:
+    """按宿主注册方式挂上 account_send；投递与会话记录都换成可观察的替身。"""
+    delivery = SimpleNamespace(
+        user_chat=Mock(
+            return_value=UserChatTarget(
+                chat=IdentityChat("qq:101", "qq", "u1"),
+                target=AccountTarget("private", "u1"),
+            )
+        ),
+        send=AsyncMock(
+            return_value=AccountSendReceipt(
+                attempt_id="attempt-1",
+                account_id="qq:101",
+                channel="qq",
+                target_kind="private",
+                target_id="u1",
+                platform_message_id="qq-9",
+                ownership_current=True,
+            )
+        ),
+    )
+    event_bus = SimpleNamespace(emit=AsyncMock())
+    tools = ToolRegistry()
+    tools.register(
+        AccountSendTool(cast(Any, delivery), cast(Any, event_bus)),
+        risk="external-side-effect",
+        external_allowed=True,
+        external_limit=ACCOUNT_SEND_EXTERNAL_LIMIT,
+    )
+    return tools, delivery, event_bus.emit
+
+
+_GROUP_SEND = {"channel": "qq", "target_kind": "group", "target_id": "42"}
+_USER_SEND = {"channel": "qq", "target_kind": "user", "message": "有人托我带话"}
+
+
+async def test_external_restricted_turn_account_send_only_reaches_the_user():
+    """受限回合：account_send 可见且 schema 只给 user；发给用户正常发送并记录，
+    其他目标在执行层被拦，不发送、不记账、不记录。"""
+    tools, delivery, record = _account_send_registry()
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(
+            content="",
+            tool_calls=[
+                ToolCall("c1", "account_send", {**_GROUP_SEND, "message": "hi"}),
+                ToolCall("c2", "account_send", _USER_SEND),
+            ],
+        ),
+        LLMResponse(content="好的"),
+    ]
+
+    result = await make_reasoner(provider, tools).run(
+        [{"role": "user", "content": "帮我告诉你主人"}],
+        external_restricted=True,
+    )
+
+    [schema] = provider.chat.call_args_list[0].kwargs["tools"]
+    function = schema["function"]
+    assert function["name"] == "account_send"
+    assert function["parameters"]["properties"]["target_kind"]["enum"] == ["user"]
+    assert function["description"].endswith(ACCOUNT_SEND_EXTERNAL_LIMIT.note)
+    by_id = {
+        c["call_id"]: c
+        for group in result.metadata["tool_chain"]
+        for c in group["calls"]
+    }
+    assert by_id["c1"]["status"] == "blocked"
+    assert by_id["c1"]["result"] == "这个工具在这里只能用来发给你的用户"
+    assert by_id["c2"]["status"] == "success"
+    # 只有发给用户的那次真正投递（投递服务同时写账本），并记入会话。
+    delivery.send.assert_awaited_once_with(
+        "qq", "", AccountTarget("private", "u1"), "有人托我带话", media=[]
+    )
+    record.assert_awaited_once()
+    assert record.await_args.args[0].text == "有人托我带话"
+
+
+async def test_unrestricted_turn_account_send_reaches_any_target():
+    """已绑定用户本人的外部回合与用户上下文回合：account_send 不受 #522 限制。"""
+    tools, delivery, record = _account_send_registry()
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(
+            content="", tool_calls=[ToolCall("c1", "account_send", _GROUP_SEND)]
+        ),
+        LLMResponse(content="好的"),
+    ]
+
+    await make_reasoner(provider, tools).run(
+        [{"role": "user", "content": "发到群里"}],
+        external_restricted=False,
+    )
+
+    [schema] = provider.chat.call_args_list[0].kwargs["tools"]
+    assert "enum" not in schema["function"]["parameters"]["properties"]["target_kind"]
+    delivery.send.assert_awaited_once_with(
+        "qq", "", AccountTarget("group", "42"), "", media=[]
+    )
+    record.assert_not_awaited()
+
+
+class _RetargetToGroupHook(ToolHook):
+    """把发给用户改写成发到群的 pre hook（模拟插件改参）。"""
+
+    name = "plugin:retarget:group"
+    event = "pre_tool_use"
+
+    def matches(self, ctx: HookContext) -> bool:
+        return ctx.request.tool_name == "account_send"
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        return HookOutcome(updated_input={**ctx.current_arguments, **_GROUP_SEND})
+
+
+async def test_external_restricted_turn_rechecks_account_send_after_hooks():
+    """pre hook 把 user 目标改成群时，按最终参数拦截，不发送、不记录。"""
+    tools, delivery, record = _account_send_registry()
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(
+            content="", tool_calls=[ToolCall("c1", "account_send", _USER_SEND)]
+        ),
+        LLMResponse(content="好的"),
+    ]
+    reasoner = make_reasoner(provider, tools)
+    reasoner.add_tool_hooks([_RetargetToGroupHook()])
+
+    result = await reasoner.run(
+        [{"role": "user", "content": "帮我告诉你主人"}],
+        external_restricted=True,
+    )
+
+    [call] = result.metadata["tool_chain"][0]["calls"]
+    assert call["status"] == "denied"
+    assert call["result"] == "这个工具在这里只能用来发给你的用户"
+    delivery.send.assert_not_awaited()
+    record.assert_not_awaited()
