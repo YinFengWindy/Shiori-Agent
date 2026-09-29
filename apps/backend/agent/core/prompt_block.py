@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
     from agent.skills import SkillsLoader
     from core.roles import RoleStore
     from conversation.context_scope import ContextScope
+    from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
 
 logger = logging.getLogger("agent.core.prompt_block")
@@ -43,6 +45,9 @@ class TurnContext:
     role_id: str = ""
     # 回合所在的上下文（#482）；None 表示非角色共享会话，按用户上下文注入。
     context_scope: "ContextScope | None" = None
+    # 回合所在会话与群环境层（#497）；未接入群环境层时为 None。
+    thread_id: str = ""
+    group_environment: "GroupEnvironment | None" = None
 
 
 def is_external_turn(ctx: TurnContext) -> bool:
@@ -97,6 +102,12 @@ class PromptBlock(Protocol):
 #  45 RecentContextPromptBlock → roles/<role_id>/memory/RECENT_CONTEXT.md（裁掉 Recent Turns；外部回合不注入）
 #                              来源：memory.read_recent_context()（严格要求 role_id）
 #                              时机：近期语境压缩摘要更新时变化；每轮 Recent Turns 刷新不会直接进入这里
+#  46 RecentActivityPromptBlock→ 各外部会话的最近动态（群环境层，只在用户上下文注入）
+#                              来源：thread_state.summary，近 3 天更新、最多 5 个
+#                              时机：记忆整理外部段后变化
+#  47 GroupNotePromptBlock     → 当前外部会话的群笔记（只在外部回合注入，不注入其他会话的）
+#                              来源：roles/<role_id>/memory/groups/*.md
+#                              时机：记忆整理外部段后变化
 #  50 ActiveSkillsPromptBlock  → active skill 内容
 #                              来源：always skills + 本轮命中的 skill_names
 #                              时机：本轮技能命中集合变化时就会变，中频
@@ -304,6 +315,52 @@ class RecentContextPromptBlock:
         if is_external_turn(ctx):
             return None
         return strip_recent_turns(ctx.memory.read_recent_context() or "") or None
+
+    def cache_signature(self, ctx: TurnContext) -> str | None:
+        return None
+
+
+class RecentActivityPromptBlock:
+    """用户上下文回合注入各外部会话的最近动态（#497）；外部回合不注入。"""
+
+    priority = 46
+    label = "recent_activity"
+    is_static = False
+
+    def render(
+        self, ctx: TurnContext, cached_signature: str | None = None
+    ) -> str | None:
+        if is_external_turn(ctx) or ctx.group_environment is None or not ctx.role_id:
+            return None
+        return (
+            ctx.group_environment.render_recent_activity(
+                ctx.role_id, now=datetime.now().astimezone()
+            )
+            or None
+        )
+
+    def cache_signature(self, ctx: TurnContext) -> str | None:
+        return None
+
+
+class GroupNotePromptBlock:
+    """外部上下文回合只注入当前会话的群笔记（#497）。"""
+
+    priority = 47
+    label = "group_note"
+    is_static = False
+
+    def render(
+        self, ctx: TurnContext, cached_signature: str | None = None
+    ) -> str | None:
+        if not is_external_turn(ctx) or ctx.group_environment is None:
+            return None
+        # 外部回合一定来自角色共享会话里的某个会话，缺了说明装配有误。
+        if not ctx.role_id or not ctx.thread_id:
+            raise ValueError("外部回合缺少 role_id 或 thread_id，无法读取群笔记")
+        return (
+            ctx.group_environment.render_group_note(ctx.role_id, ctx.thread_id) or None
+        )
 
     def cache_signature(self, ctx: TurnContext) -> str | None:
         return None

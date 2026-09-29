@@ -125,6 +125,8 @@ class PromptRenderInput:
     session_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
     # 回合所在的上下文，取自 TurnState.context_scope；决定注入哪些记忆。
     context_scope: ContextScope | None = None
+    # 回合所在会话（thread）；外部回合据此注入当前会话的群笔记（#497）。
+    thread_id: str = ""
 
 
 @dataclass

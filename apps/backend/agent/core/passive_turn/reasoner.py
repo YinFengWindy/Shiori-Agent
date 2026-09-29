@@ -411,6 +411,7 @@ class DefaultReasoner(
                         context_scope=(
                             context_view.scope if context_view is not None else None
                         ),
+                        thread_id=str((msg.metadata or {}).get("thread_id") or ""),
                     )
                 )
                 initial_messages = prompt_render.messages

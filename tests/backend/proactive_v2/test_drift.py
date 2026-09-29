@@ -20,7 +20,13 @@ from agent.tools.base import Tool
 from agent.tools.message_lookup import SearchMessagesTool
 from agent.tools.recall_memory import RecallMemoryTool
 from core.memory.engine import MemoryQueryResult, MemoryToolSpec
-from conversation.service import desktop_thread_id, network_thread_id
+from conversation.service import (
+    ConversationService,
+    LegacySessionDescriptor,
+    desktop_thread_id,
+    network_thread_id,
+)
+from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
 from core.accounts import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
 from agent.tools.registry import ToolRegistry
@@ -402,6 +408,49 @@ def test_drift_runtime_context_binds_role_memory_from_ctx(tmp_path: Path):
     assert "recent:mira" in content
     # Raw recent turns span every thread and never reach the drift prompt.
     assert "群里的原话" not in content
+
+
+def test_drift_runtime_context_injects_recent_activity_of_external_chats(
+    tmp_path: Path,
+):
+    _write_skill(tmp_path)
+    store = DriftStateStore(tmp_path)
+    manager = SessionManager(tmp_path)
+    thread = ConversationService(manager).ensure_thread_for_session(
+        LegacySessionDescriptor(
+            session_key="qq:g1", role_id="mira", channel="qq", chat_id="g1"
+        )
+    )
+    environment = GroupEnvironment(tmp_path, manager.conversation_store)
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+    )
+    environment.apply(
+        "mira",
+        GroupEnvironmentUpdate(
+            thread_id=thread.id,
+            label="群「猫猫群」",
+            recent_activity="阿明在猫猫群晒了新买的狗。",
+            group_note="",
+        ),
+        updated_at=ctx.now_utc,
+    )
+    pipeline = _make_drift_pipeline(
+        store=store,
+        tool_deps=DriftToolDeps(
+            drift_dir=tmp_path,
+            store=store,
+            shared_tools=_build_shared_tools(),
+            group_environment=environment,
+        ),
+    )
+
+    content = str(
+        pipeline._build_runtime_context_message(ctx, store.scan_skills())["content"]
+    )
+
+    assert "群「猫猫群」" in content
+    assert "阿明在猫猫群晒了新买的狗。" in content
 
 
 @pytest.mark.parametrize(

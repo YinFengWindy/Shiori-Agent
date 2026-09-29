@@ -458,20 +458,56 @@ class ConversationStore:
         self,
         thread_id: str,
         *,
-        summary: str,
+        summary: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> StateRecord:
+        """Writes one thread's derived state without clobbering the other writer.
+
+        Two owners share the row: message projection writes counters, and the
+        group environment layer (#497) writes the conversation summary. So
+        ``summary=None`` keeps the stored summary, and ``metadata`` is merged
+        into the stored keys instead of replacing them.
+        """
         return self._upsert_state(
             "thread_state",
             "thread_id",
             thread_id,
             summary=summary,
             metadata=metadata,
+            merge_metadata=True,
         )
 
     def get_thread_state(self, thread_id: str) -> StateRecord | None:
         """Returns the current derived state for a formal thread."""
         return self._get_state("thread_state", "thread_id", thread_id)
+
+    def list_summarized_thread_states(self, role_id: str) -> list[StateRecord]:
+        """The states of ``role_id``'s current threads that carry a summary.
+
+        Archived threads belong to the role no longer, so they are left out.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT thread_state.thread_id, thread_state.summary,
+                       thread_state.metadata, thread_state.updated_at
+                FROM thread_state
+                JOIN threads ON threads.id = thread_state.thread_id
+                WHERE threads.role_id = ? AND threads.archived = 0
+                      AND thread_state.summary != ''
+                ORDER BY thread_state.thread_id ASC
+                """,
+                (role_id,),
+            ).fetchall()
+        return [
+            StateRecord(
+                owner_id=str(row["thread_id"]),
+                summary=str(row["summary"]),
+                metadata=json.loads(row["metadata"] or "{}"),
+                updated_at=str(row["updated_at"]),
+            )
+            for row in rows
+        ]
 
     def upsert_contact_state(
         self,
@@ -626,20 +662,31 @@ class ConversationStore:
         owner_column: str,
         owner_id: str,
         *,
-        summary: str,
+        summary: str | None,
         metadata: dict[str, Any] | None = None,
+        merge_metadata: bool = False,
     ) -> StateRecord:
+        """Upserts one state row; ``summary=None`` keeps the stored summary.
+
+        ``merge_metadata`` patches the given keys into the stored metadata
+        instead of replacing it.
+        """
         now = datetime.now().astimezone().isoformat()
+        metadata_update = (
+            f"json_patch({table}.metadata, excluded.metadata)"
+            if merge_metadata
+            else "excluded.metadata"
+        )
         with self._lock:
             # Session undo owns the surrounding transaction for facts and projections.
             owns_transaction = not self._conn.in_transaction
             self._conn.execute(
                 f"""
                 INSERT INTO {table} ({owner_column}, summary, metadata, updated_at)
-                VALUES (?, ?, ?, ?)
+                VALUES (?, COALESCE(?, ''), ?, ?)
                 ON CONFLICT({owner_column}) DO UPDATE SET
-                    summary = excluded.summary,
-                    metadata = excluded.metadata,
+                    summary = COALESCE(?, {table}.summary),
+                    metadata = {metadata_update},
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -647,6 +694,7 @@ class ConversationStore:
                     summary,
                     json.dumps(metadata or {}, ensure_ascii=False),
                     now,
+                    summary,
                 ),
             )
             row = self._conn.execute(

@@ -635,6 +635,7 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
             SimpleNamespace(
                 get_or_create=lambda key: None,
                 commit_consolidation=lambda request, write_memory, publish_committed: None,
+                conversation_store=object(),
             ),
         ),
         presence=cast(Any, None),

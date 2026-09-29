@@ -6,6 +6,7 @@ import asyncio
 import logging
 from collections import deque
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from bus.events_lifecycle import (
@@ -31,6 +32,7 @@ from .formatting import (
     _append_entries_to_journal,
     _format_consolidation_error,
     _select_consolidation_window,
+    _session_role_id,
     _estimate_session_input_tokens,
 )
 from .runtime import MarkdownMemoryStore, resolve_markdown_store
@@ -38,6 +40,7 @@ from .runtime import MarkdownMemoryStore, resolve_markdown_store
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
     from agent.provider import LLMProvider
+    from core.memory.group_environment import GroupEnvironment
 
 logger = logging.getLogger("memory.markdown")
 
@@ -49,14 +52,6 @@ def _session_input_over_budget(
         threshold > 0
         and _estimate_session_input_tokens(session, current_content) >= threshold
     )
-
-
-def _session_role_id(session: object) -> str:
-    """会话元数据里记录的角色 ID；没有时为空串。"""
-    metadata = getattr(session, "metadata", {})
-    if not isinstance(metadata, dict):
-        return ""
-    return str(metadata.get("role_id") or "").strip()
 
 
 class MarkdownMemoryMaintenance:
@@ -100,6 +95,7 @@ class MarkdownMemoryMaintenance:
             | None
         ) = None
         self._after_consolidation: Callable[[object], Awaitable[None]] | None = None
+        self._group_environment: GroupEnvironment | None = None
         self._maintenance_queues: dict[str, deque[str]] = {}
         self._maintenance_tasks: dict[str, asyncio.Task[None]] = {}
         self._maintenance_locks: dict[str, asyncio.Lock] = {}
@@ -129,6 +125,7 @@ class MarkdownMemoryMaintenance:
         self._get_session = request.get_session
         self._commit_consolidation = request.commit_consolidation
         self._after_consolidation = request.after_consolidation
+        self._group_environment = request.group_environment
 
     def share_execution(self, previous: MarkdownMemoryMaintenance) -> None:
         """Serializes writes to shared sessions across configuration versions."""
@@ -336,6 +333,7 @@ class MarkdownMemoryMaintenance:
                 request.session, request.current_content
             ),
             user_threads=self._user_threads_for_session(request.session),
+            group_environment=self._group_environment,
         )
         if draft is None:
             if session_key:
@@ -426,6 +424,23 @@ class MarkdownMemoryMaintenance:
                 target_store,
                 history_entries,
                 draft.source_ref,
+            )
+        await self._write_group_environment(session, draft)
+
+    async def _write_group_environment(
+        self, session: object, draft: _ConsolidationDraft
+    ) -> None:
+        """把外部段整理出的最近动态与群笔记写入群环境层；不经过记忆引擎。"""
+        if not draft.group_environment_updates:
+            return
+        group_environment = self._group_environment
+        if group_environment is None:
+            raise RuntimeError("group environment is not bound")
+        role_id = _session_role_id(session)
+        updated_at = datetime.now().astimezone()
+        for update in draft.group_environment_updates:
+            await asyncio.to_thread(
+                group_environment.apply, role_id, update, updated_at=updated_at
             )
 
     async def _publish_consolidation(

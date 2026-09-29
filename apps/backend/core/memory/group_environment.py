@@ -1,0 +1,157 @@
+"""群环境层：角色对每个外部会话（群聊、陌生私聊）的最近动态与群笔记（#497）。
+
+- 最近动态：写在会话状态（``thread_state``）的 ``summary`` 字段，一两句话，
+  更新时间与会话称呼记在同一行的 metadata 里。
+- 群笔记：角色记忆目录下按会话一个的 Markdown（``memory/groups/``），记群的
+  氛围、常聊话题、角色在群里的定位与重要事件。
+
+二者都由宿主在记忆整理提交时写入，不经过记忆引擎。用户上下文回合（含主动、
+发呆）注入最近 ``RECENT_ACTIVITY_WINDOW`` 内更新过的最近动态，至多
+``RECENT_ACTIVITY_LIMIT`` 个；外部上下文回合只注入当前会话的群笔记。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import re
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from conversation.context_scope import load_user_context_threads
+from conversation.store import ConversationStore
+from utils.helpers import ensure_dir
+
+# 用户上下文注入最近动态的时间窗与数量上限。
+RECENT_ACTIVITY_WINDOW = timedelta(days=3)
+RECENT_ACTIVITY_LIMIT = 5
+# thread_state.metadata 里与最近动态一同写入的字段。
+SUMMARY_UPDATED_AT_KEY = "summary_updated_at"
+SUMMARY_LABEL_KEY = "summary_label"
+
+_UNSAFE_FILENAME_CHARS = re.compile(r"[^0-9A-Za-z._-]+")
+
+
+@dataclass(frozen=True)
+class GroupEnvironmentUpdate:
+    """一次整理为某个外部会话产出的群环境层更新。
+
+    ``label`` 是会话的称呼（如 ``群「猫猫群」``）；``recent_activity`` 与
+    ``group_note`` 为空时保留原有内容。
+    """
+
+    thread_id: str
+    label: str
+    recent_activity: str
+    group_note: str
+
+
+@dataclass(frozen=True)
+class RecentActivity:
+    """一个外部会话的最近动态。"""
+
+    thread_id: str
+    label: str
+    summary: str
+    updated_at: datetime
+
+
+class GroupEnvironment:
+    """群环境层的存储：最近动态在 ``ConversationStore``，群笔记在角色记忆目录。"""
+
+    def __init__(self, workspace: Path, conversation_store: ConversationStore) -> None:
+        self._workspace = workspace
+        self._store = conversation_store
+
+    def note_path(self, role_id: str, thread_id: str) -> Path:
+        """会话 ``thread_id`` 的群笔记文件；文件名由会话 ID 转成安全字符并加短哈希。"""
+        digest = hashlib.sha1(thread_id.encode("utf-8")).hexdigest()[:8]
+        stem = _UNSAFE_FILENAME_CHARS.sub("_", thread_id).strip("_")
+        return self._groups_dir(role_id) / f"{stem}-{digest}.md"
+
+    def read_note(self, role_id: str, thread_id: str) -> str:
+        """会话的群笔记；还没有时为空串。"""
+        path = self.note_path(role_id, thread_id)
+        if not path.exists():
+            return ""
+        return path.read_text(encoding="utf-8").strip()
+
+    def read_recent_activity(self, thread_id: str) -> str:
+        """会话当前的最近动态；还没有时为空串。"""
+        state = self._store.get_thread_state(thread_id)
+        return state.summary if state is not None else ""
+
+    def apply(
+        self, role_id: str, update: GroupEnvironmentUpdate, *, updated_at: datetime
+    ) -> None:
+        """写入一次整理的产出；空字段保留原有内容。"""
+        if update.recent_activity:
+            self._store.upsert_thread_state(
+                update.thread_id,
+                summary=update.recent_activity,
+                metadata={
+                    SUMMARY_UPDATED_AT_KEY: updated_at.isoformat(),
+                    SUMMARY_LABEL_KEY: update.label,
+                },
+            )
+        if update.group_note:
+            ensure_dir(self._groups_dir(role_id))
+            self.note_path(role_id, update.thread_id).write_text(
+                update.group_note.strip() + "\n", encoding="utf-8"
+            )
+
+    def recent_activities(self, role_id: str, *, now: datetime) -> list[RecentActivity]:
+        """``now`` 之前 ``RECENT_ACTIVITY_WINDOW`` 内更新过的外部会话最近动态，新的在前。
+
+        按此刻的身份绑定跳过已属于用户上下文的会话（例如陌生私聊绑定后并入）：
+        它们的记录不迁移也不删除，只是不再作为外部会话的动态注入。
+        """
+        user_threads = load_user_context_threads(self._workspace, role_id)
+        activities: list[RecentActivity] = []
+        for state in self._store.list_summarized_thread_states(role_id):
+            if user_threads.contains(state.owner_id):
+                continue
+            updated_at = datetime.fromisoformat(
+                str(state.metadata[SUMMARY_UPDATED_AT_KEY])
+            )
+            if now - updated_at > RECENT_ACTIVITY_WINDOW:
+                continue
+            activities.append(
+                RecentActivity(
+                    thread_id=state.owner_id,
+                    label=str(state.metadata.get(SUMMARY_LABEL_KEY) or ""),
+                    summary=state.summary,
+                    updated_at=updated_at,
+                )
+            )
+        activities.sort(key=lambda item: item.updated_at, reverse=True)
+        return activities[:RECENT_ACTIVITY_LIMIT]
+
+    def render_recent_activity(self, role_id: str, *, now: datetime) -> str:
+        """用户上下文注入的「各会话最近动态」段落；没有时为空串。"""
+        activities = self.recent_activities(role_id, now=now)
+        if not activities:
+            return ""
+        lines = [
+            "## 我在群聊与其他私聊里的最近动态",
+            "",
+            *(
+                f"- {item.label or '一个会话'}"
+                f"（{item.updated_at.strftime('%m-%d %H:%M')} 更新）：{item.summary}"
+                for item in activities
+            ),
+        ]
+        return "\n".join(lines)
+
+    def render_group_note(self, role_id: str, thread_id: str) -> str:
+        """外部上下文回合注入的当前会话群笔记段落；没有时为空串。"""
+        note = self.read_note(role_id, thread_id)
+        if not note:
+            return ""
+        return f"## 我对这个会话的群笔记\n\n{note}"
+
+    def _groups_dir(self, role_id: str) -> Path:
+        clean_role_id = role_id.strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for group environment access")
+        return self._workspace / "roles" / clean_role_id / "memory" / "groups"

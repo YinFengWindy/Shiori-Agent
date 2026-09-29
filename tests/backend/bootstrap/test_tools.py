@@ -36,6 +36,7 @@ def test_memory_lifecycle_binds_the_session_owner_commit_operation(tmp_path: Pat
             Any, SimpleNamespace(refresh_snapshot_after_consolidation=AsyncMock())
         ),
         relationship_optimizer=cast(Any, object()),
+        group_environment=cast(Any, object()),
     )
 
     assert maintenance._get_session == manager.get_or_create

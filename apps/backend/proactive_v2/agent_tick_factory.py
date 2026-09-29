@@ -23,6 +23,7 @@ from proactive_v2.drift_state import DriftStateStore
 from proactive_v2.drift_tools import DriftToolDeps
 from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
+from core.memory.group_environment import GroupEnvironment
 from core.roles.reply_state import RoleReply, RoleReplyContext
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,8 @@ class AgentTickDeps:
     pool: McpClientPool | None = None
     tool_hooks: list[ToolHook] = field(default_factory=list)
     proactive_gates: ProactiveGateChain | None = None
+    # 群环境层（#497）：主动与发呆回合注入各外部会话的最近动态。
+    group_environment: GroupEnvironment | None = None
 
 
 class AgentTickFactory:
@@ -221,6 +224,7 @@ class AgentTickFactory:
             alert_ack_fn=self._build_alert_ack_fn(pool),
             max_chars=self._deps.cfg.agent_tick_web_fetch_max_chars,
             shared_tools=self._deps.shared_tools,
+            group_environment=self._deps.group_environment,
         )
 
     def _build_gateway_deps(
@@ -260,6 +264,7 @@ class AgentTickFactory:
                     shared_tools=self._deps.shared_tools,
                     send_message_fn=self._build_drift_send_message_fn(),
                     max_web_fetch_chars=tool_deps.max_chars,
+                    group_environment=self._deps.group_environment,
                 ),
                 role_prompt_fn=self._deps.role_prompt_fn,
                 max_steps=getattr(self._deps.cfg, "drift_max_steps", 20),

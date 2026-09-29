@@ -67,6 +67,7 @@ from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from bus.queue import MessageBus
 from core.common.channel_directory import ChannelDirectory
+from core.memory.group_environment import GroupEnvironment
 from core.memory.markdown import MemoryLifecycleBindRequest, MarkdownMemoryMaintenance
 from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
@@ -323,6 +324,7 @@ def _build_loop_deps(
     channel_directory: ChannelDirectory | None = None,
 ) -> AgentLoopDeps:
     wiring = getattr(config, "wiring", WiringConfig())
+    group_environment = GroupEnvironment(workspace, session_manager.conversation_store)
     context = resolve_context_factory(wiring.context)(
         workspace,
         memory_runtime.markdown.store,
@@ -332,6 +334,7 @@ def _build_loop_deps(
         context.set_media_capabilities(
             multimodal=config.multimodal,
         )
+        context.set_group_environment(group_environment)
         if channel_directory is not None:
             context.set_channel_directory(channel_directory)
     memory_engine = memory_runtime.engine
@@ -354,6 +357,7 @@ def _build_loop_deps(
         session_manager=session_manager,
         relationship_runtime=relationship_runtime,
         relationship_optimizer=relationship_optimizer,
+        group_environment=group_environment,
     )
     retrieval_pipeline = DefaultMemoryRetrievalPipeline(
         memory=memory_services,
@@ -386,6 +390,7 @@ def _bind_memory_lifecycle_if_supported(
     session_manager: SessionManager,
     relationship_runtime: RoleRelationshipRuntimeService,
     relationship_optimizer: RelationshipSnapshotOptimizer,
+    group_environment: GroupEnvironment,
 ) -> None:
     async def _after_consolidation(session: object) -> None:
         await relationship_runtime.refresh_snapshot_after_consolidation(
@@ -398,6 +403,7 @@ def _bind_memory_lifecycle_if_supported(
             get_session=session_manager.get_or_create,
             commit_consolidation=session_manager.commit_consolidation,
             after_consolidation=_after_consolidation,
+            group_environment=group_environment,
         )
     )
 

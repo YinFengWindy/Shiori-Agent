@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -7,10 +7,13 @@ from agent.context import ContextBuilder, ContextRequest, MessageEnvelopeBuilder
 from agent.prompting import SYSTEM_CONTEXT_FRAME_MARKER
 from bus.events import InboundMessage
 from conversation.context_scope import ContextScope
+from conversation.service import ConversationService, LegacySessionDescriptor
 from core.common.channel_directory import ChannelDirectory
 from core.common.message_source import MessageSource
 from core.identity import IdentityChat
+from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
 from core.roles import RoleStore
+from session.manager import SessionManager
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 from session.manager.models import Session, whole_session
 
@@ -647,3 +650,91 @@ def test_context_builder_external_turn_injects_only_public_self_sections(
     for private in ("理解条目", "近期语境条目", "长期记忆条目", "检索条目"):
         assert private not in external
         assert private in user
+
+
+def test_context_builder_injects_group_environment_by_turn_scope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    class _Skills:
+        def __init__(self, workspace: Path) -> None:
+            self.workspace = workspace
+
+        def get_always_skills(self) -> list[str]:
+            return []
+
+        def load_skills_for_context(self, names: list[str]) -> str:
+            return ""
+
+        def build_skills_summary(self) -> str:
+            return ""
+
+    class _Memory:
+        def read_self(self) -> str:
+            return ""
+
+        def read_recent_context(self) -> str:
+            return ""
+
+        def get_memory_context(self) -> str:
+            return ""
+
+    monkeypatch.setattr("agent.context.SkillsLoader", _Skills)
+    RoleStore(tmp_path).create_role(
+        role_id="mira", name="Mira", system_prompt="test role"
+    )
+    manager = SessionManager(tmp_path)
+    conversation = ConversationService(manager)
+    environment = GroupEnvironment(tmp_path, manager.conversation_store)
+    now = datetime.now().astimezone()
+    thread_ids = []
+    # 六个会话 3 天内更新过（第 i 个早 i 小时），第七个 4 天前更新。
+    for index, age in enumerate(
+        [timedelta(hours=h) for h in range(6)] + [timedelta(days=4)]
+    ):
+        thread = conversation.ensure_thread_for_session(
+            LegacySessionDescriptor(
+                session_key=f"qq:g{index}",
+                role_id="mira",
+                channel="qq",
+                chat_id=f"g{index}",
+            )
+        )
+        thread_ids.append(thread.id)
+        environment.apply(
+            "mira",
+            GroupEnvironmentUpdate(
+                thread_id=thread.id,
+                label=f"群「群{index}」",
+                recent_activity=f"动态{index}",
+                group_note=f"群{index}的笔记",
+            ),
+            updated_at=now - age,
+        )
+    builder = ContextBuilder(tmp_path, _Memory())  # type: ignore[arg-type]
+    builder.set_group_environment(environment)
+
+    def model_input(scope: ContextScope, thread_id: str) -> str:
+        result = builder.render(
+            ContextRequest(
+                history=[],
+                current_message="你好",
+                context_scope=scope,
+                thread_id=thread_id,
+            ),
+            session_metadata={"role_id": "mira"},
+        )
+        return "\n".join(str(message["content"]) for message in result.messages)
+
+    user = model_input("user", "thread:mira:desktop")
+    external = model_input("external", thread_ids[1])
+
+    # 用户回合：3 天内最新的 5 个会话的最近动态，不注入群笔记。
+    for index in range(5):
+        assert f"群「群{index}」" in user and f"动态{index}" in user
+    assert "动态5" not in user
+    assert "动态6" not in user
+    assert not any(f"群{index}的笔记" in user for index in range(7))
+    # 外部回合：只注入当前会话的群笔记，不注入最近动态。
+    assert "群1的笔记" in external
+    assert "群0的笔记" not in external
+    assert not any(f"动态{index}" in external for index in range(7))

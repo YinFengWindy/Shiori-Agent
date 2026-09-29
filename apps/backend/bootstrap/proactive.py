@@ -14,6 +14,7 @@ from agent.tools.message_push import MessagePushTool
 from conversation.service import desktop_chat_id, desktop_thread_id
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.desktop_presence import DesktopPresence
+from core.memory.group_environment import GroupEnvironment
 from core.roles import RoleRecord, RoleStore
 from core.roles.model_runtime import RoleAwareProvider
 from core.roles.role_prompt_compiler import RolePromptCompiler
@@ -87,6 +88,7 @@ def build_proactive_runtime(
     loops: dict[str, ProactiveLoop] = {}
     role_runtime_registry = agent_loop.role_runtime_registry
     role_aware_provider = RoleAwareProvider(proactive_provider)
+    group_environment = GroupEnvironment(workspace, session_manager.conversation_store)
     for role in roles:
         proactive_cfg = _build_role_proactive_config(role)
         proactive_state = ProactiveStateStore(
@@ -123,6 +125,7 @@ def build_proactive_runtime(
             ),
             desktop_presence=desktop_presence,
             role_store=role_runtime_registry.repository.store,
+            group_environment=group_environment,
         )
         loops[role.id] = loop
         tasks.append(loop.run())

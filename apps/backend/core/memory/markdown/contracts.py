@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from session.manager.consolidation import ConsolidationCommitRequest
+
+if TYPE_CHECKING:
+    from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,8 @@ class MemoryLifecycleBindRequest:
         Awaitable[bool],
     ]
     after_consolidation: Callable[[object], Awaitable[None]] | None = None
+    # 群环境层（#497）：整理外部段的产出写到这里；外部段非空却没有绑定时整理失败。
+    group_environment: "GroupEnvironment | None" = None
 
 
 @runtime_checkable
@@ -80,7 +85,7 @@ class ConsolidationSegments:
 
     ``user_messages`` 属于用户本人（见 ``conversation.context_scope.belongs_to_user``），
     走用户层整理；``external_messages`` 是群友、陌生人的发言以及角色在外部会话里的
-    回复，目前不整理，留给群环境层接入。游标仍按整个窗口推进。
+    回复，按会话整理成群环境层（#497），不交给记忆引擎。游标仍按整个窗口推进。
     """
 
     user_messages: list[dict]
@@ -99,6 +104,8 @@ class _ConsolidationDraft:
     scope_channel: str
     scope_chat_id: str
     archive_all: bool = False
+    # 外部段整理出的各会话群环境层更新，提交时由宿主写入，不发给引擎。
+    group_environment_updates: tuple["GroupEnvironmentUpdate", ...] = ()
 
 
 @dataclass(frozen=True)

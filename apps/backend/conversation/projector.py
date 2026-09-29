@@ -20,9 +20,9 @@ class ConversationStateProjector:
         role_metadata.update(
             {"last_thread_id": thread.id, "last_message_at": last_message_at}
         )
+        # 不传 summary：会话摘要由群环境层（#497）写入，投影只刷新计数。
         self._store.upsert_thread_state(
             thread.id,
-            summary="",
             metadata={
                 "message_count": message_count,
                 "last_message_at": last_message_at,

@@ -26,6 +26,7 @@ from proactive_v2.time import format_beijing_timestamp
 
 if TYPE_CHECKING:
     from core.memory.engine import MemoryRetrievalApi
+    from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,8 @@ class ToolDeps:
     alert_ack_fn: Any = None  # async (compound_key: str) -> None
     max_chars: int = 8_000
     shared_tools: Any = None
+    # 群环境层（#497）：主动回合注入各外部会话的最近动态。
+    group_environment: "GroupEnvironment | None" = None
 
 
 # ── Tool Schemas ──────────────────────────────────────────────────────────

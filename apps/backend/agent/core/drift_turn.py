@@ -337,14 +337,14 @@ class DriftTurnPipeline:
         self_text = ""
         memory_text = ""
         recent_context_text = ""
+        role_id = ""
+        if ctx is not None:
+            session_key = str(ctx.session_key or "").strip()
+            if session_key.startswith("role:"):
+                role_id = session_key.split(":", 1)[1]
         if self._tool_deps.memory is not None:
             memory = cast("MemoryProfileApi", self._tool_deps.memory)
             bind_session_metadata = getattr(memory, "bind_session_metadata", None)
-            role_id = ""
-            if ctx is not None:
-                session_key = str(ctx.session_key or "").strip()
-                if session_key.startswith("role:"):
-                    role_id = session_key.split(":", 1)[1]
             if callable(bind_session_metadata):
                 bind_session_metadata({"role_id": role_id} if role_id else None)
             self_text = str(memory.read_self() or "").strip()
@@ -352,6 +352,13 @@ class DriftTurnPipeline:
             recent_context_text = strip_recent_turns(
                 str(memory.read_recent_context() or "")
             )
+        # 发呆回合属于用户上下文：注入各外部会话的最近动态（#497）。
+        group_environment = self._tool_deps.group_environment
+        recent_activity_text = (
+            group_environment.render_recent_activity(role_id, now=ctx.now_utc)
+            if group_environment is not None and ctx is not None and role_id
+            else ""
+        )
 
         lines = []
         for skill in skills[:8]:
@@ -414,6 +421,11 @@ class DriftTurnPipeline:
             PromptSectionRender(
                 name="recent_context",
                 content=recent_context_text or "（空）",
+                is_static=False,
+            ),
+            PromptSectionRender(
+                name="recent_activity",
+                content=recent_activity_text or "（空）",
                 is_static=False,
             ),
             PromptSectionRender(
