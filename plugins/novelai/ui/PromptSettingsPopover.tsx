@@ -1,8 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { SlidersHorizontal } from "@phosphor-icons/react";
-import { SettingsToggleCard } from "../../../apps/desktop/renderer/src/settings/SettingsToggleCard";
-import { cx, iconButtonClass } from "../../../apps/desktop/renderer/src/shared/styles";
-import { menuPanelClass, menuSeparatorClass } from "../../../apps/desktop/renderer/src/shared/ui/Menu";
+import { SettingsToggleCard, cx, iconButtonClass, menuPanelClass, menuSeparatorClass } from "@shiori/plugin-sdk";
 import { SegmentedControl } from "./SegmentedControl";
 import { undesiredContentPresetOptions } from "./studioForm";
 import type { NovelAiPromptSettings } from "./useNovelAiPromptSettings";
@@ -14,7 +12,7 @@ type PromptSettingsPopoverProps = {
 /**
  * The prompt switches that are plugin config (NSFW, quality tags,
  * undesired-content preset) behind one icon button; changes autosave through
- * the plugin config controller. Hand-rolled (enter-only motion, closes on an
+ * `host.config` (`useNovelAiPromptSettings`). Hand-rolled (enter-only motion, closes on an
  * outside press or Escape) because Base UI is not resolvable from plugin
  * code; the preset is a segmented control so nothing inside opens a portal.
  */

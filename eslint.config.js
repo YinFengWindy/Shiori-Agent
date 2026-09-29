@@ -31,52 +31,6 @@ const pluginRendererFiles = [
   "packages/plugin-sdk/src/**/*.tsx",
 ];
 
-/**
- * Plugin renderer files that still import host source while their plugin
- * awaits migration to the SDK (#440). One entry per file that really has such
- * an import — never a directory — so a new file is always checked. Delete an
- * entry as soon as its file is migrated; the last migration ticket removes
- * this list and the `ignores` below. `pluginHostImportBoundary.test.ts`
- * fails on an entry whose file no longer imports host source.
- */
-export const pluginHostImportExemptions = [
-  "plugins/novelai/ui/BaseImageField.tsx",
-  "plugins/novelai/ui/ChatImageActions.test.tsx",
-  "plugins/novelai/ui/ChatImageActions.tsx",
-  "plugins/novelai/ui/ImageFilmstrip.tsx",
-  "plugins/novelai/ui/ImageStage.test.tsx",
-  "plugins/novelai/ui/ImageStage.tsx",
-  "plugins/novelai/ui/ImageStudioPage.tsx",
-  "plugins/novelai/ui/NovelAIPage.tsx",
-  "plugins/novelai/ui/NovelAIPageSidebar.tsx",
-  "plugins/novelai/ui/PromptPanel.test.tsx",
-  "plugins/novelai/ui/PromptPanel.tsx",
-  "plugins/novelai/ui/PromptSettingsPopover.tsx",
-  "plugins/novelai/ui/PromptTagEntryEditor.tsx",
-  "plugins/novelai/ui/PromptTagGrid.test.tsx",
-  "plugins/novelai/ui/PromptTagGrid.tsx",
-  "plugins/novelai/ui/PromptTagLibraryPage.test.tsx",
-  "plugins/novelai/ui/PromptTagLibraryPage.tsx",
-  "plugins/novelai/ui/PromptTagLibraryPanel.tsx",
-  "plugins/novelai/ui/SegmentedControl.tsx",
-  "plugins/novelai/ui/SizeField.tsx",
-  "plugins/novelai/ui/StageStates.tsx",
-  "plugins/novelai/ui/generationFailure.test.ts",
-  "plugins/novelai/ui/generationFailure.ts",
-  "plugins/novelai/ui/index.tsx",
-  "plugins/novelai/ui/novelAiGeneration.test.ts",
-  "plugins/novelai/ui/novelAiGeneration.ts",
-  "plugins/novelai/ui/novelAiPageStore.test.tsx",
-  "plugins/novelai/ui/novelAiPageStore.ts",
-  "plugins/novelai/ui/roleSettings.test.tsx",
-  "plugins/novelai/ui/roleSettings.tsx",
-  "plugins/novelai/ui/studioForm.ts",
-  "plugins/novelai/ui/useImageStudio.test.tsx",
-  "plugins/novelai/ui/useImageStudio.ts",
-  "plugins/novelai/ui/useNovelAiPromptSettings.ts",
-  "plugins/novelai/ui/usePromptTagLibrary.ts",
-];
-
 const hostImportMessage = "Plugins must not import host source (apps/desktop); use @shiori/plugin-sdk or the injected client/host.";
 const hostInternalMessage = "@shiori/plugin-sdk/host-internal is host-only and not part of the plugin contract; use the @shiori/plugin-sdk main entry.";
 
@@ -94,7 +48,6 @@ export default [
   ]),
   {
     files: pluginRendererFiles,
-    ignores: pluginHostImportExemptions,
     rules: {
       "no-restricted-imports": ["error", {
         patterns: [

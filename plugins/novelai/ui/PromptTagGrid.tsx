@@ -1,8 +1,5 @@
 import { DotsThree, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
-import { toFileUrl } from "../../../apps/desktop/renderer/src/shared/format";
-import { badgeClass, compactButtonSizeClass, compactPressableClass, cx, primaryButtonSurfaceClass } from "../../../apps/desktop/renderer/src/shared/styles";
-import { ActionMenu } from "../../../apps/desktop/renderer/src/shared/ui/ActionMenu";
-import { PetalIcon, SparkleIcon } from "../../../apps/desktop/renderer/src/shared/ui/icons";
+import { ActionMenu, PetalIcon, SparkleIcon, badgeClass, compactButtonSizeClass, compactPressableClass, cx, primaryButtonSurfaceClass, usePluginHostServices } from "@shiori/plugin-sdk";
 import type { PromptTagEntry } from "./types";
 
 type PromptTagGridProps = {
@@ -37,11 +34,12 @@ function PromptTagEmptyState({ onCreate }: { onCreate: () => void }) {
 }
 
 function PromptTagCard({ entry, onOpen, onDelete }: { entry: PromptTagEntry; onOpen: () => void; onDelete: () => void }) {
+  const { assets } = usePluginHostServices();
   return (
     <article className="group relative isolate aspect-[4/5] overflow-hidden rounded-lg border border-line-soft bg-surface shadow-soft transition-[box-shadow] duration-base ease-out-soft hover:shadow-pop focus-within:shadow-pop">
       {entry.image_path ? (
         <>
-          <img className="absolute inset-0 h-full w-full object-cover object-top" src={toFileUrl(entry.image_path)} alt="" />
+          <img className="absolute inset-0 h-full w-full object-cover object-top" src={assets.url(entry.image_path)} alt="" />
           <div className="absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-white/95 via-white/75 to-transparent" aria-hidden="true" />
         </>
       ) : (

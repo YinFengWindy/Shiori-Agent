@@ -1,6 +1,4 @@
-import { errorMessage } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
-import type { PluginHostFeedback } from "../../../apps/desktop/renderer/src/plugins/pluginHostFeedback";
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
+import { errorMessage, type PluginHostFeedback, type PluginRpcClient } from "@shiori/plugin-sdk";
 import { describeGenerationFailure, type GenerationFailure, type NovelAiReadiness } from "./generationFailure";
 import { commitNovelAiState, getNovelAiState } from "./novelAiPageStore";
 import { novelAiGenerationTimeoutMs } from "./rpcPolicy";

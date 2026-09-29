@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import { BookBookmark, ImageSquare } from "@phosphor-icons/react";
-import type { PluginNavPageSidebarComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
-import { SidebarResizeHandle } from "../../../apps/desktop/renderer/src/shared/SidebarResizeHandle";
-import { cx, secondarySidebarSurfaceClass, sidebarContentMotionClass, sidebarNavItemClass } from "../../../apps/desktop/renderer/src/shared/styles";
+import { cx, secondarySidebarSurfaceClass, sidebarContentMotionClass, sidebarNavItemClass, type PluginNavPageSidebarComponentProps } from "@shiori/plugin-sdk";
+import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { backToStudio, openPromptTagLibrary, useNovelAiPageStore } from "./novelAiPageStore";
 
 const itemClass = cx(

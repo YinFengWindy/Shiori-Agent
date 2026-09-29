@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { BridgeError } from "../../../apps/desktop/renderer/src/shared/bridgeInvoke";
+import { BridgeError } from "@shiori/plugin-sdk";
 import { describeGenerationFailure, failurePersona, failureFromReadiness, scrubSecrets } from "./generationFailure";
 
 describe("describeGenerationFailure", () => {

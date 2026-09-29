@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
-import { BridgeError } from "../../../apps/desktop/renderer/src/shared/bridgeInvoke";
-import { getFeedbackSnapshot, resetFeedback } from "../../../apps/desktop/renderer/src/shared/feedback/feedbackStore";
-import { pluginHostFeedback } from "../../../apps/desktop/renderer/src/plugins/pluginHostFeedback";
+import { BridgeError, type PluginRpcClient } from "@shiori/plugin-sdk";
+import { createFakeHostServices, createFakePluginClient } from "@shiori/plugin-sdk/testing";
 import { loadHistory, refreshReadiness, submitGenerate } from "./novelAiGeneration";
 import { getNovelAiState, resetNovelAiPageStoreForTests } from "./novelAiPageStore";
 
 function client(handler: (method: string) => unknown): PluginRpcClient {
-  return { ...createPluginRpcClient("fixture"), call: async <T,>(method: string) => handler(method) as T };
+  return createFakePluginClient({ call: async <T,>(method: string) => handler(method) as T });
 }
 
 const result = {
@@ -20,15 +18,18 @@ const historyRecord = {
   steps: 0, seed: 1, width: 1024, height: 1024, base_image_path: "", output_paths: ["D:/out/1.png"], wrote_back_to_role: false, role_asset_paths: [],
 };
 
+/** The host services whose `feedback` the functions under test report to. */
+let fake = createFakeHostServices();
+
 afterEach(() => {
   resetNovelAiPageStoreForTests();
-  resetFeedback();
+  fake = createFakeHostServices();
 });
 
 describe("submitGenerate", () => {
   it("flips submitting synchronously, then publishes the result as the revealed, selected record", async () => {
     const rpc = client((method) => (method === "generate" ? { result } : { records: [historyRecord] }));
-    const pending = submitGenerate(rpc, pluginHostFeedback, { role_id: "rin", prompt: "cat" });
+    const pending = submitGenerate(rpc, fake.host.feedback, { role_id: "rin", prompt: "cat" });
     assert.equal(getNovelAiState().submitting, true);
     assert.equal(await pending, null);
     const state = getNovelAiState();
@@ -41,7 +42,7 @@ describe("submitGenerate", () => {
 
   it("keeps a classified failure for the canvas and returns it for the toast", async () => {
     const rpc = client(() => { throw new BridgeError("NovelAI 拒绝了当前 token（HTTP 401）", "novelai_unauthorized"); });
-    const failure = await submitGenerate(rpc, pluginHostFeedback, { role_id: "rin", prompt: "cat" });
+    const failure = await submitGenerate(rpc, fake.host.feedback, { role_id: "rin", prompt: "cat" });
     assert.equal(failure?.kind, "unauthorized");
     assert.equal(getNovelAiState().failure, failure);
     assert.equal(getNovelAiState().submitting, false);
@@ -50,7 +51,7 @@ describe("submitGenerate", () => {
 
   it("a not-configured failure also marks the token as unset, so 生成 stays blocked", async () => {
     const rpc = client(() => { throw new BridgeError("NovelAI token 未配置", "novelai_not_configured"); });
-    await submitGenerate(rpc, pluginHostFeedback, { role_id: "rin", prompt: "cat" });
+    await submitGenerate(rpc, fake.host.feedback, { role_id: "rin", prompt: "cat" });
     assert.equal(getNovelAiState().readiness?.configured, false);
   });
 });
@@ -67,11 +68,11 @@ describe("refreshReadiness and loadHistory", () => {
   });
 
   it("reports a history load failure as a toast instead of swallowing it", async () => {
-    await loadHistory(client(() => { throw new Error("disk"); }), pluginHostFeedback, "rin");
-    const toast = getFeedbackSnapshot().at(-1);
+    await loadHistory(client(() => { throw new Error("disk"); }), fake.host.feedback, "rin");
+    const toast = fake.feedback.at(-1);
     assert.equal(toast?.tone, "error");
-    assert.equal(toast?.detail, "disk");
-    // Opted in through the host services: 吟风 fronts it (when the 看板娘 is on).
-    assert.equal(toast?.persona, "generic");
+    assert.equal(toast?.options?.detail, "disk");
+    // Opted in through the host services: 吟风 fronts it (when the 看板娘 is on); the host maps `true` to its generic line.
+    assert.equal(toast?.options?.persona, true);
   });
 });
