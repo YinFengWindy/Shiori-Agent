@@ -19,7 +19,10 @@ from agent.core.proactive_turn.gates import ProactiveGateChain
 from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
 from agent.looping.ports import SessionServices
-from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
+from tests.support.bound_chat_delivery import (
+    FakeBoundChatDelivery,
+    bound_chat_orchestrator,
+)
 from agent.turns.outbound import DeliveryReceipt, OutboundDispatch
 from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
 from session.manager import SessionManager
@@ -858,16 +861,15 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
         async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
             return DeliveryReceipt.sent() if await sender(outbound.content) else None
 
-    orchestrator = TurnOrchestrator(
-        TurnOrchestratorDeps(
-            session=SessionServices(
-                session_manager=cast(Any, session_manager),
-                presence=cast(
-                    Any, SimpleNamespace(record_proactive_sent=lambda _key: None)
-                ),
+    orchestrator, _ = bound_chat_orchestrator(
+        SessionServices(
+            session_manager=cast(Any, session_manager),
+            presence=cast(
+                Any, SimpleNamespace(record_proactive_sent=lambda _key: None)
             ),
-            outbound=_Outbound(),
-        )
+        ),
+        _Outbound(),
+        deliver=sender,
     )
 
     async def send_message(
@@ -1328,7 +1330,9 @@ class _FakeProvider:
         return SimpleNamespace(tool_calls=[])
 
 
-def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
+def _build_factory(
+    tmp_path: Path, *, sender_ok: bool, state_store
+) -> tuple[AgentTickFactory, AsyncMock, FakeBoundChatDelivery]:
     sender = AsyncMock()
     sender.send.return_value = sender_ok
 
@@ -1339,19 +1343,15 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
             sent = await sender.send(outbound.content)
             return DeliveryReceipt.sent() if sent else None
 
-    from agent.looping.ports import SessionServices
-    from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
-
-    orchestrator = TurnOrchestrator(
-        TurnOrchestratorDeps(
-            session=SessionServices(
-                session_manager=cast(Any, session_manager),
-                presence=cast(
-                    Any, SimpleNamespace(record_proactive_sent=lambda _key: None)
-                ),
+    orchestrator, delivery = bound_chat_orchestrator(
+        SessionServices(
+            session_manager=cast(Any, session_manager),
+            presence=cast(
+                Any, SimpleNamespace(record_proactive_sent=lambda _key: None)
             ),
-            outbound=_Outbound(),
-        )
+        ),
+        _Outbound(),
+        deliver=lambda content: sender.send(content),
     )
 
     deps = AgentTickDeps(
@@ -1381,23 +1381,25 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
         turn_orchestrator=orchestrator,
         pool=McpClientPool(),
     )
-    return AgentTickFactory(deps), sender
+    return AgentTickFactory(deps), sender, delivery
 
 
 @pytest.mark.asyncio
-async def test_factory_drift_send_message_returns_false_when_send_fails(tmp_path: Path):
+async def test_factory_drift_send_message_raises_when_send_is_refused(
+    tmp_path: Path,
+):
     state = SimpleNamespace(
         path=tmp_path / "proactive_state.json", mark_delivery=MagicMock()
     )
-    factory, sender = _build_factory(tmp_path, sender_ok=False, state_store=state)
+    factory, sender, _ = _build_factory(tmp_path, sender_ok=False, state_store=state)
     send_message = factory._build_drift_send_message_fn()
     assert send_message is not None
-    ok = await send_message(
-        RoleReply("hello", "平静", "我想和你聊聊。"),
-        [],
-        RoleReplyContext(("平静",), ""),
-    )
-    assert ok is False
+    with pytest.raises(RuntimeError, match="平台拒绝发送"):
+        await send_message(
+            RoleReply("hello", "平静", "我想和你聊聊。"),
+            [],
+            RoleReplyContext(("平静",), ""),
+        )
     state.mark_delivery.assert_not_called()
     sender.send.assert_called_once_with("hello")
 
@@ -1407,7 +1409,7 @@ async def test_factory_drift_send_message_marks_delivery_on_success(tmp_path: Pa
     state = SimpleNamespace(
         path=tmp_path / "proactive_state.json", mark_delivery=MagicMock()
     )
-    factory, sender = _build_factory(tmp_path, sender_ok=True, state_store=state)
+    factory, sender, _ = _build_factory(tmp_path, sender_ok=True, state_store=state)
     send_message = factory._build_drift_send_message_fn()
     assert send_message is not None
     ok = await send_message(
@@ -1427,20 +1429,14 @@ async def test_factory_drift_send_message_uses_bound_transport_from_role(
     state = SimpleNamespace(
         path=tmp_path / "proactive_state.json", mark_delivery=MagicMock()
     )
-    factory, sender = _build_factory(tmp_path, sender_ok=True, state_store=state)
+    factory, sender, delivery = _build_factory(
+        tmp_path, sender_ok=True, state_store=state
+    )
     factory._deps.cfg.role_id = "mira"
     factory._deps.sense = SimpleNamespace(
         target_session_key=lambda: "role:mira",
-        target_transport=lambda: ("qq", "group-42"),
+        target_transport=lambda: ("qq", "902"),
     )
-    captured: dict[str, object] = {}
-
-    async def _dispatch(outbound):
-        captured["channel"] = outbound.channel
-        captured["chat_id"] = outbound.chat_id
-        return DeliveryReceipt.sent() if await sender.send(outbound.content) else None
-
-    factory._deps.turn_orchestrator._outbound.dispatch = _dispatch  # type: ignore[attr-defined]
     send_message = factory._build_drift_send_message_fn()
     assert send_message is not None
 
@@ -1451,5 +1447,4 @@ async def test_factory_drift_send_message_uses_bound_transport_from_role(
     )
 
     assert ok is True
-    assert captured["channel"] == "qq"
-    assert captured["chat_id"] == "group-42"
+    assert [target[1:] for target in delivery.targets] == [("qq", "902")]

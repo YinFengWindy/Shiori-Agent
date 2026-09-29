@@ -708,7 +708,9 @@ async def test_send_failure_no_mark_delivery():
         ]
     )
     tick, sink = _make_pipeline_with_sink(llm, state=state, sender=sender)
-    await tick.run()
+    # A refused bound-chat send raises after the failure side effects ran.
+    with pytest.raises(RuntimeError, match="平台拒绝发送"):
+        await tick.run()
 
     assert state._deliveries == []
 
@@ -733,7 +735,9 @@ async def test_send_failure_no_ack_cited():
         ]
     )
     tick, sink = _make_pipeline_with_sink(llm, sender=sender)
-    await tick.run()
+    # A refused bound-chat send raises after the failure side effects ran.
+    with pytest.raises(RuntimeError, match="平台拒绝发送"):
+        await tick.run()
 
     assert sink.not_acked("feed-mcp:1")
 
@@ -759,7 +763,9 @@ async def test_send_failure_acks_discarded_720h():
         ]
     )
     tick, sink = _make_pipeline_with_sink(llm, sender=sender)
-    await tick.run()
+    # A refused bound-chat send raises after the failure side effects ran.
+    with pytest.raises(RuntimeError, match="平台拒绝发送"):
+        await tick.run()
 
     assert sink.acked("feed-mcp:1", 720)
 

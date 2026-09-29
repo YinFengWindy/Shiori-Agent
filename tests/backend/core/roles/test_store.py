@@ -237,3 +237,38 @@ def test_role_store_persists_proactive_policy_without_legacy_candidates(
     assert reloaded.proactive.agent["max_steps"] == 12
     assert reloaded.proactive.drift["min_interval_hours"] == 6
     assert reloaded.proactive.policy_configured is True
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_role_forgets_the_user_identity_on_its_accounts(tmp_path):
+    from core.accounts import AccountDeletionPlan
+    from core.identity import IdentityChat
+
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    account = store.accounts.register(
+        plugin_id="qqbot",
+        platform="qqbot",
+        platform_account_id="app",
+        config_ref="app",
+        token="live",
+        role_id="mira",
+    )
+
+    async def done() -> None:
+        return None
+
+    store.accounts.set_delete_handler(
+        "qqbot", lambda _ref: AccountDeletionPlan(done, done)
+    )
+    store.identities.pair(
+        store.identities.create_pairing_code().code,
+        record=account.record,
+        user_id="open-1",
+        scope="account",
+        chat=IdentityChat(account.record.id, "qqbot", "c2c:open-1"),
+    )
+
+    await store.accounts.delete_role_accounts("mira")
+
+    assert store.identities.list() == []

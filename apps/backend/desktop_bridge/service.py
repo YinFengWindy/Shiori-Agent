@@ -33,6 +33,7 @@ from core.roles.role_runtime import RoleRuntimeRegistry
 from core.roles.model_runtime import ModelConfigurationError, RoleModelRuntime
 from desktop_bridge.app_service import DesktopAppService
 from desktop_bridge.account_requests import DesktopAccountRequestHandler
+from desktop_bridge.identity_requests import DesktopIdentityRequestHandler
 from desktop_bridge.chat_requests import DesktopChatRequestHandler
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.method_policy import MethodPolicy, resolve_plugin_method_policy
@@ -116,8 +117,10 @@ class DesktopBridgeService:
             self._proactive_message_listener,
         )
         self._account_change_listener = self._on_account_change
-        self._account_pushes = TaskCollector("Account change push")
+        self._identity_change_listener = self._on_identity_change
+        self._change_pushes = TaskCollector("Bridge change push")
         role_store.accounts.add_change_listener(self._account_change_listener)
+        role_store.identities.add_change_listener(self._identity_change_listener)
         self.config = config
         self.role_runtime_registry = role_runtime_registry
         registrations = getattr(config, "model_registrations", None)
@@ -216,6 +219,7 @@ class DesktopBridgeService:
         self.plugin_rpc_registry = plugin_rpc_registry
         self.request_router = DesktopBridgeRequestRouter(
             accounts=DesktopAccountRequestHandler(role_store.accounts),
+            identities=DesktopIdentityRequestHandler(role_store.identities),
             roles=DesktopRoleRequestHandler(
                 role_service=self.role_service,
                 role_presenter=self.role_presenter,
@@ -282,37 +286,34 @@ class DesktopBridgeService:
         )
 
     def _on_account_change(self, account_id: str) -> None:
-        # Registry changes arrive synchronously inside plugin reports, often
-        # from plugin tasks that inherited an RPC's since-released runtime
-        # lease. The push is therefore its own task in a fresh context: it pins
-        # no runtime generation and cannot fail the reporting plugin; failures
-        # are logged by the collector. Unwatched changes are dropped.
+        """Pushes ``accounts.updated`` so account views refresh without polling."""
+        self._schedule_change_push("accounts.updated", {"account_id": account_id})
+
+    def _on_identity_change(self) -> None:
+        """Pushes ``identities.updated`` after a bind, unbind or newly known chat."""
+        self._schedule_change_push("identities.updated", {})
+
+    def _schedule_change_push(self, method: str, payload: dict[str, Any]) -> None:
+        # Account and identity changes arrive synchronously inside plugin
+        # reports or channel intake, often from plugin tasks that inherited an
+        # RPC's since-released runtime lease. The push is therefore its own
+        # task in a fresh context: it pins no runtime generation and cannot
+        # fail the reporting caller; failures are logged by the collector.
+        # Unwatched changes are dropped.
         if not self._event_listeners:
             return
-        push = self._push_account_changed(account_id)
-        try:
-            _ = Context().run(
-                self._account_pushes.spawn,
-                push,
-                name=f"accounts.updated:{account_id}",
-            )
-        except Exception:
-            # Bridge boundary: a push that cannot even be scheduled must not
-            # surface in the plugin's register/report call.
-            push.close()
-            logger.exception("Account change push for %s not scheduled", account_id)
-
-    async def _push_account_changed(self, account_id: str) -> None:
-        """Pushes account changes so account views refresh without polling."""
-
-        await self._broadcast_event(
+        push = self._broadcast_event(
             BridgeEvent(
-                id="accounts.updated",
-                type="event",
-                method="accounts.updated",
-                payload={"account_id": account_id},
+                id=method, type="event", method=method, payload=payload
             ).to_dict()
         )
+        try:
+            _ = Context().run(self._change_pushes.spawn, push, name=method)
+        except Exception:
+            # Bridge boundary: a push that cannot even be scheduled must not
+            # surface in the plugin's register/report or intake call.
+            push.close()
+            logger.exception("Change push %s %r not scheduled", method, payload)
 
     def add_event_listener(
         self,
@@ -363,10 +364,13 @@ class DesktopBridgeService:
         )
         self.role_service.remove_role_deleted_listener(self._role_deleted_listener)
         self.role_store.accounts.remove_change_listener(self._account_change_listener)
+        self.role_store.identities.remove_change_listener(
+            self._identity_change_listener
+        )
         self.event_bus.off(PluginBridgeEvent, self._plugin_event_listener)
         self._event_listeners.clear()
-        self._account_pushes.cancel_all()
-        await self._account_pushes.drain()
+        self._change_pushes.cancel_all()
+        await self._change_pushes.drain()
         if self.plugin_rpc_registry is not None:
             self.plugin_rpc_registry.communication.retire()
         steps = [

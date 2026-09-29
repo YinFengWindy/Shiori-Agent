@@ -67,3 +67,45 @@ async def test_unbound_chat_is_observed_without_publishing_its_message():
     await channel._on_message(update, SimpleNamespace(bot=Mock()))
     channel._remember_chat.assert_called_once_with(chat, sender, message)
     channel._publish_inbound.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_private_pairing_code_binds_with_platform_scope_only_in_private_chats():
+    from bus.events import InboundMessage
+
+    pairings = []
+
+    class Hub:
+        def is_sender_allowed(self, **_kwargs):
+            return True
+
+        def claim_pairing(self, message, *, scope):
+            pairings.append((message.chat_id, scope))
+            return message.content == "PAIR1234"
+
+        def route_account_inbound(self, message):
+            return message
+
+    bus = SimpleNamespace(publish_inbound=AsyncMock())
+    channel = _InboundMixin()
+    channel._channel_hub = Hub()
+    channel.mark_online = Mock()
+    channel.send = AsyncMock()
+    channel._require_bus = Mock(return_value=bus)
+
+    def inbound(chat_id: str, chat_type: str) -> InboundMessage:
+        return InboundMessage(
+            channel="telegram_bot",
+            sender="77",
+            chat_id=chat_id,
+            content="PAIR1234",
+            metadata={"account_id": "telegram:1", "chat_type": chat_type},
+        )
+
+    await channel._accept_inbound(inbound("77", "private"))
+    await channel._accept_inbound(inbound("-1001", "supergroup"))
+
+    assert pairings == [("77", "platform")]
+    channel.send.assert_awaited_once_with("77", "已绑定")
+    [published] = [call.args[0] for call in bus.publish_inbound.await_args_list]
+    assert published.chat_id == "-1001"

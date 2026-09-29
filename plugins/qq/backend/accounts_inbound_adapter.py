@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import Any
 
 from bus.events import InboundMessage
+from core.channels.pairing_command import answer_pairing_code
 from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
 
@@ -86,6 +87,21 @@ class QQInboundAdapter:
             ) == "group" and not message.metadata.get("mentioned"):
                 return
         else:
+            # A QQ number is the same for every account.
+            if message.metadata.get(
+                "chat_type"
+            ) == "private" and await answer_pairing_code(
+                hub,
+                message,
+                scope="platform",
+                send=lambda text: self._actions.send_target(
+                    str(message.metadata["account_id"]),
+                    "private",
+                    message.sender,
+                    text,
+                ),
+            ):
+                return
             # The host admits by account and response rules, then projects.
             routed = hub.route_account_inbound(message)
             if routed is None:

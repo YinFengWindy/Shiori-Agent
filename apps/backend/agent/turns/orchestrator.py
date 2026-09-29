@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -14,6 +15,7 @@ from bus.events_lifecycle import ProactiveMessageCommitted
 from conversation.service import LegacySessionDescriptor, network_thread_id
 from core.accounts import VIA_ACCOUNT_KEY
 from core.accounts.target_contract import AccountTarget
+from core.common.channel_chat_types import CHAT_TYPE_PRIVATE
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.roles.reply_state import (
     RoleReplyContext,
@@ -30,12 +32,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger("agent.turn_orchestrator")
 
 
+# (role_id, channel, chat_id) of an external proactive target -> the account
+# channel and private target reaching it; raises LookupError for any other chat.
+BoundChatTargetLookup = Callable[[str, str, str], tuple[str, AccountTarget]]
+
+
 @dataclass
 class TurnOrchestratorDeps:
+    """Collaborators of ``TurnOrchestrator``.
+
+    ``bound_chat_target`` resolves an external default proactive target (a
+    private chat with the bound user) to the account that delivers it; it is
+    required whenever a proactive turn can target anything but the desktop.
+    """
+
     session: SessionServices
     outbound: OutboundPort
     event_bus: EventBus | None = None
     account_delivery: AccountDelivery | None = None
+    bound_chat_target: BoundChatTargetLookup | None = None
 
 
 class TurnOrchestrator:
@@ -44,6 +59,7 @@ class TurnOrchestrator:
         self._outbound = deps.outbound
         self._event_bus = deps.event_bus
         self._account_delivery = deps.account_delivery
+        self._bound_chat_target = deps.bound_chat_target
 
     def capture_reply_context(self, session_key: str) -> RoleReplyContext:
         """Capture role output constraints and the successful-state stamp per tick."""
@@ -198,55 +214,59 @@ class TurnOrchestrator:
         the delivery_status / external_message_id fields ride on the draft and
         are written by the same insert that commits it (the session store
         persists both as message columns). Only a receipt for a message the
-        platform actually accepted is stamped ``sent``; a merely queued one
-        commits without delivery facts. A refused or failed send commits
-        nothing, exactly as before.
+        platform actually accepted is stamped ``sent``. A refused or failed
+        send commits nothing.
+
+        An explicit ``account_target`` and every external default target (a
+        private chat with the bound user, resolved by ``bound_chat_target``)
+        go through the role's account; only the desktop is dispatched through
+        the outbound port, and desktop messages never carry a delivery status.
         """
+        role_id = str(metadata.get("role_id") or "")
         if isinstance(account_target, dict):
-            if self._account_delivery is None:
-                raise RuntimeError("账号目标发送服务不可用")
-            # The role's account on the named channel plugin sends it.
-            receipt = await self._account_delivery.send(
-                str(account_target.get("account_channel") or ""),
-                str(metadata.get("role_id") or ""),
-                AccountTarget.from_arguments(account_target),
-                content,
-                source="proactive",
-                media=media,
+            account_channel = str(account_target.get("account_channel") or "")
+            target = AccountTarget.from_arguments(account_target)
+        elif channel != DESKTOP_CHANNEL:
+            if self._bound_chat_target is None:
+                raise RuntimeError("外部主动推送目标需要绑定私聊的投递解析")
+            account_channel, target = self._bound_chat_target(role_id, channel, chat_id)
+        else:
+            receipt = await self._outbound.dispatch(
+                OutboundDispatch(
+                    channel=channel,
+                    chat_id=chat_id,
+                    content=content,
+                    metadata=metadata,
+                    media=media,
+                )
             )
-            message["metadata"].update(
-                {
-                    "delivery_attempt_id": receipt.attempt_id,
-                    "delivery_account_id": receipt.account_id,
-                    "delivery_target_kind": receipt.target_kind,
-                    "delivery_target_id": receipt.target_id,
-                    **(
-                        {VIA_ACCOUNT_KEY: receipt.via_account}
-                        if receipt.via_account is not None
-                        else {}
-                    ),
-                }
-            )
-            message["delivery_status"] = "sent"
-            message["external_message_id"] = receipt.platform_message_id
-            return True
-        receipt = await self._outbound.dispatch(
-            OutboundDispatch(
-                channel=channel,
-                chat_id=chat_id,
-                content=content,
-                metadata=metadata,
-                media=media,
-            )
+            return receipt is not None
+        if self._account_delivery is None:
+            raise RuntimeError("账号目标发送服务不可用")
+        # The role's account on the named channel plugin sends it.
+        receipt = await self._account_delivery.send(
+            account_channel,
+            role_id,
+            target,
+            content,
+            source="proactive",
+            media=media,
         )
-        if receipt is None:
-            return False
-        # Desktop is not an external transport: its replies never carry a
-        # delivery status, so its proactive messages keep that semantics.
-        if receipt.delivered and channel != DESKTOP_CHANNEL:
-            message["delivery_status"] = "sent"
-            if receipt.external_message_id:
-                message["external_message_id"] = receipt.external_message_id
+        message["metadata"].update(
+            {
+                "delivery_attempt_id": receipt.attempt_id,
+                "delivery_account_id": receipt.account_id,
+                "delivery_target_kind": receipt.target_kind,
+                "delivery_target_id": receipt.target_id,
+                **(
+                    {VIA_ACCOUNT_KEY: receipt.via_account}
+                    if receipt.via_account is not None
+                    else {}
+                ),
+            }
+        )
+        message["delivery_status"] = "sent"
+        message["external_message_id"] = receipt.platform_message_id
         return True
 
     def _build_proactive_message(
@@ -290,7 +310,9 @@ class TurnOrchestrator:
         metadata = {
             "source": "proactive",
             "sender_id": "proactive",
-            "chat_type": "desktop" if channel == "desktop" else "unknown",
+            # Every external default target is a private chat with the bound
+            # user (``bound_chat_target``).
+            "chat_type": "desktop" if channel == "desktop" else CHAT_TYPE_PRIVATE,
             "context_channel": channel,
             "context_chat_id": chat_id,
             "transport_channel": channel,

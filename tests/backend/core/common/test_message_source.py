@@ -101,3 +101,31 @@ def test_messages_stored_before_snapshots_have_no_via_account():
 
     assert source.via_account is None
     assert "经由账号" not in with_message_source("hello", source)
+
+
+def test_prefix_names_a_bound_sender_as_the_user_and_keeps_it_stored():
+    inbound = InboundMessage(
+        channel="qq",
+        chat_id="902",
+        sender="902",
+        content="hello",
+        metadata={"chat_type": "private", "via_account": _VIA, "sender_is_user": True},
+    )
+    live = MessageSource.from_inbound(inbound)
+    stored = MessageSource.from_metadata(
+        {"message_source": live.to_metadata(), "via_account": _VIA},
+        session_key="role:mira",
+    )
+
+    header = with_message_source("hello", stored).split("\n", 1)[0]
+    assert header.endswith("；发送者: 你的用户；经由账号: QQ 号「小栞」（101）]")
+    assert "sender_is_user" not in header
+
+
+def test_unbound_senders_are_not_named_as_the_user():
+    source = MessageSource.from_inbound(
+        InboundMessage(channel="qq", chat_id="902", sender="902", content="hello")
+    )
+
+    assert "sender_is_user" not in source.to_metadata()
+    assert "你的用户" not in with_message_source("hello", source)

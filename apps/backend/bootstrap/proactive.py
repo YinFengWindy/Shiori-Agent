@@ -119,6 +119,7 @@ def build_proactive_runtime(
                 registry=role_runtime_registry,
             ),
             desktop_presence=desktop_presence,
+            role_store=role_runtime_registry.repository.store,
         )
         loops[role.id] = loop
         tasks.append(loop.run())

@@ -25,6 +25,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.account_delivery import AccountDelivery
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
+from core.accounts.target_contract import AccountTarget
 from agent.turns.outbound import PushToolOutboundPort
 from conversation.push_sync import ExternalImageSyncService
 from session.manager.models import build_session_message
@@ -227,8 +228,8 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
     await orchestrator.handle_proactive_turn(
         result=result,
         session_key="role:mira",
-        channel="telegram",
-        chat_id="123",
+        channel="desktop",
+        chat_id="role:mira",
     )
 
     assert session.messages[0]["media"] == ["D:\\media\\scene.png"]
@@ -236,9 +237,9 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
     assert committed == [
         ProactiveMessageCommitted(
             session_key="role:mira",
-            channel="telegram",
+            channel="desktop",
             role_id="mira",
-            chat_id="123",
+            chat_id="role:mira",
             assistant_response="给你看张图",
             tools_used=("message_push",),
         )
@@ -250,8 +251,8 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
     sent = await orchestrator.handle_proactive_turn(
         result=result,
         session_key="role:mira",
-        channel="telegram",
-        chat_id="123",
+        channel="desktop",
+        chat_id="role:mira",
     )
 
     assert sent is False
@@ -304,8 +305,8 @@ async def test_proactive_dispatch_error_is_not_converted_to_false(tmp_path) -> N
                 failure_side_effects=[failure_effect],
             ),
             session_key="role:mira",
-            channel="telegram",
-            chat_id="123",
+            channel="desktop",
+            chat_id="role:mira",
         )
 
     failure_effect.run.assert_awaited_once_with()
@@ -412,8 +413,8 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
             failure_side_effects=[_Effect("failure_effect")],
         ),
         session_key="telegram:123",
-        channel="telegram",
-        chat_id="123",
+        channel="desktop",
+        chat_id="role:mira",
     )
 
     assert sent is True
@@ -460,8 +461,8 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
             outbound=TurnOutbound(session_key="role:mira", content="hello"),
         ),
         session_key="role:mira",
-        channel="telegram",
-        chat_id="123",
+        channel="desktop",
+        chat_id="role:mira",
     )
 
     assert sent is True
@@ -479,7 +480,7 @@ def _formal_result(owner, content="hello", media=None):
 
 async def _send(owner, result):
     return await owner.handle_proactive_turn(
-        result=result, session_key="role:mira", channel="telegram", chat_id="123"
+        result=result, session_key="role:mira", channel="desktop", chat_id="role:mira"
     )
 
 
@@ -654,6 +655,11 @@ async def test_image_transport_lock_and_formal_delivery_do_not_deadlock(tmp_path
     push.register_channel(
         "telegram", text=AsyncMock(return_value=None), image=image_sender
     )
+
+    async def desktop_sender(_chat_id: str, _payload: str) -> None:
+        return None
+
+    push.register_channel("desktop", text=desktop_sender, image=desktop_sender)
     port = PushToolOutboundPort(push, execution_context={"role_id": "mira"})
 
     async def formal_dispatch(outbound):
@@ -701,7 +707,7 @@ async def test_image_only_channel_cannot_commit_requested_text(tmp_path, content
     previous_metadata = dict(session.metadata)
     push = MessagePushTool()
     image_sender = AsyncMock(return_value=None)
-    push.register_channel("telegram", image=image_sender)
+    push.register_channel("desktop", image=image_sender)
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
             SessionServices(sessions),
@@ -721,48 +727,10 @@ async def test_image_only_channel_cannot_commit_requested_text(tmp_path, content
         assert reloaded.metadata == previous_metadata
     else:
         assert await _send(owner, result)
-        image_sender.assert_awaited_once_with("123", "/tmp/cat.png")
+        image_sender.assert_awaited_once_with("role:mira", "/tmp/cat.png")
         assert session.messages[0]["content"] == ""
         assert session.messages[0]["media"] == ["/tmp/cat.png"]
         assert session.metadata["current_mood"] == "平静"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("sender_result", "expected_external_id"),
-    [("qqbot-msg-1", "qqbot-msg-1"), (None, None)],
-)
-async def test_proactive_push_records_delivery_on_the_committed_message(
-    tmp_path, sender_result, expected_external_id
-):
-    sessions = SessionManager(tmp_path)
-    session = sessions.open_role_session("mira", role_name="Mira")
-    sessions.save(session)
-    push = MessagePushTool()
-    text_sender = AsyncMock(return_value=sender_result)
-    push.register_channel("qqbot", text=text_sender)
-    owner = TurnOrchestrator(
-        TurnOrchestratorDeps(
-            SessionServices(sessions),
-            PushToolOutboundPort(push, execution_context={"role_id": "mira"}),
-        )
-    )
-
-    assert await owner.handle_proactive_turn(
-        result=_formal_result(owner),
-        session_key="role:mira",
-        channel="qqbot",
-        chat_id="c2c:user-1",
-    )
-
-    text_sender.assert_awaited_once_with("c2c:user-1", "hello")
-    # The row written by the commit itself carries the delivery facts; a reload
-    # proves they reached the store, not just the in-memory draft.
-    [row] = SessionManager(tmp_path)._store.fetch_session_messages("role:mira")
-    assert row["content"] == "hello"
-    assert row["delivery_status"] == "sent"
-    assert row.get("external_message_id") == expected_external_id
-    assert session.messages[0]["delivery_status"] == "sent"
 
 
 @pytest.mark.asyncio
@@ -780,19 +748,67 @@ async def test_refused_proactive_push_commits_no_delivery_record(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_queued_receipt_commits_without_claiming_delivery(tmp_path):
-    sessions = SessionManager(tmp_path)
-    session = sessions.open_role_session("mira", role_name="Mira")
-    sessions.save(session)
-    # A queue hand-off (the bus port) proves nothing reached the platform.
-    outbound = SimpleNamespace(
-        dispatch=AsyncMock(return_value=DeliveryReceipt.queued())
+async def test_bound_private_chat_target_is_delivered_through_the_account(
+    tmp_path,
+) -> None:
+    accounts = AccountRegistry(lambda role_id: role_id == "mira")
+    account = accounts.register(
+        plugin_id="chat",
+        platform="chat",
+        platform_account_id="bot",
+        config_ref="bot",
+        token="live",
+        role_id="mira",
     )
-    owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
+    accounts.report(account.record.id, "live", connection="online")
+    sent: list[dict[str, Any]] = []
 
-    assert await _send(owner, _formal_result(owner)) is True
+    async def send(payload):
+        # Nothing is committed before the platform confirms the send.
+        assert sessions._store.fetch_session_messages("role:mira") == []
+        sent.append(payload)
+        return {"message_id": "platform-7", "via_account": _VIA}
 
-    [row] = sessions._store.fetch_session_messages("role:mira")
-    assert row["content"] == "hello"
-    assert "delivery_status" not in row
-    assert "delivery_status" not in session.messages[0]
+    sessions = SessionManager(tmp_path)
+    sessions.save(sessions.open_role_session("mira", role_name="Mira"))
+    default = SimpleNamespace(dispatch=AsyncMock())
+    lookups: list[tuple[str, str, str]] = []
+
+    def bound_chat_target(
+        role_id: str, channel: str, chat_id: str
+    ) -> tuple[str, AccountTarget]:
+        lookups.append((role_id, channel, chat_id))
+        return "chat", AccountTarget("private", "user-1")
+
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            SessionServices(sessions),
+            default,
+            account_delivery=AccountDelivery(
+                accounts,
+                SimpleNamespace(resolve=lambda name: ("chat", send)),
+                AccountDeliveryLedger(tmp_path),
+            ),
+            bound_chat_target=bound_chat_target,
+        )
+    )
+
+    assert await owner.handle_proactive_turn(
+        result=_formal_result(owner),
+        session_key="role:mira",
+        channel="chat",
+        chat_id="dm:user-1",
+    )
+
+    assert lookups == [("mira", "chat", "dm:user-1")]
+    assert (sent[0]["target_kind"], sent[0]["target_id"]) == ("private", "user-1")
+    default.dispatch.assert_not_awaited()
+    [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
+    assert (attempt.status, attempt.source) == ("sent", "proactive")
+    [row] = SessionManager(tmp_path)._store.fetch_session_messages("role:mira")
+    assert row["delivery_status"] == "sent"
+    assert row["external_message_id"] == "platform-7"
+    assert row["thread_id"] == "thread:mira:chat:dm:user-1"
+    assert row["metadata"]["chat_type"] == "private"
+    assert row["metadata"]["via_account"] == _VIA
+    assert row["metadata"]["delivery_attempt_id"] == attempt.attempt_id

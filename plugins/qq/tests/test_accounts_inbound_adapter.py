@@ -99,3 +99,60 @@ async def test_account_router_rejection_fetches_no_image(monkeypatch):
     await adapter._accept_inbound(message)
     download.assert_not_awaited()
     bus.publish_inbound.assert_not_awaited()
+
+
+def _private_message(content: str):
+    message = inbound_message(
+        account_id="account-b",
+        expected_uin="202",
+        via_account=QQConnectionConfig(
+            ref="b", ws_uri="ws://127.0.0.1:1", ws_token="t", expected_uin="202"
+        ).via_account(),
+        event={
+            "post_type": "message",
+            "message_type": "private",
+            "self_id": 202,
+            "user_id": 902,
+            "raw_message": content,
+        },
+    )
+    assert message is not None
+    return message
+
+
+@pytest.mark.asyncio
+async def test_private_pairing_code_binds_with_platform_scope_and_is_confirmed():
+    adapter = QQInboundAdapter()
+    bus = SimpleNamespace(publish_inbound=AsyncMock())
+    pairings = []
+
+    class AccountRouter:
+        def claim_pairing(self, message, *, scope):
+            pairings.append((message.sender, message.content, scope))
+            return message.content == "PAIR1234"
+
+        def route_account_inbound(self, message):
+            return message
+
+    adapter._actions = SimpleNamespace(
+        send_target=AsyncMock(return_value={"message_id": "9"})
+    )
+    adapter._ctx = SimpleNamespace(
+        bus=bus,
+        channel_hub=AccountRouter(),
+        http_resources=SimpleNamespace(),
+        attachment_store=SimpleNamespace(),
+    )
+    await adapter._accept_inbound(_private_message("PAIR1234"))
+    await adapter._accept_inbound(_private_message("你好"))
+    # A group message is never offered as a pairing code.
+    await adapter._accept_inbound(_group_message(True))
+
+    assert pairings == [("902", "PAIR1234", "platform"), ("902", "你好", "platform")]
+    adapter._actions.send_target.assert_awaited_once_with(
+        "account-b", "private", "902", "已绑定"
+    )
+    assert [call.args[0].content for call in bus.publish_inbound.await_args_list] == [
+        "你好",
+        "hello",
+    ]

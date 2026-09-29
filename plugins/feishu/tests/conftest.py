@@ -241,9 +241,16 @@ class Hub:
         self.allowed = allowed
         self.blocked = blocked
         self.deliveries: list[str] = []
+        # The pending pairing code, and every (content, scope) offered to it.
+        self.pairing_code = ""
+        self.pairings: list[tuple[str, str]] = []
 
     def is_sender_allowed(self, **kwargs: object) -> bool:
         return self.allowed
+
+    def claim_pairing(self, message: InboundMessage, *, scope: str) -> bool:
+        self.pairings.append((message.content, scope))
+        return bool(self.pairing_code) and message.content == self.pairing_code
 
     def is_sender_blocked(self, **kwargs: object) -> bool:
         return self.blocked

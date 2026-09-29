@@ -70,6 +70,10 @@ def _check_avatar(avatar: str) -> None:
 # added or removed; must not block, since it runs on the reporting call.
 AccountChangeListener = Callable[[str], None]
 
+# Called with an account ID once ``AccountRegistry.delete`` removed the account,
+# so host data tied to it (e.g. the user's identity bindings) goes too.
+AccountDeletedListener = Callable[[str], None]
+
 
 class AccountRegistry:
     """Indexes plugin-owned accounts per plugin generation; persists nothing.
@@ -90,6 +94,7 @@ class AccountRegistry:
         # Accounts mid-deletion; identity and rules are frozen until it ends.
         self._deleting: set[str] = set()
         self._change_listeners: list[AccountChangeListener] = []
+        self._deleted_listeners: list[AccountDeletedListener] = []
 
     def add_change_listener(self, listener: AccountChangeListener) -> None:
         """Subscribes to published account changes (added, removed, re-reported).
@@ -98,6 +103,10 @@ class AccountRegistry:
         published snapshot as it was does not.
         """
         self._change_listeners.append(listener)
+
+    def add_deleted_listener(self, listener: AccountDeletedListener) -> None:
+        """Subscribes to completed account deletions (``delete``, role deletion)."""
+        self._deleted_listeners.append(listener)
 
     def remove_change_listener(self, listener: AccountChangeListener) -> None:
         """Withdraws a listener added with ``add_change_listener``."""
@@ -436,7 +445,7 @@ class AccountRegistry:
         last. A failed step leaves the account listed and every step is
         idempotent, so a retry completes deletion. While deleting, rules are
         frozen, registration of the same identity is refused, and live
-        reports are ignored.
+        reports are ignored. Deleted listeners run once the account is gone.
         """
         async with self._delete_lock:
             with self._lock:
@@ -458,6 +467,8 @@ class AccountRegistry:
                 with self._lock:
                     self._deleting.discard(row.id)
             self._notify_if_changed(row.id, before)
+            for listener in list(self._deleted_listeners):
+                listener(row.id)
 
     async def delete_role_accounts(self, role_id: str) -> list[str]:
         """Deletes every account a loaded plugin holds for ``role_id``.

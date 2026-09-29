@@ -273,3 +273,18 @@ def test_listeners_hear_only_real_published_account_changes():
     registry.remove_change_listener(changed.append)
     _register(registry, token="generation-3")
     assert len(changed) == 6
+
+
+@pytest.mark.asyncio
+async def test_deleted_listeners_run_only_once_the_account_is_gone():
+    registry = AccountRegistry({"r1"}.__contains__)
+    account = _register(registry)
+    registry.set_delete_handler("chat", _Deletion(fail={"purge"}).plan)
+    deleted: list[str] = []
+    registry.add_deleted_listener(deleted.append)
+
+    with pytest.raises(OSError, match="purge failed"):
+        await registry.delete(account.record.id, role_id="r1")
+    assert deleted == []
+    await registry.delete(account.record.id, role_id="r1")
+    assert deleted == ["chat:101"]

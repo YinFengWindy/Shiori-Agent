@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 
 from bus.events import InboundMessage
 from core.accounts import VIA_ACCOUNT_KEY
+from core.channels.pairing_command import answer_pairing_code
 
 from .formatting import _build_inbound_text_with_reply
 from .identity import message_mentioned_bot, message_subject, message_topic_metadata
@@ -176,6 +177,19 @@ class _InboundMixin:
                 "[telegram] 忽略未绑定渠道或黑名单成员的消息 chat_id=%s",
                 message.chat_id,
             )
+            return
+        # Only an account's private chat pairs; a Telegram user ID is the same
+        # for every Bot.
+        pairable = (
+            "account_id" in message.metadata
+            and message.metadata.get("chat_type") == "private"
+        )
+        if pairable and await answer_pairing_code(
+            self._channel_hub,
+            message,
+            scope="platform",
+            send=lambda text: self.send(message.chat_id, text),
+        ):
             return
         routed = self._route_inbound(message)
         if routed is None or routed.metadata.get("conversation_duplicate"):

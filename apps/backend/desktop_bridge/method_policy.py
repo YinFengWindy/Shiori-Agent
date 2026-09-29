@@ -164,6 +164,9 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
     "accounts.get": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "accounts.rules.set": MethodPolicy(),
     "accounts.delete": MethodPolicy(),
+    "identities.list": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "identities.pairing.create": MethodPolicy(),
+    "identities.unbind": MethodPolicy(),
     "session.messagesPage": MethodPolicy(
         concurrency=Concurrency.READ_ONLY, admission_exempt=True
     ),

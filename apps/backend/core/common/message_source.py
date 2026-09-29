@@ -12,6 +12,11 @@ if TYPE_CHECKING:
     from bus.events import InboundMessage
 
 _PREFIX = "[消息来源: "
+# Inbound metadata flag the channel hub sets when the sender is a platform
+# identity bound to the desktop user; plugins never set it themselves.
+SENDER_IS_USER_KEY = "sender_is_user"
+# How the source prefix names a sender who is the desktop user.
+USER_SENDER_LABEL = "你的用户"
 _TIME_PREFIX = "[当前消息时间:"
 
 
@@ -40,6 +45,8 @@ class MessageSource:
     # Plugin-formatted text of the account the message came through; the
     # snapshot itself is stored under ``VIA_ACCOUNT_KEY``, not in this record.
     via_account: str | None = None
+    # The sender is a platform identity bound to the desktop user.
+    sender_is_user: bool = False
 
     @classmethod
     def from_inbound(cls, message: InboundMessage) -> MessageSource:
@@ -51,6 +58,7 @@ class MessageSource:
             sender_id=_identifier(message.sender),
             session_key=_identifier(message.session_key),
             via_account=_via_account_prefix(message.metadata),
+            sender_is_user=message.metadata.get(SENDER_IS_USER_KEY) is True,
         )
 
     @classmethod
@@ -67,6 +75,7 @@ class MessageSource:
                 sender_id=_identifier(saved.get("sender_id")),
                 session_key=_identifier(saved.get("session_key")),
                 via_account=_via_account_prefix(metadata),
+                sender_is_user=saved.get(SENDER_IS_USER_KEY) is True,
             )
         return cls(
             channel=_identifier(metadata.get("transport_channel")),
@@ -75,10 +84,22 @@ class MessageSource:
             sender_id=_identifier(metadata.get("sender_id")),
             session_key=session_key,
             via_account=_via_account_prefix(metadata),
+            sender_is_user=metadata.get(SENDER_IS_USER_KEY) is True,
         )
 
-    def to_metadata(self) -> dict[str, str | None]:
-        """Serialize the captured source for durable per-message storage."""
+    def to_metadata(self) -> dict[str, str | bool | None]:
+        """Serialize the captured source for durable per-message storage.
+
+        The user flag is stored only when set, so it stays with the message
+        after the identity is unbound.
+        """
+        stored: dict[str, str | bool | None] = {**self.platform_fields()}
+        if self.sender_is_user:
+            stored[SENDER_IS_USER_KEY] = True
+        return stored
+
+    def platform_fields(self) -> dict[str, str | None]:
+        """The platform provenance shown to the model as JSON."""
         return {
             "channel": self.channel,
             "chat_id": self.chat_id,
@@ -93,11 +114,14 @@ def with_message_source(
 ) -> str | list[dict[str, Any]]:
     """Add one source envelope without altering cached text or media blocks.
 
-    A message that came through a plugin account also names it:
-    ``[消息来源: {...}；经由账号: <plugin prefix>]``.
+    A sender bound to the desktop user is named as such, and a message that
+    came through a plugin account also names the account:
+    ``[消息来源: {...}；发送者: 你的用户；经由账号: <plugin prefix>]``.
     """
+    fields = json.dumps(source.platform_fields(), ensure_ascii=False)
+    sender = f"；发送者: {USER_SENDER_LABEL}" if source.sender_is_user else ""
     via = f"；经由账号: {source.via_account}" if source.via_account else ""
-    header = f"{_PREFIX}{json.dumps(source.to_metadata(), ensure_ascii=False)}{via}]\n"
+    header = f"{_PREFIX}{fields}{sender}{via}]\n"
     if isinstance(content, str):
         return _with_text_source(content, header)
     blocks = [dict(block) for block in content]

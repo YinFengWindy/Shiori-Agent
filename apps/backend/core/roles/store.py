@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from core.accounts import AccountRegistry
+from core.identity import UserIdentityStore
 
 from .assets import RoleAssetStore
 from .manifest import RoleManifestRepository
@@ -38,6 +39,10 @@ class RoleStore:
         self.accounts = AccountRegistry(
             lambda role_id: self.get_role(role_id) is not None, lock=self._lock
         )
+        # The desktop user's platform identities; user-level, not per role,
+        # but shared through the same runtime store as the account index.
+        self.identities = UserIdentityStore(workspace)
+        self.accounts.add_deleted_listener(self.identities.forget_account)
 
     @property
     def lock(self):

@@ -812,3 +812,67 @@ def test_invalid_reply_snapshot_still_marks_the_sent_reply(
     [record] = caplog.records
     assert record.levelname == "ERROR"
     assert account_id in record.getMessage()
+
+
+def _hub_with_qq_account(tmp_path: Path) -> tuple[ChannelHub, RoleStore, str]:
+    store = RoleStore(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path, role_store=store, session_manager=SessionManager(tmp_path)
+    )
+    service.create_role(role_id="mira", name="Mira", system_prompt="mira")
+    return ChannelHub(service), store, _live_account(service, "qq")
+
+
+def _private(account_id: str, content: str, **metadata: object) -> InboundMessage:
+    return InboundMessage(
+        channel="qq",
+        sender="902",
+        chat_id="902",
+        content=content,
+        metadata={"account_id": account_id, "chat_type": "private", **metadata},
+    )
+
+
+def test_pairing_code_binds_the_sender_and_marks_their_messages(
+    tmp_path: Path,
+) -> None:
+    hub, store, account_id = _hub_with_qq_account(tmp_path)
+    code = store.identities.create_pairing_code().code
+
+    assert not hub.claim_pairing(_private(account_id, "hello"), scope="platform")
+    before = hub.route_account_inbound(_private(account_id, "hello"))
+    assert before is not None and "sender_is_user" not in before.metadata
+
+    assert hub.claim_pairing(_private(account_id, code), scope="platform")
+    [identity] = store.identities.list()
+    assert (identity.plugin_id, identity.user_id, identity.scope) == (
+        "qq",
+        "902",
+        "platform",
+    )
+    assert [(chat.channel, chat.chat_id) for chat in identity.chats] == [("qq", "902")]
+    routed = hub.route_account_inbound(_private(account_id, "hello"))
+    assert routed is not None and routed.metadata["sender_is_user"] is True
+
+    store.identities.unbind(identity.id)
+    after = hub.route_account_inbound(_private(account_id, "hello"))
+    assert after is not None and "sender_is_user" not in after.metadata
+
+
+def test_plugins_cannot_claim_the_user_flag(tmp_path: Path) -> None:
+    hub, _, account_id = _hub_with_qq_account(tmp_path)
+
+    routed = hub.route_account_inbound(
+        _private(account_id, "hello", sender_is_user=True)
+    )
+
+    assert routed is not None and "sender_is_user" not in routed.metadata
+
+
+def test_pairing_needs_a_live_owned_receiving_account(tmp_path: Path) -> None:
+    hub, store, account_id = _hub_with_qq_account(tmp_path)
+    code = store.identities.create_pairing_code().code
+    store.accounts.report(account_id, "live", connection="offline")
+
+    assert not hub.claim_pairing(_private(account_id, code), scope="platform")
+    assert store.identities.list() == []
