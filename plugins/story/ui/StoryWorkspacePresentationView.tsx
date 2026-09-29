@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { RoleRecord } from "../../../apps/desktop/renderer/src/shared/types";
-import { toFileUrl } from "../../../apps/desktop/renderer/src/shared/format";
+import { usePluginHostServices, type RoleRecord } from "@shiori/plugin-sdk";
 import { StoryArchiveSurface, StoryCreateFlow, StoryGameSurface, StoryLauncher, StoryLoadList, StoryLoadingScreen, StorySettings, StoryWorkspaceBackdrop, type StoryWorkspaceBackdropBlur } from "./components";
 import { StoryCgGallerySurface } from "./components";
 import { resolveStoryCharacterIllustration } from "./storyCharacterPresentation";
@@ -57,13 +56,14 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   const error = operation.error || controller.error;
   const busy = operation.busy || controller.busy;
   const reducedMotion = useReducedMotion() ?? false;
-  const storyMenuBackground = useStoryMenuBackground(roles);
+  const host = usePluginHostServices();
+  const storyMenuBackground = useStoryMenuBackground(roles, host.assets.url);
   const presentationKey = mode === "launcher" && controller.loading ? "launcher-loading" : mode;
   const storyRoles = roles.map((role) => ({
     id: role.id,
     name: role.name,
     description: role.description,
-    avatarUrl: role.avatar_abs ? toFileUrl(role.avatar_abs) : undefined,
+    avatarUrl: role.avatar_abs ? host.assets.url(role.avatar_abs) : undefined,
   }));
 
   let content: ReactNode;
@@ -87,7 +87,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   } else {
     const storyCharacter = roles.find((role) => role.id === story.roleSnapshot.id);
     const characterIllustration = resolveStoryCharacterIllustration(storyCharacter ?? null, story.roleSnapshot);
-    content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} characterAvatarUrl={characterIllustration ? toFileUrl(characterIllustration) : undefined} onSubmitInput={controller.submitInput} onRegenerateCg={(resourceId) => { void controller.regenerateCg(resourceId); }} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
+    content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} characterAvatarUrl={characterIllustration ? host.assets.url(characterIllustration) : undefined} onSubmitInput={controller.submitInput} onRegenerateCg={(resourceId) => { void controller.regenerateCg(resourceId); }} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
   }
 
   return <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="story-workspace-presentation">

@@ -2,10 +2,9 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { renderToStaticMarkup } from "react-dom/server";
 import type { StoryPresentationMode } from "./storyPresentationModes";
 import { STORY_PRESENTATION_TRANSITION_SECONDS, StoryWorkspacePresentationView, type StoryCreationPresentationController, type StoryOperationPresentationController, type StoryWorkspacePresentationController } from "./StoryWorkspacePresentationView";
-import { createStoryDetails, createStorySummary } from "./testFixtures";
+import { createStoryDetails, createStorySummary, renderStoryMarkup } from "./testFixtures";
 
 const story = createStoryDetails();
 
@@ -25,7 +24,7 @@ const operation: StoryOperationPresentationController = { error: "", busy: false
 const creation: StoryCreationPresentationController = { createStory: () => undefined };
 
 function render(mode: StoryPresentationMode, loading = controller.loading) {
-  return renderToStaticMarkup(<StoryWorkspacePresentationView roles={[]} mode={mode} loadingStoryId="" loadingElapsedMs={0} loadingPhase="reading-story" cgGallery={[]} cgGalleryLoading={false} controller={{ ...controller, loading }} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
+  return renderStoryMarkup(<StoryWorkspacePresentationView roles={[]} mode={mode} loadingStoryId="" loadingElapsedMs={0} loadingPhase="reading-story" cgGallery={[]} cgGalleryLoading={false} controller={{ ...controller, loading }} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
 }
 
 describe("StoryWorkspacePresentationView", () => {
@@ -73,7 +72,7 @@ describe("StoryWorkspacePresentationView", () => {
   });
 
   it("keeps a failed Story list on the retryable loading surface", () => {
-    const markup = renderToStaticMarkup(<StoryWorkspacePresentationView roles={[]} mode="launcher" loadingStoryId="" loadingElapsedMs={0} loadingPhase="reading-story" cgGallery={[]} cgGalleryLoading={false} controller={{ ...controller, story: null, loading: true, error: "读取失败" }} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderStoryMarkup(<StoryWorkspacePresentationView roles={[]} mode="launcher" loadingStoryId="" loadingElapsedMs={0} loadingPhase="reading-story" cgGallery={[]} cgGalleryLoading={false} controller={{ ...controller, story: null, loading: true, error: "读取失败" }} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
     assert.match(markup, /role="alert">读取失败/);
     assert.match(markup, />Retry</);
   });

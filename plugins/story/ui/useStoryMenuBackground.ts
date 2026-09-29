@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import type { RoleRecord } from "../../../apps/desktop/renderer/src/shared/types";
-import { toFileUrl } from "../../../apps/desktop/renderer/src/shared/format";
+import type { RoleRecord } from "@shiori/plugin-sdk";
 import { STORY_MENU_BACKGROUND_URL } from "./storyStaticAssets";
 import {
   chooseRandomStoryMenuAsset,
@@ -17,7 +16,8 @@ import {
 
 /** Injectable dependencies for deterministic Story menu background resolution. */
 export type StoryMenuBackgroundResolverDependencies = {
-  resolveAssetUrl?: StoryMenuAssetUrlResolver;
+  /** Turns a role illustration path into a displayable URL (the host `assets.url`). */
+  resolveAssetUrl: StoryMenuAssetUrlResolver;
   createImage?: StoryMenuImageFactory;
   random?: () => number;
 };
@@ -31,9 +31,9 @@ export type StoryMenuBackground = {
 /** Resolves one random landscape role illustration or the bundled horizontal fallback. */
 export async function resolveStoryMenuBackground(
   roles: readonly Pick<RoleRecord, "id" | "illustrations_abs">[],
-  dependencies: StoryMenuBackgroundResolverDependencies = {},
+  dependencies: StoryMenuBackgroundResolverDependencies,
 ): Promise<string> {
-  const candidates = collectStoryMenuAssetCandidates(roles, dependencies.resolveAssetUrl ?? toFileUrl);
+  const candidates = collectStoryMenuAssetCandidates(roles, dependencies.resolveAssetUrl);
   if (!candidates.length) return STORY_MENU_BACKGROUND_URL;
   const landscapeAssets = await loadLandscapeStoryMenuAssets(
     candidates,
@@ -43,7 +43,7 @@ export async function resolveStoryMenuBackground(
 }
 
 /** Keeps one randomized Story menu backdrop per launcher mount and ignores stale probes on unmount. */
-export function useStoryMenuBackground(roles: readonly RoleRecord[]): StoryMenuBackground {
+export function useStoryMenuBackground(roles: readonly RoleRecord[], resolveAssetUrl: StoryMenuAssetUrlResolver): StoryMenuBackground {
   const [background, setBackground] = useState<StoryMenuBackground>({
     url: STORY_MENU_BACKGROUND_URL,
     theme: DEFAULT_STORY_MENU_THEME,
@@ -51,7 +51,7 @@ export function useStoryMenuBackground(roles: readonly RoleRecord[]): StoryMenuB
 
   useEffect(() => {
     let mounted = true;
-    void resolveStoryMenuBackground(roles).then(async (nextBackgroundUrl) => {
+    void resolveStoryMenuBackground(roles, { resolveAssetUrl }).then(async (nextBackgroundUrl) => {
       const theme = nextBackgroundUrl === STORY_MENU_BACKGROUND_URL
         ? DEFAULT_STORY_MENU_THEME
         : await resolveStoryMenuTheme(nextBackgroundUrl);
@@ -60,7 +60,7 @@ export function useStoryMenuBackground(roles: readonly RoleRecord[]): StoryMenuB
     return () => {
       mounted = false;
     };
-  }, [roles]);
+  }, [resolveAssetUrl, roles]);
 
   return background;
 }

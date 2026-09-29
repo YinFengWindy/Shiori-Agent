@@ -1,5 +1,5 @@
-import type { PluginUiModule } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
-import { StoryGlyph } from "../../../apps/desktop/renderer/src/shared/ui/icons/navGlyphs";
+import type { PluginUiModule } from "@shiori/plugin-sdk";
+import { StoryGlyph } from "./StoryGlyph";
 import { StoryPage } from "./StoryPage";
 import "./story.css";
 

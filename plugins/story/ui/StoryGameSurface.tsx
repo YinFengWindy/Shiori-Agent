@@ -1,9 +1,7 @@
 import { ArrowClockwise, BookOpenText, Gear, SignOut } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { AutosizeTextarea } from "../../../apps/desktop/renderer/src/shared/AutosizeTextarea";
-import { toFileUrl } from "../../../apps/desktop/renderer/src/shared/format";
-import { cx } from "../../../apps/desktop/renderer/src/shared/styles";
+import { AutosizeTextarea, cx, usePluginHostServices } from "@shiori/plugin-sdk";
 import { canShowStoryInput, isStoryRoleInCurrentScene, selectActiveStoryVisualResource } from "./selectors";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
 import { advanceStoryPlayback, createStoryPlaybackState, getNextStoryBeat, getPresentedStoryBeat, syncStoryPlaybackState } from "./storyPlayback";
@@ -45,6 +43,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   const [fragmentCursor, setFragmentCursor] = useState<StoryFragmentCursor>({ beatId: null, index: 0 });
   const archiveWheelTriggeredRef = useRef(false);
   const reducedMotion = useReducedMotion() ?? false;
+  const host = usePluginHostServices();
   const synchronizedPlaybackState = syncStoryPlaybackState(playbackState, story);
   const presentedBeat = getPresentedStoryBeat(story, synchronizedPlaybackState);
   const nextBeat = getNextStoryBeat(story, synchronizedPlaybackState);
@@ -58,7 +57,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   const storyVisualResource = selectActiveStoryVisualResource(story);
   const storyBackgroundPath = storyVisualResource?.path;
   const hasStoryBackground = Boolean(storyBackgroundPath);
-  const backgroundUrl = storyBackgroundPath ? toFileUrl(storyBackgroundPath) : background.url;
+  const backgroundUrl = storyBackgroundPath ? host.assets.url(storyBackgroundPath) : background.url;
   const currentSceneLabel = (story.currentScene.name ?? "").trim() || "未命名场景";
   const renderLocalBackdrop = true;
   const showCharacterForeground = Boolean(characterAvatarUrl)

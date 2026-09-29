@@ -1,10 +1,9 @@
-import { createPluginCommunicationClient } from "../../../apps/desktop/renderer/src/plugins/pluginCommunicationClient";
-import type { DesktopInvoke } from "../../../apps/desktop/renderer/src/shared/bridgeInvoke";
 /// <reference types="node" />
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { BridgeResponse } from "../../../apps/desktop/src/bridge/shared";
+import { PluginBridgeError } from "@shiori/plugin-sdk";
+import { createFakePluginClient, deferred } from "@shiori/plugin-sdk/testing";
 import { createStoryBridgeClient as makeStoryClient } from "./storyBridgeClient";
 import { StoryBridgeError } from "./types";
 
@@ -29,18 +28,12 @@ function storyPayload(revision = 4, operation: "awaiting_player" | "generating" 
   };
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
-  return { promise, resolve };
-}
-
 describe("createStoryBridgeClient", () => {
   it("calls stories.list and maps catalog fields directly", async () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
-    const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse> => {
+    const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<FakeStoryResponse> => {
       requests.push(request);
-      return { id: "response", type: "response", method: request.method, payload: { stories: [{ story_id: "story-1", relative_db_path: "story-1/story.db", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", current_story_date: "2026-08-02", current_time_band: "上午", current_scene: { key: "station", name: "车站", character_ids: [] } }] }, error: null };
+      return { payload: { stories: [{ story_id: "story-1", relative_db_path: "story-1/story.db", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", current_story_date: "2026-08-02", current_time_band: "上午", current_scene: { key: "station", name: "车站", character_ids: [] } }] }, error: null };
     };
 
     assert.deepEqual(await createStoryBridgeClient(invoke).listStories(), [{ storyId: "story-1", relativeDbPath: "story-1/story.db", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", currentStoryDate: "2026-08-02", currentTimeBand: "上午", currentScene: { key: "station", name: "车站", characterIds: [] } }]);
@@ -49,9 +42,9 @@ describe("createStoryBridgeClient", () => {
 
   it("loads CG collections grouped by Story", async () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
-    const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse> => {
+    const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<FakeStoryResponse> => {
       requests.push(request);
-      return { id: "response", type: "response", method: request.method, payload: { stories: [{ story_id: "story-1", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", items: [] }] }, error: null };
+      return { payload: { stories: [{ story_id: "story-1", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", items: [] }] }, error: null };
     };
 
     assert.deepEqual(await createStoryBridgeClient(invoke).listCgGallery(), [{ storyId: "story-1", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", items: [] }]);
@@ -60,7 +53,7 @@ describe("createStoryBridgeClient", () => {
 
   it("returns the repository Story read model without a compatibility projection", async () => {
     const story = storyPayload();
-    const client = createStoryBridgeClient(async (request): Promise<BridgeResponse> => ({ id: "response", type: "response", method: request.method, payload: { story }, error: null }));
+    const client = createStoryBridgeClient(async (): Promise<FakeStoryResponse> => ({ payload: { story }, error: null }));
     const result = await client.getStory("story-1");
     assert.equal(result.title, "雨港");
     assert.equal(result.beats[0].text, "风从走廊尽头吹来。");
@@ -69,9 +62,9 @@ describe("createStoryBridgeClient", () => {
 
   it("creates a Story with one selected role and one time period", async () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
-    const client = createStoryBridgeClient(async (request): Promise<BridgeResponse> => {
+    const client = createStoryBridgeClient(async (request): Promise<FakeStoryResponse> => {
       requests.push(request);
-      return { id: "response", type: "response", method: request.method, payload: { story: storyPayload(0, "generating") }, error: null };
+      return { payload: { story: storyPayload(0, "generating") }, error: null };
     });
     await client.createStory({ title: "雨港", background: "潮汐", storyDate: "2026-08-01", timeBand: "上午", roleId: "role-1", playerProfile: { displayName: "岚", appearance: "短发", identity: "抄写员" } }, "creation-1");
     assert.deepEqual(requests[0], { method: "plugin.story.create", payload: { title: "雨港", background: "潮汐", story_date: "2026-08-01", time_band: "上午", role_id: "role-1", creation_id: "creation-1", player_profile: { display_name: "岚", appearance: "短发", identity: "抄写员" } } });
@@ -79,9 +72,9 @@ describe("createStoryBridgeClient", () => {
 
   it("submits player input with the latest Story revision", async () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
-    const client = createStoryBridgeClient(async (request): Promise<BridgeResponse> => {
+    const client = createStoryBridgeClient(async (request): Promise<FakeStoryResponse> => {
       requests.push(request);
-      return { id: "response", type: "response", method: request.method, payload: { story: storyPayload(request.method === "plugin.story.get" ? 4 : 5, "generating") }, error: null };
+      return { payload: { story: storyPayload(request.method === "plugin.story.get" ? 4 : 5, "generating") }, error: null };
     });
     await client.getStory("story-1");
     await client.submitInput("story-1", "推开门。");
@@ -90,9 +83,9 @@ describe("createStoryBridgeClient", () => {
 
   it("regenerates the selected Story CG", async () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
-    const client = createStoryBridgeClient(async (request): Promise<BridgeResponse> => {
+    const client = createStoryBridgeClient(async (request): Promise<FakeStoryResponse> => {
       requests.push(request);
-      return { id: "response", type: "response", method: request.method, payload: { story: storyPayload(5) }, error: null };
+      return { payload: { story: storyPayload(5) }, error: null };
     });
 
     await client.regenerateCg("story-1", "resource-1");
@@ -102,23 +95,23 @@ describe("createStoryBridgeClient", () => {
 
   it("does not let an older read move the remembered revision backwards", async () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
-    const older = deferred<BridgeResponse>();
-    const newer = deferred<BridgeResponse>();
+    const older = deferred<FakeStoryResponse>();
+    const newer = deferred<FakeStoryResponse>();
     let reads = 0;
-    const client = createStoryBridgeClient(async (request): Promise<BridgeResponse> => {
+    const client = createStoryBridgeClient(async (request): Promise<FakeStoryResponse> => {
       requests.push(request);
       if (request.method === "plugin.story.get") {
         reads += 1;
         return reads === 1 ? older.promise : newer.promise;
       }
-      return { id: "response", type: "response", method: request.method, payload: { story: storyPayload(6, "generating") }, error: null };
+      return { payload: { story: storyPayload(6, "generating") }, error: null };
     });
 
     const olderRead = client.getStory("story-1");
     const newerRead = client.getStory("story-1");
-    newer.resolve({ id: "newer", type: "response", method: "plugin.story.get", payload: { story: storyPayload(5) }, error: null });
+    newer.resolve({ payload: { story: storyPayload(5) }, error: null });
     await newerRead;
-    older.resolve({ id: "older", type: "response", method: "plugin.story.get", payload: { story: storyPayload(4) }, error: null });
+    older.resolve({ payload: { story: storyPayload(4) }, error: null });
     await olderRead;
     await client.submitInput("story-1", "推开门。");
 
@@ -142,20 +135,20 @@ describe("createStoryBridgeClient", () => {
       updatedAt: "2026-08-02T10:00:00+08:00",
     };
     const readyResource = { ...generatingResource, status: "ready" as const, path: "opening.png", updatedAt: "2026-08-02T10:00:01+08:00" };
-    const older = deferred<BridgeResponse>();
-    const newer = deferred<BridgeResponse>();
+    const older = deferred<FakeStoryResponse>();
+    const newer = deferred<FakeStoryResponse>();
     let reads = 0;
-    const client = createStoryBridgeClient(async (request): Promise<BridgeResponse> => {
-      if (request.method !== "plugin.story.get") return { id: "response", type: "response", method: request.method, payload: { story: storyPayload() }, error: null };
+    const client = createStoryBridgeClient(async (request): Promise<FakeStoryResponse> => {
+      if (request.method !== "plugin.story.get") return { payload: { story: storyPayload() }, error: null };
       reads += 1;
       return reads === 1 ? older.promise : newer.promise;
     });
 
     const olderRead = client.getStory("story-1");
     const newerRead = client.getStory("story-1");
-    newer.resolve({ id: "newer", type: "response", method: "plugin.story.get", payload: { story: { ...storyPayload(4), backgroundResource: readyResource, cgGallery: [readyResource] } }, error: null });
+    newer.resolve({ payload: { story: { ...storyPayload(4), backgroundResource: readyResource, cgGallery: [readyResource] } }, error: null });
     const resolvedNewer = await newerRead;
-    older.resolve({ id: "older", type: "response", method: "plugin.story.get", payload: { story: { ...storyPayload(4), backgroundResource: generatingResource, cgGallery: [generatingResource] } }, error: null });
+    older.resolve({ payload: { story: { ...storyPayload(4), backgroundResource: generatingResource, cgGallery: [generatingResource] } }, error: null });
     const resolvedOlder = await olderRead;
 
     assert.equal(resolvedNewer.backgroundResource?.status, "ready");
@@ -164,12 +157,24 @@ describe("createStoryBridgeClient", () => {
   });
 
   it("surfaces bridge failures as stable Story errors", async () => {
-    const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse> => ({ id: "response", type: "response", method: request.method, payload: {}, error: { code: "story_conflict", message: "剧情版本已变化" } });
+    const invoke = async (): Promise<FakeStoryResponse> => ({ payload: {}, error: { code: "story_conflict", message: "剧情版本已变化" } });
     await assert.rejects(() => createStoryBridgeClient(invoke).continueStory("story-1"), (error: unknown) => error instanceof StoryBridgeError && error.code === "story_conflict");
   });
 });
 
-function createStoryBridgeClient(invoke: DesktopInvoke) { return makeStoryClient(createPluginCommunicationClient("story", { onEvent: () => () => {}, invoke: async (request) => {
-    if (request.method === "plugins.communication.open") return { id: "open", type: "response", method: request.method, error: null, payload: { generation: "g1" } };
-    return invoke({ ...request, payload: Object.fromEntries(Object.entries(request.payload).filter(([key]) => key !== "__plugin_context")) });
-  } })); }
+/** One story RPC as it reaches the backend: the wire method `plugin.story.<name>` and its payload. */
+type FakeStoryRequest = { method: string; payload: Record<string, unknown> };
+
+/** The fake backend answer: the call result, or an error the injected client raises as `PluginBridgeError`. */
+type FakeStoryResponse = { payload: Record<string, unknown>; error: { code: string; message: string } | null };
+
+/** Builds the Story client over a fake injected `client` whose calls `invoke` answers. */
+function createStoryBridgeClient(invoke: (request: FakeStoryRequest) => Promise<FakeStoryResponse>) {
+  return makeStoryClient(createFakePluginClient({
+    async call<T>(name: string, payload: Record<string, unknown> = {}) {
+      const response = await invoke({ method: `plugin.story.${name}`, payload });
+      if (response.error) throw new PluginBridgeError(response.error.message, response.error.code);
+      return response.payload as T;
+    },
+  }));
+}

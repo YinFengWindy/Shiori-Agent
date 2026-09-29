@@ -1,4 +1,4 @@
-import { BookOpenText, Chats, GearSix, MagnifyingGlass, Users } from "@phosphor-icons/react";
+import { Chats, GearSix, MagnifyingGlass, Users } from "@phosphor-icons/react";
 import { navMotifs, withMotif } from "@shiori/plugin-sdk";
 
 /*
@@ -15,5 +15,3 @@ export const ChatsGlyph = withMotif(Chats, navMotifs.heart(104, 94, 3.1), "beat"
 export const RolesGlyph = withMotif(Users, navMotifs.ribbon(84, 58, 5.2), "wiggle", "RolesGlyph");
 /** 设置: a sakura in the gear hole. */
 export const SettingsGlyph = withMotif(GearSix, navMotifs.sakura(128, 128, 27), "spin", "SettingsGlyph");
-/** 故事 (story plugin): a bookmark on the left page. Story-only; moves into the story plugin with #507. */
-export const StoryGlyph = withMotif(BookOpenText, navMotifs.bookmark(52, 36, 30, 96), "flutter", "StoryGlyph");

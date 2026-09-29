@@ -2,9 +2,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { renderToStaticMarkup } from "react-dom/server";
 import { StoryGameSurface } from "./StoryGameSurface";
-import { createStoryDetails } from "./testFixtures";
+import { createStoryDetails, renderStoryMarkup } from "./testFixtures";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 const resolvedBackground: StoryMenuBackground = {
@@ -17,7 +16,7 @@ const resolvedBackground: StoryMenuBackground = {
 
 describe("StoryGameSurface", () => {
   it("renders the active Story as a visual-novel stage with dialogue and player input", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface background={resolvedBackground} story={createStoryDetails()} busy={false} error="" characterAvatarUrl="shiori-asset://local/role" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderStoryMarkup(<StoryGameSurface background={resolvedBackground} story={createStoryDetails()} busy={false} error="" characterAvatarUrl="shiori-asset://local/role" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
     assert.match(markup, /data-testid="story-game-surface"/);
     assert.match(markup, /data-dialogue-visible="true"/);
     assert.match(markup, />你终于来了。</);
@@ -35,7 +34,7 @@ describe("StoryGameSurface", () => {
   });
 
   it("shows the current scene beside the Story time", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface story={createStoryDetails({ currentScene: { key: "home-living-room-night", name: "夜间客厅", characterIds: ["role-1", "player"] } })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderStoryMarkup(<StoryGameSurface story={createStoryDetails({ currentScene: { key: "home-living-room-night", name: "夜间客厅", characterIds: ["role-1", "player"] } })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
     assert.match(markup, /data-testid="story-current-scene"/);
     assert.match(markup, /场景：夜间客厅/);
@@ -43,23 +42,23 @@ describe("StoryGameSurface", () => {
   });
 
   it("uses the Story-owned background resource when it is ready", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({ currentScene: { key: "default", name: "默认场景", characterIds: ["role-1"] }, backgroundResource: { id: "resource-1", storyId: "story-1", kind: "background", visualType: "scene", sceneKey: "default", status: "ready", path: "D:\\stories\\opening.png", prompt: "anime screencap", sourceTurnId: "turn-1", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" } })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderStoryMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({ currentScene: { key: "default", name: "默认场景", characterIds: ["role-1"] }, backgroundResource: { id: "resource-1", storyId: "story-1", kind: "background", visualType: "scene", sceneKey: "default", status: "ready", path: "D:\\stories\\opening.png", prompt: "anime screencap", sourceTurnId: "turn-1", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" } })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
     assert.match(markup, /data-testid="story-game-backdrop"/);
-    assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
+    assert.match(markup, /url\(fake-asset:\/\/D:\\stories\\opening\.png\)/);
     assert.match(markup, /data-testid="story-game-character"/);
     assert.match(markup, /shiori-asset:\/\/local\/role/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
 
   it("uses the latest ready progression CG as the active stage visual", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
+    const markup = renderStoryMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
       cgGallery: [
         { id: "resource-1", storyId: "story-1", kind: "cg", visualType: "scene", sceneKey: "default", status: "ready", path: "D:\\stories\\scene-1.png", prompt: "scene one", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
         { id: "resource-2", storyId: "story-1", kind: "cg", visualType: "character", sceneKey: "default", status: "ready", path: "D:\\stories\\scene-2.png", prompt: "scene two", sourceTurnId: "turn-3", sequence: 2, errorCode: null, updatedAt: "", createdAt: "" },
       ],
     })} busy={false} error="" onSubmitInput={async () => true} onRegenerateCg={() => undefined} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
-    assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
+    assert.match(markup, /url\(fake-asset:\/\/D:\\stories\\scene-2\.png\)/);
     assert.match(markup, /aria-label="重新生成当前 CG"/);
     assert.doesNotMatch(markup, /scene-1\.png/);
     assert.doesNotMatch(markup, /data-testid="story-game-character"/);
@@ -67,19 +66,19 @@ describe("StoryGameSurface", () => {
   });
 
   it("keeps the previous CG visible while its replacement is generating", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
+    const markup = renderStoryMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
       cgGallery: [
         { id: "resource-1", storyId: "story-1", kind: "cg", visualType: "scene", sceneKey: "default", status: "generating", path: "D:\\stories\\scene-old.png", prompt: "scene", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
       ],
     })} busy={false} error="" onSubmitInput={async () => true} onRegenerateCg={() => undefined} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
-    assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
+    assert.match(markup, /url\(fake-asset:\/\/D:\\stories\\scene-old\.png\)/);
     assert.match(markup, /aria-label="重新生成当前 CG"/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
 
   it("overlays the current role difference on a character-free scene CG", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
+    const markup = renderStoryMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
       currentScene: { key: "default", name: "默认场景", characterIds: ["role-1"] },
       cgGallery: [
         { id: "resource-1", storyId: "story-1", kind: "cg", visualType: "scene", sceneKey: "default", status: "ready", path: "D:\\stories\\scene.png", prompt: "empty station", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
@@ -90,7 +89,7 @@ describe("StoryGameSurface", () => {
   });
 
   it("does not show a role difference when that role is not in the current scene", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
+    const markup = renderStoryMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
       cgGallery: [
         { id: "resource-1", storyId: "story-1", kind: "cg", visualType: "scene", sceneKey: "default", status: "ready", path: "D:\\stories\\scene.png", prompt: "girl feeding man", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
       ],
@@ -100,7 +99,7 @@ describe("StoryGameSurface", () => {
   });
 
   it("does not overlay the role difference when the current CG already contains characters", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
+    const markup = renderStoryMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
       currentScene: { key: "default", name: "默认场景", characterIds: ["role-1"] },
       cgGallery: [
         { id: "resource-1", storyId: "story-1", kind: "cg", visualType: "character", sceneKey: "default", status: "ready", path: "D:\\stories\\scene.png", prompt: "girl feeding man", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
@@ -111,14 +110,14 @@ describe("StoryGameSurface", () => {
   });
 
   it("does not substitute menu art when the current scene has no CG", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface background={resolvedBackground} story={createStoryDetails()} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderStoryMarkup(<StoryGameSurface background={resolvedBackground} story={createStoryDetails()} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
     assert.doesNotMatch(markup, /story-menu-random\.webp/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
 
   it("replaces the dialogue with one generation state and hides player input while busy", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface story={createStoryDetails()} busy error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderStoryMarkup(<StoryGameSurface story={createStoryDetails()} busy error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
     assert.match(markup, />剧情生成中\.\.\.</);
     assert.doesNotMatch(markup, />你终于来了。</);
@@ -128,7 +127,7 @@ describe("StoryGameSurface", () => {
 
   it("distinguishes narration from dialogue in the normal game surface", () => {
     const story = createStoryDetails({ beats: [{ ...createStoryDetails().beats[0], text: "她嘴上凶着，却伸手把你碗里凉掉的汤换成了自己手边那碗还温着的。玫粉色的眼睛低垂着，声音细得像抱怨：“……吃快点，凉了又该胃疼了。”", speaker: "澪", kind: "narration" }] });
-    const markup = renderToStaticMarkup(<StoryGameSurface story={story} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderStoryMarkup(<StoryGameSurface story={story} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
     assert.match(markup, /data-story-fragment-kind="narration"/);
     assert.match(markup, />旁白</);
@@ -138,7 +137,7 @@ describe("StoryGameSurface", () => {
 
   it("uses the frozen Story role name for legacy generic dialogue speakers", () => {
     const story = createStoryDetails({ beats: [{ ...createStoryDetails().beats[0], speaker: "角色" }] });
-    const markup = renderToStaticMarkup(<StoryGameSurface story={story} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderStoryMarkup(<StoryGameSurface story={story} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
     assert.match(markup, />澪</);
     assert.doesNotMatch(markup, />角色</);
