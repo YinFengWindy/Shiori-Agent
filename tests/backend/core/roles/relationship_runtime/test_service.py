@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from conversation.service import desktop_thread_id, network_thread_id
 from core.roles import (
     LonelinessHeartbeatLoop,
     RoleRelationshipRuntimeService,
@@ -491,3 +492,31 @@ async def test_refresh_snapshot_after_consolidation_updates_session_metadata(
     assert snapshot == expected_snapshot
     optimizer.optimize.assert_awaited_once_with(role_id="mira")
     assert session.metadata["relationship_snapshot"]["last_source_message_count"] == 6
+
+
+def test_snapshot_recent_messages_keep_only_the_users_own(tmp_path: Path):
+    _seed_role(tmp_path)
+    runtime, session_manager, _ = _runtime(tmp_path)
+    session = session_manager.get_or_create(session_manager.role_session_key("mira"))
+    group = network_thread_id("mira", "qq", "gqq:7")
+    session.add_message("user", "桌面里的你", thread_id=desktop_thread_id("mira"))
+    session.add_message(
+        "user",
+        "群里的你",
+        thread_id=group,
+        metadata={"message_source": {"sender_id": "902", "sender_is_user": True}},
+    )
+    session.add_message(
+        "user",
+        "群友",
+        thread_id=group,
+        metadata={"message_source": {"sender_id": "555"}},
+    )
+    session.add_message("assistant", "回群友", thread_id=group)
+
+    source = runtime.generate_snapshot_input("mira")
+
+    assert [item["content"] for item in source["recent_messages"]] == [
+        "桌面里的你",
+        "群里的你",
+    ]

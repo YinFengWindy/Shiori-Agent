@@ -8,6 +8,11 @@ from typing import Any, cast
 
 from agent.llm_json import load_json_object_loose
 from agent.provider import LLMProvider
+from conversation.context_scope import (
+    UserContextThreads,
+    belongs_to_user,
+    load_user_context_threads,
+)
 from core.memory.markdown import resolve_markdown_store
 from session.manager import SessionManager
 
@@ -95,7 +100,10 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         session = self._session_manager.get_or_create(
             self._session_manager.role_session_key(role_id)
         )
-        recent_messages = self._collect_recent_messages(session.messages)
+        recent_messages = self._collect_recent_messages(
+            session.messages,
+            user_threads=load_user_context_threads(self._workspace, role_id),
+        )
         return {
             "role": role,
             "self_text": store.read_self().strip(),
@@ -539,13 +547,22 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
             return 0
 
     def _collect_recent_messages(
-        self, messages: list[dict[str, Any]]
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        user_threads: UserContextThreads,
     ) -> list[dict[str, str]]:
+        """关系快照的近期互动：只取属于用户本人的消息（见 ``belongs_to_user``）。
+
+        群友与陌生人的发言、角色在外部会话里的回复都不算角色与用户的互动。
+        """
         pairs: list[dict[str, str]] = []
         total_chars = 0
         for message in reversed(messages):
             role = str(message.get("role") or "").strip()
             if role not in {"user", "assistant"}:
+                continue
+            if not belongs_to_user(message, user_threads):
                 continue
             content = str(message.get("content") or "").strip()
             if not content:
