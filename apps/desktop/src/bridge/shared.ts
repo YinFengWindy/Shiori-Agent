@@ -115,14 +115,9 @@ export type BridgeResponse = {
   } | null;
 };
 
-export type BridgeEvent = {
-  /** Owning plugin runtime generation; host events omit this field. */
-  pluginGeneration?: string;
-  id: string;
-  type: "event";
-  method: string;
-  payload: Record<string, unknown>;
-};
+// Owned by the plugin SDK because plugin event handlers receive it (#440).
+import type { BridgeEvent } from "@shiori/plugin-sdk";
+export type { BridgeEvent };
 
 /** Public desktop-pet voice state used by the pet and settings surfaces. */
 export type VoiceStatePayload = {

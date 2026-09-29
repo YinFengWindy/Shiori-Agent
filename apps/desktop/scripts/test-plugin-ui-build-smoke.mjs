@@ -18,6 +18,10 @@
  * lands in a *different* rollup entry (`surface.html`) from the UI one, and
  * the background entry in yet another (`plugin-host.html`), so a single
  * combined check would let a broken glob hide behind the other two working.
+ *
+ * The UI entry also imports `@shiori/plugin-sdk` (#503): built-in plugins live
+ * outside the Vite root, so this proves the build resolves the workspace SDK
+ * package from the plugin tree, or the build fails.
  */
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -62,12 +66,14 @@ async function main() {
     join(uiDir, "index.tsx"),
     [
       "// Throwaway fixture written by test-plugin-ui-build-smoke.mjs; not meant to be committed.",
+      "import { PluginBridgeError } from \"@shiori/plugin-sdk\";",
+      "",
       `const MARKER = ${JSON.stringify(marker)};`,
       "",
       "export default {",
       `  pluginId: ${JSON.stringify(pluginId)},`,
       "  settingsSection: { kind: \"component\", label: MARKER, component: () => null },",
-      "  navPage: { label: MARKER, component: () => null },",
+      "  navPage: { label: MARKER, component: () => { throw new PluginBridgeError(MARKER, \"smoke\"); } },",
       "};",
       "",
     ].join("\n"),

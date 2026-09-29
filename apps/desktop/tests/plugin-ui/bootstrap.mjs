@@ -15,7 +15,7 @@ ipcMain.handle("desktop:invoke", async (_event, request) => {
     id, name: id, candidate_id: id, source: "workspace", directory: resolve(process.env.SHIORI_PLUGIN_UI_QA_ROOT, "plugins", id),
     enabled: globalThis.pluginUiQaEnabled, can_toggle: true, state: globalThis.pluginUiQaEnabled ? "ACTIVE" : "DISABLED", error: "", diagnostic: null,
     content_fingerprint: `fixture-${id}`, content_hashes: approved[id],
-    renderer: { ui: { entry: "ui/dist/index.mjs", css: ["ui/dist/style.css"] } },
+    renderer: { ui: { entry: "ui/dist/index.mjs", css: ["ui/dist/style.css"] } }, channels: [],
   }));
   const entries = await resources.admit(rows);
   const plugins = rows.map((row) => ({ ...row, renderer_ui: entries.find((entry) => entry.pluginId === row.id && entry.kind === "ui") }));

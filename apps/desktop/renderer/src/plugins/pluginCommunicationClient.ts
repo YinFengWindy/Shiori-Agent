@@ -1,26 +1,12 @@
-import { PluginBackgroundMethods, type PluginBackgroundHandler } from "./pluginBackgroundMethods";
+import type { BridgeEvent, PluginEventHandler, PluginPeer, PluginRpcClient } from "@shiori/plugin-sdk";
+import { PluginBackgroundMethods } from "./pluginBackgroundMethods";
 import { pluginRuntimeChanged } from "./pluginRuntimeChanged";
 import { PluginCommunicationLifetime } from "./pluginCommunicationLifetime";
-import type { BridgeEvent } from "../../../src/bridge/shared";
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 import { PluginBridgeError as BridgeError } from "./pluginBridgeError";
 
-type EventHandler = (payload: Record<string, unknown>, event: BridgeEvent) => void;
-
-/** A declared peer uses the same local call/event names as the owning plugin. */
-export type PluginPeer = {
-  call<T>(name: string, payload?: Record<string, unknown>, options?: { timeoutMs?: number }): Promise<T>;
-  events: { on(name: string, handler: EventHandler): Promise<() => void> };
-  background: { call<T = void>(name: string, payload?: Record<string, unknown>): Promise<T> };
-};
-
-/** Injected cooperation API; namespace binding is not a sandbox or authentication. */
-export type PluginCommunicationClient = PluginPeer & {
-  dependency(pluginId: string): Promise<PluginPeer | null>;
-  /** Only the background host enables registrations on the injected context. */
-  handle(name: string, handler: PluginBackgroundHandler): Promise<void>;
-  dispose(): Promise<void>;
-};
+/** Injected cooperation API; the public contract is the SDK's `PluginRpcClient` (#440). */
+export type PluginCommunicationClient = PluginRpcClient;
 
 /** Creates one disposable UI/surface/background context over the existing bridge. */
 export function createPluginCommunicationClient(pluginId: string, options: {
@@ -30,7 +16,7 @@ export function createPluginCommunicationClient(pluginId: string, options: {
 } = {}): PluginCommunicationClient {
   const owner = crypto.randomUUID();
   const lifetime = new PluginCommunicationLifetime();
-  const subscriptions = new Set<{ target: string; name: string; handler: EventHandler }>();
+  const subscriptions = new Set<{ target: string; name: string; handler: PluginEventHandler }>();
   const methods = new PluginBackgroundMethods();
   let generation: Promise<string> | undefined;
   let currentGeneration = "";

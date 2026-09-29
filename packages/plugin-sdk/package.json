@@ -1,0 +1,12 @@
+{
+  "name": "@shiori/plugin-sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Public renderer contract between Shiori plugins and the desktop host.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "//exports": "Source-only workspace package (#440): built-in plugins and the host compile it straight into the renderer bundle, and tsc, the tsx test runner and Vite all resolve these .ts entries through the workspace link, so there is no build step and exactly one implementation. External precompiled plugins never resolve this package: the main entry reaches them as a host peer through the renderer import map (apps/desktop/src/plugins/uiContract.ts). The ./testing entry is development-only and is deliberately absent from that import map."
+}

@@ -1,4 +1,4 @@
-import { PluginBridgeError, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
+import { PluginBridgeError, type PluginRpcClient } from "@shiori/plugin-sdk";
 import type { StoryCgGallery, StoryCreationInput, StoryDetails, StoryResource, StorySummary } from "./types";
 import { StoryBridgeError } from "./types";
 

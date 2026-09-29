@@ -11,6 +11,9 @@ importers:
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@shiori/plugin-sdk':
+        specifier: workspace:*
+        version: link:packages/plugin-sdk
       '@types/react':
         specifier: ^19.2.14
         version: 19.2.18
@@ -69,6 +72,9 @@ importers:
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@shiori/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
       '@types/node':
         specifier: ^24.10.0
         version: 24.13.3
@@ -129,6 +135,8 @@ importers:
       vite:
         specifier: ^6.0.7
         version: 6.4.3(@types/node@24.13.3)(jiti@1.21.7)(tsx@4.23.1)
+
+  packages/plugin-sdk: {}
 
 packages:
 

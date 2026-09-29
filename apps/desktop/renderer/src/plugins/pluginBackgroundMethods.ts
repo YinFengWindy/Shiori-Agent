@@ -1,8 +1,5 @@
-import type { BridgeEvent } from "../../../src/bridge/shared";
+import type { BridgeEvent, PluginBackgroundHandler } from "@shiori/plugin-sdk";
 import { PluginBridgeError } from "./pluginBridgeError";
-
-/** One background method returns a JSON-compatible value or propagates its failure. */
-export type PluginBackgroundHandler = (payload: Record<string, unknown>) => unknown | Promise<unknown>;
 
 /** Owns renderer handlers independently of the client transport/session lifetime. */
 export class PluginBackgroundMethods {
