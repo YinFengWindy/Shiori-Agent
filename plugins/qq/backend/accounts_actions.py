@@ -18,6 +18,16 @@ _QQ_ID = re.compile(r"^[1-9][0-9]*$")
 _IMAGE_MIME_TYPES = frozenset(
     {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"}
 )
+# Text longer than this many characters, or with more lines than
+# FORWARD_MAX_LINES, goes out as a merged forward instead of flooding the chat.
+FORWARD_MAX_CHARS = 300
+FORWARD_MAX_LINES = 10
+_PARAGRAPH_BREAK = re.compile(r"\n\s*\n")
+# NapCat's merged-forward action for each plain send action.
+_FORWARD_ACTIONS = {
+    "send_private_msg": "send_private_forward_msg",
+    "send_group_msg": "send_group_forward_msg",
+}
 
 
 def qq_number(value: object, label: str) -> str:
@@ -91,6 +101,54 @@ def qq_image_segment(image: str) -> str:
     return f"[CQ:image,file=base64://{encoded}]"
 
 
+def _needs_forward(message: str) -> bool:
+    """Whether the text passes the merged-forward threshold.
+
+    Counts the text's characters and its lines (``str.splitlines``); image
+    segments are not part of the text and do not count.
+    """
+    lines = len(message.splitlines())
+    return len(message) > FORWARD_MAX_CHARS or lines > FORWARD_MAX_LINES
+
+
+def _forward_nodes(
+    message: str, images: str, sender: tuple[str, str]
+) -> list[dict[str, Any]]:
+    """Merged-forward nodes: one per blank-line separated paragraph.
+
+    Every node is sent as the account itself (``sender`` is its QQ number
+    and name); the image segments go in the last node.
+    """
+    paragraphs = _PARAGRAPH_BREAK.split(message.strip())
+    paragraphs[-1] += images
+    user_id, nickname = sender
+    return [
+        {
+            "type": "node",
+            "data": {"user_id": user_id, "nickname": nickname, "content": text},
+        }
+        for text in paragraphs
+    ]
+
+
+async def _send_with_receipt(
+    socket: OneBotSocket, action: str, params: dict[str, Any]
+) -> str:
+    """Sends one NapCat message and returns its real receipt's message ID."""
+    try:
+        data = await socket.call(action, params)
+    except OneBotDisconnected as exc:
+        raise UncertainDeliveryError("NapCat 发送连接中断，结果不确定") from exc
+    if not isinstance(data, dict):
+        raise UncertainDeliveryError("NapCat 发送未返回回执")
+    try:
+        # A merged forward also returns res_id/forward_id; the message ID is
+        # the receipt for the forward message in the chat.
+        return qq_number(data.get("message_id"), "消息回执")
+    except ValueError as exc:
+        raise UncertainDeliveryError("NapCat 发送未返回有效回执") from exc
+
+
 def _rows(data: object, action: str) -> list[dict[str, Any]]:
     if not isinstance(data, list) or any(not isinstance(row, dict) for row in data):
         raise OneBotError(f"NapCat {action} 返回了无效列表")
@@ -104,9 +162,12 @@ class QQAccountActions:
         self,
         socket_for: Callable[[str], OneBotSocket],
         ensure_online: Callable[[str], Awaitable[None]],
+        sender_for: Callable[[str], tuple[str, str]],
     ) -> None:
+        """``sender_for`` gives an account's QQ number and display name."""
         self._socket_for = socket_for
         self._ensure_online = ensure_online
+        self._sender_for = sender_for
 
     async def discover(
         self, account_id: str, kind: str, group_id: str = ""
@@ -200,6 +261,10 @@ class QQAccountActions:
         ``group_member`` is a group temporary session with ``target_id`` in
         group ``group_id``. ``images`` (local paths or http(s) URLs) follow
         the text in the same QQ message, so one receipt covers both.
+
+        Text over the forward threshold goes out as one merged forward
+        instead; a group's @s then go first as their own message, and the
+        forward's receipt is returned.
         """
         await self._ensure_online(account_id)
         socket = self._socket_for(account_id)
@@ -210,34 +275,38 @@ class QQAccountActions:
             raise ValueError("QQ 只有群消息可以 @ 成员")
         if group_id and kind != "group_member":
             raise ValueError("QQ 只有群临时会话需要群号")
-        content = message + "".join(qq_image_segment(image) for image in images)
+        image_segments = "".join(qq_image_segment(image) for image in images)
+        mentions = ""
         if kind == "private":
-            action, params = "send_private_msg", {"user_id": number, "message": content}
+            action, params = "send_private_msg", {"user_id": number}
         elif kind == "group":
-            mentions = "".join(
-                f"[CQ:at,qq={qq_number(member, '@ 成员')}] " for member in mention_ids
+            mentions = " ".join(
+                f"[CQ:at,qq={qq_number(member, '@ 成员')}]" for member in mention_ids
             )
-            action, params = "send_group_msg", {
-                "group_id": number,
-                "message": mentions + content,
-            }
+            action, params = "send_group_msg", {"group_id": number}
         elif kind == "group_member":
-            # NapCat reaches a non-friend group member through a temporary session.
+            # NapCat reaches a non-friend group member through a temporary
+            # session; its forward action takes the same user and group IDs.
             action, params = "send_private_msg", {
                 "user_id": number,
                 "group_id": int(qq_number(group_id, "群号")),
-                "message": content,
             }
         else:
             raise ValueError("QQ 目标类型必须是 private、group 或 group_member")
-        try:
-            data = await socket.call(action, params)
-        except OneBotDisconnected as exc:
-            raise UncertainDeliveryError("NapCat 发送连接中断，结果不确定") from exc
-        if not isinstance(data, dict):
-            raise UncertainDeliveryError("NapCat 发送未返回回执")
-        try:
-            message_id = qq_number(data.get("message_id"), "消息回执")
-        except ValueError as exc:
-            raise UncertainDeliveryError("NapCat 发送未返回有效回执") from exc
+        if not _needs_forward(message):
+            content = message + image_segments
+            if mentions:
+                content = f"{mentions} {content}"
+            message_id = await _send_with_receipt(
+                socket, action, {**params, "message": content}
+            )
+            return {"message_id": message_id}
+        nodes = _forward_nodes(message, image_segments, self._sender_for(account_id))
+        if mentions:
+            # A forward cannot @ anyone, so the @s go first on their own; if
+            # that send fails the whole send fails.
+            await _send_with_receipt(socket, action, {**params, "message": mentions})
+        message_id = await _send_with_receipt(
+            socket, _FORWARD_ACTIONS[action], {**params, "messages": nodes}
+        )
         return {"message_id": message_id}

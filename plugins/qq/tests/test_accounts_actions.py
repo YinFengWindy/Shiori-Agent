@@ -19,10 +19,15 @@ from plugins.qq.backend.onebot import OneBotDisconnected, OneBotError
 from core.identity import UserIdentityStore
 
 
+# The account's QQ number and name, as merged-forward nodes are sent.
+def _SENDER(account_id: str) -> tuple[str, str]:
+    return "101", "米拉"
+
+
 @pytest.mark.asyncio
 async def test_actions_query_fresh_lists_and_require_actual_send_receipt():
     socket = AsyncMock()
-    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock(), _SENDER)
     socket.call.return_value = [{"user_id": 902, "card": "群名片", "nickname": "昵称"}]
     result = await actions.discover("account-a", "members", "777")
     assert result == {
@@ -51,7 +56,7 @@ async def test_actions_query_fresh_lists_and_require_actual_send_receipt():
 @pytest.mark.asyncio
 async def test_group_name_comes_from_napcat_group_info():
     socket = AsyncMock()
-    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock(), _SENDER)
     socket.call.return_value = {"group_id": 777, "group_name": "读书会"}
     assert await actions.group_name("account-a", "777") == "读书会"
     socket.call.assert_awaited_with("get_group_info", {"group_id": 777})
@@ -65,7 +70,7 @@ async def test_group_name_comes_from_napcat_group_info():
 async def test_group_mentions_and_temporary_sessions_use_napcat_targets():
     socket = AsyncMock()
     socket.call.return_value = {"message_id": 90}
-    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock(), _SENDER)
 
     await actions.send_target(
         "account-a", "group", "777", "开会", mention_ids=("902", "903")
@@ -95,7 +100,7 @@ async def test_group_mentions_and_temporary_sessions_use_napcat_targets():
 async def test_images_follow_the_text_in_one_napcat_message(tmp_path):
     socket = AsyncMock()
     socket.call.return_value = {"message_id": 91}
-    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock(), _SENDER)
     image = tmp_path / "sky.png"
     image.write_bytes(b"\x89PNG\r\n\x1a\n")
     encoded = base64.b64encode(image.read_bytes()).decode("ascii")
@@ -125,9 +130,80 @@ async def test_images_follow_the_text_in_one_napcat_message(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_long_group_text_sends_mentions_then_one_merged_forward(tmp_path):
+    socket = AsyncMock()
+    socket.call.side_effect = [
+        {"message_id": 70},
+        {"message_id": 71, "res_id": "r", "forward_id": "r"},
+    ]
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock(), _SENDER)
+    image = tmp_path / "sky.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\n")
+    encoded = base64.b64encode(image.read_bytes()).decode("ascii")
+    text = "第一段" + "字" * 300 + "\n\n第二段\n续行"
+
+    receipt = await actions.send_target(
+        "account-a",
+        "group",
+        "777",
+        text,
+        mention_ids=("902", "903"),
+        images=(str(image),),
+    )
+    assert receipt == {"message_id": "71"}
+
+    def node(content):
+        return {
+            "type": "node",
+            "data": {"user_id": "101", "nickname": "米拉", "content": content},
+        }
+
+    assert [c.args for c in socket.call.await_args_list] == [
+        (
+            "send_group_msg",
+            {"group_id": 777, "message": "[CQ:at,qq=902] [CQ:at,qq=903]"},
+        ),
+        (
+            "send_group_forward_msg",
+            {
+                "group_id": 777,
+                "messages": [
+                    node("第一段" + "字" * 300),
+                    node(f"第二段\n续行[CQ:image,file=base64://{encoded}]"),
+                ],
+            },
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_many_line_private_text_is_one_merged_forward():
+    socket = AsyncMock()
+    socket.call.return_value = {"message_id": 72}
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock(), _SENDER)
+    text = "\n".join(str(line) for line in range(11))
+
+    assert await actions.send_target("account-a", "private", "902", text) == {
+        "message_id": "72"
+    }
+    socket.call.assert_awaited_once_with(
+        "send_private_forward_msg",
+        {
+            "user_id": 902,
+            "messages": [
+                {
+                    "type": "node",
+                    "data": {"user_id": "101", "nickname": "米拉", "content": text},
+                }
+            ],
+        },
+    )
+
+
+@pytest.mark.asyncio
 async def test_invalid_local_image_is_refused_before_any_send(tmp_path):
     socket = AsyncMock()
-    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock(), _SENDER)
     not_image = tmp_path / "note.png"
     not_image.write_text("plain text", encoding="utf-8")
     with pytest.raises(ValueError, match="图片文件不存在"):
@@ -144,7 +220,7 @@ async def test_invalid_local_image_is_refused_before_any_send(tmp_path):
 @pytest.mark.asyncio
 async def test_actions_reject_invalid_directory_shape_and_propagate_api_failure():
     socket = AsyncMock()
-    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock(), _SENDER)
     socket.call.return_value = {"items": []}
     with pytest.raises(OneBotError, match="无效列表"):
         await actions.discover("account-a", "friends")
@@ -167,7 +243,7 @@ async def test_disconnect_is_pending_but_onebot_rejection_is_failed(tmp_path):
     account_id = account.record.id
     accounts.report(account_id, "live", connection="online")
     socket = AsyncMock()
-    actions = QQAccountActions(lambda selected: socket, AsyncMock())
+    actions = QQAccountActions(lambda selected: socket, AsyncMock(), _SENDER)
 
     async def send(payload):
         return await actions.send_target(
@@ -206,7 +282,7 @@ def test_chat_target_preserves_qq_private_and_group_namespaces():
 @pytest.mark.asyncio
 async def test_replied_message_comes_from_one_napcat_get_msg():
     socket = AsyncMock()
-    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock(), _SENDER)
     socket.call.return_value = {
         "message_id": -35,
         "sender": {"user_id": 202, "nickname": "阿花", "card": ""},
