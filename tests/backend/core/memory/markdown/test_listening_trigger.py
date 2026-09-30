@@ -79,3 +79,31 @@ async def test_starting_sweeps_groups_left_with_records_and_detach_ends_it():
     await asyncio.wait_for(trigger.drain(), timeout=1)
 
     assert consolidation.groups == [_STRANDED]
+
+
+class _FailingOnce(_Consolidation):
+    def __init__(self) -> None:
+        super().__init__(pending=[_STRANDED])
+        self.passes = 0
+
+    def pending_groups(self) -> list[str]:
+        self.passes += 1
+        if self.passes == 1:
+            raise RuntimeError("sessions.db is locked")
+        return super().pending_groups()
+
+
+@pytest.mark.asyncio
+async def test_a_failed_sweep_pass_is_retried_at_the_next_interval():
+    consolidation = _FailingOnce()
+    trigger = ListeningTrigger(cast(Any, consolidation), sweep_interval_s=0.01)
+
+    trigger.start()
+    await asyncio.wait_for(_poll(lambda: consolidation.groups == [_STRANDED]), 1)
+    trigger.detach()
+    await asyncio.wait_for(trigger.drain(), timeout=1)
+
+
+async def _poll(done: Callable[[], bool]) -> None:
+    while not done():
+        await asyncio.sleep(0.005)

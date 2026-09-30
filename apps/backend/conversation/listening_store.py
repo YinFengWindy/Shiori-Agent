@@ -30,6 +30,13 @@ from infra.persistence.sqlite_transaction import immediate_transaction
 
 # 内存最近窗口每群保留的条数，也是 ``recent`` 默认返回的条数。
 RECENT_WINDOW_SIZE = 30
+# 按群存放的旁听表（``listening_schema``）；删除角色时一并清掉。
+_PER_GROUP_TABLES = (
+    "listening_messages",
+    "listening_groups",
+    "listening_toggles",
+    "listening_cursors",
+)
 # 小手机翻页的默认与最大页长。
 _PAGE_SIZE = 50
 _MAX_PAGE_SIZE = 100
@@ -102,6 +109,28 @@ class GroupListeningStore:
     ) -> None:
         """Withdraws a listener added with ``add_heard_listener``."""
         self._listeners = [known for known in self._listeners if known != listener]
+
+    def forget_threads(self, thread_prefix: str) -> None:
+        """Deletes everything kept for the groups whose thread ID starts with
+        ``thread_prefix`` (one role's threads, when its role is deleted).
+
+        Records, switches, the switch log and consolidation cursors go in one
+        transaction, and the groups' in-memory windows with them, so nothing
+        is left for a periodic consolidation sweep to pick up.
+        """
+        if not thread_prefix:
+            raise ValueError("thread_prefix 不能为空")
+        with self._lock:
+            with immediate_transaction(self._conn):
+                for table in _PER_GROUP_TABLES:
+                    _ = self._conn.execute(
+                        f"DELETE FROM {table} WHERE substr(thread_id, 1, ?) = ?",
+                        (len(thread_prefix), thread_prefix),
+                    )
+            for thread_id in [
+                known for known in self._window if known.startswith(thread_prefix)
+            ]:
+                del self._window[thread_id]
 
     def hear(
         self,

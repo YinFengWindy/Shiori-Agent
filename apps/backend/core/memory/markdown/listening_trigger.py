@@ -124,7 +124,12 @@ class ListeningTrigger:
 
     async def _sweep_loop(self) -> None:
         while not self._stopped.is_set():
-            await self.sweep()
+            try:
+                await self.sweep()
+            except Exception:
+                # 后台任务的边界：这一遍本身出错（如读不出待整理的群）时记下，
+                # 下一个间隔照常再扫，不让定时检查就此停掉。
+                logger.exception("listening sweep pass failed")
             try:
                 _ = await asyncio.wait_for(
                     self._stopped.wait(), timeout=self._sweep_interval_s
