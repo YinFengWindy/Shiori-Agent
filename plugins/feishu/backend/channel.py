@@ -24,12 +24,14 @@ from core.channels import ChannelHub
 from core.channels.chat_id_command import answer_chat_id_command
 from core.channels.pairing_command import answer_pairing_code
 from core.common.channel_chat_types import ChatTypeDeclaration, is_chat_id_command
+from core.common.message_source import SENDER_NAME_KEY
 from infra.channels.contract import ChannelContext, ChannelStatus
 from infra.channels.intake import ChannelIntake
 from infra.channels.session_key import resolve_outbound_session_key
 
 from .api import FeishuApi, FeishuApiError, is_rate_limited, with_rate_limit_retry
 from .avatar import fetch_bot_avatar
+from .contacts import FeishuContacts
 from .dedupe import ExpiringIdSet
 from .formatting import (
     CHANNEL,
@@ -50,6 +52,7 @@ from .ws import (
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from agent.plugin_host.avatars import AvatarsCapability
     from agent.plugin_host.capabilities import AccountsCapability
     from agent.plugin_host.kv import PluginKVStore
     from core.accounts import ConnectionState as AccountConnectionState
@@ -85,6 +88,7 @@ class FeishuChannel:
         profile_store: "PluginKVStore | None" = None,
         profile_ref: str = "",
         role_id: str | None = None,
+        avatars: "AvatarsCapability | None" = None,
     ) -> None:
         self.name = name
         self.account_id = account_id
@@ -96,6 +100,10 @@ class FeishuChannel:
         # The manifest's session types, for answering ``/chatid``.
         self._chat_types = chat_types
         self._api = FeishuApi(app_id, app_secret, domain, transport=transport)
+        # Senders' names and avatars from the contact API (#514).
+        self._contacts = FeishuContacts(
+            self._api, store=profile_store, ref=profile_ref, avatars=avatars
+        )
         self._connection_factory = connection_factory or sdk_connection_factory(
             app_id, app_secret, domain
         )
@@ -480,6 +488,7 @@ class FeishuChannel:
         payload = await self._resolver.resolve(message)
         if not payload.text and not payload.media:
             return
+        sender_name = self._contacts.name(sender)
         await self._intake.submit(
             InboundMessage(
                 channel=self.name,
@@ -495,6 +504,7 @@ class FeishuChannel:
                     "message_type": message.message_type,
                     "external_message_id": message.message_id,
                     **self._via_metadata(),
+                    **({SENDER_NAME_KEY: sender_name} if sender_name else {}),
                     **payload.metadata,
                 },
             )
@@ -524,6 +534,8 @@ class FeishuChannel:
                 message = self._channel_hub.route_inbound(message)
         if message.metadata.get("conversation_duplicate"):
             return
+        # Only a message the role receives shows its sender.
+        self._contacts.refresh(message)
         self._remember_quote(message)
         await self._require_bus().publish_inbound(message)
 

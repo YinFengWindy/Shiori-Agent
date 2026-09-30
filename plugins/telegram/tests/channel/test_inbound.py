@@ -111,3 +111,35 @@ async def test_private_pairing_code_binds_with_platform_scope_only_in_private_ch
     channel.send.assert_awaited_once_with("77", "已绑定")
     [published] = [call.args[0] for call in bus.publish_inbound.await_args_list]
     assert published.chat_id == "-1001"
+
+
+@pytest.mark.asyncio
+async def test_received_message_refreshes_its_sender_and_chat_avatars():
+    from bus.events import InboundMessage
+
+    channel = _InboundMixin()
+    channel._avatars = Mock(refresh=Mock(return_value=None))
+    channel.bot = Mock()
+    channel._channel_hub = SimpleNamespace(
+        is_sender_allowed=lambda **_kwargs: True,
+        route_account_inbound=lambda message: message,
+    )
+    channel.mark_online = Mock()
+    channel._require_bus = Mock(
+        return_value=SimpleNamespace(publish_inbound=AsyncMock())
+    )
+
+    await channel._accept_inbound(
+        InboundMessage(
+            channel="telegram_bot",
+            sender="77",
+            chat_id="-1001",
+            content="hello",
+            metadata={"account_id": "telegram:1", "chat_type": "supergroup"},
+        )
+    )
+
+    assert {call.args[:3] for call in channel._avatars.refresh.call_args_list} == {
+        ("sender", "telegram_bot", "77"),
+        ("chat", "telegram_bot", "-1001"),
+    }

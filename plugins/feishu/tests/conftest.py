@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import threading
@@ -14,6 +15,7 @@ from typing import Any, cast
 
 import httpx
 import pytest
+from PIL import Image
 
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
@@ -25,6 +27,16 @@ from plugins.feishu.backend.ws import EventCallback
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 CHAT_ID = "oc_chat"
 OPEN_ID = "ou_user"
+# The sender's profile in the fake contact directory; the avatar is on a CDN.
+CONTACT_NAME = "小王"
+AVATAR_URL = "https://cdn.test/ou_user.png"
+
+
+def avatar_png() -> bytes:
+    """A decodable picture, as the host validates avatars."""
+    output = io.BytesIO()
+    Image.new("RGB", (8, 8), "pink").save(output, format="PNG")
+    return output.getvalue()
 
 
 @dataclass
@@ -44,6 +56,9 @@ class FakeFeishu:
 
     async def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
+        if request.url.host == "cdn.test":
+            self.calls.append(("GET", str(request.url), None))
+            return httpx.Response(200, content=avatar_png())
         if path.endswith("/tenant_access_token/internal"):
             return httpx.Response(
                 200, json={"code": 0, "tenant_access_token": "t-1", "expire": 7200}
@@ -78,6 +93,10 @@ class FakeFeishu:
             data = {"file_key": "file_1"}
         elif key == "create_card":
             data = {"card_id": f"card_{self.counter}"}
+        elif key == "contact":
+            data = {
+                "user": {"name": CONTACT_NAME, "avatar": {"avatar_240": AVATAR_URL}}
+            }
         elif key == "bot":
             return httpx.Response(
                 200,
@@ -122,6 +141,8 @@ def _route_key(method: str, path: str) -> str:
         return "upload_file"
     if path.endswith("/bot/v3/info"):
         return "bot"
+    if path.startswith("/open-apis/contact/v3/users/"):
+        return "contact"
     if path == "/open-apis/cardkit/v1/cards":
         return "create_card"
     if path.endswith("/content"):

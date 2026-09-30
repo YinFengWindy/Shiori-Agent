@@ -4,6 +4,7 @@ import { ChatMessageImage } from "../chat/ChatMessageImage";
 import { isChatImageAsset } from "../chat/chatImageHistory";
 import { RoleAvatar } from "../roles/RoleAvatar";
 import { badgeClass, cx, pressableClass, type RoleRecord } from "@shiori/plugin-sdk";
+import { PhoneAvatarFace } from "./PhoneAvatarFace";
 import type { PhoneChatItem } from "./phoneChatPresentation";
 
 // Pictures stay inside the bubble column of the phone's narrow screen.
@@ -32,25 +33,27 @@ function PhoneMessageMedia({ media, onOpenImage }: { media: readonly string[]; o
   ));
 }
 
-const otherAvatarClass = "grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-soft text-ink-muted";
+const otherAvatarClass = "grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-surface-soft text-ink-muted";
 
-/** Someone else's placeholder avatar; a button opening their member profile when `onOpen` is given. */
-function OtherAvatar({ label, onOpen }: { label: string | null; onOpen?: () => void }) {
+const placeholder = <UserIcon className="h-4 w-4" aria-hidden="true" />;
+
+/** Someone else's avatar; a button opening their member profile when `onOpen` is given. */
+function OtherAvatar({ label, avatarPath, onOpen }: { label: string | null; avatarPath: string | null; onOpen?: () => void }) {
   if (!onOpen) {
-    return <span aria-hidden="true" className={otherAvatarClass}><UserIcon className="h-4 w-4" /></span>;
+    return <span aria-hidden="true" className={otherAvatarClass}><PhoneAvatarFace avatarPath={avatarPath} placeholder={placeholder} /></span>;
   }
   return (
     <button type="button" className={cx(pressableClass, otherAvatarClass, "cursor-pointer border-0 p-0 hover:text-ink")}
       aria-label={`${label ?? "成员"} 的档案`} data-testid="phone-member-avatar" onClick={onOpen}>
-      <UserIcon className="h-4 w-4" aria-hidden="true" />
+      <PhoneAvatarFace avatarPath={avatarPath} placeholder={placeholder} />
     </button>
   );
 }
 
 /**
  * One message bubble on the phone's chat page. The role's own messages sit
- * on the right beside its avatar; everyone else's on the left beside a
- * placeholder avatar, under their name, the bound user's name with a
+ * on the right beside its avatar; everyone else's on the left beside their
+ * cached platform avatar (a placeholder without one), under their name, the bound user's name with a
  * 「这是我」 badge. `onOpenMember`, when given, makes that avatar open the
  * sender's member profile.
  */
@@ -65,7 +68,7 @@ export function PhoneChatMessageRow({ item, role, onOpenImage, onOpenMember }: {
   const right = side === "right";
   return (
     <li className={cx("flex min-w-0 items-start gap-2 px-3", right && "flex-row-reverse")} data-testid={`phone-message-${message.id}`} data-side={side}>
-      {right ? <RoleAvatar role={role} /> : <OtherAvatar label={senderLabel} onOpen={onOpenMember} />}
+      {right ? <RoleAvatar role={role} /> : <OtherAvatar label={senderLabel} avatarPath={message.senderAvatarPath} onOpen={onOpenMember} />}
       {/* No width token fits a bubble column; 78% leaves the avatar and a gutter on the phone's narrow screen. */}
       <div className={cx("grid min-w-0 max-w-[78%] gap-1", right ? "justify-items-end" : "justify-items-start")}>
         {senderLabel || isUser ? (

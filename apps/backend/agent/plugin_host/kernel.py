@@ -30,6 +30,7 @@ from agent.plugin_host.capabilities import (
     ToolHooksCapability,
     ToolsCapability,
 )
+from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.config_schema import (
     PluginConfigSchemaRegistry,
     resolve_config_model,
@@ -500,6 +501,9 @@ class PluginKernel:
                 handle.effects,
                 handle.plugin_id,
                 self._account_generation,
+            ),
+            "avatars": lambda: AvatarsCapability(
+                services.role_store.avatars, handle.effects, handle.plugin_id
             ),
             "background": lambda: BackgroundCapability(
                 handle.effects, handle.plugin_id

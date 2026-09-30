@@ -11,6 +11,8 @@ export type UserIdentity = {
   accountId: string;
   /** ISO time of the binding. */
   boundAt: string;
+  /** Local file of the platform avatar a channel plugin cached from the user's messages; null when none is cached. */
+  avatarPath: string | null;
 };
 
 /** A one-time code the user sends from their platform account to bind it. */
@@ -18,13 +20,13 @@ export type PairingCode = { code: string; expiresAt: string };
 
 type IdentityPayload = {
   id: string; plugin_id: string; user_id: string;
-  scope: UserIdentity["scope"]; account_id: string; bound_at: string;
+  scope: UserIdentity["scope"]; account_id: string; bound_at: string; avatar_abs: string | null;
 };
 
 function mapIdentity(row: IdentityPayload): UserIdentity {
   return {
     id: row.id, pluginId: row.plugin_id, userId: row.user_id,
-    scope: row.scope, accountId: row.account_id, boundAt: row.bound_at,
+    scope: row.scope, accountId: row.account_id, boundAt: row.bound_at, avatarPath: row.avatar_abs,
   };
 }
 

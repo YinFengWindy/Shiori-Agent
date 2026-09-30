@@ -17,7 +17,7 @@ packages = ["plugins.feishu", "plugins.feishu.backend"]
 package-dir = {"plugins.feishu" = "."}
 
 [tool.setuptools.package-data]
-"plugins.feishu" = ["manifest.yaml", "TESTING.md", "backend/**/*.json", "backend/**/*.yaml", "backend/**/*.md"]
+"plugins.feishu" = ["manifest.yaml", "README.md", "TESTING.md", "backend/**/*.json", "backend/**/*.yaml", "backend/**/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

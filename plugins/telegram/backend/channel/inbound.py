@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -13,6 +13,7 @@ from core.accounts import VIA_ACCOUNT_KEY
 from core.channels.pairing_command import answer_pairing_code
 from core.common.message_source import MENTIONED_KEY
 
+from .avatar import refresh_message_avatars
 from .formatting import _build_inbound_text_with_reply
 from .identity import (
     message_mentioned_bot,
@@ -21,11 +22,17 @@ from .identity import (
     message_topic_metadata,
 )
 
+if TYPE_CHECKING:
+    from agent.plugin_host.avatars import AvatarsCapability
+
 logger = logging.getLogger("plugins.telegram.channel")
 
 
 class _InboundMixin:
     """处理文本消息并发布标准入站事件。"""
+
+    # 宿主的发送者与群头像缓存；未授予时为 None。
+    _avatars: AvatarsCapability | None = None
 
     def _account_metadata(self) -> dict[str, object]:
         """The receiving account's ID and snapshot; empty for an account-less Bot."""
@@ -200,6 +207,9 @@ class _InboundMixin:
         routed = self._route_inbound(message)
         if routed is None or routed.metadata.get("conversation_duplicate"):
             return
+        # 只有角色收下的消息才显示发送者和群的头像。
+        if self._avatars is not None:
+            refresh_message_avatars(self._avatars, self.bot, routed)
         await self._require_bus().publish_inbound(routed)
 
     async def _publish_telegram_inbound(

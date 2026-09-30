@@ -60,6 +60,7 @@ channels:
 - 插件从 `ctx.kv` 或自己的工作区存储读取账号；恢复时先用 `ctx.accounts.role_exists(role_id)` 清理所属角色已删除的账号，再用 `register_saved(...)` 登记。读取失败或无效数据用 `reject(...)` 报告，不影响其它账号。
 - 新增账号前校验平台身份，并用 `ctx.accounts.check_owner(...)` 检查角色与账号归属；插件保存数据后用 `register(...)` 登记，再按连接状态调用 `report(...)`。账号 ID 由宿主生成，格式为 `<插件 id>:<平台账号>`。
 - 宿主对头像只有一条约定：`register(..., avatar_url=...)` / `register_saved(...)` 的 `avatar_url` 必须是空字符串（无头像），或不超过 256 KiB、内容与声明类型一致的 PNG/JPEG/GIF/WebP base64 `data:image/...` URI，否则登记被拒绝（远程 URL 同样被拒）。头像的获取、编码和缓存都由插件自己完成：插件在后台下载平台头像、自行转成 data URI 并存进插件存储，下载失败保留已存头像且不影响连接；后台任务由插件自己持有，并在断开、删除或停止时取消。
+- 发送者与群的头像交给宿主缓存（Runtime API 2.12，manifest 声明 `avatars`）：角色收下一条消息后调用 `ctx.avatars.refresh(kind, channel, id, fetch)`，`kind` 为 `"sender"`（发送者 ID）或 `"chat"`（会话 ID，群为群头像、私聊为对方头像），`fetch` 是插件自己的异步下载，返回图片字节，平台上没有头像时返回 None。宿主判断是否到期（7 天）、在后台执行、校验缩图并单独存文件；失败只记警告，不影响收发。细节见[运行时契约](plugin-runtime-contract.md#runtime-api-212-channel-avatars)，实现可对照 `plugins/qq/backend/accounts_avatar.py`。
 - 账号的连接、错误、昵称或头像实际变化（以及登记、移除）时，宿主向桌面端推送 `accounts.updated` 事件（payload `{"account_id": ...}`）；报告与之前相同时不推送。
 - 登记 `on_delete(...)`，提供断开连接与清除插件存储的计划；角色删除时宿主也会调用它。登记 `on_rules_change(...)`，把宿主编辑的响应规则写回同一份账号记录。账号创建、编辑和连接通过插件 RPC 与角色页中的账号界面协作。
 - 若插件还有不属于某个账号的全局设置，可单独声明 `config_model`，由「设置 › 插件」的自动表单编辑；账号凭据不放在该模型或 `config.toml` 中。

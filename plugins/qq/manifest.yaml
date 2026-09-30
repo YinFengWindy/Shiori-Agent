@@ -6,6 +6,7 @@ desc: 通过插件托管的 NapCat 接入的 QQ 渠道
 capabilities:
   - channels
   - accounts
+  - avatars
   - workspace
   - rpc
 channels:

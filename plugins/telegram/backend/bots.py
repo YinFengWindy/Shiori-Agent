@@ -100,6 +100,7 @@ class TelegramBots:
                 config_ref=ref,
                 accounts=self._accounts,
                 known_store=self._ctx.kv,
+                avatars=self._ctx.avatars,
                 role_id=row["role_id"],
                 chat_types=self._ctx.manifest.channel_chat_types(_PLATFORM),
             )

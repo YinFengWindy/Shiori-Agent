@@ -12,12 +12,18 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 import httpx
 
+from agent.plugin_host.avatars import AvatarsCapability
+from agent.plugin_host.effects import EffectScope
 from bus.events import OutboundMessage
+from core.channel_avatars import ChannelAvatarStore
 from plugins.feishu.backend import api as feishu_api
 from plugins.feishu.backend.channel import FeishuChannel, resolve_receive_id
 from agent.plugin_host.kv import PluginKVStore
 
 CHAT_ID = "oc_chat"
+# The sender of ``make_event`` and their name in the fake contact directory.
+OPEN_ID = "ou_user"
+CONTACT_NAME = "小王"
 
 
 @pytest.mark.parametrize(
@@ -584,3 +590,58 @@ async def test_push_senders_return_the_first_platform_message_id(
     # After the text cards come the image upload and then the image message.
     assert image_id == f"om_{before + cards + 2}"
     assert await harness.channel.send(CHAT_ID, "  ") is None
+
+
+async def test_received_message_carries_the_cached_name_and_refreshes_avatars(
+    make_harness: Any, make_event: Any, tmp_path: Path
+) -> None:
+    profiles = PluginKVStore(tmp_path / "profiles.json")
+    profiles.set("contacts:feishu:cli_a", {OPEN_ID: CONTACT_NAME})
+    avatars = Mock(refresh=Mock(return_value=None))
+    harness = make_harness(
+        profile_store=profiles, profile_ref="feishu:cli_a", avatars=avatars
+    )
+    connection = await harness.start()
+
+    connection.emit(make_event())
+    await harness.settle()
+
+    [inbound] = harness.bus.inbound
+    assert inbound.metadata["sender_name"] == CONTACT_NAME
+    assert {call.args[:3] for call in avatars.refresh.call_args_list} == {
+        ("sender", "feishu", OPEN_ID),
+        ("chat", "feishu", CHAT_ID),
+    }
+
+
+async def test_without_contact_permission_messages_arrive_without_a_name(
+    make_harness: Any,
+    make_event: Any,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    store = ChannelAvatarStore(tmp_path)
+    harness = make_harness(
+        profile_store=PluginKVStore(tmp_path / "profiles.json"),
+        profile_ref="feishu:cli_a",
+        avatars=AvatarsCapability(store, EffectScope("feishu"), "feishu"),
+    )
+    # 99991672: the app lacks the contact permission.
+    harness.api.fail("contact", (400, 99991672))
+    connection = await harness.start()
+
+    connection.emit(make_event())
+    await harness.settle()
+    for _ in range(100):
+        if "头像获取失败" in caplog.text:
+            break
+        await asyncio.sleep(0.01)
+    connection.emit(make_event(message_id="om_in_2", event_id="ev_2"))
+    await harness.settle()
+
+    assert [item.content for item in harness.bus.inbound] == ["你好", "你好"]
+    assert all("sender_name" not in item.metadata for item in harness.bus.inbound)
+    assert "头像获取失败" in caplog.text
+    # One lookup for the sender and the private chat; not retried until due.
+    assert harness.api.keys().count("contact") == 1
+    assert store.index().sender("feishu", OPEN_ID) is None

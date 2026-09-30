@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from bus.events import InboundMessage
 from core.channels.pairing_command import answer_pairing_code
@@ -12,6 +12,7 @@ from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
 
 from .accounts_actions import QQAccountActions, qq_chat_target
+from .accounts_avatar import refresh_message_avatars
 from .accounts_group_names import QQGroupNames
 from .accounts_inbound import inbound_message, is_real_private_chat
 from .accounts_reply_sender import with_reply_sender
@@ -19,6 +20,9 @@ from .accounts_store import QQConnectionConfig
 from .channel.compat import download_to_temp, extract_cq_images
 from .channel.group_filter import strip_at_segments, strip_reply_segments
 from .onebot import OneBotSocket
+
+if TYPE_CHECKING:
+    from agent.plugin_host.avatars import AvatarsCapability
 
 
 class QQInboundAdapter:
@@ -37,6 +41,8 @@ class QQInboundAdapter:
     _ctx: ChannelContext | None
     _actions: QQAccountActions
     _group_names: QQGroupNames
+    # The host's avatar cache for senders and groups; None when not granted.
+    _avatars: AvatarsCapability | None = None
 
     def pause_intake(self) -> None:
         """Buffers incoming messages during host generation replacement."""
@@ -134,6 +140,9 @@ class QQInboundAdapter:
             message = routed
             if message.metadata.get("conversation_duplicate"):
                 return
+            # Only a message the role receives shows its sender and group.
+            if self._avatars is not None:
+                refresh_message_avatars(self._avatars, message)
         # A group message's @ and reply targets already travel as metadata.
         raw = (
             strip_reply_segments(strip_at_segments(message.content))

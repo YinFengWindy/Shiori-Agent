@@ -25,6 +25,8 @@ KNOWN_CAPABILITIES = frozenset(
         "proactive_gates",
         "channels",
         "accounts",
+        # 渠道发送者与群的头像缓存（#514）
+        "avatars",
         "events",
         "scene_observations",
         "kv",

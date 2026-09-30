@@ -90,6 +90,7 @@ async def setup(ctx):
 | `tools` / `tool_hooks` | 注册工具或工具执行前处理器 |
 | `proactive_gates` | 贡献主动行为准入 gate |
 | `channels` / `bot_commands` | 贡献 manifest 已声明的渠道（见[渠道声明](#渠道声明)）及机器人命令 |
+| `avatars` | `ctx.avatars.refresh(kind, channel, id, fetch)`：到期时在后台用插件的下载把发送者或群的平台头像交给宿主缓存，`fetch` 返回 None 即记为无头像；卸载取消在途获取（见[渠道插件](channel-plugins.md)） |
 | `rpc` | 注册 `plugin.<id>.<method>`，发送同命名空间事件 |
 | `background` | `ctx.background.spawn(coro, name=...)`；卸载取消并等待任务 |
 | `kv` | 工作区 `plugin-data/<id>/kv.json` 中的私有状态 |

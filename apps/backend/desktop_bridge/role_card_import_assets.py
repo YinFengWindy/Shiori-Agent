@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import io
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
-
+from core.common.media import write_png_thumbnail
 from core.roles import RoleAggregateService, RoleAssetCategory
 from core.roles.card_import.models import RoleCardAsset
 
@@ -17,13 +15,9 @@ from core.roles.card_import.models import RoleCardAsset
 def write_asset_preview(data: bytes, target: Path) -> bool:
     """Decode a bounded thumbnail; propagate errors writing it to disk."""
     try:
-        with Image.open(io.BytesIO(data)) as image:
-            thumbnail = image.convert("RGBA")
-            thumbnail.thumbnail((320, 320))
-    except (OSError, ValueError):
+        write_png_thumbnail(data, target, 320)
+    except ValueError:
         return False
-    with thumbnail:
-        thumbnail.save(target, format="PNG")
     return True
 
 

@@ -6,11 +6,9 @@
 
 from __future__ import annotations
 
-import hashlib
-import re
 from pathlib import Path
 
-_UNSAFE_FILENAME_CHARS = re.compile(r"[^0-9A-Za-z._-]+")
+from infra.persistence.keyed_names import keyed_file_name
 
 
 def role_memory_dir(workspace: Path, role_id: str) -> Path:
@@ -26,6 +24,4 @@ def keyed_markdown_name(key: str) -> str:
 
     安全化会把不同的键变成同一串字符，短哈希保证它们仍落在不同文件。
     """
-    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:8]
-    stem = _UNSAFE_FILENAME_CHARS.sub("_", key).strip("_")
-    return f"{stem}-{digest}.md"
+    return keyed_file_name(key, ".md")

@@ -2,14 +2,15 @@ import { LinkBreakIcon } from "@phosphor-icons/react";
 import { AccountAvatar } from "../accounts/AccountAvatar";
 import type { AccountSnapshot } from "@shiori/plugin-sdk";
 import type { AccountDetailEntry } from "../plugins/pluginUiRegistry";
-import { formatTimestamp } from "../shared/format";
+import { formatTimestamp, toFileUrl } from "../shared/format";
 import { compactDangerTextButtonClass } from "../shared/styles";
 import { SettingsGroup } from "../settings/SettingsFieldPrimitives";
 import type { UserIdentity } from "./identityClient";
 import { identityChannel, identityScopeLabel } from "./identityPresentation";
 
 /**
- * One row per bound identity: channel mark and name, the platform user id,
+ * One row per bound identity: its cached platform avatar (the channel mark
+ * without one), channel name, the platform user id,
  * where it is recognized, when it was bound, and an unbind action.
  */
 export function IdentityList({ identities, channels, accounts, onUnbind }: {
@@ -24,7 +25,7 @@ export function IdentityList({ identities, channels, accounts, onUnbind }: {
       {identities.map((identity) => {
         const channel = identityChannel(identity, channels);
         return <li key={identity.id} className="flex min-w-0 items-center gap-3 border-b border-line-soft py-3.5 last:border-b-0">
-          <AccountAvatar avatarUrl="" Icon={channel.Icon} />
+          <AccountAvatar avatarUrl={identity.avatarPath ? toFileUrl(identity.avatarPath) : ""} Icon={channel.Icon} />
           <span className="grid min-w-0 flex-1 gap-0.5">
             <span className="flex min-w-0 items-baseline gap-2">
               <span className="shrink-0 text-body font-medium text-ink">{channel.label}</span>

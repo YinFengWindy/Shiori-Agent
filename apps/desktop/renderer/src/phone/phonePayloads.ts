@@ -9,6 +9,7 @@ export type PhoneConversationPayload = {
   channel: string;
   chat_type: PhoneChatType | null;
   display_name: string;
+  avatar_abs: string | null;
   is_user_chat: boolean;
   last_message: {
     role: string; content: string; timestamp: string; has_media: boolean; sender_name: string | null;
@@ -23,6 +24,7 @@ export type PhoneMessagePayload = {
   sender_id: string | null;
   sender_name: string | null;
   sender_is_user: boolean;
+  sender_avatar_abs: string | null;
   content: string;
   media: string[];
   timestamp: string;
@@ -47,13 +49,15 @@ function isLastMessagePayload(value: unknown): value is PhoneConversationPayload
 function isConversationPayload(value: unknown): value is PhoneConversationPayload {
   return isRecord(value) && isText(value.thread_id) && isTextOrNull(value.account_id) && isText(value.channel)
     && (value.chat_type === "group" || value.chat_type === "private" || value.chat_type === null)
-    && isText(value.display_name) && typeof value.is_user_chat === "boolean" && isLastMessagePayload(value.last_message);
+    && isText(value.display_name) && isTextOrNull(value.avatar_abs) && typeof value.is_user_chat === "boolean"
+    && isLastMessagePayload(value.last_message);
 }
 
 function isMessagePayload(value: unknown): value is PhoneMessagePayload {
   return isRecord(value) && isText(value.id) && (value.seq === null || typeof value.seq === "number")
     && (value.sender === "role" || value.sender === "other") && isTextOrNull(value.sender_id)
-    && isTextOrNull(value.sender_name) && typeof value.sender_is_user === "boolean" && isText(value.content)
+    && isTextOrNull(value.sender_name) && typeof value.sender_is_user === "boolean"
+    && isTextOrNull(value.sender_avatar_abs) && isText(value.content)
     && Array.isArray(value.media) && value.media.every(isText) && isText(value.timestamp);
 }
 
@@ -65,6 +69,7 @@ export function mapConversation(row: PhoneConversationPayload) {
     channel: row.channel,
     chatType: row.chat_type,
     displayName: row.display_name,
+    avatarPath: row.avatar_abs,
     isUserChat: row.is_user_chat,
     lastMessage: {
       role: row.last_message.role,
@@ -85,6 +90,7 @@ export function mapMessage(row: PhoneMessagePayload) {
     senderId: row.sender_id,
     senderName: row.sender_name,
     senderIsUser: row.sender_is_user,
+    senderAvatarPath: row.sender_avatar_abs,
     content: row.content,
     media: row.media,
     timestamp: row.timestamp,

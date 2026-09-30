@@ -6,6 +6,7 @@ desc: Telegram Bot 渠道
 capabilities:
   - channels
   - accounts
+  - avatars
   - kv
   - rpc
 channels:

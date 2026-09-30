@@ -19,7 +19,7 @@ _DOMAIN_ALIASES = {FEISHU_DOMAIN: "feishu", LARK_DOMAIN: "lark"}
 # KV key of the saved application list.
 APPLICATIONS_KEY = "applications"
 # Per-application KV caches written by the channel and the profile RPC.
-_CACHE_PREFIXES = ("profile", "targets")
+_CACHE_PREFIXES = ("profile", "targets", "contacts")
 
 
 class FeishuAppConfig(BaseModel):

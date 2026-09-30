@@ -27,7 +27,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     workspace = ctx.workspace
     if not isinstance(workspace, Path):
         raise RuntimeError("QQ 插件需要持久化 workspace")
-    runtime = QQAccountsRuntime(QQAccountsStore(workspace), ctx.accounts)
+    runtime = QQAccountsRuntime(QQAccountsStore(workspace), ctx.accounts, ctx.avatars)
     await runtime.load()
     ctx.channels.add(runtime)
 

@@ -231,10 +231,13 @@ class DesktopBridgeService:
             accounts=role_store.accounts,
             identities=role_store.identities,
             messages=self.session_presenter,
+            avatars=role_store.avatars,
         )
         self.request_router = DesktopBridgeRequestRouter(
             accounts=DesktopAccountRequestHandler(role_store.accounts),
-            identities=DesktopIdentityRequestHandler(role_store.identities),
+            identities=DesktopIdentityRequestHandler(
+                role_store.identities, role_store.avatars, role_store.accounts
+            ),
             phone=self.phone,
             phone_memory=DesktopPhoneMemoryRequestHandler(
                 conversations=self.conversation_service,
