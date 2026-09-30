@@ -13,8 +13,10 @@ import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from core.memory.group_environment import (
+    GROUP_EDIT_REVISION_KEY,
     SUMMARY_LABEL_KEY,
     SUMMARY_UPDATED_AT_KEY,
     GroupEnvironment,
@@ -45,8 +47,8 @@ def _no_profiles() -> dict[MemberKey, MemberProfile | None]:
 class ExternalLayerSnapshot:
     """整理准备时读到、且本次会写回的群环境与成员档案。
 
-    ``group_environments`` 按会话记笔记、摘要及其更新时间，任一项被编辑就重做该次
-    整理；``member_profiles`` 按成员记档案（没有时为 None）。
+    ``group_environments`` 按会话记笔记、摘要、更新时间及手动编辑版本；即使编辑后
+    又恢复原文，旧整理仍需重做。``member_profiles`` 按成员记档案（没有时为 None）。
     """
 
     group_environments: Mapping[str, GroupEnvironmentSnapshot] = field(
@@ -94,8 +96,9 @@ def edit_group_environment(
 ) -> GroupEnvironmentSnapshot:
     """Edits supplied fields under the consolidation lock; empty text clears a field.
 
-    Unchanged fields are not written. A note write failure rolls back the summary;
-    if the database commit fails after saving the note, the old note is restored.
+    Every real edit advances the persistent revision, even if the text later returns
+    to its old value. No-op edits do not write. Summary/revision roll back on a note
+    failure; a database commit failure restores the old note.
     """
     with EXTERNAL_MEMORY_WRITE_LOCK:
         previous = environment.read(role_id, thread_id)
@@ -105,18 +108,24 @@ def edit_group_environment(
         summary_changed = next_summary != previous.recent_activity
         if not note_changed and not summary_changed:
             return previous
+        metadata: dict[str, Any] = {
+            GROUP_EDIT_REVISION_KEY: previous.edit_revision + 1,
+        }
+        if summary_changed:
+            metadata.update(
+                {
+                    SUMMARY_UPDATED_AT_KEY: updated_at.isoformat(),
+                    SUMMARY_LABEL_KEY: label,
+                }
+            )
         note_saved = False
         try:
             with environment.conversation_store.state_transaction():
-                if summary_changed:
-                    _ = environment.conversation_store.upsert_thread_state(
-                        thread_id,
-                        summary=next_summary,
-                        metadata={
-                            SUMMARY_UPDATED_AT_KEY: updated_at.isoformat(),
-                            SUMMARY_LABEL_KEY: label,
-                        },
-                    )
+                _ = environment.conversation_store.upsert_thread_state(
+                    thread_id,
+                    summary=next_summary if summary_changed else None,
+                    metadata=metadata,
+                )
                 if note_changed:
                     environment.write_note(role_id, thread_id, next_note)
                     note_saved = True

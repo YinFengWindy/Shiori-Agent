@@ -32,8 +32,9 @@ def _environment(tmp_path: Path):
     return environment
 
 
+@pytest.mark.parametrize("edit_summary", [False, True])
 def test_note_write_failure_rolls_back_summary_and_metadata(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edit_summary: bool
 ) -> None:
     environment = _environment(tmp_path)
     before = environment.read("mira", _THREAD)
@@ -49,7 +50,7 @@ def test_note_write_failure_rolls_back_summary_and_metadata(
             "mira",
             _THREAD,
             group_note="新笔记",
-            summary="新摘要",
+            summary="新摘要" if edit_summary else None,
             label="新群名",
             updated_at=_EDITED,
         )
@@ -59,8 +60,12 @@ def test_note_write_failure_rolls_back_summary_and_metadata(
 
 
 @pytest.mark.parametrize("previous_note", ["旧笔记", ""])
+@pytest.mark.parametrize("edit_summary", [False, True])
 def test_database_failure_after_note_save_restores_previous_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, previous_note: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    previous_note: str,
+    edit_summary: bool,
 ) -> None:
     environment = _environment(tmp_path)
     environment.write_note("mira", _THREAD, previous_note)
@@ -82,7 +87,7 @@ def test_database_failure_after_note_save_restores_previous_file(
             "mira",
             _THREAD,
             group_note="新笔记",
-            summary="新摘要",
+            summary="新摘要" if edit_summary else None,
             label="群",
             updated_at=_EDITED,
         )
@@ -196,3 +201,79 @@ def test_empty_summary_changed_and_cleared_still_invalidates_old_draft(
         updated_at=_EDITED,
     )
     assert environment.read("mira", _THREAD) == cleared
+
+
+@pytest.mark.parametrize("original_note", ["", "旧笔记"])
+def test_note_changed_and_restored_rejects_old_draft_using_persistent_revision(
+    tmp_path: Path, original_note: str
+) -> None:
+    environment = _environment(tmp_path)
+    environment.write_note("mira", _THREAD, original_note)
+    before = environment.read("mira", _THREAD)
+    for note in ("临时修改", original_note):
+        _ = edit_group_environment(
+            environment,
+            "mira",
+            _THREAD,
+            group_note=note,
+            label="群",
+            updated_at=_EDITED,
+        )
+    environment.conversation_store.close()
+    # Reopening proves that deleting the note did not discard its edit revision.
+    environment = GroupEnvironment(
+        tmp_path, ConversationStore(tmp_path / "sessions.db")
+    )
+    after = environment.read("mira", _THREAD)
+    assert after.group_note == before.group_note
+    assert after.recent_activity == before.recent_activity
+    assert after.summary_updated_at == before.summary_updated_at == _OLD.isoformat()
+    assert after.edit_revision == before.edit_revision + 2
+    update = GroupEnvironmentUpdate(_THREAD, "群", "", "整理新笔记")
+    assert not commit_external_layers(
+        environment,
+        MemberProfiles(tmp_path),
+        "mira",
+        environment_updates=[update],
+        member_updates=[],
+        snapshot=ExternalLayerSnapshot(group_environments={_THREAD: before}),
+        updated_at=_EDITED,
+    )
+    assert environment.read("mira", _THREAD) == after
+    assert commit_external_layers(
+        environment,
+        MemberProfiles(tmp_path),
+        "mira",
+        environment_updates=[update],
+        member_updates=[],
+        snapshot=ExternalLayerSnapshot(group_environments={_THREAD: after}),
+        updated_at=_EDITED,
+    )
+    assert environment.read_note("mira", _THREAD) == "整理新笔记"
+    assert environment.read("mira", _THREAD).edit_revision == after.edit_revision
+
+
+def test_unchanged_edit_and_reads_do_not_advance_revision(tmp_path: Path) -> None:
+    environment = _environment(tmp_path)
+    edited = edit_group_environment(
+        environment,
+        "mira",
+        _THREAD,
+        group_note="手动笔记",
+        summary="手动摘要",
+        label="群",
+        updated_at=_EDITED,
+    )
+    state = environment.conversation_store.get_thread_state(_THREAD)
+    assert edited.edit_revision == 1
+    unchanged = edit_group_environment(
+        environment,
+        "mira",
+        _THREAD,
+        group_note=" 手动笔记 ",
+        summary="手动摘要",
+        label="群",
+        updated_at=_EDITED + timedelta(days=1),
+    )
+    assert unchanged == edited == environment.read("mira", _THREAD)
+    assert environment.conversation_store.get_thread_state(_THREAD) == state
