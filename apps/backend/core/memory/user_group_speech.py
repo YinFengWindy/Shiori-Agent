@@ -21,7 +21,9 @@ from conversation.service import role_thread_prefix
 from conversation.store import ConversationStore
 from core.common.channel_chat_types import is_group_chat_type
 from core.common.message_source import MessageSource
-from session.manager.helpers import role_session_key, truncate_text
+from core.common.text import truncate_text
+from core.common.timekit import parse_local_iso
+from session.manager.helpers import role_session_key
 
 # 往前看多久、至多几条用户发言，以及用户发言与角色回复各自的截断长度。
 USER_GROUP_SPEECH_WINDOW = timedelta(hours=6)
@@ -51,13 +53,10 @@ def collect_user_group_speech(
         store.thread_messages_since(role_session_key(role_id), since)
     )
     for heard in store.listening.sent_by_user_since(role_thread_prefix(role_id), since):
-        source = MessageSource.from_metadata(
-            {"message_source": heard.source}, session_key=""
-        )
         speeches.append(
             UserGroupSpeech(
-                at=datetime.fromisoformat(heard.timestamp),
-                group=_group_label(source),
+                at=parse_local_iso(heard.timestamp),
+                group=_group_label(heard.message_source()),
                 text=heard.content,
             )
         )
@@ -98,7 +97,7 @@ def _addressed_speeches(
             continue
         speeches.append(
             UserGroupSpeech(
-                at=datetime.fromisoformat(message["ts"]),
+                at=message["at"],
                 group=_group_label(source),
                 text=message["content"],
                 reply=_reply_after(messages, index),
@@ -122,4 +121,12 @@ def _reply_after(messages: Sequence[Mapping[str, Any]], index: int) -> str:
 
 
 def _group_label(source: MessageSource) -> str:
-    return f"群「{source.group_name or source.chat_id or '未知群'}」"
+    """群的称呼：群名是插件可选上报的快照，没报时用群的 chat_id。
+
+    群消息一定带 chat_id，两者都没有说明来源快照已损坏，直接报错。
+    """
+    if source.group_name:
+        return f"群「{source.group_name}」"
+    if not source.chat_id:
+        raise ValueError("群消息的来源快照缺少 chat_id")
+    return f"群 {source.chat_id}"

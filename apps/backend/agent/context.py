@@ -11,6 +11,7 @@ from agent.core.types import ContextRenderResult, ContextRequest
 from agent.core.prompt_block import (
     ActiveSkillsPromptBlock,
     BehaviorRulesPromptBlock,
+    GroupListeningPromptBlock,
     GroupNotePromptBlock,
     IdentityPromptBlock,
     LongTermMemoryPromptBlock,
@@ -244,6 +245,7 @@ class ContextBuilder:
                 GroupNotePromptBlock(),
                 MemberProfilesPromptBlock(runtime_roles),
                 UserGroupSpeechPromptBlock(),
+                GroupListeningPromptBlock(),
                 SessionContextPromptBlock(),
                 UserIdentitiesPromptBlock(runtime_roles),
                 ActiveSkillsPromptBlock(),

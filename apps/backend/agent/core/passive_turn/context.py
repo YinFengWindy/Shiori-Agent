@@ -72,7 +72,7 @@ class DefaultContextStore(ContextStore):
 
         # 2. 系统轮次可显式跳过预检索，避免污染检索诊断和激活状态；
         #    外部上下文（群聊、陌生私聊）不检索用户层记忆，引擎契约不变（#495）。
-        external_turn = context_view is not None and context_view.scope == "external"
+        external_turn = context_view is not None and context_view.is_external
         if external_turn or bool((msg.metadata or {}).get("skip_memory_retrieval")):
             retrieval_result = RetrievalResult(block="", trace=None)
         else:

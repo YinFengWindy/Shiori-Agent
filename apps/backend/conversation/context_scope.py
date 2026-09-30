@@ -23,7 +23,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -167,6 +167,20 @@ class ContextView:
     scope: ContextScope
     user_threads: UserContextThreads
     thread_id: str = ""
+
+    @property
+    def is_external(self) -> bool:
+        """视图是否落在外部上下文（群聊、陌生私聊）。"""
+        return self.scope == "external"
+
+    @property
+    def category(self) -> ContextView:
+        """视图所在的整类上下文：外部回合的视图去掉会话限定。
+
+        整理按整类上下文进行、共用一个游标，所以积压（是否该整理）按它数；
+        模型实际收到的历史与预算估算则按回合视图本身。
+        """
+        return replace(self, thread_id="")
 
     def includes(self, message: Mapping[str, Any]) -> bool:
         """``message`` 是否对本回合可见。"""

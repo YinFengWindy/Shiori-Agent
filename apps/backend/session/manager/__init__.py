@@ -10,7 +10,6 @@ from .helpers import (
     _build_proactive_history_messages,
     _rebuild_user_content,
     _safe_filename,
-    truncate_text,
     _truncate_tool_result,
     logger,
 )

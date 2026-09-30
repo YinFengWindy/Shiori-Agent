@@ -16,6 +16,7 @@ __all__ = [
     "safe_zone",
     "format_iso",
     "local_now",
+    "parse_local_iso",
 ]
 
 
@@ -78,3 +79,13 @@ def local_now(tz: ZoneInfo | str | None = None) -> datetime:
     if isinstance(tz, str):
         tz = safe_zone(tz)
     return datetime.now(tz)
+
+
+def parse_local_iso(value: str) -> datetime:
+    """解析会话与旁听记录里的 ISO 时间，总是返回带时区的 datetime。
+
+    这些时间按本地时区写入并带偏移；不带时区的旧记录按本地时区理解（而不是
+    ``parse_iso`` 的 UTC）。格式不对直接抛 ``ValueError``，不吞错。
+    """
+    moment = datetime.fromisoformat(value)
+    return moment if moment.tzinfo is not None else moment.astimezone()

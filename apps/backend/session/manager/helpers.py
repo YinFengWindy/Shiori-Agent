@@ -6,9 +6,11 @@ import base64
 import logging
 import mimetypes
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from core.common.text import truncate_text
 from agent.prompting import (
     PromptSectionRender,
     build_context_frame_content,
@@ -125,13 +127,6 @@ def _build_proactive_history_messages(
     return messages
 
 
-def truncate_text(text: str, limit: int) -> str:
-    """``text`` 超过 ``limit`` 字时截断，并在末尾注明截掉的字数。"""
-    if len(text) <= limit:
-        return text
-    return text[:limit].rstrip() + f"…（截断 {len(text) - limit} 字）"
-
-
 def _rebuild_user_content(text: str, media_paths: list[str]) -> "str | list[dict]":
     """重建带附件的用户消息。图片内联 base64；非图片文件保留路径引用供 agent 调用 read_file。"""
     images = []
@@ -164,11 +159,18 @@ def _rebuild_user_content(text: str, media_paths: list[str]) -> "str | list[dict
     return images + [{"type": "text", "text": combined_text}]
 
 
+def starts_turn(message: Mapping[str, Any]) -> bool:
+    """原始消息是否是一轮的起点：user 消息或主动消息。
+
+    历史窗口对齐到完整 turn、按轮切分历史都以此为准。
+    """
+    role = message.get("role")
+    return role == "user" or (role == "assistant" and bool(message.get("proactive")))
+
+
 def _align_to_user_boundary(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for i, m in enumerate(messages):
-        if m.get("role") == "user" or (
-            m.get("role") == "assistant" and m.get("proactive")
-        ):
+        if starts_turn(m):
             return messages[i:]
     return []
 

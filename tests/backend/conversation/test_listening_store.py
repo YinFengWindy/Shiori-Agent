@@ -72,3 +72,30 @@ def test_past_the_daily_cap_messages_stay_only_in_the_recent_window(
         "第2条",
         "第二天",
     ]
+
+
+def test_sent_by_user_since_keeps_only_the_users_recent_messages(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    other_role = "thread:nova:qq:gqq:5"
+    for thread in (_GROUP, other_role):
+        store.switches.set_enabled(thread, True, operator="user")
+    for thread, content, is_user, at in (
+        (_GROUP, "我早上说的", True, _DAY - timedelta(hours=3)),
+        (_GROUP, "我刚说的", True, _DAY),
+        (_GROUP, "群友说的", False, _DAY),
+        (other_role, "别的角色的群", True, _DAY),
+    ):
+        store.hear(
+            thread,
+            sender_id="902",
+            content=content,
+            source={"sender_is_user": True} if is_user else {},
+            external_message_id="",
+            timestamp=at,
+        )
+
+    found = store.sent_by_user_since("thread:mira:", _DAY - timedelta(hours=1))
+
+    assert [message.content for message in found] == ["我刚说的"]

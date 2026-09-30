@@ -23,7 +23,7 @@ from .helpers import (
     get_session_metadata,
     get_window_sources_since_consolidated,
 )
-from .listening_history import HeardLine, heard_for_prompt
+from agent.prompting.listening_block import HeardLine, turn_heard
 from .reasoning_loop import _PassiveReasoningLoopMixin
 from .reasoning_result import _PassiveReasoningResultMixin
 from agent.core.runtime_support import ToolDiscoveryState
@@ -318,19 +318,21 @@ class DefaultReasoner(
             "selected_plan": None,
             "trimmed_sections": [],
         }
-        # 群回合的前文并入本群旁听记录（#539）。
-        heard = self._heard_for_turn(context_view)
         source_history = (
             base_history
             if base_history is not None
             else get_history_since_consolidated(
-                session, self._memory_window, context_view, heard
+                session, self._memory_window, context_view
             )
         )
         total_history = len(source_history)
-        # 与历史同一窗口里非用户本人消息的来源，外部回合据此注入成员档案（#498）。
+        # 与历史同一窗口里非用户本人消息的来源，加上本群旁听块里的（#539），
+        # 外部回合据此注入成员档案（#498）。
         window_sources = get_window_sources_since_consolidated(
-            session, self._memory_window, context_view, heard
+            session,
+            self._memory_window,
+            context_view,
+            self._heard_for_turn(context_view),
         )
         preloaded: set[str] | None = None
         preloaded_order: list[str] = []
@@ -470,7 +472,7 @@ class DefaultReasoner(
                     )
                 budget_repaired = True
                 source_history = get_history_since_consolidated(
-                    session, self._memory_window, context_view, heard
+                    session, self._memory_window, context_view
                 )
                 history_for_attempt = self._slice_history(
                     source_history,
@@ -612,14 +614,10 @@ class DefaultReasoner(
         return TurnRunResult(reply="（安全重试异常）", context_retry=retry_trace)
 
     def _heard_for_turn(self, context_view: "ContextView | None") -> list[HeardLine]:
-        """外部回合所在会话进入前文的旁听消息；用户上下文回合没有旁听。"""
-        if context_view is None or context_view.scope != "external":
-            return []
-        assert self._session_manager is not None
-        return heard_for_prompt(
-            self._session_manager.conversation_store.listening,
-            context_view.thread_id,
-        )
+        """外部回合所在会话旁听块里的消息；用户上下文回合没有旁听。"""
+        if self._session_manager is None:
+            raise RuntimeError("DefaultReasoner 读取旁听前文需要 session_manager")
+        return turn_heard(self._session_manager, context_view)
 
     @staticmethod
     def _slice_history(source_history: list[dict], window: int) -> list[dict]:

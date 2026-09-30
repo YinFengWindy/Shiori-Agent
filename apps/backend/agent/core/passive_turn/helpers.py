@@ -6,7 +6,8 @@ from collections.abc import Iterable, Sequence, Set as AbstractSet
 from typing import TYPE_CHECKING, Any
 
 from agent.prompting import is_context_frame
-from .listening_history import HeardLine, local_time, merge_heard_into_history
+from agent.prompting.listening_block import HeardLine
+from core.common.timekit import parse_local_iso
 from conversation.context_scope import (
     belongs_to_user,
     history_filter,
@@ -25,25 +26,18 @@ def get_history_since_consolidated(
     session: "SessionLike",
     memory_window: int,
     context_view: "ContextView | None" = None,
-    heard: Sequence[HeardLine] = (),
 ) -> list[dict]:
     """读取回合所在上下文的整理游标之后、这类上下文可见的会话历史。
 
-    ``heard`` 是群回合进入提示词的本群旁听消息（见 ``heard_for_prompt``），按时间
-    并入历史（#539）；没有时历史原样返回。
+    外部回合只含本会话的对话；本群旁听记录不进历史，另在 context frame 里成块
+    （见 ``agent.prompting.listening_block``）。
     """
-    if not heard:
-        return session.get_history(
-            max_messages=memory_window,
-            start_index=history_start(session, context_view),
-            include=history_filter(context_view),
-        )
-    window = session.history_window(
-        memory_window,
+
+    return session.get_history(
+        max_messages=memory_window,
         start_index=history_start(session, context_view),
         include=history_filter(context_view),
     )
-    return merge_heard_into_history(session, window, heard)
 
 
 def get_history_tool_names_since_consolidated(
@@ -69,10 +63,10 @@ def get_window_sources_since_consolidated(
     """与 get_history_since_consolidated 同一窗口里，非用户本人消息的来源，旧的在前。
 
     只有外部上下文回合需要（注入成员档案，#498）；其他回合返回空。用户本人按
-    ``belongs_to_user`` 共享判定排除。并入前文的旁听消息 ``heard`` 同样计入，与
+    ``belongs_to_user`` 共享判定排除。本回合旁听块里的消息 ``heard`` 同样计入，与
     对话按时间合并（#539），所以只在旁听里说话或被 @ 的成员也有速记。
     """
-    if context_view is None or context_view.scope != "external":
+    if context_view is None or not context_view.is_external:
         return ()
     spoken = [
         message
@@ -88,7 +82,7 @@ def get_window_sources_since_consolidated(
         return tuple(stored_message_source(message) for message in spoken)
     timeline = [
         *(
-            (local_time(str(message["timestamp"])), stored_message_source(message))
+            (parse_local_iso(str(message["timestamp"])), stored_message_source(message))
             for message in spoken
         ),
         *((line.at, line.source) for line in heard if not line.source.sender_is_user),

@@ -20,10 +20,6 @@ from pathlib import Path
 from conversation.context_scope import load_user_context_threads
 from conversation.store import ConversationStore
 from core.memory.role_paths import keyed_markdown_name, role_memory_dir
-from core.memory.user_group_speech import (
-    collect_user_group_speech,
-    render_user_group_speech,
-)
 from infra.persistence.text_store import atomic_save_text
 
 # 用户上下文注入最近动态的时间窗与数量上限。
@@ -72,6 +68,11 @@ class GroupEnvironment:
     def __init__(self, workspace: Path, conversation_store: ConversationStore) -> None:
         self._workspace = workspace
         self._store = conversation_store
+
+    @property
+    def conversation_store(self) -> ConversationStore:
+        """最近动态所在的会话存储；提示块也从这里读旁听记录与群里的消息（#539）。"""
+        return self._store
 
     def note_path(self, role_id: str, thread_id: str) -> Path:
         """会话 ``thread_id`` 的群笔记文件；文件名由会话 ID 转成安全字符并加短哈希。"""
@@ -180,12 +181,6 @@ class GroupEnvironment:
             ),
         ]
         return "\n".join(lines)
-
-    def render_user_group_speech(self, role_id: str, *, now: datetime) -> str:
-        """用户上下文回合注入的「用户最近在群里说过」段落；没有时为空串（#539）。"""
-        return render_user_group_speech(
-            collect_user_group_speech(self._store, role_id, now=now)
-        )
 
     def render_group_note(self, role_id: str, thread_id: str) -> str:
         """外部上下文回合注入的当前会话群笔记段落；没有时为空串。"""

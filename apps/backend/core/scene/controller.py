@@ -143,7 +143,7 @@ class SceneAwarenessController:
             role_id=event.role_id,
             thread_id=event.thread_id,
         )
-        if view is not None and view.scope == "external":
+        if view is not None and view.is_external:
             return
         self._cancel_pending_task(event.session_key)
         session = self._session_manager.get_or_create(event.session_key)

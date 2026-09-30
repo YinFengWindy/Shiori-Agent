@@ -852,3 +852,61 @@ def test_user_turns_carry_the_users_recent_group_speech_as_its_own_block(
     assert "我的回复：好呀" in frame
     assert "今晚一起打游戏" not in str(user[0]["content"])
     assert not any("今晚一起打游戏" in str(message["content"]) for message in external)
+
+
+def test_group_turns_carry_their_listening_as_one_block_next_to_the_message(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """旁听块只含本群、只出现一次，在 context frame 里紧挨当前消息（#539）。"""
+    monkeypatch.setattr("agent.context.SkillsLoader", _EmptySkills)
+    RoleStore(tmp_path).create_role(
+        role_id="mira", name="Mira", system_prompt="test role"
+    )
+    manager = SessionManager(tmp_path)
+    listening = manager.conversation_store.listening
+    for thread, text in (
+        ("thread:mira:qq:gqq:1", "本群旁听"),
+        ("thread:mira:qq:gqq:2", "别群旁听"),
+    ):
+        listening.switches.set_enabled(thread, True, operator="user")
+        listening.hear(
+            thread,
+            sender_id="77",
+            content=text,
+            source={"sender_name": "阿花"},
+            external_message_id="",
+            timestamp=datetime.now().astimezone(),
+        )
+    builder = ContextBuilder(
+        tmp_path, _EmptyMemory(), runtime_roles=RoleStore(tmp_path)  # type: ignore[arg-type]
+    )
+    builder.set_group_environment(
+        GroupEnvironment(tmp_path, manager.conversation_store)
+    )
+    history = [
+        {"role": "user", "content": "@Mira 在吗"},
+        {"role": "assistant", "content": "在"},
+    ]
+
+    def model_input(scope: ContextScope) -> list[dict]:
+        return builder.render(
+            ContextRequest(
+                history=list(history),
+                current_message="你好",
+                context_scope=scope,
+                thread_id="thread:mira:qq:gqq:1",
+            ),
+            session_metadata={"role_id": "mira"},
+        ).messages
+
+    external = model_input("external")
+    user = model_input("user")
+
+    texts = [str(message["content"]) for message in external]
+    # 系统提示词与历史里都没有旁听；它只在当前消息前的 context frame 里出现一次。
+    assert external[1:3] == history
+    assert "本群旁听" not in texts[0]
+    assert sum("本群旁听" in text for text in texts) == 1
+    assert "本群旁听" in texts[-2] and texts[-2].startswith(SYSTEM_CONTEXT_FRAME_MARKER)
+    assert not any("别群旁听" in text for text in texts)
+    assert not any("本群旁听" in str(message["content"]) for message in user)

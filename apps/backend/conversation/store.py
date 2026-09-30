@@ -4,13 +4,14 @@ import json
 import sqlite3
 import threading
 from collections.abc import Collection
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from conversation.listening_schema import ensure_listening_schema
 from conversation.listening_store import GroupListeningStore
 from conversation.models import ContactRecord, StateRecord, ThreadRecord
+from core.common.timekit import parse_local_iso
 from infra.persistence.sqlite_transaction import immediate_transaction
 
 
@@ -649,11 +650,14 @@ class ConversationStore:
     ) -> list[dict[str, Any]]:
         """Messages of ``session_key`` in any thread at or after ``since``, in session order.
 
-        Each carries ``thread_id``, ``role``, ``content``, ``ts``, its
-        ``metadata`` and whether it is ``proactive``; messages without a
-        thread are left out. Timestamps are ISO strings written in the local
-        offset, so ``since`` is compared in that offset.
+        Each carries ``thread_id``, ``role``, ``content``, ``at`` (the parsed,
+        timezone-aware ``ts``), its ``metadata`` and whether it is
+        ``proactive``; messages without a thread are left out. ``ts`` is ISO
+        text in the offset it was written in, which may differ between rows,
+        so the text only narrows the read to a day before ``since`` (dates sort
+        as text; offsets span less than a day) and the parsed times decide.
         """
+        earliest_day = (since.astimezone() - timedelta(days=1)).date().isoformat()
         with self._lock:
             rows = self._conn.execute(
                 """
@@ -663,10 +667,13 @@ class ConversationStore:
                   AND ts >= ?
                 ORDER BY seq ASC
                 """,
-                (session_key, since.astimezone().isoformat()),
+                (session_key, earliest_day),
             ).fetchall()
         messages: list[dict[str, Any]] = []
         for row in rows:
+            at = parse_local_iso(str(row["ts"]))
+            if at < since:
+                continue
             extra = json.loads(row["extra"] or "{}")
             metadata = extra.get("metadata")
             messages.append(
@@ -674,7 +681,7 @@ class ConversationStore:
                     "thread_id": str(row["thread_id"]),
                     "role": str(row["role"]),
                     "content": str(row["content"] or ""),
-                    "ts": str(row["ts"]),
+                    "at": at,
                     "metadata": metadata if isinstance(metadata, dict) else {},
                     "proactive": bool(extra.get("proactive")),
                 }

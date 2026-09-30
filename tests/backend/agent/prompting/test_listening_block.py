@@ -3,17 +3,16 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from agent.core.passive_turn.listening_history import (
-    HEARD_SEGMENT_HEADER,
+from agent.prompting.listening_block import (
+    HEARD_BLOCK_TITLE,
     LISTENING_MESSAGE_CHAR_LIMIT,
     LISTENING_PROMPT_CHAR_LIMIT,
     LISTENING_PROMPT_LIMIT,
     heard_for_prompt,
-    merge_heard_into_history,
+    render_heard_block,
 )
 from conversation.listening_store import GroupListeningStore
 from conversation.store import ConversationStore
-from session.manager.models import Session
 
 _GROUP = "thread:mira:qq:gqq:5"
 _START = datetime(2026, 9, 30, 9, 0).astimezone()
@@ -68,36 +67,28 @@ def test_long_messages_are_cut_and_the_part_stays_within_the_char_cap(
     assert "：29长" in lines[-1].text
 
 
-def test_heard_messages_are_placed_between_turns_by_time(tmp_path: Path) -> None:
+def test_block_lists_the_heard_lines_in_time_order_under_its_title(
+    tmp_path: Path,
+) -> None:
     store = _listening(tmp_path)
-    session = Session(key="role:mira")
-    for index, minute in enumerate((10, 20)):
-        at = (_START + timedelta(minutes=minute)).isoformat()
-        session.add_message("user", f"问{index}", thread_id=_GROUP)
-        session.messages[-1]["timestamp"] = at
-        session.add_message("assistant", f"答{index}", thread_id=_GROUP)
-        session.messages[-1]["timestamp"] = at
-    for minute in (5, 15, 16, 30):
-        _hear(store, f"旁听{minute}", _START + timedelta(minutes=minute))
-
-    merged = merge_heard_into_history(
-        session, session.messages, heard_for_prompt(store, _GROUP)
+    # Heard out of order; a sender without a reported name shows only the ID.
+    _hear(store, "后说的", _START + timedelta(minutes=2))
+    _hear(store, "先说的", _START + timedelta(minutes=1))
+    store.hear(
+        _GROUP,
+        sender_id="43",
+        content="没报昵称",
+        source={},
+        external_message_id="",
+        timestamp=_START + timedelta(minutes=3),
     )
 
-    def label(message: dict) -> str:
-        content = str(message["content"])
-        if content.startswith(HEARD_SEGMENT_HEADER):
-            return "+".join(
-                line.rsplit("：", 1)[-1] for line in content.split("\n")[1:]
-            )
-        return content.rsplit("\n", 1)[-1]
+    block = render_heard_block(heard_for_prompt(store, _GROUP))
 
-    assert [label(message) for message in merged] == [
-        "旁听5",
-        "问0",
-        "答0",
-        "旁听15+旁听16",
-        "问1",
-        "答1",
-        "旁听30",
+    assert block.splitlines() == [
+        HEARD_BLOCK_TITLE,
+        "[09-30 09:01] 阿花（ID 42）（@ ID 7）：先说的",
+        "[09-30 09:02] 阿花（ID 42）（@ ID 7）：后说的",
+        "[09-30 09:03] ID 43：没报昵称",
     ]
+    assert render_heard_block([]) == ""

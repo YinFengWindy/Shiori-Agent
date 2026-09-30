@@ -6,7 +6,7 @@ from agent.core.passive_turn.helpers import (
     get_history_since_consolidated,
     get_window_sources_since_consolidated,
 )
-from agent.core.passive_turn.listening_history import HeardLine
+from agent.prompting.listening_block import HeardLine
 from conversation.context_scope import ContextView, UserContextThreads
 from conversation.service import desktop_thread_id, network_thread_id
 from core.common.message_source import MessageSource

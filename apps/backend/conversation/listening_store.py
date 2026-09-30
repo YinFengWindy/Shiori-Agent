@@ -19,10 +19,12 @@ import uuid
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from conversation.listening_switches import ListeningSwitches
+from core.common.message_source import MessageSource
+from core.common.timekit import parse_local_iso
 from infra.persistence.sqlite_transaction import immediate_transaction
 
 # 内存最近窗口每群保留的条数，也是 ``recent`` 默认返回的条数。
@@ -55,6 +57,12 @@ class ListeningMessage:
     def stored(self) -> bool:
         """这条消息已入库（没有超出当日上限）。"""
         return self.seq is not None
+
+    def message_source(self) -> MessageSource:
+        """来源快照还原成的 ``MessageSource``（与会话消息同一套字段）。"""
+        return MessageSource.from_metadata(
+            {"message_source": self.source}, session_key=""
+        )
 
 
 class GroupListeningStore:
@@ -182,7 +190,7 @@ class GroupListeningStore:
             ).fetchall()
             unstored = list(self._window.get(thread_id, ()))
         merged = [*(_row_to_message(row) for row in rows), *unstored]
-        merged.sort(key=lambda message: datetime.fromisoformat(message.timestamp))
+        merged.sort(key=lambda message: parse_local_iso(message.timestamp))
         return merged[-limit:] if limit > 0 else []
 
     def sent_by_user_since(
@@ -193,6 +201,8 @@ class GroupListeningStore:
         Only groups whose thread ID starts with ``thread_prefix`` (one role's
         threads); stored records and window-only ones alike. "The user" is the
         source snapshot's ``sender_is_user``, set when the message arrived.
+        Times are compared parsed: the stored local ``day`` only narrows the
+        read, a day wider than ``since`` so an offset change cannot drop one.
         """
         with self._lock:
             rows = self._conn.execute(
@@ -205,7 +215,7 @@ class GroupListeningStore:
                 (
                     len(thread_prefix),
                     thread_prefix,
-                    since.astimezone().date().isoformat(),
+                    (since.astimezone() - timedelta(days=1)).date().isoformat(),
                 ),
             ).fetchall()
             unstored = [
@@ -218,9 +228,9 @@ class GroupListeningStore:
         found = [
             message
             for message in [*(_row_to_message(row) for row in rows), *unstored]
-            if datetime.fromisoformat(message.timestamp) >= since
+            if parse_local_iso(message.timestamp) >= since
         ]
-        found.sort(key=lambda message: datetime.fromisoformat(message.timestamp))
+        found.sort(key=lambda message: parse_local_iso(message.timestamp))
         return found
 
     def page(

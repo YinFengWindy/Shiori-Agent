@@ -415,29 +415,35 @@ async def test_external_turn_sees_only_its_own_conversation(tmp_path, thread, la
     assert _labels(history) == [label]
 
 
-async def test_group_turn_merges_its_own_listening_records_by_time(tmp_path):
+async def test_group_turn_history_is_dialog_only_but_members_include_heard(tmp_path):
+    """Listening records stay out of the history (they form their own block at
+    the tail, #539), yet the group's heard members still reach member profiles."""
     _bind(tmp_path, "902")
     manager = SessionManager(tmp_path)
     _seed_role_session(manager)
     listening = manager.conversation_store.listening
     before = datetime.now().astimezone() - timedelta(hours=1)
-    for thread, text in ((GROUP_A, "ga-heard"), (GROUP_B, "gb-heard")):
+    for thread, sender_id in ((GROUP_A, "71"), (GROUP_B, "72")):
         listening.switches.set_enabled(thread, True, operator="user")
         listening.hear(
             thread,
-            sender_id="77",
-            content=text,
-            source={"sender_name": "阿花"},
+            sender_id=sender_id,
+            content="heard",
+            source={"channel": "qq", "sender_id": sender_id},
             external_message_id="",
             timestamp=before,
         )
+    pipeline, reasoner = _isolation_pipeline(manager)
 
-    history = await _model_history(tmp_path, GROUP_B)
+    await pipeline.run(_turn(GROUP_B), "role:mira", dispatch_outbound=False)
 
-    # Heard before the group's dialog, so it comes first; group A's stays out.
-    assert history[0].endswith("阿花（ID 77）：gb-heard")
-    assert _labels(history[1:]) == ["gb"]
-    assert not any("ga-heard" in text for text in history)
+    history = [str(m["content"]) for m in reasoner.run.await_args.args[0][:-1]]
+    assert _labels(history) == ["gb"]
+    assert not any("heard" in text for text in history)
+    request = reasoner.render_prompt.await_args.args[0]
+    # Group B's heard member comes first (heard an hour before the dialog, whose
+    # seeded message has no sender); group A's heard member stays out.
+    assert [source.sender_id for source in request.window_sources] == ["72", None]
 
 
 async def test_bound_stranger_dm_joins_user_context_once_after_the_cursor(

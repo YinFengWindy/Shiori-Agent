@@ -7,8 +7,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from agent.prompting import PromptSectionMeta, PromptSectionRender, SectionCache
+from agent.prompting.listening_block import heard_for_prompt, render_heard_block
 from core.identity import identities_for_account
 from core.memory.member_profiles import MemberProfiles, render_member_profiles
+from core.memory.user_group_speech import (
+    collect_user_group_speech,
+    render_user_group_speech,
+)
 from core.memory.markdown_schema import (
     SELF_PERSONA_SECTION,
     SELF_RELATIONSHIP_SECTION,
@@ -126,6 +131,9 @@ class PromptBlock(Protocol):
 #  55 MemoryBlockPromptBlock   → 本轮语义检索注入（外部回合不注入）
 #                              来源：retrieved_memory_block
 #                              时机：每轮 retrieval 结果都可能不同，最高频
+#  56 GroupListeningPromptBlock→ 本群旁听记录（只在外部回合注入，放 context frame 末尾、紧挨当前消息）
+#                              来源：listening_messages + 内存最近窗口，最近 30 条、约 3000 字
+#                              时机：每条旁听到的群消息都会变，不进历史以保缓存前缀
 # ─────────────────────────────────────────────────────────────────────────────
 class IdentityPromptBlock:
     priority = 10
@@ -442,12 +450,40 @@ class UserGroupSpeechPromptBlock:
     ) -> str | None:
         if is_external_turn(ctx) or ctx.group_environment is None or not ctx.role_id:
             return None
-        return (
-            ctx.group_environment.render_user_group_speech(
-                ctx.role_id, now=datetime.now().astimezone()
-            )
-            or None
+        speeches = collect_user_group_speech(
+            ctx.group_environment.conversation_store,
+            ctx.role_id,
+            now=datetime.now().astimezone(),
         )
+        return render_user_group_speech(speeches) or None
+
+    def cache_signature(self, ctx: TurnContext) -> str | None:
+        return None
+
+
+class GroupListeningPromptBlock:
+    """外部回合把本群旁听记录整块放进 context frame，紧挨当前消息（#539）。
+
+    不插进对话历史：系统提示词与历史在回合之间保持字节稳定，旁听窗口滑动不打断
+    提示词缓存的前缀。用户上下文回合没有旁听。
+    """
+
+    priority = 56
+    label = "group_listening"
+    is_static = False
+
+    def render(
+        self, ctx: TurnContext, cached_signature: str | None = None
+    ) -> str | None:
+        if not is_external_turn(ctx) or ctx.group_environment is None:
+            return None
+        # 外部回合一定来自角色共享会话里的某个会话，缺了说明装配有误。
+        if not ctx.thread_id:
+            raise ValueError("外部回合缺少 thread_id，无法读取旁听记录")
+        lines = heard_for_prompt(
+            ctx.group_environment.conversation_store.listening, ctx.thread_id
+        )
+        return render_heard_block(lines) or None
 
     def cache_signature(self, ctx: TurnContext) -> str | None:
         return None

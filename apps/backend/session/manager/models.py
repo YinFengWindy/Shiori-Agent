@@ -18,6 +18,7 @@ from .helpers import (
     _build_proactive_history_messages,
     _rebuild_user_content,
     _truncate_tool_result,
+    starts_turn,
 )
 
 INTERRUPTED_TURN_METADATA_KEY = "interrupted_turn"
@@ -126,18 +127,10 @@ class Session:
         ``include`` 按原始消息筛选可见历史（例如只保留某类上下文的会话）；
         窗口仍从 ``start_index`` 起算，筛掉的消息不会被更早的消息补上。
         """
-        return self.render_history(
-            self.history_window(max_messages, start_index=start_index, include=include)
-        )
-
-    def render_history(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """把一段原始消息（``history_window`` 的结果或其中一段）转成 LLM 消息。
-
-        ``get_history`` 的转换本体；需要在历史中间插入其他内容的调用方（群回合
-        按时间并入旁听记录，#539）按段转换后自行拼接。
-        """
         out: list[dict[str, Any]] = []
-        for m in messages:
+        for m in self.history_window(
+            max_messages, start_index=start_index, include=include
+        ):
             role = m.get("role")
 
             if role == "user":
@@ -264,25 +257,10 @@ class Session:
             if start >= len(self.messages):
                 return []
             # 向前回退到最近的 user 边界（保留完整 turn）
-            while (
-                start > 0
-                and self.messages[start].get("role") != "user"
-                and not (
-                    self.messages[start].get("role") == "assistant"
-                    and self.messages[start].get("proactive")
-                )
-            ):
+            while start > 0 and not starts_turn(self.messages[start]):
                 start -= 1
             # start=0 但仍非合法边界时，向后找第一个 user 或 proactive assistant。
-            messages = self.messages[start:]
-            if messages and not (
-                messages[0].get("role") == "user"
-                or (
-                    messages[0].get("role") == "assistant"
-                    and messages[0].get("proactive")
-                )
-            ):
-                messages = _align_to_user_boundary(messages)
+            messages = _align_to_user_boundary(self.messages[start:])
             if not messages:
                 return []
         elif max_messages <= 0:

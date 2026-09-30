@@ -69,6 +69,7 @@ from agent.lifecycle.phases.prompt_render import (
 )
 from agent.prompting import PromptSectionRender
 from agent.turns.outbound import DeliveryReceipt, OutboundDispatch
+from conversation.store import ConversationStore
 from session.manager import SessionManager
 
 _observe_db = importlib.import_module("plugins.observe.backend.db")
@@ -329,7 +330,12 @@ async def test_before_turn_setup_fills_turn_state():
 async def test_before_turn_ctx_carries_context_scope_of_turn_thread(tmp_path):
     session = _DummySession("role:mira")
     session.metadata["role_id"] = "mira"
-    session_mgr = SimpleNamespace(get_or_create=lambda key: session, workspace=tmp_path)
+    # An external turn also reads its group's listening records (#539).
+    session_mgr = SimpleNamespace(
+        get_or_create=lambda key: session,
+        workspace=tmp_path,
+        conversation_store=ConversationStore(tmp_path / "sessions.db"),
+    )
     ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
     phase = Phase(
         default_before_turn_modules(
@@ -1946,3 +1952,96 @@ async def test_after_turn_collects_extra_and_telemetry_slots():
 
     assert committed_extra[0]["plugin_flag"] == "extra"
     assert after_turn_metadata == [{"plugin_flag": "telemetry"}]
+
+
+class _RecordingConsolidator:
+    """Records which consolidation the context guard asked for."""
+
+    def __init__(self) -> None:
+        self.requested: list[str] = []
+        self.ensured: list[str] = []
+
+    def request_memory_consolidation(self, session_key: str) -> None:
+        self.requested.append(session_key)
+
+    async def ensure_memory_consolidation(
+        self, session_key: str, content: str, scope: object
+    ) -> bool:
+        self.ensured.append(session_key)
+        return True
+
+    def get_memory_consolidation_failure(self, session_key: str) -> str | None:
+        return None
+
+
+async def _guard_group_turn(
+    manager: SessionManager, consolidator: _RecordingConsolidator, **guard: Any
+) -> None:
+    phase = Phase(
+        default_before_turn_modules(
+            EventBus(),
+            manager,
+            cast(
+                ContextStore,
+                SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle())),
+            ),
+            consolidator=cast(Any, consolidator),
+            **guard,
+        ),
+        frame_factory=BeforeTurnFrame,
+    )
+    msg = InboundMessage(
+        channel="qq",
+        sender="77",
+        chat_id="gqq:2",
+        content="hello",
+        metadata={"role_id": "mira", "thread_id": "thread:mira:qq:gqq:2"},
+    )
+    await phase.run(TurnState(msg=msg, session_key="role:mira", dispatch_outbound=True))
+
+
+@pytest.mark.asyncio
+async def test_backlog_counts_the_whole_external_context(tmp_path: Path) -> None:
+    """The external cursor is shared, so other groups' backlog triggers it (#539)."""
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    for index in range(20):
+        session.add_message("user", f"a{index}", thread_id="thread:mira:qq:gqq:1")
+        session.add_message("assistant", "ok", thread_id="thread:mira:qq:gqq:1")
+    manager.save(session)
+    consolidator = _RecordingConsolidator()
+
+    await _guard_group_turn(manager, consolidator, keep_count=20)
+
+    assert consolidator.requested == ["role:mira"]
+
+
+@pytest.mark.asyncio
+async def test_input_estimate_includes_the_groups_listening_records(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    manager.save(session)
+    consolidator = _RecordingConsolidator()
+    await _guard_group_turn(manager, consolidator, input_token_threshold=600)
+    assert consolidator.ensured == []
+
+    listening = manager.conversation_store.listening
+    listening.switches.set_enabled("thread:mira:qq:gqq:2", True, operator="user")
+    for index in range(30):
+        listening.hear(
+            "thread:mira:qq:gqq:2",
+            sender_id="77",
+            content="闲" * 80,
+            source={"sender_name": "阿花"},
+            external_message_id=f"m{index}",
+            timestamp=datetime.now().astimezone(),
+        )
+    # Consolidation cannot shrink the listening part, so the turn still stops.
+    with pytest.raises(MemoryConsolidationFailedError):
+        await _guard_group_turn(manager, consolidator, input_token_threshold=600)
+
+    assert consolidator.ensured == ["role:mira"]
