@@ -6,15 +6,19 @@ HISTORY 事件条目与 PENDING 候选，写入角色记忆目录，再交给记
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import TYPE_CHECKING
 
 from core.memory.events import ConsolidationCommitted
 
-from .formatting import _append_entries_to_journal
+from .formatting import append_entries_to_journal
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
     from .runtime import MarkdownMemoryStore
+
+logger = logging.getLogger("memory.markdown")
 
 
 def build_user_layer_prompt(
@@ -126,26 +130,49 @@ history_entries.emotional_weight 规则：
 只返回合法 JSON，不要 markdown 代码块。"""
 
 
-def append_user_layer(
+async def append_user_layer(
     store: "MarkdownMemoryStore",
-    history_entries: list[str],
+    history_entry_payloads: list[tuple[str, int]],
     pending_items: str,
     source_ref: str,
+    *,
+    recent_context_text: str | None = None,
 ) -> None:
-    """把用户层产物按 ``source_ref`` 幂等写入 HISTORY、PENDING 与日记。
+    """把用户层产物按 ``source_ref`` 幂等写入角色记忆目录。
 
-    同步写文件，调用方放到线程里执行；不含 RECENT_CONTEXT（只有角色会话整理写它）。
+    顺序是 HISTORY → PENDING → RECENT_CONTEXT → 日记，与角色会话整理一直以来的
+    写入顺序一致。``recent_context_text`` 只有角色会话整理给出（整篇覆盖）；旁听
+    整理（#541）传 None，不碰 RECENT_CONTEXT。
     """
+    history_entries = [entry for entry, _ in history_entry_payloads]
     if history_entries:
-        _ = store.append_history_once(
-            "\n".join(history_entries), source_ref=source_ref, kind="history_entry"
+        _ = await asyncio.to_thread(
+            store.append_history_once,
+            "\n".join(history_entries),
+            source_ref=source_ref,
+            kind="history_entry",
         )
     if pending_items:
-        _ = store.append_pending_once(
-            pending_items, source_ref=source_ref, kind="pending_items"
+        appended = await asyncio.to_thread(
+            store.append_pending_once,
+            pending_items,
+            source_ref=source_ref,
+            kind="pending_items",
         )
+        if appended:
+            logger.info(
+                "Markdown memory: appended %d pending_items",
+                len(pending_items.splitlines()),
+            )
+    if recent_context_text is not None:
+        store.write_recent_context(recent_context_text)
     if history_entries:
-        _append_entries_to_journal(store, history_entries, source_ref)
+        await asyncio.to_thread(
+            append_entries_to_journal,
+            store,
+            history_entries,
+            source_ref,
+        )
 
 
 async def publish_user_layer(

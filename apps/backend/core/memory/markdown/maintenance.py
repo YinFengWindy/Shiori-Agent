@@ -33,7 +33,7 @@ from .contracts import (
     MemoryLifecycleBindRequest,
     RefreshRecentTurnsRequest,
     _ConsolidationDraft,
-    _ConsolidationFailure,
+    ConsolidationFailure,
 )
 from .listening import ListeningConsolidation
 from .listening_trigger import ListeningTrigger
@@ -481,7 +481,7 @@ class MarkdownMemoryMaintenance:
             if session_key:
                 _ = self._maintenance_failures.pop(session_key, None)
             return ConsolidateResult(trace={"mode": "skipped"})
-        if isinstance(draft, _ConsolidationFailure):
+        if isinstance(draft, ConsolidationFailure):
             if session_key:
                 self._maintenance_failures[session_key] = draft.error
             return ConsolidateResult(
@@ -539,15 +539,13 @@ class MarkdownMemoryMaintenance:
         session: object,
         draft: "_ConsolidationDraft",
     ) -> None:
-        target_store = self._resolve_store_for_session(session)
-        await asyncio.to_thread(
-            append_user_layer,
-            target_store,
-            [entry for entry, _ in draft.history_entry_payloads],
+        await append_user_layer(
+            self._resolve_store_for_session(session),
+            draft.history_entry_payloads,
             draft.pending_items,
             draft.source_ref,
+            recent_context_text=draft.recent_context_text,
         )
-        target_store.write_recent_context(draft.recent_context_text)
 
     async def _write_external_layers(
         self,

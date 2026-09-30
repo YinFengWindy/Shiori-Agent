@@ -42,7 +42,8 @@ class ListeningMessage:
     ``seq`` 是入库后在本群旁听记录里的顺序；只留在内存窗口的消息为 None。
     ``source`` 是来源快照（群名、发送者昵称、是否用户本人、被 @ 成员 ID 等），
     ``timestamp`` 是带本地时区的 ISO 时间；``external_message_id`` 为空表示
-    插件没有给出平台消息 ID。
+    插件没有给出平台消息 ID。``day`` 是收到时的本地日期（ISO），每日上限与
+    旁听整理的跨天判断（#541）都按它计。
     """
 
     id: str
@@ -53,6 +54,7 @@ class ListeningMessage:
     source: dict[str, Any]
     external_message_id: str
     timestamp: str
+    day: str
 
     @property
     def stored(self) -> bool:
@@ -87,7 +89,12 @@ class GroupListeningStore:
         self._listeners: list[Callable[[ListeningMessage], None]] = []
 
     def add_heard_listener(self, listener: Callable[[ListeningMessage], None]) -> None:
-        """Subscribes to messages newly stored (not window-only ones)."""
+        """Subscribes to messages newly stored (not window-only ones).
+
+        Listeners run synchronously inside ``hear``, on its caller's thread —
+        the event loop thread for channel intake — so a listener may create
+        tasks but must not block.
+        """
         self._listeners.append(listener)
 
     def remove_heard_listener(
@@ -128,6 +135,7 @@ class GroupListeningStore:
             source=dict(source),
             external_message_id=external_message_id,
             timestamp=moment.isoformat(),
+            day=day,
         )
         with self._lock:
             if self._already_heard(thread_id, external_message_id):
@@ -306,7 +314,9 @@ class GroupListeningStore:
         )
 
 
-_COLUMNS = "id, thread_id, seq, sender_id, content, source, external_message_id, ts"
+_COLUMNS = (
+    "id, thread_id, seq, sender_id, content, source, external_message_id, ts, day"
+)
 
 
 def _row_to_message(row: sqlite3.Row) -> ListeningMessage:
@@ -319,4 +329,5 @@ def _row_to_message(row: sqlite3.Row) -> ListeningMessage:
         source=json.loads(row["source"]),
         external_message_id=str(row["external_message_id"] or ""),
         timestamp=str(row["ts"]),
+        day=str(row["day"]),
     )

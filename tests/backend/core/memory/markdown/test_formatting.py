@@ -5,8 +5,8 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 from core.memory.markdown import (
-    _build_consolidation_source_ref,
-    _format_conversation_for_consolidation,
+    build_consolidation_source_ref,
+    format_conversation_for_consolidation,
     _format_pending_items,
     _parse_consolidation_payload,
     _select_consolidation_window,
@@ -151,7 +151,7 @@ def test_build_consolidation_source_ref_keeps_only_messages_with_ids():
         ]
     )
     assert json.loads(
-        _build_consolidation_source_ref(cast(Any, window).old_messages)
+        build_consolidation_source_ref(cast(Any, window).old_messages)
     ) == [
         "telegram:1:0",
         "telegram:1:1",
@@ -159,5 +159,5 @@ def test_build_consolidation_source_ref_keeps_only_messages_with_ids():
 
 
 def test_format_conversation_for_consolidation_skips_tool_and_proactive_turns():
-    conversation = _format_conversation_for_consolidation(_window_session().messages)
+    conversation = format_conversation_for_consolidation(_window_session().messages)
     assert conversation.count("USER") == 1

@@ -13,22 +13,22 @@ from core.memory.member_profiles import merge_member_profile
 from .contracts import (
     ExternalLayerUpdates,
     _ConsolidationDraft,
-    _ConsolidationFailure,
+    ConsolidationFailure,
 )
 from .formatting import (
     _budget_view,
-    _build_consolidation_source_ref,
+    build_consolidation_source_ref,
     _coerce_history_text,
     _format_consolidation_error,
-    _format_conversation_for_consolidation,
+    format_conversation_for_consolidation,
     _format_pending_items,
-    _is_nsfw_memory_enabled_session,
+    is_nsfw_memory_enabled_session,
     _normalize_history_entries,
     _parse_consolidation_payload,
     _select_consolidation_window,
     _select_recent_history_entries,
     _session_role_id,
-    _split_consolidation_window,
+    split_consolidation_window,
     _estimate_session_input_tokens,
 )
 from .external_segment import (
@@ -110,7 +110,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         messages: list[dict[str, str]],
         max_tokens: int,
         timeout_s: float,
-    ) -> tuple[str, int] | _ConsolidationFailure:
+    ) -> tuple[str, int] | ConsolidationFailure:
         started_at = time.perf_counter()
         try:
             response = await asyncio.wait_for(
@@ -132,13 +132,13 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
                 elapsed_ms,
                 error,
             )
-            return _ConsolidationFailure(step=step, error=error, elapsed_ms=elapsed_ms)
+            return ConsolidationFailure(step=step, error=error, elapsed_ms=elapsed_ms)
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         return (response.content or "").strip(), elapsed_ms
 
     async def extract_user_layer(
         self, conversation: str, profile_maint: "MarkdownMemoryStore"
-    ) -> tuple[list[tuple[str, int]], str] | _ConsolidationFailure:
+    ) -> tuple[list[tuple[str, int]], str] | ConsolidationFailure:
         """把用户本人段 ``conversation`` 提取成 HISTORY 事件条目与 PENDING 候选。
 
         以 ``profile_maint`` 里现有的长期记忆查重、最近三条事件作主题参照。角色会话
@@ -160,7 +160,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
 
     async def _extract_user_layer(
         self, prompt: str
-    ) -> tuple[list[tuple[str, int]], str] | _ConsolidationFailure:
+    ) -> tuple[list[tuple[str, int]], str] | ConsolidationFailure:
         """调主模型提取用户层产物：HISTORY 事件条目与 PENDING 候选。"""
         call_result = await self._call_llm_step(
             step="event_extract",
@@ -173,7 +173,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
             max_tokens=1024,
             timeout_s=_EVENT_EXTRACTION_TIMEOUT_S,
         )
-        if isinstance(call_result, _ConsolidationFailure):
+        if isinstance(call_result, ConsolidationFailure):
             return call_result
         text, event_elapsed_ms = call_result
         logger.info(
@@ -185,7 +185,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
 
         if not text:
             logger.warning("Memory consolidation: LLM returned empty response")
-            return _ConsolidationFailure(
+            return ConsolidationFailure(
                 step="event_extract",
                 error="empty_response",
                 elapsed_ms=event_elapsed_ms,
@@ -196,7 +196,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
                 "Memory consolidation: unexpected response type. Response: %r",
                 text[:200],
             )
-            return _ConsolidationFailure(
+            return ConsolidationFailure(
                 step="event_extract",
                 error="invalid_json",
                 elapsed_ms=event_elapsed_ms,
@@ -218,13 +218,13 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         member_profiles: "MemberProfiles",
         role_id: str,
         nsfw_memory_enabled: bool,
-    ) -> ExternalLayerUpdates | _ConsolidationFailure:
+    ) -> ExternalLayerUpdates | ConsolidationFailure:
         """调主模型把外部段逐个会话整理成群环境层（#497）与成员层（#498）的更新。
 
         每个会话的成员按 ``MEMBER_BATCH_SIZE`` 分批，每批调用一次：第一批同时更新
         群环境，后续批次只产出成员档案，所以单次输出有上限。同一成员在本次窗口的
         多个会话里发言时，后面的调用看到的是前面合并后的档案。任一调用失败时语义与
-        用户层整理一致：返回 ``_ConsolidationFailure``，本次整理不提交、游标不推进，
+        用户层整理一致：返回 ``ConsolidationFailure``，本次整理不提交、游标不推进，
         下次重试。
         """
         environment_updates: list[GroupEnvironmentUpdate] = []
@@ -273,7 +273,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
                     )
                     + _MEMBER_PROFILE_MAX_TOKENS * len(batch),
                 )
-                if isinstance(payload, _ConsolidationFailure):
+                if isinstance(payload, ConsolidationFailure):
                     return payload
                 if with_environment:
                     update = parse_group_environment_update(payload, thread)
@@ -303,7 +303,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
 
     async def _call_external_layer_step(
         self, prompt: str, *, thread_id: str, max_tokens: int
-    ) -> dict | _ConsolidationFailure:
+    ) -> dict | ConsolidationFailure:
         """外部段的一次整理调用，返回解析好的 JSON 对象；空回复或非法 JSON 即失败。"""
         call_result = await self._call_llm_step(
             step="group_environment_extract",
@@ -316,7 +316,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
             max_tokens=max_tokens,
             timeout_s=_EVENT_EXTRACTION_TIMEOUT_S,
         )
-        if isinstance(call_result, _ConsolidationFailure):
+        if isinstance(call_result, ConsolidationFailure):
             return call_result
         text, elapsed_ms = call_result
         payload = _parse_consolidation_payload(text) if text else None
@@ -326,7 +326,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
                 thread_id,
                 text[:200],
             )
-            return _ConsolidationFailure(
+            return ConsolidationFailure(
                 step="group_environment_extract",
                 error="invalid_json" if text else "empty_response",
                 elapsed_ms=elapsed_ms,
@@ -345,7 +345,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         group_environment: "GroupEnvironment",
         member_profiles: "MemberProfiles",
         bound_senders: "BoundUserSenders",
-    ) -> _ConsolidationDraft | _ConsolidationFailure | None:
+    ) -> _ConsolidationDraft | ConsolidationFailure | None:
         """准备一次整理：选窗口、拆段、提取用户层产物、整理外部段并生成 RECENT_CONTEXT。
 
         ``user_threads`` 是角色共享会话此刻的用户上下文会话；给出时窗口按发送者
@@ -410,10 +410,10 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
             return
 
         # 2. 窗口按发送者拆段：用户本人段格式化成对话文本，外部段在第 4 步按会话整理。
-        nsfw_memory_enabled = _is_nsfw_memory_enabled_session(session)
-        segments = _split_consolidation_window(window, user_threads)
-        source_ref = _build_consolidation_source_ref(segments.user_messages)
-        conversation = _format_conversation_for_consolidation(
+        nsfw_memory_enabled = is_nsfw_memory_enabled_session(session)
+        segments = split_consolidation_window(window, user_threads)
+        source_ref = build_consolidation_source_ref(segments.user_messages)
+        conversation = format_conversation_for_consolidation(
             segments.user_messages,
             nsfw_memory_enabled=nsfw_memory_enabled,
             user_threads=user_threads,
@@ -426,7 +426,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         pending_items = ""
         if conversation:
             extracted = await self.extract_user_layer(conversation, profile_maint)
-            if isinstance(extracted, _ConsolidationFailure):
+            if isinstance(extracted, ConsolidationFailure):
                 return extracted
             history_entry_payloads, pending_items = extracted
         # 4. 外部段按会话整理成群环境层的最近动态与群笔记、成员层的成员档案；
@@ -443,7 +443,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
                 role_id=_session_role_id(session),
                 nsfw_memory_enabled=nsfw_memory_enabled,
             )
-            if isinstance(environment_result, _ConsolidationFailure):
+            if isinstance(environment_result, ConsolidationFailure):
                 return environment_result
             group_environment_updates = list(environment_result.group_environment)
             member_profile_updates = list(environment_result.member_profiles)
@@ -457,7 +457,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
             nsfw_memory_enabled=nsfw_memory_enabled,
             user_threads=user_threads,
         )
-        if isinstance(recent_context_text, _ConsolidationFailure):
+        if isinstance(recent_context_text, ConsolidationFailure):
             return recent_context_text
         return _ConsolidationDraft(
             window=window,

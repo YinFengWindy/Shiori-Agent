@@ -3,10 +3,11 @@
 触发规则（按群、只看该群游标之后尚未整理的记录）：
 
 - 满 ``LISTENING_BATCH_SIZE`` 条：整理最早的这一批；
-- 跨天：未整理记录里最早一条与最新一条的本地日期不同（即入库时的 ``day``，
-  消息时间换算到本地时区的日期），就整理最新那天之前各天的记录，最新那天的
-  记录留待下一批。换言之，一天结束后、这个群下一次有消息入库时，前一天剩下
-  不足一批的记录被整理。
+- 跨天：不足一批时，整理本地日期（入库时记下的 ``day``）早于「今天」的记录，
+  今天的留待下一批。「今天」取检查时的本地日期与最新一条记录的日期中较晚的
+  那个（平台时间略超前时也不会把当天记录算成前一天）。检查发生在该群有记录
+  入库时，以及定时的全量检查（``listening_trigger``），所以前一天剩下不足一批
+  的记录不必等到这个群再有人说话。
 
 旁听记录转换成与角色会话已存消息同样的字典（``listening_session_message``），
 这样用户本人段 / 外部段的拆分、外部段按会话分组与渲染都直接复用角色会话整理
@@ -16,7 +17,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import date
 from typing import Any
 
 from conversation.listening_store import ListeningMessage
@@ -25,25 +26,21 @@ from conversation.listening_store import ListeningMessage
 LISTENING_BATCH_SIZE = 50
 
 
-def listening_day(message: ListeningMessage) -> date:
-    """记录入库时的本地日期：时间戳本身带入库时的本地时区，取其日期。"""
-    return datetime.fromisoformat(message.timestamp).date()
-
-
 def select_listening_batch(
-    pending: Sequence[ListeningMessage],
+    pending: Sequence[ListeningMessage], *, today: date
 ) -> list[ListeningMessage]:
     """按触发规则从未整理的记录里选出这次要整理的一批；还不到时候为空。
 
-    ``pending`` 是游标之后最早的至多 ``LISTENING_BATCH_SIZE`` 条记录（按 ``seq``）。
-    不足一批时它就是全部未整理记录，最后一条是最新的，据此判断跨天。
+    ``pending`` 是游标之后最早的至多 ``LISTENING_BATCH_SIZE`` 条记录（按 ``seq``）；
+    不足一批时它就是全部未整理记录。``today`` 是检查时的本地日期。
     """
     if len(pending) >= LISTENING_BATCH_SIZE:
         return list(pending[:LISTENING_BATCH_SIZE])
     if not pending:
         return []
-    newest_day = listening_day(pending[-1])
-    return [message for message in pending if listening_day(message) < newest_day]
+    # ``day`` 是 ISO 日期串，按字符串比较即按日期先后。
+    current_day = max(today.isoformat(), pending[-1].day)
+    return [message for message in pending if message.day < current_day]
 
 
 def listening_session_message(message: ListeningMessage) -> dict[str, Any]:

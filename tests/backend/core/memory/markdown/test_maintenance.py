@@ -36,7 +36,7 @@ from core.memory.markdown import (
 from core.memory.markdown.contracts import ConsolidationSegments, _ConsolidationDraft
 from core.memory.markdown.external_segment import MEMBER_BATCH_SIZE
 from core.memory.markdown.formatting import (
-    _build_consolidation_source_ref,
+    build_consolidation_source_ref,
     _select_consolidation_window,
 )
 from memory2.store import MemoryStore2
@@ -87,7 +87,7 @@ def _draft(session: Session, *, archive_all: bool = False):
         segments=ConsolidationSegments(
             user_messages=list(window.old_messages), external_messages=[]
         ),
-        source_ref=_build_consolidation_source_ref(window.old_messages),
+        source_ref=build_consolidation_source_ref(window.old_messages),
         history_entry_payloads=[("[2026-09-11 12:00] 你完成了第三轮问题。", 0)],
         pending_items="- [preference] 你喜欢第三轮讨论。",
         conversation="USER: question 2\nASSISTANT: answer 2",

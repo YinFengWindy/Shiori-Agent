@@ -23,21 +23,27 @@ def _records(count: int, start: datetime, first_seq: int = 1) -> list[ListeningM
             content=f"第{first_seq + index}条",
             source={},
             external_message_id="",
-            timestamp=(start + timedelta(minutes=index)).isoformat(),
+            timestamp=start.isoformat(),
+            day=start.date().isoformat(),
         )
         for index in range(count)
     ]
 
 
-def test_a_full_batch_is_due_and_a_short_one_of_the_same_day_is_not() -> None:
-    assert select_listening_batch(_records(LISTENING_BATCH_SIZE - 1, _DAY)) == []
+def test_a_full_batch_is_due_and_a_short_one_of_today_is_not() -> None:
+    today = _DAY.date()
+    short = _records(LISTENING_BATCH_SIZE - 1, _DAY)
+    assert select_listening_batch(short, today=today) == []
 
     full = _records(LISTENING_BATCH_SIZE, _DAY)
-    assert select_listening_batch(full) == full
+    assert select_listening_batch(full, today=today) == full
 
 
 def test_crossing_a_day_consolidates_the_earlier_days_only() -> None:
     yesterday = _records(3, _DAY)
     today = _records(1, _DAY + timedelta(days=1), first_seq=4)
 
-    assert select_listening_batch([*yesterday, *today]) == yesterday
+    assert select_listening_batch([*yesterday, *today], today=_DAY.date()) == yesterday
+    # 没有新记录的群，到了第二天的检查也会整理前一天剩下的。
+    next_day = _DAY.date() + timedelta(days=1)
+    assert select_listening_batch(yesterday, today=next_day) == yesterday

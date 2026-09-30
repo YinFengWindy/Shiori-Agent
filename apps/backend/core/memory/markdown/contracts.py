@@ -83,7 +83,13 @@ class MemoryProfileApi(Protocol):
 
 
 @dataclass(frozen=True)
-class _ConsolidationWindow:
+class ConsolidationWindow:
+    """一次整理要处理的消息窗口；角色会话整理与旁听整理（#541）共用。
+
+    ``old_messages`` 是窗口里的已存消息（或同形的旁听记录），``consolidate_up_to``
+    是提交后游标推进到的位置（会话消息下标；旁听整理是该批最后一条的 ``seq``）。
+    """
+
     old_messages: list[dict]
     keep_count: int
     consolidate_up_to: int
@@ -116,7 +122,7 @@ class ExternalLayerUpdates:
 
 @dataclass(frozen=True)
 class _ConsolidationDraft:
-    window: _ConsolidationWindow
+    window: ConsolidationWindow
     segments: ConsolidationSegments
     source_ref: str
     history_entry_payloads: list[tuple[str, int]]
@@ -137,7 +143,9 @@ class _ConsolidationDraft:
 
 
 @dataclass(frozen=True)
-class _ConsolidationFailure:
+class ConsolidationFailure:
+    """整理某一步（LLM 调用等）的明确失败：本次不提交、游标不推进，下次重试。"""
+
     step: str
     error: str
     elapsed_ms: int = 0

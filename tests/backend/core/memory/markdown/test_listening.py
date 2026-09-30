@@ -135,12 +135,12 @@ async def test_fifty_records_update_the_group_and_only_its_listening_cursor(
         for index in range(48):
             _hear_friend(listening, index, _DAY + timedelta(minutes=1 + index))
         # 49 条同一天的记录还不到整理的时候。
-        early = await maintenance.listening.consolidate(_GROUP)
+        early = await maintenance.listening.consolidate(_GROUP, today=_DAY.date())
         assert early.trace == {"mode": "skipped"}
         assert provider.environment_prompts == []
 
         _hear_friend(listening, 48, _DAY + timedelta(minutes=49))
-        result = await maintenance.listening.consolidate(_GROUP)
+        result = await maintenance.listening.consolidate(_GROUP, today=_DAY.date())
     finally:
         await event_bus.aclose()
 

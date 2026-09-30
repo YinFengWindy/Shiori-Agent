@@ -29,6 +29,24 @@ class ListeningCursors:
         with self._lock:
             return self._get(thread_id)
 
+    def pending_groups(self) -> list[str]:
+        """Groups with stored records past their cursor, whatever their switch.
+
+        A group whose listening was turned off keeps its records, so its
+        unconsolidated tail is still listed. One grouped read over the
+        ``(thread_id, seq)`` index.
+        """
+        with self._lock:
+            rows = self._conn.execute("""
+                SELECT m.thread_id
+                FROM listening_messages AS m
+                LEFT JOIN listening_cursors AS c ON c.thread_id = m.thread_id
+                GROUP BY m.thread_id
+                HAVING MAX(m.seq) > COALESCE(MAX(c.consolidated_seq), 0)
+                ORDER BY m.thread_id
+                """).fetchall()
+        return [str(row[0]) for row in rows]
+
     def advance(self, thread_id: str, *, expected: int, to: int) -> bool:
         """Moves the group's cursor from ``expected`` to ``to``.
 
