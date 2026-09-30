@@ -1,0 +1,80 @@
+"""每群旁听记录的整理游标（#541）。
+
+游标是该群旁听记录里已整理到的 ``seq``（含），没有记录时为 0。它与角色会话的
+整理游标（``sessions`` 表里的按上下文游标）完全分开：旁听整理只推进这里。
+"""
+
+from __future__ import annotations
+
+import sqlite3
+import threading
+
+from infra.persistence.sqlite_transaction import immediate_transaction
+
+
+class ListeningCursors:
+    """Each group's listening consolidation cursor in ``listening_cursors``.
+
+    Shares ``sessions.db``'s connection and lock with the conversation store.
+    """
+
+    def __init__(
+        self, connection: sqlite3.Connection, lock: threading.Lock | threading.RLock
+    ) -> None:
+        self._conn = connection
+        self._lock = lock
+
+    def get(self, thread_id: str) -> int:
+        """The last consolidated ``seq`` of the group's records; 0 before any."""
+        with self._lock:
+            return self._get(thread_id)
+
+    def pending_groups(self) -> list[str]:
+        """Groups with stored records past their cursor, whatever their switch.
+
+        A group whose listening was turned off keeps its records, so its
+        unconsolidated tail is still listed. One grouped read over the
+        ``(thread_id, seq)`` index.
+        """
+        with self._lock:
+            rows = self._conn.execute("""
+                SELECT m.thread_id
+                FROM listening_messages AS m
+                LEFT JOIN listening_cursors AS c ON c.thread_id = m.thread_id
+                GROUP BY m.thread_id
+                HAVING MAX(m.seq) > COALESCE(MAX(c.consolidated_seq), 0)
+                ORDER BY m.thread_id
+                """).fetchall()
+        return [str(row[0]) for row in rows]
+
+    def advance(self, thread_id: str, *, expected: int, to: int) -> bool:
+        """Moves the group's cursor from ``expected`` to ``to``.
+
+        False, changing nothing, when the cursor is no longer ``expected``
+        (another consolidation of the group committed first). The cursor only
+        moves forward.
+        """
+        if to <= expected:
+            raise ValueError("旁听整理游标只能前进")
+        with self._lock:
+            with immediate_transaction(self._conn):
+                if self._get(thread_id) != expected:
+                    return False
+                _ = self._conn.execute(
+                    """
+                    INSERT INTO listening_cursors (thread_id, consolidated_seq)
+                    VALUES (?, ?)
+                    ON CONFLICT(thread_id) DO UPDATE
+                    SET consolidated_seq = excluded.consolidated_seq
+                    """,
+                    (thread_id, to),
+                )
+        return True
+
+    def _get(self, thread_id: str) -> int:
+        """The cursor; the caller holds the lock."""
+        row = self._conn.execute(
+            "SELECT consolidated_seq FROM listening_cursors WHERE thread_id = ?",
+            (thread_id,),
+        ).fetchone()
+        return int(row[0]) if row is not None else 0

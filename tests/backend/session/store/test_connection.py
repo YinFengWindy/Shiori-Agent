@@ -40,13 +40,15 @@ EXPECTED_MESSAGES_COLUMNS = [
 ]
 EXPECTED_OBJECTS = {
     ("index", "idx_contacts_role_id"),
-    # Group listening records (#538).
+    # Group listening records (#538) and their consolidation cursors (#541).
     ("index", "idx_listening_messages_day"),
     ("index", "uq_listening_messages_external"),
     ("index", "idx_listening_toggles_thread"),
+    ("index", "sqlite_autoindex_listening_cursors_1"),
     ("index", "sqlite_autoindex_listening_groups_1"),
     ("index", "sqlite_autoindex_listening_messages_1"),
     ("index", "sqlite_autoindex_listening_messages_2"),
+    ("table", "listening_cursors"),
     ("table", "listening_defaults"),
     ("table", "listening_groups"),
     ("table", "listening_messages"),

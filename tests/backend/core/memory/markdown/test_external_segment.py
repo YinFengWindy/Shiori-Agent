@@ -4,7 +4,7 @@ from conversation.service import network_thread_id
 from core.accounts import AccountRecord
 from core.identity import BoundUserSenders, UserIdentity
 from core.memory.group_environment import GroupEnvironmentSnapshot
-from core.memory.markdown.contracts import ConsolidationSegments, _ConsolidationWindow
+from core.memory.markdown.contracts import ConsolidationSegments, ConsolidationWindow
 from core.memory.markdown.external_segment import (
     build_group_environment_prompt,
     format_external_thread,
@@ -40,7 +40,7 @@ def test_external_thread_renders_speakers_in_the_third_person() -> None:
     user = _group_message(
         "我明天去面试", sender_id="902", sender_name="小风", sender_is_user=True
     )
-    window = _ConsolidationWindow(
+    window = ConsolidationWindow(
         old_messages=[member, reply, user], keep_count=0, consolidate_up_to=3
     )
     # 用户本人的发言归用户本人段，但作为群里的上下文一并渲染。
@@ -63,7 +63,7 @@ def test_external_thread_renders_speakers_in_the_third_person() -> None:
 
 
 def test_parse_keeps_only_text_fields() -> None:
-    window = _ConsolidationWindow(
+    window = ConsolidationWindow(
         old_messages=[_group_message("hi", sender_id="555")],
         keep_count=0,
         consolidate_up_to=1,
@@ -97,7 +97,7 @@ def test_members_skip_the_bound_user_and_take_the_latest_nickname_across_threads
         # 消息没有标记，但此刻的身份绑定认出他是用户本人。
         _group_message("hi", channel="qq", sender_id="902", sender_name="小风"),
     ]
-    window = _ConsolidationWindow(
+    window = ConsolidationWindow(
         old_messages=messages, keep_count=0, consolidate_up_to=len(messages)
     )
     bound = BoundUserSenders(
@@ -137,7 +137,7 @@ def test_a_sender_bound_after_the_message_is_rendered_as_the_user() -> None:
             }
         },
     }
-    window = _ConsolidationWindow(
+    window = ConsolidationWindow(
         old_messages=[message], keep_count=0, consolidate_up_to=1
     )
     bound = BoundUserSenders(

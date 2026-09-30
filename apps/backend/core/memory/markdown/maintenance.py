@@ -20,7 +20,6 @@ from conversation.context_scope import (
     role_context_views,
     role_session_user_threads,
 )
-from core.memory.events import ConsolidationCommitted
 from core.memory.external_writes import commit_external_layers
 from core.memory.member_profiles import MemberProfiles
 from session.manager.consolidation import ConsolidationCommitRequest
@@ -34,17 +33,19 @@ from .contracts import (
     MemoryLifecycleBindRequest,
     RefreshRecentTurnsRequest,
     _ConsolidationDraft,
-    _ConsolidationFailure,
+    ConsolidationFailure,
 )
+from .listening import ListeningConsolidation
+from .listening_trigger import ListeningTrigger
 from .formatting import (
     _budget_view,
-    _append_entries_to_journal,
     _format_consolidation_error,
     _select_consolidation_window,
     _session_role_id,
     _estimate_session_input_tokens,
 )
 from .runtime import MarkdownMemoryStore, resolve_markdown_store
+from .user_layer import append_user_layer, publish_user_layer
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
@@ -99,6 +100,14 @@ class MarkdownMemoryMaintenance:
             recent_context_provider=recent_context_provider,
             recent_context_model=recent_context_model,
         )
+        # 旁听记录按群整理（#541），与角色会话整理共用提取与成员层。
+        self.listening = ListeningConsolidation(
+            worker=self._worker,
+            workspace=self._workspace,
+            member_profiles=self._member_profiles,
+            event_bus=event_bus,
+        )
+        self.listening_trigger = ListeningTrigger(self.listening)
         self._keep_count = keep_count
         self._input_token_threshold = max(0, int(input_token_threshold))
         self._consolidation_min_new_messages = max(5, keep_count // 2)
@@ -176,13 +185,21 @@ class MarkdownMemoryMaintenance:
         self._after_consolidation = request.after_consolidation
         self._group_environment = request.group_environment
         self._runtime_roles = request.runtime_roles
+        if request.group_environment is not None and request.runtime_roles is not None:
+            self.listening.bind(
+                get_session=request.get_session,
+                group_environment=request.group_environment,
+                runtime_roles=request.runtime_roles,
+            )
 
     def share_execution(self, previous: MarkdownMemoryMaintenance) -> None:
         """Serializes writes to shared sessions across configuration versions."""
         self._maintenance_locks = previous._maintenance_locks
+        self.listening.share_execution(previous.listening)
 
     async def drain(self) -> None:
         """Waits for already queued maintenance before its providers are closed."""
+        await self.listening_trigger.drain()
         while self._maintenance_tasks:
             await asyncio.gather(
                 *tuple(self._maintenance_tasks.values()), return_exceptions=True
@@ -464,7 +481,7 @@ class MarkdownMemoryMaintenance:
             if session_key:
                 _ = self._maintenance_failures.pop(session_key, None)
             return ConsolidateResult(trace={"mode": "skipped"})
-        if isinstance(draft, _ConsolidationFailure):
+        if isinstance(draft, ConsolidationFailure):
             if session_key:
                 self._maintenance_failures[session_key] = draft.error
             return ConsolidateResult(
@@ -522,35 +539,13 @@ class MarkdownMemoryMaintenance:
         session: object,
         draft: "_ConsolidationDraft",
     ) -> None:
-        target_store = self._resolve_store_for_session(session)
-        history_entries = [entry for entry, _ in draft.history_entry_payloads]
-        if history_entries:
-            await asyncio.to_thread(
-                target_store.append_history_once,
-                "\n".join(history_entries),
-                source_ref=draft.source_ref,
-                kind="history_entry",
-            )
-        if draft.pending_items:
-            appended = await asyncio.to_thread(
-                target_store.append_pending_once,
-                draft.pending_items,
-                source_ref=draft.source_ref,
-                kind="pending_items",
-            )
-            if appended:
-                logger.info(
-                    "Markdown memory: appended %d pending_items",
-                    len(draft.pending_items.splitlines()),
-                )
-        target_store.write_recent_context(draft.recent_context_text)
-        if history_entries:
-            await asyncio.to_thread(
-                _append_entries_to_journal,
-                target_store,
-                history_entries,
-                draft.source_ref,
-            )
+        await append_user_layer(
+            self._resolve_store_for_session(session),
+            draft.history_entry_payloads,
+            draft.pending_items,
+            draft.source_ref,
+            recent_context_text=draft.recent_context_text,
+        )
 
     async def _write_external_layers(
         self,
@@ -581,21 +576,15 @@ class MarkdownMemoryMaintenance:
     async def _publish_consolidation(
         self, session: object, draft: _ConsolidationDraft
     ) -> None:
-        # 引擎只收用户本人段；窗口里没有用户本人的发言时没有可交给引擎的内容。
-        if not draft.conversation:
-            return
-        role_id = _session_role_id(session)
-        if self._event_bus is not None:
-            await self._event_bus.emit(
-                ConsolidationCommitted(
-                    history_entry_payloads=list(draft.history_entry_payloads),
-                    source_ref=draft.source_ref,
-                    scope_channel=draft.scope_channel,
-                    scope_chat_id=draft.scope_chat_id,
-                    conversation=draft.conversation,
-                    role_id=role_id,
-                )
-            )
+        await publish_user_layer(
+            self._event_bus,
+            role_id=_session_role_id(session),
+            history_entry_payloads=draft.history_entry_payloads,
+            source_ref=draft.source_ref,
+            conversation=draft.conversation,
+            scope_channel=draft.scope_channel,
+            scope_chat_id=draft.scope_chat_id,
+        )
 
     async def refresh_recent_turns(
         self,

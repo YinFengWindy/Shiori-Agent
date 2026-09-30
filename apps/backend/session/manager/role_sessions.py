@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from conversation.service import role_thread_prefix
+
 from .models import Session
 
 from .helpers import role_session_key
@@ -47,8 +49,13 @@ class _RoleSessionsMixin:
         return session
 
     def delete_role_session(self, role_id: str) -> bool:
+        """删除角色的共享会话，连同该角色各群的旁听记录、开关与整理游标（#541）。
+
+        旁听数据挂在角色的会话线程上，角色没了就不应再被旁听整理的定时检查拾起。
+        """
         session_key = self.role_session_key(role_id)
         self.invalidate(session_key)
+        self.conversation_store.listening.forget_threads(role_thread_prefix(role_id))
         return self._store.delete_session(session_key, cascade=True)
 
     def sync_role_session_metadata(

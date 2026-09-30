@@ -22,7 +22,7 @@ from session.manager.helpers import role_id_from_session_key
 from session.manager.models import consolidation_cursor, whole_session
 from session.store.common import ContextScope
 
-from .contracts import ConsolidationSegments, _ConsolidationWindow
+from .contracts import ConsolidationSegments, ConsolidationWindow
 
 if TYPE_CHECKING:
     from .runtime import MarkdownMemoryStore
@@ -111,7 +111,7 @@ def _select_consolidation_window(
     input_token_threshold: int = 0,
     input_token_estimate: int | None = None,
     views: tuple[ContextView, ...] = (),
-) -> _ConsolidationWindow | None:
+) -> ConsolidationWindow | None:
     """选出这次要整理的消息窗口；没有该整理的消息时返回 None。
 
     ``views`` 为空表示会话只有一段对话（非角色会话），从 ``last_consolidated`` 起
@@ -124,7 +124,7 @@ def _select_consolidation_window(
     total_messages = len(messages)
     scopes: tuple[ContextScope, ...] = tuple(view.scope for view in views)
     if archive_all:
-        return _ConsolidationWindow(
+        return ConsolidationWindow(
             old_messages=list(messages),
             keep_count=0,
             consolidate_up_to=total_messages,
@@ -163,7 +163,7 @@ def _select_consolidation_window(
         and len(old_indices) < max(1, int(consolidation_min_new_messages))
     ):
         return None
-    return _ConsolidationWindow(
+    return ConsolidationWindow(
         old_messages=[messages[index] for index in old_indices],
         keep_count=0 if force or len(members) <= keep_count else keep_count,
         consolidate_up_to=consolidate_up_to,
@@ -207,8 +207,8 @@ def _estimate_session_input_tokens(
     return estimate_messages_tokens(estimate_messages)
 
 
-def _split_consolidation_window(
-    window: _ConsolidationWindow, user_threads: UserContextThreads | None
+def split_consolidation_window(
+    window: ConsolidationWindow, user_threads: UserContextThreads | None
 ) -> ConsolidationSegments:
     """把整理窗口按 ``belongs_to_user`` 拆成用户本人段与外部段。
 
@@ -231,7 +231,7 @@ def _split_consolidation_window(
     )
 
 
-def _build_consolidation_source_ref(messages: list[dict]) -> str:
+def build_consolidation_source_ref(messages: list[dict]) -> str:
     """返回参与本次整理的消息 ID 的 JSON 列表。
     缺失 id 的消息（迁移前的历史脏数据）直接跳过。
     """
@@ -284,7 +284,8 @@ def _session_role_runtime_config(session: object) -> dict[str, Any]:
     return config if isinstance(config, dict) else {}
 
 
-def _is_nsfw_memory_enabled_session(session: object) -> bool:
+def is_nsfw_memory_enabled_session(session: object) -> bool:
+    """会话所属角色是否开启了 NSFW 记忆（整理时对亲密内容做抽象化）。"""
     return bool(_session_role_runtime_config(session).get("nsfw_memory_enabled"))
 
 
@@ -370,7 +371,7 @@ def _speaker_label(message: dict, user_threads: UserContextThreads | None) -> st
     return f"{role}（在群「{group_name}」里）" if group_name else f"{role}（在群聊里）"
 
 
-def _format_conversation_for_consolidation(
+def format_conversation_for_consolidation(
     old_messages: list[dict],
     *,
     nsfw_memory_enabled: bool = False,
@@ -418,11 +419,12 @@ def _coerce_history_text(value: object) -> str:
 _DATE_PREFIX_RE = re.compile(r"^\[(\d{4}-\d{2}-\d{2})")
 
 
-def _append_entries_to_journal(
+def append_entries_to_journal(
     profile_maint: "MarkdownMemoryStore",
     entries: list[str],
     source_ref: str,
 ) -> None:
+    """把带 ``[YYYY-MM-DD`` 前缀的事件条目按日期幂等追加到日记；无日期的跳过。"""
     by_date: dict[str, list[str]] = {}
     for entry in entries:
         m = _DATE_PREFIX_RE.match(entry)

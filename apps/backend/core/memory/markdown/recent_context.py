@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING
 
 from conversation.context_scope import UserContextThreads, in_user_context
 
-from .contracts import _ConsolidationFailure, _ConsolidationWindow
+from .contracts import ConsolidationFailure, ConsolidationWindow
 from .formatting import (
     _is_context_frame_message,
     _is_memory_maintenance_assistant_message,
-    _is_nsfw_memory_enabled_session,
+    is_nsfw_memory_enabled_session,
     _normalize_memory_content,
     _parse_consolidation_payload,
 )
@@ -325,11 +325,11 @@ ongoing_threads 严格限制：
         *,
         session,
         profile_maint,
-        window: _ConsolidationWindow | None,
+        window: ConsolidationWindow | None,
         archive_all: bool,
         nsfw_memory_enabled: bool = False,
         user_threads: UserContextThreads | None = None,
-    ) -> str | _ConsolidationFailure:
+    ) -> str | ConsolidationFailure:
         session_messages = _user_context_messages(list(session.messages), user_threads)
         tail = session_messages[-self._keep_count :] if self._keep_count > 0 else []
         recent_count = min(len(tail), _recent_turn_count(self._keep_count))
@@ -390,7 +390,7 @@ ongoing_threads 严格限制：
                 max_tokens=512,
                 timeout_s=_RECENT_CONTEXT_TIMEOUT_S,
             )
-            if isinstance(call_result, _ConsolidationFailure):
+            if isinstance(call_result, ConsolidationFailure):
                 return call_result
             text, elapsed_ms = call_result
             logger.info(
@@ -400,7 +400,7 @@ ongoing_threads 严格限制：
                 text[:300],
             )
             if not text:
-                return _ConsolidationFailure(
+                return ConsolidationFailure(
                     step="recent_context",
                     error="empty_response",
                     elapsed_ms=elapsed_ms,
@@ -422,7 +422,7 @@ ongoing_threads 严格限制：
                     )
                 }
             else:
-                return _ConsolidationFailure(
+                return ConsolidationFailure(
                     step="recent_context",
                     error="invalid_json",
                     elapsed_ms=elapsed_ms,
@@ -462,7 +462,7 @@ ongoing_threads 严格限制：
         recent_turns = tail[-recent_count:] if recent_count > 0 else []
         rendered_recent_turns = _format_recent_context_messages(
             recent_turns,
-            nsfw_memory_enabled=_is_nsfw_memory_enabled_session(session),
+            nsfw_memory_enabled=is_nsfw_memory_enabled_session(session),
         )
         existing_text = ""
         if hasattr(profile, "read_recent_context"):

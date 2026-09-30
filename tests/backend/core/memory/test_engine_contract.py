@@ -29,8 +29,8 @@ from core.memory.markdown import (
     ConsolidateRequest,
     ConsolidateResult,
     _ConsolidationDraft,
-    _ConsolidationFailure,
-    _ConsolidationWindow,
+    ConsolidationFailure,
+    ConsolidationWindow,
     MarkdownMemoryMaintenance,
     MarkdownMemoryStore,
     MemoryLifecycleBindRequest,
@@ -492,7 +492,7 @@ async def test_markdown_maintenance_records_background_consolidation_failure(
         keep_count=20,
     )
     maintenance._worker.prepare_consolidation = AsyncMock(
-        return_value=_ConsolidationFailure(
+        return_value=ConsolidationFailure(
             step="event",
             error="provider timeout",
             elapsed_ms=100,
@@ -753,7 +753,7 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(
         )
     )
     draft = _ConsolidationDraft(
-        window=_ConsolidationWindow(
+        window=ConsolidationWindow(
             old_messages=list(session.messages[:6]),
             keep_count=6,
             consolidate_up_to=6,
@@ -806,7 +806,7 @@ async def test_markdown_consolidation_failure_trace_does_not_advance_cursor(
         )
     )
     maintenance._worker.prepare_consolidation = AsyncMock(
-        return_value=_ConsolidationFailure(
+        return_value=ConsolidationFailure(
             step="recent_context",
             error="TimeoutError",
             elapsed_ms=180000,
@@ -846,7 +846,7 @@ async def test_markdown_consolidation_runs_post_consolidation_hook(tmp_path: Pat
         keep_count=6,
     )
     draft = _ConsolidationDraft(
-        window=_ConsolidationWindow(
+        window=ConsolidationWindow(
             old_messages=list(session.messages[:6]),
             keep_count=6,
             consolidate_up_to=6,
@@ -905,7 +905,7 @@ async def test_markdown_consolidation_ignores_post_consolidation_hook_failure(
         keep_count=6,
     )
     draft = _ConsolidationDraft(
-        window=_ConsolidationWindow(
+        window=ConsolidationWindow(
             old_messages=list(session.messages[:6]),
             keep_count=6,
             consolidate_up_to=6,

@@ -22,6 +22,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
 
+from conversation.listening_cursors import ListeningCursors
 from conversation.listening_switches import ListeningSwitches
 from core.common.message_source import MessageSource
 from core.common.timekit import parse_local_iso
@@ -29,6 +30,13 @@ from infra.persistence.sqlite_transaction import immediate_transaction
 
 # 内存最近窗口每群保留的条数，也是 ``recent`` 默认返回的条数。
 RECENT_WINDOW_SIZE = 30
+# 按群存放的旁听表（``listening_schema``）；删除角色时一并清掉。
+_PER_GROUP_TABLES = (
+    "listening_messages",
+    "listening_groups",
+    "listening_toggles",
+    "listening_cursors",
+)
 # 小手机翻页的默认与最大页长。
 _PAGE_SIZE = 50
 _MAX_PAGE_SIZE = 100
@@ -41,7 +49,8 @@ class ListeningMessage:
     ``seq`` 是入库后在本群旁听记录里的顺序；只留在内存窗口的消息为 None。
     ``source`` 是来源快照（群名、发送者昵称、是否用户本人、被 @ 成员 ID 等），
     ``timestamp`` 是带本地时区的 ISO 时间；``external_message_id`` 为空表示
-    插件没有给出平台消息 ID。
+    插件没有给出平台消息 ID。``day`` 是收到时的本地日期（ISO），每日上限与
+    旁听整理的跨天判断（#541）都按它计。
     """
 
     id: str
@@ -52,6 +61,7 @@ class ListeningMessage:
     source: dict[str, Any]
     external_message_id: str
     timestamp: str
+    day: str
 
     @property
     def stored(self) -> bool:
@@ -72,7 +82,7 @@ class GroupListeningStore:
     One instance lives on that store (``ConversationStore.listening``), so the
     in-memory recent window is the same for the channel hub that writes it and
     the prompt assembly that reads it. ``switches`` holds each group's
-    listening switch and cap.
+    listening switch and cap, ``cursors`` each group's consolidation cursor.
     """
 
     def __init__(
@@ -81,11 +91,17 @@ class GroupListeningStore:
         self._conn = connection
         self._lock = lock
         self.switches = ListeningSwitches(connection, lock)
+        self.cursors = ListeningCursors(connection, lock)
         self._window: dict[str, deque[ListeningMessage]] = {}
         self._listeners: list[Callable[[ListeningMessage], None]] = []
 
     def add_heard_listener(self, listener: Callable[[ListeningMessage], None]) -> None:
-        """Subscribes to messages newly stored (not window-only ones)."""
+        """Subscribes to messages newly stored (not window-only ones).
+
+        Listeners run synchronously inside ``hear``, on its caller's thread —
+        the event loop thread for channel intake — so a listener may create
+        tasks but must not block.
+        """
         self._listeners.append(listener)
 
     def remove_heard_listener(
@@ -93,6 +109,28 @@ class GroupListeningStore:
     ) -> None:
         """Withdraws a listener added with ``add_heard_listener``."""
         self._listeners = [known for known in self._listeners if known != listener]
+
+    def forget_threads(self, thread_prefix: str) -> None:
+        """Deletes everything kept for the groups whose thread ID starts with
+        ``thread_prefix`` (one role's threads, when its role is deleted).
+
+        Records, switches, the switch log and consolidation cursors go in one
+        transaction, and the groups' in-memory windows with them, so nothing
+        is left for a periodic consolidation sweep to pick up.
+        """
+        if not thread_prefix:
+            raise ValueError("thread_prefix 不能为空")
+        with self._lock:
+            with immediate_transaction(self._conn):
+                for table in _PER_GROUP_TABLES:
+                    _ = self._conn.execute(
+                        f"DELETE FROM {table} WHERE substr(thread_id, 1, ?) = ?",
+                        (len(thread_prefix), thread_prefix),
+                    )
+            for thread_id in [
+                known for known in self._window if known.startswith(thread_prefix)
+            ]:
+                del self._window[thread_id]
 
     def hear(
         self,
@@ -126,6 +164,7 @@ class GroupListeningStore:
             source=dict(source),
             external_message_id=external_message_id,
             timestamp=moment.isoformat(),
+            day=day,
         )
         with self._lock:
             if self._already_heard(thread_id, external_message_id):
@@ -233,6 +272,24 @@ class GroupListeningStore:
         found.sort(key=lambda message: parse_local_iso(message.timestamp))
         return found
 
+    def after(self, thread_id: str, seq: int, limit: int) -> list[ListeningMessage]:
+        """The group's first ``limit`` stored records past ``seq``, oldest first.
+
+        With the consolidation cursor as ``seq`` these are the records not yet
+        consolidated (#541).
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT {_COLUMNS} FROM listening_messages
+                WHERE thread_id = ? AND seq > ?
+                ORDER BY seq
+                LIMIT ?
+                """,
+                (thread_id, seq, limit),
+            ).fetchall()
+        return [_row_to_message(row) for row in rows]
+
     def page(
         self, thread_id: str, *, before_seq: int | None = None, limit: int = _PAGE_SIZE
     ) -> dict[str, Any]:
@@ -286,7 +343,9 @@ class GroupListeningStore:
         )
 
 
-_COLUMNS = "id, thread_id, seq, sender_id, content, source, external_message_id, ts"
+_COLUMNS = (
+    "id, thread_id, seq, sender_id, content, source, external_message_id, ts, day"
+)
 
 
 def _row_to_message(row: sqlite3.Row) -> ListeningMessage:
@@ -299,4 +358,5 @@ def _row_to_message(row: sqlite3.Row) -> ListeningMessage:
         source=json.loads(row["source"]),
         external_message_id=str(row["external_message_id"] or ""),
         timestamp=str(row["ts"]),
+        day=str(row["day"]),
     )

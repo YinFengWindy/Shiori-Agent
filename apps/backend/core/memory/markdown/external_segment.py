@@ -35,7 +35,7 @@ from core.memory.member_profiles import (
 )
 from session.manager.models import message_thread_id
 
-from .contracts import ConsolidationSegments, _ConsolidationWindow
+from .contracts import ConsolidationSegments, ConsolidationWindow
 from .formatting import (
     _is_context_frame_message,
     _is_memory_maintenance_assistant_message,
@@ -81,7 +81,7 @@ class ExternalThread:
 
 
 def group_external_threads(
-    window: _ConsolidationWindow,
+    window: ConsolidationWindow,
     segments: ConsolidationSegments,
     bound: BoundUserSenders,
 ) -> list[ExternalThread]:

@@ -3,8 +3,8 @@ import json
 from types import SimpleNamespace
 
 from core.memory.markdown import (
-    _build_consolidation_source_ref,
-    _format_conversation_for_consolidation,
+    build_consolidation_source_ref,
+    format_conversation_for_consolidation,
     _format_conversation_for_recent_context,
     _format_recent_context_messages,
     _parse_consolidation_payload,
@@ -55,12 +55,12 @@ def test_build_consolidation_source_ref_returns_message_id_list_json():
         ]
     )
 
-    ref = _build_consolidation_source_ref(cast(Any, window).old_messages)
+    ref = build_consolidation_source_ref(cast(Any, window).old_messages)
     assert json.loads(ref) == ["telegram:123:4", "telegram:123:5"]
 
 
 def test_format_conversation_for_consolidation_skips_tool_messages():
-    text = _format_conversation_for_consolidation(
+    text = format_conversation_for_consolidation(
         [
             {"role": "user", "content": "你好", "timestamp": "2026-03-09T10:00:00"},
             {"role": "tool", "content": "ignored", "timestamp": "2026-03-09T10:01:00"},
@@ -78,7 +78,7 @@ def test_format_conversation_for_consolidation_skips_tool_messages():
 
 
 def test_format_conversation_for_consolidation_skips_proactive_assistant_messages():
-    text = _format_conversation_for_consolidation(
+    text = format_conversation_for_consolidation(
         [
             {"role": "user", "content": "你好", "timestamp": "2026-03-09T10:00:00"},
             {
@@ -120,9 +120,9 @@ def test_consolidation_formatters_skip_context_frame_messages():
     window = SimpleNamespace(old_messages=messages)
 
     assert json.loads(
-        _build_consolidation_source_ref(cast(Any, window).old_messages)
+        build_consolidation_source_ref(cast(Any, window).old_messages)
     ) == ["2"]
-    assert "内部上下文" not in _format_conversation_for_consolidation(messages)
+    assert "内部上下文" not in format_conversation_for_consolidation(messages)
     assert "内部上下文" not in _format_conversation_for_recent_context(messages)
     assert "内部上下文" not in _format_recent_context_messages(messages)
 
