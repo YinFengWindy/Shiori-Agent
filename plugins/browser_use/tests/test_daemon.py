@@ -21,11 +21,8 @@ async def test_live_process_without_listening_socket_times_out_and_is_reaped(
 ):
     process = Mock(pid=123, returncode=None)
     process.wait = AsyncMock(return_value=0)
-    monkeypatch.setattr(
-        module.asyncio, "create_subprocess_exec", AsyncMock(return_value=process)
-    )
     job = Mock()
-    monkeypatch.setattr(module, "WindowsJob", Mock(return_value=job))
+    monkeypatch.setattr(module, "spawn_owned", AsyncMock(return_value=(process, job)))
     daemon = BrowserDaemon(tmp_path / "fixed.exe", tmp_path, environment(tmp_path))
     with pytest.raises(TimeoutError):
         await daemon.start(0.03)

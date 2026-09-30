@@ -37,11 +37,9 @@ async def test_per_account_ports_profiles_and_logout_are_isolated(
         process.pid = len(launched) + 100
         process.wait.return_value = 0
         launched.append((command, kwargs, process))
-        return process
+        return process, Mock()
 
-    monkeypatch.setattr(managed_napcat.subprocess, "Popen", popen)
-    monkeypatch.setattr(managed_napcat.subprocess, "run", Mock())
-    monkeypatch.setattr(managed_napcat, "WindowsJob", Mock())
+    monkeypatch.setattr(managed_napcat, "popen_owned", popen)
     await manager.start(first, "101")
     await manager.start(second, "202")
     assert len(launched) == 2
@@ -164,10 +162,9 @@ def _occupied_port_manager(monkeypatch, tmp_path, processes):
     monkeypatch.setattr(
         manager, "prepare", lambda: asyncio.sleep(0, result=tmp_path / "qq")
     )
-    launched = Mock()
+    launched = Mock(return_value=(Mock(), None))
     killed = []
-    monkeypatch.setattr(managed_napcat.subprocess, "Popen", launched)
-    monkeypatch.setattr(managed_napcat, "WindowsJob", Mock())
+    monkeypatch.setattr(managed_napcat, "popen_owned", launched)
     guard = managed_napcat.guard
     monkeypatch.setattr(guard, "port_bindable", lambda _port: bool(killed))
     monkeypatch.setattr(guard, "listener_pid", lambda _port: 11)
@@ -178,17 +175,34 @@ def _occupied_port_manager(monkeypatch, tmp_path, processes):
 
 @pytest.mark.asyncio
 async def test_orphaned_managed_tree_is_killed_from_its_launcher(monkeypatch, tmp_path):
-    # An older install version still counts as this plugin's NapCat.
+    # An older install version still counts as this plugin's NapCat; the
+    # bridge PID 5 is gone, so the launcher PID 10 is an orphan.
     node = tmp_path / "managed-napcat" / "v4.0.0" / "node.exe"
     processes = {
-        5: ProcessInfo(5, "explorer.exe", tmp_path / "explorer.exe", 1, 1.0),
         10: ProcessInfo(10, "node.exe", node, 5, 2.0),
         11: ProcessInfo(11, "node.exe", node, 10, 3.0),
     }
     manager, launched, killed = _occupied_port_manager(monkeypatch, tmp_path, processes)
     await manager.start("e" * 32, "101")
-    assert killed == [10]
+    assert killed == [processes[10]]
     launched.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_managed_tree_with_live_bridge_is_left_to_its_owner(
+    monkeypatch, tmp_path
+):
+    node = tmp_path / "managed-napcat" / "v4.0.0" / "node.exe"
+    processes = {
+        5: ProcessInfo(5, "python.exe", tmp_path / "python.exe", 1, 1.0),
+        10: ProcessInfo(10, "node.exe", node, 5, 2.0),
+        11: ProcessInfo(11, "node.exe", node, 10, 3.0),
+    }
+    manager, launched, killed = _occupied_port_manager(monkeypatch, tmp_path, processes)
+    with pytest.raises(RuntimeError, match=r"另一个运行中的 Shiori 占用（PID 5）"):
+        await manager.start("e" * 32, "101")
+    assert killed == []
+    launched.assert_not_called()
 
 
 @pytest.mark.asyncio

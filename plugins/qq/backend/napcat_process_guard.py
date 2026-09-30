@@ -3,21 +3,29 @@
 from __future__ import annotations
 
 import socket
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeVar
 
 import psutil
+
+_T = TypeVar("_T")
 
 
 @dataclass(frozen=True)
 class ProcessInfo:
-    """Identity of one live process; ``exe`` is None when the OS denies access."""
+    """Identity of one live process.
+
+    Fields the OS refuses to reveal are None; callers must treat such a process
+    as foreign and never kill it.
+    """
 
     pid: int
-    name: str
+    name: str | None
     exe: Path | None
-    parent_pid: int
-    create_time: float
+    parent_pid: int | None
+    create_time: float | None
 
 
 def port_bindable(port: int) -> bool:
@@ -43,29 +51,43 @@ def listener_pid(port: int) -> int | None:
     return None
 
 
+def _unless_denied(read: Callable[[], _T]) -> _T | None:
+    try:
+        return read()
+    except psutil.AccessDenied:
+        return None
+
+
 def process_info(pid: int) -> ProcessInfo | None:
     """Describes a live process, or returns None once it has already exited."""
     try:
         process = psutil.Process(pid)
         with process.oneshot():
-            name = process.name()
-            parent_pid = process.ppid()
-            create_time = process.create_time()
-            try:
-                exe: Path | None = Path(process.exe())
-            except psutil.AccessDenied:
-                # Elevated or system processes hide their image path; callers
-                # must treat such owners as foreign.
-                exe = None
+            exe = _unless_denied(process.exe)
+            return ProcessInfo(
+                pid,
+                _unless_denied(process.name),
+                Path(exe) if exe else None,
+                _unless_denied(process.ppid),
+                _unless_denied(process.create_time),
+            )
     except psutil.NoSuchProcess:
         return None
-    return ProcessInfo(pid, name, exe, parent_pid, create_time)
 
 
-def kill_process_tree(pid: int, timeout: float = 5) -> None:
-    """Force-kills a process and every descendant, failing if any survives."""
+def kill_process_tree(info: ProcessInfo, timeout: float = 5) -> None:
+    """Force-kills an inspected process and its descendants.
+
+    The creation time recorded in ``info`` pins identity: if the PID has since
+    exited and been reused, or the creation time was never readable, nothing
+    is killed.
+    """
     try:
-        root = psutil.Process(pid)
+        root = psutil.Process(info.pid)
+        if info.create_time is None or root.create_time() != info.create_time:
+            return
+        # psutil skips children created before the parent, so reused child
+        # PIDs are excluded as well.
         tree = [root, *root.children(recursive=True)]
     except psutil.NoSuchProcess:
         return
