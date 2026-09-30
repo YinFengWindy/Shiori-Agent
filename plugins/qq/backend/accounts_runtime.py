@@ -55,7 +55,9 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         self._stopping = False
         self._intakes: dict[str, ChannelIntake] = {}
         self._intake_paused = False
-        self._actions = QQAccountActions(self._socket_for, self._ensure_online)
+        self._actions = QQAccountActions(
+            self._socket_for, self._ensure_online, self._forward_sender
+        )
         self._group_names = QQGroupNames(self._actions.group_name)
         self._avatar_tasks: dict[str, asyncio.Task[None]] = {}
 
@@ -415,6 +417,11 @@ class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
         ):
             raise OneBotError("QQ 账号不在线")
         return socket
+
+    def _forward_sender(self, account_id: str) -> tuple[str, str]:
+        """The QQ number and name merged-forward nodes are sent as."""
+        config = self._configs[self._ref_for(account_id)]
+        return config.expected_uin, config.display_name
 
     async def _ensure_online(self, account_id: str) -> None:
         ref = self._ref_for(account_id)
