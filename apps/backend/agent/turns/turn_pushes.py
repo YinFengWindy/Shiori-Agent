@@ -1,17 +1,21 @@
 """Private push drafts owned by one passive reasoning task.
 
-Desktop pushes are held here and delivered once the turn commits; texts the
-turn already delivered through an external channel are held here too, so
-they are recorded with the turn (in its commit and ``committed_message_ids``).
+Desktop pushes are held here and delivered once the turn commits; texts and
+images the turn already delivered through an external channel are held here
+too, so they are recorded with the turn (in its commit and
+``committed_message_ids``).
 A turn that never commits drops its desktop drafts (never sent) but still
 records what it already delivered (``abandoned``).
 """
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
+
+logger = logging.getLogger("agent.turns.turn_pushes")
 
 _current: ContextVar["TurnPushDrafts | None"] = ContextVar(
     "passive_turn_pushes", default=None
@@ -70,14 +74,34 @@ class TurnPushDrafts:
         for effect in effects.values():
             await effect()
 
-    async def abandoned(self) -> None:
+    async def abandoned(self, *, turn_error: BaseException | None = None) -> None:
         """Records delivered drafts of a turn that never committed; once, in order.
 
-        A no-op after ``committed``.
+        A no-op after ``committed``. Every record runs even if an earlier one
+        fails. The failures are raised together, unless the turn itself failed
+        with ``turn_error``: that error stays the one raised, and the failures
+        are logged and noted on it instead of replacing it.
         """
         records, self._if_abandoned = self._if_abandoned, []
+        errors: list[Exception] = []
         for record in records:
-            await record()
+            try:
+                await record()
+            except Exception as exc:
+                errors.append(exc)
+        if not errors:
+            return
+        failure = ExceptionGroup("回合内已送达的推送未能记录", errors)
+        if turn_error is None:
+            raise failure
+        # 回合自身的异常优先抛出；记录失败只随之可见，不覆盖它。
+        logger.error(
+            "[turn_pushes] %s 回合失败后，%d 条已送达的推送未能记录",
+            self.session_key,
+            len(errors),
+            exc_info=failure,
+        )
+        turn_error.add_note(f"另有 {len(errors)} 条回合内已送达的推送未能记录")
 
 
 def current_turn_pushes(session_key: str) -> TurnPushDrafts | None:
