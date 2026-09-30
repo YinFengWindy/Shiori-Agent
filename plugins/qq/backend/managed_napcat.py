@@ -54,7 +54,7 @@ class ManagedNapCat(NapCatInstaller):
         # A previous run of this account may have left children in its job.
         await self._close_job(ref)
         for port in (metadata["webui_port"], metadata["onebot_port"]):
-            await self._claim_port(port)
+            await guard.reclaim_port(port, self.root)
         inherited = {
             key: value
             for key, value in os.environ.items()
@@ -102,73 +102,6 @@ class ManagedNapCat(NapCatInstaller):
         if job is not None:
             self._jobs[ref] = job
         self._processes[ref] = process
-
-    async def _claim_port(self, port: int) -> None:
-        """Frees a port held by an orphaned tree from this plugin's NapCat install.
-
-        A crashed bridge can leave NapCat alive on the account's persisted ports;
-        switching ports is not an option because the orphan still owns the QQ
-        profile. Only processes whose image lives under the managed-napcat root
-        are killed; any other owner is reported and left untouched.
-        """
-        if guard.port_bindable(port):
-            return
-        pid = guard.listener_pid(port)
-        owner = guard.process_info(pid) if pid is not None else None
-        if owner is None or not self._is_managed(owner):
-            detail = ""
-            if owner is not None:
-                detail = f"（PID {owner.pid} {owner.name or '未知进程'}）"
-            elif pid is not None:
-                detail = f"（PID {pid}）"
-            raise RuntimeError(f"托管 NapCat 端口 {port} 已被占用{detail}")
-        # Climb to the index.js launcher so the whole orphaned tree dies with it.
-        root = owner
-        while True:
-            parent = self._parent(root)
-            if parent is None or not self._is_managed(parent):
-                break
-            root = parent
-        # A launcher whose bridge is still alive belongs to another running Shiori
-        # (e.g. packaged and dev builds sharing one data dir), not to an orphan.
-        if parent is not None:
-            raise RuntimeError(
-                f"托管 NapCat 端口 {port} 被另一个运行中的 Shiori 占用"
-                f"（PID {parent.pid}）"
-            )
-        await asyncio.to_thread(guard.kill_process_tree, root)
-        for _ in range(50):
-            if guard.port_bindable(port):
-                return
-            await asyncio.sleep(0.1)
-        raise RuntimeError(f"托管 NapCat 端口 {port} 在结束残留进程后仍被占用")
-
-    def _is_managed(self, info: guard.ProcessInfo) -> bool:
-        """Whether a fully inspectable process runs an image under managed-napcat."""
-        return (
-            info.exe is not None
-            and info.create_time is not None
-            and info.parent_pid is not None
-            and info.exe.resolve().is_relative_to(self.root.resolve())
-        )
-
-    @staticmethod
-    def _parent(child: guard.ProcessInfo) -> guard.ProcessInfo | None:
-        """Returns the live genuine parent; a newer process on a reused PID is not.
-
-        An uninspectable parent counts as genuine so it is never presumed dead.
-        """
-        if child.parent_pid is None:
-            return None
-        parent = guard.process_info(child.parent_pid)
-        if (
-            parent is not None
-            and parent.create_time is not None
-            and child.create_time is not None
-            and parent.create_time > child.create_time
-        ):
-            return None
-        return parent
 
     async def _close_job(self, ref: str) -> None:
         """Releases this account's job, killing anything still inside it."""
