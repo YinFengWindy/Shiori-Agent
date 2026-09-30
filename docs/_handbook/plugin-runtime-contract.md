@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.13.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.14.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -89,6 +89,7 @@ version whose additions it uses.
 | `2.11.0` | `ctx.reportFailure(operation, error)` on the background `setup(ctx)`: a handled background failure recorded in the host's desktop diagnostic log; `@shiori/plugin-sdk` also becomes the source of the `desktop.surface` and `app.background` contract types (see [Runtime API 2.11 background failure reporting and surface/background types](#runtime-api-211-background-failure-reporting-and-surfacebackground-types)) | #508 (#440) |
 | `2.12.0` | the `avatars` capability: `ctx.avatars.refresh(kind, channel, id, fetch)` hands channel senders' and chats' platform avatars to a host-owned cache, released with the plugin scope (see [Runtime API 2.12 channel avatars](#runtime-api-212-channel-avatars)) | #514 |
 | `2.13.0` | optional `group_listening: true` on manifest `channels` entries: the channel hands every group message to the host, so its groups offer 群聊旁听 (see [Runtime API 2.2 channel declarations](#runtime-api-22-channel-declarations)) | #538 (#527) |
+| `2.14.0` | optional `on_heard=` keyword on `ctx.channel_hub.route_account_inbound`: called with the projected message only when an unaddressed group message is stored in the listening records, so a channel can refresh the avatars it shows (see channel-plugins handbook) | #553 |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and

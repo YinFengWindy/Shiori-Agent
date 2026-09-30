@@ -28,6 +28,7 @@ export type PhoneMessagePayload = {
   sender_name: string | null;
   sender_is_user: boolean;
   sender_avatar_abs: string | null;
+  mentions: { id: string; name: string | null }[];
   content: string;
   media: string[];
   timestamp: string;
@@ -59,11 +60,16 @@ function isConversationPayload(value: unknown): value is PhoneConversationPayloa
     && typeof value.listening_supported === "boolean" && isLastMessagePayload(value.last_message);
 }
 
+function isMentionPayload(value: unknown): value is PhoneMessagePayload["mentions"][number] {
+  return isRecord(value) && isText(value.id) && isTextOrNull(value.name);
+}
+
 function isMessagePayload(value: unknown): value is PhoneMessagePayload {
   return isRecord(value) && isText(value.id) && (value.seq === null || typeof value.seq === "number")
     && (value.sender === "role" || value.sender === "other") && isTextOrNull(value.sender_id)
     && isTextOrNull(value.sender_name) && typeof value.sender_is_user === "boolean"
-    && isTextOrNull(value.sender_avatar_abs) && isText(value.content)
+    && isTextOrNull(value.sender_avatar_abs) && Array.isArray(value.mentions) && value.mentions.every(isMentionPayload)
+    && isText(value.content)
     && Array.isArray(value.media) && value.media.every(isText) && isText(value.timestamp)
     && typeof value.listened === "boolean";
 }
@@ -99,6 +105,7 @@ export function mapMessage(row: PhoneMessagePayload) {
     senderName: row.sender_name,
     senderIsUser: row.sender_is_user,
     senderAvatarPath: row.sender_avatar_abs,
+    mentions: row.mentions.map((mention) => ({ id: mention.id, name: mention.name })),
     content: row.content,
     media: row.media,
     timestamp: row.timestamp,

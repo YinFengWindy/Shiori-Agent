@@ -107,6 +107,11 @@ class QQInboundAdapter:
             return message
         return replace(message, metadata={**metadata, GROUP_NAME_KEY: name})
 
+    def _refresh_avatars(self, message: InboundMessage) -> None:
+        """Refreshes the avatars ``message`` shows, when the host caches avatars."""
+        if self._avatars is not None:
+            refresh_message_avatars(self._avatars, message)
+
     async def _accept_inbound(self, message: InboundMessage) -> None:
         ctx = self._ctx
         if ctx is None:
@@ -154,15 +159,15 @@ class QQInboundAdapter:
                 return
             # The host admits by account and response rules, then projects;
             # an unaddressed group message ends there (listened to or dropped).
-            routed = hub.route_account_inbound(message)
+            # Only a message the role receives, or one kept in the group's
+            # listening records (#553), shows its sender and group.
+            routed = hub.route_account_inbound(message, on_heard=self._refresh_avatars)
             if routed is None:
                 return
             message = routed
             if message.metadata.get("conversation_duplicate"):
                 return
-            # Only a message the role receives shows its sender and group.
-            if self._avatars is not None:
-                refresh_message_avatars(self._avatars, message)
+            self._refresh_avatars(message)
         media = (
             await download_to_temp(
                 image_urls, ctx.http_resources.external_default, ctx.attachment_store

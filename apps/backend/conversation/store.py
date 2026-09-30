@@ -626,6 +626,39 @@ class ConversationStore:
                 )
         return recorded
 
+    def sender_names(
+        self, thread_id: str, sender_ids: Collection[str]
+    ) -> dict[str, str]:
+        """The newest name snapshot each of ``sender_ids`` sent with in one thread.
+
+        Reads the ``sender_name`` stored in the messages' platform source;
+        senders who never sent one with a name are absent. One query.
+        """
+        named = sorted({sender_id for sender_id in sender_ids if sender_id})
+        if not named:
+            return {}
+        placeholders = ",".join("?" for _ in named)
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT
+                    json_extract(extra, '$.metadata.message_source.sender_id')
+                        AS sender_id,
+                    json_extract(extra, '$.metadata.message_source.sender_name')
+                        AS sender_name
+                FROM messages
+                WHERE thread_id = ?
+                  AND json_extract(extra, '$.metadata.message_source.sender_id')
+                      IN ({placeholders})
+                  AND json_extract(extra, '$.metadata.message_source.sender_name')
+                      IS NOT NULL
+                ORDER BY ts ASC, seq ASC
+                """,
+                (thread_id, *named),
+            ).fetchall()
+        # 按时间先后覆盖，留下每人最新的昵称快照。
+        return {str(row["sender_id"]): str(row["sender_name"]) for row in rows}
+
     def last_user_message_at(self, thread_id: str) -> str | None:
         """Returns the ``ts`` of the newest user message in one thread, if any.
 

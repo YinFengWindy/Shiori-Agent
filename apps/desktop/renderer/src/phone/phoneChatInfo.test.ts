@@ -9,9 +9,9 @@ type MessageItem = Extract<PhoneChatItem, { kind: "message" }>;
 const item = (patch: Partial<PhoneMessage>, isUser = false): MessageItem => {
   const message: PhoneMessage = {
     id: "m", seq: 1, sender: "other", senderId: "42", senderName: "阿花", senderIsUser: isUser,
-    senderAvatarPath: null, content: "", media: [], timestamp: "", listened: false, ...patch,
+    senderAvatarPath: null, mentions: [], content: "", media: [], timestamp: "", listened: false, ...patch,
   };
-  return { kind: "message", key: "m", message, side: message.sender === "role" ? "right" : "left", senderLabel: null, isUser };
+  return { kind: "message", key: "m", message, side: message.sender === "role" ? "right" : "left", senderLabel: null, isUser, mentionLabels: [] };
 };
 
 const group = { isUserChat: false, chatType: "group", listeningSupported: false } as const;

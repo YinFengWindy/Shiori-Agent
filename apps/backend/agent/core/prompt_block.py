@@ -20,6 +20,7 @@ from core.memory.markdown_schema import (
     select_memory_sections,
 )
 from prompts.agent import (
+    EXTERNAL_TURN_RULES_PROMPT,
     UserChannelIdentity,
     build_agent_behavior_rules_prompt,
     build_agent_session_context_prompt,
@@ -110,6 +111,9 @@ class PromptBlock(Protocol):
 #  42 UserIdentitiesPromptBlock→ 用户在各渠道的身份
 #                              来源：运行时账号索引（角色的账号）+ user_identities.json
 #                              时机：每轮读取时计算，绑定/解绑/新私聊后下一轮即变；无绑定时不出现；外部回合也注入
+#  43 ExternalTurnRulesPromptBlock→ 外部回合的发言人规则（只在外部回合注入，留在系统提示词）
+#                              来源：prompts/agent.py 的固定文本
+#                              时机：不变；外部回合之间字节稳定，用户上下文回合没有这段
 #  45 RecentContextPromptBlock → roles/<role_id>/memory/RECENT_CONTEXT.md（裁掉 Recent Turns；外部回合不注入）
 #                              来源：memory.read_recent_context()（严格要求 role_id）
 #                              时机：近期语境压缩摘要更新时变化；每轮 Recent Turns 刷新不会直接进入这里
@@ -303,6 +307,25 @@ class UserIdentitiesPromptBlock:
         if not ctx.role_id:
             return None
         return build_role_user_identities_prompt(ctx.role_id, self._roles)
+
+    def cache_signature(self, ctx: TurnContext) -> str | None:
+        return None
+
+
+class ExternalTurnRulesPromptBlock:
+    """外部回合（群聊、陌生私聊）的发言人规则（#553）；用户上下文回合不注入。
+
+    固定文本，外部回合之间字节稳定，所以留在系统提示词里而不进 context frame。
+    """
+
+    priority = 43
+    label = "external_turn_rules"
+    is_static = False
+
+    def render(
+        self, ctx: TurnContext, cached_signature: str | None = None
+    ) -> str | None:
+        return EXTERNAL_TURN_RULES_PROMPT if is_external_turn(ctx) else None
 
     def cache_signature(self, ctx: TurnContext) -> str | None:
         return None

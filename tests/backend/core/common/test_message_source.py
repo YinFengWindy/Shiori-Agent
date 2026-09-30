@@ -185,8 +185,19 @@ def test_structured_mentions_and_reply_target_are_stored_with_the_message():
 
     assert stored.mentioned_ids == ("555", "666")
     assert stored.reply_to_sender_id == "777"
-    # 只随消息存下，不出现在给模型看的来源前缀里。
-    assert "555" not in with_message_source("hi", stored)
+
+
+def test_group_prefix_names_every_sender_and_the_members_mentioned():
+    def header(**fields) -> str:
+        source = MessageSource(chat_type="group", sender_id="902", **fields)
+        return with_message_source("hi", source).split("\n", 1)[0]
+
+    # 群友不再只有一段 JSON：标明是群友，免得模型把陌生人当成用户（#553）。
+    assert header(sender_name="小明").endswith("；发送者: 群友「小明」（ID 902）]")
+    assert header().endswith("；发送者: 群友（ID 902）]")
+    assert header(sender_is_user=True, mentioned_ids=("100", "555")).endswith(
+        "；发送者: 你的用户（ID 902）；@: ID 100、ID 555]"
+    )
 
 
 def test_group_message_addresses_the_account_by_mention_or_reply():

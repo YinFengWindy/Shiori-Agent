@@ -149,6 +149,20 @@ class ConversationService:
             for thread_id in thread_ids
         }
 
+    def sender_names(
+        self, thread_id: str, sender_ids: Collection[str]
+    ) -> dict[str, str]:
+        """The name snapshot each of ``sender_ids`` was last recorded with in a thread.
+
+        From the thread's conversation messages, else its group listening
+        records (#538); senders never recorded with a name are absent. Two
+        queries for all of ``sender_ids``.
+        """
+        return {
+            **self._store.listening.sender_names(thread_id, sender_ids),
+            **self._store.sender_names(thread_id, sender_ids),
+        }
+
     def contacts_by_id(self, role_id: str) -> dict[str, ContactRecord]:
         """The role's contacts keyed by ID, read in one query."""
         return {

@@ -54,7 +54,7 @@ async def test_account_router_receives_unmentioned_group_before_host_policy():
     routed = []
 
     class AccountRouter:
-        def route_account_inbound(self, message):
+        def route_account_inbound(self, message, **_):
             routed.append(message)
             return message
 
@@ -77,7 +77,7 @@ async def test_account_router_can_reject_unmentioned_group():
     bus = SimpleNamespace(publish_inbound=AsyncMock())
 
     class AccountRouter:
-        def route_account_inbound(self, message):
+        def route_account_inbound(self, message, **_):
             assert message.metadata["mentioned"] is False
             return None
 
@@ -100,7 +100,7 @@ async def test_account_router_rejection_fetches_no_image(monkeypatch):
     monkeypatch.setattr(inbound_adapter, "download_to_temp", download)
 
     class AccountRouter:
-        def route_account_inbound(self, message):
+        def route_account_inbound(self, message, **_):
             assert message.metadata["account_id"] == "account-b"
             assert message.metadata["mentioned"] is False
             # A picture alone is handed over as a line of text, for listening.
@@ -152,7 +152,7 @@ async def test_private_pairing_code_binds_with_platform_scope_and_is_confirmed()
             pairings.append((message.sender, message.content, scope))
             return message.content == "PAIR1234"
 
-        def route_account_inbound(self, message):
+        def route_account_inbound(self, message, **_):
             return message
 
     adapter._actions = _actions(send_target=AsyncMock(return_value={"message_id": "9"}))
@@ -186,7 +186,8 @@ async def test_group_temporary_session_cannot_pair():
     adapter._ctx = SimpleNamespace(
         bus=bus,
         channel_hub=SimpleNamespace(
-            claim_pairing=claim_pairing, route_account_inbound=lambda message: message
+            claim_pairing=claim_pairing,
+            route_account_inbound=lambda message, **_: message,
         ),
         http_resources=SimpleNamespace(),
         attachment_store=SimpleNamespace(),
@@ -213,7 +214,8 @@ async def test_group_message_carries_the_group_name_to_the_host():
         bus=bus,
         channel_hub=SimpleNamespace(
             claim_pairing=lambda *_args, **_kwargs: False,
-            route_account_inbound=lambda message: routed.append(message) or message,
+            route_account_inbound=lambda message, **_: routed.append(message)
+            or message,
         ),
         http_resources=SimpleNamespace(),
         attachment_store=SimpleNamespace(),
@@ -247,7 +249,7 @@ async def test_group_message_is_routed_without_a_name_when_lookup_fails(
     bus = SimpleNamespace(publish_inbound=AsyncMock())
     adapter._ctx = SimpleNamespace(
         bus=bus,
-        channel_hub=SimpleNamespace(route_account_inbound=lambda message: message),
+        channel_hub=SimpleNamespace(route_account_inbound=lambda message, **_: message),
         http_resources=SimpleNamespace(),
         attachment_store=SimpleNamespace(),
     )
@@ -269,7 +271,7 @@ async def test_group_reply_target_reaches_the_host_and_leaves_the_text():
     adapter._ctx = SimpleNamespace(
         bus=bus,
         channel_hub=SimpleNamespace(
-            route_account_inbound=lambda message: routed.append(message) or message
+            route_account_inbound=lambda message, **_: routed.append(message) or message
         ),
         http_resources=SimpleNamespace(),
         attachment_store=SimpleNamespace(),
@@ -295,7 +297,7 @@ async def test_received_message_refreshes_its_sender_and_group_avatars():
     adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
     adapter._ctx = SimpleNamespace(
         bus=SimpleNamespace(publish_inbound=AsyncMock()),
-        channel_hub=SimpleNamespace(route_account_inbound=lambda message: message),
+        channel_hub=SimpleNamespace(route_account_inbound=lambda message, **_: message),
         http_resources=SimpleNamespace(),
         attachment_store=SimpleNamespace(),
     )
@@ -306,3 +308,34 @@ async def test_received_message_refreshes_its_sender_and_group_avatars():
         ("sender", "qq", "902"),
         ("chat", "qq", "gqq:777"),
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("heard", [True, False])
+async def test_only_a_listened_group_message_refreshes_avatars(heard: bool):
+    adapter = _adapter()
+    adapter._avatars = Mock(refresh=Mock(return_value=None))
+    adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
+    bus = SimpleNamespace(publish_inbound=AsyncMock())
+
+    class AccountRouter:
+        def route_account_inbound(self, message, *, on_heard):
+            # 宿主把存进旁听记录的消息交给 on_heard；未开旁听而丢弃的不交。
+            if heard:
+                on_heard(message)
+            return None
+
+    adapter._ctx = SimpleNamespace(
+        bus=bus,
+        channel_hub=AccountRouter(),
+        http_resources=SimpleNamespace(),
+        attachment_store=SimpleNamespace(),
+    )
+
+    await adapter._accept_inbound(_group_message(False))
+
+    refreshed = {call.args[:3] for call in adapter._avatars.refresh.call_args_list}
+    assert refreshed == (
+        {("sender", "qq", "902"), ("chat", "qq", "gqq:777")} if heard else set()
+    )
+    bus.publish_inbound.assert_not_awaited()

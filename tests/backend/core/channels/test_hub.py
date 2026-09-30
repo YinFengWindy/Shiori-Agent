@@ -974,9 +974,10 @@ def test_unaddressed_group_messages_are_listened_to_where_listening_is_on(
             },
         )
 
+    heard: list[InboundMessage] = []
     assert hub.route_account_inbound(group("在吗", mentioned=True)) is not None
     # Listening is off by default: the message is dropped.
-    assert hub.route_account_inbound(group("没人听")) is None
+    assert hub.route_account_inbound(group("没人听"), on_heard=heard.append) is None
     assert listening.page(thread_id)["messages"] == []
 
     listening.switches.set_enabled(thread_id, True, operator="user")
@@ -985,8 +986,10 @@ def test_unaddressed_group_messages_are_listened_to_where_listening_is_on(
     assert hub.route_account_inbound(group("@你", mentioned=True)) is not None
     assert hub.route_account_inbound(group("回你", reply_to_sender_id="self"))
     # Unaddressed ones start no turn: the first is stored, the next is past the cap.
-    assert hub.route_account_inbound(group("大家好")) is None
-    assert hub.route_account_inbound(group("第二句")) is None
+    assert hub.route_account_inbound(group("大家好"), on_heard=heard.append) is None
+    assert hub.route_account_inbound(group("第二句"), on_heard=heard.append) is None
+    # Only the stored one is handed back, so the plugin refreshes its avatars.
+    assert [message.content for message in heard] == ["大家好"]
 
     [record] = listening.page(thread_id)["messages"]
     assert record.content == "大家好"

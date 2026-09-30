@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Mapping
 
 from core.accounts.models import VIA_ACCOUNT_KEY, ViaAccount
+from core.common.channel_chat_types import is_group_chat_type
 
 if TYPE_CHECKING:
     from bus.events import InboundMessage
@@ -17,6 +18,8 @@ _PREFIX = "[消息来源: "
 SENDER_IS_USER_KEY = "sender_is_user"
 # How the source prefix names a sender who is the desktop user.
 USER_SENDER_LABEL = "你的用户"
+# How a group message's source prefix names any other sender.
+MEMBER_SENDER_LABEL = "群友"
 # Inbound metadata contract for plugins: the platform's display names at the
 # time the message arrived. ``GROUP_NAME_KEY`` is the group chat's name;
 # ``SENDER_NAME_KEY`` is the sender's display name (group card or nickname).
@@ -97,8 +100,8 @@ class MessageSource:
     group_name: str | None = None
     sender_name: str | None = None
     # Member IDs the message structurally mentions and the member it replies
-    # to, as the plugin reported them; stored with the message, not shown in
-    # the source prefix.
+    # to, as the plugin reported them; stored with the message. A group
+    # message's source prefix lists the mentions; the reply target is not shown.
     mentioned_ids: tuple[str, ...] = ()
     reply_to_sender_id: str | None = None
 
@@ -192,14 +195,14 @@ def with_message_source(
 ) -> str | list[dict[str, Any]]:
     """Add one source envelope without altering cached text or media blocks.
 
-    A sender bound to the desktop user is named as such, and a message that
-    came through a plugin account also names the account:
-    ``[消息来源: {...}；发送者: 你的用户；经由账号: <plugin prefix>]``.
+    A message that came through a plugin account also names the account:
+    ``[消息来源: {...}<sender>；经由账号: <plugin prefix>]``. The sender item
+    is ``_sender_items``'s: in a group every sender is named, the user or a
+    group member, with the members the message @s.
     """
     fields = json.dumps(source.platform_fields(), ensure_ascii=False)
-    sender = f"；发送者: {USER_SENDER_LABEL}" if source.sender_is_user else ""
     via = f"；经由账号: {source.via_account}" if source.via_account else ""
-    header = f"{_PREFIX}{fields}{sender}{via}]\n"
+    header = f"{_PREFIX}{fields}{_sender_items(source)}{via}]\n"
     if isinstance(content, str):
         return _with_text_source(content, header)
     blocks = [dict(block) for block in content]
@@ -208,6 +211,33 @@ def with_message_source(
             block["text"] = _with_text_source(block["text"], header)
             return blocks
     return [*blocks, {"type": "text", "text": header}]
+
+
+def _sender_items(source: MessageSource) -> str:
+    """The source prefix's sender and @ items.
+
+    Outside a group only a sender bound to the desktop user is named
+    (``；发送者: 你的用户``), as before #553. In a group every sender is named
+    with their member ID, so the model never takes a member for the user:
+    ``；发送者: 你的用户（ID 1）`` or ``；发送者: 群友「昵称」（ID 2）`` (just
+    ``群友（ID 2）`` without a name snapshot); a message that @s members adds
+    ``；@: ID 3、ID 4``, written like the listening block's lines.
+    """
+    if not is_group_chat_type(source.chat_type):
+        return f"；发送者: {USER_SENDER_LABEL}" if source.sender_is_user else ""
+    if source.sender_is_user:
+        sender = USER_SENDER_LABEL
+    elif source.sender_name:
+        sender = f"{MEMBER_SENDER_LABEL}「{source.sender_name}」"
+    else:
+        sender = MEMBER_SENDER_LABEL
+    member_id = f"（ID {source.sender_id}）" if source.sender_id else ""
+    mentions = (
+        f"；@: {'、'.join(f'ID {member}' for member in source.mentioned_ids)}"
+        if source.mentioned_ids
+        else ""
+    )
+    return f"；发送者: {sender}{member_id}{mentions}"
 
 
 def _with_text_source(content: str, header: str) -> str:

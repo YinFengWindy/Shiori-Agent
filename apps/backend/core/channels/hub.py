@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -123,7 +124,12 @@ class ChannelHub:
         """The private chat ``message`` arrived in, through ``account``."""
         return IdentityChat(account.record.id, message.channel, message.chat_id)
 
-    def route_account_inbound(self, message: InboundMessage) -> InboundMessage | None:
+    def route_account_inbound(
+        self,
+        message: InboundMessage,
+        *,
+        on_heard: Callable[[InboundMessage], None] | None = None,
+    ) -> InboundMessage | None:
         """Admits only an owned, live receiving account under its response rules.
 
         A sender bound to the desktop user is marked with ``SENDER_IS_USER_KEY``;
@@ -131,7 +137,11 @@ class ChannelHub:
 
         A group message that neither @s nor replies to the role starts no
         turn: when the role listens in on that group it is kept in the group's
-        listening records (#538), otherwise dropped. Either way None returns.
+        listening records (#538), otherwise dropped. Either way None returns;
+        a message stored in the listening records is first handed, as
+        projected, to the optional ``on_heard`` (#553: the plugin refreshes
+        the avatars the phone shows with it). A dropped message, or one past
+        the group's daily cap, is not.
         """
         metadata = dict(message.metadata or {})
         metadata.pop(SENDER_IS_USER_KEY, None)
@@ -178,7 +188,9 @@ class ChannelHub:
                 )
         metadata["source"] = "role_account"
         if group and not addressed:
-            self._listen(message, role_id, metadata)
+            heard = self._listen(message, role_id, metadata)
+            if heard is not None and on_heard is not None:
+                on_heard(heard)
             return None
         return self._route_for_role(message, role_id, metadata)
 
@@ -261,7 +273,7 @@ class ChannelHub:
 
     def _listen(
         self, message: InboundMessage, role_id: str, metadata: dict[str, Any]
-    ) -> None:
+    ) -> InboundMessage | None:
         """Keeps an unaddressed group message when the role listens in there.
 
         Listening can only be on for a group the role already has a
@@ -271,14 +283,17 @@ class ChannelHub:
         loneliness and relationship state never see it. A message with no
         text leaves nothing to keep; a plugin gives a picture-only message a
         placeholder text (QQ: ``[图片]``) so it is still kept.
+
+        Returns the projected message when it was stored in the listening
+        records; None when it was dropped or only kept in the recent window.
         """
         if not message.content.strip():
-            return
+            return None
         thread = self._conversation.get_thread(
             network_thread_id(role_id, message.channel, message.chat_id)
         )
         if thread is None or thread.archived:
-            return
+            return None
         routed = self._project(message, role_id, thread, metadata)
         heard = self._conversation.listening.hear(
             thread.id,
@@ -290,6 +305,7 @@ class ChannelHub:
         )
         if heard is not None:
             self._remember_contact_name(thread, routed.metadata)
+        return routed if heard is not None and heard.stored else None
 
     def _project(
         self,

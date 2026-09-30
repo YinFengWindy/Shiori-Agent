@@ -293,6 +293,7 @@ def _handler(tmp_path: Path, conversation: ConversationService):
         config_ref="qq-1",
         token="q",
         role_id="mira",
+        display_name="小栞",
     )
     handler = DesktopPhoneRequestHandler(
         conversations=conversation,
@@ -320,7 +321,12 @@ def _bind(tmp_path: Path, record: AccountRecord, user_id: str) -> str:
 
 
 def _group_message(
-    thread: ThreadRecord, *, sender_id: str, name: str, is_user: bool = False
+    thread: ThreadRecord,
+    *,
+    sender_id: str,
+    name: str,
+    is_user: bool = False,
+    mentioned_ids: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     source = MessageSource(
         channel=thread.channel,
@@ -329,6 +335,7 @@ def _group_message(
         sender_id=sender_id,
         sender_name=name,
         sender_is_user=is_user,
+        mentioned_ids=mentioned_ids,
     )
     return {"thread_id": thread.id, "message_source": source.to_metadata()}
 
@@ -387,6 +394,7 @@ async def test_reads_one_conversation_page_by_page_from_the_roles_view(
             "sender_name": "主人",
             "sender_is_user": True,
             "sender_avatar_abs": None,
+            "mentions": [],
             "content": "我也来",
             "media": ["photo.png"],
             "timestamp": "2026-09-29T10:01:00+08:00",
@@ -398,6 +406,7 @@ async def test_reads_one_conversation_page_by_page_from_the_roles_view(
             "sender_name": None,
             "sender_is_user": False,
             "sender_avatar_abs": None,
+            "mentions": [],
             "content": "我来",
             "media": [],
             "timestamp": "2026-09-29T10:02:00+08:00",
@@ -421,6 +430,38 @@ async def test_reads_one_conversation_page_by_page_from_the_roles_view(
     assert older["messages"][0]["sender_name"] == "阿花"
     assert older["messages"][0]["sender_is_user"] is False
     assert older["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_rows_name_the_members_a_message_mentions(tmp_path: Path) -> None:
+    manager = SessionManager(tmp_path)
+    conversation = ConversationService(manager)
+    group = _thread(conversation, role_id="mira", channel="qq", chat_id="gqq:5")
+    session = manager.get_or_create("role:mira")
+    session.add_message(
+        "user", "在吗", metadata=_group_message(group, sender_id="42", name="阿花")
+    )
+    session.add_message(
+        "user",
+        "ping",
+        # 平台码入库前已剥掉，只剩 mentioned_ids（#553）。
+        metadata=_group_message(
+            group, sender_id="7", name="路人", mentioned_ids=("10001", "42", "99")
+        ),
+    )
+    manager.save(session)
+    handler, _ = _handler(tmp_path, conversation)
+
+    page = await handler.handle(
+        "phone.conversation.messages", {"role_id": "mira", "thread_id": group.id}
+    )
+    assert page is not None
+    # 角色自己的账号用账号名，群友用本群记下的昵称，都没有时只有 ID。
+    assert page["messages"][-1]["mentions"] == [
+        {"id": "10001", "name": "小栞"},
+        {"id": "42", "name": "阿花"},
+        {"id": "99", "name": None},
+    ]
 
 
 @pytest.mark.asyncio
