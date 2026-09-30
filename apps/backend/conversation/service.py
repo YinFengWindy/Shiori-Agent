@@ -149,6 +149,24 @@ class ConversationService:
             for thread_id in thread_ids
         }
 
+    def list_group_threads(self, role_id: str) -> list[ThreadRecord]:
+        """The role's current channel groups, using the recorded chat types."""
+        threads = self.list_network_threads(role_id)
+        chat_types = self.thread_chat_types([thread.id for thread in threads])
+        return [
+            thread for thread in threads if chat_types[thread.id] == CHAT_TYPE_GROUP
+        ]
+
+    def require_group_thread(self, role_id: str, thread_id: str) -> ThreadRecord:
+        """Returns a current group of the role, rejecting private or archived threads."""
+        thread = self.role_channel_thread(role_id, thread_id)
+        if (
+            thread is None
+            or self.thread_chat_types([thread.id])[thread.id] != CHAT_TYPE_GROUP
+        ):
+            raise ValueError("找不到当前角色所属的群会话，请先查询群候选")
+        return thread
+
     def sender_names(
         self, thread_id: str, sender_ids: Collection[str]
     ) -> dict[str, str]:

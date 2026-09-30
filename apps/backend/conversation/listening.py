@@ -66,10 +66,7 @@ class GroupListeningControl:
 
     def groups(self, role_id: str) -> list[ListenableGroup]:
         """The role's current groups that can be listened to (see ``supports``)."""
-        threads = self._conversations.list_network_threads(role_id)
-        chat_types = self._conversations.thread_chat_types(
-            [thread.id for thread in threads]
-        )
+        threads = self._conversations.list_group_threads(role_id)
         contacts = self._conversations.contacts_by_id(role_id)
         switches = self.store.switches
         return [
@@ -83,7 +80,7 @@ class GroupListeningControl:
                 enabled=switches.settings(thread.id).enabled,
             )
             for thread in threads
-            if self.supports(thread.channel, chat_types[thread.id])
+            if self.supports(thread.channel, CHAT_TYPE_GROUP)
         ]
 
     def group(self, role_id: str, thread_id: str) -> ThreadRecord:

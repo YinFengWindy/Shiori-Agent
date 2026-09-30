@@ -684,6 +684,7 @@ def build_core_runtime(
         workspace,
         session_manager,
         (record.manifest for record in plugin_manager.discover()),
+        group_environment,
     )
 
     return CoreRuntime(

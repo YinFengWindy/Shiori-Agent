@@ -5,6 +5,7 @@ members it met there (member profiles, #499)."""
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime
 from typing import Any
 
 from conversation.context_scope import user_context_threads
@@ -12,7 +13,10 @@ from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.accounts import AccountRegistry
 from core.identity import UserIdentity, UserIdentityStore
-from core.memory.external_writes import EXTERNAL_MEMORY_WRITE_LOCK
+from core.memory.external_writes import (
+    EXTERNAL_MEMORY_WRITE_LOCK,
+    edit_group_environment,
+)
 from core.memory.group_environment import GroupEnvironment
 from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
 from desktop_bridge.phone_requests import (
@@ -56,7 +60,8 @@ class DesktopPhoneMemoryRequestHandler:
       note Markdown (``""`` when there is none); ``phone.conversation.note.save``
       with ``note`` replaces it (a blank note removes it) and returns the same.
     - ``phone.conversation.activity`` returns ``{"thread_id",
-      "recent_activity"}``, read-only: only consolidation writes it.
+      "recent_activity"}``, read-only in the phone; consolidation and the role's
+      explicit group-context tool can update it.
     - ``phone.conversation.members`` returns ``{"thread_id", "members"}``:
       ``member_row`` of every member with a profile who spoke in the
       conversation, by name, leaving out anyone a current binding recognises as
@@ -102,9 +107,15 @@ class DesktopPhoneMemoryRequestHandler:
             note = payload.get("note")
             if not isinstance(note, str):
                 raise ValueError("note 必须是文本")
-            with EXTERNAL_MEMORY_WRITE_LOCK:
-                self._group_environment.write_note(role_id, thread.id, note)
-            return self._note(role_id, thread)
+            snapshot = edit_group_environment(
+                self._group_environment,
+                role_id,
+                thread.id,
+                group_note=note,
+                label="",
+                updated_at=datetime.now().astimezone(),
+            )
+            return {"thread_id": thread.id, "note": snapshot.group_note}
         if method == "phone.conversation.activity":
             role_id, thread, _ = self._external_thread(payload)
             snapshot = self._group_environment.read(role_id, thread.id)

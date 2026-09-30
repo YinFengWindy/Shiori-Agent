@@ -28,6 +28,8 @@ RECENT_ACTIVITY_LIMIT = 5
 # thread_state.metadata 里与最近动态一同写入的字段。
 SUMMARY_UPDATED_AT_KEY = "summary_updated_at"
 SUMMARY_LABEL_KEY = "summary_label"
+# 手动编辑的持久版本，不依赖正文或笔记文件是否存在；用于拒绝编辑前准备的整理。
+GROUP_EDIT_REVISION_KEY = "group_edit_revision"
 
 
 @dataclass(frozen=True)
@@ -46,10 +48,12 @@ class GroupEnvironmentUpdate:
 
 @dataclass(frozen=True)
 class GroupEnvironmentSnapshot:
-    """某个外部会话当前的群环境层内容，供整理时在其基础上更新；没有时为空串。"""
+    """群环境正文、摘要时间及手动编辑版本；缺失正文/时间为空串，版本默认为 0。"""
 
     recent_activity: str
     group_note: str
+    summary_updated_at: str = ""
+    edit_revision: int = 0
 
 
 @dataclass(frozen=True)
@@ -100,6 +104,16 @@ class GroupEnvironment:
         return GroupEnvironmentSnapshot(
             recent_activity=state.summary if state is not None else "",
             group_note=self.read_note(role_id, thread_id),
+            summary_updated_at=(
+                str(state.metadata.get(SUMMARY_UPDATED_AT_KEY) or "")
+                if state is not None
+                else ""
+            ),
+            edit_revision=(
+                int(state.metadata.get(GROUP_EDIT_REVISION_KEY, 0))
+                if state is not None
+                else 0
+            ),
         )
 
     def apply(

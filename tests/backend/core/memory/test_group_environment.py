@@ -6,8 +6,55 @@ from pathlib import Path
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.accounts import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
-from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
+from core.memory.group_environment import (
+    GROUP_EDIT_REVISION_KEY,
+    GroupEnvironment,
+    GroupEnvironmentUpdate,
+)
 from session.manager import SessionManager
+
+
+def test_snapshot_reads_saved_summary_timestamp_without_refreshing_it(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    environment = GroupEnvironment(tmp_path, manager.conversation_store)
+    old = datetime.fromisoformat("2020-01-02T03:04:05+08:00")
+    environment.apply(
+        "mira",
+        GroupEnvironmentUpdate("thread:mira:qq:g", "群", "旧摘要", "旧笔记"),
+        updated_at=old,
+    )
+    before = manager.conversation_store.get_thread_state("thread:mira:qq:g")
+
+    snapshot = environment.read("mira", "thread:mira:qq:g")
+
+    assert snapshot.recent_activity == "旧摘要"
+    assert snapshot.group_note == "旧笔记"
+    assert snapshot.summary_updated_at == old.isoformat()
+    assert snapshot.edit_revision == 0
+    assert manager.conversation_store.get_thread_state("thread:mira:qq:g") == before
+    assert environment.read("mira", "missing").summary_updated_at == ""
+    assert environment.read("mira", "missing").edit_revision == 0
+
+
+def test_snapshot_reads_persistent_edit_revision_without_modifying_it(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    environment = GroupEnvironment(tmp_path, manager.conversation_store)
+    state = manager.conversation_store.upsert_thread_state(
+        "thread:mira:qq:g", metadata={GROUP_EDIT_REVISION_KEY: 4}
+    )
+    snapshot = environment.read("mira", "thread:mira:qq:g")
+    assert snapshot.edit_revision == 4
+    assert (
+        snapshot.group_note
+        == snapshot.recent_activity
+        == snapshot.summary_updated_at
+        == ""
+    )
+    assert manager.conversation_store.get_thread_state("thread:mira:qq:g") == state
 
 
 def test_recent_activity_leaves_out_chats_merged_into_the_user_context(

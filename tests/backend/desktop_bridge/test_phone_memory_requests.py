@@ -12,6 +12,7 @@ from conversation.models import ThreadRecord
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.accounts import AccountRegistry
 from core.identity import IdentityChat, UserIdentityStore
+from core.memory.external_writes import ExternalLayerSnapshot, commit_external_layers
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
 from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
 from desktop_bridge.phone_memory_requests import DesktopPhoneMemoryRequestHandler
@@ -119,6 +120,42 @@ async def test_group_note_is_read_and_saved_and_recent_activity_is_read_only(
         )
         is None
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("original_note", ["", "旧笔记"])
+async def test_phone_note_restored_to_original_still_invalidates_old_consolidation(
+    tmp_path: Path, original_note: str
+) -> None:
+    setup = _Setup(tmp_path)
+    group = setup.group.id
+    setup.environment.apply(
+        "mira",
+        GroupEnvironmentUpdate(group, "群", "旧摘要", original_note),
+        updated_at=datetime(2026, 9, 29, tzinfo=timezone.utc),
+    )
+    before = setup.environment.read("mira", group)
+    for note in ("编辑过的笔记", original_note):
+        _ = await setup.call("phone.conversation.note.save", thread_id=group, note=note)
+    after = setup.environment.read("mira", group)
+    assert after.group_note == before.group_note
+    assert after.summary_updated_at == before.summary_updated_at
+    assert after.edit_revision == before.edit_revision + 2
+    _ = await setup.call(
+        "phone.conversation.note.save", thread_id=group, note=original_note
+    )
+    _ = await setup.call("phone.conversation.note", thread_id=group)
+    assert setup.environment.read("mira", group) == after
+    assert not commit_external_layers(
+        setup.environment,
+        setup.members,
+        "mira",
+        environment_updates=[GroupEnvironmentUpdate(group, "群", "", "旧草稿笔记")],
+        member_updates=[],
+        snapshot=ExternalLayerSnapshot(group_environments={group: before}),
+        updated_at=datetime.now().astimezone(),
+    )
+    assert setup.environment.read("mira", group) == after
 
 
 @pytest.mark.asyncio
