@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from conversation.listening import GroupListeningControl
+from conversation.service import ConversationService
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -45,6 +47,9 @@ async def test_desktop_bridge_lists_and_cancels_role_subagent_tasks(tmp_path):
         workspace=tmp_path,
         role_store=role_store,
         session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_listening=GroupListeningControl(
+            ConversationService(bridge_sessions), lambda _channel: False
+        ),
         group_environment=GroupEnvironment(
             tmp_path, bridge_sessions.conversation_store
         ),
@@ -89,6 +94,9 @@ async def test_desktop_bridge_creates_updates_and_emits_role_task_events(tmp_pat
         workspace=tmp_path,
         role_store=role_store,
         session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_listening=GroupListeningControl(
+            ConversationService(bridge_sessions), lambda _channel: False
+        ),
         group_environment=GroupEnvironment(
             tmp_path, bridge_sessions.conversation_store
         ),
@@ -173,6 +181,9 @@ async def test_desktop_bridge_rejects_cross_role_and_running_schedule_updates(tm
         workspace=tmp_path,
         role_store=role_store,
         session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_listening=GroupListeningControl(
+            ConversationService(bridge_sessions), lambda _channel: False
+        ),
         group_environment=GroupEnvironment(
             tmp_path, bridge_sessions.conversation_store
         ),

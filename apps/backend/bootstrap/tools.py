@@ -41,6 +41,7 @@ from agent.tools.account_delivery import (
 )
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from agent.tools.registry import ToolRegistry
+from conversation.listening import GroupListeningControl
 from core.scene.controller import SceneAwarenessController
 from core.scene.demand import SceneObservationDemand
 from core.scene.service import SceneObservationService
@@ -51,6 +52,7 @@ from bootstrap.runtime.construction import track_build_resource
 from bootstrap.toolsets.meta import (
     build_readonly_tools,
 )
+from bootstrap.toolsets.groups import register_group_tools
 from bootstrap.toolsets.protocol import ToolsetDeps
 from bootstrap.toolsets.schedule import (
     build_scheduler,
@@ -109,6 +111,8 @@ class CoreRuntime:
     role_runtime_registry: RoleRuntimeRegistry
     # 群环境层（#497）：被动回合、记忆整理与主动/发呆回合共用这一个实例。
     group_environment: GroupEnvironment
+    # 群聊旁听的开关（#538）：设置旁听的工具与桌面小手机共用这一个实例（#540）。
+    group_listening: GroupListeningControl
     scene_service: SceneObservationService | None = None
     image_sync_service: ExternalPushSyncService | None = None
     agent_provider: LLMProvider | None = None
@@ -667,6 +671,12 @@ def build_core_runtime(
         external_allowed=True,
         external_limit=ACCOUNT_SEND_EXTERNAL_LIMIT,
     )
+    group_listening = register_group_tools(
+        tools,
+        workspace,
+        session_manager,
+        (record.manifest for record in plugin_manager.discover()),
+    )
 
     return CoreRuntime(
         config=config,
@@ -688,6 +698,7 @@ def build_core_runtime(
         relationship_runtime=relationship_runtime,
         role_runtime_registry=role_runtime_registry,
         group_environment=group_environment,
+        group_listening=group_listening,
         plugin_manager=plugin_manager,
         scene_service=scene_service,
         channel_directory=channel_directory,

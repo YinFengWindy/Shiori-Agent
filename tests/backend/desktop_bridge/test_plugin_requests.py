@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+from conversation.listening import GroupListeningControl
+from conversation.service import ConversationService
+
 import asyncio
 from types import SimpleNamespace
 
@@ -28,6 +31,9 @@ def _service(tmp_path, registry: PluginRpcRegistry | None) -> DesktopBridgeServi
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
         session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_listening=GroupListeningControl(
+            ConversationService(bridge_sessions), lambda _channel: False
+        ),
         group_environment=GroupEnvironment(
             tmp_path, bridge_sessions.conversation_store
         ),

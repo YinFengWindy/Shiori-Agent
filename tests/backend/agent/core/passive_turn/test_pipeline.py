@@ -1,6 +1,8 @@
 """Passive turns own same-role desktop pushes until their ordered SQL commit."""
 
 import asyncio
+from conversation.listening import GroupListeningControl
+from conversation.service import ConversationService
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -46,6 +48,9 @@ async def runtime(tmp_path):
         workspace=tmp_path,
         role_store=roles,
         session_manager=manager,
+        group_listening=GroupListeningControl(
+            ConversationService(manager), lambda _channel: False
+        ),
         group_environment=GroupEnvironment(tmp_path, manager.conversation_store),
         agent_loop=SimpleNamespace(),
         event_bus=bus,

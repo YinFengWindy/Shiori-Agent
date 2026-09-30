@@ -1,4 +1,6 @@
 from pathlib import Path
+from conversation.listening import GroupListeningControl
+from conversation.service import ConversationService
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -52,6 +54,9 @@ async def test_role_create_persists_structured_profile(tmp_path: Path) -> None:
         workspace=tmp_path,
         role_store=role_store,
         session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_listening=GroupListeningControl(
+            ConversationService(bridge_sessions), lambda _channel: False
+        ),
         group_environment=GroupEnvironment(
             tmp_path, bridge_sessions.conversation_store
         ),
@@ -177,6 +182,9 @@ async def test_role_update_commits_generic_plugin_draft_and_projects_its_owner(
         workspace=tmp_path,
         role_store=store,
         session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_listening=GroupListeningControl(
+            ConversationService(bridge_sessions), lambda _channel: False
+        ),
         group_environment=GroupEnvironment(
             tmp_path, bridge_sessions.conversation_store
         ),
@@ -240,6 +248,9 @@ async def test_role_delete_first_deletes_its_accounts_through_their_plugins(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_listening=GroupListeningControl(
+            ConversationService(bridge_sessions), lambda _channel: False
+        ),
         group_environment=GroupEnvironment(
             tmp_path, bridge_sessions.conversation_store
         ),

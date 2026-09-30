@@ -5,6 +5,8 @@ import io
 import json
 import zipfile
 import asyncio
+from conversation.listening import GroupListeningControl
+from conversation.service import ConversationService
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, create_autospec
 
@@ -465,6 +467,9 @@ async def test_default_desktop_bridge_service_exposes_role_card_preview(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_listening=GroupListeningControl(
+            ConversationService(bridge_sessions), lambda _channel: False
+        ),
         group_environment=GroupEnvironment(
             tmp_path, bridge_sessions.conversation_store
         ),
@@ -495,6 +500,9 @@ async def test_commit_keeps_png_card_as_avatar_and_imported_asset(tmp_path) -> N
         workspace=tmp_path,
         role_store=role_store,
         session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_listening=GroupListeningControl(
+            ConversationService(bridge_sessions), lambda _channel: False
+        ),
         group_environment=GroupEnvironment(
             tmp_path, bridge_sessions.conversation_store
         ),

@@ -5,6 +5,8 @@ from types import SimpleNamespace
 import pytest
 
 from agent.tools.registry import ToolRegistry
+from conversation.listening import GroupListeningControl
+from conversation.service import ConversationService
 
 
 @pytest.fixture
@@ -30,6 +32,12 @@ def stub_core_runtime():
         )
         for name, value in overrides.items():
             setattr(runtime, name, value)
+        # 与真实运行时一样只有一份旁听控制；桩里没有渠道支持旁听。
+        runtime.group_listening = overrides.get("group_listening") or (
+            GroupListeningControl(
+                ConversationService(runtime.session_manager), lambda _channel: False
+            )
+        )
         return runtime
 
     return build
