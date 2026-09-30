@@ -46,10 +46,11 @@ class GroupEnvironmentUpdate:
 
 @dataclass(frozen=True)
 class GroupEnvironmentSnapshot:
-    """某个外部会话当前的群环境层内容，供整理时在其基础上更新；没有时为空串。"""
+    """某个外部会话的群环境层内容及摘要更新时间；缺失字段为空串。"""
 
     recent_activity: str
     group_note: str
+    summary_updated_at: str = ""
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,11 @@ class GroupEnvironment:
         return GroupEnvironmentSnapshot(
             recent_activity=state.summary if state is not None else "",
             group_note=self.read_note(role_id, thread_id),
+            summary_updated_at=(
+                str(state.metadata.get(SUMMARY_UPDATED_AT_KEY) or "")
+                if state is not None and state.summary
+                else ""
+            ),
         )
 
     def apply(

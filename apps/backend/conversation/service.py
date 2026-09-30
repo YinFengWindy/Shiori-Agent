@@ -149,6 +149,14 @@ class ConversationService:
             for thread_id in thread_ids
         }
 
+    def list_group_threads(self, role_id: str) -> list[ThreadRecord]:
+        """The role's current channel groups, using the recorded chat types."""
+        threads = self.list_network_threads(role_id)
+        chat_types = self.thread_chat_types([thread.id for thread in threads])
+        return [
+            thread for thread in threads if chat_types[thread.id] == CHAT_TYPE_GROUP
+        ]
+
     def sender_names(
         self, thread_id: str, sender_ids: Collection[str]
     ) -> dict[str, str]:

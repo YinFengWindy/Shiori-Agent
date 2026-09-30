@@ -10,6 +10,28 @@ from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpda
 from session.manager import SessionManager
 
 
+def test_snapshot_reads_saved_summary_timestamp_without_refreshing_it(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    environment = GroupEnvironment(tmp_path, manager.conversation_store)
+    old = datetime.fromisoformat("2020-01-02T03:04:05+08:00")
+    environment.apply(
+        "mira",
+        GroupEnvironmentUpdate("thread:mira:qq:g", "群", "旧摘要", "旧笔记"),
+        updated_at=old,
+    )
+    before = manager.conversation_store.get_thread_state("thread:mira:qq:g")
+
+    snapshot = environment.read("mira", "thread:mira:qq:g")
+
+    assert snapshot.recent_activity == "旧摘要"
+    assert snapshot.group_note == "旧笔记"
+    assert snapshot.summary_updated_at == old.isoformat()
+    assert manager.conversation_store.get_thread_state("thread:mira:qq:g") == before
+    assert environment.read("mira", "missing").summary_updated_at == ""
+
+
 def test_recent_activity_leaves_out_chats_merged_into_the_user_context(
     tmp_path: Path,
 ) -> None:

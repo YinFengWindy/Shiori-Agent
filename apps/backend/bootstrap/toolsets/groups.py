@@ -10,11 +10,13 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from agent.plugin_host.manifest import PluginManifest, group_listening_channels
+from agent.tools.group_context import LookupGroupContextTool
 from agent.tools.group_listening import SetGroupListeningTool
 from agent.tools.member_lookup import LookupMemberTool
 from agent.tools.registry import ToolRegistry
 from conversation.listening import GroupListeningControl
 from conversation.service import ConversationService
+from core.memory.group_environment import GroupEnvironment
 from core.memory.member_profiles import MemberProfiles
 from session.manager import SessionManager
 
@@ -24,8 +26,9 @@ def register_group_tools(
     workspace: Path,
     session_manager: SessionManager,
     manifests: Iterable[PluginManifest],
+    group_environment: GroupEnvironment,
 ) -> GroupListeningControl:
-    """Registers the listening switch and the member-profile lookup tools.
+    """Registers listening control, member lookup and group note/summary lookup.
 
     Returns the runtime's listening control, which the switch tool uses: a
     channel supports listening when its plugin manifest (among ``manifests``)
@@ -46,6 +49,12 @@ def register_group_tools(
         LookupMemberTool(MemberProfiles(workspace), conversations),
         risk="read-only",
         search_hint="群友 昵称 是谁",
+        external_allowed=True,
+    )
+    tools.register(
+        LookupGroupContextTool(group_environment, conversations),
+        risk="read-only",
+        search_hint="群笔记 群摘要 群记忆 群动态 别的群 其他群 查群 找群",
         external_allowed=True,
     )
     return listening
