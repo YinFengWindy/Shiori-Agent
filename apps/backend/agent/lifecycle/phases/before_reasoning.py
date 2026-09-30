@@ -14,6 +14,7 @@ from agent.lifecycle.phase import (
 )
 from agent.lifecycle.types import BeforeReasoningCtx, BeforeReasoningInput
 from bus.event_bus import EventBus
+from core.common.message_source import MessageSource
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
@@ -55,6 +56,7 @@ class _SyncToolContextModule:
         message_metadata = (
             state.msg.metadata if isinstance(state.msg.metadata, dict) else {}
         )
+        source = MessageSource.from_inbound(state.msg)
         self._tools.set_context(
             channel=before_turn.channel,
             chat_id=before_turn.chat_id,
@@ -70,6 +72,12 @@ class _SyncToolContextModule:
                 or ""
             ),
             delivery_key=str(message_metadata.get("delivery_key") or ""),
+            # 回合的发送者、是否出自用户本人（规则见 ``TurnState.is_user_authored``）
+            # 与所在上下文（user / external；非角色共享会话为空），供工具按回合
+            # 身份收窄行为（#540）。
+            sender_id=source.sender_id or "",
+            sender_is_user="true" if state.is_user_authored() else "false",
+            context_scope=state.context_scope or "",
             current_timestamp=before_turn.timestamp.isoformat(),
             current_user_source_ref=predict_current_user_source_ref(
                 session_manager=self._session_manager,

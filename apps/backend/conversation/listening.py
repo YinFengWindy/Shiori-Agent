@@ -8,12 +8,26 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from conversation.listening_store import GroupListeningStore
 from conversation.listening_switches import ListeningOperator, ListeningSettings
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.common.channel_chat_types import CHAT_TYPE_GROUP, ChatType
+
+
+@dataclass(frozen=True)
+class ListenableGroup:
+    """One of a role's groups that can be listened to.
+
+    ``name`` is the group name its contact learned (the chat ID until a name
+    arrived); ``enabled`` is its current listening switch.
+    """
+
+    thread: ThreadRecord
+    name: str
+    enabled: bool
 
 
 class GroupListeningControl:
@@ -49,6 +63,28 @@ class GroupListeningControl:
         if thread is None:
             return None
         return self._conversations.role_channel_thread(thread.role_id, thread.id)
+
+    def groups(self, role_id: str) -> list[ListenableGroup]:
+        """The role's current groups that can be listened to (see ``supports``)."""
+        threads = self._conversations.list_network_threads(role_id)
+        chat_types = self._conversations.thread_chat_types(
+            [thread.id for thread in threads]
+        )
+        contacts = self._conversations.contacts_by_id(role_id)
+        switches = self.store.switches
+        return [
+            ListenableGroup(
+                thread=thread,
+                name=(
+                    contact.display_name
+                    if (contact := contacts.get(thread.contact_id)) is not None
+                    else thread.external_thread_id
+                ),
+                enabled=switches.settings(thread.id).enabled,
+            )
+            for thread in threads
+            if self.supports(thread.channel, chat_types[thread.id])
+        ]
 
     def group(self, role_id: str, thread_id: str) -> ThreadRecord:
         """The role's group ``thread_id``; fails unless it can be listened to."""

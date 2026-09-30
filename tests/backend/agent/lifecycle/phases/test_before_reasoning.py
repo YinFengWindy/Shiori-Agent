@@ -123,10 +123,11 @@ async def test_prompt_warmup_renders_external_turn_with_its_group_note(
         return result
 
     monkeypatch.setattr(builder, "render", spy_render)
+    tools = Mock(spec=ToolRegistry)
     phase = Phase(
         default_before_reasoning_modules(
             EventBus(),
-            cast(ToolRegistry, Mock(spec=ToolRegistry)),
+            cast(ToolRegistry, tools),
             cast(
                 Any,
                 SimpleNamespace(peek_next_message_id=lambda key: f"{key}:1"),
@@ -165,5 +166,12 @@ async def test_prompt_warmup_renders_external_turn_with_its_group_note(
     await phase.run(BeforeReasoningInput(state=state, before_turn=before_turn))
 
     assert state.context_scope == "external"
+    # 工具按回合身份收窄（#540）：群友触发的外部回合。
+    context = tools.set_context.call_args.kwargs
+    assert (
+        context["sender_id"],
+        context["sender_is_user"],
+        context["context_scope"],
+    ) == ("555", "false", "external")
     [prompt] = rendered
     assert "猫猫群的笔记" in prompt
