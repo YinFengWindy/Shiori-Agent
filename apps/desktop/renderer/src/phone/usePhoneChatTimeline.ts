@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import type { PhoneConversation } from "./phoneClient";
 import { phoneChatTimeline } from "./phoneChatTimeline";
-import { usePhoneChatMessages, usePhoneListeningMessages } from "./usePhoneChatMessages";
+import { usePhoneChatMessages } from "./usePhoneChatMessages";
+import { usePhoneListeningMessages } from "./usePhoneListeningMessages";
 
 /**
  * The chat page's messages: the conversation, and for a group its

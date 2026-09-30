@@ -8,7 +8,6 @@ from typing import Any, Protocol
 
 from conversation.context_scope import user_context_threads
 from conversation.listening import GroupListeningControl
-from conversation.listening_store import ListeningMessage
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.accounts import AccountRegistry, account_for_channel
@@ -21,8 +20,6 @@ from session.manager.models import message_thread_id
 
 # Bridge event carrying messages newly committed to one of a role's conversations.
 PHONE_CONVERSATION_UPDATED = "phone.conversation.updated"
-# Bridge event carrying a message newly stored in a group's listening records.
-PHONE_LISTENING_HEARD = "phone.listening.heard"
 
 
 class ThreadMessages(Protocol):
@@ -107,18 +104,6 @@ def phone_message(
     }
 
 
-def _listening_row(message: ListeningMessage) -> dict[str, Any]:
-    """A listening record in the shape of a stored session message."""
-    return {
-        "id": message.id,
-        "seq": message.seq,
-        "role": "user",
-        "content": message.content,
-        "timestamp": message.timestamp,
-        "metadata": {"message_source": message.source},
-    }
-
-
 class DesktopPhoneRequestHandler:
     """Reads one role's channel conversations for the phone panel.
 
@@ -141,10 +126,6 @@ class DesktopPhoneRequestHandler:
     conversation (``phone_message`` rows, oldest first) with ``has_more``
     and the ``next_before_seq`` cursor for the older page. Only the role's
     current channel conversations can be read.
-
-    ``phone.listening.messages`` takes the same fields and returns a page of
-    the group's listening records the same way (rows with ``listened``); the
-    records stay readable after listening is turned off.
     """
 
     def __init__(
@@ -175,37 +156,16 @@ class DesktopPhoneRequestHandler:
                     role_id, self._conversations.list_network_threads(role_id)
                 )
             }
-        if method in {"phone.conversation.messages", "phone.listening.messages"}:
-            role_id = required_text(payload, "role_id")
-            thread = self._role_thread(role_id, required_text(payload, "thread_id"))
-            if thread is None:
-                raise ValueError("会话不属于该角色")
+        if method == "phone.conversation.messages":
+            role_id, thread = self.role_thread(payload)
             before_seq = payload.get("before_seq")
-            page = (
-                self._messages_page
-                if method == "phone.conversation.messages"
-                else self._listening_page
-            )
-            return page(
+            return self._messages_page(
                 role_id,
                 thread,
                 before_seq=int(before_seq) if before_seq is not None else None,
                 limit=int(payload.get("limit") or MESSAGE_PAGE_SIZE),
             )
         return None
-
-    def listening_update(self, message: ListeningMessage) -> dict[str, Any] | None:
-        """The ``phone.listening.heard`` payload for a newly stored record.
-
-        None when its group is no longer one of its role's conversations.
-        """
-        thread = self._conversations.get_thread(message.thread_id)
-        if thread is None or self._role_thread(thread.role_id, thread.id) is None:
-            return None
-        [row] = self._phone_messages(
-            thread.role_id, thread, [_listening_row(message)], listened=True
-        )
-        return {"role_id": thread.role_id, "thread_id": thread.id, "message": row}
 
     def conversation_updates(
         self, role_id: str, messages: Iterable[dict[str, Any]]
@@ -235,15 +195,23 @@ class DesktopPhoneRequestHandler:
                 "role_id": role_id,
                 "thread_id": thread.id,
                 "conversation": rows[thread.id],
-                "messages": self._phone_messages(role_id, thread, by_thread[thread.id]),
+                "messages": self.phone_messages(role_id, thread, by_thread[thread.id]),
             }
             for thread in threads
         ]
 
+    def role_thread(self, payload: dict[str, Any]) -> tuple[str, ThreadRecord]:
+        """The request's ``role_id`` and ``thread_id``, one of the role's channel conversations."""
+        role_id = required_text(payload, "role_id")
+        thread = self._role_thread(role_id, required_text(payload, "thread_id"))
+        if thread is None:
+            raise ValueError("会话不属于该角色")
+        return role_id, thread
+
     def _role_thread(self, role_id: str, thread_id: str) -> ThreadRecord | None:
         return self._conversations.role_channel_thread(role_id, thread_id)
 
-    def _phone_messages(
+    def phone_messages(
         self,
         role_id: str,
         thread: ThreadRecord,
@@ -251,7 +219,7 @@ class DesktopPhoneRequestHandler:
         *,
         listened: bool = False,
     ) -> list[dict[str, Any]]:
-        """``messages`` of ``thread`` as ``phone_message`` rows.
+        """``messages`` of ``thread`` (stored-message shape) as ``phone_message`` rows.
 
         The user's messages are those whose sender a current binding
         recognises on the role's account carrying the thread; with no such
@@ -286,21 +254,7 @@ class DesktopPhoneRequestHandler:
         )
         return {
             "thread_id": thread.id,
-            "messages": self._phone_messages(role_id, thread, page["messages"]),
-            "has_more": page["has_more"],
-            "next_before_seq": page["next_before_seq"],
-        }
-
-    def _listening_page(
-        self, role_id: str, thread: ThreadRecord, *, before_seq: int | None, limit: int
-    ) -> dict[str, Any]:
-        page = self._conversations.listening.page(
-            thread.id, before_seq=before_seq, limit=limit
-        )
-        rows = [_listening_row(message) for message in page["messages"]]
-        return {
-            "thread_id": thread.id,
-            "messages": self._phone_messages(role_id, thread, rows, listened=True),
+            "messages": self.phone_messages(role_id, thread, page["messages"]),
             "has_more": page["has_more"],
             "next_before_seq": page["next_before_seq"],
         }

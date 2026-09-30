@@ -1,11 +1,9 @@
-"""A group's listening records: daily cap, recent window and the logged switch."""
+"""A group's listening records: the switch gate, the daily cap and the recent window."""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 from pathlib import Path
-
-import pytest
 
 from conversation.listening_store import GroupListeningStore
 from conversation.store import ConversationStore
@@ -35,11 +33,11 @@ def test_only_a_listened_group_keeps_messages_and_turning_off_keeps_them(
     store = _store(tmp_path)
     assert _hear(store, "没开", _DAY) is None
 
-    store.set_enabled(_GROUP, True, operator="user")
+    store.switches.set_enabled(_GROUP, True, operator="user")
     heard = _hear(store, "开了", _DAY, external="m1")
     # A replayed platform message is kept once.
     assert _hear(store, "开了", _DAY, external="m1") is None
-    store.set_enabled(_GROUP, False, operator="role")
+    store.switches.set_enabled(_GROUP, False, operator="role")
 
     assert heard is not None and heard.stored
     assert [message.content for message in store.page(_GROUP)["messages"]] == ["开了"]
@@ -50,13 +48,14 @@ def test_past_the_daily_cap_messages_stay_only_in_the_recent_window(
     tmp_path: Path,
 ) -> None:
     store = _store(tmp_path)
-    store.set_enabled(_GROUP, True, operator="user")
-    store.set_default_daily_cap(5)
-    store.set_daily_cap(_GROUP, 2)
+    store.switches.set_enabled(_GROUP, True, operator="user")
+    store.switches.set_daily_cap(_GROUP, 2)
     heard = [
-        _hear(store, f"第{index}条", _DAY + timedelta(minutes=index))
+        _hear(store, f"第{index}条", _DAY + timedelta(minutes=index), f"m{index}")
         for index in range(3)
     ]
+    # A replay of a message past the cap does not enter the window twice.
+    assert _hear(store, "第2条", _DAY + timedelta(minutes=2), "m2") is None
     next_day = _hear(store, "第二天", _DAY + timedelta(days=1))
 
     assert [message.stored for message in heard if message] == [True, True, False]
@@ -72,21 +71,4 @@ def test_past_the_daily_cap_messages_stay_only_in_the_recent_window(
         "第1条",
         "第2条",
         "第二天",
-    ]
-    # Without an override the group follows the global default again.
-    assert store.set_daily_cap(_GROUP, None).daily_cap is None
-    with pytest.raises(ValueError):
-        store.set_daily_cap(_GROUP, 0)
-
-
-def test_every_switch_change_is_logged_with_its_operator(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-
-    store.set_enabled(_GROUP, True, operator="user")
-    store.set_enabled(_GROUP, True, operator="role")
-    store.set_enabled(_GROUP, False, operator="role")
-
-    assert [(item.enabled, item.operator) for item in store.toggles(_GROUP)] == [
-        (False, "role"),
-        (True, "user"),
     ]

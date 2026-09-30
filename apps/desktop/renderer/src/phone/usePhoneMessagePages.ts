@@ -19,7 +19,8 @@ const initialState: PhoneMessagePagesState = { messages: null, early: [], hasMor
  * One paged stream of messages for the phone's chat page: the newest page
  * (`loadPage(null)`) when it mounts or `streamKey` changes, older pages on
  * `loadOlder`, and messages handed to `pushLive` appended (each once, by
- * id). `retry` reloads after an error.
+ * id). `retry` reloads after an error. A new stream (or a retry) drops
+ * whatever an older page still in flight would have brought.
  */
 export function usePhoneMessagePages(streamKey: string, loadPage: (beforeSeq: number | null) => Promise<PhoneMessagePage>) {
   const [state, setState] = useState(initialState);
@@ -27,9 +28,13 @@ export function usePhoneMessagePages(streamKey: string, loadPage: (beforeSeq: nu
   const loadPageRef = useLatestRef(loadPage);
   // Scroll events fire faster than renders: this, not state, keeps one older page in flight.
   const loadingOlderRef = useRef(false);
+  // Bumped per (re)load of the stream: a page answering an earlier one is stale.
+  const generationRef = useRef(0);
 
   useEffect(() => {
     let current = true;
+    generationRef.current += 1;
+    loadingOlderRef.current = false;
     setState(initialState);
     loadPageRef.current(null).then(
       (page) => {
@@ -61,8 +66,11 @@ export function usePhoneMessagePages(streamKey: string, loadPage: (beforeSeq: nu
   const loadOlder = useCallback(async () => {
     if (!hasMore || nextBeforeSeq === null || loadingOlderRef.current) return;
     loadingOlderRef.current = true;
+    const generation = generationRef.current;
+    const stale = () => generation !== generationRef.current;
     try {
       const page = await loadPageRef.current(nextBeforeSeq);
+      if (stale()) return;
       setState((previous) => ({
         ...previous,
         messages: mergePhoneMessages(page.messages, previous.messages ?? []),
@@ -70,9 +78,10 @@ export function usePhoneMessagePages(streamKey: string, loadPage: (beforeSeq: nu
         nextBeforeSeq: page.nextBeforeSeq,
       }));
     } catch (loadError) {
-      setState((previous) => ({ ...previous, error: errorMessage(loadError) }));
+      if (!stale()) setState((previous) => ({ ...previous, error: errorMessage(loadError) }));
     } finally {
-      loadingOlderRef.current = false;
+      // A new stream already cleared the flag and may have its own page in flight.
+      if (!stale()) loadingOlderRef.current = false;
     }
   }, [hasMore, nextBeforeSeq, loadPageRef]);
 

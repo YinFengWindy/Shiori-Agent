@@ -8,7 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from conversation.listening_store import GroupListeningStore, ensure_listening_schema
+from conversation.listening_schema import ensure_listening_schema
+from conversation.listening_store import GroupListeningStore
 from conversation.models import ContactRecord, StateRecord, ThreadRecord
 from infra.persistence.sqlite_transaction import immediate_transaction
 

@@ -103,6 +103,8 @@ async def test_account_router_rejection_fetches_no_image(monkeypatch):
         def route_account_inbound(self, message):
             assert message.metadata["account_id"] == "account-b"
             assert message.metadata["mentioned"] is False
+            # A picture alone is handed over as a line of text, for listening.
+            assert message.content == "[图片]"
             return None
 
     adapter._ctx = SimpleNamespace(

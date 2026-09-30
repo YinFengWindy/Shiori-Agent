@@ -24,6 +24,9 @@ from .onebot import OneBotSocket
 if TYPE_CHECKING:
     from agent.plugin_host.avatars import AvatarsCapability
 
+# The text of a message that is only pictures, as other channels write it.
+IMAGE_PLACEHOLDER = "[图片]"
+
 
 class QQInboundAdapter:
     """Keeps platform parsing and media admission separate from outbound sends."""
@@ -120,7 +123,12 @@ class QQInboundAdapter:
             else message.content
         )
         text, image_urls = extract_cq_images(raw)
-        message = replace(message, content=text)
+        # A picture alone reads as 「[图片]」, as other channels write it, so a
+        # listened group message keeps a line even though its file is never
+        # downloaded.
+        message = replace(
+            message, content=text or (IMAGE_PLACEHOLDER if image_urls else "")
+        )
         hub = ctx.channel_hub
         if hub is None:
             # Without the host's account routing, a group message still only

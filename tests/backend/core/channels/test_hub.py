@@ -979,8 +979,8 @@ def test_unaddressed_group_messages_are_listened_to_where_listening_is_on(
     assert hub.route_account_inbound(group("没人听")) is None
     assert listening.page(thread_id)["messages"] == []
 
-    listening.set_enabled(thread_id, True, operator="user")
-    listening.set_daily_cap(thread_id, 1)
+    listening.switches.set_enabled(thread_id, True, operator="user")
+    listening.switches.set_daily_cap(thread_id, 1)
     # Messages that @ or reply to the role still start turns and use no cap.
     assert hub.route_account_inbound(group("@你", mentioned=True)) is not None
     assert hub.route_account_inbound(group("回你", reply_to_sender_id="self"))

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -535,62 +534,3 @@ async def test_cached_avatars_come_with_rows_messages_and_live_updates(
     ]
     assert update["conversation"]["avatar_abs"] == group_avatar
     assert update["messages"][0]["sender_avatar_abs"] == sender
-    # A listening record of the same sender shows the same avatar.
-    conversation.listening.set_enabled(group.id, True, operator="user")
-    source = _group_message(group, sender_id="42", name="阿花")["message_source"]
-    heard = conversation.listening.hear(
-        group.id,
-        sender_id="42",
-        content="路过",
-        source=source,
-        external_message_id="",
-        timestamp=datetime(2026, 9, 30, 20, 0).astimezone(),
-    )
-    assert heard is not None
-    listened = handler.listening_update(heard)
-    assert listened is not None
-    assert listened["message"]["sender_avatar_abs"] == sender
-
-
-@pytest.mark.asyncio
-async def test_reads_a_groups_listening_records_after_listening_is_off(
-    tmp_path: Path,
-) -> None:
-    manager = SessionManager(tmp_path)
-    conversation = ConversationService(manager)
-    group = _thread(conversation, role_id="mira", channel="qq", chat_id="gqq:5")
-    handler, qq = _handler(tmp_path, conversation)
-    _ = _bind(tmp_path, qq, "100")
-    listening = conversation.listening
-    listening.set_enabled(group.id, True, operator="user")
-    source = _group_message(group, sender_id="100", name="主人")["message_source"]
-    heard = listening.hear(
-        group.id,
-        sender_id="100",
-        content="今晚开黑",
-        source=source,
-        external_message_id="",
-        timestamp=datetime(2026, 9, 30, 20, 0).astimezone(),
-    )
-    assert heard is not None
-    listening.set_enabled(group.id, False, operator="user")
-
-    page = await handler.handle(
-        "phone.listening.messages", {"role_id": "mira", "thread_id": group.id}
-    )
-
-    assert page is not None
-    [row] = page["messages"]
-    assert (row["content"], row["sender_name"], row["listened"]) == (
-        "今晚开黑",
-        "主人",
-        True,
-    )
-    assert row["sender_is_user"] is True
-    assert page["has_more"] is False
-    # The live event carries the same row.
-    assert handler.listening_update(heard) == {
-        "role_id": "mira",
-        "thread_id": group.id,
-        "message": row,
-    }

@@ -15,6 +15,7 @@ const appIconClass = "relative grid h-14 w-14 place-items-center rounded-md bg-s
 /**
  * The home screen: one app per account of the role, then 设置. An offline
  * account still has its app, dimmed and marked 「离线」 under its icon.
+ * Without any account 设置 stays reachable above the empty state.
  */
 export function PhoneHomeScreen({ apps, error, onRetry, onOpen, onOpenSettings }: {
   /** Null while the accounts load. */
@@ -28,29 +29,29 @@ export function PhoneHomeScreen({ apps, error, onRetry, onOpen, onOpenSettings }
     return <PhoneLoadError message={error} onRetry={onRetry} />;
   }
   if (!apps) return null;
-  if (!apps.length) {
-    return <PhoneEmptyState line={emptyStateLines.phoneNoAccounts} label="还没有账号" testId="phone-home-empty" />;
-  }
   return (
-    <ul className="m-0 grid list-none grid-cols-3 content-start gap-x-1 gap-y-4 px-4 pt-5" aria-label="应用" data-testid="phone-home">
-      {apps.map(({ accountId, label, Icon = PuzzlePieceIcon, offline }) => (
-        <li key={accountId} className="min-w-0">
-          <button type="button" className={appButtonClass} aria-label={offline ? `${label}，离线` : label}
-            data-testid={`phone-app-${accountId}`} onClick={() => onOpen(accountId)}>
-            <span className={cx(appIconClass, offline && "opacity-60")}>
-              <Icon className="h-7 w-7" />
-            </span>
-            <span className="surface-glass max-w-full truncate rounded-full px-1 text-caption text-ink">{label}</span>
-            {offline ? <span className="rounded-full bg-surface-soft px-1.5 text-caption text-ink-muted">离线</span> : null}
+    <div className="grid content-start">
+      <ul className="m-0 grid list-none grid-cols-3 content-start gap-x-1 gap-y-4 px-4 pt-5" aria-label="应用" data-testid="phone-home">
+        {apps.map(({ accountId, label, Icon = PuzzlePieceIcon, offline }) => (
+          <li key={accountId} className="min-w-0">
+            <button type="button" className={appButtonClass} aria-label={offline ? `${label}，离线` : label}
+              data-testid={`phone-app-${accountId}`} onClick={() => onOpen(accountId)}>
+              <span className={cx(appIconClass, offline && "opacity-60")}>
+                <Icon className="h-7 w-7" />
+              </span>
+              <span className="surface-glass max-w-full truncate rounded-full px-1 text-caption text-ink">{label}</span>
+              {offline ? <span className="rounded-full bg-surface-soft px-1.5 text-caption text-ink-muted">离线</span> : null}
+            </button>
+          </li>
+        ))}
+        <li className="min-w-0">
+          <button type="button" className={appButtonClass} aria-label="设置" data-testid="phone-app-settings" onClick={onOpenSettings}>
+            <span className={appIconClass}><GearSixIcon className="h-7 w-7" /></span>
+            <span className="surface-glass max-w-full truncate rounded-full px-1 text-caption text-ink">设置</span>
           </button>
         </li>
-      ))}
-      <li className="min-w-0">
-        <button type="button" className={appButtonClass} aria-label="设置" data-testid="phone-app-settings" onClick={onOpenSettings}>
-          <span className={appIconClass}><GearSixIcon className="h-7 w-7" /></span>
-          <span className="surface-glass max-w-full truncate rounded-full px-1 text-caption text-ink">设置</span>
-        </button>
-      </li>
-    </ul>
+      </ul>
+      {apps.length ? null : <PhoneEmptyState line={emptyStateLines.phoneNoAccounts} label="还没有账号" testId="phone-home-empty" />}
+    </div>
   );
 }

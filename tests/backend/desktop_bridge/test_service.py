@@ -1407,7 +1407,7 @@ async def test_a_stored_listening_record_is_pushed_to_the_phone(tmp_path) -> Non
         )
     )
     listening = sessions.conversation_store.listening
-    listening.set_enabled(thread.id, True, operator="user")
+    listening.switches.set_enabled(thread.id, True, operator="user")
 
     # The channel hub stores it; the bridge learns of it through the shared store.
     heard = listening.hear(

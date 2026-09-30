@@ -9,11 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from conversation.listening_store import (
-    GroupListeningStore,
-    ListeningOperator,
-    ListeningSettings,
-)
+from conversation.listening_store import GroupListeningStore
+from conversation.listening_switches import ListeningOperator, ListeningSettings
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.common.channel_chat_types import CHAT_TYPE_GROUP, ChatType
@@ -46,6 +43,13 @@ class GroupListeningControl:
         """
         return chat_type == CHAT_TYPE_GROUP and self._supports_channel(channel)
 
+    def current_thread(self, thread_id: str) -> ThreadRecord | None:
+        """``thread_id`` while it is one of its role's channel conversations."""
+        thread = self._conversations.get_thread(thread_id)
+        if thread is None:
+            return None
+        return self._conversations.role_channel_thread(thread.role_id, thread.id)
+
     def group(self, role_id: str, thread_id: str) -> ThreadRecord:
         """The role's group ``thread_id``; fails unless it can be listened to."""
         thread = self._conversations.role_channel_thread(role_id, thread_id)
@@ -66,11 +70,14 @@ class GroupListeningControl:
     ) -> ListeningSettings:
         """Turns listening on or off for one of the role's groups, logging ``operator``."""
         thread = self.group(role_id, thread_id)
-        return self.store.set_enabled(thread.id, enabled, operator=operator)
+        return self.store.switches.set_enabled(thread.id, enabled, operator=operator)
 
     def set_daily_cap(
-        self, role_id: str, thread_id: str, cap: int | None
+        self, role_id: str, thread_id: str, cap: object
     ) -> ListeningSettings:
-        """Overrides the group's daily cap; None follows the global default."""
+        """Overrides the group's daily cap; None follows the global default.
+
+        ``cap`` is checked by the switches (an integer of at least 1).
+        """
         thread = self.group(role_id, thread_id)
-        return self.store.set_daily_cap(thread.id, cap)
+        return self.store.switches.set_daily_cap(thread.id, cap)

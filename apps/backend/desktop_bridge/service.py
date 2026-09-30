@@ -44,12 +44,12 @@ from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.method_policy import MethodPolicy, resolve_plugin_method_policy
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
 from desktop_bridge.phone_listening_requests import (
+    PHONE_LISTENING_HEARD,
     DesktopPhoneListeningRequestHandler,
 )
 from desktop_bridge.phone_memory_requests import DesktopPhoneMemoryRequestHandler
 from desktop_bridge.phone_requests import (
     PHONE_CONVERSATION_UPDATED,
-    PHONE_LISTENING_HEARD,
     DesktopPhoneRequestHandler,
 )
 from desktop_bridge.plugin_requests import DesktopPluginRequestHandler
@@ -247,6 +247,9 @@ class DesktopBridgeService:
             avatars=role_store.avatars,
             listening=listening,
         )
+        self.phone_listening = DesktopPhoneListeningRequestHandler(
+            listening, self.phone
+        )
         self._listening_heard_listener = self._on_listening_heard
         self.conversation_service.listening.add_heard_listener(
             self._listening_heard_listener
@@ -265,7 +268,7 @@ class DesktopBridgeService:
                 group_environment=group_environment,
                 members=MemberProfiles(workspace),
             ),
-            phone_listening=DesktopPhoneListeningRequestHandler(listening),
+            phone_listening=self.phone_listening,
             roles=DesktopRoleRequestHandler(
                 role_service=self.role_service,
                 role_presenter=self.role_presenter,
@@ -382,7 +385,7 @@ class DesktopBridgeService:
         """Pushes ``phone.listening.heard`` so an open group chat shows the record."""
         if not self._event_listeners:
             return
-        update = self.phone.listening_update(message)
+        update = self.phone_listening.heard_update(message)
         if update is not None:
             self._schedule_change_push(PHONE_LISTENING_HEARD, update)
 

@@ -42,7 +42,7 @@ EXPECTED_OBJECTS = {
     ("index", "idx_contacts_role_id"),
     # Group listening records (#538).
     ("index", "idx_listening_messages_day"),
-    ("index", "idx_listening_messages_external"),
+    ("index", "uq_listening_messages_external"),
     ("index", "idx_listening_toggles_thread"),
     ("index", "sqlite_autoindex_listening_groups_1"),
     ("index", "sqlite_autoindex_listening_messages_1"),
