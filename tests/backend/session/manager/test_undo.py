@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -300,3 +301,70 @@ async def test_undo_projection_failure_rolls_back_messages_cursor_all_states_and
     reloaded = manager.get_or_create(session.key)
     assert reloaded.messages == before_messages
     assert reloaded.last_consolidated == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("cursors", "expected"),
+    [
+        # 删掉的桌面回合已整理：用户游标退回重新整理，外部游标不动。
+        ({"user": 8, "external": 4}, {"user": 6, "external": 4}),
+        # 删掉的桌面回合未整理：用户游标不动，外部游标随删除平移。
+        ({"user": 4, "external": 8}, {"user": 4, "external": 6}),
+    ],
+)
+async def test_undo_rolls_back_each_context_cursor(
+    tmp_path: Path, cursors: dict[str, int], expected: dict[str, int]
+):
+    from conversation.service import desktop_thread_id, network_thread_id
+
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    group = network_thread_id("mira", "qq", "g1")
+    desktop = desktop_thread_id("mira")
+    for index, thread_id in enumerate((group, desktop, group, desktop)):
+        session.add_message("user", f"u{index}", thread_id=thread_id)
+        session.add_message("assistant", f"a{index}", thread_id=thread_id)
+    manager.save(session)
+    manager._store.update_last_consolidated(
+        session.key, min(cursors.values()), context_cursors=cast(Any, cursors)
+    )
+    manager.invalidate(session.key)
+
+    result = await manager.undo_last_turn(session.key)
+
+    assert result is not None
+    assert result.deleted_ids == ["role:mira:6", "role:mira:7"]
+    manager.invalidate(session.key)
+    reloaded = manager.get_or_create(session.key)
+    assert reloaded.context_cursors == expected
+    assert reloaded.last_consolidated == min(expected.values())
+    assert result.last_consolidated_after == min(expected.values())
+
+
+@pytest.mark.asyncio
+async def test_undo_ignores_memory_sources_from_the_other_context(tmp_path: Path):
+    """另一类上下文的记忆来源不会把本类游标多拉回（#523）。"""
+    from conversation.service import desktop_thread_id, network_thread_id
+
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    group = network_thread_id("mira", "qq", "g1")
+    desktop = desktop_thread_id("mira")
+    for index, thread_id in enumerate((group, desktop, group, desktop)):
+        session.add_message("user", f"u{index}", thread_id=thread_id)
+        session.add_message("assistant", f"a{index}", thread_id=thread_id)
+    manager.save(session)
+    manager._store.update_last_consolidated(
+        session.key, 8, context_cursors={"user": 8, "external": 8}
+    )
+    manager.invalidate(session.key)
+
+    result = await manager.undo_last_turn(
+        session.key,
+        rollback_source_resolver=lambda _ids: ["role:mira:0", "role:mira:6"],
+    )
+
+    assert result is not None
+    reloaded = manager.get_or_create(session.key)
+    assert reloaded.context_cursors == {"user": 6, "external": 6}

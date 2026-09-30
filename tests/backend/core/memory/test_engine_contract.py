@@ -757,6 +757,7 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(
             old_messages=list(session.messages[:6]),
             keep_count=6,
             consolidate_up_to=6,
+            scopes=("user",),
         ),
         segments=ConsolidationSegments(
             user_messages=list(session.messages[:6]), external_messages=[]
@@ -774,7 +775,7 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(
     with pytest.raises(RuntimeError, match="vector write failed"):
         await maintenance.consolidate(ConsolidateRequest(session=session))
 
-    assert session.last_consolidated == 6
+    assert session.context_cursors == {"user": 6, "external": 0}
     assert "用户测试记忆" in (
         tmp_path / "roles" / "mira" / "memory" / "HISTORY.md"
     ).read_text(encoding="utf-8")
@@ -849,6 +850,7 @@ async def test_markdown_consolidation_runs_post_consolidation_hook(tmp_path: Pat
             old_messages=list(session.messages[:6]),
             keep_count=6,
             consolidate_up_to=6,
+            scopes=("user",),
         ),
         segments=ConsolidationSegments(
             user_messages=list(session.messages[:6]), external_messages=[]
@@ -861,7 +863,8 @@ async def test_markdown_consolidation_runs_post_consolidation_hook(tmp_path: Pat
         scope_channel="desktop",
         scope_chat_id="role:mira",
     )
-    maintenance._worker.prepare_consolidation = AsyncMock(return_value=draft)
+    # 角色会话每类上下文各试一个窗口；只有用户上下文这一窗有内容。
+    maintenance._worker.prepare_consolidation = AsyncMock(side_effect=[draft, None])
     after_consolidation = AsyncMock()
     maintenance.bind_lifecycle(
         MemoryLifecycleBindRequest(

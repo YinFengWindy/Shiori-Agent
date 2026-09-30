@@ -24,7 +24,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from conversation.service import (
     desktop_thread_id,
@@ -33,10 +33,13 @@ from conversation.service import (
 )
 from core.common.message_source import MessageSource
 from core.identity import UserIdentity, UserIdentityStore
-from session.manager.helpers import role_session_key
-from session.manager.models import HistoryFilter, message_thread_id
-
-ContextScope = Literal["user", "external"]
+from session.manager.helpers import role_id_from_session_key, role_session_key
+from session.manager.models import (
+    HistoryFilter,
+    consolidation_cursor,
+    message_thread_id,
+)
+from session.store.common import CONTEXT_SCOPES, ContextScope
 
 
 @dataclass(frozen=True)
@@ -205,6 +208,21 @@ def user_context_view(workspace: Path, role_id: str) -> ContextView:
     )
 
 
+def role_session_user_threads(
+    workspace: Path, session_key: str
+) -> UserContextThreads | None:
+    """会话 ``session_key`` 若是角色共享会话，返回它此刻的用户上下文会话。
+
+    “是否角色共享会话、需要按上下文划分”的唯一判定：只看会话键是否为
+    ``role:<id>``，与 ``session_context_view`` 的规则一致。整理与撤销都经由这里，
+    两边对同一会话要么都按上下文游标、要么都按单游标。其他会话返回 None。
+    """
+    role_id = role_id_from_session_key(session_key)
+    if not role_id:
+        return None
+    return load_user_context_threads(workspace, role_id)
+
+
 def session_context_view(
     workspace: Path, *, session_key: str, role_id: str, thread_id: str
 ) -> ContextView | None:
@@ -221,3 +239,19 @@ def session_context_view(
 def history_filter(view: ContextView | None) -> HistoryFilter | None:
     """``get_history`` 的 ``include`` 参数：有视图时按它筛选，非角色会话不筛选。"""
     return view.includes if view is not None else None
+
+
+def history_start(session: object, view: ContextView | None) -> int:
+    """回合历史的起点（``get_history`` 的 ``start_index``）：本回合所在上下文的整理游标。
+
+    每类上下文从自己的游标起读，另一类整理得再多也不会挤掉本类的原文；非角色会话
+    没有视图，用 ``last_consolidated``。
+    """
+    return consolidation_cursor(session, view.scope if view is not None else None)
+
+
+def role_context_views(user_threads: UserContextThreads) -> tuple[ContextView, ...]:
+    """角色会话每类上下文各一个视图，按 ``CONTEXT_SCOPES`` 的顺序。"""
+    return tuple(
+        ContextView(scope=scope, user_threads=user_threads) for scope in CONTEXT_SCOPES
+    )

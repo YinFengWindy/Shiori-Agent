@@ -9,7 +9,7 @@ from typing import Any
 
 from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
 
-from .common import _MESSAGE_SELECT_COLUMNS, thread_filter_sql
+from .common import _MESSAGE_SELECT_COLUMNS, ContextScope, thread_filter_sql
 from session.media_assets import preserve_media
 
 
@@ -129,9 +129,13 @@ class _MessageMixin:
         rows: list[dict[str, Any]],
         updated_at: str,
         last_consolidated: int,
+        context_cursors: dict[ContextScope, int] | None,
         next_seq: int,
     ) -> None:
-        """Atomically replace one session's persisted message snapshot."""
+        """Atomically replace one session's persisted message snapshot.
+
+        整段重写消息会改变位置，整理游标（含按上下文的游标）随快照一起写入。
+        """
         with self._lock:
             self._conn.execute("BEGIN IMMEDIATE")
             try:
@@ -194,6 +198,7 @@ class _MessageMixin:
                         session_key,
                     ),
                 )
+                self.write_context_cursors(session_key, context_cursors)
                 self._conn.commit()
             except Exception:
                 self._conn.rollback()
@@ -650,11 +655,13 @@ class _MessageMixin:
         *,
         ids: list[str],
         last_consolidated: int,
+        context_cursors: dict[ContextScope, int] | None = None,
         refresh_projections: Callable[[], None] | None = None,
     ) -> int:
         """Delete every requested session message and update its cursor atomically.
 
         Missing, duplicate, or foreign IDs fail without deleting any message.
+        角色会话给出 ``context_cursors`` 时，按上下文的整理游标在同一事务里回退。
         The optional projection callback joins this transaction on the shared store.
         """
         clean_ids = [
@@ -699,6 +706,8 @@ class _MessageMixin:
                     """,
                     (int(last_consolidated), now, next_seq, next_seq, session_key),
                 )
+                if context_cursors is not None:
+                    self.write_context_cursors(session_key, context_cursors)
                 if refresh_projections is not None:
                     refresh_projections()
                 self._conn.commit()

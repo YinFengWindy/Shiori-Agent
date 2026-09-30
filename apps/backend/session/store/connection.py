@@ -10,6 +10,8 @@ from pathlib import Path
 from conversation.store import ensure_conversation_schema
 from infra.persistence.sqlite_transaction import immediate_transaction
 
+from .common import CONTEXT_CURSOR_COLUMNS
+
 # Triggers that keep the external-content messages_fts index in sync with messages.
 _FTS_TRIGGERS = ("messages_ai", "messages_ad", "messages_au")
 
@@ -84,6 +86,10 @@ class _SessionConnection:
             self._conn.execute(
                 "ALTER TABLE sessions ADD COLUMN next_seq INTEGER NOT NULL DEFAULT 0"
             )
+        # 角色会话按上下文的整理游标（#523）；NULL 表示未迁移，取 last_consolidated。
+        for column in CONTEXT_CURSOR_COLUMNS.values():
+            if column not in existing:
+                self._conn.execute(f"ALTER TABLE sessions ADD COLUMN {column} INTEGER")
 
     def _ensure_next_seq_values(self) -> None:
         rows = self._conn.execute("SELECT key, next_seq FROM sessions").fetchall()

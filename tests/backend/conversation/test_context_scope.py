@@ -8,6 +8,7 @@ from conversation.context_scope import (
     ContextView,
     belongs_to_user,
     desktop_view_thread_ids,
+    history_start,
     in_desktop_view,
     load_user_context_threads,
     turn_context_view,
@@ -16,6 +17,7 @@ from conversation.context_scope import (
 from conversation.service import desktop_thread_id, network_thread_id
 from core.accounts import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
+from session.manager import Session
 
 QQ = AccountRecord(
     id="qq:101",
@@ -127,3 +129,34 @@ def test_belongs_to_user_by_thread_or_sender_flag(
     user_threads = load_user_context_threads(tmp_path, "mira")
 
     assert belongs_to_user(message, user_threads) is expected
+
+
+def test_each_context_reads_history_from_its_own_cursor(tmp_path: Path) -> None:
+    """旧会话迁移时两类都从原 last_consolidated 起读；有按上下文游标后各读各的。"""
+    session = Session("role:mira")
+    for index, thread in enumerate((DESKTOP, GROUP, DESKTOP, GROUP, DESKTOP, GROUP)):
+        session.add_message("user", f"m{index}", thread_id=thread)
+    session.last_consolidated = 2
+    user = user_context_view(tmp_path, "mira")
+    external = turn_context_view(tmp_path, "mira", GROUP)
+
+    def history(view: ContextView, start: int) -> list[str]:
+        return [
+            str(message["content"])
+            for message in session.history_window(
+                500, start_index=start, include=view.includes
+            )
+        ]
+
+    # 迁移前的读取方式：两类都从 last_consolidated 起。
+    before = {view.scope: history(view, 2) for view in (user, external)}
+    assert {
+        view.scope: history(view, history_start(session, view))
+        for view in (user, external)
+    } == before
+    assert history_start(session, None) == 2
+
+    session.context_cursors = {"user": 0, "external": 5}
+    assert history(user, history_start(session, user)) == ["m0", "m2", "m4"]
+    assert history(external, history_start(session, external)) == ["m5"]
+    assert history_start(session, None) == 2

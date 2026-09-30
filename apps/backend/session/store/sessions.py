@@ -8,6 +8,12 @@ from typing import Any
 
 from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains, like_prefix
 
+from .common import (
+    ContextScope,
+    context_cursor_assignments,
+    row_context_cursors,
+)
+
 
 class _SessionMixin:
     def session_exists(self, key: str) -> bool:
@@ -43,7 +49,14 @@ class _SessionMixin:
             if commit:
                 self._conn.commit()
 
-    def update_last_consolidated(self, key: str, last_consolidated: int) -> None:
+    def update_last_consolidated(
+        self,
+        key: str,
+        last_consolidated: int,
+        *,
+        context_cursors: dict[ContextScope, int] | None = None,
+    ) -> None:
+        """更新整理游标；给出 ``context_cursors`` 时同一事务写入按上下文的游标。"""
         now = datetime.now().astimezone().isoformat()
         with self._lock:
             self._conn.execute(
@@ -54,12 +67,33 @@ class _SessionMixin:
                 """,
                 (int(last_consolidated), now, key),
             )
+            if context_cursors is not None:
+                try:
+                    self.write_context_cursors(key, context_cursors)
+                except Exception:
+                    self._conn.rollback()
+                    raise
             self._conn.commit()
+
+    def write_context_cursors(
+        self, key: str, context_cursors: dict[ContextScope, int] | None
+    ) -> None:
+        """写入按上下文的整理游标列（None 写回未迁移）；不提交，调用方负责提交。
+
+        会话不存在时报错，由调用方回滚。
+        """
+        assignments, values = context_cursor_assignments(context_cursors)
+        with self._lock:
+            cur = self._conn.execute(
+                f"UPDATE sessions SET {assignments} WHERE key = ?", (*values, key)
+            )
+        if cur.rowcount <= 0:
+            raise ValueError(f"session 不存在: {key}")
 
     def get_session_meta(self, key: str) -> dict[str, Any] | None:
         with self._lock:
             row = self._conn.execute(
-                "SELECT key, created_at, updated_at, last_consolidated, metadata, last_user_at, last_proactive_at FROM sessions WHERE key = ?",
+                "SELECT key, created_at, updated_at, last_consolidated, metadata, last_user_at, last_proactive_at, user_cursor, external_cursor FROM sessions WHERE key = ?",
                 (key,),
             ).fetchone()
         if row is None:
@@ -72,6 +106,7 @@ class _SessionMixin:
             "metadata": json.loads(row["metadata"] or "{}"),
             "last_user_at": row["last_user_at"],
             "last_proactive_at": row["last_proactive_at"],
+            "context_cursors": row_context_cursors(row),
         }
 
     def list_sessions(self) -> list[dict[str, Any]]:
