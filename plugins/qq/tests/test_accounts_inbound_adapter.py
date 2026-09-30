@@ -379,18 +379,14 @@ async def test_quote_of_a_turn_reaches_the_role_but_the_stored_text_stays_its_ow
 
     [call] = bus.publish_inbound.await_args_list
     turn = call.args[0]
-    assert turn.content == (
-        "【你正在回复一条历史消息】\n被回复消息（来自 阿花（ID 303））：\n看\n"
-        "（被回复消息附带 1 张图片，即本条附件中的前 1 张）\n\n"
-        "【你当前新消息】\n这是啥"
-    )
-    # The quoted picture goes to the model with the turn, kept apart from
-    # the message's own, which is all the session stores.
+    # The quoted text loses its CQ codes (no nested reply, no @); its picture
+    # is downloaded and joins the turn ahead of the message's own. Wrapping
+    # the text is the host's (``with_reply_quote``).
+    assert turn.metadata["reply_to_content"] == "看"
+    assert turn.metadata["reply_to_media"] == ["D:/att/q.png"]
     assert turn.media == ["D:/att/q.png", "D:/att/own.png"]
     assert turn.metadata["persisted_user_content"] == "这是啥"
-    assert turn.metadata["reply_to_content"] == "看"
-    assert turn.metadata["reply_to_sender_name"] == "阿花"
-    assert turn.metadata["reply_to_media"] == ["D:/att/q.png"]
+    assert "来自 阿花（ID 303）" in turn.content
 
 
 @pytest.mark.asyncio

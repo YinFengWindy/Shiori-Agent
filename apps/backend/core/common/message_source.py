@@ -34,10 +34,15 @@ REPLY_TO_SENDER_ID_KEY = "reply_to_sender_id"
 # Optional inbound metadata of a message that quotes another and starts a
 # turn (#555), set through ``infra.channels.reply_context.with_reply_quote``:
 # the quoted message's text, its sender's display-name snapshot and the local
-# files of its pictures. The message's own text and media stay what is stored.
+# files of its pictures, which lead the turn's media in this order. The
+# message's own text and media stay what is stored.
 REPLY_TO_CONTENT_KEY = "reply_to_content"
 REPLY_TO_SENDER_NAME_KEY = "reply_to_sender_name"
 REPLY_TO_MEDIA_KEY = "reply_to_media"
+# Turn metadata: the user message's text the session stores when the turn's
+# content wraps it for the model (a desktop or channel quote). Internal to the
+# turn; never kept in the stored message's metadata.
+PERSISTED_USER_CONTENT_KEY = "persisted_user_content"
 # Inbound metadata flag the channel hub sets when the quoted sender
 # (``REPLY_TO_SENDER_ID_KEY``) is a platform identity bound to the desktop
 # user; plugins never set it themselves.

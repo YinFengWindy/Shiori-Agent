@@ -1,4 +1,8 @@
+import { cx } from "@shiori/plugin-sdk";
 import { DeleteIcon } from "../shared/icons";
+import {
+  focusResetClass, replyQuoteButtonClass, replyQuoteFrameClass, replyQuoteSenderClass, replyQuoteTextClass,
+} from "../shared/styles";
 import type { ChatReplyTarget } from "../shared/types";
 
 type ChatComposerReplyTargetProps = {
@@ -10,9 +14,9 @@ type ChatComposerReplyTargetProps = {
 
 function ReplyQuote({ replyTarget }: { replyTarget: ChatReplyTarget }) {
   return (
-    <div className="border-l-2 border-line-accent pl-2.5">
-      <div className="truncate text-[11px] font-medium leading-4 text-ink-muted">{replyTarget.sender || "历史消息"}</div>
-      <div className="line-clamp-2 text-[12px] leading-5 text-ink-secondary">{replyTarget.preview}</div>
+    <div className={replyQuoteFrameClass}>
+      <div className={replyQuoteSenderClass}>{replyTarget.sender || "历史消息"}</div>
+      <div className={cx(replyQuoteTextClass, "line-clamp-2 text-ink-secondary")}>{replyTarget.preview}</div>
     </div>
   );
 }
@@ -23,7 +27,7 @@ export function ChatComposerReplyTarget({ replyTarget, disabled, onClear, onJump
     <div className="flex min-w-0 items-start gap-2 rounded-md border border-line-soft bg-surface-soft px-2.5 py-2 text-left">
       {replyTarget.messageId ? (
         <button
-          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-left transition hover:opacity-85 focus:outline-none"
+          className={cx(replyQuoteButtonClass, focusResetClass, "min-w-0 flex-1")}
           type="button"
           aria-label="跳转到引用来源消息"
           onClick={() => onJumpToMessage(replyTarget.messageId)}

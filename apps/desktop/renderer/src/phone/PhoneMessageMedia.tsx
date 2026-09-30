@@ -4,7 +4,7 @@ import { isChatImageAsset } from "../chat/chatImageHistory";
 import { cx, pressableClass } from "@shiori/plugin-sdk";
 
 /** Pictures stay inside the bubble column of the phone's narrow screen. */
-export const phoneImageBounds = { width: 180, height: 220 };
+const phoneImageBounds = { width: 180, height: 220 };
 
 const imageButtonClass = cx(
   pressableClass,

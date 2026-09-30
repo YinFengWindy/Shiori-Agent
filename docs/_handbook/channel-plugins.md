@@ -110,7 +110,7 @@ class DemoChatChannel:
 - **chat_id 是渠道本地的会话标识**，必须稳定。一个渠道有多种会话类型时用前缀区分，例如 QQBot 的 `c2c:<openid>` / `group:<openid>`、QQ（NapCat）群聊的 `gqq:<群号>`。
 - **访问控制由接收账号的响应规则决定**。插件将规则与账号一起保存，入站时交给 `ChannelHub` 判断；黑名单支持发送者 ID 与忽略大小写的渠道别名（如 Telegram 用户名）。`/stop` 等控制命令走同一账号准入。`/chatid`（别名 `/myid`）由渠道插件自己识别并回复会话类型与号码，不进入角色对话。
 - **会话键**：准入后的消息用所属角色的 `role:<role_id>`（路由写进 `session_key_override`）。出站处理和流式状态统一用 `infra.channels.session_key.resolve_outbound_session_key(msg, default_channel=self.name)` 计算，与 `TurnStarted` / `StreamDeltaReady` 的 `session_key` 对齐。
-- 用户引用了一条历史消息时，用 `infra.channels.reply_context.build_inbound_text_with_reply_context()` 拼进正文，保持各渠道的格式一致。能取到被引用消息原文的渠道，改在 `route_account_inbound` 放行之后调 `with_reply_quote(message, own_id=<接收账号平台 ID>, text=, sender_name=, media=<被引用图片的本地路径>)`（#555，目前只有 QQ）：本回合看到拼好的正文与被引用图片，存下的仍是对方自己的正文与图片，引用进元数据 `reply_to_content` / `reply_to_sender_name` / `reply_to_media`（发送者 ID 仍是路由前上报的 `reply_to_sender_id`），小手机据此显示引用块。「来自 X」由宿主写成：你自己 / 你的用户（宿主按绑定身份标 `reply_to_sender_is_user`，插件不能自己设）/ 昵称（ID …）/ ID …。旁听的群消息不经过这一步。
+- 用户引用了一条历史消息时，用 `infra.channels.reply_context.build_inbound_text_with_reply_context()` 拼进正文，保持各渠道的格式一致。能取到被引用消息原文的渠道，改在 `route_account_inbound` 放行之后调 `with_reply_quote(message, own_id=<接收账号平台 ID>, text=, sender_name=, media=<被引用图片的本地路径>, has_pictures=<被引用消息是否带图>)`（#555，目前只有 QQ）：本回合看到拼好的正文与被引用图片，存下的仍是对方自己的正文与图片，引用进元数据 `reply_to_content` / `reply_to_sender_name` / `reply_to_media`（发送者 ID 仍是路由前上报的 `reply_to_sender_id`），小手机据此显示引用块。「来自 X」由宿主写成：你自己 / 你的用户（宿主按绑定身份标 `reply_to_sender_is_user`，插件不能自己设）/ 昵称（ID …）/ ID …。旁听的群消息不经过这一步。
 
 ### 经由账号快照
 

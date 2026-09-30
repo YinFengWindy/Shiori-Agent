@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from bus.events import InboundMessage
 from core.common.message_source import (
+    PERSISTED_USER_CONTENT_KEY,
     REPLY_TO_CONTENT_KEY,
     REPLY_TO_MEDIA_KEY,
     REPLY_TO_SENDER_ID_KEY,
@@ -16,9 +17,6 @@ from core.common.message_source import (
 SELF_REPLY_SENDER_LABEL = "你自己"
 # The quoted text the turn shows for a quoted message that is only pictures.
 QUOTED_IMAGE_PLACEHOLDER = "[图片]"
-# Turn metadata the session stores as the user message's text instead of the
-# model-facing content (read by the after-reasoning phase).
-PERSISTED_USER_CONTENT_KEY = "persisted_user_content"
 
 
 def build_inbound_text_with_reply_context(
@@ -66,6 +64,7 @@ def with_reply_quote(
     text: str,
     sender_name: str,
     media: list[str],
+    has_pictures: bool = False,
 ) -> InboundMessage:
     """``message``, as routed to a turn, with the message it quotes (#555).
 
@@ -76,16 +75,19 @@ def with_reply_quote(
     (``REPLY_TO_CONTENT_KEY``, ``REPLY_TO_SENDER_NAME_KEY``,
     ``REPLY_TO_MEDIA_KEY``) beside the quoted sender's ID
     (``REPLY_TO_SENDER_ID_KEY``) the plugin set before routing. ``own_id`` is
-    the receiving account's platform ID: a quote of it is the role's own. A
-    quote with neither text nor pictures leaves the message as it is.
+    the receiving account's platform ID: a quote of it is the role's own.
+    ``has_pictures`` says the quoted message had pictures even when none of
+    them could be fetched into ``media``: the quote then still reads 「[图片]」.
+    A quote with neither text nor pictures leaves the message as it is.
     """
     text = text.strip()
     sender_name = sender_name.strip()
-    if not text and not media:
+    if not text and not media and not has_pictures:
         return message
     metadata = {
         **message.metadata,
-        REPLY_TO_CONTENT_KEY: text,
+        # Pictures that could not be fetched still show as 「[图片]」.
+        REPLY_TO_CONTENT_KEY: text or ("" if media else QUOTED_IMAGE_PLACEHOLDER),
         PERSISTED_USER_CONTENT_KEY: message.content,
     }
     if sender_name:

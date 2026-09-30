@@ -80,4 +80,5 @@ async def with_quote(
         text=text,
         sender_name=replied.sender_name,
         media=await download(image_urls),
+        has_pictures=bool(image_urls),
     )

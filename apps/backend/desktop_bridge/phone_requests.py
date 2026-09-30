@@ -75,6 +75,7 @@ def _phone_quote(
 
     ``name`` goes by ``names`` like an @ (the role's account name, else the
     newest snapshot in the thread), else the snapshot stored with the quote.
+    ``names`` is the page's ``member_names``.
     """
     text = metadata.get(REPLY_TO_CONTENT_KEY)
     content = text if isinstance(text, str) else ""
@@ -97,7 +98,7 @@ def phone_message(
     session_key: str,
     is_user: Callable[[str | None], bool],
     avatars: AvatarIndex,
-    mention_names: Mapping[str, str],
+    member_names: Mapping[str, str],
     listened: bool = False,
 ) -> dict[str, Any]:
     """One conversation message as the phone's chat page shows it.
@@ -111,9 +112,10 @@ def phone_message(
     ``sender_avatar_abs`` is the sender's cached platform avatar file (#514),
     None for the role or when none is cached. ``mentions`` are the members
     the message structurally @s (#553), in order, each ``{id, name}`` with the
-    name from ``mention_names`` (None when unknown, the phone then shows the
+    name from ``member_names`` (None when unknown, the phone then shows the
     ID). ``quote`` is the message it quotes (#555): ``{sender_id, name,
-    content, media}``, the name resolved like a mention's, or None.
+    content, media}``, its name also from ``member_names``, or None.
+    ``member_names`` names the members the page's rows @ or quote.
     ``listened`` marks a row of the group's listening records (#538) rather
     than of the role's conversation.
     """
@@ -132,10 +134,10 @@ def phone_message(
             None if from_role else avatars.sender(source.channel, source.sender_id)
         ),
         "mentions": [
-            {"id": member, "name": mention_names.get(member)}
+            {"id": member, "name": member_names.get(member)}
             for member in source.mentioned_ids
         ],
-        "quote": _phone_quote(metadata, source.reply_to_sender_id, mention_names),
+        "quote": _phone_quote(metadata, source.reply_to_sender_id, member_names),
         "content": str(message.get("content") or ""),
         "media": [str(item) for item in message.get("media") or []],
         "timestamp": str(message.get("timestamp") or ""),
@@ -277,7 +279,7 @@ class DesktopPhoneRequestHandler:
             )
             for message in rows
         ]
-        mention_names = self._mention_names(
+        member_names = self._member_names(
             role_id,
             thread,
             {member for source in sources for member in source.mentioned_ids}
@@ -297,13 +299,13 @@ class DesktopPhoneRequestHandler:
                 session_key=session_key,
                 is_user=is_user,
                 avatars=avatars,
-                mention_names=mention_names,
+                member_names=member_names,
                 listened=listened,
             )
             for message in rows
         ]
 
-    def _mention_names(
+    def _member_names(
         self, role_id: str, thread: ThreadRecord, member_ids: set[str]
     ) -> dict[str, str]:
         """Names for the members ``member_ids`` @'d or quoted in ``thread``.

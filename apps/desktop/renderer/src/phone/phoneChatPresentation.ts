@@ -6,7 +6,7 @@ import type { PhoneConversation, PhoneMessage, PhoneQuote } from "./phoneClient"
 const phoneTimeSeparatorGapMs = 5 * 60_000;
 
 /** A quote shows at most this many lines until expanded; about this many characters fill them on the phone's screen. */
-const phoneQuoteCollapsedLines = 2;
+export const phoneQuoteCollapsedLines = 2;
 const phoneQuoteCollapsedChars = 40;
 
 /** A quote block above a bubble: who is quoted (the name, else the ID) and what they said. */
