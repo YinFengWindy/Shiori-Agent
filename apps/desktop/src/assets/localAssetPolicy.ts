@@ -19,6 +19,8 @@ const trustedSinglePathFields = new Set([
   "chat_background_abs",
   "image_path",
   "preview_abs",
+  // Phone messages carry the sender's cached channel avatar (#514).
+  "sender_avatar_abs",
   "spritesheet_abs",
   // Story-owned background and CG resources expose their generated asset as path.
   "path",

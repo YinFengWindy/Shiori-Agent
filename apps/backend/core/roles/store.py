@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from core.accounts import AccountRegistry
+from core.channel_avatars import ChannelAvatarStore
 from core.identity import BoundUserSenders, UserIdentityStore
 
 from .assets import RoleAssetStore
@@ -43,6 +44,9 @@ class RoleStore:
         # but shared through the same runtime store as the account index.
         self.identities = UserIdentityStore(workspace)
         self.accounts.add_deleted_listener(self.identities.forget_account)
+        # Cached avatars of channel senders and chats (#514): written by plugins
+        # through ``ctx.avatars``, read by the phone and identity bridge.
+        self.avatars = ChannelAvatarStore(workspace)
 
     def bound_user_senders(self, role_id: str) -> BoundUserSenders:
         """The senders on ``role_id``'s channels bound to the user right now.

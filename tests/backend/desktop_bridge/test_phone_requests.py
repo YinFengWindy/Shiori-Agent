@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 from typing import Any
 
 import pytest
+from PIL import Image
 
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.accounts import AccountRecord, AccountRegistry
+from core.channel_avatars import AvatarKey, ChannelAvatarStore
 from core.common.message_source import MessageSource
 from core.identity import IdentityChat, UserIdentityStore
 from desktop_bridge.phone_requests import DesktopPhoneRequestHandler
@@ -171,6 +174,7 @@ async def test_lists_the_roles_channel_conversations_newest_first(
         accounts=accounts,
         identities=identities,
         messages=DesktopSessionPresenter(conversation),
+        avatars=ChannelAvatarStore(tmp_path),
     )
 
     result = await handler.handle("phone.conversations.list", {"role_id": "mira"})
@@ -183,6 +187,7 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 "channel": "qq",
                 "chat_type": "group",
                 "display_name": "摸鱼群",
+                "avatar_abs": None,
                 "is_user_chat": False,
                 "last_message": {
                     "role": "assistant",
@@ -198,6 +203,7 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 "channel": "telegram_bot1",
                 "chat_type": "private",
                 "display_name": "小明",
+                "avatar_abs": None,
                 "is_user_chat": True,
                 "last_message": {
                     "role": "assistant",
@@ -213,6 +219,7 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 "channel": "feishu:feishu:cli_a",
                 "chat_type": "group",
                 "display_name": "项目群",
+                "avatar_abs": None,
                 "is_user_chat": False,
                 "last_message": {
                     "role": "user",
@@ -229,6 +236,7 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 # Only an ``unknown`` type was recorded: no guess.
                 "chat_type": None,
                 "display_name": "c2c:7",
+                "avatar_abs": None,
                 "is_user_chat": False,
                 "last_message": {
                     "role": "user",
@@ -253,6 +261,7 @@ async def test_requires_a_role_and_leaves_other_methods_alone(
         accounts=AccountRegistry({"mira"}.__contains__),
         identities=UserIdentityStore(tmp_path),
         messages=DesktopSessionPresenter(conversation),
+        avatars=ChannelAvatarStore(tmp_path),
     )
 
     with pytest.raises(ValueError, match="role_id"):
@@ -276,6 +285,7 @@ def _handler(tmp_path: Path, conversation: ConversationService):
         accounts=accounts,
         identities=UserIdentityStore(tmp_path),
         messages=DesktopSessionPresenter(conversation),
+        avatars=ChannelAvatarStore(tmp_path),
     )
     return handler, qq.record
 
@@ -361,6 +371,7 @@ async def test_reads_one_conversation_page_by_page_from_the_roles_view(
             "sender_id": "100",
             "sender_name": "主人",
             "sender_is_user": True,
+            "sender_avatar_abs": None,
             "content": "我也来",
             "media": ["photo.png"],
             "timestamp": "2026-09-29T10:01:00+08:00",
@@ -370,6 +381,7 @@ async def test_reads_one_conversation_page_by_page_from_the_roles_view(
             "sender_id": None,
             "sender_name": None,
             "sender_is_user": False,
+            "sender_avatar_abs": None,
             "content": "我来",
             "media": [],
             "timestamp": "2026-09-29T10:02:00+08:00",
@@ -439,3 +451,68 @@ async def test_the_user_mark_follows_the_current_bindings(tmp_path: Path) -> Non
     assert update["messages"][0]["sender_is_user"] is True
     UserIdentityStore(tmp_path).unbind(identity_id)
     assert await marked() is False
+
+
+def _png() -> bytes:
+    output = io.BytesIO()
+    Image.new("RGB", (8, 8), "pink").save(output, format="PNG")
+    return output.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_cached_avatars_come_with_rows_messages_and_live_updates(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    conversation = ConversationService(manager)
+    group = _thread(
+        conversation, role_id="mira", channel="qq", chat_id="gqq:5", name="摸鱼群"
+    )
+    private = _thread(
+        conversation, role_id="mira", channel="qq", chat_id="42", name="阿花"
+    )
+    session = manager.get_or_create("role:mira")
+    session.add_message(
+        "user", "谁来开黑", metadata=_group_message(group, sender_id="42", name="阿花")
+    )
+    session.add_message(
+        "user", "我也来", metadata=_group_message(group, sender_id="7", name="小明")
+    )
+    session.add_message("assistant", "我来", metadata={"thread_id": group.id})
+    session.add_message(
+        "user", "在吗", metadata=_metadata(private, chat_type="private")
+    )
+    manager.save(session)
+    avatars = ChannelAvatarStore(tmp_path)
+    avatars.save(AvatarKey("sender", "qq", "42"), _png(), plugin_id="qq")
+    avatars.save(AvatarKey("chat", "qq", "gqq:5"), _png(), plugin_id="qq")
+    sender = avatars.index().sender("qq", "42")
+    group_avatar = avatars.index().chat("qq", "gqq:5")
+    assert sender is not None and group_avatar is not None
+    handler = DesktopPhoneRequestHandler(
+        conversations=conversation,
+        accounts=AccountRegistry({"mira"}.__contains__),
+        identities=UserIdentityStore(tmp_path),
+        messages=DesktopSessionPresenter(conversation),
+        avatars=avatars,
+    )
+
+    listed = await handler.handle("phone.conversations.list", {"role_id": "mira"})
+    page = await handler.handle(
+        "phone.conversation.messages", {"role_id": "mira", "thread_id": group.id}
+    )
+    [update] = handler.conversation_updates("mira", session.messages[:1])
+
+    assert listed is not None and page is not None
+    # The private chat's avatar is not cached yet: its row keeps the placeholder.
+    assert {row["thread_id"]: row["avatar_abs"] for row in listed["conversations"]} == {
+        group.id: group_avatar,
+        private.id: None,
+    }
+    assert [row["sender_avatar_abs"] for row in page["messages"]] == [
+        sender,
+        None,
+        None,
+    ]
+    assert update["conversation"]["avatar_abs"] == group_avatar
+    assert update["messages"][0]["sender_avatar_abs"] == sender

@@ -281,3 +281,23 @@ async def test_group_reply_target_reaches_the_host_and_leaves_the_text():
     assert routed[0].metadata["reply_to_sender_id"] == "202"
     [call] = bus.publish_inbound.await_args_list
     assert call.args[0].content == "是这样吗"
+
+
+@pytest.mark.asyncio
+async def test_received_message_refreshes_its_sender_and_group_avatars():
+    adapter = _adapter()
+    adapter._avatars = Mock(refresh=Mock(return_value=None))
+    adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
+    adapter._ctx = SimpleNamespace(
+        bus=SimpleNamespace(publish_inbound=AsyncMock()),
+        channel_hub=SimpleNamespace(route_account_inbound=lambda message: message),
+        http_resources=SimpleNamespace(),
+        attachment_store=SimpleNamespace(),
+    )
+
+    await adapter._accept_inbound(_group_message(True))
+
+    assert {call.args[:3] for call in adapter._avatars.refresh.call_args_list} == {
+        ("sender", "qq", "902"),
+        ("chat", "qq", "gqq:777"),
+    }

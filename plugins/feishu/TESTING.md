@@ -28,6 +28,7 @@ uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
    - `im:message`：获取与发送单聊、群组消息（读取被引用的消息、撤回失败的流式卡片需要）
    - `im:resource`：获取与上传图片或文件资源
    - `cardkit:card:write`：创建与更新卡片（流式卡片需要；缺少时回复会退回普通卡片，不影响收发）
+   - `contact:user.base:readonly`：读取发送者的名称和头像（缺少时小手机里没有发送者昵称、头像保持占位，不影响收发）
 4. 在「凭证与基础信息」复制 App ID 和 App Secret。
 
 ## 2. 在 Shiori 里启用
@@ -58,6 +59,7 @@ uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 - 回复过程中发送 `/stop`：回复中断；下一轮开始时上一张未完成的卡片被收尾。
 - 让角色用 `message_push` 主动发文本、图片、文件。
 - 撤销开发者后台的 `cardkit:card:write` 权限后再对话：回复仍以普通卡片送达。
+- 发送者的昵称与头像：第二条消息起小手机里显示发送者昵称，会话列表与聊天页显示其飞书头像；撤销 `contact:user.base:readonly` 后换一个新用户私聊，消息照常收发，日志有一条警告。
 - 断网再恢复：状态先变为未连接，随后自动重连并继续收消息。
 - 在账号详情编辑 App Secret 草稿时连接不变；点击“保存并连接”后先验证机器人身份，再只重连该账号；`config.toml` 中不出现飞书凭据。
 - 账号详情“断开连接”只停该应用；“重新连接”只重建该应用连接，重启 Shiori 后断开状态仍保留，其他账号继续在线。

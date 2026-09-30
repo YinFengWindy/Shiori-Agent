@@ -17,12 +17,12 @@ const role = { id: "mira", name: "Mira", avatar_abs: "" };
 const app: PhoneApp = { accountId: "qq:1", label: "QQ", accountName: "小栞", offline: false };
 const conversation: PhoneConversation = {
   threadId: "thread:mira:qq:gqq:5", accountId: "qq:1", channel: "qq", chatType: "group", displayName: "摸鱼群",
-  isUserChat: false,
+  avatarPath: null, isUserChat: false,
   lastMessage: { role: "assistant", content: "我来", timestamp: "2026-09-29T10:02:00+08:00", hasMedia: false, senderName: null },
 };
 
 const message = (id: string, patch: Record<string, unknown>) => ({
-  id, seq: null, sender: "other", sender_id: "42", sender_name: "阿花", sender_is_user: false,
+  id, seq: null, sender: "other", sender_id: "42", sender_name: "阿花", sender_is_user: false, sender_avatar_abs: null,
   content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00", ...patch,
 });
 
@@ -32,7 +32,7 @@ test("group chat info: blocks, note saved and its draft kept, recent activity re
   const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
   const replies: Record<string, unknown> = {
     "phone.conversation.messages": { has_more: false, next_before_seq: null, messages: [
-      message("谁来开黑", {}),
+      message("谁来开黑", { sender_avatar_abs: "D:/avatars/sender/42.png" }),
       message("我也来", { sender_id: "100", sender_name: "主人", sender_is_user: true }),
       message("我来", { sender: "role", sender_id: null, sender_name: null }),
     ] },
@@ -61,6 +61,8 @@ test("group chat info: blocks, note saved and its draft kept, recent activity re
   try {
     // Only the other, identified sender's avatar opens a profile; the user's does not.
     assert.equal(view.container.querySelectorAll('[data-testid="phone-member-avatar"]').length, 1);
+    // A cached avatar keeps that button.
+    assert.equal(find("phone-member-avatar")?.querySelector("img")?.getAttribute("src"), "D:/avatars/sender/42.png");
 
     await click(find("phone-chat-info"));
     assert.deepEqual(

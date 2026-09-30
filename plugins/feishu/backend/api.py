@@ -229,6 +229,19 @@ class FeishuApi:
         )
         return str(as_dict(payload.get("data")).get("file_key") or "")
 
+    async def get_user(self, open_id: str) -> dict[str, Any]:
+        """Returns a user's contact profile (``name``, ``avatar`` URLs …).
+
+        Needs the app's ``contact:user.base:readonly`` permission; without it
+        Feishu answers with a nonzero code and this raises ``FeishuApiError``.
+        """
+        payload = await self.request(
+            "GET",
+            f"/open-apis/contact/v3/users/{open_id}",
+            params={"user_id_type": "open_id"},
+        )
+        return as_dict(as_dict(payload.get("data")).get("user"))
+
     async def bot_info(self) -> dict[str, Any]:
         """Returns the bot profile (``app_name``, ``open_id``)."""
         payload = await self.request("GET", "/open-apis/bot/v3/info")

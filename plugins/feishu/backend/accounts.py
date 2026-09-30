@@ -101,6 +101,7 @@ class FeishuAccounts:
                 profile_ref=app.ref,
                 role_id=app.role_id,
                 chat_types=self._ctx.manifest.channel_chat_types(CHANNEL),
+                avatars=self._ctx.avatars,
             ),
         )
 

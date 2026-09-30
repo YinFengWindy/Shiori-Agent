@@ -52,6 +52,7 @@ def test_manifest_preserves_historical_channel_name() -> None:
     assert set(manifest.capabilities) == {
         "channels",
         "accounts",
+        "avatars",
         "workspace",
         "rpc",
     }

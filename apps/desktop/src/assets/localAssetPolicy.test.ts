@@ -49,3 +49,16 @@ test("pet package renderer assets are collected from trusted bridge payloads", (
 
   assert.deepEqual(paths, [previewPath, spritesheetPath]);
 });
+
+test("cached channel avatars are collected from phone and identity payloads", () => {
+  const senderPath = "C:\\workspace\\private_runtime\\channel-avatars\\sender\\qq_42-1a2b3c4d.png";
+  const chatPath = "C:\\workspace\\private_runtime\\channel-avatars\\chat\\qq_gqq_5-1a2b3c4d.png";
+
+  const paths = collectTrustedLocalAssetPaths({
+    conversation: { avatar_abs: chatPath },
+    messages: [{ sender_avatar_abs: senderPath }, { sender_avatar_abs: null }],
+    identities: [{ avatar_abs: senderPath }],
+  });
+
+  assert.deepEqual(paths, [chatPath, senderPath, senderPath]);
+});

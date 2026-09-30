@@ -7,8 +7,9 @@ import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 
 type Request = { method: string; payload: Record<string, unknown> };
 
-const identity = (id: string, scope: string, accountId = "") => ({
+const identity = (id: string, scope: string, accountId = "", avatarPath: string | null = null) => ({
   id, plugin_id: "qq", user_id: `10${id}`, scope, account_id: accountId, bound_at: "2026-09-29T08:00:00+00:00",
+  avatar_abs: avatarPath,
 });
 const account = {
   id: "acc-1", plugin_id: "qq", platform: "qq", platform_account_id: "900", config_ref: "", display_name: "小栞",
@@ -26,6 +27,7 @@ function host(identities: Array<ReturnType<typeof identity>>) {
     "accounts.list": () => ({ accounts: [account] }),
   };
   const miraDesktop = {
+    localAssetUrl: (path: string) => `asset:${path}`,
     onEvent: (listener: (event: BridgeEvent) => void) => {
       state.listeners.push(listener);
       return () => { state.listeners = state.listeners.filter((item) => item !== listener); };
@@ -60,10 +62,16 @@ test("bound identities list their channel, scope and bind time, and reload on id
     const rows = () => Array.from(view.container.querySelectorAll("li")).map((item) => item.textContent ?? "");
     assert.equal(rows().length, 1);
     assert.match(rows()[0], /^QQ101全平台 · .+解除绑定$/);
-    fake.state.identities = [identity("1", "platform"), identity("2", "account", "acc-1"), identity("3", "account", "gone")];
+    fake.state.identities = [
+      identity("1", "platform"), identity("2", "account", "acc-1", "D:/avatars/sender/102.png"), identity("3", "account", "gone"),
+    ];
     await fake.updated();
     assert.match(rows()[1], /^QQ102仅 小栞 · /);
     assert.match(rows()[2], /^QQ103仅 gone · /);
+    // A cached platform avatar replaces the channel mark; without one the mark stays.
+    const avatars = Array.from(view.container.querySelectorAll("li"), (item) => item.querySelector("[data-avatar]"));
+    assert.deepEqual(avatars.map((avatar) => avatar?.getAttribute("data-avatar")), ["channel", "account", "channel"]);
+    assert.equal(avatars[1]?.querySelector("img")?.getAttribute("src"), "asset:D:/avatars/sender/102.png");
   } finally {
     await view.cleanup();
     pluginUiRegistry.unregisterPlugin("qq");

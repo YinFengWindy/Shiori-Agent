@@ -10,6 +10,7 @@ from conversation.context_scope import user_context_threads
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.accounts import AccountRegistry, account_for_channel
+from core.channel_avatars import AvatarIndex, ChannelAvatarStore
 from core.common.message_source import MessageSource
 from core.identity import BoundUserSenders, UserIdentity, UserIdentityStore
 from desktop_bridge.session_presenter import MESSAGE_PAGE_SIZE, message_preview
@@ -82,6 +83,7 @@ def phone_message(
     *,
     session_key: str,
     is_user: Callable[[str | None], bool],
+    avatars: AvatarIndex,
 ) -> dict[str, Any]:
     """One conversation message as the phone's chat page shows it.
 
@@ -91,6 +93,8 @@ def phone_message(
     when unrecorded), and ``sender_is_user`` is ``is_user(sender_id)``: whether
     that sender is the desktop user under the bindings as they are now (like
     the context split, #482), not the flag stored when the message arrived.
+    ``sender_avatar_abs`` is the sender's cached platform avatar file (#514),
+    None for the role or when none is cached.
     """
     from_role = message.get("role") == "assistant"
     source = MessageSource.from_metadata(
@@ -104,6 +108,9 @@ def phone_message(
         "sender_id": None if from_role else source.sender_id,
         "sender_name": None if from_role else source.sender_name,
         "sender_is_user": not from_role and is_user(source.sender_id),
+        "sender_avatar_abs": (
+            None if from_role else avatars.sender(source.channel, source.sender_id)
+        ),
         "content": str(message.get("content") or ""),
         "media": [str(item) for item in message.get("media") or []],
         "timestamp": str(message.get("timestamp") or ""),
@@ -119,8 +126,10 @@ class DesktopPhoneRequestHandler:
     has an account on that platform), channel, ``chat_type`` (``group`` /
     ``private`` as the thread's messages recorded it, None when none did),
     the contact's ``display_name`` (group name for a group,
-    the sender's name for a private chat), whether it is the bound user's
-    private chat, and a ``last_message`` preview. Threads with no stored
+    the sender's name for a private chat), ``avatar_abs`` (the cached group
+    avatar, or the other person's for a private chat; None when none is
+    cached), whether it is the bound user's private chat, and a
+    ``last_message`` preview. Threads with no stored
     message are left out; the desktop conversation never appears.
 
     ``phone.conversation.messages`` with ``role_id``, ``thread_id`` and
@@ -137,11 +146,13 @@ class DesktopPhoneRequestHandler:
         accounts: AccountRegistry,
         identities: UserIdentityStore,
         messages: ThreadMessages,
+        avatars: ChannelAvatarStore,
     ) -> None:
         self._conversations = conversations
         self._accounts = accounts
         self._identities = identities
         self._messages = messages
+        self._avatars = avatars
 
     async def handle(
         self, method: str, payload: dict[str, Any]
@@ -211,18 +222,22 @@ class DesktopPhoneRequestHandler:
 
         The user's messages are those whose sender a current binding
         recognises on the role's account carrying the thread; with no such
-        account, none are. The bindings are read once for all rows.
+        account, none are. The bindings and the avatar index are read once
+        for all rows.
         """
         session_key = role_session_key(role_id)
         bound = role_bound_senders(
             role_id, accounts=self._accounts, identities=self._identities.list()
         )
+        avatars = self._avatars.index()
 
         def is_user(sender_id: str | None) -> bool:
             return sender_id is not None and bound.recognises(thread.channel, sender_id)
 
         return [
-            phone_message(message, session_key=session_key, is_user=is_user)
+            phone_message(
+                message, session_key=session_key, is_user=is_user, avatars=avatars
+            )
             for message in messages
         ]
 
@@ -251,6 +266,7 @@ class DesktopPhoneRequestHandler:
         newest = self._messages.newest_thread_messages(session_key, thread_ids)
         contacts = self._conversations.contacts_by_id(role_id)
         chat_types = self._conversations.thread_chat_types(thread_ids)
+        avatars = self._avatars.index()
         rows: list[tuple[datetime, dict[str, Any]]] = []
         for thread in threads:
             message = newest.get(thread.id)
@@ -274,6 +290,9 @@ class DesktopPhoneRequestHandler:
                         "channel": thread.channel,
                         "chat_type": chat_types[thread.id],
                         "display_name": contact.display_name,
+                        "avatar_abs": avatars.chat(
+                            thread.channel, thread.external_thread_id
+                        ),
                         "is_user_chat": thread.id in user_threads.bound_chat_thread_ids,
                         "last_message": {
                             **message_preview(message),

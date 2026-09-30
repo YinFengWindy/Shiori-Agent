@@ -5,13 +5,13 @@ import { mergePhoneMessages, phoneChatItems, phoneSeparatorTime, withLiveConvers
 
 const message = (id: string, patch: Partial<PhoneMessage> = {}): PhoneMessage => ({
   id, seq: null, sender: "other", senderId: "42", senderName: "阿花", senderIsUser: false,
-  content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00",
+  senderAvatarPath: null, content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00",
   ...patch,
 });
 
 const conversation = (threadId: string, timestamp: string): PhoneConversation => ({
-  threadId, accountId: "qq:1", channel: "qq", chatType: "group", displayName: threadId, isUserChat: false,
-  lastMessage: { role: "user", content: "在吗", timestamp, hasMedia: false, senderName: null },
+  threadId, accountId: "qq:1", channel: "qq", chatType: "group", displayName: threadId, avatarPath: null,
+  isUserChat: false, lastMessage: { role: "user", content: "在吗", timestamp, hasMedia: false, senderName: null },
 });
 
 const now = new Date("2026-09-29T12:00:00+08:00");

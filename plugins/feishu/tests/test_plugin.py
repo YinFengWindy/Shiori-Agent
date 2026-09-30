@@ -64,6 +64,7 @@ def _fake_ctx(kv: dict[str, Any], handlers: dict[str, Any], channels: list[Any])
             on_delete=lambda handler: handlers.__setitem__("delete", handler),
             on_rules_change=lambda handler: None,
         ),
+        avatars=SimpleNamespace(),
         channels=SimpleNamespace(add=channels.append),
         manifest=SimpleNamespace(channel_chat_types=lambda name: ()),
     )

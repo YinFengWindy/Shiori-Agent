@@ -19,7 +19,13 @@ def test_manifest_declares_the_telegram_channel_without_host_config() -> None:
     assert manifest is not None
     assert manifest.id == "telegram"
     # Bots and their Tokens live in plugin storage, not in [plugins.telegram].
-    assert set(manifest.capabilities) == {"channels", "accounts", "kv", "rpc"}
+    assert set(manifest.capabilities) == {
+        "channels",
+        "accounts",
+        "avatars",
+        "kv",
+        "rpc",
+    }
     assert manifest.config_model is None
     assert [item.name for item in manifest.channels] == ["telegram"]
     assert manifest.channels[0].label == "Telegram"

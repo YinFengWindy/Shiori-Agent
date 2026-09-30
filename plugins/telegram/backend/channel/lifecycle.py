@@ -54,6 +54,7 @@ from .streaming import _StreamingMixin
 logger = logging.getLogger("plugins.telegram.channel")
 
 if TYPE_CHECKING:
+    from agent.plugin_host.avatars import AvatarsCapability
     from agent.plugin_host.capabilities import AccountsCapability
     from agent.plugin_host.kv import PluginKVStore
     from core.accounts import ConnectionState
@@ -88,6 +89,7 @@ class TelegramChannel(
         name: str = _CHANNEL,
         config_ref: str = "",
         accounts: "AccountsCapability | None" = None,
+        avatars: "AvatarsCapability | None" = None,
         known_store: "PluginKVStore | None" = None,
         role_id: str | None = None,
     ) -> None:
@@ -102,6 +104,8 @@ class TelegramChannel(
         # Role that owns this Bot's account; saved with the Bot's config entry.
         self._role_id = role_id
         self._accounts = accounts
+        # 宿主的发送者与群头像缓存（#514）。
+        self._avatars = avatars
         self._account_id: str | None = None
         self._known_store = known_store
         # Background refresh of the Bot's profile photo after each connect.

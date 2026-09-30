@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from infra.channels.contract import ChannelContext
@@ -21,6 +21,9 @@ from .accounts_store import QQAccountsStore, QQConnectionConfig
 from .managed_napcat import ManagedNapCat
 from .onebot import OneBotAuthError, OneBotError, OneBotSocket
 
+if TYPE_CHECKING:
+    from agent.plugin_host.avatars import AvatarsCapability
+
 logger = logging.getLogger(__name__)
 _CAPABILITIES = frozenset({"friends", "groups", "group_members", "send"})
 STATUS_CHECK_INTERVAL_SECONDS = 5.0
@@ -31,8 +34,14 @@ LOGIN_PENDING_POLL_SECONDS = 0.5
 class QQAccountsRuntime(QQAccountSettings, QQInboundAdapter, QQOutboundAdapter):
     """Owns independently replaceable QQ connections and their host snapshots."""
 
-    def __init__(self, store: QQAccountsStore, accounts: Any) -> None:
+    def __init__(
+        self,
+        store: QQAccountsStore,
+        accounts: Any,
+        avatars: AvatarsCapability | None = None,
+    ) -> None:
         self._store = store
+        self._avatars = avatars
         self._managed = ManagedNapCat(store.path.parent)
         self._accounts = accounts
         self._generation_key = uuid4().hex

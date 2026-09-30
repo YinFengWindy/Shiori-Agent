@@ -2,6 +2,7 @@ import { ChatCircleIcon, UserIcon, UsersThreeIcon } from "@phosphor-icons/react"
 import { formatChatListTime } from "../roles/roleChatPreview";
 import { emptyStateLines } from "../shared/mascot/mascotLines";
 import { cx, pressableClass } from "@shiori/plugin-sdk";
+import { PhoneAvatarFace } from "./PhoneAvatarFace";
 import type { PhoneChatType, PhoneConversation } from "./phoneClient";
 import { PhoneEmptyState } from "./PhoneEmptyState";
 import { PhoneLoadError } from "./PhoneLoadError";
@@ -29,8 +30,8 @@ function ConversationRow({ conversation, now, onOpen }: {
     <li className="min-w-0">
       <button type="button" className={rowButtonClass} data-testid={`phone-conversation-${conversation.threadId}`}
         onClick={() => onOpen(conversation.threadId)}>
-        <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-text">
-          <ChatTypeMark chatType={conversation.chatType} />
+        <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-accent-soft text-accent-text">
+          <PhoneAvatarFace avatarPath={conversation.avatarPath} placeholder={<ChatTypeMark chatType={conversation.chatType} />} />
         </span>
         <span className="grid min-w-0 flex-1 gap-0.5">
           <span className="flex min-w-0 items-baseline gap-2">

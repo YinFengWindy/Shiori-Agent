@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.11.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.12.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -87,6 +87,7 @@ version whose additions it uses.
 | `2.9.0` | `@shiori/plugin-sdk` shared renderer primitives: components, class names, icons, pure helpers and hooks, plus the UI module, host service, account and role contract types (see [Runtime API 2.9 plugin SDK primitives](#runtime-api-29-plugin-sdk-primitives)) | #504 (#440 T2) |
 | `2.10.0` | the host services context (`PluginHostServicesProvider` / `usePluginHostServices`) exported by `@shiori/plugin-sdk`, plus `host.config` (the plugin's own config: read, save a patch, subscribe) and `host.assets` (local path to displayable URL) (see [Runtime API 2.10 host services context, config and assets](#runtime-api-210-host-services-context-config-and-assets)) | #505 (#440 T3) |
 | `2.11.0` | `ctx.reportFailure(operation, error)` on the background `setup(ctx)`: a handled background failure recorded in the host's desktop diagnostic log; `@shiori/plugin-sdk` also becomes the source of the `desktop.surface` and `app.background` contract types (see [Runtime API 2.11 background failure reporting and surface/background types](#runtime-api-211-background-failure-reporting-and-surfacebackground-types)) | #508 (#440) |
+| `2.12.0` | the `avatars` capability: `ctx.avatars.refresh(kind, channel, id, fetch)` hands channel senders' and chats' platform avatars to a host-owned cache, released with the plugin scope (see [Runtime API 2.12 channel avatars](#runtime-api-212-channel-avatars)) | #514 |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -465,6 +466,49 @@ uses the host's status wording, but they have no host styling, motion or 吟风;
 assert a `persona` on the recorded props instead. The harness relies on Base UI
 settling its DOM detection before the first mount; the desktop unit test loader
 (`apps/desktop/scripts/test-unit-loader.mjs`) does this for every test process.
+
+## Runtime API 2.12 channel avatars
+
+API 2.12 adds the `avatars` capability, the host's cache of the platform
+avatars of a channel's message senders and chats (#514). A plugin declares
+`avatars` in its manifest `capabilities` and, if it is an external package,
+`runtime_api: ">=2.12.0 <3.0.0"`.
+
+An avatar is keyed by `kind` and the message's transport `channel`
+(`InboundMessage.channel`):
+
+- `"sender"` with the sender ID (`InboundMessage.sender`): the same
+  「渠道 + 发送者 ID」 key as member profiles (#498), so one person has one
+  avatar across the channel's groups;
+- `"chat"` with the chat ID (`InboundMessage.chat_id`): a group's avatar, or
+  the other person's for a private chat.
+
+The plugin holds the platform credentials and downloads the picture; the host
+decides when it is due, validates, shrinks and stores it. The capability has
+one member, `refresh(kind, channel, id, fetch)`:
+
+- It is due when there is no cached avatar or the last attempt is older than
+  7 days. When due, the attempt time is recorded at once, so concurrent calls
+  and the retry after a failed fetch wait until it is due again; when not due
+  it does nothing and returns None.
+- When due it starts a background task and returns it: `fetch()` is the
+  plugin's async download, answering the picture's bytes, or None when the
+  platform has no avatar (the placeholder is shown until it is due again).
+  The bytes must be a PNG, JPEG, GIF or WebP of at most 1 MiB; the host
+  shrinks it to a small PNG stored as its own file under the workspace, off
+  the event loop.
+- A failing `fetch` or a refused picture is logged as a warning and never
+  reaches the caller; the cached avatar, if any, is kept.
+- An unknown `kind` or a blank channel or ID raises `ValueError`.
+
+Call `refresh` for the messages a role receives, after the host admitted them
+(`route_account_inbound`), so fetching never delays delivery. Avatars are not
+written to message metadata or account data; the desktop reads them through
+the phone (`sender_avatar_abs` on messages, `avatar_abs` on conversation rows)
+and identity (`avatar_abs`) bridge responses. After the plugin scope is
+released `refresh` raises `RuntimeError` and its pending tasks are
+cancelled. A bundled channel's own account avatar still goes through
+`ctx.accounts.register(..., avatar_url=)`.
 
 ## Renderer artifacts and dependencies
 

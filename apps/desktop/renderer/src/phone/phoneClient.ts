@@ -25,6 +25,8 @@ export type PhoneConversation = {
   chatType: PhoneChatType | null;
   /** Group name for a group, the other person's name for a private chat (the chat ID until a name is known). */
   displayName: string;
+  /** Local file of the cached platform avatar: the group's, or the other person's for a private chat; null when none is cached. */
+  avatarPath: string | null;
   /** A private chat with the desktop user's own bound platform identity. */
   isUserChat: boolean;
   lastMessage: PhoneLastMessage;
@@ -43,6 +45,8 @@ export type PhoneMessage = {
   senderName: string | null;
   /** The sender is the desktop user: a binding recognises them now (read time, not when the message arrived). */
   senderIsUser: boolean;
+  /** Local file of the other sender's cached platform avatar; null for the role or when none is cached. */
+  senderAvatarPath: string | null;
   content: string;
   /** Local file paths of attached media. */
   media: string[];
