@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, cast
 
-from agent.lifecycle.types import AfterReasoningCtx
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
     ExternalImagePushed,
@@ -51,31 +50,32 @@ class ExternalPushSyncService:
         self._conversations = conversation_service or ConversationService(
             session_manager
         )
-        self._pending_turn_images: dict[str, list[str]] = {}
         event_bus.on(ExternalImagePushed, self.handle_image_pushed)
         event_bus.on(ExternalTextPushed, self.handle_text_pushed)
-        event_bus.on(AfterReasoningCtx, self.attach_turn_images)
 
     async def handle_image_pushed(
         self,
         event: ExternalImagePushed,
     ) -> ExternalImagePushed:
-        """Queues turn-owned images or persists background deliveries immediately.
+        """Records a delivered image once, with its turn or at once.
 
-        An image pushed from a turn no live turn owns (e.g. a background
-        task's report) is a background delivery too.
+        Same rule as a text: a push made during a live turn becomes one of
+        that turn's drafts (still recorded if the turn fails); an image pushed
+        from a turn no live turn owns (e.g. a background task's report) is
+        stored at once.
         """
 
         if event.already_persisted:
             self._validate_existing_message(event)
             return event
-        if event.attach_to_turn and self._live_turn_pushes(event.session_key):
-            pending = self._pending_turn_images.setdefault(event.session_key, [])
-            if event.image not in pending:
-                pending.append(event.image)
-            return event
-
-        await self._persist_push(event, content="", media=[event.image])
+        media = [event.image]
+        await self._record_delivery(
+            event,
+            in_turn=event.attach_to_turn,
+            content="",
+            media=media,
+            persist=lambda: self._persist_push(event, content="", media=media),
+        )
         return event
 
     async def handle_text_pushed(self, event: ExternalTextPushed) -> ExternalTextPushed:
@@ -87,16 +87,39 @@ class ExternalPushSyncService:
         task's report), is stored at once. A delivery whose ``delivery_key``
         the role session already holds is not stored again.
         """
-        drafts = self._live_turn_pushes(event.session_key) if event.in_turn else None
-        if drafts is not None:
-            drafts.append(
-                self._push_message(event, content=event.text, media=_text_media(event)),
-                owner=self,
-                if_abandoned=lambda: self._persist_text(event),
-            )
-            return event
-        await self._persist_text(event)
+        await self._record_delivery(
+            event,
+            in_turn=event.in_turn,
+            content=event.text,
+            media=_text_media(event),
+            persist=lambda: self._persist_text(event),
+        )
         return event
+
+    async def _record_delivery(
+        self,
+        event: ExternalImagePushed | ExternalTextPushed,
+        *,
+        in_turn: bool,
+        content: str,
+        media: list[str] | None,
+        persist: Callable[[], Awaitable[None]],
+    ) -> None:
+        """Records one delivered push with its live turn, or at once via ``persist``.
+
+        A push made during a live turn becomes one of that turn's drafts,
+        committed with its messages; if the turn never commits, ``persist``
+        records it then. Without a live turn owning it, ``persist`` runs now.
+        """
+        drafts = self._live_turn_pushes(event.session_key) if in_turn else None
+        if drafts is None:
+            await persist()
+            return
+        drafts.append(
+            self._push_message(event, content=content, media=media),
+            owner=self,
+            if_abandoned=persist,
+        )
 
     async def _persist_text(self, event: ExternalTextPushed) -> None:
         session = self._sessions.get_or_create(self._role_session_key(event))
@@ -172,15 +195,6 @@ class ExternalPushSyncService:
                 message_id=str(pushed["id"]),
             )
         )
-
-    def attach_turn_images(self, ctx: AfterReasoningCtx) -> AfterReasoningCtx:
-        """Attaches already-delivered images to persistence without resending them."""
-
-        pending = self._pending_turn_images.pop(ctx.session_key, [])
-        for image in pending:
-            if image not in ctx.persisted_media:
-                ctx.persisted_media.append(image)
-        return ctx
 
     def _validate_existing_message(self, event: ExternalImagePushed) -> None:
         session = self._sessions.get_or_create(self._role_session_key(event))

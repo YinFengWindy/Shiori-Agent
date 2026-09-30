@@ -496,6 +496,37 @@ async def test_channel_pushes_during_a_turn_are_committed_with_it_under_their_ch
     ] == [(target, [stored[1]["id"]])]
 
 
+async def test_a_committed_turns_delivered_image_is_recorded_once_under_its_chat(
+    runtime,
+):
+    _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes,
+        session_manager=runtime.manager,
+        event_bus=runtime.bus,
+    )
+    runtime.push.register_channel("qq", image=AsyncMock(return_value=None))
+
+    async def reasoning(**_kwargs):
+        assert "已发送" in await runtime.call(
+            channel="qq", chat_id="gqq:6", image="scene.png"
+        )
+        return reply()
+
+    await runtime.pipeline(reasoning).run(
+        incoming(), runtime.session.key, dispatch_outbound=False
+    )
+
+    stored = runtime.manager._store.fetch_session_messages(runtime.session.key)
+    assert [
+        (row["content"], row.get("media"), row["thread_id"])
+        for row in stored
+        if row["role"] == "assistant"
+    ] == [
+        ("", ["scene.png"], network_thread_id("mira", "qq", "gqq:6")),
+        ("done", None, network_thread_id("mira", "qqbot", "friend")),
+    ]
+
+
 async def test_a_failed_turn_still_records_the_channel_push_it_delivered(runtime):
     _ = ExternalPushSyncService(
         live_turn_pushes=current_turn_pushes,
@@ -520,3 +551,96 @@ async def test_a_failed_turn_still_records_the_channel_push_it_delivered(runtime
     assert [(row["content"], row["thread_id"]) for row in stored] == [
         ("去另一个群说一声", network_thread_id("mira", "qq", "gqq:6"))
     ]
+
+
+@pytest.mark.parametrize("failure_stage", ["reasoning", "append"])
+async def test_a_failed_turns_delivered_image_is_recorded_once_under_its_chat(
+    runtime, monkeypatch, failure_stage
+):
+    """Before or after AfterReasoningCtx, the image never rides a later reply."""
+    _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes,
+        session_manager=runtime.manager,
+        event_bus=runtime.bus,
+    )
+    runtime.push.register_channel("qq", image=AsyncMock(return_value=None))
+    original_append = runtime.manager.append_messages
+    commits = []
+
+    async def append(*args, **kwargs):
+        # Only the turn's commit fails; recording the abandoned push goes through.
+        commits.append(args)
+        if len(commits) == 1:
+            raise OSError("commit failed")
+        return await original_append(*args, **kwargs)
+
+    async def failing_turn(**_kwargs):
+        assert "已发送" in await runtime.call(
+            channel="qq", chat_id="gqq:6", image="scene.png"
+        )
+        if failure_stage == "reasoning":
+            raise RuntimeError("turn failed")
+        # Fails the commit, after AfterReasoningCtx.
+        monkeypatch.setattr(runtime.manager, "append_messages", append)
+        return reply()
+
+    operation = runtime.pipeline(failing_turn).run(
+        incoming(), runtime.session.key, dispatch_outbound=False
+    )
+    if failure_stage == "append":
+        with pytest.raises(OSError, match="commit failed"):
+            await operation
+        assert len(commits) == 2
+        monkeypatch.setattr(runtime.manager, "append_messages", original_append)
+    else:
+        await operation
+
+    async def next_turn(**_kwargs):
+        return reply()
+
+    await runtime.pipeline(next_turn).run(
+        incoming(), runtime.session.key, dispatch_outbound=False
+    )
+
+    stored = runtime.manager._store.fetch_session_messages(runtime.session.key)
+    assert [
+        (row["content"], row.get("media"), row["thread_id"])
+        for row in stored
+        if row["role"] == "assistant"
+    ] == [
+        ("", ["scene.png"], network_thread_id("mira", "qq", "gqq:6")),
+        ("done", None, network_thread_id("mira", "qqbot", "friend")),
+    ]
+
+
+async def test_a_failure_to_record_abandoned_pushes_never_replaces_the_turns_error(
+    runtime, monkeypatch
+):
+    _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes,
+        session_manager=runtime.manager,
+        event_bus=runtime.bus,
+    )
+    runtime.push.register_channel("qq", text=AsyncMock(return_value=None))
+    turn_error = OSError("commit failed")
+    append = AsyncMock(
+        side_effect=[turn_error, OSError("record 1"), OSError("record 2")]
+    )
+
+    async def reasoning(**_kwargs):
+        for text in ("one", "two"):
+            assert "已发送" in await runtime.call(
+                channel="qq", chat_id="gqq:6", message=text
+            )
+        monkeypatch.setattr(runtime.manager, "append_messages", append)
+        return reply()
+
+    with pytest.raises(OSError) as raised:
+        await runtime.pipeline(reasoning).run(
+            incoming(), runtime.session.key, dispatch_outbound=False
+        )
+
+    assert raised.value is turn_error
+    assert raised.value.__notes__ == ["另有 2 条回合内已送达的推送未能记录"]
+    # Both records were attempted after the commit failed.
+    assert append.await_count == 3

@@ -292,12 +292,16 @@ class PassiveTurnPipeline:
             dispatch_outbound=dispatch_outbound,
             turn_pushes=pushes,
         )
+        # A turn that did not commit still records what it already delivered
+        # (no-op after a commit); a failure to record never replaces the turn's
+        # own error.
         try:
-            return await self._run(state, msg, key)
-        finally:
-            # A turn that did not commit still recorded what it already delivered
-            # (no-op after a commit).
-            await pushes.abandoned()
+            outbound = await self._run(state, msg, key)
+        except BaseException as exc:
+            await pushes.abandoned(turn_error=exc)
+            raise
+        await pushes.abandoned()
+        return outbound
 
     async def _run(
         self, state: TurnState, msg: InboundMessage, key: str

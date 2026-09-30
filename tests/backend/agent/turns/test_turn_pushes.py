@@ -33,3 +33,19 @@ async def test_closed_and_inherited_scopes_cannot_capture_later_background_work(
     await drafts.committed()
     await drafts.committed()
     effect.assert_awaited_once()
+
+
+async def test_abandoned_runs_every_record_and_raises_their_failures():
+    drafts = TurnPushDrafts("role:mira")
+    records = [AsyncMock(side_effect=OSError("disk")), AsyncMock()]
+    with drafts.collect():
+        for record in records:
+            drafts.append({}, owner=record, if_abandoned=record)
+
+    # No turn error to protect: the failure is the one raised.
+    with pytest.raises(ExceptionGroup) as raised:
+        await drafts.abandoned()
+
+    assert [type(error) for error in raised.value.exceptions] == [OSError]
+    for record in records:
+        record.assert_awaited_once()
