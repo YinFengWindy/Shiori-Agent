@@ -4,7 +4,7 @@ import type { PhoneMessage } from "./phoneClient";
 import { phoneChatTimeline } from "./phoneChatTimeline";
 
 const at = (id: string, minute: number, listened = false): PhoneMessage => ({
-  id, seq: null, sender: "other", senderId: "42", senderName: "阿花", senderIsUser: false, senderAvatarPath: null, mentions: [], content: id, media: [],
+  id, seq: null, sender: "other", senderId: "42", senderName: "阿花", senderIsUser: false, senderAvatarPath: null, mentions: [], quote: null, content: id, media: [],
   timestamp: `2026-09-30T10:${String(minute).padStart(2, "0")}:00+08:00`, listened,
 });
 

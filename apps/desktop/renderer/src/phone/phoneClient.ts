@@ -38,6 +38,15 @@ export type PhoneConversation = {
 /** A member a message @s: the platform ID, and a name when the bridge knows one (the role's account name, else the member's recorded name). */
 export type PhoneMention = { id: string; name: string | null };
 
+/** The message a message quotes (#555): its sender, named like a mention, and its text and pictures. */
+export type PhoneQuote = {
+  senderId: string | null;
+  name: string | null;
+  content: string;
+  /** Local file paths of the quoted message's pictures, apart from the message's own `media`. */
+  media: string[];
+};
+
 export type PhoneMessage = {
   id: string;
   /** Store order; absent on a live row the bridge sent before it was read back. */
@@ -54,6 +63,8 @@ export type PhoneMessage = {
   senderAvatarPath: string | null;
   /** Members the group message structurally @s, in order (#553); empty for none. */
   mentions: PhoneMention[];
+  /** The message this one quotes; null for none. */
+  quote: PhoneQuote | null;
   content: string;
   /** Local file paths of attached media. */
   media: string[];

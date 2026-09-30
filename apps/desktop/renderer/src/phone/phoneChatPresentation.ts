@@ -1,9 +1,22 @@
 import { chatListDayLabel } from "../roles/roleChatPreview";
 import { formatHourMinute, parseTimestamp } from "../shared/format";
-import type { PhoneConversation, PhoneMessage } from "./phoneClient";
+import type { PhoneConversation, PhoneMessage, PhoneQuote } from "./phoneClient";
 
 /** A pause longer than this between two messages gets a time separator. */
 const phoneTimeSeparatorGapMs = 5 * 60_000;
+
+/** A quote shows at most this many lines until expanded; about this many characters fill them on the phone's screen. */
+export const phoneQuoteCollapsedLines = 2;
+const phoneQuoteCollapsedChars = 40;
+
+/** A quote block above a bubble: who is quoted (the name, else the ID) and what they said. */
+export type PhoneQuoteItem = {
+  label: string | null;
+  content: string;
+  media: string[];
+  /** The text is long enough to start collapsed, with a toggle to expand it. */
+  collapsible: boolean;
+};
 
 /** One line of the phone's chat page: a centered time, or a message bubble. */
 export type PhoneChatItem =
@@ -20,6 +33,8 @@ export type PhoneChatItem =
     isUser: boolean;
     /** 「@名字」 for each member the message @s, shown before its text (the member ID when no name is known). */
     mentionLabels: string[];
+    /** The message it quotes; null for none. */
+    quote: PhoneQuoteItem | null;
   };
 
 /**
@@ -31,6 +46,17 @@ export function phoneSeparatorTime(timestamp: string, now: Date) {
   if (!date) return "";
   const day = chatListDayLabel(date, now);
   return day ? `${day} ${formatHourMinute(date)}` : formatHourMinute(date);
+}
+
+/** The quote block for `quote`; its text collapses past the lines the phone shows before expanding. */
+export function phoneQuoteItem(quote: PhoneQuote) {
+  return {
+    label: quote.name ?? quote.senderId,
+    content: quote.content,
+    media: quote.media,
+    collapsible: quote.content.length > phoneQuoteCollapsedChars
+      || quote.content.split("\n").length > phoneQuoteCollapsedLines,
+  } satisfies PhoneQuoteItem;
 }
 
 /**
@@ -57,6 +83,7 @@ export function phoneChatItems(messages: readonly PhoneMessage[], now: Date) {
       senderLabel: fromRole ? null : message.senderName ?? message.senderId,
       isUser: !fromRole && message.senderIsUser,
       mentionLabels: message.mentions.map((mention) => `@${mention.name ?? mention.id}`),
+      quote: message.quote && phoneQuoteItem(message.quote),
     });
   }
   return items;

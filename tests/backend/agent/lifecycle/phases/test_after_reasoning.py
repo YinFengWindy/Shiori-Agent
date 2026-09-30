@@ -125,6 +125,22 @@ async def test_channel_user_source_survives_commit_and_reload(tmp_path):
     )
 
 
+async def test_stored_user_message_keeps_its_own_pictures_not_the_quoted_ones(
+    tmp_path,
+):
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    request = turn(session)
+    # The quoted picture leads the turn's media (#555); the message's own
+    # picture is the same file, and still stays.
+    request.state.msg.media = ["same.png", "same.png"]
+    request.state.msg.metadata["reply_to_media"] = ["same.png"]
+
+    await phase(manager).run(request)
+
+    assert session.messages[0]["media"] == ["same.png"]
+
+
 @pytest.mark.parametrize("formal_reply", [True, False])
 async def test_reply_persists_own_receipt_and_separate_trigger_identity(
     tmp_path, formal_reply

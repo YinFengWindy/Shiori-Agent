@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
+from core.common.message_source import PERSISTED_USER_CONTENT_KEY
 from core.roles import RoleAggregateService
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 
@@ -205,7 +206,7 @@ class DesktopChatRequestHandler:
         metadata = self._build_metadata(payload, request_id=request_id)
         if reply_to_content:
             metadata["reply_to_content"] = reply_to_content
-            metadata["persisted_user_content"] = content
+            metadata[PERSISTED_USER_CONTENT_KEY] = content
             inbound_content = build_inbound_text_with_reply_context(
                 user_text=content,
                 reply_text=reply_to_content,

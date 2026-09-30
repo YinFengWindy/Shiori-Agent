@@ -23,7 +23,7 @@ const conversation: PhoneConversation = {
 
 const message = (id: string, patch: Record<string, unknown>) => ({
   id, seq: null, sender: "other", sender_id: "42", sender_name: "阿花", sender_is_user: false, sender_avatar_abs: null,
-  mentions: [], content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false, ...patch,
+  mentions: [], quote: null, content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false, ...patch,
 });
 
 const member = { channel: "qq", sender_id: "42", call_name: "阿花", nicknames: ["花花", "阿花"], brief: "爱开黑", profile: "## 印象" };

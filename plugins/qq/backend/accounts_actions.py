@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import re
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,28 @@ def qq_number(value: object, label: str) -> str:
     if not _QQ_ID.fullmatch(number):
         raise ValueError(f"{label}必须是 QQ 数字标识")
     return number
+
+
+def qq_sender_name(sender: object) -> str:
+    """A NapCat sender's display name: group card first, then QQ nickname."""
+    if not isinstance(sender, dict):
+        return ""
+    for field in ("card", "nickname"):
+        value = sender.get(field)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+@dataclass(frozen=True)
+class RepliedMessage:
+    """The message a QQ message replies to, as NapCat ``get_msg`` returns it."""
+
+    sender_id: str
+    # The sender's group card or nickname; empty when NapCat reports neither.
+    sender_name: str
+    # The raw CQ-coded text, pictures and nested reply segments included.
+    raw_content: str
 
 
 def qq_chat_target(chat_id: str) -> tuple[str, str]:
@@ -138,8 +161,8 @@ class QQAccountActions:
             raise OneBotError("NapCat get_group_info 未返回群名")
         return data["group_name"]
 
-    async def message_sender(self, account_id: str, message_id: str) -> str:
-        """The QQ number that sent message ``message_id``, from NapCat ``get_msg``.
+    async def replied_message(self, account_id: str, message_id: str) -> RepliedMessage:
+        """Message ``message_id``'s sender and text, from one NapCat ``get_msg``.
 
         Used while a message replying to it is being received, so the
         account's socket is already online and no status check is made.
@@ -150,9 +173,15 @@ class QQAccountActions:
         if not isinstance(sender, dict):
             raise OneBotError("NapCat get_msg 未返回发送者")
         try:
-            return qq_number(sender.get("user_id"), "被回复消息的发送者")
+            sender_id = qq_number(sender.get("user_id"), "被回复消息的发送者")
         except ValueError as exc:
             raise OneBotError("NapCat get_msg 未返回有效发送者") from exc
+        raw = data.get("raw_message")
+        return RepliedMessage(
+            sender_id=sender_id,
+            sender_name=qq_sender_name(sender),
+            raw_content=raw if isinstance(raw, str) else "",
+        )
 
     async def send_target(
         self,

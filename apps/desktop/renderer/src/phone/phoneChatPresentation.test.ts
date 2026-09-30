@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PhoneConversation, PhoneMessage } from "./phoneClient";
-import { mergePhoneMessages, phoneChatItems, phoneSeparatorTime, withLiveConversations } from "./phoneChatPresentation";
+import {
+  mergePhoneMessages, phoneChatItems, phoneQuoteItem, phoneSeparatorTime, withLiveConversations,
+} from "./phoneChatPresentation";
+
+test("a quote goes by its sender's name, else the ID; only a long text collapses", () => {
+  const short = phoneQuoteItem({ senderId: "7", name: null, content: "看", media: [] });
+  const long = phoneQuoteItem({ senderId: "7", name: "阿花", content: "一\n二\n三", media: [] });
+  assert.deepEqual([short.label, short.collapsible], ["7", false]);
+  assert.deepEqual([long.label, long.collapsible], ["阿花", true]);
+});
 
 const message = (id: string, patch: Partial<PhoneMessage> = {}): PhoneMessage => ({
   id, seq: null, sender: "other", senderId: "42", senderName: "阿花", senderIsUser: false,
-  senderAvatarPath: null, mentions: [], content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false,
+  senderAvatarPath: null, mentions: [], quote: null, content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false,
   ...patch,
 });
 

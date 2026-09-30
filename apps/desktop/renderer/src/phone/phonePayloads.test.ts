@@ -15,10 +15,10 @@ const payload = {
   },
   messages: [{
     id: "m", seq: null, sender: "role", sender_id: null, sender_name: null, sender_is_user: false,
-    sender_avatar_abs: null, mentions: [], content: "我来", media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false,
+    sender_avatar_abs: null, mentions: [], quote: null, content: "我来", media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false,
   }, {
     id: "n", seq: null, sender: "other", sender_id: "42", sender_name: "阿花", sender_is_user: false,
-    sender_avatar_abs: "D:/avatars/sender/42.png", mentions: [], content: "谁来", media: [], timestamp: "2026-09-29T10:01:00+08:00",
+    sender_avatar_abs: "D:/avatars/sender/42.png", mentions: [], quote: null, content: "谁来", media: [], timestamp: "2026-09-29T10:01:00+08:00",
     listened: false,
   }],
 };

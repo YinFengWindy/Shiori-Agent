@@ -4,7 +4,11 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
-from core.common.message_source import MessageSource
+from core.common.message_source import (
+    PERSISTED_USER_CONTENT_KEY,
+    REPLY_TO_MEDIA_KEY,
+    MessageSource,
+)
 from agent.core.passive_support import (
     build_session_runtime_metadata,
     update_session_runtime_metadata,
@@ -52,8 +56,7 @@ _OUTBOUND_METADATA_PREFIX = "outbound:metadata:"
 _OUTBOUND_MEDIA_PREFIX = "outbound:media:"
 _ASSISTANT_FIXED_FIELDS = {"tools_used", "tool_chain", "reasoning_content"}
 _USER_FIXED_FIELDS = {"media"}
-_PERSISTED_USER_CONTENT_METADATA_KEY = "persisted_user_content"
-_INTERNAL_USER_METADATA_KEYS = frozenset({_PERSISTED_USER_CONTENT_METADATA_KEY})
+_INTERNAL_USER_METADATA_KEYS = frozenset({PERSISTED_USER_CONTENT_KEY})
 _CONVERSATION_MESSAGE_FIELDS = (
     "thread_id",
     "sender_role",
@@ -237,18 +240,26 @@ class _PersistUserMessageModule:
         )
         if state.is_user_authored():
             self._record_user_activity(session.key)
-        persisted_user_content = msg.metadata.get(_PERSISTED_USER_CONTENT_METADATA_KEY)
+        persisted_user_content = msg.metadata.get(PERSISTED_USER_CONTENT_KEY)
         user_content = (
             persisted_user_content
             if isinstance(persisted_user_content, str)
             else msg.content
         )
+        # A quoted message's pictures (#555) lead the turn's media for the
+        # model but stay the quote's: the stored message keeps only its own.
+        # They are dropped by position, so a picture the message itself
+        # carries is kept even if it were the same file.
+        quoted_media = msg.metadata.get(REPLY_TO_MEDIA_KEY)
+        user_media = list(msg.media)[
+            len(quoted_media) if isinstance(quoted_media, list) else 0 :
+        ]
         if frame.slots["reply:private"]:
             frame.slots["reply:messages"].append(
                 build_session_message(
                     "user",
                     user_content,
-                    media=msg.media if msg.media else None,
+                    media=user_media or None,
                     **user_kwargs,
                 )
             )
@@ -256,7 +267,7 @@ class _PersistUserMessageModule:
             session.add_message(
                 "user",
                 user_content,
-                media=msg.media if msg.media else None,
+                media=user_media or None,
                 **user_kwargs,
             )
             frame.slots["reply:messages"].append(session.messages[-1])

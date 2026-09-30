@@ -36,6 +36,15 @@ export function underlineTabClass(selected: boolean) {
 /** Shared small-body text class for non-titlebar desktop content. */
 export const bodyTextClass = "text-body-sm";
 
+/** A quoted message's frame, an accent rule down its side (desktop reply quotes, phone quote blocks). */
+export const replyQuoteFrameClass = "border-l-2 border-line-accent pl-2.5";
+/** The quoted sender's name at the top of the frame. */
+export const replyQuoteSenderClass = "truncate text-caption font-medium text-ink-muted";
+/** The quoted text's size; each quote picks its own ink. */
+export const replyQuoteTextClass = "text-caption leading-5";
+/** A quote that is itself a button: no button chrome, dimmed on hover. */
+export const replyQuoteButtonClass = "border-0 bg-transparent p-0 text-left transition hover:opacity-85";
+
 /**
  * Sidebar open/close. The track animates its width (the only way to push the
  * main pane over), so it stays short and rides the drawer curve; the content

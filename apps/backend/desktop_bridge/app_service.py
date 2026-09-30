@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from conversation.service import ConversationService
+from core.common.message_source import PERSISTED_USER_CONTENT_KEY
 from core.roles import RoleAggregateService, RoleRelationshipRuntimeService
 from session.manager import Session, SessionManager
 from session.manager.helpers import role_id_from_session_key
@@ -205,7 +206,7 @@ class DesktopAppService:
         chat_id: str = "",
     ) -> dict[str, object]:
         next_metadata = dict(metadata or {})
-        next_metadata.pop("persisted_user_content", None)
+        next_metadata.pop(PERSISTED_USER_CONTENT_KEY, None)
         next_metadata.setdefault("source", "desktop")
         next_metadata.setdefault("sender_id", "desktop")
         next_metadata.setdefault("chat_type", "desktop")

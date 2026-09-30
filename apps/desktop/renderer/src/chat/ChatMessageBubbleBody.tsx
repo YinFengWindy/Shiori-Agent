@@ -6,16 +6,19 @@ import { ChatToolCalls } from "./ChatToolCalls";
 import { getStoredChatReplyPreview, isInterruptedChatMessage } from "./chatMessageActions";
 import { getChatMessagePresentation } from "./chatMessagePresentation";
 import { parseChatTurnMetrics } from "./chatTurnMetrics";
-import type { SessionMessage } from "@shiori/plugin-sdk";
+import { cx, type SessionMessage } from "@shiori/plugin-sdk";
+import {
+  focusResetClass, replyQuoteButtonClass, replyQuoteFrameClass, replyQuoteSenderClass, replyQuoteTextClass,
+} from "../shared/styles";
 import type { ChatReplyTarget } from "../shared/types";
 
 function StoredReplyQuote({ preview }: { preview: ChatReplyTarget }) {
   return (
-    <div className="border-l-2 border-line-accent pl-2.5 text-left">
+    <div className={cx(replyQuoteFrameClass, "text-left")}>
       {preview.sender ? (
-        <div className="truncate text-[11px] font-medium leading-4 text-ink-muted">{preview.sender}</div>
+        <div className={replyQuoteSenderClass}>{preview.sender}</div>
       ) : null}
-      <div className="line-clamp-2 text-[12px] leading-5 text-ink-faint">{preview.preview}</div>
+      <div className={cx(replyQuoteTextClass, "line-clamp-2 text-ink-faint")}>{preview.preview}</div>
     </div>
   );
 }
@@ -57,7 +60,7 @@ export function ChatMessageBubbleBody({ message, onJumpToMessage }: ChatMessageB
       {storedReplyPreview ? (
         storedReplyPreview.messageId ? (
           <button
-            className="mb-2 block max-w-[420px] border-0 bg-transparent p-0 text-left transition hover:opacity-85 focus:outline-none"
+            className={cx(replyQuoteButtonClass, focusResetClass, "mb-2 block max-w-[420px]")}
             type="button"
             aria-label="跳转到被引用消息"
             onClick={() => onJumpToMessage(storedReplyPreview.messageId)}
