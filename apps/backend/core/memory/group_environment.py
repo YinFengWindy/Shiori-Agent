@@ -103,7 +103,7 @@ class GroupEnvironment:
             group_note=self.read_note(role_id, thread_id),
             summary_updated_at=(
                 str(state.metadata.get(SUMMARY_UPDATED_AT_KEY) or "")
-                if state is not None and state.summary
+                if state is not None
                 else ""
             ),
         )

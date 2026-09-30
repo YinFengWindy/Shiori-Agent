@@ -4,6 +4,7 @@ import json
 import sqlite3
 import threading
 from collections.abc import Collection
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -151,14 +152,15 @@ class ConversationStore:
         db_path: str | Path,
         *,
         connection: sqlite3.Connection | None = None,
-        lock: threading.Lock | threading.RLock | None = None,
+        lock: threading.RLock | None = None,
     ) -> None:
         self.db_path = str(db_path)
         self._conn = connection or sqlite3.connect(
             self.db_path, check_same_thread=False
         )
         self._conn.row_factory = sqlite3.Row
-        self._lock = lock or threading.Lock()
+        # State transactions call state methods while retaining this shared lock.
+        self._lock = lock or threading.RLock()
         self._owns_connection = connection is None
         self._closed = False
         self.ensure_schema()
@@ -482,6 +484,17 @@ class ConversationStore:
             metadata=metadata,
             merge_metadata=True,
         )
+
+    @contextmanager
+    def state_transaction(self):
+        """Commits state upserts together, rolling them back if the block fails.
+
+        Only the ``upsert_*_state`` methods participate; other store mutations
+        own their commits. The connection lock stays held until commit/rollback.
+        """
+        with self._lock:
+            with immediate_transaction(self._conn):
+                yield
 
     def get_thread_state(self, thread_id: str) -> StateRecord | None:
         """Returns the current derived state for a formal thread."""

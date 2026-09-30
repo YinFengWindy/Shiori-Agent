@@ -11,6 +11,7 @@ from pathlib import Path
 
 from agent.plugin_host.manifest import PluginManifest, group_listening_channels
 from agent.tools.group_context import LookupGroupContextTool
+from agent.tools.group_context_update import UpdateGroupContextTool
 from agent.tools.group_listening import SetGroupListeningTool
 from agent.tools.member_lookup import LookupMemberTool
 from agent.tools.registry import ToolRegistry
@@ -28,7 +29,7 @@ def register_group_tools(
     manifests: Iterable[PluginManifest],
     group_environment: GroupEnvironment,
 ) -> GroupListeningControl:
-    """Registers listening control, member lookup and group note/summary lookup.
+    """Registers listening control, member lookup and group context read/write tools.
 
     Returns the runtime's listening control, which the switch tool uses: a
     channel supports listening when its plugin manifest (among ``manifests``)
@@ -51,10 +52,15 @@ def register_group_tools(
         search_hint="群友 昵称 是谁",
         external_allowed=True,
     )
+    # 群笔记/摘要不进外部白名单，只有不受群友工具限制的回合能查询与编辑。
     tools.register(
         LookupGroupContextTool(group_environment, conversations),
         risk="read-only",
         search_hint="群笔记 群摘要 群记忆 群动态 别的群 其他群 查群 找群",
-        external_allowed=True,
+    )
+    tools.register(
+        UpdateGroupContextTool(group_environment, conversations),
+        risk="write",
+        search_hint="改群笔记 改群摘要 更新群记忆 修正群动态 清空群笔记",
     )
     return listening

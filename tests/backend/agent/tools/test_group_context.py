@@ -24,7 +24,6 @@ def _runtime(tmp_path: Path):
     tools = ToolRegistry()
     tools.register(
         LookupGroupContextTool(environment, ConversationService(manager)),
-        external_allowed=True,
     )
     return manager, environment, tools
 
@@ -60,7 +59,7 @@ def _thread(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scope,channel", [("external", "qq"), ("user", "desktop")])
-async def test_turn_can_find_and_read_another_channels_old_group_context(
+async def test_user_turn_can_find_and_read_another_channels_old_group_context(
     tmp_path: Path, scope: str, channel: str
 ) -> None:
     manager, environment, tools = _runtime(tmp_path)
@@ -89,6 +88,7 @@ async def test_turn_can_find_and_read_another_channels_old_group_context(
         "context_scope": scope,
         "channel": channel,
         "thread_id": current.id,
+        "sender_is_user": "true",
     }
     state_before = manager.conversation_store.get_thread_state(target.id)
     note_path = environment.note_path("mira", target.id)

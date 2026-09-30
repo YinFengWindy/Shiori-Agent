@@ -14,6 +14,27 @@ from session.manager import SessionManager
 from session.store import SessionStore
 
 
+def test_standalone_state_transaction_commits_and_rolls_back(tmp_path: Path) -> None:
+    store = ConversationStore(tmp_path / "transaction.db")
+    try:
+        with store.state_transaction():
+            _ = store.upsert_thread_state(
+                "thread", summary="原摘要", metadata={"count": 1}
+            )
+        before = store.get_thread_state("thread")
+        with pytest.raises(OSError, match="write failed"):
+            with store.state_transaction():
+                _ = store.upsert_thread_state(
+                    "thread", summary="新摘要", metadata={"count": 2}
+                )
+                _ = store.upsert_thread_state("new-thread", summary="应回滚")
+                raise OSError("write failed")
+        assert store.get_thread_state("thread") == before
+        assert store.get_thread_state("new-thread") is None
+    finally:
+        store.close()
+
+
 def test_standalone_state_upsert_commits_for_reopened_store(tmp_path: Path):
     path = tmp_path / "conversation.db"
     store = ConversationStore(path)

@@ -6,10 +6,31 @@ import json
 from typing import Any
 
 from agent.tools.base import Tool
+from conversation.models import ThreadRecord
 from conversation.service import ConversationService
-from core.memory.group_environment import GroupEnvironment
+from core.memory.group_environment import GroupEnvironment, GroupEnvironmentSnapshot
 
 _PAGE_SIZE = 20
+
+
+def group_context_response(
+    conversations: ConversationService,
+    thread: ThreadRecord,
+    snapshot: GroupEnvironmentSnapshot,
+) -> str:
+    """Serializes the same current group identity and saved fields for both tools."""
+    contact = conversations.contacts_by_id(thread.role_id).get(thread.contact_id)
+    return json.dumps(
+        {
+            "group_thread_id": thread.id,
+            "channel": thread.channel,
+            "name": contact.display_name if contact else thread.external_thread_id,
+            "group_note": snapshot.group_note,
+            "summary": snapshot.recent_activity,
+            "summary_updated_at": snapshot.summary_updated_at,
+        },
+        ensure_ascii=False,
+    )
 
 
 class LookupGroupContextTool(Tool):
@@ -62,26 +83,13 @@ class LookupGroupContextTool(Tool):
         if group_thread_id and (name or page != 1):
             raise ValueError("按 group_thread_id 读取时不能同时按群名查找或翻页")
 
-        groups = self._groups(role_id)
         if group_thread_id:
             # 先按角色归属及群类型校验，再访问群环境层，避免读取私聊或旧绑定。
-            group = next(
-                (item for item in groups if item["group_thread_id"] == group_thread_id),
-                None,
-            )
-            if group is None:
-                raise ValueError("找不到当前角色所属的群会话，请先查询群候选")
+            thread = self._conversations.require_group_thread(role_id, group_thread_id)
             snapshot = self._environment.read(role_id, group_thread_id)
-            return json.dumps(
-                {
-                    **group,
-                    "group_note": snapshot.group_note,
-                    "summary": snapshot.recent_activity,
-                    "summary_updated_at": snapshot.summary_updated_at,
-                },
-                ensure_ascii=False,
-            )
+            return group_context_response(self._conversations, thread, snapshot)
 
+        groups = self._groups(role_id)
         matched = [
             group for group in groups if name.casefold() in group["name"].casefold()
         ]

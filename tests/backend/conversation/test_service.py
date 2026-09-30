@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from conversation.service import ConversationService, LegacySessionDescriptor
 from session.manager import SessionManager
 
@@ -44,6 +46,11 @@ def test_group_directory_uses_recorded_types_and_current_role_ownership(
             _ = manager.conversation_store.archive_thread_and_release_legacy_session_key(
                 thread.id
             )
+        if chat_id in {"g", "sg"}:
+            assert conversations.require_group_thread("mira", thread.id) == thread
+        else:
+            with pytest.raises(ValueError, match="找不到当前角色所属的群会话"):
+                _ = conversations.require_group_thread("mira", thread.id)
     # A newly seen thread without a known chat type is not assumed to be a group.
     _ = conversations.ensure_thread_for_session(
         LegacySessionDescriptor(
