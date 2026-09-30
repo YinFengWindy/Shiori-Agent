@@ -1,5 +1,7 @@
 import React from "react";
 import Markdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkCjkFriendly from "remark-cjk-friendly";
 import remarkGfm from "remark-gfm";
 import type { Components, ExtraProps } from "react-markdown";
 import { normalizeExternalLink } from "../../../src/externalLinks";
@@ -71,10 +73,17 @@ const markdownComponents: Components = {
   h1({ children }) { return <h1 className="my-3 text-lg font-semibold">{children}</h1>; },
   h2({ children }) { return <h2 className="my-2.5 text-base font-semibold">{children}</h2>; },
   h3({ children }) { return <h3 className="my-2 text-sm font-semibold">{children}</h3>; },
+  h4({ children }) { return <h4 className="my-2 font-semibold">{children}</h4>; },
+  h5({ children }) { return <h5 className="my-2 font-semibold text-ink-muted">{children}</h5>; },
+  h6({ children }) { return <h6 className="my-2 font-semibold text-ink-muted">{children}</h6>; },
   p({ children }) { return <p className="my-2 first:mt-0 last:mb-0">{children}</p>; },
   ul({ children }) { return <ul className="my-2 list-disc space-y-1 pl-5">{children}</ul>; },
   ol({ children }) { return <ol className="my-2 list-decimal space-y-1 pl-5">{children}</ol>; },
 };
+
+// cjk-friendly lets `**“引号”**` / `**标题：**` close emphasis next to CJK
+// punctuation; breaks keeps the model's single newlines as visible line breaks.
+const remarkPlugins = [remarkGfm, remarkCjkFriendly, remarkBreaks];
 
 type ChatMarkdownContentProps = {
   content: string;
@@ -84,7 +93,7 @@ type ChatMarkdownContentProps = {
 export const ChatMarkdownContent = React.memo(function ChatMarkdownContent({ content }: ChatMarkdownContentProps) {
   return (
     <div className="message-content message-markdown break-words">
-      <Markdown remarkPlugins={[remarkGfm]} skipHtml components={markdownComponents}>
+      <Markdown remarkPlugins={remarkPlugins} skipHtml components={markdownComponents}>
         {content}
       </Markdown>
     </div>
