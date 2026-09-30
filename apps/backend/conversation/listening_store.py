@@ -17,7 +17,7 @@ import sqlite3
 import threading
 import uuid
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
@@ -271,6 +271,33 @@ class GroupListeningStore:
         ]
         found.sort(key=lambda message: parse_local_iso(message.timestamp))
         return found
+
+    def sender_names(
+        self, thread_id: str, sender_ids: Collection[str]
+    ) -> dict[str, str]:
+        """The newest name snapshot each of ``sender_ids`` was heard with in a group.
+
+        Stored records only; senders never heard with a name are absent. One
+        query.
+        """
+        named = sorted({sender_id for sender_id in sender_ids if sender_id})
+        if not named:
+            return {}
+        placeholders = ",".join("?" for _ in named)
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT sender_id, json_extract(source, '$.sender_name') AS sender_name
+                FROM listening_messages
+                WHERE thread_id = ?
+                  AND sender_id IN ({placeholders})
+                  AND json_extract(source, '$.sender_name') IS NOT NULL
+                ORDER BY seq ASC
+                """,
+                (thread_id, *named),
+            ).fetchall()
+        # 按入库先后覆盖，留下每人最新的昵称快照。
+        return {str(row["sender_id"]): str(row["sender_name"]) for row in rows}
 
     def after(self, thread_id: str, seq: int, limit: int) -> list[ListeningMessage]:
         """The group's first ``limit`` stored records past ``seq``, oldest first.

@@ -18,6 +18,8 @@ export type PhoneChatItem =
     senderLabel: string | null;
     /** The sender was the desktop user's own bound identity: their name carries the 「这是我」 badge. */
     isUser: boolean;
+    /** 「@名字」 for each member the message @s, shown before its text (the member ID when no name is known). */
+    mentionLabels: string[];
   };
 
 /**
@@ -54,6 +56,7 @@ export function phoneChatItems(messages: readonly PhoneMessage[], now: Date) {
       side: fromRole ? "right" : "left",
       senderLabel: fromRole ? null : message.senderName ?? message.senderId,
       isUser: !fromRole && message.senderIsUser,
+      mentionLabels: message.mentions.map((mention) => `@${mention.name ?? mention.id}`),
     });
   }
   return items;

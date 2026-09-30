@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import Any, Protocol
 
 from conversation.context_scope import user_context_threads
@@ -68,6 +68,7 @@ def phone_message(
     session_key: str,
     is_user: Callable[[str | None], bool],
     avatars: AvatarIndex,
+    mention_names: Mapping[str, str],
     listened: bool = False,
 ) -> dict[str, Any]:
     """One conversation message as the phone's chat page shows it.
@@ -79,8 +80,11 @@ def phone_message(
     that sender is the desktop user under the bindings as they are now (like
     the context split, #482), not the flag stored when the message arrived.
     ``sender_avatar_abs`` is the sender's cached platform avatar file (#514),
-    None for the role or when none is cached. ``listened`` marks a row of the
-    group's listening records (#538) rather than of the role's conversation.
+    None for the role or when none is cached. ``mentions`` are the members
+    the message structurally @s (#553), in order, each ``{id, name}`` with the
+    name from ``mention_names`` (None when unknown, the phone then shows the
+    ID). ``listened`` marks a row of the group's listening records (#538)
+    rather than of the role's conversation.
     """
     from_role = message.get("role") == "assistant"
     source = MessageSource.from_metadata(
@@ -97,6 +101,10 @@ def phone_message(
         "sender_avatar_abs": (
             None if from_role else avatars.sender(source.channel, source.sender_id)
         ),
+        "mentions": [
+            {"id": member, "name": mention_names.get(member)}
+            for member in source.mentioned_ids
+        ],
         "content": str(message.get("content") or ""),
         "media": [str(item) for item in message.get("media") or []],
         "timestamp": str(message.get("timestamp") or ""),
@@ -223,14 +231,26 @@ class DesktopPhoneRequestHandler:
 
         The user's messages are those whose sender a current binding
         recognises on the role's account carrying the thread; with no such
-        account, none are. The bindings and the avatar index are read once
-        for all rows.
+        account, none are. The bindings, the avatar index and the names of
+        the members the rows @ are read once for all rows.
         """
         session_key = role_session_key(role_id)
+        rows = list(messages)
         bound = role_bound_senders(
             role_id, accounts=self._accounts, identities=self._identities.list()
         )
         avatars = self._avatars.index()
+        mention_names = self._mention_names(
+            role_id,
+            thread,
+            {
+                member
+                for message in rows
+                for member in MessageSource.from_metadata(
+                    message.get("metadata") or {}, session_key=session_key
+                ).mentioned_ids
+            },
+        )
 
         def is_user(sender_id: str | None) -> bool:
             return sender_id is not None and bound.recognises(thread.channel, sender_id)
@@ -241,10 +261,38 @@ class DesktopPhoneRequestHandler:
                 session_key=session_key,
                 is_user=is_user,
                 avatars=avatars,
+                mention_names=mention_names,
                 listened=listened,
             )
-            for message in messages
+            for message in rows
         ]
+
+    def _mention_names(
+        self, role_id: str, thread: ThreadRecord, member_ids: set[str]
+    ) -> dict[str, str]:
+        """Names for the members ``member_ids`` @'d in ``thread``.
+
+        The role's own account on the thread's channel goes by the account's
+        name; anyone else by the newest name snapshot recorded for them in
+        this thread. Members with neither are absent.
+        """
+        if not member_ids:
+            return {}
+        account = account_for_channel(
+            (item.record for item in self._accounts.list(role_id=role_id)),
+            thread.channel,
+        )
+        own = (
+            {account.platform_account_id: account.display_name}
+            if account is not None
+            and account.display_name
+            and account.platform_account_id in member_ids
+            else {}
+        )
+        return {
+            **self._conversations.sender_names(thread.id, member_ids - own.keys()),
+            **own,
+        }
 
     def _messages_page(
         self, role_id: str, thread: ThreadRecord, *, before_seq: int | None, limit: int

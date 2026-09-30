@@ -5,7 +5,7 @@ import { mergePhoneMessages, phoneChatItems, phoneSeparatorTime, withLiveConvers
 
 const message = (id: string, patch: Partial<PhoneMessage> = {}): PhoneMessage => ({
   id, seq: null, sender: "other", senderId: "42", senderName: "阿花", senderIsUser: false,
-  senderAvatarPath: null, content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false,
+  senderAvatarPath: null, mentions: [], content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false,
   ...patch,
 });
 
@@ -31,6 +31,13 @@ test("the role's messages sit right without a name; others sit left under their 
     { side: "left", senderLabel: "主人", isUser: true },
     { side: "right", senderLabel: null, isUser: false },
   ]);
+});
+
+test("a message's mentions lead it as @name, the member ID when no name is known", () => {
+  const [item] = phoneChatItems([
+    message("a", { mentions: [{ id: "10001", name: "小栞" }, { id: "99", name: null }] }),
+  ], now).filter((line) => line.kind === "message");
+  assert.deepEqual(item?.mentionLabels, ["@小栞", "@99"]);
 });
 
 test("a time separator opens the chat and follows every pause longer than five minutes", () => {

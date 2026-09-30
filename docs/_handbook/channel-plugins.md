@@ -102,7 +102,7 @@ class DemoChatChannel:
 2. 构造 `InboundMessage(channel=self.name, sender=<平台用户 id>, chat_id=<会话 id>, content=..., media=[本地路径], metadata={...})`。`metadata` 必须带已登记的 `account_id`，并带 `message_id` / `external_message_id`（宿主用它在线程里去重）；能确定时带 `chat_type`、`mentioned`（群消息结构化 @ 了接收账号自身）和发送者别名 `username`；群消息能确定时还带 `mentioned_ids`（被结构化 @ 的成员 ID 列表）与 `reply_to_sender_id`（被回复消息的发送者 ID，等于接收账号平台 ID 即视为回复角色；不上报就只能靠 @ 触发，目前只有 QQ 上报，Telegram 只认 @）；平台给出显示名时可带 `group_name`（群名）与 `sender_name`（发送者昵称或群名片），两者是随消息保存的快照、之后不会刷新，拿不到就不带，宿主负责去掉首尾空白（键定义在 `core.common.message_source`）。同时在 `metadata["via_account"]` 附上接收账号的快照（见下文「经由账号快照」）。
 3. 交给 `ChannelIntake.submit()`；真正接收时：
    - `ctx.channel_hub.is_sender_allowed(channel=, chat_id=, sender_id=, account_id=)` 为假就丢弃。只有已登记、在线且所属角色存在的接收账号能处理消息。
-   - `message = ctx.channel_hub.route_account_inbound(message)`：按该账号的私聊/群聊开关与黑名单准入，所有群聊共用这组账号级设置；群消息只有 @ 了账号或回复了账号发出的消息（需插件上报 `reply_to_sender_id`）才放行；返回 `None` 就丢弃，否则补上 `role_id`、`thread_id`、`session_key_override` 等元数据。
+   - `message = ctx.channel_hub.route_account_inbound(message)`：按该账号的私聊/群聊开关与黑名单准入，所有群聊共用这组账号级设置；群消息只有 @ 了账号或回复了账号发出的消息（需插件上报 `reply_to_sender_id`）才放行；返回 `None` 就丢弃，否则补上 `role_id`、`thread_id`、`session_key_override` 等元数据。可选的 `on_heard=` 回调只在没叫角色的群消息存进旁听记录时被调用（参数是投影后的消息，同样返回 `None`），插件可借此刷新这条消息显示的头像；未开旁听而丢弃、或超出当日上限的不会调用（#553）。
    - `metadata["conversation_duplicate"]` 为真时丢弃，否则 `await ctx.bus.publish_inbound(message)`。
 
 约定：
@@ -137,7 +137,7 @@ ViaAccount(
 - **识别私聊并声明作用域**：私聊消息交给 `route_account_inbound` 之前，调用 `core.channels.pairing_command.answer_pairing_code(hub, message, scope=..., send=...)`；返回 `True` 时丢弃这条消息（不进入会话、不触发角色回复），宿主已经通过 `send` 回复「已绑定」。群聊消息不调用。`message.sender` 是要绑定的平台用户 ID，`message.metadata` 必须带接收账号的 `account_id`。
 - **`scope` 按平台决定**：`"platform"` 表示用户 ID 在整个平台内唯一（QQ 号、Telegram 用户 ID），绑定对该插件的所有账号生效；`"account"` 表示 ID 只对接收它的应用有效（飞书 open_id、QQBot openid），绑定只对这个账号生效。
 
-其余由宿主完成：`ChannelHub.claim_pairing` 校验配对码（错误、过期、已用都不绑定）并记下配对所在的私聊；`route_account_inbound` 给已绑定的发送者（按作用域匹配）写入 `metadata["sender_is_user"] = True`（插件自带的该字段会被丢弃），来源前缀随之显示 `；发送者: 你的用户`，并记下这位用户之后私聊过的会话。
+其余由宿主完成：`ChannelHub.claim_pairing` 校验配对码（错误、过期、已用都不绑定）并记下配对所在的私聊；`route_account_inbound` 给已绑定的发送者（按作用域匹配）写入 `metadata["sender_is_user"] = True`（插件自带的该字段会被丢弃），来源前缀随之显示 `；发送者: 你的用户`（群消息里每个发送者都标明：`你的用户（ID …）` 或 `群友「昵称」（ID …）`，并列出结构化 @ 的成员 ID，#553），并记下这位用户之后私聊过的会话。
 
 删除账号（包括删除角色时随之删除的账号）会移除只对该账号生效的绑定，并从平台级绑定里去掉这个账号的私聊记录；同一账号重新添加后需要重新配对。
 

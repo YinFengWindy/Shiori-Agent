@@ -148,4 +148,4 @@ def test_external_channel_declaration_errors_block_the_package(contract_package)
 
 
 def test_host_advertises_runtime_api_with_group_listening_declarations():
-    assert HostRuntimeContract().runtime_api == "2.13.0"
+    assert HostRuntimeContract().runtime_api == "2.14.0"

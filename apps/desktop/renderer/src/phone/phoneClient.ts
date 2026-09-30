@@ -35,6 +35,9 @@ export type PhoneConversation = {
 };
 
 /** One message of a conversation, from the role's point of view. */
+/** A member a message @s: the platform ID, and a name when the bridge knows one (the role's account name, else the member's recorded name). */
+export type PhoneMention = { id: string; name: string | null };
+
 export type PhoneMessage = {
   id: string;
   /** Store order; absent on a live row the bridge sent before it was read back. */
@@ -49,6 +52,8 @@ export type PhoneMessage = {
   senderIsUser: boolean;
   /** Local file of the other sender's cached platform avatar; null for the role or when none is cached. */
   senderAvatarPath: string | null;
+  /** Members the group message structurally @s, in order (#553); empty for none. */
+  mentions: PhoneMention[];
   content: string;
   /** Local file paths of attached media. */
   media: string[];

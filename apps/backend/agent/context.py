@@ -11,6 +11,7 @@ from agent.core.types import ContextRenderResult, ContextRequest
 from agent.core.prompt_block import (
     ActiveSkillsPromptBlock,
     BehaviorRulesPromptBlock,
+    ExternalTurnRulesPromptBlock,
     GroupListeningPromptBlock,
     GroupNotePromptBlock,
     IdentityPromptBlock,
@@ -248,6 +249,7 @@ class ContextBuilder:
                 GroupListeningPromptBlock(),
                 SessionContextPromptBlock(),
                 UserIdentitiesPromptBlock(runtime_roles),
+                ExternalTurnRulesPromptBlock(),
                 ActiveSkillsPromptBlock(),
                 SkillsCatalogPromptBlock(render_fn=build_skills_catalog_prompt),
             ]

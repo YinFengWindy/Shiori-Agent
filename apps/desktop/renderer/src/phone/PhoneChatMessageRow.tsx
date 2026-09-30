@@ -63,6 +63,7 @@ function OtherAvatar({ label, avatarPath, onOpen }: { label: string | null; avat
  * cached platform avatar (a placeholder without one), under their name, the
  * bound user's name with a 「这是我」 badge. A message heard while listening
  * in on the group has a quieter, dashed bubble and an ear mark by the name.
+ * The members a group message @s lead its text as 「@名字」.
  * `onOpenMember`, when given, makes that avatar open the sender's member
  * profile.
  */
@@ -73,7 +74,7 @@ export function PhoneChatMessageRow({ item, role, onOpenImage, onOpenMember }: {
   onOpenImage: (path: string) => void;
   onOpenMember?: () => void;
 }) {
-  const { message, side, senderLabel, isUser } = item;
+  const { message, side, senderLabel, isUser, mentionLabels } = item;
   const right = side === "right";
   const surface = message.listened ? "listened" : side;
   return (
@@ -89,8 +90,11 @@ export function PhoneChatMessageRow({ item, role, onOpenImage, onOpenMember }: {
             {isUser ? <span className={cx(badgeClass, "shrink-0 px-1.5 py-0")} data-testid="phone-message-me">这是我</span> : null}
           </span>
         ) : null}
-        {message.content ? (
-          <p className={cx("m-0", bubbleClass, bubbleSurfaceClass[surface])}>{message.content}</p>
+        {message.content || mentionLabels.length ? (
+          <p className={cx("m-0", bubbleClass, bubbleSurfaceClass[surface])}>
+            {mentionLabels.length ? <span className="text-accent-text">{`${mentionLabels.join(" ")} `}</span> : null}
+            {message.content}
+          </p>
         ) : null}
         <PhoneMessageMedia media={message.media} onOpenImage={onOpenImage} />
       </div>

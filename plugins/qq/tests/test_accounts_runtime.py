@@ -484,7 +484,8 @@ async def test_account_added_after_handover_resume_receives_private_messages(
         ),
         channel_hub=SimpleNamespace(
             claim_pairing=lambda _message, *, scope: False,
-            route_account_inbound=lambda message: routed.append(message) or message,
+            route_account_inbound=lambda message, **_: routed.append(message)
+            or message,
         ),
         http_resources=SimpleNamespace(),
         attachment_store=SimpleNamespace(),
