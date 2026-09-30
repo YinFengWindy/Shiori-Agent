@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import os
-import socket
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
+from agent.mcp.windows_job import WindowsJob
+
+from . import napcat_process_guard as guard
 from .napcat_account_files import NapCatAccountFiles
 from .napcat_installer import NapCatInstaller
 from .napcat_qrcode import NapCatQrCache
@@ -23,6 +26,9 @@ class ManagedNapCat(NapCatInstaller):
         self._files = NapCatAccountFiles(self.root)
         self._qr = NapCatQrCache(self._files.account_dir)
         self._processes: dict[str, subprocess.Popen[bytes]] = {}
+        # Kill-on-close jobs make the OS reap each NapCat tree when this bridge
+        # dies without running stop_all (crash, kill, hot reload).
+        self._jobs: dict[str, WindowsJob] = {}
         self._webui = NapCatWebUi(self._files.metadata)
 
     def endpoint(self, ref: str) -> tuple[str, str]:
@@ -45,11 +51,7 @@ class ManagedNapCat(NapCatInstaller):
         profile = self._files.prepare_profile(ref)
         metadata = self._files.metadata(ref)
         for port in (metadata["webui_port"], metadata["onebot_port"]):
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
-                try:
-                    listener.bind(("127.0.0.1", port))
-                except OSError as exc:
-                    raise RuntimeError(f"托管 NapCat 端口 {port} 已被占用") from exc
+            await self._claim_port(port)
         inherited = {
             key: value
             for key, value in os.environ.items()
@@ -79,10 +81,14 @@ class ManagedNapCat(NapCatInstaller):
         if expected_uin:
             environment["NAPCAT_QUICK_ACCOUNT"] = expected_uin
         self._webui.reset(ref)
+        await self._close_job(ref)
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        if sys.platform == "win32":
+            # Start suspended so node cannot spawn napcat.mjs before joining the job.
+            flags |= 0x00000004  # CREATE_SUSPENDED
         log = (account_dir / "process.log").open("ab")
         try:
-            self._processes[ref] = subprocess.Popen(
+            process = subprocess.Popen(
                 [
                     str(self.install_dir / "node.exe"),
                     str(self.install_dir / "index.js"),
@@ -95,28 +101,83 @@ class ManagedNapCat(NapCatInstaller):
             )
         finally:
             log.close()
+        if sys.platform == "win32":
+            try:
+                self._jobs[ref] = WindowsJob(process.pid, resume=True)
+            except BaseException:
+                process.kill()
+                process.wait()
+                raise
+        self._processes[ref] = process
+
+    async def _claim_port(self, port: int) -> None:
+        """Frees a port held by an orphaned tree from this plugin's NapCat install.
+
+        A crashed bridge can leave NapCat alive on the account's persisted ports;
+        switching ports is not an option because the orphan still owns the QQ
+        profile. Only processes whose image lives under the managed-napcat root
+        are killed; any other owner is reported and left untouched.
+        """
+        if guard.port_bindable(port):
+            return
+        pid = guard.listener_pid(port)
+        owner = guard.process_info(pid) if pid is not None else None
+        if owner is None or not self._is_managed(owner):
+            detail = (
+                f"（PID {owner.pid} {owner.name}）"
+                if owner is not None
+                else (f"（PID {pid}）" if pid is not None else "")
+            )
+            raise RuntimeError(f"托管 NapCat 端口 {port} 已被占用{detail}")
+        # Climb to the index.js launcher so the whole orphaned tree dies with it.
+        root = owner
+        while (parent := guard.process_info(root.parent_pid)) is not None and (
+            self._is_managed(parent) and parent.create_time <= root.create_time
+        ):
+            root = parent
+        await asyncio.to_thread(guard.kill_process_tree, root.pid)
+        for _ in range(50):
+            if guard.port_bindable(port):
+                return
+            await asyncio.sleep(0.1)
+        raise RuntimeError(f"托管 NapCat 端口 {port} 在结束残留进程后仍被占用")
+
+    def _is_managed(self, info: guard.ProcessInfo) -> bool:
+        """Whether a process image comes from any version under managed-napcat."""
+        return info.exe is not None and info.exe.resolve().is_relative_to(
+            self.root.resolve()
+        )
+
+    async def _close_job(self, ref: str) -> None:
+        """Releases this account's job, killing anything still inside it."""
+        job = self._jobs.pop(ref, None)
+        if job is not None:
+            await asyncio.to_thread(job.close)
 
     async def stop(self, ref: str) -> None:
         """Terminates only the process launched for this account."""
         process = self._processes.pop(ref, None)
         self._qr.clear(ref)
         self._webui.reset(ref)
-        if process is None or process.poll() is not None:
-            return
-        if os.name == "nt":
-            await asyncio.to_thread(
-                subprocess.run,
-                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                capture_output=True,
-                check=False,
-            )
-        else:
-            process.terminate()
         try:
-            await asyncio.wait_for(asyncio.to_thread(process.wait), timeout=10)
-        except TimeoutError:
-            process.kill()
-            await asyncio.to_thread(process.wait)
+            if process is None or process.poll() is not None:
+                return
+            if os.name == "nt":
+                await asyncio.to_thread(
+                    subprocess.run,
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    capture_output=True,
+                    check=False,
+                )
+            else:
+                process.terminate()
+            try:
+                await asyncio.wait_for(asyncio.to_thread(process.wait), timeout=10)
+            except TimeoutError:
+                process.kill()
+                await asyncio.to_thread(process.wait)
+        finally:
+            await self._close_job(ref)
 
     async def stop_all(self) -> None:
         """Stops owned processes without changing saved login sessions."""

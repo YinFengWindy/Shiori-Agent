@@ -14,6 +14,7 @@ import qrcode
 
 from plugins.qq.backend import managed_napcat
 from plugins.qq.backend.managed_napcat import ManagedNapCat
+from plugins.qq.backend.napcat_process_guard import ProcessInfo
 
 
 @pytest.mark.asyncio
@@ -40,6 +41,7 @@ async def test_per_account_ports_profiles_and_logout_are_isolated(
 
     monkeypatch.setattr(managed_napcat.subprocess, "Popen", popen)
     monkeypatch.setattr(managed_napcat.subprocess, "run", Mock())
+    monkeypatch.setattr(managed_napcat, "WindowsJob", Mock())
     await manager.start(first, "101")
     await manager.start(second, "202")
     assert len(launched) == 2
@@ -154,3 +156,49 @@ async def test_refresh_rejects_missing_or_stale_png(
     monkeypatch.setattr(managed_napcat.asyncio, "sleep", AsyncMock())
     with pytest.raises(RuntimeError, match="缺失或仍是旧图"):
         await manager.refresh_qrcode(ref)
+
+
+def _occupied_port_manager(monkeypatch, tmp_path, processes):
+    """Launch-ready manager whose ports stay taken until a process tree is killed."""
+    manager = ManagedNapCat(tmp_path)
+    monkeypatch.setattr(
+        manager, "prepare", lambda: asyncio.sleep(0, result=tmp_path / "qq")
+    )
+    launched = Mock()
+    killed = []
+    monkeypatch.setattr(managed_napcat.subprocess, "Popen", launched)
+    monkeypatch.setattr(managed_napcat, "WindowsJob", Mock())
+    guard = managed_napcat.guard
+    monkeypatch.setattr(guard, "port_bindable", lambda _port: bool(killed))
+    monkeypatch.setattr(guard, "listener_pid", lambda _port: 11)
+    monkeypatch.setattr(guard, "process_info", lambda pid: processes.get(pid))
+    monkeypatch.setattr(guard, "kill_process_tree", killed.append)
+    return manager, launched, killed
+
+
+@pytest.mark.asyncio
+async def test_orphaned_managed_tree_is_killed_from_its_launcher(monkeypatch, tmp_path):
+    # An older install version still counts as this plugin's NapCat.
+    node = tmp_path / "managed-napcat" / "v4.0.0" / "node.exe"
+    processes = {
+        5: ProcessInfo(5, "explorer.exe", tmp_path / "explorer.exe", 1, 1.0),
+        10: ProcessInfo(10, "node.exe", node, 5, 2.0),
+        11: ProcessInfo(11, "node.exe", node, 10, 3.0),
+    }
+    manager, launched, killed = _occupied_port_manager(monkeypatch, tmp_path, processes)
+    await manager.start("e" * 32, "101")
+    assert killed == [10]
+    launched.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_port_held_by_foreign_process_is_reported_not_killed(
+    monkeypatch, tmp_path
+):
+    foreign = tmp_path / "elsewhere" / "node.exe"
+    processes = {11: ProcessInfo(11, "node.exe", foreign, 5, 3.0)}
+    manager, launched, killed = _occupied_port_manager(monkeypatch, tmp_path, processes)
+    with pytest.raises(RuntimeError, match=r"已被占用（PID 11 node.exe）"):
+        await manager.start("f" * 32, "101")
+    assert killed == []
+    launched.assert_not_called()
