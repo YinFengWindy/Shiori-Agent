@@ -496,6 +496,37 @@ async def test_channel_pushes_during_a_turn_are_committed_with_it_under_their_ch
     ] == [(target, [stored[1]["id"]])]
 
 
+async def test_a_committed_turns_delivered_image_is_recorded_once_under_its_chat(
+    runtime,
+):
+    _ = ExternalPushSyncService(
+        live_turn_pushes=current_turn_pushes,
+        session_manager=runtime.manager,
+        event_bus=runtime.bus,
+    )
+    runtime.push.register_channel("qq", image=AsyncMock(return_value=None))
+
+    async def reasoning(**_kwargs):
+        assert "已发送" in await runtime.call(
+            channel="qq", chat_id="gqq:6", image="scene.png"
+        )
+        return reply()
+
+    await runtime.pipeline(reasoning).run(
+        incoming(), runtime.session.key, dispatch_outbound=False
+    )
+
+    stored = runtime.manager._store.fetch_session_messages(runtime.session.key)
+    assert [
+        (row["content"], row.get("media"), row["thread_id"])
+        for row in stored
+        if row["role"] == "assistant"
+    ] == [
+        ("", ["scene.png"], network_thread_id("mira", "qq", "gqq:6")),
+        ("done", None, network_thread_id("mira", "qqbot", "friend")),
+    ]
+
+
 async def test_a_failed_turn_still_records_the_channel_push_it_delivered(runtime):
     _ = ExternalPushSyncService(
         live_turn_pushes=current_turn_pushes,

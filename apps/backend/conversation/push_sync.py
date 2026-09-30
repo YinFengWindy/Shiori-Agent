@@ -69,17 +69,13 @@ class ExternalPushSyncService:
             self._validate_existing_message(event)
             return event
         media = [event.image]
-        drafts = (
-            self._live_turn_pushes(event.session_key) if event.attach_to_turn else None
+        await self._record_delivery(
+            event,
+            in_turn=event.attach_to_turn,
+            content="",
+            media=media,
+            persist=lambda: self._persist_push(event, content="", media=media),
         )
-        if drafts is not None:
-            drafts.append(
-                self._push_message(event, content="", media=media),
-                owner=self,
-                if_abandoned=lambda: self._persist_push(event, content="", media=media),
-            )
-            return event
-        await self._persist_push(event, content="", media=media)
         return event
 
     async def handle_text_pushed(self, event: ExternalTextPushed) -> ExternalTextPushed:
@@ -91,16 +87,39 @@ class ExternalPushSyncService:
         task's report), is stored at once. A delivery whose ``delivery_key``
         the role session already holds is not stored again.
         """
-        drafts = self._live_turn_pushes(event.session_key) if event.in_turn else None
-        if drafts is not None:
-            drafts.append(
-                self._push_message(event, content=event.text, media=_text_media(event)),
-                owner=self,
-                if_abandoned=lambda: self._persist_text(event),
-            )
-            return event
-        await self._persist_text(event)
+        await self._record_delivery(
+            event,
+            in_turn=event.in_turn,
+            content=event.text,
+            media=_text_media(event),
+            persist=lambda: self._persist_text(event),
+        )
         return event
+
+    async def _record_delivery(
+        self,
+        event: ExternalImagePushed | ExternalTextPushed,
+        *,
+        in_turn: bool,
+        content: str,
+        media: list[str] | None,
+        persist: Callable[[], Awaitable[None]],
+    ) -> None:
+        """Records one delivered push with its live turn, or at once via ``persist``.
+
+        A push made during a live turn becomes one of that turn's drafts,
+        committed with its messages; if the turn never commits, ``persist``
+        records it then. Without a live turn owning it, ``persist`` runs now.
+        """
+        drafts = self._live_turn_pushes(event.session_key) if in_turn else None
+        if drafts is None:
+            await persist()
+            return
+        drafts.append(
+            self._push_message(event, content=content, media=media),
+            owner=self,
+            if_abandoned=persist,
+        )
 
     async def _persist_text(self, event: ExternalTextPushed) -> None:
         session = self._sessions.get_or_create(self._role_session_key(event))

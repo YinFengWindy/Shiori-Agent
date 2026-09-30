@@ -301,9 +301,8 @@ class _PersistAssistantMessageModule:
             assistant_kwargs["metadata"]["thought"] = ctx.response_metadata.thought
         if ctx.thinking is not None:
             assistant_kwargs["reasoning_content"] = ctx.thinking
-        persisted_media = list(dict.fromkeys([*ctx.media, *ctx.persisted_media]))
-        if persisted_media:
-            assistant_kwargs["media"] = persisted_media
+        if ctx.media:
+            assistant_kwargs["media"] = list(dict.fromkeys(ctx.media))
         assistant_kwargs.update(_collect_persist_assistant_slots(frame.slots))
         # Outbound transport metadata still identifies the triggering turn for
         # live-stream correlation. Persist that identity separately: the reply's
