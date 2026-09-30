@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from agent.mcp.windows_job import WindowsJob
+from infra.process.windows_job import WindowsJob
 
 from . import napcat_process_guard as guard
 from .napcat_account_files import NapCatAccountFiles

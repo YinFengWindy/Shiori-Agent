@@ -1,4 +1,4 @@
-"""Windows job ownership for MCP servers that spawn detached input-capable workers."""
+"""Windows job ownership that reaps an owned process tree when the host exits."""
 
 import ctypes
 from ctypes import wintypes
@@ -37,7 +37,7 @@ class WindowsJob:
 
     def __init__(self, pid: int, *, resume: bool = False) -> None:
         if sys.platform != "win32":
-            raise RuntimeError("Owned native MCP processes require Windows")
+            raise RuntimeError("Owned native processes require Windows")
         kernel: Any = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
         kernel.CreateJobObjectW.restype = wintypes.HANDLE
@@ -109,7 +109,7 @@ class WindowsJob:
                 if counters[10] == 0:
                     break
                 if time.monotonic() >= deadline:
-                    raise TimeoutError("Owned MCP process tree did not exit")
+                    raise TimeoutError("Owned process tree did not exit")
                 time.sleep(0.01)
         finally:
             kernel.CloseHandle(self._handle)
@@ -157,8 +157,6 @@ class WindowsJob:
                     finally:
                         kernel.CloseHandle(thread)
                 found = kernel.Thread32Next(snapshot, ctypes.byref(entry))
-            raise RuntimeError(
-                f"MCP initial thread missing for suspended process {pid}"
-            )
+            raise RuntimeError(f"Initial thread missing for suspended process {pid}")
         finally:
             kernel.CloseHandle(snapshot)

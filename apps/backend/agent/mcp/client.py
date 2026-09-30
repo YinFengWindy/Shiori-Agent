@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.mcp.result import McpToolError as McpToolError, decode_tool_result
-from agent.mcp.windows_job import WindowsJob
+from infra.process.windows_job import WindowsJob
 from agent.tools.base import ToolResult
 
 logger = logging.getLogger(__name__)

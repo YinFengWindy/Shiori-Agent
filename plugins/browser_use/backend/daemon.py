@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import BinaryIO
 
-from agent.mcp.windows_job import WindowsJob
+from infra.process.windows_job import WindowsJob
 
 
 class BrowserDaemon:

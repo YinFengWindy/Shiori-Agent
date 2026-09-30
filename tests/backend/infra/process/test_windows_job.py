@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from agent.mcp.windows_job import WindowsJob
+from infra.process.windows_job import WindowsJob
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows kernel Job semantics")
@@ -17,7 +17,7 @@ def test_host_exit_reaps_assigned_process_without_explicit_cleanup(tmp_path):
     ready = tmp_path / "ready.json"
     owner_code = """import json,subprocess,sys,time
 from pathlib import Path
-from agent.mcp.windows_job import WindowsJob
+from infra.process.windows_job import WindowsJob
 child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)'],creationflags=0x08000004)
 job=WindowsJob(child.pid,resume=True)
 Path(sys.argv[1]).write_text(json.dumps({'child':child.pid}),encoding='utf-8')
