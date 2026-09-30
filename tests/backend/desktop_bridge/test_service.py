@@ -1204,7 +1204,6 @@ async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -
                         "response_rules": {
                             "private_enabled": False,
                             "group_enabled": True,
-                            "require_mention": True,
                             "blocked_sender_ids": [],
                         },
                     },

@@ -22,7 +22,7 @@ def test_group_event_preserves_account_group_and_member_identity():
             "group_id": 777,
             "user_id": 902,
             "message_id": 45,
-            "raw_message": "[CQ:at,qq=101] hello",
+            "raw_message": "[CQ:at,qq=101] [CQ:at,qq=903] hello",
         },
     )
     assert message is not None
@@ -39,6 +39,7 @@ def test_group_event_preserves_account_group_and_member_identity():
         "external_message_id": "45",
         "group_id": "777",
         "mentioned": True,
+        "mentioned_ids": ["101", "903"],
         "via_account": _VIA,
     }
 

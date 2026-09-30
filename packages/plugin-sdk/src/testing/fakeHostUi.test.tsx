@@ -8,7 +8,7 @@ import { createFakeHostUi } from "./fakeHostUi";
 const account: AccountSnapshot = {
   id: "qq:101", pluginId: "qq", platform: "qq", platformAccountId: "101", configRef: "aa",
   displayName: "QQ", avatarUrl: "", roleId: "mira", runtimeActive: true, connection: "online",
-  capabilities: [], error: "", responseRules: { privateEnabled: true, groupEnabled: true, requireMention: false, blockedSenderIds: [] },
+  capabilities: [], error: "", responseRules: { privateEnabled: true, groupEnabled: true, blockedSenderIds: [] },
 };
 
 const buttonIn = (root: ParentNode, label: string) => Array.from(root.querySelectorAll("button")).find((item) => item.textContent === label);

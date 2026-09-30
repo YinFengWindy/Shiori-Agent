@@ -1,15 +1,26 @@
-"""CQ mention parsing shared by QQ account intake and message conversion."""
+"""CQ mention and reply parsing shared by QQ account intake and message conversion."""
 
 from __future__ import annotations
 
 import re
 
 _CQ_AT_RE = re.compile(r"\[CQ:at,qq=(\d+)[^\]]*\]")
+# NapCat message IDs are signed 32-bit hashes, so a replied-to ID may be negative.
+_CQ_REPLY_RE = re.compile(r"\[CQ:reply,(?:[^\]]*,)?id=(-?\d+)[^\]]*\]")
 
 
-def is_at_bot(raw_message: str, bot_uin: str) -> bool:
-    """Return whether a CQ mention names this QQ account."""
-    return any(qq == bot_uin for qq in _CQ_AT_RE.findall(raw_message))
+def at_member_ids(raw_message: str) -> tuple[str, ...]:
+    """The QQ numbers a message structurally mentions (@), in order, deduplicated.
+
+    ``@全体成员`` (``qq=all``) names no member and is left out.
+    """
+    return tuple(dict.fromkeys(_CQ_AT_RE.findall(raw_message)))
+
+
+def reply_message_id(raw_message: str) -> str | None:
+    """The message ID the message's CQ reply segment points at; None without one."""
+    match = _CQ_REPLY_RE.search(raw_message)
+    return match.group(1) if match else None
 
 
 def strip_at_segments(raw_message: str) -> str:

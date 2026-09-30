@@ -25,7 +25,7 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
   const [blockedText, setBlockedText] = useState(account.responseRules.blockedSenderIds.join("\n"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // Group toggles only apply to accounts that serve group chats; the blacklist also covers private chats.
+  // The group toggle only applies to accounts that serve group chats; the blacklist also covers private chats.
   const showGroups = account.capabilities.includes("groups");
 
   async function save(next: AccountResponseRules) {
@@ -45,7 +45,7 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
     }
   }
 
-  function toggle(field: "privateEnabled" | "groupEnabled" | "requireMention", checked: boolean) {
+  function toggle(field: "privateEnabled" | "groupEnabled", checked: boolean) {
     void save({ ...rules, [field]: checked });
   }
 
@@ -60,14 +60,9 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
     <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
       <input type="checkbox" checked={rules.privateEnabled} disabled={busy} onChange={(event) => toggle("privateEnabled", event.target.checked)} />私聊启用
     </label>
-    {showGroups ? <>
-      <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
-        <input type="checkbox" checked={rules.groupEnabled} disabled={busy} onChange={(event) => toggle("groupEnabled", event.target.checked)} />群聊启用
-      </label>
-      <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
-        <input type="checkbox" checked={rules.requireMention} disabled={busy || !rules.groupEnabled} onChange={(event) => toggle("requireMention", event.target.checked)} />群聊需要 @
-      </label>
-    </> : null}
+    {showGroups ? <label className="flex items-center gap-3 text-body-sm text-ink-secondary">
+      <input type="checkbox" checked={rules.groupEnabled} disabled={busy} onChange={(event) => toggle("groupEnabled", event.target.checked)} />群聊启用
+    </label> : null}
     <label className="grid gap-2 text-body-sm text-ink-secondary">黑名单成员 ID
       <textarea className={textareaClass} rows={3} value={blockedText} disabled={busy}
         onChange={(event) => setBlockedText(event.target.value)} onBlur={commitBlocked} />

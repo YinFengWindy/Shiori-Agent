@@ -128,19 +128,20 @@ def test_account_inbound_uses_owner_and_rules(
                 metadata={"account_id": ""},
             )
         )
-    # The owner's default rules only answer group messages that mention it.
-    assert (
-        hub.route_account_inbound(
-            InboundMessage(
-                channel=message.channel,
-                sender=message.sender,
-                chat_id=message.chat_id,
-                content=message.content,
-                metadata={**message.metadata, "mentioned": False},
-            )
+
+    # A group message only reaches the role when it @s or replies to the role.
+    def group_message(**metadata: object) -> InboundMessage:
+        return InboundMessage(
+            channel=message.channel,
+            sender=message.sender,
+            chat_id=message.chat_id,
+            content=message.content,
+            metadata={**message.metadata, "mentioned": False, **metadata},
         )
-        is None
-    )
+
+    assert hub.route_account_inbound(group_message()) is None
+    assert hub.route_account_inbound(group_message(reply_to_sender_id="555")) is None
+    assert hub.route_account_inbound(group_message(reply_to_sender_id="100"))
     routed = hub.route_account_inbound(message)
     assert routed is not None
     assert routed.session_key == "role:mira"
@@ -148,20 +149,7 @@ def test_account_inbound_uses_owner_and_rules(
     assert hub.resolve_account_runtime_session_key(account_id) == "role:mira"
     accounts.set_response_rules(account_id, AccountResponseRules(group_enabled=False))
     assert hub.route_account_inbound(message) is None
-    # Account-wide settings gate every group: @ requirement, then the blacklist.
-    accounts.set_response_rules(account_id, AccountResponseRules(require_mention=False))
-    assert (
-        hub.route_account_inbound(
-            InboundMessage(
-                channel=message.channel,
-                sender=message.sender,
-                chat_id="gqq:43",
-                content=message.content,
-                metadata={**message.metadata, "mentioned": False},
-            )
-        )
-        is not None
-    )
+    # The account-wide blacklist gates every group too.
     accounts.set_response_rules(
         account_id, AccountResponseRules(blocked_sender_ids=("user",))
     )

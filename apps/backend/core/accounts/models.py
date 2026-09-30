@@ -23,12 +23,12 @@ ConnectionState = Literal[
 class AccountResponseRules:
     """How an account responds; saved by its plugin, applied by host routing.
 
-    Every group chat follows the same account-wide group settings.
+    Every group chat follows the same account-wide group settings; within an
+    enabled group the role only speaks when @-mentioned or replied to.
     """
 
     private_enabled: bool = True
     group_enabled: bool = True
-    require_mention: bool = True
     blocked_sender_ids: tuple[str, ...] = ()
 
 

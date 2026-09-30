@@ -8,7 +8,7 @@ const account = (id: string, patch: Partial<AccountSnapshot> = {}): AccountSnaps
   id, pluginId: "qq", platform: "qq", platformAccountId: id, configRef: id,
   displayName: "", avatarUrl: "", roleId: "mira",
   runtimeActive: true, connection: "online", capabilities: [], error: "",
-  responseRules: { privateEnabled: true, groupEnabled: true, requireMention: true, blockedSenderIds: [] },
+  responseRules: { privateEnabled: true, groupEnabled: true, blockedSenderIds: [] },
   ...patch,
 });
 

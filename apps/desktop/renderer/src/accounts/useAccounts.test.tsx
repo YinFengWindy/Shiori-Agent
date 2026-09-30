@@ -27,7 +27,7 @@ test("mounted account views reload when the host pushes an account change", asyn
           id: "a", plugin_id: "demo", platform: "demo", platform_account_id: "1", display_name: "",
           avatar_url: "", role_id: "role-1", runtime_active: true, connection,
           capabilities: [], error: "", response_rules: { private_enabled: true, group_enabled: true,
-            require_mention: true, blocked_sender_ids: [] },
+            blocked_sender_ids: [] },
         }] } };
       },
     },

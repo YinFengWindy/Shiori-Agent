@@ -16,19 +16,22 @@ def _ids(value: Any, error: str) -> tuple[str, ...]:
 
 
 def response_rules_from_dict(value: Any) -> AccountResponseRules:
-    """Parses rules strictly; malformed fields raise before anything is saved."""
+    """Parses rules strictly; malformed fields raise before anything is saved.
+
+    Keys outside the rule fields are not read, so rules saved with the
+    retired ``require_mention`` switch still load.
+    """
     if not isinstance(value, dict):
         raise ValueError("response_rules must be an object")
     if any(
         type(value.get(field)) is not bool
-        for field in ("private_enabled", "group_enabled", "require_mention")
+        for field in ("private_enabled", "group_enabled")
     ):
         raise ValueError("Invalid account response rules")
     blocked = _ids(value.get("blocked_sender_ids"), "Invalid account response rules")
     return AccountResponseRules(
         private_enabled=value["private_enabled"],
         group_enabled=value["group_enabled"],
-        require_mention=value["require_mention"],
         blocked_sender_ids=blocked,
     )
 
@@ -43,6 +46,5 @@ def response_rules_to_dict(rules: AccountResponseRules) -> dict[str, Any]:
     return {
         "private_enabled": rules.private_enabled,
         "group_enabled": rules.group_enabled,
-        "require_mention": rules.require_mention,
         "blocked_sender_ids": list(rules.blocked_sender_ids),
     }

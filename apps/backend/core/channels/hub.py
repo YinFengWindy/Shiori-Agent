@@ -21,6 +21,7 @@ from core.common.message_source import (
     GROUP_NAME_KEY,
     SENDER_IS_USER_KEY,
     SENDER_NAME_KEY,
+    addresses_account,
     display_name,
 )
 from core.identity import IdentityChat, IdentityScope, UserIdentityStore
@@ -139,11 +140,12 @@ class ChannelHub:
             return None
         rules = account.record.response_rules
         group = is_group_chat_type(metadata.get("chat_type"))
-        # Every group chat follows the account-wide group switch and @ requirement.
+        # Every group chat follows the account-wide group switch, and within it
+        # the role only answers messages that @ it or reply to it.
         if group:
-            if not rules.group_enabled:
-                return None
-            if rules.require_mention and not metadata.get("mentioned"):
+            if not rules.group_enabled or not addresses_account(
+                metadata, account.record.platform_account_id
+            ):
                 return None
         elif not rules.private_enabled:
             return None

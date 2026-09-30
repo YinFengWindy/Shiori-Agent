@@ -9,7 +9,7 @@ const savedAccount: AccountSnapshot = {
   id: "qq:101", pluginId: "qq", platform: "qq", platformAccountId: "101", configRef: "aa",
   displayName: "QQ", avatarUrl: "", roleId: "mira", runtimeActive: true, connection: "offline",
   capabilities: [], error: "", responseRules: { privateEnabled: true, groupEnabled: true,
-    requireMention: false, blockedSenderIds: [] },
+    blockedSenderIds: [] },
 };
 
 const readyPreparation = { stage: "ready", percent: 100, version: "v4.18.28" };

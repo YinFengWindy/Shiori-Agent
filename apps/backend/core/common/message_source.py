@@ -28,6 +28,9 @@ SENDER_NAME_KEY = "sender_name"
 # replies to. Plain-text names are never member IDs; leave these unset then.
 MENTIONED_IDS_KEY = "mentioned_ids"
 REPLY_TO_SENDER_ID_KEY = "reply_to_sender_id"
+# Inbound metadata flag a plugin sets on a group message that structurally
+# mentions (@) the receiving account itself.
+MENTIONED_KEY = "mentioned"
 _TIME_PREFIX = "[当前消息时间:"
 
 
@@ -61,6 +64,19 @@ def _via_account_prefix(metadata: Mapping[str, Any]) -> str | None:
     if VIA_ACCOUNT_KEY not in metadata:
         return None
     return ViaAccount.from_metadata(metadata[VIA_ACCOUNT_KEY]).prefix
+
+
+def addresses_account(metadata: Mapping[str, Any], platform_account_id: str) -> bool:
+    """Whether a group message calls on the account ``platform_account_id``.
+
+    It does when the plugin flagged an @ of the account (``MENTIONED_KEY``) or
+    the message replies to one the account sent (``REPLY_TO_SENDER_ID_KEY``
+    names the account's own platform ID). The only way a group message starts
+    a role's turn.
+    """
+    return metadata.get(MENTIONED_KEY) is True or (
+        _identifier(metadata.get(REPLY_TO_SENDER_ID_KEY)) == platform_account_id
+    )
 
 
 @dataclass(frozen=True)

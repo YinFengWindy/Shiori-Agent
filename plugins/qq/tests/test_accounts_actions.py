@@ -197,3 +197,16 @@ def test_chat_target_preserves_qq_private_and_group_namespaces():
     assert qq_chat_target("gqq:777") == ("group", "777")
     with pytest.raises(ValueError, match="群号"):
         qq_chat_target("gqq:bad")
+
+
+@pytest.mark.asyncio
+async def test_message_sender_comes_from_napcat_get_msg():
+    socket = AsyncMock()
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock())
+    socket.call.return_value = {"message_id": -35, "sender": {"user_id": 202}}
+    assert await actions.message_sender("account-a", "-35") == "202"
+    socket.call.assert_awaited_with("get_msg", {"message_id": -35})
+
+    socket.call.return_value = {"message_id": -35}
+    with pytest.raises(OneBotError, match="未返回发送者"):
+        await actions.message_sender("account-a", "-35")

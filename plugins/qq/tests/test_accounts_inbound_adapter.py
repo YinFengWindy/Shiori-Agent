@@ -246,3 +246,30 @@ async def test_group_message_is_routed_without_a_name_when_lookup_fails(
     [call] = bus.publish_inbound.await_args_list
     assert "group_name" not in call.args[0].metadata
     assert "名称查询失败" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_group_reply_reports_who_sent_the_replied_message():
+    adapter = QQInboundAdapter()
+    adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
+    adapter._actions = SimpleNamespace(
+        message_sender=AsyncMock(side_effect=["202", OneBotError("消息不存在")])
+    )
+    routed = []
+    adapter._ctx = SimpleNamespace(
+        bus=SimpleNamespace(publish_inbound=AsyncMock()),
+        channel_hub=SimpleNamespace(
+            route_account_inbound=lambda message: routed.append(message) or message
+        ),
+        http_resources=SimpleNamespace(),
+        attachment_store=SimpleNamespace(),
+    )
+
+    for _ in range(2):
+        message = _group_message(False)
+        message.content = "[CQ:reply,id=-35] 是这样吗"
+        await adapter._accept_inbound(message)
+
+    adapter._actions.message_sender.assert_awaited_with("account-b", "-35")
+    # A failed lookup leaves the reply target unknown rather than dropping it.
+    assert [m.metadata.get("reply_to_sender_id") for m in routed] == ["202", None]
