@@ -859,6 +859,34 @@ def test_plugins_cannot_claim_the_user_flag(tmp_path: Path) -> None:
     assert routed is not None and "sender_is_user" not in routed.metadata
 
 
+def test_quoted_user_is_marked_by_the_hub_not_the_plugin(tmp_path: Path) -> None:
+    hub, store, account_id = _hub_with_qq_account(tmp_path)
+    assert hub.claim_pairing(
+        _private(account_id, store.identities.create_pairing_code().code),
+        scope="platform",
+    )
+
+    def quoting(sender_id: str) -> InboundMessage:
+        return InboundMessage(
+            channel="qq",
+            sender="903",
+            chat_id="903",
+            content="你看",
+            metadata={
+                "account_id": account_id,
+                "chat_type": "private",
+                "reply_to_sender_id": sender_id,
+                "reply_to_sender_is_user": True,
+            },
+        )
+
+    user = hub.route_account_inbound(quoting("902"))
+    other = hub.route_account_inbound(quoting("904"))
+
+    assert user is not None and user.metadata["reply_to_sender_is_user"] is True
+    assert other is not None and "reply_to_sender_is_user" not in other.metadata
+
+
 def test_pairing_needs_a_live_owned_receiving_account(tmp_path: Path) -> None:
     hub, store, account_id = _hub_with_qq_account(tmp_path)
     code = store.identities.create_pairing_code().code

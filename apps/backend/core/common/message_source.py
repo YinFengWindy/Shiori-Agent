@@ -31,6 +31,17 @@ SENDER_NAME_KEY = "sender_name"
 # replies to. Plain-text names are never member IDs; leave these unset then.
 MENTIONED_IDS_KEY = "mentioned_ids"
 REPLY_TO_SENDER_ID_KEY = "reply_to_sender_id"
+# Optional inbound metadata of a message that quotes another and starts a
+# turn (#555), set through ``infra.channels.reply_context.with_reply_quote``:
+# the quoted message's text, its sender's display-name snapshot and the local
+# files of its pictures. The message's own text and media stay what is stored.
+REPLY_TO_CONTENT_KEY = "reply_to_content"
+REPLY_TO_SENDER_NAME_KEY = "reply_to_sender_name"
+REPLY_TO_MEDIA_KEY = "reply_to_media"
+# Inbound metadata flag the channel hub sets when the quoted sender
+# (``REPLY_TO_SENDER_ID_KEY``) is a platform identity bound to the desktop
+# user; plugins never set it themselves.
+REPLY_TO_SENDER_IS_USER_KEY = "reply_to_sender_is_user"
 # Inbound metadata flag a plugin sets on a group message that structurally
 # mentions (@) the receiving account itself.
 MENTIONED_KEY = "mentioned"

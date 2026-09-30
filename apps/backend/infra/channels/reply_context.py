@@ -1,5 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
+from bus.events import InboundMessage
+from core.common.message_source import (
+    REPLY_TO_CONTENT_KEY,
+    REPLY_TO_MEDIA_KEY,
+    REPLY_TO_SENDER_ID_KEY,
+    REPLY_TO_SENDER_IS_USER_KEY,
+    REPLY_TO_SENDER_NAME_KEY,
+    USER_SENDER_LABEL,
+)
+
+# How the turn names a quoted message the role itself sent.
+SELF_REPLY_SENDER_LABEL = "你自己"
+# The quoted text the turn shows for a quoted message that is only pictures.
+QUOTED_IMAGE_PLACEHOLDER = "[图片]"
+# Turn metadata the session stores as the user message's text instead of the
+# model-facing content (read by the after-reasoning phase).
+PERSISTED_USER_CONTENT_KEY = "persisted_user_content"
+
 
 def build_inbound_text_with_reply_context(
     *,
@@ -25,3 +45,64 @@ def build_inbound_text_with_reply_context(
         "【你当前新消息】\n"
         f"{current_text}"
     ).strip()
+
+
+def _reply_sender_label(message: InboundMessage, own_id: str, sender_name: str) -> str:
+    """「来自 X」: the role itself, the desktop user, else 「昵称（ID …）」 / 「ID …」."""
+    sender_id = str(message.metadata.get(REPLY_TO_SENDER_ID_KEY) or "").strip()
+    if not sender_id:
+        return ""
+    if sender_id == own_id:
+        return SELF_REPLY_SENDER_LABEL
+    if message.metadata.get(REPLY_TO_SENDER_IS_USER_KEY) is True:
+        return USER_SENDER_LABEL
+    return f"{sender_name}（ID {sender_id}）" if sender_name else f"ID {sender_id}"
+
+
+def with_reply_quote(
+    message: InboundMessage,
+    *,
+    own_id: str,
+    text: str,
+    sender_name: str,
+    media: list[str],
+) -> InboundMessage:
+    """``message``, as routed to a turn, with the message it quotes (#555).
+
+    The turn sees the quoted ``text`` (never truncated) wrapped around the
+    message's own by ``build_inbound_text_with_reply_context``, and the quoted
+    pictures ``media`` (local files) ahead of its own. The session stores
+    only the message's own text and pictures; the quote is kept in metadata
+    (``REPLY_TO_CONTENT_KEY``, ``REPLY_TO_SENDER_NAME_KEY``,
+    ``REPLY_TO_MEDIA_KEY``) beside the quoted sender's ID
+    (``REPLY_TO_SENDER_ID_KEY``) the plugin set before routing. ``own_id`` is
+    the receiving account's platform ID: a quote of it is the role's own. A
+    quote with neither text nor pictures leaves the message as it is.
+    """
+    text = text.strip()
+    sender_name = sender_name.strip()
+    if not text and not media:
+        return message
+    metadata = {
+        **message.metadata,
+        REPLY_TO_CONTENT_KEY: text,
+        PERSISTED_USER_CONTENT_KEY: message.content,
+    }
+    if sender_name:
+        metadata[REPLY_TO_SENDER_NAME_KEY] = sender_name
+    reply_text = text or QUOTED_IMAGE_PLACEHOLDER
+    if media:
+        metadata[REPLY_TO_MEDIA_KEY] = list(media)
+        # The quoted pictures lead the turn's attachments; say so, or the model
+        # cannot tell them from the message's own.
+        reply_text += f"\n（被回复消息附带 {len(media)} 张图片，即本条附件中的前 {len(media)} 张）"
+    return replace(
+        message,
+        content=build_inbound_text_with_reply_context(
+            user_text=message.content,
+            reply_text=reply_text,
+            reply_sender=_reply_sender_label(message, own_id, sender_name),
+        ),
+        media=[*media, *message.media],
+        metadata=metadata,
+    )

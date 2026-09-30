@@ -12,7 +12,13 @@ from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.accounts import AccountRegistry, account_for_channel
 from core.channel_avatars import AvatarIndex, ChannelAvatarStore
-from core.common.message_source import MessageSource
+from core.common.message_source import (
+    REPLY_TO_CONTENT_KEY,
+    REPLY_TO_MEDIA_KEY,
+    REPLY_TO_SENDER_NAME_KEY,
+    MessageSource,
+    display_name,
+)
 from core.identity import BoundUserSenders, UserIdentity, UserIdentityStore
 from desktop_bridge.session_presenter import MESSAGE_PAGE_SIZE, message_preview
 from session.manager.helpers import role_session_key
@@ -62,6 +68,29 @@ def role_bound_senders(
     )
 
 
+def _phone_quote(
+    metadata: Mapping[str, Any], sender_id: str | None, names: Mapping[str, str]
+) -> dict[str, Any] | None:
+    """The message a stored message quotes (#555); None when it quotes none.
+
+    ``name`` goes by ``names`` like an @ (the role's account name, else the
+    newest snapshot in the thread), else the snapshot stored with the quote.
+    """
+    text = metadata.get(REPLY_TO_CONTENT_KEY)
+    content = text if isinstance(text, str) else ""
+    media = metadata.get(REPLY_TO_MEDIA_KEY)
+    paths = [str(item) for item in media] if isinstance(media, list) else []
+    if not content and not paths:
+        return None
+    name = names.get(sender_id) if sender_id is not None else None
+    return {
+        "sender_id": sender_id,
+        "name": name or display_name(metadata.get(REPLY_TO_SENDER_NAME_KEY)),
+        "content": content,
+        "media": paths,
+    }
+
+
 def phone_message(
     message: dict[str, Any],
     *,
@@ -83,13 +112,14 @@ def phone_message(
     None for the role or when none is cached. ``mentions`` are the members
     the message structurally @s (#553), in order, each ``{id, name}`` with the
     name from ``mention_names`` (None when unknown, the phone then shows the
-    ID). ``listened`` marks a row of the group's listening records (#538)
-    rather than of the role's conversation.
+    ID). ``quote`` is the message it quotes (#555): ``{sender_id, name,
+    content, media}``, the name resolved like a mention's, or None.
+    ``listened`` marks a row of the group's listening records (#538) rather
+    than of the role's conversation.
     """
     from_role = message.get("role") == "assistant"
-    source = MessageSource.from_metadata(
-        message.get("metadata") or {}, session_key=session_key
-    )
+    metadata = message.get("metadata") or {}
+    source = MessageSource.from_metadata(metadata, session_key=session_key)
     seq = message.get("seq")
     return {
         "id": str(message.get("id") or ""),
@@ -105,6 +135,7 @@ def phone_message(
             {"id": member, "name": mention_names.get(member)}
             for member in source.mentioned_ids
         ],
+        "quote": _phone_quote(metadata, source.reply_to_sender_id, mention_names),
         "content": str(message.get("content") or ""),
         "media": [str(item) for item in message.get("media") or []],
         "timestamp": str(message.get("timestamp") or ""),
@@ -232,7 +263,7 @@ class DesktopPhoneRequestHandler:
         The user's messages are those whose sender a current binding
         recognises on the role's account carrying the thread; with no such
         account, none are. The bindings, the avatar index and the names of
-        the members the rows @ are read once for all rows.
+        the members the rows @ or quote are read once for all rows.
         """
         session_key = role_session_key(role_id)
         rows = list(messages)
@@ -240,15 +271,20 @@ class DesktopPhoneRequestHandler:
             role_id, accounts=self._accounts, identities=self._identities.list()
         )
         avatars = self._avatars.index()
+        sources = [
+            MessageSource.from_metadata(
+                message.get("metadata") or {}, session_key=session_key
+            )
+            for message in rows
+        ]
         mention_names = self._mention_names(
             role_id,
             thread,
-            {
-                member
-                for message in rows
-                for member in MessageSource.from_metadata(
-                    message.get("metadata") or {}, session_key=session_key
-                ).mentioned_ids
+            {member for source in sources for member in source.mentioned_ids}
+            | {
+                source.reply_to_sender_id
+                for source in sources
+                if source.reply_to_sender_id is not None
             },
         )
 
@@ -270,7 +306,7 @@ class DesktopPhoneRequestHandler:
     def _mention_names(
         self, role_id: str, thread: ThreadRecord, member_ids: set[str]
     ) -> dict[str, str]:
-        """Names for the members ``member_ids`` @'d in ``thread``.
+        """Names for the members ``member_ids`` @'d or quoted in ``thread``.
 
         The role's own account on the thread's channel goes by the account's
         name; anyone else by the newest name snapshot recorded for them in

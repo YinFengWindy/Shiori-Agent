@@ -1,14 +1,10 @@
 import { EarIcon, UserIcon } from "@phosphor-icons/react";
-import { ChatFileChipContent, chatFileChipClass } from "../chat/ChatMessageAttachments";
-import { ChatMessageImage } from "../chat/ChatMessageImage";
-import { isChatImageAsset } from "../chat/chatImageHistory";
 import { RoleAvatar } from "../roles/RoleAvatar";
 import { badgeClass, cx, pressableClass, type RoleRecord } from "@shiori/plugin-sdk";
 import { PhoneAvatarFace } from "./PhoneAvatarFace";
+import { PhoneMessageMedia } from "./PhoneMessageMedia";
+import { PhoneMessageQuote } from "./PhoneMessageQuote";
 import type { PhoneChatItem } from "./phoneChatPresentation";
-
-// Pictures stay inside the bubble column of the phone's narrow screen.
-const phoneImageBounds = { width: 180, height: 220 };
 
 const bubbleClass = "w-fit max-w-full whitespace-pre-wrap break-words rounded-md px-3 py-1.5 text-body-sm";
 
@@ -18,27 +14,6 @@ const bubbleSurfaceClass = {
   left: "bg-surface text-ink shadow-soft",
   listened: "border border-dashed border-line bg-surface-soft text-ink-secondary",
 };
-
-const imageButtonClass = cx(
-  pressableClass,
-  "block w-fit cursor-zoom-in overflow-hidden rounded-md border border-line-soft bg-surface p-0",
-);
-
-/** A message's attachments: pictures at the phone's size (a click enlarges one), other files as a plain named chip. */
-function PhoneMessageMedia({ media, onOpenImage }: { media: readonly string[]; onOpenImage: (path: string) => void }) {
-  return media.map((path, index) => (
-    isChatImageAsset(path) ? (
-      <button key={`${index}:${path}`} type="button" className={imageButtonClass} aria-label="查看大图"
-        onClick={() => onOpenImage(path)}>
-        <ChatMessageImage imagePath={path} bounds={phoneImageBounds} />
-      </button>
-    ) : (
-      <span key={`${index}:${path}`} className={cx(chatFileChipClass, "max-w-full")}>
-        <ChatFileChipContent path={path} />
-      </span>
-    )
-  ));
-}
 
 const otherAvatarClass = "grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-surface-soft text-ink-muted";
 
@@ -63,7 +38,8 @@ function OtherAvatar({ label, avatarPath, onOpen }: { label: string | null; avat
  * cached platform avatar (a placeholder without one), under their name, the
  * bound user's name with a 「这是我」 badge. A message heard while listening
  * in on the group has a quieter, dashed bubble and an ear mark by the name.
- * The members a group message @s lead its text as 「@名字」.
+ * The members a group message @s lead its text as 「@名字」. The message it
+ * quotes sits above the bubble, its pictures apart from the message's own.
  * `onOpenMember`, when given, makes that avatar open the sender's member
  * profile.
  */
@@ -74,7 +50,7 @@ export function PhoneChatMessageRow({ item, role, onOpenImage, onOpenMember }: {
   onOpenImage: (path: string) => void;
   onOpenMember?: () => void;
 }) {
-  const { message, side, senderLabel, isUser, mentionLabels } = item;
+  const { message, side, senderLabel, isUser, mentionLabels, quote } = item;
   const right = side === "right";
   const surface = message.listened ? "listened" : side;
   return (
@@ -90,6 +66,7 @@ export function PhoneChatMessageRow({ item, role, onOpenImage, onOpenMember }: {
             {isUser ? <span className={cx(badgeClass, "shrink-0 px-1.5 py-0")} data-testid="phone-message-me">这是我</span> : null}
           </span>
         ) : null}
+        {quote ? <PhoneMessageQuote quote={quote} onOpenImage={onOpenImage} /> : null}
         {message.content || mentionLabels.length ? (
           <p className={cx("m-0", bubbleClass, bubbleSurfaceClass[surface])}>
             {mentionLabels.length ? <span className="text-accent-text">{`${mentionLabels.join(" ")} `}</span> : null}

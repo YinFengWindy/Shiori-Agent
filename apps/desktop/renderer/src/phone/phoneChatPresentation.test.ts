@@ -5,7 +5,7 @@ import { mergePhoneMessages, phoneChatItems, phoneSeparatorTime, withLiveConvers
 
 const message = (id: string, patch: Partial<PhoneMessage> = {}): PhoneMessage => ({
   id, seq: null, sender: "other", senderId: "42", senderName: "阿花", senderIsUser: false,
-  senderAvatarPath: null, mentions: [], content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false,
+  senderAvatarPath: null, mentions: [], quote: null, content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false,
   ...patch,
 });
 

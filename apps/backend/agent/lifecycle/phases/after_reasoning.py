@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
-from core.common.message_source import MessageSource
+from core.common.message_source import REPLY_TO_MEDIA_KEY, MessageSource
 from agent.core.passive_support import (
     build_session_runtime_metadata,
     update_session_runtime_metadata,
@@ -243,12 +243,20 @@ class _PersistUserMessageModule:
             if isinstance(persisted_user_content, str)
             else msg.content
         )
+        # A quoted message's pictures (#555) reach the model with the turn's
+        # media but stay the quote's: the stored message keeps only its own.
+        quoted_media = msg.metadata.get(REPLY_TO_MEDIA_KEY)
+        user_media = [
+            path
+            for path in msg.media
+            if not (isinstance(quoted_media, list) and path in quoted_media)
+        ]
         if frame.slots["reply:private"]:
             frame.slots["reply:messages"].append(
                 build_session_message(
                     "user",
                     user_content,
-                    media=msg.media if msg.media else None,
+                    media=user_media or None,
                     **user_kwargs,
                 )
             )
@@ -256,7 +264,7 @@ class _PersistUserMessageModule:
             session.add_message(
                 "user",
                 user_content,
-                media=msg.media if msg.media else None,
+                media=user_media or None,
                 **user_kwargs,
             )
             frame.slots["reply:messages"].append(session.messages[-1])

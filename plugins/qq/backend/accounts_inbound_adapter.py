@@ -15,7 +15,7 @@ from .accounts_actions import QQAccountActions, qq_chat_target
 from .accounts_avatar import refresh_message_avatars
 from .accounts_group_names import QQGroupNames
 from .accounts_inbound import inbound_message, is_real_private_chat
-from .accounts_reply_sender import with_reply_sender
+from .accounts_reply_quote import with_quote, with_replied_message
 from .accounts_store import QQConnectionConfig
 from .channel.compat import download_to_temp, extract_cq_images
 from .channel.group_filter import strip_at_segments, strip_reply_segments
@@ -117,13 +117,16 @@ class QQInboundAdapter:
         if ctx is None:
             return
         message = await self._with_group_name(message)
-        message = await with_reply_sender(message, self._actions.message_sender)
+        message, replied = await with_replied_message(
+            message, self._actions.replied_message
+        )
         # The host keeps the text it is handed, for a turn or for a group's
         # listening records (#538), so CQ codes leave before routing: a group
-        # message's @ and reply targets already travel as metadata, and
-        # pictures are only downloaded for a message that starts a turn.
-        raw = (
-            strip_reply_segments(strip_at_segments(message.content))
+        # message's @ and any reply target already travel as metadata, and
+        # pictures (the quoted message's too) are only downloaded, and the quote
+        # only added, for a message that starts a turn.
+        raw = strip_reply_segments(
+            strip_at_segments(message.content)
             if message.metadata.get("chat_type") == "group"
             else message.content
         )
@@ -168,11 +171,15 @@ class QQInboundAdapter:
             if message.metadata.get("conversation_duplicate"):
                 return
             self._refresh_avatars(message)
-        media = (
-            await download_to_temp(
-                image_urls, ctx.http_resources.external_default, ctx.attachment_store
+
+        async def download(urls: list[str]) -> list[str]:
+            if not urls:
+                return []
+            return await download_to_temp(
+                urls, ctx.http_resources.external_default, ctx.attachment_store
             )
-            if image_urls
-            else []
-        )
-        await ctx.bus.publish_inbound(replace(message, media=media))
+
+        message = replace(message, media=await download(image_urls))
+        if replied is not None:
+            message = await with_quote(message, replied, download)
+        await ctx.bus.publish_inbound(message)

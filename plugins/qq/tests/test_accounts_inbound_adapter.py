@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 import plugins.qq.backend.accounts_inbound_adapter as inbound_adapter
+from plugins.qq.backend.accounts_actions import RepliedMessage
 from plugins.qq.backend.accounts_inbound import inbound_message
 from plugins.qq.backend.accounts_inbound_adapter import QQInboundAdapter
 from plugins.qq.backend.accounts_group_names import QQGroupNames
@@ -15,8 +16,8 @@ from websockets.exceptions import ConnectionClosed
 
 
 def _actions(**actions: object) -> SimpleNamespace:
-    """NapCat actions; a message without a reply segment never asks for a sender."""
-    return SimpleNamespace(message_sender=AsyncMock(), **actions)
+    """NapCat actions; a message without a reply segment never asks for its reply."""
+    return SimpleNamespace(**{"replied_message": AsyncMock(), **actions})
 
 
 def _adapter() -> QQInboundAdapter:
@@ -265,7 +266,9 @@ async def test_group_message_is_routed_without_a_name_when_lookup_fails(
 async def test_group_reply_target_reaches_the_host_and_leaves_the_text():
     adapter = _adapter()
     adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
-    adapter._actions = SimpleNamespace(message_sender=AsyncMock(return_value="202"))
+    adapter._actions = _actions(
+        replied_message=AsyncMock(return_value=RepliedMessage("202", "Mira", "早"))
+    )
     bus = SimpleNamespace(publish_inbound=AsyncMock())
     routed = []
     adapter._ctx = SimpleNamespace(
@@ -281,13 +284,12 @@ async def test_group_reply_target_reaches_the_host_and_leaves_the_text():
     message.content = "[CQ:reply,id=-35] 是这样吗"
     await adapter._accept_inbound(message)
 
-    adapter._actions.message_sender.assert_awaited_once_with("account-b", "-35")
+    adapter._actions.replied_message.assert_awaited_once_with("account-b", "-35")
     assert routed[0].metadata["reply_to_sender_id"] == "202"
     # The host is handed the cleaned text: what it keeps for a turn or for
-    # the group's listening records (#538) carries no CQ codes.
+    # the group's listening records (#538) carries no CQ codes, nor the quote.
     assert routed[0].content == "是这样吗"
-    [call] = bus.publish_inbound.await_args_list
-    assert call.args[0].content == "是这样吗"
+    assert "reply_to_content" not in routed[0].metadata
 
 
 @pytest.mark.asyncio
@@ -339,3 +341,78 @@ async def test_only_a_listened_group_message_refreshes_avatars(heard: bool):
         {("sender", "qq", "902"), ("chat", "qq", "gqq:777")} if heard else set()
     )
     bus.publish_inbound.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_quote_of_a_turn_reaches_the_role_but_the_stored_text_stays_its_own(
+    monkeypatch,
+):
+    adapter = _adapter()
+    adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
+    adapter._actions = _actions(
+        replied_message=AsyncMock(
+            return_value=RepliedMessage(
+                "303",
+                "阿花",
+                "[CQ:reply,id=-9][CQ:at,qq=202] 看[CQ:image,url=https://x/q.png]",
+            )
+        )
+    )
+    bus = SimpleNamespace(publish_inbound=AsyncMock())
+
+    async def download(urls, *_):
+        return [url.replace("https://x/", "D:/att/") for url in urls]
+
+    monkeypatch.setattr(inbound_adapter, "download_to_temp", download)
+    adapter._ctx = SimpleNamespace(
+        bus=bus,
+        channel_hub=SimpleNamespace(route_account_inbound=lambda message, **_: message),
+        http_resources=SimpleNamespace(external_default=None),
+        attachment_store=None,
+    )
+
+    message = _group_message(True)
+    message.content = (
+        "[CQ:reply,id=-35][CQ:at,qq=202] 这是啥[CQ:image,url=https://x/own.png]"
+    )
+    await adapter._accept_inbound(message)
+
+    [call] = bus.publish_inbound.await_args_list
+    turn = call.args[0]
+    assert turn.content == (
+        "【你正在回复一条历史消息】\n被回复消息（来自 阿花（ID 303））：\n看\n"
+        "（被回复消息附带 1 张图片，即本条附件中的前 1 张）\n\n"
+        "【你当前新消息】\n这是啥"
+    )
+    # The quoted picture goes to the model with the turn, kept apart from
+    # the message's own, which is all the session stores.
+    assert turn.media == ["D:/att/q.png", "D:/att/own.png"]
+    assert turn.metadata["persisted_user_content"] == "这是啥"
+    assert turn.metadata["reply_to_content"] == "看"
+    assert turn.metadata["reply_to_sender_name"] == "阿花"
+    assert turn.metadata["reply_to_media"] == ["D:/att/q.png"]
+
+
+@pytest.mark.asyncio
+async def test_private_reply_that_cannot_be_fetched_passes_without_a_quote(caplog):
+    adapter = _adapter()
+    adapter._actions = _actions(
+        replied_message=AsyncMock(side_effect=OneBotError("消息不存在"))
+    )
+    bus = SimpleNamespace(publish_inbound=AsyncMock())
+    adapter._ctx = SimpleNamespace(
+        bus=bus,
+        channel_hub=SimpleNamespace(
+            claim_pairing=lambda *_args, **_kwargs: False,
+            route_account_inbound=lambda message, **_: message,
+        ),
+        http_resources=SimpleNamespace(),
+        attachment_store=SimpleNamespace(),
+    )
+
+    await adapter._accept_inbound(_private_message("[CQ:reply,id=-35]你好"))
+
+    [call] = bus.publish_inbound.await_args_list
+    assert call.args[0].content == "你好"
+    assert "reply_to_sender_id" not in call.args[0].metadata
+    assert "查询失败" in caplog.text

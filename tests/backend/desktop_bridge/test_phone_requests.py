@@ -395,6 +395,7 @@ async def test_reads_one_conversation_page_by_page_from_the_roles_view(
             "sender_is_user": True,
             "sender_avatar_abs": None,
             "mentions": [],
+            "quote": None,
             "content": "我也来",
             "media": ["photo.png"],
             "timestamp": "2026-09-29T10:01:00+08:00",
@@ -407,6 +408,7 @@ async def test_reads_one_conversation_page_by_page_from_the_roles_view(
             "sender_is_user": False,
             "sender_avatar_abs": None,
             "mentions": [],
+            "quote": None,
             "content": "我来",
             "media": [],
             "timestamp": "2026-09-29T10:02:00+08:00",
@@ -462,6 +464,44 @@ async def test_rows_name_the_members_a_message_mentions(tmp_path: Path) -> None:
         {"id": "42", "name": "阿花"},
         {"id": "99", "name": None},
     ]
+
+
+@pytest.mark.asyncio
+async def test_row_carries_the_message_it_quotes_apart_from_its_own(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    conversation = ConversationService(manager)
+    group = _thread(conversation, role_id="mira", channel="qq", chat_id="gqq:5")
+    session = manager.get_or_create("role:mira")
+    metadata = _group_message(group, sender_id="42", name="阿花")
+    metadata["message_source"]["reply_to_sender_id"] = "10001"
+    session.add_message(
+        "user",
+        "这是啥",
+        media=["own.png"],
+        metadata={
+            **metadata,
+            "reply_to_content": "看",
+            "reply_to_media": ["quoted.png"],
+        },
+    )
+    manager.save(session)
+    handler, _ = _handler(tmp_path, conversation)
+
+    page = await handler.handle(
+        "phone.conversation.messages", {"role_id": "mira", "thread_id": group.id}
+    )
+    assert page is not None
+    [row] = page["messages"]
+    # 引用角色自己的消息时用账号名，与 @ 的名字规则一致（#555）。
+    assert row["quote"] == {
+        "sender_id": "10001",
+        "name": "小栞",
+        "content": "看",
+        "media": ["quoted.png"],
+    }
+    assert (row["content"], row["media"]) == ("这是啥", ["own.png"])
 
 
 @pytest.mark.asyncio

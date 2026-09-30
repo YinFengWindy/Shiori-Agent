@@ -25,6 +25,8 @@ from conversation.service import (
 )
 from core.common.message_source import (
     GROUP_NAME_KEY,
+    REPLY_TO_SENDER_ID_KEY,
+    REPLY_TO_SENDER_IS_USER_KEY,
     SENDER_IS_USER_KEY,
     SENDER_NAME_KEY,
     MessageSource,
@@ -132,8 +134,9 @@ class ChannelHub:
     ) -> InboundMessage | None:
         """Admits only an owned, live receiving account under its response rules.
 
-        A sender bound to the desktop user is marked with ``SENDER_IS_USER_KEY``;
-        a plugin cannot claim that flag itself.
+        A sender bound to the desktop user is marked with ``SENDER_IS_USER_KEY``,
+        and on a message starting a turn, a quoted sender bound to the user
+        with ``REPLY_TO_SENDER_IS_USER_KEY``; a plugin cannot claim either flag.
 
         A group message that neither @s nor replies to the role starts no
         turn: when the role listens in on that group it is kept in the group's
@@ -145,6 +148,7 @@ class ChannelHub:
         """
         metadata = dict(message.metadata or {})
         metadata.pop(SENDER_IS_USER_KEY, None)
+        metadata.pop(REPLY_TO_SENDER_IS_USER_KEY, None)
         account_id = str(metadata.get("account_id") or "").strip()
         if not account_id or not str(message.sender or "").strip():
             return None
@@ -192,6 +196,11 @@ class ChannelHub:
             if heard is not None and on_heard is not None:
                 on_heard(heard)
             return None
+        # A message starting a turn may quote the user; the plugin names the
+        # quoted sender by this flag (#555).
+        reply_to = str(metadata.get(REPLY_TO_SENDER_ID_KEY) or "").strip()
+        if reply_to and self._identities.match(account.record, reply_to) is not None:
+            metadata[REPLY_TO_SENDER_IS_USER_KEY] = True
         return self._route_for_role(message, role_id, metadata)
 
     def _live_owned_account(
