@@ -22,6 +22,24 @@ describe("ChatMarkdownContent", () => {
     assert.match(markup, /<code>const answer = 42;<\/code>/);
   });
 
+  it("closes bold next to CJK punctuation", () => {
+    const markup = renderToStaticMarkup(
+      <ChatMarkdownContent content={"她说**“你好”**然后走了\n\n这是**重点：**后面\n\n**加粗（括号）**后文"} />,
+    );
+
+    assert.match(markup, /<strong>“你好”<\/strong>然后走了/);
+    assert.match(markup, /<strong>重点：<\/strong>后面/);
+    assert.match(markup, /<strong>加粗（括号）<\/strong>后文/);
+    assert.doesNotMatch(markup, /\*\*/);
+  });
+
+  it("keeps single newlines as line breaks and styles minor headings", () => {
+    const markup = renderToStaticMarkup(<ChatMarkdownContent content={"第一行\n第二行\n\n#### 四级标题"} />);
+
+    assert.match(markup, /第一行<br\/>\s*第二行/);
+    assert.match(markup, /<h4 class="[^"]*font-semibold[^"]*">四级标题<\/h4>/);
+  });
+
   it("does not render raw HTML or unsafe links", () => {
     const rawHtmlMarkup = renderToStaticMarkup(
       <ChatMarkdownContent content="<span>hidden markup</span> visible text" />,
