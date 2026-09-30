@@ -1,15 +1,18 @@
 import { PlugIcon, StopIcon } from "@phosphor-icons/react";
-import type { AccountStatusCardAction, AccountStatusCardProps } from "@shiori/plugin-sdk";
+import {
+  type AccountStatusCardAction,
+  type AccountStatusCardProps,
+  cardClass,
+  compactGhostButtonClass,
+  cx,
+  type AccountPendingAction,
+} from "@shiori/plugin-sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 import { SpinnerIcon } from "../shared/icons";
-import { cardClass, compactGhostButtonClass, compactPrimaryButtonClass, cx } from "../shared/styles";
+import { compactPrimaryButtonClass } from "../shared/styles";
 import { Reveal } from "../shared/ui/Reveal";
 import { accountCardActionLabels, accountCardView } from "@shiori/plugin-sdk/host-internal";
-import type { AccountPendingAction } from "./accountPresentation";
 import { AccountStatusDot } from "./AccountStatusDot";
-
-/** The card's props contract is owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
-export type { AccountStatusCardAction, AccountStatusCardProps };
 
 /**
  * One account's connection at a glance, the same for every channel: status

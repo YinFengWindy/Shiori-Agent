@@ -20,13 +20,17 @@ from desktop_bridge.request_router import DesktopBridgeRequestRouter
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.request_dispatcher import BridgeRequestDispatcher
 from session.manager import SessionManager
+from core.memory.group_environment import GroupEnvironment
 
 
 def _service(tmp_path, registry: PluginRpcRegistry | None) -> DesktopBridgeService:
     return DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
         plugin_rpc_registry=registry,

@@ -1,9 +1,13 @@
 import { PluginRoleSettingsSlot } from "../plugins/PluginRoleSettingsSlot";
 import { Brain } from "@phosphor-icons/react";
-import { SettingsToggleCard } from "../settings/SettingsToggleCard";
-import type { RoleFormState, RoleRecord } from "../shared/types";
-import { RoleCapabilityCard } from "./RoleCapabilityCard";
-import { globalVoiceOutputEnabled, roleToggleStatus } from "./roleCapabilityStatus";
+import {
+  SettingsToggleCard,
+  type RoleRecord,
+  RoleCapabilityCard,
+  roleToggleStatus,
+} from "@shiori/plugin-sdk";
+import type { RoleFormState } from "../shared/types";
+import { globalVoiceOutputEnabled } from "./roleCapabilityStatus";
 import { RoleEditorSection } from "./RoleEditorSection";
 import { RoleVoiceSettingsPanel } from "./RoleVoiceSettingsPanel";
 import { useSettingsSnapshot } from "./useSettingsSnapshot";

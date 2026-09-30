@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { AccountSnapshot } from "../accounts/accountClient";
+import type { AccountSnapshot } from "@shiori/plugin-sdk";
 import type { PhoneConversation } from "./phoneClient";
 import { accountConversations, phoneApps, phoneConversationPreview } from "./phonePresentation";
 
@@ -32,11 +32,11 @@ test("home screen shows every account of the role, offline ones marked, named by
   ], "mira", (pluginId) => channels[pluginId]);
 
   assert.deepEqual(apps, [
-    { accountId: "qq:1", label: "QQ", Icon, offline: false },
+    { accountId: "qq:1", label: "QQ", accountName: "qq:1", Icon, offline: false },
     // The registered channel label, as the role page shows it, not the platform id.
-    { accountId: "feishu:4", label: "飞书 / Lark", Icon: undefined, offline: true },
+    { accountId: "feishu:4", label: "飞书 / Lark", accountName: "feishu:4", Icon: undefined, offline: true },
     // A plugin whose UI registered no channel label is word-cased, never shown raw.
-    { accountId: "telegram:2", label: "Telegram", Icon: undefined, offline: true },
+    { accountId: "telegram:2", label: "Telegram", accountName: "telegram:2", Icon: undefined, offline: true },
   ]);
 });
 

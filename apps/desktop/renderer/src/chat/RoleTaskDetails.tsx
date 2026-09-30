@@ -2,7 +2,8 @@ import { ArrowLeft, PencilSimple, Trash } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";
 import { formatTimestamp } from "../shared/format";
 import type { RoleTask } from "../shared/types";
-import { cx, focusResetClass } from "../shared/styles";
+import { cx } from "@shiori/plugin-sdk";
+import { focusResetClass } from "../shared/styles";
 import {
   scheduleTierLabels,
   scheduleTriggerLabels,

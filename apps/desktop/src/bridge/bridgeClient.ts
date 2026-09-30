@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
-import type { BridgeEvent, BridgeRequest, BridgeResponse } from "./shared.js";
+import type { BridgeEvent } from "@shiori/plugin-sdk/contract";
+import type { BridgeRequest, BridgeResponse } from "./shared.js";
 import type { DesktopBridgeCommand } from "../runtimePaths.js";
 import { bridgeRequestTimeoutMs, bridgeTimeoutPolicy } from "./bridgeTimeoutPolicy.js";
 

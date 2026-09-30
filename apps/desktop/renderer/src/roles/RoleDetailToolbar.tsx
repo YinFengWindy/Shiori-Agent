@@ -1,5 +1,5 @@
 import { BackIcon } from "../shared/icons";
-import { cx, iconButtonClass } from "../shared/styles";
+import { cx, iconButtonClass } from "@shiori/plugin-sdk";
 import { RoleDetailActions } from "./RoleDetailActions";
 import type { RoleDetailSaveState } from "./roleDetailSaveState";
 import { RoleDetailTabs, type RoleDetailTabId } from "./RoleDetailTabs";

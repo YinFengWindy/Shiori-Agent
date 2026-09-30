@@ -1,6 +1,5 @@
 import { useEffect } from "react";
-import { cardClass, cx } from "../shared/styles";
-import type { SurfaceHandle } from "./pluginSurfaceRegistry";
+import { cardClass, cx, type SurfaceHandle } from "@shiori/plugin-sdk";
 
 /** Paints a readable diagnostic before allowing a failed surface to appear. */
 export function SurfaceFailure({ detail, surface }: { detail: string; surface: SurfaceHandle }) {

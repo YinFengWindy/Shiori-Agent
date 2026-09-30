@@ -1,4 +1,5 @@
-import type { ManagedVoiceAssetReference, RoleFormState, RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { ManagedVoiceAssetReference, RoleFormState } from "../shared/types";
 
 export const minimaxVoiceEmotionOptions = [
   "happy",

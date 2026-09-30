@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { useEffect } from "react";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { SurfaceRoot } from "./SurfaceRoot";
-import { PluginSurfaceRegistry, type PluginSurfaceComponentProps, type SurfaceHandle } from "./pluginSurfaceRegistry";
+import type { PluginSurfaceComponentProps, SurfaceHandle } from "@shiori/plugin-sdk";
+import { PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 import { loadRuntimePluginSurface } from "./runtimePluginSurface";
 
 const noopSurface: SurfaceHandle = {

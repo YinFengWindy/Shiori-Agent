@@ -169,6 +169,13 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
     "identities.unbind": MethodPolicy(),
     "phone.conversations.list": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "phone.conversation.messages": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "phone.conversation.note": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "phone.conversation.note.save": MethodPolicy(),
+    "phone.conversation.activity": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "phone.conversation.members": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "phone.member.profile": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "phone.member.profile.save": MethodPolicy(),
+    "phone.member.profile.delete": MethodPolicy(),
     "session.messagesPage": MethodPolicy(
         concurrency=Concurrency.READ_ONLY, admission_exempt=True
     ),

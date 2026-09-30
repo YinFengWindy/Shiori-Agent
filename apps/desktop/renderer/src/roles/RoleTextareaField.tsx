@@ -1,5 +1,4 @@
-import { AutosizeTextarea } from "../shared/AutosizeTextarea";
-import { cx } from "../shared/styles";
+import { AutosizeTextarea, cx } from "@shiori/plugin-sdk";
 import { roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";
 
 type RoleTextareaFieldProps = {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { SettingsPage } from "./SettingsPage";
 import { useSettingsSubsectionMemory } from "./useSettingsSubsectionMemory";

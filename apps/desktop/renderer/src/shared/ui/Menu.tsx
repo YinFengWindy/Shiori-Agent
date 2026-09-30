@@ -2,14 +2,6 @@ import React from "react";
 import { cx, menuPanelClass } from "@shiori/plugin-sdk";
 import { menuItemClass, menuItemSelectedClass } from "@shiori/plugin-sdk/host-internal";
 
-/*
- * The menu vocabulary (panel, row, selected row, separator) is owned by
- * `@shiori/plugin-sdk` (#440) and re-exported here; the hand-rolled menu
- * pieces below stay host-only.
- */
-export { menuPanelClass, menuSeparatorClass } from "@shiori/plugin-sdk";
-export { menuItemClass, menuItemSelectedClass } from "@shiori/plugin-sdk/host-internal";
-
 /** Non-interactive group caption. */
 export const menuLabelClass = "px-2.5 py-1 text-[11px] text-ink-muted";
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Select } from "../shared/ui/Select";
+import { Select } from "@shiori/plugin-sdk";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { modelEffortOptions } from "../shared/modelEffortLabels";
 import { SettingsField } from "./SettingsField";

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as React from "react";
 import * as PluginSdk from "@shiori/plugin-sdk";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { initializeRuntimePluginPeers } from "./runtimePluginPeers";
 import { pluginUiImportMap, pluginUiPeerExports } from "../../../src/plugins/uiContract";
 

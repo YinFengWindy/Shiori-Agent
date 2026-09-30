@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { errorMessage } from "../shared/feedback/feedbackStore";
-import { useLatestRef } from "../shared/useLatestRef";
+import { errorMessage, useLatestRef } from "@shiori/plugin-sdk";
 
 /**
  * One memory read. `scope` is the reset boundary (role, filters, refresh):

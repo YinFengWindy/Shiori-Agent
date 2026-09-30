@@ -1,4 +1,4 @@
-import { Select } from "../shared/ui/Select";
+import { Select, cx } from "@shiori/plugin-sdk";
 import { SettingsField as Field } from "./SettingsField";
 import {
   SettingsSecretInput,
@@ -8,7 +8,6 @@ import {
 } from "./SettingsFieldPrimitives";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 import { getMemoryEngineOptions } from "./settingsSectionUtils";
-import { cx } from "../shared/styles";
 
 /** Renders memory and embedding settings for the selected memory subsection. */
 export function MemorySettingsSection({

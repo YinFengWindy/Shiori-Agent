@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createEmptyRoleForm } from "../app/appState";
-import type { RoleFormState, RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleFormState } from "../shared/types";
 import { RoleDetailPage } from "./RoleDetailPage";
 
 type PageProps = Parameters<typeof RoleDetailPage>[0];

@@ -181,9 +181,6 @@ export const personaSceneLines = {
   confirm: confirmPersonaLines.confirm,
 } satisfies Record<PersonaSceneKey, MascotLine>;
 
-/** A scene a plugin may name for 吟风; the key set is owned by `@shiori/plugin-sdk` (#440). */
-export type { PersonaSceneKey };
-
 /** Whether `value` names one of the plugin persona scenes. */
 export function isPersonaSceneKey(value: string): value is PersonaSceneKey {
   return Object.hasOwn(personaSceneLines, value);

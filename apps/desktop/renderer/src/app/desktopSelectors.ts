@@ -10,14 +10,8 @@ import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "../chat/ch
 import { resolveCurrentMood, resolveCurrentMoodUpdatedAt, resolveCurrentThought, resolveMoodIllustration, roleSession } from "../roles/roleMoodSelectors";
 import { isRoleFormDirty } from "../roles/roleFormState";
 import { toFileUrl } from "../shared/format";
-import type {
-  AppMainView,
-  LonelinessRuntime,
-  RelationshipSnapshot,
-  RoleFormState,
-  RoleRecord,
-  SessionPayload,
-} from "../shared/types";
+import type { LonelinessRuntime, RelationshipSnapshot, RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
+import type { AppMainView, RoleFormState } from "../shared/types";
 
 type BuildDesktopViewModelArgs = {
   roles: RoleRecord[];

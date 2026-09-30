@@ -8,8 +8,7 @@ import {
   parseSessionMessagesAround,
   parseSessionSummary,
 } from "./sessionMessagePagination";
-import type { SessionPayload } from "../shared/types";
-import { errorMessage } from "../shared/feedback/feedbackStore";
+import { type SessionPayload, errorMessage } from "@shiori/plugin-sdk";
 
 type UseDesktopSessionPaginationArgs = {
   activeRoleIdRef: React.MutableRefObject<string>;

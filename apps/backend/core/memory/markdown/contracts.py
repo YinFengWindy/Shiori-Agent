@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from core.memory.external_writes import ExternalLayerSnapshot
 from session.manager.consolidation import ConsolidationCommitRequest
 from session.store.common import ContextScope
 
@@ -109,6 +110,8 @@ class ExternalLayerUpdates:
 
     group_environment: tuple["GroupEnvironmentUpdate", ...] = ()
     member_profiles: tuple["MemberProfileUpdate", ...] = ()
+    # 准备时读到、且上面的更新会写回的群笔记与档案，提交时据此做乐观校验（#499）。
+    snapshot: ExternalLayerSnapshot = field(default_factory=ExternalLayerSnapshot)
 
 
 @dataclass(frozen=True)
@@ -127,6 +130,10 @@ class _ConsolidationDraft:
     group_environment_updates: tuple["GroupEnvironmentUpdate", ...] = ()
     # 外部段整理出的成员档案更新（#498），提交时由宿主写入，不发给引擎。
     member_profile_updates: tuple["MemberProfileUpdate", ...] = ()
+    # 上面两类更新会写回的群笔记与档案在准备时的内容；提交时被改过则整次按过期处理。
+    external_snapshot: ExternalLayerSnapshot = field(
+        default_factory=ExternalLayerSnapshot
+    )
 
 
 @dataclass(frozen=True)

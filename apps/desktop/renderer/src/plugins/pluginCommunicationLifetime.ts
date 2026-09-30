@@ -1,4 +1,4 @@
-import { PluginBridgeError } from "./pluginBridgeError";
+import { PluginBridgeError } from "@shiori/plugin-sdk";
 
 /** Rejects pending client requests immediately when their owning context leaves. */
 export class PluginCommunicationLifetime {

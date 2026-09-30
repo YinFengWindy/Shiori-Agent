@@ -1,4 +1,4 @@
-import type { SessionMessage, SessionPayload } from "../shared/types";
+import type { SessionMessage, SessionPayload } from "@shiori/plugin-sdk";
 import { createChatMessageMatcher } from "./chatMessageMatching";
 
 const localChatMessageRenderIdPrefix = "local";

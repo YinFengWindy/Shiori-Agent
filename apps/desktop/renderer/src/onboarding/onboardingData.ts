@@ -1,5 +1,5 @@
 import type { DesktopApi, ModelRegistrationFormData } from "../../../src/bridge/shared";
-import type { RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
 import { saveSettingsPageData } from "../settings/settingsPersistence";
 
 /** Loads authoritative data; failed bridge reads must never imply empty or complete state. */

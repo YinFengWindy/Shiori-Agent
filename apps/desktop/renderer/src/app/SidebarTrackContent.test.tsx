@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { NavPageEntry, PluginNavPageSidebarProps } from "../plugins/pluginUiRegistry";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import type { PluginNavPageSidebarProps } from "@shiori/plugin-sdk";
+import type { NavPageEntry } from "../plugins/pluginUiRegistry";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import type { AppMainView } from "../shared/types";
 import { SidebarTrackContent, type SidebarViewState } from "./SidebarTrackContent";
 

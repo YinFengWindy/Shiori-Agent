@@ -2,9 +2,8 @@ import type React from "react";
 import { useState } from "react";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { SettingsField } from "./SettingsField";
-import { SettingsToggleCard } from "./SettingsToggleCard";
+import { SettingsToggleCard, cardClass, compactPressableClass, cx } from "@shiori/plugin-sdk";
 import { parseSettingsNumber } from "./settingsSectionUtils";
-import { cardClass, compactPressableClass, cx } from "../shared/styles";
 
 /** Shared compact field styling for editable settings values. */
 export const settingsInputClass = "w-full rounded-md border border-line bg-surface-soft px-2.5 py-2 text-body-sm text-ink transition placeholder:text-ink-faint hover:border-line-strong focus:bg-surface";

@@ -1,7 +1,9 @@
 /**
  * Error thrown when a bridge call returns an error envelope; carries the
  * envelope's stable `code` and optional structured `details` next to the
- * human-readable message.
+ * human-readable message. Domain clients (`pluginBridgeClient.ts`,
+ * `storyBridgeClient.ts`, ...) subclass it so `instanceof` checks stay scoped
+ * to their own domain while sharing one implementation of that shape.
  */
 export class BridgeError extends Error {
   constructor(

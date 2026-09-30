@@ -1,6 +1,11 @@
 import { ArrowCounterClockwise, ChatCircleDots, FloppyDisk } from "@phosphor-icons/react";
 import { SpinnerIcon } from "../shared/icons";
-import { compactButtonSizeClass, cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass } from "../shared/styles";
+import {
+  compactButtonSizeClass,
+  cx,
+  ghostButtonSurfaceClass,
+  primaryButtonSurfaceClass,
+} from "@shiori/plugin-sdk";
 import type { RoleDetailSaveState } from "./roleDetailSaveState";
 
 type RoleDetailActionsProps = {

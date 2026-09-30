@@ -1,7 +1,5 @@
 import { ArrowRight, User } from "@phosphor-icons/react";
-import { Select } from "../shared/ui/Select";
-import { inputClass } from "../shared/styles";
-import type { RoleRecord } from "../shared/types";
+import { Select, inputClass, type RoleRecord } from "@shiori/plugin-sdk";
 import { OnboardingCard } from "./OnboardingCard";
 import { onboardingActionClass } from "./onboardingStyles";
 

@@ -4,7 +4,7 @@ import React from "react";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { SessionMessage } from "../shared/types";
+import type { SessionMessage } from "@shiori/plugin-sdk";
 import { ChatMessageList } from "./ChatMessageList";
 import { getVisibleChatMessages } from "./chatMessageWindow";
 

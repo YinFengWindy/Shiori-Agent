@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cx } from "../shared/styles";
+import { cx } from "@shiori/plugin-sdk";
 import { roleFieldClass } from "./roleEditorStyles";
 
 /** Role editor field surface shown when its value cannot be edited (locked binding, single choice, no declaration). */

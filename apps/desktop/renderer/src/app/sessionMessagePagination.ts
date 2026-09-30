@@ -1,10 +1,4 @@
-import type {
-  SessionMessage,
-  SessionMessagePage,
-  SessionMessageUpdatePayload,
-  SessionPayload,
-  SessionSummary,
-} from "../shared/types";
+import type { SessionMessage, SessionMessagePage, SessionPayload, SessionSummary } from "@shiori/plugin-sdk";
 import { createChatMessageMatcher } from "../chat/chatMessageMatching";
 import { isRecord } from "../shared/isRecord";
 
@@ -225,5 +219,3 @@ export function mergeSessionMessagesAround(
   );
   return { ...current, messages };
 }
-
-export type { SessionMessageUpdatePayload };

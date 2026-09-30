@@ -31,6 +31,7 @@ from desktop_bridge.voice.voice_service import (
     VoiceTranscriptionResult,
 )
 from session.manager import SessionManager
+from core.memory.group_environment import GroupEnvironment
 
 
 @pytest.mark.parametrize("delivery_key", ["", "missing"])
@@ -45,6 +46,7 @@ async def test_registered_committed_push_requires_its_original_message(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=sessions,
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
         push_tool=push,
@@ -81,6 +83,7 @@ async def test_push_tool_blank_media_cannot_create_empty_desktop_messages(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=manager,
+        group_environment=GroupEnvironment(tmp_path, manager.conversation_store),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
         push_tool=push_tool,
@@ -125,6 +128,9 @@ async def test_injected_role_service_publishes_role_deleted(tmp_path) -> None:
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=event_bus,
         role_service=role_service,
@@ -164,6 +170,9 @@ async def test_chat_send_returns_busy_before_persisting_second_message(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
     )
@@ -195,7 +204,10 @@ async def test_chat_send_preserves_voice_turn_identity_in_metadata(tmp_path) -> 
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
     )
@@ -242,7 +254,10 @@ async def test_voice_transcribe_returns_structured_metrics(tmp_path) -> None:
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
     )
@@ -287,7 +302,10 @@ async def test_voice_transcribe_error_returns_structured_metrics(tmp_path) -> No
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
     )
@@ -324,7 +342,10 @@ async def test_voice_provider_call_does_not_block_bridge_event_loop(tmp_path) ->
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
     )
@@ -369,7 +390,10 @@ async def test_voice_turn_cancel_targets_only_the_requested_turn(tmp_path) -> No
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
     )
@@ -394,7 +418,10 @@ async def test_voice_delete_preserves_provider_and_ownership_guard(tmp_path) -> 
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
     )
@@ -438,6 +465,9 @@ async def test_external_turn_committed_refreshes_summary_without_its_messages(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=event_bus,
     )
@@ -531,6 +561,9 @@ async def test_external_proactive_media_commit_broadcasts_role_session(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=event_bus,
     )
@@ -610,6 +643,7 @@ async def test_desktop_push_publishes_its_message_after_a_channel_message(tmp_pa
         workspace=tmp_path,
         role_store=roles,
         session_manager=sessions,
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
         agent_loop=SimpleNamespace(),
         event_bus=bus,
         push_tool=push,
@@ -645,6 +679,7 @@ async def test_pending_desktop_text_and_images_publish_once_after_formal_commit(
         workspace=tmp_path,
         role_store=roles,
         session_manager=sessions,
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
         agent_loop=SimpleNamespace(),
         event_bus=bus,
         push_tool=push,
@@ -724,6 +759,9 @@ async def test_external_image_push_persists_and_broadcasts_desktop_session(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=event_bus,
     )
@@ -774,6 +812,9 @@ async def test_channel_turn_commit_sends_the_phone_exactly_its_rows(tmp_path) ->
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=event_bus,
     )
@@ -855,6 +896,9 @@ async def test_host_text_push_to_a_channel_reaches_the_phone(tmp_path) -> None:
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=event_bus,
     )
@@ -916,6 +960,9 @@ async def test_session_read_bridge_methods_return_bounded_desktop_projections(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
     )
@@ -1044,6 +1091,9 @@ async def test_session_image_history_returns_media_only_projection(tmp_path) -> 
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
     )
@@ -1092,7 +1142,10 @@ async def test_roles_create_binds_the_first_registered_model(
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
         config=config,
@@ -1131,7 +1184,10 @@ async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
     )
@@ -1188,7 +1244,10 @@ async def test_account_report_changes_are_pushed_to_desktop_clients(tmp_path) ->
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=event_bus,
     )
@@ -1229,7 +1288,10 @@ async def test_account_report_from_a_task_with_a_released_lease_still_pushes(
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=event_bus,
     )
@@ -1290,7 +1352,10 @@ async def test_identity_changes_push_identities_updated(tmp_path) -> None:
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(),
         event_bus=EventBus(),
     )

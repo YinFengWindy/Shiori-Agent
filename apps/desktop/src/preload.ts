@@ -10,14 +10,12 @@ import {
 import { surfaceChannels } from "./surface/ipc.js";
 import { pluginDataChannels } from "./plugins/ipc.js";
 import { trayChannels } from "./tray/ipc.js";
+import type { BridgeEvent, SurfaceCreateResult, SurfacePlacement, VoiceStatePayload } from "@shiori/plugin-sdk/contract";
 import type {
-  BridgeEvent,
   BridgeResponse,
   DesktopApi,
   LocalAssetTransport,
   RendererDiagnosticPayload,
-  SurfaceCreateResultPayload,
-  SurfacePlacementPayload,
   SurfaceSettledPayload,
   TrayEntryClickedPayload,
   WindowControlAction,
@@ -34,7 +32,7 @@ import type {
  * lays itself out from these numbers — a NaN reaching it produces an
  * invisible, unclickable window rather than a visible error.
  */
-function isSurfacePlacement(value: unknown): value is SurfacePlacementPayload {
+function isSurfacePlacement(value: unknown): value is SurfacePlacement {
   if (value === null || typeof value !== "object") return false;
   const { anchor, bodyOffset, workArea } = value as Record<string, unknown>;
   return isFinitePoint(anchor) && isFinitePoint(bodyOffset) && isFiniteRect(workArea);
@@ -190,7 +188,7 @@ const api: DesktopApi = {
     create(pluginId, surfaceId, spec, anchor) {
       return ipcRenderer.invoke(surfaceChannels.create, {
         pluginId, surfaceId, spec, x: anchor.x, y: anchor.y,
-      }) as Promise<SurfaceCreateResultPayload>;
+      }) as Promise<SurfaceCreateResult>;
     },
     destroy(pluginId, surfaceId) {
       return ipcRenderer.invoke(surfaceChannels.destroy, { pluginId, surfaceId }) as Promise<void>;
@@ -203,7 +201,7 @@ const api: DesktopApi = {
     },
     workArea(pluginId, surfaceId) {
       return ipcRenderer.invoke(surfaceChannels.workArea, { pluginId, surfaceId }) as Promise<
-        SurfacePlacementPayload["workArea"]
+        SurfacePlacement["workArea"]
       >;
     },
     setPosition(pluginId, surfaceId, position) {
@@ -369,7 +367,7 @@ const api: DesktopApi = {
   onVoiceState(listener) {
     const wrapped = (_event: unknown, value: unknown) => {
       if (!value || typeof value !== "object") return;
-      listener(value as import("./bridge/shared.js").VoiceStatePayload);
+      listener(value as VoiceStatePayload);
     };
     ipcRenderer.on("desktop:voice-state", wrapped);
     return () => ipcRenderer.off("desktop:voice-state", wrapped);

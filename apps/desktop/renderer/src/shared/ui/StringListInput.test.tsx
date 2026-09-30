@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { changeInputValue, mountTestComponent } from "../testing/domTestHarness";
+import { changeInputValue, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { StringListInput } from "./StringListInput";
 
 /** Keeps the list in state so every edit round-trips through `onChange`. */

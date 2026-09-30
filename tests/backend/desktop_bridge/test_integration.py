@@ -18,6 +18,7 @@ from desktop_bridge import DesktopBridgeServer, DesktopBridgeService
 from desktop_bridge.models import BridgeResponse
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
+from core.memory.group_environment import GroupEnvironment
 
 
 async def _wait_until(predicate, *, attempts: int = 40) -> None:
@@ -81,6 +82,9 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=_process_direct),
         event_bus=event_bus,
     )
@@ -196,6 +200,9 @@ async def test_desktop_bridge_chat_send_merges_reply_context_for_agent(tmp_path:
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=_process_direct),
         event_bus=event_bus,
     )
@@ -268,6 +275,9 @@ async def test_desktop_bridge_role_create_prepares_default_self(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=event_bus,
         role_service=RoleAggregateService.from_runtime(
@@ -328,6 +338,9 @@ async def test_desktop_bridge_bound_role_create_and_open_do_not_seed(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=event_bus,
         role_service=RoleAggregateService.from_runtime(
@@ -371,7 +384,10 @@ async def test_desktop_bridge_returns_role_not_found(tmp_path: Path):
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -424,6 +440,9 @@ async def test_desktop_bridge_chat_listeners_are_removed_after_send(tmp_path: Pa
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=_process_direct),
         event_bus=event_bus,
     )
@@ -488,6 +507,9 @@ async def test_desktop_bridge_chat_send_accepts_media_only(tmp_path: Path):
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=_process_direct),
         event_bus=event_bus,
     )
@@ -578,6 +600,9 @@ async def test_desktop_bridge_chat_send_updates_presence_and_loneliness_runtime(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
         relationship_runtime=relationship_runtime,
@@ -642,6 +667,9 @@ async def test_desktop_bridge_chat_send_rolls_back_runtime_side_effects_when_per
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
         relationship_runtime=relationship,  # type: ignore[arg-type]
@@ -678,7 +706,10 @@ async def test_desktop_bridge_chat_send_rejects_empty_content_and_media(tmp_path
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -714,6 +745,9 @@ async def test_desktop_bridge_emits_session_updated_for_background_desktop_push(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
         push_tool=push_tool,
@@ -782,6 +816,9 @@ async def test_desktop_bridge_push_rolls_back_runtime_side_effects_when_persist_
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
         push_tool=push_tool,
@@ -828,6 +865,9 @@ async def test_desktop_bridge_desktop_push_does_not_duplicate_existing_proactive
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
         push_tool=push_tool,
@@ -871,6 +911,9 @@ async def test_desktop_bridge_push_does_not_treat_subset_media_as_duplicate(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -898,6 +941,9 @@ async def test_desktop_bridge_server_returns_invalid_request_and_keeps_stream_op
         ),
         loop=SimpleNamespace(process_direct=AsyncMock(return_value="ok")),
         event_bus=event_bus,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
     )
     server = DesktopBridgeServer(runtime)
 
@@ -947,6 +993,9 @@ async def test_desktop_bridge_server_wraps_handler_errors_without_closing_stream
         ),
         loop=SimpleNamespace(process_direct=AsyncMock(return_value="ok")),
         event_bus=event_bus,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
     )
     server = DesktopBridgeServer(runtime)
     call_count = 0
@@ -1004,6 +1053,9 @@ async def test_desktop_bridge_updates_role_display_state(tmp_path: Path):
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -1041,6 +1093,9 @@ async def test_desktop_bridge_open_role_emits_session_updated(tmp_path: Path):
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -1073,7 +1128,10 @@ async def test_desktop_bridge_role_create_and_update_copy_assets(tmp_path: Path)
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -1127,7 +1185,10 @@ async def test_desktop_bridge_updates_role_asset_categories_and_send_permission(
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -1171,7 +1232,10 @@ async def test_desktop_bridge_role_update_removes_selected_illustration(tmp_path
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -1226,7 +1290,10 @@ async def test_desktop_bridge_role_update_selects_avatar_and_chat_background_fro
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -1279,7 +1346,10 @@ async def test_desktop_bridge_role_update_clears_selected_slots_when_asset_remov
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
-        session_manager=SessionManager(tmp_path),
+        session_manager=(bridge_sessions := SessionManager(tmp_path)),
+        group_environment=GroupEnvironment(
+            tmp_path, bridge_sessions.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -1361,6 +1431,9 @@ async def test_desktop_bridge_chat_cancel_uses_interrupt_controller(tmp_path: Pa
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=loop,
         event_bus=EventBus(),
     )
@@ -1419,6 +1492,9 @@ async def test_desktop_bridge_normalizes_stale_active_illustration_on_role_updat
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -1456,6 +1532,9 @@ async def test_desktop_bridge_syncs_role_metadata_into_session_on_open_and_updat
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )
@@ -1548,6 +1627,9 @@ async def test_desktop_bridge_recomputes_loneliness_runtime_for_roles_and_sessio
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
         relationship_runtime=relationship_runtime,
@@ -1607,6 +1689,9 @@ async def test_desktop_bridge_role_delete_removes_role_session(tmp_path: Path):
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
     )

@@ -1,4 +1,4 @@
-import type { SessionMessage, SessionPayload, SessionSummary } from "../shared/types";
+import type { SessionMessage, SessionPayload, SessionSummary } from "@shiori/plugin-sdk";
 import { mergeSessionSummaryAndMessage } from "../app/sessionMessagePagination";
 
 /** Applies a plugin's message mutation only if the originating session is still open. */

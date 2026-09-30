@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLatestRef } from "../shared/useLatestRef";
+import { useLatestRef } from "@shiori/plugin-sdk";
 import { onboardingReactionLine, onboardingSceneLines, type OnboardingReaction, type OnboardingScene } from "./onboardingScript";
 import { useOnboardingDialogue } from "./useOnboardingDialogue";
 

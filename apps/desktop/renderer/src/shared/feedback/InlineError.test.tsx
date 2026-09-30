@@ -4,7 +4,7 @@ import { act, type ReactElement } from "react";
 import { appearancePrefsStorageKey } from "../appearancePrefs";
 import { MascotOnStage } from "../mascot/MascotOnStage";
 import { inlineErrorLines } from "../mascot/mascotLines";
-import { mountTestComponent } from "../testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { resetAppearancePrefsCache } from "../useAppearancePrefs";
 import { InlineError } from "./InlineError";
 

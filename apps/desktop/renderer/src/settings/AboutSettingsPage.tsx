@@ -1,5 +1,12 @@
 import { ArrowClockwise, ArrowSquareOut, Envelope, GithubLogo } from "@phosphor-icons/react";
-import { badgeClass, cardClass, compactButtonSizeClass, cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass } from "../shared/styles";
+import {
+  badgeClass,
+  cardClass,
+  compactButtonSizeClass,
+  cx,
+  ghostButtonSurfaceClass,
+  primaryButtonSurfaceClass,
+} from "@shiori/plugin-sdk";
 import { DesktopExternalLink } from "../shared/DesktopExternalLink";
 import { InlineError } from "../shared/feedback/InlineError";
 import { MascotOnStage } from "../shared/mascot/MascotOnStage";

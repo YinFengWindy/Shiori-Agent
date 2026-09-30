@@ -1,5 +1,6 @@
 import { DeviceMobileIcon } from "@phosphor-icons/react";
-import { compactIconButtonClass, cx } from "../shared/styles";
+import { cx } from "@shiori/plugin-sdk";
+import { compactIconButtonClass } from "../shared/styles";
 import { Tooltip } from "../shared/ui/Tooltip";
 
 /** The chat header's button that opens and closes the role's phone. */

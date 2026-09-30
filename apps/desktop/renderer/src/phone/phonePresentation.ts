@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
-import type { AccountSnapshot } from "../accounts/accountClient";
-import { accountChannelLabel, accountOnline } from "../accounts/accountPresentation";
+import { type AccountSnapshot, accountOnline } from "@shiori/plugin-sdk";
+import { accountChannelLabel, accountName } from "../accounts/accountPresentation";
 import { extractChatPreviewText } from "../roles/roleChatPreview";
 import type { PhoneConversation } from "./phoneClient";
 
@@ -9,6 +9,8 @@ export type PhoneApp = {
   accountId: string;
   /** The channel name its plugin registered for account controls (as on the role page's 账号 tab). */
   label: string;
+  /** The account's own name on its platform (nickname, else platform account ID). */
+  accountName: string;
   /** The channel's registered account mark; absent while its plugin's UI is not loaded. */
   Icon?: ComponentType<{ className?: string }>;
   /** Not connected right now (stopped plugin, disconnected, login needed, failing). */
@@ -37,6 +39,7 @@ export function phoneApps(
       return {
         accountId: account.id,
         label: accountChannelLabel(account.pluginId, channel),
+        accountName: accountName(account),
         Icon: channel?.Icon,
         offline: !accountOnline(account),
       };

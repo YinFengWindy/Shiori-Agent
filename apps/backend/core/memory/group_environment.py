@@ -19,7 +19,7 @@ from pathlib import Path
 from conversation.context_scope import load_user_context_threads
 from conversation.store import ConversationStore
 from core.memory.role_paths import keyed_markdown_name, role_memory_dir
-from utils.helpers import ensure_dir
+from infra.persistence.text_store import atomic_save_text
 
 # 用户上下文注入最近动态的时间窗与数量上限。
 RECENT_ACTIVITY_WINDOW = timedelta(days=3)
@@ -79,6 +79,15 @@ class GroupEnvironment:
             return ""
         return path.read_text(encoding="utf-8").strip()
 
+    def write_note(self, role_id: str, thread_id: str, note: str) -> None:
+        """整篇原子覆盖会话的群笔记（中断时保留旧文件）；内容为空时删除笔记文件。"""
+        text = note.strip()
+        path = self.note_path(role_id, thread_id)
+        if not text:
+            path.unlink(missing_ok=True)
+            return
+        atomic_save_text(path, text + "\n")
+
     def read(self, role_id: str, thread_id: str) -> GroupEnvironmentSnapshot:
         """会话当前的最近动态与群笔记。"""
         state = self._store.get_thread_state(thread_id)
@@ -101,10 +110,7 @@ class GroupEnvironment:
                 },
             )
         if update.group_note:
-            ensure_dir(self._groups_dir(role_id))
-            self.note_path(role_id, update.thread_id).write_text(
-                update.group_note.strip() + "\n", encoding="utf-8"
-            )
+            self.write_note(role_id, update.thread_id, update.group_note)
 
     def recent_activities(self, role_id: str, *, now: datetime) -> list[RecentActivity]:
         """``now`` 之前 ``RECENT_ACTIVITY_WINDOW`` 内更新过的外部会话最近动态，新的在前。

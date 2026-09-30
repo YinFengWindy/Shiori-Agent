@@ -1,4 +1,5 @@
-import type { ChatToolCall, ChatTurnMetrics, SessionMessage, SessionPayload } from "../shared/types";
+import type { ChatToolCall, SessionMessage, SessionPayload } from "@shiori/plugin-sdk";
+import type { ChatTurnMetrics } from "../shared/types";
 import { ensureChatMessageRenderId } from "./chatMessageIdentity";
 
 /** Applies one bridge delta to the current transient assistant message. */

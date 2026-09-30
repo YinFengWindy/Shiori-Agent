@@ -1,4 +1,4 @@
-import type { SelectOption } from "../shared/ui/Select";
+import type { SelectOption } from "@shiori/plugin-sdk";
 
 /** Item lifecycle filter values; mirrors the backend's `SEMANTIC_STATUS_FILTERS`. */
 export type RoleSemanticStatusFilter = "active" | "superseded" | "all";

@@ -2,8 +2,9 @@ import type React from "react";
 import { findChatMessageElement } from "../chat/chatMessageDom";
 import { prefersReducedMotion } from "../shared/reducedMotion";
 import { copyTextToClipboard } from "../shared/clipboard";
-import type { AppMainView, RoleRecord, SessionPayload } from "../shared/types";
-import { errorMessage, type FeedbackReporter } from "../shared/feedback/feedbackStore";
+import { type RoleRecord, type SessionPayload, errorMessage } from "@shiori/plugin-sdk";
+import type { AppMainView } from "../shared/types";
+import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 type UseChatInteractionsArgs = {
   activeRoleId: string;

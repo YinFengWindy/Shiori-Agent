@@ -2,8 +2,8 @@ import { Check } from "@phosphor-icons/react";
 import React from "react";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { modelEffortOptions } from "../shared/modelEffortLabels";
-import { cx } from "../shared/styles";
-import { MenuItem, MenuPanel, menuLabelClass, menuSeparatorClass, moveMenuFocus } from "../shared/ui/Menu";
+import { cx, menuSeparatorClass } from "@shiori/plugin-sdk";
+import { MenuItem, MenuPanel, menuLabelClass, moveMenuFocus } from "../shared/ui/Menu";
 import type { ModelEffort, RoleModelSelection } from "./chatModelSelection";
 import type { RoleModelSelectionChange } from "./useRoleModelSelection";
 

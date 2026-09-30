@@ -1,10 +1,5 @@
-import type {
-  SurfaceBody,
-  SurfaceBounds,
-  SurfaceExtension,
-  SurfacePoint,
-  SurfaceWorkArea,
-} from "./contract.js";
+import type { SurfaceExtension, SurfaceWorkArea } from "@shiori/plugin-sdk/contract";
+import type { SurfaceBody, SurfaceBounds, SurfacePoint } from "./contract.js";
 
 /**
  * Clamps a surface's *body* fully inside a display work area.

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cx } from "../styles";
+import { cx } from "@shiori/plugin-sdk";
 import { mascotExpressions, type MascotExpression } from "./mascotExpressions";
 import { mascotSprites } from "./mascotSprites";
 

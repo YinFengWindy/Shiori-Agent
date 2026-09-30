@@ -32,4 +32,5 @@ def build_desktop_service(
         role_runtime_registry=registry,
         memory_engine=runtime.memory_runtime.engine,
         plugin_rpc_registry=plugin_manager.rpc if plugin_manager is not None else None,
+        group_environment=runtime.group_environment,
     )

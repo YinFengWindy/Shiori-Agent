@@ -1,8 +1,11 @@
 import { useEffect, useRef } from "react";
-import type { ChatImageHistoryEntry } from "../chat/chatImageHistory";
-import type { RoleRecord, SessionPayload } from "../shared/types";
+import type {
+  ChatImageHistoryEntry,
+  RoleRecord,
+  SessionPayload,
+  SessionMessageUpdatePayload,
+} from "@shiori/plugin-sdk";
 import { applySessionMessageUpdate } from "../chat/applySessionMessageUpdate";
-import type { SessionMessageUpdatePayload } from "../shared/types";
 import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 type UseChatImageStateArgs = {

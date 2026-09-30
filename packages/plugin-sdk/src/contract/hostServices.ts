@@ -43,6 +43,10 @@ export type PluginHostAssets = {
    * rather than throwing. Unlike the background `ctx.assets.url`, which
    * answers `null` for such a path so a plugin can decide not to show it,
    * this always returns something an element can render.
+   *
+   * `url` does not depend on `this` and keeps one identity while the plugin
+   * is loaded, so it may be passed on as a bare function (a hook argument or
+   * an effect dependency, as the story plugin does) without re-binding.
    */
   url: (path: string) => string;
 };

@@ -1,10 +1,9 @@
 import { ChatCircleDots, DotsThree, PencilSimple, Trash } from "@phosphor-icons/react";
 import { toFileUrl } from "../shared/format";
 import { SpinnerIcon } from "../shared/icons";
-import { compactPressableClass, cx } from "../shared/styles";
-import { ActionMenu } from "../shared/ui/ActionMenu";
+import { compactPressableClass, cx, ActionMenu, type RoleRecord } from "@shiori/plugin-sdk";
 import { TiltedCard } from "../shared/ui/reactBits/TiltedCard";
-import type { PendingRoleCardAction, RoleRecord } from "../shared/types";
+import type { PendingRoleCardAction } from "../shared/types";
 import { roleCardPendingLabels, selectRoleCardView } from "./roleCardState";
 import { RolePortraitPlaceholder } from "./RolePortraitPlaceholder";
 

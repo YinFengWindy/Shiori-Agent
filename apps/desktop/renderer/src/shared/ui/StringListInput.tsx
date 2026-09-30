@@ -1,7 +1,7 @@
 import { Plus, X } from "@phosphor-icons/react";
 import { useState } from "react";
 import { appendStringListItem } from "../stringList";
-import { compactPressableClass, cx } from "../styles";
+import { compactPressableClass, cx } from "@shiori/plugin-sdk";
 
 type StringListInputProps = {
   items: readonly string[];

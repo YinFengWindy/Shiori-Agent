@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  RoleRecord,
-  RoleSearchResult,
-  SessionPayload,
-  SessionSearchResult,
-} from "../shared/types";
+import type { RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
+import type { RoleSearchResult, SessionSearchResult } from "../shared/types";
 
 type FetchRoleSession = (roleId: string) => Promise<{
   error: string | null;

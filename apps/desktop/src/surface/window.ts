@@ -5,8 +5,9 @@ import {
   resolveRendererEntryUrl,
   validateRendererDevServerUrl,
 } from "../windowSecurity.js";
-import { desktopSurfaceWindowOptions, type SurfaceSpec, type SurfaceWorkArea } from "./contract.js";
-import type { SurfaceKey, SurfaceMenuItem, SurfaceWindowHandle } from "./host.js";
+import type { SurfaceSpec, SurfaceWorkArea, SurfaceMenuItem } from "@shiori/plugin-sdk/contract";
+import { desktopSurfaceWindowOptions } from "./contract.js";
+import type { SurfaceKey, SurfaceWindowHandle } from "./host.js";
 import { surfaceQueryString } from "./entry.js";
 
 /**

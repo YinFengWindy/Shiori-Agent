@@ -2,9 +2,16 @@ import { Plus, UploadSimple } from "@phosphor-icons/react";
 import { emptyStateLines } from "../shared/mascot/mascotLines";
 import { MascotEmptyState } from "../shared/mascot/MascotSpeech";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
-import { cx, ghostButtonSurfaceClass, primaryButtonSurfaceClass } from "../shared/styles";
-import { PetalIcon, RibbonIcon, SparkleIcon } from "../shared/ui/icons";
-import type { PendingRoleCardAction, RoleRecord } from "../shared/types";
+import {
+  cx,
+  ghostButtonSurfaceClass,
+  primaryButtonSurfaceClass,
+  PetalIcon,
+  SparkleIcon,
+  type RoleRecord,
+} from "@shiori/plugin-sdk";
+import { RibbonIcon } from "../shared/ui/icons";
+import type { PendingRoleCardAction } from "../shared/types";
 import { RoleCard } from "./RoleCard";
 
 type RoleManagementPageProps = {

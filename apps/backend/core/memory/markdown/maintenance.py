@@ -21,6 +21,7 @@ from conversation.context_scope import (
     role_session_user_threads,
 )
 from core.memory.events import ConsolidationCommitted
+from core.memory.external_writes import commit_external_layers
 from core.memory.member_profiles import MemberProfiles
 from session.manager.consolidation import ConsolidationCommitRequest
 from session.manager.models import consolidation_cursor
@@ -52,6 +53,10 @@ if TYPE_CHECKING:
     from core.roles import RoleStore
 
 logger = logging.getLogger("memory.markdown")
+
+
+class _StaleExternalLayers(Exception):
+    """准备后群笔记或成员档案已被别处（小手机）改过：本次整理按过期处理，不提交。"""
 
 
 def _session_input_over_budget(
@@ -472,26 +477,27 @@ class MarkdownMemoryMaintenance:
             )
 
         async def write_memory() -> None:
+            # 群笔记与档案先写：准备后被改过时在任何写入之前放弃，游标也不推进。
+            await self._write_external_layers(request.session, draft, group_environment)
             await self._commit_markdown_draft(request.session, draft)
-            await self._write_group_environment(
-                request.session, draft, group_environment
-            )
-            await self._write_member_profiles(request.session, draft)
 
         async def publish_committed() -> None:
             await self._publish_consolidation(request.session, draft)
 
-        committed = await commit(
-            _commit_request(
-                session_key,
-                expected_ids,
-                draft,
-                expected_cursor=expected_cursor,
-                expected_context_cursors=expected_context_cursors,
-            ),
-            write_memory,
-            publish_committed,
-        )
+        try:
+            committed = await commit(
+                _commit_request(
+                    session_key,
+                    expected_ids,
+                    draft,
+                    expected_cursor=expected_cursor,
+                    expected_context_cursors=expected_context_cursors,
+                ),
+                write_memory,
+                publish_committed,
+            )
+        except _StaleExternalLayers:
+            committed = False
         if not committed:
             return ConsolidateResult(trace={"mode": "skipped", "reason": "stale"})
         await self._run_after_consolidation(request.session)
@@ -546,31 +552,31 @@ class MarkdownMemoryMaintenance:
                 draft.source_ref,
             )
 
-    async def _write_group_environment(
+    async def _write_external_layers(
         self,
         session: object,
         draft: _ConsolidationDraft,
         group_environment: "GroupEnvironment",
     ) -> None:
-        """把外部段整理出的最近动态与群笔记写入群环境层；不经过记忆引擎。"""
-        if not draft.group_environment_updates:
-            return
-        role_id = _session_role_id(session)
-        updated_at = datetime.now().astimezone()
-        for update in draft.group_environment_updates:
-            await asyncio.to_thread(
-                group_environment.apply, role_id, update, updated_at=updated_at
-            )
+        """把外部段整理出的群环境层与成员档案更新写入；不经过记忆引擎。
 
-    async def _write_member_profiles(
-        self, session: object, draft: _ConsolidationDraft
-    ) -> None:
-        """把外部段整理出的成员档案更新合并进成员层；不经过记忆引擎。"""
-        if not draft.member_profile_updates:
+        准备时读到的群笔记与档案在此期间被改过（小手机编辑）时什么都不写，抛
+        ``_StaleExternalLayers`` 让本次整理按过期处理，下次用新内容重来。
+        """
+        if not draft.group_environment_updates and not draft.member_profile_updates:
             return
-        role_id = _session_role_id(session)
-        for update in draft.member_profile_updates:
-            await asyncio.to_thread(self._member_profiles.apply, role_id, update)
+        written = await asyncio.to_thread(
+            commit_external_layers,
+            group_environment,
+            self._member_profiles,
+            _session_role_id(session),
+            environment_updates=draft.group_environment_updates,
+            member_updates=draft.member_profile_updates,
+            snapshot=draft.external_snapshot,
+            updated_at=datetime.now().astimezone(),
+        )
+        if not written:
+            raise _StaleExternalLayers
 
     async def _publish_consolidation(
         self, session: object, draft: _ConsolidationDraft

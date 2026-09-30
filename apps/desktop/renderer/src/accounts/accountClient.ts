@@ -1,9 +1,6 @@
 import type { AccountResponseRules, AccountSnapshot } from "@shiori/plugin-sdk";
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 
-/** The account snapshot types are owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
-export type { AccountResponseRules, AccountSnapshot };
-
 type AccountPayload = {
   id: string; plugin_id: string; platform: string; platform_account_id: string; config_ref: string;
   display_name: string; avatar_url: string; role_id: string;

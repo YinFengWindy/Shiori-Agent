@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { applyPluginBackgroundModules, type PluginBackgroundContribution } from "./pluginBackgroundContract";
+import type { PluginBackgroundContribution } from "@shiori/plugin-sdk";
+import { applyPluginBackgroundModules } from "./pluginBackgroundContract";
 import { PluginBackgroundRegistry } from "./pluginBackgroundRegistry";
 
 const setup = () => {};

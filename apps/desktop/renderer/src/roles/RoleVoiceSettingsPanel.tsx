@@ -1,13 +1,10 @@
-import { Select } from "../shared/ui/Select";
+import { Select, SettingsToggleCard, cx, RoleCapabilityCard } from "@shiori/plugin-sdk";
 import { CaretDown, Waveform } from "@phosphor-icons/react";
 import type React from "react";
 import { useState } from "react";
 import { minimaxVoiceEmotionOptions } from "./roleVoiceConfig";
 import type { RoleFormState } from "../shared/types";
-import { SettingsToggleCard } from "../settings/SettingsToggleCard";
-import { cx } from "../shared/styles";
 import { roleFieldClass as voiceFieldClass, roleFieldLabelClass, rolePanelGhostButtonClass } from "./roleEditorStyles";
-import { RoleCapabilityCard } from "./RoleCapabilityCard";
 import { roleVoiceStatus } from "./roleCapabilityStatus";
 
 type RoleVoiceSettingsPanelProps = {

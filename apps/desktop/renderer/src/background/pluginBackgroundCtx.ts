@@ -1,20 +1,16 @@
 import type {
   BridgeEvent,
-  DesktopApi,
-  DesktopSurfacesApi,
-  SurfaceSettledPayload,
-} from "../../../src/bridge/shared";
-import { unavailableLocalAssetUrl } from "../../../src/assets/localAssetContract";
-import type { DesktopInvoke } from "../shared/bridgeInvoke";
-import { createPluginCommunicationClient } from "../plugins/pluginCommunicationClient";
-import type { BackgroundEffectScope } from "./backgroundEffectScope";
-import type {
   BackgroundCtx,
   PluginBackgroundAssets,
   PluginBackgroundStore,
   PluginBackgroundSurfaces,
   PluginBackgroundTray,
-} from "./pluginBackgroundRegistry";
+} from "@shiori/plugin-sdk";
+import type { DesktopApi, DesktopSurfacesApi, SurfaceSettledPayload } from "../../../src/bridge/shared";
+import { unavailableLocalAssetUrl } from "../../../src/assets/localAssetContract";
+import type { DesktopInvoke } from "../shared/bridgeInvoke";
+import { createPluginCommunicationClient } from "../plugins/pluginCommunicationClient";
+import type { BackgroundEffectScope } from "./backgroundEffectScope";
 
 /** Subscribes to every tray click this window is told about. */
 export type TrayClickSource = (

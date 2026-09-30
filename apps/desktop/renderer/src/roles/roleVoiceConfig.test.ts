@@ -2,7 +2,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { RoleFormState, RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleFormState } from "../shared/types";
 import { deleteManagedVoiceAssets, managedVoiceAssetsForRole, queueManagedVoiceAssetDeletion, readRoleVoiceConfig, roleVoiceConfigEqual, writeRoleVoiceConfigToRuntimeConfig } from "./roleVoiceConfig.js";
 
 function role(runtime_config: Record<string, unknown>): Pick<RoleRecord, "runtime_config"> {

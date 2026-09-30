@@ -1,4 +1,4 @@
-import type { RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
 
 /**
  * Reconciles the bridge-provided role list against the current renderer state.

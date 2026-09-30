@@ -14,7 +14,7 @@ import {
   viewsEqual,
 } from "./appState";
 import type { NavigationEntry } from "./appState";
-import type { SessionPayload } from "../shared/types";
+import type { SessionPayload } from "@shiori/plugin-sdk";
 
 function createSession(overrides: Partial<SessionPayload> = {}): SessionPayload {
   return {

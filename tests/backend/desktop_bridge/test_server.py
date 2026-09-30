@@ -15,6 +15,7 @@ import pytest
 from bus.event_bus import EventBus
 from desktop_bridge.models import BridgeResponse
 from desktop_bridge.server import DesktopBridgeServer
+from core.memory.group_environment import GroupEnvironment
 from session.manager import SessionManager
 
 
@@ -49,6 +50,9 @@ def _build_server(tmp_path: Path, stub_core_runtime) -> DesktopBridgeServer:
         ),
         loop=SimpleNamespace(process_direct=AsyncMock(return_value="ok")),
         event_bus=EventBus(),
+        group_environment=GroupEnvironment(
+            tmp_path, session_manager.conversation_store
+        ),
     )
     return DesktopBridgeServer(runtime)
 

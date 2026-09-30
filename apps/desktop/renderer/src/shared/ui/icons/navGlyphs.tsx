@@ -1,12 +1,6 @@
 import { Chats, GearSix, MagnifyingGlass, Users } from "@phosphor-icons/react";
 import { navMotifs, withMotif } from "@shiori/plugin-sdk";
 
-/*
- * The nav glyph builder (`withMotif`, `navMotifs`) is owned by
- * `@shiori/plugin-sdk` (#440) and re-exported here; the glyphs are built below.
- */
-export { navMotifs, withMotif, type NavGlyphMotion } from "@shiori/plugin-sdk";
-
 /** 搜索: a sparkle in the lens. */
 export const SearchGlyph = withMotif(MagnifyingGlass, navMotifs.sparkle(88, 88, 30, { cx: 128, cy: 70, r: 7 }), "twinkle", "SearchGlyph");
 /** 消息: a heart in the back bubble. */

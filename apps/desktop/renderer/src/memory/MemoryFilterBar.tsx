@@ -1,5 +1,4 @@
-import { inputClass } from "../shared/styles";
-import { Select, type SelectOption } from "../shared/ui/Select";
+import { inputClass, Select, type SelectOption } from "@shiori/plugin-sdk";
 import {
   defaultSemanticStatus, pickOffered, semanticSortOptions, semanticSortOrders, semanticStatusLabels,
   type RoleSemanticFilters, type RoleSemanticQuery,

@@ -1,8 +1,4 @@
-import type { ChatImageHistoryEntry } from "@shiori/plugin-sdk";
-import type { SessionPayload } from "../shared/types";
-
-/** Owned by `@shiori/plugin-sdk` (#440; plugin chat image actions receive one); re-exported for host callers. */
-export type { ChatImageHistoryEntry };
+import type { ChatImageHistoryEntry, SessionPayload } from "@shiori/plugin-sdk";
 
 export type ChatImageHistorySourceMessage = {
   id?: string;

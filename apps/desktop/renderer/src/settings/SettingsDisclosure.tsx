@@ -1,6 +1,6 @@
 import { CaretRight } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
-import { cx } from "../shared/styles";
+import { cx } from "@shiori/plugin-sdk";
 
 /**
  * Collapsible body for settings disclosures, animated by the

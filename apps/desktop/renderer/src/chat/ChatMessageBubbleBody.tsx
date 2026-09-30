@@ -6,7 +6,8 @@ import { ChatToolCalls } from "./ChatToolCalls";
 import { getStoredChatReplyPreview, isInterruptedChatMessage } from "./chatMessageActions";
 import { getChatMessagePresentation } from "./chatMessagePresentation";
 import { parseChatTurnMetrics } from "./chatTurnMetrics";
-import type { ChatReplyTarget, SessionMessage } from "../shared/types";
+import type { SessionMessage } from "@shiori/plugin-sdk";
+import type { ChatReplyTarget } from "../shared/types";
 
 function StoredReplyQuote({ preview }: { preview: ChatReplyTarget }) {
   return (

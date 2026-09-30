@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import type { BridgeEvent } from "../../../src/bridge/shared";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
-import { accountStatus } from "./accountPresentation";
+import type { BridgeEvent } from "@shiori/plugin-sdk";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { accountStatusView } from "@shiori/plugin-sdk/host-internal";
 import { useAccounts } from "./useAccounts";
 
 test("mounted account views reload when the host pushes an account change", async () => {
@@ -13,7 +13,7 @@ test("mounted account views reload when the host pushes an account change", asyn
   let unsubscribed = false;
   function View() {
     const { accounts } = useAccounts();
-    return <span>{accounts?.[0] ? accountStatus(accounts[0]) : "加载中"}</span>;
+    return <span>{accounts?.[0] ? accountStatusView(accounts[0]).label : "加载中"}</span>;
   }
   const view = await mountTestComponent(<View />, { windowGlobals: {
     miraDesktop: {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
-import type { AccountSnapshot } from "./accountClient";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import type { AccountSnapshot } from "@shiori/plugin-sdk";
 import { AccountStatusCard } from "./AccountStatusCard";
 
 const account: AccountSnapshot = {

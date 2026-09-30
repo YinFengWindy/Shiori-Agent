@@ -8,7 +8,7 @@ import { afterEach, test } from "node:test";
 import { stagePickedFiles } from "./pickedFileStaging";
 import { resolveLocalAssetCandidate } from "./localAssetPolicy";
 import { importLocalAssets } from "./localAssetImport";
-import type { NativeFilePickerOptions } from "./filePickerContract";
+import type { NativeFilePickerOptions } from "@shiori/plugin-sdk/contract";
 
 const temporary: string[] = [];
 const policy: NativeFilePickerOptions = { namespace: "sample-packages", maxFileBytes: 64, filters: [{ name: "Packages", extensions: ["zip"] }] };

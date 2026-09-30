@@ -18,7 +18,7 @@ import {
   mergeSessionSummaryAndMessage,
   parseSessionMessagesAround,
 } from "./sessionMessagePagination";
-import type { SessionMessage, SessionPayload } from "../shared/types";
+import type { SessionMessage, SessionPayload } from "@shiori/plugin-sdk";
 
 function createSession(messages: SessionMessage[]): SessionPayload {
   return {

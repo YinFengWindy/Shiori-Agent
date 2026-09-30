@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import type { BridgeEvent } from "../../../src/bridge/shared";
+import type { BridgeEvent } from "@shiori/plugin-sdk";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
-import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 
 type Request = { method: string; payload: Record<string, unknown> };
 

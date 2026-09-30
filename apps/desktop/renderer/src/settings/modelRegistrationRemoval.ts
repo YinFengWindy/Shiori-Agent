@@ -1,5 +1,5 @@
 import type { ModelRegistrationFormData, PendingRoleModelUpdate } from "../../../src/bridge/shared";
-import type { RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
 
 /** What removing one model registration would do, shown to the user before it is applied. */
 export type ModelRegistrationRemovalPlan = {

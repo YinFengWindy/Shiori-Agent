@@ -1,4 +1,5 @@
-import type { RoleFormState, RoleRecord } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleFormState } from "../shared/types";
 
 const defaultMood = "平静";
 

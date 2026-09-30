@@ -1,6 +1,7 @@
 import { loadRuntimePluginModules } from "../plugins/runtimePluginModuleLoader";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
-import { isPluginSurfaceModule, type PluginSurfaceModule } from "./pluginSurfaceContract";
+import type { PluginSurfaceModule } from "@shiori/plugin-sdk";
+import { isPluginSurfaceModule } from "./pluginSurfaceContract";
 import { pluginSurfaceRegistry, type PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 
 /** Loader boundaries a surface window's bootstrap supplies. */

@@ -8,7 +8,8 @@ import {
   resolveSearchResultMessageKey,
   resolveRoleSearchMessageResults,
 } from "./roleSearch";
-import type { RoleRecord, SessionSearchResult } from "../shared/types";
+import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { SessionSearchResult } from "../shared/types";
 
 const roles = [{
   id: "mira",

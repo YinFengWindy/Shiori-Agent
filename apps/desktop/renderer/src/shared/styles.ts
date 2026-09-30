@@ -6,30 +6,6 @@ import {
   primaryButtonSurfaceClass,
 } from "@shiori/plugin-sdk";
 
-/*
- * Class names plugins also use are owned by `@shiori/plugin-sdk` (#440) and
- * re-exported here, so host code keeps one import site; everything below the
- * re-export is host-only.
- */
-export {
-  badgeClass,
-  cardClass,
-  compactButtonSizeClass,
-  compactGhostButtonClass,
-  compactPressableClass,
-  cx,
-  ghostButtonClass,
-  ghostButtonSurfaceClass,
-  iconButtonClass,
-  inputClass,
-  pressableClass,
-  primaryButtonSurfaceClass,
-  secondarySidebarSurfaceClass,
-  sidebarContentMotionClass,
-  sidebarNavItemClass,
-  textareaClass,
-} from "@shiori/plugin-sdk";
-
 /** Track of a segmented tab group: secondary navigation nested under a page's section tabs. */
 export const segmentedTabListClass = "rounded-md bg-surface-soft p-1";
 

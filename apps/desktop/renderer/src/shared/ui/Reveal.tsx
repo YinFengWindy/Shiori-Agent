@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { RevealProps } from "@shiori/plugin-sdk";
-import { cx } from "../styles";
+import { type RevealProps, cx } from "@shiori/plugin-sdk";
 
 /**
  * Shows and hides a block with a fade plus height change (`.reveal` in

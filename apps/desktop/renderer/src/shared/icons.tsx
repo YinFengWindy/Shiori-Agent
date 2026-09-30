@@ -1,8 +1,5 @@
 import React from "react";
 
-/** Functional icons plugins also use are owned by `@shiori/plugin-sdk` (#440); re-exported for host callers. */
-export { UploadIcon } from "@shiori/plugin-sdk";
-
 type DesktopIconProps = {
   className?: string;
 };
