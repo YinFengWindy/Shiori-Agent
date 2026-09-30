@@ -269,8 +269,8 @@ class ChannelHub:
         projected like a turn's and keeps the same source snapshot, but it
         never reaches the role's session or the turn pipeline, so presence,
         loneliness and relationship state never see it. A message with no
-        text (e.g. a picture alone, whose file a listened message never
-        downloads) leaves nothing to keep.
+        text leaves nothing to keep; a plugin gives a picture-only message a
+        placeholder text (QQ: ``[图片]``) so it is still kept.
         """
         if not message.content.strip():
             return
