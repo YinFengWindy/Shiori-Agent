@@ -39,9 +39,9 @@ export const bodyTextClass = "text-body-sm";
 /** A quoted message's frame, an accent rule down its side (desktop reply quotes, phone quote blocks). */
 export const replyQuoteFrameClass = "border-l-2 border-line-accent pl-2.5";
 /** The quoted sender's name at the top of the frame. */
-export const replyQuoteSenderClass = "truncate text-[11px] font-medium leading-4 text-ink-muted";
+export const replyQuoteSenderClass = "truncate text-caption font-medium text-ink-muted";
 /** The quoted text's size; each quote picks its own ink. */
-export const replyQuoteTextClass = "text-[12px] leading-5";
+export const replyQuoteTextClass = "text-caption leading-5";
 /** A quote that is itself a button: no button chrome, dimmed on hover. */
 export const replyQuoteButtonClass = "border-0 bg-transparent p-0 text-left transition hover:opacity-85";
 
