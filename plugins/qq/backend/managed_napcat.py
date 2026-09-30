@@ -73,6 +73,10 @@ class ManagedNapCat(NapCatInstaller):
             "LOCALAPPDATA": str(profile / "AppData" / "Local"),
             "TEMP": str(profile / "Temp"),
             "TMP": str(profile / "Temp"),
+            # QQNT reads its data root from the machine-wide
+            # %PUBLIC%\Documents\Tencent\QQ\UserDataInfo.ini; without this the
+            # instance shares nt_qq/global login.db with the user's desktop QQ.
+            "PUBLIC": str(profile / "Public"),
             "PATH": os.pathsep.join(
                 (str(self.install_dir), str(qq_runtime_dir), os.environ.get("PATH", ""))
             ),

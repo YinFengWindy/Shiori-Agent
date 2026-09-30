@@ -54,6 +54,9 @@ async def test_per_account_ports_profiles_and_logout_are_isolated(
     ]
     assert a["APPDATA"] != b["APPDATA"]
     assert a["TEMP"] != b["TEMP"]
+    # QQNT resolves its data root through %PUBLIC%, not the per-user variables.
+    assert a["PUBLIC"] == str(manager._files.account_dir(first) / "profile/Public")
+    assert b["PUBLIC"] == str(manager._files.account_dir(second) / "profile/Public")
     assert a["NAPCAT_WEBUI_JWT_SECRET_KEY"] != b["NAPCAT_WEBUI_JWT_SECRET_KEY"]
     assert a["NAPCAT_WEBUI_PREFERRED_PORT"] != b["NAPCAT_WEBUI_PREFERRED_PORT"]
     assert launched[0][1]["cwd"] == manager._files.account_dir(first)
@@ -76,12 +79,9 @@ async def test_per_account_ports_profiles_and_logout_are_isolated(
         == "127.0.0.1"
     )
 
-    first_login = (
-        manager._files.account_dir(first) / "profile/AppData/Roaming/Tencent/QQNT"
-    )
-    second_login = (
-        manager._files.account_dir(second) / "profile/AppData/Roaming/Tencent/QQNT"
-    )
+    login_db = "profile/Documents/Tencent Files/nt_qq/global/nt_db"
+    first_login = manager._files.account_dir(first) / login_db
+    second_login = manager._files.account_dir(second) / login_db
     first_login.mkdir(parents=True)
     second_login.mkdir(parents=True)
     (first_login / "session").write_text("first", encoding="utf-8")
