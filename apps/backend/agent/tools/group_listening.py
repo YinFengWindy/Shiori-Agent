@@ -82,24 +82,25 @@ class SetGroupListeningTool(Tool):
         target = network_thread_id(
             role_id, str(kwargs.get("channel") or ""), str(kwargs.get("chat_id") or "")
         )
-        if kwargs.get("context_scope") == "external":
-            # 白名单已把群友触发的回合排除在外；这里再确认一次，失败即停。
-            if kwargs.get("sender_is_user") != "true":
-                raise PermissionError("只有你的用户能让你设置旁听")
+        scope = kwargs.get("context_scope")
+        # 失败即关：只有用户上下文，或用户本人在群里对当前群的操作才放行；
+        # 上下文缺失或无法判定（非角色会话、后台回传）一律拒绝。
+        if scope == "external" and kwargs.get("sender_is_user") == "true":
             if target != kwargs.get("thread_id"):
-                raise ValueError("在群里只能设置当前这个群的旁听")
-        groups = self._listening.groups(role_id)
-        group = next((item for item in groups if item.thread.id == target), None)
-        if group is None:
-            raise ValueError(f"这不是你可以旁听的群。{_candidates(groups)}")
-        settings = self._listening.set_enabled(
-            role_id, group.thread.id, enabled, operator="role"
-        )
+                raise PermissionError("在群里只能设置当前这个群的旁听")
+        elif scope != "user":
+            raise PermissionError("只有你的用户能让你设置旁听")
+        try:
+            settings = self._listening.set_enabled(
+                role_id, target, enabled, operator="role"
+            )
+        except ValueError as error:
+            candidates = _candidates(self._listening.groups(role_id))
+            raise ValueError(f"这不是你可以旁听的群。{candidates}") from error
         return json.dumps(
             {
-                "group": group.name,
-                "channel": group.thread.channel,
-                "chat_id": group.thread.external_thread_id,
+                "channel": kwargs.get("channel"),
+                "chat_id": kwargs.get("chat_id"),
                 "listening": settings.enabled,
             },
             ensure_ascii=False,

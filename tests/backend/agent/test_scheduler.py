@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+from conversation.listening import GroupListeningControl
+from conversation.service import ConversationService
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -111,6 +113,9 @@ async def test_recurring_desktop_delivery_persists_once_per_occurrence(tmp_path,
         workspace=tmp_path,
         role_store=role_store,
         session_manager=sessions,
+        group_listening=GroupListeningControl(
+            ConversationService(sessions), lambda _channel: False
+        ),
         group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
         agent_loop=loop,
         event_bus=event_bus,

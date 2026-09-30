@@ -1,10 +1,12 @@
 """查成员档案的工具（#540）。
 
 成员档案按「渠道 + 成员 ID」保存（#498）。按 ID 查返回档案；按名字查时匹配档案
-记录过的全部昵称（含旧昵称），只返回带 ID 的候选，由模型再按 ID 查档案。
+记录过的全部昵称（含旧昵称），只返回带 ID 与渠道的候选，由模型再按 ID 查档案。
 
-渠道规则：外部上下文（群聊、陌生私聊）固定查当前会话所在的渠道；用户上下文由
-``channel`` 指定，省略时为当前对话的渠道。声明外部上下文可用，群友触发的回合也能用。
+渠道规则：外部上下文（群聊、陌生私聊）固定查当前会话所在的渠道。其他回合由
+``member_channel`` 指定；按名字查时可省略，表示在所有渠道里找，按 ID 查时必填。
+渠道参数不叫 ``channel``，免得省略时被执行上下文里当前对话的渠道（桌面等）顶替。
+声明外部上下文可用，群友触发的回合也能用。
 """
 
 from __future__ import annotations
@@ -27,18 +29,19 @@ def _matches_name(profile: MemberProfile, name: str) -> bool:
 
 
 class LookupMemberTool(Tool):
-    """Looks up the role's member profiles on one channel, by member ID or by name.
+    """Looks up the role's member profiles, by member ID or by name.
 
     The turn's role, conversation and context come only from the execution
-    context; ``channel`` falls back to the turn's channel when omitted.
+    context. In the external context the lookup stays on the turn's channel.
     """
 
     name = "lookup_member"
     description = (
         "查你记下的成员档案（群友、陌生人）。按 member_id 查返回这个人的档案；"
-        "只知道名字时用 name 查，会匹配他用过的所有昵称（含旧昵称），返回带 member_id 的"
-        "候选，再用 member_id 查档案。member_id 即消息来源里的 sender_id。"
-        "在群聊或陌生私聊里只查当前渠道。"
+        "只知道名字时用 name 查，会匹配他用过的所有昵称（含旧昵称），返回带 member_id "
+        "与渠道的候选，再用 member_id 查档案。member_id 即消息来源里的 sender_id。"
+        "在群聊或陌生私聊里只查当前渠道；其他时候按名字查可省略 member_channel 查所有渠道，"
+        "按 member_id 查必须给出 member_channel。"
     )
     parameters = {
         "type": "object",
@@ -51,9 +54,9 @@ class LookupMemberTool(Tool):
                 "type": "string",
                 "description": "成员的名字或昵称的一部分。与 member_id 二选一。",
             },
-            "channel": {
+            "member_channel": {
                 "type": "string",
-                "description": "渠道 ID；省略时为当前对话的渠道，在群聊或陌生私聊里固定为当前渠道。",
+                "description": "成员所在的渠道 ID（消息来源里的 channel）；在群聊或陌生私聊里固定为当前渠道。",
             },
         },
     }
@@ -75,15 +78,15 @@ class LookupMemberTool(Tool):
             raise ValueError("member_id 与 name 必须且只能给一个")
         channel = self._channel(kwargs)
         if member_id:
+            if not channel:
+                raise ValueError("按 member_id 查需要给出 member_channel")
             return self._by_id(role_id, MemberKey(channel, member_id))
         return self._by_name(role_id, channel, name)
 
     def _channel(self, kwargs: dict[str, Any]) -> str:
-        """本次查询的渠道：外部上下文固定为当前会话的渠道。"""
-        channel = str(kwargs.get("channel") or "").strip()
+        """本次查询的渠道：外部上下文固定为当前会话的渠道；其他回合取参数，可为空。"""
+        channel = str(kwargs.get("member_channel") or "").strip()
         if kwargs.get("context_scope") != "external":
-            if not channel:
-                raise ValueError("缺少 channel")
             return channel
         thread_id = str(kwargs.get("thread_id") or "")
         thread = self._conversations.get_thread(thread_id)
@@ -110,18 +113,20 @@ class LookupMemberTool(Tool):
         )
 
     def _by_name(self, role_id: str, channel: str, name: str) -> str:
+        """``channel`` 为空时在所有渠道里找。"""
         matched = [
             profile
             for profile in self._members.list(role_id)
-            if profile.key.channel == channel and _matches_name(profile, name)
+            if (not channel or profile.key.channel == channel)
+            and _matches_name(profile, name)
         ]
         return json.dumps(
             {
-                "channel": channel,
                 "total": len(matched),
                 "candidates": [
                     {
                         "member_id": profile.key.sender_id,
+                        "channel": profile.key.channel,
                         "name": profile.call_name,
                         "nicknames": list(profile.nicknames),
                     }

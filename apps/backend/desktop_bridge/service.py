@@ -115,11 +115,10 @@ class DesktopBridgeService:
         activate_transport: bool = True,
         model_resolver: RoleModelRuntime | None = None,
         plugin_rpc_registry: PluginRpcRegistry | None = None,
-        group_listening: GroupListeningControl | None = None,
+        group_listening: GroupListeningControl,
     ) -> None:
         """``group_listening`` is the runtime's listening control (#538), shared
-        with the role's listening tool (#540); without it no channel supports
-        listening."""
+        with the role's listening tool (#540)."""
         self.workspace = workspace
         self.role_store = role_store
         self.session_manager = session_manager
@@ -236,19 +235,16 @@ class DesktopBridgeService:
         )
         self.voice_assets = self.voice_handler.assets
         self.plugin_rpc_registry = plugin_rpc_registry
-        listening = group_listening or GroupListeningControl(
-            self.conversation_service, lambda _channel: False
-        )
         self.phone = DesktopPhoneRequestHandler(
             conversations=self.conversation_service,
             accounts=role_store.accounts,
             identities=role_store.identities,
             messages=self.session_presenter,
             avatars=role_store.avatars,
-            listening=listening,
+            listening=group_listening,
         )
         self.phone_listening = DesktopPhoneListeningRequestHandler(
-            listening, self.phone
+            group_listening, self.phone
         )
         self._listening_heard_listener = self._on_listening_heard
         self.conversation_service.listening.add_heard_listener(

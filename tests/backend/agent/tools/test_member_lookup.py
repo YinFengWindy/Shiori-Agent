@@ -53,12 +53,47 @@ async def test_name_matches_old_nicknames_and_id_returns_the_profile(
         )
     )
     other_channel = await tools.execute(
-        "lookup_member", {"name": "阿明", "channel": "telegram"}, context=in_group
+        "lookup_member",
+        {"name": "阿明", "member_channel": "telegram"},
+        context=in_group,
     )
 
     assert by_name["candidates"] == [
-        {"member_id": "555", "name": "明哥", "nicknames": ["阿明", "明哥"]}
+        {
+            "member_id": "555",
+            "channel": "qq",
+            "name": "明哥",
+            "nicknames": ["阿明", "明哥"],
+        }
     ]
     assert "profile" not in by_name["candidates"][0]
     assert by_id["name"] == "明哥" and by_id["profile"] == "爱狗"
     assert "只能查当前渠道" in str(other_channel)
+
+
+@pytest.mark.asyncio
+async def test_desktop_name_lookup_spans_channels_and_id_needs_a_channel(
+    tmp_path: Path,
+) -> None:
+    members = MemberProfiles(tmp_path)
+    members.apply("mira", MemberProfileUpdate(MemberKey("qq", "555"), "g1", ("阿明",)))
+    members.apply(
+        "mira", MemberProfileUpdate(MemberKey("telegram", "9"), "t1", ("阿明",))
+    )
+    tools = ToolRegistry()
+    tools.register(
+        LookupMemberTool(members, ConversationService(SessionManager(tmp_path))),
+        external_allowed=True,
+    )
+    # 桌面回合：执行上下文的 channel 是 desktop，不能顶替成员渠道。
+    desktop = {"role_id": "mira", "context_scope": "user", "channel": "desktop"}
+
+    by_name = json.loads(
+        str(await tools.execute("lookup_member", {"name": "阿明"}, context=desktop))
+    )
+    by_id = await tools.execute("lookup_member", {"member_id": "555"}, context=desktop)
+
+    assert sorted(
+        (item["channel"], item["member_id"]) for item in by_name["candidates"]
+    ) == [("qq", "555"), ("telegram", "9")]
+    assert "需要给出 member_channel" in str(by_id)

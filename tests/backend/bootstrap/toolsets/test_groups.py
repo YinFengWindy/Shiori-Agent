@@ -6,7 +6,7 @@ from pathlib import Path
 
 from agent.core.passive_turn.helpers import turn_tool_names
 from agent.tools.registry import ToolRegistry
-from bootstrap.toolsets.groups import build_group_listening, register_group_tools
+from bootstrap.toolsets.groups import register_group_tools
 from session.manager import SessionManager
 
 
@@ -15,9 +15,7 @@ def test_a_group_member_turn_gets_the_lookup_but_not_the_listening_switch(
 ) -> None:
     manager = SessionManager(tmp_path)
     tools = ToolRegistry()
-    register_group_tools(
-        tools, tmp_path, manager, build_group_listening(manager, manifests=())
-    )
+    _ = register_group_tools(tools, tmp_path, manager, manifests=())
 
     # 外部上下文里群友触发的回合（受限回合）。
     restricted = turn_tool_names(

@@ -105,3 +105,30 @@ async def test_the_user_in_a_group_switches_only_that_group(tmp_path: Path) -> N
     assert switches.settings(threads["g2"]).enabled is False
     assert '"listening": true' in str(here)
     assert switches.settings(threads["g1"]).enabled is True
+
+
+@pytest.mark.parametrize(
+    "turn",
+    [
+        # 群友在群里触发的回合。
+        {"context_scope": "external", "sender_is_user": "false"},
+        # 上下文判定不了的回合（非角色会话、后台回传）。
+        {"context_scope": "", "sender_is_user": "false"},
+        {},
+    ],
+)
+@pytest.mark.asyncio
+async def test_turns_that_are_not_the_user_cannot_switch_listening(
+    tmp_path: Path, turn: dict[str, str]
+) -> None:
+    tools, listening, threads = _groups(tmp_path)
+    context = {"role_id": "mira", "thread_id": threads["g1"], **turn}
+
+    result = await tools.execute(
+        "set_group_listening",
+        {"channel": "qq", "chat_id": "g1", "enabled": True},
+        context=context,
+    )
+
+    assert "只有你的用户能让你设置旁听" in str(result)
+    assert listening.store.switches.settings(threads["g1"]).enabled is False

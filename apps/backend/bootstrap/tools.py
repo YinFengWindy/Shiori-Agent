@@ -52,7 +52,7 @@ from bootstrap.runtime.construction import track_build_resource
 from bootstrap.toolsets.meta import (
     build_readonly_tools,
 )
-from bootstrap.toolsets.groups import build_group_listening, register_group_tools
+from bootstrap.toolsets.groups import register_group_tools
 from bootstrap.toolsets.protocol import ToolsetDeps
 from bootstrap.toolsets.schedule import (
     build_scheduler,
@@ -671,10 +671,12 @@ def build_core_runtime(
         external_allowed=True,
         external_limit=ACCOUNT_SEND_EXTERNAL_LIMIT,
     )
-    group_listening = build_group_listening(
-        session_manager, (record.manifest for record in plugin_manager.discover())
+    group_listening = register_group_tools(
+        tools,
+        workspace,
+        session_manager,
+        (record.manifest for record in plugin_manager.discover()),
     )
-    register_group_tools(tools, workspace, session_manager, group_listening)
 
     return CoreRuntime(
         config=config,

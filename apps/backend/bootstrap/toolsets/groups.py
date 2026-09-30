@@ -19,23 +19,22 @@ from core.memory.member_profiles import MemberProfiles
 from session.manager import SessionManager
 
 
-def build_group_listening(
-    session_manager: SessionManager, manifests: Iterable[PluginManifest]
-) -> GroupListeningControl:
-    """The runtime's listening control; a channel supports listening when its
-    plugin manifest (among ``manifests``) declares ``group_listening``."""
-    return GroupListeningControl(
-        ConversationService(session_manager), group_listening_channels(manifests)
-    )
-
-
 def register_group_tools(
     tools: ToolRegistry,
     workspace: Path,
     session_manager: SessionManager,
-    listening: GroupListeningControl,
-) -> None:
-    """Registers the listening switch and the member-profile lookup tools."""
+    manifests: Iterable[PluginManifest],
+) -> GroupListeningControl:
+    """Registers the listening switch and the member-profile lookup tools.
+
+    Returns the runtime's listening control, which the switch tool uses: a
+    channel supports listening when its plugin manifest (among ``manifests``)
+    declares ``group_listening``.
+    """
+    conversations = ConversationService(session_manager)
+    listening = GroupListeningControl(
+        conversations, group_listening_channels(manifests)
+    )
     # 未声明外部可用：外部上下文里群友触发的回合拿不到（#489）。
     tools.register(
         SetGroupListeningTool(listening),
@@ -44,10 +43,9 @@ def register_group_tools(
     )
     # 查成员档案进外部上下文白名单。
     tools.register(
-        LookupMemberTool(
-            MemberProfiles(workspace), ConversationService(session_manager)
-        ),
+        LookupMemberTool(MemberProfiles(workspace), conversations),
         risk="read-only",
         search_hint="群友 昵称 是谁",
         external_allowed=True,
     )
+    return listening
