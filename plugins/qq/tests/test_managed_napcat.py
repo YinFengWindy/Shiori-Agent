@@ -36,10 +36,9 @@ async def test_per_account_ports_profiles_and_logout_are_isolated(
         process.pid = len(launched) + 100
         process.wait.return_value = 0
         launched.append((command, kwargs, process))
-        return process
+        return process, Mock()
 
-    monkeypatch.setattr(managed_napcat.subprocess, "Popen", popen)
-    monkeypatch.setattr(managed_napcat.subprocess, "run", Mock())
+    monkeypatch.setattr(managed_napcat, "popen_owned", popen)
     await manager.start(first, "101")
     await manager.start(second, "202")
     assert len(launched) == 2
@@ -154,3 +153,19 @@ async def test_refresh_rejects_missing_or_stale_png(
     monkeypatch.setattr(managed_napcat.asyncio, "sleep", AsyncMock())
     with pytest.raises(RuntimeError, match="缺失或仍是旧图"):
         await manager.refresh_qrcode(ref)
+
+
+@pytest.mark.asyncio
+async def test_unreclaimable_port_blocks_launch(monkeypatch, tmp_path):
+    manager = ManagedNapCat(tmp_path)
+    monkeypatch.setattr(
+        manager, "prepare", lambda: asyncio.sleep(0, result=tmp_path / "qq")
+    )
+    launched = Mock()
+    monkeypatch.setattr(managed_napcat, "popen_owned", launched)
+    reclaim = AsyncMock(side_effect=RuntimeError("已被占用"))
+    monkeypatch.setattr(managed_napcat.guard, "reclaim_port", reclaim)
+    with pytest.raises(RuntimeError, match="已被占用"):
+        await manager.start("e" * 32, "101")
+    assert reclaim.await_args.args[1] == manager.root
+    launched.assert_not_called()

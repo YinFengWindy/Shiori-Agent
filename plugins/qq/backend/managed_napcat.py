@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import os
-import socket
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
+from infra.process.owned_spawn import popen_owned
+from infra.process.windows_job import WindowsJob
+
+from . import napcat_process_guard as guard
 from .napcat_account_files import NapCatAccountFiles
 from .napcat_installer import NapCatInstaller
 from .napcat_qrcode import NapCatQrCache
@@ -23,6 +27,9 @@ class ManagedNapCat(NapCatInstaller):
         self._files = NapCatAccountFiles(self.root)
         self._qr = NapCatQrCache(self._files.account_dir)
         self._processes: dict[str, subprocess.Popen[bytes]] = {}
+        # Kill-on-close jobs make the OS reap each NapCat tree when this bridge
+        # dies without running stop_all (crash, kill, hot reload).
+        self._jobs: dict[str, WindowsJob] = {}
         self._webui = NapCatWebUi(self._files.metadata)
 
     def endpoint(self, ref: str) -> tuple[str, str]:
@@ -44,12 +51,10 @@ class ManagedNapCat(NapCatInstaller):
         account_dir = self._files.account_dir(ref)
         profile = self._files.prepare_profile(ref)
         metadata = self._files.metadata(ref)
+        # A previous run of this account may have left children in its job.
+        await self._close_job(ref)
         for port in (metadata["webui_port"], metadata["onebot_port"]):
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
-                try:
-                    listener.bind(("127.0.0.1", port))
-                except OSError as exc:
-                    raise RuntimeError(f"托管 NapCat 端口 {port} 已被占用") from exc
+            await guard.reclaim_port(port, self.root)
         inherited = {
             key: value
             for key, value in os.environ.items()
@@ -79,39 +84,41 @@ class ManagedNapCat(NapCatInstaller):
         if expected_uin:
             environment["NAPCAT_QUICK_ACCOUNT"] = expected_uin
         self._webui.reset(ref)
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         log = (account_dir / "process.log").open("ab")
         try:
-            self._processes[ref] = subprocess.Popen(
+            process, job = popen_owned(
                 [
                     str(self.install_dir / "node.exe"),
                     str(self.install_dir / "index.js"),
                 ],
+                owned=sys.platform == "win32",
                 cwd=account_dir,
                 env=environment,
                 stdout=log,
                 stderr=subprocess.STDOUT,
-                creationflags=flags,
             )
         finally:
             log.close()
+        if job is not None:
+            self._jobs[ref] = job
+        self._processes[ref] = process
+
+    async def _close_job(self, ref: str) -> None:
+        """Releases this account's job, killing anything still inside it."""
+        job = self._jobs.pop(ref, None)
+        if job is not None:
+            await asyncio.to_thread(job.close)
 
     async def stop(self, ref: str) -> None:
         """Terminates only the process launched for this account."""
         process = self._processes.pop(ref, None)
         self._qr.clear(ref)
         self._webui.reset(ref)
+        # Closing the kill-on-close job ends the whole NapCat tree and waits for it.
+        await self._close_job(ref)
         if process is None or process.poll() is not None:
             return
-        if os.name == "nt":
-            await asyncio.to_thread(
-                subprocess.run,
-                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                capture_output=True,
-                check=False,
-            )
-        else:
-            process.terminate()
+        process.terminate()
         try:
             await asyncio.wait_for(asyncio.to_thread(process.wait), timeout=10)
         except TimeoutError:

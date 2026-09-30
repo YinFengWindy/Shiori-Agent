@@ -4,7 +4,8 @@ import asyncio
 from pathlib import Path
 from typing import BinaryIO
 
-from agent.mcp.windows_job import WindowsJob
+from infra.process.owned_spawn import spawn_owned
+from infra.process.windows_job import WindowsJob
 
 
 class BrowserDaemon:
@@ -35,16 +36,14 @@ class BrowserDaemon:
         self._log = (self._profile / "daemon.log").open("w+b")
         try:
             async with asyncio.timeout(timeout):
-                self._process = await asyncio.create_subprocess_exec(
+                self._process, self._job = await spawn_owned(
                     str(self._executable),
                     env={**self._env, "AGENT_BROWSER_DAEMON": "1"},
                     cwd=str(self._profile),
                     stdin=asyncio.subprocess.DEVNULL,
                     stdout=self._log,
                     stderr=self._log,
-                    creationflags=0x08000004,
                 )
-                self._job = WindowsJob(self._process.pid, resume=True)
                 port_file = socket_dir / (session + ".port")
                 while True:
                     if self._process.returncode is not None:

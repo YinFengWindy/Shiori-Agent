@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from agent.mcp.result import McpToolError as McpToolError, decode_tool_result
-from agent.mcp.windows_job import WindowsJob
+from infra.process.owned_spawn import spawn_owned
+from infra.process.windows_job import WindowsJob
 from agent.tools.base import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -86,18 +87,16 @@ class McpClient:
 
     async def _connect_impl(self) -> list[McpToolInfo]:
         self._read_error = None
-        self._process = await asyncio.create_subprocess_exec(
+        self._process, self._job = await spawn_owned(
             *self.command,
+            owned=self._own_process_tree,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env={**os.environ, **self.env} if self._inherit_env else self.env,
             cwd=self.cwd,
             limit=_STREAM_LIMIT,
-            creationflags=0x08000004 if self._own_process_tree else 0,
         )
-        if self._own_process_tree:
-            self._job = WindowsJob(self._process.pid, resume=True)
         if self._process.stdout is None or self._process.stderr is None:
             raise RuntimeError("MCP stdout/stderr unavailable")
         self._stderr_task = asyncio.create_task(
