@@ -126,6 +126,7 @@ class NapCatAccountFiles:
             profile / "AppData" / "Roaming",
             profile / "AppData" / "Local",
             profile / "Temp",
+            profile / "Public",
         ):
             directory.mkdir(parents=True, exist_ok=True)
         return profile
@@ -134,6 +135,9 @@ class NapCatAccountFiles:
         """Removes native QQ sessions only beneath this account's profile."""
         profile = self.account_dir(ref) / "profile"
         for relative in (
+            # QQNT's default data root once the private %PUBLIC% hides the
+            # machine-wide UserDataInfo.ini; holds nt_qq/global/nt_db/login.db.
+            Path("Documents/Tencent Files"),
             Path("AppData/Roaming/Tencent/QQNT"),
             Path("AppData/Local/Tencent/QQNT"),
             Path("AppData/Roaming/QQ"),
