@@ -4,6 +4,7 @@ from plugins.qq.backend.channel.group_filter import (
     at_member_ids,
     reply_message_id,
     strip_at_segments,
+    strip_reply_segments,
 )
 
 
@@ -16,6 +17,7 @@ def test_at_member_ids_lists_structural_mentions_only():
 def test_reply_message_id_reads_the_cq_reply_segment():
     assert reply_message_id("[CQ:reply,id=-2081231] [CQ:at,qq=1] hi") == "-2081231"
     assert reply_message_id("hi") is None
+    assert strip_reply_segments("[CQ:reply,id=-2081231] hi") == "hi"
 
 
 def test_strip_at_segments_removes_cq_at_codes():

@@ -96,10 +96,10 @@ class DemoChatChannel:
 一条入站消息的标准处理顺序（飞书 `_handle_message` / `_accept_inbound`）：
 
 1. 解析平台事件，按平台消息 id 去重（重投很常见，`infra.channels.base.MessageDeduper` 或自带的过期集合）。
-2. 构造 `InboundMessage(channel=self.name, sender=<平台用户 id>, chat_id=<会话 id>, content=..., media=[本地路径], metadata={...})`。`metadata` 必须带已登记的 `account_id`，并带 `message_id` / `external_message_id`（宿主用它在线程里去重）；能确定时带 `chat_type`、`mentioned`（群消息结构化 @ 了接收账号自身）和发送者别名 `username`；群消息能确定时还带 `mentioned_ids`（被结构化 @ 的成员 ID 列表）与 `reply_to_sender_id`（被回复消息的发送者 ID，等于接收账号平台 ID 即视为回复角色）；平台给出显示名时可带 `group_name`（群名）与 `sender_name`（发送者昵称或群名片），两者是随消息保存的快照、之后不会刷新，拿不到就不带，宿主负责去掉首尾空白（键定义在 `core.common.message_source`）。同时在 `metadata["via_account"]` 附上接收账号的快照（见下文「经由账号快照」）。
+2. 构造 `InboundMessage(channel=self.name, sender=<平台用户 id>, chat_id=<会话 id>, content=..., media=[本地路径], metadata={...})`。`metadata` 必须带已登记的 `account_id`，并带 `message_id` / `external_message_id`（宿主用它在线程里去重）；能确定时带 `chat_type`、`mentioned`（群消息结构化 @ 了接收账号自身）和发送者别名 `username`；群消息能确定时还带 `mentioned_ids`（被结构化 @ 的成员 ID 列表）与 `reply_to_sender_id`（被回复消息的发送者 ID，等于接收账号平台 ID 即视为回复角色；不上报就只能靠 @ 触发，目前只有 QQ 上报，Telegram 只认 @）；平台给出显示名时可带 `group_name`（群名）与 `sender_name`（发送者昵称或群名片），两者是随消息保存的快照、之后不会刷新，拿不到就不带，宿主负责去掉首尾空白（键定义在 `core.common.message_source`）。同时在 `metadata["via_account"]` 附上接收账号的快照（见下文「经由账号快照」）。
 3. 交给 `ChannelIntake.submit()`；真正接收时：
    - `ctx.channel_hub.is_sender_allowed(channel=, chat_id=, sender_id=, account_id=)` 为假就丢弃。只有已登记、在线且所属角色存在的接收账号能处理消息。
-   - `message = ctx.channel_hub.route_account_inbound(message)`：按该账号的私聊/群聊开关与黑名单准入，所有群聊共用这组账号级设置；群消息只有 @ 了账号或回复了账号发出的消息才放行；返回 `None` 就丢弃，否则补上 `role_id`、`thread_id`、`session_key_override` 等元数据。
+   - `message = ctx.channel_hub.route_account_inbound(message)`：按该账号的私聊/群聊开关与黑名单准入，所有群聊共用这组账号级设置；群消息只有 @ 了账号或回复了账号发出的消息（需插件上报 `reply_to_sender_id`）才放行；返回 `None` 就丢弃，否则补上 `role_id`、`thread_id`、`session_key_override` 等元数据。
    - `metadata["conversation_duplicate"]` 为真时丢弃，否则 `await ctx.bus.publish_inbound(message)`。
 
 约定：

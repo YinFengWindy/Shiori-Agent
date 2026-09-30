@@ -26,3 +26,8 @@ def reply_message_id(raw_message: str) -> str | None:
 def strip_at_segments(raw_message: str) -> str:
     """Remove CQ mentions from message text."""
     return _CQ_AT_RE.sub("", raw_message).strip()
+
+
+def strip_reply_segments(raw_message: str) -> str:
+    """Remove CQ reply segments from message text; the reply target is metadata."""
+    return _CQ_REPLY_RE.sub("", raw_message).strip()

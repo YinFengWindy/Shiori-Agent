@@ -27,10 +27,12 @@ async def with_reply_sender(
 
     The CQ reply segment only carries the replied-to message's ID, so its
     sender is asked from NapCat. The host compares it with the account's own
-    QQ number to tell a reply to the role. A failed query (the replied-to
-    message expired or was recalled, the account went offline, a timeout)
-    only costs the message its reply target: it is logged and the message
-    proceeds without one, so it does not count as a reply to the role.
+    QQ number to tell a reply to the role. A failed query only costs the
+    message its reply target: it is logged and the message proceeds without
+    one, so it does not count as a reply to the role. Failures are NapCat
+    errors (``OneBotError``: the replied-to message expired or was recalled,
+    the account has no live socket, or an in-flight reply was lost to a
+    disconnect), a reply timeout, or the socket closing while sending.
     """
     metadata = message.metadata
     if metadata.get("chat_type") != "group":

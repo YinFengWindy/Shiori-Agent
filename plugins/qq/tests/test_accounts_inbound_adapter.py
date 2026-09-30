@@ -14,6 +14,17 @@ from plugins.qq.backend.onebot import OneBotError
 from websockets.exceptions import ConnectionClosed
 
 
+def _actions(**actions: object) -> SimpleNamespace:
+    """NapCat actions; a message without a reply segment never asks for a sender."""
+    return SimpleNamespace(message_sender=AsyncMock(), **actions)
+
+
+def _adapter() -> QQInboundAdapter:
+    adapter = QQInboundAdapter()
+    adapter._actions = _actions()
+    return adapter
+
+
 def _group_message(mentioned: bool):
     raw = "[CQ:at,qq=202] hello" if mentioned else "hello"
     message = inbound_message(
@@ -37,7 +48,7 @@ def _group_message(mentioned: bool):
 
 @pytest.mark.asyncio
 async def test_account_router_receives_unmentioned_group_before_host_policy():
-    adapter = QQInboundAdapter()
+    adapter = _adapter()
     adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
     bus = SimpleNamespace(publish_inbound=AsyncMock())
     routed = []
@@ -61,7 +72,7 @@ async def test_account_router_receives_unmentioned_group_before_host_policy():
 
 @pytest.mark.asyncio
 async def test_account_router_can_reject_unmentioned_group():
-    adapter = QQInboundAdapter()
+    adapter = _adapter()
     adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
     bus = SimpleNamespace(publish_inbound=AsyncMock())
 
@@ -82,7 +93,7 @@ async def test_account_router_can_reject_unmentioned_group():
 
 @pytest.mark.asyncio
 async def test_account_router_rejection_fetches_no_image(monkeypatch):
-    adapter = QQInboundAdapter()
+    adapter = _adapter()
     adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
     bus = SimpleNamespace(publish_inbound=AsyncMock())
     download = AsyncMock()
@@ -129,7 +140,7 @@ def _private_message(content: str, **event: object):
 
 @pytest.mark.asyncio
 async def test_private_pairing_code_binds_with_platform_scope_and_is_confirmed():
-    adapter = QQInboundAdapter()
+    adapter = _adapter()
     adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
     bus = SimpleNamespace(publish_inbound=AsyncMock())
     pairings = []
@@ -142,9 +153,7 @@ async def test_private_pairing_code_binds_with_platform_scope_and_is_confirmed()
         def route_account_inbound(self, message):
             return message
 
-    adapter._actions = SimpleNamespace(
-        send_target=AsyncMock(return_value={"message_id": "9"})
-    )
+    adapter._actions = _actions(send_target=AsyncMock(return_value={"message_id": "9"}))
     adapter._ctx = SimpleNamespace(
         bus=bus,
         channel_hub=AccountRouter(),
@@ -168,10 +177,10 @@ async def test_private_pairing_code_binds_with_platform_scope_and_is_confirmed()
 
 @pytest.mark.asyncio
 async def test_group_temporary_session_cannot_pair():
-    adapter = QQInboundAdapter()
+    adapter = _adapter()
     bus = SimpleNamespace(publish_inbound=AsyncMock())
     claim_pairing = Mock()
-    adapter._actions = SimpleNamespace(send_target=AsyncMock())
+    adapter._actions = _actions(send_target=AsyncMock())
     adapter._ctx = SimpleNamespace(
         bus=bus,
         channel_hub=SimpleNamespace(
@@ -193,7 +202,7 @@ async def test_group_temporary_session_cannot_pair():
 
 @pytest.mark.asyncio
 async def test_group_message_carries_the_group_name_to_the_host():
-    adapter = QQInboundAdapter()
+    adapter = _adapter()
     fetch = AsyncMock(return_value="读书会")
     adapter._group_names = QQGroupNames(fetch)
     bus = SimpleNamespace(publish_inbound=AsyncMock())
@@ -231,7 +240,7 @@ async def test_group_message_carries_the_group_name_to_the_host():
 async def test_group_message_is_routed_without_a_name_when_lookup_fails(
     caplog, failure
 ):
-    adapter = QQInboundAdapter()
+    adapter = _adapter()
     adapter._group_names = QQGroupNames(AsyncMock(side_effect=failure))
     bus = SimpleNamespace(publish_inbound=AsyncMock())
     adapter._ctx = SimpleNamespace(
@@ -249,15 +258,14 @@ async def test_group_message_is_routed_without_a_name_when_lookup_fails(
 
 
 @pytest.mark.asyncio
-async def test_group_reply_reports_who_sent_the_replied_message():
-    adapter = QQInboundAdapter()
+async def test_group_reply_target_reaches_the_host_and_leaves_the_text():
+    adapter = _adapter()
     adapter._group_names = QQGroupNames(AsyncMock(return_value="读书会"))
-    adapter._actions = SimpleNamespace(
-        message_sender=AsyncMock(side_effect=["202", OneBotError("消息不存在")])
-    )
+    adapter._actions = SimpleNamespace(message_sender=AsyncMock(return_value="202"))
+    bus = SimpleNamespace(publish_inbound=AsyncMock())
     routed = []
     adapter._ctx = SimpleNamespace(
-        bus=SimpleNamespace(publish_inbound=AsyncMock()),
+        bus=bus,
         channel_hub=SimpleNamespace(
             route_account_inbound=lambda message: routed.append(message) or message
         ),
@@ -265,11 +273,11 @@ async def test_group_reply_reports_who_sent_the_replied_message():
         attachment_store=SimpleNamespace(),
     )
 
-    for _ in range(2):
-        message = _group_message(False)
-        message.content = "[CQ:reply,id=-35] 是这样吗"
-        await adapter._accept_inbound(message)
+    message = _group_message(False)
+    message.content = "[CQ:reply,id=-35] 是这样吗"
+    await adapter._accept_inbound(message)
 
-    adapter._actions.message_sender.assert_awaited_with("account-b", "-35")
-    # A failed lookup leaves the reply target unknown rather than dropping it.
-    assert [m.metadata.get("reply_to_sender_id") for m in routed] == ["202", None]
+    adapter._actions.message_sender.assert_awaited_once_with("account-b", "-35")
+    assert routed[0].metadata["reply_to_sender_id"] == "202"
+    [call] = bus.publish_inbound.await_args_list
+    assert call.args[0].content == "是这样吗"
