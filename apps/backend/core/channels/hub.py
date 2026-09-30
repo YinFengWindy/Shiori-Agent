@@ -16,11 +16,17 @@ from core.accounts import (
     account_serves_channel,
     delivered_via_account,
 )
-from conversation.service import ConversationService, LegacySessionDescriptor
+from conversation.models import ThreadRecord
+from conversation.service import (
+    ConversationService,
+    LegacySessionDescriptor,
+    network_thread_id,
+)
 from core.common.message_source import (
     GROUP_NAME_KEY,
     SENDER_IS_USER_KEY,
     SENDER_NAME_KEY,
+    MessageSource,
     addresses_account,
     display_name,
 )
@@ -122,6 +128,10 @@ class ChannelHub:
 
         A sender bound to the desktop user is marked with ``SENDER_IS_USER_KEY``;
         a plugin cannot claim that flag itself.
+
+        A group message that neither @s nor replies to the role starts no
+        turn: when the role listens in on that group it is kept in the group's
+        listening records (#538), otherwise dropped. Either way None returns.
         """
         metadata = dict(message.metadata or {})
         metadata.pop(SENDER_IS_USER_KEY, None)
@@ -142,10 +152,9 @@ class ChannelHub:
         group = is_group_chat_type(metadata.get("chat_type"))
         # Every group chat follows the account-wide group switch, and within it
         # the role only answers messages that @ it or reply to it.
+        addressed = addresses_account(metadata, account.record.platform_account_id)
         if group:
-            if not rules.group_enabled or not addresses_account(
-                metadata, account.record.platform_account_id
-            ):
+            if not rules.group_enabled:
                 return None
         elif not rules.private_enabled:
             return None
@@ -168,6 +177,9 @@ class ChannelHub:
                     identity.id, self._identity_chat(account, message)
                 )
         metadata["source"] = "role_account"
+        if group and not addressed:
+            self._listen(message, role_id, metadata)
+            return None
         return self._route_for_role(message, role_id, metadata)
 
     def _live_owned_account(
@@ -225,18 +237,78 @@ class ChannelHub:
                 metadata=metadata,
             )
         )
-        session_key = self._service.sessions.derive_session_key(role.id)
         self._service.sessions.open_by_role(role)
+        routed = self._project(message, role_id, thread, metadata)
+        external_message_id = str(routed.metadata.get("external_message_id") or "")
+        if external_message_id and self._conversation.has_external_message(
+            thread.id, external_message_id
+        ):
+            routed.metadata["conversation_duplicate"] = True
+        # A replayed duplicate carries no newer name than the original did.
+        if not routed.metadata.get("conversation_duplicate"):
+            self._remember_contact_name(thread, routed.metadata)
+        context = RoleExecutionContext.create(
+            role=role,
+            thread_id=thread.id,
+            transport_channel=message.channel,
+            transport_chat_id=message.chat_id,
+            source=str(routed.metadata["source"]),
+            work_kind="passive_turn",
+            request_id=external_message_id,
+        )
+        routed.metadata.update(context.to_metadata())
+        return routed
+
+    def _listen(
+        self, message: InboundMessage, role_id: str, metadata: dict[str, Any]
+    ) -> None:
+        """Keeps an unaddressed group message when the role listens in there.
+
+        Listening can only be on for a group the role already has a
+        conversation with, so no thread is created here. The message is
+        projected like a turn's and keeps the same source snapshot, but it
+        never reaches the role's session or the turn pipeline, so presence,
+        loneliness and relationship state never see it. A message with no
+        text leaves nothing to keep; a plugin gives a picture-only message a
+        placeholder text (QQ: ``[图片]``) so it is still kept.
+        """
+        if not message.content.strip():
+            return
+        thread = self._conversation.get_thread(
+            network_thread_id(role_id, message.channel, message.chat_id)
+        )
+        if thread is None or thread.archived:
+            return
+        routed = self._project(message, role_id, thread, metadata)
+        heard = self._conversation.listening.hear(
+            thread.id,
+            sender_id=message.sender,
+            content=routed.content,
+            source=MessageSource.from_inbound(routed).to_metadata(),
+            external_message_id=str(routed.metadata.get("external_message_id") or ""),
+            timestamp=message.timestamp,
+        )
+        if heard is not None:
+            self._remember_contact_name(thread, routed.metadata)
+
+    def _project(
+        self,
+        message: InboundMessage,
+        role_id: str,
+        thread: ThreadRecord,
+        metadata: dict[str, Any],
+    ) -> InboundMessage:
+        """``message`` addressed to ``role_id``'s session through ``thread``."""
         external_message_id = str(
             metadata.get("external_message_id") or metadata.get("message_id") or ""
         ).strip()
         if external_message_id:
             metadata["external_message_id"] = external_message_id
-            if self._conversation.has_external_message(thread.id, external_message_id):
-                metadata["conversation_duplicate"] = True
         metadata["role_id"] = role_id
         metadata["thread_id"] = thread.id
-        metadata["session_key_override"] = session_key
+        metadata["session_key_override"] = self._service.sessions.derive_session_key(
+            role_id
+        )
         metadata.setdefault("context_channel", message.channel)
         metadata.setdefault("context_chat_id", message.chat_id)
         metadata["transport_channel"] = message.channel
@@ -246,28 +318,7 @@ class ChannelHub:
             metadata["chat_type"] = self._channel_directory.default_chat_type(
                 message.channel
             )
-        # The contact list shows a group by its name and a private chat by
-        # the sender's name, whichever the plugin reported with this message.
-        # A replayed duplicate carries no newer name than the original did.
-        name_key = (
-            GROUP_NAME_KEY
-            if is_group_chat_type(metadata.get("chat_type"))
-            else SENDER_NAME_KEY
-        )
-        name = display_name(metadata.get(name_key))
-        if name is not None and not metadata.get("conversation_duplicate"):
-            self._conversation.remember_contact_name(thread, name)
         metadata.setdefault("source", "role_account")
-        context = RoleExecutionContext.create(
-            role=role,
-            thread_id=thread.id,
-            transport_channel=message.channel,
-            transport_chat_id=message.chat_id,
-            source=str(metadata["source"]),
-            work_kind="passive_turn",
-            request_id=external_message_id,
-        )
-        metadata.update(context.to_metadata())
         return InboundMessage(
             channel=message.channel,
             sender=message.sender,
@@ -277,6 +328,22 @@ class ChannelHub:
             media=list(message.media),
             metadata=metadata,
         )
+
+    def _remember_contact_name(
+        self, thread: ThreadRecord, metadata: dict[str, Any]
+    ) -> None:
+        """Names the contact by the group's name, or a private chat's sender's.
+
+        Whichever the plugin reported with this message; none keeps the name.
+        """
+        name_key = (
+            GROUP_NAME_KEY
+            if is_group_chat_type(metadata.get("chat_type"))
+            else SENDER_NAME_KEY
+        )
+        name = display_name(metadata.get(name_key))
+        if name is not None:
+            self._conversation.remember_contact_name(thread, name)
 
     def is_sender_allowed(
         self,

@@ -24,6 +24,8 @@ from bus.events_lifecycle import (
     RoleDeleted,
     TurnCommitted,
 )
+from conversation.listening import GroupListeningControl
+from conversation.listening_store import ListeningMessage
 from conversation.service import ConversationService
 from core.memory.group_environment import GroupEnvironment
 from core.memory.member_profiles import MemberProfiles
@@ -41,6 +43,10 @@ from desktop_bridge.chat_requests import DesktopChatRequestHandler
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.method_policy import MethodPolicy, resolve_plugin_method_policy
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
+from desktop_bridge.phone_listening_requests import (
+    PHONE_LISTENING_HEARD,
+    DesktopPhoneListeningRequestHandler,
+)
 from desktop_bridge.phone_memory_requests import DesktopPhoneMemoryRequestHandler
 from desktop_bridge.phone_requests import (
     PHONE_CONVERSATION_UPDATED,
@@ -109,7 +115,10 @@ class DesktopBridgeService:
         activate_transport: bool = True,
         model_resolver: RoleModelRuntime | None = None,
         plugin_rpc_registry: PluginRpcRegistry | None = None,
+        supports_group_listening: Callable[[str], bool] | None = None,
     ) -> None:
+        """``supports_group_listening`` tells whether a channel's plugin
+        declares group listening (#538); without it no channel does."""
         self.workspace = workspace
         self.role_store = role_store
         self.session_manager = session_manager
@@ -226,12 +235,24 @@ class DesktopBridgeService:
         )
         self.voice_assets = self.voice_handler.assets
         self.plugin_rpc_registry = plugin_rpc_registry
+        listening = GroupListeningControl(
+            self.conversation_service,
+            supports_group_listening or (lambda _channel: False),
+        )
         self.phone = DesktopPhoneRequestHandler(
             conversations=self.conversation_service,
             accounts=role_store.accounts,
             identities=role_store.identities,
             messages=self.session_presenter,
             avatars=role_store.avatars,
+            listening=listening,
+        )
+        self.phone_listening = DesktopPhoneListeningRequestHandler(
+            listening, self.phone
+        )
+        self._listening_heard_listener = self._on_listening_heard
+        self.conversation_service.listening.add_heard_listener(
+            self._listening_heard_listener
         )
         self.request_router = DesktopBridgeRequestRouter(
             accounts=DesktopAccountRequestHandler(role_store.accounts),
@@ -247,6 +268,7 @@ class DesktopBridgeService:
                 group_environment=group_environment,
                 members=MemberProfiles(workspace),
             ),
+            phone_listening=self.phone_listening,
             roles=DesktopRoleRequestHandler(
                 role_service=self.role_service,
                 role_presenter=self.role_presenter,
@@ -359,6 +381,14 @@ class DesktopBridgeService:
                 ).to_dict()
             )
 
+    def _on_listening_heard(self, message: ListeningMessage) -> None:
+        """Pushes ``phone.listening.heard`` so an open group chat shows the record."""
+        if not self._event_listeners:
+            return
+        update = self.phone_listening.heard_update(message)
+        if update is not None:
+            self._schedule_change_push(PHONE_LISTENING_HEARD, update)
+
     def _on_account_change(self, account_id: str) -> None:
         """Pushes ``accounts.updated`` so account views refresh without polling."""
         self._schedule_change_push("accounts.updated", {"account_id": account_id})
@@ -440,6 +470,9 @@ class DesktopBridgeService:
         self.role_store.accounts.remove_change_listener(self._account_change_listener)
         self.role_store.identities.remove_change_listener(
             self._identity_change_listener
+        )
+        self.conversation_service.listening.remove_heard_listener(
+            self._listening_heard_listener
         )
         self.event_bus.off(PluginBridgeEvent, self._plugin_event_listener)
         self._event_listeners.clear()

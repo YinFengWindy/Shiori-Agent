@@ -18,7 +18,6 @@ from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
 from desktop_bridge.phone_requests import (
     required_text,
     role_bound_senders,
-    role_channel_thread,
 )
 
 
@@ -149,8 +148,8 @@ class DesktopPhoneMemoryRequestHandler:
         Fails unless the conversation is one of the role's external ones.
         """
         role_id = required_text(payload, "role_id")
-        thread = role_channel_thread(
-            self._conversations, role_id, required_text(payload, "thread_id")
+        thread = self._conversations.role_channel_thread(
+            role_id, required_text(payload, "thread_id")
         )
         if thread is None:
             raise ValueError("会话不属于该角色")

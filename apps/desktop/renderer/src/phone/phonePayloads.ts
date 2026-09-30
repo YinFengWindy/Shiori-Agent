@@ -1,6 +1,8 @@
 import type { BridgeEvent } from "@shiori/plugin-sdk";
 import { isRecord } from "../shared/isRecord";
-import type { PhoneChatType, PhoneConversation, PhoneConversationUpdate, PhoneMessage } from "./phoneClient";
+import type {
+  PhoneChatType, PhoneConversation, PhoneConversationUpdate, PhoneListeningHeard, PhoneMessage,
+} from "./phoneClient";
 
 /** A conversation list row as the bridge sends it (`phone.conversations.list`, live updates). */
 export type PhoneConversationPayload = {
@@ -11,6 +13,7 @@ export type PhoneConversationPayload = {
   display_name: string;
   avatar_abs: string | null;
   is_user_chat: boolean;
+  listening_supported: boolean;
   last_message: {
     role: string; content: string; timestamp: string; has_media: boolean; sender_name: string | null;
   };
@@ -28,10 +31,13 @@ export type PhoneMessagePayload = {
   content: string;
   media: string[];
   timestamp: string;
+  listened: boolean;
 };
 
 /** Bridge event carrying a `PhoneConversationUpdate`. */
 const phoneConversationUpdatedEvent = "phone.conversation.updated";
+/** Bridge event carrying a `PhoneListeningHeard`. */
+const phoneListeningHeardEvent = "phone.listening.heard";
 
 function isText(value: unknown): value is string {
   return typeof value === "string";
@@ -50,7 +56,7 @@ function isConversationPayload(value: unknown): value is PhoneConversationPayloa
   return isRecord(value) && isText(value.thread_id) && isTextOrNull(value.account_id) && isText(value.channel)
     && (value.chat_type === "group" || value.chat_type === "private" || value.chat_type === null)
     && isText(value.display_name) && isTextOrNull(value.avatar_abs) && typeof value.is_user_chat === "boolean"
-    && isLastMessagePayload(value.last_message);
+    && typeof value.listening_supported === "boolean" && isLastMessagePayload(value.last_message);
 }
 
 function isMessagePayload(value: unknown): value is PhoneMessagePayload {
@@ -58,7 +64,8 @@ function isMessagePayload(value: unknown): value is PhoneMessagePayload {
     && (value.sender === "role" || value.sender === "other") && isTextOrNull(value.sender_id)
     && isTextOrNull(value.sender_name) && typeof value.sender_is_user === "boolean"
     && isTextOrNull(value.sender_avatar_abs) && isText(value.content)
-    && Array.isArray(value.media) && value.media.every(isText) && isText(value.timestamp);
+    && Array.isArray(value.media) && value.media.every(isText) && isText(value.timestamp)
+    && typeof value.listened === "boolean";
 }
 
 /** A bridge list row in the renderer's shape. */
@@ -71,6 +78,7 @@ export function mapConversation(row: PhoneConversationPayload) {
     displayName: row.display_name,
     avatarPath: row.avatar_abs,
     isUserChat: row.is_user_chat,
+    listeningSupported: row.listening_supported,
     lastMessage: {
       role: row.last_message.role,
       content: row.last_message.content,
@@ -94,6 +102,7 @@ export function mapMessage(row: PhoneMessagePayload) {
     content: row.content,
     media: row.media,
     timestamp: row.timestamp,
+    listened: row.listened,
   } satisfies PhoneMessage;
 }
 
@@ -112,4 +121,17 @@ export function phoneConversationUpdateOf(event: BridgeEvent) {
   return {
     roleId, threadId, conversation: mapConversation(conversation), messages: messages.map(mapMessage),
   } satisfies PhoneConversationUpdate;
+}
+
+/**
+ * The record a `phone.listening.heard` event carries; null for any other
+ * event. A payload without its shape is a bridge contract break and throws.
+ */
+export function phoneListeningHeardOf(event: BridgeEvent) {
+  if (event.method !== phoneListeningHeardEvent) return null;
+  const { role_id: roleId, thread_id: threadId, message } = event.payload;
+  if (!isText(roleId) || !isText(threadId) || !isMessagePayload(message)) {
+    throw new Error(`${phoneListeningHeardEvent} 的负载格式不符`);
+  }
+  return { roleId, threadId, message: mapMessage(message) } satisfies PhoneListeningHeard;
 }

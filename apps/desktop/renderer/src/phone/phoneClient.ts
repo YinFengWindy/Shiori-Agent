@@ -29,6 +29,8 @@ export type PhoneConversation = {
   avatarPath: string | null;
   /** A private chat with the desktop user's own bound platform identity. */
   isUserChat: boolean;
+  /** A group on a channel whose plugin declares listening: its chat info page has the 旁听 block. */
+  listeningSupported: boolean;
   lastMessage: PhoneLastMessage;
 };
 
@@ -51,6 +53,8 @@ export type PhoneMessage = {
   /** Local file paths of attached media. */
   media: string[];
   timestamp: string;
+  /** Heard while listening in on the group (#538), not said to the role; `seq` then orders the group's listening records. */
+  listened: boolean;
 };
 
 /** One page of a conversation, oldest first. */
@@ -70,10 +74,23 @@ export type PhoneConversationUpdate = {
   messages: PhoneMessage[];
 };
 
+/** A message newly stored in a group's listening records (`phone.listening.heard`). */
+export type PhoneListeningHeard = {
+  roleId: string;
+  threadId: string;
+  message: PhoneMessage;
+};
+
 /** Bridge client for the phone panel's reads. */
 export function createPhoneClient(invoke?: DesktopInvoke) {
   const call = <T>(method: string, payload: Record<string, unknown>) =>
     invokeBridgePayload<T>(invoke ?? window.miraDesktop.invoke, method, payload);
+  const page = async (method: string, roleId: string, threadId: string, beforeSeq: number | null): Promise<PhoneMessagePage> => {
+    const result = await call<{ messages: PhoneMessagePayload[]; has_more: boolean; next_before_seq: number | null }>(
+      method, { role_id: roleId, thread_id: threadId, ...(beforeSeq === null ? {} : { before_seq: beforeSeq }) },
+    );
+    return { messages: result.messages.map(mapMessage), hasMore: result.has_more, nextBeforeSeq: result.next_before_seq };
+  };
   return {
     /** The role's channel conversations, newest message first. */
     async listConversations(roleId: string) {
@@ -81,12 +98,12 @@ export function createPhoneClient(invoke?: DesktopInvoke) {
       return result.conversations.map(mapConversation);
     },
     /** One page of a conversation of the role, the newest one unless `beforeSeq` asks for older. */
-    async listMessages(roleId: string, threadId: string, beforeSeq: number | null): Promise<PhoneMessagePage> {
-      const result = await call<{ messages: PhoneMessagePayload[]; has_more: boolean; next_before_seq: number | null }>(
-        "phone.conversation.messages",
-        { role_id: roleId, thread_id: threadId, ...(beforeSeq === null ? {} : { before_seq: beforeSeq }) },
-      );
-      return { messages: result.messages.map(mapMessage), hasMore: result.has_more, nextBeforeSeq: result.next_before_seq };
+    listMessages(roleId: string, threadId: string, beforeSeq: number | null) {
+      return page("phone.conversation.messages", roleId, threadId, beforeSeq);
+    },
+    /** One page of a group's listening records (kept after listening is turned off), the newest one unless `beforeSeq` asks for older. */
+    listListening(roleId: string, threadId: string, beforeSeq: number | null) {
+      return page("phone.listening.messages", roleId, threadId, beforeSeq);
     },
   };
 }

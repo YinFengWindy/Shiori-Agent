@@ -948,3 +948,59 @@ def test_contacts_are_named_by_the_latest_group_or_sender_name(
 
     hub.route_account_inbound(_private(account_id, "hello", sender_name="小明"))
     assert _contact_name(hub, "thread:mira:qq:902") == "小明"
+
+
+def test_unaddressed_group_messages_are_listened_to_where_listening_is_on(
+    tmp_path: Path,
+) -> None:
+    hub, _, account_id = _hub_with_qq_account(tmp_path)
+    listening = hub._conversation.listening
+    thread_id = "thread:mira:qq:gqq:5"
+
+    def group(content: str, **metadata: object) -> InboundMessage:
+        return InboundMessage(
+            channel="qq",
+            sender="902",
+            chat_id="gqq:5",
+            content=content,
+            metadata={
+                "account_id": account_id,
+                "chat_type": "group",
+                "mentioned": False,
+                "group_name": "读书会",
+                "sender_name": "阿花",
+                "mentioned_ids": ["903"],
+                **metadata,
+            },
+        )
+
+    assert hub.route_account_inbound(group("在吗", mentioned=True)) is not None
+    # Listening is off by default: the message is dropped.
+    assert hub.route_account_inbound(group("没人听")) is None
+    assert listening.page(thread_id)["messages"] == []
+
+    listening.switches.set_enabled(thread_id, True, operator="user")
+    listening.switches.set_daily_cap(thread_id, 1)
+    # Messages that @ or reply to the role still start turns and use no cap.
+    assert hub.route_account_inbound(group("@你", mentioned=True)) is not None
+    assert hub.route_account_inbound(group("回你", reply_to_sender_id="self"))
+    # Unaddressed ones start no turn: the first is stored, the next is past the cap.
+    assert hub.route_account_inbound(group("大家好")) is None
+    assert hub.route_account_inbound(group("第二句")) is None
+
+    [record] = listening.page(thread_id)["messages"]
+    assert record.content == "大家好"
+    assert record.source == {
+        "channel": "qq",
+        "chat_id": "gqq:5",
+        "chat_type": "group",
+        "sender_id": "902",
+        "session_key": "role:mira",
+        "group_name": "读书会",
+        "sender_name": "阿花",
+        "mentioned_ids": ["903"],
+    }
+    assert [message.content for message in listening.recent(thread_id)] == [
+        "大家好",
+        "第二句",
+    ]

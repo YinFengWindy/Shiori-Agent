@@ -7,6 +7,7 @@ from collections.abc import Callable, Collection, Iterable
 from typing import Any, Protocol
 
 from conversation.context_scope import user_context_threads
+from conversation.listening import GroupListeningControl
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.accounts import AccountRegistry, account_for_channel
@@ -51,23 +52,6 @@ def required_text(payload: dict[str, Any], key: str) -> str:
     return value
 
 
-def role_channel_thread(
-    conversations: ConversationService, role_id: str, thread_id: str
-) -> ThreadRecord | None:
-    """``thread_id`` when it is one of the role's current channel conversations."""
-    if not thread_id:
-        return None
-    thread = conversations.get_thread(thread_id)
-    if (
-        thread is None
-        or thread.role_id != role_id
-        or thread.thread_kind != "network"
-        or thread.archived
-    ):
-        return None
-    return thread
-
-
 def role_bound_senders(
     role_id: str, *, accounts: AccountRegistry, identities: Iterable[UserIdentity]
 ) -> BoundUserSenders:
@@ -84,6 +68,7 @@ def phone_message(
     session_key: str,
     is_user: Callable[[str | None], bool],
     avatars: AvatarIndex,
+    listened: bool = False,
 ) -> dict[str, Any]:
     """One conversation message as the phone's chat page shows it.
 
@@ -94,7 +79,8 @@ def phone_message(
     that sender is the desktop user under the bindings as they are now (like
     the context split, #482), not the flag stored when the message arrived.
     ``sender_avatar_abs`` is the sender's cached platform avatar file (#514),
-    None for the role or when none is cached.
+    None for the role or when none is cached. ``listened`` marks a row of the
+    group's listening records (#538) rather than of the role's conversation.
     """
     from_role = message.get("role") == "assistant"
     source = MessageSource.from_metadata(
@@ -114,6 +100,7 @@ def phone_message(
         "content": str(message.get("content") or ""),
         "media": [str(item) for item in message.get("media") or []],
         "timestamp": str(message.get("timestamp") or ""),
+        "listened": listened,
     }
 
 
@@ -128,9 +115,11 @@ class DesktopPhoneRequestHandler:
     the contact's ``display_name`` (group name for a group,
     the sender's name for a private chat), ``avatar_abs`` (the cached group
     avatar, or the other person's for a private chat; None when none is
-    cached), whether it is the bound user's private chat, and a
-    ``last_message`` preview. Threads with no stored
-    message are left out; the desktop conversation never appears.
+    cached), whether it is the bound user's private chat, whether it is a
+    group that can be listened to (``listening_supported``: its channel's
+    plugin declares support, #538), and a ``last_message`` preview. Threads
+    with no stored message are left out; the desktop conversation never
+    appears.
 
     ``phone.conversation.messages`` with ``role_id``, ``thread_id`` and
     optional ``before_seq`` / ``limit`` returns one page of that
@@ -147,12 +136,14 @@ class DesktopPhoneRequestHandler:
         identities: UserIdentityStore,
         messages: ThreadMessages,
         avatars: ChannelAvatarStore,
+        listening: GroupListeningControl,
     ) -> None:
         self._conversations = conversations
         self._accounts = accounts
         self._identities = identities
         self._messages = messages
         self._avatars = avatars
+        self._listening = listening
 
     async def handle(
         self, method: str, payload: dict[str, Any]
@@ -166,10 +157,7 @@ class DesktopPhoneRequestHandler:
                 )
             }
         if method == "phone.conversation.messages":
-            role_id = required_text(payload, "role_id")
-            thread = self._role_thread(role_id, required_text(payload, "thread_id"))
-            if thread is None:
-                raise ValueError("会话不属于该角色")
+            role_id, thread = self.role_thread(payload)
             before_seq = payload.get("before_seq")
             return self._messages_page(
                 role_id,
@@ -207,18 +195,31 @@ class DesktopPhoneRequestHandler:
                 "role_id": role_id,
                 "thread_id": thread.id,
                 "conversation": rows[thread.id],
-                "messages": self._phone_messages(role_id, thread, by_thread[thread.id]),
+                "messages": self.phone_messages(role_id, thread, by_thread[thread.id]),
             }
             for thread in threads
         ]
 
-    def _role_thread(self, role_id: str, thread_id: str) -> ThreadRecord | None:
-        return role_channel_thread(self._conversations, role_id, thread_id)
+    def role_thread(self, payload: dict[str, Any]) -> tuple[str, ThreadRecord]:
+        """The request's ``role_id`` and ``thread_id``, one of the role's channel conversations."""
+        role_id = required_text(payload, "role_id")
+        thread = self._role_thread(role_id, required_text(payload, "thread_id"))
+        if thread is None:
+            raise ValueError("会话不属于该角色")
+        return role_id, thread
 
-    def _phone_messages(
-        self, role_id: str, thread: ThreadRecord, messages: Iterable[dict[str, Any]]
+    def _role_thread(self, role_id: str, thread_id: str) -> ThreadRecord | None:
+        return self._conversations.role_channel_thread(role_id, thread_id)
+
+    def phone_messages(
+        self,
+        role_id: str,
+        thread: ThreadRecord,
+        messages: Iterable[dict[str, Any]],
+        *,
+        listened: bool = False,
     ) -> list[dict[str, Any]]:
-        """``messages`` of ``thread`` as ``phone_message`` rows.
+        """``messages`` of ``thread`` (stored-message shape) as ``phone_message`` rows.
 
         The user's messages are those whose sender a current binding
         recognises on the role's account carrying the thread; with no such
@@ -236,7 +237,11 @@ class DesktopPhoneRequestHandler:
 
         return [
             phone_message(
-                message, session_key=session_key, is_user=is_user, avatars=avatars
+                message,
+                session_key=session_key,
+                is_user=is_user,
+                avatars=avatars,
+                listened=listened,
             )
             for message in messages
         ]
@@ -249,7 +254,7 @@ class DesktopPhoneRequestHandler:
         )
         return {
             "thread_id": thread.id,
-            "messages": self._phone_messages(role_id, thread, page["messages"]),
+            "messages": self.phone_messages(role_id, thread, page["messages"]),
             "has_more": page["has_more"],
             "next_before_seq": page["next_before_seq"],
         }
@@ -294,6 +299,9 @@ class DesktopPhoneRequestHandler:
                             thread.channel, thread.external_thread_id
                         ),
                         "is_user_chat": thread.id in user_threads.bound_chat_thread_ids,
+                        "listening_supported": self._listening.supports(
+                            thread.channel, chat_types[thread.id]
+                        ),
                         "last_message": {
                             **message_preview(message),
                             "sender_name": (

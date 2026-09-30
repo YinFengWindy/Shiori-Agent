@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent.plugin_host.manifest import group_listening_channels
 from bootstrap.tools import CoreRuntime
 from core.roles import RoleStore
 from desktop_bridge.service import DesktopBridgeService
@@ -33,4 +34,11 @@ def build_desktop_service(
         memory_engine=runtime.memory_runtime.engine,
         plugin_rpc_registry=plugin_manager.rpc if plugin_manager is not None else None,
         group_environment=runtime.group_environment,
+        supports_group_listening=(
+            group_listening_channels(
+                record.manifest for record in plugin_manager.discover()
+            )
+            if plugin_manager is not None
+            else None
+        ),
     )

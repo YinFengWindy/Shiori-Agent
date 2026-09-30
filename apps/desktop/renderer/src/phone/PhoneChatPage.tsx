@@ -9,13 +9,15 @@ import { PhoneChatMessageRow } from "./PhoneChatMessageRow";
 import { PhoneImageLightbox } from "./PhoneImageLightbox";
 import { PhoneLoadError } from "./PhoneLoadError";
 import { PhoneScreenHeader } from "./PhoneScreenHeader";
-import { usePhoneChatMessages } from "./usePhoneChatMessages";
+import { usePhoneChatTimeline } from "./usePhoneChatTimeline";
 import { usePhoneChatScroll } from "./usePhoneChatScroll";
 
 /**
  * One conversation, read-only, as IM bubbles from the role's side, with a
- * centered time wherever the chat paused. Opens at the newest message,
- * loads older ones when scrolled to the top, and takes new messages live.
+ * centered time wherever the chat paused; a group's listening records
+ * (kept after listening is turned off) are merged in by time. Opens at the
+ * newest message, loads older ones when scrolled to the top, and takes new
+ * messages live.
  * A picture opens enlarged on click. With `onOpenInfo` the header gets a
  * button to the chat info page; with `onOpenMember` the avatar of a sender
  * with a member profile entry (`phoneMemberEntryOf`) opens it.
@@ -28,7 +30,7 @@ export function PhoneChatPage({ role, conversation, now, onBack, onOpenInfo, onO
   onOpenInfo?: () => void;
   onOpenMember?: (senderId: string) => void;
 }) {
-  const { messages, hasMore, error, loadOlder, retry } = usePhoneChatMessages(role.id, conversation.threadId);
+  const { messages, hasMore, error, loadOlder, retry } = usePhoneChatTimeline(role.id, conversation);
   const { viewportRef, contentRef, onScroll } = usePhoneChatScroll({ messages, hasMore, loadOlder });
   const items = useMemo(() => (messages ? phoneChatItems(messages, now) : []), [messages, now]);
   // The enlarged picture; kept after closing so the lightbox fades out with it.

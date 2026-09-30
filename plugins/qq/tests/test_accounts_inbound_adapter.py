@@ -103,6 +103,8 @@ async def test_account_router_rejection_fetches_no_image(monkeypatch):
         def route_account_inbound(self, message):
             assert message.metadata["account_id"] == "account-b"
             assert message.metadata["mentioned"] is False
+            # A picture alone is handed over as a line of text, for listening.
+            assert message.content == "[图片]"
             return None
 
     adapter._ctx = SimpleNamespace(
@@ -279,6 +281,9 @@ async def test_group_reply_target_reaches_the_host_and_leaves_the_text():
 
     adapter._actions.message_sender.assert_awaited_once_with("account-b", "-35")
     assert routed[0].metadata["reply_to_sender_id"] == "202"
+    # The host is handed the cleaned text: what it keeps for a turn or for
+    # the group's listening records (#538) carries no CQ codes.
+    assert routed[0].content == "是这样吗"
     [call] = bus.publish_inbound.await_args_list
     assert call.args[0].content == "是这样吗"
 

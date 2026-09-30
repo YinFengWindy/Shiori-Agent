@@ -176,6 +176,12 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
     "phone.member.profile": MethodPolicy(concurrency=Concurrency.READ_ONLY),
     "phone.member.profile.save": MethodPolicy(),
     "phone.member.profile.delete": MethodPolicy(),
+    "phone.listening.messages": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "phone.listening.state": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "phone.listening.set": MethodPolicy(),
+    "phone.listening.cap.set": MethodPolicy(),
+    "phone.listening.defaults": MethodPolicy(concurrency=Concurrency.READ_ONLY),
+    "phone.listening.defaults.save": MethodPolicy(),
     "session.messagesPage": MethodPolicy(
         concurrency=Concurrency.READ_ONLY, admission_exempt=True
     ),

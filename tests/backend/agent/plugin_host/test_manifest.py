@@ -7,6 +7,7 @@ import pytest
 from agent.plugin_host.manifest import (
     ManifestError,
     declared_chat_types,
+    group_listening_channels,
     load_manifest,
 )
 
@@ -423,3 +424,34 @@ def test_manifest_limits_dynamic_instances_to_declared_prefix(tmp_path):
     assert declarations.get("demo_") is None
     assert declarations.get("demo.unauthorized") is None
     assert declarations.get("other_one") is None
+
+
+def test_channels_declare_group_listening_support(tmp_path):
+    (tmp_path / "manifest.yaml").write_text(
+        _CHANNEL_MANIFEST + "  - {name: listens, label: L, group_listening: true,"
+        f" instance_prefix: listens_, chat_types: [{_PRIVATE}]}}\n"
+        f"  - {{name: quiet, label: Q, chat_types: [{_PRIVATE}]}}\n",
+        encoding="utf-8",
+    )
+    manifest = load_manifest(tmp_path)
+    assert manifest is not None
+
+    assert manifest.channels[0].to_dict()["group_listening"] is True
+    assert "group_listening" not in manifest.channels[1].to_dict()
+    supports = group_listening_channels([manifest])
+    assert [supports(name) for name in ("listens", "listens_a", "quiet", "x")] == [
+        True,
+        True,
+        False,
+        False,
+    ]
+
+
+def test_group_listening_declaration_must_be_boolean(tmp_path):
+    (tmp_path / "manifest.yaml").write_text(
+        _CHANNEL_MANIFEST
+        + f"  - {{name: demo, label: D, group_listening: 'yes', chat_types: [{_PRIVATE}]}}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ManifestError, match="group_listening"):
+        load_manifest(tmp_path)

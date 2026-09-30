@@ -14,6 +14,7 @@ const account = (id: string, patch: Partial<AccountSnapshot> = {}): AccountSnaps
 
 const conversation = (threadId: string, patch: Partial<PhoneConversation> = {}): PhoneConversation => ({
   threadId, accountId: "qq:1", channel: "qq", chatType: "private", displayName: threadId, avatarPath: null, isUserChat: false,
+  listeningSupported: false,
   lastMessage: { role: "user", content: "在吗", timestamp: "2026-09-29T10:00:00+08:00", hasMedia: false, senderName: null },
   ...patch,
 });

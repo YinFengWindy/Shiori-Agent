@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from PIL import Image
 
+from conversation.listening import GroupListeningControl
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.accounts import AccountRecord, AccountRegistry
@@ -39,6 +40,11 @@ def _thread(
     if name is not None:
         conversation.remember_contact_name(thread, name)
     return thread
+
+
+def _listening(conversation: ConversationService) -> GroupListeningControl:
+    """Only the QQ plugin declares group listening."""
+    return GroupListeningControl(conversation, {"qq"}.__contains__)
 
 
 def _metadata(
@@ -175,6 +181,7 @@ async def test_lists_the_roles_channel_conversations_newest_first(
         identities=identities,
         messages=DesktopSessionPresenter(conversation),
         avatars=ChannelAvatarStore(tmp_path),
+        listening=_listening(conversation),
     )
 
     result = await handler.handle("phone.conversations.list", {"role_id": "mira"})
@@ -189,6 +196,8 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 "display_name": "摸鱼群",
                 "avatar_abs": None,
                 "is_user_chat": False,
+                # A QQ group: its plugin declares listening.
+                "listening_supported": True,
                 "last_message": {
                     "role": "assistant",
                     "content": "我来",
@@ -205,6 +214,7 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 "display_name": "小明",
                 "avatar_abs": None,
                 "is_user_chat": True,
+                "listening_supported": False,
                 "last_message": {
                     "role": "assistant",
                     "content": "晚安",
@@ -221,6 +231,8 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 "display_name": "项目群",
                 "avatar_abs": None,
                 "is_user_chat": False,
+                # A group, but Feishu declares no listening: no 旁听 block.
+                "listening_supported": False,
                 "last_message": {
                     "role": "user",
                     "content": "周会改到三点",
@@ -238,6 +250,7 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 "display_name": "c2c:7",
                 "avatar_abs": None,
                 "is_user_chat": False,
+                "listening_supported": False,
                 "last_message": {
                     "role": "user",
                     "content": "在吗",
@@ -262,6 +275,7 @@ async def test_requires_a_role_and_leaves_other_methods_alone(
         identities=UserIdentityStore(tmp_path),
         messages=DesktopSessionPresenter(conversation),
         avatars=ChannelAvatarStore(tmp_path),
+        listening=_listening(conversation),
     )
 
     with pytest.raises(ValueError, match="role_id"):
@@ -286,6 +300,7 @@ def _handler(tmp_path: Path, conversation: ConversationService):
         identities=UserIdentityStore(tmp_path),
         messages=DesktopSessionPresenter(conversation),
         avatars=ChannelAvatarStore(tmp_path),
+        listening=_listening(conversation),
     )
     return handler, qq.record
 
@@ -375,6 +390,7 @@ async def test_reads_one_conversation_page_by_page_from_the_roles_view(
             "content": "我也来",
             "media": ["photo.png"],
             "timestamp": "2026-09-29T10:01:00+08:00",
+            "listened": False,
         },
         {
             "sender": "role",
@@ -385,6 +401,7 @@ async def test_reads_one_conversation_page_by_page_from_the_roles_view(
             "content": "我来",
             "media": [],
             "timestamp": "2026-09-29T10:02:00+08:00",
+            "listened": False,
         },
     ]
     assert newest["next_before_seq"] == newest["messages"][0]["seq"]
@@ -495,6 +512,7 @@ async def test_cached_avatars_come_with_rows_messages_and_live_updates(
         identities=UserIdentityStore(tmp_path),
         messages=DesktopSessionPresenter(conversation),
         avatars=avatars,
+        listening=_listening(conversation),
     )
 
     listed = await handler.handle("phone.conversations.list", {"role_id": "mira"})

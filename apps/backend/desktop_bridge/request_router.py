@@ -8,6 +8,7 @@ from .chat_requests import DesktopChatRequestHandler
 from .account_requests import DesktopAccountRequestHandler
 from .identity_requests import DesktopIdentityRequestHandler
 from .model_connection_probe import probe_model_connection
+from .phone_listening_requests import DesktopPhoneListeningRequestHandler
 from .phone_memory_requests import DesktopPhoneMemoryRequestHandler
 from .phone_requests import DesktopPhoneRequestHandler
 from .plugin_requests import DesktopPluginRequestHandler
@@ -33,6 +34,7 @@ class DesktopBridgeRequestRouter:
         identities: DesktopIdentityRequestHandler | None = None,
         phone: DesktopPhoneRequestHandler | None = None,
         phone_memory: DesktopPhoneMemoryRequestHandler | None = None,
+        phone_listening: DesktopPhoneListeningRequestHandler | None = None,
     ) -> None:
         self._roles = roles
         self._sessions_and_tasks = sessions_and_tasks
@@ -43,6 +45,7 @@ class DesktopBridgeRequestRouter:
         self._identities = identities
         self._phone = phone
         self._phone_memory = phone_memory
+        self._phone_listening = phone_listening
 
     async def dispatch(
         self,
@@ -76,6 +79,10 @@ class DesktopBridgeRequestRouter:
             phone_memory_result = await self._phone_memory.handle(method, payload)
             if phone_memory_result is not None:
                 return phone_memory_result
+        if self._phone_listening is not None:
+            listening_result = await self._phone_listening.handle(method, payload)
+            if listening_result is not None:
+                return listening_result
         voice_result = await self._voice.handle(method, payload)
         if voice_result is not None:
             return voice_result

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BridgeEvent } from "@shiori/plugin-sdk";
-import { phoneConversationUpdateOf } from "./phonePayloads";
+import { phoneConversationUpdateOf, phoneListeningHeardOf } from "./phonePayloads";
 
 const event = (method: string, payload: Record<string, unknown>): BridgeEvent => ({ id: "e", type: "event", method, payload });
 
@@ -10,15 +10,16 @@ const payload = {
   thread_id: "t",
   conversation: {
     thread_id: "t", account_id: null, channel: "qq", chat_type: "group", display_name: "摸鱼群",
-    avatar_abs: "D:/avatars/chat/group.png", is_user_chat: false,
+    avatar_abs: "D:/avatars/chat/group.png", is_user_chat: false, listening_supported: true,
     last_message: { role: "assistant", content: "我来", timestamp: "2026-09-29T10:00:00+08:00", has_media: false, sender_name: null },
   },
   messages: [{
     id: "m", seq: null, sender: "role", sender_id: null, sender_name: null, sender_is_user: false,
-    sender_avatar_abs: null, content: "我来", media: [], timestamp: "2026-09-29T10:00:00+08:00",
+    sender_avatar_abs: null, content: "我来", media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false,
   }, {
     id: "n", seq: null, sender: "other", sender_id: "42", sender_name: "阿花", sender_is_user: false,
     sender_avatar_abs: "D:/avatars/sender/42.png", content: "谁来", media: [], timestamp: "2026-09-29T10:01:00+08:00",
+    listened: false,
   }],
 };
 
@@ -42,4 +43,11 @@ test("a live update that breaks the bridge contract fails loudly", () => {
     () => phoneConversationUpdateOf(event("phone.conversation.updated", { ...payload, messages: [{ id: 1 }] })),
     /负载格式不符/,
   );
+});
+
+test("a heard listening record is read as a listened message of its group", () => {
+  const message = { ...payload.messages[0], id: "listen:1", sender: "other", sender_id: "42", listened: true };
+  const heard = phoneListeningHeardOf(event("phone.listening.heard", { role_id: "mira", thread_id: "t", message }));
+  assert.deepEqual([heard?.threadId, heard?.message.id, heard?.message.listened], ["t", "listen:1", true]);
+  assert.equal(phoneListeningHeardOf(event("phone.conversation.updated", payload)), null);
 });

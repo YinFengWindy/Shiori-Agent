@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from conversation.listening_schema import ensure_listening_schema
+from conversation.listening_store import GroupListeningStore
 from conversation.models import ContactRecord, StateRecord, ThreadRecord
 from infra.persistence.sqlite_transaction import immediate_transaction
 
@@ -24,6 +26,7 @@ def ensure_conversation_schema(connection: sqlite3.Connection) -> None:
     _ensure_conversation_tables(connection)
     _ensure_message_columns(connection)
     _ensure_indexes(connection)
+    ensure_listening_schema(connection)
 
 
 def _ensure_base_legacy_tables(connection: sqlite3.Connection) -> None:
@@ -158,6 +161,8 @@ class ConversationStore:
         self._owns_connection = connection is None
         self._closed = False
         self.ensure_schema()
+        # Group listening records (#538) live in the same database.
+        self.listening = GroupListeningStore(self._conn, self._lock)
 
     def close(self) -> None:
         if not self._owns_connection or self._closed:

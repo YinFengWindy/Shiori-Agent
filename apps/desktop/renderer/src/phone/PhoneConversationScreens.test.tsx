@@ -17,16 +17,21 @@ const role = { id: "mira", name: "Mira", avatar_abs: "" };
 const app: PhoneApp = { accountId: "qq:1", label: "QQ", accountName: "小栞", offline: false };
 const conversation: PhoneConversation = {
   threadId: "thread:mira:qq:gqq:5", accountId: "qq:1", channel: "qq", chatType: "group", displayName: "摸鱼群",
-  avatarPath: null, isUserChat: false,
+  avatarPath: null, isUserChat: false, listeningSupported: true,
   lastMessage: { role: "assistant", content: "我来", timestamp: "2026-09-29T10:02:00+08:00", hasMedia: false, senderName: null },
 };
 
 const message = (id: string, patch: Record<string, unknown>) => ({
   id, seq: null, sender: "other", sender_id: "42", sender_name: "阿花", sender_is_user: false, sender_avatar_abs: null,
-  content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00", ...patch,
+  content: id, media: [], timestamp: "2026-09-29T10:00:00+08:00", listened: false, ...patch,
 });
 
 const member = { channel: "qq", sender_id: "42", call_name: "阿花", nicknames: ["花花", "阿花"], brief: "爱开黑", profile: "## 印象" };
+
+const listeningState = (enabled: boolean, dailyCap: number | null) => ({
+  thread_id: "thread:mira:qq:gqq:5", enabled, daily_cap: dailyCap, default_daily_cap: 200,
+  toggles: enabled ? [{ enabled: true, operator: "user", at: "2026-09-29T11:00:00+08:00" }] : [],
+});
 
 test("group chat info: blocks, note saved and its draft kept, recent activity read-only; a profile opens from the list and is deleted", async () => {
   const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
@@ -42,6 +47,12 @@ test("group chat info: blocks, note saved and its draft kept, recent activity re
     "phone.conversation.members": { members: [member] },
     "phone.member.profile": { member },
     "phone.member.profile.delete": { channel: "qq", sender_id: "42" },
+    "phone.listening.messages": { has_more: false, next_before_seq: null, messages: [
+      message("听到的", {
+        id: "listen:1", listened: true, timestamp: "2026-09-29T09:59:00+08:00", sender_avatar_abs: "D:/avatars/sender/42.png",
+      }),
+    ] },
+    "phone.listening.state": listeningState(false, null),
   };
   const view = await mountTestComponent(
     <PhoneConversationScreens role={role} app={app} conversation={conversation} now={new Date("2026-09-29T12:00:00+08:00")} onBack={() => {}} />,
@@ -52,6 +63,9 @@ test("group chat info: blocks, note saved and its draft kept, recent activity re
         calls.push({ method, payload });
         // Once deleted, the member is gone from the list.
         if (method === "phone.member.profile.delete") replies["phone.conversation.members"] = { members: [] };
+        // Each change answers with the group's new state.
+        if (method === "phone.listening.set") replies[method] = replies["phone.listening.state"] = listeningState(true, null);
+        if (method === "phone.listening.cap.set") replies[method] = replies["phone.listening.state"] = listeningState(true, 30);
         return { id: "response", type: "response", method, error: null, payload: replies[method] };
       },
     } } },
@@ -59,16 +73,32 @@ test("group chat info: blocks, note saved and its draft kept, recent activity re
   const find = <T extends Element = HTMLElement>(testId: string) => view.container.querySelector<T & HTMLElement>(`[data-testid="${testId}"]`);
   const click = (element: HTMLElement | null | undefined) => act(async () => element?.click());
   try {
-    // Only the other, identified sender's avatar opens a profile; the user's does not.
-    assert.equal(view.container.querySelectorAll('[data-testid="phone-member-avatar"]').length, 1);
-    // A cached avatar keeps that button.
-    assert.equal(find("phone-member-avatar")?.querySelector("img")?.getAttribute("src"), "D:/avatars/sender/42.png");
+    // The group's listening record comes first by time, marked as heard.
+    assert.deepEqual(
+      Array.from(view.container.querySelectorAll("[data-side]"), (item) => item.hasAttribute("data-listened")),
+      [true, false, false, false],
+    );
+    // Only other, identified senders' avatars open a profile; the user's does not.
+    // A cached avatar keeps that button, on a listening record as well.
+    assert.deepEqual(
+      Array.from(view.container.querySelectorAll('[data-testid="phone-member-avatar"]'), (item) => item.querySelector("img")?.getAttribute("src")),
+      ["D:/avatars/sender/42.png", "D:/avatars/sender/42.png"],
+    );
 
     await click(find("phone-chat-info"));
     assert.deepEqual(
       Array.from(find("phone-chat-info-page")?.querySelectorAll("section") ?? [], (section) => section.getAttribute("aria-label")),
-      ["群信息", "群成员", "群笔记", "最近动态"],
+      ["群信息", "群成员", "群笔记", "最近动态", "旁听"],
     );
+    // Listening is switched on and the group's cap overridden, as the user.
+    await click(find("phone-info-listening")?.querySelector<HTMLButtonElement>('[role="switch"]'));
+    assert.deepEqual(calls.find((call) => call.method === "phone.listening.set")?.payload,
+      { role_id: "mira", thread_id: conversation.threadId, enabled: true });
+    assert.match(find("phone-listening-toggles")?.textContent ?? "", /我开启/);
+    await changeInputValue(find<HTMLInputElement>("phone-listening-cap")!, "30");
+    await click(find("phone-listening-cap-save"));
+    assert.equal(calls.find((call) => call.method === "phone.listening.cap.set")?.payload.daily_cap, 30);
+    assert.equal(find<HTMLInputElement>("phone-listening-cap")?.value, "30");
     assert.match(find("phone-info-summary")?.textContent ?? "", /摸鱼群.*QQ.*小栞/);
     assert.equal(find("phone-info-activity-text")?.textContent, "在聊开黑");
     assert.equal(find("phone-info-activity")?.querySelector("textarea, input"), null);

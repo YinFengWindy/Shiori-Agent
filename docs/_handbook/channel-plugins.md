@@ -39,6 +39,7 @@ channels:
   - name: demo_chat                 # 渠道名：会话线程与账号路由的数据键
     label: Demo Chat                # 账号面板和消息来源里显示的名字
     contact_label: 用户 ID           # 可选，群聊响应规则里成员 ID 的说明
+    group_listening: true           # 可选（Runtime API 2.13），群里没 @ 账号的消息也交给宿主，支持群聊旁听
     chat_types:                     # 必填，渠道支持的会话类型
       - type: private               # private / group
         label: 私聊                  # 类型下拉里的名字
@@ -50,6 +51,7 @@ channels:
 - 插件 id 建议与渠道名相同。渠道名写进会话线程，账号 ID 为 `<插件 id>:<平台账号>`；**发布后不能改名**，否则历史账号和线程无法定位。
 - 声明是静态的：插件停用、未授信或还没有账号时，桌面端也能通过 `channels.list` 列出这个渠道并标注状态。插件加载后再从自己的存储恢复账号。
 - `chat_types` 必须声明（Runtime API 2.5，规则见[运行时契约](plugin-runtime-contract.md#runtime-api-22-channel-declarations)），缺失时宿主拒绝整个 manifest；按类型的 `prefix` 拼出存储的 `chat_id`。
+- `group_listening: true` 表示插件把群里**所有**消息（不只是 @ 或回复账号的）交给 `route_account_inbound`，宿主据此在小手机为这个渠道的群显示「旁听」开关（#538）。声明前先把文本清理成宿主该保存的样子：没有 @ / 回复 / 图片这类平台码，因为旁听记录直接保存路由时的正文；图片只在消息真正触发回合（路由返回消息）后再下载。
 - `ctx.channels.add()` 只接受本 manifest 声明过的名字；两个插件声明同一个名字会同时变成 `CONFLICT`。规则细节见 [渠道声明](plugins-tutorial.md#渠道声明)。
 
 ## 2. 账号存储与连接

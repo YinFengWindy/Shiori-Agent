@@ -1,17 +1,8 @@
 import { useCallback } from "react";
-import { useBridgeRefreshedValue } from "../shared/useBridgeRefreshedValue";
 import { createPhoneMemoryClient, type PhoneMember } from "./phoneMemoryClient";
+import { usePhoneLoadedValue } from "./usePhoneLoadedValue";
 
 const client = createPhoneMemoryClient();
-
-// Read when a chat info screen opens; memory consolidation pushes no event,
-// so a screen shows what was stored when it opened.
-const noRefreshEvents: ReadonlySet<string> = new Set();
-
-/** A value read once per mount (or when `load` changes); `refresh` reads it again. */
-function usePhoneLoadedValue<T>(load: () => Promise<T>) {
-  return useBridgeRefreshedValue({ load, refreshEvents: noRefreshEvents, refreshOnFocus: false });
-}
 
 /**
  * A conversation's group note (null while it loads). `save` stores a new
