@@ -62,6 +62,6 @@ def external_tools_restricted(
     """
     return (
         context_view is not None
-        and context_view.scope == "external"
+        and context_view.is_external
         and not source.sender_is_user
     )

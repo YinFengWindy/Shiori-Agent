@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import closing
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -251,3 +252,27 @@ def test_list_summarized_thread_states_covers_the_roles_current_threads(
     states = store.list_summarized_thread_states("mira")
 
     assert [state.owner_id for state in states] == [threads["current"].id]
+
+
+def test_thread_messages_since_compares_parsed_times_across_offsets(
+    tmp_path: Path,
+) -> None:
+    """A row written in another offset is judged by its instant, not its text."""
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    for text, ts in (
+        ("before", "2026-09-30T09:00:00+08:00"),
+        # 11:30 +08:00, though its text sorts before the cutoff's.
+        ("after", "2026-09-30T03:30:00+00:00"),
+        ("no thread", "2026-09-30T12:00:00+08:00"),
+    ):
+        thread = "" if text == "no thread" else "thread:mira:qq:gqq:1"
+        session.add_message("user", text, thread_id=thread)
+        session.messages[-1]["timestamp"] = ts
+    manager.save(session)
+
+    rows = manager.conversation_store.thread_messages_since(
+        "role:mira", datetime.fromisoformat("2026-09-30T10:00:00+08:00")
+    )
+
+    assert [row["content"] for row in rows] == ["after"]

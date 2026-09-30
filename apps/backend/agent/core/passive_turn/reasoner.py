@@ -23,6 +23,7 @@ from .helpers import (
     get_session_metadata,
     get_window_sources_since_consolidated,
 )
+from agent.prompting.listening_block import HeardLine, turn_heard
 from .reasoning_loop import _PassiveReasoningLoopMixin
 from .reasoning_result import _PassiveReasoningResultMixin
 from agent.core.runtime_support import ToolDiscoveryState
@@ -325,9 +326,13 @@ class DefaultReasoner(
             )
         )
         total_history = len(source_history)
-        # 与历史同一窗口里非用户本人消息的来源，外部回合据此注入成员档案（#498）。
+        # 与历史同一窗口里非用户本人消息的来源，加上本群旁听块里的（#539），
+        # 外部回合据此注入成员档案（#498）。
         window_sources = get_window_sources_since_consolidated(
-            session, self._memory_window, context_view
+            session,
+            self._memory_window,
+            context_view,
+            self._heard_for_turn(context_view),
         )
         preloaded: set[str] | None = None
         preloaded_order: list[str] = []
@@ -607,6 +612,12 @@ class DefaultReasoner(
                     context_retry=retry_trace,
                 )
         return TurnRunResult(reply="（安全重试异常）", context_retry=retry_trace)
+
+    def _heard_for_turn(self, context_view: "ContextView | None") -> list[HeardLine]:
+        """外部回合所在会话旁听块里的消息；用户上下文回合没有旁听。"""
+        if self._session_manager is None:
+            raise RuntimeError("DefaultReasoner 读取旁听前文需要 session_manager")
+        return turn_heard(self._session_manager, context_view)
 
     @staticmethod
     def _slice_history(source_history: list[dict], window: int) -> list[dict]:

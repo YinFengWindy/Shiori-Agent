@@ -16,6 +16,7 @@ from agent.lifecycle.phase import (
 )
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
 from agent.core.passive_support import estimate_messages_tokens
+from agent.prompting.listening_block import render_heard_block, turn_heard
 from conversation.context_scope import (
     history_filter,
     history_start,
@@ -136,10 +137,13 @@ class _MemoryContextGuardModule:
 
     def __init__(
         self,
+        session_manager: SessionManager,
         keep_count: int,
         consolidator: MemoryConsolidator | None = None,
         input_token_threshold: int = 75000,
     ) -> None:
+        # 外部回合的预算估算要算上本群旁听块，从这里读旁听记录。
+        self._session_manager = session_manager
         self._keep_count = max(1, int(keep_count))
         self._min_new = max(5, self._keep_count // 2)
         self._threshold = self._keep_count + self._min_new
@@ -160,8 +164,12 @@ class _MemoryContextGuardModule:
             len(messages),
         )
         pending = _pending_messages(messages, last, state.context_view)
+        # 旁听块不随整理变化，整理前后的两次估算共用一份。
+        heard_block = render_heard_block(
+            turn_heard(self._session_manager, state.context_view)
+        )
         input_tokens = _estimate_session_input_tokens(
-            session, state.msg.content, last, state.context_view
+            session, state.msg.content, last, state.context_view, heard_block
         )
         token_pressure = (
             self._input_token_threshold > 0
@@ -200,6 +208,7 @@ class _MemoryContextGuardModule:
                         len(getattr(session, "messages", [])),
                     ),
                     state.context_view,
+                    heard_block,
                 )
                 if input_tokens >= self._input_token_threshold:
                     raise MemoryConsolidationFailedError(
@@ -333,6 +342,7 @@ def default_before_turn_modules(
     builtins: BeforeTurnModules = [
         _AcquireSessionModule(session_manager),
         _MemoryContextGuardModule(
+            session_manager,
             keep_count,
             consolidator,
             input_token_threshold=input_token_threshold,
@@ -361,11 +371,16 @@ def _clamp_context_cursor(cursor: int, total_messages: int) -> int:
 def _pending_messages(
     messages: list[dict], last_consolidated: int, context_view: ContextView | None
 ) -> int:
-    """本回合所在上下文在整理游标之后尚未整理的消息数；非角色会话数整段。"""
+    """本回合所在整类上下文在整理游标之后尚未整理的消息数；非角色会话数整段。
+
+    整理按整类上下文进行、共用一个游标，所以按 ``category`` 数：外部回合也把
+    其他群与陌生私聊的积压算进来，不只数本会话。
+    """
     tail = messages[last_consolidated:]
     if context_view is None:
         return len(tail)
-    return sum(1 for message in tail if context_view.includes(message))
+    category = context_view.category
+    return sum(1 for message in tail if category.includes(message))
 
 
 def _estimate_session_input_tokens(
@@ -373,19 +388,23 @@ def _estimate_session_input_tokens(
     current_content: str,
     last_consolidated: int,
     context_view: ContextView | None,
+    heard_block: str,
 ) -> int:
     """Estimate the next model input from unarchived history and current turn.
 
-    Only history visible in the turn's context counts, since that is all the
-    model will be sent.
+    Counts what the model will actually be sent: history in the turn's own
+    view (an external turn's conversation only), plus the group's listening
+    block ``heard_block`` sent next to the current message (empty for none).
     """
     history = session.get_history(
         max_messages=500,
         start_index=last_consolidated,
         include=history_filter(context_view),
     )
+    # 旁听块随 context frame 发送，是紧挨当前消息的一条 user 消息。
+    frame = [{"role": "user", "content": heard_block}] if heard_block else []
     return estimate_messages_tokens(
-        [*history, {"role": "user", "content": current_content}]
+        [*history, *frame, {"role": "user", "content": current_content}]
     )
 
 

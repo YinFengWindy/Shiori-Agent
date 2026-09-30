@@ -19,10 +19,12 @@ import uuid
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from conversation.listening_switches import ListeningSwitches
+from core.common.message_source import MessageSource
+from core.common.timekit import parse_local_iso
 from infra.persistence.sqlite_transaction import immediate_transaction
 
 # 内存最近窗口每群保留的条数，也是 ``recent`` 默认返回的条数。
@@ -55,6 +57,12 @@ class ListeningMessage:
     def stored(self) -> bool:
         """这条消息已入库（没有超出当日上限）。"""
         return self.seq is not None
+
+    def message_source(self) -> MessageSource:
+        """来源快照还原成的 ``MessageSource``（与会话消息同一套字段）。"""
+        return MessageSource.from_metadata(
+            {"message_source": self.source}, session_key=""
+        )
 
 
 class GroupListeningStore:
@@ -182,8 +190,48 @@ class GroupListeningStore:
             ).fetchall()
             unstored = list(self._window.get(thread_id, ()))
         merged = [*(_row_to_message(row) for row in rows), *unstored]
-        merged.sort(key=lambda message: datetime.fromisoformat(message.timestamp))
+        merged.sort(key=lambda message: parse_local_iso(message.timestamp))
         return merged[-limit:] if limit > 0 else []
+
+    def sent_by_user_since(
+        self, thread_prefix: str, since: datetime
+    ) -> list[ListeningMessage]:
+        """Heard messages the user sent at or after ``since``, oldest first.
+
+        Only groups whose thread ID starts with ``thread_prefix`` (one role's
+        threads); stored records and window-only ones alike. "The user" is the
+        source snapshot's ``sender_is_user``, set when the message arrived.
+        Times are compared parsed: the stored local ``day`` only narrows the
+        read, a day wider than ``since`` so an offset change cannot drop one.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT {_COLUMNS} FROM listening_messages
+                WHERE substr(thread_id, 1, ?) = ?
+                  AND day >= ?
+                  AND json_extract(source, '$.sender_is_user') = 1
+                """,
+                (
+                    len(thread_prefix),
+                    thread_prefix,
+                    (since.astimezone() - timedelta(days=1)).date().isoformat(),
+                ),
+            ).fetchall()
+            unstored = [
+                message
+                for thread_id, window in self._window.items()
+                if thread_id.startswith(thread_prefix)
+                for message in window
+                if message.source.get("sender_is_user") is True
+            ]
+        found = [
+            message
+            for message in [*(_row_to_message(row) for row in rows), *unstored]
+            if parse_local_iso(message.timestamp) >= since
+        ]
+        found.sort(key=lambda message: parse_local_iso(message.timestamp))
+        return found
 
     def page(
         self, thread_id: str, *, before_seq: int | None = None, limit: int = _PAGE_SIZE

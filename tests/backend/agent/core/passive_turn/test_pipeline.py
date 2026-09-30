@@ -1,7 +1,7 @@
 """Passive turns own same-role desktop pushes until their ordered SQL commit."""
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -402,15 +402,48 @@ async def test_scheduled_job_without_source_thread_runs_in_user_context(tmp_path
     assert _labels(history) == ["desk", "udm"]
 
 
-@pytest.mark.parametrize("thread", [GROUP_B, STRANGER_DM])
-async def test_external_turn_sees_groups_and_stranger_dm_only(tmp_path, thread):
+@pytest.mark.parametrize(
+    ("thread", "label"), [(GROUP_A, "ga"), (GROUP_B, "gb"), (STRANGER_DM, "sdm")]
+)
+async def test_external_turn_sees_only_its_own_conversation(tmp_path, thread, label):
+    """Other groups and stranger private chats stay out of an external turn (#539)."""
     _bind(tmp_path, "902")
     _seed_role_session(SessionManager(tmp_path))
 
     history = await _model_history(tmp_path, thread)
 
-    # Group A holds the bound user's own group message: external only.
-    assert _labels(history) == ["sdm", "ga", "gb"]
+    assert _labels(history) == [label]
+
+
+async def test_group_turn_history_is_dialog_only_but_members_include_heard(tmp_path):
+    """Listening records stay out of the history (they form their own block at
+    the tail, #539), yet the group's heard members still reach member profiles."""
+    _bind(tmp_path, "902")
+    manager = SessionManager(tmp_path)
+    _seed_role_session(manager)
+    listening = manager.conversation_store.listening
+    before = datetime.now().astimezone() - timedelta(hours=1)
+    for thread, sender_id in ((GROUP_A, "71"), (GROUP_B, "72")):
+        listening.switches.set_enabled(thread, True, operator="user")
+        listening.hear(
+            thread,
+            sender_id=sender_id,
+            content="heard",
+            source={"channel": "qq", "sender_id": sender_id},
+            external_message_id="",
+            timestamp=before,
+        )
+    pipeline, reasoner = _isolation_pipeline(manager)
+
+    await pipeline.run(_turn(GROUP_B), "role:mira", dispatch_outbound=False)
+
+    history = [str(m["content"]) for m in reasoner.run.await_args.args[0][:-1]]
+    assert _labels(history) == ["gb"]
+    assert not any("heard" in text for text in history)
+    request = reasoner.render_prompt.await_args.args[0]
+    # Group B's heard member comes first (heard an hour before the dialog, whose
+    # seeded message has no sender); group A's heard member stays out.
+    assert [source.sender_id for source in request.window_sources] == ["72", None]
 
 
 async def test_bound_stranger_dm_joins_user_context_once_after_the_cursor(
@@ -440,11 +473,11 @@ async def test_input_budget_counts_only_the_turn_context(tmp_path):
     manager = SessionManager(tmp_path)
     _seed_role_session(manager, group_text="x" * 40000)
 
-    for thread, runs in ((DESKTOP, True), (GROUP_B, False)):
+    for thread, runs in ((DESKTOP, True), (GROUP_B, True), (GROUP_A, False)):
         pipeline, reasoner = _isolation_pipeline(manager, input_token_threshold=2000)
         await pipeline.run(_turn(thread), "role:mira", dispatch_outbound=False)
-        # The large group message only weighs on external turns, where the
-        # context guard stops the turn before the model is called.
+        # The large group A message only weighs on group A's own turns, where
+        # the context guard stops the turn before the model is called.
         assert reasoner.run.await_count == (1 if runs else 0)
 
 

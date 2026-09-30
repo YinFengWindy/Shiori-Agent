@@ -26,14 +26,19 @@ def desktop_chat_id(role_id: str) -> str:
     return f"role:{role_id}"
 
 
+def role_thread_prefix(role_id: str) -> str:
+    """The prefix every thread ID of ``role_id`` starts with."""
+    return f"thread:{role_id}:"
+
+
 def desktop_thread_id(role_id: str) -> str:
     """Returns the formal thread ID of one role's desktop session."""
-    return f"thread:{role_id}:desktop"
+    return f"{role_thread_prefix(role_id)}desktop"
 
 
 def network_thread_id(role_id: str, channel: str, chat_id: str) -> str:
     """Returns the formal thread ID of one role's external channel session."""
-    return f"thread:{role_id}:{channel}:{chat_id}"
+    return f"{role_thread_prefix(role_id)}{channel}:{chat_id}"
 
 
 def scheduler_thread_id(role_id: str, job_id: str) -> str:

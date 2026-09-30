@@ -59,10 +59,15 @@ def test_threads_split_by_the_current_bindings(tmp_path: Path) -> None:
         DESKTOP,
         USER_DM,
     ]
-    assert _visible(turn_context_view(tmp_path, "mira", GROUP), *threads) == [
-        STRANGER_DM,
-        GROUP,
-    ]
+    # An external turn sees only its own conversation (#539): not other groups
+    # or stranger private chats.
+    other_group = network_thread_id("mira", "qq", "group:8")
+    assert _visible(
+        turn_context_view(tmp_path, "mira", GROUP), *threads, other_group
+    ) == [GROUP]
+    assert _visible(
+        turn_context_view(tmp_path, "mira", STRANGER_DM), *threads, other_group
+    ) == [STRANGER_DM]
     assert _visible(user_context_view(tmp_path, "mira"), *threads) == [
         DESKTOP,
         USER_DM,

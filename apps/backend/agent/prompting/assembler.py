@@ -57,6 +57,10 @@ _CONTEXT_FRAME_SECTIONS = {
     "group_note",
     # 成员层（#498）每轮随触发者与历史窗口变化，同样不进系统提示词。
     "member_profiles",
+    # 「用户最近在群里说过」（#539）随用户在群里发言变化，单独成块。
+    "user_group_speech",
+    # 本群旁听块（#539）每条群消息都会变，放 context frame 末尾而不进历史。
+    "group_listening",
     "retrieved_memory",
 }
 SYSTEM_CONTEXT_FRAME_MARKER = '<system-reminder data-system-context-frame="true">'

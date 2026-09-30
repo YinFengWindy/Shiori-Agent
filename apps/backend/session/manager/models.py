@@ -18,6 +18,7 @@ from .helpers import (
     _build_proactive_history_messages,
     _rebuild_user_content,
     _truncate_tool_result,
+    starts_turn,
 )
 
 INTERRUPTED_TURN_METADATA_KEY = "interrupted_turn"
@@ -256,25 +257,10 @@ class Session:
             if start >= len(self.messages):
                 return []
             # 向前回退到最近的 user 边界（保留完整 turn）
-            while (
-                start > 0
-                and self.messages[start].get("role") != "user"
-                and not (
-                    self.messages[start].get("role") == "assistant"
-                    and self.messages[start].get("proactive")
-                )
-            ):
+            while start > 0 and not starts_turn(self.messages[start]):
                 start -= 1
             # start=0 但仍非合法边界时，向后找第一个 user 或 proactive assistant。
-            messages = self.messages[start:]
-            if messages and not (
-                messages[0].get("role") == "user"
-                or (
-                    messages[0].get("role") == "assistant"
-                    and messages[0].get("proactive")
-                )
-            ):
-                messages = _align_to_user_boundary(messages)
+            messages = _align_to_user_boundary(self.messages[start:])
             if not messages:
                 return []
         elif max_messages <= 0:
