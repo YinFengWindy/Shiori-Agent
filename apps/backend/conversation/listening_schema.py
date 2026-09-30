@@ -2,7 +2,8 @@
 
 - ``listening_messages``：入库的旁听消息（``listening_store``）；
 - ``listening_groups`` / ``listening_toggles`` / ``listening_defaults``：每群的
-  开关与上限覆盖、开关记录、全局默认上限（``listening_switches``）。
+  开关与上限覆盖、开关记录、全局默认上限（``listening_switches``）；
+- ``listening_cursors``：每群旁听记录的整理游标（``listening_cursors``，#541）。
 """
 
 from __future__ import annotations
@@ -51,6 +52,12 @@ def ensure_listening_schema(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS listening_defaults (
             id        INTEGER PRIMARY KEY CHECK (id = 1),
             daily_cap INTEGER NOT NULL
+        )
+        """)
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS listening_cursors (
+            thread_id        TEXT PRIMARY KEY,
+            consolidated_seq INTEGER NOT NULL
         )
         """)
     connection.execute(

@@ -598,7 +598,10 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
     observed: dict[str, object] = {}
     fake_context = object()
     markdown_store = object()
-    markdown_maintenance = SimpleNamespace(bind_lifecycle=lambda request: None)
+    markdown_maintenance = SimpleNamespace(
+        bind_lifecycle=lambda request: None,
+        listening_trigger=SimpleNamespace(attach=lambda store: None),
+    )
 
     monkeypatch.setattr(
         "bootstrap.tools.resolve_context_factory",
@@ -626,7 +629,9 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
         config=config,
         workspace=tmp_path,
         runtime_roles=roles,
-        group_environment=cast(Any, object()),
+        group_environment=cast(
+            Any, SimpleNamespace(conversation_store=SimpleNamespace(listening=None))
+        ),
         bus=cast(Any, SimpleNamespace()),
         provider=cast(Any, object()),
         light_provider=None,

@@ -14,6 +14,7 @@ from bootstrap.tools import (
     _validate_role_target,
 )
 from core.roles import RoleRepository, RoleStore
+from core.memory.group_environment import GroupEnvironment
 from core.memory.markdown import MarkdownMemoryMaintenance, MarkdownMemoryStore
 from session.manager import SessionManager
 
@@ -36,12 +37,15 @@ def test_memory_lifecycle_binds_the_session_owner_commit_operation(tmp_path: Pat
             Any, SimpleNamespace(refresh_snapshot_after_consolidation=AsyncMock())
         ),
         relationship_optimizer=cast(Any, object()),
-        group_environment=cast(Any, object()),
+        group_environment=GroupEnvironment(tmp_path, manager.conversation_store),
         runtime_roles=RoleStore(tmp_path),
     )
 
     assert maintenance._get_session == manager.get_or_create
     assert maintenance._commit_consolidation == manager.commit_consolidation
+    # 旁听记录入库时触发该群的旁听整理（#541）。
+    listeners = manager.conversation_store.listening._listeners
+    assert maintenance.listening_trigger.on_heard in listeners
 
 
 def test_resolve_plugin_dirs_uses_repository_root_in_dev(tmp_path: Path) -> None:

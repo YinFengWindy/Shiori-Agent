@@ -177,13 +177,16 @@ class CoreRuntime:
         spawn = self.tools.get_tool("spawn")
         if spawn is not None:
             steps.append(("spawn.drain", spawn.manager.drain))
+        maintenance = self.memory_runtime.markdown.maintenance
+
+        async def detach_listening() -> None:
+            maintenance.listening_trigger.detach()
+
         steps.extend(
             [
+                ("memory.listening.detach", detach_listening),
                 ("event_bus.drain", self.event_bus.drain),
-                (
-                    "memory.maintenance.drain",
-                    self.memory_runtime.markdown.maintenance.drain,
-                ),
+                ("memory.maintenance.drain", maintenance.drain),
             ]
         )
         if self.scene_followup_subscription is not None:
@@ -415,6 +418,8 @@ def _bind_memory_lifecycle_if_supported(
             runtime_roles=runtime_roles,
         )
     )
+    # 旁听记录入库即检查该群是否到了整理的时候（#541）；运行时停止时先断开。
+    markdown.listening_trigger.attach(group_environment.conversation_store.listening)
 
 
 def _resolve_plugin_llm_dependencies(

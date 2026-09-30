@@ -22,6 +22,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
 
+from conversation.listening_cursors import ListeningCursors
 from conversation.listening_switches import ListeningSwitches
 from core.common.message_source import MessageSource
 from core.common.timekit import parse_local_iso
@@ -72,7 +73,7 @@ class GroupListeningStore:
     One instance lives on that store (``ConversationStore.listening``), so the
     in-memory recent window is the same for the channel hub that writes it and
     the prompt assembly that reads it. ``switches`` holds each group's
-    listening switch and cap.
+    listening switch and cap, ``cursors`` each group's consolidation cursor.
     """
 
     def __init__(
@@ -81,6 +82,7 @@ class GroupListeningStore:
         self._conn = connection
         self._lock = lock
         self.switches = ListeningSwitches(connection, lock)
+        self.cursors = ListeningCursors(connection, lock)
         self._window: dict[str, deque[ListeningMessage]] = {}
         self._listeners: list[Callable[[ListeningMessage], None]] = []
 
@@ -232,6 +234,24 @@ class GroupListeningStore:
         ]
         found.sort(key=lambda message: parse_local_iso(message.timestamp))
         return found
+
+    def after(self, thread_id: str, seq: int, limit: int) -> list[ListeningMessage]:
+        """The group's first ``limit`` stored records past ``seq``, oldest first.
+
+        With the consolidation cursor as ``seq`` these are the records not yet
+        consolidated (#541).
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT {_COLUMNS} FROM listening_messages
+                WHERE thread_id = ? AND seq > ?
+                ORDER BY seq
+                LIMIT ?
+                """,
+                (thread_id, seq, limit),
+            ).fetchall()
+        return [_row_to_message(row) for row in rows]
 
     def page(
         self, thread_id: str, *, before_seq: int | None = None, limit: int = _PAGE_SIZE
