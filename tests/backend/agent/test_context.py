@@ -737,10 +737,17 @@ def test_context_builder_injects_group_environment_by_turn_scope(
     assert "动态5" not in user
     assert "动态6" not in user
     assert not any(f"群{index}的笔记" in user for index in range(7))
-    # 外部回合：只注入当前会话的群笔记，不注入最近动态。
+    # 外部回合：只注入当前会话的群笔记；其他会话只以最近动态出现，同样至多
+    # 5 个，不含当前会话自己（#539）。
     assert "群1的笔记" in external
     assert "群0的笔记" not in external
-    assert not any(f"动态{index}" in external for index in range(7))
+    assert [index for index in range(7) if f"动态{index}" in external] == [
+        0,
+        2,
+        3,
+        4,
+        5,
+    ]
 
 
 def test_context_builder_injects_member_profiles_only_in_external_turns(
@@ -790,3 +797,58 @@ def test_context_builder_injects_member_profiles_only_in_external_turns(
     # 用户上下文回合不注入成员档案。
     assert "完整档案555" not in user
     assert "速记666" not in user
+
+
+def test_user_turns_carry_the_users_recent_group_speech_as_its_own_block(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """「用户最近在群里说过」只进用户回合的 context frame，不进外部回合（#539）。"""
+    monkeypatch.setattr("agent.context.SkillsLoader", _EmptySkills)
+    RoleStore(tmp_path).create_role(
+        role_id="mira", name="Mira", system_prompt="test role"
+    )
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.add_message(
+        "user",
+        "今晚一起打游戏",
+        thread_id="thread:mira:qq:gqq:1",
+        metadata={
+            "message_source": {
+                "channel": "qq",
+                "chat_type": "group",
+                "group_name": "猫猫群",
+                "sender_id": "902",
+                "sender_is_user": True,
+            }
+        },
+    )
+    session.add_message("assistant", "好呀", thread_id="thread:mira:qq:gqq:1")
+    manager.save(session)
+    builder = ContextBuilder(
+        tmp_path, _EmptyMemory(), runtime_roles=RoleStore(tmp_path)  # type: ignore[arg-type]
+    )
+    builder.set_group_environment(
+        GroupEnvironment(tmp_path, manager.conversation_store)
+    )
+
+    def model_input(scope: ContextScope, thread_id: str) -> list[dict]:
+        return builder.render(
+            ContextRequest(
+                history=[],
+                current_message="你好",
+                context_scope=scope,
+                thread_id=thread_id,
+            ),
+            session_metadata={"role_id": "mira"},
+        ).messages
+
+    user = model_input("user", "thread:mira:desktop")
+    external = model_input("external", "thread:mira:qq:gqq:2")
+
+    frame = str(user[-2]["content"])
+    assert frame.startswith(SYSTEM_CONTEXT_FRAME_MARKER)
+    assert "群「猫猫群」 用户：今晚一起打游戏" in frame
+    assert "我的回复：好呀" in frame
+    assert "今晚一起打游戏" not in str(user[0]["content"])
+    assert not any("今晚一起打游戏" in str(message["content"]) for message in external)

@@ -644,6 +644,43 @@ class ConversationStore:
             ).fetchone()
         return str(row["ts"]) if row is not None else None
 
+    def thread_messages_since(
+        self, session_key: str, since: datetime
+    ) -> list[dict[str, Any]]:
+        """Messages of ``session_key`` in any thread at or after ``since``, in session order.
+
+        Each carries ``thread_id``, ``role``, ``content``, ``ts``, its
+        ``metadata`` and whether it is ``proactive``; messages without a
+        thread are left out. Timestamps are ISO strings written in the local
+        offset, so ``since`` is compared in that offset.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT thread_id, role, content, extra, ts
+                FROM messages
+                WHERE session_key = ? AND thread_id IS NOT NULL AND thread_id != ''
+                  AND ts >= ?
+                ORDER BY seq ASC
+                """,
+                (session_key, since.astimezone().isoformat()),
+            ).fetchall()
+        messages: list[dict[str, Any]] = []
+        for row in rows:
+            extra = json.loads(row["extra"] or "{}")
+            metadata = extra.get("metadata")
+            messages.append(
+                {
+                    "thread_id": str(row["thread_id"]),
+                    "role": str(row["role"]),
+                    "content": str(row["content"] or ""),
+                    "ts": str(row["ts"]),
+                    "metadata": metadata if isinstance(metadata, dict) else {},
+                    "proactive": bool(extra.get("proactive")),
+                }
+            )
+        return messages
+
     def has_external_message(self, thread_id: str, external_message_id: str) -> bool:
         """Checks whether a channel delivery has already been archived for a thread."""
         clean_external_id = str(external_message_id or "").strip()

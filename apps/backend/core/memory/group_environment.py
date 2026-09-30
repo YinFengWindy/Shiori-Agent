@@ -7,7 +7,8 @@
 
 二者都由宿主在记忆整理提交时写入，不经过记忆引擎。用户上下文回合（含主动、
 发呆）注入最近 ``RECENT_ACTIVITY_WINDOW`` 内更新过的最近动态，至多
-``RECENT_ACTIVITY_LIMIT`` 个；外部上下文回合只注入当前会话的群笔记。
+``RECENT_ACTIVITY_LIMIT`` 个；外部上下文回合注入当前会话的群笔记，以及其他外部
+会话的最近动态（同样的时间窗与上限，不含当前会话，#539）。
 """
 
 from __future__ import annotations
@@ -19,6 +20,10 @@ from pathlib import Path
 from conversation.context_scope import load_user_context_threads
 from conversation.store import ConversationStore
 from core.memory.role_paths import keyed_markdown_name, role_memory_dir
+from core.memory.user_group_speech import (
+    collect_user_group_speech,
+    render_user_group_speech,
+)
 from infra.persistence.text_store import atomic_save_text
 
 # 用户上下文注入最近动态的时间窗与数量上限。
@@ -112,16 +117,22 @@ class GroupEnvironment:
         if update.group_note:
             self.write_note(role_id, update.thread_id, update.group_note)
 
-    def recent_activities(self, role_id: str, *, now: datetime) -> list[RecentActivity]:
+    def recent_activities(
+        self, role_id: str, *, now: datetime, exclude_thread_id: str = ""
+    ) -> list[RecentActivity]:
         """``now`` 之前 ``RECENT_ACTIVITY_WINDOW`` 内更新过的外部会话最近动态，新的在前。
 
         按此刻的身份绑定跳过已属于用户上下文的会话（例如陌生私聊绑定后并入）：
-        它们的记录不迁移也不删除，只是不再作为外部会话的动态注入。
+        它们的记录不迁移也不删除，只是不再作为外部会话的动态注入。外部回合用
+        ``exclude_thread_id`` 跳过自己所在的会话，上限只数其他会话。
         """
         user_threads = load_user_context_threads(self._workspace, role_id)
         activities: list[RecentActivity] = []
         for state in self._store.list_summarized_thread_states(role_id):
-            if user_threads.contains(state.owner_id):
+            if (
+                user_threads.contains(state.owner_id)
+                or state.owner_id == exclude_thread_id
+            ):
                 continue
             # ``apply`` 总是把摘要与更新时间一起写入；有摘要却缺时间说明数据已损坏，
             # 直接 KeyError 失败即停，不猜一个时间。
@@ -141,13 +152,26 @@ class GroupEnvironment:
         activities.sort(key=lambda item: item.updated_at, reverse=True)
         return activities[:RECENT_ACTIVITY_LIMIT]
 
-    def render_recent_activity(self, role_id: str, *, now: datetime) -> str:
-        """用户上下文注入的「各会话最近动态」段落；没有时为空串。"""
-        activities = self.recent_activities(role_id, now=now)
+    def render_recent_activity(
+        self, role_id: str, *, now: datetime, current_thread_id: str = ""
+    ) -> str:
+        """「各会话最近动态」段落；没有时为空串。
+
+        用户上下文回合不给 ``current_thread_id``，列出全部外部会话；外部回合给出
+        自己所在的会话，只列其他外部会话（#539）。
+        """
+        activities = self.recent_activities(
+            role_id, now=now, exclude_thread_id=current_thread_id
+        )
         if not activities:
             return ""
+        title = (
+            "## 我在其他群聊与私聊里的最近动态"
+            if current_thread_id
+            else "## 我在群聊与其他私聊里的最近动态"
+        )
         lines = [
-            "## 我在群聊与其他私聊里的最近动态",
+            title,
             "",
             *(
                 f"- {item.label or '一个会话'}"
@@ -156,6 +180,12 @@ class GroupEnvironment:
             ),
         ]
         return "\n".join(lines)
+
+    def render_user_group_speech(self, role_id: str, *, now: datetime) -> str:
+        """用户上下文回合注入的「用户最近在群里说过」段落；没有时为空串（#539）。"""
+        return render_user_group_speech(
+            collect_user_group_speech(self._store, role_id, now=now)
+        )
 
     def render_group_note(self, role_id: str, thread_id: str) -> str:
         """外部上下文回合注入的当前会话群笔记段落；没有时为空串。"""

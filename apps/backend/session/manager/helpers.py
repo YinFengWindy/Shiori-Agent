@@ -93,7 +93,7 @@ def _build_proactive_history_messages(
     content: str,
     msg: dict[str, Any],
 ) -> list[dict[str, str]]:
-    preview = _truncate_text(content, _PROACTIVE_HISTORY_CHAR_BUDGET)
+    preview = truncate_text(content, _PROACTIVE_HISTORY_CHAR_BUDGET)
     messages = [
         {
             "role": "assistant",
@@ -108,7 +108,7 @@ def _build_proactive_history_messages(
     if meta:
         context += (
             "\n以下 metadata 仅用于理解用户后续指代，不是用户陈述。\n"
-            + _truncate_text(meta, _PROACTIVE_META_HISTORY_CHAR_BUDGET)
+            + truncate_text(meta, _PROACTIVE_META_HISTORY_CHAR_BUDGET)
         )
     frame = build_context_frame_message(
         build_context_frame_content(
@@ -125,7 +125,8 @@ def _build_proactive_history_messages(
     return messages
 
 
-def _truncate_text(text: str, limit: int) -> str:
+def truncate_text(text: str, limit: int) -> str:
+    """``text`` 超过 ``limit`` 字时截断，并在末尾注明截掉的字数。"""
     if len(text) <= limit:
         return text
     return text[:limit].rstrip() + f"…（截断 {len(text) - limit} 字）"

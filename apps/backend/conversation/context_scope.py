@@ -6,8 +6,9 @@
 - 用户上下文：桌面会话、对方是已绑定用户的渠道私聊，以及没有来源会话的计划任务
   （计划任务由用户安排，结果只会交给用户）。统一会话之前的旧消息没有
   ``thread_id``，它们实际上是桌面对话，同样归入用户上下文。
-- 外部上下文：其余所有会话，即全部群聊，以及对方不是已绑定用户的渠道私聊；
-  外部会话之间共享同一段上下文。
+- 外部上下文：其余所有会话，即全部群聊，以及对方不是已绑定用户的渠道私聊。
+  外部回合只看自己所在会话的历史（#539）：群 A 的回合看不到群 B 或陌生私聊的
+  原文，其他外部会话只以最近动态出现。整理仍按整类外部上下文进行，共用一个游标。
 
 划分按会话而不是按发送者：已绑定用户在群里的发言属于外部上下文。归属在读取时按
 当前的身份绑定计算，绑定或解绑之后，相应私聊的历史随之改变可见性，消息本身不变。
@@ -159,10 +160,13 @@ class ContextView:
     """一个回合能看到的历史：与回合所在会话同属一类上下文的消息。
 
     ``user_threads`` 是读取时算出的用户上下文会话；其余会话都属于外部上下文。
+    ``thread_id`` 非空时视图只含这一个外部会话：外部回合的视图（见
+    ``turn_context_view``）；整理用的整类视图不设（见 ``role_context_views``）。
     """
 
     scope: ContextScope
     user_threads: UserContextThreads
+    thread_id: str = ""
 
     def includes(self, message: Mapping[str, Any]) -> bool:
         """``message`` 是否对本回合可见。"""
@@ -170,7 +174,9 @@ class ContextView:
 
     def includes_thread(self, thread_id: str) -> bool:
         """会话 ``thread_id`` 的消息是否对本回合可见；空值代表旧消息。"""
-        return self.user_threads.contains(thread_id) == (self.scope == "user")
+        if self.user_threads.contains(thread_id) != (self.scope == "user"):
+            return False
+        return not self.thread_id or thread_id == self.thread_id
 
 
 def load_user_context_threads(workspace: Path, role_id: str) -> UserContextThreads:
@@ -185,16 +191,18 @@ def load_user_context_threads(workspace: Path, role_id: str) -> UserContextThrea
 def turn_context_view(workspace: Path, role_id: str, thread_id: str) -> ContextView:
     """回合所在会话 ``thread_id`` 对应的历史视图。
 
+    用户上下文回合看整个用户上下文；外部回合只看自己所在的会话（#539）。
     当前回合必须知道自己的会话；只有已存的旧消息才允许没有 ``thread_id``。
     """
     clean_thread_id = thread_id.strip()
     if not clean_thread_id:
         raise ValueError("角色回合缺少 thread_id，无法判定上下文归属")
     user_threads = load_user_context_threads(workspace, role_id)
-    scope: ContextScope = (
-        "user" if user_threads.contains(clean_thread_id) else "external"
+    if user_threads.contains(clean_thread_id):
+        return ContextView(scope="user", user_threads=user_threads)
+    return ContextView(
+        scope="external", user_threads=user_threads, thread_id=clean_thread_id
     )
-    return ContextView(scope=scope, user_threads=user_threads)
 
 
 def user_context_view(workspace: Path, role_id: str) -> ContextView:

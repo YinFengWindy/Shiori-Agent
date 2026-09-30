@@ -89,6 +89,7 @@ class SessionLike(Protocol):
         start_index: int | None = None,
         include: "HistoryFilter | None" = None,
     ) -> list[dict]: ...
+    def render_history(self, messages: list[dict]) -> list[dict]: ...
     def get_history_tool_names(
         self,
         max_messages: int = 500,

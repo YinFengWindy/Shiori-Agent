@@ -185,6 +185,44 @@ class GroupListeningStore:
         merged.sort(key=lambda message: datetime.fromisoformat(message.timestamp))
         return merged[-limit:] if limit > 0 else []
 
+    def sent_by_user_since(
+        self, thread_prefix: str, since: datetime
+    ) -> list[ListeningMessage]:
+        """Heard messages the user sent at or after ``since``, oldest first.
+
+        Only groups whose thread ID starts with ``thread_prefix`` (one role's
+        threads); stored records and window-only ones alike. "The user" is the
+        source snapshot's ``sender_is_user``, set when the message arrived.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT {_COLUMNS} FROM listening_messages
+                WHERE substr(thread_id, 1, ?) = ?
+                  AND day >= ?
+                  AND json_extract(source, '$.sender_is_user') = 1
+                """,
+                (
+                    len(thread_prefix),
+                    thread_prefix,
+                    since.astimezone().date().isoformat(),
+                ),
+            ).fetchall()
+            unstored = [
+                message
+                for thread_id, window in self._window.items()
+                if thread_id.startswith(thread_prefix)
+                for message in window
+                if message.source.get("sender_is_user") is True
+            ]
+        found = [
+            message
+            for message in [*(_row_to_message(row) for row in rows), *unstored]
+            if datetime.fromisoformat(message.timestamp) >= since
+        ]
+        found.sort(key=lambda message: datetime.fromisoformat(message.timestamp))
+        return found
+
     def page(
         self, thread_id: str, *, before_seq: int | None = None, limit: int = _PAGE_SIZE
     ) -> dict[str, Any]:

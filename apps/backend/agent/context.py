@@ -24,6 +24,7 @@ from agent.core.prompt_block import (
     SystemPromptBuildResult,
     SystemPromptBuilder,
     TurnContext,
+    UserGroupSpeechPromptBlock,
     UserIdentitiesPromptBlock,
 )
 from agent.prompting import (
@@ -242,6 +243,7 @@ class ContextBuilder:
                 RecentActivityPromptBlock(),
                 GroupNotePromptBlock(),
                 MemberProfilesPromptBlock(runtime_roles),
+                UserGroupSpeechPromptBlock(),
                 SessionContextPromptBlock(),
                 UserIdentitiesPromptBlock(runtime_roles),
                 ActiveSkillsPromptBlock(),

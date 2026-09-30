@@ -108,7 +108,7 @@ class PromptBlock(Protocol):
 #  45 RecentContextPromptBlock → roles/<role_id>/memory/RECENT_CONTEXT.md（裁掉 Recent Turns；外部回合不注入）
 #                              来源：memory.read_recent_context()（严格要求 role_id）
 #                              时机：近期语境压缩摘要更新时变化；每轮 Recent Turns 刷新不会直接进入这里
-#  46 RecentActivityPromptBlock→ 各外部会话的最近动态（群环境层，只在用户上下文注入）
+#  46 RecentActivityPromptBlock→ 各外部会话的最近动态（群环境层；外部回合只列其他外部会话）
 #                              来源：thread_state.summary，近 3 天更新、最多 5 个
 #                              时机：记忆整理外部段后变化
 #  47 GroupNotePromptBlock     → 当前外部会话的群笔记（只在外部回合注入，不注入其他会话的）
@@ -117,6 +117,9 @@ class PromptBlock(Protocol):
 #  48 MemberProfilesPromptBlock→ 触发者与 @/回复对象的完整档案、窗口内其他成员的速记（只在外部回合注入，放 context frame）
 #                              来源：roles/<role_id>/memory/members/*.md，合计约 1500 字
 #                              时机：记忆整理外部段后变化；每轮随触发者与历史窗口变化
+#  49 UserGroupSpeechPromptBlock→ 用户最近在群里说过的话与我的回复（只在用户上下文注入，放 context frame）
+#                              来源：角色会话里群聊的用户发言 + 旁听记录，最近 6 小时、最多 10 条
+#                              时机：用户在群里发言后变化
 #  50 ActiveSkillsPromptBlock  → active skill 内容
 #                              来源：always skills + 本轮命中的 skill_names
 #                              时机：本轮技能命中集合变化时就会变，中频
@@ -330,7 +333,11 @@ class RecentContextPromptBlock:
 
 
 class RecentActivityPromptBlock:
-    """用户上下文回合注入各外部会话的最近动态（#497）；外部回合不注入。"""
+    """注入外部会话的最近动态（#497）。
+
+    用户上下文回合列出全部外部会话；外部回合只列自己以外的外部会话（#539），
+    其他群与陌生私聊的原文不进本回合，只以最近动态出现。
+    """
 
     priority = 46
     label = "recent_activity"
@@ -339,11 +346,19 @@ class RecentActivityPromptBlock:
     def render(
         self, ctx: TurnContext, cached_signature: str | None = None
     ) -> str | None:
-        if is_external_turn(ctx) or ctx.group_environment is None or not ctx.role_id:
+        if ctx.group_environment is None or not ctx.role_id:
             return None
+        current_thread_id = ""
+        if is_external_turn(ctx):
+            # 外部回合一定来自角色共享会话里的某个会话，缺了说明装配有误。
+            if not ctx.thread_id:
+                raise ValueError("外部回合缺少 thread_id，无法排除当前会话的动态")
+            current_thread_id = ctx.thread_id
         return (
             ctx.group_environment.render_recent_activity(
-                ctx.role_id, now=datetime.now().astimezone()
+                ctx.role_id,
+                now=datetime.now().astimezone(),
+                current_thread_id=current_thread_id,
             )
             or None
         )
@@ -404,6 +419,32 @@ class MemberProfilesPromptBlock:
                 trigger=ctx.message_source,
                 window=ctx.window_sources,
                 bound=self._roles.bound_user_senders(ctx.role_id),
+            )
+            or None
+        )
+
+    def cache_signature(self, ctx: TurnContext) -> str | None:
+        return None
+
+
+class UserGroupSpeechPromptBlock:
+    """用户上下文回合注入「用户最近在群里说过」（#539）；外部回合不注入。
+
+    单独成块放进 context frame，不并入对话历史的时间线。
+    """
+
+    priority = 49
+    label = "user_group_speech"
+    is_static = False
+
+    def render(
+        self, ctx: TurnContext, cached_signature: str | None = None
+    ) -> str | None:
+        if is_external_turn(ctx) or ctx.group_environment is None or not ctx.role_id:
+            return None
+        return (
+            ctx.group_environment.render_user_group_speech(
+                ctx.role_id, now=datetime.now().astimezone()
             )
             or None
         )
