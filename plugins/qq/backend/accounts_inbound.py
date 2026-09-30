@@ -6,10 +6,14 @@ from typing import Any
 
 from bus.events import InboundMessage
 from core.accounts import VIA_ACCOUNT_KEY
-from core.common.message_source import SENDER_NAME_KEY
+from core.common.message_source import (
+    MENTIONED_IDS_KEY,
+    MENTIONED_KEY,
+    SENDER_NAME_KEY,
+)
 
 from .accounts_actions import qq_number
-from .channel.group_filter import is_at_bot
+from .channel.group_filter import at_member_ids
 
 # Metadata flag of a private message that came through a group temporary
 # session (NapCat ``sub_type == "group"``) rather than a real private chat.
@@ -77,7 +81,12 @@ def inbound_message(
         metadata[GROUP_TEMPORARY_KEY] = True
     if kind == "group":
         metadata["group_id"] = chat_id[4:]
-        metadata["mentioned"] = is_at_bot(content, expected_uin)
+        # The @ segments are stripped from the text after admission, so the
+        # mentioned members are kept here as metadata.
+        mentioned_ids = at_member_ids(content)
+        metadata[MENTIONED_KEY] = expected_uin in mentioned_ids
+        if mentioned_ids:
+            metadata[MENTIONED_IDS_KEY] = list(mentioned_ids)
     return InboundMessage(
         channel="qq",
         sender=sender,

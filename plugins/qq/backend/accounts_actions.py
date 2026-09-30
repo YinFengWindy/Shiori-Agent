@@ -138,6 +138,22 @@ class QQAccountActions:
             raise OneBotError("NapCat get_group_info 未返回群名")
         return data["group_name"]
 
+    async def message_sender(self, account_id: str, message_id: str) -> str:
+        """The QQ number that sent message ``message_id``, from NapCat ``get_msg``.
+
+        Used while a message replying to it is being received, so the
+        account's socket is already online and no status check is made.
+        """
+        socket = self._socket_for(account_id)
+        data = await socket.call("get_msg", {"message_id": int(message_id)})
+        sender = data.get("sender") if isinstance(data, dict) else None
+        if not isinstance(sender, dict):
+            raise OneBotError("NapCat get_msg 未返回发送者")
+        try:
+            return qq_number(sender.get("user_id"), "被回复消息的发送者")
+        except ValueError as exc:
+            raise OneBotError("NapCat get_msg 未返回有效发送者") from exc
+
     async def send_target(
         self,
         account_id: str,

@@ -17,7 +17,6 @@ _AVATAR = "data:image/png;base64,iVBORw0KGgo="
 _RULES = {
     "private_enabled": False,
     "group_enabled": True,
-    "require_mention": False,
     "blocked_sender_ids": ["troll"],
 }
 

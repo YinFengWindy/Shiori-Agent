@@ -4,11 +4,14 @@
  * as the `account` prop).
  */
 
-/** Account-wide response policy the account's plugin saves with it; every group chat follows it. */
+/**
+ * Account-wide response policy the account's plugin saves with it; every group
+ * chat follows it, and within a group the role only speaks when @-mentioned or
+ * replied to.
+ */
 export type AccountResponseRules = {
   privateEnabled: boolean;
   groupEnabled: boolean;
-  requireMention: boolean;
   blockedSenderIds: string[];
 };
 

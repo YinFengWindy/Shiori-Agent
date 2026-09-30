@@ -9,7 +9,7 @@ const account: AccountSnapshot = {
   id: "telegram:123", pluginId: "telegram", platform: "telegram", platformAccountId: "123", configRef: "123",
   displayName: "First Bot", avatarUrl: "", roleId: "mira",
   runtimeActive: true, connection: "online", capabilities: [], error: "",
-  responseRules: { privateEnabled: true, groupEnabled: true, requireMention: true, blockedSenderIds: [] },
+  responseRules: { privateEnabled: true, groupEnabled: true, blockedSenderIds: [] },
 };
 
 type Call = { name: string; payload?: Record<string, unknown> };

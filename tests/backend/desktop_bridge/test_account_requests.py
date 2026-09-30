@@ -52,7 +52,6 @@ async def test_list_and_detail_use_live_account_snapshot():
             "response_rules": {
                 "private_enabled": True,
                 "group_enabled": True,
-                "require_mention": True,
                 "blocked_sender_ids": [],
             },
         }
@@ -74,7 +73,6 @@ async def test_rules_are_validated_then_saved_by_the_plugin():
     rules = {
         "private_enabled": False,
         "group_enabled": True,
-        "require_mention": True,
         "blocked_sender_ids": [" member-1 "],
     }
     with pytest.raises(ValueError, match="Invalid account response rules"):

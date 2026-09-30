@@ -6,7 +6,7 @@ type AccountPayload = {
   display_name: string; avatar_url: string; role_id: string;
   runtime_active: boolean; connection: AccountSnapshot["connection"];
   capabilities: string[]; error: string;
-  response_rules: { private_enabled: boolean; group_enabled: boolean; require_mention: boolean; blocked_sender_ids: string[] };
+  response_rules: { private_enabled: boolean; group_enabled: boolean; blocked_sender_ids: string[] };
 };
 
 function mapAccount(row: AccountPayload): AccountSnapshot {
@@ -19,7 +19,6 @@ function mapAccount(row: AccountPayload): AccountSnapshot {
     responseRules: {
       privateEnabled: row.response_rules.private_enabled,
       groupEnabled: row.response_rules.group_enabled,
-      requireMention: row.response_rules.require_mention,
       blockedSenderIds: row.response_rules.blocked_sender_ids,
     },
   };
@@ -48,7 +47,6 @@ export function createAccountClient(invoke?: DesktopInvoke) {
         response_rules: {
           private_enabled: rules.privateEnabled,
           group_enabled: rules.groupEnabled,
-          require_mention: rules.requireMention,
           blocked_sender_ids: rules.blockedSenderIds,
         },
       });

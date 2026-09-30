@@ -7,16 +7,17 @@ from typing import Any
 
 from bus.events import InboundMessage
 from core.channels.pairing_command import answer_pairing_code
-from core.common.message_source import GROUP_NAME_KEY
+from core.common.message_source import GROUP_NAME_KEY, addresses_account
 from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
 
 from .accounts_actions import QQAccountActions, qq_chat_target
 from .accounts_group_names import QQGroupNames
 from .accounts_inbound import inbound_message, is_real_private_chat
+from .accounts_reply_sender import with_reply_sender
 from .accounts_store import QQConnectionConfig
 from .channel.compat import download_to_temp, extract_cq_images
-from .channel.group_filter import strip_at_segments
+from .channel.group_filter import strip_at_segments, strip_reply_segments
 from .onebot import OneBotSocket
 
 
@@ -102,11 +103,14 @@ class QQInboundAdapter:
         if ctx is None:
             return
         message = await self._with_group_name(message)
+        message = await with_reply_sender(message, self._actions.message_sender)
         hub = ctx.channel_hub
         if hub is None:
-            if message.metadata.get(
-                "chat_type"
-            ) == "group" and not message.metadata.get("mentioned"):
+            # Without the host's account routing, a group message still only
+            # passes when it @s this account or replies to it.
+            if message.metadata.get("chat_type") == "group" and not addresses_account(
+                message.metadata, str(message.metadata["platform_account_id"])
+            ):
                 return
         else:
             # A QQ number is the same for every account. Only a real private
@@ -130,8 +134,9 @@ class QQInboundAdapter:
             message = routed
             if message.metadata.get("conversation_duplicate"):
                 return
+        # A group message's @ and reply targets already travel as metadata.
         raw = (
-            strip_at_segments(message.content)
+            strip_reply_segments(strip_at_segments(message.content))
             if message.metadata.get("chat_type") == "group"
             else message.content
         )

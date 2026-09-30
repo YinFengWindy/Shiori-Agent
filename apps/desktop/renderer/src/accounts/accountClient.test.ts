@@ -8,7 +8,7 @@ test("account client maps host snapshots and sends only explicit rule mutations"
     id: "a", plugin_id: "demo", platform: "demo", platform_account_id: "101", config_ref: "private-a",
     display_name: "Account", avatar_url: "", role_id: "role-1",
     runtime_active: true, connection: "online", capabilities: ["groups"], error: "",
-    response_rules: { private_enabled: true, group_enabled: true, require_mention: false,
+    response_rules: { private_enabled: true, group_enabled: true,
       blocked_sender_ids: ["sender-1"] },
   };
   const client = createAccountClient(async ({ method, payload }) => {
@@ -17,7 +17,6 @@ test("account client maps host snapshots and sends only explicit rule mutations"
       payload: method === "accounts.list" ? { accounts: [row] } : { account: row } };
   });
   const [account] = await client.list();
-  assert.equal(account.responseRules.requireMention, false);
   assert.equal(account.responseRules.blockedSenderIds[0], "sender-1");
   assert.deepEqual(account.capabilities, ["groups"]);
   assert.equal(account.configRef, "private-a");
@@ -25,7 +24,7 @@ test("account client maps host snapshots and sends only explicit rule mutations"
   await client.setRules("a", account.responseRules);
   assert.deepEqual(calls[1], { method: "accounts.rules.set", payload: {
     account_id: "a", response_rules: { private_enabled: true, group_enabled: true,
-      require_mention: false, blocked_sender_ids: ["sender-1"] },
+      blocked_sender_ids: ["sender-1"] },
   } });
 });
 

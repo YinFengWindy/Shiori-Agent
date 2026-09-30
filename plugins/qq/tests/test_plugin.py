@@ -222,7 +222,6 @@ async def test_rules_edited_on_the_host_survive_a_plugin_restart(
     rules = {
         "private_enabled": False,
         "group_enabled": True,
-        "require_mention": False,
         "blocked_sender_ids": ["9"],
     }
     async with plugin_runtime(("qq",)) as (service, _path):
@@ -232,9 +231,7 @@ async def test_rules_edited_on_the_host_survive_a_plugin_restart(
             {"account_id": "qq:101", "response_rules": rules},
         )
         assert saved.error is None, saved.error
-    expected = AccountResponseRules(
-        private_enabled=False, require_mention=False, blocked_sender_ids=("9",)
-    )
+    expected = AccountResponseRules(private_enabled=False, blocked_sender_ids=("9",))
 
     listed = await _restart_and_list(tmp_path, tmp_path / "staging")
 

@@ -13,7 +13,7 @@ const identity = (id: string, scope: string, accountId = "") => ({
 const account = {
   id: "acc-1", plugin_id: "qq", platform: "qq", platform_account_id: "900", config_ref: "", display_name: "小栞",
   avatar_url: "", role_id: "role-1", runtime_active: true, connection: "online", capabilities: [], error: "",
-  response_rules: { private_enabled: true, group_enabled: true, require_mention: true, blocked_sender_ids: [] },
+  response_rules: { private_enabled: true, group_enabled: true, blocked_sender_ids: [] },
 };
 
 /** A fake host: `identities` is what `identities.list` returns now; every call is recorded. */

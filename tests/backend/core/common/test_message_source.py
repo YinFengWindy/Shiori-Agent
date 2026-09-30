@@ -1,5 +1,9 @@
 from bus.events import InboundMessage
-from core.common.message_source import MessageSource, with_message_source
+from core.common.message_source import (
+    MessageSource,
+    addresses_account,
+    with_message_source,
+)
 
 
 def test_inbound_source_uses_platform_fields_not_context_overrides():
@@ -183,3 +187,10 @@ def test_structured_mentions_and_reply_target_are_stored_with_the_message():
     assert stored.reply_to_sender_id == "777"
     # 只随消息存下，不出现在给模型看的来源前缀里。
     assert "555" not in with_message_source("hi", stored)
+
+
+def test_group_message_addresses_the_account_by_mention_or_reply():
+    assert addresses_account({"mentioned": True}, "100")
+    assert addresses_account({"reply_to_sender_id": "100"}, "100")
+    assert not addresses_account({"reply_to_sender_id": "555"}, "100")
+    assert not addresses_account({"mentioned": False}, "100")

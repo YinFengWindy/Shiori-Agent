@@ -11,6 +11,7 @@ from telegram.ext import ContextTypes
 from bus.events import InboundMessage
 from core.accounts import VIA_ACCOUNT_KEY
 from core.channels.pairing_command import answer_pairing_code
+from core.common.message_source import MENTIONED_KEY
 
 from .formatting import _build_inbound_text_with_reply
 from .identity import (
@@ -115,7 +116,7 @@ class _InboundMixin:
                 media=reply_media,
                 metadata={
                     **self._account_metadata(),
-                    "mentioned": message_mentioned_bot(
+                    MENTIONED_KEY: message_mentioned_bot(
                         msg, getattr(self, "_bot_username", "")
                     ),
                     "username": user.username or "",
