@@ -58,6 +58,8 @@ def test_manifest_preserves_historical_channel_name() -> None:
     }
     assert manifest.config_model is None
     assert [item.name for item in manifest.channels] == ["qq"]
+    # NapCat delivers every group message, so its groups can be listened to.
+    assert manifest.channels[0].group_listening is True
 
 
 def test_manifest_group_prefix_matches_the_transport_group_format() -> None:

@@ -110,6 +110,17 @@ class QQInboundAdapter:
             return
         message = await self._with_group_name(message)
         message = await with_reply_sender(message, self._actions.message_sender)
+        # The host keeps the text it is handed, for a turn or for a group's
+        # listening records (#538), so CQ codes leave before routing: a group
+        # message's @ and reply targets already travel as metadata, and
+        # pictures are only downloaded for a message that starts a turn.
+        raw = (
+            strip_reply_segments(strip_at_segments(message.content))
+            if message.metadata.get("chat_type") == "group"
+            else message.content
+        )
+        text, image_urls = extract_cq_images(raw)
+        message = replace(message, content=text)
         hub = ctx.channel_hub
         if hub is None:
             # Without the host's account routing, a group message still only
@@ -133,7 +144,8 @@ class QQInboundAdapter:
                 ),
             ):
                 return
-            # The host admits by account and response rules, then projects.
+            # The host admits by account and response rules, then projects;
+            # an unaddressed group message ends there (listened to or dropped).
             routed = hub.route_account_inbound(message)
             if routed is None:
                 return
@@ -143,13 +155,6 @@ class QQInboundAdapter:
             # Only a message the role receives shows its sender and group.
             if self._avatars is not None:
                 refresh_message_avatars(self._avatars, message)
-        # A group message's @ and reply targets already travel as metadata.
-        raw = (
-            strip_reply_segments(strip_at_segments(message.content))
-            if message.metadata.get("chat_type") == "group"
-            else message.content
-        )
-        text, image_urls = extract_cq_images(raw)
         media = (
             await download_to_temp(
                 image_urls, ctx.http_resources.external_default, ctx.attachment_store
@@ -157,6 +162,4 @@ class QQInboundAdapter:
             if image_urls
             else []
         )
-        message = replace(message, content=text, media=media)
-        if not message.metadata.get("conversation_duplicate"):
-            await ctx.bus.publish_inbound(message)
+        await ctx.bus.publish_inbound(replace(message, media=media))

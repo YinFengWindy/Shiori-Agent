@@ -7,23 +7,24 @@ import type { RoleRecord } from "@shiori/plugin-sdk";
 import { PhoneConversationList } from "./PhoneConversationList";
 import { PhoneConversationScreens } from "./PhoneConversationScreens";
 import { PhoneHomeScreen } from "./PhoneHomeScreen";
+import { PhoneSettingsPage } from "./PhoneSettingsPage";
 import { accountConversations, phoneApps } from "./phonePresentation";
 import { PhoneShell } from "./PhoneShell";
 import { usePhoneClock } from "./usePhoneClock";
 import { usePhoneConversations } from "./usePhoneConversations";
 
 /**
- * Which screen shows: the home screen (no app), an app's conversation list
- * (no thread) or a conversation's chat page; and the side it slides in from
- * (`none` for the first one).
+ * Which screen shows: the home screen (no app), the phone's settings, an
+ * app's conversation list (no thread) or a conversation's chat page; and
+ * the side it slides in from (`none` for the first one).
  */
-type PhoneView = { accountId: string | null; threadId: string | null; direction: "none" | "forward" | "back" };
+type PhoneView = { accountId: string | null; threadId: string | null; settings?: boolean; direction: "none" | "forward" | "back" };
 
 const homeView: PhoneView = { accountId: null, threadId: null, direction: "none" };
 
 /**
  * The role's phone, floating at the right of the chat: home screen of the
- * role's accounts, then one account's conversations, then one
+ * role's accounts (and the phone's settings), then one account's conversations, then one
  * conversation (with its chat info and member profiles). Mounting it (opening the phone) reads the accounts and
  * conversations afresh; while it is open, new messages arrive live.
  */
@@ -46,8 +47,11 @@ export function PhonePanel({ role }: { role: RoleRecord }) {
   return (
     <aside className="pointer-events-auto flex h-full justify-end" aria-label={`${role.name} 的手机`} data-testid="phone-panel">
       <PhoneShell avatarUrl={role.avatar_abs ? toFileUrl(role.avatar_abs) : ""} now={now}>
-        <div key={openConversation?.threadId ?? openApp?.accountId ?? "home"} className="phone-view h-full" data-direction={view.direction}>
-          {openApp && openConversation ? (
+        <div key={openConversation?.threadId ?? openApp?.accountId ?? (view.settings ? "settings" : "home")} className="phone-view h-full"
+          data-direction={view.direction}>
+          {view.settings ? (
+            <PhoneSettingsPage onBack={() => setView({ ...homeView, direction: "back" })} />
+          ) : openApp && openConversation ? (
             <PhoneConversationScreens
               role={role}
               app={openApp}
@@ -71,6 +75,7 @@ export function PhonePanel({ role }: { role: RoleRecord }) {
               error={accountsError}
               onRetry={() => void reloadAccounts()}
               onOpen={(accountId) => setView({ accountId, threadId: null, direction: "forward" })}
+              onOpenSettings={() => setView({ ...homeView, settings: true, direction: "forward" })}
             />
           )}
         </div>

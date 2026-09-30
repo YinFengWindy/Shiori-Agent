@@ -1,4 +1,4 @@
-import { PuzzlePieceIcon } from "@phosphor-icons/react";
+import { GearSixIcon, PuzzlePieceIcon } from "@phosphor-icons/react";
 import { emptyStateLines } from "../shared/mascot/mascotLines";
 import { cx, pressableClass } from "@shiori/plugin-sdk";
 import { PhoneEmptyState } from "./PhoneEmptyState";
@@ -10,16 +10,19 @@ const appButtonClass = cx(
   "grid w-full min-w-0 cursor-pointer justify-items-center gap-1 rounded-md p-1 hover:bg-surface-hover",
 );
 
+const appIconClass = "relative grid h-14 w-14 place-items-center rounded-md bg-surface text-ink-secondary shadow-soft";
+
 /**
- * The home screen: one app per account of the role. An offline account
- * still has its app, dimmed and marked 「离线」 under its icon.
+ * The home screen: one app per account of the role, then 设置. An offline
+ * account still has its app, dimmed and marked 「离线」 under its icon.
  */
-export function PhoneHomeScreen({ apps, error, onRetry, onOpen }: {
+export function PhoneHomeScreen({ apps, error, onRetry, onOpen, onOpenSettings }: {
   /** Null while the accounts load. */
   apps: PhoneApp[] | null;
   error: string;
   onRetry: () => void;
   onOpen: (accountId: string) => void;
+  onOpenSettings: () => void;
 }) {
   if (error) {
     return <PhoneLoadError message={error} onRetry={onRetry} />;
@@ -34,10 +37,7 @@ export function PhoneHomeScreen({ apps, error, onRetry, onOpen }: {
         <li key={accountId} className="min-w-0">
           <button type="button" className={appButtonClass} aria-label={offline ? `${label}，离线` : label}
             data-testid={`phone-app-${accountId}`} onClick={() => onOpen(accountId)}>
-            <span className={cx(
-              "relative grid h-14 w-14 place-items-center rounded-md bg-surface text-ink-secondary shadow-soft",
-              offline && "opacity-60",
-            )}>
+            <span className={cx(appIconClass, offline && "opacity-60")}>
               <Icon className="h-7 w-7" />
             </span>
             <span className="surface-glass max-w-full truncate rounded-full px-1 text-caption text-ink">{label}</span>
@@ -45,6 +45,12 @@ export function PhoneHomeScreen({ apps, error, onRetry, onOpen }: {
           </button>
         </li>
       ))}
+      <li className="min-w-0">
+        <button type="button" className={appButtonClass} aria-label="设置" data-testid="phone-app-settings" onClick={onOpenSettings}>
+          <span className={appIconClass}><GearSixIcon className="h-7 w-7" /></span>
+          <span className="surface-glass max-w-full truncate rounded-full px-1 text-caption text-ink">设置</span>
+        </button>
+      </li>
     </ul>
   );
 }

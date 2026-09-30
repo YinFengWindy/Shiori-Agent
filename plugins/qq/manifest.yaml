@@ -13,6 +13,8 @@ channels:
   - name: qq
     label: QQ（NapCat）
     contact_label: QQ 号
+    # NapCat delivers every group message, so a group can be listened to (#538).
+    group_listening: true
     chat_types:
       - type: private
         label: 私聊

@@ -46,8 +46,8 @@ export function PhoneConversationScreens({ role, app, conversation, now, onBack 
       {infoOpen ? (
         <div className={cx("phone-view absolute inset-0", member && "invisible")} inert={Boolean(member)}
           data-direction={member ? undefined : direction}>
-          <PhoneChatInfoPage roleId={role.id} app={app} conversation={conversation} sections={sections}
-            active={!member} membersRevision={membersRevision} onBack={back}
+          <PhoneChatInfoPage roleId={role.id} roleName={role.name} app={app} conversation={conversation} sections={sections}
+            active={!member} membersRevision={membersRevision} now={now} onBack={back}
             onOpenMember={(senderId) => open({ kind: "member", senderId, from: "info" })} />
         </div>
       ) : null}

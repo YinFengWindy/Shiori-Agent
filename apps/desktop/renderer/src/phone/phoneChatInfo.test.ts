@@ -9,12 +9,12 @@ type MessageItem = Extract<PhoneChatItem, { kind: "message" }>;
 const item = (patch: Partial<PhoneMessage>, isUser = false): MessageItem => {
   const message: PhoneMessage = {
     id: "m", seq: 1, sender: "other", senderId: "42", senderName: "阿花", senderIsUser: isUser,
-    senderAvatarPath: null, content: "", media: [], timestamp: "", ...patch,
+    senderAvatarPath: null, content: "", media: [], timestamp: "", listened: false, ...patch,
   };
   return { kind: "message", key: "m", message, side: message.sender === "role" ? "right" : "left", senderLabel: null, isUser };
 };
 
-const group = { isUserChat: false, chatType: "group" } as const;
+const group = { isUserChat: false, chatType: "group", listeningSupported: false } as const;
 
 test("external chats get the four blocks in order; the user's own chat gets none", () => {
   assert.deepEqual(phoneChatInfoSections(group), [
@@ -23,12 +23,14 @@ test("external chats get the four blocks in order; the user's own chat gets none
     { id: "note", title: "群笔记" },
     { id: "activity", title: "最近动态" },
   ]);
+  // Only a group whose channel declares listening ends with the 旁听 block.
+  assert.deepEqual(phoneChatInfoSections({ ...group, listeningSupported: true }).at(-1), { id: "listening", title: "旁听" });
   // A stranger's private chat is external as well, titled for a chat.
   assert.deepEqual(
-    phoneChatInfoSections({ isUserChat: false, chatType: "private" }).map(({ id, title }) => `${id}:${title}`),
+    phoneChatInfoSections({ isUserChat: false, chatType: "private", listeningSupported: false }).map(({ id, title }) => `${id}:${title}`),
     ["summary:聊天信息", "members:成员", "note:笔记", "activity:最近动态"],
   );
-  assert.deepEqual(phoneChatInfoSections({ isUserChat: true, chatType: "private" }), []);
+  assert.deepEqual(phoneChatInfoSections({ isUserChat: true, chatType: "private", listeningSupported: false }), []);
 });
 
 test("the summary names the group or the other person, the channel and the carrying account", () => {
@@ -45,7 +47,7 @@ test("an avatar opens a member profile only for another, identified sender in an
   assert.equal(phoneMemberEntryOf(item({ senderIsUser: true }, true), group), null);
   assert.equal(phoneMemberEntryOf(item({ sender: "role", senderId: null }), group), null);
   assert.equal(phoneMemberEntryOf(item({ senderId: null }), group), null);
-  assert.equal(phoneMemberEntryOf(item({}), { isUserChat: true, chatType: "private" }), null);
+  assert.equal(phoneMemberEntryOf(item({}), { isUserChat: true, chatType: "private", listeningSupported: false }), null);
 });
 
 test("a profile goes back to where it was opened from; the info page back to the chat", () => {

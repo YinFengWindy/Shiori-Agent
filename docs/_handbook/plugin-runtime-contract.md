@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.12.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.13.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -88,6 +88,7 @@ version whose additions it uses.
 | `2.10.0` | the host services context (`PluginHostServicesProvider` / `usePluginHostServices`) exported by `@shiori/plugin-sdk`, plus `host.config` (the plugin's own config: read, save a patch, subscribe) and `host.assets` (local path to displayable URL) (see [Runtime API 2.10 host services context, config and assets](#runtime-api-210-host-services-context-config-and-assets)) | #505 (#440 T3) |
 | `2.11.0` | `ctx.reportFailure(operation, error)` on the background `setup(ctx)`: a handled background failure recorded in the host's desktop diagnostic log; `@shiori/plugin-sdk` also becomes the source of the `desktop.surface` and `app.background` contract types (see [Runtime API 2.11 background failure reporting and surface/background types](#runtime-api-211-background-failure-reporting-and-surfacebackground-types)) | #508 (#440) |
 | `2.12.0` | the `avatars` capability: `ctx.avatars.refresh(kind, channel, id, fetch)` hands channel senders' and chats' platform avatars to a host-owned cache, released with the plugin scope (see [Runtime API 2.12 channel avatars](#runtime-api-212-channel-avatars)) | #514 |
+| `2.13.0` | optional `group_listening: true` on manifest `channels` entries: the channel hands every group message to the host, so its groups offer 群聊旁听 (see [Runtime API 2.2 channel declarations](#runtime-api-22-channel-declarations)) | #538 (#527) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -132,6 +133,7 @@ channels:
   - name: qq                         # required, [a-z][a-z0-9_-]{0,63}
     label: QQ（NapCat）               # required, display name
     contact_label: QQ 号              # optional, names member IDs in a group binding's blacklist
+    group_listening: true            # optional since 2.13, boolean: groups can be listened to
     chat_types:                      # required since 2.5, nonempty
       - type: private                # required, private | group, unique per channel
         label: 私聊                   # required, type picker label
@@ -144,8 +146,18 @@ channels:
         prefix: 'gqq:'               # optional, prepended to the number
 ```
 
-Values must be nonempty strings; unknown keys, duplicate names, the host-owned
-`desktop` name and declarations without the `channels` capability are rejected.
+Values must be nonempty strings (`group_listening` is a boolean); unknown keys,
+duplicate names, the host-owned `desktop` name and declarations without the
+`channels` capability are rejected.
+
+Since API 2.13 an entry may declare `group_listening: true`: the plugin passes
+every group message to `route_account_inbound`, not only those that @ or reply
+to the account, with the text already cleaned of platform codes (the host keeps
+it as is). The host then offers listening for that channel's groups: a group the
+user (or the role) turns listening on for keeps its unaddressed messages in
+separate listening records, which start no turn (#538). Channels without the
+declaration show no listening switch. `channels.list` rows carry
+`group_listening: true` only when declared.
 
 Since API 2.5 every entry must declare `chat_types`; an entry without it is
 rejected, and the 2.2 channel-level `chat_id_label` / `chat_id_hint` keys are no

@@ -11,11 +11,15 @@ import { usePhoneMembers, usePhoneRecentActivity } from "./usePhoneChatMemory";
 export type PhoneChatInfoSectionProps = {
   section: PhoneChatInfoSection;
   roleId: string;
+  /** The role's name, naming it in the listening switch log. */
+  roleName: string;
   app: PhoneApp;
   conversation: PhoneConversation;
   onOpenMember: (senderId: string) => void;
   /** Changes whenever a member profile opened from this page was saved or deleted. */
   membersRevision: number;
+  /** The phone's clock, for relative times. */
+  now: Date;
 };
 
 const memberButtonClass = cx(

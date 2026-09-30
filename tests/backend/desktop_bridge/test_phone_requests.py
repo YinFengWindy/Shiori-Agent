@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import io
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 from PIL import Image
 
+from conversation.listening import GroupListeningControl
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.accounts import AccountRecord, AccountRegistry
@@ -39,6 +41,11 @@ def _thread(
     if name is not None:
         conversation.remember_contact_name(thread, name)
     return thread
+
+
+def _listening(conversation: ConversationService) -> GroupListeningControl:
+    """Only the QQ plugin declares group listening."""
+    return GroupListeningControl(conversation, {"qq"}.__contains__)
 
 
 def _metadata(
@@ -175,6 +182,7 @@ async def test_lists_the_roles_channel_conversations_newest_first(
         identities=identities,
         messages=DesktopSessionPresenter(conversation),
         avatars=ChannelAvatarStore(tmp_path),
+        listening=_listening(conversation),
     )
 
     result = await handler.handle("phone.conversations.list", {"role_id": "mira"})
@@ -189,6 +197,8 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 "display_name": "摸鱼群",
                 "avatar_abs": None,
                 "is_user_chat": False,
+                # A QQ group: its plugin declares listening.
+                "listening_supported": True,
                 "last_message": {
                     "role": "assistant",
                     "content": "我来",
@@ -205,6 +215,7 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 "display_name": "小明",
                 "avatar_abs": None,
                 "is_user_chat": True,
+                "listening_supported": False,
                 "last_message": {
                     "role": "assistant",
                     "content": "晚安",
@@ -221,6 +232,8 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 "display_name": "项目群",
                 "avatar_abs": None,
                 "is_user_chat": False,
+                # A group, but Feishu declares no listening: no 旁听 block.
+                "listening_supported": False,
                 "last_message": {
                     "role": "user",
                     "content": "周会改到三点",
@@ -238,6 +251,7 @@ async def test_lists_the_roles_channel_conversations_newest_first(
                 "display_name": "c2c:7",
                 "avatar_abs": None,
                 "is_user_chat": False,
+                "listening_supported": False,
                 "last_message": {
                     "role": "user",
                     "content": "在吗",
@@ -262,6 +276,7 @@ async def test_requires_a_role_and_leaves_other_methods_alone(
         identities=UserIdentityStore(tmp_path),
         messages=DesktopSessionPresenter(conversation),
         avatars=ChannelAvatarStore(tmp_path),
+        listening=_listening(conversation),
     )
 
     with pytest.raises(ValueError, match="role_id"):
@@ -286,6 +301,7 @@ def _handler(tmp_path: Path, conversation: ConversationService):
         identities=UserIdentityStore(tmp_path),
         messages=DesktopSessionPresenter(conversation),
         avatars=ChannelAvatarStore(tmp_path),
+        listening=_listening(conversation),
     )
     return handler, qq.record
 
@@ -375,6 +391,7 @@ async def test_reads_one_conversation_page_by_page_from_the_roles_view(
             "content": "我也来",
             "media": ["photo.png"],
             "timestamp": "2026-09-29T10:01:00+08:00",
+            "listened": False,
         },
         {
             "sender": "role",
@@ -385,6 +402,7 @@ async def test_reads_one_conversation_page_by_page_from_the_roles_view(
             "content": "我来",
             "media": [],
             "timestamp": "2026-09-29T10:02:00+08:00",
+            "listened": False,
         },
     ]
     assert newest["next_before_seq"] == newest["messages"][0]["seq"]
@@ -495,6 +513,7 @@ async def test_cached_avatars_come_with_rows_messages_and_live_updates(
         identities=UserIdentityStore(tmp_path),
         messages=DesktopSessionPresenter(conversation),
         avatars=avatars,
+        listening=_listening(conversation),
     )
 
     listed = await handler.handle("phone.conversations.list", {"role_id": "mira"})
@@ -516,3 +535,62 @@ async def test_cached_avatars_come_with_rows_messages_and_live_updates(
     ]
     assert update["conversation"]["avatar_abs"] == group_avatar
     assert update["messages"][0]["sender_avatar_abs"] == sender
+    # A listening record of the same sender shows the same avatar.
+    conversation.listening.set_enabled(group.id, True, operator="user")
+    source = _group_message(group, sender_id="42", name="阿花")["message_source"]
+    heard = conversation.listening.hear(
+        group.id,
+        sender_id="42",
+        content="路过",
+        source=source,
+        external_message_id="",
+        timestamp=datetime(2026, 9, 30, 20, 0).astimezone(),
+    )
+    assert heard is not None
+    listened = handler.listening_update(heard)
+    assert listened is not None
+    assert listened["message"]["sender_avatar_abs"] == sender
+
+
+@pytest.mark.asyncio
+async def test_reads_a_groups_listening_records_after_listening_is_off(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    conversation = ConversationService(manager)
+    group = _thread(conversation, role_id="mira", channel="qq", chat_id="gqq:5")
+    handler, qq = _handler(tmp_path, conversation)
+    _ = _bind(tmp_path, qq, "100")
+    listening = conversation.listening
+    listening.set_enabled(group.id, True, operator="user")
+    source = _group_message(group, sender_id="100", name="主人")["message_source"]
+    heard = listening.hear(
+        group.id,
+        sender_id="100",
+        content="今晚开黑",
+        source=source,
+        external_message_id="",
+        timestamp=datetime(2026, 9, 30, 20, 0).astimezone(),
+    )
+    assert heard is not None
+    listening.set_enabled(group.id, False, operator="user")
+
+    page = await handler.handle(
+        "phone.listening.messages", {"role_id": "mira", "thread_id": group.id}
+    )
+
+    assert page is not None
+    [row] = page["messages"]
+    assert (row["content"], row["sender_name"], row["listened"]) == (
+        "今晚开黑",
+        "主人",
+        True,
+    )
+    assert row["sender_is_user"] is True
+    assert page["has_more"] is False
+    # The live event carries the same row.
+    assert handler.listening_update(heard) == {
+        "role_id": "mira",
+        "thread_id": group.id,
+        "message": row,
+    }

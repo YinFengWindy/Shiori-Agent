@@ -6,10 +6,10 @@ import type { PhoneApp } from "./phonePresentation";
 /**
  * Blocks of a conversation's chat info page. The page renders them in the
  * order `phoneChatInfoSections` lists them, each id through its registered
- * view; a later block (e.g. listening in on a group) adds an id here, a
- * descriptor there and a view in the page's registry.
+ * view; a new block adds an id here, a descriptor there and a view in the
+ * page's registry.
  */
-export type PhoneChatInfoSectionId = "summary" | "members" | "note" | "activity";
+export type PhoneChatInfoSectionId = "summary" | "members" | "note" | "activity" | "listening";
 
 /** One block of the chat info page. */
 export type PhoneChatInfoSection = {
@@ -23,9 +23,12 @@ export type PhoneChatInfoSection = {
  * conversation never reaches the phone), otherwise the conversation summary,
  * its members, the note (editable) and the recent activity (read-only:
  * only memory consolidation writes it). A stranger's private chat is external too
- * and gets the same blocks, titled for a chat rather than a group.
+ * and gets the same blocks, titled for a chat rather than a group. A group
+ * whose channel declares listening (`listeningSupported`) ends with 旁听.
  */
-export function phoneChatInfoSections(conversation: Pick<PhoneConversation, "isUserChat" | "chatType">): PhoneChatInfoSection[] {
+export function phoneChatInfoSections(
+  conversation: Pick<PhoneConversation, "isUserChat" | "chatType" | "listeningSupported">,
+): PhoneChatInfoSection[] {
   if (conversation.isUserChat) return [];
   const group = conversation.chatType === "group";
   return [
@@ -33,6 +36,7 @@ export function phoneChatInfoSections(conversation: Pick<PhoneConversation, "isU
     { id: "members", title: group ? "群成员" : "成员" },
     { id: "note", title: group ? "群笔记" : "笔记" },
     { id: "activity", title: "最近动态" },
+    ...(group && conversation.listeningSupported ? [{ id: "listening", title: "旁听" } as const] : []),
   ];
 }
 
@@ -56,7 +60,7 @@ export function phoneChatSummaryRows(
  */
 export function phoneMemberEntryOf(
   item: Extract<PhoneChatItem, { kind: "message" }>,
-  conversation: Pick<PhoneConversation, "isUserChat" | "chatType">,
+  conversation: Pick<PhoneConversation, "isUserChat" | "chatType" | "listeningSupported">,
 ) {
   const { message } = item;
   if (!phoneChatInfoSections(conversation).length || message.sender === "role" || item.isUser) return null;

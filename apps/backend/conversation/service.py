@@ -4,6 +4,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from conversation.listening_store import GroupListeningStore
 from conversation.models import ContactRecord, ThreadRecord
 from conversation.projector import ConversationStateProjector
 from conversation.store import ConversationStore
@@ -88,12 +89,31 @@ class ConversationService:
             self._store = ConversationStore(db_path)
         self._projector = ConversationStateProjector(self._store)
 
+    @property
+    def listening(self) -> GroupListeningStore:
+        """The role groups' listening records and switches (#538)."""
+        return self._store.listening
+
     def get_thread_by_session_key(self, session_key: str) -> ThreadRecord | None:
         return self._store.get_thread_by_legacy_session_key(session_key)
 
     def get_thread(self, thread_id: str) -> ThreadRecord | None:
         """Looks up a formal thread without exposing a legacy session key."""
         return self._store.get_thread(thread_id)
+
+    def role_channel_thread(self, role_id: str, thread_id: str) -> ThreadRecord | None:
+        """``thread_id`` when it is one of the role's current channel conversations."""
+        if not thread_id:
+            return None
+        thread = self._store.get_thread(thread_id)
+        if (
+            thread is None
+            or thread.role_id != role_id
+            or thread.thread_kind != "network"
+            or thread.archived
+        ):
+            return None
+        return thread
 
     def list_network_threads(self, role_id: str) -> list[ThreadRecord]:
         """The role's current external channel threads, without the desktop one.

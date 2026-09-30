@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -103,6 +103,10 @@ class ChannelDeclaration:
     内部前缀：绑定面板据此让用户选类型、只填号码，保存绑定时宿主据此校验会话
     ID 与类型一致。插件声明必须提供（解析时缺失即拒绝）；只有宿主自有的
     ``desktop`` 行显式传空元组。
+
+    ``group_listening``（Runtime API 2.13）声明渠道会把群里没有 @ 或回复账号的
+    消息也交给宿主，因而支持群聊旁听（#538）；只有这样的渠道在小手机里显示
+    旁听开关。缺省为不支持。
     """
 
     name: str
@@ -110,6 +114,7 @@ class ChannelDeclaration:
     chat_types: tuple[ChatTypeDeclaration, ...]
     contact_label: str | None = None
     instance_prefix: str | None = None
+    group_listening: bool = False
 
     def to_dict(self) -> dict[str, object]:
         """Returns the JSON-compatible bridge representation."""
@@ -123,6 +128,7 @@ class ChannelDeclaration:
                 else {}
             ),
             "chat_types": [item.to_dict() for item in self.chat_types],
+            **({"group_listening": True} if self.group_listening else {}),
         }
 
 
@@ -285,6 +291,9 @@ def _parse_channel(item: object, field_name: str) -> ChannelDeclaration:
     entry: dict[str, object] = dict(item)
     declares_chat_types = "chat_types" in entry
     raw_chat_types = entry.pop("chat_types", None)
+    group_listening = entry.pop("group_listening", False)
+    if not isinstance(group_listening, bool):
+        raise ManifestError(f"{field_name}.group_listening 必须是布尔值")
     allowed = {*_CHANNEL_REQUIRED_FIELDS, *_CHANNEL_OPTIONAL_FIELDS}
     values = _parse_string_fields(entry, field_name, allowed, _CHANNEL_REQUIRED_FIELDS)
     name = values["name"]
@@ -308,6 +317,7 @@ def _parse_channel(item: object, field_name: str) -> ChannelDeclaration:
         contact_label=values.get("contact_label"),
         instance_prefix=instance_prefix,
         chat_types=_parse_chat_types(raw_chat_types, f"{field_name}.chat_types"),
+        group_listening=group_listening,
     )
 
 
@@ -394,6 +404,30 @@ def declared_chat_types(manifests: Iterable[PluginManifest]) -> ChatTypeDeclarat
             if declaration.instance_prefix:
                 prefixes.append((declaration.instance_prefix, declaration.chat_types))
     return _DeclaredChatTypes(result, prefixes)
+
+
+def group_listening_channels(
+    manifests: Iterable[PluginManifest],
+) -> Callable[[str], bool]:
+    """Whether a channel (or an instance of a declared prefix) supports listening.
+
+    Like ``declared_chat_types``, static declarations of every discovered
+    plugin count, enabled or not; the first declaration of a name wins.
+    """
+    exact: dict[str, bool] = {}
+    prefixes: list[str] = []
+    for manifest in manifests:
+        for declaration in manifest.channels:
+            exact.setdefault(declaration.name, declaration.group_listening)
+            if declaration.instance_prefix and declaration.group_listening:
+                prefixes.append(declaration.instance_prefix)
+
+    def supports(name: str) -> bool:
+        if name in exact:
+            return exact[name]
+        return any(matches_channel_instance(name, prefix) for prefix in prefixes)
+
+    return supports
 
 
 class _DeclaredChatTypes(dict[str, tuple[ChatTypeDeclaration, ...]]):

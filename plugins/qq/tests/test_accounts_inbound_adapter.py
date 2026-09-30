@@ -279,6 +279,9 @@ async def test_group_reply_target_reaches_the_host_and_leaves_the_text():
 
     adapter._actions.message_sender.assert_awaited_once_with("account-b", "-35")
     assert routed[0].metadata["reply_to_sender_id"] == "202"
+    # The host is handed the cleaned text: what it keeps for a turn or for
+    # the group's listening records (#538) carries no CQ codes.
+    assert routed[0].content == "是这样吗"
     [call] = bus.publish_inbound.await_args_list
     assert call.args[0].content == "是这样吗"
 

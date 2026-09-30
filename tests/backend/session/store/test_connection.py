@@ -40,6 +40,18 @@ EXPECTED_MESSAGES_COLUMNS = [
 ]
 EXPECTED_OBJECTS = {
     ("index", "idx_contacts_role_id"),
+    # Group listening records (#538).
+    ("index", "idx_listening_messages_day"),
+    ("index", "idx_listening_messages_external"),
+    ("index", "idx_listening_toggles_thread"),
+    ("index", "sqlite_autoindex_listening_groups_1"),
+    ("index", "sqlite_autoindex_listening_messages_1"),
+    ("index", "sqlite_autoindex_listening_messages_2"),
+    ("table", "listening_defaults"),
+    ("table", "listening_groups"),
+    ("table", "listening_messages"),
+    ("table", "listening_toggles"),
+    ("table", "sqlite_sequence"),
     ("index", "idx_messages_external_message_id"),
     ("index", "idx_messages_thread_id"),
     ("index", "idx_threads_contact_id"),

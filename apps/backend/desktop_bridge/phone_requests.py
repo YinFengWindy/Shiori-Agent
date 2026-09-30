@@ -7,6 +7,8 @@ from collections.abc import Callable, Collection, Iterable
 from typing import Any, Protocol
 
 from conversation.context_scope import user_context_threads
+from conversation.listening import GroupListeningControl
+from conversation.listening_store import ListeningMessage
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.accounts import AccountRegistry, account_for_channel
@@ -19,6 +21,8 @@ from session.manager.models import message_thread_id
 
 # Bridge event carrying messages newly committed to one of a role's conversations.
 PHONE_CONVERSATION_UPDATED = "phone.conversation.updated"
+# Bridge event carrying a message newly stored in a group's listening records.
+PHONE_LISTENING_HEARD = "phone.listening.heard"
 
 
 class ThreadMessages(Protocol):
@@ -51,23 +55,6 @@ def required_text(payload: dict[str, Any], key: str) -> str:
     return value
 
 
-def role_channel_thread(
-    conversations: ConversationService, role_id: str, thread_id: str
-) -> ThreadRecord | None:
-    """``thread_id`` when it is one of the role's current channel conversations."""
-    if not thread_id:
-        return None
-    thread = conversations.get_thread(thread_id)
-    if (
-        thread is None
-        or thread.role_id != role_id
-        or thread.thread_kind != "network"
-        or thread.archived
-    ):
-        return None
-    return thread
-
-
 def role_bound_senders(
     role_id: str, *, accounts: AccountRegistry, identities: Iterable[UserIdentity]
 ) -> BoundUserSenders:
@@ -84,6 +71,7 @@ def phone_message(
     session_key: str,
     is_user: Callable[[str | None], bool],
     avatars: AvatarIndex,
+    listened: bool = False,
 ) -> dict[str, Any]:
     """One conversation message as the phone's chat page shows it.
 
@@ -94,7 +82,8 @@ def phone_message(
     that sender is the desktop user under the bindings as they are now (like
     the context split, #482), not the flag stored when the message arrived.
     ``sender_avatar_abs`` is the sender's cached platform avatar file (#514),
-    None for the role or when none is cached.
+    None for the role or when none is cached. ``listened`` marks a row of the
+    group's listening records (#538) rather than of the role's conversation.
     """
     from_role = message.get("role") == "assistant"
     source = MessageSource.from_metadata(
@@ -114,6 +103,19 @@ def phone_message(
         "content": str(message.get("content") or ""),
         "media": [str(item) for item in message.get("media") or []],
         "timestamp": str(message.get("timestamp") or ""),
+        "listened": listened,
+    }
+
+
+def _listening_row(message: ListeningMessage) -> dict[str, Any]:
+    """A listening record in the shape of a stored session message."""
+    return {
+        "id": message.id,
+        "seq": message.seq,
+        "role": "user",
+        "content": message.content,
+        "timestamp": message.timestamp,
+        "metadata": {"message_source": message.source},
     }
 
 
@@ -128,15 +130,21 @@ class DesktopPhoneRequestHandler:
     the contact's ``display_name`` (group name for a group,
     the sender's name for a private chat), ``avatar_abs`` (the cached group
     avatar, or the other person's for a private chat; None when none is
-    cached), whether it is the bound user's private chat, and a
-    ``last_message`` preview. Threads with no stored
-    message are left out; the desktop conversation never appears.
+    cached), whether it is the bound user's private chat, whether it is a
+    group that can be listened to (``listening_supported``: its channel's
+    plugin declares support, #538), and a ``last_message`` preview. Threads
+    with no stored message are left out; the desktop conversation never
+    appears.
 
     ``phone.conversation.messages`` with ``role_id``, ``thread_id`` and
     optional ``before_seq`` / ``limit`` returns one page of that
     conversation (``phone_message`` rows, oldest first) with ``has_more``
     and the ``next_before_seq`` cursor for the older page. Only the role's
     current channel conversations can be read.
+
+    ``phone.listening.messages`` takes the same fields and returns a page of
+    the group's listening records the same way (rows with ``listened``); the
+    records stay readable after listening is turned off.
     """
 
     def __init__(
@@ -147,12 +155,14 @@ class DesktopPhoneRequestHandler:
         identities: UserIdentityStore,
         messages: ThreadMessages,
         avatars: ChannelAvatarStore,
+        listening: GroupListeningControl,
     ) -> None:
         self._conversations = conversations
         self._accounts = accounts
         self._identities = identities
         self._messages = messages
         self._avatars = avatars
+        self._listening = listening
 
     async def handle(
         self, method: str, payload: dict[str, Any]
@@ -165,19 +175,37 @@ class DesktopPhoneRequestHandler:
                     role_id, self._conversations.list_network_threads(role_id)
                 )
             }
-        if method == "phone.conversation.messages":
+        if method in {"phone.conversation.messages", "phone.listening.messages"}:
             role_id = required_text(payload, "role_id")
             thread = self._role_thread(role_id, required_text(payload, "thread_id"))
             if thread is None:
                 raise ValueError("会话不属于该角色")
             before_seq = payload.get("before_seq")
-            return self._messages_page(
+            page = (
+                self._messages_page
+                if method == "phone.conversation.messages"
+                else self._listening_page
+            )
+            return page(
                 role_id,
                 thread,
                 before_seq=int(before_seq) if before_seq is not None else None,
                 limit=int(payload.get("limit") or MESSAGE_PAGE_SIZE),
             )
         return None
+
+    def listening_update(self, message: ListeningMessage) -> dict[str, Any] | None:
+        """The ``phone.listening.heard`` payload for a newly stored record.
+
+        None when its group is no longer one of its role's conversations.
+        """
+        thread = self._conversations.get_thread(message.thread_id)
+        if thread is None or self._role_thread(thread.role_id, thread.id) is None:
+            return None
+        [row] = self._phone_messages(
+            thread.role_id, thread, [_listening_row(message)], listened=True
+        )
+        return {"role_id": thread.role_id, "thread_id": thread.id, "message": row}
 
     def conversation_updates(
         self, role_id: str, messages: Iterable[dict[str, Any]]
@@ -213,10 +241,15 @@ class DesktopPhoneRequestHandler:
         ]
 
     def _role_thread(self, role_id: str, thread_id: str) -> ThreadRecord | None:
-        return role_channel_thread(self._conversations, role_id, thread_id)
+        return self._conversations.role_channel_thread(role_id, thread_id)
 
     def _phone_messages(
-        self, role_id: str, thread: ThreadRecord, messages: Iterable[dict[str, Any]]
+        self,
+        role_id: str,
+        thread: ThreadRecord,
+        messages: Iterable[dict[str, Any]],
+        *,
+        listened: bool = False,
     ) -> list[dict[str, Any]]:
         """``messages`` of ``thread`` as ``phone_message`` rows.
 
@@ -236,7 +269,11 @@ class DesktopPhoneRequestHandler:
 
         return [
             phone_message(
-                message, session_key=session_key, is_user=is_user, avatars=avatars
+                message,
+                session_key=session_key,
+                is_user=is_user,
+                avatars=avatars,
+                listened=listened,
             )
             for message in messages
         ]
@@ -250,6 +287,20 @@ class DesktopPhoneRequestHandler:
         return {
             "thread_id": thread.id,
             "messages": self._phone_messages(role_id, thread, page["messages"]),
+            "has_more": page["has_more"],
+            "next_before_seq": page["next_before_seq"],
+        }
+
+    def _listening_page(
+        self, role_id: str, thread: ThreadRecord, *, before_seq: int | None, limit: int
+    ) -> dict[str, Any]:
+        page = self._conversations.listening.page(
+            thread.id, before_seq=before_seq, limit=limit
+        )
+        rows = [_listening_row(message) for message in page["messages"]]
+        return {
+            "thread_id": thread.id,
+            "messages": self._phone_messages(role_id, thread, rows, listened=True),
             "has_more": page["has_more"],
             "next_before_seq": page["next_before_seq"],
         }
@@ -294,6 +345,9 @@ class DesktopPhoneRequestHandler:
                             thread.channel, thread.external_thread_id
                         ),
                         "is_user_chat": thread.id in user_threads.bound_chat_thread_ids,
+                        "listening_supported": self._listening.supports(
+                            thread.channel, chat_types[thread.id]
+                        ),
                         "last_message": {
                             **message_preview(message),
                             "sender_name": (

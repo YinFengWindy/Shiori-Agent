@@ -6,6 +6,7 @@ import { PhoneConversationList } from "./PhoneConversationList";
 
 const conversation = (threadId: string, avatarPath: string | null): PhoneConversation => ({
   threadId, accountId: "qq:1", channel: "qq", chatType: "group", displayName: threadId, avatarPath, isUserChat: false,
+  listeningSupported: false,
   lastMessage: { role: "user", content: "在吗", timestamp: "2026-09-29T10:00:00+08:00", hasMedia: false, senderName: null },
 });
 

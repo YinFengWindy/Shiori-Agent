@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -1380,4 +1381,48 @@ async def test_identity_changes_push_identities_updated(tmp_path) -> None:
         ("identities.updated", {}),
         ("identities.updated", {}),
     ]
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_a_stored_listening_record_is_pushed_to_the_phone(tmp_path) -> None:
+    from conversation.service import ConversationService, LegacySessionDescriptor
+
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(role_id="mira", name="Mira", system_prompt="m")
+    sessions = SessionManager(tmp_path)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=sessions,
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    emitted: list[dict] = []
+    service.add_event_listener(emitted.append)
+    thread = ConversationService(sessions).ensure_thread_for_session(
+        LegacySessionDescriptor(
+            session_key="qq:gqq:5", role_id="mira", channel="qq", chat_id="gqq:5"
+        )
+    )
+    listening = sessions.conversation_store.listening
+    listening.set_enabled(thread.id, True, operator="user")
+
+    # The channel hub stores it; the bridge learns of it through the shared store.
+    heard = listening.hear(
+        thread.id,
+        sender_id="902",
+        content="大家好",
+        source={"sender_name": "阿花"},
+        external_message_id="",
+        timestamp=datetime.now(),
+    )
+    await asyncio.sleep(0)
+
+    assert heard is not None
+    [event] = emitted
+    assert event["method"] == "phone.listening.heard"
+    assert event["payload"]["thread_id"] == thread.id
+    assert event["payload"]["message"]["id"] == heard.id
     await service.aclose()
