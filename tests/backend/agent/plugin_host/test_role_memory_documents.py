@@ -28,7 +28,9 @@ async def test_registration_owns_a_read_only_role_scoped_request(tmp_path):
 
 
 def test_registration_requires_the_host_role_store(tmp_path):
-    ctx = SimpleNamespace(plugin_id="akasha", workspace=tmp_path, role_store=None)
+    ctx = SimpleNamespace(
+        plugin_id="default_memory", workspace=tmp_path, role_store=None
+    )
 
-    with pytest.raises(RuntimeError, match="akasha.*role_store"):
+    with pytest.raises(RuntimeError, match="default_memory.*role_store"):
         register_role_memory_documents(ctx)

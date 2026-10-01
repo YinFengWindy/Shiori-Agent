@@ -7,7 +7,7 @@ import {
   type CrossfadeLayer,
   type CrossfadeVariant,
 } from "./crossfadeLayerState";
-import { cx } from "@shiori/plugin-sdk";
+import { cx } from "../styles";
 
 type CrossfadeLayersProps = {
   /** The visual value (usually an image URL); empty renders nothing. */
@@ -27,9 +27,8 @@ type CrossfadeLayersProps = {
 
 /**
  * Stacks the previous and next rendering of `value` and crossfades between
- * them (see `.crossfade-*` in the host's styles.css). Reduced motion keeps
- * only the opacity fade. novelai owns this copy (#509); the host keeps its
- * own for the chat backdrop and mood portrait.
+ * them (see `.crossfade-*` in styles.css). Reduced motion keeps only the
+ * opacity fade.
  */
 export function CrossfadeLayers({ value, variant = "soft", resetKey = "", layerClassName, render }: CrossfadeLayersProps) {
   const [layers, setLayers] = useState<readonly CrossfadeLayer[]>(() => initialCrossfadeLayers(value));

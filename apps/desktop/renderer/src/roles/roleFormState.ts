@@ -42,7 +42,6 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     voiceName: voiceConfig.voiceName,
     voiceSpeed: voiceConfig.speed,
     voiceMoodEmotions: voiceConfig.moodTtsEmotions,
-    pendingVoiceAssetDeletes: [],
   };
 }
 
@@ -65,7 +64,6 @@ export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null
         || Boolean(roleForm.avatarSource)
         || roleForm.illustrationSources.length > 0
         || roleForm.removedIllustrations.length > 0
-        || roleForm.pendingVoiceAssetDeletes.length > 0
       )
   );
 }

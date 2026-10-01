@@ -4,9 +4,6 @@ export function parseSettingsNumber(value: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-/** Display names for memory engines the app ships; any other configured name shows as written. */
-const memoryEngineLabels: Record<string, string> = { akasha: "Akasha" };
-
 /** Preserves a configured custom memory engine alongside the default option. */
 export function getMemoryEngineOptions(currentValue: string): Array<{ value: string; label: string }> {
   const normalized = currentValue.trim();
@@ -14,7 +11,7 @@ export function getMemoryEngineOptions(currentValue: string): Array<{ value: str
     { value: "", label: "默认" },
   ];
   if (normalized && normalized !== "default") {
-    options.push({ value: normalized, label: memoryEngineLabels[normalized] ?? normalized });
+    options.push({ value: normalized, label: normalized });
   }
   return options;
 }

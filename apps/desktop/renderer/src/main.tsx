@@ -287,7 +287,6 @@ function App(): React.ReactElement {
     setActiveIllustration,
     setSendingSessions,
     setCancellingSessions,
-    chooseIllustration,
     applyRoleSnapshot,
     buildNavigationEntry,
     pushNavigationEntry,

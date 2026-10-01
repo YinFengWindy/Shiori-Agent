@@ -24,7 +24,7 @@ class OneBotAuthError(OneBotError):
 
 
 class OneBotSocket:
-    """One isolated NapCat socket; no NcatBot process-global settings are used."""
+    """One isolated NapCat socket with per-account connection settings."""
 
     def __init__(
         self,

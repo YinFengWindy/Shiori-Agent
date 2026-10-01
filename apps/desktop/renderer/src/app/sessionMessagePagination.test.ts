@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mergeOpenedSessionSnapshot, mergeSessionMessage, mergeSessionSummaryAndMessage } from "./sessionMessagePagination.js";
+import { mergeSessionMessagePage, mergeSessionMessagesAround, parseSessionMessagesAround, mergeOpenedSessionSnapshot, mergeSessionMessage, mergeSessionSummaryAndMessage } from "./sessionMessagePagination.js";
 import type { SessionMessage, SessionPayload, SessionSummary } from "@shiori/plugin-sdk";
 
 function createSummary(): SessionSummary {
@@ -190,5 +190,146 @@ describe("mergeSessionSummaryAndMessage", () => {
         ["user", "role:mira:5"],
       ],
     );
+  });
+});
+
+describe("loaded session pages", () => {
+  it("replaces an optimistic user message after the bridge confirms its client message id", () => {
+    const current = createSession([
+      {
+        role: "user",
+        content: "刚发出去的消息",
+        metadata: { client_message_id: "client-message-1" },
+      },
+    ]);
+    current.pagination = {
+      limit: 50,
+      has_more: true,
+      oldest_seq: 0,
+      newest_seq: 0,
+      total_count: 1,
+      before_seq: null,
+      next_before_seq: 0,
+    };
+    const merged = mergeSessionSummaryAndMessage(current, {
+      key: current.key,
+      created_at: current.created_at,
+      updated_at: current.updated_at,
+      last_consolidated: current.last_consolidated,
+      metadata: current.metadata,
+    }, {
+      id: "role:shiori:7",
+      seq: 7,
+      role: "user",
+      content: "刚发出去的消息",
+      metadata: { client_message_id: "client-message-1" },
+    });
+
+    assert.deepEqual(merged.messages, [{
+      id: "role:shiori:7",
+      seq: 7,
+      role: "user",
+      content: "刚发出去的消息",
+      metadata: { client_message_id: "client-message-1" },
+    }]);
+    assert.equal(merged.pagination?.total_count, 2);
+  });
+
+  it("merges an older sparse-sequence page without losing the streamed tail", () => {
+    const current = createSession([
+      { id: "role:shiori:8", seq: 8, role: "user", content: "最新" },
+      { role: "assistant", content: "正在生成", streaming: true, render_id: "stream-1" },
+    ]);
+    current.pagination = {
+      limit: 2,
+      has_more: true,
+      oldest_seq: 8,
+      newest_seq: 8,
+      total_count: 4,
+      before_seq: null,
+      next_before_seq: 8,
+    };
+
+    const merged = mergeSessionMessagePage(current, {
+      messages: [
+        { id: "role:shiori:0", seq: 0, role: "assistant", content: "最早" },
+        { id: "role:shiori:5", seq: 5, role: "user", content: "中间" },
+      ],
+      limit: 2,
+      has_more: false,
+      oldest_seq: 0,
+      newest_seq: 8,
+      total_count: 4,
+      before_seq: 8,
+      next_before_seq: 0,
+    });
+
+    assert.deepEqual(merged.messages.map((message) => message.seq ?? message.render_id), [0, 5, 8, "stream-1"]);
+    assert.equal(merged.pagination?.has_more, false);
+  });
+
+  it("merges search context by persisted message id without resetting the older-page cursor", () => {
+    const current = createSession([{ id: "role:shiori:9", seq: 9, role: "assistant", content: "最新" }]);
+    current.pagination = {
+      limit: 50,
+      has_more: true,
+      oldest_seq: 9,
+      newest_seq: 9,
+      total_count: 10,
+      before_seq: null,
+      next_before_seq: 9,
+    };
+    const around = parseSessionMessagesAround({
+      session_key: current.key,
+      target_message_id: "role:shiori:2",
+      messages: [
+        { id: "role:shiori:0", seq: 0, role: "user", content: "前文" },
+        { id: "role:shiori:2", seq: 2, role: "assistant", content: "命中", is_target: true },
+      ],
+    });
+
+    assert.ok(around);
+    const merged = mergeSessionMessagesAround(current, around);
+    assert.deepEqual(merged.messages.map((message) => message.id), ["role:shiori:0", "role:shiori:2", "role:shiori:9"]);
+    assert.equal(merged.pagination?.next_before_seq, 9);
+  });
+
+  it("keeps loaded historical messages when reopening the active session returns only its newest page", () => {
+    const current = createSession([
+      { id: "role:shiori:2", seq: 2, role: "user", content: "历史命中" },
+      { id: "role:shiori:9", seq: 9, role: "assistant", content: "最新" },
+    ]);
+    current.pagination = {
+      limit: 50,
+      has_more: true,
+      oldest_seq: 2,
+      newest_seq: 9,
+      total_count: 10,
+      before_seq: null,
+      next_before_seq: 2,
+    };
+    const incoming = createSession([{
+      id: "role:shiori:9",
+      seq: 9,
+      role: "assistant",
+      content: "最新",
+    }]);
+    incoming.pagination = {
+      limit: 50,
+      has_more: true,
+      oldest_seq: 9,
+      newest_seq: 9,
+      total_count: 10,
+      before_seq: null,
+      next_before_seq: 9,
+    };
+
+    const merged = mergeOpenedSessionSnapshot(current, incoming);
+
+    assert.deepEqual(merged.messages.map((message) => message.id), [
+      "role:shiori:2",
+      "role:shiori:9",
+    ]);
+    assert.equal(merged.pagination?.next_before_seq, 9);
   });
 });

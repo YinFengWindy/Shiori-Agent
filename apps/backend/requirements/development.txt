@@ -14,3 +14,6 @@ pyinstaller>=6.18.0
 -e .
 -e ./plugins/default_memory
 -e ./packages/shiori-plugin-testkit
+
+# QQ login QR fixtures (not used by the production runtime).
+qrcode>=8.2

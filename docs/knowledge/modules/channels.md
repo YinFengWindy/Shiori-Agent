@@ -45,5 +45,5 @@ QQ 群会话的规范 chat_id 是 `gqq:<群号>`，裸号一律是私聊。渠�
 - 修改聊天标识：检查角色绑定、Session/Conversation 键、群聊记忆域和推送目标。
 - 修改账号响应规则：检查插件的规则保存钩子（`ctx.accounts.on_rules_change`）、入站准入和账号详情里的规则编辑器。
 - 修改附件模型：检查 Telegram 媒体、QQ 适配、桌面桥接、自动 CG 和历史消息展示。
-- 修改 QQ 渠道：NcatBot 需同步检查主 loop/bot loop 桥接、群聊过滤和 CQ 媒体；QQBot 需同步检查 Gateway intent、token/REST、C2C message id 和 live stream 状态。
+- 修改 QQ 渠道：需同步检查 `QQAccountsRuntime` 的账号生命周期、`OneBotSocket` 的连接清理、群聊过滤和 CQ 媒体；QQBot 需同步检查 Gateway intent、token/REST、C2C message id 和 live stream 状态。
 - 新增渠道：写成渠道插件（manifest 声明 + 配置模型 + Channel 合约），复用 `ChannelIntake`、会话键解析和输出端口，不复制 Agent 回合逻辑；步骤见 `docs/_handbook/channel-plugins.md`。

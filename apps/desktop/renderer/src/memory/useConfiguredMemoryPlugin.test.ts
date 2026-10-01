@@ -7,12 +7,11 @@ import { memoryPluginId, readMemoryPluginId, useConfiguredMemoryPlugin } from ".
 it("maps the saved engine to its exact owner", () => {
   assert.equal(memoryPluginId(""), "default_memory");
   assert.equal(memoryPluginId("default"), "default_memory");
-  assert.equal(memoryPluginId("akasha"), "akasha");
   assert.equal(memoryPluginId("other"), "other");
 });
 
 it("ignores an older settings read after the runtime changes", async () => {
-  const pending: Array<(value: unknown) => void> = [];
+  const pending: Array<{ resolve: (value: unknown) => void; reject: (error: Error) => void }> = [];
   const listeners = new Set<(event: { method: string; payload: { changed?: boolean } }) => void>();
   function Probe() {
     const selection = useConfiguredMemoryPlugin(true);
@@ -20,17 +19,17 @@ it("ignores an older settings read after the runtime changes", async () => {
   }
   const view = await mountTestComponent(createElement(Probe), { windowGlobals: {
     miraDesktop: {
-      readSettings: () => new Promise((resolve) => { pending.push(resolve); }),
+      readSettings: () => new Promise((resolve, reject) => { pending.push({ resolve, reject }); }),
       onEvent: (listener: (event: { method: string; payload: { changed?: boolean } }) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     },
   } });
   try {
     await act(async () => { for (const listener of listeners) listener({ method: "runtime.applied", payload: { changed: true } }); });
     assert.equal(pending.length, 2);
-    await act(async () => pending[1]({ formData: { memory: { engine: "akasha" } } }));
-    assert.match(view.container.textContent ?? "", /akasha/);
-    await act(async () => pending[0]({ formData: { memory: { engine: "default" } } }));
-    assert.match(view.container.textContent ?? "", /akasha/);
+    await act(async () => pending[1].resolve({ formData: { memory: { engine: "default" } } }));
+    assert.match(view.container.textContent ?? "", /default_memory/);
+    await act(async () => pending[0].reject(new Error("stale read failed")));
+    assert.match(view.container.textContent ?? "", /default_memory/);
   } finally {
     await view.cleanup();
   }
@@ -46,16 +45,16 @@ it("keeps the same ready selection through a no-op runtime publication", async (
   }
   const view = await mountTestComponent(createElement(Probe), { windowGlobals: {
     miraDesktop: {
-      readSettings: async () => ({ formData: { memory: { engine: "akasha" } } }),
+      readSettings: async () => ({ formData: { memory: { engine: "default" } } }),
       onEvent: (listener: (event: { method: string; payload: { changed?: boolean } }) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     },
   } });
   try {
-    assert.match(view.container.textContent ?? "", /akasha/);
+    assert.match(view.container.textContent ?? "", /default_memory/);
     const before = observed.length;
     await act(async () => { for (const listener of listeners) listener({ method: "runtime.applied", payload: { changed: false } }); });
-    assert.ok(observed.slice(before).every((value) => value === "ready:akasha"));
-    assert.equal(observed.at(-1), "ready:akasha");
+    assert.ok(observed.slice(before).every((value) => value === "ready:default_memory"));
+    assert.equal(observed.at(-1), "ready:default_memory");
   } finally {
     await view.cleanup();
   }

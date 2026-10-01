@@ -17,16 +17,13 @@ from session.store import SessionStore
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("engine", ["default", "akasha"])
-async def test_real_selected_engine_assembles_without_loading_the_other(
+async def test_default_engine_assembles_without_model_requests(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    engine: str,
 ):
     plugin_root = tmp_path / "plugins"
-    package = "default_memory" if engine == "default" else engine
-    other = "akasha" if engine == "default" else "default_memory"
+    package = "default_memory"
     backend = plugin_root / package / "backend"
     _ = shutil.copytree(
         REPOSITORY_ROOT / "plugins" / package / "backend",
@@ -34,11 +31,6 @@ async def test_real_selected_engine_assembles_without_loading_the_other(
         ignore=shutil.ignore_patterns("__pycache__"),
     )
     _ = (backend / "config.local.toml").write_text("", encoding="utf-8")
-    unselected = plugin_root / other / "backend"
-    unselected.mkdir(parents=True)
-    _ = (unselected / "memory_plugin.py").write_text(
-        "raise AssertionError('unselected engine loaded')", encoding="utf-8"
-    )
     monkeypatch.setattr("bootstrap.memory_plugins.plugin_roots", lambda: [plugin_root])
     monkeypatch.setitem(sys.modules, "plugins", None)
     monkeypatch.chdir(tmp_path)
@@ -48,27 +40,15 @@ async def test_real_selected_engine_assembles_without_loading_the_other(
     provider.chat = AsyncMock(side_effect=AssertionError("assembly must not chat"))
     config = Config(provider="openai", model="test", api_key="test")
     config.memory.enabled = True
-    config.memory.engine = engine
+    config.memory.engine = "default"
     workspace = tmp_path / "workspace"
-    selected_db = (
-        workspace
-        / "plugin-data"
-        / package
-        / ("memory2.db" if engine == "default" else "akasha.db")
-    )
-    other_db = (
-        workspace
-        / "plugin-data"
-        / other
-        / ("akasha.db" if engine == "default" else "memory2.db")
-    )
+    selected_db = workspace / "plugin-data" / package / "memory2.db"
 
     storage = ensure_memory_plugin_storage(config, workspace)
     assert storage == [(selected_db, False)]
     assert selected_db.is_file()
-    assert not other_db.exists()
     assert ensure_memory_plugin_storage(config, workspace) == [(selected_db, True)]
-    # Normal host startup creates sessions first; Akasha then builds its FTS IDF.
+    # Normal host startup creates the conversation store before memory runtime.
     sessions = SessionStore(workspace / "sessions.db")
     sessions.close()
 
@@ -78,9 +58,8 @@ async def test_real_selected_engine_assembles_without_loading_the_other(
             config, workspace, ToolRegistry(), provider, None, http
         )
         try:
-            assert runtime.engine.describe().name == engine
+            assert runtime.engine.describe().name == "default"
             assert len(runtime.closeables) == 2
-            assert not other_db.exists()
             engine_file = sys.modules[type(runtime.engine).__module__].__file__
             assert engine_file is not None
             assert Path(engine_file).is_relative_to(backend)

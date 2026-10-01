@@ -1,6 +1,6 @@
 import type React from "react";
 import { Plus, SquaresFour, UploadSimple } from "@phosphor-icons/react";
-import { SidebarResizeHandle } from "../shared/SidebarResizeHandle";
+import { SidebarResizeHandle } from "@shiori/plugin-sdk";
 import {
   cx,
   pressableClass,

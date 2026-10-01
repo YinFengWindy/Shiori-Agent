@@ -19,6 +19,7 @@ export const crossfadeDurations: Record<CrossfadeVariant, number> = {
   focus: 480,
 };
 
+/** One current or outgoing visual layer, keyed independently from its value. */
 export type CrossfadeLayer = {
   /** Stable React key; every new value gets a new one. */
   key: number;

@@ -86,10 +86,7 @@ def test_default_aliases_still_validate_existing_storage(
         validate_memory_transition(previous, candidate, tmp_path)
 
 
-@pytest.mark.parametrize(("enabled", "engine"), [(True, "akasha"), (False, "default")])
-def test_non_default_transition_does_not_load_default_package(
-    tmp_path, monkeypatch, enabled, engine
-):
+def test_disabled_transition_does_not_load_default_package(tmp_path, monkeypatch):
     def unexpected_load(*_args):
         raise AssertionError("unselected default memory must not load")
 
@@ -98,7 +95,7 @@ def test_non_default_transition_does_not_load_default_package(
     )
     previous = Config(provider="", model="", api_key="", model_registrations=[])
     candidate = replace(
-        previous, memory=replace(previous.memory, enabled=enabled, engine=engine)
+        previous, memory=replace(previous.memory, enabled=False, engine="default")
     )
 
     validate_memory_transition(previous, candidate, tmp_path)
