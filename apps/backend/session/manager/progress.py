@@ -61,11 +61,7 @@ class _ProgressMixin(_ManagerCoreMixin):
         ):
             # Visibility changed: replay only currently permitted messages. Old
             # windows and consumer snapshots must never establish a new cut.
-            progress = MaintenanceProgress(
-                ownership=stamp,
-                generation=progress.generation + 1,
-                memory_version=progress.memory_version + 1,
-            )
+            progress = progress.invalidated(ownership=stamp)
             cursors: dict[ContextScope, int] | None = (
                 {"user": 0, "external": 0} if stamp else None
             )
@@ -87,11 +83,7 @@ class _ProgressMixin(_ManagerCoreMixin):
         async with self._lock(session_key):
             session = self.get_or_create(session_key)
             old = self.maintenance_progress(session)
-            progress = MaintenanceProgress(
-                ownership=old.ownership,
-                generation=old.generation + 1,
-                memory_version=old.memory_version + 1,
-            )
+            progress = old.invalidated()
             cursors: dict[ContextScope, int] | None = (
                 {"user": 0, "external": 0} if old.ownership else None
             )

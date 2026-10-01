@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -58,3 +58,29 @@ async def test_optimizer_uses_the_role_dialogue_model_snapshot() -> None:
     assert activations == [("mira", "chat")]
     assert selected_provider.chat.await_args.kwargs["model"] == "role-model"
     fallback_provider.chat.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_optimizer_records_and_propagates_provider_failure_without_lock_leak():
+    error = RuntimeError("relationship provider unavailable")
+    runtime = SimpleNamespace(
+        generate_snapshot_via_llm=AsyncMock(side_effect=error),
+        mark_snapshot_error=Mock(),
+        recompute_loneliness=Mock(),
+    )
+    optimizer = RelationshipSnapshotOptimizer(
+        runtime, provider=SimpleNamespace(), model="test"
+    )
+    with pytest.raises(RuntimeError) as failure:
+        await optimizer.optimize(role_id="mira")
+    assert failure.value is error
+    assert not optimizer.is_running
+    runtime.mark_snapshot_error.assert_called_once()
+    assert runtime.mark_snapshot_error.call_args.args == ("mira",)
+    assert runtime.mark_snapshot_error.call_args.kwargs["error"] == str(error)
+    runtime.recompute_loneliness.assert_not_called()
+
+    runtime.generate_snapshot_via_llm.side_effect = None
+    runtime.generate_snapshot_via_llm.return_value = {"role_id": "mira"}
+    assert await optimizer.optimize(role_id="mira") == {"role_id": "mira"}
+    runtime.recompute_loneliness.assert_called_once()

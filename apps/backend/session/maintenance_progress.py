@@ -82,6 +82,18 @@ class MaintenanceProgress:
     consumer_error: str = ""
     pending_consumers: dict[str, Any] = field(default_factory=dict)
 
+    def invalidated(self, *, ownership: str | None = None) -> MaintenanceProgress:
+        """Return a new generation without mutating the previous state snapshot.
+
+        Identity changes supply the new ownership stamp. Undo, explicit reset and
+        clear retain it; their owners separately decide how memory cursors move.
+        """
+        return MaintenanceProgress(
+            ownership=self.ownership if ownership is None else ownership,
+            generation=self.generation + 1,
+            memory_version=self.memory_version + 1,
+        )
+
     def cursor(self, view: ContextView | None) -> int:
         """Read the effective window cut without changing memory progress."""
         if self.ownership != ownership_key(view.user_threads if view else None):

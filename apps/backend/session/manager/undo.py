@@ -79,17 +79,7 @@ class _UndoMixin(_ManagerCoreMixin):
                 else None
             )
             if progress is not None:
-                progress.windows.clear()
-                progress.window_versions.clear()
-                progress.legacy_cuts.clear()
-                progress.generation += 1
-                progress.memory_version += 1
-                progress.recent_context_version = 0
-                progress.recent_context_source_ids = []
-                progress.published_version = 0
-                progress.relationship_version = 0
-                progress.pending_consumers = {}
-                progress.consumer_error = ""
+                progress = progress.invalidated()
 
             def refresh_projections() -> None:
                 if progress is not None:

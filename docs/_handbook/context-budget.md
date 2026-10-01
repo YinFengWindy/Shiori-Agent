@@ -16,6 +16,8 @@
 
 记忆提交保存 `memory_version`、近期语境来源消息与更新版本，并持久化待发布的消费者输入。事件发布和关系完成各有版本；事件成功但关系失败只重试关系，不再次触发 memory2 提取。后置失败通过 `WindowMaintenanceFailedError.result` 明确携带 `memory_committed` 与 `failure_stage`，窗口水位保持不变。心情仍由逐轮正式回复状态 owner 更新。
 
+关系优化器记录 provider 错误后继续抛出；周期任务在单个角色边界捕获并继续后续角色和周期，记忆后置调用则保留未完成消费者。扩大待压缩范围重试时，`memory_committed` 保留此前记忆已提交的事实，前置结果中的 `memory_covered` 单独表示当前移出范围是否全部完成整理；窗口提交仍按实际消息覆盖校验，不能用已有部分记忆提交代替完整覆盖。
+
 用量锚点保存在运行时，绑定实际连接、模型、可见上下文、身份绑定视图和发送请求快照。同一角色的用户上下文共用视图，群聊和陌生私聊各自隔离。历史只追加及带明确标记的系统 context frame 替换可用旧实际输入加本地差值；历史重写、模型/连接/身份绑定或未知系统提示/schema 变化时失效。迟到响应不能覆盖较新请求；辅助调用不改写对话锚点。子 Agent 的独立请求使用临时锚点和独立用量记录，完成后由 `SubAgent.last_usage` 提供，不覆盖父回合的最后请求或累计用量。
 
 状态来源为 `actual`、`anchor_delta`、`local`。缺失用量为 null，单次 input/output/cache 与累计已知用量、未知调用数分别记录在 `context_retry.request_usage`。流式请求使用公开的 `stream_options.include_usage`；未返回 usage 不生成零值锚点。

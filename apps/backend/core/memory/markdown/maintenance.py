@@ -242,8 +242,13 @@ class MarkdownMemoryMaintenance:
         covered_ids = {
             str(message.get("id") or "") for message in session.messages[:cursor]
         }
-        result.trace["memory_committed"] = set(prepared.removed_message_ids).issubset(
-            covered_ids
+        removed_ids = set(prepared.removed_message_ids)
+        result.trace["memory_covered"] = removed_ids.issubset(covered_ids)
+        # A larger retry can have committed old memory and still lack coverage
+        # for appended messages. Preserve that fact even when consumer retry fails.
+        result.trace["memory_committed"] = bool(
+            result.trace.get("memory_committed")
+            or removed_ids.intersection(covered_ids)
         )
         return result
 

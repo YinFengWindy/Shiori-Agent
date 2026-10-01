@@ -211,11 +211,7 @@ class _PersistenceMixin:
             cursors = {scope: 0 for scope in cursors} if cursors else None
             if meta and meta.get("maintenance_progress"):
                 previous = MaintenanceProgress.load(meta["maintenance_progress"])
-                cleared_progress = MaintenanceProgress(
-                    ownership=previous.ownership,
-                    generation=previous.generation + 1,
-                    memory_version=previous.memory_version + 1,
-                )
+                cleared_progress = previous.invalidated()
         self._store.replace_session_messages(
             session.key,
             rows=rows,

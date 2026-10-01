@@ -296,3 +296,43 @@ async def test_unpublished_memory_consumer_resumes_after_restart(memory_harness)
             payload["history_entry_payloads"],
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_larger_retry_preserves_prior_memory_commit_when_consumer_still_fails(
+    memory_harness,
+):
+    import json
+
+    h = memory_harness
+    session = h.manager.get_or_create("cli:larger-retry")
+    _turn(session)
+    h.manager.save(session)
+
+    async def fail(_session):
+        raise RuntimeError("relationship unavailable")
+
+    h.maintenance._after_consolidation = fail
+    first = await h.manager.prepare_window(session.key, None, keep_count=0)
+    assert first is not None
+    window = ContextWindowMaintenance(h.manager, h.maintenance)
+    assert (await window.apply(first)).memory_committed
+    calls = len(h.prompts)
+    _turn(session, label="more tea")
+    h.manager.save(session)
+    larger = await h.manager.prepare_window(session.key, None, keep_count=0)
+    assert larger is not None and larger.stop == 4
+    retried = await window.apply(larger)
+    assert not retried.committed and retried.failure_stage == "consumers"
+    assert retried.memory_committed
+    assert session.last_consolidated == 2 and history_start(session, None) == 0
+    assert len(h.prompts) == calls and len(h.events) == 1
+    assert not await h.manager.commit_window(larger)
+
+    h.maintenance._after_consolidation = None
+    assert (await window.apply(larger)).committed
+    assert session.last_consolidated == history_start(session, None) == 4
+    assert [json.loads(event.source_ref) for event in h.events] == [
+        [m["id"] for m in session.messages[:2]],
+        [m["id"] for m in session.messages[2:]],
+    ]
