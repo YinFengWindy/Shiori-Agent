@@ -1,0 +1,43 @@
+"""Summary completions reject tool calls while ordinary loop steps can dispatch them."""
+
+from unittest.mock import AsyncMock
+
+import pytest
+
+from agent.core.passive_turn.empty_reply import EmptyReplyError
+from agent.core.passive_turn.reply_recovery import complete_reply
+from agent.core.reply_output import RoleReplyOutput
+from agent.provider import LLMResponse, ToolCall
+
+
+@pytest.mark.parametrize("allow_tool_calls", [False, True])
+async def test_tools_are_only_returned_to_an_explicit_dispatching_caller(
+    allow_tool_calls,
+):
+    provider = AsyncMock()
+    response = LLMResponse(content="", tool_calls=[ToolCall("t1", "counter", {})])
+    operation = complete_reply(
+        response,
+        output=RoleReplyOutput(None, enabled=True),
+        messages=[],
+        provider=provider,
+        model="m",
+        max_tokens=512,
+        role_reply=True,
+        input_token_threshold=100,
+        estimate_request=lambda *_: 1,
+        session="role:mira",
+        channel="qq",
+        iteration=1,
+        allow_tool_calls=allow_tool_calls,
+    )
+    if allow_tool_calls:
+        result = await operation
+        assert result.response is response
+        assert result.diagnostics is None
+    else:
+        with pytest.raises(EmptyReplyError) as caught:
+            await operation
+        assert caught.value.diagnostics["outcome"] == "unexpected_tool_calls"
+        assert caught.value.diagnostics["retries"] == 0
+    provider.chat.assert_not_awaited()

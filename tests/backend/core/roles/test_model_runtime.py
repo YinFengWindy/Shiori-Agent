@@ -297,7 +297,7 @@ async def test_auxiliary_call_preserves_role_snapshot_and_main_reasoning(
 
     with runtime.activate("mira", "chat") as snapshot:
         for purpose in ("default", "auxiliary", "default"):
-            await provider.chat(
+            response = await provider.chat(
                 messages=[{"role": "user", "content": "你好"}],
                 tools=[],
                 model="fallback-model",
@@ -308,6 +308,8 @@ async def test_auxiliary_call_preserves_role_snapshot_and_main_reasoning(
                 call_purpose=purpose,
                 auxiliary_max_tokens=512,
             )
+            assert response.model == model
+            assert response.stream is False
         assert snapshot.provider._extra_body == {"reasoning_effort": "high"}
         assert runtime.resolve("mira", "chat").provider is snapshot.provider
 

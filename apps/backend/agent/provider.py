@@ -87,6 +87,13 @@ class LLMResponse:
     # from a genuinely malformed/empty reply instead of the two looking
     # identical.
     finish_reason: str | None = None
+    # Request identity and pre-extraction size remain available after role routing
+    # and content normalization. No raw model output is retained for diagnostics.
+    model: str | None = None
+    stream: bool = False
+    raw_content_length: int | None = None
+    raw_content_blank: bool | None = None
+    refused: bool = False
 
 
 # finish_reason values that mean "the API stopped us, not the model" - i.e.
@@ -183,11 +190,15 @@ class ProviderStrategy:
         msg: Any,
         raw: str | None,
     ) -> tuple[str | None, str | None, dict[str, Any]]:
-        thinking: str | None = None
+        reasoning = _get_field(msg, "reasoning_content")
+        thinking = str(reasoning) if reasoning is not None else None
+        if thinking is not None and not thinking.strip():
+            thinking = None
         if raw:
             m = _THINK_RE.search(raw)
             if m:
-                thinking = m.group(1).strip()
+                if thinking is None:
+                    thinking = m.group(1).strip()
                 raw = _THINK_RE.sub("", raw).strip() or None
         return raw, thinking, {}
 
@@ -443,6 +454,11 @@ class LLMProvider:
             cache_hit_tokens=cache_hit_tokens,
             total_tokens=total_tokens,
             finish_reason=finish_reason,
+            model=model,
+            raw_content_length=len(msg.content or ""),
+            raw_content_blank=not (msg.content or "").strip(),
+            refused=bool(_get_field(msg, "refusal"))
+            or finish_reason == "content_filter",
         )
 
     async def _chat_streaming(
@@ -468,6 +484,7 @@ class LLMProvider:
         cache_hit_tokens: int | None = None
         total_tokens: int | None = None
         finish_reason: str | None = None
+        refused = False
 
         stream_iter = aiter(stream)
         while True:
@@ -506,6 +523,7 @@ class LLMProvider:
             delta = getattr(choice, "delta", None)
             if delta is None:
                 continue
+            refused = refused or bool(_get_field(delta, "refusal"))
 
             reasoning_piece = _get_field(delta, "reasoning_content")
             if isinstance(reasoning_piece, str) and reasoning_piece:
@@ -562,7 +580,8 @@ class LLMProvider:
                 )
             )
 
-        raw = "".join(content_parts).strip() or None
+        raw_content = "".join(content_parts)
+        raw = raw_content.strip() or None
         thinking = "".join(reasoning_parts).strip() or None
         raw, parsed_thinking, provider_fields = strategy.extract_message(
             {"reasoning_content": thinking} if thinking is not None else {},
@@ -583,6 +602,11 @@ class LLMProvider:
             cache_hit_tokens=cache_hit_tokens,
             total_tokens=total_tokens,
             finish_reason=finish_reason,
+            model=kwargs.get("model"),
+            stream=True,
+            raw_content_length=len(raw_content),
+            raw_content_blank=not raw_content.strip(),
+            refused=refused or finish_reason == "content_filter",
         )
 
     async def _create_with_retry(

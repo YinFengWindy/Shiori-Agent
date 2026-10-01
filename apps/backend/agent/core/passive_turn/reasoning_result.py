@@ -8,7 +8,8 @@ from typing import Any
 import agent.core.passive_support as support
 from agent.core.types import LLMToolCall, ReasonerResult
 from agent.core.reply_completion import fetch_role_mood
-from agent.core.reply_output import normalize_role_content
+from agent.core.reply_output import RoleReplyOutput
+from .reply_recovery import complete_reply
 from core.roles.reply_state import RoleReply
 from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted
 
@@ -93,7 +94,9 @@ class _PassiveReasoningResultMixin:
         iteration: int,
         tools_used: list[str],
         reply_moods: tuple[str, ...] | None = None,
-    ) -> tuple[str, int | None, RoleReply | None]:
+        session: str = "",
+        channel: str = "",
+    ) -> tuple[str, int | None, RoleReply | None, dict[str, Any] | None]:
         # 1. 先构造收尾总结 prompt；正文始终是纯文本，不再为 reply_moods 特判。
         summary_prompt = (
             f"[收尾原因] {reason}\n"
@@ -105,7 +108,7 @@ class _PassiveReasoningResultMixin:
             support.build_context_hint_message("summary_request", summary_prompt)
         ]
 
-        if reply_moods:
+        if reply_moods is not None:
             threshold = int(getattr(self, "_memory_input_token_threshold", 0))
             from core.roles.reply_state import InvalidRoleReply
 
@@ -120,7 +123,22 @@ class _PassiveReasoningResultMixin:
                 model=self._llm_config.model,
                 max_tokens=self._llm_config.max_tokens,
             )
-            content = normalize_role_content(response.content or "")
+            completion = await complete_reply(
+                response,
+                output=RoleReplyOutput(None, enabled=True),
+                messages=summary_messages,
+                provider=self._llm.provider,
+                model=self._llm_config.model,
+                max_tokens=self._llm_config.max_tokens,
+                role_reply=True,
+                input_token_threshold=threshold,
+                estimate_request=support.estimate_messages_tokens,
+                session=session,
+                channel=channel,
+                iteration=iteration,
+            )
+            content = completion.response.content
+            assert content is not None
             # 心情/想法通过一次独立调用获取；失败时返回 None，由调用方降级为
             # 沿用上一轮心情，绝不阻塞这段阶段性总结的投递。
             role_reply = await fetch_role_mood(
@@ -131,7 +149,7 @@ class _PassiveReasoningResultMixin:
                 content=content,
                 moods=reply_moods,
             )
-            return content, response.total_tokens, role_reply
+            return content, completion.total_tokens, role_reply, completion.diagnostics
 
         # 2. 先尝试让模型给一段中文收尾总结。
         try:
@@ -144,7 +162,7 @@ class _PassiveReasoningResultMixin:
             )
             text = (response.content or "").strip()
             if text:
-                return text, response.total_tokens, None
+                return text, response.total_tokens, None, None
         except Exception as exc:
             logger.warning("生成预算收尾总结失败: %s", exc)
 
@@ -156,6 +174,7 @@ class _PassiveReasoningResultMixin:
                 f"这次任务还没完全收束。{done}"
                 "我先停在当前进度，后续会继续基于已有工具结果补齐缺失信息并给你最终结论。"
             ),
+            None,
             None,
             None,
         )
@@ -178,6 +197,7 @@ class _PassiveReasoningResultMixin:
         tools_unlocked: list[str] | None = None,
         role_reply: RoleReply | None = None,
         role_reply_mood_fresh: bool = False,
+        reply_recovery: dict[str, Any] | None = None,
     ) -> ReasonerResult:
         # 1. 先把 tool_chain 扁平化成 invocations。
         invocations: list[LLMToolCall] = []
@@ -226,6 +246,9 @@ class _PassiveReasoningResultMixin:
             "role_reply": role_reply,
             "role_reply_mood_fresh": role_reply_mood_fresh,
         }
+
+        if reply_recovery is not None:
+            metadata["reply_recovery"] = reply_recovery
 
         # 3. 最后返回标准 ReasonerResult。
         return ReasonerResult(

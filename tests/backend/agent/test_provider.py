@@ -118,6 +118,103 @@ class _FakeStream:
         return self._chunks.pop(0)
 
 
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(
+    "content,reasoning,expected_content,expected_thinking",
+    [
+        ("", "只有思考", None, "只有思考"),
+        ("答复", "思考", "答复", "思考"),
+        ("<think>旧思考</think>答复", "字段思考", "答复", "字段思考"),
+        ("<think>旧思考</think>", None, None, "旧思考"),
+        ("<think>旧思考</think>", " ", None, "旧思考"),
+        (" \n ", None, None, None),
+    ],
+)
+async def test_generic_reasoning_fields_and_response_facts_are_consistent(
+    monkeypatch, stream, content, reasoning, expected_content, expected_thinking
+):
+    usage = SimpleNamespace(prompt_tokens=20, total_tokens=30)
+    raw_response = (
+        _FakeStream(
+            [
+                SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            delta=SimpleNamespace(
+                                content=content, reasoning_content=reasoning
+                            ),
+                            finish_reason="length",
+                        )
+                    ],
+                    usage=usage,
+                )
+            ]
+        )
+        if stream
+        else _Response(
+            content=content,
+            reasoning_content=reasoning,
+            finish_reason="length",
+            usage=usage,
+        )
+    )
+    fake = _FakeClient([raw_response])
+    monkeypatch.setattr(provider_module, "AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="test", provider_name="stepfun")
+    result = await provider.chat(
+        messages=[],
+        tools=[],
+        model="step-5-preview",
+        max_tokens=128,
+        on_content_delta=AsyncMock() if stream else None,
+    )
+    assert (result.content or "").strip() == (expected_content or "")
+    assert result.thinking == expected_thinking
+    assert result.provider_fields == {}
+    assert result.model == "step-5-preview"
+    assert result.stream is stream
+    assert result.raw_content_length == len(content)
+    assert result.raw_content_blank is (not content.strip())
+    assert result.finish_reason == "length"
+    assert result.total_tokens == 30
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(
+    "finish_reason,refusal", [("content_filter", None), ("stop", "拒绝")]
+)
+async def test_explicit_provider_refusals_are_preserved(
+    monkeypatch, stream, finish_reason, refusal
+):
+    if stream:
+        raw_response = _FakeStream(
+            [
+                SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            delta=SimpleNamespace(content=None, refusal=refusal),
+                            finish_reason=finish_reason,
+                        )
+                    ]
+                )
+            ]
+        )
+    else:
+        raw_response = _Response(content="", finish_reason=finish_reason)
+        raw_response.choices[0].message.refusal = refusal
+    fake = _FakeClient([raw_response])
+    monkeypatch.setattr(provider_module, "AsyncOpenAI", lambda **_: fake)
+    result = await LLMProvider(api_key="test").chat(
+        messages=[],
+        tools=[],
+        model="m",
+        max_tokens=128,
+        on_content_delta=AsyncMock() if stream else None,
+    )
+    assert result.refused is True
+    assert len(fake.calls) == 1
+
+
 async def _collect_delta(bucket: list, chunk) -> None:
     bucket.append(chunk)
 

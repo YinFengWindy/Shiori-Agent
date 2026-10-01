@@ -31,17 +31,11 @@ from agent.tools.base import normalize_tool_result
 from agent.tools.registry import ToolRegistry
 from agent.tools.tool_search import tool_search_call_context
 from agent.tools.turn_scope import tool_turn
-from agent.provider import ContextLengthError, is_truncated_finish_reason
+from agent.provider import ContextLengthError
 from .helpers import turn_tool_names
+from .reply_recovery import complete_reply
 
 logger = logging.getLogger("agent.core.passive_turn")
-
-
-def _empty_reply_label(finish_reason: str | None) -> str:
-    """Human-readable reason for an empty main-call reply, shared by the
-    retry-exhausted log and the general empty-content log so both describe
-    a `max_tokens` cutoff the same way instead of drifting independently."""
-    return "输出被截断" if is_truncated_finish_reason(finish_reason) else "未产出正文"
 
 
 class _PassiveReasoningLoopMixin:
@@ -95,6 +89,7 @@ class _PassiveReasoningLoopMixin:
         react_cache_seen = False
         react_total_tokens = 0
         react_total_tokens_seen = False
+        reply_recovery = None
 
         def _degraded_role_reply(content: str) -> RoleReply:
             """Fall back to last turn's mood/thought when the mood call
@@ -109,14 +104,16 @@ class _PassiveReasoningLoopMixin:
             reason: str,
             summary_iteration: int,
         ) -> tuple[str, RoleReply | None, bool]:
-            nonlocal react_total_tokens, react_total_tokens_seen
-            summary, summary_tokens, summary_role_reply = (
+            nonlocal react_total_tokens, react_total_tokens_seen, reply_recovery
+            summary, summary_tokens, summary_role_reply, reply_recovery = (
                 await self._summarize_incomplete_progress(
                     messages,
                     reason=reason,
                     iteration=summary_iteration,
                     tools_used=tools_used,
-                    **({"reply_moods": reply_moods} if reply_moods else {}),
+                    session=tool_event_session_key,
+                    channel=tool_event_channel,
+                    **({"reply_moods": reply_moods} if reply_moods is not None else {}),
                 )
             )
             if summary_tokens is not None:
@@ -209,6 +206,7 @@ class _PassiveReasoningLoopMixin:
                     tools_unlocked=tools_unlocked,
                     role_reply=summary_role_reply,
                     role_reply_mood_fresh=summary_role_reply_fresh,
+                    reply_recovery=reply_recovery,
                 )
             # 4. 调用 LLM，带上当前可见工具 schema。
             react_input_samples.append(step_ctx.input_tokens_estimate)
@@ -251,16 +249,34 @@ class _PassiveReasoningLoopMixin:
                 tool_choice="auto",
                 on_content_delta=reply_output.callback,
             )
-            response.content = await reply_output.finish(response.content)
+            completion = await complete_reply(
+                response,
+                output=reply_output,
+                messages=messages,
+                provider=self._llm.provider,
+                model=self._llm_config.model,
+                max_tokens=self._llm_config.max_tokens,
+                role_reply=reply_moods is not None,
+                on_content_delta=on_content_delta,
+                input_token_threshold=threshold,
+                estimate_request=self._request_tokens_with_tools,
+                session=tool_event_session_key,
+                channel=tool_event_channel,
+                iteration=iteration + 1,
+                allow_tool_calls=True,
+            )
+            response = completion.response
+            reply_recovery = completion.diagnostics
             if on_content_delta is not None and response.content:
                 streamed = True
-            if response.cache_prompt_tokens is not None:
-                react_cache_seen = True
-                react_cache_prompt_tokens += response.cache_prompt_tokens
-                react_cache_hit_tokens += response.cache_hit_tokens or 0
-            if response.total_tokens is not None:
-                react_total_tokens_seen = True
-                react_total_tokens += response.total_tokens
+            for call in completion.calls:
+                if call.cache_prompt_tokens is not None:
+                    react_cache_seen = True
+                    react_cache_prompt_tokens += call.cache_prompt_tokens
+                    react_cache_hit_tokens += call.cache_hit_tokens or 0
+                if call.total_tokens is not None:
+                    react_total_tokens_seen = True
+                    react_total_tokens += call.total_tokens
 
             # 5. 模型返回 tool_calls 时，进入工具执行分支。
             # 正文是纯文本后，调工具前的铺垫话和正式回复用的是同一条 content
@@ -427,6 +443,7 @@ class _PassiveReasoningLoopMixin:
                                 tools_unlocked=tools_unlocked,
                                 role_reply=summary_role_reply,
                                 role_reply_mood_fresh=summary_role_reply_fresh,
+                                reply_recovery=reply_recovery,
                             )
                         logger.warning(
                             "[工具未解锁] LLM 尝试调用 '%s'，但该工具 schema 不可见，引导模型先 tool_search",
@@ -654,6 +671,7 @@ class _PassiveReasoningLoopMixin:
                             tools_unlocked=tools_unlocked,
                             role_reply=summary_role_reply,
                             role_reply_mood_fresh=summary_role_reply_fresh,
+                            reply_recovery=reply_recovery,
                         )
 
                 # 7. 本轮工具执行完后，记录 tool_chain。
@@ -707,90 +725,13 @@ class _PassiveReasoningLoopMixin:
                         tools_unlocked=tools_unlocked,
                         role_reply=summary_role_reply,
                         role_reply_mood_fresh=summary_role_reply_fresh,
+                        reply_recovery=reply_recovery,
                     )
                 continue
 
-            # 8. 没有 tool_calls 时，说明本轮得到最终回复。
-            # 8a. 若 content 为空（模型只输出了 thinking），retry 一次；正文不再是
-            # JSON，这条重试路径对角色回复和普通回复完全一致。
-            # 追踪重试是否已经打过"仍为空"的日志：避免下面 8b 的通用空正文日志
-            # 和这里的重试失败日志针对同一次失败重复打印两条 warning。
-            retry_exhausted_empty = False
-            if not response.content and response.thinking:
-                logger.warning(
-                    "[空回复重试] 第%d轮，content为空但thinking非空，触发一次重试 "
-                    "finish_reason=%s",
-                    iteration + 1,
-                    response.finish_reason,
-                )
-                messages.append({"role": "assistant", "content": ""})
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": "你刚才只输出了思考过程，没有给出正式回复。请直接回复用户，不要重复思考。",
-                    }
-                )
-                threshold = int(getattr(self, "_memory_input_token_threshold", 0))
-                if (
-                    threshold > 0
-                    and self._request_tokens_with_tools(messages, []) >= threshold
-                ):
-                    raise ContextLengthError(
-                        "空回复重试追加提示后输入超过预算，已停止继续调用模型。"
-                    )
-                retry_output = RoleReplyOutput(
-                    on_content_delta, enabled=reply_moods is not None
-                )
-                retry_response = await self._llm.provider.chat(
-                    messages=messages,
-                    tools=[],
-                    model=self._llm_config.model,
-                    max_tokens=self._llm_config.max_tokens,
-                    on_content_delta=retry_output.callback,
-                )
-                retry_response.content = await retry_output.finish(
-                    retry_response.content
-                )
-                if retry_response.cache_prompt_tokens is not None:
-                    react_cache_seen = True
-                    react_cache_prompt_tokens += retry_response.cache_prompt_tokens
-                    react_cache_hit_tokens += retry_response.cache_hit_tokens or 0
-                if retry_response.total_tokens is not None:
-                    react_total_tokens_seen = True
-                    react_total_tokens += retry_response.total_tokens
-                if retry_response.content:
-                    response = retry_response
-                    if on_content_delta is not None:
-                        streamed = True
-                    logger.info("[空回复重试] 重试成功，获得正常回复")
-                else:
-                    retry_exhausted_empty = True
-                    retry_label = _empty_reply_label(retry_response.finish_reason)
-                    logger.warning(
-                        "[空回复重试] 第%d轮重试仍为空，使用fallback"
-                        "（%s，finish_reason=%s） model=%s",
-                        iteration + 1,
-                        retry_label,
-                        retry_response.finish_reason,
-                        self._llm_config.model,
-                    )
-
-            if not response.content and not retry_exhausted_empty:
-                # 正文主调用空产出时区分「被 max_tokens 截断」与「模型确实没有
-                # 输出」：前者不该被误读成格式/解析问题（issue #304 的排查教训——
-                # 空 content 曾统一被下游当成"非法 JSON"上报，找错了方向）。重试
-                # 耗尽的情形已经在上面打过同样区分的日志，这里跳过避免重复。
-                label = _empty_reply_label(response.finish_reason)
-                logger.warning(
-                    "[正文为空] 第%d轮模型%s（finish_reason=%s），回退为占位回复 "
-                    "model=%s",
-                    iteration + 1,
-                    label,
-                    response.finish_reason,
-                    self._llm_config.model,
-                )
-
-            final_content = response.content or "（无响应）"
+            # 8. The shared completion boundary has validated final content.
+            final_content = response.content
+            assert final_content is not None
             role_reply: RoleReply | None = None
             role_reply_mood_fresh = False
             if reply_moods is not None:
@@ -855,6 +796,7 @@ class _PassiveReasoningLoopMixin:
                 tools_unlocked=tools_unlocked,
                 role_reply=role_reply,
                 role_reply_mood_fresh=role_reply_mood_fresh,
+                reply_recovery=reply_recovery,
             )
 
         # 9. 达到最大迭代次数后，生成不完整进展总结。
@@ -883,4 +825,5 @@ class _PassiveReasoningLoopMixin:
             tools_unlocked=tools_unlocked,
             role_reply=summary_role_reply,
             role_reply_mood_fresh=summary_role_reply_fresh,
+            reply_recovery=reply_recovery,
         )

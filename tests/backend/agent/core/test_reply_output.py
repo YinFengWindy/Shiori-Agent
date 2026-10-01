@@ -40,7 +40,6 @@ def test_encoded_trailing_space_does_not_decode_entities_in_dialogue():
         '```json\n{"content":"正常 JSON 示例"}\n```',
         '```python\n{"content":"示例","mood":"平静","thought":"我知道。"}\n```',
         "`inline code` 和正常正文",
-        " \n ",
     ],
 )
 async def test_unrelated_or_malformed_content_is_preserved_in_stream_and_final(raw):
@@ -56,6 +55,23 @@ async def test_unrelated_or_malformed_content_is_preserved_in_stream_and_final(r
 
     assert await output.finish(raw) == raw
     assert "".join(emitted) == raw
+
+
+@pytest.mark.parametrize(
+    "raw", [" \n ", '{"content":" ","mood":"平静","thought":"私密"}']
+)
+async def test_empty_role_content_is_not_emitted_as_a_reply(raw):
+    emitted = []
+
+    async def sink(delta):
+        emitted.append(delta)
+
+    output = RoleReplyOutput(sink, enabled=True)
+    assert output.callback is not None
+    for character in raw:
+        await output.callback({"content_delta": character})
+    assert not (await output.finish(raw)).strip()
+    assert emitted == []
 
 
 async def test_plain_dialogue_and_thinking_stream_before_response_completes():
