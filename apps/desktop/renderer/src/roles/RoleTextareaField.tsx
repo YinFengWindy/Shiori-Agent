@@ -1,4 +1,5 @@
 import { AutosizeTextarea, cx } from "@shiori/plugin-sdk";
+import type { CSSProperties } from "react";
 import { roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";
 
 type RoleTextareaFieldProps = {
@@ -9,6 +10,8 @@ type RoleTextareaFieldProps = {
   placeholder?: string;
   /** Height the field starts at; it grows with its content from there. */
   minHeightClass?: "min-h-24" | "min-h-32" | "min-h-40";
+  /** Caps the editor height; longer content scrolls within this field. */
+  maxHeight?: CSSProperties["maxHeight"];
   disabled?: boolean;
   "data-testid"?: string;
   onChange: (value: string) => void;
@@ -17,13 +20,14 @@ type RoleTextareaFieldProps = {
 // The mirror must share the textarea's box model and type so both wrap identically.
 const mirrorBoxClass = "border border-transparent px-3.5 py-2.5 text-body leading-6";
 
-/** A role-editor long-text field that grows with its content instead of scrolling inside a fixed box. */
+/** Shared role-editor text field, growing with its content up to an optional height limit. */
 export function RoleTextareaField({
   label,
   ariaLabel,
   value,
   placeholder,
   minHeightClass = "min-h-24",
+  maxHeight,
   disabled,
   onChange,
   ...rest
@@ -31,8 +35,10 @@ export function RoleTextareaField({
   const field = (
     <AutosizeTextarea
       aria-label={label ? undefined : ariaLabel}
-      className={cx(roleFieldClass, "leading-6", minHeightClass)}
+      className={cx(roleFieldClass, "leading-6", minHeightClass, maxHeight !== undefined && "overflow-y-auto")}
+      style={{ maxHeight }}
       containerClassName={minHeightClass}
+      containerStyle={{ maxHeight }}
       mirrorClassName={cx(mirrorBoxClass, minHeightClass)}
       data-testid={rest["data-testid"]}
       rows={1}

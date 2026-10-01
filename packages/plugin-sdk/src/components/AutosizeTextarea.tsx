@@ -13,11 +13,13 @@ type AutosizeTextareaProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "
 export const AutosizeTextarea = forwardRef<HTMLTextAreaElement, AutosizeTextareaProps>(
   function AutosizeTextarea({ value, className, containerClassName, containerStyle, mirrorClassName, ...textareaProps }, ref) {
     return (
-      <div className={cx("grid min-w-0", containerClassName)} style={{ contain: "layout", ...containerStyle }}>
+      <div className={cx("grid min-w-0 grid-cols-[minmax(0,1fr)]", containerClassName)} style={{ contain: "layout", ...containerStyle }}>
         <div
           aria-hidden="true"
           className={cx(
-            "pointer-events-none invisible col-start-1 row-start-1 whitespace-pre-wrap break-words",
+            // A long unbroken word must not enlarge the grid's intrinsic width;
+            // the mirror can also shrink when the caller caps the editor height.
+            "pointer-events-none invisible col-start-1 row-start-1 min-h-0 min-w-0 overflow-hidden whitespace-pre-wrap [overflow-wrap:anywhere]",
             mirrorClassName,
           )}
           data-autosize-textarea-mirror=""
@@ -27,7 +29,7 @@ export const AutosizeTextarea = forwardRef<HTMLTextAreaElement, AutosizeTextarea
         <textarea
           {...textareaProps}
           ref={ref}
-          className={cx("col-start-1 row-start-1 h-full resize-none overflow-hidden", className)}
+          className={cx("col-start-1 row-start-1 h-full min-w-0 resize-none overflow-hidden [overflow-wrap:anywhere]", className)}
           value={value}
         />
       </div>
