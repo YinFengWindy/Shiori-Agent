@@ -47,10 +47,22 @@ _DRAFT = {
 
 
 @pytest.mark.asyncio
-async def test_probe_sends_one_tiny_request_with_the_draft_connection() -> None:
+@pytest.mark.parametrize(
+    "capacity_draft",
+    [
+        {},
+        {"context_window_tokens": None, "max_output_tokens": None},
+        {"context_window_tokens": 0, "max_output_tokens": 0},
+    ],
+)
+async def test_probe_sends_one_tiny_request_with_the_draft_connection(
+    capacity_draft,
+) -> None:
     build, created = _factory()
 
-    result = await probe_model_connection(_DRAFT, provider_factory=build)
+    result = await probe_model_connection(
+        {**_DRAFT, **capacity_draft}, provider_factory=build
+    )
 
     assert result["ok"] is True
     assert isinstance(result["latency_ms"], int)

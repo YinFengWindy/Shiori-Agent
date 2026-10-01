@@ -46,13 +46,20 @@ class ModelConfigurationError(ValueError):
 
 
 def incomplete_registration_fields(registration: ModelRegistration):
-    """Checks required connection fields without making a network request."""
+    """Check all fields needed for a budgeted conversation, without network access."""
+    capacity_fields = tuple(
+        name
+        for name in ("context_window_tokens", "max_output_tokens")
+        if getattr(registration, name) is None
+    )
+    return incomplete_connection_fields(registration) + capacity_fields
+
+
+def incomplete_connection_fields(registration: ModelRegistration):
+    """Check endpoint reachability configuration independently of model capacity."""
     fields = []
     for name in ("provider", "model"):
         if not getattr(registration, name).strip():
-            fields.append(name)
-    for name in ("context_window_tokens", "max_output_tokens"):
-        if getattr(registration, name) is None:
             fields.append(name)
     base_url = registration.base_url.strip()
     try:
