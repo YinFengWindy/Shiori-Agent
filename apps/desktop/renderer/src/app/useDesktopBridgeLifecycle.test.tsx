@@ -6,7 +6,7 @@ import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { createFeedbackRecorder } from "../shared/testing/feedbackRecorder";
 import { useDesktopBridgeLifecycle } from "./useDesktopBridgeLifecycle";
 
-async function mountLifecycle({ cancelling = false, health = "online", viewKind = "chat" } = {}) {
+async function mountLifecycle({ cancelling = false, health = "online", viewKind = "chat", initialOpen = Promise.resolve(true) } = {}) {
   let listener!: (event: BridgeEvent) => void;
   const activeSessionRef: React.MutableRefObject<SessionPayload | null> = { current: {
     key: "role:mira", created_at: "", updated_at: "", last_consolidated: 0,
@@ -48,12 +48,13 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
       activeSessionRef.current = { ...current, messages: [...current.messages, { role: "error", content: message, ...(detail ? { metadata: { error_detail: detail } } : {}) }] };
     },
     loadRolesFromBridge: async () => [{ id: "mira" } as never],
-    openRole: async (roleId) => { openedRoles.push(roleId); return true; },
+    openRole: async (roleId) => { openedRoles.push(roleId); return initialOpen; },
     buildNavigationEntry: () => ({ view: { kind: "chat" }, activeRoleId: "mira", settingsSection: "models", settingsSubsection: "" }),
     pushNavigationEntry: ignore,
   };
+  let lifecycle!: ReturnType<typeof useDesktopBridgeLifecycle>;
   function Harness() {
-    useDesktopBridgeLifecycle(args);
+    lifecycle = useDesktopBridgeLifecycle(args);
     return null;
   }
   const view = await mountTestComponent(null);
@@ -68,6 +69,7 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
   return {
     ...view, activeSessionRef, completions, statesAtError, feedback, healthRef, healthChanges, invokedMethods, openedRoles,
     unreadCounts: () => unreadCounts,
+    ready: () => lifecycle.ready,
     async emit(method: string, payload: BridgeEvent["payload"] = {}, id = "request-1") {
       await act(async () => listener({ id, type: "event", method, payload: {
         session_key: "role:mira", turn_id: "turn-1", ...payload,
@@ -77,6 +79,17 @@ async function mountLifecycle({ cancelling = false, health = "online", viewKind 
 }
 
 describe("useDesktopBridgeLifecycle", () => {
+  it("does not allow notification navigation until the startup role has finished opening", async () => {
+    let finish!: (result: boolean) => void;
+    const initialOpen = new Promise<boolean>((resolve) => { finish = resolve; });
+    const view = await mountLifecycle({ initialOpen });
+    try {
+      assert.deepEqual(view.openedRoles, ["mira"]);
+      assert.equal(view.ready(), false);
+      await act(async () => { finish(true); });
+      assert.equal(view.ready(), true);
+    } finally { await view.cleanup(); }
+  });
   for (const doneFirst of [true, false]) it(`replaces an emoji placeholder in the same bubble when done arrives ${doneFirst ? "before" : "after"} persistence`, async () => {
     const view = await mountLifecycle();
     try {
