@@ -1,9 +1,8 @@
-import { Select, SettingsToggleCard, cardClass, cx, roleToggleStatus } from "@shiori/plugin-sdk";
+import { Select, cardClass, cx } from "@shiori/plugin-sdk";
 import { CaretDown } from "@phosphor-icons/react";
 import type React from "react";
 import { useState } from "react";
 import type { RoleFormState } from "../shared/types";
-import { RoleCapabilityBadge } from "@shiori/plugin-sdk/host-internal";
 import { roleFieldClass, roleFieldLabelClass, rolePanelGhostButtonClass } from "./roleEditorStyles";
 import { RoleEditorSection } from "./RoleEditorSection";
 import { RoleProactiveExecutionFields } from "./RoleProactiveExecutionFields";
@@ -20,19 +19,10 @@ type RoleProactiveSettingsPanelProps = {
 /** Configures the role's proactive generation policy. */
 export function RoleProactiveSettingsPanel({ devMode = false, roleForm, onUpdate }: RoleProactiveSettingsPanelProps) {
   const [executionOpen, setExecutionOpen] = useState(false);
-  const enabled = Boolean(roleForm.proactiveEnabled ?? roleProactiveDefaults.enabled);
   const profile = roleForm.proactiveProfile ?? roleProactiveDefaults.profile;
 
   return (
-    <RoleEditorSection
-      title="主动推送"
-      action={(
-        <div className="flex items-center gap-3">
-          <RoleCapabilityBadge status={roleToggleStatus(enabled)} />
-          <SettingsToggleCard checked={enabled} ariaLabel="主动推送" onChange={(checked) => onUpdate((current) => ({ ...current, proactiveEnabled: checked }))} />
-        </div>
-      )}
-    >
+    <RoleEditorSection title="主动推送">
       <div className={cx(cardClass, "grid gap-4 p-5")} data-testid="role-proactive-config">
         <label className={cx(roleFieldLabelClass, "sm:max-w-[50%]")}>
           <span>推送策略</span>

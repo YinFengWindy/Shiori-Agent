@@ -178,6 +178,7 @@ def _validate_agent_keys(agent: dict[str, Any]) -> None:
 
 def _validate_drift_keys(drift: dict[str, Any]) -> None:
     allowed = {
+        # Accepted for historical role snapshots; the main switch owns Drift.
         "enabled",
         "max_steps",
         "min_interval_hours",
@@ -291,6 +292,7 @@ def load_proactive_config(p: dict[str, Any], *, role_id: str = "") -> ProactiveC
     # 构建 ProactiveConfig
     config = ProactiveConfig(
         enabled=enabled,
+        drift_enabled=bool(enabled),
         role_id=role_id.strip(),
         model=model,
         profile=str(preset_name),
@@ -331,8 +333,6 @@ def load_proactive_config(p: dict[str, Any], *, role_id: str = "") -> ProactiveC
                 "agent.web_fetch_max_chars",
             ),
         )
-    if "enabled" in drift:
-        config.drift_enabled = bool(drift["enabled"])
     if "max_steps" in drift:
         config.drift_max_steps = max(
             3,

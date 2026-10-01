@@ -39,3 +39,36 @@ def test_rejects_retired_agent_tick_root_block_via_root_validation() -> None:
                 "agent_tick": {"max_steps": 12},
             }
         )
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("legacy_drift_enabled", [None, False, True])
+def test_main_switch_owns_drift_without_losing_execution_settings(
+    enabled, legacy_drift_enabled
+) -> None:
+    drift = {"max_steps": 8, "min_interval_hours": 6}
+    if legacy_drift_enabled is not None:
+        drift["enabled"] = legacy_drift_enabled
+    config = load_proactive_config(
+        {
+            "enabled": enabled,
+            "profile": "quiet",
+            "overrides": {"trigger": {"tick_jitter": 0.1}},
+            "drift": drift,
+        }
+    )
+
+    assert config.enabled is enabled
+    assert config.drift_enabled is enabled
+    assert config.drift_max_steps == 8
+    assert config.drift_min_interval_hours == 6
+    assert config.tick_jitter == 0.1
+    assert drift.get("enabled") is legacy_drift_enabled
+
+
+def test_enabled_role_without_a_drift_block_uses_idle_activity_defaults() -> None:
+    config = load_proactive_config({"enabled": True, "profile": "daily"})
+
+    assert config.drift_enabled is True
+    assert config.drift_max_steps == 20
+    assert config.drift_min_interval_hours == 3
