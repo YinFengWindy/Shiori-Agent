@@ -27,6 +27,7 @@ import { openGrantedLocalAsset } from "./assets/localAssetOpen.js";
 import { LocalAssetRegistry, localAssetScheme } from "./assets/localAssetRegistry.js";
 import { ensureDesktopRuntimeConfig, resolveDesktopRuntimePaths } from "./runtimePaths.js";
 import { registerDesktopUpdates } from "./updater.js";
+import { createDesktopMessageNotifications } from "./notifications/electron.js";
 import { createDesktopTray } from "./tray/menu.js";
 import { PluginTrayRegistry } from "./tray/registry.js";
 import { trayChannels } from "./tray/ipc.js";
@@ -60,6 +61,8 @@ import type { LocalAssetTransport, SettingsFormData, SurfaceSettledPayload } fro
 
 // Voice replies are played from a trusted hidden renderer without a DOM user gesture.
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+// Matches electron-builder's appId and the installed Windows shortcut identity.
+if (process.platform === "win32") app.setAppUserModelId("com.yinfengwindy.shiori");
 
 // Select the profile before acquiring its single-instance lock.
 configureUserDataPath();
@@ -96,6 +99,7 @@ let voicePlayback: BrowserVoicePlayback | null = null;
 let voiceHotkey: VoiceHotkeyController | null = null;
 let voiceSettings: SettingsFormData["voice"];
 let desktopPresenceReporting: ReturnType<typeof startDesktopPresenceReporting> | null = null;
+let messageNotifications: ReturnType<typeof createDesktopMessageNotifications> | null = null;
 let isQuitting = false;
 let bridgeShutdownStarted = false;
 
@@ -459,7 +463,12 @@ void app.whenReady().then(async () => {
     });
     voiceHotkey.setHotkey(voiceSettings.hotkey);
   }
+  messageNotifications = createDesktopMessageNotifications({
+    getWindow: () => desktopWindow,
+    showWindow: showOrCreateDesktopWindow,
+  });
   wireBridgeEvents(bridge, localAssets, (event) => {
+    messageNotifications?.handleEvent(event);
     if (handleVoiceBridgeEvent(event, activeVoiceController, activeVoicePlayback)) return;
   });
   // The host reports OS availability; plugins own their presentation and behavior.
@@ -560,6 +569,8 @@ app.on("before-quit", (event) => {
   pluginHostWindow = null;
   desktopPresenceReporting?.dispose();
   desktopPresenceReporting = null;
+  messageNotifications?.dispose();
+  messageNotifications = null;
   voiceHotkey?.stop();
   voiceController?.dispose();
   voicePlayback?.dispose();

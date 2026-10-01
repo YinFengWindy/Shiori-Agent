@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { type AccountSnapshot, accountOnline } from "@shiori/plugin-sdk";
 import { accountChannelLabel, accountName } from "../accounts/accountPresentation";
-import { extractChatPreviewText } from "../roles/roleChatPreview";
+import { extractChatPreviewText } from "../../../src/shared/chatPreviewText";
 import type { PhoneConversation } from "./phoneClient";
 
 /** One app on the phone's home screen: an account of the role. */

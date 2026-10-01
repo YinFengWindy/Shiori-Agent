@@ -1,5 +1,6 @@
 import { normalizeSessionMediaPaths } from "../chat/chatMedia";
 import { formatHourMinute } from "../shared/format";
+import { extractChatPreviewText } from "../../../src/shared/chatPreviewText";
 import type { RoleLastMessage, SessionMessage } from "@shiori/plugin-sdk";
 
 /** One chat-list row's second line: the newest message, flattened, and when it was sent. */
@@ -7,26 +8,6 @@ export type RoleChatPreview = {
   text: string;
   timestamp: string;
 };
-
-/**
- * Flattens Markdown into one line of plain text for the chat list: fenced
- * code becomes 「[代码]」, links and images keep their text, emphasis,
- * headings, quotes, list and table markers are dropped, whitespace collapses.
- */
-export function extractChatPreviewText(content: string): string {
-  return content
-    .replace(/```[\s\S]*?(?:```|$)/g, " [代码] ")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/`([^`]*)`/g, "$1")
-    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)/gm, "")
-    .replace(/^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/gm, "")
-    .replace(/\|/g, " ")
-    .replace(/(\*\*|__|~~)(.*?)\1/g, "$2")
-    .replace(/(^|[^\w*])[*_]([^*_\n]+)[*_](?=[^\w*]|$)/g, "$1$2")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 /** Builds the preview for one message; errors and empty traces are skipped (null). */
 function previewFromMessage(

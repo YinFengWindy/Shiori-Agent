@@ -20,6 +20,7 @@ import {
 import { useDesktopSessionState } from "./app/useDesktopSessionState";
 import { useDesktopViewSynchronization } from "./app/useDesktopViewSynchronization";
 import { useDesktopBridgeLifecycle } from "./app/useDesktopBridgeLifecycle";
+import { useDesktopNotificationNavigation } from "./app/useDesktopNotificationNavigation";
 import { useDesktopUiEffects } from "./app/useDesktopUiEffects";
 import { useChatImageState } from "./app/useChatImageState";
 import { useChatInteractions } from "./app/useChatInteractions";
@@ -531,6 +532,13 @@ function App(): React.ReactElement {
     },
   });
   const guardLeave = leaveGuard.guard;
+  useDesktopNotificationNavigation({
+    ready: bridgeLifecycle.ready && health === "online",
+    guardNavigation: guardLeave,
+    openChatView,
+    openRole,
+    feedback,
+  });
 
   useDesktopUiEffects({
     pendingMessageNavigation,

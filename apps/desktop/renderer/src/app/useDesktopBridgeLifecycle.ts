@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useEffect } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import { refreshPluginEnabledState } from "../plugins/pluginEnabledStateStore";
 import {
   applyChatStreamDelta,
@@ -86,6 +86,7 @@ export function useDesktopBridgeLifecycle({
   buildNavigationEntry,
   pushNavigationEntry,
 }: UseDesktopBridgeLifecycleArgs) {
+  const [ready, setReady] = useState(false);
   const callbacksRef = useLatestRef({
     appendSessionErrorMessage,
     buildNavigationEntry,
@@ -113,6 +114,7 @@ export function useDesktopBridgeLifecycle({
    * from a still-offline bridge.
    */
   const refreshBridge = useCallback(async (): Promise<boolean> => {
+    setReady(false);
     setHealth("connecting");
     const res = await window.miraDesktop.invoke({
       method: "health",
@@ -145,6 +147,7 @@ export function useDesktopBridgeLifecycle({
     } else if (nextRoles[0]) {
       await callbacksRef.current.openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
     }
+    setReady(true);
     return true;
   }, [activeRoleIdRef, callbacksRef, reportPluginStateError, setActiveIllustration, setActiveRoleId, setBridgeError, setHealth]);
 
@@ -428,11 +431,13 @@ export function useDesktopBridgeLifecycle({
         ?? nextRoles[0]?.id;
       if (preferredRoleId) {
         const preferredRole = nextRoles.find((item) => item.id === preferredRoleId) ?? null;
-        void callbacksRef.current.openRole(preferredRoleId, preferredRole, { recordHistory: false });
+        await callbacksRef.current.openRole(preferredRoleId, preferredRole, { recordHistory: false });
       }
+      if (cancelled) return;
       callbacksRef.current.pushNavigationEntry(
         callbacksRef.current.buildNavigationEntry({ kind: "chat" }, preferredRoleId ?? ""),
       );
+      setReady(true);
     }
 
     void load();
@@ -449,6 +454,7 @@ export function useDesktopBridgeLifecycle({
   ]);
 
   return {
+    ready,
     refreshBridge,
     restartBridge,
   };
