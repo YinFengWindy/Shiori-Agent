@@ -19,8 +19,17 @@ from agent.tools.tool_search import ToolSearchTool
 from bus.event_bus import EventBus
 from bus.events import InboundMessage
 from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted
-import plugins.context_pressure.backend.plugin as context_pressure_plugin
-from plugins.context_pressure.backend.plugin import ContextPressureStopModule
+from shiori_sdk.lifecycle import LifecycleFrame
+
+
+class _RequestSummary:
+    slot = "test.request_summary"
+    requires = ("after_step.copy_input", "step:ctx")
+    produces = ("step:early_stop_reason",)
+
+    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
+        frame.slots["step:early_stop_reason"] = "test_policy"
+        return frame
 
 
 class _DummyTool(Tool):
@@ -361,10 +370,7 @@ def test_default_reasoner_zero_max_iterations_is_unlimited():
     assert len(tool.calls) == 3
 
 
-def test_default_reasoner_stops_on_context_pressure_after_tool_batch(monkeypatch):
-    monkeypatch.setattr(
-        context_pressure_plugin, "_CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS", 1
-    )
+def test_default_reasoner_honors_after_step_stop_after_tool_batch():
     provider = _Provider(
         [
             LLMResponse(
@@ -395,7 +401,7 @@ def test_default_reasoner_stops_on_context_pressure_after_tool_batch(monkeypatch
         tool_search_enabled=False,
         memory_window=40,
     )
-    reasoner.add_after_step_plugin_modules([ContextPressureStopModule()])
+    reasoner.add_after_step_plugin_modules([_RequestSummary()])
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 
@@ -403,7 +409,7 @@ def test_default_reasoner_stops_on_context_pressure_after_tool_batch(monkeypatch
     assert len(provider.calls) == 2
     assert provider.calls[1]["tools"] == []
     summary_messages = json.dumps(provider.calls[1]["messages"], ensure_ascii=False)
-    assert "[收尾原因] context_pressure" in summary_messages
+    assert "[收尾原因] test_policy" in summary_messages
     assert "已经使用了哪些工具或操作" in summary_messages
     assert "当前已经做到哪一步" in summary_messages
     assert "还缺什么信息或步骤" in summary_messages
@@ -412,12 +418,7 @@ def test_default_reasoner_stops_on_context_pressure_after_tool_batch(monkeypatch
     assert result.metadata["react_stats"]["total_tokens"] == 270
 
 
-def test_default_reasoner_context_pressure_policy_lives_in_after_step_plugin(
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        context_pressure_plugin, "_CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS", 1
-    )
+def test_default_reasoner_continues_without_after_step_stop_request():
     provider = _Provider(
         [
             LLMResponse(

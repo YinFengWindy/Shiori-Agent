@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { act } from "react";
 import { it } from "node:test";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { RoleAvatarPicker } from "./RoleAvatarPicker";
 
 it("retains the avatar on cancellation and picker failure, and supports explicit removal", async () => {

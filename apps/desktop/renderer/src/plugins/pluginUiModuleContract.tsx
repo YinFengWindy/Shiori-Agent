@@ -1,5 +1,5 @@
 import type React from "react";
-import { PluginHostServicesProvider, type PluginInjectedProps, type PluginUiModule } from "@shiori/plugin-sdk";
+import { PluginHostServicesProvider, type PluginInjectedProps, type PluginUiModule } from "@shiori/sdk";
 import { usePluginRpcClient } from "./usePluginRpcClient";
 import { pluginHostServicesFor } from "./pluginHostServices";
 import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";

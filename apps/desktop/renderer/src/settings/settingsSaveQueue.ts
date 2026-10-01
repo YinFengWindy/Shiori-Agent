@@ -1,5 +1,5 @@
-import { BridgeError } from "@shiori/plugin-sdk";
-import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
+import { BridgeError } from "@shiori/sdk";
+import { errorFeedback } from "@shiori/sdk/host-internal";
 import type { DesktopApi, SaveSettingsResult, SettingsFormData, SettingsSaveOptions, SettingsSnapshot } from "../../../src/bridge/shared.js";
 import { SerialDraftQueue } from "../shared/serialDraftQueue.js";
 import { cloneSettings, refreshSavedSettings, saveSettingsPageData, settingsEqual } from "./settingsPersistence.js";

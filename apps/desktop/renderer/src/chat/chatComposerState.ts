@@ -1,5 +1,5 @@
 import { ensureChatMessageRenderId } from "./chatMessageIdentity";
-import type { SessionMessage } from "@shiori/plugin-sdk";
+import type { SessionMessage } from "@shiori/sdk";
 import type { ChatReplyTarget } from "../shared/types";
 
 /** Normalizes pending attachment paths so chat send logic can deduplicate repeated selections. */

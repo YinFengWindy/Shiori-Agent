@@ -1,4 +1,4 @@
-import type { PluginBackgroundContribution } from "@shiori/plugin-sdk";
+import type { PluginBackgroundContribution } from "@shiori/sdk";
 import { applyPluginBackgroundModules } from "./pluginBackgroundContract";
 
 /**

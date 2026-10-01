@@ -1,4 +1,4 @@
-import type { BridgeEvent } from "@shiori/plugin-sdk/contract";
+import type { BridgeEvent } from "@shiori/sdk/contract";
 import { extractChatPreviewText } from "../shared/chatPreviewText.js";
 
 function record(value: unknown): Record<string, unknown> | null {

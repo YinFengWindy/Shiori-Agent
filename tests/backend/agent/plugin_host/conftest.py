@@ -97,7 +97,7 @@ def contract_package(tmp_path: Path) -> Path:
     (package / "renderer").mkdir()
     (package / "manifest.yaml").write_text(
         "api: 2\npackage_contract: 1\nid: external_demo\nversion: 1.2.3\n"
-        "runtime_api: '>=2.0.0 <3.0.0'\nentry: backend/plugin.py\n"
+        "runtime_api: '>=3.0.0 <4.0.0'\nentry: backend/plugin.py\n"
         "capabilities: []\n"
         "peer_dependencies: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0'}\n"
         "renderer:\n  ui: {entry: renderer/ui.mjs, css: [renderer/style.css]}\n"

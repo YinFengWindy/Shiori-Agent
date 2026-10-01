@@ -1,6 +1,6 @@
-import { errorFeedbackText } from "@shiori/plugin-sdk/host-internal";
+import { errorFeedbackText } from "@shiori/sdk/host-internal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLatestRef } from "@shiori/plugin-sdk";
+import { useLatestRef } from "@shiori/sdk";
 import type { PhoneMessage, PhoneMessagePage } from "./phoneClient";
 import { mergePhoneMessages } from "./phoneChatPresentation";
 

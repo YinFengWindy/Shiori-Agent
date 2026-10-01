@@ -15,7 +15,7 @@ import { desktopEslintConfig } from "./apps/desktop/eslint.config.js";
 /**
  * Plugin renderer code (including `shared/` modules the renderer entries import)
  * and the plugin SDK. Plugins reach the host only
- * through `@shiori/plugin-sdk` and their injected `client`/`host` (#440), and
+ * through `@shiori/sdk` and their injected `client`/`host` (#440), and
  * the SDK itself must never depend on host source.
  */
 const pluginRendererFiles = [
@@ -27,12 +27,12 @@ const pluginRendererFiles = [
   "plugins/*/background/**/*.tsx",
   "plugins/*/shared/**/*.ts",
   "plugins/*/shared/**/*.tsx",
-  "packages/plugin-sdk/src/**/*.ts",
-  "packages/plugin-sdk/src/**/*.tsx",
+  "packages/sdk/src/**/*.ts",
+  "packages/sdk/src/**/*.tsx",
 ];
 
-const hostImportMessage = "Plugins must not import host source (apps/desktop); use @shiori/plugin-sdk or the injected client/host.";
-const hostInternalMessage = "@shiori/plugin-sdk/host-internal is host-only and not part of the plugin contract; use the @shiori/plugin-sdk main entry.";
+const hostImportMessage = "Plugins must not import host source (apps/desktop); use @shiori/sdk or the injected client/host.";
+const hostInternalMessage = "@shiori/sdk/host-internal is host-only and not part of the plugin contract; use the @shiori/sdk main entry.";
 
 export default [
   ...desktopEslintConfig([
@@ -54,7 +54,7 @@ export default [
           // Any relative (`../../../apps/desktop/...`) or aliased spelling that names the host tree.
           { regex: "(^|/)apps/desktop(/|$)", message: hostImportMessage },
           // SDK internals the host shares with the SDK; not in the peer ABI, so a plugin could not load them anyway.
-          { regex: "^@shiori/plugin-sdk/host-internal$", message: hostInternalMessage },
+          { regex: "^@shiori/sdk/host-internal$", message: hostInternalMessage },
         ],
       }],
     },

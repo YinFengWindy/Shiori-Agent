@@ -1,4 +1,4 @@
-import type { PluginBackgroundContribution } from "@shiori/plugin-sdk";
+import type { PluginBackgroundContribution } from "@shiori/sdk";
 import { readDesktopPetBinding } from "./binding";
 import { DesktopPetController, desktopPetSurfaceId } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";

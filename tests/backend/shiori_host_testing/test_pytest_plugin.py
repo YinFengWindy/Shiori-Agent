@@ -9,7 +9,7 @@ import pytest
 
 from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
-from shiori_plugin_testkit.bridge import plugin_bridge_request
+from shiori_sdk.testing.bridge import plugin_bridge_request
 
 
 @pytest.mark.asyncio
@@ -36,7 +36,7 @@ async def test_plugin_account_report_and_bridge_listing_share_role_store(
     )
     RoleStore(tmp_path).create_role(role_id="owner", name="Owner", system_prompt="o")
     monkeypatch.setattr(
-        "shiori_plugin_testkit.pytest_plugin.plugin_directory",
+        "shiori_host_testing.pytest_plugin.plugin_directory",
         lambda _plugin_id: package,
     )
 

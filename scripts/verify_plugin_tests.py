@@ -18,13 +18,14 @@ import zipfile
 
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
-from shiori_plugin_testkit.packages import stage_plugin_package
+from shiori_sdk.testing.packages import stage_plugin_package
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 UV = str(Path(sys.executable).with_name("uv.exe" if os.name == "nt" else "uv"))
 if not Path(UV).is_file():
     UV = "uv"
 # Measured as the longest suites in CI; starting them first shortens the pool's tail.
+SDK_PLUGINS = frozenset({"citation", "context_pressure"})
 SLOW_PLUGINS = ("telegram", "feishu", "qqbot")
 
 
@@ -117,6 +118,7 @@ def check_host_wheel(wheel: Path, log: Path) -> None:
         names = archive.namelist()
     forbidden = (
         "tests/",
+        "shiori_host_testing/",
         "plugins/",
         "agent/plugin_packages/",
         "data/",
@@ -150,7 +152,7 @@ site = Path(sysconfig.get_paths()["purelib"]).resolve()
 
 def pytest_sessionfinish(session, exitstatus):
     paths = {}
-    for name in ("agent.provider", "core.roles.store", "bus.event_bus", "bootstrap.paths", "desktop_bridge.service", "shiori_plugin_testkit.bridge"):
+    for name in ("agent.provider", "core.roles.store", "bus.event_bus", "bootstrap.paths", "desktop_bridge.service", "shiori_plugin_testkit.bridge", "shiori_host_testing.pytest_plugin", "shiori_sdk"):
         spec = importlib.util.find_spec(name)
         path = Path(spec.origin).resolve()
         assert path.is_relative_to(site), (name, path, site)
@@ -179,6 +181,36 @@ def pytest_sessionfinish(session, exitstatus):
 """
 
 
+_SDK_PROVENANCE_CHECK = r"""
+import hashlib, importlib.util, json, sys, sysconfig
+from importlib.metadata import distributions, version
+from pathlib import Path
+source = Path(__SOURCE__)
+plugin_id = __PLUGIN_ID__
+allowed = set(__ALLOWED__)
+site = Path(sysconfig.get_paths()["purelib"]).resolve()
+def pytest_sessionfinish(session, exitstatus):
+    installed = {dist.metadata["Name"] for dist in distributions()}
+    assert "shiori-agent" not in installed and "shiori-plugin-testkit" not in installed and "shiori-host-testing" not in installed, installed
+    assert installed.intersection({"shiori-plugin-" + name.replace("_", "-") for name in ("default_memory",)}) <= allowed
+    for name in ("agent", "bootstrap", "core", "bus", "desktop_bridge", "memory2", "shiori_host_testing"):
+        assert importlib.util.find_spec(name) is None, name
+    paths = {}
+    for name in ("shiori_sdk", "shiori_sdk.testing", f"plugins.{plugin_id}.backend.plugin"):
+        path = Path(importlib.util.find_spec(name).origin).resolve()
+        assert path.is_relative_to(site), (name, path)
+        paths[name] = str(path)
+    plugin_path = Path(paths[f"plugins.{plugin_id}.backend.plugin"])
+    assert hashlib.sha256(plugin_path.read_bytes()).digest() == hashlib.sha256((source / "backend/plugin.py").read_bytes()).digest()
+    for dist in distributions():
+        direct = dist.read_text("direct_url.json")
+        assert not direct or not json.loads(direct).get("dir_info", {}).get("editable"), dist.metadata["Name"]
+    assert {name for name in installed if name.startswith("shiori-plugin-")} == allowed
+    paths["sdk_version"] = version("shiori-sdk")
+    Path("provenance.json").write_text(json.dumps(paths, indent=2), encoding="utf-8")
+"""
+
+
 def case_directory(artifact_root: Path, plugin_id: str) -> Path:
     """Holds every piece of per-plugin evidence (venv, logs, provenance)."""
     return artifact_root / "cases" / plugin_id
@@ -190,8 +222,8 @@ def verify_plugin(
     artifact_root: Path,
     wheelhouse: Path,
     source: Path,
-    host: Path,
-    kit: Path,
+    host: Path | None,
+    kit: Path | None,
     wheel: Path,
 ) -> dict[str, object]:
     """Runs all target tests with only the target and its declared sibling dependencies installed."""
@@ -213,17 +245,19 @@ def verify_plugin(
             str(python),
             "--find-links",
             str(wheelhouse),
-            str(host),
-            str(kit),
+            *([str(host), str(kit)] if host is not None else []),
             f"{wheel}[test]",
         ],
         cwd=case,
         log=case / "install.log",
     )
-    ids = plugin_dependencies({plugin_id}, extras=frozenset({"test"}))
+    ids = plugin_dependencies(
+        {plugin_id}, extras=frozenset({"test"}), include_host=host is not None
+    )
     allowed = ["shiori-plugin-" + name.replace("_", "-") for name in sorted(ids)]
     check = (
-        _PROVENANCE_CHECK.replace("__SOURCE__", repr(str(source)))
+        (_PROVENANCE_CHECK if host is not None else _SDK_PROVENANCE_CHECK)
+        .replace("__SOURCE__", repr(str(source)))
         .replace("__PLUGIN_ID__", repr(plugin_id))
         .replace("__ALLOWED__", repr(allowed))
     )
@@ -274,7 +308,10 @@ def verify_plugin(
 
 
 def plugin_dependencies(
-    plugin_ids: set[str], *, extras: frozenset[str] = frozenset()
+    plugin_ids: set[str],
+    *,
+    extras: frozenset[str] = frozenset(),
+    include_host: bool = True,
 ) -> set[str]:
     """Resolves selected extras and declared sibling dependencies for this interpreter.
 
@@ -284,7 +321,7 @@ def plugin_dependencies(
     """
     resolved: set[str] = set()
     visited: set[tuple[str, str]] = set()
-    pending = [("default_memory", "")]
+    pending = [("default_memory", "")] if include_host else []
     for plugin_id in plugin_ids:
         pending.append((plugin_id, ""))
         pending.extend((plugin_id, canonicalize_name(extra)) for extra in extras)
@@ -410,6 +447,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--plugins", nargs="+")
     parser.add_argument(
+        "--sdk-only",
+        action="store_true",
+        help="Run migrated plugins without installing the host",
+    )
+    parser.add_argument(
         "--jobs",
         type=int,
         default=os.cpu_count() or 1,
@@ -426,17 +468,26 @@ def main(argv: list[str] | None = None) -> None:
     artifact_root.mkdir(parents=True, exist_ok=True)
     wheelhouse = artifact_root / "wheels"
     wheelhouse.mkdir()
-    plugin_ids = args.plugins or [
-        path.name
-        for path in sorted((REPOSITORY / "plugins").iterdir())
-        if any((path / "tests").rglob("test_*.py"))
-    ]
+    plugin_ids = args.plugins or (
+        sorted(SDK_PLUGINS)
+        if args.sdk_only
+        else [
+            path.name
+            for path in sorted((REPOSITORY / "plugins").iterdir())
+            if any((path / "tests").rglob("test_*.py"))
+        ]
+    )
+    if args.sdk_only and not set(plugin_ids) <= SDK_PLUGINS:
+        raise ValueError("SDK isolation only accepts migrated plugins")
     for plugin_id in plugin_ids:
         if not (REPOSITORY / "plugins" / plugin_id / "pyproject.toml").is_file():
             raise ValueError(
                 f"Tested plugin {plugin_id} must declare its package and test dependencies"
             )
-    dependencies = plugin_dependencies(set(plugin_ids), extras=frozenset({"test"}))
+    needs_host = bool(set(plugin_ids) - SDK_PLUGINS)
+    dependencies = plugin_dependencies(
+        set(plugin_ids), extras=frozenset({"test"}), include_host=needs_host
+    )
     copies = {}
     for plugin_id in sorted(dependencies):
         copies[plugin_id] = artifact_root / "sources" / plugin_id
@@ -444,15 +495,24 @@ def main(argv: list[str] | None = None) -> None:
     wheels = build_wheels(
         {
             **copies,
-            "host": REPOSITORY,
-            "testkit": REPOSITORY / "packages/shiori-plugin-testkit",
+            "sdk": REPOSITORY / "packages/sdk",
+            **(
+                {
+                    "host": REPOSITORY,
+                    "testkit": REPOSITORY / "packages/shiori-plugin-testkit",
+                    "host-testing": REPOSITORY / "packages/shiori-host-testing",
+                }
+                if needs_host
+                else {}
+            ),
         },
         wheelhouse,
         artifact_root,
         jobs=args.jobs,
     )
-    host, kit = wheels["host"], wheels["testkit"]
-    check_host_wheel(host, artifact_root / "host-wheel-files.txt")
+    host, kit = wheels.get("host"), wheels.get("testkit")
+    if host is not None:
+        check_host_wheel(host, artifact_root / "host-wheel-files.txt")
     results = verify_all(
         plugin_ids,
         lambda plugin_id: verify_plugin(
@@ -460,8 +520,8 @@ def main(argv: list[str] | None = None) -> None:
             artifact_root=artifact_root,
             wheelhouse=wheelhouse,
             source=copies[plugin_id],
-            host=host,
-            kit=kit,
+            host=host if plugin_id not in SDK_PLUGINS else None,
+            kit=kit if plugin_id not in SDK_PLUGINS else None,
             wheel=wheels[plugin_id],
         ),
         artifact_root=artifact_root,

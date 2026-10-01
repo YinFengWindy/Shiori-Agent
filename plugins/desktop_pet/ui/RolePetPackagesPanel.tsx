@@ -1,5 +1,5 @@
 import { CheckCircleIcon, TrashIcon } from "@phosphor-icons/react";
-import { cx, UploadIcon, usePluginHostServices, type PluginRoleAssetsComponentProps } from "@shiori/plugin-sdk";
+import { cx, UploadIcon, usePluginHostServices, type PluginRoleAssetsComponentProps } from "@shiori/sdk";
 import { usePetPackages } from "./usePetPackages";
 
 /** The plugin's package library, mounted through the role.assets contribution (it needs no host services). */

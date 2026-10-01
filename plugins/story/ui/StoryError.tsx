@@ -1,4 +1,4 @@
-import { usePluginHostServices, type HostInlineErrorProps } from "@shiori/plugin-sdk";
+import { usePluginHostServices, type HostInlineErrorProps } from "@shiori/sdk";
 
 /** Presents Story failures through the host's shared, collapsed diagnostic disclosure. */
 export function StoryError(props: Pick<HostInlineErrorProps, "message" | "detail" | "className">) {

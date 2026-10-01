@@ -47,7 +47,7 @@ import {
   type RoleRecord,
   type SessionMessage,
   type SessionPayload,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import { sidebarTrackMotionClass } from "../shared/styles";
 import { useWindowActivity } from "../shared/useWindowActivity";
 import type { ChatReplyTarget, ChatSendRequest } from "../shared/types";

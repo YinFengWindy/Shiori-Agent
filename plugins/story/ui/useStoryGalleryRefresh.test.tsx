@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { PluginHostServicesProvider, type PluginHostServices } from "@shiori/plugin-sdk";
-import { createFakeHostServices, mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { PluginHostServicesProvider, type PluginHostServices } from "@shiori/sdk";
+import { createFakeHostServices, mountTestComponent } from "@shiori/sdk/testing";
 import { useStoryGalleryRefresh } from "./useStoryGalleryRefresh";
 
 test("Story gallery refresh follows plugin events and releases its subscription when closed", async () => {

@@ -1,4 +1,4 @@
-import type { PluginUiModule } from "@shiori/plugin-sdk";
+import type { PluginUiModule } from "@shiori/sdk";
 import { StoryGlyph } from "./StoryGlyph";
 import { StoryPage } from "./StoryPage";
 import "./story.css";

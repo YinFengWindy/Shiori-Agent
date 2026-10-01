@@ -1,6 +1,6 @@
 import { ArrowClockwise } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";
-import { compactPressableClass, cx } from "@shiori/plugin-sdk";
+import { compactPressableClass, cx } from "@shiori/sdk";
 import { splitChatErrorContent } from "./chatFailedTurn";
 
 type ChatErrorRowProps = {

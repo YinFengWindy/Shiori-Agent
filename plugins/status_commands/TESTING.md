@@ -1,6 +1,6 @@
 # 独立运行 Python 测试
 
-将本插件目录复制到 Shiori 仓库外。准备私有 wheelhouse，其中包含 `shiori-agent`、`shiori-plugin-testkit`、`shiori-plugin-default-memory` 和 `shiori-plugin-observe` 的 0.1.0 wheel。这些私有包不发布到 PyPI；其余依赖由包元数据解析。
+将本插件目录复制到 Shiori 仓库外。准备私有 wheelhouse，其中包含 `shiori-agent`、`shiori-plugin-testkit`、`shiori-host-testing`、`shiori-plugin-default-memory` 和 `shiori-plugin-observe` 的 0.1.0 wheel，以及 `shiori-sdk` 3.0.0 wheel。这些私有包不发布到 PyPI；其余依赖由包元数据解析。
 
 在插件副本目录执行（替换 wheelhouse 绝对路径）：
 

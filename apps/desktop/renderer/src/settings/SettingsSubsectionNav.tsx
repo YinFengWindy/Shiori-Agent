@@ -1,5 +1,5 @@
 import { ArrowLeft } from "@phosphor-icons/react";
-import { compactPressableClass, cx } from "@shiori/plugin-sdk";
+import { compactPressableClass, cx } from "@shiori/sdk";
 import type { SettingsSubsection } from "./settingsPageTypes";
 
 type SettingsSubsectionNavProps = {

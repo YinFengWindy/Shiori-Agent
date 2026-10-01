@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { act, useState } from "react";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { RoleCardImportAssets } from "./RoleCardImportAssets";
 
 it("selects one of two same-name emotions without selecting ordinary images", async () => {

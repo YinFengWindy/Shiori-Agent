@@ -1,6 +1,6 @@
-import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
+import { errorFeedback } from "@shiori/sdk/host-internal";
 import { useState } from "react";
-import { useLatestRef } from "@shiori/plugin-sdk";
+import { useLatestRef } from "@shiori/sdk";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { modelConnectionKey, selectModelConnectionTestView, testModelConnection, type ModelConnectionTestOutcome, type ModelConnectionTestRecord } from "./modelConnectionTest";
 

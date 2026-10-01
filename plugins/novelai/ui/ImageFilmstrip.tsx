@@ -1,4 +1,4 @@
-import { cx, pressableClass, usePluginHostServices } from "@shiori/plugin-sdk";
+import { cx, pressableClass, usePluginHostServices } from "@shiori/sdk";
 import type { ImageHistoryRecord } from "./types";
 
 type ImageFilmstripProps = {

@@ -19,7 +19,7 @@
  * the background entry in yet another (`plugin-host.html`), so a single
  * combined check would let a broken glob hide behind the other two working.
  *
- * The UI entry also imports `@shiori/plugin-sdk` (#503): built-in plugins live
+ * The UI entry also imports `@shiori/sdk` (#503): built-in plugins live
  * outside the Vite root, so this proves the build resolves the workspace SDK
  * package from the plugin tree, or the build fails.
  */
@@ -66,7 +66,7 @@ async function main() {
     join(uiDir, "index.tsx"),
     [
       "// Throwaway fixture written by test-plugin-ui-build-smoke.mjs; not meant to be committed.",
-      "import { PluginBridgeError } from \"@shiori/plugin-sdk\";",
+      "import { PluginBridgeError } from \"@shiori/sdk\";",
       "",
       `const MARKER = ${JSON.stringify(marker)};`,
       "",

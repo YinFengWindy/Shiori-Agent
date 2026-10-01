@@ -1,4 +1,4 @@
-import type { RoleAssetCategory, RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleAssetCategory, RoleRecord } from "@shiori/sdk";
 
 export type RoleAssetPair = {
   relPath: string;

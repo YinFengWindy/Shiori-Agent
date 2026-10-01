@@ -7,7 +7,7 @@ import type {
   SurfacePlacement,
   SurfaceSpec,
   VoiceStatePayload,
-} from "@shiori/plugin-sdk/contract";
+} from "@shiori/sdk/contract";
 
 export type BridgeRequest = {
   id: string;

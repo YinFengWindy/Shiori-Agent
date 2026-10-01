@@ -1,4 +1,4 @@
-import type { PluginRpcClient } from "@shiori/plugin-sdk";
+import type { PluginRpcClient } from "@shiori/sdk";
 import type { RoleMemoryDocumentsPayload } from "./memoryDocuments";
 import { semanticListParams, type RoleSemanticDetail, type RoleSemanticList, type RoleSemanticQuery } from "./roleSemanticMemory";
 

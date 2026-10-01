@@ -1,4 +1,4 @@
-import type { BridgeEvent } from "@shiori/plugin-sdk";
+import type { BridgeEvent } from "@shiori/sdk";
 import { isRecord } from "../shared/isRecord";
 import type {
   PhoneChatType, PhoneConversation, PhoneConversationUpdate, PhoneListeningHeard, PhoneMessage,

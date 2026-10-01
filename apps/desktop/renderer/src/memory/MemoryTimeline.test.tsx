@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, it } from "node:test";
 import { act } from "react";
 import { formatTimestamp } from "../shared/format";
-import { changeInputValue, mountTestComponent, chooseSelectOption } from "@shiori/plugin-sdk/testing";
+import { changeInputValue, mountTestComponent, chooseSelectOption } from "@shiori/sdk/testing";
 import { createPluginRpcTestClient, type PluginRpcTestResponder } from "../shared/testing/pluginRpcTestBridge";
 import type { RoleSemanticFilters, RoleSemanticItem } from "./roleSemanticMemory";
 

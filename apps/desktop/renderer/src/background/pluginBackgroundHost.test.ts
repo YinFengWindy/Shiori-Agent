@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BackgroundEffectScope } from "./backgroundEffectScope";
 import { PluginBackgroundHost, type PluginBackgroundHostDeps } from "./pluginBackgroundHost";
-import type { BackgroundCtx } from "@shiori/plugin-sdk";
+import type { BackgroundCtx } from "@shiori/sdk";
 import type { PluginBackgroundEntry } from "./pluginBackgroundRegistry";
 
 /** A fake ctx.effect-capable BackgroundCtx that just records what happened. */

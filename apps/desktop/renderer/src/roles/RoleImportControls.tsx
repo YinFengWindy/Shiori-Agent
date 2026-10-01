@@ -3,7 +3,7 @@ import { FileText, UploadSimple } from "@phosphor-icons/react";
 import type React from "react";
 import type { RoleCardImportState } from "../app/roleCardImportState";
 import type { NewRoleFormState } from "../shared/types";
-import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "@shiori/plugin-sdk";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "@shiori/sdk";
 import { RoleCardImportPreviewDialog } from "./RoleCardImportPreview";
 import { selectRoleCreateState } from "./roleCreateSelectors";
 

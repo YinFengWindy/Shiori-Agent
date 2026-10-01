@@ -1,4 +1,4 @@
-import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
+import { errorFeedback } from "@shiori/sdk/host-internal";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPluginBridgeClient, type PluginSummary } from "./pluginBridgeClient";
 import { refreshPluginEnabledState } from "./pluginEnabledStateStore";

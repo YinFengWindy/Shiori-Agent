@@ -1,5 +1,5 @@
-import { errorFeedbackText } from "@shiori/plugin-sdk/host-internal";
-import { Select, cx, errorMessage } from "@shiori/plugin-sdk";
+import { errorFeedbackText } from "@shiori/sdk/host-internal";
+import { Select, cx, errorMessage } from "@shiori/sdk";
 import { useEffect, useRef, useState } from "react";
 import { Microphone, Stop } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";

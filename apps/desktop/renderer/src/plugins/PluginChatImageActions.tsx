@@ -1,6 +1,6 @@
 import { usePluginRpcClient } from "./usePluginRpcClient";
 import type { ComponentType } from "react";
-import type { PluginChatImageActionProps } from "@shiori/plugin-sdk";
+import type { PluginChatImageActionProps } from "@shiori/sdk";
 import { pluginChatImageActionsRegistry } from "./pluginFeatureRegistry";
 import { usePluginEnabledState } from "./usePluginEnabledState";
 

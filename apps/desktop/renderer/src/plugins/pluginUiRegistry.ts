@@ -5,7 +5,7 @@ import type {
   PluginNavPageSidebarProps,
   PluginRoleAssetsProps,
   StandaloneSettingsSectionProps,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import type {
   SettingsSectionEditorProps,
   SettingsSubsection,

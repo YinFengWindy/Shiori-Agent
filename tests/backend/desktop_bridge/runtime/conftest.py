@@ -56,7 +56,7 @@ def plugin_package_env(tmp_path, monkeypatch):
         with ZipFile(path, "w") as output:
             output.writestr(
                 "manifest.yaml",
-                f"api: 2\npackage_contract: 1\nid: {plugin_id}\nversion: {version}\nruntime_api: '>=2.0.0 <3.0.0'\nentry: backend/plugin.py\ncapabilities: [rpc]\nsupports_hot_unload: {str(hot).lower()}\n",
+                f"api: 2\npackage_contract: 1\nid: {plugin_id}\nversion: {version}\nruntime_api: '>=3.0.0 <4.0.0'\nentry: backend/plugin.py\ncapabilities: [rpc]\nsupports_hot_unload: {str(hot).lower()}\n",
             )
             if not invalid:
                 output.writestr(

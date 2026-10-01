@@ -1,4 +1,4 @@
-import type { HostConfirmDialogProps, HostInlineErrorProps } from "@shiori/plugin-sdk";
+import type { HostConfirmDialogProps, HostInlineErrorProps } from "@shiori/sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 import { confirmPersonaLines, personaSceneLines } from "../shared/mascot/mascotLines";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";

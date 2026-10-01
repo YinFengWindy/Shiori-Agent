@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { act } from "react";
-import { mockableWindowTimers, mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mockableWindowTimers, mountTestComponent } from "@shiori/sdk/testing";
 import { appearancePrefsStorageKey } from "../appearancePrefs";
 import { mascotFeedback } from "../mascot/mascotFeedback";
 import { resetAppearancePrefsCache } from "../useAppearancePrefs";

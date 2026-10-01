@@ -26,7 +26,7 @@
     "../../../plugins/*/background/**/*.tsx",
     // The source-only plugin SDK (#440) is compiled into the same bundle; list
     // it so a module not yet reachable from its entries is still checked.
-    "../../../packages/plugin-sdk/src/**/*.ts",
-    "../../../packages/plugin-sdk/src/**/*.tsx"
+    "../../../packages/sdk/src/**/*.ts",
+    "../../../packages/sdk/src/**/*.tsx"
   ]
 }

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { useEffect } from "react";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { SurfaceRoot } from "./SurfaceRoot";
-import type { PluginSurfaceComponentProps, SurfaceHandle } from "@shiori/plugin-sdk";
+import type { PluginSurfaceComponentProps, SurfaceHandle } from "@shiori/sdk";
 import { PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 import { loadRuntimePluginSurface } from "./runtimePluginSurface";
 

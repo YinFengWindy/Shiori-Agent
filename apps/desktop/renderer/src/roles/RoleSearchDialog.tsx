@@ -3,7 +3,7 @@ import { formatTimestamp, toFileUrl } from "../shared/format";
 import { emptyStateLines } from "../shared/mascot/mascotLines";
 import { MascotEmptyState } from "../shared/mascot/MascotSpeech";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
-import { cx } from "@shiori/plugin-sdk";
+import { cx } from "@shiori/sdk";
 import type { RoleSearchResult } from "../shared/types";
 
 type RoleSearchDialogProps = {

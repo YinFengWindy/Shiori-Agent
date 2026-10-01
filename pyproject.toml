@@ -19,13 +19,13 @@ select = ["E4", "E7", "E9", "F"]
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/conftest.py" = ["F401"]
-"tests/support/legacy_stubs.py" = ["E402"]
 
 [dependency-groups]
 dev = [
     "qrcode>=8.2",
     "rich>=15.0.0",
     "shiori-plugin-testkit==0.1.0",
+    "shiori-host-testing==0.1.0",
     "black>=26.0.0",
     "ruff>=0.15",
     "pyright>=1.1.403",
@@ -35,5 +35,7 @@ dev = [
 
 
 [tool.uv.sources]
+shiori-host-testing = { path = "packages/shiori-host-testing", editable = true }
+shiori-sdk = { path = "packages/sdk", editable = true }
 shiori-plugin-default-memory = { path = "plugins/default_memory", editable = true }
 shiori-plugin-testkit = { path = "packages/shiori-plugin-testkit", editable = true }

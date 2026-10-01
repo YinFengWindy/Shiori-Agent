@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -32,6 +34,9 @@ jobs:
       - name: Run Ruff
         run: .venv/bin/ruff check .
 
+      - name: Enforce SDK import boundary and migration ratchet
+        run: .venv/bin/python scripts/check_sdk_imports.py --base "${{ github.event.pull_request.base.sha }}"
+
       - name: Run pyright
         run: |
           .venv/bin/pyright --level error
@@ -45,8 +50,8 @@ jobs:
           PYTHONWARNINGS: "ignore:.*AbstractEventLoopPolicy.*:DeprecationWarning"
         run: |
           # 不显式传路径：显式路径会覆盖 pytest.ini 的 testpaths
-          # （宿主、plugins/*/tests/ 与 packages/plugin-testkit/tests），
-          # 避免遗漏插件或公开 testkit 的用例（#178、#215）。
+          # （宿主、plugins/*/tests/ 与 packages/sdk/tests），
+          # 避免遗漏插件或公开 SDK 的用例（#178、#215）。
           .venv/bin/pytest -q -W error
 
   plugin-isolation:
@@ -60,7 +65,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      # The runner imports only packaging and the testkit's stdlib-only staging
+      # The runner imports only packaging and the SDK's stdlib-only staging
       # helper; every plugin gets its own venv built from private wheels.
       - name: Install runner dependencies
         # packaging matches uv.lock; uv is not pinned anywhere in the repository.
@@ -69,9 +74,9 @@ jobs:
       - name: Verify portable plugin tests
         timeout-minutes: 20
         env:
-          # Read from source so the testkit tree is not touched before its wheel
+          # Read from source so the SDK tree is not touched before its wheel
           # is built; the runner strips PYTHON* from every child process.
-          PYTHONPATH: packages/shiori-plugin-testkit/src
+          PYTHONPATH: packages/sdk/python
           PYTHONDONTWRITEBYTECODE: "1"
         run: python scripts/verify_plugin_tests.py --output "${{ runner.temp }}/plugin-isolation"
 
@@ -132,3 +137,38 @@ jobs:
       # would ship a host with no pet in it and every other gate still green.
       - name: Run plugin UI build smoke check
         run: pnpm run desktop:test:plugin-ui
+
+  sdk-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install build tools and SDK only
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install uv packaging ./packages/sdk
+          pnpm install --frozen-lockfile
+      - name: Build and install npm SDK outside the repository
+        run: pnpm run sdk:smoke
+      - name: Build and install wheel and run pure SDK tests outside the repository
+        run: .venv/bin/python -m scripts.verify_sdk
+      - name: Run migrated plugins without shiori-agent
+        run: .venv/bin/python scripts/verify_plugin_tests.py --sdk-only --output "${{ runner.temp }}/sdk-plugin-isolation"
+      - name: Upload SDK plugin provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-plugin-isolation-evidence
+          path: |
+            ${{ runner.temp }}/sdk-plugin-isolation/**/*.log
+            ${{ runner.temp }}/sdk-plugin-isolation/**/provenance.json
+            ${{ runner.temp }}/sdk-plugin-isolation/results.json

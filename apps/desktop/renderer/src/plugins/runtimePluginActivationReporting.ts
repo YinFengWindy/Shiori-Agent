@@ -1,4 +1,4 @@
-import { errorMessage } from "@shiori/plugin-sdk";
+import { errorMessage } from "@shiori/sdk";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 import type { PluginBridgeClient } from "./pluginBridgeClient";
 

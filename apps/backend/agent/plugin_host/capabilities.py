@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import asyncio
 import inspect
 import logging
@@ -159,7 +161,7 @@ class LifecycleCapability:
         self._contributions = contributions
         self._effects = effects
 
-    def contribute(self, slot: str, modules: list[object]) -> None:
+    def contribute(self, slot: str, modules: Sequence[object]) -> None:
         if slot not in PHASE_SLOTS:
             raise ValueError(f"未知 phase 槽位: {slot}")
         self._effects.ensure_active(f"phase:{slot}")

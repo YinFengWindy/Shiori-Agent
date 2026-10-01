@@ -3,7 +3,7 @@ import { ChatMessageRow, type ChatMessageRowProps } from "./ChatMessageRow";
 import { useChatMessageVirtualization } from "./useChatMessageVirtualization";
 import { getChatMessageDomKey, getChatMessageReactKey } from "./chatMessageIdentity";
 import type { getVisibleChatMessages } from "./chatMessageWindow";
-import { cx, type RoleRecord } from "@shiori/plugin-sdk";
+import { cx, type RoleRecord } from "@shiori/sdk";
 
 type ChatMessageListProps = {
   activeRole: RoleRecord | null;

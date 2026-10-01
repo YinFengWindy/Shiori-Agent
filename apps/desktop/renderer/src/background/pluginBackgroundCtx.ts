@@ -5,7 +5,7 @@ import type {
   PluginBackgroundStore,
   PluginBackgroundSurfaces,
   PluginBackgroundTray,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import type { DesktopApi, DesktopSurfacesApi, SurfaceSettledPayload } from "../../../src/bridge/shared";
 import { unavailableLocalAssetUrl } from "../../../src/assets/localAssetContract";
 import type { DesktopInvoke } from "../shared/bridgeInvoke";

@@ -1,8 +1,8 @@
 import { CaretRightIcon, PlusIcon } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";
-import { compactGhostButtonClass, cx, sidebarNavItemClass, type AccountSnapshot } from "@shiori/plugin-sdk";
+import { compactGhostButtonClass, cx, sidebarNavItemClass, type AccountSnapshot } from "@shiori/sdk";
 import type { AccountDetailEntry } from "../plugins/pluginUiRegistry";
-import { accountStatusView } from "@shiori/plugin-sdk/host-internal";
+import { accountStatusView } from "@shiori/sdk/host-internal";
 import { accountChannelLine, accountName } from "./accountPresentation";
 import { AccountAvatar } from "./AccountAvatar";
 import { AccountStatusDot } from "./AccountStatusDot";

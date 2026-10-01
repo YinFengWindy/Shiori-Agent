@@ -1,4 +1,4 @@
-import { errorFeedbackText } from "@shiori/plugin-sdk/host-internal";
+import { errorFeedbackText } from "@shiori/sdk/host-internal";
 import { useRef, useState } from "react";
 import { Camera } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";

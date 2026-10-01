@@ -52,7 +52,7 @@ import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { useRoleFormAdapters } from "./roles/useRoleFormAdapters";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
 import { useSettingsSubsectionMemory } from "./settings/useSettingsSubsectionMemory";
-import { useLatestRef, type RoleRecord, type SessionPayload } from "@shiori/plugin-sdk";
+import { useLatestRef, type RoleRecord, type SessionPayload } from "@shiori/sdk";
 import { setInFlightChatTurns } from "./shared/chatTurnActivity";
 import { useLeftSidebarState } from "./shared/useLeftSidebarState";
 import { useRightSidebarState } from "./shared/useRightSidebarState";

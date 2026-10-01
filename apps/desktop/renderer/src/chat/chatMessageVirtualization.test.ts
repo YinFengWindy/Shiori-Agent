@@ -7,7 +7,7 @@ import {
   chatMessageVirtualRowGap,
   chatMessageVirtualizationThreshold,
 } from "./chatMessageVirtualization";
-import type { SessionMessage } from "@shiori/plugin-sdk";
+import type { SessionMessage } from "@shiori/sdk";
 
 function messages(count: number): SessionMessage[] {
   return Array.from({ length: count }, (_value, index) => ({

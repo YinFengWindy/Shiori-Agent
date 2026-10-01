@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act, createElement } from "react";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { resolveLeftSidebarDragUpdate, useLeftSidebarState } from "./useLeftSidebarState";
 
 // Shell values: nav rail 52px wide, sidebar 220..400 (default 220),

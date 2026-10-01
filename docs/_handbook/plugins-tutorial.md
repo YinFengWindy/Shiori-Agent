@@ -167,7 +167,7 @@ class QQBotChannel:
 - 钩子按渠道名查询当前已发布的连接；换代中正在排空的旧连接仍按它自己的钩子回答。
 - 开了流式事件就要订阅 `StreamDeltaReady` 并自己节流，最终回复仍经出站消息送达。
 - `register_channel(..., description=...)` 的说明写进 `message_push` 工具描述的「当前可用渠道」列表，用来告诉模型渠道身份和 chat_id 格式。工具描述只列出当前已注册、未停用的渠道。
-- 用到这些钩子或 `description` 参数的包要声明 `runtime_api: ">=2.3.0 <3.0.0"`；旧宿主会忽略钩子，并拒绝未知的 `description` 参数。
+- 用到这些钩子或 `description` 参数的包要声明 `runtime_api: ">=3.0.0 <4.0.0"`；旧宿主会忽略钩子，并拒绝未知的 `description` 参数。
 
 ## 阶段与依赖
 
@@ -229,11 +229,11 @@ export default exampleUi;
 
 `settings.section` 不再是设置侧栏的顶层条目：它注册为内建「插件」区块下的一个子页面。设置 › 插件的列表按 manifest 的 `category` 分成功能、渠道、系统组件三组，有设置页的插件在所在行显示「设置」按钮，点开进入它的设置页（页头带返回），不再作为「已安装」旁的子标签；侧栏始终只有模型/记忆/语音/外观/高级/插件/关于七项（「频道」已随渠道插件化移除，#363）。深链 `openSettingsWorkspace("plugins", { subsectionId: pluginId })` 直接打开该插件的设置页。manifest 声明了 `config_model` 的插件无需手写 `ui/index.tsx` 就能自动获得一个 schema 表单设置页，页标题取自后端 `plugins.list` 的回退链：manifest 的 `display_name` → 插件记录名（未声明 `display_name` 时即插件目录名）→ `id`，所以请在 manifest 里写出 `display_name`。账号插件的凭据与响应规则在角色页编辑，保存在插件自己的账号存储，不放在自动配置表单里。只有需要自定义表单组件、或额外贡献 `navPage`/`roleAssets` 等插槽时才需要手写（如 novelai——它的手写 `settingsSection` 会优先于自动注册，不会重复出现两个子标签）。已使用的插槽还包括 `nav.page`（story）、`role.assets`（desktop_pet）。角色设置与聊天图片动作也有独立贡献契约。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
 
-Runtime API **2.4.0** 起，绑定的组件（`navPage` 及其侧栏、自定义 `settingsSection`、`roleAssets`）除了 `client` 还会收到 `host`（即宿主服务，内置插件也可以继续用 `usePluginHostServices()`）。其中三项是宿主的呈现：`host.feedback.error("加载失败", { detail, persona: true })` 把提示放进宿主唯一的提示队列；`<host.ui.InlineError persona message={error} actions={…} />` 是宿主的页面内报错块（`layout` 可选 `row` / `strip` / `card`）；`<host.ui.ConfirmDialog persona="destructive" … />` 是宿主的确认弹窗（参数与宿主自己的一致）。`persona` 默认 `false`；传 `true`（或 `"generic"`）让看板娘吟风用该处的通用台词出面（报错 / 警告带一句，成功 / 普通提示只露脸），传场景键（`not_configured` / `unauthorized` / `quota` / `network` / `upstream` / `destructive` / `discard` / `confirm`）用宿主为该场景写好的台词。台词永远由宿主写，插件只能选场景；用户在 设置 › 外观 关掉「看板娘」后，一律回到不带她的样式。用到 `host` 的包声明 `runtime_api: ">=2.4.0 <3.0.0"`。细节见[运行时契约](plugin-runtime-contract.md#runtime-api-24-host-feedback-and-inline-errors)，NovelAI 生图的失败卡片和报错提示就是这样接的。
+Runtime API **2.4.0** 起，绑定的组件（`navPage` 及其侧栏、自定义 `settingsSection`、`roleAssets`）除了 `client` 还会收到 `host`（即宿主服务，内置插件也可以继续用 `usePluginHostServices()`）。其中三项是宿主的呈现：`host.feedback.error("加载失败", { detail, persona: true })` 把提示放进宿主唯一的提示队列；`<host.ui.InlineError persona message={error} actions={…} />` 是宿主的页面内报错块（`layout` 可选 `row` / `strip` / `card`）；`<host.ui.ConfirmDialog persona="destructive" … />` 是宿主的确认弹窗（参数与宿主自己的一致）。`persona` 默认 `false`；传 `true`（或 `"generic"`）让看板娘吟风用该处的通用台词出面（报错 / 警告带一句，成功 / 普通提示只露脸），传场景键（`not_configured` / `unauthorized` / `quota` / `network` / `upstream` / `destructive` / `discard` / `confirm`）用宿主为该场景写好的台词。台词永远由宿主写，插件只能选场景；用户在 设置 › 外观 关掉「看板娘」后，一律回到不带她的样式。用到 `host` 的包声明 `runtime_api: ">=3.0.0 <4.0.0"`。细节见[运行时契约](plugin-runtime-contract.md#runtime-api-24-host-feedback-and-inline-errors)，NovelAI 生图的失败卡片和报错提示就是这样接的。
 
 `app.background` 在隐藏的 plugin-host renderer 运行，入口是 `background/index.ts` 的 `{ pluginId, setup(ctx) }`。桌宠已通过它拥有控制器、surface、托盘项与订阅。它的 `BackgroundCtx` 不是 Python 上下文：通过自己的 `effect`、`events`、`rpc`、`surfaces`、`tray`、`store` 管理资源。使用 `surface/` 入口渲染独立桌面窗口。
 
-Runtime API **2.1.0** 为 UI、surface 和后台注入同一套通信接口。新包使用这些接口时声明 `runtime_api: ">=2.1.0 <3.0.0"`。它们沿用 manifest 的 `dependencies` / `optional_dependencies`；不会建立另一套依赖注册表，也不会隐式启用提供方。
+Runtime API **2.1.0** 为 UI、surface 和后台注入同一套通信接口。新包使用这些接口时声明 `runtime_api: ">=3.0.0 <4.0.0"`。它们沿用 manifest 的 `dependencies` / `optional_dependencies`；不会建立另一套依赖注册表，也不会隐式启用提供方。
 
 ```ts
 // UI / surface：自身后端、事件、后台都只传局部名称。
@@ -299,3 +299,13 @@ continues to use the existing v2 path.
 因此，仅备份 `plugin-data/<id>/` 不代表完整插件备份：还须保留主配置的对应插件表、对应角色命名空间和 `private_runtime/plugin-data-migrations/<id>/` 凭证；角色命名空间恢复时按角色合并，保留其他插件和角色字段。普通「同时删除插件数据」只清理私有目录与主配置插件表，保留角色命名空间、迁移凭证和设备偏好。清理 NovelAI 数据保留 Story 和会话各自持有的图片副本；清理 Story 自身数据会同时删除其故事及 CG。重新安装仍需对插件代码重新授权，授权后该插件可继续读取保留的角色偏好。
 
 Story 播放偏好保留为设备 renderer 的 `localStorage["shiori.story-preferences.v1"]`；桌宠位置/窗口状态保留在 Electron `userData/plugin-data/desktop_pet.json`。它们不随工作区迁移或清理，复制设备体验时另行备份。shell_restore 的新默认是工作区内受保护的 `recovery/shell_restore/`，保存的是用户原文件，不能随普通插件数据删除。显式 `AKASIC_RESTORE_DIR` 保持原值；旧 `~/restore` 不自动归属任何工作区，也不移动或删除，须独立备份和恢复。
+
+
+## 统一 SDK 3.0
+
+新插件前端使用 `@shiori/sdk`，后端契约使用 `shiori_sdk`，并声明
+`runtime_api: ">=3.0.0 <4.0.0"`。SDK 主文档位于
+[packages/sdk/README.md](../../packages/sdk/README.md)，包括 wheel/tarball 构建、
+公开协议和 `shiori-sdk[testing]` 的无宿主测试入口。
+citation/context_pressure 已完成迁移。尚未公开的能力按对应迁移票进入 SDK；
+渠道等未迁移插件暂时保留现有 testkit 与真实宿主集成测试，不把宿主服务复制进 SDK。

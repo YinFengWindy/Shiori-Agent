@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import { PluginBridgeError, PluginHostServicesProvider, type PluginConfigValues, type PluginHostConfig } from "@shiori/plugin-sdk";
-import { createFakeHostServices, deferred, mountTestComponent, type FakeHostServicesOptions } from "@shiori/plugin-sdk/testing";
+import { PluginBridgeError, PluginHostServicesProvider, type PluginConfigValues, type PluginHostConfig } from "@shiori/sdk";
+import { createFakeHostServices, deferred, mountTestComponent, type FakeHostServicesOptions } from "@shiori/sdk/testing";
 import { useNovelAiPromptSettings, type NovelAiPromptSettings } from "./useNovelAiPromptSettings";
 
 /** Mounts the hook under fake host services; `latest()` is the settings of the last render. */

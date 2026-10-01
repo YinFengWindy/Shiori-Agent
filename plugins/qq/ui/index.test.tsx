@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import React, { act } from "react";
-import type { AccountSnapshot } from "@shiori/plugin-sdk";
-import { createFakeHostServices, createFakePluginClient, deferred, mountTestComponent } from "@shiori/plugin-sdk/testing";
+import type { AccountSnapshot } from "@shiori/sdk";
+import { createFakeHostServices, createFakePluginClient, deferred, mountTestComponent } from "@shiori/sdk/testing";
 import { QQAccountDetail } from "./index";
 
 const savedAccount: AccountSnapshot = {
@@ -174,7 +174,7 @@ test("退出登录 sits in the dialog's danger zone and shows 正在退出 while
 });
 
 test("a failed QQ settings read reports its cause without claiming the platform is unsupported", async () => {
-  const { PluginBridgeError } = await import("@shiori/plugin-sdk");
+  const { PluginBridgeError } = await import("@shiori/sdk");
   const fake = createFakeHostServices();
   const client = createFakePluginClient({ call: async () => { throw new PluginBridgeError("本地服务处理失败", "internal_error", { detail: "settings access denied" }); } });
   const view = await mountTestComponent(<QQAccountDetail account={savedAccount} roleId="mira" onChanged={() => undefined} host={fake.host} client={client} />);
@@ -187,7 +187,7 @@ test("a failed QQ settings read reports its cause without claiming the platform 
 });
 
 test("a failed QQ connection forwards its actionable cause as a separate safe detail", async () => {
-  const { BridgeError } = await import("@shiori/plugin-sdk");
+  const { BridgeError } = await import("@shiori/sdk");
   const fake = createFakeHostServices();
   const client = createFakePluginClient({ call: async <T,>(method: string): Promise<T> => {
     if (method === "accounts.settings") return { managed_available: true } as T;

@@ -14,7 +14,7 @@
  * package uses.
  */
 
-import type { SurfaceExtension, SurfaceSpec } from "@shiori/plugin-sdk/contract";
+import type { SurfaceExtension, SurfaceSpec } from "@shiori/sdk/contract";
 
 /** A point in screen coordinates. */
 export type SurfacePoint = { x: number; y: number };

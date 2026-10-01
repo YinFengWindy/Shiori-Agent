@@ -1,7 +1,7 @@
 import { ChatCircleIcon, UserIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { formatChatListTime } from "../roles/roleChatPreview";
 import { emptyStateLines } from "../shared/mascot/mascotLines";
-import { cx, pressableClass } from "@shiori/plugin-sdk";
+import { cx, pressableClass } from "@shiori/sdk";
 import { PhoneAvatarFace } from "./PhoneAvatarFace";
 import type { PhoneChatType, PhoneConversation } from "./phoneClient";
 import { PhoneEmptyState } from "./PhoneEmptyState";

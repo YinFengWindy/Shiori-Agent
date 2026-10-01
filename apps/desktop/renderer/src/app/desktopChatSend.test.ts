@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BridgeError, type SessionPayload } from "@shiori/plugin-sdk";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { BridgeError, type SessionPayload } from "@shiori/sdk";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { createDesktopChatSend } from "./desktopChatSend";
 
 test("a rejected send preserves its diagnostic through failed session recovery", async () => {

@@ -8,7 +8,7 @@ import { canSubmitChatMessage, normalizeChatAttachmentPaths } from "./chatCompos
 import { insertEmojiIntoChatDraft } from "./chatEmojiState";
 import { PlusIcon, SendIcon } from "../shared/icons";
 import type { ChatReplyTarget, ChatSendRequest } from "../shared/types";
-import { AutosizeTextarea, compactPressableClass, cx } from "@shiori/plugin-sdk";
+import { AutosizeTextarea, compactPressableClass, cx } from "@shiori/sdk";
 import { ChatModelMenu } from "./ChatModelMenu";
 
 /** Shared by send and stop so swapping between them keeps the same press feel. */

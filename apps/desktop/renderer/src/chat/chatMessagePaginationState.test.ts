@@ -9,7 +9,7 @@ import {
   shouldLoadOlderChatMessagesAfterSessionRestore,
   triggerOlderChatMessagesLoad,
 } from "./chatMessagePaginationState";
-import type { SessionPayload } from "@shiori/plugin-sdk";
+import type { SessionPayload } from "@shiori/sdk";
 
 function session(messages: number): SessionPayload {
   return {

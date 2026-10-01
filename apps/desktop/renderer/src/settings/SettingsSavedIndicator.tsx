@@ -1,6 +1,6 @@
 import { Check } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { cx } from "@shiori/plugin-sdk";
+import { cx } from "@shiori/sdk";
 import type { SettingsSavePhase } from "./settingsPageTypes";
 import { isSettingsSaveCompleted, settingsSavedIndicatorMs } from "./settingsSaveState";
 

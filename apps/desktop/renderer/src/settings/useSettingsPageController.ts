@@ -1,4 +1,4 @@
-import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
+import { errorFeedback } from "@shiori/sdk/host-internal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SettingsFormData, SettingsSnapshot } from "../shared/types";
 import { cloneSettings, loadSettingsPageData, settingsEqual, shouldRetryFailedSettingsLoad } from "./settingsPersistence";

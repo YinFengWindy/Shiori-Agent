@@ -1,4 +1,4 @@
-import type { ChatToolCall, SessionMessage, SessionPayload } from "@shiori/plugin-sdk";
+import type { ChatToolCall, SessionMessage, SessionPayload } from "@shiori/sdk";
 import type { ChatTurnMetrics } from "../shared/types";
 import { ensureChatMessageRenderId } from "./chatMessageIdentity";
 

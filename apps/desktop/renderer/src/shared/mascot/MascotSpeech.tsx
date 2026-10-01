@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cx } from "@shiori/plugin-sdk";
+import { cx } from "@shiori/sdk";
 import { MascotMediumFigure } from "./MascotFigure";
 import { mascotName } from "./mascotExpressions";
 import type { MascotLine } from "./mascotLines";

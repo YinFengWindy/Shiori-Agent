@@ -3,7 +3,7 @@ import type {
   SurfaceSpec,
   SurfaceWorkArea,
   SurfaceMenuItem,
-} from "@shiori/plugin-sdk/contract";
+} from "@shiori/sdk/contract";
 import type { SurfacePoint } from "./contract.js";
 import { DesktopSurfaceError, type DesktopSurfaceHost, type SurfaceKey } from "./host.js";
 

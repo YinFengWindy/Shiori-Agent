@@ -1,4 +1,4 @@
-import type { SessionMessageUpdatePayload } from "@shiori/plugin-sdk";
+import type { SessionMessageUpdatePayload } from "@shiori/sdk";
 import { ensureChatMessageRenderId } from "../chat/chatMessageIdentity";
 import { mergeSessionSummaryAndMessage } from "./sessionMessagePagination";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import type { SurfaceHandle } from "@shiori/plugin-sdk";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import type { SurfaceHandle } from "@shiori/sdk";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
 
 type BridgeCall = { name: string; args: unknown[] };

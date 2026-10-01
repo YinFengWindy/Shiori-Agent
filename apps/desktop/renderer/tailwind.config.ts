@@ -18,7 +18,7 @@ export default {
     resolve(here, "../../../plugins/*/ui/**/*.{ts,tsx}"),
     // The plugin SDK (#440) owns shared class names and components the host
     // renders too; like plugin UI it lives outside renderer/.
-    resolve(here, "../../../packages/plugin-sdk/src/**/*.{ts,tsx}"),
+    resolve(here, "../../../packages/sdk/src/**/*.{ts,tsx}"),
   ],
   theme: {
     extend: {

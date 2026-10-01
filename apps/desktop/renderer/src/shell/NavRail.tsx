@@ -1,5 +1,5 @@
 import type React from "react";
-import { cx, pressableClass } from "@shiori/plugin-sdk";
+import { cx, pressableClass } from "@shiori/sdk";
 import { ChatsGlyph, RolesGlyph, SearchGlyph, SettingsGlyph } from "../shared/ui/icons/navGlyphs";
 import { Tooltip } from "../shared/ui/Tooltip";
 import { formatShortcut, viewShortcutLabel } from "./globalShortcuts";

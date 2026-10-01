@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.account_delivery.turn_state import mark_account_delivery_sent
 from core.accounts import (
     VIA_ACCOUNT_KEY,
@@ -26,6 +25,11 @@ from core.accounts.target_contract import (
     UncertainDeliveryError,
 )
 from core.identity import IdentityChat, UserIdentityStore, identities_for_account
+
+if TYPE_CHECKING:
+    # The registry is injected; importing its package here initializes the kernel
+    # and turn orchestration before AccountDelivery itself has been defined.
+    from agent.plugin_host.rpc import PluginRpcRegistry
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 import { readPluginRoleSettings } from "../plugins/pluginRoleSettings";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";
-import type { RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
+import type { RoleRecord, SessionPayload } from "@shiori/sdk";
 import type { AppMainView, NewRoleFormState, RoleFormState } from "../shared/types";
 import { createDefaultRoleProactiveForm } from "../roles/roleProactiveDefaults";
 

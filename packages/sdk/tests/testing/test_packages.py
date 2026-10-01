@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from shiori_plugin_testkit.packages import stage_plugin_package
+from shiori_sdk.testing.packages import stage_plugin_package
 
 
 def _write(root: Path, relative: str) -> None:

@@ -1,4 +1,4 @@
-import type { AccountStatusView } from "@shiori/plugin-sdk";
+import type { AccountStatusView } from "@shiori/sdk";
 import type { ManagedStatus } from "./useManagedNapCat";
 
 const preparationLabels = {

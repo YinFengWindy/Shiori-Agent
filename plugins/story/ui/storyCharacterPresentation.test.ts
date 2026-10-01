@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleRecord } from "@shiori/sdk";
 import { createStoryDetails } from "./testFixtures";
 import { resolveStoryCharacterIllustration } from "./storyCharacterPresentation";
 

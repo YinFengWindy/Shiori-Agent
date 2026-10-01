@@ -6,12 +6,12 @@ import {
   compactGhostButtonClass,
   cx,
   type AccountPendingAction,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 import { SpinnerIcon } from "../shared/icons";
 import { compactPrimaryButtonClass } from "../shared/styles";
 import { Reveal } from "../shared/ui/Reveal";
-import { accountCardActionLabels, accountCardView } from "@shiori/plugin-sdk/host-internal";
+import { accountCardActionLabels, accountCardView } from "@shiori/sdk/host-internal";
 import { AccountStatusDot } from "./AccountStatusDot";
 
 /**

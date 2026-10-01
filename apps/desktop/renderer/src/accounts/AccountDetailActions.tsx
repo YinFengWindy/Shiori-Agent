@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import { createPortal } from "react-dom";
-import type { AccountDetailActionsProps } from "@shiori/plugin-sdk";
+import type { AccountDetailActionsProps } from "@shiori/sdk";
 import { SpinnerIcon } from "../shared/icons";
 import { compactTextButtonClass } from "../shared/styles";
 

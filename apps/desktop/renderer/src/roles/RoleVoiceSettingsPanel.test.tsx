@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createEmptyRoleForm } from "../app/appState";
-import { mountTestComponent, chooseSelectOption } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent, chooseSelectOption } from "@shiori/sdk/testing";
 import type { RoleFormState } from "../shared/types";
 
 let RoleVoiceSettingsPanel: typeof import("./RoleVoiceSettingsPanel").RoleVoiceSettingsPanel;

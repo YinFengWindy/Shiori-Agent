@@ -50,7 +50,7 @@ export function accountOnline(account: Pick<AccountSnapshot, "runtimeActive" | "
 
 /*
  * The host's own status wording, used by its account list and status card and
- * by the testing entry's stand-in card. Host-only (`@shiori/plugin-sdk/host-internal`):
+ * by the testing entry's stand-in card. Host-only (`@shiori/sdk/host-internal`):
  * plugins get it rendered through `host.ui.AccountStatusCard`, never as text.
  */
 

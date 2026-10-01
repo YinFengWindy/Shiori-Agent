@@ -1,4 +1,4 @@
-import { errorFeedbackText } from "@shiori/plugin-sdk/host-internal";
+import { errorFeedbackText } from "@shiori/sdk/host-internal";
 import { useCallback, useEffect, useState } from "react";
 import { parseTimestamp } from "../shared/format";
 import { createIdentityClient } from "./identityClient";

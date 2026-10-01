@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { errorMessage, type HostInlineErrorProps, type PluginRpcClient } from "@shiori/plugin-sdk";
+import { errorMessage, type HostInlineErrorProps, type PluginRpcClient } from "@shiori/sdk";
 
 type ConnectionSettings = { ref: string };
 

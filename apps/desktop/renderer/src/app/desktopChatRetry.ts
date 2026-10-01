@@ -1,4 +1,4 @@
-import { errorMessage } from "@shiori/plugin-sdk";
+import { errorMessage } from "@shiori/sdk";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 import type { useDesktopChatTurns } from "./useDesktopChatTurns";
 import type { createDesktopSessionSnapshot } from "./desktopSessionSnapshot";

@@ -26,8 +26,8 @@ function baseUiProbeError(detail) {
  */
 async function baseUiProbeUrls() {
   // The main entry is `src/index.ts`, one level below the package root.
-  const sdkManifestPath = join(dirname(fileURLToPath(import.meta.resolve("@shiori/plugin-sdk"))), "..", "package.json");
-  if (JSON.parse(await readFile(sdkManifestPath, "utf8")).name !== "@shiori/plugin-sdk") {
+  const sdkManifestPath = join(dirname(fileURLToPath(import.meta.resolve("@shiori/sdk"))), "..", "package.json");
+  if (JSON.parse(await readFile(sdkManifestPath, "utf8")).name !== "@shiori/sdk") {
     throw new Error(`test-unit-loader: ${sdkManifestPath} is not the plugin SDK manifest; the SDK main entry moved, update baseUiProbeUrls().`);
   }
   const baseUiManifestPath = createRequire(sdkManifestPath).resolve("@base-ui/react/package.json");

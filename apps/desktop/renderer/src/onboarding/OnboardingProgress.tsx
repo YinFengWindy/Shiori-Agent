@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import { Check } from "@phosphor-icons/react";
 import type { OnboardingProgress as Progress } from "./onboardingState";
 import { selectOnboardingStepStatuses } from "./onboardingSteps";
-import { cx } from "@shiori/plugin-sdk";
+import { cx } from "@shiori/sdk";
 
 const dotClass = {
   done: "border-line-accent bg-accent-soft text-accent-text",

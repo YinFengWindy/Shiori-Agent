@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { useSettingsSubsectionMemory, type SettingsSubsectionMemory } from "./useSettingsSubsectionMemory";
 
 async function mountHarness() {

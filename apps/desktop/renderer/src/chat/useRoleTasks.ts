@@ -1,4 +1,4 @@
-import { BridgeError, errorMessage } from "@shiori/plugin-sdk";
+import { BridgeError, errorMessage } from "@shiori/sdk";
 import { useCallback, useEffect, useState } from "react";
 import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
 

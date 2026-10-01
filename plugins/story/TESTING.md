@@ -1,6 +1,6 @@
 # 独立运行 Python 测试
 
-将本插件目录复制到 Shiori 仓库外。准备私有 wheelhouse，其中必须有 `shiori-agent`、`shiori-plugin-testkit`、`shiori-plugin-default-memory` 的 0.1.0 wheel；Story 还需要 `shiori-plugin-novelai` wheel。这些私有包不发布到 PyPI；其余第三方依赖由包元数据解析。
+将本插件目录复制到 Shiori 仓库外。准备私有 wheelhouse，其中必须有 `shiori-agent`、`shiori-plugin-testkit`、`shiori-host-testing`、`shiori-plugin-default-memory` 的 0.1.0 wheel；Story 还需要 `shiori-plugin-novelai` wheel。这些私有包不发布到 PyPI；其余第三方依赖由包元数据解析。
 
 在插件副本目录执行（将 `/path/to/wheelhouse` 替换为实际绝对路径）：
 

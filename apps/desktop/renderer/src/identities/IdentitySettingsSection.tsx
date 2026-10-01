@@ -2,7 +2,7 @@ import { useAccounts } from "../accounts/useAccounts";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { InlineError } from "../shared/feedback/InlineError";
 import { confirmPersonaLines } from "../shared/mascot/mascotLines";
-import { compactGhostButtonClass } from "@shiori/plugin-sdk";
+import { compactGhostButtonClass } from "@shiori/sdk";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import { settingsGroupStackClass } from "../settings/SettingsFieldPrimitives";
 import { IdentityList } from "./IdentityList";

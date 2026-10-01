@@ -1,8 +1,8 @@
 import type React from "react";
-import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
+import { errorFeedback } from "@shiori/sdk/host-internal";
 import { describeRoleCardImportError } from "../roles/roleCardImportErrors";
 import type { BridgeResponse } from "../../../src/bridge/shared";
-import { type RoleRecord, errorMessage } from "@shiori/plugin-sdk";
+import { type RoleRecord, errorMessage } from "@shiori/sdk";
 import type { AppMainView, NewRoleFormState, PendingRoleCardAction } from "../shared/types";
 import { createEmptyNewRoleForm, createPendingRoleRecord, waitForMinimumRoleCardBusy } from "./appState";
 import type { NavigationEntry } from "./appState";

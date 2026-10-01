@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from collections.abc import Callable
+from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
+from shiori_sdk.runtime import (
+    CapabilityNotGranted as CapabilityNotGranted,
+    EventsCapability,
+)
+from agent.plugin_host.capabilities import LifecycleCapability
 
 from agent.plugin_host.effects import Dispose, EffectScope
 from agent.plugin_host.manifest import PluginManifest
 
 
-class CapabilityNotGranted(AttributeError):
-    """插件访问了 manifest 未声明的 capability。"""
-
-
-class PluginRuntimeContext:
+class PluginSetupContext:
     """v2 插件在 setup(ctx) 中拿到的唯一句柄。
 
     通过属性访问已授予的 capability（ctx.tools / ctx.events / ctx.kv / ...）；
@@ -28,7 +31,9 @@ class PluginRuntimeContext:
         manifest: PluginManifest,
         effects: EffectScope,
         capabilities: dict[str, Any],
-        publish_api: Any = None,
+        publish_api: Callable[[object], None] | None = None,
+        lifecycle: LifecycleCapability | None = None,
+        events: EventsCapability | None = None,
     ) -> None:
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
@@ -36,6 +41,12 @@ class PluginRuntimeContext:
         self._effects = effects
         self._capabilities = capabilities
         self._publish_api = publish_api
+        self._lifecycle = lifecycle
+        self._events = events
+
+    def as_sdk_context(self) -> SdkRuntimeContext:
+        """Checks the setup boundary against this static base, without __getattr__."""
+        return self
 
     def expose(self, api: object) -> None:
         """Publishes this plugin's API for declared dependents in the same generation."""
@@ -55,6 +66,28 @@ class PluginRuntimeContext:
         先后不影响退订优先规则；开始清理后拒绝新登记。
         """
         self._effects.add(f"custom:{label}", dispose)
+
+    @property
+    def lifecycle(self) -> LifecycleCapability:
+        """Returns the explicitly typed lifecycle capability granted by the kernel."""
+        if self._lifecycle is None:
+            raise CapabilityNotGranted(
+                f"插件 {self.plugin_id} 未声明 capability 'lifecycle'"
+            )
+        return self._lifecycle
+
+    @property
+    def events(self) -> EventsCapability:
+        """Returns the explicitly typed scoped event bus granted by the kernel."""
+        if self._events is None:
+            raise CapabilityNotGranted(
+                f"插件 {self.plugin_id} 未声明 capability 'events'"
+            )
+        return self._events
+
+
+class PluginRuntimeContext(PluginSetupContext):
+    """Legacy capabilities for plugins awaiting migration; absent from SDK typing."""
 
     def __getattr__(self, name: str) -> Any:
         try:

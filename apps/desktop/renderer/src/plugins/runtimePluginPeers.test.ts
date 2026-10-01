@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as React from "react";
-import * as PluginSdk from "@shiori/plugin-sdk";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import * as PluginSdk from "@shiori/sdk";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { initializeRuntimePluginPeers } from "./runtimePluginPeers";
 import { pluginUiImportMap, pluginUiPeerExports } from "../../../src/plugins/uiContract";
 
@@ -30,14 +30,14 @@ test("every peer in the ABI is installed, and the SDK export list matches the ho
     initializeRuntimePluginPeers();
     const peers = Reflect.get(window, "__shioriPluginPeers");
     assert.deepEqual(Object.keys(peers).sort(), Object.keys(pluginUiPeerExports).sort());
-    assert.equal(peers["@shiori/plugin-sdk"], PluginSdk);
-    assert.deepEqual([...pluginUiPeerExports["@shiori/plugin-sdk"]].sort(), Object.keys(PluginSdk).sort());
+    assert.equal(peers["@shiori/sdk"], PluginSdk);
+    assert.deepEqual([...pluginUiPeerExports["@shiori/sdk"]].sort(), Object.keys(PluginSdk).sort());
     const imports = JSON.parse(pluginUiImportMap).imports;
-    assert.equal(imports["@shiori/plugin-sdk"], "shiori-plugin://host/@shiori/plugin-sdk.mjs");
+    assert.equal(imports["@shiori/sdk"], "shiori-plugin://host/@shiori/sdk.mjs");
     // The test entry is development-only and never a runtime peer.
-    assert.equal(Object.keys(imports).some((name) => name.startsWith("@shiori/plugin-sdk/")), false);
-    const testingExports = Object.keys(await import("@shiori/plugin-sdk/testing"));
+    assert.equal(Object.keys(imports).some((name) => name.startsWith("@shiori/sdk/")), false);
+    const testingExports = Object.keys(await import("@shiori/sdk/testing"));
     assert.ok(testingExports.includes("createFakeHostServices"));
-    assert.deepEqual(testingExports.filter((name) => pluginUiPeerExports["@shiori/plugin-sdk"].includes(name)), []);
+    assert.deepEqual(testingExports.filter((name) => pluginUiPeerExports["@shiori/sdk"].includes(name)), []);
   } finally { await view.cleanup(); }
 });

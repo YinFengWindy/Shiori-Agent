@@ -4,7 +4,7 @@ import {
   cx,
   pressableClass,
   primaryButtonSurfaceClass,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 
 /** Track of a segmented tab group: secondary navigation nested under a page's section tabs. */
 export const segmentedTabListClass = "rounded-md bg-surface-soft p-1";

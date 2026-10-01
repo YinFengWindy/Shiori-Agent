@@ -1,4 +1,4 @@
-import type { PluginRpcClient, SurfaceHandle } from "@shiori/plugin-sdk";
+import type { PluginRpcClient, SurfaceHandle } from "@shiori/sdk";
 
 /**
  * The pet's own right-click menu.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PluginHostServicesProvider } from "@shiori/plugin-sdk";
-import { createFakeHostServices, mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { PluginHostServicesProvider } from "@shiori/sdk";
+import { createFakeHostServices, mountTestComponent } from "@shiori/sdk/testing";
 import { StoryError } from "./StoryError";
 
 test("Story error presentation delegates separate summary/detail to the shared disclosure", async () => {

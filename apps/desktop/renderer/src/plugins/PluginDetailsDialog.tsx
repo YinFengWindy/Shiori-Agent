@@ -1,7 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useState, type RefObject } from "react";
 import { CaretRight, WarningCircle, XIcon } from "@phosphor-icons/react";
-import { ghostButtonClass, iconButtonClass } from "@shiori/plugin-sdk";
+import { ghostButtonClass, iconButtonClass } from "@shiori/sdk";
 import { dangerGhostButtonClass, dialogBackdropClass } from "../shared/styles";
 import { InlineError } from "../shared/feedback/InlineError";
 import type { PluginSummary } from "./pluginBridgeClient";

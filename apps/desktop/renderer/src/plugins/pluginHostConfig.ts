@@ -1,4 +1,4 @@
-import type { PluginConfigValues, PluginHostConfig } from "@shiori/plugin-sdk";
+import type { PluginConfigValues, PluginHostConfig } from "@shiori/sdk";
 import { createPluginBridgeClient, type PluginBridgeClient } from "./pluginBridgeClient";
 import { pluginConfigChanges, type PluginConfigChanges } from "./pluginConfigChanges";
 

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleRecord } from "@shiori/sdk";
 import type { RoleFormState } from "../shared/types";
 import { readRoleVoiceConfig, roleVoiceConfigEqual, writeRoleVoiceConfigToRuntimeConfig } from "./roleVoiceConfig.js";
 

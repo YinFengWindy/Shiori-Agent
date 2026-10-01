@@ -1,4 +1,4 @@
-import { BridgeError, errorMessage } from "@shiori/plugin-sdk";
+import { BridgeError, errorMessage } from "@shiori/sdk";
 
 // These codes are owned by Story (backend/errors.py and input validation).
 // Their messages are actionable domain instructions; transport/internal errors

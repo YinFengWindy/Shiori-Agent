@@ -18,14 +18,14 @@ def _change(package, **values):
 def test_valid_package_separates_identity_version_and_runtime(contract_package):
     result = validate_package(contract_package)
     assert result.manifest.version == "1.2.3"
-    assert result.runtime_api == ">=2.0.0 <3.0.0"
+    assert result.runtime_api == ">=3.0.0 <4.0.0"
     assert [entry.kind for entry in result.renderer] == ["ui", "background", "surface"]
 
 
 @pytest.mark.parametrize(
     "values, code, field",
     [
-        ({"runtime_api": ">=3.0.0 <4.0.0"}, "incompatible_runtime", "runtime_api"),
+        ({"runtime_api": ">=2.0.0 <3.0.0"}, "incompatible_runtime", "runtime_api"),
         ({"version": "1.2"}, "invalid_version", "version"),
         ({"package_contract": True}, "unsupported_contract", "package_contract"),
         ({"package_contract": 2}, "unsupported_contract", "package_contract"),
@@ -125,7 +125,7 @@ def test_external_package_may_declare_channels(contract_package):
     _change(
         contract_package,
         capabilities=["channels"],
-        runtime_api=">=2.5.0 <3.0.0",
+        runtime_api=">=3.0.0 <4.0.0",
         channels=[
             {
                 "name": "demo_chat",
@@ -153,4 +153,4 @@ def test_external_channel_declaration_errors_block_the_package(contract_package)
 
 
 def test_host_advertises_runtime_api_with_shared_visual_components():
-    assert HostRuntimeContract().runtime_api == "2.16.0"
+    assert HostRuntimeContract().runtime_api == "3.0.0"

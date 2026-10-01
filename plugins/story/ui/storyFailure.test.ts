@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BridgeError } from "@shiori/plugin-sdk";
+import { BridgeError } from "@shiori/sdk";
 import { describeStoryFailure } from "./storyFailure";
 
 test("Story diagnostics never replace the operation summary and remain scrubbed", () => {

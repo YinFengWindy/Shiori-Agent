@@ -1,4 +1,4 @@
-import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleRecord } from "@shiori/sdk";
 
 /** What clicking 「设为…」 on the assets page changes. */
 export type RoleAssetMode = "avatar" | "chat-background" | "mood-binding";

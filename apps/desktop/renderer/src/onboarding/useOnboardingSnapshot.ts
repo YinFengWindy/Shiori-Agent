@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { type BridgeEvent, errorMessage } from "@shiori/plugin-sdk";
+import { type BridgeEvent, errorMessage } from "@shiori/sdk";
 import { useBridgeRefreshedValue } from "../shared/useBridgeRefreshedValue";
 import { loadOnboardingData } from "./onboardingData";
 import type { useDesktopBridgeLifecycle } from "../app/useDesktopBridgeLifecycle";

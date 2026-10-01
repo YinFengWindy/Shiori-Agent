@@ -1,4 +1,4 @@
-import { Select, SettingsToggleCard, cx, RoleCapabilityCard } from "@shiori/plugin-sdk";
+import { Select, SettingsToggleCard, cx, RoleCapabilityCard } from "@shiori/sdk";
 import { CaretDown, Waveform } from "@phosphor-icons/react";
 import type React from "react";
 import { useState } from "react";

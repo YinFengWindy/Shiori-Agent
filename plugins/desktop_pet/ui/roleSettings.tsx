@@ -5,7 +5,7 @@ import {
   SettingsToggleCard,
   type PluginRoleSettingsContribution,
   type PluginRoleSettingsProps,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 
 /** The pet switch edits a draft; only the role editor's Save persists it. */
 export function DesktopPetRoleSettings({ values, snapshot, disabled, onChange }: PluginRoleSettingsProps) {

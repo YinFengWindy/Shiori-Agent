@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { errorMessage, type HostInlineErrorProps, usePluginHostServices, type PluginRoleAssetsComponentProps } from "@shiori/plugin-sdk";
+import { errorMessage, type HostInlineErrorProps, usePluginHostServices, type PluginRoleAssetsComponentProps } from "@shiori/sdk";
 import { noPetPackages, readPetPackages, type PetPackages } from "./petPackages";
 import { pickPetPackageFile } from "./petPackagePicker";
 

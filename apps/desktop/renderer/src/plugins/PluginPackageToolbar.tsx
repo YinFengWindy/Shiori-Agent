@@ -1,5 +1,5 @@
 import { PlusIcon } from "@phosphor-icons/react";
-import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "@shiori/plugin-sdk";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "@shiori/sdk";
 
 /** Installation is the only package action outside an individual plugin's details. */
 export function PluginPackageToolbar({ busy, onInstall }: {

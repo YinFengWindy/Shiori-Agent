@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { BridgeError } from "@shiori/plugin-sdk";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { BridgeError } from "@shiori/sdk";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { useBusyAction } from "./useBusyAction";
 
 test("failed account and phone actions retain a safe cause while clearing busy state", async () => {

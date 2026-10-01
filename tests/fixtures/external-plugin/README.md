@@ -16,7 +16,7 @@ pnpm build --version 4.0.0 --variant renderer-failure
 
 Each build produces `artifacts/external_demo-<version>-<variant>/` and a deterministic
 ZIP beside it, with `manifest.yaml` at its root. The build prints the archive's
-SHA-256. React, React DOM and `@shiori/plugin-sdk` remain host peers. `zip.mjs` uses Node's standard
+SHA-256. React, React DOM and `@shiori/sdk` remain host peers. `zip.mjs` uses Node's standard
 library; it stores regular files with stable timestamps and no enclosing folder.
 `src/contract.d.ts` describes only the injected API subset used by this independent
 example; it imports no Shiori types. Host validation is separate from building:

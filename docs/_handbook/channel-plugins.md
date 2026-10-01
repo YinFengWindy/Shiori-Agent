@@ -186,7 +186,7 @@ async def stop(self):
 - `uses_bot_commands = True`：只有在 `start` 里读取 `ctx.bot_commands`（如注册 Telegram 命令菜单）的渠道才声明；宿主会把命令列表并入复用键，其它插件增减命令时它才会重连。
 - `status()`：返回 `{"connected": bool, "account": str, "detail": str}`（后两项可省略），`channels.list` 原样带给桌面端。适合放机器人名称、断线原因或账号连接状态。`status()` 抛错时渠道显示为 `failed`。
 
-这些钩子和 `description` 参数属于 Runtime API 2.3；外部包要声明 `runtime_api: ">=2.3.0 <3.0.0"`。
+这些钩子和 `description` 参数属于 Runtime API 2.3；外部包要声明 `runtime_api: ">=3.0.0 <4.0.0"`。
 
 ## 7. 流式回复
 
@@ -239,3 +239,13 @@ uv run python scripts/verify_plugin_tests.py --plugins <id>
 - [ ] 开了流式就消费事件并在最终回复时收尾；失败时退回普通发送。
 - [ ] `register_channel(..., description=)` 写清 chat_id 格式。
 - [ ] 测试离线，`verify_plugin_tests.py --plugins <id>` 通过。
+
+
+## 统一 SDK 3.0
+
+新插件前端使用 `@shiori/sdk`，后端契约使用 `shiori_sdk`，并声明
+`runtime_api: ">=3.0.0 <4.0.0"`。SDK 主文档位于
+[packages/sdk/README.md](../../packages/sdk/README.md)，包括 wheel/tarball 构建、
+公开协议和 `shiori-sdk[testing]` 的无宿主测试入口。
+citation/context_pressure 已完成迁移。尚未公开的能力按对应迁移票进入 SDK；
+渠道等未迁移插件暂时保留现有 testkit 与真实宿主集成测试，不把宿主服务复制进 SDK。

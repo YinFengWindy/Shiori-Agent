@@ -1,5 +1,5 @@
 import { toFileUrl } from "../shared/format";
-import { cx, pressableClass, type RoleRecord } from "@shiori/plugin-sdk";
+import { cx, pressableClass, type RoleRecord } from "@shiori/sdk";
 
 /** Openers offered on an empty chat: the chip label and the text it puts in the composer (never sent automatically). */
 export const chatEmptyStateSuggestions = [

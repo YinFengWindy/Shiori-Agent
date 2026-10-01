@@ -1,6 +1,6 @@
-import { BridgeError, errorMessage } from "@shiori/plugin-sdk";
+import { BridgeError, errorMessage } from "@shiori/sdk";
 import type { DesktopApi, ModelRegistrationFormData } from "../../../src/bridge/shared";
-import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleRecord } from "@shiori/sdk";
 import { isModelRegistrationComplete } from "../settings/modelRegistration";
 import { saveSettingsPageData } from "../settings/settingsPersistence";
 

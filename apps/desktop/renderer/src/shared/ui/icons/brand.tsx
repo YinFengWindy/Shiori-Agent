@@ -1,6 +1,6 @@
 import React from "react";
-import { brandMotifPaths } from "@shiori/plugin-sdk/host-internal";
-import type { IconProps } from "@shiori/plugin-sdk";
+import { brandMotifPaths } from "@shiori/sdk/host-internal";
+import type { IconProps } from "@shiori/sdk";
 
 /** Little-devil wing, lifted from the app icon's hair ornament. Brand motif. */
 export function WingIcon({ className = "h-4 w-4" }: IconProps) {

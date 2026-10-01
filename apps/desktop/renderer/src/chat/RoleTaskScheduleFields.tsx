@@ -1,4 +1,4 @@
-import { Select } from "@shiori/plugin-sdk";
+import { Select } from "@shiori/sdk";
 import type { Dispatch, SetStateAction } from "react";
 import type { ScheduleTaskTrigger } from "../shared/types";
 import {

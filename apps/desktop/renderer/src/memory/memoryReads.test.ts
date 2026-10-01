@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, it } from "node:test";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { createPluginRpcTestClient, type PluginRpcTestResponder } from "../shared/testing/pluginRpcTestBridge";
 import { memoryReadKey, readMemoryDocuments, readSemanticBatch, readSemanticDetail } from "./memoryReads";
 import { initialSemanticQuery } from "./roleSemanticMemory";

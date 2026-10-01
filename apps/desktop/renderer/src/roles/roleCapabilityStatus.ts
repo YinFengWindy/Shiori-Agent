@@ -1,4 +1,4 @@
-import type { RoleCapabilityStatus } from "@shiori/plugin-sdk";
+import type { RoleCapabilityStatus } from "@shiori/sdk";
 import type { SettingsFormData } from "../../../src/bridge/shared";
 
 /**

@@ -1,7 +1,7 @@
 import { ArrowsClockwise } from "@phosphor-icons/react";
 import { useState } from "react";
 import { hasInFlightChatTurns } from "../shared/chatTurnActivity";
-import { errorMessage, cx } from "@shiori/plugin-sdk";
+import { errorMessage, cx } from "@shiori/sdk";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";

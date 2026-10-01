@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 from typing import Any
+from shiori_sdk.runtime import EventHandler
 
 from agent.plugin_host.effects import EffectScope
 from bus.event_bus import EventBus
@@ -37,7 +38,9 @@ class ScopedEventBus:
         self._effects = effects
         self._subscriptions: list[_Subscription] = []
 
-    def on(self, event_type: type, handler: Any) -> None:
+    def on[EventT](
+        self, event_type: type[EventT], handler: EventHandler[EventT]
+    ) -> None:
         """登记订阅；卸载时先退订再 LIFO 清理 ctx.effect，与登记先后无关。
 
         作用域一旦开始清理，拒绝新订阅并跳过尚未开始的 handler；已运行的
@@ -50,7 +53,9 @@ class ScopedEventBus:
         self._subscriptions.append(subscription)
         self._effects.add_subscription(label, lambda: self._unsubscribe(subscription))
 
-    def off(self, event_type: type, handler: Any) -> None:
+    def off[EventT](
+        self, event_type: type[EventT], handler: EventHandler[EventT]
+    ) -> None:
         """按原 handler 身份移除全部匹配订阅；重复退订安全。"""
         for subscription in tuple(self._subscriptions):
             if (
@@ -64,6 +69,10 @@ class ScopedEventBus:
         self._bus.off(subscription.event_type, subscription)
         if subscription in self._subscriptions:
             self._subscriptions.remove(subscription)
+
+    async def emit[EventT](self, event: EventT) -> EventT:
+        """Dispatches through the real bus while preserving the event's type."""
+        return await self._bus.emit(event)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._bus, name)

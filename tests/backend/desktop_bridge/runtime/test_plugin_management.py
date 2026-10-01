@@ -833,11 +833,11 @@ async def test_list_preserves_external_contract_rejection(
     raw.update(
         package_contract=1,
         version="1.0.0",
-        runtime_api=">=3.0.0 <4.0.0",
+        runtime_api=">=2.0.0 <3.0.0",
         entry="backend/plugin.py",
     )
     if missing_provider:
-        raw.update(runtime_api=">=2.0.0 <3.0.0", dependencies=["missing-provider"])
+        raw.update(runtime_api=">=3.0.0 <4.0.0", dependencies=["missing-provider"])
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")
     service, _, app = await _start_service(tmp_path)
     try:
@@ -875,7 +875,7 @@ async def test_workspace_candidates_are_visible_unsafe_and_reload_safe(
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
             f"api: 2\nid: {plugin_id}\ncapabilities: []\npackage_contract: 1\n"
-            "version: 1.0.0\nruntime_api: '>=2.0.0 <3.0.0'\nentry: backend/plugin.py\n",
+            "version: 1.0.0\nruntime_api: '>=3.0.0 <4.0.0'\nentry: backend/plugin.py\n",
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
@@ -950,7 +950,7 @@ async def test_workspace_directory_changes_wait_for_application_restart(
         "bootstrap.tools._resolve_plugin_dirs", lambda _: [builtin, external]
     )
 
-    def stage_external(name, plugin_id, *, version="1.0.0", runtime=">=2.0.0 <3.0.0"):
+    def stage_external(name, plugin_id, *, version="1.0.0", runtime=">=3.0.0 <4.0.0"):
         package = external / name
         (package / "backend").mkdir(parents=True, exist_ok=True)
         (package / "manifest.yaml").write_text(
@@ -972,7 +972,7 @@ async def test_workspace_directory_changes_wait_for_application_restart(
         assert before_by_id["rpc_demo"]["state"] == "ACTIVE"
         assert before_by_id["manual"]["state"] == "UNTRUSTED"
         stage_external("new-copy", "rpc_demo")
-        stage_external("manual", "manual", version="2.0.0", runtime=">=3.0.0 <4.0.0")
+        stage_external("manual", "manual", version="2.0.0", runtime=">=2.0.0 <3.0.0")
         shutil.rmtree(removed)
 
         for index, enabled in enumerate((False, True)):

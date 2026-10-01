@@ -1,5 +1,5 @@
 import type React from "react";
-import type { RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
+import type { RoleRecord, SessionPayload } from "@shiori/sdk";
 import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 import type { ChatSendFailure } from "../chat/chatSendFailure";
 import type { RoleSessionCache } from "../chat/roleSessionCache";

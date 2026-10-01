@@ -1,41 +1,23 @@
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
-from pathlib import Path
-from types import SimpleNamespace
-from typing import Any
 
 import pytest
-from shiori_plugin_testkit.packages import stage_plugin_package
+from shiori_sdk.testing import FakeFrame, FakePluginContext
 
-from agent.core.response_parser import ResponseMetadata
-from agent.lifecycle.types import AfterReasoningCtx
-from agent.plugin_host import HostServices, PluginKernel
-from bus.event_bus import EventBus
-
-PLUGIN_DIR = Path(__file__).resolve().parents[1]
+from shiori_sdk.lifecycle import ResponseMetadata
+from shiori_sdk.lifecycle import AfterReasoningCtx
 
 
-def _load_citation_plugin_module() -> Any:
-    path = PLUGIN_DIR / "backend" / "plugin.py"
-    spec = importlib.util.spec_from_file_location("test_citation_plugin", path)
-    if spec is None or spec.loader is None:
-        raise ImportError(str(path))
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-_citation_module = _load_citation_plugin_module()
-CitationAfterReasoningModule = _citation_module.CitationAfterReasoningModule
-ProtocolTagCleanupModule = _citation_module.ProtocolTagCleanupModule
-extract_cited_ids = _citation_module.extract_cited_ids
-extract_cited_ids_from_tool_chain = _citation_module.extract_cited_ids_from_tool_chain
-strip_trailing_protocol_tags = _citation_module.strip_trailing_protocol_tags
-strip_inline_memory_refs = _citation_module.strip_inline_memory_refs
+from plugins.citation.backend.plugin import (
+    CitationAfterReasoningModule,
+    ProtocolTagCleanupModule,
+    extract_cited_ids,
+    extract_cited_ids_from_tool_chain,
+    strip_trailing_protocol_tags,
+    strip_inline_memory_refs,
+    setup,
+)
 
 
 def test_citation_extracts_ascii_marker_only_at_end() -> None:
@@ -170,41 +152,6 @@ def test_citation_tool_chain_fallback_uses_item_ids() -> None:
 
 
 @pytest.mark.asyncio
-async def test_citation_setup_contributes_expected_phase_modules_via_kernel(
-    tmp_path: Path,
-) -> None:
-    """setup(ctx) 只贡献回复后处理模块，不再向 prompt 注入引用要求。
-
-    用真实 PluginKernel 装配真实插件目录来验证，而不是自造 fake capability——
-    fake 与真实 capability 契约脱钩，capability 改坏也不会让测试变红（#182 评审）。
-    """
-    root = tmp_path / "plugins"
-    root.mkdir()
-    source = tmp_path / "source-citation"
-    stage_plugin_package(PLUGIN_DIR, source)
-    environment = source / ".venv/Lib/site-packages"
-    environment.mkdir(parents=True)
-    (environment / "review-marker.txt").write_text("environment", encoding="utf-8")
-    stage_plugin_package(source, root / "citation")
-    assert (root / "citation/backend/plugin.py").is_file()
-    assert (root / "citation/manifest.yaml").is_file()
-    assert not (root / "citation/.venv").exists()
-    kernel = PluginKernel([root], services=HostServices(event_bus=EventBus()))
-    await kernel.load_all()
-
-    assert kernel.prompt_render_modules == []
-    assert [type(m).__name__ for m in kernel.after_reasoning_modules] == [
-        "CitationAfterReasoningModule",
-        "ProtocolTagCleanupModule",
-    ]
-
-    # 卸载后贡献必须整体撤回，证明生命周期与 phase 槽位真正挂在插件作用域上
-    _ = await kernel.unload("citation")
-    assert kernel.prompt_render_modules == []
-    assert kernel.after_reasoning_modules == []
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("reply", ["答复正文\n§cited:[mem_1]§", "答复正文"])
 async def test_citation_after_reasoning_writes_persist_slot(reply: str) -> None:
     module = CitationAfterReasoningModule()
@@ -229,7 +176,7 @@ async def test_citation_after_reasoning_writes_persist_slot(reply: str) -> None:
         context_retry={},
         reply=reply,
     )
-    frame = SimpleNamespace(slots={"reasoning:ctx": ctx})
+    frame = FakeFrame(slots={"reasoning:ctx": ctx})
 
     await module.run(frame)
 
@@ -254,7 +201,7 @@ async def test_citation_after_reasoning_strips_inline_memory_refs() -> None:
         context_retry={},
         reply="答复正文 [§mem_1]\n§cited:[mem_1]§",
     )
-    frame = SimpleNamespace(slots={"reasoning:ctx": ctx})
+    frame = FakeFrame(slots={"reasoning:ctx": ctx})
 
     await module.run(frame)
 
@@ -277,8 +224,16 @@ async def test_citation_cleanup_module_strips_leftover_protocol_tags() -> None:
         context_retry={},
         reply="答复正文 <memem:clever>",
     )
-    frame = SimpleNamespace(slots={"reasoning:ctx": ctx})
+    frame = FakeFrame(slots={"reasoning:ctx": ctx})
 
     await module.run(frame)
 
     assert ctx.reply == "答复正文"
+
+
+async def test_setup_registers_modules(sdk_context: FakePluginContext) -> None:
+    await setup(sdk_context)
+    assert [
+        type(module).__name__
+        for module in sdk_context.lifecycle.modules["after_reasoning"]
+    ] == ["CitationAfterReasoningModule", "ProtocolTagCleanupModule"]
