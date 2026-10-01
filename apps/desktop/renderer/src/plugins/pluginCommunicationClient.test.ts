@@ -143,7 +143,7 @@ test("background handler failures are returned to the exact request and disposal
   const replies = fixture.calls.filter((call) => call.method.endsWith(".reply"));
   assert.equal(replies.length, 1);
   assert.equal(replies[0].payload.request_id, "right");
-  assert.deepEqual(replies[0].payload.error, { code: "plugin_handler_failed", message: "binding failed" });
+  assert.deepEqual(replies[0].payload.error, { code: "plugin_handler_failed", message: "插件后台执行失败", details: { detail: "binding failed" } });
   await client.dispose();
   assert.equal(fixture.calls.at(-1)?.method, "plugins.communication.close");
 });
