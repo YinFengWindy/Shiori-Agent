@@ -648,10 +648,10 @@ async def test_recall_memory_falls_back_to_keyword_when_query_embed_fails() -> N
     assert payload["count"] == 1
     assert payload["items"][0]["id"] == "mem:1"
     assert payload["items"][0]["source_ref"] == "tg:1:2"
-    assert payload["citation_required"] is True
-    assert payload["citation_format"] == "§cited:[id1,id2,...]§"
+    assert "citation_required" not in payload
+    assert "citation_format" not in payload
+    assert "citation_rule" not in payload
     assert payload["cited_item_ids"] == ["mem:1"]
-    assert "§cited:[" in payload["citation_rule"]
     assert store.vector_search_called is False
 
 

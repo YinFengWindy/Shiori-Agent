@@ -124,13 +124,7 @@ def _render_records(records: list[MemoryRecord], *, trace: dict[str, object]) ->
             "count": len(items),
             "items": items,
             "trace": trace,
-            "citation_required": True,
-            "citation_format": "§cited:[id1,id2,...]§",
             "cited_item_ids": cited_item_ids,
-            "citation_rule": (
-                "若最终回复使用了本工具返回的任何记忆条目，"
-                "必须在正文末尾输出 §cited:[实际使用的id列表]§"
-            ),
         },
         ensure_ascii=False,
     )
