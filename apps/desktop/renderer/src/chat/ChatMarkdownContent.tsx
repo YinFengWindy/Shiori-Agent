@@ -89,11 +89,11 @@ type ChatMarkdownContentProps = {
   content: string;
 };
 
-/** Renders assistant Markdown without allowing raw HTML or unsafe link protocols. */
+/** Renders assistant Markdown, keeping HTML visible as escaped text and guarding links. */
 export const ChatMarkdownContent = React.memo(function ChatMarkdownContent({ content }: ChatMarkdownContentProps) {
   return (
     <div className="message-content message-markdown break-words">
-      <Markdown remarkPlugins={remarkPlugins} skipHtml components={markdownComponents}>
+      <Markdown remarkPlugins={remarkPlugins} components={markdownComponents}>
         {content}
       </Markdown>
     </div>

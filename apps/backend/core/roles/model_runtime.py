@@ -168,7 +168,7 @@ class RoleAwareProvider(LLMProvider):
         messages: list[dict],
         tools: list[dict],
         model: str,
-        max_tokens: int,
+        max_tokens: int | None,
         tool_choice: str | dict = "auto",
         extra_body: dict | None = None,
         disable_thinking: bool = False,

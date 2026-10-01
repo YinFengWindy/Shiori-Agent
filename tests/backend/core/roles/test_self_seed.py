@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -37,6 +38,39 @@ async def test_self_seed_uses_the_role_dialogue_model_snapshot(tmp_path) -> None
 
     assert result == "# 角色自我认知"
     assert selected_provider.chat.await_args.kwargs["model"] == "role-model"
+    assert selected_provider.chat.await_args.kwargs["max_tokens"] is None
+
+
+@pytest.mark.asyncio
+async def test_self_seed_allows_generation_past_one_minute(tmp_path, monkeypatch):
+    loop = asyncio.get_running_loop()
+    real_time = loop.time
+    elapsed = 0.0
+    monkeypatch.setattr(loop, "time", lambda: real_time() + elapsed)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def generate(**kwargs):
+        started.set()
+        await release.wait()
+        return SimpleNamespace(content="# 我是谁\n\n完整的角色自述")
+
+    provider = SimpleNamespace(chat=AsyncMock(side_effect=generate))
+    role = RoleStore(tmp_path).create_role(name="Mira", system_prompt="详细设定" * 5000)
+    snapshot = RoleModelSnapshot("selected", provider, "test", "none", role_id=role.id)
+    task = asyncio.create_task(LlmRoleSelfSeedGenerator().agenerate(role, snapshot))
+    try:
+        await started.wait()
+        # Advance the event-loop clock without waiting a real minute; any due
+        # timeout gets a chance to run while the model is still generating.
+        elapsed = 61.0
+        for _ in range(5):
+            await asyncio.sleep(0)
+        release.set()
+        assert await task == "# 我是谁\n\n完整的角色自述"
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.asyncio

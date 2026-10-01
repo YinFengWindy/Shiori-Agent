@@ -347,7 +347,7 @@ class LLMProvider:
         messages: list[dict],
         tools: list[dict],
         model: str,
-        max_tokens: int,
+        max_tokens: int | None,
         tool_choice: str | dict = "auto",
         extra_body: dict | None = None,
         disable_thinking: bool = False,
@@ -360,10 +360,13 @@ class LLMProvider:
     ) -> LLMResponse:
         """Generates a reply; auxiliary work opts out of configured reasoning.
 
+        An explicit max_tokens=None omits the request cap, leaving output limits
+        to the model service. Finite budgets are sent unchanged for default calls.
         DeepSeek and DashScope explicitly disable thinking and apply the optional
-        auxiliary output cap, bounded by max_tokens. Generic compatible providers
-        only drop reasoning options; they keep max_tokens because their thinking
-        defaults and off switches are unknown. Default calls ignore the extra cap.
+        auxiliary output cap, bounded by max_tokens when set. Generic compatible
+        providers only drop reasoning options; they preserve the original budget
+        because their thinking defaults and off switches are unknown. Default
+        calls ignore the auxiliary cap.
         """
         strategy = _select_provider_strategy(
             provider_name=self._provider_name,
@@ -375,10 +378,16 @@ class LLMProvider:
             and auxiliary_max_tokens is not None
             and strategy.supports_thinking_disable
         ):
-            max_tokens = min(max_tokens, auxiliary_max_tokens)
+            max_tokens = (
+                auxiliary_max_tokens
+                if max_tokens is None
+                else min(max_tokens, auxiliary_max_tokens)
+            )
         full_messages = _merge_leading_system_messages(messages)
         full_messages = strategy.normalize_messages(full_messages)
-        kwargs: dict = dict(model=model, max_tokens=max_tokens, messages=full_messages)
+        kwargs: dict = dict(model=model, messages=full_messages)
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
         if response_format is not None:
             kwargs["response_format"] = response_format
         if tools:

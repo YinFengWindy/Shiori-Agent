@@ -40,16 +40,41 @@ describe("ChatMarkdownContent", () => {
     assert.match(markup, /<h4 class="[^"]*font-semibold[^"]*">四级标题<\/h4>/);
   });
 
-  it("does not render raw HTML or unsafe links", () => {
+  for (const content of [
+    "<div>回复正文</div>",
+    "<details><summary>摘要</summary>回复正文</details>",
+    "<role-reply>\n回复正文\n</role-reply>",
+    "<div>回复正文",
+  ]) {
+    it(`keeps HTML block text visible: ${content}`, () => {
+      const markup = renderToStaticMarkup(<ChatMarkdownContent content={content} />);
+
+      assert.match(markup, /回复正文/);
+      assert.ok(markup.includes(content.replaceAll("<", "&lt;").replaceAll(">", "&gt;")));
+      assert.doesNotMatch(markup, /<(?:details|summary|role-reply)>/);
+    });
+  }
+
+  it("escapes inline HTML and preserves incomplete streamed tags", () => {
     const rawHtmlMarkup = renderToStaticMarkup(
-      <ChatMarkdownContent content="<span>hidden markup</span> visible text" />,
+      <ChatMarkdownContent content="<span>回复正文</span> 后文 <span" />,
+    );
+
+    assert.match(rawHtmlMarkup, /&lt;span&gt;回复正文&lt;\/span&gt; 后文 &lt;span/);
+    assert.doesNotMatch(rawHtmlMarkup, /<span/);
+  });
+
+  it("shows script source without creating executable elements or unsafe links", () => {
+    const scriptMarkup = renderToStaticMarkup(
+      <ChatMarkdownContent content={"<script>alert(1)</script>\n<img src=x onerror=alert(2)>"} />,
     );
     const unsafeLinkMarkup = renderToStaticMarkup(
       <ChatMarkdownContent content="[run](javascript:alert(1))" />,
     );
 
-    assert.doesNotMatch(rawHtmlMarkup, /<span/);
-    assert.match(rawHtmlMarkup, /visible text/);
+    assert.match(scriptMarkup, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+    assert.match(scriptMarkup, /&lt;img src=x onerror=alert\(2\)&gt;/);
+    assert.doesNotMatch(scriptMarkup, /<(?:script|img)\b/);
     assert.doesNotMatch(unsafeLinkMarkup, /href=/);
     assert.match(unsafeLinkMarkup, /run/);
     assert.equal(normalizeExternalLink("data:text/plain,hello"), null);
