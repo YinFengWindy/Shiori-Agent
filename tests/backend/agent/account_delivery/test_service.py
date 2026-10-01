@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
+import subprocess
+import sys
 import pytest
 
 from agent.account_delivery import AccountDelivery
@@ -11,6 +14,28 @@ from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from core.accounts.target_contract import AccountTarget, UncertainDeliveryError
 from core.identity import IdentityChat, UserIdentityStore
+
+
+def test_service_import_does_not_initialize_the_plugin_kernel(tmp_path: Path) -> None:
+    """A fresh interpreter must import delivery without any fixture preloading."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import sys\n"
+            "from agent.account_delivery.service import AccountDelivery\n"
+            "assert AccountDelivery.__name__ == 'AccountDelivery'\n"
+            "assert 'agent.plugin_host' not in sys.modules\n",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 class _Rpc:
