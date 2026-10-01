@@ -5,7 +5,6 @@ import type { RoleFormState } from "../shared/types";
 import { RoleCapabilitiesPanel } from "./RoleCapabilitiesPanel";
 import { resolveRoleCardCover } from "./roleCardState";
 import { captureRoleDetailScrollTop, restoreRoleDetailScrollTop } from "./roleDetailScrollState";
-import { RoleDeliveryPanels } from "./RoleDeliveryPanels";
 import { RoleDetailHeader } from "./RoleDetailHeader";
 import { selectRoleDetailSaveState } from "./roleDetailSaveState";
 import type { RoleDetailTabId } from "./RoleDetailTabs";
@@ -87,10 +86,8 @@ export function RoleDetailPage({
     activeRoleId ? <RoleAccountsPanel roleId={activeRoleId} /> : null
   ) : activeTab === "memory" ? (
     <RoleMemoryPanel roleId={activeRoleId} bridgeReady={bridgeReady} />
-  ) : activeTab === "capabilities" ? (
-    <RoleCapabilitiesPanel activeRole={activeRole} bridgeReady={bridgeReady} roleForm={roleForm} onUpdate={updateRoleForm} />
   ) : (
-    <RoleDeliveryPanels roleForm={roleForm} onUpdate={updateRoleForm} />
+    <RoleCapabilitiesPanel activeRole={activeRole} bridgeReady={bridgeReady} roleForm={roleForm} onUpdate={updateRoleForm} />
   );
 
   return (

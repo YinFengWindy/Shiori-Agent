@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { changeInputValue, mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { changeInputValue, chooseSelectOption, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { createEmptyRoleForm } from "../app/appState";
+import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
+import { createSettingsDraft } from "../settings/testFixtures";
 import type { RoleRecord } from "@shiori/plugin-sdk";
 import type { RoleFormState } from "../shared/types";
 import { RoleDetailPage } from "./RoleDetailPage";
@@ -76,9 +78,9 @@ describe("RoleDetailPage", () => {
     assert.match(markup, /记忆/);
     assert.doesNotMatch(markup, /知识库/);
     assert.match(markup, /能力/);
-    assert.match(markup, /主动推送/);
-    // Tabs read 资料 / 记忆 / 能力 / 主动推送 / 账号; accounts live only in their own tab.
-    assert.match(markup, /资料<\/button>.*记忆<\/button>.*能力<\/button>.*主动推送<\/button>.*账号<\/button>/);
+    assert.doesNotMatch(markup, /主动推送/);
+    // Tabs read 资料 / 记忆 / 能力 / 账号; accounts live only in their own tab.
+    assert.match(markup, /资料<\/button>.*记忆<\/button>.*能力<\/button>.*账号<\/button>/);
     assert.doesNotMatch(markup, /添加账号/);
     assert.doesNotMatch(markup, /渠道绑定/);
     assert.match(markup, /aria-current="page"[^>]*>.*资料/);
@@ -129,6 +131,55 @@ describe("RoleDetailPage", () => {
     assert.match(renderPage({ roleFormDirty: true, bridgeReady: false }), /data-testid="save-role-button"[^>]*disabled=""/);
     const saving = renderPage({ roleFormDirty: true, savingRole: true });
     assert.match(saving, /data-testid="save-role-button"[^>]*data-saving="true"[^>]*disabled=""[^>]*>.*保存中…<\/button>/);
+  });
+
+  it("saves and resets proactive edits through the shared role draft across tab switches", async () => {
+    setPluginEnabledSnapshot([]);
+    let saved: RoleFormState | undefined;
+    const view = await mountTestComponent(<DraftDetailPage onSave={(form) => { saved = form; }} />, {
+      windowGlobals: { miraDesktop: { readSettings: async () => ({ formData: createSettingsDraft() }) } },
+    });
+    const button = (label: string) => {
+      const found = Array.from(view.container.querySelectorAll("button")).find((item) => item.textContent === label);
+      assert.ok(found, `Missing button: ${label}`);
+      return found;
+    };
+    try {
+      await act(async () => button("能力").click());
+      assert.ok(view.container.querySelector('[data-testid="role-proactive-config"]'));
+      const toggle = view.container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="主动推送"]');
+      assert.ok(toggle);
+      await act(async () => toggle.click());
+      await chooseSelectOption("推送策略", "低打扰");
+      await act(async () => button("执行参数").click());
+      const steps = Array.from(view.container.querySelectorAll("label"))
+        .find((label) => label.textContent === "每次推送最大步数")?.querySelector("input");
+      assert.ok(steps);
+      await changeInputValue(steps, "48");
+      const driftToggle = view.container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="空闲活动"]');
+      assert.ok(driftToggle);
+      await act(async () => driftToggle.click());
+      await act(async () => button("资料").click());
+      await act(async () => button("保存").click());
+      assert.deepEqual(saved, { ...profileForm, proactiveEnabled: true, proactiveProfile: "quiet", proactiveAgentMaxSteps: 48, proactiveDriftEnabled: true });
+
+      await act(async () => button("能力").click());
+      assert.equal(view.container.querySelector('[aria-label="主动推送"]')?.getAttribute("aria-checked"), "true");
+      assert.equal(view.container.querySelector('[aria-label="推送策略"]')?.textContent, "低打扰");
+      assert.equal(button("执行参数").getAttribute("aria-expanded"), "false");
+      await act(async () => button("执行参数").click());
+      assert.equal(Array.from(view.container.querySelectorAll("label"))
+        .find((label) => label.textContent === "每次推送最大步数")?.querySelector("input")?.value, "48");
+
+      await act(async () => button("重置").click());
+      assert.equal(button("保存").disabled, true);
+      assert.equal(view.container.querySelector('[aria-label="主动推送"]')?.getAttribute("aria-checked"), "false");
+      assert.equal(view.container.querySelector('[aria-label="推送策略"]')?.textContent, "日常");
+      assert.equal(view.container.querySelector('[aria-label="空闲活动"]')?.getAttribute("aria-checked"), "false");
+    } finally {
+      await view.cleanup();
+      resetPluginEnabledStateForTests();
+    }
   });
 
   it("offers 去聊天 for a loaded role while the bridge is up", () => {
