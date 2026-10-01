@@ -1,27 +1,25 @@
-"""Pytest entry point, activated when pytest and the SDK testing extra are installed."""
+"""Safe pytest auto-loading for both the base SDK and the optional testing extra."""
 
-from collections.abc import AsyncIterator, Iterator
-from pathlib import Path
+from importlib.util import find_spec
 
 import pytest
-import pytest_asyncio
-
-from .context import FakePluginContext
-from .ssl_context import share_httpx_ssl_contexts
 
 
-@pytest.fixture(scope="session", autouse=True)
-def shared_httpx_ssl_contexts() -> Iterator[None]:
-    """Reuses test-session TLS contexts without importing host state."""
-    with share_httpx_ssl_contexts():
-        yield
+class _MissingTestingExtra:
+    @pytest.fixture
+    def sdk_context(self) -> None:
+        pytest.fail(
+            "The sdk_context fixture requires shiori-sdk[testing]; "
+            "install that extra to enable pytest-asyncio and httpx support.",
+            pytrace=False,
+        )
 
 
-@pytest_asyncio.fixture
-async def sdk_context(tmp_path: Path) -> AsyncIterator[FakePluginContext]:
-    """Provides an isolated context and always runs its registered cleanup."""
-    context = FakePluginContext(plugin_dir=tmp_path)
-    try:
-        yield context
-    finally:
-        await context.aclose()
+def pytest_configure(config: pytest.Config) -> None:
+    """Registers optional fixtures without requiring them for unrelated test suites."""
+    if all(find_spec(name) is not None for name in ("pytest_asyncio", "httpx")):
+        from . import pytest_fixtures
+
+        config.pluginmanager.register(pytest_fixtures, "shiori_sdk_testing")
+    else:
+        config.pluginmanager.register(_MissingTestingExtra(), "shiori_sdk_testing")

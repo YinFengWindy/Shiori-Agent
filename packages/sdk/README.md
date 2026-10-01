@@ -55,6 +55,9 @@ Install `shiori-sdk[testing]` for pytest/pytest-asyncio, `sdk_context`,
 bridge request helpers and shared test TLS contexts. Fakes store only test values
 in memory; they never open host persistence. `FakeLifecycle` records modules for
 explicit execution; it does not simulate the host phase dependency sorter.
+The base wheel can coexist with pytest without the testing extra: unrelated tests
+collect and run normally. Requesting `sdk_context` without the extra reports the
+installation requirement. Optional fixtures load only when their dependencies exist.
 SDK-only tests never start `AppRuntime`. Real host integration fixtures live in
 `shiori_host_testing`; `shiori-plugin-testkit` temporarily forwards those fixtures
 for unmigrated plugins and retains their legacy memory fake.
@@ -76,7 +79,8 @@ uv run python scripts/check_sdk_imports.py --base <base-commit>
 ```
 
 The artifact probes install tarball/wheel non-editably outside the checkout. The
-wheel probe runs all SDK tests; the plugin probe executes citation/context_pressure
+wheel probe first collects/runs an unrelated test with only the base SDK and pytest,
+checks the missing-extra diagnostic, then installs the extra and runs all SDK tests; the plugin probe executes citation/context_pressure
 tests with no host, testkit or default-memory distribution. It verifies installed
 origins and that async failures really execute. The original full host CI and
 legacy plugin integration job remain enabled.

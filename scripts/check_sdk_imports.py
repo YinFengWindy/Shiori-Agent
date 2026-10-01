@@ -34,27 +34,105 @@ HOST_ROOTS = frozenset(
 )
 
 
-def host_imports(source: str) -> Counter[str]:
-    """Counts host edges even inside functions and TYPE_CHECKING branches."""
-    edges: Counter[str] = Counter()
-    for node in ast.walk(ast.parse(source)):
+def _scope_nodes(node: ast.AST):
+    """Walks one lexical scope, leaving nested scopes for a separate pass."""
+    for child in ast.iter_child_nodes(node):
+        yield child
+        if not isinstance(
+            child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            yield from _scope_nodes(child)
+
+
+def _identities(node: ast.AST, bindings: dict[str, set[str]]) -> set[str]:
+    if isinstance(node, ast.Name):
+        return bindings.get(node.id, set())
+    if isinstance(node, ast.Attribute):
+        return {
+            f"{name}.{node.attr}"
+            for name in _identities(node.value, bindings)
+            if name in {"importlib", "builtins"}
+        }
+    return set()
+
+
+def _scope_imports(
+    scope: ast.AST, inherited: dict[str, set[str]], edges: Counter[str]
+) -> None:
+    nodes = list(_scope_nodes(scope))
+    bindings = {name: set(values) for name, values in inherited.items()}
+    # Local bindings shadow outer aliases. Within a scope, retain every possible
+    # imported identity so conditional assignments cannot conceal a host import.
+    for node in nodes:
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            bindings.pop(node.id, None)
+    if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        for arg in ast.walk(scope.args):
+            if isinstance(arg, ast.arg):
+                bindings.pop(arg.arg, None)
+    for node in nodes:
         names: list[str] = []
         if isinstance(node, ast.Import):
             names = [alias.name for alias in node.names]
+            for alias in node.names:
+                local = alias.asname or alias.name.split(".")[0]
+                identity = alias.name if alias.asname else local
+                bindings.setdefault(local, set()).add(identity)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             names = [f"{node.module}.{alias.name}" for alias in node.names]
-        elif isinstance(node, ast.Call) and node.args:
-            call = node.func
-            dynamic = (isinstance(call, ast.Name) and call.id == "__import__") or (
-                isinstance(call, ast.Attribute) and call.attr == "import_module"
-            )
-            if dynamic and isinstance(node.args[0], ast.Constant):
-                value = node.args[0].value
-                if isinstance(value, str):
-                    names = [value]
+            for alias in node.names:
+                bindings.setdefault(alias.asname or alias.name, set()).add(
+                    f"{node.module}.{alias.name}"
+                )
         for name in names:
             if name.split(".")[0] in HOST_ROOTS:
                 edges[name] += 1
+
+    # Follow simple callable aliases (load = import_module, including alias chains).
+    changed = True
+    while changed:
+        changed = False
+        for node in nodes:
+            if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value:
+                targets = (
+                    node.targets if isinstance(node, ast.Assign) else [node.target]
+                )
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        identities = _identities(node.value, bindings)
+                        previous = bindings.setdefault(target.id, set())
+                        changed |= not identities <= previous
+                        previous.update(identities)
+    for node in nodes:
+        if isinstance(node, ast.Call) and _identities(node.func, bindings) & {
+            "importlib.import_module",
+            "builtins.__import__",
+        }:
+            argument = (
+                node.args[0]
+                if node.args
+                else next(
+                    (
+                        keyword.value
+                        for keyword in node.keywords
+                        if keyword.arg == "name"
+                    ),
+                    None,
+                )
+            )
+            if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+                if argument.value.split(".")[0] in HOST_ROOTS:
+                    edges[argument.value] += 1
+        elif isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            _scope_imports(node, bindings, edges)
+
+
+def host_imports(source: str) -> Counter[str]:
+    """Counts host edges, including typed imports and aliased dynamic import calls."""
+    edges: Counter[str] = Counter()
+    _scope_imports(ast.parse(source), {"__import__": {"builtins.__import__"}}, edges)
     return edges
 
 
