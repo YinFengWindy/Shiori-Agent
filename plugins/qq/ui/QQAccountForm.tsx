@@ -21,7 +21,7 @@ export function QQAccountForm({ account, host, form }: Pick<PluginAccountDetailC
   const running = account?.connection === "online" || account?.connection === "connecting" || Boolean(ref && status
     && status.login.phase !== "stopped" && status.connection !== "offline" && status.connection !== "error");
   const statusError = status?.connection === "error" && status.error !== account?.error ? status.error : "";
-  const errors = [error, managed.error, !managedAvailable && !loading ? "托管 NapCat 仅支持 Windows x64" : "",
+  const errors = [!managedAvailable && !loading && !error ? "托管 NapCat 仅支持 Windows x64" : "",
     status?.preparation.error ?? "", statusError].filter(Boolean);
   const connect = () => form.start(managed.reload);
   const latestConnect = useLatestRef(connect);
@@ -44,7 +44,9 @@ export function QQAccountForm({ account, host, form }: Pick<PluginAccountDetailC
       action={running
         ? { kind: "disconnect", onClick: () => void form.disconnect(accountId, managed.reload), disabled: loading }
         : { kind: "connect", onClick: () => void connect(), disabled: loading || !managedAvailable || preparing }}>
-      <host.ui.Reveal show={errors.length > 0} className="grid gap-2 pt-3">
+      <host.ui.Reveal show={Boolean(error || managed.error || errors.length)} className="grid gap-2 pt-3">
+        {error ? <host.ui.InlineError {...error} /> : null}
+        {managed.error ? <host.ui.InlineError {...managed.error} /> : null}
         {errors.map((message) => <host.ui.InlineError key={message} message={message} />)}
       </host.ui.Reveal>
       <host.ui.Reveal show={preparing} className="pt-3">

@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { usePluginHostServices } from "@shiori/plugin-sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type StoryBridgeClient } from "./storyBridgeClient";
@@ -32,7 +33,7 @@ export function useStoryController(client: StoryBridgeClient) {
       apply?.(result);
       return result;
     } catch (error) {
-      setState((current) => ({ ...current, error: error instanceof Error ? error.message : "剧情暂时无法响应" }));
+      setState((current) => ({ ...current, error: errorMessage(error, { includeDetail: true }) || "剧情暂时无法响应" }));
       return null;
     } finally {
       setState((current) => ({ ...current, busy: false }));
@@ -72,7 +73,7 @@ export function useStoryController(client: StoryBridgeClient) {
       await waitForStoryLoadingCompletion();
       setState((current) => ({ ...current, stories, loading: false }));
     } catch (error) {
-      setState((current) => ({ ...current, loading: true, error: error instanceof Error ? error.message : "剧情列表加载失败" }));
+      setState((current) => ({ ...current, loading: true, error: errorMessage(error, { includeDetail: true }) || "剧情列表加载失败" }));
     }
   }, [client]);
 
@@ -84,7 +85,7 @@ export function useStoryController(client: StoryBridgeClient) {
       applyStory(story);
     }).catch((error: unknown) => {
       if (refreshSequenceRef.current.get(storyId) !== sequence) return;
-      setState((current) => current.story?.id === storyId ? { ...current, error: error instanceof Error ? error.message : "无法刷新剧情" } : current);
+      setState((current) => current.story?.id === storyId ? { ...current, error: errorMessage(error, { includeDetail: true }) || "无法刷新剧情" } : current);
     });
   }, [applyStory, client]);
 

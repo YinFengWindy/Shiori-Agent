@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.roles.errors import RoleNotFoundError
+
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -53,7 +55,7 @@ class RoleModelRuntime:
         registration = self._selected_registration(role_id, purpose)
         role = self._roles.get_role(role_id)
         if role is None:
-            raise KeyError(f"role 不存在: {role_id}")
+            raise RoleNotFoundError(role_id)
         effort = registration.effort
         effort_key = f"{'dialogue' if purpose == 'chat' else 'visual'}_model_effort"
         role_effort = str(role.runtime_config.get(effort_key) or "").strip().lower()
@@ -98,7 +100,7 @@ class RoleModelRuntime:
     def _selected_registration(self, role_id: str, purpose: ModelPurpose):
         role = self._roles.get_role(role_id)
         if role is None:
-            raise KeyError(f"role 不存在: {role_id}")
+            raise RoleNotFoundError(role_id)
         if not self._registrations:
             raise ModelConfigurationError(
                 reason="no_models", role_id=role_id, purpose=purpose

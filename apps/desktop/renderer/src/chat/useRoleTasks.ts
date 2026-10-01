@@ -1,11 +1,8 @@
+import { BridgeError, errorMessage } from "@shiori/plugin-sdk";
 import { useCallback, useEffect, useState } from "react";
 import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
 
 const refreshEventMethods = new Set(["session.updated", "chat.done", "chat.error", "roles.tasks.updated"]);
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /** Owns loading and mutations for tasks belonging to the active role. */
 export function useRoleTasks({ activeRoleId, bridgeReady, enabled }: {
@@ -23,7 +20,7 @@ export function useRoleTasks({ activeRoleId, bridgeReady, enabled }: {
       return;
     }
     const response = await window.miraDesktop.invoke({ method: "roles.tasks.list", payload: { role_id: activeRoleId } });
-    if (response.error) throw new Error(response.error.message);
+    if (response.error) throw new BridgeError(response.error.message, response.error.code, response.error.details);
     setTasks((response.payload.tasks as RoleTask[] | undefined) ?? []);
   }, [activeRoleId, bridgeReady]);
 
@@ -31,7 +28,7 @@ export function useRoleTasks({ activeRoleId, bridgeReady, enabled }: {
     setTasks([]);
     setError("");
     if (!enabled || !activeRoleId || !bridgeReady) return;
-    const handleRefreshError = (refreshError: unknown) => setError(errorMessage(refreshError));
+    const handleRefreshError = (refreshError: unknown) => setError(errorMessage(refreshError, { includeDetail: true }));
     void refresh().catch(handleRefreshError);
     const interval = window.setInterval(() => void refresh().catch(handleRefreshError), 3000);
     const off = window.miraDesktop.onEvent((event) => {
@@ -59,11 +56,11 @@ export function useRoleTasks({ activeRoleId, bridgeReady, enabled }: {
         method,
         payload: { ...payload, role_id: activeRoleId },
       });
-      if (response.error) throw new Error(response.error.message);
+      if (response.error) throw new BridgeError(response.error.message, response.error.code, response.error.details);
       await refresh();
       return response.payload;
     } catch (mutationError) {
-      setError(errorMessage(mutationError));
+      setError(errorMessage(mutationError, { includeDetail: true }));
       throw mutationError;
     } finally {
       setOperation(null);

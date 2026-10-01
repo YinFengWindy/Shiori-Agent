@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
-import { type RoleRecord, errorMessage } from "@shiori/plugin-sdk";
+import { type RoleRecord, BridgeError, errorMessage } from "@shiori/plugin-sdk";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import {
   runtimeConfigForSelection,
@@ -32,7 +32,7 @@ export function useRoleModelSelection(activeRoleId: string, bridgeReady: boolean
         window.miraDesktop.readSettings(),
         window.miraDesktop.invoke({ method: "roles.list", payload: {} }),
       ]);
-      if (rolesResponse.error) throw new Error(rolesResponse.error.message);
+      if (rolesResponse.error) throw new BridgeError(rolesResponse.error.message, rolesResponse.error.code, rolesResponse.error.details);
       const roles = Array.isArray(rolesResponse.payload.roles)
         ? rolesResponse.payload.roles as RoleRecord[]
         : [];
@@ -41,7 +41,7 @@ export function useRoleModelSelection(activeRoleId: string, bridgeReady: boolean
       setRegistrations(settings.formData.models.registrations);
       setSelection(selectionFromRole(role, settings.formData.models.registrations));
     } catch (error) {
-      feedback.error(`模型选项加载失败：${errorMessage(error)}`);
+      feedback.error(`模型选项加载失败：${errorMessage(error, { includeDetail: true })}`);
     }
   }, [activeRoleId, bridgeReady]);
 
@@ -63,7 +63,7 @@ export function useRoleModelSelection(activeRoleId: string, bridgeReady: boolean
         method: "roles.update",
         payload: { role_id: activeRoleId, runtime_config: runtimeConfig },
       });
-      if (response.error) throw new Error(response.error.message);
+      if (response.error) throw new BridgeError(response.error.message, response.error.code, response.error.details);
       const role = response.payload.role as RoleRecord | undefined;
       setSelection(role ? selectionFromRole(role, registrations) : {
         dialogueId: String(runtimeConfig.dialogue_model_registration_id),
@@ -74,7 +74,7 @@ export function useRoleModelSelection(activeRoleId: string, bridgeReady: boolean
       });
       return true;
     } catch (error) {
-      feedback.error(`模型切换失败：${errorMessage(error)}`);
+      feedback.error(`模型切换失败：${errorMessage(error, { includeDetail: true })}`);
       return false;
     }
   }, [activeRoleId, registrations, selection]);

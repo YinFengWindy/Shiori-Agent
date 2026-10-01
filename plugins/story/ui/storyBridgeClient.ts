@@ -29,7 +29,7 @@ async function invokePayload<T>(client: PluginRpcClient, method: string, payload
   try {
     return await client.call<T>(method.replace(/^stories\./, ""), payload);
   } catch (error) {
-    if (error instanceof PluginBridgeError) throw new StoryBridgeError(error.message, error.code);
+    if (error instanceof PluginBridgeError) throw new StoryBridgeError(error.message, error.code, error.details);
     throw error;
   }
 }

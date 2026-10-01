@@ -261,7 +261,9 @@ async def test_role_delete_first_deletes_its_accounts_through_their_plugins(
     try:
         # A plugin that cannot clean up keeps both the role and its account.
         failed = await service.handle(request, emit_event=AsyncMock())
-        assert failed.error is not None and "locked" in failed.error.message
+        assert failed.error is not None
+        assert failed.error.message == "本地服务处理失败，请查看详情"
+        assert "locked" in failed.error.details["detail"]
         assert role_store.get_role("mira") is not None
         assert [row.record.id for row in accounts.list(role_id="mira")] == ["chat:101"]
 

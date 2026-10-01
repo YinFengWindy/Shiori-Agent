@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { useEffect } from "react";
 import { usePluginHostServices } from "@shiori/plugin-sdk";
 
@@ -9,7 +10,7 @@ export function useStoryGalleryRefresh(active: boolean, refresh: () => Promise<v
     return host.onEvent((event) => {
       if (event.method !== "plugin.story.resource.changed") return;
       void refresh().catch((error: unknown) => {
-        reportError(error instanceof Error ? error.message : "无法刷新 CG 集");
+        reportError(errorMessage(error, { includeDetail: true }) || "无法刷新 CG 集");
       });
     });
   }, [active, host, refresh, reportError]);

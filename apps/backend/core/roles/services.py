@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.roles.errors import RoleNotFoundError
+
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,7 +56,7 @@ class RoleRepository:
         clean_role_id = _clean_role_id(role_id)
         role = self._store.get_role(clean_role_id)
         if role is None:
-            raise KeyError(f"role 不存在: {clean_role_id}")
+            raise RoleNotFoundError(clean_role_id)
         return role
 
     def create_role(

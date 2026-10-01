@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { useRef, useState } from "react";
 import { ArrowRight } from "@phosphor-icons/react";
 import { ModelRegistrationFields } from "../settings/ModelRegistrationFields";
@@ -27,7 +28,7 @@ export function OnboardingModelStep({ onSaved, onBusyChange, onReact }: {
       await registerOnboardingModel(window.miraDesktop, registration);
       await onSaved();
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(errorMessage(error, { includeDetail: true }));
       onReact("modelSaveFailed");
     } finally {
       pending.current = false;

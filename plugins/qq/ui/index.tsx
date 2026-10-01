@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { ChatCircleIcon } from "@phosphor-icons/react";
-import type { PluginAccountDetailComponentProps, PluginUiModule } from "@shiori/plugin-sdk";
+import { errorMessage, type PluginAccountDetailComponentProps, type PluginUiModule } from "@shiori/plugin-sdk";
 import { QQAccountForm } from "./QQAccountForm";
 import { useQQAccountForm } from "./useQQAccountForm";
 
@@ -8,7 +8,7 @@ import { useQQAccountForm } from "./useQQAccountForm";
 function QQAccountEditor({ account, roleId, onChanged, client, host }: PluginAccountDetailComponentProps) {
   const form = useQQAccountForm({ accountId: account?.id, roleId, client, onChanged,
     onCleanupError: (failure) => host.feedback.error("QQ 临时连接清理失败", {
-      detail: failure instanceof Error ? failure.message : String(failure),
+      detail: errorMessage(failure, { includeDetail: true }),
     }),
   });
   const accountId = account?.id;
@@ -16,7 +16,7 @@ function QQAccountEditor({ account, roleId, onChanged, client, host }: PluginAcc
     if (accountId || !form.ref) return;
     const ref = form.ref;
     return () => { void client.call("accounts.cancel", { ref, role_id: roleId }).catch((failure: unknown) => {
-      host.feedback.error("QQ 临时连接清理失败", { detail: failure instanceof Error ? failure.message : String(failure) });
+      host.feedback.error("QQ 临时连接清理失败", { detail: errorMessage(failure, { includeDetail: true }) });
     }); };
   }, [accountId, form.ref, client, roleId, host.feedback]);
   return <QQAccountForm account={account} host={host} form={form} />;

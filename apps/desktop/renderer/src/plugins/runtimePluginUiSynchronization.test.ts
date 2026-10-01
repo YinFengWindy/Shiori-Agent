@@ -38,3 +38,15 @@ test("a changed activationToken alone does not reevaluate an otherwise-unchanged
   await sync([{ pluginId: "demo", entry: "demo", css: ["demo.css"], activationToken: "token-2" }]);
   assert.deepEqual(events, ["css", "import", "register"], "a token-only change must not dispose or reimport");
 });
+
+
+test("runtime UI failures retain the RPC cause in their displayed diagnostic state", async () => {
+  const { PluginBridgeError } = await import("@shiori/plugin-sdk");
+  const sync = createRuntimePluginUiSynchronization({
+    importModule: async () => { throw new PluginBridgeError("本地服务处理失败", "internal_error", { detail: "module asset missing token=private-value" }); },
+    loadCss: async () => () => undefined, register: () => undefined, unregister: () => undefined, failed: () => undefined,
+  });
+  const failures = await sync([{ pluginId: "demo", entry: "demo", css: [] }]);
+  assert.match(failures.get("demo") ?? "", /module asset missing/);
+  assert.doesNotMatch(failures.get("demo") ?? "", /private-value/);
+});

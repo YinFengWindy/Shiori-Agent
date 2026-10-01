@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { useCallback, useState } from "react";
 
 export type RunStoryOperation = <T>(
@@ -18,7 +19,7 @@ export function useStoryPresentationOperation() {
       const result = await operation();
       await apply(result);
     } catch (operationError) {
-      setError(operationError instanceof Error ? operationError.message : "剧情暂时无法响应");
+      setError(errorMessage(operationError, { includeDetail: true }) || "剧情暂时无法响应");
     } finally {
       setBusy(false);
     }

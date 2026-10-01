@@ -172,3 +172,16 @@ test("退出登录 sits in the dialog's danger zone and shows 正在退出 while
     assert.equal(buttonIn(zone, "退出登录")?.disabled, false);
   } finally { await view.cleanup(); }
 });
+
+test("a failed QQ settings read reports its cause without claiming the platform is unsupported", async () => {
+  const { PluginBridgeError } = await import("@shiori/plugin-sdk");
+  const fake = createFakeHostServices();
+  const client = createFakePluginClient({ call: async () => { throw new PluginBridgeError("本地服务处理失败", "internal_error", { detail: "settings access denied" }); } });
+  const view = await mountTestComponent(<QQAccountDetail account={savedAccount} roleId="mira" onChanged={() => undefined} host={fake.host} client={client} />);
+  try {
+    assert.doesNotMatch(view.container.textContent ?? "", /仅支持 Windows/);
+    const error = fake.uiRenders.InlineError.at(-1);
+    assert.equal(error?.message, "QQ 账号设置读取失败");
+    assert.match(error?.detail ?? "", /settings access denied/);
+  } finally { await view.cleanup(); }
+});

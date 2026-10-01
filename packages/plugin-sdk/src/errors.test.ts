@@ -19,3 +19,13 @@ test("legacy string state keeps the summary and cause recoverable without except
   assert.equal(errorFeedback(null).detail, "");
   assert.equal(errorMessage(new Error("Error invoking remote method 'desktop:test': Error: 录音回放失败")), "录音回放失败");
 });
+
+
+test("callers can retain structured RPC diagnostics without changing summary-only callers", () => {
+  const error = new BridgeError("本地服务处理失败，请查看详情", "internal_error", { detail: "RuntimeError: 未找到官方 QQ，请检查安装目录 token=private-value" });
+  assert.equal(errorMessage(error), "本地服务处理失败，请查看详情");
+  const complete = errorMessage(error, { includeDetail: true });
+  assert.match(complete, /未找到官方 QQ，请检查安装目录/);
+  assert.doesNotMatch(complete, /private-value/);
+  assert.equal(errorMessage({ message: error.message, code: error.code, details: error.details }, { includeDetail: true }), complete);
+});

@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { useEffect, useState } from "react";
 import type { AccountSnapshot } from "@shiori/plugin-sdk";
 import { createAccountClient } from "./accountClient";
@@ -25,7 +26,7 @@ export function useRoleDeletionAccounts(roleId: string | null) {
     client.list(roleId).then(
       (accounts) => { if (active) setLoaded({ roleId, result: { accounts, error: "", status: "ready" } }); },
       (failure: unknown) => {
-        if (active) setLoaded({ roleId, result: { accounts: [], error: failure instanceof Error ? failure.message : String(failure), status: "error" } });
+        if (active) setLoaded({ roleId, result: { accounts: [], error: errorMessage(failure, { includeDetail: true }), status: "error" } });
       },
     );
     return () => { active = false; };

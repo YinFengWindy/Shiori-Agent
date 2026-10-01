@@ -29,9 +29,16 @@ export class PluginBridgeError extends BridgeError {
   }
 }
 
-/** Normalizes a thrown value into the message an error toast or inline error shows. */
-export function errorMessage(error: unknown): string {
-  return scrubErrorDetail(error instanceof Error ? error.message : String(error ?? "")).replace(/^Error invoking remote method [^\n]+?: (?:Error: )?/, "").replace(/^(?:[A-Za-z]+Error:\s*)+/, "");
+/** Normalizes a thrown value; includeDetail preserves RPC diagnostics for a disclosure or diagnostic sink. */
+export function errorMessage(error: unknown, options?: { includeDetail?: boolean }): string {
+  const message = typeof error === "object" && error !== null && "message" in error && typeof error.message === "string" ? error.message : String(error ?? "");
+  const summary = scrubErrorDetail(message).replace(/^Error invoking remote method [^\n]+?: (?:Error: )?/, "").replace(/^(?:[A-Za-z]+Error:\s*)+/, "");
+  return options?.includeDetail ? [summary, errorDiagnosticDetail(error)].filter(Boolean).join("\n") : summary;
+}
+
+function errorDiagnosticDetail(error: unknown) {
+  const details = typeof error === "object" && error !== null && "details" in error ? error.details : null;
+  return typeof details === "object" && details !== null && "detail" in details && typeof details.detail === "string" ? scrubErrorDetail(details.detail) : "";
 }
 
 /** Redacts credential-shaped text before any error reaches UI or copied diagnostics. */
@@ -54,8 +61,7 @@ export function errorFeedback(error: unknown, fallback = "操作未完成，请�
   // transport exceptions are kept only in details, even when detail already exists.
   const readable = /[一-龥]/.test(first) && first.length <= 180 && !technical;
   const message = readable ? first : fallback;
-  const details = envelope && "details" in envelope ? envelope.details : null;
-  const reported = typeof details === "object" && details !== null && "detail" in details && typeof details.detail === "string" ? details.detail : "";
+  const reported = errorDiagnosticDetail(error);
   const detail = scrubErrorDetail([...(message === raw ? [] : [raw]), reported].filter(Boolean).join("\n"));
   return { message, detail };
 }

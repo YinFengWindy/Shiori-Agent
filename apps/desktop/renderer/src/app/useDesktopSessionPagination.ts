@@ -8,7 +8,7 @@ import {
   parseSessionMessagesAround,
   parseSessionSummary,
 } from "./sessionMessagePagination";
-import { type SessionPayload, errorMessage } from "@shiori/plugin-sdk";
+import { type SessionPayload, BridgeError, errorMessage } from "@shiori/plugin-sdk";
 
 type UseDesktopSessionPaginationArgs = {
   activeRoleIdRef: React.MutableRefObject<string>;
@@ -70,7 +70,7 @@ export function createDesktopSessionPaginationController({
           limit: pagination.limit,
         },
       });
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new BridgeError(res.error.message, res.error.code, res.error.details);
       const page = parseSessionMessagePage(res.payload.page);
       const summary = parseSessionSummary(res.payload.session);
       if (!page || !summary || summary.key !== sessionKey) {
@@ -83,7 +83,7 @@ export function createDesktopSessionPaginationController({
       return true;
     } catch (error) {
       if (isCurrentGeneration(sessionKey, generation)) {
-        reportError(errorMessage(error));
+        reportError(errorMessage(error, { includeDetail: true }));
       }
       return false;
     } finally {
@@ -104,7 +104,7 @@ export function createDesktopSessionPaginationController({
         method: "session.messagesAround",
         payload: { message_id: normalizedMessageId, context: 8 },
       });
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new BridgeError(res.error.message, res.error.code, res.error.details);
       const around = parseSessionMessagesAround(res.payload.around);
       if (!around || around.targetMessageId !== normalizedMessageId || around.sessionKey !== expectedSessionKey) {
         throw new Error("历史消息定位响应无效");
@@ -116,7 +116,7 @@ export function createDesktopSessionPaginationController({
       return true;
     } catch (error) {
       if (isCurrentGeneration(expectedSessionKey, generation)) {
-        reportError(errorMessage(error));
+        reportError(errorMessage(error, { includeDetail: true }));
       }
       return false;
     }

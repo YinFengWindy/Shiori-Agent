@@ -61,7 +61,7 @@ export function useBridgeRefreshedValue<T>({
     } catch (loadError) {
       if (request !== requestRef.current) return;
       if (!keepValueOnError) setValue(null);
-      setError(errorMessage(loadError));
+      setError(errorMessage(loadError, { includeDetail: true }));
       onErrorRef.current?.(loadError);
     } finally {
       if (request === requestRef.current) setLoading(false);

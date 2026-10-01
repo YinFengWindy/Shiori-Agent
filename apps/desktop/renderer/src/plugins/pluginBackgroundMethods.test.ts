@@ -18,3 +18,16 @@ test("duplicate registration retains the existing handler and retired callbacks 
   await pending;
   assert.deepEqual(replies, []);
 });
+
+
+test("a background RPC reply retains structured upstream diagnostics", async () => {
+  const { PluginBridgeError } = await import("@shiori/plugin-sdk");
+  const methods = new PluginBackgroundMethods();
+  await methods.register("sync", async () => { throw new PluginBridgeError("桌宠同步失败", "pet_sync_failed", { detail: "missing asset token=private-value" }); }, async () => undefined);
+  let response: Record<string, unknown> | undefined;
+  await methods.dispatch({ id: "1", type: "event", method: "plugin.demo.__request", payload: { name: "sync", request_id: "r" } },
+    () => true, async (value) => { response = value; });
+  assert.match(JSON.stringify(response), /pet_sync_failed|missing asset/);
+  assert.doesNotMatch(JSON.stringify(response), /private-value/);
+  assert.deepEqual(response, { request_id: "r", error: { code: "pet_sync_failed", message: "桌宠同步失败", details: { detail: "missing asset token=***" } } });
+});

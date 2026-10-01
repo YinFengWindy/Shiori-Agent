@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { useState } from "react";
 import type { AccountSnapshot } from "@shiori/plugin-sdk";
 import { createAccountClient } from "./accountClient";
@@ -31,7 +32,7 @@ export function useAccountDeletion(roleId: string, onSettled: () => void) {
       return true;
     } catch (failure) {
       // The host kept the account; show why so the user can retry.
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(errorMessage(failure, { includeDetail: true }));
       return false;
     } finally {
       setBusy(false);

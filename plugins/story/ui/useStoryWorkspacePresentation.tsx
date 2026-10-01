@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { useStoryGalleryRefresh } from "./useStoryGalleryRefresh";
 import { useCallback, useState } from "react";
 import type { RoleRecord } from "@shiori/plugin-sdk";
@@ -65,7 +66,7 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
       setMode("game");
     } catch (error) {
       if (keepCurrentSurface) throw error instanceof Error ? error : new Error("无法加载这段剧情，请重试。");
-      reportError(error instanceof Error ? error.message : "剧情加载失败，请重试。");
+      reportError(errorMessage(error, { includeDetail: true }) || "剧情加载失败，请重试。");
       setLoadingElapsedMs(250);
       setMode("loading");
     } finally {
@@ -89,7 +90,7 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
     setMode("gallery");
     setCgGalleryLoading(true);
     void refreshCgGallery().catch((error: unknown) => {
-      reportError(error instanceof Error ? error.message : "无法读取 CG 集");
+      reportError(errorMessage(error, { includeDetail: true }) || "无法读取 CG 集");
     }).finally(() => setCgGalleryLoading(false));
   }, [clearError, refreshCgGallery, reportError]);
   const retryCg = useCallback((storyId: string, resourceId: string) => {

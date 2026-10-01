@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.roles.errors import RoleNotFoundError
+
 from core.common.error_summary import (
     public_validation_message,
     summarize_exception_for_user,
@@ -809,15 +811,22 @@ class DesktopBridgeService:
             return self._error(
                 request_id, method, "account_not_found", f"账号不存在: {exc.args[0]}"
             )
+        except RoleNotFoundError as exc:
+            return self._error(
+                request_id,
+                method,
+                "role_not_found",
+                "角色不存在，请刷新角色列表",
+                details={
+                    "role_id": exc.role_id,
+                    "detail": summarize_exception_for_user(exc),
+                },
+            )
         except KeyError as exc:
             return self._error(
                 request_id,
                 method,
-                (
-                    "role_not_found"
-                    if method.startswith("roles.")
-                    else "resource_not_found"
-                ),
+                "resource_not_found",
                 public_validation_message(
                     ValueError(str(exc.args[0]) if exc.args else ""),
                     fallback="找不到请求的内容，请刷新后重试",

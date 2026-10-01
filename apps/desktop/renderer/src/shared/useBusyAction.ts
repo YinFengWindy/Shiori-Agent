@@ -16,7 +16,7 @@ export function useBusyAction() {
       await action();
       return true;
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorMessage(failure, { includeDetail: true }));
       return false;
     } finally {
       setBusy(false);

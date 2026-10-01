@@ -1,3 +1,5 @@
+import { errorMessage } from "@shiori/plugin-sdk";
+
 /**
  * Reports a plugin-host failure somewhere a human will actually find it.
  *
@@ -23,7 +25,7 @@ export function reportBackgroundFailure(what: string, error: unknown): void {
   if (typeof window === "undefined") return;
   window.miraDesktop?.reportRendererDiagnostic?.({
     kind: "error",
-    message: `[plugin-host] ${what} 失败: ${normalized.message}`,
+    message: `[plugin-host] ${what} 失败: ${errorMessage(error, { includeDetail: true })}`,
     stack: normalized.stack,
   });
 }

@@ -1,3 +1,4 @@
+import { BridgeError } from "@shiori/plugin-sdk";
 import { useEffect, useRef } from "react";
 import { finalizeChatCancellation } from "../chat/chatStreamingState";
 import {
@@ -297,7 +298,7 @@ export function useDesktopSessionState({
       payload: {},
     });
     if (rolesRes.error) {
-      feedback.error(`角色列表加载失败：${rolesRes.error.message}`);
+      feedback.error(`角色列表加载失败：${errorMessage(rolesRes.error, { includeDetail: true })}`);
       return null;
     }
     const nextRoles = (rolesRes.payload.roles as RoleRecord[]) ?? [];
@@ -332,7 +333,7 @@ export function useDesktopSessionState({
       });
       if (res.error) {
         return {
-          error: res.error.message,
+          error: errorMessage(res.error, { includeDetail: true }),
           session: null,
           page: null,
         };
@@ -353,7 +354,7 @@ export function useDesktopSessionState({
       };
     } catch (error) {
       return {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error, { includeDetail: true }),
         session: null,
         page: null,
       };
@@ -625,7 +626,7 @@ export function useDesktopSessionState({
           current?.key === sessionKey ? previousSession : current,
         );
       }
-      reportSendFailure({ message: errorMessage(error) });
+      reportSendFailure({ message: errorMessage(error, { includeDetail: true }) });
       return false;
     }
   }
@@ -669,7 +670,7 @@ export function useDesktopSessionState({
       }
       return true;
     } catch (error) {
-      restoreFailedTurn({ message: errorMessage(error) });
+      restoreFailedTurn({ message: errorMessage(error, { includeDetail: true }) });
       return false;
     }
   }
@@ -684,7 +685,7 @@ export function useDesktopSessionState({
         method: "chat.cancel",
         payload: { session_key: sessionKey, turn_id: turnId },
       });
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new BridgeError(res.error.message, res.error.code, res.error.details);
       const status = String(res.payload.status ?? "");
       if (status !== "interrupted" && status !== "idle") {
         throw new Error(String(res.payload.message ?? "中止回复失败"));
@@ -712,7 +713,7 @@ export function useDesktopSessionState({
     } catch (error) {
       if (shouldSurfaceChatCancellationFailure(activeTurnIdsRef.current, sessionKey, turnId)) {
         clearSessionCancelling(sessionKey);
-        feedback.error(errorMessage(error));
+        feedback.error(errorMessage(error, { includeDetail: true }));
       }
       return false;
     }

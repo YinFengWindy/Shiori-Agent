@@ -1,3 +1,4 @@
+import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
 import { type BridgeEvent, type PluginBackgroundHandler, PluginBridgeError } from "@shiori/plugin-sdk";
 
 /** Owns renderer handlers independently of the client transport/session lifetime. */
@@ -22,7 +23,8 @@ export class PluginBackgroundMethods {
     let result: Record<string, unknown>;
     try { result = { result: await handler((event.payload.payload ?? {}) as Record<string, unknown>) }; }
     catch (error) {
-      result = { error: { code: error instanceof PluginBridgeError ? error.code : "plugin_handler_failed", message: error instanceof Error ? error.message : String(error) } };
+      const failure = errorFeedback(error, "插件后台执行失败");
+      result = { error: { code: error instanceof PluginBridgeError ? error.code : "plugin_handler_failed", message: failure.message, details: { detail: failure.detail } } };
     }
     if (isCurrent()) await reply({ ...result, request_id: event.payload.request_id });
   }

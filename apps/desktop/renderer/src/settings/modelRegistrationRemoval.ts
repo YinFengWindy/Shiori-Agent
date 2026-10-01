@@ -1,3 +1,4 @@
+import { BridgeError } from "@shiori/plugin-sdk";
 import type { ModelRegistrationFormData, PendingRoleModelUpdate } from "../../../src/bridge/shared";
 import type { RoleRecord } from "@shiori/plugin-sdk";
 
@@ -21,7 +22,7 @@ export async function planModelRegistrationRemoval(
   pendingUpdates: PendingRoleModelUpdate[] = [],
 ): Promise<ModelRegistrationRemovalPlan> {
   const response = await window.miraDesktop.invoke({ method: "roles.list", payload: {} });
-  if (response.error) throw new Error(response.error.message);
+  if (response.error) throw new BridgeError(response.error.message, response.error.code, response.error.details);
   const roles = Array.isArray(response.payload.roles) ? response.payload.roles as RoleRecord[] : [];
   const effectiveRoles = roles.map((role) => ({
     ...role,

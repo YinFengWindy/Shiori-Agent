@@ -149,8 +149,8 @@ export type StoryCreationInput = {
 
 /** Stable error exposed by the Story bridge client. */
 export class StoryBridgeError extends BridgeError {
-  constructor(message: string, code: string) {
-    super(message, code);
+  constructor(message: string, code: string, details?: Record<string, unknown>) {
+    super(message, code, details);
     this.name = "StoryBridgeError";
   }
 }

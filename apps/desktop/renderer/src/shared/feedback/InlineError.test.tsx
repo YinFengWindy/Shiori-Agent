@@ -115,3 +115,36 @@ it("keeps a failed RPC's safe summary visible and its scrubbed cause accessible"
     assert.doesNotMatch(view.container.textContent ?? "", /private-value/);
   } finally { await view.cleanup(); }
 });
+
+
+it("discloses the actionable cause forwarded by a QQ account RPC", async () => {
+  const { QQAccountDetail } = await import("../../../../../../plugins/qq/ui/index");
+  const { BridgeError } = await import("@shiori/plugin-sdk");
+  const { createFakeHostServices, createFakePluginClient } = await import("@shiori/plugin-sdk/testing");
+  const fake = createFakeHostServices();
+  const host: import("@shiori/plugin-sdk").PluginHostServices = {
+    ...fake.host, ui: { ...fake.host.ui, InlineError: (props) => <InlineError {...props} persona={false} /> },
+  };
+  const client = createFakePluginClient({ call: async <T,>(method: string): Promise<T> => {
+    if (method === "accounts.settings") return { managed_available: true } as T;
+    if (method === "accounts.begin") return { ref: "temporary" } as T;
+    if (method === "accounts.start") throw new BridgeError("本地服务处理失败，请查看详情", "internal_error", {
+      detail: "RuntimeError: 未找到官方 QQ，请检查安装目录 token=private-value",
+    });
+    if (method === "accounts.managed_status") return {
+      preparation: { stage: "ready", percent: 100, version: "v4" },
+      login: { phase: "stopped", qrcode: "", error: "" }, connection: "offline", error: "",
+    } as T;
+    return {} as T;
+  } });
+  const view = await mount(<QQAccountDetail account={null} roleId="mira" onChanged={() => undefined} host={host} client={client} />);
+  try {
+    await act(async () => { await Promise.resolve(); });
+    const alert = view.container.querySelector('[role="alert"]');
+    assert.match(alert?.textContent ?? "", /QQ 连接未完成/);
+    assert.doesNotMatch(alert?.textContent ?? "", /未找到官方 QQ|private-value/);
+    await act(async () => alert?.querySelector("button")?.click());
+    assert.match(alert?.textContent ?? "", /未找到官方 QQ，请检查安装目录/);
+    assert.doesNotMatch(alert?.textContent ?? "", /private-value/);
+  } finally { await view.cleanup(); }
+});

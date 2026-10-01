@@ -50,7 +50,7 @@ export function ModelsSettingsSection({
     try {
       setPendingRemoval(await planModelRegistrationRemoval(registration, draft.pendingRoleModelUpdates));
     } catch (error) {
-      feedback.error(`无法删除模型：${errorMessage(error)}`);
+      feedback.error(`无法删除模型：${errorMessage(error, { includeDetail: true })}`);
     }
   }
 

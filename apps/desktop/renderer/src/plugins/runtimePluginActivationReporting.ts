@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 import type { PluginBridgeClient } from "./pluginBridgeClient";
 
@@ -28,7 +29,7 @@ export function reportRuntimePluginActivation(
   void pluginBridge.reportActivation(entry.pluginId, kind, report).catch((transportError) => {
     window.miraDesktop?.reportRendererDiagnostic?.({
       kind: "error",
-      message: `插件 ${entry.pluginId} 的 ${kind} 激活状态上报失败: ${transportError instanceof Error ? transportError.message : String(transportError)}`,
+      message: `插件 ${entry.pluginId} 的 ${kind} 激活状态上报失败: ${errorMessage(transportError, { includeDetail: true })}`,
       details: { pluginId: entry.pluginId, event: `plugin-${kind}.activation-report-failed`, stage: "renderer" },
     });
   });
@@ -52,7 +53,7 @@ export function reportRuntimePluginRendererLoadFailure(
   kind: "ui" | "surface",
   error: unknown,
 ): void {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessage(error, { includeDetail: true });
   window.miraDesktop.reportRendererDiagnostic({
     kind: "error",
     message,

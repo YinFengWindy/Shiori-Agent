@@ -157,3 +157,13 @@ test("a predicate with keepValueOnError keeps the last value on failure and skip
     assert.equal(view.container.textContent, "second|");
   } finally { await view.cleanup(); }
 });
+
+test("read-only consumers retain a structured bridge cause for their shared error disclosure", async () => {
+  const { BridgeError } = await import("@shiori/plugin-sdk");
+  const probe = await mount(async () => { throw new BridgeError("本地服务处理失败", "internal_error", { detail: "phone history unavailable token=private-value" }); });
+  try {
+    assert.equal(probe.latest.error.split("\n")[0], "本地服务处理失败");
+    assert.match(probe.latest.error, /phone history unavailable/);
+    assert.doesNotMatch(probe.latest.error, /private-value/);
+  } finally { await probe.view.cleanup(); }
+});

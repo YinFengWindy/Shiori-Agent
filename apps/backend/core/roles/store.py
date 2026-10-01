@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.roles.errors import RoleNotFoundError
+
 from collections.abc import Sequence
 from dataclasses import replace
 import uuid
@@ -270,7 +272,7 @@ class RoleStore:
                 roles[index] = role
                 self._repository.save_roles(roles, plugin_data=extension_data)
                 return role
-        raise KeyError(f"角色不存在: {role_id}")
+        raise RoleNotFoundError(role_id)
 
     def delete_role(self, role_id: str, *, remove_assets: bool = True) -> bool:
         with self._lock:

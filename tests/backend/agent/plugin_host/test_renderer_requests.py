@@ -18,3 +18,24 @@ async def test_pending_requests_are_bounded_and_cancelled_by_either_owner():
     for request in pending:
         with pytest.raises(PluginRpcError):
             await request.future
+
+
+@pytest.mark.asyncio
+async def test_renderer_reply_preserves_structured_failure_details():
+    requests = RendererRequests()
+    request_id, request = requests.create("caller", "provider")
+    requests.reply(
+        request_id,
+        "provider",
+        {
+            "error": {
+                "code": "pet_sync_failed",
+                "message": "桌宠同步失败",
+                "details": {"detail": "missing asset"},
+            }
+        },
+    )
+    with pytest.raises(PluginRpcError) as failure:
+        await request.future
+    assert failure.value.code == "pet_sync_failed"
+    assert failure.value.details == {"detail": "missing asset"}

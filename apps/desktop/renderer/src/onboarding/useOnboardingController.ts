@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { useEffect, useRef, useState } from "react";
 import type { RoleRecord } from "@shiori/plugin-sdk";
 import type { useDesktopBridgeLifecycle } from "../app/useDesktopBridgeLifecycle";
@@ -24,7 +25,7 @@ export function useOnboardingController(
       if (!active) return;
       setSessionId(id);
       setDismissed(window.sessionStorage.getItem(onboardingSkipKey) === id);
-    }).catch((error: unknown) => { if (active) setError(error instanceof Error ? error.message : String(error)); });
+    }).catch((error: unknown) => { if (active) setError(errorMessage(error, { includeDetail: true })); });
     return () => { active = false; };
   }, []);
   useEffect(() => {
@@ -60,7 +61,7 @@ export function useOnboardingController(
       window.localStorage.setItem(onboardingStorageKey, JSON.stringify(completed));
       setProgress(completed);
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(errorMessage(error, { includeDetail: true }));
     } finally {
       pending.current = false;
       setEntering(false);
