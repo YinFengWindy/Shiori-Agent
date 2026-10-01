@@ -415,6 +415,9 @@ def _bind_memory_lifecycle_if_supported(
         MemoryLifecycleBindRequest(
             get_session=session_manager.get_or_create,
             commit_consolidation=session_manager.commit_consolidation,
+            retry_consumers=session_manager.retry_memory_consumers,
+            record_publication=session_manager.record_memory_publication,
+            record_recent_context=session_manager.record_recent_context,
             after_consolidation=_after_consolidation,
             group_environment=group_environment,
             runtime_roles=runtime_roles,

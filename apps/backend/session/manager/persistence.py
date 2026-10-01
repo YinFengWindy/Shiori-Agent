@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Any
 
 from .models import Session, message_thread_id
+from session.maintenance_progress import MaintenanceProgress
+from session.store.common import ContextScope
 
 
 class _PersistenceMixin:
@@ -196,14 +198,32 @@ class _PersistenceMixin:
                 }
             )
             rows.append(row)
+        meta = self._store.get_session_meta(session.key)
+        # A message rewrite cannot publish stale cached maintenance fields. Only
+        # explicitly clearing the conversation resets all derived progress.
+        last = int(meta["last_consolidated"]) if meta else session.last_consolidated
+        cursors: dict[ContextScope, int] | None = (
+            meta["context_cursors"] if meta else session.context_cursors
+        )
+        cleared_progress = None
+        if not rows:
+            last = 0
+            cursors = {scope: 0 for scope in cursors} if cursors else None
+            if meta and meta.get("maintenance_progress"):
+                previous = MaintenanceProgress.load(meta["maintenance_progress"])
+                cleared_progress = previous.invalidated()
         self._store.replace_session_messages(
             session.key,
             rows=rows,
             updated_at=session.updated_at.isoformat(),
-            last_consolidated=session.last_consolidated,
-            context_cursors=session.context_cursors,
+            last_consolidated=last,
+            context_cursors=cursors,
             next_seq=next_seq,
+            maintenance_progress=cleared_progress.dump() if cleared_progress else None,
         )
+        session.set_consolidation_cursors(last, cursors)
+        if cleared_progress is not None:
+            session.maintenance_progress = cleared_progress
         for message, row in zip(session.messages, rows):
             if row.get("media"):
                 message["media"] = row["media"]

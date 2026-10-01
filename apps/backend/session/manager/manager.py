@@ -46,13 +46,16 @@ class _ManagerCoreMixin:
 
     def get_or_create(self, key: str) -> Session:
         if key in self._cache:
-            return self._cache[key]
+            session = self._cache[key]
+            self.maintenance_progress(session)
+            return session
 
         session = self._load(key)
         if session is None:
             session = Session(key)
             self._ensure_session_meta(session)
         self._cache[key] = session
+        self.maintenance_progress(session)
         return session
 
     def peek_next_message_id(self, session_key: str) -> str:

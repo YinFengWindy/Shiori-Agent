@@ -2,7 +2,8 @@
 
 import asyncio
 
-from session.store.common import ContextScope
+from conversation.context_scope import ContextView
+from core.context_window import ContextWindowMaintenance
 
 from .assembly import _AssemblyMixin
 from .helpers import (
@@ -69,24 +70,25 @@ class AgentLoop(
             return
         self._markdown_memory.maintenance.request_background_consolidation(session_key)
 
-    async def ensure_memory_consolidation(
+    async def ensure_context_window(
         self,
         session_key: str,
         current_content: str = "",
-        scope: ContextScope | None = None,
+        view: ContextView | None = None,
         *,
         input_token_threshold: int,
     ) -> bool:
-        """Wait for token-triggered memory consolidation before a model request.
-
-        ``scope`` 是回合所在的上下文，预算按这类上下文估算；非角色会话为 None。
-        """
+        """Maintain the real model window after completing its memory prerequisite."""
         if self._markdown_memory is None:
             return False
-        return await self._markdown_memory.maintenance.ensure_consolidation(
+        maintenance = self._markdown_memory.maintenance
+        return await ContextWindowMaintenance(
+            self.session_manager, maintenance
+        ).ensure_budget(
             session_key,
             current_content,
-            scope,
+            view,
+            keep_count=self._context_keep_count,
             input_token_threshold=input_token_threshold,
         )
 

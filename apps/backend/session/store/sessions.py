@@ -41,7 +41,6 @@ class _SessionMixin:
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(key) DO UPDATE SET
                     updated_at = excluded.updated_at,
-                    last_consolidated = excluded.last_consolidated,
                     metadata = excluded.metadata
                 """,
                 (key, created_at, updated_at, int(last_consolidated), payload),
@@ -55,6 +54,7 @@ class _SessionMixin:
         last_consolidated: int,
         *,
         context_cursors: dict[ContextScope, int] | None = None,
+        commit: bool = True,
     ) -> None:
         """更新整理游标；给出 ``context_cursors`` 时同一事务写入按上下文的游标。"""
         now = datetime.now().astimezone().isoformat()
@@ -73,7 +73,8 @@ class _SessionMixin:
                 except Exception:
                     self._conn.rollback()
                     raise
-            self._conn.commit()
+            if commit:
+                self._conn.commit()
 
     def write_context_cursors(
         self, key: str, context_cursors: dict[ContextScope, int] | None
@@ -93,7 +94,7 @@ class _SessionMixin:
     def get_session_meta(self, key: str) -> dict[str, Any] | None:
         with self._lock:
             row = self._conn.execute(
-                "SELECT key, created_at, updated_at, last_consolidated, metadata, last_user_at, last_proactive_at, user_cursor, external_cursor FROM sessions WHERE key = ?",
+                "SELECT key, created_at, updated_at, last_consolidated, metadata, last_user_at, last_proactive_at, user_cursor, external_cursor, maintenance_progress FROM sessions WHERE key = ?",
                 (key,),
             ).fetchone()
         if row is None:
@@ -107,7 +108,24 @@ class _SessionMixin:
             "last_user_at": row["last_user_at"],
             "last_proactive_at": row["last_proactive_at"],
             "context_cursors": row_context_cursors(row),
+            "maintenance_progress": row["maintenance_progress"],
         }
+
+    def write_maintenance_progress(
+        self, key: str, payload: str, *, commit: bool = True
+    ) -> None:
+        """Write maintenance-owned state; ordinary message saves never touch it."""
+        if commit:
+            with self.transaction():
+                self.write_maintenance_progress(key, payload, commit=False)
+            return
+        with self._lock:
+            result = self._conn.execute(
+                "UPDATE sessions SET maintenance_progress = ? WHERE key = ?",
+                (payload, key),
+            )
+            if result.rowcount == 0:
+                raise ValueError(f"session does not exist: {key}")
 
     def list_sessions(self) -> list[dict[str, Any]]:
         with self._lock:

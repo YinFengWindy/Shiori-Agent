@@ -715,7 +715,7 @@ async def test_default_memory_engine_consolidates_ready_session_from_lifecycle(
     await event_bus.aclose()
 
 
-async def test_markdown_consolidation_advances_window_when_consumer_fails(
+async def test_markdown_consolidation_commits_memory_when_consumer_fails(
     tmp_path: Path,
 ):
     event_bus = EventBus()
@@ -748,6 +748,9 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(
         MemoryLifecycleBindRequest(
             get_session=manager.get_or_create,
             commit_consolidation=manager.commit_consolidation,
+            retry_consumers=manager.retry_memory_consumers,
+            record_publication=manager.record_memory_publication,
+            record_recent_context=manager.record_recent_context,
             group_environment=cast(Any, object()),
             runtime_roles=RoleStore(tmp_path),
         )
@@ -772,8 +775,10 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(
     )
     maintenance._worker.prepare_consolidation = AsyncMock(return_value=draft)
 
-    with pytest.raises(RuntimeError, match="vector write failed"):
-        await maintenance.consolidate(ConsolidateRequest(session=session))
+    result = await maintenance.consolidate(ConsolidateRequest(session=session))
+    assert result.trace["memory_committed"] is True
+    assert result.trace["step"] == "consumers"
+    assert "vector write failed" in str(result.trace["error"])
 
     assert session.context_cursors == {"user": 6, "external": 0}
     assert "用户测试记忆" in (
@@ -870,6 +875,9 @@ async def test_markdown_consolidation_runs_post_consolidation_hook(tmp_path: Pat
         MemoryLifecycleBindRequest(
             get_session=lambda _key: session,
             commit_consolidation=manager.commit_consolidation,
+            retry_consumers=manager.retry_memory_consumers,
+            record_publication=manager.record_memory_publication,
+            record_recent_context=manager.record_recent_context,
             after_consolidation=after_consolidation,
             group_environment=cast(Any, object()),
             runtime_roles=RoleStore(tmp_path),
@@ -882,7 +890,7 @@ async def test_markdown_consolidation_runs_post_consolidation_hook(tmp_path: Pat
     after_consolidation.assert_awaited_once_with(session)
 
 
-async def test_markdown_consolidation_ignores_post_consolidation_hook_failure(
+async def test_markdown_consolidation_reports_committed_post_consumer_failure(
     tmp_path: Path,
 ):
     session = SimpleNamespace(
@@ -930,6 +938,9 @@ async def test_markdown_consolidation_ignores_post_consolidation_hook_failure(
         MemoryLifecycleBindRequest(
             get_session=lambda _key: session,
             commit_consolidation=manager.commit_consolidation,
+            retry_consumers=manager.retry_memory_consumers,
+            record_publication=manager.record_memory_publication,
+            record_recent_context=manager.record_recent_context,
             after_consolidation=_fail,
             group_environment=cast(Any, object()),
             runtime_roles=RoleStore(tmp_path),
@@ -938,7 +949,9 @@ async def test_markdown_consolidation_ignores_post_consolidation_hook_failure(
 
     result = await maintenance.consolidate(ConsolidateRequest(session=session))
 
-    assert result.trace["mode"] == "markdown"
+    assert result.trace["mode"] == "failed"
+    assert result.trace["memory_committed"] is True
+    assert result.trace["step"] == "consumers"
     assert session.last_consolidated == 6
 
 

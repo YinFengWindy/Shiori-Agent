@@ -48,6 +48,77 @@ def test_memory_lifecycle_binds_the_session_owner_commit_operation(tmp_path: Pat
     assert maintenance.listening_trigger.on_heard in listeners
 
 
+@pytest.mark.asyncio
+async def test_real_relationship_failure_keeps_window_pending_until_consumer_retry(
+    memory_harness,
+):
+    from conversation.context_scope import history_start, user_context_view
+    from core.context_window import ContextWindowMaintenance
+    from core.roles.relationship_runtime import (
+        RelationshipSnapshotOptimizer,
+        RoleRelationshipRuntimeService,
+    )
+
+    h = memory_harness
+    roles = RoleStore(h.manager.workspace)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="You are Mira.")
+    runtime = RoleRelationshipRuntimeService(
+        h.manager.workspace,
+        role_store=roles,
+        session_manager=h.manager,
+        presence=None,
+    )
+    provider = SimpleNamespace(
+        chat=AsyncMock(side_effect=RuntimeError("relationship provider unavailable"))
+    )
+    optimizer = RelationshipSnapshotOptimizer(
+        runtime, provider=cast(Any, provider), model="controlled"
+    )
+    _bind_memory_lifecycle_if_supported(
+        markdown=h.maintenance,
+        session_manager=h.manager,
+        relationship_runtime=runtime,
+        relationship_optimizer=optimizer,
+        group_environment=GroupEnvironment(
+            h.manager.workspace, h.manager.conversation_store
+        ),
+        runtime_roles=roles,
+    )
+    session = h.manager.get_or_create("role:mira")
+    session.add_message("user", "tea")
+    session.add_message("assistant", "yes")
+    h.manager.save(session)
+    view = user_context_view(h.manager.workspace, "mira")
+    prepared = await h.manager.prepare_window(session.key, view, keep_count=0)
+    assert prepared is not None
+    window = ContextWindowMaintenance(h.manager, h.maintenance)
+    failed = await window.apply(prepared)
+    assert not failed.committed and failed.failure_stage == "consumers"
+    assert failed.memory_committed
+    assert history_start(session, view) == 0
+    assert session.maintenance_progress.memory_version == 1
+    assert session.maintenance_progress.relationship_version == 0
+    assert session.maintenance_progress.pending_consumers["published"] is True
+    assert (
+        runtime.read_snapshot("mira")["last_error"]
+        == "relationship provider unavailable"
+    )
+    extraction_calls = len(h.prompts)
+
+    provider.chat.side_effect = None
+    provider.chat.return_value = SimpleNamespace(
+        content='{"role_self_view":"我想继续和你聊茶。","relation_tags":["亲近"],"relation_state":{"closeness":0.7},"behavior_profile":{}}'
+    )
+    assert (await window.apply(prepared)).committed
+    assert len(h.prompts) == extraction_calls and len(h.events) == 1
+    assert provider.chat.await_count == 2
+    assert session.maintenance_progress.relationship_version == 1
+    assert not session.maintenance_progress.pending_consumers
+    assert runtime.read_snapshot("mira")["last_error"] == ""
+    assert session.metadata["relationship_snapshot"]["relation_tags"] == ["亲近"]
+    assert history_start(session, view) == 2
+
+
 def test_resolve_plugin_dirs_uses_repository_root_in_dev(tmp_path: Path) -> None:
     dirs = _resolve_plugin_dirs(tmp_path)
 

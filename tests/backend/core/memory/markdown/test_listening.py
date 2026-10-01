@@ -94,6 +94,9 @@ def _setup(tmp_path: Path):
         MemoryLifecycleBindRequest(
             get_session=manager.get_or_create,
             commit_consolidation=manager.commit_consolidation,
+            retry_consumers=manager.retry_memory_consumers,
+            record_publication=manager.record_memory_publication,
+            record_recent_context=manager.record_recent_context,
             group_environment=GroupEnvironment(tmp_path, store),
             runtime_roles=RoleStore(tmp_path),
         )

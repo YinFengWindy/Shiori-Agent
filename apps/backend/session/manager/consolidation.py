@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from session.store.common import ContextScope
+from session.maintenance_progress import MaintenanceProgress, message_prefix_stamp
 
 from .manager import _ManagerCoreMixin
 from .models import effective_context_cursors
@@ -27,6 +28,12 @@ class ConsolidationCommitRequest:
     last_consolidated: int | None = None
     expected_context_cursors: Mapping[ContextScope, int] = field(default_factory=dict)
     context_cursors: Mapping[ContextScope, int] = field(default_factory=dict)
+
+    expected_ownership: str | None = None
+    expected_generation: int | None = None
+    consumer_payload: dict[str, Any] = field(default_factory=dict)
+    updates_recent_context: bool = False
+    expected_prefix_stamp: str = ""
 
     def __post_init__(self) -> None:
         single = (self.expected_last_consolidated, self.last_consolidated)
@@ -68,6 +75,20 @@ class _ConsolidationMixin(_ManagerCoreMixin):
         ):
             raise ValueError("整理游标超出准备的消息范围")
         async with self._lock(request.session_key):
+            session = self.get_or_create(request.session_key)
+            progress = self.maintenance_progress(session, allow_invalidation=True)
+            from conversation.context_scope import role_session_user_threads
+            from session.maintenance_progress import ownership_key
+
+            live_ownership = ownership_key(
+                role_session_user_threads(self.workspace, request.session_key)
+            )
+            if request.expected_ownership is not None and (
+                request.expected_ownership != live_ownership
+                or request.expected_ownership != progress.ownership
+                or request.expected_generation != progress.generation
+            ):
+                return False
             messages = self._store.fetch_session_messages(request.session_key)
             meta = self._store.get_session_meta(request.session_key)
             expected = request.expected_message_ids
@@ -77,45 +98,79 @@ class _ConsolidationMixin(_ManagerCoreMixin):
                 or not all(expected)
                 or tuple(str(message["id"]) for message in messages[: len(expected)])
                 != expected
+                or (
+                    request.expected_prefix_stamp
+                    and message_prefix_stamp(messages[: len(expected)])
+                    != request.expected_prefix_stamp
+                )
             ):
                 return False
             next_cursors = _next_cursors(request, meta)
             if next_cursors is None:
                 return False
             last_consolidated, context_cursors = next_cursors
+            # Prepare a private next state. A storage failure must not publish a
+            # cursor/version change into the already shared Session cache.
+            progress = MaintenanceProgress.load(progress.dump())
 
             async def finish_commit() -> None:
                 await write_memory()
-                self._store.update_last_consolidated(
-                    request.session_key,
-                    last_consolidated,
-                    context_cursors=context_cursors,
-                )
+                if (
+                    ownership_key(
+                        role_session_user_threads(self.workspace, request.session_key)
+                    )
+                    != live_ownership
+                ):
+                    raise RuntimeError("记忆写入期间身份归属已变化，未推进记忆进度")
+                progress.memory_version += 1
+                if request.updates_recent_context:
+                    progress.recent_context_version += 1
+                    progress.recent_context_source_ids = list(
+                        request.expected_message_ids
+                    )
+                progress.pending_consumers = request.consumer_payload
+                with self._store.transaction():
+                    self._store.write_maintenance_progress(
+                        request.session_key, progress.dump(), commit=False
+                    )
+                    self._store.update_last_consolidated(
+                        request.session_key,
+                        last_consolidated,
+                        context_cursors=context_cursors,
+                        commit=False,
+                    )
                 session = self._cache.get(request.session_key)
                 if session is not None:
                     session.set_consolidation_cursors(
                         last_consolidated, context_cursors
                     )
-                if publish_committed is not None:
-                    await publish_committed()
+                    session.maintenance_progress = progress
+                await self._complete_memory_consumers(
+                    request.session_key,
+                    progress,
+                    publish_committed,
+                )
 
-            # Cancelling an asyncio.to_thread await does not stop its underlying write.
-            # Shield the whole commit and defer even repeated cancellation requests.
-            pending = asyncio.gather(finish_commit(), return_exceptions=True)
-            cancelled: asyncio.CancelledError | None = None
-            while not pending.done():
-                try:
-                    await asyncio.shield(pending)
-                except asyncio.CancelledError as exc:
-                    cancelled = exc
-            outcome = pending.result()[0]
-            if cancelled is not None:
-                if isinstance(outcome, BaseException):
-                    raise cancelled from outcome
-                raise cancelled
-            if isinstance(outcome, BaseException):
-                raise outcome
+            await _finish_shielded(finish_commit())
             return True
+
+
+async def _finish_shielded(operation: Awaitable[None]) -> None:
+    """Defer repeated cancellation until started writes and consumers settle."""
+    pending = asyncio.gather(operation, return_exceptions=True)
+    cancelled: asyncio.CancelledError | None = None
+    while not pending.done():
+        try:
+            await asyncio.shield(pending)
+        except asyncio.CancelledError as exc:
+            cancelled = exc
+    outcome = pending.result()[0]
+    if cancelled is not None:
+        if isinstance(outcome, BaseException):
+            raise cancelled from outcome
+        raise cancelled
+    if isinstance(outcome, BaseException):
+        raise outcome
 
 
 def _next_cursors(

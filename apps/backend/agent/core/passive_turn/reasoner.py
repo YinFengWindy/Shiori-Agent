@@ -18,10 +18,10 @@ from .helpers import (
     build_turn_injection_prompt,
     turn_tool_names,
     extract_model_facing_turn,
-    get_history_since_consolidated,
-    get_history_tool_names_since_consolidated,
+    get_window_history,
+    get_window_preloaded_tools,
     get_session_metadata,
-    get_window_sources_since_consolidated,
+    get_window_sources,
 )
 from agent.prompting.usage_anchor import turn_usage_context
 from agent.prompting.listening_block import HeardLine, turn_heard
@@ -63,7 +63,6 @@ if TYPE_CHECKING:
     from agent.looping.ports import LLMConfig, LLMServices
     from agent.tool_hooks.base import ToolHook
     from agent.tools.registry import ToolRegistry
-    from session.store.common import ContextScope
     from conversation.context_scope import ContextView
     from session.manager import SessionManager
 
@@ -320,14 +319,12 @@ class DefaultReasoner(
         source_history = (
             base_history
             if base_history is not None
-            else get_history_since_consolidated(
-                session, self._memory_window, context_view
-            )
+            else get_window_history(session, self._memory_window, context_view)
         )
         total_history = len(source_history)
         # 与历史同一窗口里非用户本人消息的来源，加上本群旁听块里的（#539），
         # 外部回合据此注入成员档案（#498）。
-        window_sources = get_window_sources_since_consolidated(
+        window_sources = get_window_sources(
             session,
             self._memory_window,
             context_view,
@@ -336,15 +333,13 @@ class DefaultReasoner(
         preloaded: set[str] | None = None
         preloaded_order: list[str] = []
         if self._tool_search_enabled:
-            # 历史窗口里用过或解锁过的工具继续可见，直到随记忆整理移出窗口。
-            always_on = self._tools.get_always_on_names()
-            preloaded_order = [
-                name
-                for name in get_history_tool_names_since_consolidated(
-                    session, self._memory_window, context_view
-                )
-                if name not in always_on and self._tools.has_tool(name)
-            ]
+            # 历史窗口里用过或解锁过的工具继续可见，直到窗口维护移出原文。
+            preloaded_order = get_window_preloaded_tools(
+                session,
+                self._memory_window,
+                context_view,
+                self._tools,
+            )
             preloaded = set(preloaded_order)
             logger.info(
                 "[tool_search] history preloaded=%s",
@@ -456,10 +451,10 @@ class DefaultReasoner(
                 if budget_repaired:
                     break
                 ensure = cast(
-                    "Callable[[str, str, ContextScope | None], Awaitable[bool]]",
+                    "Callable[..., Awaitable[bool]]",
                     getattr(
                         self._memory_consolidator,
-                        "ensure_memory_consolidation",
+                        "ensure_context_window",
                         None,
                     ),
                 )
@@ -467,7 +462,7 @@ class DefaultReasoner(
                 if not callable(ensure) or not await ensure(
                     session.key,
                     msg.content,
-                    context_view.scope if context_view is not None else None,
+                    context_view,
                     **(
                         {"input_token_threshold": budget.target_tokens}
                         if budget is not None
@@ -478,7 +473,21 @@ class DefaultReasoner(
                         "记忆整理没有可处理的历史或未产生进展，已停止发送超限上下文。"
                     )
                 budget_repaired = True
-                source_history = get_history_since_consolidated(
+                window_sources = get_window_sources(
+                    session,
+                    self._memory_window,
+                    context_view,
+                    self._heard_for_turn(context_view),
+                )
+                if self._tool_search_enabled:
+                    preloaded_order = get_window_preloaded_tools(
+                        session,
+                        self._memory_window,
+                        context_view,
+                        self._tools,
+                    )
+                    preloaded = set(preloaded_order)
+                source_history = get_window_history(
                     session, self._memory_window, context_view
                 )
                 history_for_attempt = self._slice_history(

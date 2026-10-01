@@ -25,6 +25,9 @@ from .projection import _ProjectionMixin
 from .role_sessions import _RoleSessionsMixin
 from .undo_result import UndoSessionResult
 from .undo import _UndoMixin
+from .progress import _ProgressMixin
+from .consumers import _MemoryConsumersMixin
+from .window import _WindowMixin
 from .consolidation import ConsolidationCommitRequest, _ConsolidationMixin
 
 Session.__module__ = __name__
@@ -32,6 +35,9 @@ Session.__module__ = __name__
 
 class SessionManager(
     _UndoMixin,
+    _ProgressMixin,
+    _MemoryConsumersMixin,
+    _WindowMixin,
     _ConsolidationMixin,
     _RoleSessionsMixin,
     _PersistenceMixin,

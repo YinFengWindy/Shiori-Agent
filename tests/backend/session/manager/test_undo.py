@@ -39,6 +39,8 @@ def _saved_manager(
 def test_undo_deletes_context_user_assistant_three_rows(tmp_path: Path):
     manager = _saved_manager(tmp_path, turns=2)
     session = manager.get_or_create("cli:1")
+    manager._store.update_last_consolidated(session.key, 6)
+
     session.last_consolidated = 6
     manager.save(session)
 
@@ -54,6 +56,8 @@ def test_undo_deletes_context_user_assistant_three_rows(tmp_path: Path):
 def test_undo_uses_rollback_source_ids_for_consolidated_window_start(tmp_path: Path):
     manager = _saved_manager(tmp_path, turns=2)
     session = manager.get_or_create("cli:1")
+    manager._store.update_last_consolidated(session.key, 6)
+
     session.last_consolidated = 6
     manager.save(session)
 
@@ -79,6 +83,8 @@ def test_undo_uses_rollback_source_ids_for_consolidated_window_start(tmp_path: P
 def test_undo_keeps_cursor_when_target_is_after_consolidated_prefix(tmp_path: Path):
     manager = _saved_manager(tmp_path, turns=3)
     session = manager.get_or_create("cli:1")
+    manager._store.update_last_consolidated(session.key, 6)
+
     session.last_consolidated = 6
     manager.save(session)
 
@@ -161,6 +167,8 @@ async def test_concurrent_append_and_undo_use_committed_turn_and_keep_shared_cac
 ):
     manager = _saved_manager(tmp_path, turns=1)
     session = manager.get_or_create("cli:1")
+    manager._store.update_last_consolidated(session.key, 3)
+
     session.last_consolidated = 3
     manager.save(session)
     # Match after_reasoning: mutate the shared Session, then queue append_messages.
@@ -208,6 +216,8 @@ async def test_concurrent_append_and_undo_use_committed_turn_and_keep_shared_cac
 async def test_undo_resolver_failure_preserves_cache_cursor_and_disk(tmp_path: Path):
     manager = _saved_manager(tmp_path, turns=1)
     session = manager.get_or_create("cli:1")
+    manager._store.update_last_consolidated(session.key, 3)
+
     session.last_consolidated = 3
     manager.save(session)
     before = list(session.messages)
@@ -267,6 +277,8 @@ async def test_undo_projection_failure_rolls_back_messages_cursor_all_states_and
     session = manager.get_or_create("role:mira")
     session.add_message("user", "question", thread_id=thread.id)
     session.add_message("assistant", "answer", thread_id=thread.id)
+    manager._store.update_last_consolidated(session.key, 2)
+
     session.last_consolidated = 2
     manager.save(session)
     before_messages = list(session.messages)

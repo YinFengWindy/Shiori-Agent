@@ -92,7 +92,8 @@ class RelationshipSnapshotOptimizer:
     def is_running(self) -> bool:
         return self._lock.locked()
 
-    async def optimize(self, *, role_id: str) -> dict[str, Any] | None:
+    async def optimize(self, *, role_id: str) -> dict[str, Any]:
+        """Generate a snapshot, recording and propagating failures to the caller."""
         clean_role_id = str(role_id or "").strip()
         if not clean_role_id:
             raise ValueError("role_id required for relationship optimizer")
@@ -123,7 +124,7 @@ class RelationshipSnapshotOptimizer:
                     error=str(exc),
                     attempted_at=now,
                 )
-                return None
+                raise
 
     async def _generate(
         self,

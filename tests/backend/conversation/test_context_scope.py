@@ -159,9 +159,14 @@ def test_each_context_reads_history_from_its_own_cursor(tmp_path: Path) -> None:
         view.scope: history(view, history_start(session, view))
         for view in (user, external)
     } == before
-    assert history_start(session, None) == 2
+    assert history_start(Session("cli:legacy", last_consolidated=2), None) == 2
 
     session.context_cursors = {"user": 0, "external": 5}
+    # Memory advances do not change the already migrated model window.
+    assert history(user, history_start(session, user)) == before["user"]
+    assert history(external, history_start(session, external)) == before["external"]
+    # A separate pre-migration record inherits its own original category cuts.
+    session.maintenance_progress = None
     assert history(user, history_start(session, user)) == ["m0", "m2", "m4"]
     assert history(external, history_start(session, external)) == ["m5"]
-    assert history_start(session, None) == 2
+    assert history_start(Session("cli:legacy", last_consolidated=2), None) == 2
