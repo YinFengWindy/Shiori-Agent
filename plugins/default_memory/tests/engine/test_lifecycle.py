@@ -180,7 +180,11 @@ async def test_failed_parallel_consumer_settles_writes_before_undo_and_error(
         if cancel_count:
             assert isinstance(outcome, asyncio.CancelledError)
         else:
-            assert outcome is memorizer.error
+            # Committed-memory failures wrap the original consumer error. Keep
+            # this boundary assertion without introducing another host import.
+            assert isinstance(outcome, RuntimeError)
+            assert type(outcome).__name__ == "MemoryConsumersFailedError"
+            assert outcome.__cause__ is memorizer.error
         assert isinstance(cleanup, dict)
         assert cleanup["affected_ids"] == memorizer.item_ids
         assert memorizer.finished.is_set()
