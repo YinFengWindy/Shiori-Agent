@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { act, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { changeInputValue, mountTestComponent } from "@shiori/plugin-sdk/testing";
 import { createEmptyRoleForm } from "../app/appState";
 import type { RoleRecord } from "@shiori/plugin-sdk";
 import type { RoleFormState } from "../shared/types";
@@ -8,8 +10,8 @@ import { RoleDetailPage } from "./RoleDetailPage";
 
 type PageProps = Parameters<typeof RoleDetailPage>[0];
 
-function renderPage(overrides: Partial<PageProps> = {}) {
-  return renderToStaticMarkup(
+function pageElement(overrides: Partial<PageProps> = {}) {
+  return (
     <RoleDetailPage
       activeRole={null}
       activeRoleId="role-1"
@@ -28,8 +30,23 @@ function renderPage(overrides: Partial<PageProps> = {}) {
       onResetRoleForm={() => undefined}
       onSaveRole={() => undefined}
       {...overrides}
-    />,
+    />
   );
+}
+
+function renderPage(overrides: Partial<PageProps> = {}) {
+  return renderToStaticMarkup(pageElement(overrides));
+}
+
+function DraftDetailPage({ onSave }: { onSave: (form: RoleFormState) => void }) {
+  const [form, setForm] = useState(profileForm);
+  return pageElement({
+    roleForm: form,
+    roleFormDirty: form !== profileForm,
+    onUpdateRoleForm: setForm,
+    onResetRoleForm: () => setForm(profileForm),
+    onSaveRole: () => onSave(form),
+  });
 }
 
 const profileForm: RoleFormState = {
@@ -66,7 +83,7 @@ describe("RoleDetailPage", () => {
     assert.doesNotMatch(markup, /渠道绑定/);
     assert.match(markup, /aria-current="page"[^>]*>.*资料/);
     assert.match(markup, /角色设定/);
-    assert.match(markup, /性格与规则/);
+    assert.match(markup, /性格/);
     assert.match(markup, /执行规则/);
     assert.doesNotMatch(markup, /data-testid="role-channel-config"/);
   });
@@ -79,6 +96,33 @@ describe("RoleDetailPage", () => {
     const dirty = renderPage({ roleFormDirty: true });
     assert.doesNotMatch(dirty, /data-testid="save-role-button"[^>]*disabled=""/);
     assert.doesNotMatch(dirty, /data-testid="reset-role-button"[^>]*disabled=""/);
+  });
+
+  it("saves the folded draft through the existing toolbar and resets all profile fields", async () => {
+    let saved: RoleFormState | undefined;
+    const view = await mountTestComponent(<DraftDetailPage onSave={(form) => { saved = form; }} />);
+    const button = (label: string) => {
+      const found = Array.from(view.container.querySelectorAll("button")).find((item) => item.textContent === label);
+      assert.ok(found, `Missing button: ${label}`);
+      return found;
+    };
+    try {
+      await act(async () => button("执行规则").click());
+      const editor = view.container.querySelector<HTMLTextAreaElement>("textarea[aria-label='执行规则']");
+      assert.ok(editor);
+      await changeInputValue(editor, "新的执行规则");
+      await act(async () => button("性格").click());
+      await act(async () => button("保存").click());
+      assert.ok(saved);
+      assert.equal(saved.systemPrompt, "新的执行规则");
+      assert.equal(saved.profile?.character?.behavior_rules, "新的执行规则");
+      assert.equal(saved.profile?.character?.profile, profileForm.profile?.character?.profile);
+
+      await act(async () => button("重置").click());
+      assert.equal(button("保存").disabled, true);
+      await act(async () => button("执行规则").click());
+      assert.equal(view.container.querySelector<HTMLTextAreaElement>("textarea[aria-label='执行规则']")?.value, "Keep focus.");
+    } finally { await view.cleanup(); }
   });
 
   it("keeps save unavailable while the bridge is down, and shows 保存中 while saving", () => {
