@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from agent.plugin_host.kv import PluginKVStore
+from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
+from bus.events import InboundMessage
+from bus.queue import MessageBus
+from infra.channels.base import AttachmentStore
+from infra.channels.contract import ChannelContext
 from plugins.qqbot.backend.account_channel import QQBotAccountsChannel
 from plugins.qqbot.backend.accounts import QQBotAccountStore
 from plugins.qqbot.backend.channel import QQBotChannel
@@ -64,6 +72,97 @@ class _Push:
 
     def unregister_channel(self, channel, **kwargs):
         pass
+
+
+@pytest.fixture
+def connected_gateways(monkeypatch: pytest.MonkeyPatch) -> dict[str, QQBotChannel]:
+    """Expose fake gateways while retaining each child's real lifecycle and intake."""
+    gateways: dict[str, QQBotChannel] = {}
+
+    async def gateway(self: QQBotChannel) -> None:
+        gateways[self._app_id] = self
+        self._report_status("online")
+
+    monkeypatch.setattr(QQBotChannel, "_gateway_loop", gateway)
+    monkeypatch.setattr(
+        QQBotChannel, "_get_access_token", AsyncMock(return_value="test-token")
+    )
+    monkeypatch.setattr(
+        QQBotChannel,
+        "_api_request",
+        AsyncMock(return_value={"url": "wss://gateway.invalid"}),
+    )
+    return gateways
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("initially_paused", [True, False], ids=["paused", "running"])
+@pytest.mark.parametrize("reconnect", [False, True], ids=["new", "reconnect"])
+async def test_connected_applications_inherit_current_intake_state(
+    tmp_path: Path,
+    connected_gateways: dict[str, QQBotChannel],
+    initially_paused: bool,
+    reconnect: bool,
+) -> None:
+    store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
+    account = {"app_id": "200", "client_secret": "secret", "role_id": "mira"}
+    if reconnect:
+        store.save(account)
+    manager = QQBotAccountsChannel(SimpleNamespace(accounts=_Accounts()), store, ())
+    bus = MessageBus()
+    runtime = ChannelContext(
+        bus=bus,
+        session_manager=MagicMock(),
+        event_bus=EventBus(),
+        push_tool=MessagePushTool(),
+        attachment_store=AttachmentStore(tmp_path / "attachments"),
+        http_resources=MagicMock(),
+        interrupt_controller=None,
+        bot_commands=[],
+        log=logging.getLogger("test.qqbot.accounts"),
+        intake_paused=initially_paused,
+    )
+    await manager.start(runtime)
+    try:
+        # A settings handover changes admission after the start context was saved.
+        if initially_paused:
+            manager.resume_intake()
+        else:
+            manager.pause_intake()
+        await manager.save_and_connect(account)
+        channel = connected_gateways["200"]
+        await channel._handle_dispatch(
+            "C2C_MESSAGE_CREATE",
+            {"id": "first", "author": {"user_openid": "openid"}, "content": "hello"},
+        )
+        assert bus.inbound_size == (1 if initially_paused else 0)
+        # Composite state must not mutate the context shared by the host.
+        assert runtime.intake_paused is initially_paused
+        if not initially_paused:
+            manager.resume_intake()
+        message = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
+        assert isinstance(message, InboundMessage)
+        assert (message.sender, message.chat_id, message.content) == (
+            "openid",
+            "c2c:200:openid",
+            "hello",
+        )
+
+        # The connected child also follows later pauses and replays queued input.
+        manager.pause_intake()
+        await channel._handle_dispatch(
+            "C2C_MESSAGE_CREATE",
+            {"id": "second", "author": {"user_openid": "openid"}, "content": "queued"},
+        )
+        assert bus.inbound_size == 0
+        manager.resume_intake()
+        replayed = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
+        assert isinstance(replayed, InboundMessage)
+        assert replayed.content == "queued"
+        assert replayed.metadata["account_id"] == "200"
+        assert bus.inbound_size == 0
+    finally:
+        await manager.stop()
 
 
 @pytest.mark.asyncio
