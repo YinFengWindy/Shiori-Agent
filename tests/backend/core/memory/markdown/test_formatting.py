@@ -98,7 +98,7 @@ def test_select_consolidation_window_archive_all_takes_whole_history():
     assert window and window.consolidate_up_to == 4
 
 
-def test_select_consolidation_window_uses_token_pressure_without_message_count():
+def test_select_consolidation_window_uses_required_range_without_message_threshold():
     session = SimpleNamespace(
         key="telegram:tokens",
         last_consolidated=0,
@@ -113,7 +113,7 @@ def test_select_consolidation_window_uses_token_pressure_without_message_count()
         keep_count=1,
         consolidation_min_new_messages=99,
         archive_all=False,
-        input_budget_exceeded=True,
+        through_index=2,
     )
 
     assert window is not None
@@ -132,7 +132,7 @@ def test_select_consolidation_window_archives_small_session_when_only_turn_is_hu
         keep_count=20,
         consolidation_min_new_messages=10,
         archive_all=False,
-        input_budget_exceeded=True,
+        through_index=1,
     )
 
     assert window is not None

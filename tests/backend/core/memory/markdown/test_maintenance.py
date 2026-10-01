@@ -2,47 +2,74 @@
 
 import asyncio
 import threading
-from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
-import agent.looping.core as loop_core
 import pytest
-from agent.core.passive_turn.helpers import get_history_since_consolidated
-from agent.looping.core import AgentLoop
-from agent.looping.ports import SessionServices
+
 from agent.provider import LLMProvider
+from agent.looping.core import AgentLoop
+import agent.looping.core as loop_core
+from agent.looping.ports import SessionServices
 from bus.event_bus import EventBus
 from bus.events_lifecycle import TurnCommitted
+from agent.core.passive_turn.helpers import get_window_history
 from conversation.context_scope import turn_context_view, user_context_view
 from conversation.service import desktop_thread_id, network_thread_id
 from core.memory.events import ConsolidationCommitted
+from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
+from core.roles import RoleStore
+from core.context_window import ContextWindowMaintenance
 from core.memory.group_environment import (
     SUMMARY_LABEL_KEY,
     SUMMARY_UPDATED_AT_KEY,
     GroupEnvironment,
 )
+from collections.abc import Callable
 from core.memory.markdown import (
     ConsolidateRequest,
     MarkdownMemoryMaintenance,
-    MarkdownMemoryRuntime,
     MarkdownMemoryStore,
+    MarkdownMemoryRuntime,
     MemoryLifecycleBindRequest,
 )
 from core.memory.markdown.contracts import ConsolidationSegments, _ConsolidationDraft
 from core.memory.markdown.external_segment import MEMBER_BATCH_SIZE
 from core.memory.markdown.formatting import (
-    _select_consolidation_window,
     build_consolidation_source_ref,
+    _select_consolidation_window,
 )
-from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
-from core.roles import RoleStore
+from tests.backend.core.memory.markdown.memory_double import CommittedMemory
+from plugins.plugin_undo.backend.plugin import PluginUndo
 from session.manager import Session, SessionManager
 from session.manager.models import consolidation_cursor
 
-from plugins.plugin_undo.backend.plugin import PluginUndo
-from tests.backend.core.memory.markdown.memory_double import CommittedMemory
+
+@pytest.mark.asyncio
+async def test_recent_context_has_its_own_source_and_update_version(memory_harness):
+    from core.memory.markdown import RefreshRecentTurnsRequest
+    from conversation.context_scope import history_start
+
+    h = memory_harness
+    session = h.manager.get_or_create("role:mira")
+    session.add_message("user", "tea")
+    session.add_message("assistant", "yes")
+    h.manager.save(session)
+    await h.maintenance.refresh_recent_turns(RefreshRecentTurnsRequest(session))
+    progress = session.maintenance_progress
+    assert progress.recent_context_version == 1
+    assert progress.recent_context_source_ids == [
+        message["id"] for message in session.messages
+    ]
+    assert progress.memory_version == progress.relationship_version == 0
+    assert history_start(session, user_context_view(h.manager.workspace, "mira")) == 0
+    assert (
+        await h.maintenance.consolidate(ConsolidateRequest(session, force=True))
+    ).trace["mode"] == "markdown"
+    assert session.maintenance_progress.memory_version == 1
+    assert session.maintenance_progress.relationship_version == 1
+    assert session.maintenance_progress.recent_context_version == 2
 
 
 def _setup(tmp_path: Path):
@@ -65,6 +92,9 @@ def _setup(tmp_path: Path):
         MemoryLifecycleBindRequest(
             get_session=manager.get_or_create,
             commit_consolidation=manager.commit_consolidation,
+            retry_consumers=manager.retry_memory_consumers,
+            record_publication=manager.record_memory_publication,
+            record_recent_context=manager.record_recent_context,
             group_environment=GroupEnvironment(tmp_path, manager.conversation_store),
             runtime_roles=RoleStore(tmp_path),
         )
@@ -221,6 +251,7 @@ async def test_successful_consolidation_persists_cursor_without_caller_save(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, archive_all: bool
 ):
     manager, session, maintenance, event_bus = _setup(tmp_path)
+    manager._store.update_last_consolidated(session.key, 2)
     session.last_consolidated = 2
     manager.save(session)
 
@@ -345,118 +376,6 @@ async def test_manual_timeout_keeps_lock_until_threaded_markdown_commit_finishes
         await event_bus.aclose()
 
 
-@pytest.mark.asyncio
-async def test_ensure_consolidation_runs_non_force_then_force_when_budget_remains(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    manager, session, maintenance, event_bus = _setup(tmp_path)
-    calls: list[bool] = []
-    budget_states = iter((True, True, False))
-
-    async def consolidate(request: ConsolidateRequest):
-        calls.append(request.force)
-        return SimpleNamespace(trace={"mode": "markdown"})
-
-    monkeypatch.setattr(maintenance, "consolidate", consolidate)
-    monkeypatch.setattr(
-        "core.memory.markdown.maintenance._session_input_over_budget",
-        lambda *_args, **_kwargs: next(budget_states),
-    )
-    try:
-        assert (
-            await maintenance.ensure_consolidation(
-                session.key, input_token_threshold=75000
-            )
-            is True
-        )
-        assert calls == [False, True]
-    finally:
-        await event_bus.aclose()
-
-
-@pytest.mark.asyncio
-async def test_ensure_consolidation_returns_false_when_no_progress(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    _manager, session, maintenance, event_bus = _setup(tmp_path)
-
-    async def consolidate(_request: ConsolidateRequest):
-        return SimpleNamespace(trace={"mode": "skipped"})
-
-    monkeypatch.setattr(maintenance, "consolidate", consolidate)
-    monkeypatch.setattr(
-        "core.memory.markdown.maintenance._session_input_over_budget",
-        lambda *_args, **_kwargs: True,
-    )
-    try:
-        assert (
-            await maintenance.ensure_consolidation(
-                session.key, input_token_threshold=75000
-            )
-            is False
-        )
-    finally:
-        await event_bus.aclose()
-
-
-@pytest.mark.asyncio
-async def test_ensure_consolidation_propagates_existing_background_failure(
-    tmp_path: Path,
-):
-    _manager, session, maintenance, event_bus = _setup(tmp_path)
-
-    started, release = asyncio.Event(), asyncio.Event()
-
-    async def fail():
-        started.set()
-        await release.wait()
-        raise RuntimeError("provider failed")
-
-    maintenance._maintenance_tasks[session.key] = asyncio.create_task(fail())
-    try:
-        await started.wait()
-        pending = asyncio.create_task(
-            maintenance.ensure_consolidation(session.key, input_token_threshold=75000)
-        )
-        await asyncio.sleep(0)
-        release.set()
-        with pytest.raises(RuntimeError, match="provider failed"):
-            await pending
-    finally:
-        await event_bus.aclose()
-
-
-@pytest.mark.asyncio
-async def test_concurrent_ensure_consolidation_shares_in_flight_task(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    _manager, session, maintenance, event_bus = _setup(tmp_path)
-    entered, release = asyncio.Event(), asyncio.Event()
-    calls = 0
-
-    async def ensure_impl(_session_key: str, _current_content: str, _scope, _threshold):
-        nonlocal calls
-        calls += 1
-        entered.set()
-        await release.wait()
-        return True
-
-    monkeypatch.setattr(maintenance, "_ensure_consolidation", ensure_impl)
-    first = asyncio.create_task(
-        maintenance.ensure_consolidation(session.key, input_token_threshold=75000)
-    )
-    await entered.wait()
-    second = asyncio.create_task(
-        maintenance.ensure_consolidation(session.key, input_token_threshold=75000)
-    )
-    release.set()
-    try:
-        assert await asyncio.gather(first, second) == [True, True]
-        assert calls == 1
-    finally:
-        await event_bus.aclose()
-
-
 class _RecordingProvider:
     """记下整理各步收到的提示词，按步骤返回固定结果。"""
 
@@ -523,6 +442,9 @@ def _recording_maintenance(
         MemoryLifecycleBindRequest(
             get_session=manager.get_or_create,
             commit_consolidation=manager.commit_consolidation,
+            retry_consumers=manager.retry_memory_consumers,
+            record_publication=manager.record_memory_publication,
+            record_recent_context=manager.record_recent_context,
             group_environment=GroupEnvironment(tmp_path, manager.conversation_store),
             runtime_roles=RoleStore(tmp_path),
         )
@@ -559,21 +481,19 @@ async def test_external_growth_leaves_the_user_context_window_and_cursor_alone(
     manager.save(session)
     user_view = user_context_view(tmp_path, "mira")
     external_view = turn_context_view(tmp_path, "mira", group)
-    user_history = get_history_since_consolidated(session, 500, user_view)
+    user_history = get_window_history(session, 500, user_view)
     provider, event_bus, _events, maintenance = _recording_maintenance(
         tmp_path, manager, keep_count=4
     )
     try:
         external = await maintenance.consolidate(ConsolidateRequest(session=session))
-        user_history_after_external = get_history_since_consolidated(
-            session, 500, user_view
-        )
+        user_history_after_external = get_window_history(session, 500, user_view)
         # 桌面这边攒够一批（本类最后 4 条之外至少 5 条）才整理，只推进用户游标。
         for index in range(4):
             session.add_message("user", f"桌面第 {index} 句", thread_id=desktop)
             session.add_message("assistant", f"回桌面第 {index} 句", thread_id=desktop)
         await manager.save_async(session)
-        external_history = get_history_since_consolidated(session, 500, external_view)
+        external_history = get_window_history(session, 500, external_view)
         user = await maintenance.consolidate(ConsolidateRequest(session=session))
     finally:
         await event_bus.aclose()
@@ -586,13 +506,11 @@ async def test_external_growth_leaves_the_user_context_window_and_cursor_alone(
     assert provider.event_prompts and "群友" not in provider.event_prompts[0]
     manager.invalidate(session.key)
     reloaded = manager.get_or_create(session.key)
-    assert len(external_history) == 4
+    assert len(external_history) == 26
     assert external_history[-1]["content"] == "回群友第 11 句"
-    assert get_history_since_consolidated(reloaded, 500, external_view) == (
-        external_history
-    )
-    user_history = get_history_since_consolidated(reloaded, 500, user_view)
-    assert len(user_history) == 4
+    assert get_window_history(reloaded, 500, external_view) == (external_history)
+    user_history = get_window_history(reloaded, 500, user_view)
+    assert len(user_history) == 10
     assert user_history[-1]["content"] == "回桌面第 3 句"
     assert consolidation_cursor(reloaded, "external") == 24
     assert consolidation_cursor(reloaded, "user") == 32
@@ -830,15 +748,19 @@ async def test_group_turn_budget_force_only_advances_the_external_cursor(
     _add_group_turns(session, group, 3)
     manager.save(session)
     user_view = user_context_view(tmp_path, "mira")
-    user_history = get_history_since_consolidated(session, 500, user_view)
+    user_history = get_window_history(session, 500, user_view)
     _provider, event_bus, _events, maintenance = _recording_maintenance(
         tmp_path, manager, keep_count=4
     )
     try:
         # 阈值为 1，普通整理后仍超预算，于是走强制整理；预算始终降不下来。
         assert (
-            await maintenance.ensure_consolidation(
-                session.key, "群里新消息", "external", input_token_threshold=1
+            await ContextWindowMaintenance(manager, maintenance).ensure_budget(
+                session.key,
+                "群里新消息",
+                turn_context_view(tmp_path, "mira", group),
+                keep_count=4,
+                input_token_threshold=1,
             )
             is False
         )
@@ -847,7 +769,7 @@ async def test_group_turn_budget_force_only_advances_the_external_cursor(
 
     manager.invalidate(session.key)
     reloaded = manager.get_or_create(session.key)
-    assert get_history_since_consolidated(reloaded, 500, user_view) == user_history
+    assert get_window_history(reloaded, 500, user_view) == user_history
     assert consolidation_cursor(reloaded, "user") == 0
     assert consolidation_cursor(reloaded, "external") == len(reloaded.messages)
 

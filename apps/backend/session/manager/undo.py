@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from session.store.common import ContextScope
+from session.maintenance_progress import MaintenanceProgress
 
 from .manager import _ManagerCoreMixin
 from .models import effective_context_cursors
@@ -72,7 +73,19 @@ class _UndoMixin(_ManagerCoreMixin):
                 str(messages[index].get("thread_id") or "") for index in indices
             }
 
+            progress = (
+                MaintenanceProgress.load(meta["maintenance_progress"])
+                if meta and meta.get("maintenance_progress")
+                else None
+            )
+            if progress is not None:
+                progress = progress.invalidated()
+
             def refresh_projections() -> None:
+                if progress is not None:
+                    self._store.write_maintenance_progress(
+                        session_key, progress.dump(), commit=False
+                    )
                 for thread_id in sorted(thread_ids - {""}):
                     thread = self.conversation_store.get_thread(thread_id)
                     if thread is not None:
@@ -95,6 +108,7 @@ class _UndoMixin(_ManagerCoreMixin):
                     if message.get("id") not in deleted_set
                 ]
                 session.set_consolidation_cursors(new_last, context_cursors)
+                session.maintenance_progress = progress
             return UndoSessionResult(
                 deleted_ids=deleted_ids,
                 target_user_id=str(messages[user_index]["id"]),

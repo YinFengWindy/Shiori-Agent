@@ -10,6 +10,7 @@ from typing import Any
 
 from core.common.message_source import MessageSource, with_message_source
 from session.store.common import CONTEXT_SCOPES, ContextScope
+from session.maintenance_progress import MaintenanceProgress
 
 from .helpers import (
     _align_to_user_boundary,
@@ -62,7 +63,7 @@ def effective_context_cursors(
 
 
 def consolidation_cursor(session: Any, scope: ContextScope | None) -> int:
-    """回合读历史、估算预算时的整理游标：此前的消息已整理，不再原文发给模型。
+    """记忆提取的整理游标；模型原文窗口使用独立的 history_start。
 
     ``scope`` 为 None 表示会话只有一段对话（非角色会话），用 ``last_consolidated``；
     否则取角色会话里这类上下文自己的游标，见 ``effective_context_cursors``。
@@ -107,6 +108,7 @@ class Session:
     # last_consolidated。只由整理提交与撤销改写，见 ``set_consolidation_cursors``。
     context_cursors: dict[ContextScope, int] | None = None
     consolidation_requested: bool = False
+    maintenance_progress: MaintenanceProgress | None = None
 
     def add_message(
         self, role: str, content: str, media: list[str] | None = None, **kwargs: Any
@@ -280,6 +282,7 @@ class Session:
         self.last_consolidated = 0
         self.context_cursors = None
         self.consolidation_requested = False
+        self.maintenance_progress = None
 
     def set_consolidation_cursors(
         self,

@@ -10,9 +10,32 @@ from unittest.mock import AsyncMock
 import pytest
 from bus.event_bus import EventBus
 from session.manager import ConsolidationCommitRequest, SessionManager
+from session.manager.consumers import MemoryConsumersFailedError
 from shiori_sdk.memory.events import ConsolidationCommitted
 
 from tests.backend.core.memory.markdown.memory_double import CommittedMemory
+
+
+@pytest.mark.asyncio
+async def test_cursor_persistence_failure_rolls_back_private_progress(
+    tmp_path, monkeypatch
+):
+    manager, session, request = _setup(tmp_path)
+    before = manager._store.get_session_meta(session.key)["maintenance_progress"]
+
+    def fail(*args, **kwargs):
+        raise OSError("cursor store failed")
+
+    monkeypatch.setattr(manager._store, "update_last_consolidated", fail)
+    with pytest.raises(OSError, match="cursor store failed"):
+        await manager.commit_consolidation(request, AsyncMock())
+    assert session.last_consolidated == 0
+    assert session.maintenance_progress.memory_version == 0
+    assert not manager._store._conn.in_transaction
+    manager.save(session)
+    assert (
+        manager._store.get_session_meta(session.key)["maintenance_progress"] == before
+    )
 
 
 def _setup(tmp_path: Path):
@@ -37,6 +60,8 @@ async def test_changed_cursor_or_source_ids_reject_before_memory_side_effects(
 ):
     manager, session, request = _setup(tmp_path)
     if changed == "cursor":
+        manager._store.update_last_consolidated(session.key, 1)
+
         session.last_consolidated = 1
         manager.save(session)
     elif changed == "reordered":
@@ -138,6 +163,8 @@ async def test_context_cursors_commit_independently_and_repeat_is_rejected(
 ):
     """角色会话两个游标各自条件提交：另一类游标变了不影响本类，重复提交不生效。"""
     manager, session, _ = _setup(tmp_path)
+    manager._store.update_last_consolidated(session.key, 1)
+
     session.last_consolidated = 1
     manager.save(session)
     ids = tuple(message["id"] for message in session.messages)
@@ -317,7 +344,8 @@ async def test_failed_parallel_consumer_settles_writes_before_undo_and_error(
         if cancel_count:
             assert isinstance(outcome, asyncio.CancelledError)
         else:
-            assert outcome is memorizer.error
+            assert isinstance(outcome, MemoryConsumersFailedError)
+            assert outcome.__cause__ is memorizer.error
         assert isinstance(cleanup, dict)
         assert cleanup["affected_ids"] == memorizer.item_ids
         assert memorizer.finished.is_set()

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime
 
 from ..store import RoleStore
 from .loneliness import _LONELINESS_TICK_MINUTES, _parse_iso
 from .service import RoleRelationshipRuntimeService
 from .snapshot import RelationshipSnapshotOptimizer
+
+logger = logging.getLogger(__name__)
 
 
 class RelationshipSnapshotLoop:
@@ -41,10 +44,7 @@ class RelationshipSnapshotLoop:
             await asyncio.sleep(self._seconds_until_next_tick())
             if not self._running:
                 break
-            for role in self._role_store.list_roles():
-                if not self._is_role_overdue(role.id, now=self._now_fn().astimezone()):
-                    continue
-                await self._optimizer.optimize(role_id=role.id)
+            await self._catch_up_overdue_roles()
 
     def stop(self) -> None:
         self._running = False
@@ -53,7 +53,14 @@ class RelationshipSnapshotLoop:
         now = self._now_fn().astimezone()
         for role in self._role_store.list_roles():
             if self._is_role_overdue(role.id, now=now):
-                await self._optimizer.optimize(role_id=role.id)
+                try:
+                    await self._optimizer.optimize(role_id=role.id)
+                except Exception:
+                    # A background role failure must not stop later roles/ticks.
+                    # Synchronous memory consumers receive the optimizer error.
+                    logger.exception(
+                        "Relationship snapshot refresh failed: role=%s", role.id
+                    )
 
     def _is_role_overdue(self, role_id: str, *, now: datetime) -> bool:
         snapshot = self._runtime.read_snapshot(role_id)

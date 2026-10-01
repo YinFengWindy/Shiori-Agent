@@ -86,6 +86,10 @@ class _SessionConnection:
             self._conn.execute(
                 "ALTER TABLE sessions ADD COLUMN next_seq INTEGER NOT NULL DEFAULT 0"
             )
+        if "maintenance_progress" not in existing:
+            self._conn.execute(
+                "ALTER TABLE sessions ADD COLUMN maintenance_progress TEXT"
+            )
         # 角色会话按上下文的整理游标（#523）；NULL 表示未迁移，取 last_consolidated。
         for column in CONTEXT_CURSOR_COLUMNS.values():
             if column not in existing:

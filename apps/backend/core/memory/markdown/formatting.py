@@ -9,17 +9,15 @@ from typing import TYPE_CHECKING, Any
 
 from agent.llm_json import load_json_object_loose
 from agent.prompting import is_context_frame
-from agent.prompting.token_estimate import estimate_input
 from conversation.context_scope import (
     ContextView,
     UserContextThreads,
     belongs_to_user,
-    history_start,
     in_user_context,
     stored_message_source,
 )
 from session.manager.helpers import role_id_from_session_key
-from session.manager.models import consolidation_cursor, whole_session
+from session.manager.models import consolidation_cursor
 from session.store.common import ContextScope
 
 from .contracts import ConsolidationSegments, ConsolidationWindow
@@ -108,7 +106,7 @@ def _select_consolidation_window(
     consolidation_min_new_messages: int,
     archive_all: bool,
     force: bool = False,
-    input_budget_exceeded: bool = False,
+    through_index: int | None = None,
     views: tuple[ContextView, ...] = (),
 ) -> ConsolidationWindow | None:
     """选出这次要整理的消息窗口；没有该整理的消息时返回 None。
@@ -134,10 +132,14 @@ def _select_consolidation_window(
     if not pending:
         return None
 
-    if force:
+    if through_index is not None:
+        if not 0 <= through_index <= total_messages:
+            raise ValueError("记忆前置范围超出会话消息")
+        consolidate_up_to = through_index
+    elif force:
         consolidate_up_to = total_messages
     else:
-        if len(members) <= keep_count and not input_budget_exceeded:
+        if len(members) <= keep_count:
             return None
         consolidate_up_to = (
             members[-keep_count] if 0 < keep_count < len(members) else total_messages
@@ -153,7 +155,7 @@ def _select_consolidation_window(
         return None
     if (
         not force
-        and not input_budget_exceeded
+        and through_index is None
         and len(old_indices) < max(1, int(consolidation_min_new_messages))
     ):
         return None
@@ -163,38 +165,6 @@ def _select_consolidation_window(
         consolidate_up_to=consolidate_up_to,
         scopes=scopes,
     )
-
-
-def _estimate_session_input_tokens(
-    session: object, current_content: str = "", view: ContextView | None = None
-) -> int:
-    """Conservatively estimate serialized model-facing session history size.
-
-    ``view`` 给出时只估算这类上下文从自己游标起的历史（模型实际会收到的部分）；
-    为 None 时是非角色会话的整段历史。
-    """
-    messages = getattr(session, "messages", [])
-    if not isinstance(messages, list):
-        return 0
-    start_index = max(0, history_start(session, view))
-    try:
-        history = session.get_history(
-            max_messages=500,
-            start_index=start_index,
-            include=view.includes if view is not None else whole_session,
-        )
-    except (AttributeError, TypeError):
-        history = messages[start_index:]
-    if not isinstance(history, list):
-        history = list(messages)
-    estimate_messages = history
-    if current_content:
-        estimate_messages = [
-            *history,
-            {"role": "user", "content": current_content},
-        ]
-    # Call the owning pure estimator; importing agent.core here creates a cycle.
-    return estimate_input(estimate_messages)
 
 
 def split_consolidation_window(

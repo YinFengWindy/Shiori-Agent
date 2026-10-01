@@ -52,6 +52,7 @@ class _AssemblyMixin:
         self.bus = deps.bus
         self.tools = deps.tools
         self.memory_window = config.memory.window
+        self._context_keep_count = config.memory.keep_count
         self._running = False
         self._processing_state = deps.processing_state
         self._event_bus = deps.event_bus or EventBus()

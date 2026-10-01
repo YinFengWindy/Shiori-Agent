@@ -188,15 +188,12 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         snapshot = await optimizer.optimize(role_id=role_id)
         metadata = getattr(session, "metadata", None)
         if isinstance(metadata, dict):
-            if snapshot is None:
-                session.metadata = self.enrich_session_metadata(metadata)
-            else:
-                next_metadata = dict(metadata)
-                next_metadata["relationship_snapshot"] = snapshot
-                runtime = self.current_loneliness_runtime(role_id)
-                if runtime is not None:
-                    next_metadata["loneliness_runtime"] = runtime
-                session.metadata = next_metadata
+            next_metadata = dict(metadata)
+            next_metadata["relationship_snapshot"] = snapshot
+            runtime = self.current_loneliness_runtime(role_id)
+            if runtime is not None:
+                next_metadata["loneliness_runtime"] = runtime
+            session.metadata = next_metadata
         return snapshot
 
     def recompute_loneliness(

@@ -6,7 +6,17 @@
 
 `agent.context` 的 `trigger_ratio`、`target_ratio`、`safety_margin_tokens` 默认分别为 0.75、0.4、4096。比例以模型上下文窗口为基数，触发与目标都不超过 `窗口 − 实际输出上限 − 安全余量`。无有效输入空间或输出超过模型能力时明确报错。已移除旧的固定 `consolidation_input_token_threshold` 设置。
 
-预算只计算 provider 最终归一化后的完整消息、工具 schema 和响应格式，不再额外扣 schema。初始请求、工具循环、空回复恢复、阶段性收尾共用此依据。初始超预算仍调用现有 `ensure_consolidation`，以显式预算压力启动既有记忆窗口选择；重新渲染后按完整请求检查目标，再沿用既有裁剪计划。本阶段没有新摘要、压缩游标或控制器。
+预算只计算 provider 最终归一化后的完整消息、工具 schema 和响应格式，不再额外扣 schema。初始请求、工具循环、空回复恢复、阶段性收尾共用此依据。初始超预算经 `AgentLoop.ensure_context_window` 进入独立窗口维护：先准备原文范围，再补齐对应记忆，最后提交窗口水位；重新渲染后按完整请求检查目标，再沿用既有裁剪计划。当前仍使用既有保留条数策略；有界工作摘要、保留轮数和统一控制器由 #565 接入。
+
+`sessions.maintenance_progress` 单独保存窗口水位、版本、身份归属和消费者进度，普通消息保存不覆盖它。用户上下文共享 `user` 窗口；外部群与陌生私聊以实际 thread id 各自保存窗口。记忆继续使用 `last_consolidated` / `user_cursor` / `external_cursor`，单独整理记忆不会缩短原文窗口或撤下历史解锁工具。历史、工具和成员来源统一使用 `history_start` 的窗口水位。
+
+`ContextWindowMaintenance.apply` 与 `MarkdownMemoryMaintenance.ensure_memory_for_window` 是同一前置能力：按待移出范围补齐所属记忆类别的整个前缀，不等平时阈值，并跳过已整理范围。群 A 的补齐会覆盖前缀里交错的群 B 消息，但只推进 A 的窗口。提交由 SessionManager 校验消息前缀（含正文、工具与会话归属）、身份归属、失效代次和窗口版本；并发追加不进入旧准备范围。
+
+首次迁移一次冻结旧 user/external 有效水位，之后才允许记忆前进；从未读取的群 B 也使用冻结值。绑定变化失效旧窗口和维护进度。`invalidate_maintenance` 只失效派生状态，原始消息不删除；显式聊天撤销仍删除指定回合，同时失效窗口与消费者版本，其他原文保留。
+
+记忆提交保存 `memory_version`、近期语境来源消息与更新版本，并持久化待发布的消费者输入。事件发布和关系完成各有版本；事件成功但关系失败只重试关系，不再次触发 memory2 提取。后置失败通过 `WindowMaintenanceFailedError.result` 明确携带 `memory_committed` 与 `failure_stage`，窗口水位保持不变。心情仍由逐轮正式回复状态 owner 更新。
+
+关系优化器记录 provider 错误后继续抛出；周期任务在单个角色边界捕获并继续后续角色和周期，记忆后置调用则保留未完成消费者。扩大待压缩范围重试时，`memory_committed` 保留此前记忆已提交的事实，前置结果中的 `memory_covered` 单独表示当前移出范围是否全部完成整理；窗口提交仍按实际消息覆盖校验，不能用已有部分记忆提交代替完整覆盖。
 
 用量锚点保存在运行时，绑定实际连接、模型、可见上下文、身份绑定视图和发送请求快照。同一角色的用户上下文共用视图，群聊和陌生私聊各自隔离。历史只追加及带明确标记的系统 context frame 替换可用旧实际输入加本地差值；历史重写、模型/连接/身份绑定或未知系统提示/schema 变化时失效。迟到响应不能覆盖较新请求；辅助调用不改写对话锚点。子 Agent 的独立请求使用临时锚点和独立用量记录，完成后由 `SubAgent.last_usage` 提供，不覆盖父回合的最后请求或累计用量。
 

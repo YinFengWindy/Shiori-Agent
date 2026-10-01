@@ -7,7 +7,7 @@ import logging
 from collections import deque
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from bus.events_lifecycle import (
     NOT_USER_AUTHORED_KEY,
@@ -24,6 +24,9 @@ from core.memory.external_writes import commit_external_layers
 from core.memory.member_profiles import MemberProfiles
 from session.manager.consolidation import ConsolidationCommitRequest
 from session.manager.models import consolidation_cursor
+from session.manager.consumers import MemoryConsumersFailedError
+from session.manager.window import WindowPreparation
+from session.maintenance_progress import ownership_key, message_prefix_stamp
 from session.store.common import ContextScope
 
 from .consolidation import _MarkdownConsolidationWorker
@@ -41,7 +44,6 @@ from .formatting import (
     _format_consolidation_error,
     _select_consolidation_window,
     _session_role_id,
-    _estimate_session_input_tokens,
 )
 from .runtime import MarkdownMemoryStore, resolve_markdown_store
 from .user_layer import append_user_layer, publish_user_layer
@@ -57,19 +59,6 @@ logger = logging.getLogger("memory.markdown")
 
 class _StaleExternalLayers(Exception):
     """准备后群笔记或成员档案已被别处（小手机）改过：本次整理按过期处理，不提交。"""
-
-
-def _session_input_over_budget(
-    session: object,
-    threshold: int,
-    current_content: str = "",
-    view: ContextView | None = None,
-) -> bool:
-    """``view`` 这类上下文（非角色会话为 None）的下一次模型输入是否超出预算。"""
-    return (
-        threshold > 0
-        and _estimate_session_input_tokens(session, current_content, view) >= threshold
-    )
 
 
 class MarkdownMemoryMaintenance:
@@ -126,9 +115,9 @@ class MarkdownMemoryMaintenance:
         self._maintenance_tasks: dict[str, asyncio.Task[None]] = {}
         self._maintenance_locks: dict[str, asyncio.Lock] = {}
         self._maintenance_failures: dict[str, str] = {}
-        self._ensure_tasks: dict[
-            tuple[str, ContextScope | None, int], asyncio.Task[bool]
-        ] = {}
+        self._retry_consumers = None
+        self._record_publication = None
+        self._record_recent_context = None
         if event_bus is not None:
             event_bus.on(TurnCommitted, self.on_turn_committed)
 
@@ -146,17 +135,6 @@ class MarkdownMemoryMaintenance:
         return role_session_user_threads(
             self._workspace, str(getattr(session, "key", "") or "")
         )
-
-    def _scope_view(
-        self, session: object, scope: ContextScope | None
-    ) -> ContextView | None:
-        """角色会话里 ``scope`` 这类上下文的视图；``scope`` 为 None 时返回 None。"""
-        if scope is None:
-            return None
-        user_threads = self._user_threads_for_session(session)
-        if user_threads is None:
-            raise ValueError(f"会话 {getattr(session, 'key', '')} 没有上下文划分")
-        return ContextView(scope=scope, user_threads=user_threads)
 
     def _window_plans(
         self, session: object, *, scope: ContextScope | None = None
@@ -179,6 +157,9 @@ class MarkdownMemoryMaintenance:
         self._get_session = request.get_session
         self._commit_consolidation = request.commit_consolidation
         self._after_consolidation = request.after_consolidation
+        self._retry_consumers = request.retry_consumers
+        self._record_publication = request.record_publication
+        self._record_recent_context = request.record_recent_context
         self._group_environment = request.group_environment
         self._runtime_roles = request.runtime_roles
         if request.group_environment is not None and request.runtime_roles is not None:
@@ -222,73 +203,54 @@ class MarkdownMemoryMaintenance:
         """返回指定会话最近一次后台记忆整理的明确失败原因。"""
         return self._maintenance_failures.get(session_key)
 
-    async def ensure_consolidation(
-        self,
-        session_key: str,
-        current_content: str = "",
-        scope: ContextScope | None = None,
-        *,
-        input_token_threshold: int,
-    ) -> bool:
-        """Finish token-triggered consolidation before sending a model request.
+    async def ensure_memory_for_window(
+        self, prepared: WindowPreparation
+    ) -> ConsolidateResult:
+        """Complete every unprocessed category member through the window's cut.
 
-        ``scope`` 是回合所在的上下文（非角色会话为 None）：预算只按这类上下文从
-        自己游标起的历史估算。
+        An external window can contain interleaved groups. Extract the owning
+        external category prefix, so advancing its cursor cannot skip another group.
         """
-        ensure_key = (session_key, scope, input_token_threshold)
-        existing_ensure = self._ensure_tasks.get(ensure_key)
-        if existing_ensure is not None and not existing_ensure.done():
-            return await existing_ensure
-        task = asyncio.create_task(
-            self._ensure_consolidation(
-                session_key, current_content, scope, input_token_threshold
-            ),
-            name=f"markdown-memory-ensure:{session_key}",
-        )
-        self._ensure_tasks[ensure_key] = task
-        try:
-            return await task
-        finally:
-            if self._ensure_tasks.get(ensure_key) is task:
-                self._ensure_tasks.pop(ensure_key, None)
-
-    async def _ensure_consolidation(
-        self,
-        session_key: str,
-        current_content: str,
-        scope: ContextScope | None,
-        input_token_threshold: int,
-    ) -> bool:
-        """Run the token-triggered consolidation shared by concurrent callers."""
-        if self._get_session is None or self._commit_consolidation is None:
-            return False
-        existing = self._maintenance_tasks.get(session_key)
-        if existing is not None and not existing.done():
-            await existing
-        session = self._get_session(session_key)
-        if session is None:
-            return False
-        view = self._scope_view(session, scope)
-        threshold = input_token_threshold
-        for force in (False, True):
-            result = await self.consolidate(
-                ConsolidateRequest(
-                    session=session,
-                    input_budget_exceeded=True,
-                    force=force,
-                    current_content=current_content,
-                    scope=scope,
-                )
+        if self._get_session is None:
+            raise RuntimeError("memory lifecycle is not bound")
+        session = self._get_session(prepared.session_key)
+        if (
+            ownership_key(self._user_threads_for_session(session)) != prepared.ownership
+            or tuple(
+                str(m.get("id") or "")
+                for m in session.messages[: len(prepared.expected_message_ids)]
             )
-            if result.trace.get("mode") == "failed":
-                return False
-            if not _session_input_over_budget(
-                session, threshold, current_content, view
-            ):
-                return True
-            if result.trace.get("mode") != "markdown":
-                return False
-        return not _session_input_over_budget(session, threshold, current_content, view)
+            != prepared.expected_message_ids
+            or message_prefix_stamp(
+                session.messages[: len(prepared.expected_message_ids)]
+            )
+            != prepared.prefix_stamp
+        ):
+            return ConsolidateResult(
+                trace={"mode": "failed", "step": "stale", "memory_committed": False}
+            )
+        result = await self.consolidate(
+            ConsolidateRequest(
+                session=session,
+                scope=prepared.view.scope if prepared.view else None,
+                through_index=prepared.stop,
+            )
+        )
+        cursor = consolidation_cursor(
+            session, prepared.view.scope if prepared.view else None
+        )
+        covered_ids = {
+            str(message.get("id") or "") for message in session.messages[:cursor]
+        }
+        removed_ids = set(prepared.removed_message_ids)
+        result.trace["memory_covered"] = removed_ids.issubset(covered_ids)
+        # A larger retry can have committed old memory and still lack coverage
+        # for appended messages. Preserve that fact even when consumer retry fails.
+        result.trace["memory_committed"] = bool(
+            result.trace.get("memory_committed")
+            or removed_ids.intersection(covered_ids)
+        )
+        return result
 
     def _enqueue_maintenance(self, session_key: str) -> None:
         if self._get_session is None or self._commit_consolidation is None:
@@ -375,6 +337,9 @@ class MarkdownMemoryMaintenance:
             _ = self._maintenance_queues.pop(session_key, None)
 
     def _should_consolidate_session(self, session: object) -> bool:
+        progress = getattr(session, "maintenance_progress", None)
+        if progress is not None and progress.pending_consumers:
+            return True
         return any(
             _select_consolidation_window(
                 session,
@@ -406,6 +371,21 @@ class MarkdownMemoryMaintenance:
         某个窗口失败时立即返回失败，此前已提交的窗口保留。
         """
         session = request.session
+        if self._retry_consumers is not None:
+            try:
+                await self._retry_consumers(
+                    str(session.key),
+                    lambda payload: self._consume_payload(session, payload),
+                )
+            except MemoryConsumersFailedError as exc:
+                return ConsolidateResult(
+                    trace={
+                        "mode": "failed",
+                        "step": "consumers",
+                        "memory_committed": True,
+                        "error": str(exc),
+                    }
+                )
         user_threads = self._user_threads_for_session(session)
         if user_threads is not None and (
             request.archive_all or (request.force and request.scope is None)
@@ -445,6 +425,9 @@ class MarkdownMemoryMaintenance:
             for message in getattr(request.session, "messages", [])
         )
         expected_cursor = int(getattr(request.session, "last_consolidated", 0))
+        expected_prefix_stamp = message_prefix_stamp(
+            getattr(request.session, "messages", [])
+        )
         # 整理的提交、群环境层写入与身份绑定都由 bind_lifecycle 接入，未接入时直接失败。
         commit = self._commit_consolidation
         group_environment = self._group_environment
@@ -455,11 +438,14 @@ class MarkdownMemoryMaintenance:
             view.scope: consolidation_cursor(request.session, view.scope)
             for view in views
         }
+        progress = getattr(request.session, "maintenance_progress", None)
+        expected_generation = progress.generation if progress is not None else None
+        expected_ownership = ownership_key(user_threads)
         draft = await self._worker.prepare_consolidation(
             request.session,
             archive_all=request.archive_all,
             force=request.force,
-            input_budget_exceeded=request.input_budget_exceeded,
+            through_index=request.through_index,
             user_threads=user_threads,
             group_environment=group_environment,
             views=views,
@@ -489,8 +475,17 @@ class MarkdownMemoryMaintenance:
             await self._write_external_layers(request.session, draft, group_environment)
             await self._commit_markdown_draft(request.session, draft)
 
+        payload = {
+            "role_id": _session_role_id(request.session),
+            "history_entry_payloads": draft.history_entry_payloads,
+            "source_ref": draft.source_ref,
+            "conversation": draft.conversation,
+            "scope_channel": draft.scope_channel,
+            "scope_chat_id": draft.scope_chat_id,
+        }
+
         async def publish_committed() -> None:
-            await self._publish_consolidation(request.session, draft)
+            await self._consume_payload(request.session, payload)
 
         try:
             committed = await commit(
@@ -500,15 +495,30 @@ class MarkdownMemoryMaintenance:
                     draft,
                     expected_cursor=expected_cursor,
                     expected_context_cursors=expected_context_cursors,
+                    expected_ownership=(
+                        expected_ownership if progress is not None else None
+                    ),
+                    expected_generation=expected_generation,
+                    consumer_payload=payload,
+                    expected_prefix_stamp=expected_prefix_stamp,
                 ),
                 write_memory,
                 publish_committed,
             )
         except _StaleExternalLayers:
             committed = False
+        except MemoryConsumersFailedError as exc:
+            self._maintenance_failures[session_key] = str(exc)
+            return ConsolidateResult(
+                trace={
+                    "mode": "failed",
+                    "step": "consumers",
+                    "memory_committed": True,
+                    "error": str(exc),
+                }
+            )
         if not committed:
             return ConsolidateResult(trace={"mode": "skipped", "reason": "stale"})
-        await self._run_after_consolidation(request.session)
         if session_key:
             _ = self._maintenance_failures.pop(session_key, None)
         return ConsolidateResult(
@@ -516,14 +526,22 @@ class MarkdownMemoryMaintenance:
             trace={"mode": "markdown", "source_ref": draft.source_ref},
         )
 
-    async def _run_after_consolidation(self, session: object) -> None:
-        hook = self._after_consolidation
-        if hook is None:
-            return
-        try:
-            await hook(session)
-        except Exception as exc:
-            logger.warning("markdown memory post-consolidation hook failed: %s", exc)
+    async def _consume_payload(self, session: object, payload: dict[str, Any]) -> None:
+        if not payload.get("published"):
+            publication = {
+                key: value for key, value in payload.items() if key != "published"
+            }
+            publication["history_entry_payloads"] = [
+                (entry, weight) for entry, weight in payload["history_entry_payloads"]
+            ]
+            await publish_user_layer(
+                self._event_bus,
+                **publication,
+            )
+            if self._record_publication is not None:
+                self._record_publication(session.key, payload)
+        if self._after_consolidation is not None:
+            await self._after_consolidation(session)
 
     async def _commit_markdown_draft(
         self,
@@ -564,28 +582,21 @@ class MarkdownMemoryMaintenance:
         if not written:
             raise _StaleExternalLayers
 
-    async def _publish_consolidation(
-        self, session: object, draft: _ConsolidationDraft
-    ) -> None:
-        await publish_user_layer(
-            self._event_bus,
-            role_id=_session_role_id(session),
-            history_entry_payloads=draft.history_entry_payloads,
-            source_ref=draft.source_ref,
-            conversation=draft.conversation,
-            scope_channel=draft.scope_channel,
-            scope_chat_id=draft.scope_chat_id,
-        )
-
     async def refresh_recent_turns(
         self,
         request: RefreshRecentTurnsRequest,
     ) -> None:
+        source_ids = tuple(str(m.get("id") or "") for m in request.session.messages)
+        ownership = ownership_key(self._user_threads_for_session(request.session))
         await self._worker.refresh_recent_turns(
             session=request.session,
             profile_maint=self._resolve_store_for_session(request.session),
             user_threads=self._user_threads_for_session(request.session),
         )
+        if self._record_recent_context is not None:
+            await self._record_recent_context(
+                request.session.key, source_ids, ownership
+            )
 
 
 def _commit_request(
@@ -595,6 +606,10 @@ def _commit_request(
     *,
     expected_cursor: int,
     expected_context_cursors: dict[ContextScope, int],
+    expected_ownership: str | None,
+    expected_generation: int | None,
+    consumer_payload: dict[str, Any],
+    expected_prefix_stamp: str,
 ) -> ConsolidationCommitRequest:
     """把草稿要推进的游标写成条件提交请求，准备前看到的游标是预期值。
 
@@ -602,16 +617,25 @@ def _commit_request(
     只进不退，archive_all 则全部归零。
     """
     window = draft.window
+    common = {
+        "expected_ownership": expected_ownership,
+        "expected_generation": expected_generation,
+        "consumer_payload": consumer_payload,
+        "updates_recent_context": bool(draft.recent_context_text),
+        "expected_prefix_stamp": expected_prefix_stamp,
+    }
     if not window.scopes:
         return ConsolidationCommitRequest(
             session_key=session_key,
             expected_message_ids=expected_ids,
+            **common,
             expected_last_consolidated=expected_cursor,
             last_consolidated=0 if draft.archive_all else window.consolidate_up_to,
         )
     return ConsolidationCommitRequest(
         session_key=session_key,
         expected_message_ids=expected_ids,
+        **common,
         expected_context_cursors={
             scope: expected_context_cursors[scope] for scope in window.scopes
         },

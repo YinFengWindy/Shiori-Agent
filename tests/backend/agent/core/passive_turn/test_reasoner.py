@@ -17,6 +17,112 @@ from bus.events import InboundMessage
 from conversation.context_scope import ContextView, UserContextThreads
 from core.common.message_source import SENDER_IS_USER_KEY, MessageSource
 from session.manager import SessionManager
+from session.manager.consolidation import ConsolidationCommitRequest
+from agent.tools.base import Tool
+
+
+class _ArchivedTool(Tool):
+    name = "archived_tool"
+    description = "A tool discovered by an older turn"
+    parameters = {"type": "object", "properties": {}}
+
+    async def execute(self, **kwargs):
+        return "ok"
+
+
+@pytest.mark.parametrize("consumer_fails", [False, True])
+async def test_real_budget_path_preserves_memory_status_and_refreshes_tools(
+    memory_harness, consumer_fails
+):
+    from agent.looping.core import AgentLoop
+    from agent.looping.ports import SessionServices
+    from agent.provider import LLMProvider
+    from agent.prompting.input_budget import BudgetPolicy
+    from core.context_window import WindowMaintenanceFailedError
+    from core.memory.markdown import MarkdownMemoryRuntime
+
+    h = memory_harness
+    session = h.manager.get_or_create("cli:real-budget")
+    session.metadata["role_id"] = "mira"
+    session.add_message("user", "tea " * 2500)
+    session.add_message(
+        "assistant",
+        "tea",
+        tool_chain=[
+            {
+                "calls": [
+                    {
+                        "call_id": "old",
+                        "name": "archived_tool",
+                        "arguments": {},
+                        "result": "done",
+                    }
+                ]
+            }
+        ],
+    )
+    h.manager.save(session)
+    loop = AgentLoop.__new__(AgentLoop)
+    loop._context_keep_count = 20
+    loop._session_services = SessionServices(session_manager=h.manager)
+    loop._markdown_memory = MarkdownMemoryRuntime(
+        store=h.maintenance._store,
+        maintenance=h.maintenance,
+        workspace=h.manager.workspace,
+    )
+    if consumer_fails:
+
+        async def fail(_session):
+            raise RuntimeError("relationship unavailable")
+
+        h.maintenance._after_consolidation = fail
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=2000,
+        max_output_tokens=100,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
+    )
+    registry = ToolRegistry()
+    registry.register(_ArchivedTool())
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=provider, light_provider=provider),
+        llm_config=LLMConfig(max_tokens=100),
+        tools=registry,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=True,
+        memory_window=40,
+        context=AsyncMock(),
+        session_manager=h.manager,
+        memory_consolidator=loop,
+    )
+    reasoner.render_prompt = AsyncMock(
+        side_effect=lambda request: PromptRenderResult(
+            messages=[*request.history, {"role": "user", "content": request.content}],
+        )
+    )
+    reasoner.run = AsyncMock(return_value=ReasonerResult(reply="ok"))
+    msg = InboundMessage(
+        channel="cli", sender="user", chat_id="real-budget", content="continue"
+    )
+    try:
+        if consumer_fails:
+            with pytest.raises(WindowMaintenanceFailedError) as failure:
+                await reasoner.run_turn(msg=msg, session=session)
+            assert failure.value.result.memory_committed
+            assert failure.value.result.failure_stage == "consumers"
+            reasoner.run.assert_not_awaited()
+        else:
+            result = await reasoner.run_turn(msg=msg, session=session)
+            assert result.reply == "ok"
+            assert reasoner.run.await_args.kwargs["preloaded_tools"] == set()
+            assert reasoner.run.await_args.args[0] == [
+                {"role": "user", "content": "continue"}
+            ]
+        assert session.last_consolidated == 2
+        assert len(session.messages) == 2
+        assert len(h.events) == 1
+    finally:
+        await provider.aclose()
 
 
 @pytest.mark.parametrize("error_type", [ContentSafetyError, ContextLengthError])
@@ -35,9 +141,20 @@ async def test_run_turn_retry_preserves_persisted_history(
         if index == total_messages - 1:
             role = "user"
         session.add_message(role, f"message-{index}", metadata={"index": index})
-    session.last_consolidated = last_consolidated
     session.consolidation_requested = True
     await manager.save_async(session)
+    if last_consolidated:
+        await manager.commit_consolidation(
+            ConsolidationCommitRequest(
+                session.key,
+                tuple(m["id"] for m in session.messages),
+                expected_last_consolidated=0,
+                last_consolidated=last_consolidated,
+            ),
+            AsyncMock(),
+        )
+        prepared = await manager.prepare_window(session.key, None, keep_count=6)
+        assert prepared is not None and await manager.commit_window(prepared)
     original_messages = deepcopy(session.messages)
     source_history = session.get_history(start_index=last_consolidated)
     msg = InboundMessage(
@@ -155,7 +272,7 @@ async def test_run_turn_repairs_rendered_input_budget_before_reasoning(tmp_path)
     async def consolidate(
         _session_key: str, _content: str, _scope: object, **kwargs
     ) -> bool:
-        session.last_consolidated = len(session.messages)
+        session.maintenance_progress.windows["session"] = len(session.messages)
         return True
 
     from agent.provider import LLMProvider
@@ -177,7 +294,7 @@ async def test_run_turn_repairs_rendered_input_budget_before_reasoning(tmp_path)
         context=AsyncMock(),
         session_manager=manager,
         memory_consolidator=SimpleNamespace(
-            ensure_memory_consolidation=AsyncMock(side_effect=consolidate)
+            ensure_context_window=AsyncMock(side_effect=consolidate)
         ),
     )
     reasoner.render_prompt = AsyncMock(
@@ -193,7 +310,7 @@ async def test_run_turn_repairs_rendered_input_budget_before_reasoning(tmp_path)
     result = await reasoner.run_turn(msg=msg, session=session)
 
     assert result.reply == "ok"
-    reasoner._memory_consolidator.ensure_memory_consolidation.assert_awaited_once_with(
+    reasoner._memory_consolidator.ensure_context_window.assert_awaited_once_with(
         "cli:budget", "hello", None, input_token_threshold=160
     )
     assert reasoner.run.await_args.args[0] == [{"role": "user", "content": "hello"}]
@@ -372,7 +489,7 @@ async def test_model_budget_forces_existing_consolidation_even_below_old_history
 
     async def consolidate(key, content, scope, *, input_token_threshold):
         calls.append((key, input_token_threshold))
-        session.last_consolidated = len(session.messages)
+        session.maintenance_progress.windows["session"] = len(session.messages)
         return True
 
     reasoner = DefaultReasoner(
@@ -384,7 +501,7 @@ async def test_model_budget_forces_existing_consolidation_even_below_old_history
         memory_window=40,
         context=AsyncMock(),
         session_manager=manager,
-        memory_consolidator=SimpleNamespace(ensure_memory_consolidation=consolidate),
+        memory_consolidator=SimpleNamespace(ensure_context_window=consolidate),
     )
     reasoner.render_prompt = AsyncMock(
         side_effect=lambda request: PromptRenderResult(
