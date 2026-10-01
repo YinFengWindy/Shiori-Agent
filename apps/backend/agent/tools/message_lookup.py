@@ -31,10 +31,7 @@ class FetchMessagesTool(Tool):
         "这是 recall_memory / search_messages / 记忆注入三条路里唯一可以直接作为最终证据的工具。\n"
         "何时必须调用：回答依赖具体时间、原话、金额、配置值、是否发生过——只要结论需要事实支撑，就在回复前调用此工具。\n"
         "recall_memory 返回 evidence 时优先传 evidence；search_messages 返回 source_ref 时传 source_ref。\n"
-        "支持 context 参数扩展前后文，适合还原完整上下文片段。\n"
-        "【引用协议（必须执行）】本工具调用后，最终回复正文末尾必须另起一行输出：\n"
-        "  §cited:[memory_id1,memory_id2,...]§\n"
-        "  列出本次实际引用的记忆条目 id（来自 recall_memory 结果中的 id 字段），逗号分隔无空格。"
+        "支持 context 参数扩展前后文，适合还原完整上下文片段。"
     )
     parameters = {
         "type": "object",

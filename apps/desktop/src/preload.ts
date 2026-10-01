@@ -10,6 +10,7 @@ import {
 import { surfaceChannels } from "./surface/ipc.js";
 import { pluginDataChannels } from "./plugins/ipc.js";
 import { trayChannels } from "./tray/ipc.js";
+import { notificationChannels, type NotificationChatTarget } from "./notifications/contract.js";
 import type { BridgeEvent, SurfaceCreateResult, SurfacePlacement, VoiceStatePayload } from "@shiori/plugin-sdk/contract";
 import type {
   BridgeResponse,
@@ -98,6 +99,15 @@ window.addEventListener("click", (event) => {
 });
 
 const api: DesktopApi = {
+  notifications: {
+    getPending: () => ipcRenderer.invoke(notificationChannels.pending) as Promise<NotificationChatTarget | null>,
+    acknowledge: (id) => ipcRenderer.invoke(notificationChannels.acknowledge, id) as Promise<void>,
+    onClicked(listener) {
+      const wrapped = () => listener();
+      ipcRenderer.on(notificationChannels.clicked, wrapped);
+      return () => ipcRenderer.off(notificationChannels.clicked, wrapped);
+    },
+  },
   updates: {
     getState: () => ipcRenderer.invoke("desktop:update-state"),
     check: () => ipcRenderer.invoke("desktop:update-check"),

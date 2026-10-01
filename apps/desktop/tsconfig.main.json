@@ -23,6 +23,8 @@
     "src/bridge/**/*.ts",
     "src/paths.ts",
     "src/tray/**/*.ts",
+    "src/notifications/**/*.ts",
+    "src/shared/**/*.ts",
     "src/window.ts",
     "src/windowSecurity.ts",
     "src/electron-shim.d.ts"

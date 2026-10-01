@@ -410,7 +410,8 @@ def test_message_lookup_tools_require_fetch_for_evidence():
     assert "fetch_messages" in SearchMessagesTool.description
     assert "必须" in SearchMessagesTool.description
     assert "fetch_messages" in FetchMessagesTool.description
-    assert "§cited:[" in FetchMessagesTool.description
+    assert "何时必须调用" in FetchMessagesTool.description
+    assert "§cited:[" not in FetchMessagesTool.description
 
 
 def test_history_fact_guard_requires_fetch_after_search_preview():

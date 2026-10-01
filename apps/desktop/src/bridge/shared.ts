@@ -240,6 +240,8 @@ export type RendererDiagnosticPayload = {
 export type TrayEntryClickedPayload = import("../tray/ipc.js").TrayEntryClickedPayload;
 
 export type DesktopApi = {
+  /** Retains and acknowledges native notification clicks in the main window. */
+  notifications: import("../notifications/contract.js").DesktopNotificationsApi;
   /** Reads and controls the Electron application update lifecycle. */
   updates: import("../updateContract.js").DesktopUpdateApi;
   /** Identifies one main-process lifetime, including renderer reloads. */
