@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from .account_avatar import fetch_bot_avatar
@@ -111,12 +112,16 @@ class QQBotAccountsChannel(
         self._identity.unregister_all()
 
     def pause_intake(self) -> None:
-        """Pause every application before a host settings handover."""
+        """Pause existing and later connections before a host settings handover."""
+        if self._runtime is not None:
+            self._runtime = replace(self._runtime, intake_paused=True)
         for channel in self._channels.values():
             channel.pause_intake()
 
     def resume_intake(self) -> None:
-        """Resume all application intakes after a rejected handover."""
+        """Resume existing and later connections after a handover or rollback."""
+        if self._runtime is not None:
+            self._runtime = replace(self._runtime, intake_paused=False)
         for channel in self._channels.values():
             channel.resume_intake()
 
