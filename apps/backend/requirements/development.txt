@@ -11,8 +11,10 @@ pytest-cov>=6.0.0
 pyinstaller>=6.18.0
 
 # Local host/testkit distributions are private and resolved together from this checkout.
+-e ./packages/sdk
 -e .
 -e ./plugins/default_memory
+-e ./packages/shiori-host-testing
 -e ./packages/shiori-plugin-testkit
 
 # QQ login QR fixtures (not used by the production runtime).

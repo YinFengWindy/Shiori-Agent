@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { bridgeTimeoutPolicy } from "../../../src/bridge/bridgeTimeoutPolicy";
-import { errorMessage } from "@shiori/plugin-sdk";
+import { errorMessage } from "@shiori/sdk";
 
 type Selection = { status: "loading" | "ready" | "error"; pluginId: string; error: string };
 /** The bridge gets its full request deadline; IPC delivery and UI scheduling get 5s more. */

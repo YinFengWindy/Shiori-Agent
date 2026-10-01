@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it, type TestContext } from "node:test";
 import { act } from "react";
-import { mockableWindowTimers, mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mockableWindowTimers, mountTestComponent } from "@shiori/sdk/testing";
 import { startupSplashExitMs, startupSplashMinMs } from "./startupSplashPhase";
 import { useStartupSplash } from "./useStartupSplash";
 

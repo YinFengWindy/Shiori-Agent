@@ -5,7 +5,7 @@ import {
   type RoleRecord,
   RoleCapabilityCard,
   roleToggleStatus,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import type { RoleFormState } from "../shared/types";
 import { globalVoiceOutputEnabled } from "./roleCapabilityStatus";
 import { RoleEditorSection } from "./RoleEditorSection";

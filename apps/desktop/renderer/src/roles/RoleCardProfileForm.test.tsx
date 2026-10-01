@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act, useState } from "react";
-import { changeInputValue, mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { changeInputValue, mountTestComponent } from "@shiori/sdk/testing";
 import type { RoleProfileDraft } from "../shared/types";
 import { RoleCardProfileForm } from "./RoleCardProfileForm";
 

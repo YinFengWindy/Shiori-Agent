@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { unavailableLocalAssetUrl } from "../../../src/assets/localAssetContract";
-import type { NativeFilePickerOptions } from "@shiori/plugin-sdk";
+import type { NativeFilePickerOptions } from "@shiori/sdk";
 import { toFileUrl } from "../shared/format";
 import { pluginHostServicesFor } from "./pluginHostServices";
 

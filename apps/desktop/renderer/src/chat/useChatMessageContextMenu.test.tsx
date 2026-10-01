@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import React, { act } from "react";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
-import type { SessionMessage } from "@shiori/plugin-sdk";
+import { mountTestComponent } from "@shiori/sdk/testing";
+import type { SessionMessage } from "@shiori/sdk";
 import { getChatMessageActionAvailability } from "./chatMessageActions";
 import { ChatMessageContextMenu } from "./ChatMessageContextMenu";
 import { ChatMessageRow } from "./ChatMessageRow";

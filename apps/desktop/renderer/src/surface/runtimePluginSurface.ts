@@ -1,6 +1,6 @@
 import { loadRuntimePluginModules } from "../plugins/runtimePluginModuleLoader";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
-import type { PluginSurfaceModule } from "@shiori/plugin-sdk";
+import type { PluginSurfaceModule } from "@shiori/sdk";
 import { isPluginSurfaceModule } from "./pluginSurfaceContract";
 import { pluginSurfaceRegistry, type PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 

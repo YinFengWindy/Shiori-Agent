@@ -16,7 +16,7 @@ def _stage(workspace):
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
         "api: 2\npackage_contract: 1\nid: manual\nversion: 1.0.0\n"
-        "runtime_api: '>=2.0.0 <3.0.0'\nentry: backend/plugin.py\ncapabilities: [rpc]\n",
+        "runtime_api: '>=3.0.0 <4.0.0'\nentry: backend/plugin.py\ncapabilities: [rpc]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(

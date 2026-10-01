@@ -10,7 +10,7 @@ import type { SettingsSectionId } from "./SettingsSidebar";
 import { resolveSettingsSubsectionId } from "./settingsSectionMetadata";
 import type { SettingsSubsection } from "./settingsPageTypes";
 import { useSettingsPageController } from "./useSettingsPageController";
-import { cardClass, cx } from "@shiori/plugin-sdk";
+import { cardClass, cx } from "@shiori/sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 
 type SettingsPageProps = {

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shiori-sdk"
+dynamic = ["version"]
+description = "Public Shiori plugin contracts and independent testing support."
+requires-python = ">=3.12"
+
+[project.optional-dependencies]
+testing = ["pytest>=9.0", "pytest-asyncio>=1.3", "httpx>=0.28"]
+
+[project.entry-points.pytest11]
+shiori_sdk = "shiori_sdk.testing.pytest_plugin"
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.setuptools.dynamic]
+version = {attr = "shiori_sdk._version.__version__"}
+
+[tool.setuptools.package-data]
+shiori_sdk = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-W error --import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+required_plugins = ["pytest-asyncio", "shiori-sdk"]

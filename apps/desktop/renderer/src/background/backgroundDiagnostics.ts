@@ -1,4 +1,4 @@
-import { errorMessage } from "@shiori/plugin-sdk";
+import { errorMessage } from "@shiori/sdk";
 
 /**
  * Reports a plugin-host failure somewhere a human will actually find it.

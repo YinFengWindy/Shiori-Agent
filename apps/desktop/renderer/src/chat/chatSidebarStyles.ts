@@ -1,4 +1,4 @@
-import { cx } from "@shiori/plugin-sdk";
+import { cx } from "@shiori/sdk";
 import { focusResetClass } from "../shared/styles";
 
 /** Shared surface for every chat-sidebar view. */

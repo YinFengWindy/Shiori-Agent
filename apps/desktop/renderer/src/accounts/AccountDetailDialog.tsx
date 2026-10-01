@@ -3,7 +3,7 @@ import { XIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
-import { iconButtonClass, accountOnline, type AccountSnapshot } from "@shiori/plugin-sdk";
+import { iconButtonClass, accountOnline, type AccountSnapshot } from "@shiori/sdk";
 import { dialogBackdropClass } from "../shared/styles";
 import { Reveal } from "../shared/ui/Reveal";
 import { accountChannelLabel, accountChannelLine, accountName } from "./accountPresentation";

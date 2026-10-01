@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { PluginBridgeError } from "@shiori/plugin-sdk";
+import { PluginBridgeError } from "@shiori/sdk";
 import { initializeRuntimePluginUi } from "../../renderer/src/plugins/runtimePluginUiBootstrap";
 import { refreshPluginEnabledState } from "../../renderer/src/plugins/pluginEnabledStateStore";
 import { pluginUiRegistry } from "../../renderer/src/plugins/pluginUiRegistry";

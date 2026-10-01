@@ -1,6 +1,6 @@
-import { errorMessage } from "@shiori/plugin-sdk";
+import { errorMessage } from "@shiori/sdk";
 import { useEffect, useRef, useState } from "react";
-import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleRecord } from "@shiori/sdk";
 import type { useDesktopBridgeLifecycle } from "../app/useDesktopBridgeLifecycle";
 import { useOnboardingSnapshot } from "./useOnboardingSnapshot";
 import { completeOnboarding, onboardingSkipKey, onboardingStorageKey, onboardingVersion, readOnboardingProgress, reconcileOnboarding } from "./onboardingState";

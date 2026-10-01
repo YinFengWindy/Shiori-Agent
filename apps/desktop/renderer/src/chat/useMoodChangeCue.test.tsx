@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { useMoodChangeCue } from "./useMoodChangeCue";
 
 function Probe(props: { scope: string; mood: string; updatedAt: string }) {

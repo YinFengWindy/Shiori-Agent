@@ -1,5 +1,5 @@
 import { Chats, GearSix, MagnifyingGlass, Users } from "@phosphor-icons/react";
-import { navMotifs, withMotif } from "@shiori/plugin-sdk";
+import { navMotifs, withMotif } from "@shiori/sdk";
 
 /** 搜索: a sparkle in the lens. */
 export const SearchGlyph = withMotif(MagnifyingGlass, navMotifs.sparkle(88, 88, 30, { cx: 128, cy: 70, r: 7 }), "twinkle", "SearchGlyph");

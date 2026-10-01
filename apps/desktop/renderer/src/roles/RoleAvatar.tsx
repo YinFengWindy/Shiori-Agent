@@ -1,5 +1,5 @@
 import { toFileUrl } from "../shared/format";
-import { cx, type RoleRecord } from "@shiori/plugin-sdk";
+import { cx, type RoleRecord } from "@shiori/sdk";
 
 const roleAvatarClass = "role-avatar grid h-8 w-8 place-items-center rounded-full border border-line-soft object-cover";
 

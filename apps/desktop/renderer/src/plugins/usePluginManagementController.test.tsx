@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act, useEffect } from "react";
-import type { BridgeEvent } from "@shiori/plugin-sdk";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import type { BridgeEvent } from "@shiori/sdk";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { usePluginManagementController } from "./usePluginManagementController";
 import { resetPluginEnabledStateForTests } from "./pluginEnabledStateStore";
 

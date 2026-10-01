@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
+
 import asyncio
 import importlib.util
 from importlib.abc import Loader
@@ -55,7 +57,7 @@ from agent.plugin_host.plugin_data import (
     open_plugin_kv,
 )
 from agent.plugin_host.rpc import PluginRpcRegistry
-from agent.plugin_host.runtime_context import PluginRuntimeContext
+from agent.plugin_host.runtime_context import PluginRuntimeContext, PluginSetupContext
 from agent.plugin_host.unload import PluginRestartRequired
 from agent.plugin_host.package_fingerprint import (
     PackageContent,
@@ -438,16 +440,26 @@ class PluginKernel:
             raise ManifestError(
                 f"v2 插件 {handle.record.name} 的入口缺少 setup(ctx) 函数"
             )
-        setup_fn = cast("Callable[[PluginRuntimeContext], Awaitable[None]]", setup)
-        context = PluginRuntimeContext(
+        setup_fn = cast("Callable[[SdkRuntimeContext], Awaitable[None]]", setup)
+        context: PluginSetupContext = PluginRuntimeContext(
             plugin_id=handle.plugin_id,
             plugin_dir=handle.record.plugin_dir,
             manifest=handle.record.manifest,
             effects=handle.effects,
             capabilities=self._build_capabilities(handle),
+            lifecycle=(
+                LifecycleCapability(handle.contributions, handle.effects)
+                if "lifecycle" in handle.record.manifest.capabilities
+                else None
+            ),
+            events=(
+                ScopedEventBus(self._services.event_bus, handle.effects)
+                if "events" in handle.record.manifest.capabilities
+                else None
+            ),
             publish_api=lambda api: setattr(handle, "instance", api),
         )
-        await setup_fn(context)
+        await setup_fn(context.as_sdk_context())
 
     def _build_capabilities(self, handle: PluginHandle) -> dict[str, Any]:
         from agent.plugin_host.config import PluginConfig
@@ -457,7 +469,7 @@ class PluginKernel:
             "scene_observations": lambda: SceneObservationsCapability(
                 services.scene_observations, handle.effects
             ),
-            "events": lambda: ScopedEventBus(services.event_bus, handle.effects),
+            "events": lambda: None,
             "kv": lambda: open_plugin_kv(
                 workspace=services.workspace,
                 plugin_id=handle.plugin_id,
@@ -474,9 +486,7 @@ class PluginKernel:
                 handle.contributions,
                 handle.plugin_id,
             ),
-            "lifecycle": lambda: LifecycleCapability(
-                handle.contributions, handle.effects
-            ),
+            "lifecycle": lambda: None,
             "tool_hooks": lambda: ToolHooksCapability(
                 handle.contributions, handle.effects, handle.plugin_id
             ),

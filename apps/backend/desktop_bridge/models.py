@@ -1,43 +1,7 @@
-from __future__ import annotations
+"""Host imports of the shared bridge wire values."""
 
-from dataclasses import asdict, dataclass, field
-from typing import Any
-
-
-@dataclass
-class BridgeError:
-    code: str
-    message: str
-    details: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
-class BridgeResponse:
-    id: str
-    type: str
-    method: str
-    payload: dict[str, Any] = field(default_factory=dict)
-    error: BridgeError | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "type": self.type,
-            "method": self.method,
-            "payload": self.payload,
-            "error": self.error.to_dict() if self.error else None,
-        }
-
-
-@dataclass
-class BridgeEvent:
-    id: str
-    type: str
-    method: str
-    payload: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+from shiori_sdk.bridge import (
+    BridgeError as BridgeError,
+    BridgeEvent as BridgeEvent,
+    BridgeResponse as BridgeResponse,
+)

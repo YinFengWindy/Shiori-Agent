@@ -1,0 +1,1103 @@
+{
+  "plugins/browser_use/backend/browser.py": {
+    "agent.tools.base.ToolResult": 1
+  },
+  "plugins/browser_use/backend/daemon.py": {
+    "infra.process.owned_spawn.spawn_owned": 1,
+    "infra.process.windows_job.WindowsJob": 1
+  },
+  "plugins/browser_use/backend/plugin.py": {
+    "agent.plugin_host.plugin_data.plugin_data_dir": 1,
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1
+  },
+  "plugins/browser_use/backend/runtime.py": {
+    "bootstrap.paths.resource_root": 1
+  },
+  "plugins/browser_use/backend/session.py": {
+    "agent.mcp.client.McpClient": 1,
+    "agent.mcp.client.McpToolError": 1,
+    "agent.tools.base.ToolResult": 1
+  },
+  "plugins/browser_use/backend/tool.py": {
+    "agent.tools.base.Tool": 1,
+    "agent.tools.base.ToolResult": 1
+  },
+  "plugins/browser_use/tests/test_browser.py": {
+    "agent.mcp.client.McpClient": 4,
+    "agent.mcp.client.McpToolError": 1
+  },
+  "plugins/browser_use/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.tools.registry.ToolRegistry": 1,
+    "bus.event_bus.EventBus": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/browser_use/tests/test_session.py": {
+    "agent.mcp.client.McpClient": 2,
+    "agent.mcp.client.McpToolError": 2,
+    "agent.tools.base.ToolResult": 1
+  },
+  "plugins/browser_use/tests/test_tool.py": {
+    "agent.tools.registry.ToolRegistry": 1
+  },
+  "plugins/computer_use/backend/desktop.py": {
+    "agent.mcp.client.McpToolError": 1,
+    "agent.tools.base.ToolResult": 1,
+    "agent.tools.turn_scope.ToolTurnScope": 1,
+    "agent.tools.turn_scope.current_tool_turn": 1
+  },
+  "plugins/computer_use/backend/plugin.py": {
+    "agent.plugin_host.plugin_data.plugin_data_dir": 1,
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1
+  },
+  "plugins/computer_use/backend/runtime.py": {
+    "agent.mcp.client.McpClient": 1,
+    "bootstrap.paths.resource_root": 1
+  },
+  "plugins/computer_use/backend/session.py": {
+    "agent.mcp.client.McpClient": 1,
+    "agent.tools.base.ToolResult": 1
+  },
+  "plugins/computer_use/backend/targets.py": {
+    "agent.tools.base.ToolResult": 1
+  },
+  "plugins/computer_use/backend/tool.py": {
+    "agent.tools.base.Tool": 1,
+    "agent.tools.base.ToolResult": 1
+  },
+  "plugins/computer_use/tests/test_desktop.py": {
+    "agent.mcp.client.McpToolError": 1,
+    "agent.tools.turn_scope.current_tool_turn": 1,
+    "agent.tools.turn_scope.tool_turn": 1
+  },
+  "plugins/computer_use/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.tools.registry.ToolRegistry": 1,
+    "bus.event_bus.EventBus": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/computer_use/tests/test_session.py": {
+    "agent.mcp.client.McpToolError": 1,
+    "agent.tools.base.ToolResult": 1,
+    "agent.tools.turn_scope.tool_turn": 1
+  },
+  "plugins/computer_use/tests/test_targets.py": {
+    "agent.tools.base.ToolResult": 1
+  },
+  "plugins/computer_use/tests/test_tool.py": {
+    "agent.tools.registry.ToolRegistry": 1
+  },
+  "plugins/default_memory/backend/config.py": {
+    "agent.plugin_host.data_migration.migrate_private_data": 1,
+    "agent.plugin_host.local_config.resolve_local_config": 1
+  },
+  "plugins/default_memory/backend/engine/admin.py": {
+    "memory2.store.MemoryStore2": 1
+  },
+  "plugins/default_memory/backend/engine/lifecycle.py": {
+    "agent.config_models.Config": 1,
+    "agent.llm_json.load_json_object_loose": 1,
+    "agent.provider.LLMProvider": 1,
+    "agent.skills.SkillsLoader": 1,
+    "bootstrap.runtime.construction.track_build_resource": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events_lifecycle.TurnCommitted": 1,
+    "core.memory.engine.EngineProfile": 1,
+    "core.memory.engine.MemoryCapability": 1,
+    "core.memory.engine.MemoryEngineDescriptor": 1,
+    "core.memory.engine.MemoryToolProfile": 1,
+    "core.memory.events.ConsolidationCommitted": 1,
+    "core.memory.events.TurnIngested": 1,
+    "core.net.http.SharedHttpResources": 1,
+    "memory2.embedder.Embedder": 1,
+    "memory2.memorizer.Memorizer": 1,
+    "memory2.post_response_worker.PostResponseMemoryWorker": 1,
+    "memory2.procedure_tagger.ProcedureTagger": 1,
+    "memory2.retriever.Retriever": 1,
+    "memory2.store.MemoryStore2": 1,
+    "memory2.store.VEC_DIM": 1
+  },
+  "plugins/default_memory/backend/engine/mutation.py": {
+    "core.memory.engine.MemoryIngestRequest": 1,
+    "core.memory.engine.MemoryIngestResult": 1,
+    "core.memory.engine.MemoryMutation": 1,
+    "core.memory.engine.MemoryMutationResult": 1,
+    "core.memory.engine.MemoryScope": 1,
+    "core.memory.utils.resolve_memory_scope": 1,
+    "memory2.rule_schema.build_procedure_rule_schema": 1
+  },
+  "plugins/default_memory/backend/engine/policy.py": {
+    "core.memory.engine.MemoryMutation": 1,
+    "core.memory.engine.MemoryQuery": 1,
+    "core.memory.engine.MemoryRecord": 1,
+    "core.memory.utils.evidence_from_source_ref": 1,
+    "core.roles.policy.get_role_for_runtime_scope": 1,
+    "core.roles.policy.is_shared_memory_enabled": 1,
+    "memory2.store.MemoryStore2": 1
+  },
+  "plugins/default_memory/backend/engine/prompts.py": {
+    "core.memory.engine.MemoryToolProfile": 1,
+    "core.memory.engine.MemoryToolSpec": 1
+  },
+  "plugins/default_memory/backend/engine/query.py": {
+    "agent.provider.LLMResponse": 1,
+    "core.memory.engine.EngineProfile": 1,
+    "core.memory.engine.MemoryQuery": 1,
+    "core.memory.engine.MemoryQueryResult": 1,
+    "core.memory.utils.resolve_memory_scope": 1,
+    "core.memory.utils.should_require_scope_match": 1,
+    "memory2.query_builder.build_procedure_queries": 1
+  },
+  "plugins/default_memory/backend/memory_plugin.py": {
+    "agent.config_models.Config": 1,
+    "core.memory.plugin.MemoryPluginBuildDeps": 1,
+    "core.memory.plugin.MemoryPluginRuntime": 1
+  },
+  "plugins/default_memory/backend/plugin.py": {
+    "agent.lifecycle.types.AfterToolResultCtx": 1,
+    "agent.lifecycle.types.BeforeTurnCtx": 1,
+    "agent.plugin_host.data_migration.migrate_private_data": 1,
+    "agent.plugin_host.role_memory_documents.register_role_memory_documents": 1,
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1
+  },
+  "plugins/default_memory/backend/role_memory.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "core.roles.semantic_memory_requests.SEMANTIC_STATUS_FILTERS": 1,
+    "core.roles.semantic_memory_requests.page_options": 1,
+    "core.roles.semantic_memory_requests.readable_item": 1,
+    "core.roles.semantic_memory_requests.reject_undeclared_filters": 1,
+    "core.roles.semantic_memory_requests.require_memory_role": 1,
+    "desktop_bridge.method_policy.Concurrency": 1
+  },
+  "plugins/default_memory/tests/engine/test_lifecycle.py": {
+    "agent.provider.LLMResponse": 1,
+    "bus.event_bus.EventBus": 1,
+    "core.memory.events.ConsolidationCommitted": 1,
+    "memory2.store.MemoryStore2": 1,
+    "session.manager.ConsolidationCommitRequest": 1,
+    "session.manager.SessionManager": 1
+  },
+  "plugins/default_memory/tests/engine/test_query.py": {
+    "agent.provider.LLMResponse": 1
+  },
+  "plugins/default_memory/tests/test_plugin.py": {
+    "agent.lifecycle.types.AfterToolResultCtx": 1,
+    "agent.lifecycle.types.BeforeTurnCtx": 1,
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "bus.event_bus.EventBus": 1,
+    "core.roles.RoleStore": 1,
+    "desktop_bridge.method_policy.Concurrency": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/default_memory/tests/test_role_memory.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "bus.event_bus.EventBus": 1,
+    "core.roles.RoleStore": 1,
+    "desktop_bridge.method_policy.Concurrency": 1,
+    "memory2.store.MemoryStore2": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/desktop_pet/backend/bubbles.py": {
+    "agent.plugin_host.capabilities.RpcCapability": 1,
+    "desktop_bridge.method_policy.Concurrency": 1
+  },
+  "plugins/desktop_pet/backend/models.py": {
+    "core.roles.models.normalize_rel_path": 1,
+    "core.roles.models.now_iso": 1
+  },
+  "plugins/desktop_pet/backend/pet_packages.py": {
+    "core.roles.models.now_iso": 1,
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/desktop_pet/backend/pet_state.py": {
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/desktop_pet/backend/plugin.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "bus.events_lifecycle.RoleDeleted": 1,
+    "desktop_bridge.method_policy.Concurrency": 1
+  },
+  "plugins/desktop_pet/backend/reconcile.py": {
+    "agent.plugin_host.plugin_data.plugin_data_dir": 1,
+    "bus.events_lifecycle.RoleDeleted": 1,
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/desktop_pet/backend/rpc.py": {
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/desktop_pet/backend/storage.py": {
+    "agent.plugin_host.data_migration.migrate_private_data": 1,
+    "agent.plugin_host.plugin_data.plugin_data_dir": 1,
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/desktop_pet/backend/tool.py": {
+    "agent.plugin_host.capabilities.RpcCapability": 1,
+    "agent.tools.base.Tool": 1,
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/desktop_pet/tests/test_bubbles.py": {
+    "agent.plugin_host.bridge_events.PluginBridgeEvent": 1,
+    "agent.plugin_host.capabilities.RpcCapability": 1,
+    "agent.plugin_host.effects.EffectScope": 1,
+    "agent.plugin_host.rpc.PluginRpcRegistry": 1,
+    "bus.event_bus.EventBus": 1
+  },
+  "plugins/desktop_pet/tests/test_pet_packages.py": {
+    "core.roles.RoleStore": 1
+  },
+  "plugins/desktop_pet/tests/test_pet_state.py": {
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/desktop_pet/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.tools.registry.ToolRegistry": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events_lifecycle.RoleDeleted": 1,
+    "core.roles.store.RoleStore": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/desktop_pet/tests/test_reconcile.py": {
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/desktop_pet/tests/test_rpc.py": {
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/desktop_pet/tests/test_storage.py": {
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/desktop_pet/tests/test_tool.py": {
+    "agent.plugin_host.bridge_events.PluginBridgeEvent": 1,
+    "agent.plugin_host.capabilities.RpcCapability": 1,
+    "agent.plugin_host.effects.EffectScope": 1,
+    "agent.plugin_host.rpc.PluginRpcRegistry": 1,
+    "agent.tools.registry.ToolRegistry": 1,
+    "bus.event_bus.EventBus": 1,
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/feishu/backend/account_delivery.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "core.accounts.VIA_ACCOUNT_KEY": 1,
+    "core.accounts.target_contract.GROUP_MEMBER_TARGET": 1,
+    "core.accounts.target_contract.UncertainDeliveryError": 1,
+    "core.accounts.target_contract.account_send_media": 1,
+    "core.common.media.detect_image_mime_from_header": 1
+  },
+  "plugins/feishu/backend/accounts.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "core.accounts.AccountDeletionPlan": 1,
+    "core.accounts.AccountResponseRules": 1,
+    "core.accounts.response_rules_to_dict": 1,
+    "core.accounts.stored_response_rules": 1,
+    "infra.channels.account_group.AccountChannelGroup": 1
+  },
+  "plugins/feishu/backend/channel.py": {
+    "agent.looping.interrupt.InterruptController": 1,
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "agent.plugin_host.capabilities.AccountsCapability": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "agent.tools.message_push.MessagePushTool": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events.InboundMessage": 1,
+    "bus.events.OutboundMessage": 1,
+    "bus.events_lifecycle.StreamDeltaReady": 1,
+    "bus.events_lifecycle.TurnStarted": 1,
+    "bus.queue.MessageBus": 1,
+    "core.accounts.ConnectionState": 1,
+    "core.accounts.VIA_ACCOUNT_KEY": 1,
+    "core.accounts.ViaAccount": 1,
+    "core.channels.ChannelHub": 1,
+    "core.channels.chat_id_command.answer_chat_id_command": 1,
+    "core.channels.pairing_command.answer_pairing_code": 1,
+    "core.common.channel_chat_types.ChatTypeDeclaration": 1,
+    "core.common.channel_chat_types.is_chat_id_command": 1,
+    "core.common.message_source.SENDER_NAME_KEY": 1,
+    "infra.channels.contract.ChannelContext": 1,
+    "infra.channels.contract.ChannelStatus": 1,
+    "infra.channels.intake.ChannelIntake": 1,
+    "infra.channels.session_key.resolve_outbound_session_key": 1
+  },
+  "plugins/feishu/backend/config.py": {
+    "agent.config.resolve_config_references": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1
+  },
+  "plugins/feishu/backend/contacts.py": {
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "bus.events.InboundMessage": 1
+  },
+  "plugins/feishu/backend/inbound.py": {
+    "core.common.media.detect_image_mime_from_header": 1,
+    "infra.channels.base.AttachmentStore": 1,
+    "infra.channels.reply_context.build_inbound_text_with_reply_context": 1
+  },
+  "plugins/feishu/backend/plugin.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "core.accounts.target_contract.ACCOUNT_SEND_METHOD": 1,
+    "core.accounts.target_contract.ACCOUNT_TARGETS_METHOD": 1,
+    "desktop_bridge.method_policy.Concurrency": 1,
+    "infra.channels.account_group.AccountChannelGroup": 1
+  },
+  "plugins/feishu/tests/conftest.py": {
+    "bus.event_bus.EventBus": 1,
+    "bus.events.InboundMessage": 1,
+    "bus.events.OutboundMessage": 1,
+    "infra.channels.base.AttachmentStore": 1,
+    "infra.channels.contract.ChannelContext": 1
+  },
+  "plugins/feishu/tests/test_account_delivery.py": {
+    "core.accounts.target_contract.UncertainDeliveryError": 1
+  },
+  "plugins/feishu/tests/test_channel.py": {
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "agent.plugin_host.effects.EffectScope": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "bus.events.OutboundMessage": 1,
+    "core.channel_avatars.ChannelAvatarStore": 1
+  },
+  "plugins/feishu/tests/test_contacts.py": {
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "agent.plugin_host.effects.EffectScope": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "bus.events.InboundMessage": 1,
+    "core.channel_avatars.ChannelAvatarStore": 1
+  },
+  "plugins/feishu/tests/test_inbound.py": {
+    "agent.plugin_host.manifest.load_manifest": 1
+  },
+  "plugins/feishu/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "agent.plugin_host.load_manifest": 1,
+    "agent.plugin_host.plugin_data.plugin_data_dir": 1,
+    "bus.event_bus.EventBus": 1,
+    "core.accounts.AccountResponseRules": 1,
+    "core.accounts.AccountSnapshot": 1,
+    "core.accounts.target_contract.UncertainDeliveryError": 1,
+    "core.roles.store.RoleStore": 1,
+    "shiori_plugin_testkit.bridge.plugin_bridge_request": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/feishu/tests/test_streaming.py": {
+    "agent.looping.core.AgentLoop": 1,
+    "bus.events.InboundMessage": 1,
+    "bus.events.OutboundMessage": 1,
+    "bus.events_lifecycle.TurnStarted": 1,
+    "core.common.channel_directory.ChannelDirectory": 1
+  },
+  "plugins/meme/backend/plugin.py": {
+    "agent.lifecycle.types.AfterReasoningCtx": 1,
+    "agent.lifecycle.types.PromptRenderCtx": 1,
+    "agent.plugin_host.data_migration.migrate_private_data": 1,
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "agent.prompting.PromptSectionRender": 1,
+    "session.manager.SessionManager": 1
+  },
+  "plugins/meme/backend/runtime.py": {
+    "bootstrap.paths.common_emojis_paths": 1,
+    "core.roles.RoleStore": 1
+  },
+  "plugins/meme/tests/test_plugin.py": {
+    "agent.core.response_parser.ResponseMetadata": 1,
+    "agent.core.runtime_support.TurnRunResult": 1,
+    "agent.lifecycle.phases.after_reasoning.AfterReasoningFrame": 1,
+    "agent.lifecycle.phases.after_reasoning.default_after_reasoning_modules": 1,
+    "agent.lifecycle.phases.prompt_render.default_prompt_render_modules": 1,
+    "agent.lifecycle.types.AfterReasoningCtx": 1,
+    "agent.lifecycle.types.AfterReasoningInput": 1,
+    "agent.lifecycle.types.PromptRenderCtx": 1,
+    "agent.lifecycle.types.TurnState": 1,
+    "agent.looping.ports.SessionServices": 1,
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.plugin_host.events.ScopedEventBus": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events.InboundMessage": 1,
+    "core.roles.RoleStore": 1,
+    "session.manager.Session": 1,
+    "shiori_plugin_testkit.packages.plugin_directory": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/novelai/backend/auto_cg.py": {
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "agent.tool_hooks.types.HookOutcome": 1
+  },
+  "plugins/novelai/backend/auto_cg_controller.py": {
+    "bus.events_lifecycle.SceneObservationCommitted": 1,
+    "core.common.runtime_tasks.create_runtime_task": 1,
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/novelai/backend/client.py": {
+    "core.net.http.HttpRequester": 1
+  },
+  "plugins/novelai/backend/failures.py": {
+    "agent.plugin_host.bridge_events.PluginRpcError": 1,
+    "core.common.error_summary.summarize_exception_for_user": 1
+  },
+  "plugins/novelai/backend/plugin.py": {
+    "agent.lifecycle.types.AfterReasoningCtx": 1,
+    "agent.lifecycle.types.AfterToolResultCtx": 1,
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "bus.events_lifecycle.RoleDeleted": 1,
+    "bus.events_lifecycle.SceneObservationCommitted": 1,
+    "core.net.http.get_default_http_requester": 1,
+    "desktop_bridge.method_policy.Concurrency": 1
+  },
+  "plugins/novelai/backend/prompt_tags.py": {
+    "infra.persistence.owned_assets.copy_owned_asset": 1
+  },
+  "plugins/novelai/backend/role_state.py": {
+    "bus.events_lifecycle.RoleDeleted": 1,
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/novelai/backend/rpc.py": {
+    "desktop_bridge.session_presenter.DesktopSessionPresenter": 1
+  },
+  "plugins/novelai/backend/scene_prompt.py": {
+    "bus.events_lifecycle.SceneObservationCommitted": 1
+  },
+  "plugins/novelai/backend/service.py": {
+    "agent.tools.filesystem._resolve_path": 1,
+    "core.common.media.detect_image_mime_from_header": 1,
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/novelai/backend/storage.py": {
+    "agent.plugin_host.data_migration.migrate_private_data": 1,
+    "infra.persistence.json_store.atomic_save_json": 1,
+    "infra.persistence.text_store.atomic_save_text": 1
+  },
+  "plugins/novelai/backend/store.py": {
+    "session.media_assets.original_media_path": 1
+  },
+  "plugins/novelai/backend/tool.py": {
+    "agent.tools.base.Tool": 1
+  },
+  "plugins/novelai/tests/test_auto_cg.py": {
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "agent.tool_hooks.types.HookOutcome": 1
+  },
+  "plugins/novelai/tests/test_auto_cg_controller.py": {
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "agent.tools.message_push.MessagePushTool": 1,
+    "agent.tools.registry.ToolRegistry": 1,
+    "bootstrap.runtime.generations.RuntimeCandidate": 1,
+    "bus.events_lifecycle.SceneObservationCommitted": 1,
+    "core.common.runtime_scope.bind_runtime": 1,
+    "core.common.runtime_scope.current_runtime_lease": 1,
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/novelai/tests/test_config.py": {
+    "agent.config.load_config_text": 1,
+    "shiori_plugin_testkit.bridge.plugin_bridge_request": 1
+  },
+  "plugins/novelai/tests/test_failures.py": {
+    "agent.plugin_host.bridge_events.PluginRpcError": 1
+  },
+  "plugins/novelai/tests/test_plugin.py": {
+    "agent.lifecycle.types.AfterReasoningCtx": 1,
+    "agent.lifecycle.types.AfterToolResultCtx": 1,
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.provider.LLMResponse": 1,
+    "agent.provider.ToolCall": 1,
+    "agent.tools.message_push.MessagePushTool": 1,
+    "agent.tools.registry.ToolRegistry": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events_lifecycle.RoleDeleted": 1,
+    "bus.events_lifecycle.SceneObservationCommitted": 1,
+    "core.roles.store.RoleStore": 1,
+    "session.manager.SessionManager": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/novelai/tests/test_role_state.py": {
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/novelai/tests/test_rpc.py": {
+    "agent.plugin_host.bridge_events.PluginRpcError": 1,
+    "session.manager.SessionManager": 1,
+    "session.media_assets.original_media_path": 2
+  },
+  "plugins/novelai/tests/test_scene_prompt.py": {
+    "agent.provider.LLMResponse": 1,
+    "agent.provider.ToolCall": 1,
+    "bus.events_lifecycle.SceneObservationCommitted": 1
+  },
+  "plugins/novelai/tests/test_service.py": {
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/observe/backend/collector.py": {
+    "core.common.global_hook_stack.install_global_hooks": 1,
+    "core.common.global_hook_stack.uninstall_global_hooks": 1,
+    "core.error_context.current_session_key": 1
+  },
+  "plugins/observe/backend/plugin.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "bus.events_lifecycle.TurnCommitted": 1,
+    "core.memory.events.MemoryWritten": 1,
+    "core.memory.events.RetrievalCompleted": 1
+  },
+  "plugins/observe/backend/storage.py": {
+    "agent.plugin_host.data_migration.migrate_private_data": 1,
+    "agent.plugin_host.plugin_data.plugin_data_dir": 1
+  },
+  "plugins/observe/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.plugin_host.capabilities.BackgroundCapability": 1,
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events_lifecycle.TurnCommitted": 1,
+    "core.common.global_hook_stack": 1,
+    "core.memory.events.MemoryWritten": 1,
+    "core.memory.events.RetrievalCompleted": 1,
+    "core.memory.events.RetrievalHitSummary": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/observe/tests/test_writer.py": {
+    "core.common.diagnostic_log": 1
+  },
+  "plugins/plugin_undo/backend/plugin.py": {
+    "agent.lifecycle.commands.abort_command": 1,
+    "agent.lifecycle.commands.normalize_command": 1,
+    "agent.lifecycle.phases.before_turn.BeforeTurnFrame": 1,
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "session.manager.SessionManager": 1
+  },
+  "plugins/plugin_undo/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "bus.event_bus.EventBus": 1,
+    "session.manager.SessionManager": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/qq/backend/accounts_actions.py": {
+    "core.accounts.target_contract.UncertainDeliveryError": 1,
+    "core.common.media.detect_image_mime_from_header": 1
+  },
+  "plugins/qq/backend/accounts_avatar.py": {
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "bus.events.InboundMessage": 1,
+    "core.net.http.shared_ssl_context": 1
+  },
+  "plugins/qq/backend/accounts_inbound.py": {
+    "bus.events.InboundMessage": 1,
+    "core.accounts.VIA_ACCOUNT_KEY": 1,
+    "core.common.message_source.MENTIONED_IDS_KEY": 1,
+    "core.common.message_source.MENTIONED_KEY": 1,
+    "core.common.message_source.SENDER_NAME_KEY": 1
+  },
+  "plugins/qq/backend/accounts_inbound_adapter.py": {
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "bus.events.InboundMessage": 1,
+    "core.channels.pairing_command.answer_pairing_code": 1,
+    "core.common.message_source.GROUP_NAME_KEY": 1,
+    "core.common.message_source.addresses_account": 1,
+    "infra.channels.contract.ChannelContext": 1,
+    "infra.channels.intake.ChannelIntake": 1
+  },
+  "plugins/qq/backend/accounts_outbound_adapter.py": {
+    "bus.events.OutboundMessage": 1,
+    "core.common.channel_chat_types.REPLY_MENTION_IDS_KEY": 1,
+    "infra.channels.contract.ChannelContext": 1
+  },
+  "plugins/qq/backend/accounts_reply_quote.py": {
+    "bus.events.InboundMessage": 1,
+    "core.common.message_source.REPLY_TO_SENDER_ID_KEY": 1,
+    "infra.channels.reply_context.with_reply_quote": 1
+  },
+  "plugins/qq/backend/accounts_runtime.py": {
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "infra.channels.contract.ChannelContext": 1,
+    "infra.channels.intake.ChannelIntake": 1
+  },
+  "plugins/qq/backend/accounts_settings.py": {
+    "core.accounts.AccountResponseRules": 1,
+    "infra.channels.intake.ChannelIntake": 1
+  },
+  "plugins/qq/backend/accounts_store.py": {
+    "agent.plugin_host.plugin_data.plugin_data_dir": 1,
+    "core.accounts.AccountResponseRules": 1,
+    "core.accounts.ViaAccount": 1,
+    "core.accounts.response_rules_to_dict": 1,
+    "core.accounts.stored_response_rules": 1,
+    "infra.persistence.json_store.atomic_save_json": 1
+  },
+  "plugins/qq/backend/channel/compat.py": {
+    "core.net.http.HttpRequester": 1,
+    "core.net.http.RequestBudget": 1,
+    "infra.channels.base.AttachmentStore": 1
+  },
+  "plugins/qq/backend/channel/formatting.py": {
+    "core.common.channel_identifiers.QQ_GROUP_PREFIX": 1
+  },
+  "plugins/qq/backend/managed_napcat.py": {
+    "infra.process.owned_spawn.popen_owned": 1,
+    "infra.process.windows_job.WindowsJob": 1
+  },
+  "plugins/qq/backend/napcat_account_files.py": {
+    "infra.persistence.json_store.atomic_save_json": 1
+  },
+  "plugins/qq/backend/napcat_installer.py": {
+    "infra.persistence.json_store.atomic_save_json": 1
+  },
+  "plugins/qq/backend/plugin.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "core.accounts.AccountDeletionPlan": 1,
+    "core.accounts.VIA_ACCOUNT_KEY": 1,
+    "core.accounts.target_contract.ACCOUNT_SEND_METHOD": 1,
+    "core.accounts.target_contract.ACCOUNT_TARGETS_METHOD": 1,
+    "core.accounts.target_contract.account_send_media": 1,
+    "desktop_bridge.method_policy.Concurrency": 1
+  },
+  "plugins/qq/tests/test_accounts_actions.py": {
+    "agent.account_delivery.AccountDelivery": 1,
+    "core.accounts.AccountRegistry": 1,
+    "core.accounts.delivery_ledger.AccountDeliveryLedger": 1,
+    "core.accounts.target_contract.AccountTarget": 1,
+    "core.accounts.target_contract.UncertainDeliveryError": 1,
+    "core.identity.UserIdentityStore": 1
+  },
+  "plugins/qq/tests/test_accounts_avatar.py": {
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "agent.plugin_host.effects.EffectScope": 1,
+    "core.channel_avatars.ChannelAvatarStore": 1
+  },
+  "plugins/qq/tests/test_accounts_outbound_adapter.py": {
+    "bus.events.OutboundMessage": 1
+  },
+  "plugins/qq/tests/test_accounts_runtime.py": {
+    "infra.persistence.json_store.atomic_save_json": 1
+  },
+  "plugins/qq/tests/test_compat.py": {
+    "core.net.http.HttpRequester": 1,
+    "core.net.http.RequestBudget": 1,
+    "core.net.http.RetryPolicy": 1
+  },
+  "plugins/qq/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.plugin_host.load_manifest": 1,
+    "bus.event_bus.EventBus": 1,
+    "core.accounts.AccountResponseRules": 1,
+    "core.roles.store.RoleStore": 1,
+    "shiori_plugin_testkit.bridge.plugin_bridge_request": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/qqbot/backend/account_channel.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "bus.events_lifecycle.StreamDeltaReady": 2,
+    "bus.events_lifecycle.TurnCancelled": 2,
+    "bus.events_lifecycle.TurnStarted": 2,
+    "core.common.channel_chat_types.ChatTypeDeclaration": 1,
+    "infra.channels.contract.ChannelContext": 1
+  },
+  "plugins/qqbot/backend/account_commands.py": {
+    "infra.channels.contract.ChannelContext": 1
+  },
+  "plugins/qqbot/backend/account_identity.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "core.accounts.ViaAccount": 1,
+    "core.accounts.stored_response_rules": 1
+  },
+  "plugins/qqbot/backend/account_sending.py": {
+    "core.accounts.VIA_ACCOUNT_KEY": 1,
+    "core.accounts.target_contract.GROUP_MEMBER_TARGET": 1,
+    "core.accounts.target_contract.UncertainDeliveryError": 1,
+    "core.accounts.target_contract.account_send_media": 1,
+    "core.common.media.detect_image_mime_from_header": 1
+  },
+  "plugins/qqbot/backend/accounts.py": {
+    "agent.config.resolve_config_references": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1
+  },
+  "plugins/qqbot/backend/channel.py": {
+    "agent.looping.interrupt.InterruptController": 1,
+    "bus.events_lifecycle.StreamDeltaReady": 1,
+    "bus.events_lifecycle.TurnCancelled": 1,
+    "bus.events_lifecycle.TurnStarted": 1,
+    "bus.queue.MessageBus": 1,
+    "core.channels.ChannelHub": 1,
+    "core.common.channel_chat_types.ChatTypeDeclaration": 1,
+    "infra.channels.contract.ChannelContext": 1,
+    "infra.channels.intake.ChannelIntake": 1
+  },
+  "plugins/qqbot/backend/inbound.py": {
+    "bus.events.InboundMessage": 1,
+    "core.accounts.VIA_ACCOUNT_KEY": 1,
+    "core.channels.chat_id_command.answer_chat_id_command": 1,
+    "core.channels.pairing_command.answer_pairing_code": 1,
+    "core.common.channel_chat_types.is_chat_id_command": 1
+  },
+  "plugins/qqbot/backend/outbound.py": {
+    "bus.errors.NonRetryableDeliveryError": 1,
+    "bus.events.OutboundMessage": 1,
+    "core.common.media.detect_image_mime_from_header": 1,
+    "infra.channels.session_key.resolve_outbound_session_key": 1
+  },
+  "plugins/qqbot/backend/plugin.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "core.accounts.AccountDeletionPlan": 1,
+    "core.accounts.AccountResponseRules": 1,
+    "core.accounts.response_rules_to_dict": 1,
+    "core.accounts.target_contract.ACCOUNT_SEND_METHOD": 1,
+    "core.accounts.target_contract.ACCOUNT_TARGETS_METHOD": 1,
+    "desktop_bridge.method_policy.Concurrency": 1
+  },
+  "plugins/qqbot/backend/streaming.py": {
+    "bus.events_lifecycle.StreamDeltaReady": 1,
+    "bus.events_lifecycle.TurnCancelled": 1,
+    "bus.events_lifecycle.TurnStarted": 1
+  },
+  "plugins/qqbot/tests/test_account_channel.py": {
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "agent.tools.message_push.MessagePushTool": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events.InboundMessage": 1,
+    "bus.queue.MessageBus": 1,
+    "infra.channels.base.AttachmentStore": 1,
+    "infra.channels.contract.ChannelContext": 1
+  },
+  "plugins/qqbot/tests/test_account_commands.py": {
+    "agent.plugin_host.kv.PluginKVStore": 1
+  },
+  "plugins/qqbot/tests/test_account_identity.py": {
+    "agent.plugin_host.kv.PluginKVStore": 1
+  },
+  "plugins/qqbot/tests/test_account_sending.py": {
+    "core.accounts.target_contract.UncertainDeliveryError": 1
+  },
+  "plugins/qqbot/tests/test_accounts.py": {
+    "agent.config": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1
+  },
+  "plugins/qqbot/tests/test_channel.py": {
+    "agent.plugin_host.manifest.load_manifest": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events.InboundMessage": 1,
+    "bus.events.OutboundMessage": 1,
+    "infra.channels.base.AttachmentStore": 1,
+    "infra.channels.contract.ChannelContext": 1
+  },
+  "plugins/qqbot/tests/test_outbound.py": {
+    "bus.errors.NonRetryableDeliveryError": 1,
+    "bus.events.OutboundMessage": 1
+  },
+  "plugins/qqbot/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "agent.plugin_host.load_manifest": 1,
+    "agent.plugin_host.plugin_data.plugin_data_dir": 1,
+    "bus.event_bus.EventBus": 1,
+    "core.roles.store.RoleStore": 1,
+    "shiori_plugin_testkit.bridge.plugin_bridge_request": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/qqbot/tests/test_streaming.py": {
+    "agent.looping.core.AgentLoop": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events.InboundMessage": 1,
+    "bus.events.OutboundMessage": 1,
+    "bus.events_lifecycle.TurnCancelled": 1,
+    "bus.events_lifecycle.TurnStarted": 1,
+    "bus.queue.MessageBus": 1,
+    "core.common.channel_directory.ChannelDirectory": 1,
+    "infra.channels.base.AttachmentStore": 1,
+    "infra.channels.contract.ChannelContext": 1
+  },
+  "plugins/screen_perception/backend/model.py": {
+    "agent.llm_json.load_json_object_loose": 1,
+    "agent.provider.LLMProvider": 1,
+    "core.roles.RoleRepository": 1,
+    "core.roles.role_runtime.RoleRuntimeRegistry": 1
+  },
+  "plugins/screen_perception/backend/plugin.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "core.roles.RoleRepository": 1
+  },
+  "plugins/screen_perception/backend/tool.py": {
+    "agent.tools.base.Tool": 1
+  },
+  "plugins/screen_perception/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.tools.registry.ToolRegistry": 1,
+    "bus.event_bus.EventBus": 1,
+    "core.roles.RoleStore": 1,
+    "shiori_plugin_testkit.packages.plugin_directory": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/screen_perception/tests/test_tool.py": {
+    "agent.tools.registry.ToolRegistry": 1
+  },
+  "plugins/shell_restore/backend/plugin.py": {
+    "agent.lifecycle.types.PreToolCtx": 1,
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1
+  },
+  "plugins/shell_restore/tests/test_rm_hook.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.tool_hooks.ToolExecutionRequest": 1,
+    "agent.tool_hooks.ToolExecutor": 1,
+    "bus.event_bus.EventBus": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/shell_safety/backend/plugin.py": {
+    "agent.lifecycle.types.PreToolCtx": 1,
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "agent.tool_hooks.HookOutcome": 1
+  },
+  "plugins/shell_safety/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.tool_hooks.ToolExecutionRequest": 1,
+    "agent.tool_hooks.ToolExecutor": 1,
+    "bus.event_bus.EventBus": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/status_commands/backend/kvcache.py": {
+    "agent.lifecycle.commands.abort_command": 1,
+    "agent.lifecycle.commands.normalize_command": 1,
+    "agent.lifecycle.phases.before_turn.BeforeTurnFrame": 1,
+    "agent.lifecycle.types.TurnState": 1,
+    "agent.plugin_host.dependencies.PluginDependencies": 1,
+    "agent.prompting.is_context_frame": 1
+  },
+  "plugins/status_commands/backend/memory_status.py": {
+    "agent.lifecycle.commands.abort_command": 1,
+    "agent.lifecycle.commands.normalize_command": 1,
+    "agent.lifecycle.phases.before_turn.BeforeTurnFrame": 1,
+    "agent.prompting.is_context_frame": 1
+  },
+  "plugins/status_commands/backend/plugin.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1
+  },
+  "plugins/status_commands/tests/conftest.py": {
+    "agent.core.passive_turn.ContextStore": 1,
+    "agent.lifecycle.phases.before_turn.BeforeTurnFrame": 1,
+    "agent.lifecycle.phases.before_turn.default_before_turn_modules": 1,
+    "agent.lifecycle.types.TurnState": 1,
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events.InboundMessage": 1,
+    "session.manager.Session": 1,
+    "shiori_plugin_testkit.packages.plugin_directory": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/status_commands/tests/test_kvcache.py": {
+    "agent.plugin_host.dependencies.PluginDependencies": 1
+  },
+  "plugins/status_commands/tests/test_memory_status.py": {
+    "session.manager.Session": 1
+  },
+  "plugins/status_commands/tests/test_plugin.py": {
+    "agent.plugin_host.capabilities.BotCommandsCapability": 1,
+    "bus.events_lifecycle.TurnCommitted": 1,
+    "shiori_plugin_testkit.packages.plugin_directory": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/story/backend/assets.py": {
+    "infra.persistence.owned_assets.copy_owned_asset": 1
+  },
+  "plugins/story/backend/catalog.py": {
+    "agent.plugin_host.data_migration.migrate_private_data": 1
+  },
+  "plugins/story/backend/plugin.py": {
+    "agent.plugin_host.bridge_events.PluginRpcError": 1,
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "core.roles.RoleStore": 1,
+    "desktop_bridge.method_policy.Concurrency": 1
+  },
+  "plugins/story/backend/rpc.py": {
+    "core.common.runtime_tasks.create_runtime_task": 1,
+    "core.roles.RoleRuntimeRegistry": 1,
+    "core.roles.RoleStore": 1
+  },
+  "plugins/story/backend/service.py": {
+    "core.roles.models.RoleRecord": 1
+  },
+  "plugins/story/tests/test_director.py": {
+    "agent.provider.LLMResponse": 1
+  },
+  "plugins/story/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.tools.registry.ToolRegistry": 1,
+    "bus.event_bus.EventBus": 1,
+    "core.roles.store.RoleStore": 1,
+    "desktop_bridge.method_policy.Concurrency": 1,
+    "shiori_plugin_testkit.bridge.plugin_bridge_request": 1,
+    "shiori_plugin_testkit.packages.plugin_directory": 1
+  },
+  "plugins/story/tests/test_rpc.py": {
+    "core.roles.store.RoleStore": 1
+  },
+  "plugins/telegram/backend/account_api.py": {
+    "agent.plugin_host.capabilities.RpcCapability": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "core.accounts.VIA_ACCOUNT_KEY": 1,
+    "core.accounts.target_contract.ACCOUNT_SEND_METHOD": 1,
+    "core.accounts.target_contract.ACCOUNT_TARGETS_METHOD": 1,
+    "core.accounts.target_contract.GROUP_MEMBER_TARGET": 1,
+    "core.accounts.target_contract.UncertainDeliveryError": 1,
+    "core.accounts.target_contract.account_send_media": 1,
+    "core.common.media.detect_image_mime_from_header": 1,
+    "desktop_bridge.method_policy.Concurrency": 1
+  },
+  "plugins/telegram/backend/bots.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "core.accounts.AccountDeletionPlan": 1,
+    "core.accounts.AccountResponseRules": 1,
+    "core.accounts.response_rules_to_dict": 1,
+    "core.accounts.stored_response_rules": 1,
+    "infra.channels.account_group.AccountChannelGroup": 1
+  },
+  "plugins/telegram/backend/channel/avatar.py": {
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "bus.events.InboundMessage": 1
+  },
+  "plugins/telegram/backend/channel/commands.py": {
+    "core.channels.chat_id_command.answer_chat_id_command": 1
+  },
+  "plugins/telegram/backend/channel/formatting.py": {
+    "infra.channels.reply_context.build_inbound_text_with_reply_context": 1
+  },
+  "plugins/telegram/backend/channel/identity.py": {
+    "core.common.channel_chat_types.is_group_chat_type": 1,
+    "core.common.message_source.GROUP_NAME_KEY": 1,
+    "core.common.message_source.SENDER_NAME_KEY": 1
+  },
+  "plugins/telegram/backend/channel/inbound.py": {
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "bus.events.InboundMessage": 1,
+    "core.accounts.VIA_ACCOUNT_KEY": 1,
+    "core.channels.pairing_command.answer_pairing_code": 1,
+    "core.common.message_source.MENTIONED_KEY": 1
+  },
+  "plugins/telegram/backend/channel/lifecycle.py": {
+    "agent.looping.interrupt.InterruptController": 1,
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "agent.plugin_host.capabilities.AccountsCapability": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "bus.event_binding.EventBinding": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events_lifecycle.StreamDeltaReady": 1,
+    "bus.events_lifecycle.ToolCallCompleted": 1,
+    "bus.events_lifecycle.ToolCallStarted": 1,
+    "bus.events_lifecycle.TurnStarted": 1,
+    "bus.queue.MessageBus": 1,
+    "core.accounts.ConnectionState": 1,
+    "core.accounts.ViaAccount": 1,
+    "core.channels.ChannelHub": 1,
+    "core.common.channel_chat_types.CHAT_ID_COMMANDS": 1,
+    "core.common.channel_chat_types.ChatTypeDeclaration": 1,
+    "infra.channels.base.AttachmentStore": 1,
+    "infra.channels.base.MessageDeduper": 1,
+    "infra.channels.base.SessionIdentityIndex": 1,
+    "infra.channels.contract.ChannelContext": 1,
+    "infra.channels.intake.ChannelIntake": 1,
+    "session.manager.SessionManager": 1
+  },
+  "plugins/telegram/backend/channel/media.py": {
+    "core.common.message_source.MENTIONED_KEY": 1
+  },
+  "plugins/telegram/backend/channel/outbound.py": {
+    "bus.events.OutboundMessage": 1,
+    "core.common.channel_chat_types.REPLY_MENTION_IDS_KEY": 1,
+    "core.common.channel_chat_types.is_group_chat_type": 1,
+    "infra.channels.session_key.resolve_outbound_session_key": 1
+  },
+  "plugins/telegram/backend/channel/streaming.py": {
+    "bus.events_lifecycle.StreamDeltaReady": 1,
+    "bus.events_lifecycle.ToolCallCompleted": 1,
+    "bus.events_lifecycle.ToolCallStarted": 1,
+    "bus.events_lifecycle.TurnStarted": 1
+  },
+  "plugins/telegram/backend/credentials.py": {
+    "agent.config.resolve_config_references": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1
+  },
+  "plugins/telegram/backend/plugin.py": {
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "infra.channels.account_group.AccountChannelGroup": 1
+  },
+  "plugins/telegram/tests/channel/test_avatar.py": {
+    "agent.plugin_host.avatars.AvatarsCapability": 1,
+    "agent.plugin_host.effects.EffectScope": 1,
+    "bus.events.InboundMessage": 1,
+    "core.channel_avatars.ChannelAvatarStore": 1
+  },
+  "plugins/telegram/tests/channel/test_inbound.py": {
+    "bus.events.InboundMessage": 2
+  },
+  "plugins/telegram/tests/channel/test_lifecycle.py": {
+    "agent.plugin_host.kv.PluginKVStore": 1
+  },
+  "plugins/telegram/tests/channel/test_outbound.py": {
+    "bus.events.OutboundMessage": 1
+  },
+  "plugins/telegram/tests/test_account_api.py": {
+    "core.accounts.target_contract.UncertainDeliveryError": 1
+  },
+  "plugins/telegram/tests/test_bots.py": {
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "agent.plugin_host.plugin_data.plugin_data_dir": 1,
+    "core.roles.store.RoleStore": 1,
+    "shiori_plugin_testkit.bridge.plugin_bridge_request": 1
+  },
+  "plugins/telegram/tests/test_channel.py": {
+    "agent.plugin_host.manifest.load_manifest": 1,
+    "bus.event_bus.EventBus": 1,
+    "bus.events.InboundMessage": 1,
+    "bus.events.OutboundMessage": 1,
+    "bus.events_lifecycle.StreamDeltaReady": 1,
+    "bus.events_lifecycle.ToolCallCompleted": 1,
+    "bus.events_lifecycle.ToolCallStarted": 1,
+    "conversation.service.LegacySessionDescriptor": 1,
+    "core.common.channel_directory.ChannelDirectory": 1,
+    "core.roles.RoleStore": 1,
+    "infra.channels.contract.ChannelContext": 1
+  },
+  "plugins/telegram/tests/test_plugin.py": {
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.plugin_host.kv.PluginKVStore": 1,
+    "agent.plugin_host.load_manifest": 1,
+    "agent.plugin_host.plugin_data.plugin_data_dir": 1,
+    "bus.event_bus.EventBus": 1,
+    "core.roles.store.RoleStore": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  },
+  "plugins/tool_loop_guard/backend/plugin.py": {
+    "agent.lifecycle.types.PreToolCtx": 1,
+    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
+    "agent.tool_hooks.HookOutcome": 1
+  },
+  "plugins/tool_loop_guard/tests/test_plugin.py": {
+    "agent.looping.core.AgentLoop": 1,
+    "agent.looping.ports.AgentLoopConfig": 1,
+    "agent.looping.ports.AgentLoopDeps": 1,
+    "agent.looping.ports.LLMConfig": 1,
+    "agent.looping.ports.MemoryServices": 1,
+    "agent.plugin_host.HostServices": 1,
+    "agent.plugin_host.PluginKernel": 1,
+    "agent.provider.LLMResponse": 1,
+    "agent.provider.ToolCall": 1,
+    "agent.subagent.SubAgent": 1,
+    "agent.tool_hooks.base.ToolHook": 1,
+    "agent.tools.base.Tool": 1,
+    "agent.tools.registry.ToolRegistry": 1,
+    "bus.event_bus.EventBus": 1,
+    "core.net.http.SharedHttpResources": 1,
+    "core.net.http.clear_default_shared_http_resources": 1,
+    "core.net.http.configure_default_shared_http_resources": 1,
+    "shiori_plugin_testkit.memory.FakeMemoryEngine": 1,
+    "shiori_plugin_testkit.packages.stage_plugin_package": 1
+  }
+}

@@ -1,4 +1,4 @@
-import { cx } from "@shiori/plugin-sdk";
+import { cx } from "@shiori/sdk";
 import { DeleteIcon } from "../shared/icons";
 import {
   focusResetClass, replyQuoteButtonClass, replyQuoteFrameClass, replyQuoteSenderClass, replyQuoteTextClass,

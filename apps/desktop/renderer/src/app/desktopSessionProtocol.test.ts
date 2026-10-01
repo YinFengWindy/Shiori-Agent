@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { SessionMessage, SessionPayload } from "@shiori/plugin-sdk";
+import type { SessionMessage, SessionPayload } from "@shiori/sdk";
 
 import { parseOpenedSessionPayload, parseSessionMessageUpdatePayload } from "./desktopSessionProtocol";
 import { mergeSessionSummaryAndMessage } from "./sessionMessagePagination";
@@ -116,8 +116,8 @@ describe("desktop session protocol", () => {
 
 for (const throws of [false, true]) {
   it(`retains session read diagnostics from ${throws ? "a rejected request" : "an error envelope"}`, async () => {
-    const { BridgeError } = await import("@shiori/plugin-sdk");
-    const { mountTestComponent } = await import("@shiori/plugin-sdk/testing");
+    const { BridgeError } = await import("@shiori/sdk");
+    const { mountTestComponent } = await import("@shiori/sdk/testing");
     const { fetchRoleSession } = await import("./desktopSessionProtocol");
     const failure = { code: "internal_error", message: "本地服务处理失败", details: { detail: "session read denied token=private-value" } };
     const view = await mountTestComponent(null, { windowGlobals: { miraDesktop: { invoke: async () => {

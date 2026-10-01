@@ -1,5 +1,5 @@
 import { CaretDown } from "@phosphor-icons/react";
-import { cx } from "@shiori/plugin-sdk";
+import { cx } from "@shiori/sdk";
 
 /**
  * The 「详情」 fold shared by toasts and inline errors: a small toggle and,

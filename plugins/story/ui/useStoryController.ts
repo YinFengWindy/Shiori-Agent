@@ -1,5 +1,5 @@
 import { describeStoryFailure } from "./storyFailure";
-import { usePluginHostServices } from "@shiori/plugin-sdk";
+import { usePluginHostServices } from "@shiori/sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type StoryBridgeClient } from "./storyBridgeClient";
 import { replaceStorySummary } from "./selectors";

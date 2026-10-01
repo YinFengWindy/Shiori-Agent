@@ -73,6 +73,10 @@ setup(
     ],
     package_dir={"": "apps/backend"},
     include_package_data=False,
-    install_requires=[*requirements, "shiori-plugin-default-memory==0.1.0"],
+    install_requires=[
+        *requirements,
+        "shiori-sdk==3.0.0",
+        "shiori-plugin-default-memory==0.1.0",
+    ],
     cmdclass={"build_py": BuildRuntime},
 )

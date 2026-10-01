@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { PluginHostServicesProvider } from "@shiori/plugin-sdk";
-import { createFakeHostServices, createFakePluginClient } from "@shiori/plugin-sdk/testing";
+import { PluginHostServicesProvider } from "@shiori/sdk";
+import { createFakeHostServices, createFakePluginClient } from "@shiori/sdk/testing";
 import { PromptTagLibraryPage } from "./PromptTagLibraryPage";
 
 const noopClient = createFakePluginClient({ call: async <T,>() => ({} as T) });

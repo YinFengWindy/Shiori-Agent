@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { openChatRole } from "./chatRoleSwitchTransition";
 
 /** The chat surface's marked parts, as ChatSurface / ChatHeader / RoleSidebar render them. */

@@ -1,4 +1,4 @@
-import { inputClass } from "@shiori/plugin-sdk";
+import { inputClass } from "@shiori/sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 import { compactPrimaryButtonClass, compactTextButtonClass } from "../shared/styles";
 import { useBusyAction } from "../shared/useBusyAction";

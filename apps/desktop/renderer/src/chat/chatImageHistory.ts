@@ -1,4 +1,4 @@
-import type { ChatImageHistoryEntry, SessionPayload } from "@shiori/plugin-sdk";
+import type { ChatImageHistoryEntry, SessionPayload } from "@shiori/sdk";
 
 export type ChatImageHistorySourceMessage = {
   id?: string;

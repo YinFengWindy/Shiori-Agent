@@ -8,7 +8,7 @@ import {
   cx,
   pressableClass,
   primaryButtonSurfaceClass,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import { registrationHost, registrationInitials, registrationProviderLabel } from "./modelRegistrationSummary";
 
 type ModelRegistrationListProps = {

@@ -6,7 +6,7 @@ import {
   ghostButtonSurfaceClass,
   iconButtonClass,
   primaryButtonSurfaceClass,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import type { NewRoleFormState } from "../shared/types";
 import type { RoleCardImportState } from "../app/roleCardImportState";
 import { RoleCreateFields } from "./RoleCreateFields";

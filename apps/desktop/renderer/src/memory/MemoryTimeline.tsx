@@ -1,4 +1,4 @@
-import { cx, ghostButtonClass } from "@shiori/plugin-sdk";
+import { cx, ghostButtonClass } from "@shiori/sdk";
 import { MemoryFilterBar } from "./MemoryFilterBar";
 import { MemoryItemDetail } from "./MemoryItemDetail";
 import type { MemoryReadContext } from "./memoryReads";

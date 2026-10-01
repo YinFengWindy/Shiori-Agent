@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "../styles.css";
 import * as Icons from "../shared/ui/icons";
 import { SelectExamples } from "./SelectExamples";
-import { PetalIcon, SparkleIcon, badgeClass, cardClass, ghostButtonClass, inputClass, textareaClass } from "@shiori/plugin-sdk";
+import { PetalIcon, SparkleIcon, badgeClass, cardClass, ghostButtonClass, inputClass, textareaClass } from "@shiori/sdk";
 import {
   dangerButtonClass,
   dangerGhostButtonClass,

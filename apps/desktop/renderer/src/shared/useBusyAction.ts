@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { errorMessage } from "@shiori/plugin-sdk";
+import { errorMessage } from "@shiori/sdk";
 
 /**
  * One user action (a save, a delete) run from a view: `busy` while it runs,

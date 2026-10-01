@@ -371,7 +371,9 @@ def test_main_summarizes_all_failures_writes_results_and_exits_non_zero(
         "build-broken.log",
         "build-crash.log",
         "build-default_memory.log",
+        "build-host-testing.log",
         "build-host.log",
+        "build-sdk.log",
         "build-telegram.log",
         "build-testkit.log",
     ]
@@ -424,3 +426,15 @@ def test_jobs_defaults_to_cpu_count_for_builds_and_verification(
     runner.main(["--output", str(tmp_path / "out"), "--plugins", "alpha"])
 
     assert received == {"build": 7, "verify": 7}
+
+
+def test_sdk_selection_does_not_add_default_memory_or_host(repository: Path) -> None:
+    _plugin(
+        repository,
+        "citation",
+        dependencies=("shiori-sdk==3.0.0",),
+        optional={"test": ("shiori-sdk[testing]==3.0.0",)},
+    )
+    assert runner.plugin_dependencies(
+        {"citation"}, extras=frozenset({"test"}), include_host=False
+    ) == {"citation"}

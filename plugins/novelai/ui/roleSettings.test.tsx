@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import type { PluginRoleValues } from "@shiori/plugin-sdk";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import type { PluginRoleValues } from "@shiori/sdk";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { NovelAiRoleSettings, novelAiRoleSettings } from "./roleSettings";
 
 // The role editor's draft bookkeeping (dirty check, explicit Save, dropping a

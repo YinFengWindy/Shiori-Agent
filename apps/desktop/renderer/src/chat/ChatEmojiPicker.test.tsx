@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import React, { act, useState } from "react";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { ChatEmojiPicker } from "./ChatEmojiPicker";
 
 /** Owns `open` the way ChatComposer does, recording the emojis picked. */

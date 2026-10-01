@@ -1,4 +1,4 @@
-import type { BridgeEvent } from "@shiori/plugin-sdk/contract";
+import type { BridgeEvent } from "@shiori/sdk/contract";
 import { notificationMessages } from "./message.js";
 
 /** OS-facing capabilities; notification failures are reported without interrupting bridge delivery. */

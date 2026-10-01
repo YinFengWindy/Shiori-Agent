@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { mountTestComponent, chooseSelectOption } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent, chooseSelectOption } from "@shiori/sdk/testing";
 import { createSettingsDraft } from "./testFixtures";
 
 it("MemorySettingsSection retains custom engine values and can reset to the empty default", async () => {

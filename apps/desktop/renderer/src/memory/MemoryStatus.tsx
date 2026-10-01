@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { InlineError } from "../shared/feedback/InlineError";
-import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "@shiori/plugin-sdk";
+import { compactButtonSizeClass, cx, ghostButtonSurfaceClass } from "@shiori/sdk";
 
 /** Status texts of the memory tab: page availability, the timeline and the document tabs. */
 export const memoryStatusText = {

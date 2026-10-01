@@ -1,6 +1,6 @@
 import { useStoryGalleryRefresh } from "./useStoryGalleryRefresh";
 import { useCallback, useState } from "react";
-import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleRecord } from "@shiori/sdk";
 import type { StoryBridgeClient } from "./storyBridgeClient";
 import type { StoryCgGallery } from "./types";
 import { isStoryOpeningFailed, replaceStoryGallery } from "./selectors";

@@ -1,4 +1,4 @@
-import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleRecord } from "@shiori/sdk";
 
 /** One role-owned image that can be considered for the Story menu backdrop. */
 export type StoryMenuAssetCandidate = {

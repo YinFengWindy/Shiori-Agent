@@ -1,5 +1,5 @@
 import { toFileUrl } from "../shared/format";
-import { PetalIcon, SparkleIcon } from "@shiori/plugin-sdk";
+import { PetalIcon, SparkleIcon } from "@shiori/sdk";
 import { RibbonIcon } from "../shared/ui/icons";
 
 type RolePortraitPlaceholderProps = {

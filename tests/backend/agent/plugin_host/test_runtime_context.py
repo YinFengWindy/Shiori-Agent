@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from shiori_sdk.testing import FakeEvents
+from shiori_sdk.runtime import EventsCapability
 
 import pytest
 
@@ -15,7 +17,10 @@ from agent.plugin_host.runtime_context import (
 
 
 def _make_context(
-    capabilities: dict[str, object], *, effects: EffectScope | None = None
+    capabilities: dict[str, object],
+    *,
+    effects: EffectScope | None = None,
+    events: EventsCapability | None = None,
 ) -> PluginRuntimeContext:
     scope = effects or EffectScope("demo")
     return PluginRuntimeContext(
@@ -24,12 +29,13 @@ def _make_context(
         manifest=PluginManifest(id="demo", capabilities=tuple(capabilities)),
         effects=scope,
         capabilities=capabilities,
+        events=events,
     )
 
 
 def test_granted_capability_is_accessible():
-    sentinel = object()
-    context = _make_context({"events": sentinel})
+    sentinel = FakeEvents()
+    context = _make_context({"events": sentinel}, events=sentinel)
     # 属性访问必须拿到宿主注入的同一实例，而不是替身
     assert context.events is sentinel
 

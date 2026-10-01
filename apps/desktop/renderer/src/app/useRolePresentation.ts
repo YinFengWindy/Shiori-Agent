@@ -1,6 +1,6 @@
 import type React from "react";
 import { createRoleFormFromRole, isRoleFormDirty } from "../roles/roleFormState";
-import type { RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
+import type { RoleRecord, SessionPayload } from "@shiori/sdk";
 import type { AppMainView, RoleFormState } from "../shared/types";
 
 type MutableValue<T> = { current: T };

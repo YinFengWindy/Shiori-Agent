@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from "react";
 import { SurfaceFailure } from "./SurfaceFailure";
-import type { SurfaceHandle } from "@shiori/plugin-sdk";
+import type { SurfaceHandle } from "@shiori/sdk";
 
 /** Contains plugin render and mount-effect errors inside their surface window. */
 export class SurfaceErrorBoundary extends Component<{

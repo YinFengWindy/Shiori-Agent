@@ -1,5 +1,5 @@
 import { DotsThree, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
-import { ActionMenu, PetalIcon, SparkleIcon, badgeClass, compactButtonSizeClass, compactPressableClass, cx, primaryButtonSurfaceClass, usePluginHostServices } from "@shiori/plugin-sdk";
+import { ActionMenu, PetalIcon, SparkleIcon, badgeClass, compactButtonSizeClass, compactPressableClass, cx, primaryButtonSurfaceClass, usePluginHostServices } from "@shiori/sdk";
 import type { PromptTagEntry } from "./types";
 
 type PromptTagGridProps = {

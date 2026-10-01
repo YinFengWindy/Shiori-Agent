@@ -90,3 +90,5 @@ build/
 
 # Prepared, checksum-pinned native browser resources
 /native/
+
+/packages/sdk/dist/

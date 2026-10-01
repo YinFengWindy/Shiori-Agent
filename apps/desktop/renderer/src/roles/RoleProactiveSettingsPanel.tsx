@@ -1,4 +1,4 @@
-import { Select, cardClass, cx } from "@shiori/plugin-sdk";
+import { Select, cardClass, cx } from "@shiori/sdk";
 import { CaretDown } from "@phosphor-icons/react";
 import type React from "react";
 import { useState } from "react";

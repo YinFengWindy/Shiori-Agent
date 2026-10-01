@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { RoleRecord } from "@shiori/plugin-sdk";
-import { cx } from "@shiori/plugin-sdk";
+import type { RoleRecord } from "@shiori/sdk";
+import { cx } from "@shiori/sdk";
 import { phoneChatInfoSections, phoneSubpageBack, type PhoneChatSubpage } from "./phoneChatInfo";
 import { PhoneChatInfoPage } from "./PhoneChatInfoPage";
 import { PhoneChatPage } from "./PhoneChatPage";

@@ -56,7 +56,7 @@ import { BrowserVoicePlayback } from "./voice/playback.js";
 import { cancelVoiceTurn, createVoicePlaybackCallbacks, handleVoiceBridgeEvent, selectVoiceTurn } from "./voice/bridgeEvents.js";
 import { applyVoiceAvailability, isVoiceHotkeyAvailable } from "./voice/availability.js";
 import { configureSettingsConfigPath, loadSettingsData } from "./settings.js";
-import type { BridgeEvent, VoiceStatePayload } from "@shiori/plugin-sdk/contract";
+import type { BridgeEvent, VoiceStatePayload } from "@shiori/sdk/contract";
 import type { LocalAssetTransport, SettingsFormData, SurfaceSettledPayload } from "./bridge/shared.js";
 
 // Voice replies are played from a trusted hidden renderer without a DOM user gesture.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { errorMessage, usePluginHostServices, type PluginConfigValues } from "@shiori/plugin-sdk";
+import { errorMessage, usePluginHostServices, type PluginConfigValues } from "@shiori/sdk";
 
 /**
  * Fallbacks for the two configured model ids, used only until the plugin's

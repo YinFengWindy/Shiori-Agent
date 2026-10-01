@@ -6,7 +6,7 @@ import {
   initialChatMessageEnterState,
   pruneChatMessageEnterState,
 } from "./chatMessageEnterState";
-import type { SessionMessage } from "@shiori/plugin-sdk";
+import type { SessionMessage } from "@shiori/sdk";
 
 /**
  * Returns the render keys of messages that should play the enter animation

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { BridgeError, PluginHostServicesProvider } from "@shiori/plugin-sdk";
-import { createFakeHostServices, createFakePluginClient, mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { BridgeError, PluginHostServicesProvider } from "@shiori/sdk";
+import { createFakeHostServices, createFakePluginClient, mountTestComponent } from "@shiori/sdk/testing";
 import { createStoryBridgeClient } from "./storyBridgeClient";
 import { useStoryController } from "./useStoryController";
 

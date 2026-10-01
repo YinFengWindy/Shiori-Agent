@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FolderSimplePlus } from "@phosphor-icons/react";
-import type { RoleAssetCategory, RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleAssetCategory, RoleRecord } from "@shiori/sdk";
 import { confirmPersonaLines } from "../shared/mascot/mascotLines";
 import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import {

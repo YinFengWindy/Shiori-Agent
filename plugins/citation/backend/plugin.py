@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING, Any, cast
-
-if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+from typing import cast
+from shiori_sdk import PluginRuntimeContext
+from shiori_sdk.lifecycle import AfterReasoningCtx, LifecycleFrame
 
 _REASONING_CTX_SLOT = "reasoning:ctx"
 _PERSIST_CITED_SLOT = "persist:assistant:cited_memory_ids"
@@ -24,23 +23,23 @@ _INLINE_MEMORY_REF_RE = re.compile(
 
 
 class CitationAfterReasoningModule:
+    """Extracts citation metadata and removes citation markers from the reply."""
+
     slot = "citation.after_reasoning"
     requires = ("after_reasoning.build_ctx", _REASONING_CTX_SLOT)
     produces = (_REASONING_CTX_SLOT, _PERSIST_CITED_SLOT)
 
-    async def run(self, frame: Any) -> Any:
+    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
         ctx = frame.slots.get(_REASONING_CTX_SLOT)
-        if ctx is None:
+        if not isinstance(ctx, AfterReasoningCtx):
             return frame
-        reply = str(getattr(ctx, "reply", "") or "")
+        reply = ctx.reply
         cleaned, cited_ids = extract_cited_ids(reply)
         cleaned = strip_inline_memory_refs(cleaned)
         if cited_ids:
             frame.slots[_PERSIST_CITED_SLOT] = cited_ids
         else:
-            fallback_ids = extract_cited_ids_from_tool_chain(
-                list(getattr(ctx, "tool_chain", ()) or ())
-            )
+            fallback_ids = extract_cited_ids_from_tool_chain(list(ctx.tool_chain))
             if fallback_ids:
                 frame.slots[_PERSIST_CITED_SLOT] = fallback_ids
         if cleaned != reply:
@@ -49,15 +48,17 @@ class CitationAfterReasoningModule:
 
 
 class ProtocolTagCleanupModule:
+    """Removes trailing protocol tags after other reply hooks have used them."""
+
     slot = "citation.protocol_cleanup"
     requires = ("after_reasoning.emit", _REASONING_CTX_SLOT)
     produces = (_REASONING_CTX_SLOT,)
 
-    async def run(self, frame: Any) -> Any:
+    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
         ctx = frame.slots.get(_REASONING_CTX_SLOT)
-        if ctx is None:
+        if not isinstance(ctx, AfterReasoningCtx):
             return frame
-        reply = str(getattr(ctx, "reply", "") or "")
+        reply = ctx.reply
         cleaned = strip_inline_memory_refs(strip_trailing_protocol_tags(reply))
         if cleaned != reply:
             ctx.reply = cleaned
@@ -73,6 +74,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
 
 def extract_cited_ids(response: str) -> tuple[str, list[str]]:
+    """Returns display text and memory IDs from a valid trailing citation marker."""
     match = _CITED_RE.search(response)
     if not match:
         return response, []
@@ -86,16 +88,19 @@ def extract_cited_ids(response: str) -> tuple[str, list[str]]:
 
 
 def strip_trailing_protocol_tags(response: str) -> str:
+    """Removes unused protocol tags only at the end of a reply."""
     return _TRAILING_PROTOCOL_TAGS_RE.sub("", response).rstrip()
 
 
 def strip_inline_memory_refs(response: str) -> str:
+    """Removes inline memory reference markers without deleting body text."""
     return _INLINE_MEMORY_REF_RE.sub("", response).rstrip()
 
 
 def extract_cited_ids_from_tool_chain(
     tool_chain: list[dict[str, object]],
 ) -> list[str]:
+    """Collects unique recall results in encounter order when the reply has no marker."""
     cited: list[str] = []
     seen: set[str] = set()
     for group in tool_chain:

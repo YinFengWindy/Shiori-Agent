@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { mountTestComponent, chooseSelectOption } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent, chooseSelectOption } from "@shiori/sdk/testing";
 import type { RecurringScheduleRule } from "./roleTaskFormState";
 
 it("RoleTaskScheduleFields updates the recurrence preset and weekday without losing execution time", async () => {

@@ -1,4 +1,4 @@
-import { Select, cx, inputClass } from "@shiori/plugin-sdk";
+import { Select, cx, inputClass } from "@shiori/sdk";
 import { clampCustomDimensionInput, sizeOptions } from "./studioForm";
 import type { ImageSizePreset, ImageStudioFormState } from "./types";
 

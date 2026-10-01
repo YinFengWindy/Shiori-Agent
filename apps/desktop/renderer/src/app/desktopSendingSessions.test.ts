@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { SessionMessage, SessionPayload } from "@shiori/plugin-sdk";
+import type { SessionMessage, SessionPayload } from "@shiori/sdk";
 
 import { mergeIncomingSessionDuringSend } from "../chat/chatSessionMerge";
 import { canSendSessionState, clearAllSendingSessionsState, clearSendingSessionState, markSendingSessionState } from "./desktopSendingSessions";

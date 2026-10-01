@@ -1,4 +1,4 @@
-import type { SessionPayload } from "@shiori/plugin-sdk";
+import type { SessionPayload } from "@shiori/sdk";
 import { mergeIncomingSessionDuringSend, shouldClearPendingUserMessage } from "../chat/chatSessionMerge";
 import { reconcileSessionMessageRenderIds } from "../chat/chatMessageIdentity";
 import { getRoleIdFromSession } from "./appState";

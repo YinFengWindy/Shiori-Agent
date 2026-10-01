@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Sparkle } from "@phosphor-icons/react";
-import { Select, cx, inputClass, primaryButtonSurfaceClass, usePluginHostServices, type RoleRecord, type SelectOption } from "@shiori/plugin-sdk";
+import { Select, cx, inputClass, primaryButtonSurfaceClass, usePluginHostServices, type RoleRecord, type SelectOption } from "@shiori/sdk";
 import { BaseImageField } from "./BaseImageField";
 import { PromptSettingsPopover } from "./PromptSettingsPopover";
 import { SegmentedControl } from "./SegmentedControl";

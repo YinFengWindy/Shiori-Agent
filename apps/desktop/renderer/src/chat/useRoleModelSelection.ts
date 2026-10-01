@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
-import { type RoleRecord, BridgeError, errorMessage } from "@shiori/plugin-sdk";
+import { type RoleRecord, BridgeError, errorMessage } from "@shiori/sdk";
 import { mascotFeedback as feedback } from "../shared/mascot/mascotFeedback";
 import {
   runtimeConfigForSelection,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { createFeedbackRecorder } from "../shared/testing/feedbackRecorder";
 import { createDesktopRoleList } from "./desktopRoleList";
 

@@ -9,7 +9,7 @@ import httpx
 import httpx._transports.default as httpx_transport
 import pytest
 
-from shiori_plugin_testkit.ssl_context import (
+from shiori_sdk.testing.ssl_context import (
     caching_ssl_context_factory,
     share_httpx_ssl_contexts,
 )

@@ -6,7 +6,8 @@ import re
 from dataclasses import dataclass, field
 from importlib import metadata
 
-RUNTIME_API_VERSION = "2.16.0"
+from shiori_sdk import RUNTIME_API_VERSION as RUNTIME_API_VERSION
+
 # This is the renderer ABI's guaranteed minimum, not a probe of the developer's npm tree.
 REACT_API_VERSION = "19.2.0"
 

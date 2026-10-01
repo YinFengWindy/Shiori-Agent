@@ -21,7 +21,7 @@ test("duplicate registration retains the existing handler and retired callbacks 
 
 
 test("a background RPC reply retains structured upstream diagnostics", async () => {
-  const { PluginBridgeError } = await import("@shiori/plugin-sdk");
+  const { PluginBridgeError } = await import("@shiori/sdk");
   const methods = new PluginBackgroundMethods();
   await methods.register("sync", async () => { throw new PluginBridgeError("配置同步失败", "config_sync_failed", { detail: "missing asset token=private-value" }); }, async () => undefined);
   let response: Record<string, unknown> | undefined;

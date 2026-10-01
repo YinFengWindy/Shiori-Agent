@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act, useState } from "react";
 import type { BridgeResponse } from "../../../src/bridge/shared";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { createEmptyNewRoleForm } from "./appState";
 import { useRoleCardImport } from "./useRoleCardImport";
 

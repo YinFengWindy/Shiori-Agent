@@ -1,15 +1,19 @@
 # 独立运行 Python 测试
 
-将本插件目录复制到 Shiori 仓库外。准备私有 wheelhouse，其中必须有 `shiori-agent`、`shiori-plugin-testkit`、`shiori-plugin-default-memory` 的 0.1.0 wheel。这些私有包不发布到 PyPI；其余第三方依赖由包元数据解析。
-
-在插件副本目录执行（将 `/path/to/wheelhouse` 替换为实际绝对路径）：
+将本插件目录复制到仓库外，准备包含 `shiori-sdk` 3.0.0 的私有 wheelhouse。
+插件和 SDK 都以普通 wheel 安装；不需要 `shiori-agent`、旧 testkit 或默认记忆插件。
 
 ```sh
 uv venv .venv --python 3.12
-uv pip install --python .venv --find-links /path/to/wheelhouse /path/to/wheelhouse/shiori_agent-0.1.0-py3-none-any.whl /path/to/wheelhouse/shiori_plugin_testkit-0.1.0-py3-none-any.whl /path/to/wheelhouse/shiori_plugin_default_memory-0.1.0-py3-none-any.whl ".[test]"
+uv pip install --python .venv --find-links /path/to/wheelhouse ".[test]"
 uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 ```
 
-安装不使用 editable。不要设置 `PYTHONPATH` 指向原仓库，也不要复制原仓库 `tests/` 或根 conftest。全部测试使用标准 pytest-asyncio；公共启动 fixture 由显式安装的 testkit 注册。需要暂存整个插件时，调用 `shiori_plugin_testkit.packages.stage_plugin_package(source, target)`；它会排除本地虚拟环境与构建/运行状态，允许按上述方式把 `.venv` 留在插件副本内。
+不要注入 `PYTHONPATH`，也不要复制宿主测试树或 conftest。测试通过
+`shiori_sdk.testing` 的 `FakeFrame`、`FakePluginContext` 和 `sdk_context`
+执行真实插件模块。Fake 仅记录贡献，不模拟宿主阶段调度。
+真实 Kernel 加载与卸载回归保留在宿主 `test_kernel.py`，由宿主 CI 执行。
 
-宿主仓库中的 `docs/agents/plugin-testing.md` 说明 wheelhouse 构建与 CI 隔离验收；本插件的运行不依赖该文档所在仓库。
+仓库维护者可运行 `uv run python scripts/verify_plugin_tests.py --sdk-only`
+构建 wheel、逐插件创建干净环境并记录 `provenance.json` 与异步失败探针。
+统一契约与构建说明见 `packages/sdk/README.md`。

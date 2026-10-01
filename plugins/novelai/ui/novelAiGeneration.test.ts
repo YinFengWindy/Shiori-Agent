@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { BridgeError, type PluginRpcClient } from "@shiori/plugin-sdk";
-import { createFakeHostServices, createFakePluginClient } from "@shiori/plugin-sdk/testing";
+import { BridgeError, type PluginRpcClient } from "@shiori/sdk";
+import { createFakeHostServices, createFakePluginClient } from "@shiori/sdk/testing";
 import { loadHistory, refreshReadiness, submitGenerate } from "./novelAiGeneration";
 import { getNovelAiState, resetNovelAiPageStoreForTests } from "./novelAiPageStore";
 

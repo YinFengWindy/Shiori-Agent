@@ -1,0 +1,65 @@
+{
+  "name": "@shiori/sdk",
+  "version": "3.0.0",
+  "description": "Public Shiori plugin contracts, shared UI and independent test support.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contract": "./src/contract.ts",
+    "./host-internal": "./src/hostInternal.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "//exports": "Workspace development uses source entries; pnpm pack publishes compiled ESM and declarations through publishConfig. Main, contract, host-internal and testing retain their separate responsibilities. Only the main entry is a runtime peer.",
+  "dependencies": {
+    "@base-ui/react": "1.8.0",
+    "@phosphor-icons/react": "^2.1.10",
+    "happy-dom": "^20.14.0"
+  },
+  "peerDependencies": {
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "@types/node": ">=26.6.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "esbuild": "^0.27.0",
+    "typescript": "^5.8.0",
+    "@types/node": "26.6.3"
+  },
+  "//dependencies": "React stays a host peer. happy-dom is installed for the development-only testing subpath and is never imported by the runtime main entry.",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/sync_sdk_version.mjs --check && node scripts/build.mjs && tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./contract": {
+        "types": "./dist/contract.d.ts",
+        "import": "./dist/contract.js"
+      },
+      "./host-internal": {
+        "types": "./dist/hostInternal.d.ts",
+        "import": "./dist/hostInternal.js"
+      },
+      "./testing": {
+        "types": "./dist/testing/index.d.ts",
+        "import": "./dist/testing/index.js"
+      }
+    }
+  },
+  "peerDependenciesMeta": {
+    "@types/node": {
+      "optional": true
+    }
+  }
+}

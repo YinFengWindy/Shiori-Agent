@@ -1,4 +1,4 @@
-import type { BridgeEvent } from "@shiori/plugin-sdk";
+import type { BridgeEvent } from "@shiori/sdk";
 
 /** No-op configuration writes leave existing plugin contexts and requests alive. */
 export function pluginRuntimeChanged(event: BridgeEvent) {

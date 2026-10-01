@@ -6,7 +6,7 @@ import {
   cx,
   ghostButtonSurfaceClass,
   type RoleRecord,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import type { RoleFormState } from "../shared/types";
 import { roleIdentityInputClass } from "./roleEditorStyles";
 

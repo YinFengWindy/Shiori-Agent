@@ -20,7 +20,7 @@ import { previewFromSessionMessages } from "../roles/roleChatPreview";
 import { usePluginUiVisibility } from "./usePluginUiVisibility";
 import { SettingsPage } from "../settings/SettingsPage";
 import { type SettingsSectionId } from "../settings/SettingsSidebar";
-import { cx, ghostButtonClass, type RoleAssetCategory, type RoleRecord, type SessionPayload } from "@shiori/plugin-sdk";
+import { cx, ghostButtonClass, type RoleAssetCategory, type RoleRecord, type SessionPayload } from "@shiori/sdk";
 import { sidebarTrackMotionClass } from "../shared/styles";
 import { buildNavRailViews, NavRail, pluginNavRailViewId, type NavRailViewId } from "../shell/NavRail";
 import { useGlobalShortcuts } from "../shell/useGlobalShortcuts";

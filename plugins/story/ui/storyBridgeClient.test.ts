@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { PluginBridgeError } from "@shiori/plugin-sdk";
-import { createFakePluginClient, deferred } from "@shiori/plugin-sdk/testing";
+import { PluginBridgeError } from "@shiori/sdk";
+import { createFakePluginClient, deferred } from "@shiori/sdk/testing";
 import { createStoryBridgeClient as makeStoryClient } from "./storyBridgeClient";
 import { StoryBridgeError } from "./types";
 

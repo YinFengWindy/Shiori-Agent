@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { type HostConfirmDialogProps, ghostButtonClass } from "@shiori/plugin-sdk";
+import { type HostConfirmDialogProps, ghostButtonClass } from "@shiori/sdk";
 import { Dialog } from "@base-ui/react/dialog";
 import { InlineError } from "../feedback/InlineError";
 import { MascotFaceAvatar } from "../mascot/MascotFigure";

@@ -19,10 +19,10 @@ test("plugin renderer and SDK code cannot import host source or host-only SDK in
     'import { panelTitleClass } from "../../../apps/desktop/renderer/src/shared/styles";',
     'import type { SettingsFormData } from "../../../apps/desktop/src/bridge/shared";',
     'export { createFeedbackRecorder } from "../../../../apps/desktop/renderer/src/shared/testing/feedbackRecorder";',
-    'import { menuItemClass } from "@shiori/plugin-sdk/host-internal";',
+    'import { menuItemClass } from "@shiori/sdk/host-internal";',
   ];
-  for (const path of ["plugins/boundary_probe/ui/probe.tsx", "plugins/boundary_probe/background/probe.ts", "plugins/boundary_probe/surface/nested/probe.ts", "plugins/boundary_probe/shared/probe.ts", "packages/plugin-sdk/src/probe.ts"]) {
+  for (const path of ["plugins/boundary_probe/ui/probe.tsx", "plugins/boundary_probe/background/probe.ts", "plugins/boundary_probe/surface/nested/probe.ts", "plugins/boundary_probe/shared/probe.ts", "packages/sdk/src/probe.ts"]) {
     for (const code of hostImports) assert.equal((await boundaryViolations(code, path)).length, 1, `${path}: ${code}`);
-    assert.deepEqual(await boundaryViolations('import { PluginBridgeError } from "@shiori/plugin-sdk";\nimport { deferred } from "@shiori/plugin-sdk/testing";', path), []);
+    assert.deepEqual(await boundaryViolations('import { PluginBridgeError } from "@shiori/sdk";\nimport { deferred } from "@shiori/sdk/testing";', path), []);
   }
 });

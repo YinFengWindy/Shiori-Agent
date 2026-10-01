@@ -3,13 +3,12 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from collections.abc import Awaitable, Callable
-from typing import TypeAlias, TypeVar, cast
+from typing import TypeVar, cast
+from shiori_sdk.runtime import EventHandler as Handler
 
 logger = logging.getLogger(__name__)
 
 E = TypeVar("E")
-Handler: TypeAlias = Callable[[E], Awaitable[E | None] | E | None]
 
 
 class EventBus:

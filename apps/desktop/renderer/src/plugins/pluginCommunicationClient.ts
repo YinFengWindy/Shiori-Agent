@@ -1,4 +1,4 @@
-import { PluginBridgeError, type BridgeEvent, type PluginEventHandler, type PluginPeer, type PluginRpcClient } from "@shiori/plugin-sdk";
+import { PluginBridgeError, type BridgeEvent, type PluginEventHandler, type PluginPeer, type PluginRpcClient } from "@shiori/sdk";
 import { PluginBackgroundMethods } from "./pluginBackgroundMethods";
 import { pluginRuntimeChanged } from "./pluginRuntimeChanged";
 import { PluginCommunicationLifetime } from "./pluginCommunicationLifetime";

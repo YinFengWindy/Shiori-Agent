@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 
 describe("ChatStatusSidebar", () => {
   it("renders historical thoughts verbatim alongside mood, relationship tags, and loneliness", () => {

@@ -1,5 +1,5 @@
-import { errorFeedback, scrubErrorDetail } from "@shiori/plugin-sdk/host-internal";
-import type { FeedbackAction, FeedbackTone, PersonaSceneKey } from "@shiori/plugin-sdk";
+import { errorFeedback, scrubErrorDetail } from "@shiori/sdk/host-internal";
+import type { FeedbackAction, FeedbackTone, PersonaSceneKey } from "@shiori/sdk";
 import type { FeedbackPersona } from "../mascot/mascotLines";
 
 /** Who fronts a toast: one of the host's toast personas, or a plugin-named scene (runtime API 2.4.0). */

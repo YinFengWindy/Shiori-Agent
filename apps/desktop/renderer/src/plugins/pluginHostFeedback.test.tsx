@@ -4,7 +4,7 @@ import { act } from "react";
 import { appearancePrefsStorageKey } from "../shared/appearancePrefs";
 import { FeedbackToaster } from "../shared/feedback/FeedbackToaster";
 import { getFeedbackSnapshot, resetFeedback } from "../shared/feedback/feedbackStore";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { resetAppearancePrefsCache } from "../shared/useAppearancePrefs";
 import { pluginHostFeedback } from "./pluginHostFeedback";
 import { pluginHostServicesFor } from "./pluginHostServices";

@@ -1,6 +1,6 @@
 import { EyeIcon, EyeSlashIcon, InfoIcon } from "@phosphor-icons/react";
 import { useEffect, useId, useState } from "react";
-import { iconButtonClass, inputClass, useAccountAction, type PluginAccountDetailComponentProps } from "@shiori/plugin-sdk";
+import { iconButtonClass, inputClass, useAccountAction, type PluginAccountDetailComponentProps } from "@shiori/sdk";
 
 type KnownChat = { chat_id: string; chat_type: string; title: string; username: string; topics: number[]; last_seen: string };
 type BotIdentity = { bot_id: string; name: string; username: string };

@@ -1,4 +1,4 @@
-import { errorMessage } from "@shiori/plugin-sdk";
+import { errorMessage } from "@shiori/sdk";
 import { useRef, useState } from "react";
 import { ArrowRight } from "@phosphor-icons/react";
 import { useRoleCreationDraft } from "../roles/useRoleCreationDraft";

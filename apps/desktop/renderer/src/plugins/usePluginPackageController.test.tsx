@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act, useEffect } from "react";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { usePluginPackageController } from "./usePluginPackageController";
 import type { DesktopInvoke } from "../shared/bridgeInvoke";
 

@@ -40,7 +40,7 @@
 - 视图层中的派生计算（dirty 判断、header title、preview 数据、可见状态等）应优先抽到 selector / pure helper，避免散落在页面主体。
 - 每个测试文件只测试对应源文件的行为，对应关系必须一目了然：
   - TypeScript 单测与被测源文件**同目录并列**（`main.ts` / `main.test.ts`）；Electron、onboarding 这类 e2e 放 `apps/desktop/tests/`。
-  - Python 单测放 `tests/backend/`，目录结构镜像 `apps/backend/`。例外：顶层 `plugins/<id>/` 插件包的单测放 `plugins/<id>/tests/`，与插件包同目录、插件包自包含；插件后端代码位于 `plugins/<id>/backend/`（`manifest.yaml`、`README.md`、`plugin.disabled` 等包级文件留在插件根目录），宿主 fixture 归 `tests/conftest.py`；插件通过显式安装的 `shiori-plugin-testkit` 获取公共测试支持，不依赖根 conftest 或宿主测试树。独立运行见 `docs/agents/plugin-testing.md`。公共测试支持包 `packages/shiori-plugin-testkit/` 自身的单测放在 `packages/shiori-plugin-testkit/tests/`，文件名对应 `src/shiori_plugin_testkit/` 的源模块，并由根 pytest 与测试类型配置显式收集。
+  - Python 单测放 `tests/backend/`，目录结构镜像 `apps/backend/`。例外：顶层 `plugins/<id>/` 插件包的单测放 `plugins/<id>/tests/`，与插件包同目录、插件包自包含；插件后端代码位于 `plugins/<id>/backend/`（`manifest.yaml`、`README.md`、`plugin.disabled` 等包级文件留在插件根目录），宿主 fixture 归 `tests/conftest.py`；已迁移插件通过显式安装的 `shiori-sdk[testing]` 获取独立测试支持；未迁移插件暂用 `shiori-plugin-testkit`，不依赖根 conftest 或宿主测试树。独立运行见 `docs/agents/plugin-testing.md`。SDK 自身的单测放在 `packages/sdk/tests/`，结构镜像 `python/shiori_sdk/`；真实宿主 fixture 位于独立开发包 `packages/shiori-host-testing/`，其测试位于 `tests/backend/shiori_host_testing/`，并由根 pytest 与测试类型配置显式收集。
 - 测试要能证明问题真实存在；不要只写“会通过但证明不了什么”的测试。
 
 ## React 与状态管理
@@ -58,7 +58,7 @@
 
 - 设计系统（三层 token、共享类名、排版阶梯、legacy 别名清单）详见 `docs/_handbook/design-system.md`；下面几条是必须记住的硬约束。
 - 前端页面不要产生对功能进行叙述的文字。
-- 表单控件、按钮、卡片优先复用共享类名，不要另起一套手写 Tailwind 串：插件也能用的在 `@shiori/plugin-sdk`（`inputClass`、`textareaClass`、`ghostButtonClass`、`cardClass` 等），宿主专用的在 `renderer/src/shared/styles.ts`（`primaryButtonClass` 等）。
+- 表单控件、按钮、卡片优先复用共享类名，不要另起一套手写 Tailwind 串：插件也能用的在 `@shiori/sdk`（`inputClass`、`textareaClass`、`ghostButtonClass`、`cardClass` 等），宿主专用的在 `renderer/src/shared/styles.ts`（`primaryButtonClass` 等）。
 - 颜色、圆角、阴影、动效一律走语义 token 或 Tailwind 语义类（`bg-surface`、`text-ink-muted`、`rounded-md`、`shadow-soft`），不要写死色值；`--bg`、`--panel`、`--accent`、`*-primary` 这类是 restyle 前的 legacy 别名，新代码不要再用。
 - 字段 focus 态由 `styles.css` 里全局的 `input/textarea/select:focus` 规则统一提供，组件里不要再手写 `focus:ring-*` / `focus:border-*` 覆盖；确有理由退出的（如 chat composer 的 `ring-0`）需在注释里说明。
 - 默认圆角使用 rounded-md（对应 `--radius-md`）；纯圆形与胶囊用 rounded-full。
@@ -74,7 +74,7 @@
 - 验证当轮改动的命令（PowerShell 下逐条执行，不要用 `&&` 串联）：
   - 桌面端：`pnpm test`（单测）、`pnpm typecheck`、`pnpm lint`。
   - Python 格式与静态检查：Windows 使用 `.venv\\Scripts\\black.exe --check .`、`.venv\\Scripts\\ruff.exe check .`；跨平台使用 `uv run black --check .`、`uv run ruff check .`。
-  - 后端：`uv run pytest`；testpaths 包括 `tests/backend`、`plugins` 和 `packages/shiori-plugin-testkit/tests`，且开了 `-W error`，任何警告都会判失败。
+  - 后端：`uv run pytest`；testpaths 包括 `tests/backend`、`plugins` 和 `packages/sdk/tests`，且开了 `-W error`，任何警告都会判失败。
   - 后端类型检查有两套配置：源码用 `pyrightconfig.json`，测试用 `pyrightconfig.tests.json`（`--project` 指定）。
 - Python 代码风格走 ruff（`select = ["E4", "E7", "E9", "F"]`）+ black，line-length 88。
 - Python 命令、测试和质量工具必须使用仓库 `.venv`，禁止依赖 PATH 中的系统 Python：Windows 使用 `.venv\\Scripts\\python.exe`、`.venv\\Scripts\\pytest.exe`、`.venv\\Scripts\\ruff.exe` 等；跨平台文档和脚本统一使用 `uv run ...`。

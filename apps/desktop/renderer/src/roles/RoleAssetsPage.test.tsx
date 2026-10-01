@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 import { act } from "react";
 import { createEmptyRoleForm } from "../app/appState";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
-import type { RoleRecord } from "@shiori/plugin-sdk";
+import { mountTestComponent } from "@shiori/sdk/testing";
+import type { RoleRecord } from "@shiori/sdk";
 
 // Created with an avatar: it lives next to the library, not in it.
 const role: RoleRecord = {

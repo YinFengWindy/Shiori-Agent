@@ -5,7 +5,7 @@ import {
   cx,
   ghostButtonSurfaceClass,
   primaryButtonSurfaceClass,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import type { RoleDetailSaveState } from "./roleDetailSaveState";
 
 type RoleDetailActionsProps = {

@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from shiori_sdk.lifecycle import (
+    AfterStepCtx as AfterStepCtx,
+    AfterReasoningCtx as AfterReasoningCtx,
+)
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -11,7 +16,6 @@ from bus.events import InboundMessage, OutboundMessage
 
 if TYPE_CHECKING:
     from agent.turns.turn_pushes import TurnPushDrafts
-    from agent.core.response_parser import ResponseMetadata
     from agent.core.runtime_support import SessionLike, TurnRunResult
     from agent.core.types import HistoryMessage
     from conversation.context_scope import ContextScope, ContextView
@@ -202,48 +206,9 @@ class BeforeStepCtx:
 
 
 @dataclass(frozen=True)
-class AfterStepCtx:
-    # after-* fanout ctx 是观察快照；需要补充 metadata 时由 PhaseModule replace 新实例。
-    session_key: str
-    channel: str
-    chat_id: str
-    iteration: int
-    context_tokens_estimate: int
-    tools_called: tuple[str, ...]
-    partial_reply: str
-    tools_used_so_far: tuple[str, ...]
-    tool_chain_partial: tuple[dict[str, Any], ...]
-    partial_thinking: str | None
-    has_more: bool
-    early_stop: bool = False
-    early_stop_reason: str = ""
-    extra_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
-
-
-@dataclass(frozen=True)
 class AfterReasoningInput:
     state: TurnState
     turn_result: TurnRunResult
-
-
-@dataclass
-class AfterReasoningCtx:
-    # after_reasoning 仍是 GATE 链，插件可改写 reply/media/outbound_metadata。
-    # read-only by convention
-    session_key: str
-    channel: str
-    chat_id: str
-    tools_used: tuple[str, ...]
-    thinking: str | None
-    response_metadata: ResponseMetadata
-    streamed: bool
-    tool_chain: tuple[dict[str, Any], ...]
-    context_retry: dict[str, object]
-    # writable
-    reply: str
-    media: list[str] = field(default_factory=_empty_str_list)
-    meme_tag: str | None = None
-    outbound_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
 
 
 @dataclass(frozen=True)

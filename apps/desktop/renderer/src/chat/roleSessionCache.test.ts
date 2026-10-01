@@ -10,7 +10,7 @@ import {
   writeRoleSessionCache,
   type RoleSessionCache,
 } from "./roleSessionCache";
-import type { SessionPayload } from "@shiori/plugin-sdk";
+import type { SessionPayload } from "@shiori/sdk";
 
 function createSession(roleId: string, updatedAt: string): SessionPayload {
   return {

@@ -1,5 +1,5 @@
 import type React from "react";
-import type { PluginSurfaceComponentProps } from "@shiori/plugin-sdk";
+import type { PluginSurfaceComponentProps } from "@shiori/sdk";
 import { PluginContributionRegistry } from "../plugins/pluginContributionRegistry";
 
 export type PluginSurfaceEntry = {

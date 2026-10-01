@@ -2,7 +2,7 @@ import { StoryError } from "./StoryError";
 import { ArrowClockwise, BookOpenText, Gear, SignOut } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { AutosizeTextarea, cx, usePluginHostServices } from "@shiori/plugin-sdk";
+import { AutosizeTextarea, cx, usePluginHostServices } from "@shiori/sdk";
 import { canShowStoryInput, isStoryRoleInCurrentScene, selectActiveStoryVisualResource } from "./selectors";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
 import { advanceStoryPlayback, createStoryPlaybackState, getNextStoryBeat, getPresentedStoryBeat, syncStoryPlaybackState } from "./storyPlayback";

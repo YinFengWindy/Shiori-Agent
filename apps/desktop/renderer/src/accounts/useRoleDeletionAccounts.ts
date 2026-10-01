@@ -1,6 +1,6 @@
-import { errorMessage } from "@shiori/plugin-sdk";
+import { errorMessage } from "@shiori/sdk";
 import { useEffect, useState } from "react";
-import type { AccountSnapshot } from "@shiori/plugin-sdk";
+import type { AccountSnapshot } from "@shiori/sdk";
 import { createAccountClient } from "./accountClient";
 
 const client = createAccountClient();

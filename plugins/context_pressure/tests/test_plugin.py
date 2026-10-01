@@ -1,20 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
-from shiori_plugin_testkit.packages import stage_plugin_package
+from shiori_sdk.testing import FakeFrame, FakePluginContext
 
-from agent.lifecycle.types import AfterStepCtx
-from agent.plugin_host import HostServices, PluginKernel
-from bus.event_bus import EventBus
+from shiori_sdk.lifecycle import AfterStepCtx
 from plugins.context_pressure.backend.plugin import (
+    setup,
     ContextPressureStopModule,
-    _CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS,
 )
-
-PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 
 def _after_step_ctx(*, has_more: bool, tokens: int) -> AfterStepCtx:
@@ -36,29 +30,21 @@ def _after_step_ctx(*, has_more: bool, tokens: int) -> AfterStepCtx:
 @pytest.mark.asyncio
 async def test_requests_early_stop_when_pressure_exceeds_threshold() -> None:
     module = ContextPressureStopModule()
-    ctx = _after_step_ctx(
-        has_more=True, tokens=_CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS + 1
-    )
-    frame = SimpleNamespace(slots={"step:ctx": ctx})
+    ctx = _after_step_ctx(has_more=True, tokens=800_001)
+    frame = FakeFrame(slots={"step:ctx": ctx})
 
     result = await module.run(frame)
 
     assert result.slots["step:early_stop_reason"] == "context_pressure"
-    assert (
-        result.slots["step:telemetry:context_pressure_tokens"]
-        == _CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS + 1
-    )
-    assert (
-        result.slots["step:telemetry:context_pressure_threshold"]
-        == _CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS
-    )
+    assert result.slots["step:telemetry:context_pressure_tokens"] == 800_001
+    assert result.slots["step:telemetry:context_pressure_threshold"] == 800_000
 
 
 @pytest.mark.asyncio
 async def test_no_early_stop_below_threshold() -> None:
     module = ContextPressureStopModule()
-    ctx = _after_step_ctx(has_more=True, tokens=_CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS)
-    frame = SimpleNamespace(slots={"step:ctx": ctx})
+    ctx = _after_step_ctx(has_more=True, tokens=800_000)
+    frame = FakeFrame(slots={"step:ctx": ctx})
 
     result = await module.run(frame)
 
@@ -68,33 +54,16 @@ async def test_no_early_stop_below_threshold() -> None:
 @pytest.mark.asyncio
 async def test_no_early_stop_when_no_more_steps() -> None:
     module = ContextPressureStopModule()
-    ctx = _after_step_ctx(
-        has_more=False, tokens=_CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS + 1
-    )
-    frame = SimpleNamespace(slots={"step:ctx": ctx})
+    ctx = _after_step_ctx(has_more=False, tokens=800_001)
+    frame = FakeFrame(slots={"step:ctx": ctx})
 
     result = await module.run(frame)
 
     assert "step:early_stop_reason" not in result.slots
 
 
-@pytest.mark.asyncio
-async def test_setup_contributes_after_step_module_via_kernel(tmp_path: Path) -> None:
-    """setup(ctx) 必须与旧 ContextPressurePlugin.after_step_modules() 等价。
-
-    用真实 PluginKernel 装配真实插件目录来验证，而不是自造 fake capability——
-    fake 与真实 capability 契约脱钩，capability 改坏也不会让测试变红（#182 评审）。
-    """
-    root = tmp_path / "plugins"
-    root.mkdir()
-    stage_plugin_package(PLUGIN_DIR, root / "context_pressure")
-    kernel = PluginKernel([root], services=HostServices(event_bus=EventBus()))
-    await kernel.load_all()
-
-    assert [type(m).__name__ for m in kernel.after_step_modules] == [
-        "ContextPressureStopModule"
-    ]
-
-    # 卸载后贡献必须整体撤回，证明 phase 槽位真正挂在插件作用域上
-    _ = await kernel.unload("context_pressure")
-    assert kernel.after_step_modules == []
+async def test_setup_registers_modules(sdk_context: FakePluginContext) -> None:
+    await setup(sdk_context)
+    assert [
+        type(module).__name__ for module in sdk_context.lifecycle.modules["after_step"]
+    ] == ["ContextPressureStopModule"]

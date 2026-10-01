@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import type { SurfaceHandle, SurfacePlacement } from "@shiori/plugin-sdk";
-import { createFakePluginClient, mountTestComponent } from "@shiori/plugin-sdk/testing";
+import type { SurfaceHandle, SurfacePlacement } from "@shiori/sdk";
+import { createFakePluginClient, mountTestComponent } from "@shiori/sdk/testing";
 import { DesktopPetSurface } from "./DesktopPetSurface";
 import { petBubbleGap } from "./bubbleExtension";
 

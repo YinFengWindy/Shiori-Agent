@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shiori_sdk.lifecycle import ResponseMetadata as ResponseMetadata
+
 from dataclasses import dataclass
 import json
 import logging
@@ -9,15 +11,6 @@ from typing import Any
 from core.common.llm_output_log import summarize_llm_output_for_log
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ResponseMetadata:
-    """Formal reply fields retained separately from the displayed content."""
-
-    raw_text: str
-    mood: str | None = None
-    thought: str | None = None
 
 
 @dataclass

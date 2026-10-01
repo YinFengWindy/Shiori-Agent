@@ -1,4 +1,4 @@
-import type { AccountResponseRules, AccountSnapshot } from "@shiori/plugin-sdk";
+import type { AccountResponseRules, AccountSnapshot } from "@shiori/sdk";
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 
 type AccountPayload = {

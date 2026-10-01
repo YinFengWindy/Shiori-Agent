@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import type { SessionMessage } from "@shiori/plugin-sdk";
+import type { SessionMessage } from "@shiori/sdk";
 import { matchesChatTurn } from "../chat/chatTurnOwnership";
 import { markSendingSessionState, clearSendingSessionState, clearAllSendingSessionsState } from "./desktopSendingSessions";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";

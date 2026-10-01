@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { DesktopErrorBoundary } from "./DesktopErrorBoundary";
 
 test("crash fallback opens the log folder and discloses scrubbed diagnostics", async (context) => {

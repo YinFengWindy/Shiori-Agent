@@ -1,4 +1,4 @@
-import { SettingsToggleCard } from "@shiori/plugin-sdk";
+import { SettingsToggleCard } from "@shiori/sdk";
 import { InlineError } from "../shared/feedback/InlineError";
 import { useBusyAction } from "../shared/useBusyAction";
 import type { PhoneChatInfoSectionProps } from "./PhoneChatInfoSections";

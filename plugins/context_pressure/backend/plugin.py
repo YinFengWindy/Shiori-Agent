@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
-
-from agent.lifecycle.types import AfterStepCtx
-
-if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+from shiori_sdk import PluginRuntimeContext
+from shiori_sdk.lifecycle import AfterStepCtx, LifecycleFrame
 
 _CTX_SLOT = "step:ctx"
 _EARLY_STOP_REASON_SLOT = "step:early_stop_reason"
@@ -16,6 +12,8 @@ _CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS = _MODEL_CONTEXT_WINDOW_TOKENS * 80 // 1
 
 
 class ContextPressureStopModule:
+    """Requests a summary when an unfinished step crosses the plugin budget."""
+
     slot = "context_pressure.stop"
     requires = ("after_step.copy_input", _CTX_SLOT)
     produces = (
@@ -24,11 +22,8 @@ class ContextPressureStopModule:
         f"{_TELEMETRY_PREFIX}context_pressure_threshold",
     )
 
-    async def run(self, frame: object) -> object:
-        raw_slots = getattr(frame, "slots", None)
-        if not isinstance(raw_slots, dict):
-            return frame
-        slots = cast(dict[str, object], raw_slots)
+    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
+        slots = frame.slots
         ctx = slots.get(_CTX_SLOT)
         if not isinstance(ctx, AfterStepCtx) or not ctx.has_more:
             return frame

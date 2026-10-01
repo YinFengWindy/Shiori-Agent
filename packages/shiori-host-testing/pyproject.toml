@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shiori-host-testing"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["shiori-agent==0.1.0", "shiori-sdk[testing]==3.0.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

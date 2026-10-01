@@ -1,7 +1,7 @@
 import { ChatFileChipContent, chatFileChipClass } from "../chat/ChatMessageAttachments";
 import { ChatMessageImage } from "../chat/ChatMessageImage";
 import { isChatImageAsset } from "../chat/chatImageHistory";
-import { cx, pressableClass } from "@shiori/plugin-sdk";
+import { cx, pressableClass } from "@shiori/sdk";
 
 /** Pictures stay inside the bubble column of the phone's narrow screen. */
 const phoneImageBounds = { width: 180, height: 220 };

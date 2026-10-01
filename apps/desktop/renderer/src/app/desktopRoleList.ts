@@ -1,4 +1,4 @@
-import { errorMessage, type RoleRecord } from "@shiori/plugin-sdk";
+import { errorMessage, type RoleRecord } from "@shiori/sdk";
 import { reconcileRoles } from "../roles/roleListState";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 import type { createDesktopSessionCache } from "./desktopSessionCache";

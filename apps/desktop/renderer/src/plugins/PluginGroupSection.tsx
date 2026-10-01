@@ -1,6 +1,6 @@
 import { useId, useState, type ReactNode } from "react";
 import { SettingsDisclosure, SettingsDisclosureToggle } from "../settings/SettingsDisclosure";
-import { cardClass, cx } from "@shiori/plugin-sdk";
+import { cardClass, cx } from "@shiori/sdk";
 import type { PluginGroup } from "./pluginPresentation";
 
 const groupTitleClass = "text-body-sm font-semibold text-ink-secondary";

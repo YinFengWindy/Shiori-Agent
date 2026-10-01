@@ -1,4 +1,4 @@
-import { errorMessage, type PluginHostFeedback, type PluginHostServices, type RoleRecord } from "@shiori/plugin-sdk";
+import { errorMessage, type PluginHostFeedback, type PluginHostServices, type RoleRecord } from "@shiori/sdk";
 import { useSyncExternalStore } from "react";
 import type { GenerationFailure, NovelAiReadiness } from "./generationFailure";
 import type { ImageGenerateResult, ImageHistoryRecord, ImageStudioFormState } from "./types";

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import type { BridgeEvent } from "@shiori/plugin-sdk";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import type { BridgeEvent } from "@shiori/sdk";
+import { mountTestComponent } from "@shiori/sdk/testing";
 import { useIdentities } from "./useIdentities";
 
 const row = (id: string, boundAt: string) => ({

@@ -1,6 +1,6 @@
 import type React from "react";
 import { Plus, SquaresFour, UploadSimple } from "@phosphor-icons/react";
-import { SidebarResizeHandle } from "@shiori/plugin-sdk";
+import { SidebarResizeHandle } from "@shiori/sdk";
 import {
   cx,
   pressableClass,
@@ -8,7 +8,7 @@ import {
   sidebarContentMotionClass,
   sidebarNavItemClass,
   type RoleRecord,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import { RoleAvatar } from "./RoleAvatar";
 
 export type RoleWorkspaceSectionId = "roles-list" | "role-create" | "role-detail" | "role-assets";

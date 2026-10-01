@@ -1,5 +1,5 @@
 import { readPluginRoleSettings, pluginRoleSettingsDirty } from "../plugins/pluginRoleSettings";
-import type { RoleRecord } from "@shiori/plugin-sdk";
+import type { RoleRecord } from "@shiori/sdk";
 import type { RoleFormState } from "../shared/types";
 import { readRoleMoodConfig, roleMoodConfigEqual } from "./roleMoodConfig";
 import { readRoleVoiceConfig, roleVoiceConfigEqual } from "./roleVoiceConfig";

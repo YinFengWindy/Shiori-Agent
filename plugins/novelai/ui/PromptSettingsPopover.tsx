@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { SlidersHorizontal } from "@phosphor-icons/react";
-import { SettingsToggleCard, cx, iconButtonClass, menuPanelClass, menuSeparatorClass } from "@shiori/plugin-sdk";
+import { SettingsToggleCard, cx, iconButtonClass, menuPanelClass, menuSeparatorClass } from "@shiori/sdk";
 import { SegmentedControl } from "./SegmentedControl";
 import { undesiredContentPresetOptions } from "./studioForm";
 import type { NovelAiPromptSettings } from "./useNovelAiPromptSettings";

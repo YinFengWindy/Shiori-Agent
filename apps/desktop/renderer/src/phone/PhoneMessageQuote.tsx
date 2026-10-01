@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cx } from "@shiori/plugin-sdk";
+import { cx } from "@shiori/sdk";
 import { replyQuoteButtonClass, replyQuoteFrameClass, replyQuoteSenderClass, replyQuoteTextClass } from "../shared/styles";
 import { PhoneMessageMedia } from "./PhoneMessageMedia";
 import { phoneQuoteCollapsedLines, type PhoneQuoteItem } from "./phoneChatPresentation";

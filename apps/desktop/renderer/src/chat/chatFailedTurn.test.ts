@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { findChatRetryTarget, findRetryableChatErrorKey, splitChatErrorContent } from "./chatFailedTurn";
-import type { SessionMessage } from "@shiori/plugin-sdk";
+import type { SessionMessage } from "@shiori/sdk";
 
 const user: SessionMessage = { id: "role:mira:4", role: "user", content: "帮我看看这张图", render_id: "local:user:1" };
 const partial: SessionMessage = { role: "assistant", content: "我看", render_id: "local:assistant:2" };

@@ -7,7 +7,7 @@ import {
   cx,
   ghostButtonSurfaceClass,
   primaryButtonSurfaceClass,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import { dangerGhostButtonSurfaceClass, segmentedTabClass, segmentedTabListClass } from "../shared/styles";
 import type { RoleAssetMode, RoleAssetPreview } from "./roleAssetPreview";
 import { roleAssetModes } from "./roleAssetPreview";

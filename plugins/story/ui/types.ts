@@ -1,4 +1,4 @@
-import { BridgeError } from "@shiori/plugin-sdk";
+import { BridgeError } from "@shiori/sdk";
 import type { StoryTimeBand } from "./storyTime";
 
 /** A Story entry shown in the launcher. */

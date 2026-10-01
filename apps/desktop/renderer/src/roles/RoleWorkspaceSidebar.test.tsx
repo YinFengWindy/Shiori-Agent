@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
-import type { RoleRecord } from "@shiori/plugin-sdk";
+import { mountTestComponent } from "@shiori/sdk/testing";
+import type { RoleRecord } from "@shiori/sdk";
 import { RoleWorkspaceSidebar, type RoleWorkspaceSectionId } from "./RoleWorkspaceSidebar";
 
 function role(id: string, name: string, description = ""): RoleRecord {

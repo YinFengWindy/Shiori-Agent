@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 import { act } from "react";
-import { changeInputValue, mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { changeInputValue, mountTestComponent } from "@shiori/sdk/testing";
 
 let PluginSchemaSettingsSection: typeof import("./PluginSchemaSettingsSection").PluginSchemaSettingsSection;
 before(async () => {

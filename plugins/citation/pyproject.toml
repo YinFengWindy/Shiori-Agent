@@ -6,10 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "shiori-plugin-citation"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["shiori-agent==0.1.0"]
+dependencies = ["shiori-sdk==3.0.0"]
 
 [project.optional-dependencies]
-test = ["shiori-plugin-testkit==0.1.0"]
+test = ["shiori-sdk[testing]==3.0.0"]
 
 [tool.setuptools]
 include-package-data = false
@@ -24,4 +24,4 @@ testpaths = ["tests"]
 addopts = "-W error --import-mode=importlib"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-required_plugins = ["pytest-asyncio", "shiori-plugin-testkit"]
+required_plugins = ["pytest-asyncio", "shiori-sdk"]

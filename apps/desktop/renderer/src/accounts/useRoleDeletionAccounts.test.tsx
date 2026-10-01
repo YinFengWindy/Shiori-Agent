@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
-import { mountTestComponent } from "@shiori/plugin-sdk/testing";
+import { mountTestComponent } from "@shiori/sdk/testing";
 
 test("role deletion waits for its account list and can retry a failed lookup", async () => {
   const requests: Array<(response: Record<string, unknown>) => void> = [];

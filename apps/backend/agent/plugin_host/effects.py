@@ -5,12 +5,10 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from collections.abc import Awaitable, Callable
+from shiori_sdk.runtime import Dispose as Dispose
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
-
-Dispose = Callable[[], Awaitable[None] | None]
 
 
 @dataclass

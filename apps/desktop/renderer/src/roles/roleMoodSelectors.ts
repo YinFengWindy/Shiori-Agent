@@ -1,4 +1,4 @@
-import type { RoleRecord, SessionPayload } from "@shiori/plugin-sdk";
+import type { RoleRecord, SessionPayload } from "@shiori/sdk";
 import type { RoleFormState } from "../shared/types";
 
 type ResolveCurrentMoodArgs = {

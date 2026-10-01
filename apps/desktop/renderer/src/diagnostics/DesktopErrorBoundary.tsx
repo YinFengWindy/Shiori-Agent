@@ -1,7 +1,7 @@
 import React from "react";
 import { FeedbackDetail } from "../shared/feedback/FeedbackDetail";
-import { ghostButtonClass } from "@shiori/plugin-sdk";
-import { errorFeedback, scrubErrorDetail } from "@shiori/plugin-sdk/host-internal";
+import { ghostButtonClass } from "@shiori/sdk";
+import { errorFeedback, scrubErrorDetail } from "@shiori/sdk/host-internal";
 
 type DesktopErrorBoundaryProps = { children: React.ReactNode };
 type DesktopErrorBoundaryState = { hasError: boolean; detail: string; folderError: string; detailOpen: boolean };

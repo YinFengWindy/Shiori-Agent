@@ -13,7 +13,7 @@ import {
   primaryButtonSurfaceClass,
   textareaClass,
   usePluginHostServices,
-} from "@shiori/plugin-sdk";
+} from "@shiori/sdk";
 import type { PromptTagEntry } from "./types";
 
 type PromptTagEntryEditorProps = {
