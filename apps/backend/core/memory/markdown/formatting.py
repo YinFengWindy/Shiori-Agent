@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from agent.llm_json import load_json_object_loose
 from agent.prompting import is_context_frame
-from agent.core.passive_support import estimate_messages_tokens
+from agent.prompting.token_estimate import estimate_input
 from conversation.context_scope import (
     ContextView,
     UserContextThreads,
@@ -193,7 +193,8 @@ def _estimate_session_input_tokens(
             *history,
             {"role": "user", "content": current_content},
         ]
-    return estimate_messages_tokens(estimate_messages)
+    # Call the owning pure estimator; importing agent.core here creates a cycle.
+    return estimate_input(estimate_messages)
 
 
 def split_consolidation_window(

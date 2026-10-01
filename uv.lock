@@ -1587,13 +1587,23 @@ name = "shiori-plugin-default-memory"
 version = "0.1.0"
 source = { editable = "plugins/default_memory" }
 dependencies = [
-    { name = "shiori-agent" },
+    { name = "httpx" },
+    { name = "json-repair" },
+    { name = "numpy" },
+    { name = "shiori-sdk" },
+    { name = "sqlite-vec" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "shiori-agent", specifier = "==0.1.0" },
-    { name = "shiori-plugin-testkit", marker = "extra == 'test'", specifier = "==0.1.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "json-repair", specifier = ">=0.40.0" },
+    { name = "numpy", specifier = ">=2.0.0" },
+    { name = "shiori-sdk", specifier = "==3.0.0" },
+    { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = "==3.0.0" },
+    { name = "sqlite-vec", specifier = ">=0.1.6" },
+    { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2025.2" },
 ]
 provides-extras = ["test"]
 
@@ -1617,6 +1627,10 @@ requires-dist = [
 [[package]]
 name = "shiori-sdk"
 source = { editable = "packages/sdk" }
+dependencies = [
+    { name = "httpx" },
+    { name = "json-repair" },
+]
 
 [package.optional-dependencies]
 testing = [
@@ -1627,7 +1641,9 @@ testing = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "httpx", marker = "extra == 'testing'", specifier = ">=0.28" },
+    { name = "json-repair", specifier = ">=0.40.0" },
     { name = "pytest", marker = "extra == 'testing'", specifier = ">=9.0" },
     { name = "pytest-asyncio", marker = "extra == 'testing'", specifier = ">=1.3" },
 ]

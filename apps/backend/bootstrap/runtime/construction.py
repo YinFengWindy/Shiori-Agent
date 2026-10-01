@@ -8,6 +8,8 @@ from contextlib import AsyncExitStack
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, TypeVar
 
+from shiori_sdk.memory.build import BuildResource
+
 if TYPE_CHECKING:
     from bootstrap.tools import CoreRuntime
 
@@ -52,3 +54,38 @@ async def prepare_core_runtime(*args, builder: Callable[..., CoreRuntime], **kwa
             _scope.reset(token)
         cleanup.pop_all()
         return core
+
+
+class MemoryBuildResources:
+    """Keeps partial allocations in the outer construction scope until host handoff."""
+
+    def __init__(self) -> None:
+        self._resources: list[BuildResource] = []
+        self._transferred = False
+
+    def register(self, resource: object, cleanup: Callable[[], object]) -> None:
+        """Records cleanup immediately, including before a plugin build can return."""
+        if self._transferred:
+            raise RuntimeError("memory resources already transferred")
+        if any(entry.value is resource for entry in self._resources):
+            return
+        closed = False
+
+        async def close_once():
+            nonlocal closed
+            if closed:
+                return
+            closed = True
+            result = cleanup()
+            if inspect.isawaitable(result):
+                await result
+
+        self._resources.append(BuildResource(resource, close_once))
+        track_build_resource(resource, close_once)
+
+    def transfer(self) -> list[BuildResource]:
+        """Transfers to the returned runtime; outer assembly rollback stays armed."""
+        if self._transferred:
+            raise RuntimeError("memory resources already transferred")
+        self._transferred = True
+        return list(self._resources)

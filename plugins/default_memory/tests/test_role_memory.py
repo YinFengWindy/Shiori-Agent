@@ -1,33 +1,24 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
-from shiori_plugin_testkit.packages import stage_plugin_package
+from shiori_sdk.rpc import Concurrency
+from shiori_sdk.testing.memory import FakeMemoryRoles
+from shiori_sdk.testing.memory_context import FakeMemoryPluginContext
 
-from agent.plugin_host import HostServices, PluginKernel
-from bus.event_bus import EventBus
-from core.roles import RoleStore
-from desktop_bridge.method_policy import Concurrency
-from memory2.store import MemoryStore2
+from plugins.default_memory.backend.role_memory import register_role_semantic_memory
+from plugins.default_memory.backend.semantic.store import MemoryStore2
 
 
 @pytest.mark.asyncio
 async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_detail(
     tmp_path: Path,
 ) -> None:
-    plugin_root = tmp_path / "plugins"
-    plugin_root.mkdir()
-    stage_plugin_package(
-        Path(__file__).resolve().parents[1], plugin_root / "default_memory"
-    )
     workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    roles = RoleStore(workspace)
-    for role_id in ("mira", "atlas"):
-        roles.create_role(role_id=role_id, name=role_id, system_prompt="test")
+    roles = FakeMemoryRoles(("mira", "atlas"))
     store = MemoryStore2(tmp_path / "memory.db")
     try:
         first_id = store.upsert_item(
@@ -55,27 +46,22 @@ async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_
             list_role_filter_values=store.list_role_filter_values,
             get_item_for_admin=store.get_item_for_admin,
         )
-        kernel = PluginKernel(
-            [plugin_root],
-            services=HostServices(
-                event_bus=EventBus(),
-                workspace=workspace,
-                role_store=roles,
-                memory_engine=engine,
-            ),
-        )
-        await kernel.load_all()
-        list_method = "plugin.default_memory.roles.memory.semantic.list"
-        detail_method = "plugin.default_memory.roles.memory.semantic.detail"
-        assert kernel.rpc.policy_for(list_method).concurrency is Concurrency.READ_ONLY
-        assert kernel.rpc.policy_for(detail_method).concurrency is Concurrency.READ_ONLY
-        list_rpc = kernel.rpc.resolve(list_method)[1]
-        detail_rpc = kernel.rpc.resolve(detail_method)[1]
-
+        ctx = FakeMemoryPluginContext(workspace, roles=roles, engine=engine)
+        register_role_semantic_memory(ctx)
+        list_method = "roles.memory.semantic.list"
+        detail_method = "roles.memory.semantic.detail"
+        assert ctx.rpc.concurrency[list_method] is Concurrency.READ_ONLY
+        assert ctx.rpc.concurrency[detail_method] is Concurrency.READ_ONLY
+        list_rpc = ctx.rpc.handlers[list_method]
+        detail_rpc = ctx.rpc.handlers[detail_method]
         active = await list_rpc({"role_id": "mira", "page_size": 1})
+        assert active is not None
         assert active["total"] == 1
-        assert [item["id"] for item in active["items"]] == [first_id]
-        assert "embedding" not in active["items"][0]
+        assert _listed(active, "id") == [first_id]
+        active_items = active["items"]
+        assert isinstance(active_items, list)
+        assert isinstance(active_items[0], dict)
+        assert "embedding" not in active_items[0]
         filtered = await list_rpc(
             {
                 "role_id": "mira",
@@ -86,9 +72,10 @@ async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_
                 "page_size": 1,
             }
         )
+        assert filtered is not None
         assert filtered["total"] == 2
-        assert len(filtered["items"]) == 1
-        assert all(item["id"] != atlas_id for item in filtered["items"])
+        assert len(_listed(filtered, "id")) == 1
+        assert atlas_id not in _listed(filtered, "id")
         second_page = await list_rpc(
             {
                 "role_id": "mira",
@@ -97,20 +84,26 @@ async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_
                 "page_size": 1,
             }
         )
+        assert second_page is not None
         assert second_page["total"] == 2
-        assert {filtered["items"][0]["id"], second_page["items"][0]["id"]} == {
+        assert {_listed(filtered, "id")[0], _listed(second_page, "id")[0]} == {
             first_id,
             second_id,
         }
         detail = await detail_rpc({"role_id": "mira", "item_id": first_id})
-        assert detail["item"]["extra_json"]["role_id"] == "mira"
-        assert "embedding" not in detail["item"]
+        assert detail is not None
+        extra = _detail(detail, "extra_json")
+        assert isinstance(extra, dict)
+        assert extra["role_id"] == "mira"
+        item = detail["item"]
+        assert isinstance(item, dict)
+        assert "embedding" not in item
         with pytest.raises(ValueError, match="memory item not found"):
             await detail_rpc({"role_id": "mira", "item_id": atlas_id})
         with pytest.raises(ValueError, match="role not found"):
             await list_rpc({"role_id": "missing"})
-        await kernel.unload("default_memory")
-        assert kernel.rpc.resolve(list_method) is None
+        await ctx.aclose()
+        assert list_method not in ctx.rpc.handlers
     finally:
         store.close()
 
@@ -186,8 +179,7 @@ async def test_semantic_reads_report_disabled_engine_after_role_validation(
 ) -> None:
     from plugins.default_memory.backend.role_memory import DefaultRoleMemoryReader
 
-    roles = RoleStore(tmp_path)
-    roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    roles = FakeMemoryRoles(("mira",))
     reader = DefaultRoleMemoryReader(roles, None)
     assert (await reader.list({"role_id": "mira"}))["status"] == "disabled"
     assert (await reader.detail({"role_id": "mira"}))["status"] == "disabled"
@@ -209,9 +201,7 @@ def _store_reader(tmp_path: Path, store: MemoryStore2, *role_ids: str):
     """Build a reader over a real memory2 store with the given persisted roles."""
     from plugins.default_memory.backend.role_memory import DefaultRoleMemoryReader
 
-    roles = RoleStore(tmp_path)
-    for role_id in role_ids:
-        roles.create_role(role_id=role_id, name=role_id, system_prompt="test")
+    roles = FakeMemoryRoles(role_ids)
     engine = SimpleNamespace(
         list_items_for_admin=store.list_items_for_admin,
         list_role_filter_values=store.list_role_filter_values,

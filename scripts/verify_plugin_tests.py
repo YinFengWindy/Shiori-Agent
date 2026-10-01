@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Iterable, Mapping
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
@@ -15,6 +12,9 @@ import time
 import tomllib
 import traceback
 import zipfile
+from collections.abc import Callable, Iterable, Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
@@ -25,7 +25,7 @@ UV = str(Path(sys.executable).with_name("uv.exe" if os.name == "nt" else "uv"))
 if not Path(UV).is_file():
     UV = "uv"
 # Measured as the longest suites in CI; starting them first shortens the pool's tail.
-SDK_PLUGINS = frozenset({"citation", "context_pressure"})
+SDK_PLUGINS = frozenset({"citation", "context_pressure", "default_memory"})
 SLOW_PLUGINS = ("telegram", "feishu", "qqbot")
 
 

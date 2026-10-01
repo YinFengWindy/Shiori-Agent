@@ -2,48 +2,47 @@
 
 import asyncio
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
-import pytest
-
-from agent.provider import LLMProvider
-from agent.looping.core import AgentLoop
 import agent.looping.core as loop_core
+import pytest
+from agent.core.passive_turn.helpers import get_history_since_consolidated
+from agent.looping.core import AgentLoop
 from agent.looping.ports import SessionServices
+from agent.provider import LLMProvider
 from bus.event_bus import EventBus
 from bus.events_lifecycle import TurnCommitted
-from agent.core.passive_turn.helpers import get_history_since_consolidated
 from conversation.context_scope import turn_context_view, user_context_view
 from conversation.service import desktop_thread_id, network_thread_id
 from core.memory.events import ConsolidationCommitted
-from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
-from core.roles import RoleStore
 from core.memory.group_environment import (
     SUMMARY_LABEL_KEY,
     SUMMARY_UPDATED_AT_KEY,
     GroupEnvironment,
 )
-from collections.abc import Callable
 from core.memory.markdown import (
     ConsolidateRequest,
     MarkdownMemoryMaintenance,
-    MarkdownMemoryStore,
     MarkdownMemoryRuntime,
+    MarkdownMemoryStore,
     MemoryLifecycleBindRequest,
 )
 from core.memory.markdown.contracts import ConsolidationSegments, _ConsolidationDraft
 from core.memory.markdown.external_segment import MEMBER_BATCH_SIZE
 from core.memory.markdown.formatting import (
-    build_consolidation_source_ref,
     _select_consolidation_window,
+    build_consolidation_source_ref,
 )
-from memory2.store import MemoryStore2
-from plugins.default_memory.backend.engine import DefaultMemoryEngine
-from plugins.plugin_undo.backend.plugin import PluginUndo
+from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
+from core.roles import RoleStore
 from session.manager import Session, SessionManager
 from session.manager.models import consolidation_cursor
+
+from plugins.plugin_undo.backend.plugin import PluginUndo
+from tests.backend.core.memory.markdown.memory_double import CommittedMemory
 
 
 def _setup(tmp_path: Path):
@@ -162,9 +161,8 @@ async def test_undo_waits_for_started_commit_and_cleans_its_real_memory_sources(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     manager, session, maintenance, event_bus = _setup(tmp_path)
-    memory_store = MemoryStore2(tmp_path / "memory2.db")
-    memory_engine = DefaultMemoryEngine.__new__(DefaultMemoryEngine)
-    memory_engine._v2_store = memory_store
+    memory_store = CommittedMemory([message["id"] for message in session.messages])
+    memory_engine = memory_store
     entered, resume = asyncio.Event(), asyncio.Event()
     item_ids: list[str] = []
 
@@ -262,9 +260,8 @@ async def test_manual_timeout_keeps_lock_until_threaded_markdown_commit_finishes
     release = threading.Event()
     event_loop = asyncio.get_running_loop()
     maintenance_task: asyncio.Task[Any] | None = None
-    memory_store = MemoryStore2(tmp_path / "memory2.db")
-    engine = DefaultMemoryEngine.__new__(DefaultMemoryEngine)
-    engine._v2_store = memory_store
+    memory_store = CommittedMemory([message["id"] for message in session.messages])
+    engine = memory_store
     item_ids: list[str] = []
     original_append = MarkdownMemoryStore.append_history_once
 

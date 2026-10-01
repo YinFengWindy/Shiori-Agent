@@ -4,23 +4,25 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from core.roles.semantic_memory_requests import (
-    SEMANTIC_STATUS_FILTERS,
+from shiori_sdk.memory.build import MemoryRoles
+from shiori_sdk.memory.engine import MemoryAdminApi
+from shiori_sdk.memory.requests import (
     page_options,
-    readable_item,
     reject_undeclared_filters,
     require_memory_role,
 )
-from desktop_bridge.method_policy import Concurrency
+from shiori_sdk.rpc import Concurrency
+
+from .semantic_requests import SEMANTIC_STATUS_FILTERS, readable_item
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.memory.context import MemoryPluginContext as PluginRuntimeContext
 
 
 class DefaultRoleMemoryReader:
     """Expose only one persisted role's default-engine admin reads."""
 
-    def __init__(self, role_store: Any, engine: Any) -> None:
+    def __init__(self, role_store: MemoryRoles, engine: MemoryAdminApi | None) -> None:
         self._role_store = role_store
         self._engine = engine
 
@@ -76,10 +78,10 @@ class DefaultRoleMemoryReader:
 
 def register_role_semantic_memory(ctx: PluginRuntimeContext) -> None:
     """Register default-engine reads in this plugin's RPC namespace."""
-    engine = ctx.memory_engine
+    engine = ctx.memory.engine
     if engine is not None and engine.describe().name != "default":
         engine = None
-    reader = DefaultRoleMemoryReader(ctx.role_store, engine)
+    reader = DefaultRoleMemoryReader(ctx.memory.roles, engine)
     ctx.rpc.register(
         "roles.memory.semantic.list", reader.list, concurrency=Concurrency.READ_ONLY
     )

@@ -8,6 +8,7 @@ from functools import cache
 from typing import Any, Literal
 
 import httpx
+from shiori_sdk.http import RequestBudget as RequestBudget
 
 HttpProfile = Literal["external_default", "feed_fetcher", "local_service"]
 
@@ -36,11 +37,6 @@ class RetryPolicy:
     base_delay_s: float = 0.3
     max_delay_s: float = 1.5
     jitter_ratio: float = 0.2
-
-
-@dataclass(frozen=True)
-class RequestBudget:
-    total_timeout_s: float
 
 
 @dataclass

@@ -1,8 +1,7 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
-
 from bootstrap.runtime.construction import prepare_core_runtime, track_build_resource
 
 
@@ -36,33 +35,47 @@ async def test_complete_runtime_takes_ownership_without_closing_resources():
 
 
 @pytest.mark.asyncio
-async def test_default_memory_constructor_failure_closes_open_database(
-    tmp_path, monkeypatch
+@pytest.mark.parametrize("failure_after_transfer", [False, True])
+async def test_memory_build_callbacks_close_partial_or_transferred_resources_once(
+    failure_after_transfer,
 ):
-    from agent.config_models import Config
-    from plugins.default_memory.backend.config import load_default_memory_config
-    from plugins.default_memory.backend.engine.lifecycle import DefaultMemoryEngine
+    from bootstrap.runtime.construction import MemoryBuildResources
 
-    store = SimpleNamespace(close=Mock())
-    monkeypatch.setattr(
-        "plugins.default_memory.backend.engine.lifecycle.MemoryStore2",
-        lambda *args, **kwargs: store,
-    )
-    monkeypatch.setattr(
-        "plugins.default_memory.backend.engine.lifecycle.Embedder",
-        Mock(side_effect=ValueError("bad embedding")),
-    )
-    config = Config(provider="", model="", api_key="", model_registrations=[])
+    closed = []
 
     def build():
-        return DefaultMemoryEngine(
-            config=config,
-            default_config=load_default_memory_config(),
-            workspace=tmp_path,
-            provider=None,
-            http_resources=SimpleNamespace(external_default=None),
+        resources = MemoryBuildResources()
+        resources.register(object(), lambda: closed.append("first"))
+        resources.register(object(), lambda: closed.append("second"))
+        if failure_after_transfer:
+            transferred = resources.transfer()
+            assert len(transferred) == 2
+        raise ValueError("assembly failed")
+
+    with pytest.raises(ValueError, match="assembly failed"):
+        await prepare_core_runtime(builder=build)
+    assert closed == ["second", "first"]
+
+
+@pytest.mark.asyncio
+async def test_successful_memory_handoff_uses_explicit_cleanup_callbacks():
+    from bootstrap.runtime.construction import MemoryBuildResources
+    from core.memory.plugin import DisabledMemoryEngine
+    from core.memory.runtime import MemoryRuntime
+
+    closed = []
+
+    def build():
+        resources = MemoryBuildResources()
+        resources.register(object(), lambda: closed.append("opaque-resource"))
+        return MemoryRuntime(
+            markdown=SimpleNamespace(),
+            engine=DisabledMemoryEngine(),
+            resources=resources.transfer(),
         )
 
-    with pytest.raises(ValueError, match="bad embedding"):
-        await prepare_core_runtime(builder=build)
-    store.close.assert_called_once()
+    runtime = await prepare_core_runtime(builder=build)
+    assert closed == []
+    await runtime.aclose()
+    await runtime.aclose()
+    assert closed == ["opaque-resource"]

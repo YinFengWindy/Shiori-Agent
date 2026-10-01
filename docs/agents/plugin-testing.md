@@ -48,10 +48,10 @@ uv run python scripts/verify_plugin_tests.py --output /absolute/path/outside-rep
 
 ## SDK 隔离与导入守护
 
-citation/context_pressure 已迁入 `shiori-sdk[testing]`，安装声明不再依赖宿主。
-`uv run python scripts/verify_plugin_tests.py --sdk-only` 仅为这两个插件构建
+citation/context_pressure/default_memory 已迁入 `shiori-sdk[testing]`，安装声明不再依赖宿主。
+`uv run python scripts/verify_plugin_tests.py --sdk-only` 仅为这三个插件构建
 SDK/插件 wheel，逐一在仓库外普通安装、执行全部测试，并断言没有
-shiori-agent、testkit、默认记忆与源码路径注入。普通全插件验证也对这两个插件
+shiori-agent、testkit、宿主测试支持与源码路径注入；default_memory 只在验证自己时安装。普通全插件验证也对这三个插件
 使用相同无宿主路径；其余插件保留真实宿主安装与资源检查。
 
 `uv run python -m scripts.verify_sdk` 另外安装 SDK wheel 并执行 SDK 自身测试；

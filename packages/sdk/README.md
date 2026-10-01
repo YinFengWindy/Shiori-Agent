@@ -55,6 +55,8 @@ Install `shiori-sdk[testing]` for pytest/pytest-asyncio, `sdk_context`,
 bridge request helpers and shared test TLS contexts. Fakes store only test values
 in memory; they never open host persistence. `FakeLifecycle` records modules for
 explicit execution; it does not simulate the host phase dependency sorter.
+HTTP response contracts and tolerant JSON helpers declare httpx/json-repair as
+runtime dependencies. pytest-asyncio and test fixtures remain optional.
 The base wheel can coexist with pytest without the testing extra: unrelated tests
 collect and run normally. Requesting `sdk_context` without the extra reports the
 installation requirement. Optional fixtures load only when their dependencies exist.
@@ -80,8 +82,9 @@ uv run python scripts/check_sdk_imports.py --base <base-commit>
 
 The artifact probes install tarball/wheel non-editably outside the checkout. The
 wheel probe first collects/runs an unrelated test with only the base SDK and pytest,
-checks the missing-extra diagnostic, then installs the extra and runs all SDK tests; the plugin probe executes citation/context_pressure
-tests with no host, testkit or default-memory distribution. It verifies installed
+checks the missing-extra diagnostic, then installs the extra and runs all SDK tests.
+The plugin probe executes citation, context_pressure and default_memory with no
+host or testkit; default_memory is installed only for its own target. It verifies installed
 origins and that async failures really execute. The original full host CI and
 legacy plugin integration job remain enabled.
 
@@ -90,3 +93,37 @@ counts, including `TYPE_CHECKING` imports. Remove entries with each migration.
 New edges, increased counts, unused entries and host imports from the SDK or
 graduated plugins fail the guard. PR CI compares the baseline with its exact base
 commit so editing the exemption file cannot silently expand it.
+
+
+## Memory engines
+
+`shiori_sdk.memory.engine` owns memory requests, results, scopes, tool profiles and
+`MemoryEngine`. `memory.events` and `memory.committed` own shared ingestion,
+consolidation and committed-turn values; implementations and SQLite stay outside SDK.
+Pure semantic pagination/filter declarations live in `memory.requests`; each engine
+owns its status vocabulary and removes private vector/hash fields from responses.
+
+A memory package exposes `MemoryPlugin.build(MemoryPluginBuildDeps)`,
+`ensure_workspace_storage(...)` and `validate_transition(...)` from its
+`backend/memory_plugin.py`. Build inputs contain resolved `MemoryBuildConfig`
+(model selection and embedding credentials), a `ModelProvider`, bounded HTTP
+requester, typed queued events, a skill-name callback and narrow role/storage ports.
+No full host Config, RoleStore, provider implementation or Markdown service crosses
+this boundary. The storage port retains host migration receipts, atomic publication
+and live-database leases. Compatibility failures use
+`MemoryStorageIncompatibleError.to_details()` for the settings recovery hint.
+
+Construction must register every allocation with `deps.resources.register(value,
+cleanup)` before allocating the next resource. Call `transfer()` only after the
+engine is complete and return its records in `MemoryPluginRuntime.resources`.
+The caller retains an outer construction cleanup scope until all host assembly
+succeeds, then consumes those exact callbacks at shutdown (including opaque values
+with no close method). Returned callbacks run once; cleanup continues in reverse
+order if one callback fails. A direct build caller supplies and owns that scope.
+
+Setup plugins declaring `memory` and `rpc` use `MemoryPluginContext`: shared
+Markdown reads, role existence/permissions, storage and current engine are injected,
+while RPC registration remains plugin-owned. `BeforeTurnObservation` exposes only
+inspection fields; `AfterToolResultCtx` is the shared result event. Standalone tests
+can use `FakeMemoryPluginContext`, `FakeMemoryRoles`, `FakeMemoryStorage` and
+`FakeBuildResources`; real migration and runtime assembly remain host integration tests.

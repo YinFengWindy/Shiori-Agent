@@ -8,10 +8,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from agent.lifecycle.types import AfterToolResultCtx, BeforeTurnCtx
+from shiori_sdk.lifecycle import (
+    AfterToolResultCtx,
+    LifecycleFrame,
+)
+from shiori_sdk.lifecycle import (
+    BeforeTurnObservation as BeforeTurnCtx,
+)
+from shiori_sdk.memory.build import MemoryStorage
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.memory.context import MemoryPluginContext as PluginRuntimeContext
 
 _CTX_SLOT = "session:ctx"
 _ITEM_LINE_RE = re.compile(r"^-\s+\[([^\]]+)\]\s*(.*)$")
@@ -25,7 +32,7 @@ class ContextPrepareRecordModule:
     def __init__(self, recorder: "_DefaultMemoryRecorder") -> None:
         self._recorder = recorder
 
-    async def run(self, frame: Any) -> Any:
+    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
         ctx = frame.slots.get(_CTX_SLOT)
         if isinstance(ctx, BeforeTurnCtx):
             self._recorder.record_context_prepare(ctx)
@@ -128,21 +135,30 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     """装配 default_memory 插件壳：贡献 before_turn 检索记录模块与 recall_memory 工具结果记录。
 
     记忆引擎本体（``DefaultMemoryEngine`` / ``MemoryPlugin``）不在此文件，由
-    ``core.memory.plugin`` 的独立契约装配（见同目录 ``memory_plugin.py``），
-    不受本次插件系统迁移影响；这里只是给它接一个 v2 生命周期壳。
+    ``shiori_sdk.memory.build`` 的独立契约装配（见同目录 ``memory_plugin.py``），
+    构造依赖通过 SDK 注入；此入口负责插件作用域的观察与 RPC 注册。
 
-    是否激活只在装配时判定一次：``ctx.memory_engine`` 在同一次 kernel
+    是否激活只在装配时判定一次：``ctx.memory.engine`` 在同一次 kernel
     generation 内固定不变，与旧 ``initialize()`` 里的一次性判定效果等价。
     """
-    from agent.plugin_host.role_memory_documents import register_role_memory_documents
+    from shiori_sdk.rpc import Concurrency
+
     from .role_memory import register_role_semantic_memory
 
-    register_role_memory_documents(ctx)
+    ctx.rpc.register(
+        "roles.memory.documents",
+        ctx.memory.read_documents,
+        concurrency=Concurrency.READ_ONLY,
+    )
     register_role_semantic_memory(ctx)
 
     recorder = _DefaultMemoryRecorder(
-        active=_is_memory_engine(ctx.memory_engine, "default"),
-        data_path=_data_path(plugin_dir=ctx.plugin_dir, workspace=ctx.workspace),
+        active=_is_memory_engine(ctx.memory.engine, "default"),
+        data_path=_data_path(
+            plugin_dir=ctx.plugin_dir,
+            workspace=ctx.memory.workspace,
+            storage=ctx.memory.storage,
+        ),
     )
     ctx.lifecycle.contribute("before_turn", [ContextPrepareRecordModule(recorder)])
     ctx.events.on(AfterToolResultCtx, recorder.record_recall_memory)
@@ -162,15 +178,16 @@ def _is_memory_engine(engine: object, name: str) -> bool:
     return str(describe().name) == name
 
 
-def _data_path(*, plugin_dir: Path, workspace: Path | None) -> Path:
-    from agent.plugin_host.data_migration import migrate_private_data
+def _data_path(
+    *, plugin_dir: Path, workspace: Path | None, storage: MemoryStorage
+) -> Path:
 
     if workspace is None:
         raise RuntimeError("default_memory 插件需要 workspace，不能写入安装包")
     source = workspace / "observe" / "recall_inspector.jsonl"
     if not source.exists():
         source = plugin_dir / ".data" / "recall_turns.jsonl"
-    return migrate_private_data(
+    return storage.migrate_data(
         workspace, "default_memory", "recall_inspector.jsonl", source
     )
 

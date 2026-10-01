@@ -22,7 +22,6 @@ const HOST_PACKAGE_ROOTS = [
   "core",
   "desktop_bridge",
   "infra",
-  "memory2",
   "proactive_v2",
   "prompts",
   "session",

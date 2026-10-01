@@ -10,7 +10,7 @@ class _MissingTestingExtra:
     def sdk_context(self) -> None:
         pytest.fail(
             "The sdk_context fixture requires shiori-sdk[testing]; "
-            "install that extra to enable pytest-asyncio and httpx support.",
+            "install that extra to enable pytest-asyncio and testing fixtures.",
             pytrace=False,
         )
 

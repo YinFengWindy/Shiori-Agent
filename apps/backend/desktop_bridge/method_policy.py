@@ -22,17 +22,7 @@ if TYPE_CHECKING:
     from agent.plugin_host.rpc import PluginRpcRegistry
 
 
-class Concurrency(Enum):
-    """Which dispatcher lane runs the request."""
-
-    READ_ONLY = "read_only"
-    INTEGRATION = "integration"
-    MUTATION = "mutation"
-    # The settings transaction owns its serial lock; scheduling it through a
-    # shared lane would starve health checks and cancellation while it drains.
-    SETTINGS_APPLY = "settings_apply"
-    # Renderer rendezvous must leave capacity for callback RPCs and their replies.
-    PLUGIN_TRANSPORT = "plugin_transport"
+from shiori_sdk.rpc import Concurrency as Concurrency
 
 
 class Handler(Enum):

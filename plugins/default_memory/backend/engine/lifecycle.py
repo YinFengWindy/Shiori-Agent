@@ -6,34 +6,38 @@ import asyncio
 import hashlib
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from agent.config_models import Config
-from agent.llm_json import load_json_object_loose
-from agent.provider import LLMProvider
-from agent.skills import SkillsLoader
-from bus.events_lifecycle import TurnCommitted
-from core.memory.engine import (
+from shiori_sdk.http import HttpRequester
+from shiori_sdk.json import load_json_object_loose
+from shiori_sdk.memory.build import (
+    BuildResources,
+    MemoryBuildConfig,
+    MemoryRoles,
+    MemoryStorage,
+)
+from shiori_sdk.memory.committed import TurnCommitted
+from shiori_sdk.memory.engine import (
     EngineProfile,
     MemoryCapability,
     MemoryEngineDescriptor,
     MemoryToolProfile,
 )
-from core.memory.events import ConsolidationCommitted, TurnIngested
-from core.net.http import SharedHttpResources
-from memory2.embedder import Embedder
-from memory2.memorizer import Memorizer
-from memory2.post_response_worker import PostResponseMemoryWorker
-from memory2.procedure_tagger import ProcedureTagger
-from memory2.retriever import Retriever
-from memory2.store import VEC_DIM, MemoryStore2
+from shiori_sdk.memory.events import ConsolidationCommitted, TurnIngested
+from shiori_sdk.models import ModelProvider as LLMProvider
+
 from ..config import (
     DefaultMemoryConfig,
     resolve_memory_db_path,
 )
-from bootstrap.runtime.construction import track_build_resource
-
+from ..semantic.embedder import Embedder
+from ..semantic.memorizer import Memorizer
+from ..semantic.post_response_worker import PostResponseMemoryWorker
+from ..semantic.procedure_tagger import ProcedureTagger
+from ..semantic.retriever import Retriever
+from ..semantic.store import VEC_DIM, MemoryStore2
 from .admin import _AdminMixin
 from .mutation import _MutationMixin
 from .policy import _PolicyMixin
@@ -41,7 +45,7 @@ from .prompts import _build_long_term_prompt, _default_memory_tool_profile
 from .query import _QueryMixin
 
 if TYPE_CHECKING:
-    from bus.event_bus import EventBus
+    from shiori_sdk.memory.build import MemoryEvents as EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -81,17 +85,22 @@ class DefaultMemoryEngine(
     def __init__(
         self,
         *,
-        config: Config,
+        config: MemoryBuildConfig,
         default_config: DefaultMemoryConfig,
         workspace: Path,
         provider: LLMProvider,
         light_provider: LLMProvider | None = None,
-        http_resources: SharedHttpResources,
+        requester: HttpRequester,
+        storage: MemoryStorage,
+        roles: MemoryRoles,
+        skills: Callable[[], list[str]],
+        resources: BuildResources,
         event_publisher: "EventBus | None" = None,
     ) -> None:
         self._config = config
         self._default_config = default_config
         self._workspace = workspace
+        self._roles = roles
         self._provider = provider
         self._light_provider = light_provider or provider
         self._light_model = config.light_model or config.model
@@ -107,25 +116,24 @@ class DefaultMemoryEngine(
         db_path = resolve_memory_db_path(
             workspace=workspace,
             default_config=default_config,
+            storage=storage,
         )
-        embedding = config.memory.embedding
+        embedding = config.embedding
         retrieval = default_config.retrieval
         self._v2_store = MemoryStore2(
             db_path,
             vec_dim=embedding.output_dimensionality or VEC_DIM,
+            open_database=storage.open_database,
         )
-        track_build_resource(self._v2_store, self._v2_store.close)
+        resources.register(self._v2_store, self._v2_store.close)
         self._embedder = Embedder(
-            base_url=embedding.base_url
-            or config.light_base_url
-            or config.base_url
-            or "",
-            api_key=embedding.api_key or config.light_api_key or config.api_key,
+            base_url=embedding.base_url,
+            api_key=embedding.api_key,
             model=embedding.model,
             output_dimensionality=embedding.output_dimensionality,
-            requester=http_resources.external_default,
+            requester=requester,
         )
-        track_build_resource(self._embedder, self._embedder.aclose)
+        resources.register(self._embedder, self._embedder.aclose)
         self._memorizer = Memorizer(self._v2_store, self._embedder)
         self._retriever = Retriever(
             self._v2_store,
@@ -147,13 +155,10 @@ class DefaultMemoryEngine(
             procedure_guard_enabled=retrieval.procedure_guard_enabled,
             hotness_alpha=0.20,
         )
-        skills_loader = SkillsLoader(workspace)
         self._tagger = ProcedureTagger(
             provider=self._light_provider,
             model=self._light_model,
-            skills_fn=lambda: [
-                s["name"] for s in skills_loader.list_skills(filter_unavailable=False)
-            ],
+            skills_fn=skills,
         )
         self._post_response_worker = PostResponseMemoryWorker(
             memorizer=self._memorizer,
@@ -172,12 +177,14 @@ class DefaultMemoryEngine(
         *,
         default_config: DefaultMemoryConfig,
         workspace: Path,
+        storage: MemoryStorage,
     ) -> None:
         db_path = resolve_memory_db_path(
             workspace=workspace,
             default_config=default_config,
+            storage=storage,
         )
-        store = MemoryStore2(db_path)
+        store = MemoryStore2(db_path, open_database=storage.open_database)
         store.close()
 
     def _wire_memory2_events(self) -> None:

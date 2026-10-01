@@ -8,11 +8,11 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import cast
 
-from agent.provider import LLMResponse
-from core.memory.engine import EngineProfile, MemoryQuery, MemoryQueryResult
-from core.memory.utils import resolve_memory_scope, should_require_scope_match
-from memory2.query_builder import build_procedure_queries
+from shiori_sdk.memory.engine import EngineProfile, MemoryQuery, MemoryQueryResult
+from shiori_sdk.memory.utils import resolve_memory_scope, should_require_scope_match
+from shiori_sdk.models import ModelResponse as LLMResponse
 
+from ..semantic.query_builder import build_procedure_queries
 from .prompts import _explicit_hypothesis_prompt
 
 logger = logging.getLogger(__name__)
