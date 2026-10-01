@@ -28,14 +28,14 @@ type PluginSchemaSettingsSectionProps = { pluginId: string };
 
 /** Renders and autosaves a plugin's config form, generated from its declared JSON Schema. */
 export function PluginSchemaSettingsSection({ pluginId }: PluginSchemaSettingsSectionProps) {
-  const { schema, envStatus, draft, loadError, savePhase, statusMessage, updateDraft, retrySave, reloadConfig } =
+  const { schema, envStatus, draft, loadError, loadDetail, savePhase, statusMessage, statusDetail, updateDraft, retrySave, reloadConfig } =
     usePluginConfigController(pluginId);
 
   if (loadError) {
     return (
       <InlineError
         persona="pluginConfigLoadFailed"
-        message={`插件配置加载失败：${loadError}`}
+        message={loadError} detail={loadDetail}
         actions={<button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} onClick={reloadConfig}>重新加载</button>}
       />
     );
@@ -60,7 +60,7 @@ export function PluginSchemaSettingsSection({ pluginId }: PluginSchemaSettingsSe
       <SettingsStatus><SettingsSavedIndicator phase={savePhase} /></SettingsStatus>
       <SettingsSaveFeedback
         phase={savePhase}
-        message={statusMessage}
+        message={statusMessage} detail={statusDetail}
         onRetry={retrySave}
         onReload={reloadConfig}
       />

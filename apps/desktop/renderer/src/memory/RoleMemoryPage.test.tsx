@@ -100,7 +100,7 @@ it("keeps documents readable when the semantic layer fails or is disabled", asyn
   const { client } = createPluginRpcTestClient("default_memory", responder((...args) => semantic(...args)));
   const view = await mountTestComponent(<RoleMemoryPage client={client} roleId="mira" />, { windowGlobals });
   try {
-    assert.match(view.container.querySelector('[role="alert"]')?.textContent ?? "", /读取失败：engine offline/);
+    assert.match(view.container.querySelector('[role="alert"]')?.textContent ?? "", /读取失败/);
     await click(view.container.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1]);
     assert.match(text(view.container), /mira self/);
     semantic = () => ({ role_id: "mira", status: "disabled", items: [], total: 0 });

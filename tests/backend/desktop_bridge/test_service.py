@@ -1503,3 +1503,41 @@ async def test_a_stored_listening_record_is_pushed_to_the_phone(tmp_path) -> Non
     assert event["payload"]["thread_id"] == thread.id
     assert event["payload"]["message"]["id"] == heard.id
     await service.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error,summary",
+    [
+        (RuntimeError("failed token=secret-value"), "本地服务处理失败"),
+        (ValueError("请填写角色名称"), "请填写角色名称"),
+        (KeyError("角色任务不存在"), "角色任务不存在"),
+        (KeyError("身份绑定不存在"), "身份绑定不存在"),
+    ],
+)
+async def test_rpc_boundary_preserves_domain_messages_and_scrubs_unknown_causes(
+    tmp_path, error, summary
+):
+    sessions = SessionManager(tmp_path)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=sessions,
+        group_listening=GroupListeningControl(
+            ConversationService(sessions), lambda _channel: False
+        ),
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    service.request_router.dispatch = AsyncMock(side_effect=error)
+    try:
+        response = await service.handle(
+            {"id": "1", "method": "test.failure", "payload": {}}, emit_event=Mock()
+        )
+        assert response.error is not None
+        assert summary in response.error.message
+        assert "secret-value" not in str(response.to_dict())
+        assert response.error.details["detail"]
+    finally:
+        await service.aclose()

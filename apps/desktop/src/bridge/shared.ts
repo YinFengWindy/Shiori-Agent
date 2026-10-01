@@ -258,6 +258,10 @@ export type DesktopApi = {
   localAssetUrl(path: string): string;
   startAttachmentDrag(request: StartAttachmentDragRequest): void;
   reportRendererDiagnostic(payload: RendererDiagnosticPayload): void;
+  /** Opens the desktop diagnostics directory selected by the main process. */
+  openDiagnosticsFolder(): Promise<void>;
+  /** Acknowledges test playback completion from the hidden voice renderer. */
+  voiceTestPlaybackFinished(): void;
   bridgeStatus(): Promise<{ running: boolean; lastError: string | null }>;
   restartBridge(): Promise<{
     ok: boolean;

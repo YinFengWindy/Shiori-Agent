@@ -17,6 +17,9 @@ class PluginBridgeEvent:
 class PluginRpcError(RuntimeError):
     """A stable plugin-owned error code carried across the RPC boundary."""
 
-    def __init__(self, code: str, message: str):
+    def __init__(
+        self, code: str, message: str, *, details: dict[str, Any] | None = None
+    ):
         super().__init__(message)
         self.code = code
+        self.details = details

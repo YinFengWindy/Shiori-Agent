@@ -54,6 +54,15 @@ describe("splitChatErrorContent", () => {
 
   it("moves long or multi-line errors behind a detail toggle", () => {
     const raw = "Connection error: upstream returned 502\nretry-after: 10";
-    assert.deepEqual(splitChatErrorContent(raw), { summary: "回复失败", detail: raw });
+    assert.deepEqual(splitChatErrorContent(raw), { summary: "这次回复未完成", detail: raw });
   });
+});
+
+it("never trusts a legacy raw summary just because a scrubbed detail is supplied", () => {
+  const raw = "RuntimeError: https://example.com/?key=raw-secret\n" + "trace".repeat(60);
+  const result = splitChatErrorContent(raw, "RuntimeError: safe cause");
+  assert.equal(result.summary, "这次回复未完成");
+  assert.match(result.detail, /safe cause/);
+  assert.doesNotMatch(result.detail, /raw-secret/);
+  assert.equal(splitChatErrorContent("模型连接配置不完整，请检查模型设置", "context").summary, "模型连接配置不完整，请检查模型设置");
 });

@@ -1,3 +1,4 @@
+import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
 import { useState } from "react";
 import { useLatestRef } from "@shiori/plugin-sdk";
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
@@ -19,7 +20,7 @@ export function useModelConnectionTest(registration: ModelRegistrationFormData, 
     try {
       outcome = await testModelConnection(window.miraDesktop.invoke, registration);
     } catch (error) {
-      outcome = { status: "failure", message: error instanceof Error ? error.message : String(error) };
+      outcome = { status: "failure", ...errorFeedback(error, "连接测试未通过，请查看详情") };
     }
     // A slower probe of an earlier draft must not overwrite a newer one.
     setRecord((current) => (current?.key === key ? { key, view: outcome } : current));

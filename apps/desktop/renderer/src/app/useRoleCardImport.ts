@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { NewRoleFormState } from "../shared/types";
-import { useLatestRef, errorMessage } from "@shiori/plugin-sdk";
+import { useLatestRef, BridgeError } from "@shiori/plugin-sdk";
 import { createRoleFormFromImport, idleRoleCardImport, readRoleCardImportPreview } from "./roleCardImportState";
 import type { RoleCardImportState } from "./roleCardImportState";
 import type { FeedbackOptions } from "../shared/feedback/feedbackStore";
@@ -17,7 +17,7 @@ type ImportControllerArgs = {
 
 async function releasePreview(importId: string) {
   const response = await window.miraDesktop.invoke({ method: "roles.cardImport.cancel", payload: { import_id: importId } });
-  if (response.error) throw new Error(response.error.message);
+  if (response.error) throw new BridgeError(response.error.message, response.error.code, response.error.details);
 }
 
 /** Owns staging and invalidates stale preview responses when a draft is cancelled or reset. */
@@ -37,10 +37,10 @@ export function useRoleCardImport({ updateNewRoleForm, reportImportError }: Impo
     updateImport(idleRoleCardImport);
   }
 
-  function reportError(error: unknown) {
-    const { message, detail } = describeRoleCardImportError(errorMessage(error));
+  function reportError(error: unknown, phase: "preview" | "cleanup" = "preview") {
+    const { message, detail } = describeRoleCardImportError(error, phase);
     // 吟风 has her own line for an unreadable card (the host reporter shows it when she is on).
-    reportImportError(message, { persona: "roleImportFailed", ...(detail ? { detail } : {}) });
+    reportImportError(message, { persona: phase === "cleanup" ? "generic" : "roleImportFailed", ...(detail ? { detail } : {}) });
   }
 
   async function previewRoleCard() {
@@ -53,10 +53,10 @@ export function useRoleCardImport({ updateNewRoleForm, reportImportError }: Impo
       if (!source) { updateImport(idleRoleCardImport); return; }
       updateImport({ status: "previewing", preview: null, source });
       const response = await window.miraDesktop.invoke({ method: "roles.cardImport.preview", payload: { source } });
-      if (response.error) throw new Error(response.error.message);
+      if (response.error) throw new BridgeError(response.error.message, response.error.code, response.error.details);
       const preview = readRoleCardImportPreview(response.payload);
       if (requestGeneration !== generation.current) {
-        await releasePreview(preview.import_id);
+        try { await releasePreview(preview.import_id); } catch (error) { reportError(error, "cleanup"); }
         return;
       }
       updateImport({ status: "ready", preview, source });
@@ -74,7 +74,7 @@ export function useRoleCardImport({ updateNewRoleForm, reportImportError }: Impo
     clearRoleCardImport();
     updateNewRoleForm((current) => ({ ...current, importId: undefined, emotionSelections: undefined }));
     if (!importId) return;
-    try { await releasePreview(importId); } catch (error) { reportError(error); }
+    try { await releasePreview(importId); } catch (error) { reportError(error, "cleanup"); }
   }
 
   return { roleCardImport, clearRoleCardImport, previewRoleCard, cancelRoleCardImport };

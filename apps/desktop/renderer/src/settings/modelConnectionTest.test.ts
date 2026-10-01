@@ -23,7 +23,7 @@ describe("model connection test", () => {
 
   it("reports an endpoint rejection as a failure view", async () => {
     const { invoke } = respond({ ok: false, message: "AuthenticationError: 401" });
-    assert.deepEqual(await testModelConnection(invoke, registration), { status: "failure", message: "AuthenticationError: 401" });
+    assert.deepEqual(await testModelConnection(invoke, registration), { status: "failure", message: "AuthenticationError: 401", detail: undefined });
   });
 
   it("raises bridge errors such as incomplete fields", async () => {

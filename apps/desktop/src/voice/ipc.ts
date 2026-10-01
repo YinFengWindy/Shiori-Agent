@@ -49,6 +49,9 @@ export function registerVoiceIpc({
   ipcMain.on("desktop:voice-capture-error", (event, message: unknown) => {
     voiceRecorder.handleError(event.sender, String(message || "麦克风采集失败"));
   });
+  ipcMain.on("desktop:voice-test-playback-finished", (event) => {
+    voiceRecorder.handleTestPlaybackFinished(event.sender);
+  });
   ipcMain.on("desktop:voice-input-devices", (event, devices: unknown) => {
     voiceRecorder.handleInputDevices(event.sender, devices);
   });
@@ -60,7 +63,7 @@ export function registerVoiceIpc({
   });
   ipcMain.handle("desktop:voice-test-start", async (_event: IpcMainInvokeEvent, deviceId?: unknown) => {
     if (voiceTestActive || voiceTestStop || isVoiceInteractionBusy(voiceController.currentState)) {
-      throw new Error("当前已有语音任务正在进行");
+      throw new Error("请等待当前语音任务结束后再测试麦克风");
     }
     voiceTestActive = true;
     try {
@@ -75,8 +78,13 @@ export function registerVoiceIpc({
     if (!voiceTestActive) return;
     voiceTestActive = false;
     voiceTestStop = (async () => {
-      const audio = await voiceRecorder.stop();
-      await voiceRecorder.playTestAudio(audio);
+      let audio: Uint8Array;
+      try { audio = await voiceRecorder.stop(); } catch (error) {
+        throw new Error(`录音处理失败\n${error instanceof Error ? error.message : String(error)}`, { cause: error });
+      }
+      try { await voiceRecorder.playTestAudio(audio); } catch (error) {
+        throw new Error(`录音回放失败\n${error instanceof Error ? error.message : String(error)}`, { cause: error });
+      }
     })().finally(() => {
       voiceTestStop = null;
     });

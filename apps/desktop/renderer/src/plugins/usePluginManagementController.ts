@@ -1,3 +1,4 @@
+import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPluginBridgeClient, type PluginSummary } from "./pluginBridgeClient";
 import { refreshPluginEnabledState } from "./pluginEnabledStateStore";
@@ -12,6 +13,7 @@ import { pluginRuntimeChanged } from "./pluginRuntimeChanged";
 export function usePluginManagementController() {
   const [plugins, setPlugins] = useState<PluginSummary[] | null>(null);
   const [error, setError] = useState("");
+  const [errorDetail, setErrorDetail] = useState("");
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [trustCandidate, setTrustCandidate] = useState<PluginSummary | null>(null);
   const client = useMemo(() => createPluginBridgeClient(), []);
@@ -23,7 +25,9 @@ export function usePluginManagementController() {
       setError("");
       return true;
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
+      const failure = errorFeedback(loadError, "插件列表加载失败");
+      setError(failure.message);
+      setErrorDetail(failure.detail);
       return false;
     }
   }, [client]);
@@ -50,7 +54,9 @@ export function usePluginManagementController() {
       await action();
       return await reload();
     } catch (toggleError) {
-      setError(toggleError instanceof Error ? toggleError.message : String(toggleError));
+      const failure = errorFeedback(toggleError, "插件操作未完成");
+      setError(failure.message);
+      setErrorDetail(failure.detail);
       return false;
     } finally {
       setPendingIds((current) => {
@@ -74,5 +80,5 @@ export function usePluginManagementController() {
     setTrustCandidate(candidate);
   }, []);
 
-  return { plugins, error, pendingIds, setEnabled, reload, runMutation, trustCandidate, requestTrust, confirmTrust, closeTrust: () => setTrustCandidate(null) };
+  return { plugins, error, errorDetail, pendingIds, setEnabled, reload, runMutation, trustCandidate, requestTrust, confirmTrust, closeTrust: () => setTrustCandidate(null) };
 }

@@ -32,7 +32,7 @@ export function ModelConnectionTestAction({ registration, onTested }: {
             <CheckCircle className="h-4 w-4 shrink-0" weight="fill" aria-hidden="true" />连接成功 · {view.latencyMs} ms
           </span>
         ) : null}
-        {view.status === "failure" ? <InlineError role={false} persona="connectionTestFailed" message={view.message} /> : null}
+        {view.status === "failure" ? <InlineError role={false} persona="connectionTestFailed" message={view.message} detail={view.detail} /> : null}
       </div>
     </div>
   );

@@ -95,3 +95,23 @@ describe("InlineError", () => {
     } finally { await view.cleanup(); }
   });
 });
+
+
+it("keeps a failed RPC's safe summary visible and its scrubbed cause accessible", async () => {
+  const { invokeBridgePayload } = await import("../bridgeInvoke");
+  const { errorFeedback } = await import("@shiori/plugin-sdk/host-internal");
+  let failure: unknown;
+  try {
+    await invokeBridgePayload(async ({ method }) => ({ id: "1", type: "response", method, payload: {}, error: {
+      code: "internal_error", message: "本地服务处理失败", details: { detail: "OSError: token=private-value" },
+    } }), "roles.update", {});
+  } catch (error) { failure = error; }
+  const view = await mount(<InlineError persona={false} {...errorFeedback(failure)} />);
+  try {
+    assert.match(view.container.textContent ?? "", /本地服务处理失败/);
+    assert.doesNotMatch(view.container.textContent ?? "", /OSError|private-value/);
+    await act(async () => view.container.querySelector("button")?.click());
+    assert.match(view.container.textContent ?? "", /OSError/);
+    assert.doesNotMatch(view.container.textContent ?? "", /private-value/);
+  } finally { await view.cleanup(); }
+});

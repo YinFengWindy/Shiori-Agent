@@ -19,6 +19,8 @@ export type SettingsPageSaveResult = {
   saveResult: SaveSettingsResult;
   snapshot: SettingsSnapshot | null;
   nextDraft: SettingsFormData;
+  /** A confirmed write whose read-back failed; retry must only read. */
+  refreshError?: unknown;
 };
 
 /** Deep-clones mutable settings form data before local edits. */
@@ -58,7 +60,17 @@ export async function saveSettingsPageData(
   options?: SettingsSaveOptions,
 ): Promise<SettingsPageSaveResult> {
   const saveResult = await api.saveSettings(cloneSettings(draft), options);
-  const snapshot = saveResult.ok ? await api.readSettings() : null;
+  return refreshSavedSettings(api, draft, saveResult);
+}
+
+/** Refreshes an acknowledged save without submitting the transaction a second time. */
+export async function refreshSavedSettings(api: SettingsLoadApi, draft: SettingsFormData, saveResult: SaveSettingsResult): Promise<SettingsPageSaveResult> {
+  let snapshot: SettingsSnapshot | null = null;
+  if (saveResult.ok) {
+    try { snapshot = await api.readSettings(); } catch (refreshError) {
+      return { saveResult, snapshot: null, nextDraft: cloneSettings(draft), refreshError };
+    }
+  }
   const nextDraft = cloneSettings(snapshot?.formData ?? draft);
 
   return {

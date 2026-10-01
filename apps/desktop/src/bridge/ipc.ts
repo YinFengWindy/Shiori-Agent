@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain, shell, type WebContents } from "electron";
-import { logDesktopDiagnostic } from "../diagnostics.js";
+import { logDesktopDiagnostic, openDiagnosticsFolder } from "../diagnostics.js";
 import { desktopDragFileIcon } from "../paths.js";
 import { registerVoiceIpc } from "../voice/ipc.js";
 import {
@@ -28,6 +28,7 @@ const electronHost: DesktopIpcHost = {
   showOpenDialog: (options) => dialog.showOpenDialog(options),
   openExternal: (url) => shell.openExternal(url),
   logDiagnostic: logDesktopDiagnostic,
+  openDiagnosticsFolder,
   dragFileIcon: desktopDragFileIcon,
   registerVoiceIpc,
 };

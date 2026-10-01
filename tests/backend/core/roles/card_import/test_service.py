@@ -150,7 +150,7 @@ def test_charx_rejects_traversal_and_encrypted_archive(tmp_path):
     missing = tmp_path / "missing.charx"
     with zipfile.ZipFile(missing, "w") as archive:
         archive.writestr("nested/card.json", "{}")
-    with pytest.raises(ValueError, match="根目录缺少 card.json"):
+    with pytest.raises(ValueError, match="缺少角色信息文件"):
         adapt_charx(missing)
 
 

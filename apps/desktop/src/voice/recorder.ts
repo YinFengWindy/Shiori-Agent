@@ -14,13 +14,14 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
   private started: Deferred<void> | null = null;
   private stopped: Deferred<Uint8Array> | null = null;
   private devices: Deferred<VoiceInputDevice[]> | null = null;
+  private testPlayback: Deferred<void> | null = null;
   private sampleChunks: Int16Array[] = [];
   private captureGeneration = 0;
   private captureActive = false;
   private stopPromise: Promise<Uint8Array> | null = null;
 
   get isBusy(): boolean {
-    return this.captureActive || this.stopPromise !== null;
+    return this.captureActive || this.stopPromise !== null || this.testPlayback !== null;
   }
 
   constructor(private readonly createWindow: VoiceCaptureWindowFactory) {}
@@ -73,6 +74,7 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.captureGeneration += 1;
     const cancellation = new Error("麦克风采集已取消");
     this.started?.reject(cancellation);
+    this.testPlayback?.reject(cancellation);
     this.stopped?.reject(cancellation);
     this.started = null;
     this.stopped = null;
@@ -95,7 +97,21 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
   async playTestAudio(audio: Uint8Array): Promise<void> {
     const window = this.ensureWindow();
     await this.waitUntilReady(window);
-    this.sendCommand({ command: "play-test", audioBase64: Buffer.from(audio).toString("base64") });
+    const playback = createDeferred<void>();
+    this.testPlayback = playback;
+    try {
+      this.sendCommand({ command: "play-test", audioBase64: Buffer.from(audio).toString("base64") });
+      await playback.promise;
+    } finally {
+      if (this.testPlayback === playback) this.testPlayback = null;
+    }
+  }
+
+  /** Acknowledges completed test playback from the authorized capture window. */
+  handleTestPlaybackFinished(sender: WebContents): boolean {
+    if (!this.isCaptureSender(sender)) return false;
+    this.testPlayback?.resolve(undefined);
+    return true;
   }
 
   /** Accepts a readiness signal from the authorized hidden capture renderer. */
@@ -138,6 +154,7 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.started?.reject(error);
     this.stopped?.reject(error);
     this.devices?.reject(error);
+    this.testPlayback?.reject(error);
     this.started = null;
     this.stopped = null;
     this.stopPromise = null;
@@ -167,6 +184,7 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
   dispose(): void {
     this.sampleChunks = [];
     this.started?.reject(new Error("麦克风采集已关闭"));
+    this.testPlayback?.reject(new Error("录音回放已关闭"));
     this.stopped?.reject(new Error("麦克风采集已关闭"));
     this.started = null;
     this.stopped = null;
@@ -211,6 +229,7 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.started?.reject(error);
     this.stopped?.reject(error);
     this.devices?.reject(error);
+    this.testPlayback?.reject(error);
     this.started = null;
     this.stopped = null;
     this.devices = null;

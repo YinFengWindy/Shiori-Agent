@@ -56,6 +56,7 @@ function setup(overrides: {
     showOpenDialog: overrides.showOpenDialog ?? (async () => ({ canceled: true, filePaths: [] })),
     openExternal: async (url: string) => { externalOpened.push(url); },
     logDiagnostic: () => undefined,
+    openDiagnosticsFolder: async () => { externalOpened.push("diagnostics"); },
     dragFileIcon: "drag-icon.png",
     registerVoiceIpc: () => undefined,
   } as unknown as DesktopIpcHost;
@@ -311,4 +312,10 @@ it("generic picker IPC forwards validated dialog options and returns cancellatio
   assert.deepEqual(dialogs, [{ properties: ["openFile", "multiSelections"], filters: options.filters }]);
   await assert.rejects(ipc.invokeHandler("desktop:pick-files", ipc.windows.main.webContents, { ...options, source: "/secret.zip" }), /不支持/);
   assert.equal(dialogs.length, 1);
+});
+
+it("log-folder IPC only calls the fixed host action and ignores arbitrary paths", async () => {
+  const ipc = setup();
+  await ipc.invokeHandler("desktop:diagnostics-open-folder", ipc.windows.main.webContents, "C:/arbitrary");
+  assert.deepEqual(ipc.externalOpened, ["diagnostics"]);
 });

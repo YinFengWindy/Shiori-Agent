@@ -178,6 +178,8 @@ describe("PluginManagementSection", () => {
 
     try {
       await view.render(<PluginManagementSection />);
+      assert.match(view.container.textContent ?? "", /插件列表加载失败/);
+      await act(async () => Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent?.includes("详情"))?.click());
       assert.match(view.container.textContent ?? "", /backend offline/);
     } finally {
       await view.cleanup();

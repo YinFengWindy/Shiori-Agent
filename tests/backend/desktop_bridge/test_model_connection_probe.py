@@ -78,7 +78,7 @@ async def test_probe_failure_is_a_result_scrubbed_of_the_submitted_key() -> None
 
     assert result["ok"] is False
     assert "draft-key-value" not in result["message"]
-    assert result["message"].startswith("RuntimeError: 401 Incorrect API key")
+    assert result["detail"].startswith("RuntimeError: 401 Incorrect API key")
     assert "trace" not in result["message"]
     assert created[0].closed
 
@@ -103,7 +103,9 @@ async def test_probe_timeout_reports_the_deadline() -> None:
 
     result = await probe_model_connection(_DRAFT, provider_factory=build, timeout_s=5)
 
-    assert result == {"ok": False, "message": "5 秒内没有响应"}
+    assert result["ok"] is False
+    assert result["code"] == "timeout"
+    assert "5 秒" in result["message"]
 
 
 @pytest.mark.asyncio
@@ -156,3 +158,41 @@ async def test_router_serves_models_test_without_domain_handlers(monkeypatch) ->
 
     assert result == {"ok": True, "latency_ms": 1}
     assert seen == [_DRAFT]
+
+
+@pytest.mark.asyncio
+async def test_probe_timeout_scrubs_the_exact_submitted_key() -> None:
+    import httpx
+
+    build, _ = _factory(httpx.ReadTimeout("request with draft-key-value timed out"))
+    result = await probe_model_connection(_DRAFT, provider_factory=build)
+    assert result["code"] == "timeout"
+    assert "draft-key-value" not in str(result)
+    assert "ReadTimeout" in result["detail"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status,code,remedy",
+    [
+        (401, "credentials", "密钥"),
+        (403, "permission", "授权"),
+        (404, "model", "模型名称"),
+        (429, "rate_limit", "服务商限制"),
+        (503, "upstream", "稍后重试"),
+    ],
+)
+async def test_probe_reports_the_remedy_for_the_actual_status(status, code, remedy):
+    import httpx
+    import openai
+
+    response = httpx.Response(
+        status, request=httpx.Request("POST", "https://example.com")
+    )
+    build, _ = _factory(
+        openai.APIStatusError("upstream diagnostic", response=response, body=None)
+    )
+    result = await probe_model_connection(_DRAFT, provider_factory=build)
+    assert result["code"] == code
+    assert remedy in result["message"]
+    assert "upstream diagnostic" in result["detail"]

@@ -82,7 +82,7 @@ it("retries only the failed batch and keeps the loaded ones", async () => {
   });
   try {
     await act(async () => timeline().loadMore());
-    assert.equal(timeline().error, "engine busy");
+    assert.equal(timeline().error, "操作未完成，请重试\nengine busy");
     assert.equal(timeline().list?.items.length, 20);
     await act(async () => timeline().retry());
     assert.deepEqual(pages(), [1, 2, 2]);

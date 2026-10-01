@@ -1,3 +1,4 @@
+import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type PluginConfigValues, PluginBridgeError } from "@shiori/plugin-sdk";
 import { SerialDraftQueue, type DraftSavePhase } from "../shared/serialDraftQueue";
@@ -39,6 +40,8 @@ export function usePluginConfigController(pluginId: string) {
   const [snapshot, setSnapshot] = useState<PluginConfigSnapshot | null>(null);
   const [draft, setDraft] = useState<PluginConfigValues | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [loadDetail, setLoadDetail] = useState("");
+  const [statusDetail, setStatusDetail] = useState("");
   const [savePhase, setSavePhase] = useState<DraftSavePhase>("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const loadRequestIdRef = useRef(0);
@@ -58,18 +61,20 @@ export function usePluginConfigController(pluginId: string) {
           return {
             ok: false,
             resumesAutomatically: RECOVERABLE_WITHOUT_RELOAD.has(error.code),
-            message: error.message,
+            ...errorFeedback(error, "插件配置保存失败"),
+            ...(["bridge_timeout", "bridge_exit", "bridge_write_failed"].includes(error.code) ? { phase: "unknown" as const, message: "暂时无法确认插件配置保存结果，请重试以确认" } : {}),
           };
         }
         throw error;
       }
     },
-    onApplied: (result) => {
+    onApplied: (result, submitted) => {
       pluginConfigChanges.publish(pluginId, result.values, origin);
       setSnapshot((current) => (current ? { ...current, values: result.values, envStatus: result.envStatus } : current));
-      setDraft(cloneValues(result.values));
+      setDraft((current) => valuesEqual(current, submitted) ? cloneValues(result.values) : current);
     },
-    onStatus: (phase, message) => {
+    onStatus: (phase, message, detail) => {
+      setStatusDetail(detail ?? "");
       setSavePhase(phase);
       setStatusMessage(message);
     },
@@ -88,7 +93,9 @@ export function usePluginConfigController(pluginId: string) {
       setStatusMessage("");
     } catch (error) {
       if (loadRequestIdRef.current !== requestId) return;
-      setLoadError(error instanceof Error ? error.message : String(error));
+      const failure = errorFeedback(error, "插件配置读取失败");
+      setLoadError(failure.message);
+      setLoadDetail(failure.detail);
     }
   }, [client, pluginId, queue]);
 
@@ -115,6 +122,8 @@ export function usePluginConfigController(pluginId: string) {
     envStatus: snapshot?.envStatus ?? null,
     draft,
     loadError,
+    loadDetail,
+    statusDetail,
     savePhase,
     statusMessage,
     updateDraft,

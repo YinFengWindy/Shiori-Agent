@@ -9,7 +9,7 @@ type BotIdentity = { bot_id: string; name: string; username: string };
 export function TelegramAccountDetail({ account, roleId, onChanged, client, host }: PluginAccountDetailComponentProps) {
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
-  const { pending, error, setError, run } = useAccountAction(onChanged);
+  const { pending, error, errorDetail, reportError, run } = useAccountAction(onChanged);
   const [known, setKnown] = useState<KnownChat[]>([]);
   const [identity, setIdentity] = useState<BotIdentity | null>(null);
   const tokenId = useId();
@@ -18,10 +18,10 @@ export function TelegramAccountDetail({ account, roleId, onChanged, client, host
   useEffect(() => {
     if (!accountRef) return;
     void client.call<{ chats: KnownChat[] }>("known.list", { ref: accountRef })
-      .then((result) => setKnown(result.chats)).catch((failure) => setError(String(failure)));
+      .then((result) => setKnown(result.chats)).catch((failure) => reportError(failure, "会话列表加载失败"));
     void client.call<BotIdentity>("identity.get", { ref: accountRef })
-      .then(setIdentity).catch((failure) => setError(String(failure)));
-  }, [accountRef, client, setError]);
+      .then(setIdentity).catch((failure) => reportError(failure, "账号身份加载失败"));
+  }, [accountRef, client, reportError]);
 
   // An offline saved Bot reconnects with its kept Token unless a new one is typed.
   const save = () => run("connect", async () => {
@@ -42,7 +42,7 @@ export function TelegramAccountDetail({ account, roleId, onChanged, client, host
       action={account && connected
         ? { kind: "disconnect", onClick: () => void disconnect() }
         : { kind: "connect", onClick: () => void save(), disabled: !account && !token.trim() }}>
-      <host.ui.Reveal show={Boolean(error)} className="pt-3"><host.ui.InlineError message={error} /></host.ui.Reveal>
+      <host.ui.Reveal show={Boolean(error)} className="pt-3"><host.ui.InlineError message={error} detail={errorDetail} /></host.ui.Reveal>
     </host.ui.AccountStatusCard>
     {identity?.username ? <p className="m-0 text-body-sm text-ink-secondary">@{identity.username}</p> : null}
     <div className="grid gap-2 text-body-sm text-ink-secondary">

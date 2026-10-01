@@ -31,18 +31,19 @@ const PLUGINS_SECTION_ID = "plugins";
  * action that opens that page through `onSelectSubsection`.
  */
 export function PluginManagementSection({ onSelectSubsection }: Partial<StandaloneSettingsSectionProps> = {}) {
-  const { plugins, error, pendingIds, setEnabled, reload, runMutation, trustCandidate, requestTrust, confirmTrust, closeTrust } = usePluginManagementController();
+  const { plugins, error, errorDetail, pendingIds, setEnabled, reload, runMutation, trustCandidate, requestTrust, confirmTrust, closeTrust } = usePluginManagementController();
   const packages = usePluginPackageController(runMutation);
   const [detailsCandidateId, setDetailsCandidateId] = useState<string | null>(null);
   const detailsPopupRef = useRef<HTMLDivElement>(null);
   const details = pluginDetailsCandidate(plugins, detailsCandidateId);
+  const dialogError = error ? [error, errorDetail].filter(Boolean).join("\n") : "";
   const busy = packages.busy || pendingIds.size > 0;
 
   if (error && !plugins) {
     return (
       <InlineError
         persona="pluginsLoadFailed"
-        message={`插件列表加载失败：${error}`}
+        message={error} detail={errorDetail}
         actions={<button type="button" className={cx(ghostButtonSurfaceClass, compactButtonSizeClass)} onClick={() => void reload()}>重新加载</button>}
       />
     );
@@ -60,7 +61,7 @@ export function PluginManagementSection({ onSelectSubsection }: Partial<Standalo
     <Dialog.Root open={details !== null} onOpenChange={(open) => { if (!open && !busy) setDetailsCandidateId(null); }}>
     <PluginRestartBanner plugins={plugins} />
     <PluginPackageToolbar busy={busy} onInstall={() => void packages.pickPackage()} />
-    {error ? <InlineError className="mb-4" message={error} /> : null}
+    {error ? <InlineError className="mb-4" message={error} detail={errorDetail} /> : null}
     <div className={settingsGroupStackClass}>
       {groupPlugins(plugins).map((group) => (
         <PluginGroupSection key={group.category} group={group} problemCount={group.plugins.filter((plugin) => pluginProblem(plugin)).length}>
@@ -78,11 +79,11 @@ export function PluginManagementSection({ onSelectSubsection }: Partial<Standalo
         </PluginGroupSection>
       ))}
     </div>
-    <PluginDetailsDialog plugin={details} busy={busy} error={error} popupRef={detailsPopupRef}
+    <PluginDetailsDialog plugin={details} busy={busy} error={dialogError} popupRef={detailsPopupRef}
       onUpdate={() => { if (details) void packages.pickPackage(details); }}
       onUninstall={() => { if (details) packages.requestUninstall(details); }} />
-    <PluginPackageDialogs controller={packages} error={error} detailsPopupRef={detailsPopupRef} />
-    <PluginTrustDialog plugin={trustCandidate} busy={Boolean(trustCandidate && pendingIds.has(trustCandidate.id))} error={error} onClose={closeTrust} onConfirm={() => void confirmTrust()} />
+    <PluginPackageDialogs controller={packages} error={dialogError} detailsPopupRef={detailsPopupRef} />
+    <PluginTrustDialog plugin={trustCandidate} busy={Boolean(trustCandidate && pendingIds.has(trustCandidate.id))} error={dialogError} onClose={closeTrust} onConfirm={() => void confirmTrust()} />
     </Dialog.Root>
   );
 }

@@ -24,7 +24,7 @@ test("account action names the command in flight, refreshes only after success a
     await act(async () => view.container.querySelector("button")?.click());
     assert.equal(output(), "connect");
     await act(async () => gate.resolve());
-    assert.equal(output(), "invalid token");
+    assert.equal(output(), "账号连接未完成");
     assert.deepEqual(changed, []);
     fail = false;
     gate = deferred<void>();

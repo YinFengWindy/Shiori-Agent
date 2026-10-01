@@ -74,7 +74,12 @@ test("in-flight changes disable detail actions and retained failures remain visi
     const dialog = document.querySelector('[role="dialog"]')!;
     assert.match(dialog.textContent ?? "", /disk full/);
     assert.match(dialog.textContent ?? "", /界面加载失败 · UI unavailable/);
+    assert.doesNotMatch(dialog.textContent ?? "", /bridge unavailable/);
+    const disclosure = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "详情");
+    await act(async () => disclosure?.click());
     assert.match(dialog.textContent ?? "", /bridge unavailable/);
-    for (const button of Array.from(dialog.querySelectorAll<HTMLButtonElement>("button"))) assert.equal(button.disabled, true);
+    for (const button of Array.from(dialog.querySelectorAll<HTMLButtonElement>("button"))) {
+      if (button !== disclosure) assert.equal(button.disabled, true);
+    }
   } finally { await view.cleanup(); }
 });

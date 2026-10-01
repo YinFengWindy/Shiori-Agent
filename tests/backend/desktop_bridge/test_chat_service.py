@@ -1133,7 +1133,7 @@ async def test_chat_terminal_waits_for_turn_and_session_work(failure_stage):
     terminal = next(event for event in emitted if event["method"].startswith("chat."))
     assert terminal["payload"]["turn_id"] == "turn-1"
     if failure_stage:
-        assert terminal["payload"]["message"] == f"{failure_stage} failed"
+        assert terminal["payload"]["message"] == "这次回复未完成，请重试"
     assert event_bus._handlers == {}
 
 
@@ -1184,7 +1184,7 @@ async def test_failure_snapshot_cannot_replace_original_error(failure_stage, cap
     assert emitted[0]["payload"] == {
         "session_key": "role:mira",
         "turn_id": "turn-1",
-        "message": "provider failed",
+        "message": "这次回复未完成，请重试",
         "detail": "RuntimeError: provider failed",
     }
     assert "snapshot unavailable" in caplog.text
@@ -1287,5 +1287,6 @@ async def test_raised_turn_failure_detail_is_scrubbed():
     await service.drain()
 
     terminal = next(event for event in emitted if event["method"] == "chat.error")
-    assert "abcdefghijklmnopqrst" not in terminal["payload"]["detail"]
+    assert terminal["payload"]["message"] == "这次回复未完成，请重试"
+    assert "abcdefghijklmnopqrst" not in str(terminal["payload"])
     assert terminal["payload"]["detail"].startswith("RuntimeError: 401")

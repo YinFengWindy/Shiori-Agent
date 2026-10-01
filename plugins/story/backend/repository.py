@@ -94,9 +94,9 @@ class StoryRepository:
 
         player_profile.validate()
         if not title.strip():
-            raise ValueError("title 不能为空")
+            raise ValueError("请填写剧情标题")
         if not background.strip():
-            raise ValueError("background 不能为空")
+            raise ValueError("请填写剧情背景")
         normalized_story_date = normalize_story_date(story_date)
         normalized_time_band = normalize_story_time_band(time_band)
         segment_id = f"segment-{uuid4().hex}"
@@ -461,7 +461,7 @@ class StoryRepository:
                 "SELECT * FROM turns WHERE id = ?", (turn_id,), connection
             )
             if turn["status"] != "failed":
-                raise StoryInvalidStateError("Turn 当前不可重试")
+                raise StoryInvalidStateError("这段剧情当前无法重试")
             now = utc_now()
             connection.execute(
                 """UPDATE turns SET status = 'pending', active_attempt_id = NULL,
@@ -496,9 +496,9 @@ class StoryRepository:
 
         clean_input = input_text.strip()
         if kind not in {"opening", "player", "continue"}:
-            raise ValueError("Turn kind 无效")
+            raise ValueError("不支持这种剧情输入方式")
         if kind != "opening" and not clean_input:
-            raise ValueError("input 不能为空")
+            raise ValueError("请填写剧情输入")
         with self.transaction() as connection:
             story = self._require_row(
                 "SELECT * FROM stories WHERE id = ?", (story_id,), connection
@@ -517,7 +517,7 @@ class StoryRepository:
                     or existing["input_text"] != clean_input
                     or existing["kind"] != kind
                 ):
-                    raise ValueError("request_id 携带了不同的请求")
+                    raise ValueError("这次提交与先前的内容不同，请重新提交")
                 return self._turn_dict(existing)
             self._assert_revision(story, expected_revision)
             segment = self._require_row(
@@ -530,14 +530,14 @@ class StoryRepository:
                 segment["status"] != "active"
                 and segment["status"] != "awaiting_opening"
             ):
-                raise StoryInvalidStateError("Story 段当前不可输入")
+                raise StoryInvalidStateError("这段剧情当前无法输入")
             busy = connection.execute(
                 """SELECT id FROM turns WHERE segment_id = ?
                 AND status IN ('pending', 'generating', 'validating')""",
                 (segment["id"],),
             ).fetchone()
             if busy is not None:
-                raise StoryTurnBusyError("Story 当前已有生成中的输入")
+                raise StoryTurnBusyError("剧情正在生成，请完成后再输入")
             turn_id = f"turn-{uuid4().hex}"
             now = utc_now()
             connection.execute(
@@ -577,7 +577,7 @@ class StoryRepository:
                 "SELECT * FROM turns WHERE id = ?", (turn_id,), connection
             )
             if turn["status"] != "pending":
-                raise StoryInvalidStateError("Turn 不处于可生成状态")
+                raise StoryInvalidStateError("这段剧情当前无法生成")
             now = utc_now()
             connection.execute(
                 "INSERT INTO attempts VALUES (?, ?, 'running', NULL, ?, NULL)",
@@ -869,13 +869,13 @@ class StoryRepository:
             "generating",
             "validating",
         }:
-            raise StoryInvalidStateError("生成 attempt 已失效")
+            raise StoryInvalidStateError("这次生成已失效，请重新加载剧情")
         return turn
 
     @staticmethod
     def _assert_revision(story: sqlite3.Row, expected_revision: int) -> None:
         if int(story["revision"]) != int(expected_revision):
-            raise StoryRevisionConflictError("Story revision 已变化")
+            raise StoryRevisionConflictError("剧情已更新，请重新加载后再试")
 
     def _require_row(
         self,
@@ -886,7 +886,7 @@ class StoryRepository:
         conn = connection or self._connection
         row = conn.execute(query, params).fetchone()
         if row is None:
-            raise StoryNotFoundError("Story 记录不存在")
+            raise StoryNotFoundError("找不到这段剧情")
         return row
 
     @staticmethod

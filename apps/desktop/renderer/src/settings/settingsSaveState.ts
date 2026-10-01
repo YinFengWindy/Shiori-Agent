@@ -2,7 +2,7 @@ import type { SettingsSavePhase } from "./settingsPageTypes";
 
 /** Returns whether the page should render its terminal save feedback. */
 export function shouldShowSettingsFeedback(phase: SettingsSavePhase, message: string): boolean {
-  return phase === "error" && Boolean(message);
+  return ["error", "refresh-error", "unknown"].includes(phase) && Boolean(message);
 }
 
 /** How long the "已保存" confirmation lingers after the last completed save. */

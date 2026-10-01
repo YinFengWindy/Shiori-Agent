@@ -48,6 +48,8 @@ export type DesktopIpcHost = {
   showOpenDialog(options: OpenDialogOptions): Promise<OpenDialogReturnValue>;
   openExternal(url: string): Promise<void>;
   logDiagnostic: typeof logDesktopDiagnostic;
+  /** Opens the fixed application log directory; accepts no renderer path. */
+  openDiagnosticsFolder: () => Promise<void>;
   dragFileIcon: string;
   registerVoiceIpc: typeof registerVoiceIpc;
 };
@@ -189,6 +191,7 @@ export function registerDesktopIpcHandlers(
       icon: host.dragFileIcon,
     });
   });
+  host.handle("desktop:diagnostics-open-folder", () => host.openDiagnosticsFolder());
   host.on("desktop:renderer-diagnostic", (_event, payload?: RendererDiagnosticPayload) => {
     const diagnostic = payload ?? {
       kind: "error",

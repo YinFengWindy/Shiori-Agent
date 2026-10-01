@@ -1,3 +1,4 @@
+import { errorFeedback, scrubErrorDetail } from "@shiori/plugin-sdk/host-internal";
 import type { FeedbackAction, FeedbackTone, PersonaSceneKey } from "@shiori/plugin-sdk";
 import type { FeedbackPersona } from "../mascot/mascotLines";
 
@@ -99,14 +100,15 @@ function publish(next: readonly FeedbackToast[]): void {
 export function showFeedback(raw: FeedbackInput): number {
   const input = filter ? filter(raw) : raw;
   if (!input) return 0;
-  const message = input.message.trim();
-  if (!message) return 0;
-  const detail = input.detail?.trim();
+  if (!input.message.trim()) return 0;
+  const view = input.tone === "error" ? errorFeedback(input.message) : { message: input.message.trim(), detail: "" };
+  const message = view.message;
+  const detail = scrubErrorDetail([view.detail, input.detail].filter(Boolean).join("\n"));
   const toast: FeedbackToast = {
     id: nextId++, tone: input.tone, message, action: input.action, ...(detail ? { detail } : {}), ...(input.persona ? { persona: input.persona } : {}),
     ...(input.persona && input.personaQuiet ? { personaQuiet: true } : {}),
   };
-  const remaining = toasts.filter((item) => item.tone !== toast.tone || item.message !== toast.message);
+  const remaining = toasts.filter((item) => item.tone !== toast.tone || item.message !== toast.message || item.detail !== toast.detail);
   publish([...remaining, toast].slice(-maxVisibleFeedback));
   return toast.id;
 }

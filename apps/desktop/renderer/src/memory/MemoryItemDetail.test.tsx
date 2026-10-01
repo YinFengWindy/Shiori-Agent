@@ -28,7 +28,7 @@ it("tells a missing item apart from a disabled engine and a failed read", async 
   for (const [respond, expected, unexpected] of [
     [() => ({ role_id: "mira", status: "ready", item: null }), /记忆已不存在/, /已停用/],
     [() => ({ role_id: "mira", status: "disabled", item: null }), /语义记忆已停用/, /不存在/],
-    [() => { throw new Error("engine offline"); }, /读取失败：engine offline/, /已停用|不存在/],
+    [() => { throw new Error("engine offline"); }, /读取失败/, /已停用|不存在/],
   ] satisfies Array<[PluginRpcTestResponder, RegExp, RegExp]>) {
     const { view, text } = await renderDetail(respond);
     try {

@@ -47,13 +47,16 @@ it("ModelRegistrationFields probes the draft and shows the scrubbed failure inli
   const outcomes: unknown[] = [];
   const { view } = await mountFields(async (request) => {
     requests.push(request);
-    return { id: "1", type: "response", method: request.method, payload: { ok: false, message: "AuthenticationError: 401" }, error: null };
+    return { id: "1", type: "response", method: request.method, payload: { ok: false, message: "密钥未通过验证，请检查模型密钥", detail: "AuthenticationError: 401" }, error: null };
   }, (outcome) => outcomes.push(outcome));
   try {
     await act(async () => button("测试连接").click());
     assert.equal(requests[0]?.method, "models.test");
+    assert.match(document.querySelector('[role="status"]')?.textContent ?? "", /密钥未通过验证/);
+    assert.doesNotMatch(document.querySelector('[role="status"]')?.textContent ?? "", /AuthenticationError/);
+    await act(async () => button("详情").click());
     assert.match(document.querySelector('[role="status"]')?.textContent ?? "", /AuthenticationError: 401/);
     // The first-run guide hears the finished probe to make 吟风 react.
-    assert.deepEqual(outcomes, [{ status: "failure", message: "AuthenticationError: 401" }]);
+    assert.deepEqual(outcomes, [{ status: "failure", message: "密钥未通过验证，请检查模型密钥", detail: "AuthenticationError: 401" }]);
   } finally { await view.cleanup(); }
 });

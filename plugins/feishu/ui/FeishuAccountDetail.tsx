@@ -18,16 +18,16 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
   const [appId, setAppId] = useState(saved?.appId ?? "");
   const [secret, setSecret] = useState("");
   const [profile, setProfile] = useState<FeishuProfile | null>(null);
-  const { pending, busy, error, setError, run } = useAccountAction(onChanged);
+  const { pending, busy, error, errorDetail, reportError, run } = useAccountAction(onChanged);
 
   useEffect(() => {
     if (!accountRef) return;
     let active = true;
     void client.call<FeishuProfile>("accounts.profile", { ref: accountRef })
       .then((result) => { if (active) setProfile(result); })
-      .catch((failure) => { if (active) setError(String(failure)); });
+      .catch((failure) => { if (active) reportError(failure, "账号信息加载失败"); });
     return () => { active = false; };
-  }, [accountRef, client, setError]);
+  }, [accountRef, client, reportError]);
 
   // Connecting saves the app; a saved app reconnects with its kept secret unless a new one is typed.
   async function save() {
@@ -57,7 +57,7 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
         ? { kind: "disconnect", onClick: () => void disconnect() }
         : { kind: "connect", onClick: () => void save(), disabled: !appId.trim() || (!account && !secret.trim()) }}>
       <host.ui.Reveal show={Boolean(error || loginError)} className="grid gap-2 pt-3">
-        {error ? <host.ui.InlineError message={error} /> : null}
+        {error ? <host.ui.InlineError message={error} detail={errorDetail} /> : null}
         {loginError ? <host.ui.InlineError message={loginError} /> : null}
       </host.ui.Reveal>
     </host.ui.AccountStatusCard>

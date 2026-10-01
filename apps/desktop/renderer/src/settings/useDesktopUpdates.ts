@@ -1,3 +1,4 @@
+import { errorFeedbackText } from "@shiori/plugin-sdk/host-internal";
 import { useCallback, useEffect, useState } from "react";
 import type { DesktopUpdateState } from "../../../src/updateContract.js";
 
@@ -20,7 +21,7 @@ export function useDesktopUpdates() {
     void window.miraDesktop.updates.getState().then((snapshot) => {
       if (active) acceptState(snapshot);
     }).catch((reason: unknown) => {
-      if (active && !receivedEvent) setError(reason instanceof Error ? reason.message : String(reason));
+      if (active && !receivedEvent) setError(errorFeedbackText(reason, "更新状态读取失败"));
     });
     return () => { active = false; unsubscribe(); };
   }, [acceptState]);
@@ -31,9 +32,9 @@ export function useDesktopUpdates() {
       if (command === "check") acceptState(await window.miraDesktop.updates.check());
       else await window.miraDesktop.updates.install();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(errorFeedbackText(reason, command === "check" ? "检查更新失败" : "更新安装失败"));
     }
   }
 
-  return { state, error: error ?? state?.error, check: () => runCommand("check"), install: () => runCommand("install") };
+  return { state, error: state?.error ?? error, check: () => runCommand("check"), install: () => runCommand("install") };
 }

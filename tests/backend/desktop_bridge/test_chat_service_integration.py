@@ -219,7 +219,7 @@ async def test_desktop_chat_service_reconciles_persisted_user_before_chat_error(
             "payload": {
                 "session_key": "role:mira",
                 "turn_id": "1",
-                "message": "boom",
+                "message": "这次回复未完成，请重试",
                 "detail": "RuntimeError: boom",
             },
         }

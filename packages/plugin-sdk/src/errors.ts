@@ -31,5 +31,37 @@ export class PluginBridgeError extends BridgeError {
 
 /** Normalizes a thrown value into the message an error toast or inline error shows. */
 export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return scrubErrorDetail(error instanceof Error ? error.message : String(error ?? "")).replace(/^Error invoking remote method [^\n]+?: (?:Error: )?/, "").replace(/^(?:[A-Za-z]+Error:\s*)+/, "");
+}
+
+/** Redacts credential-shaped text before any error reaches UI or copied diagnostics. */
+export function scrubErrorDetail(text: string): string {
+  return text
+    .replace(/([?&]key=)[^&\s"']+/gi, "$1***")
+    .replace(/Bearer\s+[^\s"',;]+/gi, "Bearer ***")
+    .replace(/\b(?:sk-|pst-)[A-Za-z0-9_-]{6,}/g, "***")
+    .replace(/((?:[?&]|\b)(?:api[_-]?key|access[_-]?token|token|secret|password|signature)["']?\s*[=:]\s*["']?)[^\s&"',;}]+/gi, "$1***");
+}
+
+/** Short operation summary plus scrubbed technical context for a detail disclosure. */
+export function errorFeedback(error: unknown, fallback = "操作未完成，请重试") {
+  const envelope = typeof error === "object" && error !== null && "message" in error && typeof error.message === "string" ? error : null;
+  const raw = errorMessage(envelope ? envelope.message : error).trim();
+  const lines = raw.split(/\r?\n/);
+  const first = lines[0] ?? "";
+  const technical = /(?:[A-Za-z]+Error:|Traceback|https?:\/\/|[A-Z]:\\|\*\*\*)/.test(first);
+  // A short, readable domain validation message remains actionable. Legacy
+  // transport exceptions are kept only in details, even when detail already exists.
+  const readable = /[一-龥]/.test(first) && first.length <= 180 && !technical;
+  const message = readable ? first : fallback;
+  const details = envelope && "details" in envelope ? envelope.details : null;
+  const reported = typeof details === "object" && details !== null && "detail" in details && typeof details.detail === "string" ? details.detail : "";
+  const detail = scrubErrorDetail([...(message === raw ? [] : [raw]), reported].filter(Boolean).join("\n"));
+  return { message, detail };
+}
+
+/** Adapts structured feedback to legacy text-only state; InlineError splits the first line and details. */
+export function errorFeedbackText(error: unknown, fallback?: string) {
+  const view = errorFeedback(error, fallback);
+  return [view.message, view.detail].filter(Boolean).join("\n");
 }

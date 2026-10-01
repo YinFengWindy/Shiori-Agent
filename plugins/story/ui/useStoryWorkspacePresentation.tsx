@@ -65,7 +65,7 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
       setMode("game");
     } catch (error) {
       if (keepCurrentSurface) throw error instanceof Error ? error : new Error("无法加载这段剧情，请重试。");
-      reportError(error instanceof Error ? error.message : "Unable to load this Story. Please try again.");
+      reportError(error instanceof Error ? error.message : "剧情加载失败，请重试。");
       setLoadingElapsedMs(250);
       setMode("loading");
     } finally {

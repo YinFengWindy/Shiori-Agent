@@ -101,3 +101,12 @@ describe("feedbackStore", () => {
     assert.deepEqual(personas(), [["已在素材库", "info"], ["角色已删除", "roleDeleted"], ["插件报错", undefined]]);
   });
 });
+
+
+it("keeps distinct technical causes when their safe summaries match", () => {
+  feedback.error("OSError: first failure");
+  feedback.error("TypeError: second failure");
+  assert.equal(getFeedbackSnapshot().length, 2);
+  feedback.error("OSError: first failure");
+  assert.equal(getFeedbackSnapshot().length, 2);
+});

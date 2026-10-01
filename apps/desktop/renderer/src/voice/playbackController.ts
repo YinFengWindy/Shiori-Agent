@@ -63,6 +63,7 @@ export class VoicePlaybackRenderer {
         this.source = null;
         this.playbackId = "";
         if (reportPlayback) window.miraDesktop.voicePlaybackFinished(id);
+        else window.miraDesktop.voiceTestPlaybackFinished();
       };
       await ensurePlaybackContextRunning(this.context);
       sourceNode.start();

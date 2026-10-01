@@ -7,7 +7,7 @@ type RuntimeBridge = Pick<DesktopBridgeClient, "invoke">;
 /** Reads settings and their optimistic concurrency version from one backend snapshot. */
 export async function readRuntimeSettings(bridge: RuntimeBridge) {
   const status = await bridge.invoke({ method: "runtime.status", payload: {} });
-  if (status.error) throw new Error(status.error.message);
+  if (status.error) throw new Error([status.error.message, status.error.details?.detail].filter(Boolean).join("\n"));
   const { generation, config_toml: content } = status.payload;
   if (typeof generation !== "number" || typeof content !== "string") {
     throw new Error("运行时未返回完整配置快照。");

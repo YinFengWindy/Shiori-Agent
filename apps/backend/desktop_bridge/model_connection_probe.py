@@ -14,6 +14,9 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+import httpx
+import openai
+
 from agent.config_models import ModelRegistration
 from agent.provider import LLMProvider
 from core.common.error_summary import summarize_exception_for_user
@@ -80,15 +83,31 @@ async def probe_model_connection(
             max_tokens=_PROBE_MAX_TOKENS,
             call_purpose="auxiliary",
         )
-    except TimeoutError:
-        return {"ok": False, "message": f"{timeout_s:g} 秒内没有响应"}
     except Exception as error:
-        message = summarize_exception_for_user(error)
+        detail = summarize_exception_for_user(error)
         # Pattern-based scrubbing cannot recognise every key shape; the exact
         # submitted key is known here, so remove any echo of it verbatim.
         if len(registration.api_key) >= 4:
-            message = message.replace(registration.api_key, "***REDACTED***")
-        return {"ok": False, "message": message}
+            detail = detail.replace(registration.api_key, "***REDACTED***")
+        status = getattr(error, "status_code", None)
+        code, message = {
+            401: ("credentials", "密钥未通过验证，请检查模型密钥"),
+            403: ("permission", "当前账号无权使用此模型，请检查服务商授权"),
+            404: ("model", "找不到请求的模型或接口，请检查模型名称和服务地址"),
+            429: ("rate_limit", "请求过于频繁或可用额度不足，请检查服务商限制后重试"),
+        }.get(status if isinstance(status, int) else 0, ("service", "连接测试未通过，请查看详情"))
+        if isinstance(
+            error, (TimeoutError, openai.APITimeoutError, httpx.TimeoutException)
+        ):
+            code, message = (
+                "timeout",
+                f"连接测试超时（{timeout_s:g} 秒），请检查网络后重试",
+            )
+        elif isinstance(error, (openai.APIConnectionError, httpx.TransportError)):
+            code, message = "network", "无法连接模型服务，请检查网络和服务地址"
+        elif isinstance(status, int) and status >= 500:
+            code, message = "upstream", "模型服务暂时异常，请稍后重试"
+        return {"ok": False, "code": code, "message": message, "detail": detail}
     finally:
         await provider.aclose()
     return {"ok": True, "latency_ms": round((time.monotonic() - started) * 1000)}

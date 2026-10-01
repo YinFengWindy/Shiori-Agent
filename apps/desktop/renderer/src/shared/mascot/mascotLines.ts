@@ -92,9 +92,11 @@ export const feedbackPersonaLines = {
   /** Any warning without a more specific line. */
   warning: line("confused", "嗯？这里好像有点不对劲。"),
   /** Sending failed because the role has no usable model. */
-  modelMissing: line("pout", "还没给我接模型呢，先去选一个！"),
+  modelMissing: line("pout", "先给这个角色选一个模型吧。"),
+  /** A selected model needs its connection settings repaired. */
+  modelIncomplete: line("confused", "模型配置还缺一点，去设置里检查一下吧。"),
   /** A role card could not be imported. */
-  roleImportFailed: line("confused", "这张角色卡我读不懂……换一张试试？"),
+  roleImportFailed: line("confused", "这次导入没完成……原因放在下面了。"),
   /** Success default: her face only. */
   success: face("laugh"),
   /** Info default: her face only. */
@@ -143,13 +145,13 @@ export const confirmPersonaLines = {
 export const inlineErrorLines = {
   /** Any in-page error without a more specific line. */
   generic: line("confused", "唔，这里出了点问题……"),
-  settingsSaveFailed: line("sad", "没保存上……要再试一次吗？"),
+  settingsSaveFailed: line("sad", "保存遇到一点问题……先看看下面的状态吧。"),
   settingsLoadFailed: line("sad", "设置没读出来……先别急着改哦。"),
   pluginsLoadFailed: line("sad", "插件列表没读出来……"),
   pluginConfigLoadFailed: line("sad", "这个插件的配置没读出来……"),
-  connectionTestFailed: line("confused", "连不上呢……地址和密钥再对一下？"),
-  microphoneTestFailed: line("confused", "我没听到声音……麦克风还好吗？"),
-  chatTurnFailed: line("sad", "这句没能送到……"),
+  connectionTestFailed: line("confused", "这次连接测试没通过……"),
+  microphoneTestFailed: line("confused", "这次麦克风测试没完成……"),
+  chatTurnFailed: line("sad", "这次没能完成回复……"),
 } satisfies Record<string, MascotLine>;
 
 /** Which of `inlineErrorLines` fronts an in-page error. */
@@ -168,7 +170,7 @@ export const personaSceneLines = {
   /** The credentials were refused. */
   unauthorized: line("confused", "钥匙好像不对……去设置里换一个？"),
   /** The account ran out of quota / credits. */
-  quota: line("sad", "额度见底了……先歇一会儿吧。"),
+  quota: line("sad", "这次生成被账户限制拦住了，检查一下订阅和额度吧。"),
   /** The remote service could not be reached. */
   network: line("sad", "连不上那边……网络还好吗？"),
   /** The remote service answered with an error of its own. */
@@ -197,7 +199,8 @@ export const aboutIdleLines: MascotLinePool = [
 export const aboutUpdateLines = {
   available: line("surprised", "有新版本了！要不要现在更新？"),
   current: line("neutral", "已经是最新的啦，放心吧。"),
-  failed: line("confused", "更新没弄成……待会儿再试试？"),
+  unavailable: line("neutral", "暂时还没有可用的更新哦。"),
+  failed: line("confused", "更新遇到一点问题……看看下面能从哪一步继续吧。"),
 } satisfies Record<string, MascotLine>;
 
 /**

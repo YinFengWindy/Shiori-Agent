@@ -1,5 +1,5 @@
+import { errorFeedbackText } from "@shiori/plugin-sdk/host-internal";
 import { useState } from "react";
-import { errorMessage } from "@shiori/plugin-sdk";
 import { createIdentityClient, type UserIdentity } from "./identityClient";
 
 const client = createIdentityClient();
@@ -27,7 +27,7 @@ export function useIdentityUnbind(onSettled: () => void) {
       await client.unbind(pending.id);
       setPending(null);
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorFeedbackText(failure));
     } finally {
       setBusy(false);
       onSettled();

@@ -2,14 +2,14 @@ import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 
 /** Outcome of one `models.test` probe, as reported by the bridge. */
-export type ModelConnectionResult = { ok: true; latency_ms: number } | { ok: false; message: string };
+export type ModelConnectionResult = { ok: true; latency_ms: number } | { ok: false; message: string; detail?: string; code?: string };
 
 /** What the fields show for the registration as it is right now. */
 export type ModelConnectionTestView =
   | { status: "idle" }
   | { status: "testing" }
   | { status: "success"; latencyMs: number }
-  | { status: "failure"; message: string };
+  | { status: "failure"; message: string; detail?: string };
 
 /** A finished probe, as reported to observers such as the first-run guide. */
 export type ModelConnectionTestOutcome = Extract<ModelConnectionTestView, { status: "success" | "failure" }>;
@@ -40,5 +40,5 @@ export async function testModelConnection(invoke: DesktopInvoke, registration: M
     base_url: registration.baseUrl,
     api_key: registration.apiKey,
   });
-  return result.ok ? { status: "success", latencyMs: result.latency_ms } : { status: "failure", message: result.message };
+  return result.ok ? { status: "success", latencyMs: result.latency_ms } : { status: "failure", message: result.message, detail: result.detail };
 }
