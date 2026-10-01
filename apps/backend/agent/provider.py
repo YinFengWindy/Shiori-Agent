@@ -24,7 +24,12 @@ from core.common.llm_output_log import summarize_llm_output_for_log
 from agent.prompting.input_budget import BudgetPolicy, InputBudget, build_input_budget
 from agent.prompting.usage_accounting import record_usage
 from agent.prompting.token_estimate import estimate_tokens
-from agent.prompting.usage_anchor import UsageAnchors, InputEstimate, input_cost
+from agent.prompting.usage_anchor import (
+    UsageAnchors,
+    InputEstimate,
+    input_cost,
+    request_anchors,
+)
 import hashlib
 
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
@@ -458,7 +463,7 @@ class LLMProvider:
             output_tokens=kwargs["max_tokens"],
             policy=self._budget_policy,
             estimate=(
-                self._usage_anchors.estimate(request)
+                request_anchors(self._usage_anchors).estimate(request)
                 if calibrate
                 else InputEstimate(input_cost(request), "local")
             ),
@@ -516,8 +521,9 @@ class LLMProvider:
         budget = self._budget_for_request(kwargs, calibrate=call_purpose == "default")
         if budget is not None and budget.estimate.tokens > budget.input_limit_tokens:
             raise ContextLengthError("完整请求超过模型可用输入预算")
+        anchors = request_anchors(self._usage_anchors)
         ticket = (
-            self._usage_anchors.begin(self._input_request(kwargs))
+            anchors.begin(self._input_request(kwargs))
             if call_purpose == "default"
             else None
         )
@@ -529,15 +535,9 @@ class LLMProvider:
                 strategy,
                 payload_snapshot_enabled=payload_snapshot_enabled,
             )
-            response.input_budget = budget
-            if ticket is not None:
-                self._usage_anchors.finish(ticket, response.prompt_tokens)
-            if budget is not None and response.prompt_tokens is not None:
-                response.input_budget = replace(
-                    budget, estimate=InputEstimate(response.prompt_tokens, "actual")
-                )
-            record_usage(response, purpose=call_purpose)
-            return response
+            return self._finalize_response(
+                response, budget, anchors, ticket, call_purpose
+            )
 
         resp = cast(
             Any,
@@ -579,8 +579,6 @@ class LLMProvider:
                 provider_fields,
                 kwargs,
             )
-        if ticket is not None:
-            self._usage_anchors.finish(ticket, cache_prompt_tokens)
         response = LLMResponse(
             prompt_tokens=cache_prompt_tokens,
             completion_tokens=_coerce_int(
@@ -601,11 +599,25 @@ class LLMProvider:
             refused=bool(_get_field(msg, "refusal"))
             or finish_reason == "content_filter",
         )
+        return self._finalize_response(response, budget, anchors, ticket, call_purpose)
+
+    def _finalize_response(
+        self,
+        response: LLMResponse,
+        budget: InputBudget | None,
+        anchors: UsageAnchors,
+        ticket: tuple[tuple | None, object, dict] | None,
+        purpose: LLMCallPurpose,
+    ) -> LLMResponse:
+        """Publish one stream or non-stream response to its exact request owner."""
+        response.input_budget = budget
+        if ticket is not None:
+            anchors.finish(ticket, response.prompt_tokens)
         if budget is not None and response.prompt_tokens is not None:
             response.input_budget = replace(
                 budget, estimate=InputEstimate(response.prompt_tokens, "actual")
             )
-        record_usage(response, purpose=call_purpose)
+        record_usage(response, purpose=purpose)
         return response
 
     async def _chat_streaming(

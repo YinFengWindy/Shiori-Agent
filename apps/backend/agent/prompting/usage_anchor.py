@@ -13,6 +13,9 @@ from .token_estimate import estimate_tokens
 from .usage_accounting import turn_usage
 
 _context: ContextVar[tuple | None] = ContextVar("input_usage_context", default=None)
+_independent_anchors: ContextVar[UsageAnchors | None] = ContextVar(
+    "independent_usage_anchors", default=None
+)
 
 
 @contextmanager
@@ -23,6 +26,22 @@ def usage_context(key: tuple):
         yield
     finally:
         _context.reset(token)
+
+
+@contextmanager
+def independent_usage_context():
+    """Give a one-off child its own visible request and temporary anchor ownership."""
+    token = _independent_anchors.set(UsageAnchors())
+    try:
+        with usage_context(("independent-task",)), turn_usage():
+            yield
+    finally:
+        _independent_anchors.reset(token)
+
+
+def request_anchors(shared: UsageAnchors) -> UsageAnchors:
+    """Choose a child's temporary store or the provider's retained conversation store."""
+    return _independent_anchors.get() or shared
 
 
 def turn_usage_context(function):

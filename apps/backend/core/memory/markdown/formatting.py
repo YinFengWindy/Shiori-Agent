@@ -165,11 +165,6 @@ def _select_consolidation_window(
     )
 
 
-def _budget_view(views: tuple[ContextView, ...]) -> ContextView | None:
-    """整理窗口的预算按哪类上下文估算：只推进一类时就是它，否则按整个会话。"""
-    return views[0] if len(views) == 1 else None
-
-
 def _estimate_session_input_tokens(
     session: object, current_content: str = "", view: ContextView | None = None
 ) -> int:

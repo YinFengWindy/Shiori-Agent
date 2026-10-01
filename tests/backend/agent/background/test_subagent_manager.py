@@ -140,6 +140,7 @@ async def test_subagent_manager_announces_completion_to_origin_session(tmp_path)
 
     class _FakeSubAgent:
         last_exit_reason = "forced_summary"
+        last_usage = {"cumulative": {"prompt_tokens": 7}}
 
         async def run(self, task: str) -> str:
             assert task == "research this"
@@ -185,6 +186,7 @@ async def test_subagent_manager_announces_completion_to_origin_session(tmp_path)
     assert started["trace_type"] == "spawn"
     assert started["subject"]["kind"] == "job"
     assert completed["payload"]["status"] == "incomplete"
+    assert completed["payload"]["request_usage"]["cumulative"]["prompt_tokens"] == 7
 
 
 @pytest.mark.asyncio
@@ -246,6 +248,7 @@ async def test_spawn_sync_uses_shorter_iteration_budget(tmp_path):
 
     class _FakeSubAgent:
         last_exit_reason = "completed"
+        last_usage = {"cumulative": {"prompt_tokens": 9}}
 
         async def run(self, task: str) -> str:
             return "ok"
@@ -263,6 +266,10 @@ async def test_spawn_sync_uses_shorter_iteration_budget(tmp_path):
     assert "退出原因: completed" in result
     assert observed["profile"] == "research"
     assert observed["max_iterations"] == 10
+    trace = __import__("json").loads(
+        (tmp_path / "memory" / "spawn_trace.jsonl").read_text(encoding="utf-8")
+    )
+    assert trace["payload"]["request_usage"]["cumulative"]["prompt_tokens"] == 9
 
 
 @pytest.mark.asyncio

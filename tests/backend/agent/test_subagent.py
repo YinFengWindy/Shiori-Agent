@@ -135,3 +135,74 @@ async def test_forced_final_summary_is_auxiliary_with_a_bounded_budget(
     summary_call = provider.chat.await_args
     assert summary_call.kwargs["call_purpose"] == "auxiliary"
     assert summary_call.kwargs["max_tokens"] == expected_budget
+
+
+@pytest.mark.parametrize("background", [False, True], ids=["awaited", "runtime-task"])
+async def test_child_visible_request_and_usage_never_replace_parent(background):
+    import asyncio
+    from types import SimpleNamespace
+    from agent.provider import LLMProvider
+    from agent.prompting.usage_anchor import usage_context
+    from agent.prompting.usage_accounting import current_usage, turn_usage
+    from core.common.runtime_tasks import create_runtime_task
+
+    provider = LLMProvider(
+        api_key="test", context_window_tokens=128000, max_output_tokens=8192
+    )
+    child_started, child_release = asyncio.Event(), asyncio.Event()
+
+    async def create(kwargs, **unused):
+        child = kwargs["messages"][-1]["content"] == "child-visible-task"
+        if child and background:
+            child_started.set()
+            await child_release.wait()
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="done", tool_calls=[]),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=7 if child else 1000,
+                completion_tokens=2,
+                total_tokens=9 if child else 1002,
+            ),
+        )
+
+    provider._create_with_retry = create
+    agent = SubAgent(provider=provider, model="same-model", tools=[])
+    request = dict(
+        messages=[{"role": "user", "content": "parent-visible-context"}],
+        tools=[],
+        model="same-model",
+        max_tokens=8192,
+    )
+    try:
+        with usage_context(("role:a", "user", "")), turn_usage():
+            if background:
+                child = create_runtime_task(
+                    agent.run("child-visible-task"), name="usage-isolation-test"
+                )
+                await child_started.wait()
+                # Parent response arrives first; child finishes during a later await.
+                await provider.chat(**request)
+                child_release.set()
+                assert await child == "done"
+            else:
+                await provider.chat(**request)
+                assert await agent.run("child-visible-task") == "done"
+            budget = provider.input_budget(**request)
+            assert budget is not None
+            assert budget.estimate.source == "actual"
+            assert budget.estimate.tokens == 1000
+            parent = current_usage()
+            assert parent["last_request"]["prompt_tokens"] == 1000
+            assert parent["cumulative"]["prompt_tokens"] == 1000
+            assert len(parent["calls"]) == 1
+            assert agent.last_usage["last_request"]["prompt_tokens"] == 7
+            assert agent.last_usage["cumulative"]["prompt_tokens"] == 7
+        # One-off child anchors never accumulate in the shared provider store.
+        assert len(provider._usage_anchors._anchors) == 1
+    finally:
+        await provider.aclose()

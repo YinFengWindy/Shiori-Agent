@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Literal
 
@@ -35,6 +35,8 @@ class AgentBackgroundJobResult:
     finished_at: str
     completion_mode: AgentBackgroundCompletionMode
     persistence_mode: AgentBackgroundPersistenceMode
+    # Billing belongs to this job, separately from its originating conversation.
+    request_usage: dict = field(default_factory=dict)
 
 
 class AgentBackgroundJobRunner:
@@ -51,6 +53,7 @@ class AgentBackgroundJobRunner:
         error_result_summary: str | None = None,
     ) -> AgentBackgroundJobResult:
         started_at = datetime.now(timezone.utc)
+        agent = None
         try:
             agent = self._agent_factory()
             result_summary = await agent.run(spec.task)
@@ -78,6 +81,7 @@ class AgentBackgroundJobRunner:
             finished_at=finished_at.isoformat(),
             completion_mode=spec.completion_mode,
             persistence_mode=spec.persistence_mode,
+            request_usage=getattr(agent, "last_usage", {}),
         )
 
     @staticmethod
