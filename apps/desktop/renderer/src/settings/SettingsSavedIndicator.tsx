@@ -16,7 +16,7 @@ export function SettingsSavedIndicator({ phase }: { phase: SettingsSavePhase }) 
   useEffect(() => {
     const completed = isSettingsSaveCompleted(previousPhaseRef.current, phase);
     previousPhaseRef.current = phase;
-    if (phase === "error") setVisible(false);
+    if (["error", "refresh-error", "unknown"].includes(phase)) setVisible(false);
     if (!completed) return undefined;
     setVisible(true);
     const timer = window.setTimeout(() => setVisible(false), settingsSavedIndicatorMs);

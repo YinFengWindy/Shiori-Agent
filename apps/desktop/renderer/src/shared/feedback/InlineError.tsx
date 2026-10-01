@@ -1,3 +1,4 @@
+import { errorFeedback, scrubErrorDetail } from "@shiori/plugin-sdk/host-internal";
 import { WarningCircle, X } from "@phosphor-icons/react";
 import { useState } from "react";
 import { type HostInlineErrorProps, type PersonaSceneKey, cx } from "@shiori/plugin-sdk";
@@ -53,9 +54,9 @@ const layoutClass = {
  * Plugins reach it as `PluginHostServices.ui.InlineError`.
  */
 export function InlineError({
-  message,
+  message: rawMessage,
   title,
-  detail,
+  detail: rawDetail,
   actions,
   persona = "generic",
   layout = "row",
@@ -67,6 +68,8 @@ export function InlineError({
   testId,
 }: InlineErrorProps) {
   const [detailOpen, setDetailOpen] = useState(false);
+  const { message, detail: inferredDetail } = errorFeedback(rawMessage);
+  const detail = scrubErrorDetail([inferredDetail, rawDetail].filter(Boolean).join("\n"));
   const cameo = useMascotCameoAllowed();
   const line = !cameo || !persona ? null : isPersonaSceneKey(persona) ? personaSceneLines[persona] : inlineErrorLines[persona];
   const detailFold = detail ? <FeedbackDetail detail={detail} open={detailOpen} onToggle={() => setDetailOpen((current) => !current)} /> : null;

@@ -5,7 +5,7 @@
  * specific domain module. `settings/settingsPageTypes.ts` re-exports this
  * under its historical name, `SettingsSavePhase`, for its own consumers.
  */
-export type DraftSavePhase = "idle" | "saving" | "error";
+export type DraftSavePhase = "idle" | "saving" | "error" | "refresh-error" | "unknown";
 
 /**
  * Outcome of one submission attempt against the backend. `resumesAutomatically`
@@ -18,7 +18,7 @@ export type DraftSavePhase = "idle" | "saving" | "error";
  */
 export type DraftAttemptOutcome<TResult> =
   | { ok: true; result: TResult }
-  | { ok: false; message: string; resumesAutomatically: boolean };
+  | { ok: false; message: string; detail?: string; phase?: "error" | "refresh-error" | "unknown"; resumesAutomatically: boolean };
 
 export type SerialDraftQueueOptions<TDraft, TResult> = {
   /** Structural equality used to collapse no-op edits and detect obsolete queued drafts. */
@@ -29,7 +29,7 @@ export type SerialDraftQueueOptions<TDraft, TResult> = {
   attempt: (draft: TDraft, operationId: string) => Promise<DraftAttemptOutcome<TResult>>;
   /** Called once an attempt succeeds, with the backend result and the draft that produced it. */
   onApplied: (result: TResult, submitted: TDraft) => void;
-  onStatus: (phase: DraftSavePhase, message: string) => void;
+  onStatus: (phase: DraftSavePhase, message: string, detail?: string) => void;
 };
 
 /**
@@ -96,7 +96,7 @@ export class SerialDraftQueue<TDraft, TResult> {
       if (!outcome.ok) {
         this.failed = true;
         this.paused = !outcome.resumesAutomatically;
-        this.options.onStatus("error", outcome.message);
+        this.options.onStatus(outcome.phase ?? "error", outcome.message, outcome.detail);
         return;
       }
       this.paused = false;
@@ -105,7 +105,7 @@ export class SerialDraftQueue<TDraft, TResult> {
     } catch (error) {
       this.failed = true;
       this.paused = true;
-      this.options.onStatus("error", error instanceof Error ? error.message : String(error));
+      this.options.onStatus("unknown", "暂时无法确认保存结果，请重试以确认", error instanceof Error ? error.message : String(error));
     } finally {
       this.running = false;
       if (!this.paused && this.queued) void this.drain();

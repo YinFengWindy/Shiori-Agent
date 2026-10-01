@@ -61,3 +61,16 @@ test("closing before begin returns cancels the late temporary login", async () =
     { method: "accounts.cancel", payload: { ref: "temporary-2", role_id: "mira" } },
   ]);
 });
+
+
+test("QQ account settings preserve an RPC diagnostic in the error disclosure", async () => {
+  const { PluginBridgeError } = await import("@shiori/plugin-sdk");
+  const client = createFakePluginClient({ call: async () => { throw new PluginBridgeError("本地服务处理失败", "internal_error", { detail: "settings read failed" }); } });
+  let latest!: ReturnType<typeof useQQAccountForm>;
+  function Probe() { latest = useQQAccountForm({ roleId: "mira", client, onChanged: () => undefined, onCleanupError: () => undefined }); return null; }
+  const view = await mountTestComponent(<Probe />);
+  try {
+    assert.equal(latest.error?.message, "QQ 账号设置读取失败");
+    assert.match(latest.error?.detail ?? "", /settings read failed/);
+  } finally { await view.cleanup(); }
+});

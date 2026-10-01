@@ -95,3 +95,15 @@ describe("InlineError", () => {
     } finally { await view.cleanup(); }
   });
 });
+
+
+it("keeps diagnostics folded and scrubbed when passed separately from the summary", async () => {
+  const view = await mount(<InlineError persona={false} message="本地服务处理失败" detail="OSError: token=private-value" />);
+  try {
+    assert.match(view.container.textContent ?? "", /本地服务处理失败/);
+    assert.doesNotMatch(view.container.textContent ?? "", /OSError|private-value/);
+    await act(async () => view.container.querySelector("button")?.click());
+    assert.match(view.container.textContent ?? "", /OSError/);
+    assert.doesNotMatch(view.container.textContent ?? "", /private-value/);
+  } finally { await view.cleanup(); }
+});

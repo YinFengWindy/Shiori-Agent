@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.common.error_summary import summarize_exception_for_user
+
 import asyncio
 import json
 import logging
@@ -81,7 +83,11 @@ class DesktopBridgeServer:
                     id=request_id,
                     type="response",
                     method=method,
-                    error=BridgeError(code="internal_error", message=str(exc)),
+                    error=BridgeError(
+                        code="internal_error",
+                        message="本地服务处理失败，请查看详情",
+                        details={"detail": summarize_exception_for_user(exc)},
+                    ),
                 )
             await writer.write(response.to_dict())
 

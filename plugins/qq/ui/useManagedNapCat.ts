@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PluginRpcClient } from "@shiori/plugin-sdk";
+import { errorMessage, type HostInlineErrorProps, type PluginRpcClient } from "@shiori/plugin-sdk";
 import { napCatPreparing } from "./qqStatusPresentation";
 
 /** One managed instance's preparation, QR login, and connection state. */
@@ -29,7 +29,7 @@ export function managedPollInterval(status: ManagedStatus | null) {
 /** Polls only the selected QQ managed instance while its account detail is open. */
 export function useManagedNapCat(client: PluginRpcClient, ref: string, enabled: boolean, onVerified?: (accountId: string) => void) {
   const [status, setStatus] = useState<ManagedStatus | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<Pick<HostInlineErrorProps, "message" | "detail"> | null>(null);
   const [pending, setPending] = useState<"refresh" | "logout" | null>(null);
   const reportedAccount = useRef("");
   const reload = useCallback(async () => {
@@ -37,9 +37,9 @@ export function useManagedNapCat(client: PluginRpcClient, ref: string, enabled: 
     try {
       const next = await client.call<ManagedStatus>("accounts.managed_status", { ref });
       setStatus(next);
-      setError("");
+      setError(null);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError({ message: "QQ 连接状态读取失败", detail: errorMessage(failure, { includeDetail: true }) });
     }
   }, [client, enabled, ref]);
 
@@ -65,12 +65,12 @@ export function useManagedNapCat(client: PluginRpcClient, ref: string, enabled: 
 
   async function command(kind: "refresh" | "logout", method: string, payload: Record<string, unknown>) {
     setPending(kind);
-    setError("");
+    setError(null);
     try {
       await client.call(method, payload);
       await reload();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError({ message: kind === "refresh" ? "QQ 登录二维码刷新失败" : "QQ 退出登录未完成", detail: errorMessage(failure, { includeDetail: true }) });
     } finally {
       setPending(null);
     }

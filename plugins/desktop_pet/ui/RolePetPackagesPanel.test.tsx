@@ -293,3 +293,19 @@ it("a backend import failure retains the visible packages and does not refresh s
     assert.equal(button.disabled, false);
   } finally { await view.cleanup(); }
 });
+
+
+it("a structured pet RPC failure reaches the shared error disclosure with its cause", async () => {
+  const { PluginBridgeError } = await import("@shiori/plugin-sdk");
+  const fake = createFakeHostServices();
+  const view = await mountTestComponent(<PluginHostServicesProvider services={fake.host}>
+    <PetPackagesPanel roleId="mira" disabled={false} onRoleDataChanged={() => undefined}
+      client={fakeClient({ "pets.list": new PluginBridgeError("本地服务处理失败", "internal_error", { detail: "package directory missing token=private-value" }) }, [])} />
+  </PluginHostServicesProvider>);
+  try {
+    const failure = fake.uiRenders.InlineError.at(-1);
+    assert.equal(failure?.message, "桌宠素材包读取失败");
+    assert.match(failure?.detail ?? "", /package directory missing/);
+    assert.doesNotMatch(failure?.detail ?? "", /private-value/);
+  } finally { await view.cleanup(); }
+});

@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { useEffect, useRef } from "react";
 import type {
   ChatImageHistoryEntry,
@@ -105,7 +106,7 @@ export function useChatImageState({
     });
     setAddingChatImageToAssetLibrary(false);
     if (res.error) {
-      feedback.error(res.error.message);
+      feedback.error(errorMessage(res.error, { includeDetail: true }));
       return;
     }
     await loadRolesFromBridge();

@@ -28,7 +28,7 @@ class ModelConfigurationError(ValueError):
         messages = {
             "no_models": "尚未配置模型，请先在设置中添加模型",
             "role_unbound": "角色未选择对话模型，请先绑定模型",
-            "registration_missing": "角色引用了不存在的模型注册，请重新选择模型",
+            "registration_missing": "原先选择的模型已不存在，请重新选择模型",
             "connection_incomplete": "模型连接配置不完整，请检查模型设置",
         }
         super().__init__(messages[reason])

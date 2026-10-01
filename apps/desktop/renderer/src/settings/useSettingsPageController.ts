@@ -1,3 +1,4 @@
+import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SettingsFormData, SettingsSnapshot } from "../shared/types";
 import { cloneSettings, loadSettingsPageData, settingsEqual, shouldRetryFailedSettingsLoad } from "./settingsPersistence";
@@ -11,6 +12,8 @@ export function useSettingsPageController({ bridgeReady }: UseSettingsPageContro
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
   const [draft, setDraft] = useState<SettingsFormData | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [loadDetail, setLoadDetail] = useState("");
+  const [statusDetail, setStatusDetail] = useState("");
   const [savePhase, setSavePhase] = useState<SettingsSavePhase>("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const loadRequestIdRef = useRef(0);
@@ -20,7 +23,8 @@ export function useSettingsPageController({ bridgeReady }: UseSettingsPageContro
       setSnapshot(nextSnapshot);
       setDraft((current) => settingsEqual(current, submitted) ? nextDraft : current);
     },
-    onStatus: (phase, message) => {
+    onStatus: (phase, message, detail) => {
+      setStatusDetail(detail ?? "");
       setSavePhase(phase);
       setStatusMessage(message);
     },
@@ -39,7 +43,9 @@ export function useSettingsPageController({ bridgeReady }: UseSettingsPageContro
       setStatusMessage("");
     } catch (error) {
       if (loadRequestIdRef.current !== requestId) return;
-      setLoadError(error instanceof Error ? error.message : String(error));
+      const failure = errorFeedback(error, "设置读取失败，请重新加载");
+      setLoadError(failure.message);
+      setLoadDetail(failure.detail);
     }
   }, [saveQueue]);
 
@@ -61,7 +67,7 @@ export function useSettingsPageController({ bridgeReady }: UseSettingsPageContro
   };
 
   return {
-    draft, loadError, savePhase, statusMessage, updateDraft,
+    draft, loadError, loadDetail, savePhase, statusMessage, statusDetail, updateDraft,
     retrySave: () => saveQueue.retry(),
     reloadSettings: () => void loadPageData(),
   };

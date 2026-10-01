@@ -1,4 +1,6 @@
 import type React from "react";
+import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
+import { describeRoleCardImportError } from "../roles/roleCardImportErrors";
 import type { BridgeResponse } from "../../../src/bridge/shared";
 import { type RoleRecord, errorMessage } from "@shiori/plugin-sdk";
 import type { AppMainView, NewRoleFormState, PendingRoleCardAction } from "../shared/types";
@@ -113,18 +115,20 @@ export async function runRoleCreation(form: NewRoleFormState, args: RoleCreation
     await completeRoleCreation(createdRole, pendingId, imported, args);
     return true;
   } catch (error) {
-    const message = errorMessage(error);
+    const failure = errorFeedback(error);
+    const message = failure.message;
     if (createdRole?.id) {
       // Persistence has succeeded: keep the role so retrying navigation cannot create it again.
       activateCreatedRole(createdRole, pendingId, args);
       const destination = { kind: "role-detail" as const, roleId: createdRole.id };
       args.openRoleWorkspace(destination, { recordHistory: false });
       args.replaceNavigationEntry(args.buildNavigationEntry(destination, createdRole.id));
-      args.feedback.error(`角色已创建，打开失败：${message}`);
+      args.feedback.error(`${imported ? "角色卡已导入" : "角色已创建"}，打开失败：${message}`, { detail: failure.detail });
       return true;
     }
     if (pendingId) restoreFailedCreation(pendingId, previousRoleId, args);
-    args.feedback.error(`${imported ? "角色卡导入" : "角色创建"}失败：${message}`, imported ? { persona: "roleImportFailed" } : undefined);
+    const view = imported ? describeRoleCardImportError(error, "commit") : { ...failure, message: `角色创建失败：${message}` };
+    args.feedback.error(view.message, { detail: view.detail, ...(imported ? { persona: "roleImportFailed" as const } : {}) });
     return false;
   } finally {
     args.setCreating(false);

@@ -1,3 +1,4 @@
+import { microphoneFailure } from "./microphoneFailure";
 import type { VoiceCaptureCommand } from "../../../src/bridge/shared.js";
 import { capturedChunksToPcm16 } from "./captureAudio";
 
@@ -72,7 +73,7 @@ export class VoiceCaptureRenderer {
       window.miraDesktop.voiceCaptureReady();
     } catch (error) {
       if (generation !== this.captureGeneration) return;
-      window.miraDesktop.voiceCaptureError(error instanceof Error ? error.message : "没有可用的麦克风");
+      window.miraDesktop.voiceCaptureError(microphoneFailure(error, "start"));
       await this.cancel();
     }
   }
@@ -86,7 +87,7 @@ export class VoiceCaptureRenderer {
           .map((device) => ({ deviceId: device.deviceId, label: device.label })),
       );
     } catch (error) {
-      window.miraDesktop.voiceCaptureError(error instanceof Error ? error.message : "无法读取麦克风设备");
+      window.miraDesktop.voiceCaptureError(microphoneFailure(error, "devices"));
     }
   }
 
@@ -99,7 +100,7 @@ export class VoiceCaptureRenderer {
       window.miraDesktop.voiceCaptureData(transferable.buffer);
       window.miraDesktop.voiceCaptureStopped();
     } catch (error) {
-      window.miraDesktop.voiceCaptureError(error instanceof Error ? error.message : "录音处理失败");
+      window.miraDesktop.voiceCaptureError(microphoneFailure(error, "stop"));
     }
   }
 

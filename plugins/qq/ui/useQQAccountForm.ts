@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { PluginRpcClient } from "@shiori/plugin-sdk";
+import { errorMessage, type HostInlineErrorProps, type PluginRpcClient } from "@shiori/plugin-sdk";
 
 type ConnectionSettings = { ref: string };
 
@@ -26,7 +26,7 @@ export function useQQAccountForm({ accountId, roleId, client, onChanged, onClean
   const [pending, setPending] = useState<"connect" | "disconnect" | null>(null);
   // Settings load on mount, so nothing reads "unsupported" before they arrive.
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<Pick<HostInlineErrorProps, "message" | "detail"> | null>(null);
 
   useEffect(() => {
     active.current = true;
@@ -35,7 +35,7 @@ export function useQQAccountForm({ accountId, roleId, client, onChanged, onClean
 
   useEffect(() => {
     let current = true;
-    setError("");
+    setError(null);
     setSavedRef("");
     setLoading(true);
     const payload = accountId ? { account_id: accountId } : undefined;
@@ -45,7 +45,7 @@ export function useQQAccountForm({ accountId, roleId, client, onChanged, onClean
         setManagedAvailable(managed_available);
         setSavedRef(account?.ref ?? "");
       })
-      .catch((failure: unknown) => { if (current) setError(failure instanceof Error ? failure.message : String(failure)); })
+      .catch((failure: unknown) => { if (current) setError({ message: "QQ 账号设置读取失败", detail: errorMessage(failure, { includeDetail: true }) }); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
   }, [accountId, client]);
@@ -55,9 +55,9 @@ export function useQQAccountForm({ accountId, roleId, client, onChanged, onClean
   async function run(kind: "connect" | "disconnect", operation: () => Promise<void>) {
     if (pending) return;
     setPending(kind);
-    setError("");
+    setError(null);
     try { await operation(); }
-    catch (failure) { if (active.current) setError(failure instanceof Error ? failure.message : String(failure)); }
+    catch (failure) { if (active.current) setError({ message: kind === "connect" ? "QQ 连接未完成" : "QQ 断开未完成", detail: errorMessage(failure, { includeDetail: true }) }); }
     finally { if (active.current) setPending(null); }
   }
 

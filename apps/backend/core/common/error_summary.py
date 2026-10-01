@@ -35,4 +35,15 @@ def summarize_exception_for_user(
     return f"{summary[: limit - 1]}…"
 
 
-__all__ = ["summarize_exception_for_user"]
+def public_validation_message(
+    exc: BaseException, *, fallback: str = "请求内容有误，请检查输入"
+) -> str:
+    """Keep short domain validation instructions; move technical causes to details."""
+    message = str(exc).strip()
+    # Built-in conversion errors and tracebacks are not form validation copy.
+    if not re.search("[一-龥]", message) or "\n" in message or len(message) > 180:
+        return fallback
+    return _QUERY_SECRET_PATTERN.sub(r"\1***REDACTED***", redact_secrets(message))
+
+
+__all__ = ["summarize_exception_for_user", "public_validation_message"]

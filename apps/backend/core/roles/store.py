@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.roles.errors import RoleNotFoundError
+
 from collections.abc import Sequence
 from dataclasses import replace
 import uuid
@@ -116,7 +118,7 @@ class RoleStore:
         clean_name = str(name).strip()
         clean_prompt = str(system_prompt).strip()
         if not clean_name:
-            raise ValueError("role.name 不能为空")
+            raise ValueError("请填写角色名称")
         if not clean_prompt:
             raise ValueError("role.system_prompt 不能为空")
 
@@ -270,7 +272,7 @@ class RoleStore:
                 roles[index] = role
                 self._repository.save_roles(roles, plugin_data=extension_data)
                 return role
-        raise KeyError(f"role 不存在: {role_id}")
+        raise RoleNotFoundError(role_id)
 
     def delete_role(self, role_id: str, *, remove_assets: bool = True) -> bool:
         with self._lock:
@@ -314,7 +316,7 @@ class RoleStore:
         if name is not None:
             clean_name = str(name).strip()
             if not clean_name:
-                raise ValueError("role.name 不能为空")
+                raise ValueError("请填写角色名称")
             role.name = clean_name
         if description is not None:
             role.description = str(description)

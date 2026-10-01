@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.roles.errors import RoleNotFoundError
+
 import asyncio
 from typing import Any
 
@@ -86,7 +88,7 @@ class RoleSelfInitializer:
     def _required_role(self, role_id: str):
         role = self._store.get_role(role_id)
         if role is None:
-            raise KeyError(f"role 不存在: {role_id}")
+            raise RoleNotFoundError(role_id)
         return role
 
     def _save_seed(self, role_id: str, seed: dict[str, Any]):

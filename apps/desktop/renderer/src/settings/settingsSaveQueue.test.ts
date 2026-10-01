@@ -139,3 +139,47 @@ describe("SettingsSaveQueue", () => {
     assert.deepEqual(calls, ["first", "original"]);
   });
 });
+
+
+it("retries only the read after an acknowledged save and preserves newer queued edits", async () => {
+  const writes: string[] = [];
+  const phases: string[] = [];
+  let generation = 4;
+  let persisted = editedDraft("original");
+  let unreadable = true;
+  const queue = new SettingsSaveQueue({ api: {
+    saveSettings: async (draft) => { writes.push(draft.memory.engine); persisted = draft; return { ok: true, generation: ++generation }; },
+    readSettings: async () => { if (unreadable) throw new Error("read failed"); return { configPath: "config.toml", generation, formData: persisted }; },
+  }, onApplied: () => undefined, onStatus: (phase) => phases.push(phase) });
+  queue.reset(4);
+  queue.enqueue(editedDraft("first"));
+  await setImmediate();
+  assert.equal(phases.at(-1), "refresh-error");
+  queue.enqueue(editedDraft("newer"));
+  assert.deepEqual(writes, ["first"]);
+  unreadable = false;
+  queue.retry();
+  await setImmediate();
+  assert.deepEqual(writes, ["first", "newer"]);
+  assert.equal(phases.at(-1), "idle");
+});
+
+it("does not borrow a newer external generation for queued drafts after read-back", async () => {
+  const versions: (number | undefined)[] = [];
+  let unreadable = true;
+  const queue = new SettingsSaveQueue({ api: {
+    saveSettings: async (_draft, options) => {
+      versions.push(options?.expectedGeneration);
+      return versions.length === 1 ? { ok: true, generation: 5 } : { ok: false, error: { code: "runtime_generation_conflict", message: "配置已更新，请重新加载" } };
+    },
+    readSettings: async () => { if (unreadable) throw new Error("read failed"); return { configPath: "config.toml", generation: 6, formData: editedDraft("external") }; },
+  }, onApplied: () => undefined, onStatus: () => undefined });
+  queue.reset(4);
+  queue.enqueue(editedDraft("first"));
+  await setImmediate();
+  queue.enqueue(editedDraft("newer-local"));
+  unreadable = false;
+  queue.retry();
+  await setImmediate();
+  assert.deepEqual(versions, [4, 5]);
+});

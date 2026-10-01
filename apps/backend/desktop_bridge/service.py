@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from core.roles.errors import RoleNotFoundError
+
+from core.common.error_summary import (
+    public_validation_message,
+    summarize_exception_for_user,
+)
+
 from agent.plugin_host.bridge_events import PluginBridgeEvent, PluginRpcError
 
 from contextlib import ExitStack
@@ -804,8 +811,28 @@ class DesktopBridgeService:
             return self._error(
                 request_id, method, "account_not_found", f"账号不存在: {exc.args[0]}"
             )
+        except RoleNotFoundError as exc:
+            return self._error(
+                request_id,
+                method,
+                "role_not_found",
+                "角色不存在，请刷新角色列表",
+                details={
+                    "role_id": exc.role_id,
+                    "detail": summarize_exception_for_user(exc),
+                },
+            )
         except KeyError as exc:
-            return self._error(request_id, method, "role_not_found", str(exc))
+            return self._error(
+                request_id,
+                method,
+                "resource_not_found",
+                public_validation_message(
+                    ValueError(str(exc.args[0]) if exc.args else ""),
+                    fallback="找不到请求的内容，请刷新后重试",
+                ),
+                details={"detail": summarize_exception_for_user(exc)},
+            )
         except VoiceServiceError as exc:
             metrics = getattr(exc, "metrics", None)
             details = {"metrics": metrics.to_dict()} if metrics is not None else {}
@@ -832,16 +859,38 @@ class DesktopBridgeService:
                 request_id, method, exc.code, str(exc), details=exc.to_details()
             )
         except ValueError as exc:
-            return self._error(request_id, method, "invalid_request", str(exc))
+            return self._error(
+                request_id,
+                method,
+                "invalid_request",
+                public_validation_message(exc),
+                details={"detail": summarize_exception_for_user(exc)},
+            )
         except ChatTurnBusyError as exc:
             return self._error(request_id, method, "chat_busy", str(exc))
         except PluginRpcError as exc:
-            return self._error(request_id, method, exc.code, str(exc))
+            return self._error(
+                request_id,
+                method,
+                exc.code,
+                public_validation_message(exc, fallback="插件操作失败，请查看详情"),
+                details=exc.details or {"detail": summarize_exception_for_user(exc)},
+            )
         except AccountDeletingError as exc:
             # accounts.rules.set/delete while that account is being deleted.
             return self._error(request_id, method, "account_deleting", str(exc))
         except Exception as exc:
-            return self._error(request_id, method, "internal_error", str(exc))
+            return self._error(
+                request_id,
+                method,
+                "internal_error",
+                "本地服务处理失败，请查看详情",
+                details={"detail": summarize_exception_for_user(exc)},
+            )
         return self._error(
-            request_id, method, "unknown_method", f"unknown method: {method}"
+            request_id,
+            method,
+            "unknown_method",
+            "当前版本不支持此操作，请检查应用和插件版本",
+            details={"detail": method},
         )

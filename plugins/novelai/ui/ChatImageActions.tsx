@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { ArrowClockwise } from "@phosphor-icons/react";
-import { cx, ghostButtonClass, type PluginChatImageActionProps, type SessionMessageUpdatePayload } from "@shiori/plugin-sdk";
+import { errorMessage, cx, ghostButtonClass, type PluginChatImageActionProps, type SessionMessageUpdatePayload } from "@shiori/plugin-sdk";
 import { novelAiGenerationTimeoutMs } from "./rpcPolicy";
 
 /** Determines whether this image belongs to NovelAI's persisted output collection. */
@@ -26,7 +26,7 @@ export function NovelAiChatImageActions({ target, client, onSessionUpdate, onErr
       onSessionUpdate(target.sessionKey, update);
       onNotice("图片已重新生成。");
     } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
+      onError(errorMessage(error, { includeDetail: true }));
     } finally {
       pending.current.delete(key);
       setBusy(new Set(pending.current));

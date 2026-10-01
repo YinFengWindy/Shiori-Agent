@@ -65,7 +65,7 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
       setMode("game");
     } catch (error) {
       if (keepCurrentSurface) throw error instanceof Error ? error : new Error("无法加载这段剧情，请重试。");
-      reportError(error instanceof Error ? error.message : "Unable to load this Story. Please try again.");
+      reportError(error, "剧情加载失败，请重试");
       setLoadingElapsedMs(250);
       setMode("loading");
     } finally {
@@ -89,7 +89,7 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
     setMode("gallery");
     setCgGalleryLoading(true);
     void refreshCgGallery().catch((error: unknown) => {
-      reportError(error instanceof Error ? error.message : "无法读取 CG 集");
+      reportError(error, "CG 集加载失败，请重试");
     }).finally(() => setCgGalleryLoading(false));
   }, [clearError, refreshCgGallery, reportError]);
   const retryCg = useCallback((storyId: string, resourceId: string) => {

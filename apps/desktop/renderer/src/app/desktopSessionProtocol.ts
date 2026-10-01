@@ -1,4 +1,4 @@
-import type { SessionMessage, SessionMessagePage, SessionMessageUpdatePayload, SessionPayload } from "@shiori/plugin-sdk";
+import { errorMessage, type SessionMessage, type SessionMessagePage, type SessionMessageUpdatePayload, type SessionPayload } from "@shiori/plugin-sdk";
 import { isRecord } from "../shared/isRecord";
 import { getSessionPaginationState, parseSessionMessagePage, parseSessionSummary } from "./sessionMessagePagination";
 
@@ -60,7 +60,7 @@ export async function fetchRoleSession(roleId: string): Promise<{
     });
     if (res.error) {
       return {
-        error: res.error.message,
+        error: errorMessage(res.error, { includeDetail: true }),
         session: null,
         page: null,
       };
@@ -81,7 +81,7 @@ export async function fetchRoleSession(roleId: string): Promise<{
     };
   } catch (error) {
     return {
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error, { includeDetail: true }),
       session: null,
       page: null,
     };

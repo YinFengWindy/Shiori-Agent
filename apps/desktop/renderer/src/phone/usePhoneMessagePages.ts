@@ -1,5 +1,6 @@
+import { errorFeedbackText } from "@shiori/plugin-sdk/host-internal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage, useLatestRef } from "@shiori/plugin-sdk";
+import { useLatestRef } from "@shiori/plugin-sdk";
 import type { PhoneMessage, PhoneMessagePage } from "./phoneClient";
 import { mergePhoneMessages } from "./phoneChatPresentation";
 
@@ -48,7 +49,7 @@ export function usePhoneMessagePages(streamKey: string, loadPage: (beforeSeq: nu
         }));
       },
       (loadError: unknown) => {
-        if (current) setState((previous) => ({ ...previous, error: errorMessage(loadError) }));
+        if (current) setState((previous) => ({ ...previous, error: errorFeedbackText(loadError) }));
       },
     );
     return () => { current = false; };
@@ -78,7 +79,7 @@ export function usePhoneMessagePages(streamKey: string, loadPage: (beforeSeq: nu
         nextBeforeSeq: page.nextBeforeSeq,
       }));
     } catch (loadError) {
-      if (!stale()) setState((previous) => ({ ...previous, error: errorMessage(loadError) }));
+      if (!stale()) setState((previous) => ({ ...previous, error: errorFeedbackText(loadError) }));
     } finally {
       // A new stream already cleared the flag and may have its own page in flight.
       if (!stale()) loadingOlderRef.current = false;

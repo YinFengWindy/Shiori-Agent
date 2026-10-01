@@ -47,6 +47,11 @@ class RendererRequests:
                 PluginRpcError(
                     str(error.get("code") or "plugin_handler_failed"),
                     str(error.get("message") or "插件后台执行失败"),
+                    details=(
+                        error.get("details")
+                        if isinstance(error.get("details"), dict)
+                        else None
+                    ),
                 )
             )
         else:

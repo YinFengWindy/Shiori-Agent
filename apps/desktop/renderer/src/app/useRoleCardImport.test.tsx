@@ -126,11 +126,13 @@ describe("useRoleCardImport", () => {
     try {
       await act(async () => view.controller.previewRoleCard());
       assert.equal(view.controller.roleCardImport.status, "idle");
-      assert.match(view.feedbackMessages.at(-1) ?? "", /Picker unavailable/);
+      assert.match(view.feedbackMessages.at(-1) ?? "", /角色卡读取失败/);
+      assert.match(view.feedbackDetails.at(-1) ?? "", /Picker unavailable/);
       failPicker = false;
       await act(async () => view.controller.previewRoleCard());
       assert.equal(view.controller.roleCardImport.status, "idle");
-      assert.match(view.feedbackMessages.at(-1) ?? "", /Invalid card/);
+      assert.match(view.feedbackMessages.at(-1) ?? "", /角色卡读取失败/);
+      assert.match(view.feedbackDetails.at(-1) ?? "", /Invalid card/);
       assert.equal(view.form.importId, undefined);
     } finally { await view.cleanup(); }
   });
@@ -142,7 +144,7 @@ describe("useRoleCardImport", () => {
     });
     try {
       await act(async () => view.controller.previewRoleCard());
-      assert.equal(view.feedbackMessages.at(-1), "角色导入失败：这张图片里没有找到角色卡数据");
+      assert.equal(view.feedbackMessages.at(-1), "角色卡读取失败：这张图片里没有找到角色卡数据");
       assert.equal(view.feedbackDetails.at(-1), "角色卡图片缺少 chara 或 ccv3 metadata");
     } finally { await view.cleanup(); }
   });
@@ -166,4 +168,18 @@ describe("useRoleCardImport", () => {
       assert.deepEqual(view.requests.at(-1)?.payload, { import_id: "card-1" });
     } finally { await view.cleanup(); }
   });
+});
+
+it("reports cleanup failure after cancellation without blaming the role card", async () => {
+  const view = await mountImport({ invoke: async ({ method }) => method === "roles.cardImport.cancel"
+    ? response({}, { code: "internal_error", message: "本地服务处理失败", details: { detail: "unlink failed" } })
+    : response({ import_id: "card-1", name: "Imported" }) });
+  try {
+    await act(async () => view.controller.previewRoleCard());
+    await act(async () => view.controller.cancelRoleCardImport());
+    assert.equal(view.controller.roleCardImport.status, "idle");
+    assert.equal(view.form.importId, undefined);
+    assert.equal(view.feedbackMessages.at(-1), "已退出导入，但临时预览清理失败");
+    assert.match(view.feedbackDetails.at(-1) ?? "", /unlink failed/);
+  } finally { await view.cleanup(); }
 });

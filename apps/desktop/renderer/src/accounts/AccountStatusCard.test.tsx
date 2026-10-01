@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { act } from "react";
 import { mountTestComponent } from "@shiori/plugin-sdk/testing";
 import type { AccountSnapshot } from "@shiori/plugin-sdk";
 import { AccountStatusCard } from "./AccountStatusCard";
@@ -39,6 +40,8 @@ test("the host's own failure report shows inside the card", async () => {
   const view = await mountTestComponent(<AccountStatusCard account={{ ...account, connection: "error", error: "token revoked" }} />);
   try {
     assert.equal(words(view.container), "故障");
-    assert.equal(view.container.querySelector('[role="alert"]')?.textContent?.includes("token revoked"), true);
+    assert.equal(view.container.querySelector('[role="alert"]')?.textContent?.includes("token revoked"), false);
+    await act(async () => Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent?.includes("详情"))?.click());
+    assert.match(view.container.textContent ?? "", /token revoked/);
   } finally { await view.cleanup(); }
 });

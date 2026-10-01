@@ -57,7 +57,7 @@ export function createDesktopChatRetry({
       }
       return true;
     } catch (error) {
-      restoreFailedTurn({ message: errorMessage(error) });
+      restoreFailedTurn({ message: errorMessage(error, { includeDetail: true }) });
       return false;
     }
   }

@@ -97,3 +97,20 @@ test("coalesces concurrent stop callers onto one renderer command", async () => 
     entry as { channel?: unknown; command?: unknown }
   ).command === "stop").length, 1);
 });
+
+
+test("test playback waits for completion and rejects playback failure instead of reporting success", async () => {
+  const window = new FakeCaptureWindow();
+  const surface = createSurface(window);
+  const recorder = new BrowserVoiceRecorder(surface.createWindow);
+  const first = recorder.playTestAudio(new Uint8Array([0, 0]));
+  surface.resolveReady();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const rejected = assert.rejects(first, /playback blocked/);
+  recorder.handleError(window.webContents as never, "playback blocked");
+  await rejected;
+  const second = recorder.playTestAudio(new Uint8Array([0, 0]));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  recorder.handleTestPlaybackFinished(window.webContents as never);
+  await second;
+});

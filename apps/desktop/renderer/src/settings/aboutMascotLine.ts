@@ -16,6 +16,7 @@ const updateReady = (phase: UpdatePhase | undefined) => phase === "downloading" 
 export function aboutLineForPhaseChange(previous: UpdatePhase | undefined, next: UpdatePhase | undefined): MascotLine | null {
   if (previous === next) return null;
   if (updateReady(next) && !updateReady(previous)) return aboutUpdateLines.available;
+  if (next === "unavailable") return aboutUpdateLines.unavailable;
   if (next === "current" && previous !== undefined) return aboutUpdateLines.current;
   // She is on stage here, so the failure is hers to say (the inline error below stays plain).
   if (next === "error") return aboutUpdateLines.failed;

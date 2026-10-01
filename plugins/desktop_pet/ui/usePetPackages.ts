@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { usePluginHostServices, type PluginRoleAssetsComponentProps } from "@shiori/plugin-sdk";
+import { errorMessage, type HostInlineErrorProps, usePluginHostServices, type PluginRoleAssetsComponentProps } from "@shiori/plugin-sdk";
 import { noPetPackages, readPetPackages, type PetPackages } from "./petPackages";
 import { pickPetPackageFile } from "./petPackagePicker";
 
@@ -8,7 +8,7 @@ export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: 
   const { pickFiles, assets } = usePluginHostServices();
   const [state, setState] = useState<PetPackages>(noPetPackages);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<Pick<HostInlineErrorProps, "message" | "detail"> | null>(null);
 
   const parse = useCallback(
     (payload: unknown) => readPetPackages(payload, (path) => assets.url(path)),
@@ -31,26 +31,26 @@ export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: 
         const next = parse(await client.call<unknown>("pets.list", { role_id: roleId }));
         if (!alive) return;
         setState(next);
-        setError("");
+        setError(null);
       } catch (reason) {
         if (!alive) return;
         // The previous rows are kept: a failed refresh is not evidence that the
         // packages are gone, and blanking the list would make a momentary
         // bridge hiccup look like data loss.
-        setError(reason instanceof Error ? reason.message : String(reason));
+        setError({ message: "桌宠素材包读取失败", detail: errorMessage(reason, { includeDetail: true }) });
       }
     })();
     return () => { alive = false; };
   }, [client, disabled, parse, roleId]);
 
   /** Runs one mutation, surfacing its failure instead of leaving the panel silent. */
-  const run = useCallback(async (action: () => Promise<void>) => {
+  const run = useCallback(async (message: string, action: () => Promise<void>) => {
     setBusy(true);
     try {
       await action();
-      setError("");
+      setError(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError({ message, detail: errorMessage(reason, { includeDetail: true }) });
     } finally {
       setBusy(false);
     }
@@ -62,13 +62,13 @@ export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: 
     if (method !== "pets.import") await client.background.call("sync");
   }, [client, onRoleDataChanged, parse, roleId]);
 
-  const onImport = useCallback(() => void run(async () => {
+  const onImport = useCallback(() => void run("桌宠素材包导入未完成", async () => {
     const source = await pickPetPackageFile(pickFiles);
     if (source) await mutate("pets.import", { source });
   }), [mutate, pickFiles, run]);
 
-  const onRemove = useCallback((packageId: string) => void run(() => mutate("pets.remove", { package_id: packageId })), [mutate, run]);
-  const onSelect = useCallback((packageId: string) => void run(() => mutate("pets.select", { package_id: packageId })), [mutate, run]);
+  const onRemove = useCallback((packageId: string) => void run("桌宠素材包删除未完成", () => mutate("pets.remove", { package_id: packageId })), [mutate, run]);
+  const onSelect = useCallback((packageId: string) => void run("桌宠素材包切换未完成", () => mutate("pets.select", { package_id: packageId })), [mutate, run]);
 
   return { state, busy, error, onImport, onRemove, onSelect };
 }

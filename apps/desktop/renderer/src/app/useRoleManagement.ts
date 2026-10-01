@@ -132,7 +132,7 @@ export function useRoleManagement({
     });
     if (res.error) {
       setSavingRole(false);
-      feedback.error(`角色保存失败：${res.error.message}`);
+      feedback.error(`角色保存失败：${res.error.message}`, { detail: typeof res.error.details?.detail === "string" ? res.error.details.detail : undefined });
       return;
     }
     const updated = res.payload.role as RoleRecord;
@@ -201,7 +201,7 @@ export function useRoleManagement({
       return;
     }
     if (res.error) {
-      feedback.error(res.error.message);
+      feedback.error(res.error.message, { detail: typeof res.error.details?.detail === "string" ? res.error.details.detail : undefined });
       return;
     }
     const updated = res.payload.role as RoleRecord;
@@ -231,7 +231,7 @@ export function useRoleManagement({
     setDeletingRole(false);
     if (res.error) {
       setPendingRoleCardAction(null);
-      feedback.error(res.error.message);
+      feedback.error(res.error.message, { detail: typeof res.error.details?.detail === "string" ? res.error.details.detail : undefined });
       return;
     }
     const nextRoles = (await loadRolesFromBridge()) ?? [];
@@ -272,7 +272,7 @@ export function useRoleManagement({
     });
     setSavingRoleAssets(false);
     if (res.error) {
-      feedback.error(res.error.message);
+      feedback.error(res.error.message, { detail: typeof res.error.details?.detail === "string" ? res.error.details.detail : undefined });
       return;
     }
     const updated = res.payload.role as RoleRecord;
@@ -299,7 +299,7 @@ export function useRoleManagement({
     });
     setSavingRoleAssets(false);
     if (res.error) {
-      feedback.error(res.error.message);
+      feedback.error(res.error.message, { detail: typeof res.error.details?.detail === "string" ? res.error.details.detail : undefined });
       return false;
     }
     const updated = res.payload.role as RoleRecord;
@@ -326,7 +326,7 @@ export function useRoleManagement({
     });
     setSavingRoleAssets(false);
     if (res.error) {
-      feedback.error(res.error.message);
+      feedback.error(res.error.message, { detail: typeof res.error.details?.detail === "string" ? res.error.details.detail : undefined });
       return;
     }
     const updated = res.payload.role as RoleRecord;

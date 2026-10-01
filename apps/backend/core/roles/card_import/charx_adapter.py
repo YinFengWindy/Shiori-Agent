@@ -26,14 +26,18 @@ def adapt_charx(source: str | Path) -> RoleCardImportPreview:
     if not path.is_file():
         raise FileNotFoundError(f"角色卡包不存在: {path}")
     if path.stat().st_size > MAX_SOURCE_BYTES:
-        raise ValueError("角色卡包超过大小限制")
+        raise ValueError(
+            f"角色卡源文件超过大小限制（最多 {MAX_SOURCE_BYTES // (1024 * 1024)} MiB）"
+        )
     return adapt_charx_bytes(path.read_bytes())
 
 
 def adapt_charx_bytes(data: bytes) -> RoleCardImportPreview:
     """Parse a CHARX ZIP from memory with the same limits as the file adapter."""
     if len(data) > MAX_SOURCE_BYTES:
-        raise ValueError("角色卡包超过大小限制")
+        raise ValueError(
+            f"角色卡源文件超过大小限制（最多 {MAX_SOURCE_BYTES // (1024 * 1024)} MiB）"
+        )
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except (OSError, zipfile.BadZipFile) as error:
@@ -41,7 +45,7 @@ def adapt_charx_bytes(data: bytes) -> RoleCardImportPreview:
     with archive:
         infos = archive.infolist()
         if len(infos) > MAX_ARCHIVE_MEMBERS:
-            raise ValueError("角色卡包文件数量超过限制")
+            raise ValueError(f"角色卡包内条目过多（最多 {MAX_ARCHIVE_MEMBERS} 个条目）")
         names: dict[str, zipfile.ZipInfo] = {}
         total_size = 0
         for info in infos:
@@ -55,13 +59,17 @@ def adapt_charx_bytes(data: bytes) -> RoleCardImportPreview:
             if info.is_dir():
                 continue
             if info.file_size > MAX_MEMBER_BYTES:
-                raise ValueError("角色卡包文件超过大小限制")
+                raise ValueError(
+                    f"角色卡包单条目超过大小限制（最多 {MAX_MEMBER_BYTES // (1024 * 1024)} MiB）"
+                )
             total_size += info.file_size
             if total_size > MAX_ARCHIVE_BYTES:
-                raise ValueError("角色卡包解压总大小超过限制")
+                raise ValueError(
+                    f"角色卡包解压总大小超过限制（最多 {MAX_ARCHIVE_BYTES // (1024 * 1024)} MiB）"
+                )
             names[name] = info
         if "card.json" not in names:
-            raise ValueError("角色卡包根目录缺少 card.json")
+            raise ValueError("角色卡包缺少角色信息文件（根目录 card.json）")
         try:
             payload = json.loads(archive.read(names["card.json"]).decode("utf-8"))
         except (
@@ -71,7 +79,7 @@ def adapt_charx_bytes(data: bytes) -> RoleCardImportPreview:
             RuntimeError,
             zipfile.BadZipFile,
         ) as error:
-            raise ValueError("角色卡包 card.json 无效") from error
+            raise ValueError("角色卡包内角色信息文件无法解析（card.json）") from error
         preview = adapt_json(payload, source_name="card.json", format_name="charx")
         assets: list[RoleCardAsset] = []
         unsupported_resources: list[str] = []

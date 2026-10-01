@@ -16,6 +16,7 @@ export function isBridgeUnavailableMessage(message: string, bridgeError: string)
   const reason = bridgeError.split("\n", 1)[0]?.trim() ?? "";
   return new RegExp(bridgeStoppedPattern.source, "i").test(message)
     || new RegExp(bridgeExitedPattern.source, "i").test(message)
+    || message.includes("本地服务连接已中断，请等待重新连接")
     || (reason.length > 0 && message.includes(reason));
 }
 

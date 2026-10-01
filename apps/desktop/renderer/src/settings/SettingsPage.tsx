@@ -148,7 +148,7 @@ function EditableSettingsPage({
   if (controller.loadError) {
     return (
       <section className={cx(settingsPageSurfaceClass, "grid h-full place-items-center")} data-testid="settings-page">
-        <InlineError layout="card" className="mx-8" persona="settingsLoadFailed" title="设置加载失败" message={controller.loadError} />
+        <InlineError layout="card" className="mx-8" persona="settingsLoadFailed" title="设置加载失败" message={controller.loadError} detail={controller.loadDetail} />
       </section>
     );
   }
@@ -167,6 +167,7 @@ function EditableSettingsPage({
         <SettingsSaveFeedback
           phase={controller.savePhase}
           message={controller.statusMessage}
+          detail={controller.statusDetail}
           onRetry={controller.retrySave}
           onReload={controller.reloadSettings}
         />

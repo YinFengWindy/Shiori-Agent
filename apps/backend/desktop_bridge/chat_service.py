@@ -26,7 +26,12 @@ from desktop_bridge.voice.tts_coordinator import TtsTurnCoordinator
 from desktop_bridge.voice.voice_service import VoiceService
 from session.manager import Session, SessionManager
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
-from core.common.error_summary import summarize_exception_for_user
+from core.common.error_summary import (
+    public_validation_message,
+    summarize_exception_for_user,
+)
+from core.roles.self_initializer import SelfInitializationError
+from core.roles.model_errors import ModelConfigurationError
 from core.common.runtime_tasks import create_runtime_task
 
 logger = logging.getLogger("desktop.bridge.chat")
@@ -641,7 +646,13 @@ class DesktopChatService:
                 turn_id=turn_id,
                 session_key=session_key,
                 role_id="",
-                failure_message=str(exc),
+                failure_message=(
+                    public_validation_message(exc)
+                    if isinstance(
+                        exc, (SelfInitializationError, ModelConfigurationError)
+                    )
+                    else "这次回复未完成，请重试"
+                ),
                 failure_detail=summarize_exception_for_user(exc),
             )
             collected.append(bridge_event)

@@ -1,4 +1,4 @@
-import type { RoleRecord } from "@shiori/plugin-sdk";
+import { errorMessage, type RoleRecord } from "@shiori/plugin-sdk";
 import { reconcileRoles } from "../roles/roleListState";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 import type { createDesktopSessionCache } from "./desktopSessionCache";
@@ -17,7 +17,7 @@ export function createDesktopRoleList({
       payload: {},
     });
     if (rolesRes.error) {
-      feedback.error(`角色列表加载失败：${rolesRes.error.message}`);
+      feedback.error(`角色列表加载失败：${errorMessage(rolesRes.error, { includeDetail: true })}`);
       return null;
     }
     const nextRoles = (rolesRes.payload.roles as RoleRecord[]) ?? [];

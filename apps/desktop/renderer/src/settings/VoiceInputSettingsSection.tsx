@@ -1,4 +1,5 @@
-import { Select, cx } from "@shiori/plugin-sdk";
+import { errorFeedbackText } from "@shiori/plugin-sdk/host-internal";
+import { Select, cx, errorMessage } from "@shiori/plugin-sdk";
 import { useEffect, useRef, useState } from "react";
 import { Microphone, Stop } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";
@@ -29,7 +30,7 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
   useEffect(() => {
     if (typeof window.miraDesktop.listVoiceInputDevices !== "function") return undefined;
     void window.miraDesktop.listVoiceInputDevices().then(setDevices).catch((error) => {
-      setTestError(error instanceof Error ? error.message : String(error));
+      setTestError(`麦克风设备读取失败\n${errorMessage(error)}`);
     });
     return () => {
       if (testTimer.current !== null) window.clearTimeout(testTimer.current);
@@ -59,13 +60,13 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
         testTimer.current = null;
         testActive.current = false;
         void window.miraDesktop.stopVoiceTest()
-          .catch((error) => setTestError(error instanceof Error ? error.message : String(error)))
+          .catch((error) => setTestError(errorFeedbackText(error, "录音处理失败")))
           .finally(() => setTesting(false));
       }, 3000);
     } catch (error) {
       testActive.current = false;
       setTesting(false);
-      setTestError(error instanceof Error ? error.message : String(error));
+      setTestError(errorFeedbackText(error, testing ? "录音处理失败" : "麦克风启动失败"));
     }
   }
 

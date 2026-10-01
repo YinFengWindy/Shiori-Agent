@@ -156,6 +156,12 @@ const api: DesktopApi = {
   startAttachmentDrag(request) {
     ipcRenderer.send("desktop:start-attachment-drag", request);
   },
+  openDiagnosticsFolder() {
+    return ipcRenderer.invoke("desktop:diagnostics-open-folder");
+  },
+  voiceTestPlaybackFinished() {
+    ipcRenderer.send("desktop:voice-test-playback-finished");
+  },
   reportRendererDiagnostic(payload: RendererDiagnosticPayload) {
     ipcRenderer.send("desktop:renderer-diagnostic", payload);
   },

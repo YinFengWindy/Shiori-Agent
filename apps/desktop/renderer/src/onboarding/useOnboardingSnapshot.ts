@@ -25,7 +25,7 @@ export function useOnboardingSnapshot(enabled: boolean, bridgeLifecycle: ReturnT
         await bridgeLifecycle.restartBridge();
       } else await bridgeLifecycle.refreshBridge();
     } catch (error) {
-      fail(errorMessage(error));
+      fail(errorMessage(error, { includeDetail: true }));
       return;
     }
     await refresh();

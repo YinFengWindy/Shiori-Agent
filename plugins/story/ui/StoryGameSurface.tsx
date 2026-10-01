@@ -1,3 +1,4 @@
+import { StoryError } from "./StoryError";
 import { ArrowClockwise, BookOpenText, Gear, SignOut } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -16,6 +17,7 @@ type StoryGameSurfaceProps = {
   sharedBackdrop?: boolean;
   busy: boolean;
   error: string;
+  errorDetail?: string;
   characterAvatarUrl?: string;
   onSubmitInput: (content: string) => Promise<boolean>;
   onRegenerateCg?: (resourceId: string) => void | Promise<boolean>;
@@ -36,7 +38,7 @@ function resolveDialogueSpeakerName(speaker: string | null | undefined, roleName
 }
 
 /** Renders the active Story as a layered visual-novel stage with one bottom dialogue band. */
-export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, busy, error, characterAvatarUrl, onSubmitInput, onRegenerateCg, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
+export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, busy, error, errorDetail, characterAvatarUrl, onSubmitInput, onRegenerateCg, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
   const [action, setAction] = useState("");
   const [dialogueVisible, setDialogueVisible] = useState(true);
   const [playbackState, setPlaybackState] = useState(() => createStoryPlaybackState(story));
@@ -152,7 +154,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
           </div>
         </section>
       </div> : null}
-      {error ? <div className="fixed bottom-5 left-1/2 z-40 -translate-x-1/2 rounded-md bg-[#793F36] px-4 py-2 text-sm text-white shadow-lg" role="alert">{error}</div> : null}
+      {error ? <StoryError className="fixed bottom-5 left-1/2 z-40 w-[min(32rem,calc(100%-2rem))] -translate-x-1/2" message={error} detail={errorDetail} /> : null}
     </section>
   );
 }

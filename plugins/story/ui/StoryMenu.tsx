@@ -1,3 +1,4 @@
+import { StoryError } from "./StoryError";
 import { ArrowLeft, ArrowRight } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
 import type { StorySummary } from "./types";
@@ -21,6 +22,7 @@ type StoryLoadListProps = Pick<LauncherActions, "busy"> & {
   sharedBackdrop?: boolean;
   reducedMotion?: boolean;
   error?: string;
+  errorDetail?: string;
   onBack: () => void;
   onLoadStory: (storyId: string) => void;
 };
@@ -46,7 +48,7 @@ export function StoryMainMenu({ busy, reducedMotion, onCreateStory, onOpenLoad, 
 }
 
 /** Renders saved Stories as a full-screen Story surface. */
-export function StoryLoadList({ stories, busy, background, sharedBackdrop = false, reducedMotion: reducedMotionOverride, error = "", onBack, onLoadStory }: StoryLoadListProps) {
+export function StoryLoadList({ stories, busy, background, sharedBackdrop = false, reducedMotion: reducedMotionOverride, error = "", errorDetail, onBack, onLoadStory }: StoryLoadListProps) {
   const systemReducedMotion = useReducedMotion() ?? false;
   const reducedMotion = reducedMotionOverride ?? systemReducedMotion;
 
@@ -73,7 +75,7 @@ export function StoryLoadList({ stories, busy, background, sharedBackdrop = fals
               ))}
             </div>
           ) : <p className="m-0 border-b border-[#DDA9BE]/65 py-5 text-sm text-[#8B6676]">暂无已保存的剧情</p>}
-          {error ? <div className="mt-5 border border-[#D58A9F] bg-[#FFF0F4] px-3 py-2 text-sm text-[#9A365D]" role="alert">{error}</div> : null}
+          {error ? <StoryError className="mt-5" message={error} detail={errorDetail} /> : null}
         </div>
       </div>
     </StorySurface>

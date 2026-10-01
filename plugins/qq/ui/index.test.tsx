@@ -172,3 +172,41 @@ test("退出登录 sits in the dialog's danger zone and shows 正在退出 while
     assert.equal(buttonIn(zone, "退出登录")?.disabled, false);
   } finally { await view.cleanup(); }
 });
+
+test("a failed QQ settings read reports its cause without claiming the platform is unsupported", async () => {
+  const { PluginBridgeError } = await import("@shiori/plugin-sdk");
+  const fake = createFakeHostServices();
+  const client = createFakePluginClient({ call: async () => { throw new PluginBridgeError("本地服务处理失败", "internal_error", { detail: "settings access denied" }); } });
+  const view = await mountTestComponent(<QQAccountDetail account={savedAccount} roleId="mira" onChanged={() => undefined} host={fake.host} client={client} />);
+  try {
+    assert.doesNotMatch(view.container.textContent ?? "", /仅支持 Windows/);
+    const error = fake.uiRenders.InlineError.at(-1);
+    assert.equal(error?.message, "QQ 账号设置读取失败");
+    assert.match(error?.detail ?? "", /settings access denied/);
+  } finally { await view.cleanup(); }
+});
+
+test("a failed QQ connection forwards its actionable cause as a separate safe detail", async () => {
+  const { BridgeError } = await import("@shiori/plugin-sdk");
+  const fake = createFakeHostServices();
+  const client = createFakePluginClient({ call: async <T,>(method: string): Promise<T> => {
+    if (method === "accounts.settings") return { managed_available: true } as T;
+    if (method === "accounts.begin") return { ref: "temporary" } as T;
+    if (method === "accounts.start") throw new BridgeError("本地服务处理失败，请查看详情", "internal_error", {
+      detail: "RuntimeError: 未找到官方 QQ，请检查安装目录 token=private-value",
+    });
+    if (method === "accounts.managed_status") return {
+      preparation: readyPreparation, login: { phase: "stopped", qrcode: "", error: "" }, connection: "offline", error: "",
+    } as T;
+    return {} as T;
+  } });
+  const view = await mountTestComponent(<QQAccountDetail account={null} roleId="mira" onChanged={() => undefined} host={fake.host} client={client} />);
+  try {
+    await act(async () => { await Promise.resolve(); });
+    const failure = fake.uiRenders.InlineError.find((props) => props.message === "QQ 连接未完成");
+    assert.ok(failure);
+    assert.doesNotMatch(failure.message, /未找到官方 QQ|private-value/);
+    assert.match(failure.detail ?? "", /未找到官方 QQ，请检查安装目录/);
+    assert.doesNotMatch(failure.detail ?? "", /private-value/);
+  } finally { await view.cleanup(); }
+});

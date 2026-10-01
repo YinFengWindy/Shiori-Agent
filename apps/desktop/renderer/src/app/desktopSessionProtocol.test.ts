@@ -113,3 +113,23 @@ describe("desktop session protocol", () => {
     assert.equal(merged.pagination?.total_count, 3);
   });
 });
+
+for (const throws of [false, true]) {
+  it(`retains session read diagnostics from ${throws ? "a rejected request" : "an error envelope"}`, async () => {
+    const { BridgeError } = await import("@shiori/plugin-sdk");
+    const { mountTestComponent } = await import("@shiori/plugin-sdk/testing");
+    const { fetchRoleSession } = await import("./desktopSessionProtocol");
+    const failure = { code: "internal_error", message: "本地服务处理失败", details: { detail: "session read denied token=private-value" } };
+    const view = await mountTestComponent(null, { windowGlobals: { miraDesktop: { invoke: async () => {
+      if (throws) throw new BridgeError(failure.message, failure.code, failure.details);
+      return { error: failure };
+    } } } });
+    try {
+      const result = await fetchRoleSession("mira");
+      assert.equal(result.session, null);
+      assert.equal(result.page, null);
+      assert.match(result.error ?? "", /session read denied/);
+      assert.doesNotMatch(result.error ?? "", /private-value/);
+    } finally { await view.cleanup(); }
+  });
+}

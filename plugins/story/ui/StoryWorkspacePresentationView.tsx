@@ -13,10 +13,10 @@ import type { StoryCgGallery } from "./types";
 import type { StoryGameplayLoadingPhase } from "./storyLoadingPresentation";
 
 /** Story state required by the presentation router. */
-export type StoryWorkspacePresentationController = Pick<ReturnType<typeof useStoryController>, "story" | "stories" | "loading" | "loadingPhase" | "error" | "busy" | "reloadStories" | "submitInput" | "regenerateCg">;
+export type StoryWorkspacePresentationController = Pick<ReturnType<typeof useStoryController>, "story" | "stories" | "loading" | "loadingPhase" | "error" | "errorDetail" | "busy" | "reloadStories" | "submitInput" | "regenerateCg">;
 
 /** Operation state required by Story routes. */
-export type StoryOperationPresentationController = Pick<ReturnType<typeof useStoryPresentationOperation>, "error" | "busy" | "clearError">;
+export type StoryOperationPresentationController = Pick<ReturnType<typeof useStoryPresentationOperation>, "error" | "errorDetail" | "busy" | "clearError">;
 
 /** Creation state consumed by the Story launcher route. */
 export type StoryCreationPresentationController = Pick<ReturnType<typeof useStoryCreationFlowController>, "createStory">;
@@ -54,6 +54,7 @@ type Props = {
 export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, loadingElapsedMs, loadingPhase, cgGallery, cgGalleryLoading, controller, operation, creation, setMode, loadStoryForPlay, onOpenCg, onRetryCg, onOpenSettings, onCloseSettings, onExit }: Props) {
   const story = controller.story;
   const error = operation.error || controller.error;
+  const errorDetail = operation.error ? operation.errorDetail : controller.errorDetail;
   const busy = operation.busy || controller.busy;
   const reducedMotion = useReducedMotion() ?? false;
   const host = usePluginHostServices();
@@ -68,26 +69,26 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
 
   let content: ReactNode;
   if (mode === "launcher" && controller.loading) {
-    content = <StoryLoadingScreen background={storyMenuBackground} sharedBackdrop mode="listing" phase={controller.loadingPhase} error={error} onRetry={() => void controller.reloadStories()} />;
+    content = <StoryLoadingScreen background={storyMenuBackground} sharedBackdrop mode="listing" phase={controller.loadingPhase} error={error} errorDetail={errorDetail} onRetry={() => void controller.reloadStories()} />;
   } else if (mode === "launcher") {
-    content = <StoryLauncher background={storyMenuBackground} sharedBackdrop busy={busy} error={error} onCreateStory={() => { operation.clearError(); setMode("create"); }} onOpenLoad={() => { operation.clearError(); setMode("load"); }} onOpenCg={onOpenCg} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
+    content = <StoryLauncher background={storyMenuBackground} sharedBackdrop busy={busy} error={error} errorDetail={errorDetail} onCreateStory={() => { operation.clearError(); setMode("create"); }} onOpenLoad={() => { operation.clearError(); setMode("load"); }} onOpenCg={onOpenCg} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
   } else if (mode === "load") {
-    content = <StoryLoadList stories={controller.stories} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} onBack={() => setMode("launcher")} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} />;
+    content = <StoryLoadList stories={controller.stories} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} errorDetail={errorDetail} onBack={() => setMode("launcher")} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} />;
   } else if (mode === "loading") {
     const backgroundReady = story?.id === loadingStoryId && story.backgroundResource?.status !== "generating";
-    content = <StoryLoadingScreen background={storyMenuBackground} sharedBackdrop mode="story" phase={loadingPhase} busy={busy} error={error} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} onBack={() => setMode("launcher")} />;
+    content = <StoryLoadingScreen background={storyMenuBackground} sharedBackdrop mode="story" phase={loadingPhase} busy={busy} error={error} errorDetail={errorDetail} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} onBack={() => setMode("launcher")} />;
   } else if (mode === "gallery") {
-    content = <StoryCgGallerySurface stories={cgGallery} background={storyMenuBackground} sharedBackdrop busy={cgGalleryLoading || busy} error={error} onRetry={onRetryCg} onBack={() => setMode("launcher")} />;
+    content = <StoryCgGallerySurface stories={cgGallery} background={storyMenuBackground} sharedBackdrop busy={cgGalleryLoading || busy} error={error} errorDetail={errorDetail} onRetry={onRetryCg} onBack={() => setMode("launcher")} />;
   } else if (mode === "settings") {
     content = <StorySettings background={storyMenuBackground} sharedBackdrop onBack={onCloseSettings} />;
   } else if (mode === "create" || !story) {
-    content = <StoryCreateFlow roles={storyRoles} background={storyMenuBackground} sharedBackdrop busy={operation.busy} error={error} onBack={() => setMode("launcher")} onCreate={creation.createStory} />;
+    content = <StoryCreateFlow roles={storyRoles} background={storyMenuBackground} sharedBackdrop busy={operation.busy} error={error} errorDetail={errorDetail} onBack={() => setMode("launcher")} onCreate={creation.createStory} />;
   } else if (mode === "archive") {
-    content = <StoryArchiveSurface story={story} background={storyMenuBackground} sharedBackdrop error={error} onReturnToGame={() => setMode("game")} />;
+    content = <StoryArchiveSurface story={story} background={storyMenuBackground} sharedBackdrop error={error} errorDetail={errorDetail} onReturnToGame={() => setMode("game")} />;
   } else {
     const storyCharacter = roles.find((role) => role.id === story.roleSnapshot.id);
     const characterIllustration = resolveStoryCharacterIllustration(storyCharacter ?? null, story.roleSnapshot);
-    content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} characterAvatarUrl={characterIllustration ? host.assets.url(characterIllustration) : undefined} onSubmitInput={controller.submitInput} onRegenerateCg={(resourceId) => { void controller.regenerateCg(resourceId); }} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
+    content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} errorDetail={errorDetail} characterAvatarUrl={characterIllustration ? host.assets.url(characterIllustration) : undefined} onSubmitInput={controller.submitInput} onRegenerateCg={(resourceId) => { void controller.regenerateCg(resourceId); }} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
   }
 
   return <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="story-workspace-presentation">

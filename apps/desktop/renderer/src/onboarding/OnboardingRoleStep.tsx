@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { useRef, useState } from "react";
 import { ArrowRight } from "@phosphor-icons/react";
 import { useRoleCreationDraft } from "../roles/useRoleCreationDraft";
@@ -41,7 +42,7 @@ export function OnboardingRoleStep({ onSaved, onBusyChange, onReact }: {
       }
       await onSaved();
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(errorMessage(error, { includeDetail: true }));
       onReact("roleCreateFailed");
     } finally {
       pending.current = false;

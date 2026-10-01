@@ -1,3 +1,4 @@
+import { errorFeedbackText } from "@shiori/plugin-sdk/host-internal";
 import { useRef, useState } from "react";
 import { Camera } from "@phosphor-icons/react";
 import { InlineError } from "../shared/feedback/InlineError";
@@ -20,7 +21,7 @@ export function RoleAvatarPicker({ source, disabled, onChange }: {
       const [path] = await window.miraDesktop.pickImages({ multiple: false });
       if (path) onChange(path);
     } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
+      setError(errorFeedbackText(error, "头像选择失败"));
     } finally {
       pending.current = false;
       setPicking(false);

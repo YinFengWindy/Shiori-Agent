@@ -33,7 +33,9 @@ def safe_archive_path(value: str) -> str:
 def validate_image(data: bytes, *, name: str = "角色卡素材") -> tuple[str, str]:
     """Validate image bytes and return ``(format, media_type)``."""
     if len(data) > MAX_MEMBER_BYTES:
-        raise ValueError(f"{name}超过大小限制")
+        raise ValueError(
+            f"{name}超过大小限制（单条目最多 {MAX_MEMBER_BYTES // (1024 * 1024)} MiB）"
+        )
     try:
         with Image.open(io.BytesIO(data)) as image:
             image.verify()

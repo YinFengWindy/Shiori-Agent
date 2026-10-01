@@ -1,5 +1,6 @@
+import { errorFeedbackText } from "@shiori/plugin-sdk/host-internal";
 import { useEffect, useState } from "react";
-import { errorMessage, useLatestRef } from "@shiori/plugin-sdk";
+import { useLatestRef } from "@shiori/plugin-sdk";
 
 /**
  * One memory read. `scope` is the reset boundary (role, filters, refresh):
@@ -56,7 +57,7 @@ export function useMemoryRead<T>(request: MemoryReadRequest<T> | null): MemoryRe
         scope: current.scope,
         key: current.key,
         value: previous?.scope === current.scope ? previous.value : null,
-        error: errorMessage(error),
+        error: errorFeedbackText(error),
       }));
     });
     return () => { cancelled = true; };

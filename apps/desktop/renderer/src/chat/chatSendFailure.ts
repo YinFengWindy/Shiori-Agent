@@ -38,5 +38,6 @@ export function chatSendFailureAction(
  * 吟风's 「还没给我接模型呢」 line, anything else her generic one.
  */
 export function chatSendFailurePersona(failure: ChatSendFailure): FeedbackPersona {
-  return modelConfigurationRemedy(failure) ? "modelMissing" : "generic";
+  const remedy = modelConfigurationRemedy(failure);
+  return remedy === "choose-role-model" ? "modelMissing" : remedy ? "modelIncomplete" : "generic";
 }

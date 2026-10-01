@@ -276,6 +276,7 @@ function App(): React.ReactElement {
     setActiveSession,
     feedback,
     reportSendFailure: (failure) => feedback.error(failure.message, {
+      detail: typeof failure.details?.detail === "string" ? failure.details.detail : undefined,
       action: chatSendFailureAction(failure, {
         chooseRoleModel: requestChatModelMenu,
         openModelSettings: () => openSettingsWorkspace("models"),

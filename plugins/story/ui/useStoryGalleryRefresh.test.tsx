@@ -13,9 +13,9 @@ test("Story gallery refresh follows plugin events and releases its subscription 
     onEvent: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
   let refreshes = 0;
-  const errors: string[] = [];
+  const errors: Array<{ cause: unknown; summary?: string }> = [];
   const refresh = async () => { refreshes++; if (refreshes === 2) throw new Error("gallery failed"); };
-  const reportError = (message: string) => { errors.push(message); };
+  const reportError = (cause: unknown, summary?: string) => { errors.push({ cause, summary }); };
   function Probe({ active }: { active: boolean }) {
     useStoryGalleryRefresh(active, refresh, reportError);
     return null;
@@ -32,7 +32,10 @@ test("Story gallery refresh follows plugin events and releases its subscription 
     await emit("plugin.story.resource.changed");
     assert.equal(refreshes, 1);
     await emit("plugin.story.resource.changed");
-    assert.deepEqual(errors, ["gallery failed"]);
+    assert.equal(errors.length, 1);
+    assert.ok(errors[0]?.cause instanceof Error);
+    assert.equal(errors[0].cause.message, "gallery failed");
+    assert.equal(errors[0].summary, "CG 集刷新失败，请重试");
     await view.render(render(false));
     assert.equal(listeners.size, 0);
     await emit("plugin.story.resource.changed");

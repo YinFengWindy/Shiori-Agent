@@ -1,4 +1,4 @@
-import { errorMessage } from "@shiori/plugin-sdk";
+import { BridgeError, errorMessage } from "@shiori/plugin-sdk";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 import type { useDesktopChatTurns } from "./useDesktopChatTurns";
 import type { createDesktopSessionSnapshot } from "./desktopSessionSnapshot";
@@ -31,7 +31,7 @@ export function createDesktopChatCancellation({
         method: "chat.cancel",
         payload: { session_key: sessionKey, turn_id: turnId },
       });
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new BridgeError(res.error.message, res.error.code, res.error.details);
       const status = String(res.payload.status ?? "");
       if (status !== "interrupted" && status !== "idle") {
         throw new Error(String(res.payload.message ?? "中止回复失败"));
@@ -55,7 +55,7 @@ export function createDesktopChatCancellation({
     } catch (error) {
       if (isCurrentChatTurn(sessionKey, turnId)) {
         clearSessionCancelling(sessionKey);
-        feedback.error(errorMessage(error));
+        feedback.error(errorMessage(error, { includeDetail: true }));
       }
       return false;
     }

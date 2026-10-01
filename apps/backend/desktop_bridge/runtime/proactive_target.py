@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.roles.errors import RoleNotFoundError
+
 from typing import Any
 
 from core.roles.models import RoleProactiveCandidate
@@ -19,7 +21,7 @@ def preview_proactive_target(
     """
     role_id = str(payload.get("role_id") or "").strip()
     if roles.get_role(role_id) is None:
-        raise KeyError(f"角色不存在: {role_id}")
+        raise RoleNotFoundError(role_id)
     raw_candidates = payload.get("candidates")
     if not isinstance(raw_candidates, list):
         raise ValueError("candidates 必须是数组")

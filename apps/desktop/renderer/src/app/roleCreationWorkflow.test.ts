@@ -249,7 +249,7 @@ describe("runRoleCreation", () => {
     assert.equal(harness.state.pendingAction, null);
     assert.deepEqual(harness.state.roles.map((role) => role.id), ["existing"]);
     assert.equal(harness.state.feedback?.tone, "error");
-    assert.match(harness.state.feedback?.message ?? "", /disconnected/);
+    assert.match(harness.state.feedback?.message ?? "", /角色创建失败/);
   });
 
   it("preserves a committed role when its subsequent refresh fails", async () => {

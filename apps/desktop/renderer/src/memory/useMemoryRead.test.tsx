@@ -49,7 +49,7 @@ it("appends batches within a scope, keeps them when a later batch fails, and res
     assert.equal(view.container.textContent, "idle||a,b");
     await view.render(<Probe scope="q1" page={3} read={read} />);
     await act(async () => pending.get("q1#3")?.reject(new Error("offline")));
-    assert.equal(view.container.textContent, "idle|offline|a,b");
+    assert.equal(view.container.textContent, "idle|操作未完成，请重试\noffline|a,b");
     await view.render(<Probe scope="q2" page={1} read={read} />);
     assert.equal(view.container.textContent, "loading||none");
   } finally {

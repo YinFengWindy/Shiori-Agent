@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 import { loadRuntimePluginUi, type RuntimePluginUiHost } from "./runtimePluginUi";
 
@@ -40,7 +41,7 @@ export function createRuntimePluginUiSynchronization(host: RuntimePluginUiHost) 
       const dispose = await loadRuntimePluginUi([entry], {
         ...host,
         failed: (failedEntry, error) => {
-          failures.set(failedEntry.pluginId, error instanceof Error ? error.message : String(error));
+          failures.set(failedEntry.pluginId, errorMessage(error, { includeDetail: true }));
           host.failed(failedEntry, error);
         },
       });

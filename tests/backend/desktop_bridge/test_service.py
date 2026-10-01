@@ -26,6 +26,7 @@ from conversation.push_sync import ExternalPushSyncService
 from conversation.service import LegacySessionDescriptor, network_thread_id
 from core.common.message_source import MessageSource
 from core.roles import RoleStore
+from core.roles.errors import RoleNotFoundError
 from core.roles.services import RoleAggregateService
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.voice.voice_service import (
@@ -1503,3 +1504,63 @@ async def test_a_stored_listening_record_is_pushed_to_the_phone(tmp_path) -> Non
     assert event["payload"]["thread_id"] == thread.id
     assert event["payload"]["message"]["id"] == heard.id
     await service.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error,summary,method,code",
+    [
+        (
+            RuntimeError("failed token=secret-value"),
+            "本地服务处理失败",
+            "test.failure",
+            "internal_error",
+        ),
+        (
+            ValueError("请填写角色名称"),
+            "请填写角色名称",
+            "roles.create",
+            "invalid_request",
+        ),
+        (RoleNotFoundError("missing"), "角色不存在", "chat.send", "role_not_found"),
+        (
+            KeyError("角色任务不存在"),
+            "角色任务不存在",
+            "roles.tasks.cancel",
+            "resource_not_found",
+        ),
+        (
+            KeyError("身份绑定不存在"),
+            "身份绑定不存在",
+            "identities.unbind",
+            "resource_not_found",
+        ),
+    ],
+)
+async def test_rpc_boundary_preserves_domain_messages_and_scrubs_unknown_causes(
+    tmp_path, error, summary, method, code
+):
+    sessions = SessionManager(tmp_path)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=sessions,
+        group_listening=GroupListeningControl(
+            ConversationService(sessions), lambda _channel: False
+        ),
+        group_environment=GroupEnvironment(tmp_path, sessions.conversation_store),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    service.request_router.dispatch = AsyncMock(side_effect=error)
+    try:
+        response = await service.handle(
+            {"id": "1", "method": method, "payload": {}}, emit_event=Mock()
+        )
+        assert response.error is not None
+        assert response.error.code == code
+        assert summary in response.error.message
+        assert "secret-value" not in str(response.to_dict())
+        assert response.error.details["detail"]
+    finally:
+        await service.aclose()

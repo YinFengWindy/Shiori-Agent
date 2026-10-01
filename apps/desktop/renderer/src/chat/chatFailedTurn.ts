@@ -1,3 +1,4 @@
+import { errorFeedback, scrubErrorDetail } from "@shiori/plugin-sdk/host-internal";
 import { getChatMessageReactKey } from "./chatMessageIdentity";
 import type { SessionMessage } from "@shiori/plugin-sdk";
 
@@ -59,8 +60,7 @@ export function findChatRetryTarget(
 export function splitChatErrorContent(content: string, detail = ""): { summary: string; detail: string } {
   const text = content.trim();
   const reportedDetail = detail.trim();
-  if (reportedDetail) return { summary: text || "回复失败", detail: reportedDetail };
-  if (!text) return { summary: "回复失败", detail: "" };
-  if (text.length <= inlineErrorMaxLength && !text.includes("\n")) return { summary: text, detail: "" };
-  return { summary: "回复失败", detail: text };
+  const view = errorFeedback(text, "这次回复未完成");
+  const compact = view.message.length <= inlineErrorMaxLength;
+  return { summary: compact ? view.message : "这次回复未完成", detail: scrubErrorDetail([compact ? view.detail : text, reportedDetail].filter(Boolean).join("\n")) };
 }

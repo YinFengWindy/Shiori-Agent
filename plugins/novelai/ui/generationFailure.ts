@@ -43,7 +43,7 @@ const kindByCode: Record<string, GenerationFailureKind> = {
 const titleByKind: Record<GenerationFailureKind, string> = {
   "not-configured": "NovelAI 未配置",
   unauthorized: "NovelAI token 无效",
-  quota: "NovelAI 额度不足",
+  quota: "NovelAI 订阅或额度不足",
   network: "连不上 NovelAI",
   upstream: "NovelAI 返回了错误",
   invalid: "请求参数有误",
@@ -67,7 +67,8 @@ export function describeGenerationFailure(error: unknown): GenerationFailure {
   const code = error instanceof BridgeError ? error.code : "";
   const kind = kindByCode[code] ?? "unknown";
   const raw = error instanceof Error ? error.message : String(error ?? "");
-  const message = scrubSecrets(raw.trim());
+  const detail = error instanceof BridgeError && typeof error.details?.detail === "string" ? error.details.detail : "";
+  const message = scrubSecrets([raw.trim(), detail].filter(Boolean).join("\n"));
   return {
     kind,
     title: titleByKind[kind],

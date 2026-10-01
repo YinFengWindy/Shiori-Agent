@@ -68,3 +68,11 @@ describe("bridge offline feedback", () => {
     } finally { await view.cleanup(); }
   });
 });
+
+
+it("suppresses the coded bridge-exit summary while preserving unrelated errors", () => {
+  install({ bannerVisible: true, bridgeError: "bridge exited with code 1" });
+  feedback.error("本地服务连接已中断，请等待重新连接", { detail: "bridge exited with code 1" });
+  feedback.error("请填写角色名称");
+  assert.deepEqual(getFeedbackSnapshot().map((toast) => toast.message), ["请填写角色名称"]);
+});

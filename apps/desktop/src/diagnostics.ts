@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { app } from "electron";
+import { app, shell } from "electron";
 
 type DiagnosticScope = "main" | "renderer";
 
@@ -30,6 +30,14 @@ function safeJsonStringify(value: unknown): string {
     }
     return currentValue;
   });
+}
+
+/** Opens only the application-owned directory containing desktop-diagnostics.log. */
+export async function openDiagnosticsFolder(): Promise<void> {
+  const directory = app.getPath("userData");
+  mkdirSync(directory, { recursive: true });
+  const error = await shell.openPath(directory);
+  if (error) throw new Error(error);
 }
 
 function getDiagnosticsLogPath(): string {

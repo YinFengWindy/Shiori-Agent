@@ -1,9 +1,10 @@
 import { CheckCircleIcon, TrashIcon } from "@phosphor-icons/react";
-import { cx, UploadIcon, type PluginRoleAssetsComponentProps } from "@shiori/plugin-sdk";
+import { cx, UploadIcon, usePluginHostServices, type PluginRoleAssetsComponentProps } from "@shiori/plugin-sdk";
 import { usePetPackages } from "./usePetPackages";
 
 /** The plugin's package library, mounted through the role.assets contribution (it needs no host services). */
 export function RolePetPackagesPanel({ roleId, disabled, client, onRoleDataChanged }: Omit<PluginRoleAssetsComponentProps, "host">) {
+  const host = usePluginHostServices();
   const { state, busy, error, onImport, onRemove, onSelect } = usePetPackages({ roleId, disabled, client, onRoleDataChanged });
 
   // No role open: guessing one would let a click act on somebody else's packages.
@@ -18,7 +19,7 @@ export function RolePetPackagesPanel({ roleId, disabled, client, onRoleDataChang
           <UploadIcon className="h-4 w-4 fill-current" />
         </button>
       </div>
-      {error ? <div className="mb-2 text-xs text-danger-text">{error}</div> : null}
+      {error ? <host.ui.InlineError className="mb-2" {...error} /> : null}
       <div className="grid grid-cols-2 gap-2">
         {state.packages.map((item) => (
           <div

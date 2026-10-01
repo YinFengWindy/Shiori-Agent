@@ -85,7 +85,7 @@ export class DesktopBridgeClient extends EventEmitter {
       type: "response",
       method,
       payload: {},
-      error: { code: "bridge_exit", message },
+      error: { code: "bridge_exit", message: "本地服务连接已中断，请等待重新连接", details: { detail: message } },
     };
   }
 
@@ -358,7 +358,8 @@ export class DesktopBridgeClient extends EventEmitter {
             payload: {},
             error: {
               code: "bridge_timeout",
-              message: `bridge request timed out after ${timeoutMs}ms`,
+              message: "请求超时，请稍后重试",
+              details: { detail: `bridge request timed out after ${timeoutMs}ms`, outcome: "unknown" },
             },
           });
         }, timeoutMs);
@@ -371,7 +372,7 @@ export class DesktopBridgeClient extends EventEmitter {
           type: "response",
           method: request.method,
           payload: {},
-          error: { code: "bridge_write_failed", message },
+          error: { code: "bridge_write_failed", message: "请求未能传递到本地服务，请重试", details: { detail: message } },
         });
       });
     });

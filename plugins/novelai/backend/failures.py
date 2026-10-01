@@ -16,6 +16,7 @@ from typing import Awaitable, Literal, TypeVar
 import httpx
 
 from agent.plugin_host.bridge_events import PluginRpcError
+from core.common.error_summary import summarize_exception_for_user
 
 TokenState = Literal["configured", "missing", "placeholder"]
 T = TypeVar("T")
@@ -72,6 +73,10 @@ class NovelAINotConfiguredError(ValueError):
     """Raised before any upstream call when no usable token is configured."""
 
 
+class NovelAIResponseError(ValueError):
+    """A successful response did not contain a readable generated image."""
+
+
 class NovelAIUpstreamError(ValueError):
     """An HTTP failure reported by NovelAI, already scrubbed of the token."""
 
@@ -92,6 +97,12 @@ def scrub_secret(text: str, secret: str) -> str:
 def to_rpc_error(error: Exception) -> PluginRpcError | None:
     """Maps a generation failure to a coded RPC error; None leaves it unchanged."""
 
+    if isinstance(error, NovelAIResponseError):
+        return PluginRpcError(
+            UPSTREAM,
+            str(error),
+            details={"detail": summarize_exception_for_user(error)},
+        )
     if isinstance(error, NovelAINotConfiguredError):
         return PluginRpcError(NOT_CONFIGURED, str(error))
     if isinstance(error, NovelAIUpstreamError):
@@ -102,7 +113,11 @@ def to_rpc_error(error: Exception) -> PluginRpcError | None:
             )
         if error.status_code == 402:
             return PluginRpcError(QUOTA, "NovelAI 账户订阅或额度不足（HTTP 402）")
-        return PluginRpcError(UPSTREAM, str(error))
+        return PluginRpcError(
+            UPSTREAM,
+            "NovelAI 服务响应异常，请稍后重试",
+            details={"detail": summarize_exception_for_user(error)},
+        )
     if isinstance(error, httpx.TimeoutException):
         return PluginRpcError(NETWORK, "连接 NovelAI 超时")
     if isinstance(error, httpx.TransportError):

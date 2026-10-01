@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.roles.errors import RoleNotFoundError
+
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -95,7 +97,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
     ) -> dict[str, Any]:
         role = self._role_store.get_role(role_id)
         if role is None:
-            raise KeyError(f"role 不存在: {role_id}")
+            raise RoleNotFoundError(role_id)
         store = resolve_markdown_store(workspace=self._workspace, role_id=role_id)
         session = self._session_manager.get_or_create(
             self._session_manager.role_session_key(role_id)

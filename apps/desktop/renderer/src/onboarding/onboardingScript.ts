@@ -36,11 +36,11 @@ const openingLines = [
 
 const reactionLines: Record<OnboardingReaction, MascotLine> = {
   connectionOk: say("laugh", "通了通了！看来你还挺靠谱嘛。"),
-  connectionFailed: say("sad", "连不上……是不是密钥抄错了？"),
-  modelSaveFailed: say("confused", "咦，没存上？再试一次看看。"),
+  connectionFailed: say("sad", "这次连接测试没通过……看看下面的提示吧。"),
+  modelSaveFailed: say("confused", "这里遇到一点问题……看看下面的提示吧。"),
   avatarPicked: say("surprised", "哇，好可爱……比我差一点点就是了。"),
-  importFailed: say("confused", "这张图里好像没有角色卡数据？"),
-  roleCreateFailed: say("sad", "唔，没建成……再检查一下？"),
+  importFailed: say("confused", "这次导入没完成……原因放在下面了。"),
+  roleCreateFailed: say("sad", "唔，这里出了点状况……看看下面的提示吧。"),
   skipModel: say("pout", "跳过？好吧，以后去设置里也能弄。"),
   skipRole: say("pout", "不建了？好吧，以后在角色页也能建。"),
 };

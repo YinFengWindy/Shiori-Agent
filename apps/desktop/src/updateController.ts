@@ -2,7 +2,7 @@ import type { EventEmitter } from "node:events";
 import type { AppUpdater, UpdateInfo, ProgressInfo } from "electron-updater";
 import type { DesktopUpdateState } from "./updateContract.js";
 
-type UpdateEngine = Pick<AppUpdater, "autoDownload" | "checkForUpdates" | "quitAndInstall">
+type UpdateEngine = Pick<AppUpdater, "autoDownload" | "checkForUpdates" | "downloadUpdate" | "quitAndInstall">
   & Pick<EventEmitter, "on" | "removeListener">;
 
 /** Owns one update lifecycle, including concurrent checks and renderer snapshots. */
@@ -50,14 +50,22 @@ export class DesktopUpdateController {
     if (!engine) return Promise.reject(new Error("开发模式不支持应用更新"));
     if (this.checking) return this.checking;
     if (["downloading", "downloaded", "installing"].includes(this.state.phase)) return Promise.resolve(this.state);
-    this.update({ phase: "checking", error: null, progress: 0 });
+    if (this.state.phase === "error" && this.state.errorPhase === "downloading") {
+      this.update({ phase: "downloading", error: null, errorDetail: undefined, progress: 0 });
+      this.checking = Promise.resolve().then(() => engine.downloadUpdate()).then(() => this.state).catch((error: unknown) => {
+        this.recordError(error);
+        throw error;
+      }).finally(() => { this.checking = null; });
+      return this.checking;
+    }
+    this.update({ phase: "checking", error: null, errorPhase: undefined, errorDetail: undefined, progress: 0 });
     this.checking = Promise.resolve().then(() => engine.checkForUpdates()).then((result) => {
       if (!result) throw new Error("当前环境无法检查应用更新");
       void result.downloadPromise?.catch((error: unknown) => this.recordError(error));
       return this.state;
     }).catch((error: unknown) => {
       if (this.isEmptyReleaseCheck(error)) {
-        this.markCurrent();
+        this.update({ phase: "unavailable", latestVersion: null, progress: 0, error: null });
         return this.state;
       }
       this.recordError(error);
@@ -68,7 +76,7 @@ export class DesktopUpdateController {
 
   /** Installs only a completely downloaded update and relaunches the application. */
   install() {
-    if (!this.options.engine || this.state.phase !== "downloaded") throw new Error("更新尚未下载完成");
+    if (!this.options.engine || this.state.phase !== "downloaded" && !(this.state.phase === "error" && this.state.errorPhase === "installing")) throw new Error("更新尚未下载完成");
     this.update({ phase: "installing", error: null });
     try {
       this.options.engine.quitAndInstall(false, true);
@@ -90,7 +98,7 @@ export class DesktopUpdateController {
   }
 
   private update(patch: Partial<DesktopUpdateState>) {
-    this.state = { ...this.state, ...patch, revision: this.state.revision + 1 };
+    this.state = { ...this.state, ...patch, ...(patch.error === null ? { errorPhase: undefined, errorDetail: undefined } : {}), revision: this.state.revision + 1 };
     this.options.publish(this.state);
   }
 
@@ -105,9 +113,12 @@ export class DesktopUpdateController {
   }
 
   private recordError(error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (this.state.phase === "error" && this.state.error === message) return;
-    this.update({ phase: "error", error: message });
+    const detail = error instanceof Error ? error.message : String(error);
+    if (this.state.phase === "error" && this.state.errorDetail === detail) return;
+    const errorPhase = this.state.phase === "error" ? this.state.errorPhase ?? "checking"
+      : this.state.phase === "installing" ? "installing" : this.state.phase === "downloading" ? "downloading" : "checking";
+    const message = { checking: "检查更新失败", downloading: "更新下载失败", installing: "更新安装失败" }[errorPhase];
+    this.update({ phase: "error", error: message, errorPhase, errorDetail: detail });
     this.options.onError(error);
   }
 }

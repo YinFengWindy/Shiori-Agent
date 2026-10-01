@@ -253,6 +253,8 @@ describe("PluginSchemaSettingsSection", () => {
 
     try {
       await view.render(<PluginSchemaSettingsSection pluginId="demo" />);
+      assert.match(view.container.textContent ?? "", /插件配置读取失败/);
+      await act(async () => Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent?.includes("详情"))?.click());
       assert.match(view.container.textContent ?? "", /backend offline/);
     } finally {
       await view.cleanup();

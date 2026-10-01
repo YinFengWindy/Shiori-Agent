@@ -465,3 +465,40 @@ async def test_service_upstream_error_carries_status_and_scrubs_token(
     assert caught.value.status_code == 401
     assert "pst-secret" not in str(caught.value)
     assert "***" in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "body,content_type",
+    [
+        (b'{"images": []}', "application/json"),
+        (b"{bad", "application/json"),
+        (b'{"images": ["bad"]}', "application/json"),
+        (b"not-image", "image/png"),
+        (b"PK\x03\x04bad", "application/zip"),
+    ],
+)
+def test_unreadable_success_response_is_an_upstream_failure(
+    tmp_path, body, content_type
+):
+    from plugins.novelai.backend.failures import NovelAIResponseError, to_rpc_error
+
+    settings = NovelAISettings(token="novel-token")
+    response = httpx.Response(
+        200,
+        content=body,
+        headers={"content-type": content_type},
+        request=httpx.Request("POST", "https://example.com"),
+    )
+    service = NovelAIService(
+        settings=settings,
+        client=_FakeClient(response, settings),
+        store=NovelAIStore(tmp_path),
+        role_store=RoleStore(tmp_path),
+        workspace=tmp_path,
+    )
+    with pytest.raises(NovelAIResponseError) as caught:
+        service._extract_primary_image(response)
+    failure = to_rpc_error(caught.value)
+    assert failure is not None
+    assert failure.code == "novelai_upstream"
+    assert "图片" in str(failure)

@@ -36,3 +36,23 @@ describe("onboarding data", () => {
     }, registration), /模型无效/);
   });
 });
+
+it("keeps a confirmed onboarding save distinct from its failed refresh, with the cause", async () => {
+  const { BridgeError } = await import("@shiori/plugin-sdk");
+  let reads = 0;
+  let writes = 0;
+  await assert.rejects(registerOnboardingModel({
+    readSettings: async () => {
+      if (++reads > 1) throw new BridgeError("本地服务处理失败", "internal_error", { detail: "config read denied" });
+      return { ...loadSettingsData("[llm]\n"), generation: 1 };
+    },
+    saveSettings: async () => { writes += 1; return { ok: true, generation: 2 }; },
+  }, registration), (failure) => {
+    assert.ok(failure instanceof BridgeError);
+    assert.equal(failure.code, "settings_refresh_failed");
+    assert.match(failure.message, /模型已保存/);
+    assert.match(String(failure.details?.detail), /config read denied/);
+    return true;
+  });
+  assert.equal(writes, 1);
+});

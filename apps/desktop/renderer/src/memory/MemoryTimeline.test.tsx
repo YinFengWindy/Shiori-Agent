@@ -107,7 +107,9 @@ it("shows a failed batch under the loaded items and retries that same batch", as
   });
   try {
     await click(button(view.container, "加载更多"));
-    assert.match(view.container.querySelector('[role="alert"]')?.textContent ?? "", /读取失败：engine busy/);
+    assert.match(view.container.querySelector('[role="alert"]')?.textContent ?? "", /读取失败/);
+    await click(button(view.container, "详情"));
+    assert.match(view.container.querySelector('[role="alert"]')?.textContent ?? "", /engine busy/);
     assert.equal(nodeCount(view.container), 20);
     assert.equal(button(view.container, "加载更多"), undefined);
     await click(button(view.container, "重试"));
@@ -161,7 +163,7 @@ it("distinguishes empty, disabled and failed timelines", async () => {
   for (const [respond, expected] of [
     [() => ready([]), /暂无记忆/],
     [() => ({ role_id: "mira", status: "disabled", items: [], total: 0 }), /语义记忆已停用/],
-    [() => { throw new Error("engine offline"); }, /读取失败：engine offline/],
+    [() => { throw new Error("engine offline"); }, /读取失败/],
   ] satisfies Array<[PluginRpcTestResponder, RegExp]>) {
     const { view } = await mountTimeline(respond);
     try {

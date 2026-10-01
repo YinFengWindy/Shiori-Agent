@@ -1,12 +1,14 @@
-import type { DesktopApi, SettingsFormData, SettingsSaveOptions, SettingsSnapshot } from "../../../src/bridge/shared.js";
+import { BridgeError } from "@shiori/plugin-sdk";
+import { errorFeedback } from "@shiori/plugin-sdk/host-internal";
+import type { DesktopApi, SaveSettingsResult, SettingsFormData, SettingsSaveOptions, SettingsSnapshot } from "../../../src/bridge/shared.js";
 import { SerialDraftQueue } from "../shared/serialDraftQueue.js";
-import { cloneSettings, saveSettingsPageData, settingsEqual } from "./settingsPersistence.js";
+import { cloneSettings, refreshSavedSettings, saveSettingsPageData, settingsEqual } from "./settingsPersistence.js";
 import type { SettingsSavePhase } from "./settingsPageTypes.js";
 
 type SaveQueueOptions = {
   api: Pick<DesktopApi, "readSettings" | "saveSettings">;
   onApplied: (snapshot: SettingsSnapshot, submitted: SettingsFormData, nextDraft: SettingsFormData) => void;
-  onStatus: (phase: SettingsSavePhase, message: string) => void;
+  onStatus: (phase: SettingsSavePhase, message: string, detail?: string) => void;
 };
 
 // Error codes the user can still fix by editing further, without reloading first.
@@ -19,6 +21,7 @@ type Applied = { snapshot: SettingsSnapshot; nextDraft: SettingsFormData };
 /** Serializes automatic saves and retains a failed transaction's identity for explicit retries. */
 export class SettingsSaveQueue {
   private generation?: number;
+  private acknowledged: SaveSettingsResult | undefined;
   private readonly core: SerialDraftQueue<SettingsFormData, Applied>;
 
   constructor(private readonly options: SaveQueueOptions) {
@@ -27,13 +30,14 @@ export class SettingsSaveQueue {
       clone: cloneSettings,
       attempt: (draft, operationId) => this.attempt(draft, operationId),
       onApplied: (applied, submitted) => this.options.onApplied(applied.snapshot, submitted, applied.nextDraft),
-      onStatus: (phase, message) => this.options.onStatus(phase, message),
+      onStatus: (phase, message, detail) => this.options.onStatus(phase, message, detail),
     });
   }
 
   /** Seeds the version from a freshly loaded backend snapshot. */
   reset(generation: number | undefined): void {
     this.generation = generation;
+    this.acknowledged = undefined;
     this.core.reset();
   }
 
@@ -49,13 +53,24 @@ export class SettingsSaveQueue {
 
   private async attempt(draft: SettingsFormData, operationId: string) {
     const attemptOptions: SettingsSaveOptions = { expectedGeneration: this.generation, operationId };
-    const result = await saveSettingsPageData(this.options.api, draft, attemptOptions);
+    const result = this.acknowledged
+      ? await refreshSavedSettings(this.options.api, draft, this.acknowledged)
+      : await saveSettingsPageData(this.options.api, draft, attemptOptions);
+    if (result.saveResult.ok && !result.snapshot) {
+      this.acknowledged = result.saveResult;
+      return { ok: false as const, phase: "refresh-error" as const, resumesAutomatically: false,
+        message: "设置已保存，但刷新失败。请重新加载以继续。",
+        detail: errorFeedback(result.refreshError).detail || String(result.refreshError) };
+    }
+    this.acknowledged = undefined;
     if (!result.saveResult.ok || !result.snapshot) {
       const code = result.saveResult.error?.code ?? "";
       return {
         ok: false as const,
         resumesAutomatically: RECOVERABLE_WITHOUT_RELOAD.includes(code),
-        message: result.saveResult.error?.message ?? "配置应用失败。",
+        phase: ["bridge_timeout", "bridge_exit", "bridge_write_failed"].includes(code) ? "unknown" as const : "error" as const,
+        ...errorFeedback(new BridgeError(result.saveResult.error?.message ?? "配置应用失败。", code, result.saveResult.error?.details)),
+        ...(["bridge_timeout", "bridge_exit", "bridge_write_failed"].includes(code) ? { message: "暂时无法确认保存结果，请重试以确认" } : {}),
       };
     }
     this.generation = result.saveResult.generation;

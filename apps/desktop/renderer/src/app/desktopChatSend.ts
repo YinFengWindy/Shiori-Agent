@@ -105,7 +105,7 @@ export function createDesktopChatSend({
       if (isLatestChatTurn(sessionKey, turnId)) commitSessionMessageUpdate(roleId, update);
       return true;
     } catch (error) {
-      await recoverFailedSend({ message: errorMessage(error) });
+      await recoverFailedSend({ message: errorMessage(error, { includeDetail: true }) });
       return false;
     }
   }

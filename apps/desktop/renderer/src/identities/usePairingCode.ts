@@ -1,6 +1,6 @@
+import { errorFeedbackText } from "@shiori/plugin-sdk/host-internal";
 import { useCallback, useEffect, useState } from "react";
 import { parseTimestamp } from "../shared/format";
-import { errorMessage } from "@shiori/plugin-sdk";
 import { createIdentityClient } from "./identityClient";
 
 const client = createIdentityClient();
@@ -40,7 +40,7 @@ export function usePairingCode() {
       setNow(Date.now());
       setShown({ code: next.code, expiresAtMs: expiresAt.getTime() });
     } catch (failure) {
-      setError(errorMessage(failure));
+      setError(errorFeedbackText(failure));
     } finally {
       setBusy(false);
     }

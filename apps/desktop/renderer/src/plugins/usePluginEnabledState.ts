@@ -30,7 +30,7 @@ export function usePluginEnabledState(): (pluginId: string) => boolean {
     ensurePluginEnabledStateLoaded().catch((error: unknown) => {
       window.miraDesktop.reportRendererDiagnostic({
         kind: "error",
-        message: `插件状态加载失败：${errorMessage(error)}`,
+        message: `插件状态加载失败：${errorMessage(error, { includeDetail: true })}`,
         stack: error instanceof Error ? error.stack : undefined,
       });
     });

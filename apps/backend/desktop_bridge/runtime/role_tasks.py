@@ -1,5 +1,6 @@
 """Task visibility and cancellation across current and draining runtime versions."""
 
+from core.roles.errors import RoleNotFoundError
 from core.common.runtime_scope import bind_runtime
 from desktop_bridge.role_task_service import RoleTaskService
 
@@ -25,7 +26,7 @@ class RuntimeRoleTasks:
     def list_tasks(self, role_id: str):
         """Merges background work while deduplicating the shared scheduler."""
         if self._roles.get_role(role_id) is None:
-            raise KeyError(f"角色不存在: {role_id}")
+            raise RoleNotFoundError(role_id)
         tasks = {
             str(task["id"]): task
             for _, source in self._sources()

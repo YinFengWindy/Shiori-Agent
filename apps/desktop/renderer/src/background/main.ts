@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { pluginRuntimeChanged } from "../plugins/pluginRuntimeChanged";
 // Registers every plugin's `background/index.ts` before the host reads the registry.
 import "./pluginBackgroundModules";
@@ -44,7 +45,7 @@ const loadRuntimeBackground = createRuntimePluginBackgroundLoader({
     // Rolls the whole plugin back on the backend so tools/RPC/UI/surface
     // contributions do not outlive a background module that failed to load
     // (#262 AC2).
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = errorMessage(error, { includeDetail: true });
     reportRuntimePluginActivation(pluginBridge, entry, "background", { ok: false, reason });
   },
 });

@@ -13,7 +13,7 @@ export function QQBotAccountDetail({ account, roleId, onChanged, client, host }:
   const [showSecret, setShowSecret] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [targets, setTargets] = useState<Targets | null>(null);
-  const { pending, busy, error, setError, run } = useAccountAction(onChanged);
+  const { pending, busy, error, errorDetail, reportError, run } = useAccountAction(onChanged);
 
   useEffect(() => {
     if (!accountId) return;
@@ -23,9 +23,9 @@ export function QQBotAccountDetail({ account, roleId, onChanged, client, host }:
       client.call<Targets>("account.targets", { account_id: accountId }),
     ]).then(([nextDetail, nextTargets]) => {
       if (active) { setDetail(nextDetail); setTargets(nextTargets); setAppId(nextDetail.app_id); }
-    }).catch((failure: unknown) => { if (active) setError(String(failure)); });
+    }).catch((failure: unknown) => { if (active) reportError(failure, "账号信息加载失败"); });
     return () => { active = false; };
-  }, [accountId, client, setError]);
+  }, [accountId, client, reportError]);
 
   const save = () => run("connect", async () => {
     const result = await client.call<{ account_id: string }>("account.save", {
@@ -48,7 +48,7 @@ export function QQBotAccountDetail({ account, roleId, onChanged, client, host }:
       action={account && detail?.connected
         ? { kind: "disconnect", onClick: () => void disconnect() }
         : { kind: "connect", onClick: () => void save(), disabled: !appId.trim() || (!secret.trim() && !detail?.has_secret) }}>
-      <host.ui.Reveal show={Boolean(error)} className="pt-3"><host.ui.InlineError message={error} /></host.ui.Reveal>
+      <host.ui.Reveal show={Boolean(error)} className="pt-3"><host.ui.InlineError message={error} detail={errorDetail} /></host.ui.Reveal>
     </host.ui.AccountStatusCard>
     <p className="m-0 font-medium text-ink">QQ 官方机器人应用</p>
     <label className="grid gap-2 text-ink-secondary">App ID

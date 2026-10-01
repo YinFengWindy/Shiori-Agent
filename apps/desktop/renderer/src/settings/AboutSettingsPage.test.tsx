@@ -84,7 +84,7 @@ test("failed status loading remains retryable", async () => {
   Object.defineProperty(window, "miraDesktop", { configurable: true, value: { updates: api } });
   try {
     await view.render(<AboutSettingsPage />);
-    assert.match(view.container.querySelector('[role="alert"]')?.textContent ?? "", /connection lost/);
+    assert.match(view.container.querySelector('[role="alert"]')?.textContent ?? "", /更新状态读取失败/);
     const button = view.container.querySelector("button");
     assert.ok(button);
     assert.equal(button.disabled, false);
@@ -125,4 +125,40 @@ test("puts 吟风 beside the version card with the 看板娘 on, and leaves the 
     await plain.cleanup();
     resetAppearancePrefsCache();
   }
+});
+
+for (const [errorPhase, label, expectedCommand] of [
+  ["checking", "重新检查", "check"], ["downloading", "重新下载", "check"], ["installing", "重试安装", "install"],
+] as const) {
+  test(`update recovery for ${errorPhase} labels and invokes the matching action`, async () => {
+    const view = await mountTestComponent(null);
+    const calls: string[] = [];
+    const state: DesktopUpdateState = { revision: 1, currentVersion: "0.2.0", phase: "error", errorPhase, error: "更新操作失败", errorDetail: "technical cause", latestVersion: "0.3.0", progress: 0 };
+    Object.defineProperty(window, "miraDesktop", { configurable: true, value: { updates: {
+      getState: async () => state, onState: () => () => undefined,
+      check: async () => { calls.push("check"); return state; }, install: async () => { calls.push("install"); },
+    } } });
+    try {
+      await view.render(<AboutSettingsPage />);
+      const action = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent?.trim() === label);
+      assert.ok(action);
+      await act(async () => action.click());
+      assert.deepEqual(calls, [expectedCommand]);
+      assert.doesNotMatch(view.container.textContent ?? "", /technical cause/);
+    } finally { await view.cleanup(); }
+  });
+}
+
+test("an empty update feed is a normal unavailable status instead of claiming latest", async () => {
+  const view = await mountTestComponent(null);
+  Object.defineProperty(window, "miraDesktop", { configurable: true, value: { updates: {
+    getState: async () => ({ revision: 1, currentVersion: "0.2.0", phase: "unavailable", latestVersion: null, progress: 0, error: null }),
+    onState: () => () => undefined,
+  } } });
+  try {
+    await view.render(<AboutSettingsPage />);
+    assert.match(view.container.textContent ?? "", /暂无可用更新/);
+    assert.doesNotMatch(view.container.textContent ?? "", /已是最新|已经是最新/);
+    assert.equal(view.container.querySelector('[role="alert"]'), null);
+  } finally { await view.cleanup(); }
 });

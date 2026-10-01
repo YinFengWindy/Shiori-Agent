@@ -27,7 +27,7 @@ export function useRolePluginRefresh(args: RolePluginRefreshArgs) {
   useEffect(() => {
     // A cached role may lack projections while disabled. Stable lifecycle keys
     // prevent ordinary roster reloads from resetting an unsaved plugin draft.
-    void refresh(false).catch((error: unknown) => latest.current.reportError(errorMessage(error)));
+    void refresh(false).catch((error: unknown) => latest.current.reportError(errorMessage(error, { includeDetail: true })));
     return () => { request.current += 1; };
   }, [args.detailRoleId, lifecycleKey, latest, refresh]);
 

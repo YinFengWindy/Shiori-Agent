@@ -1,3 +1,4 @@
+import { describeStoryFailure } from "./storyFailure";
 import { usePluginHostServices } from "@shiori/plugin-sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type StoryBridgeClient } from "./storyBridgeClient";
@@ -13,9 +14,10 @@ type ControllerState = {
   loadingPhase: StoryListingLoadingPhase;
   busy: boolean;
   error: string;
+  errorDetail?: string;
 };
 
-const initialState: ControllerState = { stories: [], story: null, loading: true, loadingPhase: "reading-list", busy: false, error: "" };
+const initialState: ControllerState = { stories: [], story: null, loading: true, loadingPhase: "reading-list", busy: false, error: "", errorDetail: undefined };
 const storyResourcePollMs = 350;
 const storyResourcePollLimit = 240;
 
@@ -25,14 +27,15 @@ export function useStoryController(client: StoryBridgeClient) {
   const [state, setState] = useState(initialState);
   const refreshSequenceRef = useRef(new Map<string, number>());
 
-  const run = useCallback(async <T,>(operation: () => Promise<T>, apply?: (value: T) => void) => {
-    setState((current) => ({ ...current, busy: true, error: "" }));
+  const run = useCallback(async <T,>(operation: () => Promise<T>, apply?: (value: T) => void, options?: { rethrow?: boolean }) => {
+    setState((current) => ({ ...current, busy: true, error: "", errorDetail: undefined }));
     try {
       const result = await operation();
       apply?.(result);
       return result;
     } catch (error) {
-      setState((current) => ({ ...current, error: error instanceof Error ? error.message : "剧情暂时无法响应" }));
+      if (options?.rethrow) throw error;
+      setState((current) => ({ ...current, ...describeStoryFailure(error, "剧情操作未完成，请重试") }));
       return null;
     } finally {
       setState((current) => ({ ...current, busy: false }));
@@ -46,7 +49,7 @@ export function useStoryController(client: StoryBridgeClient) {
     });
   }, []);
 
-  const loadStory = useCallback((storyId: string) => run(() => client.getStory(storyId), applyStory), [applyStory, client, run]);
+  const loadStory = useCallback((storyId: string) => run(() => client.getStory(storyId), applyStory, { rethrow: true }), [applyStory, client, run]);
 
   const waitForStoryReady = useCallback(async (storyId: string, initialStory: StoryDetails) => {
     let current = initialStory;
@@ -62,7 +65,7 @@ export function useStoryController(client: StoryBridgeClient) {
 
   const reloadStories = useCallback(async () => {
     const startedAt = Date.now();
-    setState((current) => ({ ...current, loading: true, loadingPhase: "reading-list", error: "" }));
+    setState((current) => ({ ...current, loading: true, loadingPhase: "reading-list", error: "", errorDetail: undefined }));
     try {
       const stories = await client.listStories();
       await waitForMinimumStoryLoadingStage(startedAt);
@@ -72,7 +75,7 @@ export function useStoryController(client: StoryBridgeClient) {
       await waitForStoryLoadingCompletion();
       setState((current) => ({ ...current, stories, loading: false }));
     } catch (error) {
-      setState((current) => ({ ...current, loading: true, error: error instanceof Error ? error.message : "Unable to load the Story list" }));
+      setState((current) => ({ ...current, loading: true, ...describeStoryFailure(error, "剧情列表加载失败，请重试") }));
     }
   }, [client]);
 
@@ -84,7 +87,7 @@ export function useStoryController(client: StoryBridgeClient) {
       applyStory(story);
     }).catch((error: unknown) => {
       if (refreshSequenceRef.current.get(storyId) !== sequence) return;
-      setState((current) => current.story?.id === storyId ? { ...current, error: error instanceof Error ? error.message : "无法刷新剧情" } : current);
+      setState((current) => current.story?.id === storyId ? { ...current, ...describeStoryFailure(error, "剧情刷新失败，请重试") } : current);
     });
   }, [applyStory, client]);
 

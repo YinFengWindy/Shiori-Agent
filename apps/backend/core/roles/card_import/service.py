@@ -20,7 +20,9 @@ class RoleCardImportService:
         if not path.is_file():
             raise FileNotFoundError(f"角色卡不存在: {path}")
         if path.stat().st_size > MAX_SOURCE_BYTES:
-            raise ValueError("角色卡超过大小限制")
+            raise ValueError(
+                f"角色卡源文件超过大小限制（最多 {MAX_SOURCE_BYTES // (1024 * 1024)} MiB）"
+            )
         suffix = path.suffix.casefold()
         if suffix == ".json":
             try:
@@ -37,7 +39,9 @@ class RoleCardImportService:
     def preview_bytes(self, data: bytes, *, filename: str) -> RoleCardImportPreview:
         """Write no files: parse bytes through the same bounded adapters."""
         if len(data) > MAX_SOURCE_BYTES:
-            raise ValueError("角色卡超过大小限制")
+            raise ValueError(
+                f"角色卡源文件超过大小限制（最多 {MAX_SOURCE_BYTES // (1024 * 1024)} MiB）"
+            )
         suffix = Path(filename).suffix.casefold()
         if suffix == ".json":
             try:

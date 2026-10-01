@@ -20,6 +20,7 @@ from .client import NovelAIClient
 from .failures import (
     NovelAINotConfiguredError,
     NovelAIUpstreamError,
+    NovelAIResponseError,
     TokenReadiness,
     scrub_secret,
     token_readiness,
@@ -464,24 +465,37 @@ class NovelAIService:
         response.raise_for_status()
         content_type = str(response.headers.get("content-type") or "").lower()
         if "application/json" in content_type:
-            payload = response.json()
+            try:
+                payload = response.json()
+            except ValueError as error:
+                raise NovelAIResponseError("NovelAI 返回的图片数据无法解析") from error
             if not isinstance(payload, dict):
-                raise ValueError("上游未返回可用图片")
+                raise NovelAIResponseError("NovelAI 未返回可用图片")
             raw_images = payload.get("images")
             if not isinstance(raw_images, list) or not raw_images:
-                raise ValueError("上游未返回可用图片")
+                raise NovelAIResponseError("NovelAI 未返回可用图片")
             first = raw_images[0]
             if not isinstance(first, str) or not first.strip():
-                raise ValueError("上游未返回可用图片")
-            body = base64.b64decode(first)
+                raise NovelAIResponseError("NovelAI 未返回可用图片")
+            try:
+                body = base64.b64decode(first)
+            except ValueError as error:
+                raise NovelAIResponseError("NovelAI 返回的图片编码无效") from error
             return body, self._detect_output_suffix(body)
         body = bytes(response.content)
         if "application/zip" in content_type or body.startswith(b"PK\x03\x04"):
-            return self._extract_first_image_from_zip(body)
+            try:
+                return self._extract_first_image_from_zip(body)
+            except (zipfile.BadZipFile, RuntimeError) as error:
+                raise NovelAIResponseError("NovelAI 返回的图片包无法读取") from error
         return body, self._detect_output_suffix(body)
 
     def _extract_first_image_from_zip(self, body: bytes) -> tuple[bytes, str]:
-        with zipfile.ZipFile(io.BytesIO(body)) as archive:
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(body))
+        except zipfile.BadZipFile as error:
+            raise NovelAIResponseError("NovelAI 返回的图片包无法读取") from error
+        with archive:
             for name in archive.namelist():
                 content = archive.read(name)
                 try:
@@ -489,15 +503,15 @@ class NovelAIService:
                 except ValueError:
                     continue
                 return content, suffix
-        raise ValueError("上游未返回可用图片")
+        raise NovelAIResponseError("NovelAI 未返回可用图片")
 
     def _detect_output_suffix(self, body: bytes) -> str:
         mime = detect_image_mime_from_header(body[:4096])
         if mime is None:
-            raise ValueError("上游响应不是支持的图片格式")
+            raise NovelAIResponseError("NovelAI 返回的图片无法读取")
         suffix = _SUPPORTED_OUTPUT_SUFFIX.get(mime)
         if suffix is None:
-            raise ValueError("上游响应不是支持的图片格式")
+            raise NovelAIResponseError("NovelAI 返回的图片无法读取")
         return suffix
 
     def _is_v45_model(self, model: str) -> bool:

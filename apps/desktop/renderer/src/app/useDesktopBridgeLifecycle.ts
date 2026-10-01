@@ -103,7 +103,7 @@ export function useDesktopBridgeLifecycle({
   });
 
   const reportPluginStateError = useCallback((error: unknown) => {
-    feedback.error(`插件状态刷新失败：${errorMessage(error)}`);
+    feedback.error(`插件状态刷新失败：${errorMessage(error, { includeDetail: true })}`);
   }, [feedback]);
 
   /**
@@ -120,7 +120,7 @@ export function useDesktopBridgeLifecycle({
     });
     if (res.error) {
       setHealth("offline");
-      setBridgeError(res.error.message);
+      setBridgeError(errorMessage(res.error, { includeDetail: true }));
       return false;
     }
     setHealth("online");
@@ -232,7 +232,7 @@ export function useDesktopBridgeLifecycle({
         if (event.method === "runtime.applied") {
           void refreshPluginEnabledState().catch(reportPluginStateError);
           void callbacks.loadRolesFromBridge().catch((error: unknown) => {
-            feedback.error(`角色列表加载失败：${errorMessage(error)}`);
+            feedback.error(`角色列表加载失败：${errorMessage(error, { includeDetail: true })}`);
           });
           return;
         }
@@ -413,7 +413,7 @@ export function useDesktopBridgeLifecycle({
       if (cancelled) return;
       if (healthRes.error) {
         setHealth("offline");
-        setBridgeError(healthRes.error.message);
+        setBridgeError(errorMessage(healthRes.error, { includeDetail: true }));
         return;
       }
       setHealth("online");

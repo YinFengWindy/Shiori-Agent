@@ -73,7 +73,7 @@ def test_story_repository_freezes_opening_profile_and_replays_same_turn(
     assert story["segment"]["storyDate"] == "2026-08-01"
     assert replay["id"] == turn["id"]
 
-    with pytest.raises(ValueError, match="不同的请求"):
+    with pytest.raises(ValueError, match="与先前的内容不同"):
         repository.create_turn(
             story_id="story-1",
             input_text="转身离开",

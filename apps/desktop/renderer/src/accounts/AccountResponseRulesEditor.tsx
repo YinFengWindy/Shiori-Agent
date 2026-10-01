@@ -1,3 +1,4 @@
+import { errorMessage } from "@shiori/plugin-sdk";
 import { useState } from "react";
 import { InlineError } from "../shared/feedback/InlineError";
 import { textareaClass, type AccountResponseRules, type AccountSnapshot } from "@shiori/plugin-sdk";
@@ -37,7 +38,7 @@ export function AccountResponseRulesEditor({ account, onChanged }: { account: Ac
       setSaved(next);
       onChanged();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(errorMessage(failure, { includeDetail: true }));
       setRules(saved);
       setBlockedText(saved.blockedSenderIds.join("\n"));
     } finally {
