@@ -3,18 +3,17 @@ import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 import type { useDesktopChatTurns } from "./useDesktopChatTurns";
 import type { createDesktopSessionSnapshot } from "./desktopSessionSnapshot";
 import { finalizeChatCancellation } from "../chat/chatStreamingState";
-import { shouldSurfaceChatCancellationFailure } from "../chat/chatTurnOwnership";
 import { parseSessionMessageUpdatePayload } from "./desktopSessionProtocol";
 import type { createDesktopSessionMessages } from "./desktopSessionMessages";
 type Args = Pick<DesktopSessionStateArgs, "cancellingSessionsRef" | "feedback">
-  & Pick<ReturnType<typeof useDesktopChatTurns>, "activeTurnIdsRef" | "markSessionCancelling" | "isCurrentChatTurn" | "completeChatTurn" | "clearSessionCancelling">
+  & Pick<ReturnType<typeof useDesktopChatTurns>, "latestTurnIdsRef" | "markSessionCancelling" | "isCurrentChatTurn" | "completeChatTurn" | "clearSessionCancelling">
   & Pick<ReturnType<typeof createDesktopSessionSnapshot>, "updateCommittedActiveSession">
   & Pick<ReturnType<typeof createDesktopSessionMessages>, "commitSessionMessageUpdate">;
 /** Cancels only the owning turn and reconciles its persisted interrupted trace. */
 export function createDesktopChatCancellation({
   cancellingSessionsRef,
   feedback,
-  activeTurnIdsRef,
+  latestTurnIdsRef,
   markSessionCancelling,
   isCurrentChatTurn,
   completeChatTurn,
@@ -23,8 +22,8 @@ export function createDesktopChatCancellation({
   updateCommittedActiveSession
 }: Args) {
   async function cancelChatTurn(sessionKey: string, roleId: string): Promise<boolean> {
-    const turnId = activeTurnIdsRef.current[sessionKey] ?? "";
-    if (!turnId || !sessionKey) return false;
+    const turnId = latestTurnIdsRef.current[sessionKey] ?? "";
+    if (!isCurrentChatTurn(sessionKey, turnId)) return false;
     if (cancellingSessionsRef.current[sessionKey]) return false;
     markSessionCancelling(sessionKey, roleId);
     try {
@@ -54,7 +53,7 @@ export function createDesktopChatCancellation({
       }
       return true;
     } catch (error) {
-      if (shouldSurfaceChatCancellationFailure(activeTurnIdsRef.current, sessionKey, turnId)) {
+      if (isCurrentChatTurn(sessionKey, turnId)) {
         clearSessionCancelling(sessionKey);
         feedback.error(errorMessage(error));
       }

@@ -8,7 +8,7 @@ import type { ChatSendFailure } from "../chat/chatSendFailure";
 import type { createDesktopSessionMessages } from "./desktopSessionMessages";
 import { canSendSessionState } from "./desktopSendingSessions";
 type Args = Pick<DesktopSessionStateArgs, "activeRoleIdRef" | "activeSessionRef" | "sendingSessionsRef" | "reportSendFailure">
-  & Pick<ReturnType<typeof useDesktopChatTurns>, "activeTurnIdsRef" | "markSessionSending" | "isCurrentChatTurn" | "completeChatTurn">
+  & Pick<ReturnType<typeof useDesktopChatTurns>, "latestTurnIdsRef" | "markSessionSending" | "isCurrentChatTurn" | "completeChatTurn">
   & Pick<ReturnType<typeof createDesktopSessionSnapshot>, "updateCommittedActiveSession">
   & Pick<ReturnType<typeof createDesktopSessionMessages>, "appendSessionErrorMessage">;
 /** Retries the persisted user turn without duplicating its message. */
@@ -17,7 +17,7 @@ export function createDesktopChatRetry({
   activeSessionRef,
   sendingSessionsRef,
   reportSendFailure,
-  activeTurnIdsRef,
+  latestTurnIdsRef,
   markSessionSending,
   isCurrentChatTurn,
   completeChatTurn,
@@ -33,7 +33,7 @@ export function createDesktopChatRetry({
     if (!target || !canSendSessionState(sendingSessionsRef.current, sessionKey)) return false;
     const errorRow = session.messages.find((message, index) => getChatMessageReactKey(message, index) === errorKey);
     const turnId = window.crypto.randomUUID();
-    activeTurnIdsRef.current[sessionKey] = turnId;
+    latestTurnIdsRef.current[sessionKey] = turnId;
     markSessionSending(sessionKey, roleId);
     updateCommittedActiveSession((current) => current?.key === sessionKey
       ? { ...current, messages: current.messages.filter((message, index) => getChatMessageReactKey(message, index) !== errorKey) }

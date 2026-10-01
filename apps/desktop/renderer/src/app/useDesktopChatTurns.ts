@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import type { SessionMessage } from "@shiori/plugin-sdk";
-import { isActiveChatTurn } from "../chat/chatTurnOwnership";
+import { matchesChatTurn } from "../chat/chatTurnOwnership";
 import { markSendingSessionState, clearSendingSessionState, clearAllSendingSessionsState } from "./desktopSendingSessions";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 type Args = Pick<DesktopSessionStateArgs, "sendingSessionsRef" | "cancellingSessionsRef" | "setSendingSessions" | "setCancellingSessions">;
@@ -12,7 +12,9 @@ export function useDesktopChatTurns({
   setCancellingSessions
 }: Args) {
   const pendingUserMessagesRef = useRef<Record<string, SessionMessage>>({});
-  const activeTurnIdsRef = useRef<Record<string, string>>({});
+  // Retain the latest identity after completion so delayed persistence acknowledgements
+  // can reconcile; sendingSessions determines whether that turn is still active.
+  const latestTurnIdsRef = useRef<Record<string, string>>({});
 
   function markSessionSending(sessionKey: string, roleId: string): void {
     sendingSessionsRef.current = markSendingSessionState(sendingSessionsRef.current, sessionKey, roleId);
@@ -42,8 +44,12 @@ export function useDesktopChatTurns({
     });
   }
 
+  function isLatestChatTurn(sessionKey: string, turnId: string): boolean {
+    return matchesChatTurn(latestTurnIdsRef.current, sessionKey, turnId);
+  }
+
   function isCurrentChatTurn(sessionKey: string, turnId: string): boolean {
-    return isActiveChatTurn(activeTurnIdsRef.current, sessionKey, turnId);
+    return isLatestChatTurn(sessionKey, turnId) && Boolean(sendingSessionsRef.current[sessionKey]);
   }
 
   function isChatTurnCancelling(sessionKey: string, turnId: string): boolean {
@@ -53,19 +59,18 @@ export function useDesktopChatTurns({
 
   function completeChatTurn(sessionKey: string, turnId: string): void {
     if (!isCurrentChatTurn(sessionKey, turnId)) return;
-    delete activeTurnIdsRef.current[sessionKey];
     clearSessionCancelling(sessionKey);
     clearSessionSending(sessionKey);
   }
 
   function clearAllSendingSessions(): void {
     pendingUserMessagesRef.current = {};
-    activeTurnIdsRef.current = {};
+    latestTurnIdsRef.current = {};
     sendingSessionsRef.current = clearAllSendingSessionsState(sendingSessionsRef.current);
     setSendingSessions((current) => clearAllSendingSessionsState(current));
     cancellingSessionsRef.current = {};
     setCancellingSessions((current) => clearAllSendingSessionsState(current));
   }
 
-  return { pendingUserMessagesRef, activeTurnIdsRef, markSessionSending, clearSessionSending, markSessionCancelling, clearSessionCancelling, isCurrentChatTurn, isChatTurnCancelling, completeChatTurn, clearAllSendingSessions };
+  return { pendingUserMessagesRef, latestTurnIdsRef, markSessionSending, clearSessionSending, markSessionCancelling, clearSessionCancelling, isLatestChatTurn, isCurrentChatTurn, isChatTurnCancelling, completeChatTurn, clearAllSendingSessions };
 }

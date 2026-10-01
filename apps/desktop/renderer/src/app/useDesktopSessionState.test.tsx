@@ -9,6 +9,7 @@ import { createFeedbackRecorder } from "../shared/testing/feedbackRecorder";
 import { findRetryableChatErrorKey } from "../chat/chatFailedTurn";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 import { useDesktopSessionState } from "./useDesktopSessionState";
+import { mergeSessionSummaryAndMessage } from "./sessionMessagePagination";
 
 function session(roleId = "mira"): SessionPayload {
   return {
@@ -78,6 +79,51 @@ async function mountSession() {
 }
 
 describe("useDesktopSessionState", () => {
+  it("reconciles the user acknowledgement after completion and an assistant-only update", async () => {
+    const view = await mountSession();
+    try {
+      const sending = view.send();
+      const pending = view.requests[0]!;
+      const turnId = String(pending.request.payload.turn_id);
+      const optimisticRenderId = view.args.activeSessionRef.current?.messages[0]?.render_id;
+      // The bridge settles the response, then synchronously publishes events from
+      // the same stdout chunk before this send's Promise continuation can run.
+      pending.result.resolve(response("chat.send", {
+        session: session(),
+        message: { id: "user-1", seq: 1, role: "user", content: "hello", metadata: { client_message_id: pending.request.payload.client_message_id } },
+      }));
+      view.controller.completeChatTurn("role:mira", turnId);
+      view.controller.commitActiveSession(mergeSessionSummaryAndMessage(
+        view.args.activeSessionRef.current, session(),
+        { id: "assistant-1", seq: 2, role: "assistant", content: "reply", metadata: { turn_id: turnId } },
+      ));
+      assert.equal(view.controller.isCurrentChatTurn("role:mira", turnId), false);
+      assert.equal(await sending, true);
+      assert.deepEqual(view.args.activeSessionRef.current?.messages.map(({ id, seq }) => ({ id, seq })), [
+        { id: "user-1", seq: 1 }, { id: "assistant-1", seq: 2 },
+      ]);
+      assert.equal(view.args.activeSessionRef.current?.messages[0]?.render_id, optimisticRenderId);
+      assert.deepEqual(view.args.sendingSessionsRef.current, {});
+    } finally { await view.cleanup(); }
+  });
+
+  it("rolls back the source role cache when both send and recovery fail after switching roles", async () => {
+    const view = await mountSession();
+    try {
+      const before = view.args.activeSessionRef.current;
+      const sending = view.send();
+      view.switchRole("other");
+      await act(async () => view.requests[0]!.result.resolve(response("chat.send", {}, { code: "failed", message: "send failed" })));
+      assert.equal(view.requests[1]!.request.method, "session.openByRole");
+      view.requests[1]!.result.resolve(response("session.openByRole", {}, { code: "failed", message: "recovery failed" }));
+      assert.equal(await sending, false);
+      assert.equal(view.args.roleSessionCacheRef.current.mira, before);
+      assert.equal(view.args.activeSessionRef.current?.key, "role:other");
+      assert.deepEqual(view.args.sendingSessionsRef.current, {});
+      assert.deepEqual(view.feedback.messages("error"), ["send failed"]);
+    } finally { await view.cleanup(); }
+  });
+
   it("keeps a late send acknowledgement in the source role cache after switching roles", async () => {
     const view = await mountSession();
     try {
@@ -167,6 +213,37 @@ describe("useDesktopSessionState", () => {
       assert.equal(view.controller.isCurrentChatTurn("role:mira", String(nextRequest.request.payload.turn_id)), true);
       nextRequest.result.resolve(response("chat.send", { session: session(), message: { id: "u2", role: "user", content: "hello" } }));
       await nextOperation;
+    } finally { await view.cleanup(); }
+  });
+
+  it("ignores a successful acknowledgement invalidated by a bridge reset without a new turn", async () => {
+    const view = await mountSession();
+    try {
+      const sending = view.send();
+      view.controller.clearAllSendingSessions();
+      const before = view.args.activeSessionRef.current;
+      view.requests[0]!.result.resolve(response("chat.send", { session: session(), message: { id: "stale-user", role: "user", content: "stale" } }));
+      assert.equal(await sending, true);
+      assert.equal(view.args.activeSessionRef.current, before);
+    } finally { await view.cleanup(); }
+  });
+
+  it("keeps completed turns inactive for cancellation requests and late cancellation failures", async () => {
+    const view = await mountSession();
+    try {
+      const sending = view.send();
+      const pending = view.requests[0]!;
+      const turnId = String(pending.request.payload.turn_id);
+      pending.result.resolve(response("chat.send", { session: session(), message: { id: "user-1", role: "user", content: "hello" } }));
+      await sending;
+      const cancelling = view.controller.cancelChatTurn("role:mira", "mira");
+      view.controller.completeChatTurn("role:mira", turnId);
+      view.requests[1]!.result.resolve(response("chat.cancel", {}, { code: "failed", message: "already done" }));
+      assert.equal(await cancelling, false);
+      assert.equal(await view.controller.cancelChatTurn("role:mira", "mira"), false);
+      assert.equal(view.requests.length, 2);
+      assert.deepEqual(view.feedback.entries, []);
+      assert.equal(view.controller.isCurrentChatTurn("role:mira", turnId), false);
     } finally { await view.cleanup(); }
   });
 

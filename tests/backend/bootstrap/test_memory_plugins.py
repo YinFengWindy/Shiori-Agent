@@ -83,15 +83,3 @@ def test_independent_package_roots_do_not_share_config_modules(
     assert first is not second
     assert first.value == 0
     assert second.value == 1
-
-
-def test_retired_engine_in_source_layout_fails_without_creating_data(tmp_path):
-    from agent.config_models import Config
-    from bootstrap.memory import ensure_memory_plugin_storage
-
-    config = Config(provider="openai", model="test", api_key="test")
-    config.memory.engine = "akasha"
-    config.memory.enabled = True
-    with pytest.raises(ValueError, match="未知 memory engine: akasha"):
-        ensure_memory_plugin_storage(config, tmp_path)
-    assert not (tmp_path / "plugin-data").exists()

@@ -10,7 +10,7 @@ import type { createDesktopSessionMessages } from "./desktopSessionMessages";
 import type { createDesktopSessionCache } from "./desktopSessionCache";
 import { canSendSessionState } from "./desktopSendingSessions";
 type Args = Pick<DesktopSessionStateArgs, "activeRoleIdRef" | "activeSessionRef" | "sendingSessionsRef" | "reportSendFailure">
-  & Pick<ReturnType<typeof useDesktopChatTurns>, "pendingUserMessagesRef" | "activeTurnIdsRef" | "markSessionSending" | "isCurrentChatTurn" | "completeChatTurn">
+  & Pick<ReturnType<typeof useDesktopChatTurns>, "pendingUserMessagesRef" | "latestTurnIdsRef" | "markSessionSending" | "isLatestChatTurn" | "isCurrentChatTurn" | "completeChatTurn">
   & Pick<ReturnType<typeof createDesktopSessionSnapshot>, "updateCommittedActiveSession">
   & Pick<ReturnType<typeof createDesktopSessionMessages>, "commitSessionMessageUpdate">
   & Pick<ReturnType<typeof createDesktopSessionCache>, "cacheRoleSession">;
@@ -21,8 +21,9 @@ export function createDesktopChatSend({
   sendingSessionsRef,
   reportSendFailure,
   pendingUserMessagesRef,
-  activeTurnIdsRef,
+  latestTurnIdsRef,
   markSessionSending,
+  isLatestChatTurn,
   isCurrentChatTurn,
   completeChatTurn,
   commitSessionMessageUpdate,
@@ -48,7 +49,7 @@ export function createDesktopChatSend({
       clientMessageId,
     );
     pendingUserMessagesRef.current[sessionKey] = pendingUserMessage;
-    activeTurnIdsRef.current[sessionKey] = turnId;
+    latestTurnIdsRef.current[sessionKey] = turnId;
     markSessionSending(sessionKey, roleId);
     updateCommittedActiveSession((current) =>
       current?.key === sessionKey
@@ -67,14 +68,11 @@ export function createDesktopChatSend({
       const { session: recoveredSession } = await fetchRoleSession(roleId);
       // Bridge resets or a newer turn can supersede this recovery while it awaits.
       if (!isCurrentChatTurn(sessionKey, turnId)) return;
-      if (recoveredSession) {
-        cacheRoleSession(roleId, recoveredSession);
+      const restoredSession = recoveredSession ?? previousSession;
+      if (restoredSession) {
+        cacheRoleSession(roleId, restoredSession);
         updateCommittedActiveSession((current) =>
-          current?.key === sessionKey ? recoveredSession : current,
-        );
-      } else if (previousSession) {
-        updateCommittedActiveSession((current) =>
-          current?.key === sessionKey ? previousSession : current,
+          current?.key === sessionKey ? restoredSession : current,
         );
       }
       completeChatTurn(sessionKey, turnId);
@@ -102,8 +100,9 @@ export function createDesktopChatSend({
       if (!update || update.session.key !== sessionKey || !update.message) {
         throw new Error("发送消息响应无效");
       }
-      // Preserve the loaded page and replace the optimistic user message with the persisted turn.
-      if (isCurrentChatTurn(sessionKey, turnId)) commitSessionMessageUpdate(roleId, update);
+      // Completion can arrive before this continuation. Reconcile its persisted user
+      // message unless a newer turn or bridge reset has superseded the acknowledgement.
+      if (isLatestChatTurn(sessionKey, turnId)) commitSessionMessageUpdate(roleId, update);
       return true;
     } catch (error) {
       await recoverFailedSend({ message: errorMessage(error) });
