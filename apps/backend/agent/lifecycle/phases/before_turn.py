@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import TYPE_CHECKING, Awaitable, Callable, Protocol, TypeAlias, cast
+from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 
 from bus.event_bus import EventBus
 from agent.core.runtime_support import SessionLike
@@ -15,10 +15,7 @@ from agent.lifecycle.phase import (
     topo_sort_modules,
 )
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
-from agent.core.passive_support import estimate_messages_tokens
-from agent.prompting.listening_block import render_heard_block, turn_heard
 from conversation.context_scope import (
-    history_filter,
     history_start,
     session_context_view,
 )
@@ -52,6 +49,8 @@ class MemoryConsolidator(Protocol):
         session_key: str,
         current_content: str = "",
         scope: ContextScope | None = None,
+        *,
+        input_token_threshold: int,
     ) -> bool: ...
 
 
@@ -140,14 +139,11 @@ class _MemoryContextGuardModule:
         session_manager: SessionManager,
         keep_count: int,
         consolidator: MemoryConsolidator | None = None,
-        input_token_threshold: int = 75000,
     ) -> None:
-        # 外部回合的预算估算要算上本群旁听块，从这里读旁听记录。
         self._session_manager = session_manager
         self._keep_count = max(1, int(keep_count))
         self._min_new = max(5, self._keep_count // 2)
         self._threshold = self._keep_count + self._min_new
-        self._input_token_threshold = max(0, int(input_token_threshold))
         self._consolidator = consolidator
 
     async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
@@ -164,18 +160,7 @@ class _MemoryContextGuardModule:
             len(messages),
         )
         pending = _pending_messages(messages, last, state.context_view)
-        # 旁听块不随整理变化，整理前后的两次估算共用一份。
-        heard_block = render_heard_block(
-            turn_heard(self._session_manager, state.context_view)
-        )
-        input_tokens = _estimate_session_input_tokens(
-            session, state.msg.content, last, state.context_view, heard_block
-        )
-        token_pressure = (
-            self._input_token_threshold > 0
-            and input_tokens >= self._input_token_threshold
-        )
-        if pending < self._threshold and not token_pressure:
+        if pending < self._threshold:
             return frame
 
         if self._consolidator is not None:
@@ -186,36 +171,7 @@ class _MemoryContextGuardModule:
                 raise MemoryConsolidationFailedError(
                     f"记忆整理失败，请检查模型或网络配置后重试。详情：{failure}"
                 )
-            if token_pressure:
-                ensure = getattr(
-                    self._consolidator, "ensure_memory_consolidation", None
-                )
-                ensure_fn = cast(
-                    "Callable[[str, str, ContextScope | None], Awaitable[bool]]",
-                    ensure,
-                )
-                if not callable(ensure) or not await ensure_fn(
-                    state.session_key, state.msg.content, state.context_scope
-                ):
-                    raise MemoryConsolidationFailedError(
-                        "记忆整理没有可处理的历史或未产生进展，已停止发送超限上下文。"
-                    )
-                input_tokens = _estimate_session_input_tokens(
-                    session,
-                    state.msg.content,
-                    _clamp_context_cursor(
-                        history_start(session, state.context_view),
-                        len(getattr(session, "messages", [])),
-                    ),
-                    state.context_view,
-                    heard_block,
-                )
-                if input_tokens >= self._input_token_threshold:
-                    raise MemoryConsolidationFailedError(
-                        "记忆整理后输入仍超过预算，已停止发送超限上下文。"
-                    )
-            else:
-                self._consolidator.request_memory_consolidation(state.session_key)
+            self._consolidator.request_memory_consolidation(state.session_key)
             logger.info(
                 "memory context guard continued with hot window while consolidation runs: session=%s pending=%d threshold=%d",
                 state.session_key,
@@ -336,7 +292,6 @@ def default_before_turn_modules(
     *,
     keep_count: int = 20,
     consolidator: MemoryConsolidator | None = None,
-    input_token_threshold: int = 75000,
     plugin_modules: BeforeTurnModules | None = None,
 ) -> BeforeTurnModules:
     builtins: BeforeTurnModules = [
@@ -345,7 +300,6 @@ def default_before_turn_modules(
             session_manager,
             keep_count,
             consolidator,
-            input_token_threshold=input_token_threshold,
         ),
         _PrepareContextModule(context_store),
         _BuildBeforeTurnCtxModule(),
@@ -381,31 +335,6 @@ def _pending_messages(
         return len(tail)
     category = context_view.category
     return sum(1 for message in tail if category.includes(message))
-
-
-def _estimate_session_input_tokens(
-    session: SessionLike,
-    current_content: str,
-    last_consolidated: int,
-    context_view: ContextView | None,
-    heard_block: str,
-) -> int:
-    """Estimate the next model input from unarchived history and current turn.
-
-    Counts what the model will actually be sent: history in the turn's own
-    view (an external turn's conversation only), plus the group's listening
-    block ``heard_block`` sent next to the current message (empty for none).
-    """
-    history = session.get_history(
-        max_messages=500,
-        start_index=last_consolidated,
-        include=history_filter(context_view),
-    )
-    # 旁听块随 context frame 发送，是紧挨当前消息的一条 user 消息。
-    frame = [{"role": "user", "content": heard_block}] if heard_block else []
-    return estimate_messages_tokens(
-        [*history, *frame, {"role": "user", "content": current_content}]
-    )
 
 
 def _memory_context_guard_reply(

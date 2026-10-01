@@ -20,6 +20,8 @@ import logging
 from typing import Any, Sequence
 
 from agent.provider import LLMProvider
+from agent.prompting.usage_anchor import independent_usage_context
+from agent.prompting.usage_accounting import current_usage
 from agent.tool_hooks import (
     ToolExecutionRequest,
     ToolExecutor,
@@ -136,6 +138,8 @@ class SubAgent:
         self.iterations_used: int = 0  # 实际使用的迭代次数
         self.tools_called: list[str] = []  # 实际调用的工具名称列表
         self._run_seq = 0
+        # Child billing is separate from the parent conversational request ledger.
+        self.last_usage: dict[str, Any] = {}
         prepared = prepare_toolset(tools)
         self._tool_map: dict[str, Tool] = prepared.tool_map
         self._tool_schemas: list[dict[str, Any]] = prepared.schemas
@@ -151,6 +155,13 @@ class SubAgent:
         - 命中循环保护或达到最大迭代：返回进度收尾总结
         - LLM 调用等硬错误：返回空字符串
         """
+        with independent_usage_context():
+            try:
+                return await self._run(task)
+            finally:
+                self.last_usage = current_usage()
+
+    async def _run(self, task: str) -> str:
         messages: list[dict[str, Any]] = []
         self.last_exit_reason = "running"
         self.iterations_used = 0

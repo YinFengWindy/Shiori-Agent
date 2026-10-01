@@ -237,15 +237,26 @@ def test_load_config_defaults_memory_window_and_optimizer_interval(tmp_path: Pat
 
     assert cfg.memory_window == 40
     assert cfg.memory_optimizer_interval_seconds == 64800
-    assert cfg.memory_consolidation_input_token_threshold == 75000
+    assert cfg.context_budget.trigger_ratio == 0.75
+    assert cfg.context_budget.target_ratio == 0.4
+    assert cfg.context_budget.safety_margin_tokens == 4096
 
 
-def test_load_config_reads_consolidation_input_token_threshold_from_maintenance():
+def test_load_config_reads_context_budget_policy():
     loaded = config.load_config_data(
-        {"agent": {"maintenance": {"consolidation_input_token_threshold": 12345}}}
+        {
+            "agent": {
+                "context": {
+                    "trigger_ratio": 0.8,
+                    "target_ratio": 0.5,
+                    "safety_margin_tokens": 1234,
+                }
+            }
+        }
     )
-
-    assert loaded.memory_consolidation_input_token_threshold == 12345
+    assert loaded.context_budget.trigger_ratio == 0.8
+    assert loaded.context_budget.target_ratio == 0.5
+    assert loaded.context_budget.safety_margin_tokens == 1234
 
 
 def test_load_config_upgrades_plugin_markers_but_candidate_parsing_is_pure(
@@ -286,3 +297,37 @@ def test_load_config_resolves_plugin_environment_values(tmp_path, monkeypatch):
         "app_id": "qq-app",
         "client_secret": "qq-secret",
     }
+
+
+@pytest.mark.parametrize("capacity", [0, -1, True, 1.5, "128000"])
+def test_registration_rejects_invalid_capacity(capacity):
+    with pytest.raises(ValueError, match="context_window_tokens"):
+        config.load_config_data(
+            {
+                "llm": {
+                    "registrations": [
+                        {
+                            "id": "12345678-1234-1234-1234-123456789012",
+                            "context_window_tokens": capacity,
+                        }
+                    ]
+                }
+            }
+        )
+
+
+def test_registration_capacity_roundtrip_and_legacy_incomplete():
+    from core.roles.model_errors import incomplete_registration_fields
+
+    legacy = '[llm]\n[[llm.registrations]]\nid = "12345678-1234-1234-1234-123456789012"\nprovider = "openai"\nmodel = "m"\napi_key = "test"\n'
+    registration = config.load_config_text(legacy).model_registrations[0]
+    assert incomplete_registration_fields(registration) == (
+        "context_window_tokens",
+        "max_output_tokens",
+    )
+    saved = config.load_config_text(
+        legacy + "context_window_tokens = 128000\nmax_output_tokens = 32768\n"
+    )
+    assert saved.model_registrations[0].context_window_tokens == 128000
+    assert saved.model_registrations[0].max_output_tokens == 32768
+    assert not incomplete_registration_fields(saved.model_registrations[0])

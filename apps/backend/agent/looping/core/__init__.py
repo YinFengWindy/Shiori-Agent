@@ -74,6 +74,8 @@ class AgentLoop(
         session_key: str,
         current_content: str = "",
         scope: ContextScope | None = None,
+        *,
+        input_token_threshold: int,
     ) -> bool:
         """Wait for token-triggered memory consolidation before a model request.
 
@@ -82,7 +84,10 @@ class AgentLoop(
         if self._markdown_memory is None:
             return False
         return await self._markdown_memory.maintenance.ensure_consolidation(
-            session_key, current_content, scope
+            session_key,
+            current_content,
+            scope,
+            input_token_threshold=input_token_threshold,
         )
 
     def get_memory_consolidation_failure(self, session_key: str) -> str | None:

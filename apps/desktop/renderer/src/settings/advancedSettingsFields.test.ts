@@ -25,7 +25,9 @@ describe("advancedSettingsGroups", () => {
       max_iterations: "步",
       memory_window: "条",
       memory_optimizer_interval_seconds: "秒",
-      consolidation_input_token_threshold: "token",
+      trigger_ratio: undefined,
+      target_ratio: undefined,
+      safety_margin_tokens: "token",
     });
     assert.deepEqual(advancedSettingsGroups.map((group) => group.title), ["对话", "能力", "记忆整理", "开发者"]);
   });

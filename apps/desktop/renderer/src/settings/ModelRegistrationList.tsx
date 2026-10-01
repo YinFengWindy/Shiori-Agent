@@ -9,6 +9,7 @@ import {
   pressableClass,
   primaryButtonSurfaceClass,
 } from "@shiori/sdk";
+import { hasModelCapacity } from "./modelRegistration";
 import { registrationHost, registrationInitials, registrationProviderLabel } from "./modelRegistrationSummary";
 
 type ModelRegistrationListProps = {
@@ -59,6 +60,7 @@ export function ModelRegistrationList({
                 </span>
               </span>
               <span className="flex items-center gap-2.5 pl-2">
+                {!hasModelCapacity(registration) ? <span className={badgeClass}>需补填容量</span> : null}
                 {registration.effort !== "none" ? (
                   <span className="hidden sm:block"><span className={badgeClass}>思考 {modelEffortLabels[registration.effort]}</span></span>
                 ) : null}

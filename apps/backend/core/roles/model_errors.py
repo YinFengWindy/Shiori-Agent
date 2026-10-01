@@ -29,7 +29,7 @@ class ModelConfigurationError(ValueError):
             "no_models": "尚未配置模型，请先在设置中添加模型",
             "role_unbound": "角色未选择对话模型，请先绑定模型",
             "registration_missing": "原先选择的模型已不存在，请重新选择模型",
-            "connection_incomplete": "模型连接配置不完整，请检查模型设置",
+            "connection_incomplete": "模型配置需补填，请检查连接和上下文容量",
         }
         super().__init__(messages[reason])
 
@@ -46,7 +46,17 @@ class ModelConfigurationError(ValueError):
 
 
 def incomplete_registration_fields(registration: ModelRegistration):
-    """Checks required connection fields without making a network request."""
+    """Check all fields needed for a budgeted conversation, without network access."""
+    capacity_fields = tuple(
+        name
+        for name in ("context_window_tokens", "max_output_tokens")
+        if getattr(registration, name) is None
+    )
+    return incomplete_connection_fields(registration) + capacity_fields
+
+
+def incomplete_connection_fields(registration: ModelRegistration):
+    """Check endpoint reachability configuration independently of model capacity."""
     fields = []
     for name in ("provider", "model"):
         if not getattr(registration, name).strip():

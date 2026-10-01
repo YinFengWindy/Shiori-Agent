@@ -20,7 +20,7 @@ import openai
 from agent.config_models import ModelRegistration
 from agent.provider import LLMProvider
 from core.common.error_summary import summarize_exception_for_user
-from core.roles.model_errors import incomplete_registration_fields
+from core.roles.model_errors import incomplete_connection_fields
 
 PROBE_TIMEOUT_S = 20.0
 """Stays below the Electron bridge's 30s default request deadline."""
@@ -59,7 +59,7 @@ async def probe_model_connection(
     ``{"ok": False, "message": ...}``.
     """
     registration = _registration_from_payload(payload)
-    missing = incomplete_registration_fields(registration)
+    missing = incomplete_connection_fields(registration)
     if missing:
         labels = "、".join(_FIELD_LABELS[name] for name in missing)
         raise ValueError(f"请先填写有效的{labels}")

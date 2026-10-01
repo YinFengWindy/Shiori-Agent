@@ -456,7 +456,7 @@ async def test_recovery_budget_check_stops_before_second_request(monkeypatch):
     provider = AsyncMock()
     provider.chat.return_value = LLMResponse(content="")
     reasoner = make_reasoner(provider, ToolRegistry())
-    reasoner._memory_input_token_threshold = 100
+    reasoner._request_threshold = lambda *_: 100
     monkeypatch.setattr(
         reasoner, "_request_tokens_with_tools", Mock(side_effect=[1, 100])
     )

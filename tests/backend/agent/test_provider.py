@@ -1148,3 +1148,195 @@ async def test_provider_level_warns_on_truncation_for_streaming_path_too(
         "model=my-stream-model" in message and "finish_reason=length" in message
         for message in messages
     )
+
+
+@pytest.mark.parametrize("stream", [False, True])
+async def test_profile_budget_matches_normalized_request_and_usage_without_cache(
+    stream,
+):
+    from agent.prompting.input_budget import BudgetPolicy
+    from agent.prompting.usage_anchor import input_cost, usage_context
+
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=128000,
+        max_output_tokens=64000,
+        budget_policy=BudgetPolicy(safety_margin_tokens=4000),
+    )
+    usage = SimpleNamespace(prompt_tokens=888, completion_tokens=17, total_tokens=905)
+    response = _Response(usage=usage)
+    if stream:
+        response = _FakeStream(
+            [
+                SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            delta=SimpleNamespace(content="ok", tool_calls=[]),
+                            finish_reason="stop",
+                        )
+                    ],
+                    usage=None,
+                ),
+                SimpleNamespace(choices=[], usage=usage),
+            ]
+        )
+    client = _FakeClient([response])
+    provider._client = client
+    request = dict(
+        messages=[
+            {"role": "system", "content": "第一段"},
+            {"role": "system", "content": "第二段"},
+            {"role": "user", "content": "你好"},
+        ],
+        tools=[{"type": "function", "function": {"name": "read"}}],
+        model="actual",
+        max_tokens=32000,
+    )
+    with usage_context(("role:a", "user", "")):
+        preflight = provider.input_budget(**request)
+        result = await provider.chat(
+            **request, **({"on_content_delta": AsyncMock()} if stream else {})
+        )
+        assert provider.input_budget(**request).estimate.source == "actual"
+    sent = client.calls[0]
+    assert len(sent["messages"]) == 2
+    assert preflight.estimate.tokens == input_cost(sent)
+    assert preflight.input_limit_tokens == 92000
+    assert preflight.output_reservation_tokens == sent["max_tokens"] == 32000
+    assert result.prompt_tokens == 888
+    assert result.completion_tokens == 17
+    assert result.cache_hit_tokens is None
+    assert result.input_budget.estimate.source == "actual"
+    if stream:
+        assert sent["stream_options"] == {"include_usage": True}
+
+
+async def test_auxiliary_usage_never_invalidates_or_overwrites_conversation_anchor():
+    from agent.prompting.usage_anchor import usage_context
+
+    provider = LLMProvider(
+        api_key="test",
+        provider_name="deepseek",
+        context_window_tokens=128000,
+        max_output_tokens=32768,
+    )
+    provider._client = _FakeClient(
+        [
+            _Response(usage={"prompt_tokens": 800}),
+            _Response(usage={"prompt_tokens": 20}),
+        ]
+    )
+    request = dict(
+        messages=[{"role": "user", "content": "继续任务"}],
+        tools=[],
+        model="m",
+        max_tokens=8192,
+    )
+    with usage_context(("role:a", "user", "")):
+        await provider.chat(**request)
+        auxiliary = {
+            **request,
+            "messages": [{"role": "user", "content": "维护"}],
+            "call_purpose": "auxiliary",
+            "auxiliary_max_tokens": 512,
+        }
+        assert provider.input_budget(**auxiliary).output_reservation_tokens == 512
+        await provider.chat(**auxiliary)
+        assert provider.input_budget(**request).estimate.tokens == 800
+        assert provider.input_budget(**request).estimate.source == "actual"
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [None, {}, {"prompt_cache_hit_tokens": 12}, {"prompt_cache_miss_tokens": 12}],
+)
+async def test_missing_full_prompt_usage_stays_unknown(usage):
+    provider = LLMProvider(api_key="test")
+    provider._client = _FakeClient([_Response(usage=usage)])
+    response = await provider.chat(messages=[], tools=[], model="m", max_tokens=10)
+    assert response.prompt_tokens is None
+
+
+async def test_profile_rejects_output_override_and_hard_input_overflow_before_network():
+    from agent.prompting.input_budget import BudgetPolicy
+
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=1000,
+        max_output_tokens=600,
+        budget_policy=BudgetPolicy(safety_margin_tokens=10),
+    )
+    provider._client = _FakeClient([])
+    request = dict(
+        messages=[{"role": "user", "content": "中文" * 300}],
+        tools=[],
+        model="m",
+        max_tokens=500,
+    )
+    with pytest.raises(ContextLengthError):
+        await provider.chat(**request)
+    with pytest.raises(ValueError, match="本次输出"):
+        await provider.chat(**{**request, "max_tokens": 601})
+    with pytest.raises(ValueError, match="extra_body"):
+        await provider.chat(**request, extra_body={"max_tokens": 1})
+    assert not provider._client.calls
+
+
+async def test_normalized_outgoing_payload_is_isolated_from_concurrent_caller_edits():
+    from agent.prompting.usage_anchor import usage_context
+
+    provider = LLMProvider(
+        api_key="test", context_window_tokens=128000, max_output_tokens=32768
+    )
+    source_messages = [{"role": "user", "content": [{"type": "text", "text": "原文"}]}]
+    source_tools = [
+        {"type": "function", "function": {"name": "read", "description": "原始说明"}}
+    ]
+
+    async def create(**kwargs):
+        source_messages[0]["content"][0]["text"] = "被另一个任务改写"
+        source_tools[0]["function"]["description"] = "被另一个任务改写"
+        assert kwargs["messages"][0]["content"][0]["text"] == "原文"
+        assert kwargs["tools"][0]["function"]["description"] == "原始说明"
+        return _Response(usage={"prompt_tokens": 400})
+
+    provider._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    with usage_context(("session",)):
+        await provider.chat(
+            messages=source_messages, tools=source_tools, model="m", max_tokens=1024
+        )
+        estimate = provider.input_budget(
+            messages=source_messages, tools=source_tools, model="m", max_tokens=1024
+        )
+        assert estimate.estimate.source == "local"
+
+
+async def test_tool_choice_change_invalidates_actual_usage_anchor():
+    from agent.prompting.usage_anchor import usage_context
+
+    provider = LLMProvider(
+        api_key="test", context_window_tokens=128000, max_output_tokens=32768
+    )
+    provider._client = _FakeClient([_Response(usage={"prompt_tokens": 400})])
+    request = dict(
+        messages=[{"role": "user", "content": "继续"}],
+        tools=[{"type": "function", "function": {"name": "read"}}],
+        model="m",
+        max_tokens=1024,
+    )
+    with usage_context(("session",)):
+        await provider.chat(**request, tool_choice="auto")
+        assert (
+            provider.input_budget(**request, tool_choice="auto").estimate.source
+            == "actual"
+        )
+        assert (
+            provider.input_budget(**request, tool_choice="none").estimate.source
+            == "local"
+        )
+        assert (
+            provider.input_budget(**request, tool_choice="auto").estimate.source
+            == "local"
+        )

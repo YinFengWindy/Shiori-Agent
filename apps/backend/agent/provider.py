@@ -13,13 +13,24 @@ import os
 import re
 import tempfile
 from datetime import datetime, timezone
+from copy import deepcopy
 from urllib.parse import urlsplit, urlunsplit
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal, cast
 from openai import AsyncOpenAI
 
 from core.common.llm_output_log import summarize_llm_output_for_log
+from agent.prompting.input_budget import BudgetPolicy, InputBudget, build_input_budget
+from agent.prompting.usage_accounting import record_usage
+from agent.prompting.token_estimate import estimate_tokens
+from agent.prompting.usage_anchor import (
+    UsageAnchors,
+    InputEstimate,
+    input_cost,
+    request_anchors,
+)
+import hashlib
 
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
@@ -72,6 +83,9 @@ class LLMResponse:
     tool_calls: list[ToolCall] = field(default_factory=list)
     thinking: str | None = None
     provider_fields: dict[str, Any] = field(default_factory=dict)
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    input_budget: InputBudget | None = None
     cache_prompt_tokens: int | None = None
     cache_hit_tokens: int | None = None
     total_tokens: int | None = None
@@ -210,7 +224,7 @@ class ProviderStrategy:
         return fields
 
     def prepare_stream_request(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        return {**kwargs, "stream": True}
+        return {**kwargs, "stream": True, "stream_options": {"include_usage": True}}
 
 
 class DeepSeekStrategy(ProviderStrategy):
@@ -310,6 +324,10 @@ class LLMProvider:
         provider_name: str = "",
         force_disable_thinking: bool = False,
         payload_snapshot_enabled: bool | None = None,
+        context_window_tokens: int | None = None,
+        max_output_tokens: int | None = None,
+        budget_policy: BudgetPolicy | None = None,
+        usage_anchors: UsageAnchors | None = None,
     ) -> None:
         normalized_base_url = _normalize_openai_base_url(base_url)
         # Keep retry ownership here so every provider obeys the same retry budget.
@@ -318,6 +336,13 @@ class LLMProvider:
             base_url=normalized_base_url,
             max_retries=0,
         )
+        self._context_window_tokens = context_window_tokens
+        self._max_output_tokens = max_output_tokens
+        self._budget_policy = budget_policy or BudgetPolicy()
+        self._usage_anchors = usage_anchors or UsageAnchors()
+        self._connection_identity = hashlib.sha256(
+            f"{provider_name}|{normalized_base_url}|{api_key}".encode()
+        ).hexdigest()
         self._base_url = normalized_base_url or ""
         self._provider_name = provider_name
         self._extra_body = extra_body or {}
@@ -342,37 +367,27 @@ class LLMProvider:
         """Releases HTTP connections after all owning runtime tasks have drained."""
         await self._client.close()
 
-    async def chat(
+    def _prepare_request(
         self,
-        messages: list[dict],
-        tools: list[dict],
-        model: str,
-        max_tokens: int | None,
+        *,
+        messages,
+        tools,
+        model,
+        max_tokens,
         tool_choice: str | dict = "auto",
-        extra_body: dict | None = None,
-        disable_thinking: bool = False,
-        payload_snapshot_enabled: bool | None = None,
-        on_content_delta: Callable[[StreamDelta], Awaitable[None]] | None = None,
-        # Opt-in final role output constraint; background calls remain unconstrained.
-        response_format: dict[str, str] | None = None,
-        call_purpose: LLMCallPurpose = "default",
-        auxiliary_max_tokens: int | None = None,
-    ) -> LLMResponse:
-        """Generates a reply; auxiliary work opts out of configured reasoning.
-
-        An explicit max_tokens=None omits the request cap, leaving output limits
-        to the model service. Finite budgets are sent unchanged for default calls.
-        DeepSeek and DashScope explicitly disable thinking and apply the optional
-        auxiliary output cap, bounded by max_tokens when set. Generic compatible
-        providers only drop reasoning options; they preserve the original budget
-        because their thinking defaults and off switches are unknown. Default
-        calls ignore the auxiliary cap.
-        """
+        extra_body=None,
+        disable_thinking=False,
+        response_format=None,
+        call_purpose="default",
+        auxiliary_max_tokens=None,
+    ):
         strategy = _select_provider_strategy(
             provider_name=self._provider_name,
             base_url=self._base_url,
             model=model,
         )
+        if max_tokens is None and self._max_output_tokens is not None:
+            max_tokens = self._max_output_tokens
         if (
             call_purpose == "auxiliary"
             and auxiliary_max_tokens is not None
@@ -406,12 +421,122 @@ class LLMProvider:
             ),
         )
 
+        if self._context_window_tokens is not None:
+            forbidden = {
+                "messages",
+                "tools",
+                "model",
+                "max_tokens",
+                "max_completion_tokens",
+                "response_format",
+            } & merged_extra_body.keys()
+            if forbidden:
+                raise ValueError(f"extra_body 不得覆盖预算参数: {sorted(forbidden)}")
+        # Freeze nested messages/schema before yielding to callbacks or the SDK.
+        return deepcopy(kwargs), strategy
+
+    def _input_request(self, kwargs: dict) -> dict:
+        return {
+            key: value
+            for key, value in kwargs.items()
+            if key
+            in {
+                "messages",
+                "tools",
+                "tool_choice",
+                "response_format",
+                "model",
+                "extra_body",
+                "reasoning_effort",
+            }
+        } | {"_connection": self._connection_identity}
+
+    def _budget_for_request(
+        self, kwargs: dict, *, calibrate: bool = True
+    ) -> InputBudget | None:
+        if self._context_window_tokens is None or self._max_output_tokens is None:
+            return None
+        request = self._input_request(kwargs)
+        return build_input_budget(
+            context_window_tokens=self._context_window_tokens,
+            max_output_tokens=self._max_output_tokens,
+            output_tokens=kwargs["max_tokens"],
+            policy=self._budget_policy,
+            estimate=(
+                request_anchors(self._usage_anchors).estimate(request)
+                if calibrate
+                else InputEstimate(input_cost(request), "local")
+            ),
+            schema_tokens=(
+                estimate_tokens(kwargs["tools"]) if kwargs.get("tools") else 0
+            ),
+        )
+
+    def input_budget(self, **request) -> InputBudget | None:
+        """Evaluate the same normalized payload and output cap used by chat."""
+        kwargs, _ = self._prepare_request(**request)
+        return self._budget_for_request(
+            kwargs, calibrate=request.get("call_purpose", "default") == "default"
+        )
+
+    async def chat(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        model: str,
+        max_tokens: int | None,
+        tool_choice: str | dict = "auto",
+        extra_body: dict | None = None,
+        disable_thinking: bool = False,
+        payload_snapshot_enabled: bool | None = None,
+        on_content_delta: Callable[[StreamDelta], Awaitable[None]] | None = None,
+        # Opt-in final role output constraint; background calls remain unconstrained.
+        response_format: dict[str, str] | None = None,
+        call_purpose: LLMCallPurpose = "default",
+        auxiliary_max_tokens: int | None = None,
+    ) -> LLMResponse:
+        """Generates a reply; auxiliary work opts out of configured reasoning.
+
+        With an explicit model profile, max_tokens=None reserves and sends its
+        maximum output capability. Unprofiled utility providers retain uncapped
+        requests. Finite budgets are sent unchanged for default calls.
+        DeepSeek and DashScope explicitly disable thinking and apply the optional
+        auxiliary output cap, bounded by max_tokens when set. Generic compatible
+        providers only drop reasoning options; they preserve the original budget
+        because their thinking defaults and off switches are unknown. Default
+        calls ignore the auxiliary cap.
+        """
+        kwargs, strategy = self._prepare_request(
+            messages=messages,
+            tools=tools,
+            model=model,
+            max_tokens=max_tokens,
+            tool_choice=tool_choice,
+            extra_body=extra_body,
+            disable_thinking=disable_thinking,
+            response_format=response_format,
+            call_purpose=call_purpose,
+            auxiliary_max_tokens=auxiliary_max_tokens,
+        )
+        budget = self._budget_for_request(kwargs, calibrate=call_purpose == "default")
+        if budget is not None and budget.estimate.tokens > budget.input_limit_tokens:
+            raise ContextLengthError("完整请求超过模型可用输入预算")
+        anchors = request_anchors(self._usage_anchors)
+        ticket = (
+            anchors.begin(self._input_request(kwargs))
+            if call_purpose == "default"
+            else None
+        )
+
         if on_content_delta is not None:
-            return await self._chat_streaming(
+            response = await self._chat_streaming(
                 kwargs,
                 on_content_delta,
                 strategy,
                 payload_snapshot_enabled=payload_snapshot_enabled,
+            )
+            return self._finalize_response(
+                response, budget, anchors, ticket, call_purpose
             )
 
         resp = cast(
@@ -454,7 +579,12 @@ class LLMProvider:
                 provider_fields,
                 kwargs,
             )
-        return LLMResponse(
+        response = LLMResponse(
+            prompt_tokens=cache_prompt_tokens,
+            completion_tokens=_coerce_int(
+                _get_field(getattr(resp, "usage", None), "completion_tokens")
+            ),
+            input_budget=budget,
             content=raw,
             tool_calls=tool_calls,
             thinking=thinking,
@@ -469,6 +599,26 @@ class LLMProvider:
             refused=bool(_get_field(msg, "refusal"))
             or finish_reason == "content_filter",
         )
+        return self._finalize_response(response, budget, anchors, ticket, call_purpose)
+
+    def _finalize_response(
+        self,
+        response: LLMResponse,
+        budget: InputBudget | None,
+        anchors: UsageAnchors,
+        ticket: tuple[tuple | None, object, dict] | None,
+        purpose: LLMCallPurpose,
+    ) -> LLMResponse:
+        """Publish one stream or non-stream response to its exact request owner."""
+        response.input_budget = budget
+        if ticket is not None:
+            anchors.finish(ticket, response.prompt_tokens)
+        if budget is not None and response.prompt_tokens is not None:
+            response.input_budget = replace(
+                budget, estimate=InputEstimate(response.prompt_tokens, "actual")
+            )
+        record_usage(response, purpose=purpose)
+        return response
 
     async def _chat_streaming(
         self,
@@ -492,6 +642,7 @@ class LLMProvider:
         cache_prompt_tokens: int | None = None
         cache_hit_tokens: int | None = None
         total_tokens: int | None = None
+        completion_tokens: int | None = None
         finish_reason: str | None = None
         refused = False
 
@@ -509,9 +660,15 @@ class LLMProvider:
             )
             if prompt_tokens is not None:
                 cache_prompt_tokens = prompt_tokens
+            if hit_tokens is not None:
                 cache_hit_tokens = hit_tokens
             if chunk_total_tokens is not None:
                 total_tokens = chunk_total_tokens
+            chunk_completion = _coerce_int(
+                _get_field(getattr(chunk, "usage", None), "completion_tokens")
+            )
+            if chunk_completion is not None:
+                completion_tokens = chunk_completion
             choices = getattr(chunk, "choices", None) or []
             if not choices:
                 continue
@@ -603,6 +760,8 @@ class LLMProvider:
                 kwargs,
             )
         return LLMResponse(
+            prompt_tokens=cache_prompt_tokens,
+            completion_tokens=completion_tokens,
             content=raw,
             tool_calls=tool_calls,
             thinking=thinking,
@@ -754,19 +913,16 @@ def _extract_usage(
         if prompt_tokens is not None and completion_tokens is not None:
             total_tokens = prompt_tokens + completion_tokens
 
+    prompt_tokens = _coerce_int(_get_field(usage, "prompt_tokens"))
     hit_tokens = _coerce_int(_get_field(usage, "prompt_cache_hit_tokens"))
     miss_tokens = _coerce_int(_get_field(usage, "prompt_cache_miss_tokens"))
-    if hit_tokens is not None or miss_tokens is not None:
-        hit = hit_tokens or 0
-        miss = miss_tokens or 0
-        return hit + miss, hit, total_tokens
-
-    prompt_tokens = _coerce_int(_get_field(usage, "prompt_tokens"))
-    prompt_details = _get_field(usage, "prompt_tokens_details")
-    cached_tokens = _coerce_int(_get_field(prompt_details, "cached_tokens"))
-    if prompt_tokens is None or cached_tokens is None:
-        return None, None, total_tokens
-    return prompt_tokens, cached_tokens, total_tokens
+    if prompt_tokens is None and hit_tokens is not None and miss_tokens is not None:
+        prompt_tokens = hit_tokens + miss_tokens
+    if hit_tokens is None:
+        hit_tokens = _coerce_int(
+            _get_field(_get_field(usage, "prompt_tokens_details"), "cached_tokens")
+        )
+    return prompt_tokens, hit_tokens, total_tokens
 
 
 def _iter_tool_call_deltas(delta: Any) -> list[dict[str, str | int]]:

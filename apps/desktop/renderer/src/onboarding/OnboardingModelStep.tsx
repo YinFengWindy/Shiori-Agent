@@ -2,7 +2,7 @@ import { BridgeError, errorMessage } from "@shiori/sdk";
 import { useRef, useState } from "react";
 import { ArrowRight } from "@phosphor-icons/react";
 import { ModelRegistrationFields } from "../settings/ModelRegistrationFields";
-import { createModelRegistration } from "../settings/modelRegistration";
+import { createModelRegistration, isModelRegistrationComplete } from "../settings/modelRegistration";
 import { OnboardingCard } from "./OnboardingCard";
 import { registerOnboardingModel } from "./onboardingData";
 import type { OnboardingReaction } from "./onboardingScript";
@@ -50,7 +50,7 @@ export function OnboardingModelStep({ onSaved, onBusyChange, onReact }: {
   }
   return (
     <OnboardingCard title="注册模型" error={error} onSubmit={() => void save()} footer={(
-      <button type="submit" className={onboardingActionClass} disabled={saving || (!saved && (!registration.model.trim() || !registration.provider.trim()))}>
+      <button type="submit" className={onboardingActionClass} disabled={saving || (!saved && !isModelRegistrationComplete(registration))}>
         {saved ? saving ? "正在重新加载" : "重新加载并继续" : saving ? "正在保存" : "保存并继续"}<ArrowRight className="h-4 w-4" weight="bold" aria-hidden="true" />
       </button>
     )}>

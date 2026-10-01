@@ -1,6 +1,7 @@
 import { BridgeError, errorMessage } from "@shiori/sdk";
 import type { DesktopApi, ModelRegistrationFormData } from "../../../src/bridge/shared";
 import type { RoleRecord } from "@shiori/sdk";
+import { isModelRegistrationComplete } from "../settings/modelRegistration";
 import { saveSettingsPageData } from "../settings/settingsPersistence";
 
 /** Loads authoritative data; failed bridge reads must never imply empty or complete state. */
@@ -15,7 +16,7 @@ export async function loadOnboardingData(api: Pick<DesktopApi, "readSettings" | 
 
 /** Applies a registration through the same settings transaction used by the catalog. */
 export async function registerOnboardingModel(api: Pick<DesktopApi, "readSettings" | "saveSettings">, registration: ModelRegistrationFormData) {
-  if (!registration.provider.trim() || !registration.model.trim()) throw new Error("服务商和模型不能为空。");
+  if (!isModelRegistrationComplete(registration)) throw new Error("请补填模型连接和容量。");
   const snapshot = await api.readSettings();
   const registrations = snapshot.formData.models.registrations;
   const result = await saveSettingsPageData(api, {

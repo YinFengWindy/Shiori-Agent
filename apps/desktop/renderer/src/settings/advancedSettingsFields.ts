@@ -1,7 +1,7 @@
 import type { SettingsFormData } from "../shared/types";
 
 type AdvancedSettings = SettingsFormData["advanced"];
-type NumberKey = { [K in keyof AdvancedSettings]-?: AdvancedSettings[K] extends number ? K : never }[keyof AdvancedSettings];
+type NumberKey = { [K in keyof AdvancedSettings]-?: NonNullable<AdvancedSettings[K]> extends number ? K : never }[keyof AdvancedSettings];
 type ToggleKey = { [K in keyof AdvancedSettings]-?: AdvancedSettings[K] extends boolean | undefined ? K : never }[keyof AdvancedSettings];
 
 /** One row of 设置 › 高级: a Chinese label over the raw config.toml key it edits. */
@@ -38,7 +38,9 @@ export const advancedSettingsGroups: readonly AdvancedSettingsGroup[] = [
     fields: [
       { kind: "toggle", key: "memoryOptimizerEnabled", configKey: "memory_optimizer_enabled", label: "后台整理记忆" },
       { kind: "number", key: "memoryOptimizerIntervalSeconds", configKey: "memory_optimizer_interval_seconds", label: "整理间隔", unit: "秒" },
-      { kind: "number", key: "consolidationInputTokenThreshold", configKey: "consolidation_input_token_threshold", label: "会话历史整理阈值", unit: "token" },
+      { kind: "number", key: "contextTriggerRatio", configKey: "trigger_ratio", label: "上下文压缩触发比例" },
+      { kind: "number", key: "contextTargetRatio", configKey: "target_ratio", label: "上下文压缩目标比例" },
+      { kind: "number", key: "contextSafetyMarginTokens", configKey: "safety_margin_tokens", label: "输入安全余量", unit: "token" },
     ],
   },
   {

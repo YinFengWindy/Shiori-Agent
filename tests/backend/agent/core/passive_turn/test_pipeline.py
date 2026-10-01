@@ -1,5 +1,7 @@
 """Passive turns own same-role desktop pushes until their ordered SQL commit."""
 
+from agent.lifecycle.phases.before_turn import MemoryConsolidationFailedError
+
 import asyncio
 import json
 import sqlite3
@@ -327,8 +329,17 @@ def _seed_role_session(manager, *, group_text="said in group a"):
 
 
 def _isolation_pipeline(manager, *, input_token_threshold=75000):
+    from agent.provider import LLMProvider
+    from agent.prompting.input_budget import BudgetPolicy
+
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=input_token_threshold + 8192,
+        max_output_tokens=8192,
+        budget_policy=BudgetPolicy(safety_margin_tokens=0),
+    )
     reasoner = DefaultReasoner(
-        llm=LLMServices(provider=AsyncMock(), light_provider=AsyncMock()),
+        llm=LLMServices(provider=provider, light_provider=provider),
         llm_config=LLMConfig(),
         tools=ToolRegistry(),
         discovery=ToolDiscoveryState(),
@@ -358,7 +369,6 @@ def _isolation_pipeline(manager, *, input_token_threshold=75000):
             tools=ToolRegistry(),
             reasoner=reasoner,
             event_bus=EventBus(),
-            memory_input_token_threshold=input_token_threshold,
         )
     )
     return pipeline, reasoner
@@ -625,9 +635,13 @@ async def test_input_budget_counts_only_the_turn_context(tmp_path):
 
     for thread, runs in ((DESKTOP, True), (GROUP_B, True), (GROUP_A, False)):
         pipeline, reasoner = _isolation_pipeline(manager, input_token_threshold=2000)
-        await pipeline.run(_turn(thread), "role:mira", dispatch_outbound=False)
+        if runs:
+            await pipeline.run(_turn(thread), "role:mira", dispatch_outbound=False)
+        else:
+            with pytest.raises(MemoryConsolidationFailedError):
+                await pipeline.run(_turn(thread), "role:mira", dispatch_outbound=False)
         # The large group A message only weighs on group A's own turns, where
-        # the context guard stops the turn before the model is called.
+        # the complete request preflight stops before the model is called.
         assert reasoner.run.await_count == (1 if runs else 0)
 
 

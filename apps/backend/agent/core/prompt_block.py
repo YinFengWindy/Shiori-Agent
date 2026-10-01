@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent.prompting.token_estimate import estimate_tokens
+
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -627,7 +629,7 @@ class SystemPromptBuilder:
                     PromptSectionMeta(
                         name=block.label,
                         chars=len(rendered),
-                        est_tokens=max(1, len(rendered) // 3),
+                        est_tokens=estimate_tokens(rendered),
                         is_static=block.is_static,
                         cache_hit=cache_hit,
                     )

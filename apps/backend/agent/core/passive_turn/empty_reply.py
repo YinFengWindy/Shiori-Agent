@@ -36,7 +36,11 @@ def response_diagnostics(
         "normalized_length": len(normalized or ""),
         "thinking_length": len(response.thinking or ""),
         "tool_count": len(response.tool_calls),
-        "prompt_tokens": response.cache_prompt_tokens,
+        "prompt_tokens": (
+            response.prompt_tokens
+            if response.prompt_tokens is not None
+            else response.cache_prompt_tokens
+        ),
         "cache_hit_tokens": response.cache_hit_tokens,
         "total_tokens": response.total_tokens,
         "refused": response.refused or finish_reason == "content_filter",

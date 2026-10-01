@@ -16,7 +16,6 @@ from .contracts import (
     ConsolidationFailure,
 )
 from .formatting import (
-    _budget_view,
     build_consolidation_source_ref,
     _coerce_history_text,
     _format_consolidation_error,
@@ -29,7 +28,6 @@ from .formatting import (
     _select_recent_history_entries,
     _session_role_id,
     split_consolidation_window,
-    _estimate_session_input_tokens,
 )
 from .external_segment import (
     GROUP_ENVIRONMENT_SYSTEM,
@@ -83,7 +81,6 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         provider: "LLMProvider",
         model: str,
         keep_count: int,
-        input_token_threshold: int = 75000,
         recent_context_provider: "LLMProvider | None" = None,
         recent_context_model: str | None = None,
     ) -> None:
@@ -94,7 +91,6 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         self._recent_context_model = str(recent_context_model or "").strip() or model
         self._keep_count = keep_count
         self._consolidation_min_new_messages = max(5, keep_count // 2)
-        self._input_token_threshold = max(0, int(input_token_threshold))
 
     def _resolve_recent_context_llm(
         self,
@@ -341,7 +337,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         session,
         archive_all: bool = False,
         force: bool = False,
-        input_token_estimate: int | None = None,
+        input_budget_exceeded: bool = False,
         user_threads: "UserContextThreads | None" = None,
         views: "tuple[ContextView, ...]" = (),
         *,
@@ -364,12 +360,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
             session,
             keep_count=self._keep_count,
             consolidation_min_new_messages=self._consolidation_min_new_messages,
-            input_token_threshold=self._input_token_threshold,
-            input_token_estimate=(
-                _estimate_session_input_tokens(session, view=_budget_view(views))
-                if input_token_estimate is None
-                else input_token_estimate
-            ),
+            input_budget_exceeded=input_budget_exceeded,
             archive_all=archive_all,
             force=force,
             views=views,

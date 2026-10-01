@@ -3,7 +3,10 @@ from dataclasses import replace
 import pytest
 
 from agent.config_models import ModelRegistration
-from core.roles.model_errors import incomplete_registration_fields
+from core.roles.model_errors import (
+    incomplete_connection_fields,
+    incomplete_registration_fields,
+)
 
 
 @pytest.mark.parametrize(
@@ -12,7 +15,13 @@ from core.roles.model_errors import incomplete_registration_fields
 )
 def test_local_openai_compatible_endpoint_can_omit_api_key(url):
     registration = ModelRegistration(
-        id="local", provider="openai", base_url=url, api_key="", model="local"
+        context_window_tokens=128000,
+        max_output_tokens=32768,
+        id="local",
+        provider="openai",
+        base_url=url,
+        api_key="",
+        model="local",
     )
     assert incomplete_registration_fields(registration) == ()
     assert incomplete_registration_fields(
@@ -25,6 +34,34 @@ def test_local_openai_compatible_endpoint_can_omit_api_key(url):
 )
 def test_invalid_connection_address_is_a_repairable_field(url):
     registration = ModelRegistration(
-        id="remote", provider="openai", base_url=url, api_key="key", model="model"
+        context_window_tokens=128000,
+        max_output_tokens=32768,
+        id="remote",
+        provider="openai",
+        base_url=url,
+        api_key="key",
+        model="model",
     )
     assert incomplete_registration_fields(registration) == ("base_url",)
+
+
+def test_connection_readiness_does_not_imply_conversation_capacity_is_complete():
+    legacy = ModelRegistration(
+        id="legacy",
+        provider="openai",
+        base_url="https://example.test/v1",
+        api_key="test",
+        model="m",
+    )
+    assert incomplete_connection_fields(legacy) == ()
+    assert incomplete_registration_fields(legacy) == (
+        "context_window_tokens",
+        "max_output_tokens",
+    )
+    broken = replace(legacy, api_key="")
+    assert incomplete_connection_fields(broken) == ("api_key",)
+    assert incomplete_registration_fields(broken) == (
+        "api_key",
+        "context_window_tokens",
+        "max_output_tokens",
+    )

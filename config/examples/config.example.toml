@@ -14,6 +14,8 @@ registrations = []
 # api_key = "${MODEL_API_KEY}"
 # base_url = "https://your-provider.example/v1"
 # effort = "none"
+# context_window_tokens = 128000 # 必须按服务商文档填写实际容量
+# max_output_tokens = 32768 # 模型能力，单次输出由 agent.max_tokens 限制
 
 # =============================================================================
 # 可选：桌宠语音交互
@@ -55,6 +57,9 @@ dev_mode = false
 streaming_enabled = false
 
 [agent.context]
+trigger_ratio = 0.75
+target_ratio = 0.4
+safety_margin_tokens = 4096
 memory_window = 40
 
 [agent.tools]
@@ -64,7 +69,7 @@ search_enabled = true
 # [agent.maintenance]
 # memory_optimizer_enabled = true
 # memory_optimizer_interval_seconds = 64800
-# consolidation_input_token_threshold = 75000
+# 输入预算策略见 [agent.context]，不再使用固定历史 token 阈值。
 
 # 可选：控制加载哪些工具集（默认值适合大多数场景）
 # [agent.wiring]
