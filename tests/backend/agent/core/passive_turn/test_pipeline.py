@@ -18,7 +18,7 @@ from agent.core.runtime_support import ToolDiscoveryState, TurnRunResult
 from agent.core.types import ContextBundle, ReasonerResult
 from agent.lifecycle.types import PromptRenderResult
 from agent.looping.ports import LLMConfig, LLMServices
-from agent.provider import LLMResponse
+from agent.provider import LLMResponse, ToolCall
 from agent.tool_hooks import ToolExecutionRequest
 from agent.tool_hooks.executor import ToolExecutor
 from agent.tools.message_push import MessagePushTool
@@ -364,9 +364,10 @@ def _isolation_pipeline(manager, *, input_token_threshold=75000):
     return pipeline, reasoner
 
 
+@pytest.mark.parametrize("summary", [False, True])
 @pytest.mark.parametrize("retry_failure", ["empty", "request"])
 async def test_empty_reply_failure_is_persisted_without_committing_role_reply(
-    tmp_path, retry_failure
+    tmp_path, retry_failure, summary
 ):
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")
@@ -376,7 +377,7 @@ async def test_empty_reply_failure_is_persisted_without_committing_role_reply(
     # Restore the real reasoning loop while retaining deterministic prompt setup.
     reasoner.run = DefaultReasoner.run.__get__(reasoner)
     provider = AsyncMock()
-    provider.chat.side_effect = [
+    responses = [
         LLMResponse(
             content="",
             thinking="secret thought",
@@ -397,6 +398,13 @@ async def test_empty_reply_failure_is_persisted_without_committing_role_reply(
             else RuntimeError("upstream api_key=super-secret-key " + "x" * 10000)
         ),
     ]
+    if summary:
+        reasoner._llm_config = LLMConfig(max_iterations=1)
+        responses.insert(
+            0,
+            LLMResponse(content="", tool_calls=[ToolCall("t1", "summary-trigger", {})]),
+        )
+    provider.chat.side_effect = responses
     reasoner._llm = LLMServices(provider=provider, light_provider=provider)
     failed_events = []
     pipeline._bus.observe = AsyncMock(side_effect=failed_events.append)
@@ -419,7 +427,7 @@ async def test_empty_reply_failure_is_persisted_without_committing_role_reply(
             await writer_task
     assert result.content == "处理消息时出错，请稍后再试。"
     assert result.committed_message_id is None
-    assert provider.chat.await_count == 2
+    assert provider.chat.await_count == (3 if summary else 2)
     assert manager._store.fetch_session_messages(session.key) == []
     assert any(type(event).__name__ == "TurnFailed" for event in failed_events)
     with sqlite3.connect(db_path) as conn:
@@ -452,7 +460,10 @@ async def test_empty_reply_failure_is_persisted_without_committing_role_reply(
     assert "private" not in diagnostic_text
 
 
-async def test_recovered_reply_commits_diagnostics_and_normal_content(tmp_path):
+@pytest.mark.parametrize("summary", [False, True])
+async def test_recovered_reply_commits_diagnostics_and_normal_content(
+    tmp_path, summary
+):
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")
     session.metadata["role_id"] = "mira"
@@ -460,11 +471,22 @@ async def test_recovered_reply_commits_diagnostics_and_normal_content(tmp_path):
     pipeline, reasoner = _isolation_pipeline(manager)
     reasoner.run = DefaultReasoner.run.__get__(reasoner)
     provider = AsyncMock()
-    provider.chat.side_effect = [
-        LLMResponse(content=""),
-        LLMResponse(content="恢复正文"),
+    responses = [
+        LLMResponse(content="", total_tokens=11),
+        LLMResponse(content="恢复正文", total_tokens=13),
         LLMResponse(content='{"mood":"平静","thought":"我想回应你。"}'),
     ]
+    if summary:
+        reasoner._llm_config = LLMConfig(max_iterations=1)
+        responses.insert(
+            0,
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("t1", "summary-trigger", {})],
+                total_tokens=7,
+            ),
+        )
+    provider.chat.side_effect = responses
     reasoner._llm = LLMServices(provider=provider, light_provider=provider)
     result = await pipeline.run(_turn(USER_DM), session.key, dispatch_outbound=False)
     assert result.content == "恢复正文"
@@ -475,7 +497,10 @@ async def test_recovered_reply_commits_diagnostics_and_normal_content(tmp_path):
         persisted[-1]["metadata"]["context_retry"]["reply_recovery"]["outcome"]
         == "recovered"
     )
-    assert provider.chat.await_count == 3
+    assert persisted[-1]["metadata"]["context_retry"]["react_stats"][
+        "total_tokens"
+    ] == (31 if summary else 24)
+    assert provider.chat.await_count == (4 if summary else 3)
 
 
 def _turn(thread, channel="qq", chat_id="x"):

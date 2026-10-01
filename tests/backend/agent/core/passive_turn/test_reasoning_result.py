@@ -1,10 +1,11 @@
 """Auxiliary budget summaries remain separate from role-facing replies."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from agent.core.passive_turn import DefaultReasoner
+from agent.core.passive_turn.empty_reply import EmptyReplyError
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import LLMResponse
@@ -29,16 +30,19 @@ async def test_role_summary_normalizes_legacy_content_before_mood_call():
         memory_window=40,
     )
 
-    content, tokens, role_reply = await reasoner._summarize_incomplete_progress(
-        [{"role": "user", "content": "请检查"}],
-        reason="max_iterations",
-        iteration=1,
-        tools_used=["search"],
-        reply_moods=("平静", "害羞"),
+    content, tokens, role_reply, recovery = (
+        await reasoner._summarize_incomplete_progress(
+            [{"role": "user", "content": "请检查"}],
+            reason="max_iterations",
+            iteration=1,
+            tools_used=["search"],
+            reply_moods=("平静", "害羞"),
+        )
     )
 
     assert content == "先告诉你当前进度。"
     assert tokens == 40
+    assert recovery is None
     assert role_reply is not None
     assert role_reply.content == content
     assert role_reply.mood == "平静"
@@ -72,8 +76,38 @@ async def test_internal_budget_summary_uses_auxiliary_purpose(
         tools_used=["search"],
     )
 
-    assert result == ("检查到当前进度。", 40, None)
+    assert result == ("检查到当前进度。", 40, None, None)
     request = provider.chat.await_args.kwargs
     assert request["call_purpose"] == "auxiliary"
     assert request["max_tokens"] == expected_budget
     assert request["tools"] == []
+
+
+async def test_role_summary_recovery_obeys_input_budget_and_skips_mood(monkeypatch):
+    provider = AsyncMock()
+    provider.chat.return_value = LLMResponse(content="")
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=provider, light_provider=provider),
+        llm_config=LLMConfig(),
+        tools=ToolRegistry(),
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
+        memory_input_token_threshold=100,
+    )
+    monkeypatch.setattr(
+        "agent.core.passive_turn.reasoning_result.support.estimate_messages_tokens",
+        Mock(side_effect=[1, 100]),
+    )
+    with pytest.raises(EmptyReplyError) as caught:
+        await reasoner._summarize_incomplete_progress(
+            [{"role": "user", "content": "检查"}],
+            reason="early_stop",
+            iteration=1,
+            tools_used=[],
+            reply_moods=("平静",),
+            session="role:mira",
+            channel="qq",
+        )
+    assert caught.value.diagnostics["outcome"] == "budget_exceeded"
+    assert provider.chat.await_count == 1

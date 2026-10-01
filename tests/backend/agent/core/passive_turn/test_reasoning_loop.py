@@ -602,6 +602,100 @@ async def test_iteration_summary_fetches_mood_without_json_content_contract():
     assert result.metadata["role_reply_mood_fresh"] is True
 
 
+@pytest.mark.parametrize("early_stop", [False, True])
+@pytest.mark.parametrize(
+    "empty_content", ["", " \n", '{"content":"","mood":"平静","thought":"私密"}']
+)
+@pytest.mark.parametrize("recovered", [False, True])
+async def test_role_summary_empty_content_uses_shared_recovery_without_replaying_tools(
+    early_stop, empty_content, recovered
+):
+    provider = AsyncMock()
+    tool = CounterTool()
+    tools = ToolRegistry()
+    tools.register(tool, always_on=True)
+    responses = (
+        []
+        if early_stop
+        else [
+            LLMResponse(
+                content="", tool_calls=[ToolCall("c1", "counter", {})], total_tokens=7
+            )
+        ]
+    )
+    responses += [
+        LLMResponse(content=empty_content, finish_reason="length", total_tokens=11),
+        LLMResponse(
+            content="阶段性回复" if recovered else empty_content, total_tokens=13
+        ),
+    ]
+    if recovered:
+        responses.append(LLMResponse(content=mood_payload()))
+    provider.chat.side_effect = responses
+    reasoner = make_reasoner(provider, tools, max_iterations=1)
+    if early_stop:
+        reasoner._before_step.run = AsyncMock(
+            return_value=SimpleNamespace(early_stop=True)
+        )
+    operation = reasoner.run(
+        [{"role": "user", "content": "检查"}],
+        reply_moods=("平静",),
+        tool_event_session_key="role:mira",
+        tool_event_channel="qq",
+    )
+    if recovered:
+        result = await operation
+        assert result.reply == "阶段性回复"
+        facts = result.metadata["reply_recovery"]
+        assert facts["outcome"] == "recovered"
+        assert result.metadata["role_reply"].content == result.reply
+        assert result.metadata["react_stats"]["total_tokens"] == (
+            24 if early_stop else 31
+        )
+    else:
+        with pytest.raises(EmptyReplyError) as caught:
+            await operation
+        facts = caught.value.diagnostics
+        assert facts["outcome"] == "exhausted"
+    assert facts["session"] == "role:mira"
+    assert facts["channel"] == "qq"
+    assert facts["retries"] == 1
+    assert facts["attempts"][0]["finish_reason"] == "length"
+    assert tool.calls == (0 if early_stop else 1)
+    summary_calls = provider.chat.call_args_list[(0 if early_stop else 1) :]
+    assert len(summary_calls) == (3 if recovered else 2)
+    for call in summary_calls[:2]:
+        assert call.kwargs["tools"] == []
+        assert call.kwargs["max_tokens"] == LLMConfig().max_tokens
+        assert call.kwargs.get("call_purpose", "default") == "default"
+
+
+@pytest.mark.parametrize("early_stop", [False, True])
+async def test_explicitly_refused_role_summary_does_not_retry_or_fetch_mood(early_stop):
+    provider = AsyncMock()
+    tool = CounterTool()
+    tools = ToolRegistry()
+    tools.register(tool, always_on=True)
+    responses = (
+        []
+        if early_stop
+        else [LLMResponse(content="", tool_calls=[ToolCall("c1", "counter", {})])]
+    )
+    responses.append(LLMResponse(content="", refused=True))
+    provider.chat.side_effect = responses
+    reasoner = make_reasoner(provider, tools, max_iterations=1)
+    if early_stop:
+        reasoner._before_step.run = AsyncMock(
+            return_value=SimpleNamespace(early_stop=True)
+        )
+    with pytest.raises(EmptyReplyError) as caught:
+        await reasoner.run([{"role": "user", "content": "检查"}], reply_moods=("平静",))
+    assert caught.value.diagnostics["outcome"] == "refused"
+    assert caught.value.diagnostics["retries"] == 0
+    assert provider.chat.await_count == (1 if early_stop else 2)
+    assert tool.calls == (0 if early_stop else 1)
+
+
 class _OtherPluginFinalizeHook(ToolHook):
     """一个与 tool_loop_guard 毫无关系的 hook：身份、reason 措辞都不含
     "tool_loop_guard"。用来证明主回合的截断逻辑现在按结构化的
