@@ -13,7 +13,7 @@ uv run pytest
 
 `uv.lock` 与本地 source 声明会安装真实宿主、默认记忆和测试支持包。使用既有 requirements 入口时，在仓库根目录向项目虚拟环境安装 `apps/backend/requirements/development.txt`；其中的相对路径刻意从根目录解析。该入口同时安装本地宿主、默认记忆、testkit 和质量工具。
 
-根目录不再有 `conftest.py`。`tests/conftest.py` 与 `tests/support/` 只提供宿主测试所需的 fixture 和历史 SDK stub。插件测试不得导入这些模块，不得从父目录推导原仓库路径。插件自己的文件可相对 `__file__` 定位；已声明的兄弟插件通过 `shiori_sdk.testing.packages.plugin_directory()` 定位。整包暂存统一调用 `stage_plugin_package(source: Path, target: Path) -> Path`（同一模块），它保留插件源码、manifest、测试及资源，排除 `.venv`、含 `pyvenv.cfg` 的环境目录、构建缓存与包级运行状态；不要在各插件中复制 ignore 规则。宿主的 v2 fixture 也直接使用整包暂存；迁移回归在暂存后显式构造历史状态文件，不保留旧布局适配器。独立支持测试位于 `packages/sdk/tests/testing/`，真实 AppRuntime fixture 与对应测试分别位于 `packages/shiori-host-testing/src/shiori_host_testing/`、`tests/backend/shiori_host_testing/`。根 pytest 和测试类型检查均显式覆盖。
+根目录不再有 `conftest.py`。`tests/conftest.py` 与 `tests/support/` 只提供宿主测试所需的 fixture；生产依赖使用项目环境中安装的真实包，测试在各自边界 mock 网络请求，不全局替换第三方模块。插件测试不得导入这些模块，不得从父目录推导原仓库路径。插件自己的文件可相对 `__file__` 定位；已声明的兄弟插件通过 `shiori_sdk.testing.packages.plugin_directory()` 定位。整包暂存统一调用 `stage_plugin_package(source: Path, target: Path) -> Path`（同一模块），它保留插件源码、manifest、测试及资源，排除 `.venv`、含 `pyvenv.cfg` 的环境目录、构建缓存与包级运行状态；不要在各插件中复制 ignore 规则。宿主的 v2 fixture 也直接使用整包暂存；迁移回归在暂存后显式构造历史状态文件，不保留旧布局适配器。独立支持测试位于 `packages/sdk/tests/testing/`，真实 AppRuntime fixture 与对应测试分别位于 `packages/shiori-host-testing/src/shiori_host_testing/`、`tests/backend/shiori_host_testing/`。根 pytest 和测试类型检查均显式覆盖。
 
 SDK 的 pytest 插件在整个会话内按参数与证书环境变量缓存 httpx 的 SSL 上下文，避免每个 client 重复加载 CA 证书；宿主测试与插件独立运行都会启用。测试不得修改从 httpx 拿到的 SSL 上下文。
 

@@ -19,7 +19,6 @@ select = ["E4", "E7", "E9", "F"]
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/conftest.py" = ["F401"]
-"tests/support/legacy_stubs.py" = ["E402"]
 
 [dependency-groups]
 dev = [
