@@ -48,7 +48,6 @@ function createRoleForm(overrides: Partial<RoleFormState> = {}): RoleFormState {
     voiceName: overrides.voiceName ?? "",
     voiceSpeed: overrides.voiceSpeed ?? 1,
     voiceMoodEmotions: overrides.voiceMoodEmotions ?? {},
-    pendingVoiceAssetDeletes: overrides.pendingVoiceAssetDeletes ?? [],
   };
 }
 

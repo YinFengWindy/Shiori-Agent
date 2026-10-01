@@ -1,6 +1,6 @@
 import { ArrowUUpLeft, Key } from "@phosphor-icons/react";
 import { compactPressableClass, cx, usePluginHostServices } from "@shiori/plugin-sdk";
-import { CrossfadeLayers } from "./CrossfadeLayers";
+import { CrossfadeLayers } from "@shiori/plugin-sdk";
 import type { GenerationFailure } from "./generationFailure";
 import { StageEmpty, StageFailure, StageGenerating } from "./StageStates";
 import type { StageView } from "./studioSelectors";

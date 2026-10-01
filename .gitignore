@@ -2,7 +2,7 @@
 /config.json
 /config.toml
 
-# NcatBot 自动生成的配置文件
+# 历史渠道运行时自动生成的本地配置
 config.yaml
 
 # Python 缓存

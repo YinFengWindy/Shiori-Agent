@@ -63,20 +63,6 @@ describe("roleFormState", () => {
     }, role), true);
   });
 
-  it("tracks pending voice asset cleanup in the saved role form", () => {
-    const role = createRole();
-    const form = createRoleFormFromRole(role);
-
-    assert.equal(isRoleFormDirty({
-      ...form,
-      pendingVoiceAssetDeletes: [{
-        provider: "minimax",
-        voiceId: "Shiori_stale",
-        ownership: "shiori_managed",
-      }],
-    }, role), true);
-  });
-
   it("reads and compares role-owned proactive settings", () => {
     const role = createRole();
     const form = createRoleFormFromRole(role);

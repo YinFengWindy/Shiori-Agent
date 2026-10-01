@@ -249,7 +249,9 @@ async def test_setup_still_wires_module_but_recorder_is_inactive_for_other_engin
     workspace.mkdir()
     kernel, bus = _load_default_memory_kernel(
         tmp_path=tmp_path,
-        memory_engine=SimpleNamespace(describe=lambda: SimpleNamespace(name="akasha")),
+        memory_engine=SimpleNamespace(
+            describe=lambda: SimpleNamespace(name="disabled")
+        ),
         workspace=workspace,
     )
     await kernel.load_all()

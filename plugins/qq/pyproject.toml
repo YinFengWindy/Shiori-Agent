@@ -8,13 +8,12 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "shiori-agent==0.1.0",
-    "ncatbot>=4.4.0",
     "psutil>=7.0",
     "websockets>=15.0,<16",
 ]
 
 [project.optional-dependencies]
-test = ["shiori-plugin-testkit==0.1.0"]
+test = ["shiori-plugin-testkit==0.1.0", "qrcode>=8.2"]
 
 [tool.setuptools]
 include-package-data = false

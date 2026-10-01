@@ -78,7 +78,7 @@ async def test_recall_memory_passes_current_timestamp_to_engine() -> None:
     ts = datetime(2026, 4, 4, 22, 0, 0)
 
     _ = await tool.execute(
-        query="Akasha", current_timestamp=ts.isoformat(), role_id="mira"
+        query="memory", current_timestamp=ts.isoformat(), role_id="mira"
     )
 
     assert memory.request.timestamp == ts
@@ -92,7 +92,7 @@ async def test_recall_memory_passes_memory_domain_to_engine() -> None:
         MemoryToolSpec(description="", parameters={"type": "object", "properties": {}}),
     )
 
-    _ = await tool.execute(query="Akasha", memory_domain="role_self", role_id="mira")
+    _ = await tool.execute(query="memory", memory_domain="role_self", role_id="mira")
 
     assert memory.request.filters.domains == ("role_self",)
 

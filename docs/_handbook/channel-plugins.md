@@ -206,7 +206,7 @@ async def stop(self):
 ## 8. 线程与第三方 SDK
 
 - 渠道代码默认跑在宿主事件循环上。SDK 自带线程或事件循环时（飞书的 lark-oapi 长连接），把连接放到独立线程，回调里只做去重并用 `loop.call_soon_threadsafe` 交回宿主循环，网络与路由都在宿主循环上完成；`stop` 必须有超时，不能让宿主挂起。
-- SDK 有进程级全局配置时（NcatBot），每次激活都显式写入本代的值，留空时恢复 SDK 原值，避免上一代的设置残留到下一代（`plugins/qq/backend/channel/lifecycle.py`）。
+- QQ 由 `plugins/qq/backend/accounts_runtime.py` 的 `QQAccountsRuntime` 管理账号生命周期，每个账号用 `backend/onebot.py` 的 `OneBotSocket` 连接自己的 NapCat 进程；连接设置和事件分发隔离到账号，停止时关闭该账号的 socket 和托管进程。
 - 第三方依赖写进插件 `pyproject.toml` 的 `dependencies`；桌面安装包由宿主的 `apps/backend/requirements/production.txt` 统一打包，新依赖要同时加到那里。
 - 渠道插件应保持 `supports_hot_unload: true`（默认值），否则任何设置保存都会要求重启应用。
 

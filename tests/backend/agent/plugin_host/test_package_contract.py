@@ -49,6 +49,11 @@ def test_valid_package_separates_identity_version_and_runtime(contract_package):
             "invalid_manifest",
             "host_dependencies",
         ),
+        (
+            {"host_dependencies": {"python": ["ncatbot"]}},
+            "missing_dependency",
+            "host_dependencies.python[0]",
+        ),
         ({"assets": ["../secret"]}, "invalid_path", "assets[0]"),
         ({"entry": "backend/missing.py"}, "missing_file", "entry"),
         (
@@ -147,5 +152,5 @@ def test_external_channel_declaration_errors_block_the_package(contract_package)
     assert "desktop" in caught.value.diagnostic.reason
 
 
-def test_host_advertises_runtime_api_with_group_listening_declarations():
-    assert HostRuntimeContract().runtime_api == "2.15.0"
+def test_host_advertises_runtime_api_with_shared_visual_components():
+    assert HostRuntimeContract().runtime_api == "2.16.0"

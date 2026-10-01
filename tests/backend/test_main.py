@@ -60,7 +60,7 @@ def test_bridge_keeps_dependency_prints_off_protocol_pipe(
             return object()
 
         async def start():
-            print({("ncatbot_status",): None}.keys(), {("ncs",): None}.keys())
+            print({("channel_status",): None}.keys(), {("ncs",): None}.keys())
             await asyncio.to_thread(print, "thread: 后台线程")
 
         async def shutdown():
@@ -124,7 +124,7 @@ def test_bridge_keeps_dependency_prints_off_protocol_pipe(
         "recovery: 配置恢复",
         "config: 配置加载",
         "construction: 创建运行时",
-        "dict_keys([('ncatbot_status',)]) dict_keys([('ncs',)])",
+        "dict_keys([('channel_status',)]) dict_keys([('ncs',)])",
         "thread: 后台线程",
         "server: 创建服务",
         "runtime: 请求处理",

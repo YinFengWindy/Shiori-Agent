@@ -11,12 +11,11 @@ from bootstrap import paths
 from bootstrap.memory_plugins import load_memory_plugin_module
 
 
-@pytest.mark.parametrize("engine", ["default", "akasha"])
 @pytest.mark.parametrize("layout", ["source", "wheel", "frozen"])
-def test_real_memory_modules_follow_resource_roots_from_unrelated_cwd(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: str, layout: str
+def test_default_memory_modules_follow_resource_roots_from_unrelated_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str
 ):
-    package = "default_memory" if engine == "default" else engine
+    package = "default_memory"
     expected_backend = paths.REPOSITORY_ROOT / "plugins" / package / "backend"
     if layout != "source":
         plugin_root = tmp_path / "distribution" / "plugins"
@@ -45,14 +44,14 @@ def test_real_memory_modules_follow_resource_roots_from_unrelated_cwd(
     # These entry points must not depend on a globally importable plugins package.
     monkeypatch.setitem(sys.modules, "plugins", None)
 
-    entry = load_memory_plugin_module(engine, "memory_plugin")
-    config = load_memory_plugin_module(engine, "config")
+    entry = load_memory_plugin_module("default", "memory_plugin")
+    config = load_memory_plugin_module("default", "config")
 
     assert entry.__file__ is not None
     assert config.__file__ is not None
     assert Path(entry.__file__).resolve() == expected_backend / "memory_plugin.py"
     assert Path(config.__file__).resolve() == expected_backend / "config.py"
-    assert load_memory_plugin_module(engine, "memory_plugin") is entry
+    assert load_memory_plugin_module("default", "memory_plugin") is entry
     assert getattr(entry, f"load_{package}_config") is getattr(
         config, f"load_{package}_config"
     )

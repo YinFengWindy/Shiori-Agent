@@ -11,10 +11,8 @@ import { useLatestRef, type RoleRecord, type SessionPayload, errorMessage } from
 import { parseChatTurnMetrics } from "../chat/chatTurnMetrics";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";
-import {
-  mergeSessionSummaryAndMessage,
-  parseSessionMessageUpdatePayload,
-} from "./useDesktopSessionState";
+import { mergeSessionSummaryAndMessage } from "./sessionMessagePagination";
+import { parseSessionMessageUpdatePayload } from "./desktopSessionProtocol";
 import type { AppMainView } from "../shared/types";
 import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 

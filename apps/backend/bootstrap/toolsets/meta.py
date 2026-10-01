@@ -1,23 +1,18 @@
 from __future__ import annotations
 
-from pathlib import Path
 
 from agent.background.subagent_manager import SubagentManager
-from agent.config_models import Config
 from agent.policies.delegation import DelegationPolicy
 from agent.tool_bundles import build_readonly_research_tools
 from agent.tools.base import Tool
 from agent.tools.meta import register_common_meta_tools
-from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.tools.spawn import SpawnManageTool, SpawnTool
-from bus.queue import MessageBus
 from bootstrap.toolsets.protocol import (
     ToolsetDeps,
     ToolsetProvider,
     build_registration_result,
 )
-from core.memory.engine import MemoryEngine
 from core.net.http import SharedHttpResources
 
 
@@ -95,44 +90,3 @@ def build_readonly_tools(
             multimodal=multimodal,
         )
     }
-
-
-def register_meta_and_common_tools(
-    tools: ToolRegistry,
-    readonly_tools: dict[str, Tool],
-    session_store,
-    push_tool: MessagePushTool | None = None,
-) -> MessagePushTool:
-    result = CommonMetaToolsetProvider(readonly_tools).register(
-        tools,
-        ToolsetDeps(
-            config=None,
-            workspace=Path("."),
-            session_store=session_store,
-            push_tool=push_tool,
-        ),
-    )
-    return result.extras["push_tool"]
-
-
-def register_spawn_tool(
-    tools: ToolRegistry,
-    config: Config,
-    workspace: Path,
-    bus: MessageBus,
-    provider,
-    http_resources: SharedHttpResources,
-    memory_engine: MemoryEngine | None = None,
-) -> SubagentManager:
-    result = SpawnToolsetProvider().register(
-        tools,
-        ToolsetDeps(
-            config=config,
-            workspace=workspace,
-            provider=provider,
-            http_resources=http_resources,
-            bus=bus,
-            memory_engine=memory_engine,
-        ),
-    )
-    return result.extras["subagent_manager"]

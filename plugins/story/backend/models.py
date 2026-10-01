@@ -234,10 +234,3 @@ class StoryContext:
     recent_turns: tuple[dict[str, Any], ...] = ()
     recent_beats: tuple[dict[str, Any], ...] = ()
     context_summary: str = ""
-
-
-@dataclass
-class StoryRuntimeState:
-    """Mutable service-owned task registry, not a persisted Story fact."""
-
-    tasks: dict[str, Any] = field(default_factory=dict)

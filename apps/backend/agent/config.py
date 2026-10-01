@@ -12,7 +12,6 @@ import tomllib
 import uuid
 from pathlib import Path
 from typing import Any, cast
-from zoneinfo import ZoneInfo
 
 from agent.config_models import (
     Config,
@@ -28,20 +27,6 @@ from proactive_v2.config import ProactiveConfig
 from proactive_v2.config_loader import ProactiveConfigError, load_proactive_config
 
 logger = logging.getLogger(__name__)
-
-
-def _validated_timezone(tz_name: str, *, enabled: bool) -> str:
-    """仅当 anyaction_enabled=True 时校验时区合法性，无效则启动时 fail-fast。"""
-    if not enabled:
-        return tz_name
-    try:
-        ZoneInfo(tz_name)
-        return tz_name
-    except Exception:
-        raise ValueError(
-            f"proactive.anyaction_timezone 无效: {tz_name!r}，"
-            "请使用 IANA 格式，如 'Asia/Shanghai'"
-        )
 
 
 def load_config(
@@ -472,7 +457,6 @@ __all__ = [
     "Config",
     "MemoryConfig",
     "MemoryEmbeddingConfig",
-    "_validated_timezone",
     "has_config_reference",
     "load_config",
     "load_config_data",

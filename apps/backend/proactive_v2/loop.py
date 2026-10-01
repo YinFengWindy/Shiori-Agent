@@ -576,7 +576,3 @@ class ProactiveLoop:
                 )
             )
             return score
-
-
-def build_proactive_loop(**kwargs: Any) -> ProactiveLoop:
-    return ProactiveLoop(**kwargs)

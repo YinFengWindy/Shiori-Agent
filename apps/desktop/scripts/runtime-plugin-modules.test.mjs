@@ -13,16 +13,16 @@ test("collectPluginBackendModules discovers namespace backends and nested packag
   const directory = await mkdtemp(join(tmpdir(), "shiori-runtime-modules-"));
   try {
     for (const relativePath of [
-      "akasha/backend/memory_plugin.py",
-      "akasha/backend/core.py",
-      "akasha/backend/fast/graph_fast.py",
+      "qq/backend/channel.py",
+      "qq/backend/channel/inbound.py",
+      "qq/backend/onebot.py",
       "default_memory/backend/engine/__init__.py",
       "default_memory/backend/engine/lifecycle.py",
       "default_memory/backend/memory_plugin.py",
       "default_memory/backend/config.local.toml",
-      "akasha/tests/test_plugin.py",
-      "akasha/ui/preview.py",
-      "akasha/backend/__pycache__/cache.py",
+      "default_memory/tests/test_plugin.py",
+      "default_memory/ui/preview.py",
+      "default_memory/backend/__pycache__/cache.py",
       "skin/manifest.yaml",
     ]) {
       const path = join(directory, relativePath);
@@ -31,12 +31,12 @@ test("collectPluginBackendModules discovers namespace backends and nested packag
     }
 
     assert.deepEqual(await collectPluginBackendModules(directory), [
-      "plugins.akasha.backend.core",
-      "plugins.akasha.backend.fast.graph_fast",
-      "plugins.akasha.backend.memory_plugin",
       "plugins.default_memory.backend.engine",
       "plugins.default_memory.backend.engine.lifecycle",
       "plugins.default_memory.backend.memory_plugin",
+      "plugins.qq.backend.channel",
+      "plugins.qq.backend.channel.inbound",
+      "plugins.qq.backend.onebot",
     ]);
   } finally {
     await rm(directory, { recursive: true, force: true });

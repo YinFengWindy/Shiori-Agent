@@ -739,18 +739,17 @@ def test_memory_plugin_resolver_loads_plugin_directory(monkeypatch, tmp_path: Pa
     assert resolve_memory_plugin("demo_memory").plugin_id == "demo_memory"
 
 
-@pytest.mark.parametrize("name", ["default", "akasha"])
-def test_memory_plugin_resolver_loads_real_packages(name):
+def test_memory_plugin_resolver_loads_default_package():
     from core.memory.plugin import MemoryPlugin
 
-    plugin = resolve_memory_plugin(name)
+    plugin = resolve_memory_plugin("default")
 
     assert isinstance(plugin, MemoryPlugin)
-    assert plugin.plugin_id == name
-    assert type(resolve_memory_plugin(name)) is type(plugin)
+    assert plugin.plugin_id == "default"
+    assert type(resolve_memory_plugin("default")) is type(plugin)
 
 
-@pytest.mark.parametrize("name", ["../akasha", "a/b", "a\\b", "a.b", "C:akasha"])
+@pytest.mark.parametrize("name", ["../custom", "a/b", "a\\b", "a.b", "C:custom"])
 def test_memory_plugin_resolver_rejects_invalid_names(name):
     with pytest.raises(ValueError, match="名称非法"):
         resolve_memory_plugin(name)

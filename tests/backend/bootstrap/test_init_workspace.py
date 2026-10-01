@@ -49,6 +49,8 @@ def test_init_workspace_creates_expected_assets(tmp_path):
     assert registrations == []
     assert "[llm.vl]" not in config_text
     assert (workspace / "sessions.db").exists()
+    assert not (workspace / "proactive_quota.json").exists()
+    assert not (workspace / "plugin-data" / "akasha").exists()
     assert not (workspace / "observe").exists()
     assert not (workspace / "memes").exists()
     assert (workspace / "memory" / "consolidation_writes.db").exists()
@@ -144,3 +146,20 @@ def test_mcp_servers_example_is_public_empty_configuration() -> None:
     payload = json.loads(example_path.read_text(encoding="utf-8"))
 
     assert payload == {"servers": {}}
+
+
+def test_init_preserves_retired_quota_and_engine_data(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    quota = workspace / "proactive_quota.json"
+    quota.write_bytes(b'{"used": 7}')
+    database = workspace / "plugin-data" / "akasha" / "akasha.db"
+    database.parent.mkdir(parents=True)
+    database.write_bytes(b"user-owned archived database")
+
+    workspace_init.init_workspace(
+        config_path=tmp_path / "config.toml", workspace=workspace
+    )
+
+    assert quota.read_bytes() == b'{"used": 7}'
+    assert database.read_bytes() == b"user-owned archived database"

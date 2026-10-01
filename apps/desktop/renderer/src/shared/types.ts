@@ -84,13 +84,6 @@ export type SessionImageHistoryMessage = {
   media: unknown[];
 };
 
-/** Editable role form state used by the role editor. */
-export type ManagedVoiceAssetReference = {
-  provider: string;
-  voiceId: string;
-  ownership: "shiori_managed";
-};
-
 export type RoleFormState = {
   name: string;
   description: string;
@@ -120,7 +113,6 @@ export type RoleFormState = {
   voiceName: string;
   voiceSpeed: number;
   voiceMoodEmotions: Record<string, string>;
-  pendingVoiceAssetDeletes: ManagedVoiceAssetReference[];
 };
 
 /** New role composer form state. */
