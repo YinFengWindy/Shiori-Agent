@@ -170,7 +170,7 @@ export const personaSceneLines = {
   /** The credentials were refused. */
   unauthorized: line("confused", "钥匙好像不对……去设置里换一个？"),
   /** The account ran out of quota / credits. */
-  quota: line("sad", "这次生成被账户限制拦住了，检查一下订阅和额度吧。"),
+  quota: line("sad", "这次操作被账户限制拦住了，检查一下订阅和额度吧。"),
   /** The remote service could not be reached. */
   network: line("sad", "连不上那边……网络还好吗？"),
   /** The remote service answered with an error of its own. */

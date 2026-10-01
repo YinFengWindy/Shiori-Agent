@@ -1,4 +1,4 @@
-import { errorMessage } from "@shiori/plugin-sdk";
+import { describeStoryFailure } from "./storyFailure";
 import { useCallback, useState } from "react";
 
 export type RunStoryOperation = <T>(
@@ -9,27 +9,29 @@ export type RunStoryOperation = <T>(
 /** Owns shared busy and surfaced-error state for Story bridge operations. */
 export function useStoryPresentationOperation() {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const clearError = useCallback(() => setError(""), []);
+  const [failure, setFailure] = useState<ReturnType<typeof describeStoryFailure> | null>(null);
+  const clearError = useCallback(() => setFailure(null), []);
+  const reportError = useCallback((cause: unknown, summary?: string) => setFailure(describeStoryFailure(cause, summary)), []);
 
   const run = useCallback<RunStoryOperation>(async (operation, apply) => {
     setBusy(true);
-    setError("");
+    setFailure(null);
     try {
       const result = await operation();
       await apply(result);
     } catch (operationError) {
-      setError(errorMessage(operationError, { includeDetail: true }) || "剧情暂时无法响应");
+      reportError(operationError);
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [reportError]);
 
   return {
     busy,
-    error,
+    error: failure?.error ?? "",
+    ...(failure?.errorDetail ? { errorDetail: failure.errorDetail } : {}),
     clearError,
-    reportError: setError,
+    reportError,
     run,
   };
 }

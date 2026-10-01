@@ -1,3 +1,4 @@
+import { StoryError } from "./StoryError";
 import { ArrowClockwise, ArrowLeft, ImageBroken, X } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useState } from "react";
@@ -13,6 +14,7 @@ type StoryCgGallerySurfaceProps = {
   sharedBackdrop?: boolean;
   busy: boolean;
   error: string;
+  errorDetail?: string;
   onRetry: (storyId: string, resourceId: string) => void;
   onBack: () => void;
 };
@@ -23,7 +25,7 @@ function resourceLabel(resource: StoryResource, index: number) {
 }
 
 /** Renders the main-menu Story CG collection, grouped by Story. */
-export function StoryCgGallerySurface({ stories, background, sharedBackdrop = false, busy, error, onRetry, onBack }: StoryCgGallerySurfaceProps) {
+export function StoryCgGallerySurface({ stories, background, sharedBackdrop = false, busy, error, errorDetail, onRetry, onBack }: StoryCgGallerySurfaceProps) {
   const [selectedStoryId, setSelectedStoryId] = useState(stories[0]?.storyId ?? "");
   const [preview, setPreview] = useState<StoryResource | null>(null);
   const reducedMotion = useReducedMotion() ?? false;
@@ -79,7 +81,7 @@ export function StoryCgGallerySurface({ stories, background, sharedBackdrop = fa
                 })}
               </div> : <p className="m-0 py-8 text-sm text-[#8B6676]">这个故事还没有 CG</p>}
             </> : <div className="grid min-h-64 place-items-center text-sm text-[#8B6676]">还没有故事 CG</div>}
-            {error ? <div className="mt-6 border border-[#D58A9F] bg-[#FFF0F4] px-3 py-2 text-sm text-[#9A365D]" role="alert">{error}</div> : null}
+            {error ? <StoryError className="mt-5" message={error} detail={errorDetail} /> : null}
           </div>
         </main>
       </div>

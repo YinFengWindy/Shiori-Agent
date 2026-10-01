@@ -2,6 +2,9 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { renderToStaticMarkup } from "react-dom/server";
+import { PluginHostServicesProvider } from "@shiori/plugin-sdk";
+import { createFakeHostServices } from "@shiori/plugin-sdk/testing";
 import type { StoryPresentationMode } from "./storyPresentationModes";
 import { STORY_PRESENTATION_TRANSITION_SECONDS, StoryWorkspacePresentationView, type StoryCreationPresentationController, type StoryOperationPresentationController, type StoryWorkspacePresentationController } from "./StoryWorkspacePresentationView";
 import { createStoryDetails, createStorySummary, renderStoryMarkup } from "./testFixtures";
@@ -73,7 +76,23 @@ describe("StoryWorkspacePresentationView", () => {
 
   it("keeps a failed Story list on the retryable loading surface", () => {
     const markup = renderStoryMarkup(<StoryWorkspacePresentationView roles={[]} mode="launcher" loadingStoryId="" loadingElapsedMs={0} loadingPhase="reading-story" cgGallery={[]} cgGalleryLoading={false} controller={{ ...controller, story: null, loading: true, error: "读取失败" }} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
-    assert.match(markup, /role="alert">读取失败/);
+    assert.match(markup, /role="alert"/);
     assert.match(markup, />Retry</);
   });
 });
+
+for (const mode of ["launcher", "load", "loading", "gallery", "create", "archive", "game"] satisfies StoryPresentationMode[]) {
+  it(`keeps operation diagnostics separate through the ${mode} route`, () => {
+    const fake = createFakeHostServices();
+    renderToStaticMarkup(<PluginHostServicesProvider services={fake.host}>
+      <StoryWorkspacePresentationView roles={[]} mode={mode} loadingStoryId={story.id} loadingElapsedMs={0} loadingPhase="reading-story" cgGallery={[]} cgGalleryLoading={false}
+        controller={{ ...controller, error: "旧读取错误", errorDetail: "old diagnostic" }}
+        operation={{ ...operation, error: "剧情操作未完成", errorDetail: "database unavailable" }}
+        creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />
+    </PluginHostServicesProvider>);
+    const error = fake.uiRenders.InlineError.at(-1);
+    assert.equal(error?.message, "剧情操作未完成");
+    assert.equal(error?.detail, "database unavailable");
+    assert.doesNotMatch(error?.message ?? "", /database|old diagnostic/);
+  });
+}

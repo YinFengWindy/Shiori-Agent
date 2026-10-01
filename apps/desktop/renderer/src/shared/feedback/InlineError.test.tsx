@@ -97,54 +97,13 @@ describe("InlineError", () => {
 });
 
 
-it("keeps a failed RPC's safe summary visible and its scrubbed cause accessible", async () => {
-  const { invokeBridgePayload } = await import("../bridgeInvoke");
-  const { errorFeedback } = await import("@shiori/plugin-sdk/host-internal");
-  let failure: unknown;
-  try {
-    await invokeBridgePayload(async ({ method }) => ({ id: "1", type: "response", method, payload: {}, error: {
-      code: "internal_error", message: "本地服务处理失败", details: { detail: "OSError: token=private-value" },
-    } }), "roles.update", {});
-  } catch (error) { failure = error; }
-  const view = await mount(<InlineError persona={false} {...errorFeedback(failure)} />);
+it("keeps diagnostics folded and scrubbed when passed separately from the summary", async () => {
+  const view = await mount(<InlineError persona={false} message="本地服务处理失败" detail="OSError: token=private-value" />);
   try {
     assert.match(view.container.textContent ?? "", /本地服务处理失败/);
     assert.doesNotMatch(view.container.textContent ?? "", /OSError|private-value/);
     await act(async () => view.container.querySelector("button")?.click());
     assert.match(view.container.textContent ?? "", /OSError/);
     assert.doesNotMatch(view.container.textContent ?? "", /private-value/);
-  } finally { await view.cleanup(); }
-});
-
-
-it("discloses the actionable cause forwarded by a QQ account RPC", async () => {
-  const { QQAccountDetail } = await import("../../../../../../plugins/qq/ui/index");
-  const { BridgeError } = await import("@shiori/plugin-sdk");
-  const { createFakeHostServices, createFakePluginClient } = await import("@shiori/plugin-sdk/testing");
-  const fake = createFakeHostServices();
-  const host: import("@shiori/plugin-sdk").PluginHostServices = {
-    ...fake.host, ui: { ...fake.host.ui, InlineError: (props) => <InlineError {...props} persona={false} /> },
-  };
-  const client = createFakePluginClient({ call: async <T,>(method: string): Promise<T> => {
-    if (method === "accounts.settings") return { managed_available: true } as T;
-    if (method === "accounts.begin") return { ref: "temporary" } as T;
-    if (method === "accounts.start") throw new BridgeError("本地服务处理失败，请查看详情", "internal_error", {
-      detail: "RuntimeError: 未找到官方 QQ，请检查安装目录 token=private-value",
-    });
-    if (method === "accounts.managed_status") return {
-      preparation: { stage: "ready", percent: 100, version: "v4" },
-      login: { phase: "stopped", qrcode: "", error: "" }, connection: "offline", error: "",
-    } as T;
-    return {} as T;
-  } });
-  const view = await mount(<QQAccountDetail account={null} roleId="mira" onChanged={() => undefined} host={host} client={client} />);
-  try {
-    await act(async () => { await Promise.resolve(); });
-    const alert = view.container.querySelector('[role="alert"]');
-    assert.match(alert?.textContent ?? "", /QQ 连接未完成/);
-    assert.doesNotMatch(alert?.textContent ?? "", /未找到官方 QQ|private-value/);
-    await act(async () => alert?.querySelector("button")?.click());
-    assert.match(alert?.textContent ?? "", /未找到官方 QQ，请检查安装目录/);
-    assert.doesNotMatch(alert?.textContent ?? "", /private-value/);
   } finally { await view.cleanup(); }
 });

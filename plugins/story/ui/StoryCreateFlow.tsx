@@ -1,3 +1,4 @@
+import { StoryError } from "./StoryError";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowLeft, ArrowRight, Check, CircleNotch, Sparkle } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
@@ -14,6 +15,7 @@ type StoryCreateFlowProps = {
   sharedBackdrop?: boolean;
   busy?: boolean;
   error?: string;
+  errorDetail?: string;
   onBack: () => void;
   onCreate: (input: StoryCreationInput, creationId: string) => void;
 };
@@ -25,7 +27,7 @@ const storySecondaryButtonClass = cx(storyActionButtonBase, "text-[#6C3E52] hove
 const stepTransition = { duration: 0.22, ease: "easeOut" } as const;
 
 /** Renders the compact animated form that creates one Story database entry. */
-export function StoryCreateFlow({ roles, background, sharedBackdrop = false, busy = false, error = "", onBack, onCreate }: StoryCreateFlowProps) {
+export function StoryCreateFlow({ roles, background, sharedBackdrop = false, busy = false, error = "", errorDetail, onBack, onCreate }: StoryCreateFlowProps) {
   const [input, setInput] = useState<StoryCreationInput>(createInitialStoryCreationInput);
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -84,7 +86,7 @@ export function StoryCreateFlow({ roles, background, sharedBackdrop = false, bus
               <StoryCreateStep step={step} roles={roles} input={input} selectedRole={selectedRole} reducedMotion={reducedMotion} onSelectRole={(roleId) => setInput((current) => ({ ...current, roleId }))} onChangeSetting={updateSetting} onChangeProfile={updateProfile} />
             </motion.div>
           </AnimatePresence>
-          <AnimatePresence initial={false}>{error ? <motion.div className="mt-5 border border-[#D58A9F] bg-[#FFF0F4] px-3 py-2 text-sm text-[#9A365D]" role="alert" initial={{ opacity: 0, y: reducedMotion ? 0 : 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={reducedMotion ? { duration: 0 } : stepTransition}>{error}</motion.div> : null}</AnimatePresence>
+          <AnimatePresence initial={false}>{error ? <motion.div className="mt-5" initial={{ opacity: 0, y: reducedMotion ? 0 : 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={reducedMotion ? { duration: 0 } : stepTransition}><StoryError message={error} detail={errorDetail} /></motion.div> : null}</AnimatePresence>
         </div>
       </main>
 

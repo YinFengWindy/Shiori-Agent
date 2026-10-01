@@ -1,3 +1,5 @@
+import { StoryError } from "./StoryError";
+import { describeStoryFailure } from "./storyFailure";
 import { useEffect, useMemo, useState } from "react";
 import { usePluginHostServices, type PluginNavPageComponentProps, type RoleRecord } from "@shiori/plugin-sdk";
 import { createStoryBridgeClient } from "./storyBridgeClient";
@@ -9,13 +11,13 @@ import { StoryAppSurface } from "./StoryAppSurface";
 export function StoryPage({ client, onExit }: PluginNavPageComponentProps) {
   const host = usePluginHostServices();
   const [roles, setRoles] = useState<RoleRecord[]>([]);
-  const [error, setError] = useState("");
+  const [failure, setFailure] = useState<ReturnType<typeof describeStoryFailure> | null>(null);
   const storyClient = useMemo(() => createStoryBridgeClient(client), [client]);
   const controller = useStoryController(storyClient);
   useEffect(() => {
     let active = true;
     void host.listRoles().then((next) => { if (active) setRoles(next); }).catch((cause: unknown) => {
-      if (active) setError(cause instanceof Error ? cause.message : String(cause));
+      if (active) setFailure(describeStoryFailure(cause, "剧情角色列表加载失败，请重试"));
     });
     return () => { active = false; };
   }, [host]);
@@ -24,5 +26,5 @@ export function StoryPage({ client, onExit }: PluginNavPageComponentProps) {
     onExit();
   };
   const presentation = useStoryWorkspacePresentation({ roles, client: storyClient, controller, onExit: exit });
-  return <StoryAppSurface>{error ? <p className="p-6 text-danger-text" role="alert">{error}</p> : presentation.content}</StoryAppSurface>;
+  return <StoryAppSurface>{failure ? <StoryError className="m-6" message={failure.error} detail={failure.errorDetail} /> : presentation.content}</StoryAppSurface>;
 }

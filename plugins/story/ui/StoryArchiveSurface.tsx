@@ -1,3 +1,4 @@
+import { StoryError } from "./StoryError";
 import { ArrowLeft } from "@phosphor-icons/react";
 import { useLayoutEffect, useRef } from "react";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
@@ -10,11 +11,12 @@ type StoryArchiveSurfaceProps = {
   background?: StoryMenuBackground;
   sharedBackdrop?: boolean;
   error: string;
+  errorDetail?: string;
   onReturnToGame: () => void;
 };
 
 /** Renders the immutable Story beat history without exposing gameplay input controls. */
-export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, error, onReturnToGame }: StoryArchiveSurfaceProps) {
+export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, error, errorDetail, onReturnToGame }: StoryArchiveSurfaceProps) {
   const latestEntryRef = useRef<HTMLLIElement | null>(null);
   const archiveDays = buildStoryArchiveDays(story);
   const lastEntryId = archiveDays.at(-1)?.periods.at(-1)?.entries.at(-1)?.id;
@@ -57,7 +59,7 @@ export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BAC
             ))}
           </div>
         </main>
-        {error ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 rounded-md bg-[#793F36] px-4 py-2 text-sm text-white shadow-lg" role="alert">{error}</div> : null}
+        {error ? <StoryError className="fixed bottom-5 left-1/2 z-40 w-[min(32rem,calc(100%-2rem))] -translate-x-1/2" message={error} detail={errorDetail} /> : null}
         </div>
       </div>
     </section>
