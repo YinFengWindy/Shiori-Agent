@@ -128,7 +128,8 @@ async def test_meme_prompt_module_injects_bottom_section(
         bus, MagicMock(), kernel.prompt_render_modules
     )
     names = [type(item).__name__ for item in ordered]
-    assert names.index("CitationPromptModule") < names.index("MemePromptModule")
+    assert names.index("_EmitPromptRenderCtxModule") < names.index("MemePromptModule")
+    assert names.index("MemePromptModule") < names.index("_RenderPromptModule")
 
 
 @pytest.mark.asyncio
@@ -147,7 +148,6 @@ async def test_meme_discovery_uses_v2_and_declares_citation(
     }
     assert kernel.loaded_count == 2
     assert [type(module).__name__ for module in kernel.prompt_render_modules] == [
-        "CitationPromptModule",
         "MemePromptModule",
     ]
     await kernel.terminate_all()
@@ -416,7 +416,7 @@ async def test_meme_unload_and_reload_removes_all_contributions(
         assert decorated.reply == "好的"
         assert decorated.media == [str(image)]
         assert decorated.meme_tag == "shy"
-        assert len(kernel.prompt_render_modules) == 2
+        assert len(kernel.prompt_render_modules) == 1
         assert await kernel.unload(provider) == []
         assert not any(
             type(module).__name__ == "MemePromptModule"
@@ -449,13 +449,11 @@ async def test_meme_setup_failure_rolls_back_events_and_prompt(
     state = next(item for item in kernel.states() if item["id"] == "meme")
     assert state["state"] == "FAILED"
     assert state["error"] == "registration failed after event effect"
-    assert [type(module).__name__ for module in kernel.prompt_render_modules] == [
-        "CitationPromptModule"
-    ]
+    assert kernel.prompt_render_modules == []
     assert (await bus.emit(_reply_ctx())).reply == "好的 <meme:shy>"
     assert await kernel.load("meme")
     decorated = await bus.emit(_reply_ctx())
     assert decorated.media == [str(image)]
     assert decorated.meme_tag == "shy"
-    assert len(kernel.prompt_render_modules) == 2
+    assert len(kernel.prompt_render_modules) == 1
     await kernel.terminate_all()

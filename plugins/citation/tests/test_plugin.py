@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -12,7 +11,7 @@ import pytest
 from shiori_plugin_testkit.packages import stage_plugin_package
 
 from agent.core.response_parser import ResponseMetadata
-from agent.lifecycle.types import AfterReasoningCtx, PromptRenderCtx
+from agent.lifecycle.types import AfterReasoningCtx
 from agent.plugin_host import HostServices, PluginKernel
 from bus.event_bus import EventBus
 
@@ -32,7 +31,6 @@ def _load_citation_plugin_module() -> Any:
 
 _citation_module = _load_citation_plugin_module()
 CitationAfterReasoningModule = _citation_module.CitationAfterReasoningModule
-CitationPromptModule = _citation_module.CitationPromptModule
 ProtocolTagCleanupModule = _citation_module.ProtocolTagCleanupModule
 extract_cited_ids = _citation_module.extract_cited_ids
 extract_cited_ids_from_tool_chain = _citation_module.extract_cited_ids_from_tool_chain
@@ -175,7 +173,7 @@ def test_citation_tool_chain_fallback_uses_item_ids() -> None:
 async def test_citation_setup_contributes_expected_phase_modules_via_kernel(
     tmp_path: Path,
 ) -> None:
-    """setup(ctx) 必须贡献与旧 CitationPlugin 完全一致的 phase 模块集合。
+    """setup(ctx) 只贡献回复后处理模块，不再向 prompt 注入引用要求。
 
     用真实 PluginKernel 装配真实插件目录来验证，而不是自造 fake capability——
     fake 与真实 capability 契约脱钩，capability 改坏也不会让测试变红（#182 评审）。
@@ -194,9 +192,7 @@ async def test_citation_setup_contributes_expected_phase_modules_via_kernel(
     kernel = PluginKernel([root], services=HostServices(event_bus=EventBus()))
     await kernel.load_all()
 
-    assert [type(m).__name__ for m in kernel.prompt_render_modules] == [
-        "CitationPromptModule"
-    ]
+    assert kernel.prompt_render_modules == []
     assert [type(m).__name__ for m in kernel.after_reasoning_modules] == [
         "CitationAfterReasoningModule",
         "ProtocolTagCleanupModule",
@@ -209,31 +205,8 @@ async def test_citation_setup_contributes_expected_phase_modules_via_kernel(
 
 
 @pytest.mark.asyncio
-async def test_citation_prompt_module_injects_prompt_section() -> None:
-    module = CitationPromptModule()
-    ctx = PromptRenderCtx(
-        session_key="telegram:1",
-        channel="telegram",
-        chat_id="1",
-        content="你好",
-        media=None,
-        timestamp=datetime.now(timezone.utc),
-        history=[],
-        skill_names=[],
-        retrieved_memory_block="",
-        disabled_sections=set(),
-        turn_injection_prompt="",
-    )
-    frame = SimpleNamespace(slots={"prompt:ctx": ctx})
-
-    await module.run(frame)
-
-    assert ctx.system_sections_bottom[0].name == "citation_protocol"
-    assert "§cited:[id1,id2,id3]§" in ctx.system_sections_bottom[0].content
-
-
-@pytest.mark.asyncio
-async def test_citation_after_reasoning_writes_persist_slot() -> None:
+@pytest.mark.parametrize("reply", ["答复正文\n§cited:[mem_1]§", "答复正文"])
+async def test_citation_after_reasoning_writes_persist_slot(reply: str) -> None:
     module = CitationAfterReasoningModule()
     ctx = AfterReasoningCtx(
         session_key="telegram:1",
@@ -241,11 +214,20 @@ async def test_citation_after_reasoning_writes_persist_slot() -> None:
         chat_id="1",
         tools_used=(),
         thinking=None,
-        response_metadata=ResponseMetadata(raw_text="答复正文\n§cited:[mem_1]§"),
+        response_metadata=ResponseMetadata(raw_text=reply),
         streamed=False,
-        tool_chain=(),
+        tool_chain=(
+            {
+                "calls": [
+                    {
+                        "name": "recall_memory",
+                        "result": json.dumps({"cited_item_ids": ["mem_1"]}),
+                    }
+                ]
+            },
+        ),
         context_retry={},
-        reply="答复正文\n§cited:[mem_1]§",
+        reply=reply,
     )
     frame = SimpleNamespace(slots={"reasoning:ctx": ctx})
 
