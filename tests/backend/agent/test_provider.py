@@ -118,6 +118,33 @@ class _FakeStream:
         return self._chunks.pop(0)
 
 
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("max_tokens", [None, 128])
+@pytest.mark.parametrize("provider_name", ["deepseek", "dashscope", "generic"])
+async def test_chat_omits_only_explicitly_unbounded_output_budget(
+    monkeypatch, streaming, max_tokens, provider_name
+):
+    fake = _FakeClient([_FakeStream([]) if streaming else _Response(content="ok")])
+    monkeypatch.setattr(provider_module, "AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="test", provider_name=provider_name)
+
+    await provider.chat(
+        messages=[],
+        tools=[],
+        model="model",
+        max_tokens=max_tokens,
+        auxiliary_max_tokens=64,
+        on_content_delta=AsyncMock() if streaming else None,
+    )
+
+    request = fake.calls[0]
+    if max_tokens is None:
+        assert "max_tokens" not in request
+    else:
+        assert request["max_tokens"] == max_tokens
+    assert request.get("stream", False) is streaming
+
+
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize(
     "content,reasoning,expected_content,expected_thinking",
@@ -637,7 +664,7 @@ async def test_deepseek_strategy_disables_thinking(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.parametrize("streaming", [False, True])
-@pytest.mark.parametrize("max_tokens", [128, 8192])
+@pytest.mark.parametrize("max_tokens", [128, 8192, None])
 @pytest.mark.parametrize(
     "provider_name,expected_extra",
     [
@@ -673,9 +700,13 @@ async def test_auxiliary_call_overrides_reasoning_without_mutating_config(
     assert "reasoning_effort" not in request
     assert "call_purpose" not in request
     assert "auxiliary_max_tokens" not in request
-    assert request["max_tokens"] == (
-        max_tokens if provider_name == "generic" else min(max_tokens, 512)
-    )
+    expected_max_tokens = max_tokens
+    if provider_name != "generic":
+        expected_max_tokens = 512 if max_tokens is None else min(max_tokens, 512)
+    if expected_max_tokens is None:
+        assert "max_tokens" not in request
+    else:
+        assert request["max_tokens"] == expected_max_tokens
     assert request.get("stream", False) is streaming
     assert defaults == {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
     assert overrides == {"enable_thinking": True, "temperature": 0.2}

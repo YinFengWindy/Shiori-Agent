@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass
 from .models import RoleRecord
 from .model_runtime import RoleModelSnapshot
 from .role_prompt_compiler import RolePromptCompiler
@@ -41,11 +39,8 @@ _SELF_SEED_PROMPT = """\
 """
 
 
-@dataclass
 class LlmRoleSelfSeedGenerator:
     """Generates SELF content using the dialogue snapshot accepted by the turn."""
-
-    timeout_s: float = 60.0
 
     async def agenerate(self, role: RoleRecord, snapshot: RoleModelSnapshot) -> str:
         """Returns generated content, propagating provider failures and empty responses."""
@@ -54,17 +49,16 @@ class LlmRoleSelfSeedGenerator:
             role_description=role.description.strip() or "（无）",
             role_prompt=RolePromptCompiler().compile(role).content,
         )
-        response = await asyncio.wait_for(
-            snapshot.provider.chat(
-                messages=[
-                    {"role": "system", "content": _SELF_SEED_SYSTEM},
-                    {"role": "user", "content": prompt},
-                ],
-                tools=[],
-                model=snapshot.model,
-                max_tokens=2048,
-            ),
-            timeout=self.timeout_s,
+        # Long role profiles and configured reasoning share the provider's normal
+        # timeout; initialization does not impose an additional output budget.
+        response = await snapshot.provider.chat(
+            messages=[
+                {"role": "system", "content": _SELF_SEED_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            tools=[],
+            model=snapshot.model,
+            max_tokens=None,
         )
         text = (response.content or "").strip()
         if not text:

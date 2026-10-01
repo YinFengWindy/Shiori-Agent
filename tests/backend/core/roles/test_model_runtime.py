@@ -231,6 +231,7 @@ def test_runtime_uses_role_dialogue_effort_override(tmp_path) -> None:
     assert visual_snapshot.provider._extra_body == {"reasoning_effort": "max"}
 
 
+@pytest.mark.parametrize("max_tokens", [8192, None])
 @pytest.mark.parametrize(
     "provider_name,model,main_extra,auxiliary_extra,main_effort",
     [
@@ -259,6 +260,7 @@ async def test_auxiliary_call_preserves_role_snapshot_and_main_reasoning(
     main_extra,
     auxiliary_extra,
     main_effort,
+    max_tokens,
 ):
     create = AsyncMock(
         return_value=SimpleNamespace(
@@ -301,7 +303,7 @@ async def test_auxiliary_call_preserves_role_snapshot_and_main_reasoning(
                 messages=[{"role": "user", "content": "你好"}],
                 tools=[],
                 model="fallback-model",
-                max_tokens=8192,
+                max_tokens=max_tokens,
                 # Proactive/drift legacy flags must still respect role effort.
                 disable_thinking=True,
                 extra_body={"reasoning_effort": "low"},
@@ -319,23 +321,32 @@ async def test_auxiliary_call_preserves_role_snapshot_and_main_reasoning(
     assert main_before == main_after
     assert main_before.get("extra_body") == main_extra
     assert main_before.get("reasoning_effort") == main_effort
-    assert main_before["max_tokens"] == 8192
+    if max_tokens is None:
+        assert "max_tokens" not in main_before
+    else:
+        assert main_before["max_tokens"] == max_tokens
     assert auxiliary.get("extra_body") == auxiliary_extra
-    assert auxiliary["max_tokens"] == (8192 if provider_name == "openai" else 512)
+    if provider_name == "openai" and max_tokens is None:
+        assert "max_tokens" not in auxiliary
+    else:
+        assert auxiliary["max_tokens"] == (
+            max_tokens if provider_name == "openai" else 512
+        )
     assert "reasoning_effort" not in auxiliary
     assert auxiliary["model"] == model
     assert "call_purpose" not in auxiliary
     fallback.chat.assert_not_awaited()
 
 
-async def test_role_aware_provider_forwards_fallback_call_options():
+@pytest.mark.parametrize("max_tokens", [256, None])
+async def test_role_aware_provider_forwards_fallback_call_options(max_tokens):
     fallback = AsyncMock(spec=LLMProvider)
     provider = RoleAwareProvider(fallback)
     options = dict(
         messages=[{"role": "user", "content": "hi"}],
         tools=[],
         model="fallback-model",
-        max_tokens=256,
+        max_tokens=max_tokens,
         tool_choice="none",
         extra_body={"reasoning_effort": "high", "temperature": 0.2},
         disable_thinking=True,
