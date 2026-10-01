@@ -20,8 +20,9 @@ EXPECTED_SESSIONS_COLUMNS = [
     (5, "last_user_at", "TEXT", 0, None, 0),
     (6, "last_proactive_at", "TEXT", 0, None, 0),
     (7, "next_seq", "INTEGER", 1, "0", 0),
-    (8, "user_cursor", "INTEGER", 0, None, 0),
-    (9, "external_cursor", "INTEGER", 0, None, 0),
+    (8, "maintenance_progress", "TEXT", 0, None, 0),
+    (9, "user_cursor", "INTEGER", 0, None, 0),
+    (10, "external_cursor", "INTEGER", 0, None, 0),
 ]
 EXPECTED_MESSAGES_COLUMNS = [
     (0, "id", "TEXT", 0, None, 1),
@@ -168,7 +169,7 @@ def test_schema_setup_runs_in_one_transaction_with_single_commit(
     assert traced[-1] == ("COMMIT", True)
     # Every DDL/DML statement between BEGIN and COMMIT runs inside the transaction.
     assert all(in_transaction for _, in_transaction in traced[1:])
-    assert sum(verb == "ALTER" for verb, _ in traced) == 10
+    assert sum(verb == "ALTER" for verb, _ in traced) == 11
 
 
 def test_failed_schema_setup_leaves_fresh_database_empty(

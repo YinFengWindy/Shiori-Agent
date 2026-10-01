@@ -131,6 +131,7 @@ class _MessageMixin:
         last_consolidated: int,
         context_cursors: dict[ContextScope, int] | None,
         next_seq: int,
+        maintenance_progress: str | None = None,
     ) -> None:
         """Atomically replace one session's persisted message snapshot.
 
@@ -199,6 +200,10 @@ class _MessageMixin:
                     ),
                 )
                 self.write_context_cursors(session_key, context_cursors)
+                if maintenance_progress is not None:
+                    self.write_maintenance_progress(
+                        session_key, maintenance_progress, commit=False
+                    )
                 self._conn.commit()
             except Exception:
                 self._conn.rollback()

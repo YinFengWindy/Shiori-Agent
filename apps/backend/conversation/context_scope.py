@@ -37,7 +37,6 @@ from core.identity import UserIdentity, UserIdentityStore
 from session.manager.helpers import role_id_from_session_key, role_session_key
 from session.manager.models import (
     HistoryFilter,
-    consolidation_cursor,
     message_thread_id,
 )
 from session.store.common import CONTEXT_SCOPES, ContextScope
@@ -264,12 +263,16 @@ def history_filter(view: ContextView | None) -> HistoryFilter | None:
 
 
 def history_start(session: object, view: ContextView | None) -> int:
-    """回合历史的起点（``get_history`` 的 ``start_index``）：本回合所在上下文的整理游标。
+    """模型历史及派生工具可见性使用窗口进度，与记忆游标独立。"""
+    from session.maintenance_progress import legacy_progress, ownership_key
 
-    每类上下文从自己的游标起读，另一类整理得再多也不会挤掉本类的原文；非角色会话
-    没有视图，用 ``last_consolidated``。
-    """
-    return consolidation_cursor(session, view.scope if view is not None else None)
+    progress = getattr(session, "maintenance_progress", None)
+    if progress is None:
+        progress = legacy_progress(
+            session, ownership_key(view.user_threads if view else None)
+        )
+        session.maintenance_progress = progress
+    return progress.cursor(view)
 
 
 def role_context_views(user_threads: UserContextThreads) -> tuple[ContextView, ...]:

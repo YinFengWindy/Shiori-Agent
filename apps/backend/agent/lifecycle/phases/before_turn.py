@@ -5,6 +5,7 @@ import logging
 from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 
 from bus.event_bus import EventBus
+from session.manager.models import consolidation_cursor
 from agent.core.runtime_support import SessionLike
 from agent.core.types import ContextBundle
 from agent.lifecycle.phase import (
@@ -16,7 +17,6 @@ from agent.lifecycle.phase import (
 )
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
 from conversation.context_scope import (
-    history_start,
     session_context_view,
 )
 
@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from agent.core.passive_turn import ContextStore
     from conversation.context_scope import ContextView
     from session.manager import SessionManager
-    from session.store.common import ContextScope
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +37,17 @@ BeforeTurnModules: TypeAlias = list[PhaseModule[BeforeTurnFrame]]
 
 
 class MemoryConsolidator(Protocol):
-    """Schedules consolidation and exposes its last definitive failure."""
+    """Schedule memory and delegate independent model-window maintenance."""
 
     def request_memory_consolidation(self, session_key: str) -> None: ...
 
     def get_memory_consolidation_failure(self, session_key: str) -> str | None: ...
 
-    async def ensure_memory_consolidation(
+    async def ensure_context_window(
         self,
         session_key: str,
         current_content: str = "",
-        scope: ContextScope | None = None,
+        view: ContextView | None = None,
         *,
         input_token_threshold: int,
     ) -> bool: ...
@@ -154,9 +153,11 @@ class _MemoryContextGuardModule:
             return frame
         session = cast(SessionLike, frame.slots[_SESSION_SLOT])
         messages = list(getattr(session, "messages", []))
-        # 积压与预算都只看本回合所在上下文：从这类上下文自己的整理游标起算。
+        # 记忆积压按本回合所属类别的记忆游标计算，与模型窗口水位独立。
         last = _clamp_context_cursor(
-            history_start(session, state.context_view),
+            consolidation_cursor(
+                session, state.context_view.scope if state.context_view else None
+            ),
             len(messages),
         )
         pending = _pending_messages(messages, last, state.context_view)
@@ -316,7 +317,7 @@ def default_before_turn_modules(
 def _clamp_context_cursor(cursor: int, total_messages: int) -> int:
     """把本回合所在上下文的整理游标夹到 ``[0, total_messages]``。
 
-    游标由 ``history_start`` 给出，已经是 int（会话字段按 int 存取，数字字符串在
+    游标由 ``consolidation_cursor`` 给出，已经是 int（会话字段按 int 存取，数字字符串在
     ``consolidation_cursor`` 里就转成 int，非数字直接报错），这里只需夹范围。
     """
     return min(max(0, cursor), max(0, int(total_messages)))

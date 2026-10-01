@@ -606,7 +606,7 @@ async def test_group_turn_history_is_dialog_only_but_members_include_heard(tmp_p
     assert [source.sender_id for source in request.window_sources] == ["72", None]
 
 
-async def test_bound_stranger_dm_joins_user_context_once_after_the_cursor(
+async def test_bound_stranger_dm_rebuilds_user_visibility_after_binding(
     tmp_path,
 ):
     _bind(tmp_path, "902")
@@ -625,7 +625,7 @@ async def test_bound_stranger_dm_joins_user_context_once_after_the_cursor(
 
     assert _labels(history) == ["desk", "udm", "sdm"]
     assert sum("sdm-user" in text for text in history) == 1
-    assert not any("sdm-old" in text for text in history)
+    assert sum("sdm-old" in text for text in history) == 2
 
 
 async def test_input_budget_counts_only_the_turn_context(tmp_path):

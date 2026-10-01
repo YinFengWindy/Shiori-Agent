@@ -8,7 +8,7 @@ from .helpers import (
     build_deferred_tools_hint,
     build_turn_injection_prompt,
     extract_model_facing_turn,
-    get_history_since_consolidated,
+    get_window_history,
     get_session_metadata,
 )
 from .pipeline import AgentCore, AgentCoreDeps, PassiveTurnPipeline
@@ -25,6 +25,6 @@ __all__ = [
     "build_deferred_tools_hint",
     "build_turn_injection_prompt",
     "extract_model_facing_turn",
-    "get_history_since_consolidated",
+    "get_window_history",
     "get_session_metadata",
 ]

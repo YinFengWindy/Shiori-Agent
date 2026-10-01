@@ -22,12 +22,12 @@ if TYPE_CHECKING:
     from agent.tools.registry import ToolRegistry
 
 
-def get_history_since_consolidated(
+def get_window_history(
     session: "SessionLike",
     memory_window: int,
     context_view: "ContextView | None" = None,
 ) -> list[dict]:
-    """读取回合所在上下文的整理游标之后、这类上下文可见的会话历史。
+    """读取回合所在实际上下文的窗口水位之后的可见原文。
 
     外部回合只含本会话的对话；本群旁听记录不进历史，另在 context frame 里成块
     （见 ``agent.prompting.listening_block``）。
@@ -40,12 +40,12 @@ def get_history_since_consolidated(
     )
 
 
-def get_history_tool_names_since_consolidated(
+def get_window_tool_names(
     session: "SessionLike",
     memory_window: int,
     context_view: "ContextView | None" = None,
 ) -> list[str]:
-    """读取与 get_history_since_consolidated 同一窗口内用过或解锁过的工具名。"""
+    """读取与 get_window_history 同一窗口内用过或解锁过的工具名。"""
 
     return session.get_history_tool_names(
         max_messages=memory_window,
@@ -54,13 +54,28 @@ def get_history_tool_names_since_consolidated(
     )
 
 
-def get_window_sources_since_consolidated(
+def get_window_preloaded_tools(
+    session: SessionLike,
+    memory_window: int,
+    context_view: ContextView | None,
+    tools: ToolRegistry,
+) -> list[str]:
+    """Resolve existing deferred tools from the current raw window in stable order."""
+    always_on = tools.get_always_on_names()
+    return [
+        name
+        for name in get_window_tool_names(session, memory_window, context_view)
+        if name not in always_on and tools.has_tool(name)
+    ]
+
+
+def get_window_sources(
     session: "SessionLike",
     memory_window: int,
     context_view: "ContextView | None",
     heard: Sequence[HeardLine] = (),
 ) -> "tuple[MessageSource, ...]":
-    """与 get_history_since_consolidated 同一窗口里，非用户本人消息的来源，旧的在前。
+    """与 get_window_history 同一窗口里，非用户本人消息的来源，旧的在前。
 
     只有外部上下文回合需要（注入成员档案，#498）；其他回合返回空。用户本人按
     ``belongs_to_user`` 共享判定排除。本回合旁听块里的消息 ``heard`` 同样计入，与

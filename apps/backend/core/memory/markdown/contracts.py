@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable, Any
 
 from core.memory.external_writes import ExternalLayerSnapshot
 from session.manager.consolidation import ConsolidationCommitRequest
@@ -21,12 +21,10 @@ class ConsolidateRequest:
     session: object
     archive_all: bool = False
     force: bool = False
-    current_content: str = ""
-    # 角色会话只整理这类上下文（按其预算判断）；None 表示各类上下文都看一遍。
-    # ``current_content`` 只计入这类上下文的预算。force 与 archive_all 总是两类一起推进。
+    # Memory owns category-wide extraction, even for an external-thread window.
     scope: ContextScope | None = None
-    # The owning final request already exceeded its model input budget.
-    input_budget_exceeded: bool = False
+    # Exact prefix required by an independent window; bypasses periodic thresholds.
+    through_index: int | None = None
 
 
 @dataclass
@@ -53,6 +51,14 @@ class MemoryLifecycleBindRequest:
         ],
         Awaitable[bool],
     ]
+    retry_consumers: (
+        Callable[[str, Callable[[dict[str, Any]], Awaitable[None]]], Awaitable[None]]
+        | None
+    ) = None
+    record_publication: Callable[[str, dict[str, Any]], None] | None = None
+    record_recent_context: (
+        Callable[[str, tuple[str, ...], str], Awaitable[None]] | None
+    ) = None
     after_consolidation: Callable[[object], Awaitable[None]] | None = None
     # 群环境层（#497）：整理外部段的产出写到这里；未绑定时整理直接失败。
     group_environment: "GroupEnvironment | None" = None

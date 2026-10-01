@@ -7,6 +7,43 @@ import pytest
 
 from session.manager import SessionManager
 from session.manager.models import build_session_message
+from session.manager.consolidation import ConsolidationCommitRequest
+from unittest.mock import AsyncMock
+from conversation.context_scope import history_start
+
+
+async def test_stale_message_rewrite_preserves_progress_and_clear_invalidates_it(
+    tmp_path,
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:rewrite")
+    session.add_message("user", "old")
+    session.add_message("assistant", "answer")
+    manager.save(session)
+    stale = replace(session, messages=[dict(message) for message in session.messages])
+    assert await manager.commit_consolidation(
+        ConsolidationCommitRequest(
+            session.key,
+            tuple(m["id"] for m in session.messages),
+            expected_last_consolidated=0,
+            last_consolidated=2,
+        ),
+        AsyncMock(),
+    )
+    prepared = await manager.prepare_window(session.key, None, keep_count=0)
+    assert prepared is not None and await manager.commit_window(prepared)
+    stale.messages[0]["content"] = "edited"
+    manager.save(stale)
+    restored = manager.get_or_create(session.key)
+    assert restored.last_consolidated == history_start(restored, None) == 2
+    restored.clear()
+    manager.save(restored)
+    restored.add_message("user", "new")
+    manager.save(restored)
+    manager.invalidate(restored.key)
+    restored = manager.get_or_create(restored.key)
+    assert restored.last_consolidated == history_start(restored, None) == 0
+    assert len(restored.messages) == 1
 
 
 async def test_media_replacement_copies_assets_preserves_cache_and_rejects_stale_cas(

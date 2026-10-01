@@ -10,6 +10,28 @@ import pytest
 from session.manager import ConsolidationCommitRequest, SessionManager
 
 
+@pytest.mark.asyncio
+async def test_cursor_persistence_failure_rolls_back_private_progress(
+    tmp_path, monkeypatch
+):
+    manager, session, request = _setup(tmp_path)
+    before = manager._store.get_session_meta(session.key)["maintenance_progress"]
+
+    def fail(*args, **kwargs):
+        raise OSError("cursor store failed")
+
+    monkeypatch.setattr(manager._store, "update_last_consolidated", fail)
+    with pytest.raises(OSError, match="cursor store failed"):
+        await manager.commit_consolidation(request, AsyncMock())
+    assert session.last_consolidated == 0
+    assert session.maintenance_progress.memory_version == 0
+    assert not manager._store._conn.in_transaction
+    manager.save(session)
+    assert (
+        manager._store.get_session_meta(session.key)["maintenance_progress"] == before
+    )
+
+
 def _setup(tmp_path: Path):
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")
@@ -32,6 +54,8 @@ async def test_changed_cursor_or_source_ids_reject_before_memory_side_effects(
 ):
     manager, session, request = _setup(tmp_path)
     if changed == "cursor":
+        manager._store.update_last_consolidated(session.key, 1)
+
         session.last_consolidated = 1
         manager.save(session)
     elif changed == "reordered":
@@ -133,6 +157,8 @@ async def test_context_cursors_commit_independently_and_repeat_is_rejected(
 ):
     """角色会话两个游标各自条件提交：另一类游标变了不影响本类，重复提交不生效。"""
     manager, session, _ = _setup(tmp_path)
+    manager._store.update_last_consolidated(session.key, 1)
+
     session.last_consolidated = 1
     manager.save(session)
     ids = tuple(message["id"] for message in session.messages)

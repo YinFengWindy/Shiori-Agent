@@ -24,6 +24,8 @@ Shiori 的记忆分为两层：**Markdown 文件层**（人类可读，LLM 直�
 
 每次 agent 回复完后会触发一次 consolidation 检查。不是每条消息都触发——有一个最小新消息数的门槛。
 
+记忆整理进度与模型原文窗口分开持久化。普通整理只更新记忆游标、语义产物及消费者状态，不移出模型历史。窗口准备移出原文时，会通过 `ensure_memory_for_window` 补齐对应类别的未整理前缀；即使未达到平时门槛也执行，已整理范围跳过。具体归属、迁移和提交条件见 [模型输入预算](context-budget.md)。
+
 ### 什么时候触发
 
 ```
@@ -97,6 +99,8 @@ Compression 部分由第二次 LLM 调用生成，有严格规则：**只从 USE
 ### 幂等性保证
 
 `consolidation_writes.db`（SQLite）用 `source_ref`（一条 JSON 数组，比如 `["msg_001","msg_002"]`）做主键，同一批消息不会写两次。HISTORY.md 和 PENDING.md 内部的隐藏标记也做第二层保护。
+
+记忆文件写入和游标提交成功后，下游 memory2 事件或关系刷新失败不会回滚记忆。会话持久化保存消费者输入和版本，下一次维护继续未完成阶段；事件已发布时不再重复发布。近期语境刷新也独立记录来源消息和更新版本，关系记录其已消费的记忆版本。
 
 PENDING.md 还有两阶段提交：`snapshot_pending()` → Optimizer 处理 → `commit_pending_snapshot()` 或 `rollback_pending_snapshot()`。启动时如果发现残留 snapshot 会自动回滚合并，防止崩溃丢数据。
 

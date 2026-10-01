@@ -40,7 +40,6 @@ from .formatting import (
     _normalize_memory_content,
     _parse_consolidation_payload,
     _select_consolidation_window,
-    _estimate_session_input_tokens,
     _select_recent_history_entries,
     _session_role_runtime_config,
 )

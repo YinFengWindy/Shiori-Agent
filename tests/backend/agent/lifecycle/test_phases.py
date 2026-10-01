@@ -667,12 +667,12 @@ async def test_before_turn_defers_token_pressure_until_complete_request_is_rende
         def request_memory_consolidation(self, session_key: str) -> None:
             raise AssertionError("token pressure must use awaited consolidation")
 
-        async def ensure_memory_consolidation(
+        async def ensure_context_window(
             self, session_key: str, current_content: str = "", scope=None
         ) -> bool:
             assert scope is None
             self.ensure_calls += 1
-            session.last_consolidated = len(session.messages)
+            session.maintenance_progress.windows["session"] = len(session.messages)
             return True
 
     consolidator = _Consolidator()
@@ -1963,7 +1963,7 @@ class _RecordingConsolidator:
     def request_memory_consolidation(self, session_key: str) -> None:
         self.requested.append(session_key)
 
-    async def ensure_memory_consolidation(
+    async def ensure_context_window(
         self, session_key: str, content: str, scope: object
     ) -> bool:
         self.ensured.append(session_key)
