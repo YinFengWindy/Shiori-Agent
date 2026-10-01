@@ -541,6 +541,8 @@ class DefaultReasoner(
                 retry_trace["react_stats"] = dict(
                     result.metadata.get("react_stats") or {}
                 )
+                if "reply_recovery" in result.metadata:
+                    retry_trace["reply_recovery"] = result.metadata["reply_recovery"]
                 if account_delivery_state.get("sent"):
                     retry_trace["account_delivery_sent"] = True
                 thinking_finished_at = first_content_at or time.perf_counter()

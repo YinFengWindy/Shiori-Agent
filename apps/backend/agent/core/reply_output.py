@@ -90,6 +90,6 @@ class RoleReplyOutput:
         if not self._enabled or content is None:
             return content
         normalized = normalize_role_content(content)
-        if self._sink is not None and not self._passthrough and normalized:
+        if self._sink is not None and not self._passthrough and normalized.strip():
             await self._sink({"content_delta": normalized})
         return normalized

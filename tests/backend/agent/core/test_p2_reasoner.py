@@ -5,10 +5,13 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
+import pytest
+
 from agent.core.passive_turn import DefaultReasoner
 from agent.core.runtime_support import LLMServices, ToolDiscoveryState
 from agent.lifecycle.types import PromptRenderResult
 from agent.looping.ports import LLMConfig
+from agent.core.passive_turn.empty_reply import EmptyReplyError
 from agent.provider import LLMResponse, ToolCall
 from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
@@ -896,7 +899,7 @@ def test_empty_content_with_thinking_triggers_retry_and_succeeds():
     assert len(provider.calls) == 2
 
 
-def test_empty_content_with_thinking_retry_still_empty_falls_back():
+def test_empty_content_with_thinking_retry_still_empty_fails():
     provider = _Provider(
         [
             LLMResponse(content=None, tool_calls=[], thinking="只有思考"),
@@ -919,17 +922,17 @@ def test_empty_content_with_thinking_retry_still_empty_falls_back():
         memory_window=40,
     )
 
-    result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
+    with pytest.raises(EmptyReplyError):
+        asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 
-    assert result.reply == "（无响应）"
-    assert result.thinking == "只有思考"
     assert len(provider.calls) == 2
 
 
-def test_empty_content_without_thinking_no_retry():
+def test_empty_content_without_thinking_recovers():
     provider = _Provider(
         [
             LLMResponse(content=None, tool_calls=[], thinking=None),
+            LLMResponse(content="恢复正文"),
         ]
     )
     tools = ToolRegistry()
@@ -950,5 +953,5 @@ def test_empty_content_without_thinking_no_retry():
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
 
-    assert result.reply == "（无响应）"
-    assert len(provider.calls) == 1
+    assert result.reply == "恢复正文"
+    assert len(provider.calls) == 2

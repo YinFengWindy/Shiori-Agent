@@ -1,6 +1,9 @@
 """Passive turns own same-role desktop pushes until their ordered SQL commit."""
 
 import asyncio
+import json
+import sqlite3
+from contextlib import suppress
 from conversation.listening import GroupListeningControl
 from conversation.service import ConversationService
 from datetime import datetime, timedelta, timezone
@@ -15,6 +18,7 @@ from agent.core.runtime_support import ToolDiscoveryState, TurnRunResult
 from agent.core.types import ContextBundle, ReasonerResult
 from agent.lifecycle.types import PromptRenderResult
 from agent.looping.ports import LLMConfig, LLMServices
+from agent.provider import LLMResponse
 from agent.tool_hooks import ToolExecutionRequest
 from agent.tool_hooks.executor import ToolExecutor
 from agent.tools.message_push import MessagePushTool
@@ -35,6 +39,8 @@ from core.roles.reply_state import RoleReply
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
 from core.memory.group_environment import GroupEnvironment
+from plugins.observe.backend.collector import GlobalErrorCollector
+from plugins.observe.backend.writer import TraceWriter
 
 
 @pytest.fixture
@@ -356,6 +362,120 @@ def _isolation_pipeline(manager, *, input_token_threshold=75000):
         )
     )
     return pipeline, reasoner
+
+
+@pytest.mark.parametrize("retry_failure", ["empty", "request"])
+async def test_empty_reply_failure_is_persisted_without_committing_role_reply(
+    tmp_path, retry_failure
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    manager.save(session)
+    pipeline, reasoner = _isolation_pipeline(manager)
+    # Restore the real reasoning loop while retaining deterministic prompt setup.
+    reasoner.run = DefaultReasoner.run.__get__(reasoner)
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(
+            content="",
+            thinking="secret thought",
+            model="role-model",
+            stream=True,
+            finish_reason="length",
+            total_tokens=128,
+        ),
+        (
+            LLMResponse(
+                content='{"content":" ","mood":"平静","thought":"private"}',
+                model="role-model",
+                stream=True,
+                finish_reason="stop",
+                total_tokens=10,
+            )
+            if retry_failure == "empty"
+            else RuntimeError("upstream api_key=super-secret-key " + "x" * 10000)
+        ),
+    ]
+    reasoner._llm = LLMServices(provider=provider, light_provider=provider)
+    failed_events = []
+    pipeline._bus.observe = AsyncMock(side_effect=failed_events.append)
+    db_path = tmp_path / "observe.db"
+    writer = TraceWriter(db_path)
+    writer_task = asyncio.create_task(writer.run())
+    collector = GlobalErrorCollector(writer)
+    try:
+        await writer.wait_ready(writer_task)
+        collector.install()
+        result = await pipeline.run(
+            _turn(USER_DM), session.key, dispatch_outbound=False
+        )
+        await collector.uninstall()
+        await writer.drain()
+    finally:
+        await collector.uninstall()
+        writer_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await writer_task
+    assert result.content == "处理消息时出错，请稍后再试。"
+    assert result.committed_message_id is None
+    assert provider.chat.await_count == 2
+    assert manager._store.fetch_session_messages(session.key) == []
+    assert any(type(event).__name__ == "TurnFailed" for event in failed_events)
+    with sqlite3.connect(db_path) as conn:
+        records = conn.execute("SELECT traceback_text FROM global_errors").fetchall()
+    assert len(records) == 1
+    diagnostic_text = records[0][0]
+    assert "EmptyReplyError" in diagnostic_text
+    payload = diagnostic_text.split("模型未产出有效正文。 ", 1)[1].split("\n", 1)[0]
+    facts = json.loads(payload)
+    assert facts["session"] == session.key
+    assert facts["channel"] == "qq"
+    assert facts["turn"]
+    assert facts["retries"] == 1
+    assert facts["attempts"][0]["model"] == "role-model"
+    assert facts["attempts"][0]["stream"] is True
+    assert facts["attempts"][0]["finish_reason"] == "length"
+    assert facts["attempts"][0]["empty_kind"] == "raw_empty"
+    if retry_failure == "empty":
+        assert facts["outcome"] == "exhausted"
+        assert facts["attempts"][1]["finish_reason"] == "stop"
+        assert facts["attempts"][1]["empty_kind"] == "normalization_empty"
+        assert facts["attempts"][1]["total_tokens"] == 10
+    else:
+        assert facts["outcome"] == "request_failed"
+        assert facts["error_type"] == "RuntimeError"
+        assert "upstream" in facts["error_summary"]
+        assert len(facts["error_summary"]) <= 300
+        assert "super-secret-key" not in diagnostic_text
+    assert "secret thought" not in diagnostic_text
+    assert "private" not in diagnostic_text
+
+
+async def test_recovered_reply_commits_diagnostics_and_normal_content(tmp_path):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.metadata["role_id"] = "mira"
+    manager.save(session)
+    pipeline, reasoner = _isolation_pipeline(manager)
+    reasoner.run = DefaultReasoner.run.__get__(reasoner)
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(content=""),
+        LLMResponse(content="恢复正文"),
+        LLMResponse(content='{"mood":"平静","thought":"我想回应你。"}'),
+    ]
+    reasoner._llm = LLMServices(provider=provider, light_provider=provider)
+    result = await pipeline.run(_turn(USER_DM), session.key, dispatch_outbound=False)
+    assert result.content == "恢复正文"
+    assert result.committed_message_id is not None
+    persisted = SessionManager(tmp_path).get_or_create(session.key).messages
+    assert persisted[-1]["content"] == "恢复正文"
+    assert (
+        persisted[-1]["metadata"]["context_retry"]["reply_recovery"]["outcome"]
+        == "recovered"
+    )
+    assert provider.chat.await_count == 3
 
 
 def _turn(thread, channel="qq", chat_id="x"):

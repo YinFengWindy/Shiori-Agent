@@ -20,7 +20,8 @@ from agent.account_delivery import AccountSendReceipt, UserChatTarget
 from agent.core.passive_turn import DefaultReasoner
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.looping.ports import LLMConfig, LLMServices
-from agent.provider import LLMResponse, ToolCall
+from agent.provider import ContentSafetyError, LLMResponse, ToolCall
+from agent.core.passive_turn.empty_reply import EmptyReplyError
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.types import HookContext, HookOutcome
 from agent.tools.account_delivery import ACCOUNT_SEND_EXTERNAL_LIMIT, AccountSendTool
@@ -284,72 +285,186 @@ async def test_mood_fetch_failure_degrades_without_failing_delivery():
     assert result.metadata["role_reply_mood_fresh"] is False
 
 
-async def test_empty_main_reply_truncation_is_logged_distinctly_from_other_empty(
-    caplog,
+@pytest.mark.parametrize("finish_reason,truncated", [("length", True), ("stop", False)])
+async def test_empty_reply_exhaustion_keeps_both_response_facts(
+    finish_reason, truncated
 ):
-    """Issue #304: the main reply call's `content` can come back empty with
-    no `thinking` either (never hits the "[空回复重试]" retry, which only
-    fires when thinking is non-empty), and used to fall straight to the
-    "（无响应）" placeholder with zero trace of why. A `max_tokens` cutoff
-    (finish_reason="length") must now be labelled as truncation, not left
-    indistinguishable from any other empty-content cause."""
-    provider = AsyncMock()
-    provider.chat.return_value = LLMResponse(content="", finish_reason="length")
-    with caplog.at_level("WARNING"):
-        result = await make_reasoner(provider, ToolRegistry()).run(
-            [{"role": "user", "content": "你好"}],
-        )
-    assert result.reply == "（无响应）"
-    messages = [record.getMessage() for record in caplog.records]
-    assert any(
-        "截断" in message and "finish_reason=length" in message for message in messages
-    )
-
-
-async def test_empty_main_reply_without_truncation_is_logged_as_non_truncated(
-    caplog,
-):
-    provider = AsyncMock()
-    provider.chat.return_value = LLMResponse(content="", finish_reason="stop")
-    with caplog.at_level("WARNING"):
-        result = await make_reasoner(provider, ToolRegistry()).run(
-            [{"role": "user", "content": "你好"}],
-        )
-    assert result.reply == "（无响应）"
-    messages = [record.getMessage() for record in caplog.records]
-    assert any(
-        "未产出正文" in message and "finish_reason=stop" in message
-        for message in messages
-    )
-    assert not any("截断" in message for message in messages)
-
-
-async def test_retry_exhausted_empty_reply_does_not_double_log_truncation(caplog):
-    """#304 two-axis review, round 2: when the retry after an empty-content-
-    but-thinking response also comes back empty, the retry-failure log and
-    the general empty-content log used to fire independently for the same
-    single failure - two warnings for one event. Only the retry-specific
-    one (which carries the retry attempt's own finish_reason) should fire."""
     provider = AsyncMock()
     provider.chat.side_effect = [
-        LLMResponse(content="", thinking="在想", finish_reason="length"),
-        LLMResponse(content="", finish_reason="length"),
+        LLMResponse(
+            content="", thinking="在想", finish_reason=finish_reason, total_tokens=20
+        ),
+        LLMResponse(content="", finish_reason="stop", total_tokens=5),
     ]
-    with caplog.at_level("WARNING"):
-        result = await make_reasoner(provider, ToolRegistry()).run(
-            [{"role": "user", "content": "你好"}],
+    messages = [{"role": "user", "content": "你好"}]
+    with pytest.raises(EmptyReplyError) as caught:
+        await make_reasoner(provider, ToolRegistry()).run(
+            messages, reply_moods=("平静",)
         )
-    assert result.reply == "（无响应）"
-    warning_texts = [record.getMessage() for record in caplog.records]
-    truncation_labelled = [
-        message
-        for message in warning_texts
-        if "输出被截断" in message and "finish_reason=length" in message
+    assert provider.chat.await_count == 2
+    assert messages == [{"role": "user", "content": "你好"}]
+    facts = caught.value.diagnostics
+    assert facts["outcome"] == "exhausted"
+    assert facts["retries"] == 1
+    assert facts["attempts"][0]["finish_reason"] == finish_reason
+    assert facts["attempts"][0]["truncated"] is truncated
+    assert facts["attempts"][0]["total_tokens"] == 20
+    assert facts["attempts"][1]["finish_reason"] == "stop"
+    assert facts["attempts"][1]["total_tokens"] == 5
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(
+    "content", [None, "", " \n ", '{"content":" ","mood":"平静","thought":"私密"}']
+)
+async def test_empty_final_reply_recovers_once_without_thinking(stream, content):
+    provider = AsyncMock()
+    responses = [
+        LLMResponse(content=content),
+        LLMResponse(content="已恢复"),
+        LLMResponse(content=mood_payload()),
     ]
-    # Exactly one truncation-labelled empty-reply warning, not two, for
-    # this single failed-retry event.
-    assert len(truncation_labelled) == 1
-    assert "[空回复重试]" in truncation_labelled[0]
+    provider.chat.side_effect = streaming_chat(responses) if stream else responses
+    deltas = []
+
+    async def sink(delta):
+        deltas.append(delta)
+
+    result = await make_reasoner(provider, ToolRegistry()).run(
+        [{"role": "user", "content": "你好"}],
+        reply_moods=("平静",),
+        on_content_delta=sink if stream else None,
+    )
+    assert result.reply == "已恢复"
+    assert result.streamed is stream
+    assert "".join(delta.get("content_delta", "") for delta in deltas) == (
+        "已恢复" if stream else ""
+    )
+    assert provider.chat.await_count == 3
+    recovery_call = provider.chat.call_args_list[1].kwargs
+    assert recovery_call["tools"] == []
+    assert (
+        recovery_call["max_tokens"]
+        == provider.chat.call_args_list[0].kwargs["max_tokens"]
+    )
+    assert "disable_thinking" not in recovery_call
+    assert result.metadata["reply_recovery"]["outcome"] == "recovered"
+
+
+async def test_empty_reply_recovery_does_not_replay_prior_tool_and_keeps_usage_and_thinking():
+    provider = AsyncMock()
+    tool = CounterTool()
+    tools = ToolRegistry()
+    tools.register(tool, always_on=True)
+    provider.chat.side_effect = [
+        LLMResponse(
+            content="", tool_calls=[ToolCall("c1", "counter", {})], total_tokens=10
+        ),
+        LLMResponse(
+            content="",
+            thinking="主思考",
+            total_tokens=20,
+            cache_prompt_tokens=8,
+            cache_hit_tokens=2,
+        ),
+        LLMResponse(
+            content="完成了", total_tokens=5, cache_prompt_tokens=3, cache_hit_tokens=1
+        ),
+    ]
+    result = await make_reasoner(provider, tools).run(
+        [{"role": "user", "content": "检查"}]
+    )
+    assert tool.calls == 1
+    assert provider.chat.await_count == 3
+    assert provider.chat.call_args_list[-1].kwargs["tools"] == []
+    assert (
+        sum(
+            m["role"] == "tool"
+            for m in provider.chat.call_args_list[-1].kwargs["messages"]
+        )
+        == 1
+    )
+    assert result.thinking == "主思考"
+    assert result.metadata["react_stats"]["total_tokens"] == 35
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        LLMResponse(content="", refused=True),
+        LLMResponse(content="", finish_reason="content_filter"),
+        LLMResponse(content="", finish_reason="CONTENT_FILTER"),
+    ],
+)
+async def test_empty_explicit_refusal_does_not_retry(response):
+    provider = AsyncMock()
+    provider.chat.return_value = response
+    with pytest.raises(EmptyReplyError) as caught:
+        await make_reasoner(provider, ToolRegistry()).run(
+            [{"role": "user", "content": "你好"}]
+        )
+    assert caught.value.diagnostics["outcome"] == "refused"
+    assert caught.value.diagnostics["retries"] == 0
+    assert provider.chat.await_count == 1
+
+
+@pytest.mark.parametrize("recovering", [False, True])
+async def test_explanatory_refusal_text_is_delivered_without_retrying_it(recovering):
+    provider = AsyncMock()
+    responses = [LLMResponse(content="", thinking="")] if recovering else []
+    responses.append(LLMResponse(content="无法帮助处理此请求。", refused=True))
+    provider.chat.side_effect = responses
+    result = await make_reasoner(provider, ToolRegistry()).run(
+        [{"role": "user", "content": "你好"}]
+    )
+    assert result.reply == "无法帮助处理此请求。"
+    assert provider.chat.await_count == (2 if recovering else 1)
+
+
+@pytest.mark.parametrize(
+    "error", [TimeoutError("timeout"), ContentSafetyError("content_filter")]
+)
+async def test_recovery_request_failure_propagates_without_successful_fallback(error):
+    provider = AsyncMock()
+    provider.chat.side_effect = [LLMResponse(content=""), error]
+    with pytest.raises(EmptyReplyError) as caught:
+        await make_reasoner(provider, ToolRegistry()).run(
+            [{"role": "user", "content": "你好"}]
+        )
+    assert caught.value.__cause__ is error
+    assert caught.value.diagnostics["outcome"] == "request_failed"
+    assert provider.chat.await_count == 2
+
+
+async def test_recovery_rejects_unexpected_tools_without_execution():
+    provider = AsyncMock()
+    tool = CounterTool()
+    tools = ToolRegistry()
+    tools.register(tool, always_on=True)
+    provider.chat.side_effect = [
+        LLMResponse(content=""),
+        LLMResponse(content="工具正文", tool_calls=[ToolCall("c1", "counter", {})]),
+    ]
+    with pytest.raises(EmptyReplyError) as caught:
+        await make_reasoner(provider, tools).run([{"role": "user", "content": "你好"}])
+    assert caught.value.diagnostics["outcome"] == "unexpected_tool_calls"
+    assert tool.calls == 0
+    assert provider.chat.await_count == 2
+
+
+async def test_recovery_budget_check_stops_before_second_request(monkeypatch):
+    provider = AsyncMock()
+    provider.chat.return_value = LLMResponse(content="")
+    reasoner = make_reasoner(provider, ToolRegistry())
+    reasoner._memory_input_token_threshold = 100
+    monkeypatch.setattr(
+        reasoner, "_request_tokens_with_tools", Mock(side_effect=[1, 100])
+    )
+    with pytest.raises(EmptyReplyError) as caught:
+        await reasoner.run([{"role": "user", "content": "你好"}])
+    assert caught.value.diagnostics["outcome"] == "budget_exceeded"
+    assert caught.value.diagnostics["retries"] == 0
+    assert provider.chat.await_count == 1
 
 
 async def test_mood_fetch_never_overwrites_main_response_thinking():

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from .context import ContextStore
+from .empty_reply import EmptyReplyError
 from .reasoner import Reasoner
 from agent.lifecycle.phase import Phase
 from agent.lifecycle.phases.after_reasoning import (
@@ -436,21 +437,26 @@ class PassiveTurnPipeline:
             except MemoryConsolidationFailedError:
                 raise
             except Exception as exc:
-                logger.exception(
-                    diagnostic_line(
-                        "PassiveTurnPipeline.run",
-                        event="phase_error",
-                        flow="passive",
-                        phase="reasoner",
-                        session=key,
-                        turn=turn_id,
-                        action="fail",
-                        reason="provider_error",
-                        duration_ms=int((time.perf_counter() - started) * 1000),
-                        error_type=type(exc).__name__,
-                        note=str(exc)[:160],
+                if isinstance(exc, EmptyReplyError):
+                    # This bounded payload is the diagnosis. A chained provider
+                    # traceback can exceed the collector limit and cut it off.
+                    logger.error("EmptyReplyError: %s", exc)
+                else:
+                    logger.exception(
+                        diagnostic_line(
+                            "PassiveTurnPipeline.run",
+                            event="phase_error",
+                            flow="passive",
+                            phase="reasoner",
+                            session=key,
+                            turn=turn_id,
+                            action="fail",
+                            reason="provider_error",
+                            duration_ms=int((time.perf_counter() - started) * 1000),
+                            error_type=type(exc).__name__,
+                            note=str(exc)[:160],
+                        )
                     )
-                )
                 # The reply below stays generic; surfaces that can show more
                 # (the desktop's 「详情」) pick up a scrubbed one-line summary.
                 await self._bus.observe(
