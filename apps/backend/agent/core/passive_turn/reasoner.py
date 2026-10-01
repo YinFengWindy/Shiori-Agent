@@ -23,11 +23,11 @@ from .helpers import (
     get_session_metadata,
     get_window_sources_since_consolidated,
 )
+from agent.prompting.usage_anchor import turn_usage_context
 from agent.prompting.listening_block import HeardLine, turn_heard
 from .reasoning_loop import _PassiveReasoningLoopMixin
 from .reasoning_result import _PassiveReasoningResultMixin
 from agent.core.runtime_support import ToolDiscoveryState
-from agent.core import passive_support
 from agent.core.types import ReasonerResult
 from agent.lifecycle.phase import Phase
 from agent.lifecycle.phases.after_step import AfterStepFrame, default_after_step_modules
@@ -173,7 +173,6 @@ class DefaultReasoner(
         session_manager: "SessionManager | None" = None,
         event_bus: "EventBus | None" = None,
         memory_consolidator: MemoryConsolidator | None = None,
-        memory_input_token_threshold: int = 75000,
     ) -> None:
         self._llm = llm
         self._llm_config = llm_config
@@ -185,7 +184,6 @@ class DefaultReasoner(
         self._session_manager = session_manager
         self._event_bus = event_bus
         self._memory_consolidator = memory_consolidator
-        self._memory_input_token_threshold = max(0, int(memory_input_token_threshold))
         self._prompt_render_plugin_modules: list[object] = []
         self._before_step_plugin_modules: list[object] = []
         self._after_step_plugin_modules: list[object] = []
@@ -289,6 +287,7 @@ class DefaultReasoner(
         self._stream_sink_factory = factory
 
     @tool_turn
+    @turn_usage_context
     async def run_turn(
         self,
         *,
@@ -443,13 +442,16 @@ class DefaultReasoner(
                     ),
                     external_only=external_restricted,
                 )
-                request_tokens = passive_support.estimate_messages_tokens(
+                budget = self._request_budget(initial_messages, schemas)
+                threshold = (
+                    (budget.target_tokens if budget_repaired else budget.trigger_tokens)
+                    if budget is not None
+                    else 0
+                )
+                request_tokens = self._request_tokens_with_tools(
                     initial_messages, schemas
                 )
-                if (
-                    self._memory_input_token_threshold <= 0
-                    or request_tokens < self._memory_input_token_threshold
-                ):
+                if threshold <= 0 or request_tokens < threshold:
                     break
                 if budget_repaired:
                     break
@@ -466,6 +468,11 @@ class DefaultReasoner(
                     session.key,
                     msg.content,
                     context_view.scope if context_view is not None else None,
+                    **(
+                        {"input_token_threshold": budget.target_tokens}
+                        if budget is not None
+                        else {}
+                    ),
                 ):
                     raise MemoryConsolidationFailedError(
                         "记忆整理没有可处理的历史或未产生进展，已停止发送超限上下文。"
@@ -479,15 +486,12 @@ class DefaultReasoner(
                     plan["history_window"],
                 )
             if (
-                self._memory_input_token_threshold > 0
-                and request_tokens >= self._memory_input_token_threshold
+                threshold > 0
+                and request_tokens >= threshold
                 and attempt + 1 < len(attempts)
             ):
                 continue
-            if (
-                self._memory_input_token_threshold > 0
-                and request_tokens >= self._memory_input_token_threshold
-            ):
+            if threshold > 0 and request_tokens >= threshold:
                 raise MemoryConsolidationFailedError(
                     "记忆整理和上下文裁剪后输入仍超过预算，已停止发送超限上下文。"
                 )
@@ -534,6 +538,7 @@ class DefaultReasoner(
                         sorted(plan["disabled_sections"]),
                     )
 
+                retry_trace["request_usage"] = result.metadata.get("request_usage", {})
                 if isinstance(llm_user_content, (str, list)):
                     retry_trace["llm_user_content"] = llm_user_content
                 if isinstance(llm_context_frame, str) and llm_context_frame.strip():

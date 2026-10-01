@@ -11,6 +11,7 @@ from agent.background.runtime import (
 class _FakeAgent:
     def __init__(self, *, exit_reason: str, result: str) -> None:
         self.last_exit_reason = exit_reason
+        self.last_usage = {"cumulative": {"prompt_tokens": 7}}
         self._result = result
 
     async def run(self, task: str) -> str:
@@ -45,6 +46,7 @@ async def test_background_job_runner_marks_completed():
     assert result.status == "completed"
     assert result.exit_reason == "completed"
     assert result.result_summary == "done"
+    assert result.request_usage == {"cumulative": {"prompt_tokens": 7}}
 
 
 @pytest.mark.asyncio

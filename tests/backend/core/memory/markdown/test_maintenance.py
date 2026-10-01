@@ -366,7 +366,12 @@ async def test_ensure_consolidation_runs_non_force_then_force_when_budget_remain
         lambda *_args, **_kwargs: next(budget_states),
     )
     try:
-        assert await maintenance.ensure_consolidation(session.key) is True
+        assert (
+            await maintenance.ensure_consolidation(
+                session.key, input_token_threshold=75000
+            )
+            is True
+        )
         assert calls == [False, True]
     finally:
         await event_bus.aclose()
@@ -387,7 +392,12 @@ async def test_ensure_consolidation_returns_false_when_no_progress(
         lambda *_args, **_kwargs: True,
     )
     try:
-        assert await maintenance.ensure_consolidation(session.key) is False
+        assert (
+            await maintenance.ensure_consolidation(
+                session.key, input_token_threshold=75000
+            )
+            is False
+        )
     finally:
         await event_bus.aclose()
 
@@ -408,7 +418,9 @@ async def test_ensure_consolidation_propagates_existing_background_failure(
     maintenance._maintenance_tasks[session.key] = asyncio.create_task(fail())
     try:
         await started.wait()
-        pending = asyncio.create_task(maintenance.ensure_consolidation(session.key))
+        pending = asyncio.create_task(
+            maintenance.ensure_consolidation(session.key, input_token_threshold=75000)
+        )
         await asyncio.sleep(0)
         release.set()
         with pytest.raises(RuntimeError, match="provider failed"):
@@ -425,7 +437,7 @@ async def test_concurrent_ensure_consolidation_shares_in_flight_task(
     entered, release = asyncio.Event(), asyncio.Event()
     calls = 0
 
-    async def ensure_impl(_session_key: str, _current_content: str, _scope):
+    async def ensure_impl(_session_key: str, _current_content: str, _scope, _threshold):
         nonlocal calls
         calls += 1
         entered.set()
@@ -433,9 +445,13 @@ async def test_concurrent_ensure_consolidation_shares_in_flight_task(
         return True
 
     monkeypatch.setattr(maintenance, "_ensure_consolidation", ensure_impl)
-    first = asyncio.create_task(maintenance.ensure_consolidation(session.key))
+    first = asyncio.create_task(
+        maintenance.ensure_consolidation(session.key, input_token_threshold=75000)
+    )
     await entered.wait()
-    second = asyncio.create_task(maintenance.ensure_consolidation(session.key))
+    second = asyncio.create_task(
+        maintenance.ensure_consolidation(session.key, input_token_threshold=75000)
+    )
     release.set()
     try:
         assert await asyncio.gather(first, second) == [True, True]
@@ -493,7 +509,6 @@ def _recording_maintenance(
     manager: SessionManager,
     environment_replies: dict[str, str] | None = None,
     keep_count: int = 0,
-    input_token_threshold: int = 75000,
 ):
     """接上真实会话提交、群环境层，记录提示词与引擎事件的整理服务。"""
     provider = _RecordingProvider(environment_replies)
@@ -505,7 +520,6 @@ def _recording_maintenance(
         provider=cast(LLMProvider, provider),
         model="test",
         keep_count=keep_count,
-        input_token_threshold=input_token_threshold,
         event_bus=event_bus,
     )
     maintenance.bind_lifecycle(
@@ -821,13 +835,13 @@ async def test_group_turn_budget_force_only_advances_the_external_cursor(
     user_view = user_context_view(tmp_path, "mira")
     user_history = get_history_since_consolidated(session, 500, user_view)
     _provider, event_bus, _events, maintenance = _recording_maintenance(
-        tmp_path, manager, keep_count=4, input_token_threshold=1
+        tmp_path, manager, keep_count=4
     )
     try:
         # 阈值为 1，普通整理后仍超预算，于是走强制整理；预算始终降不下来。
         assert (
             await maintenance.ensure_consolidation(
-                session.key, "群里新消息", "external"
+                session.key, "群里新消息", "external", input_token_threshold=1
             )
             is False
         )

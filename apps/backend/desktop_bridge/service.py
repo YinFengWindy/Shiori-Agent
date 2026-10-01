@@ -155,6 +155,7 @@ class DesktopBridgeService:
                 role_store=role_store,
                 registrations=registrations,
                 dev_mode=bool(getattr(config, "dev_mode", False)),
+                budget_policy=config.context_budget,
             )
             if isinstance(registrations, list)
             else None

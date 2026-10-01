@@ -92,5 +92,6 @@ export function installOnboardingFakeBridge(initial: SettingsSnapshot) {
     localAssetUrl: () => "/qa-avatar.png",
     reportRendererDiagnostic: () => undefined,
     onVoiceState: () => () => undefined,
+    notifications: { onClicked: () => () => undefined, getPending: async () => null, acknowledge: async () => undefined },
   } });
 }

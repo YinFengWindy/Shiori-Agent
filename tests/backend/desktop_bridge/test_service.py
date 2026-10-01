@@ -1187,10 +1187,14 @@ async def test_roles_create_binds_the_first_registered_model(
     tmp_path, registration_ids, expected
 ) -> None:
     from agent.config_models import ModelRegistration
+    from agent.prompting.input_budget import BudgetPolicy
 
     config = SimpleNamespace(
+        context_budget=BudgetPolicy(),
         model_registrations=[
             ModelRegistration(
+                context_window_tokens=128000,
+                max_output_tokens=32768,
                 id=registration_id,
                 provider="openai",
                 base_url="http://127.0.0.1:1/v1",
@@ -1198,7 +1202,7 @@ async def test_roles_create_binds_the_first_registered_model(
                 model=registration_id,
             )
             for registration_id in registration_ids
-        ]
+        ],
     )
     service = DesktopBridgeService(
         workspace=tmp_path,

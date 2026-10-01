@@ -113,8 +113,7 @@ def test_select_consolidation_window_uses_token_pressure_without_message_count()
         keep_count=1,
         consolidation_min_new_messages=99,
         archive_all=False,
-        input_token_threshold=100,
-        input_token_estimate=500,
+        input_budget_exceeded=True,
     )
 
     assert window is not None
@@ -133,8 +132,7 @@ def test_select_consolidation_window_archives_small_session_when_only_turn_is_hu
         keep_count=20,
         consolidation_min_new_messages=10,
         archive_all=False,
-        input_token_threshold=100,
-        input_token_estimate=500,
+        input_budget_exceeded=True,
     )
 
     assert window is not None

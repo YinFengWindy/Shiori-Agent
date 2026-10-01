@@ -25,6 +25,8 @@ class ConsolidateRequest:
     # 角色会话只整理这类上下文（按其预算判断）；None 表示各类上下文都看一遍。
     # ``current_content`` 只计入这类上下文的预算。force 与 archive_all 总是两类一起推进。
     scope: ContextScope | None = None
+    # The owning final request already exceeded its model input budget.
+    input_budget_exceeded: bool = False
 
 
 @dataclass

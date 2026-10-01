@@ -44,7 +44,7 @@ function createSettingsFormData(): SettingsFormData {
       spawnEnabled: true,
       memoryOptimizerEnabled: false,
       memoryOptimizerIntervalSeconds: 3600,
-      consolidationInputTokenThreshold: 75000
+      contextTriggerRatio: 0.75, contextTargetRatio: 0.4, contextSafetyMarginTokens: 4096
     },
   };
 }

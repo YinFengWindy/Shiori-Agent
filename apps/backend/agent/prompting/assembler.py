@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent.prompting.token_estimate import estimate_tokens
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -199,7 +201,7 @@ def _section_meta(sections: list[PromptSectionRender]) -> list[PromptSectionMeta
         PromptSectionMeta(
             name=section.name,
             chars=len(section.content),
-            est_tokens=max(1, len(section.content) // 3),
+            est_tokens=estimate_tokens(section.content),
             is_static=section.is_static,
             cache_hit=section.cache_hit,
         )

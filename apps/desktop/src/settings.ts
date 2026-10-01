@@ -71,6 +71,8 @@ function loadModelRegistrations(llm: Record<string, unknown>): ModelRegistration
       baseUrl: String(item.base_url ?? ""),
       apiKey: String(item.api_key ?? ""),
       model: String(item.model ?? ""),
+      contextWindowTokens: item.context_window_tokens == null ? null : Number(item.context_window_tokens),
+      maxOutputTokens: item.max_output_tokens == null ? null : Number(item.max_output_tokens),
       effort: String(item.effort ?? "none") as "none" | "low" | "high" | "max",
     };
   });
@@ -132,6 +134,9 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
         devMode: Boolean(agent.dev_mode),
         streamingEnabled: Boolean(asRecord(asRecord(parsed.desktop).chat).streaming_enabled),
         memoryWindow: Number(agentContext.memory_window ?? 40),
+        contextTriggerRatio: Number(agentContext.trigger_ratio ?? 0.75),
+        contextTargetRatio: Number(agentContext.target_ratio ?? 0.4),
+        contextSafetyMarginTokens: Number(agentContext.safety_margin_tokens ?? 4096),
         searchEnabled: Boolean(agentTools.search_enabled),
         spawnEnabled: Boolean(agentTools.spawn_enabled ?? true),
         sceneObservationEnabled: optionalBoolean(
@@ -142,9 +147,6 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
         ),
         memoryOptimizerIntervalSeconds: Number(
           agentMaintenance.memory_optimizer_interval_seconds ?? 64800,
-        ),
-        consolidationInputTokenThreshold: Number(
-          agentMaintenance.consolidation_input_token_threshold ?? 75000,
         ),
       },
     },
@@ -166,6 +168,8 @@ function renderSettingsToml(formData: SettingsFormData): string {
       `api_key = ${quote(registration.apiKey)}`,
       `model = ${quote(registration.model.trim())}`,
       `effort = ${quote(registration.effort)}`,
+      ...(registration.contextWindowTokens == null ? [] : [`context_window_tokens = ${registration.contextWindowTokens}`]),
+      ...(registration.maxOutputTokens == null ? [] : [`max_output_tokens = ${registration.maxOutputTokens}`]),
       "",
     ]),
     "[agent]",
@@ -179,6 +183,9 @@ function renderSettingsToml(formData: SettingsFormData): string {
     ...renderProactiveStrategies(formData.proactiveStrategies),
     "[agent.context]",
     `memory_window = ${formData.advanced.memoryWindow}`,
+    `trigger_ratio = ${formData.advanced.contextTriggerRatio ?? 0.75}`,
+    `target_ratio = ${formData.advanced.contextTargetRatio ?? 0.4}`,
+    `safety_margin_tokens = ${formData.advanced.contextSafetyMarginTokens ?? 4096}`,
     "",
     "[agent.tools]",
     `search_enabled = ${formData.advanced.searchEnabled ? "true" : "false"}`,
@@ -194,7 +201,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
       formData.advanced.memoryOptimizerEnabled ? "true" : "false"
     }`,
     `memory_optimizer_interval_seconds = ${formData.advanced.memoryOptimizerIntervalSeconds}`,
-    `consolidation_input_token_threshold = ${formData.advanced.consolidationInputTokenThreshold}`,
     "",
     "[agent.wiring]",
     'context = "default"',
@@ -256,8 +262,17 @@ function validateSettings(formData: SettingsFormData): void {
     if (!["none", "low", "high", "max"].includes(registration.effort)) {
       throw new Error("Effort 必须是 none、low、high 或 max");
     }
+    for (const value of [registration.contextWindowTokens, registration.maxOutputTokens]) {
+      if (value != null && (!Number.isSafeInteger(value) || value <= 0)) throw new Error("模型容量必须是正整数");
+    }
+    if (registration.contextWindowTokens != null && registration.maxOutputTokens != null && registration.maxOutputTokens > registration.contextWindowTokens) throw new Error("模型最大输出能力不得超过上下文窗口");
     registrationIds.add(registration.id);
   }
+  const trigger = formData.advanced.contextTriggerRatio ?? 0.75;
+  const target = formData.advanced.contextTargetRatio ?? 0.4;
+  const safety = formData.advanced.contextSafetyMarginTokens ?? 4096;
+  if (!(0 < target && target < trigger && trigger < 1)) throw new Error("输入预算比例必须满足 0 < 目标 < 触发 < 1");
+  if (!Number.isSafeInteger(safety) || safety < 0) throw new Error("安全余量必须是非负整数");
   if (formData.advanced.maxTokens <= 0) {
     throw new Error("max_tokens 必须大于 0");
   }

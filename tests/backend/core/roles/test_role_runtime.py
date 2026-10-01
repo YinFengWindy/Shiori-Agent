@@ -46,7 +46,13 @@ async def test_first_turn_seeds_once_across_channels_and_runtime_generations(
     )
     registrations = [
         ModelRegistration(
-            id=key, provider="openai", model=key, api_key="fake", base_url=""
+            context_window_tokens=128000,
+            max_output_tokens=32768,
+            id=key,
+            provider="openai",
+            model=key,
+            api_key="fake",
+            base_url="",
         )
         for key in ("dialogue", "visual")
     ]
@@ -125,6 +131,8 @@ async def test_unbound_first_turn_stops_before_seed_and_can_retry_after_binding(
         role_store=store,
         registrations=[
             ModelRegistration(
+                context_window_tokens=128000,
+                max_output_tokens=32768,
                 id="dialogue",
                 provider="openai",
                 model="selected",
@@ -174,7 +182,13 @@ async def test_text_reply_respects_when_its_model_snapshot_is_accepted(
         role_store=store,
         registrations=[
             ModelRegistration(
-                id=key, provider="openai", model=key, api_key="fake", base_url=""
+                context_window_tokens=128000,
+                max_output_tokens=32768,
+                id=key,
+                provider="openai",
+                model=key,
+                api_key="fake",
+                base_url="",
             )
             for key in ("first", "second")
         ],
@@ -236,7 +250,13 @@ async def test_image_reply_preserves_accepted_snapshot_after_initialization(
         role_store=store,
         registrations=[
             ModelRegistration(
-                id=key, provider="openai", model=key, api_key="fake", base_url=""
+                context_window_tokens=128000,
+                max_output_tokens=32768,
+                id=key,
+                provider="openai",
+                model=key,
+                api_key="fake",
+                base_url="",
             )
             for key in ("dialogue", "old-vision", "new-vision")
         ],

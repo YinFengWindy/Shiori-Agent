@@ -25,6 +25,8 @@ for (const failurePhase of ["read-back", "next-step"] as const) {
       const input = view.container.querySelector<HTMLInputElement>('[aria-label="模型"]');
       assert.ok(input);
       await changeInputValue(input, "model-test");
+      await changeInputValue(view.container.querySelector<HTMLInputElement>('[aria-label="上下文窗口"]')!, "128000");
+      await changeInputValue(view.container.querySelector<HTMLInputElement>('[aria-label="模型最大输出"]')!, "32768");
       await act(async () => view.container.querySelector<HTMLButtonElement>('button[type="submit"]')?.click());
       assert.equal(writes, 1);
       assert.equal(continued, 0);

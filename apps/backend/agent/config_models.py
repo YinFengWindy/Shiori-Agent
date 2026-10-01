@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Literal
 import uuid
 
+from agent.prompting.input_budget import BudgetPolicy
 from agent.voice_config import VoiceConfig
 from proactive_v2.config import ProactiveConfig, ProactiveStrategiesConfig
 
@@ -38,6 +39,21 @@ class ModelRegistration:
     api_key: str
     model: str
     effort: Effort = "none"
+    # None represents legacy configuration requiring explicit user repair.
+    context_window_tokens: int | None = None
+    max_output_tokens: int | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("context_window_tokens", "max_output_tokens"):
+            value = getattr(self, name)
+            if value is not None and (type(value) is not int or value <= 0):
+                raise ValueError(f"模型注册 {name} 必须是正整数")
+        if (
+            self.context_window_tokens is not None
+            and self.max_output_tokens is not None
+            and self.max_output_tokens > self.context_window_tokens
+        ):
+            raise ValueError("模型最大输出能力不得超过上下文窗口")
 
 
 # Distinguish omitted legacy constructor arguments from an explicitly empty registry.
@@ -66,7 +82,6 @@ class Config:
     max_tokens: int = 8192
     max_iterations: int = 10
     memory_window: int = 40
-    memory_consolidation_input_token_threshold: int = 75000
     base_url: str | None = None
     extra_body: dict = field(default_factory=dict)
     proactive: ProactiveConfig = field(default_factory=ProactiveConfig)
@@ -95,6 +110,7 @@ class Config:
     model_registrations: list[ModelRegistration] = field(
         default_factory=lambda: _UNSET_MODEL_REGISTRATIONS
     )
+    context_budget: BudgetPolicy = field(default_factory=BudgetPolicy)
 
     def __post_init__(self) -> None:
         if self.model_registrations is not _UNSET_MODEL_REGISTRATIONS:

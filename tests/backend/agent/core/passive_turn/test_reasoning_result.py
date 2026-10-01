@@ -93,8 +93,8 @@ async def test_role_summary_recovery_obeys_input_budget_and_skips_mood(monkeypat
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
         memory_window=40,
-        memory_input_token_threshold=100,
     )
+    monkeypatch.setattr(reasoner, "_request_threshold", lambda *_: 100)
     monkeypatch.setattr(
         "agent.core.passive_turn.reasoning_result.support.estimate_messages_tokens",
         Mock(side_effect=[1, 100]),

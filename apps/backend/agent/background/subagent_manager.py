@@ -139,7 +139,16 @@ class SubagentManager:
                         max_iterations=_SYNC_MAX_ITERATIONS,
                         runtime=snapshot_runtime,
                     )
-                result = await subagent.run(task)
+                try:
+                    result = await subagent.run(task)
+                finally:
+                    self._append_spawn_trace(
+                        job_id=job_id,
+                        payload={
+                            "phase": "usage",
+                            "request_usage": getattr(subagent, "last_usage", {}),
+                        },
+                    )
                 exit_reason = getattr(subagent, "last_exit_reason", None) or "completed"
                 return result, exit_reason
 
@@ -379,6 +388,7 @@ class SubagentManager:
                 "persistence_mode": result.persistence_mode,
                 "started_at": result.started_at,
                 "finished_at": result.finished_at,
+                "request_usage": result.request_usage,
                 "profile": profile,
                 "retry_count": retry_count,
                 "decision": _decision_payload(decision),

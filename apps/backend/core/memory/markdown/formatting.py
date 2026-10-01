@@ -108,8 +108,7 @@ def _select_consolidation_window(
     consolidation_min_new_messages: int,
     archive_all: bool,
     force: bool = False,
-    input_token_threshold: int = 0,
-    input_token_estimate: int | None = None,
+    input_budget_exceeded: bool = False,
     views: tuple[ContextView, ...] = (),
 ) -> ConsolidationWindow | None:
     """选出这次要整理的消息窗口；没有该整理的消息时返回 None。
@@ -135,15 +134,10 @@ def _select_consolidation_window(
     if not pending:
         return None
 
-    token_pressure = (
-        input_token_threshold > 0
-        and (input_token_estimate or 0) >= input_token_threshold
-    )
-
     if force:
         consolidate_up_to = total_messages
     else:
-        if len(members) <= keep_count and not token_pressure:
+        if len(members) <= keep_count and not input_budget_exceeded:
             return None
         consolidate_up_to = (
             members[-keep_count] if 0 < keep_count < len(members) else total_messages
@@ -159,7 +153,7 @@ def _select_consolidation_window(
         return None
     if (
         not force
-        and not token_pressure
+        and not input_budget_exceeded
         and len(old_indices) < max(1, int(consolidation_min_new_messages))
     ):
         return None
@@ -169,11 +163,6 @@ def _select_consolidation_window(
         consolidate_up_to=consolidate_up_to,
         scopes=scopes,
     )
-
-
-def _budget_view(views: tuple[ContextView, ...]) -> ContextView | None:
-    """整理窗口的预算按哪类上下文估算：只推进一类时就是它，否则按整个会话。"""
-    return views[0] if len(views) == 1 else None
 
 
 def _estimate_session_input_tokens(

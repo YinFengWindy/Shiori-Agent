@@ -7,10 +7,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.core.passive_support import (
-    build_post_reply_context_budget,
-    estimate_history_budget,
-)
 from agent.core.passive_turn import DefaultContextStore
 from agent.core.types import RetrievalTrace
 from agent.retrieval.protocol import RetrievalResult
@@ -209,45 +205,6 @@ async def test_default_context_store_uses_cli_context_override_for_retrieval():
     assert request.session_key == "telegram:7674283004"
     assert request.channel == "telegram"
     assert request.chat_id == "7674283004"
-
-
-def test_estimate_history_budget_returns_serialized_history_size():
-    stats = estimate_history_budget(
-        [
-            {"role": "user", "content": "你好"},
-            {
-                "role": "assistant",
-                "content": "收到",
-                "tool_calls": [{"id": "call-1", "name": "read_file"}],
-            },
-        ]
-    )
-
-    assert stats["messages"] == 2
-    assert stats["chars"] > 0
-    assert stats["tokens"] == max(1, stats["chars"] // 3)
-
-
-def test_build_post_reply_context_budget_combines_history_and_prompt():
-    context = SimpleNamespace(
-        last_debug_breakdown=[
-            SimpleNamespace(est_tokens=100),
-            SimpleNamespace(est_tokens=250),
-        ]
-    )
-
-    budget = build_post_reply_context_budget(
-        context=cast(Any, context),
-        history=[{"role": "user", "content": "你好"}],
-        history_window=40,
-    )
-
-    assert budget["history_window"] == 40
-    assert budget["history_messages"] == 1
-    assert budget["history_chars"] > 0
-    assert budget["history_tokens"] == max(1, budget["history_chars"] // 3)
-    assert budget["prompt_tokens"] == 350
-    assert budget["next_turn_baseline_tokens"] == (budget["history_tokens"] + 350)
 
 
 @pytest.mark.asyncio
