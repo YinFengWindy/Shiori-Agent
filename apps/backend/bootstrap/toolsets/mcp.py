@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 
 from agent.mcp.manage_tools import McpAddTool, McpListTool, McpRemoveTool
 from agent.mcp.registry import McpServerRegistry
@@ -30,17 +29,3 @@ class McpToolsetProvider(ToolsetProvider):
             before=before,
             extras={"mcp_registry": mcp_registry},
         )
-
-
-def register_mcp_tools(
-    tools: ToolRegistry,
-    workspace: Path,
-) -> McpServerRegistry:
-    result = McpToolsetProvider().register(
-        tools,
-        ToolsetDeps(
-            config=None,  # type: ignore[arg-type]
-            workspace=workspace,
-        ),
-    )
-    return result.extras["mcp_registry"]

@@ -143,7 +143,6 @@ export function useRoleManagement({
       avatarSource: "",
       illustrationSources: [],
       removedIllustrations: [],
-      pendingVoiceAssetDeletes: [],
     }));
     await openRole(updated.id, resolvedRole, { recordHistory: false });
     setSavingRole(false);

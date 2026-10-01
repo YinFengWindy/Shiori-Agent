@@ -22,10 +22,6 @@ class _ProactiveTraceLoop(ProactiveLoop):
             tick_interval_s0=30,
             tick_interval_s1=60,
             tick_jitter=0.1,
-            anyaction_enabled=True,
-            anyaction_min_interval_seconds=60,
-            anyaction_probability_min=0.1,
-            anyaction_probability_max=0.5,
             memory_history_gate_enabled=True,
         )
 

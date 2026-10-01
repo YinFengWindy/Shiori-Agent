@@ -1,20 +1,11 @@
-/** Active renderer turn identities keyed by the session that owns them. */
-export type ActiveChatTurns = Readonly<Record<string, string>>;
+/** Recorded renderer turn identities keyed by the session that owns them. */
+export type ChatTurnIds = Readonly<Record<string, string>>;
 
-/** Returns whether a bridge event still belongs to the active renderer turn. */
-export function isActiveChatTurn(
-  activeTurns: ActiveChatTurns,
+/** Checks whether a session still records the expected turn identity. */
+export function matchesChatTurn(
+  turnIds: ChatTurnIds,
   sessionKey: string,
   turnId: string,
 ): boolean {
-  return Boolean(sessionKey && turnId && activeTurns[sessionKey] === turnId);
-}
-
-/** Prevents an older cancellation request from surfacing after its turn has ended. */
-export function shouldSurfaceChatCancellationFailure(
-  activeTurns: ActiveChatTurns,
-  sessionKey: string,
-  turnId: string,
-): boolean {
-  return isActiveChatTurn(activeTurns, sessionKey, turnId);
+  return Boolean(sessionKey && turnId && turnIds[sessionKey] === turnId);
 }

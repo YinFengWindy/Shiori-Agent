@@ -1,5 +1,5 @@
 import type { RoleRecord } from "@shiori/plugin-sdk";
-import type { ManagedVoiceAssetReference, RoleFormState } from "../shared/types";
+import type { RoleFormState } from "../shared/types";
 
 export const minimaxVoiceEmotionOptions = [
   "happy",
@@ -22,61 +22,6 @@ export type RoleVoiceConfig = {
   speed: number;
   moodTtsEmotions: Record<string, string>;
 };
-
-/** Adds the current managed clone to a deduplicated post-save deletion queue. */
-export function queueManagedVoiceAssetDeletion(
-  roleForm: Pick<RoleFormState, "voiceProvider" | "voiceId" | "voiceOwnership" | "pendingVoiceAssetDeletes">,
-): ManagedVoiceAssetReference[] {
-  const pending = roleForm.pendingVoiceAssetDeletes;
-  const provider = String(roleForm.voiceProvider ?? "").trim();
-  const voiceId = String(roleForm.voiceId ?? "").trim();
-  if (roleForm.voiceOwnership !== "shiori_managed" || !provider || !voiceId) {
-    return pending;
-  }
-  if (pending.some((item) => item.provider === provider && item.voiceId === voiceId)) {
-    return pending;
-  }
-  return [...pending, { provider, voiceId, ownership: "shiori_managed" }];
-}
-
-/** Deletes queued managed assets and returns only entries that still need retrying. */
-export async function deleteManagedVoiceAssets(
-  assets: ManagedVoiceAssetReference[],
-  invoke: Window["miraDesktop"]["invoke"],
-): Promise<ManagedVoiceAssetReference[]> {
-  const failed: ManagedVoiceAssetReference[] = [];
-  for (const asset of assets) {
-    try {
-      const response = await invoke({
-        method: "voice.delete",
-        payload: {
-          provider: asset.provider,
-          voice_id: asset.voiceId,
-          ownership: asset.ownership,
-        },
-      });
-      if (response.error) failed.push(asset);
-    } catch {
-      failed.push(asset);
-    }
-  }
-  return failed;
-}
-
-/** Returns the provider asset that must be removed before deleting this role. */
-export function managedVoiceAssetsForRole(
-  role: Pick<RoleRecord, "runtime_config">,
-): ManagedVoiceAssetReference[] {
-  const config = readRoleVoiceConfig(role);
-  if (config.ownership !== "shiori_managed" || !config.provider || !config.voiceId) {
-    return [];
-  }
-  return [{
-    provider: config.provider,
-    voiceId: config.voiceId,
-    ownership: "shiori_managed",
-  }];
-}
 
 /** Normalizes one role-owned MiniMax voice configuration. */
 export function readRoleVoiceConfig(role: Pick<RoleRecord, "runtime_config"> | null): RoleVoiceConfig {

@@ -3,7 +3,7 @@ import { Plus } from "@phosphor-icons/react";
 import { emptyStateLines } from "../shared/mascot/mascotLines";
 import { MascotEmptyState } from "../shared/mascot/MascotSpeech";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
-import { SidebarResizeHandle } from "../shared/SidebarResizeHandle";
+import { SidebarResizeHandle } from "@shiori/plugin-sdk";
 import {
   cx,
   pressableClass,

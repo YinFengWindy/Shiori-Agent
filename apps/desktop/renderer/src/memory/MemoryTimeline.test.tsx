@@ -43,7 +43,7 @@ it("shows exactly the filters each engine declares", async () => {
     [fullFilters, ["记忆类型", "记忆领域", "记忆状态", "时间排序"]],
     // Types and domains only: no status picker.
     [{ memory_type: ["event"], memory_domain: [] }, ["记忆类型", "记忆领域", "时间排序"]],
-    // Akasha declares nothing: search and sort only.
+    // No declared facets: search and sort only.
     [{}, ["时间排序"]],
   ];
   for (const [filters, expected] of cases) {

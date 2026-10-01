@@ -353,7 +353,7 @@ class ProactiveTurnPipeline:
         return _render_content_block(content_meta, content_store)
 
     def _render_context_block(self, context: list[dict]) -> str:
-        return _render_context_block(context, self._cfg)
+        return _render_context_block(context)
 
     def _record_tick_log_start(self, ctx: AgentTickContext) -> None:
         _record_tick_log_start(

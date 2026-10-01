@@ -79,7 +79,6 @@ proactive tick
 | `roles/<role-id>/drift/skills/*/SKILL.md` | **你写** | 当前角色的 Drift 任务定义。也可以用内置 skill `create-drift-skill` 让 agent 帮你生成 |
 | `memory/*.md` | **agent 维护** | 长期记忆、自我认知、近期上下文——全部由主 agent 通过被动对话自动读写 |
 | `roles/<role-id>/drift/drift.json` | **agent 维护** | 当前角色的 Drift runner 自动写运行记录，不用管 |
-| `proactive_quota.json` | **agent 维护** | AnyAction gate 自动写配额计数，不用管 |
 
 ### 1. 开启 proactive（config.toml）
 
@@ -266,7 +265,7 @@ ProactiveLoop.run()
        │    ├── _fetch_content()           # 调 MCP tool: get_proactive_events(kind=content) → 并行 web_fetch 正文
        │    └── _fetch_context()           # 调 MCP tool: get_context / get_sleep_context / get_steam_context
        ├── AgentTick.tick()
-       │    ├── Pre-gate（冷却 / busy / AnyAction 概率门 / context gate）
+       │    ├── Pre-gate（冷却 / busy / context gate）
        │    ├── agent loop（LLM 逐条评分分类 → mark_interesting/mark_not_interesting → message_push → finish_turn）
        │    ├── Classification completeness check（未分类条目强制补完）
        │    └── Reflection pass（有 interesting 但没收尾时注入提示）

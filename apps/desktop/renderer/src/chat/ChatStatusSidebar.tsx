@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { CrossfadeLayers } from "../shared/CrossfadeLayers";
+import { CrossfadeLayers } from "@shiori/plugin-sdk";
 import { cx } from "@shiori/plugin-sdk";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
 import { moodTone } from "./moodTone";

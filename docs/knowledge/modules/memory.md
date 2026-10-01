@@ -22,6 +22,8 @@ related:
 - `apps/backend/memory2/` 提供插件使用的向量编码、存储、召回与注入块构造、procedure 查询构造与标签、记忆写入和响应后 worker。查询与长期记忆提取策略由默认记忆插件持有。
 - `apps/backend/agent/retrieval/` 将具体记忆召回适配到 Agent 上下文准备阶段。
 
+Akasha 已从内置插件中移除；显式配置 `memory.engine = "akasha"` 会按未知引擎报错，需改为已安装的引擎后启动。卸载不迁移或删除工作区中原有的 Akasha 数据。
+
 ## 典型数据流
 
 回合前根据角色、会话和当前输入构建 `MemoryQuery`，召回结果经过过滤、重排或注入规划进入上下文。回合后由后台 worker 判断是否写入、合并或 supersede 旧记忆。post-response 与 consolidation 两条隐式长期记忆提取链路共用当前角色的 active `profile / preference / procedure` 作为去重上下文；每轮提取受 worker token 预算约束。显式的 `memorize`、`forget_memory`、`recall_memory` 工具复用同一记忆契约。

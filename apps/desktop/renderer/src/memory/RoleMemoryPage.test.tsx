@@ -51,7 +51,7 @@ it("opens on the timeline in one navigation row and reads documents from the sam
     assert.equal(tablist?.children[1].getAttribute("data-testid"), "memory-nav-divider");
     assert.equal(tablist?.parentElement?.lastElementChild?.getAttribute("aria-label"), "刷新记忆");
     assert.equal(view.container.querySelector("h1, h2"), null);
-    assert.doesNotMatch(text(view.container), /默认记忆|Akasha/);
+    assert.doesNotMatch(text(view.container), /默认记忆/);
     assert.match(text(view.container), /Memory 1/);
     assert.deepEqual(calls.map((call) => call.name).sort(), ["roles.memory.documents", "roles.memory.semantic.list"]);
 

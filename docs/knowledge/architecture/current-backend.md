@@ -14,7 +14,7 @@ source_paths:
   - apps/backend/agent/provider.py
   - apps/backend/agent/tools/
   - apps/backend/core/memory/
-  - apps/backend/agent/plugins/manager.py
+  - apps/backend/agent/plugin_host/kernel.py
 ---
 
 # 当前后端架构基线
@@ -23,7 +23,7 @@ source_paths:
 
 ## 进程与装配
 
-`apps/backend/main.py` 解析配置和 workspace，`apps/backend/bootstrap/app.py` 的 `AppRuntime.start()` 调用 `apps/backend/bootstrap/tools.py:build_core_runtime()` 装配 CoreRuntime。CoreRuntime 持有 AgentLoop、MessageBus、EventBus、ToolRegistry、SessionManager、Scheduler、LLMProvider、MemoryRuntime、RoleRuntimeRegistry、MCP 和 PluginManager。
+`apps/backend/main.py` 解析配置和 workspace，`apps/backend/bootstrap/app.py` 的 `AppRuntime.start()` 调用 `apps/backend/bootstrap/tools.py:build_core_runtime()` 装配 CoreRuntime。CoreRuntime 持有 AgentLoop、MessageBus、EventBus、ToolRegistry、SessionManager、Scheduler、LLMProvider、MemoryRuntime、RoleRuntimeRegistry、MCP 和 PluginKernel。
 
 ```mermaid
 flowchart TD
@@ -33,7 +33,7 @@ flowchart TD
   C --> E[RoleRuntimeRegistry]
   C --> F[Tool / Memory / Scheduler / MCP]
   C --> G[AgentLoop + lifecycle wiring]
-  C --> H[PluginManager]
+  C --> H[PluginKernel]
   B --> I[Channels and background tasks]
   B --> J[DesktopBridgeServer]
   J --> K[JSONL request dispatcher]
@@ -84,9 +84,9 @@ flowchart TD
 ## 工具、Memory 与插件
 
 - `ToolRegistry` 保存工具、schema、风险、always-on、搜索索引和 source metadata；MCP 工具也同步到该 registry。
-- `apps/backend/core/memory/` 定义 MemoryEngine、MemoryQuery、MemoryResult、MemoryMutation 和 runtime protocol；具体策略位于 `plugins/default_memory/`、Akasha 和 `apps/backend/memory2/`。
-- `PluginManager` 同时负责 discover/import/config/context 注入、EventBus handler、tool、tool hook、phase module、proactive gate、channel、initialize rollback 和 terminate。
-- 当前 PluginManager 的 EventBus handler 卸载不完整，目标迁移必须把每个订阅变成可销毁资源。
+- `apps/backend/core/memory/` 定义 MemoryEngine、MemoryQuery、MemoryResult、MemoryMutation 和 runtime protocol；具体策略位于 `plugins/default_memory/` 和 `apps/backend/memory2/`。
+- `PluginKernel` 同时负责 discover/import/config/context 注入、EventBus handler、tool、tool hook、phase module、proactive gate、channel、initialize rollback 和 terminate。
+- `ScopedEventBus` 将每个事件订阅注册到所属 `EffectScope`，插件卸载和初始化回滚会撤销贡献；已经开始的 handler 由插件 disposer 等待或取消。
 
 ## 持久化边界
 
@@ -94,7 +94,7 @@ flowchart TD
 - Session metadata/messages：`apps/backend/session/` 的 SQLite store；消息可能含 `tool_chain`、reasoning 和 proactive metadata。
 - Conversation：`apps/backend/conversation/` 负责 legacy session key 到正式 thread 的映射。
 - 角色记忆：`workspace/roles/{role_id}/memory` 及具体 MemoryStore/索引。
-- 插件配置和 KV：插件目录中的配置文件与 `.kv.json`。
+- 插件配置在主 TOML 的 `[plugins.<id>]`；KV 与私有持久化文件位于 `workspace/plugin-data/<id>/`。
 
 ## 关闭流程
 
@@ -103,7 +103,7 @@ flowchart TD
   A[AppRuntime.shutdown] --> B[Stop AgentLoop / MessageBus / Scheduler]
   B --> C[Cancel and await background tasks]
   C --> D[CoreRuntime.stop]
-  D --> E[PluginManager.terminate_all / MCP.shutdown / EventBus.aclose]
+  D --> E[PluginKernel.terminate_all / drain / MCP.shutdown / EventBus.aclose]
   E --> F[IPC and ChannelHost stop]
   F --> G[MemoryRuntime.aclose]
   G --> H[SharedHttpResources.aclose]
@@ -113,5 +113,5 @@ flowchart TD
 
 - Proactive、scheduler 和所有 background task 是否都严格共享同一 RoleRuntime lock。
 - DesktopBridge 每个 RPC method 到 request handler 的完整映射。
-- PluginManager terminate 时已绑定 EventBus listener 的实际残留情况。
+- 插件热换代的跨渠道竞态需结合各 owning module 的生命周期测试与运行 trace 验证。
 - 文档中的抽象 bus 路径与 DesktopBridge direct path 在所有渠道上的差异。

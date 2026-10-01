@@ -58,17 +58,3 @@ def build_scheduler(
         agent_loop_provider=agent_loop_provider,
         tracker=LatencyTracker(),
     )
-
-
-def register_scheduler_tools(
-    tools: ToolRegistry,
-    scheduler: SchedulerService,
-) -> None:
-    SchedulerToolsetProvider().register(
-        tools,
-        ToolsetDeps(
-            config=None,
-            workspace=Path("."),
-            scheduler=scheduler,
-        ),
-    )

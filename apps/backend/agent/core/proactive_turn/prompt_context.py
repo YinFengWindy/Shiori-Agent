@@ -187,15 +187,13 @@ def render_content_block(
     )
 
 
-def render_context_block(context: list[dict], cfg: Any) -> str:
+def render_context_block(context: list[dict]) -> str:
     """将环境上下文渲染为带本地时区语义的 prompt 区块。"""
 
     if not context:
         return ""
-    local_tz = getattr(cfg, "anyaction_timezone", None)
-    annotated_context = [
-        normalize_context(item, local_tz=local_tz).to_prompt_item() for item in context
-    ]
+    # Context timestamps use the system local timezone, as in the current config.
+    annotated_context = [normalize_context(item).to_prompt_item() for item in context]
     return (
         "【背景上下文】\n"
         "注：sleep_prob=睡眠概率，awake_prob=清醒概率（= 1 - sleep_prob）；"
@@ -286,7 +284,7 @@ def build_runtime_context_message(
         ),
         (
             "proactive_context",
-            render_context_block(gateway_result.context, cfg).strip(),
+            render_context_block(gateway_result.context).strip(),
         ),
         (
             "workspace_proactive_context",

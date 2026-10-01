@@ -81,10 +81,3 @@ export type DesktopPetSettings = {
   packageId: string | null;
   positions: Record<string, DesktopPetPosition>;
 };
-
-export const defaultDesktopPetSettings: DesktopPetSettings = {
-  visible: false,
-  roleId: null,
-  packageId: null,
-  positions: {},
-};

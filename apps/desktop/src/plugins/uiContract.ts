@@ -59,6 +59,8 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     "UploadIcon", "PetalIcon", "SparkleIcon", "navMotifs", "withMotif",
     // Runtime API 2.10.0 (#505): the host services context.
     "PluginHostServicesProvider", "usePluginHostServices",
+    // Runtime API 2.16.0 (#576): shared visual components.
+    "CrossfadeLayers", "SidebarResizeHandle",
   ],
 };
 

@@ -9,7 +9,6 @@ from agent.memory import MemoryStore
 from bootstrap.memory import ensure_memory_plugin_storage
 from bootstrap.paths import resource_root
 from infra.persistence.json_store import save_json
-from proactive_v2.anyaction import QuotaStore
 from session.store import SessionStore
 
 # Canonical template copied into the user-owned workspace during setup.
@@ -140,17 +139,6 @@ def _ensure_workspace_db_assets(
         summary.created.append(consolidation_db)
     else:
         summary.skipped.append(consolidation_db)
-
-    quota_path = workspace / "proactive_quota.json"
-    if not quota_path.exists():
-        save_json(
-            quota_path,
-            QuotaStore(quota_path)._state,
-            domain="workspace.init",
-        )
-        summary.created.append(quota_path)
-    else:
-        summary.skipped.append(quota_path)
 
     if config.memory.enabled:
         storage_results = ensure_memory_plugin_storage(config, workspace)

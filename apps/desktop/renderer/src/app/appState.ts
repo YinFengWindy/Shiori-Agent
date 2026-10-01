@@ -8,9 +8,6 @@ export const sidebarMinWidth = 220;
 export const sidebarMaxWidth = 400;
 export const sidebarDefaultWidth = 220;
 export const sidebarCollapseThreshold = sidebarMinWidth / 2;
-export const historySidebarMinWidth = 126;
-export const historySidebarMaxWidth = 280;
-export const historySidebarDefaultWidth = 126;
 export const chatLatestImageSidebarMinWidth = 180;
 export const chatLatestImageSidebarMaxWidth = 360;
 export const chatLatestImageSidebarDefaultWidth = 200;
@@ -135,7 +132,6 @@ export function createEmptyRoleForm(): RoleFormState {
     voiceName: "",
     voiceSpeed: 1,
     voiceMoodEmotions: {},
-    pendingVoiceAssetDeletes: [],
   };
 }
 

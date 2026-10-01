@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { RoleRecord } from "@shiori/plugin-sdk";
 import type { RoleFormState } from "../shared/types";
-import { deleteManagedVoiceAssets, managedVoiceAssetsForRole, queueManagedVoiceAssetDeletion, readRoleVoiceConfig, roleVoiceConfigEqual, writeRoleVoiceConfigToRuntimeConfig } from "./roleVoiceConfig.js";
+import { readRoleVoiceConfig, roleVoiceConfigEqual, writeRoleVoiceConfigToRuntimeConfig } from "./roleVoiceConfig.js";
 
 function role(runtime_config: Record<string, unknown>): Pick<RoleRecord, "runtime_config"> {
   return { runtime_config };
@@ -50,66 +50,4 @@ describe("roleVoiceConfig", () => {
     assert.equal(roleVoiceConfigEqual(form({ voiceOwnership: "shiori_managed" }), readRoleVoiceConfig(role({ tts: { provider: "minimax", ownership: "external", voice_id: "voice-1", voice_name: "Mira", speed: 1.2, mood_tts_emotions: { 开心: "happy" } } }))), false);
   });
 
-  it("queues only unique Shiori-managed voice assets for deletion", () => {
-    const managed = {
-      voiceProvider: "minimax",
-      voiceId: "Shiori_voice123",
-      voiceOwnership: "shiori_managed" as const,
-      pendingVoiceAssetDeletes: [],
-    };
-
-    const queued = queueManagedVoiceAssetDeletion(managed);
-
-    assert.deepEqual(queued, [{
-      provider: "minimax",
-      voiceId: "Shiori_voice123",
-      ownership: "shiori_managed",
-    }]);
-    assert.deepEqual(queueManagedVoiceAssetDeletion({ ...managed, pendingVoiceAssetDeletes: queued }), queued);
-    assert.deepEqual(queueManagedVoiceAssetDeletion({ ...managed, voiceOwnership: "external" }), []);
-  });
-
-  it("retains only managed voice assets whose provider deletion failed", async () => {
-    const assets = [
-      { provider: "minimax", voiceId: "Shiori_ok", ownership: "shiori_managed" as const },
-      { provider: "minimax", voiceId: "Shiori_retry", ownership: "shiori_managed" as const },
-    ];
-    const calls: string[] = [];
-    const failed = await deleteManagedVoiceAssets(assets, async (request) => {
-      calls.push(String(request.payload.voice_id));
-      return {
-        id: "delete",
-        type: "response",
-        method: request.method,
-        payload: {},
-        error: request.payload.voice_id === "Shiori_retry"
-          ? { code: "provider_error", message: "failed" }
-          : null,
-      };
-    });
-
-    assert.deepEqual(calls, ["Shiori_ok", "Shiori_retry"]);
-    assert.deepEqual(failed, [assets[1]]);
-  });
-
-  it("requires provider cleanup only for a managed role voice", () => {
-    assert.deepEqual(managedVoiceAssetsForRole(role({
-      tts: {
-        provider: "minimax",
-        ownership: "shiori_managed",
-        voice_id: "Shiori_voice123",
-      },
-    })), [{
-      provider: "minimax",
-      voiceId: "Shiori_voice123",
-      ownership: "shiori_managed",
-    }]);
-    assert.deepEqual(managedVoiceAssetsForRole(role({
-      tts: {
-        provider: "minimax",
-        ownership: "external",
-        voice_id: "public_voice",
-      },
-    })), []);
-  });
 });

@@ -11,23 +11,6 @@ type UseDesktopUiEffectsArgs = {
   setActiveIllustration: React.Dispatch<React.SetStateAction<string>>;
 };
 
-/** Keeps a message target pending while its destination role session is opening. */
-export function shouldWaitForMessageNavigation(
-  pendingMessageNavigation: { roleId: string; messageKey: string } | null,
-  activeSessionKey: string,
-  activeRoleId: string,
-  activeSessionMessageKeys: readonly string[],
-): boolean {
-  return Boolean(
-    pendingMessageNavigation
-    && (
-      !activeSessionKey
-      || pendingMessageNavigation.roleId !== activeRoleId
-      || !activeSessionMessageKeys.includes(pendingMessageNavigation.messageKey)
-    ),
-  );
-}
-
 /** Runs UI-only desktop effects such as message highlight retries and illustration fallback. */
 export function useDesktopUiEffects({
   pendingMessageNavigation,
