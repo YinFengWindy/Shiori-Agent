@@ -91,6 +91,7 @@ export type RoleProactiveConfig = {
     web_fetch_max_chars?: number;
   };
   drift?: {
+    /** Legacy persisted field; idle activity now follows the main enabled switch. */
     enabled?: boolean;
     max_steps?: number;
     min_interval_hours?: number;

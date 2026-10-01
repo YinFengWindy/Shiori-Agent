@@ -20,7 +20,7 @@ describe("RoleCapabilitiesPanel", () => {
 
   it("groups the proactive switch with runtime capabilities and places its parameters below voice", async () => {
     setPluginEnabledSnapshot([]);
-    const initialForm = { ...createEmptyRoleForm(), proactiveProfile: "quiet", proactiveAgentMaxSteps: 42, proactiveDriftEnabled: true };
+    const initialForm = { ...createEmptyRoleForm(), proactiveProfile: "quiet", proactiveAgentMaxSteps: 42, proactiveDriftMaxSteps: 9, proactiveDriftMinIntervalHours: 4 };
     let form: RoleFormState = initialForm;
     const panel = () => <RoleCapabilitiesPanel activeRole={null} bridgeReady roleForm={form} onUpdate={(next) => { form = typeof next === "function" ? next(form) : next; }} />;
     const view = await mountTestComponent(panel(), { windowGlobals: { miraDesktop: { readSettings: async () => ({ formData: createSettingsDraft() }) } } });

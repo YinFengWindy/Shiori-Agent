@@ -6,8 +6,11 @@ from typing import Any, cast
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
 from proactive_v2.config import ProactiveConfig
+from proactive_v2.config_loader import load_proactive_config
 from proactive_v2.context import AgentTickContext
 from proactive_v2.mcp_sources import McpClientPool
 from bootstrap.proactive import build_proactive_runtime
@@ -81,17 +84,28 @@ def test_agent_tick_factory_prefers_role_session_key_when_role_id_present():
     assert tick._session_key == "role:mira"
 
 
-def test_agent_tick_factory_builds_drift_pipeline_when_enabled(tmp_path):
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("legacy_drift_enabled", [None, False, True])
+def test_agent_tick_factory_builds_drift_only_when_main_switch_is_enabled(
+    tmp_path, enabled, legacy_drift_enabled
+):
     deps = _build_deps(with_pool=True)
-    deps.cfg = ProactiveConfig(
+    drift = {"max_steps": 9}
+    if legacy_drift_enabled is not None:
+        drift["enabled"] = legacy_drift_enabled
+    deps.cfg = load_proactive_config(
+        {"enabled": enabled, "profile": "daily", "drift": drift},
         role_id="mira",
-        drift_enabled=True,
     )
     deps.state_store = SimpleNamespace(workspace_dir=tmp_path)
     deps.any_action_gate = SimpleNamespace()
     tick = AgentTickFactory(deps).build()
-    assert tick._drift_pipeline is not None
-    assert tick._drift_pipeline._store.drift_dir == tmp_path / "drift"
+    if enabled:
+        assert tick._drift_pipeline is not None
+        assert tick._drift_pipeline._store.drift_dir == tmp_path / "drift"
+        assert tick._drift_pipeline._max_steps == 9
+    else:
+        assert tick._drift_pipeline is None
 
 
 def test_agent_tick_factory_binds_drift_step_recorder_to_tick_store(tmp_path):

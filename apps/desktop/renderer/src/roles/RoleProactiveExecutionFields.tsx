@@ -1,5 +1,4 @@
 import type React from "react";
-import { SettingsToggleCard } from "@shiori/plugin-sdk";
 import type { RoleFormState } from "../shared/types";
 import { roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";
 import { roleProactiveDefaults } from "./roleProactiveDefaults";
@@ -43,14 +42,7 @@ export function RoleProactiveExecutionFields({ roleForm, onUpdate }: RoleProacti
         {numberInput("网页上下文字符数", "proactiveAgentWebFetchMaxChars", roleProactiveDefaults.agentWebFetchMaxChars)}
       </div>
       <div className="grid gap-4 border-t border-line-soft pt-4">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="m-0 text-body-sm font-medium text-ink">空闲活动</h3>
-          <SettingsToggleCard
-            checked={Boolean(roleForm.proactiveDriftEnabled ?? roleProactiveDefaults.driftEnabled)}
-            ariaLabel="空闲活动"
-            onChange={(checked) => onUpdate((current) => ({ ...current, proactiveDriftEnabled: checked }))}
-          />
-        </div>
+        <h3 className="m-0 text-body-sm font-medium text-ink">空闲活动</h3>
         <div className="grid gap-4 sm:grid-cols-2">
           {numberInput("空闲活动最大步数", "proactiveDriftMaxSteps", roleProactiveDefaults.driftMaxSteps)}
           {numberInput("空闲活动最小间隔（小时）", "proactiveDriftMinIntervalHours", roleProactiveDefaults.driftMinIntervalHours)}

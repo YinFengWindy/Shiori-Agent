@@ -156,12 +156,18 @@ describe("RoleDetailPage", () => {
         .find((label) => label.textContent === "每次推送最大步数")?.querySelector("input");
       assert.ok(steps);
       await changeInputValue(steps, "48");
-      const driftToggle = view.container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="空闲活动"]');
-      assert.ok(driftToggle);
-      await act(async () => driftToggle.click());
+      assert.equal(view.container.querySelector('[role="switch"][aria-label="空闲活动"]'), null);
+      const driftSteps = Array.from(view.container.querySelectorAll("label"))
+        .find((label) => label.textContent === "空闲活动最大步数")?.querySelector("input");
+      const driftInterval = Array.from(view.container.querySelectorAll("label"))
+        .find((label) => label.textContent === "空闲活动最小间隔（小时）")?.querySelector("input");
+      assert.ok(driftSteps);
+      assert.ok(driftInterval);
+      await changeInputValue(driftSteps, "9");
+      await changeInputValue(driftInterval, "5");
       await act(async () => button("资料").click());
       await act(async () => button("保存").click());
-      assert.deepEqual(saved, { ...profileForm, proactiveEnabled: true, proactiveProfile: "quiet", proactiveAgentMaxSteps: 48, proactiveDriftEnabled: true });
+      assert.deepEqual(saved, { ...profileForm, proactiveEnabled: true, proactiveProfile: "quiet", proactiveAgentMaxSteps: 48, proactiveDriftMaxSteps: 9, proactiveDriftMinIntervalHours: 5 });
 
       await act(async () => button("能力").click());
       assert.equal(view.container.querySelector('[aria-label="主动推送"]')?.getAttribute("aria-checked"), "true");
@@ -175,7 +181,10 @@ describe("RoleDetailPage", () => {
       assert.equal(button("保存").disabled, true);
       assert.equal(view.container.querySelector('[aria-label="主动推送"]')?.getAttribute("aria-checked"), "false");
       assert.equal(view.container.querySelector('[aria-label="推送策略"]')?.textContent, "日常");
-      assert.equal(view.container.querySelector('[aria-label="空闲活动"]')?.getAttribute("aria-checked"), "false");
+      assert.equal(Array.from(view.container.querySelectorAll("label"))
+        .find((label) => label.textContent === "空闲活动最大步数")?.querySelector("input")?.value, String(profileForm.proactiveDriftMaxSteps));
+      assert.equal(Array.from(view.container.querySelectorAll("label"))
+        .find((label) => label.textContent === "空闲活动最小间隔（小时）")?.querySelector("input")?.value, String(profileForm.proactiveDriftMinIntervalHours));
     } finally {
       await view.cleanup();
       resetPluginEnabledStateForTests();

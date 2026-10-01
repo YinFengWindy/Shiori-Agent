@@ -92,6 +92,7 @@ class ProactiveConfig:
     agent_tick_max_steps: int = 35
     agent_tick_content_limit: int = 5
     agent_tick_web_fetch_max_chars: int = 8_000
+    # Derived from the main enabled switch at the configuration loading boundary.
     drift_enabled: bool = False
     drift_max_steps: int = 20
     drift_min_interval_hours: int = 3

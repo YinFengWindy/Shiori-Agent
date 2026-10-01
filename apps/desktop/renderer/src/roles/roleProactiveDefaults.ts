@@ -8,7 +8,6 @@ export const roleProactiveDefaults = Object.freeze({
   agentMaxSteps: 35,
   agentContentLimit: 5,
   agentWebFetchMaxChars: 8000,
-  driftEnabled: false,
   driftMaxSteps: 20,
   driftMinIntervalHours: 3,
 });
@@ -20,7 +19,6 @@ export type RoleProactiveFormState = Pick<
   | "proactiveAgentMaxSteps"
   | "proactiveAgentContentLimit"
   | "proactiveAgentWebFetchMaxChars"
-  | "proactiveDriftEnabled"
   | "proactiveDriftMaxSteps"
   | "proactiveDriftMinIntervalHours"
 >;
@@ -33,7 +31,6 @@ export function createDefaultRoleProactiveForm(): RoleProactiveFormState {
     proactiveAgentMaxSteps: roleProactiveDefaults.agentMaxSteps,
     proactiveAgentContentLimit: roleProactiveDefaults.agentContentLimit,
     proactiveAgentWebFetchMaxChars: roleProactiveDefaults.agentWebFetchMaxChars,
-    proactiveDriftEnabled: roleProactiveDefaults.driftEnabled,
     proactiveDriftMaxSteps: roleProactiveDefaults.driftMaxSteps,
     proactiveDriftMinIntervalHours: roleProactiveDefaults.driftMinIntervalHours,
   };
@@ -50,7 +47,6 @@ export function readRoleProactiveForm(
     proactiveAgentMaxSteps: proactive?.agent?.max_steps ?? roleProactiveDefaults.agentMaxSteps,
     proactiveAgentContentLimit: proactive?.agent?.content_limit ?? roleProactiveDefaults.agentContentLimit,
     proactiveAgentWebFetchMaxChars: proactive?.agent?.web_fetch_max_chars ?? roleProactiveDefaults.agentWebFetchMaxChars,
-    proactiveDriftEnabled: proactive?.drift?.enabled ?? roleProactiveDefaults.driftEnabled,
     proactiveDriftMaxSteps: proactive?.drift?.max_steps ?? roleProactiveDefaults.driftMaxSteps,
     proactiveDriftMinIntervalHours: proactive?.drift?.min_interval_hours ?? roleProactiveDefaults.driftMinIntervalHours,
   };
@@ -64,6 +60,9 @@ export function buildRoleProactiveConfig(
   const persisted = role?.proactive;
   const persistedAgent = { ...(persisted?.agent ?? {}) } as Record<string, unknown>;
   delete persistedAgent.model;
+  const persistedDrift = { ...persisted?.drift };
+  // The main proactive switch owns idle activity; discard the retired override.
+  delete persistedDrift.enabled;
   return {
     ...persisted,
     enabled: Boolean(roleForm.proactiveEnabled),
@@ -76,8 +75,7 @@ export function buildRoleProactiveConfig(
       web_fetch_max_chars: roleForm.proactiveAgentWebFetchMaxChars ?? roleProactiveDefaults.agentWebFetchMaxChars,
     },
     drift: {
-      ...(persisted?.drift ?? {}),
-      enabled: Boolean(roleForm.proactiveDriftEnabled),
+      ...persistedDrift,
       max_steps: roleForm.proactiveDriftMaxSteps ?? roleProactiveDefaults.driftMaxSteps,
       min_interval_hours: roleForm.proactiveDriftMinIntervalHours ?? roleProactiveDefaults.driftMinIntervalHours,
     },
@@ -103,7 +101,6 @@ export function roleProactiveConfigEqual(
       === (persisted?.agent?.content_limit ?? roleProactiveDefaults.agentContentLimit)
     && (roleForm.proactiveAgentWebFetchMaxChars ?? roleProactiveDefaults.agentWebFetchMaxChars)
       === (persisted?.agent?.web_fetch_max_chars ?? roleProactiveDefaults.agentWebFetchMaxChars)
-    && Boolean(roleForm.proactiveDriftEnabled) === Boolean(persisted?.drift?.enabled)
     && (roleForm.proactiveDriftMaxSteps ?? roleProactiveDefaults.driftMaxSteps)
       === (persisted?.drift?.max_steps ?? roleProactiveDefaults.driftMaxSteps)
     && (roleForm.proactiveDriftMinIntervalHours ?? roleProactiveDefaults.driftMinIntervalHours)

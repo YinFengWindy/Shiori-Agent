@@ -134,6 +134,14 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
                 drift={"enabled": True, "min_interval_hours": 7},
             ),
         ),
+        SimpleNamespace(
+            id="sol",
+            proactive=SimpleNamespace(enabled=True, profile="daily"),
+        ),
+        SimpleNamespace(
+            id="sleeping",
+            proactive=SimpleNamespace(enabled=False, drift={"enabled": True}),
+        ),
     ]
     monkeypatch.setattr(
         "bootstrap.proactive.RoleStore",
@@ -188,14 +196,17 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
         group_environment=MagicMock(),
     )
 
-    assert tasks == ["run:mira", "run:luna"]
-    assert set(loops) == {"mira", "luna"}
+    assert tasks == ["run:mira", "run:luna", "run:sol"]
+    assert set(loops) == {"mira", "luna", "sol"}
     assert not hasattr(loops["mira"].config, "agent_tick_model")
     assert loops["mira"].config.tick_interval_s0 == 480
+    assert loops["mira"].config.drift_enabled is True
     assert not hasattr(loops["luna"].config, "agent_tick_model")
     assert loops["luna"].config.tick_interval_s0 == 1800
     assert loops["luna"].config.drift_enabled is True
     assert loops["luna"].config.drift_min_interval_hours == 7
+    assert loops["sol"].config.drift_enabled is True
+    assert loops["sol"].config.drift_min_interval_hours == 3
     assert (
         created[0]["state_store"].db_path
         == tmp_path / "roles" / "mira" / "proactive.db"

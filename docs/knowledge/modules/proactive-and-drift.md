@@ -45,6 +45,8 @@ related:
 
 ## Drift
 
+角色「能力 → 运行能力」的「主动推送」开关统一控制主动消息与空闲活动。空闲活动的最大步数、最小间隔保留在「声音」下方的「主动推送 → 执行参数」。配置加载时 `drift_enabled` 由主开关派生；旧数据中的 `drift.enabled` 仍可读取，但不再覆盖主开关，角色编辑保存时移除该旧字段。
+
 Drift 是独立于普通被动消息的特殊回合模式。`DriftStateStore` 保存状态，`DriftTurnPipeline` 负责执行，`apps/backend/proactive_v2/drift_tools.py` 提供相关工具接入。它与 Proactive 共享触发和投递基础设施，但拥有自己的回合语义与状态迁移。Drift 必须显式取得当前角色 prompt，并完整读取该角色的 `SELF.md`、长期记忆与最近上下文；任一读取失败都终止本轮，不能退化为无记忆的通用回复。
 
 ## 修改影响

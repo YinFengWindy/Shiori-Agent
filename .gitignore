@@ -59,6 +59,7 @@ plugins/**/.data/
 /docs/plan/
 /.pytest_artifacts/
 /.test-tmp-root/
+/.scratch/
 /rss/
 
 # Benchmark 运行产物
