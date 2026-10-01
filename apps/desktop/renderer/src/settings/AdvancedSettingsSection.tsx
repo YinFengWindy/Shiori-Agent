@@ -19,7 +19,7 @@ export function AdvancedSettingsSection({
       <SettingsNumberInput
         ariaLabel={field.label}
         unit={field.unit}
-        value={draft.advanced[field.key]}
+        value={draft.advanced[field.key] ?? 0}
         onChange={(value) => setAdvanced({ [field.key]: value })}
       />
     </Field>

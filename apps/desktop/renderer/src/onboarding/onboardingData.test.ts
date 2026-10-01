@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { configureSettingsConfigPath, loadSettingsData } from "../../../src/settings";
 import { loadOnboardingData, registerOnboardingModel } from "./onboardingData";
 
-const registration = { id: "first", provider: "openai", model: "test-model", apiKey: "test-key", baseUrl: "", effort: "none" as const };
+const registration = { id: "first", provider: "openai", model: "test-model", apiKey: "test-key", baseUrl: "https://example.test", contextWindowTokens: 128000, maxOutputTokens: 32768, effort: "none" as const };
 configureSettingsConfigPath("onboarding-test.toml");
 describe("onboarding data", () => {
   it("never interprets bridge errors as an empty role list", async () => {

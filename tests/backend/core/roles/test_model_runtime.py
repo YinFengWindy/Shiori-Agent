@@ -18,6 +18,8 @@ from core.roles.store import RoleStore
 
 def registration(identifier: str, model: str) -> ModelRegistration:
     return ModelRegistration(
+        context_window_tokens=128000,
+        max_output_tokens=32768,
         id=identifier,
         provider="openai",
         base_url="https://example.com/v1",
@@ -191,6 +193,8 @@ def test_runtime_snapshot_stays_stable_after_role_selection_changes(tmp_path) ->
 def test_runtime_uses_role_dialogue_effort_override(tmp_path) -> None:
     dialogue = registration("00000000-0000-4000-a000-000000000001", "chat-model")
     visual = ModelRegistration(
+        context_window_tokens=128000,
+        max_output_tokens=32768,
         id="00000000-0000-4000-a000-000000000002",
         provider="openai",
         base_url="https://example.com/v1",
@@ -322,12 +326,12 @@ async def test_auxiliary_call_preserves_role_snapshot_and_main_reasoning(
     assert main_before.get("extra_body") == main_extra
     assert main_before.get("reasoning_effort") == main_effort
     if max_tokens is None:
-        assert "max_tokens" not in main_before
+        assert main_before["max_tokens"] == 32768
     else:
         assert main_before["max_tokens"] == max_tokens
     assert auxiliary.get("extra_body") == auxiliary_extra
     if provider_name == "openai" and max_tokens is None:
-        assert "max_tokens" not in auxiliary
+        assert auxiliary["max_tokens"] == 32768
     else:
         assert auxiliary["max_tokens"] == (
             max_tokens if provider_name == "openai" else 512
@@ -361,3 +365,24 @@ async def test_role_aware_provider_forwards_fallback_call_options(max_tokens):
 
     fallback.chat.assert_awaited_once_with(**options)
     assert response is fallback.chat.return_value
+
+
+def test_old_model_registration_is_browsable_but_cannot_start_a_conversation(tmp_path):
+    store = RoleStore(tmp_path)
+    store.create_role(
+        name="Mira",
+        system_prompt="mira",
+        role_id="mira",
+        runtime_config={"dialogue_model_registration_id": "old"},
+    )
+    old = replace(
+        registration("old", "same-name"),
+        context_window_tokens=None,
+        max_output_tokens=None,
+    )
+    runtime = RoleModelRuntime(role_store=store, registrations=[old])
+    status = runtime.availability("mira")
+    assert not status["available"]
+    assert status["fields"] == ["context_window_tokens", "max_output_tokens"]
+    with pytest.raises(ModelConfigurationError, match="需补填"):
+        runtime.resolve("mira", "chat")

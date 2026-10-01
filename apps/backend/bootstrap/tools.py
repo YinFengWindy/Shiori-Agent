@@ -473,6 +473,7 @@ def build_core_runtime(
         role_store=role_store,
         registrations=config.model_registrations,
         dev_mode=config.dev_mode,
+        budget_policy=config.context_budget,
     )
     track_build_resource(role_model_resolver, role_model_resolver.aclose)
     role_repository = RoleRepository(role_store)
@@ -576,7 +577,6 @@ def build_core_runtime(
             ),
             memory=MemoryConfig(
                 window=config.memory_window,
-                input_token_threshold=config.memory_consolidation_input_token_threshold,
             ),
         ),
     )

@@ -20,6 +20,10 @@ class UnconfiguredProvider(LLMProvider):
     def __init__(self, reason: str) -> None:
         self._reason = reason
 
+    def input_budget(self, **request):
+        """Reject incomplete configuration before any prompt or network work."""
+        raise ModelConfigurationError(reason=self._reason, role_id="", purpose="chat")
+
     async def chat(self, *args, **kwargs):
         """Reports missing configuration at the actual model invocation boundary."""
         raise ModelConfigurationError(reason=self._reason, role_id="", purpose="chat")
@@ -49,6 +53,9 @@ def build_providers(
         stream_idle_timeout_s=_MAIN_STREAM_IDLE_TIMEOUT_S,
         provider_name=config.provider,
         payload_snapshot_enabled=payload_snapshot_enabled,
+        context_window_tokens=config.model_registrations[0].context_window_tokens,
+        max_output_tokens=config.model_registrations[0].max_output_tokens,
+        budget_policy=config.context_budget,
     )
     track_build_resource(provider, provider.aclose)
 

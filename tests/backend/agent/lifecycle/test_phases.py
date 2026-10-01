@@ -637,7 +637,7 @@ async def test_before_turn_memory_context_guard_schedules_consolidation_without_
 
 
 @pytest.mark.asyncio
-async def test_before_turn_token_pressure_waits_for_consolidation_before_context_prepare():
+async def test_before_turn_defers_token_pressure_until_complete_request_is_rendered():
     bus = EventBus()
 
     class _TokenSession(_DummySession):
@@ -682,7 +682,6 @@ async def test_before_turn_token_pressure_waits_for_consolidation_before_context
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
             keep_count=20,
-            input_token_threshold=100,
             consolidator=cast(Any, consolidator),
         ),
         frame_factory=BeforeTurnFrame,
@@ -693,7 +692,7 @@ async def test_before_turn_token_pressure_waits_for_consolidation_before_context
     )
 
     assert ctx.abort is False
-    assert consolidator.ensure_calls == 1
+    assert consolidator.ensure_calls == 0
     ctx_store.prepare.assert_awaited_once()
 
 
@@ -2018,7 +2017,7 @@ async def test_backlog_counts_the_whole_external_context(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
-async def test_input_estimate_includes_the_groups_listening_records(
+async def test_before_turn_leaves_listening_budget_to_complete_request_preflight(
     tmp_path: Path,
 ) -> None:
     manager = SessionManager(tmp_path)
@@ -2026,7 +2025,7 @@ async def test_input_estimate_includes_the_groups_listening_records(
     session.metadata["role_id"] = "mira"
     manager.save(session)
     consolidator = _RecordingConsolidator()
-    await _guard_group_turn(manager, consolidator, input_token_threshold=600)
+    await _guard_group_turn(manager, consolidator)
     assert consolidator.ensured == []
 
     listening = manager.conversation_store.listening
@@ -2040,8 +2039,6 @@ async def test_input_estimate_includes_the_groups_listening_records(
             external_message_id=f"m{index}",
             timestamp=datetime.now().astimezone(),
         )
-    # Consolidation cannot shrink the listening part, so the turn still stops.
-    with pytest.raises(MemoryConsolidationFailedError):
-        await _guard_group_turn(manager, consolidator, input_token_threshold=600)
-
-    assert consolidator.ensured == ["role:mira"]
+    # Partial history cannot decide the final model budget, including listening.
+    await _guard_group_turn(manager, consolidator)
+    assert consolidator.ensured == []

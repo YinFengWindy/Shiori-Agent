@@ -12,7 +12,13 @@ from core.roles.model_errors import incomplete_registration_fields
 )
 def test_local_openai_compatible_endpoint_can_omit_api_key(url):
     registration = ModelRegistration(
-        id="local", provider="openai", base_url=url, api_key="", model="local"
+        context_window_tokens=128000,
+        max_output_tokens=32768,
+        id="local",
+        provider="openai",
+        base_url=url,
+        api_key="",
+        model="local",
     )
     assert incomplete_registration_fields(registration) == ()
     assert incomplete_registration_fields(
@@ -25,6 +31,12 @@ def test_local_openai_compatible_endpoint_can_omit_api_key(url):
 )
 def test_invalid_connection_address_is_a_repairable_field(url):
     registration = ModelRegistration(
-        id="remote", provider="openai", base_url=url, api_key="key", model="model"
+        context_window_tokens=128000,
+        max_output_tokens=32768,
+        id="remote",
+        provider="openai",
+        base_url=url,
+        api_key="key",
+        model="model",
     )
     assert incomplete_registration_fields(registration) == ("base_url",)

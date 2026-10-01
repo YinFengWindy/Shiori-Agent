@@ -90,6 +90,10 @@ export type ModelRegistrationFormData = {
   apiKey: string;
   model: string;
   effort: "none" | "low" | "high" | "max";
+  /** Empty only for an incomplete draft or legacy profile. */
+  contextWindowTokens?: number | null;
+  /** Model capability; the actual request cap is advanced.maxTokens. */
+  maxOutputTokens?: number | null;
 };
 
 export type SettingsFormData = {
@@ -139,7 +143,10 @@ export type SettingsFormData = {
     sceneObservationEnabled?: boolean;
     memoryOptimizerEnabled: boolean;
     memoryOptimizerIntervalSeconds: number;
-    consolidationInputTokenThreshold: number;
+    /** Input-budget policy, preserved by ordinary settings saves. */
+    contextTriggerRatio?: number;
+    contextTargetRatio?: number;
+    contextSafetyMarginTokens?: number;
   };
   pendingRoleModelUpdates?: PendingRoleModelUpdate[];
 };

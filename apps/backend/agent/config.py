@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from agent.prompting.input_budget import BudgetPolicy
+
 import logging
 import os
 import re
@@ -102,21 +104,19 @@ def load_config_data(data: dict[str, Any]) -> Config:
         provider=primary_registration.provider if primary_registration else "",
         model=primary_registration.model if primary_registration else "",
         api_key=primary_registration.api_key if primary_registration else "",
+        context_budget=BudgetPolicy(
+            **{
+                key: agent_context[key]
+                for key in ("trigger_ratio", "target_ratio", "safety_margin_tokens")
+                if key in agent_context
+            }
+        ),
         max_tokens=int(agent_cfg.get("max_tokens", data.get("max_tokens", 8192))),
         max_iterations=int(
             agent_cfg.get("max_iterations", data.get("max_iterations", 10))
         ),
         memory_window=int(
             agent_context.get("memory_window", data.get("memory_window", 40))
-        ),
-        memory_consolidation_input_token_threshold=max(
-            0,
-            int(
-                agent_maintenance.get(
-                    "consolidation_input_token_threshold",
-                    75000,
-                )
-            ),
         ),
         base_url=primary_registration.base_url if primary_registration else None,
         extra_body=(
@@ -216,6 +216,8 @@ def _parse_model_registration(payload: dict[str, Any]) -> ModelRegistration:
         api_key=_resolve(str(payload.get("api_key") or "")),
         model=str(payload.get("model") or "").strip(),
         effort=cast(Any, effort),
+        context_window_tokens=payload.get("context_window_tokens"),
+        max_output_tokens=payload.get("max_output_tokens"),
     )
 
 

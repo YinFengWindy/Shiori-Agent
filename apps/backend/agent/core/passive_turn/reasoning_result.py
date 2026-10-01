@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 import agent.core.passive_support as support
+from agent.prompting.usage_accounting import current_usage
 from agent.core.types import LLMToolCall, ReasonerResult
 from agent.core.reply_completion import fetch_role_mood
 from agent.core.reply_output import RoleReplyOutput
@@ -109,12 +110,12 @@ class _PassiveReasoningResultMixin:
         ]
 
         if reply_moods is not None:
-            threshold = int(getattr(self, "_memory_input_token_threshold", 0))
+            threshold = self._request_threshold(summary_messages, [])
             from core.roles.reply_state import InvalidRoleReply
 
             if (
                 threshold > 0
-                and support.estimate_messages_tokens(summary_messages) >= threshold
+                and self._request_tokens_with_tools(summary_messages, []) >= threshold
             ):
                 raise InvalidRoleReply("角色阶段性回复超出当前回合输入预算")
             response = await self._llm.provider.chat(
@@ -132,7 +133,7 @@ class _PassiveReasoningResultMixin:
                 max_tokens=self._llm_config.max_tokens,
                 role_reply=True,
                 input_token_threshold=threshold,
-                estimate_request=support.estimate_messages_tokens,
+                estimate_request=self._request_tokens_with_tools,
                 session=session,
                 channel=channel,
                 iteration=iteration,
@@ -151,6 +152,13 @@ class _PassiveReasoningResultMixin:
             )
             return content, completion.total_tokens, role_reply, completion.diagnostics
 
+        # Auxiliary summaries use their actual smaller output reservation too.
+        summary_cap = min(_SUMMARY_MAX_TOKENS, self._llm_config.max_tokens)
+        budget = self._request_budget(
+            summary_messages, [], summary_cap, call_purpose="auxiliary"
+        )
+        if budget is not None and budget.needs_trim:
+            raise ValueError("阶段性总结超过当前输入预算")
         # 2. 先尝试让模型给一段中文收尾总结。
         try:
             response = await self._llm.provider.chat(
@@ -243,6 +251,7 @@ class _PassiveReasoningResultMixin:
             "tool_chain": list(tool_chain),
             "visible_names": set(visible_names) if visible_names is not None else None,
             "react_stats": react_stats,
+            "request_usage": current_usage(),
             "role_reply": role_reply,
             "role_reply_mood_fresh": role_reply_mood_fresh,
         }

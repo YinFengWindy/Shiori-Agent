@@ -29,7 +29,7 @@ class ModelConfigurationError(ValueError):
             "no_models": "尚未配置模型，请先在设置中添加模型",
             "role_unbound": "角色未选择对话模型，请先绑定模型",
             "registration_missing": "原先选择的模型已不存在，请重新选择模型",
-            "connection_incomplete": "模型连接配置不完整，请检查模型设置",
+            "connection_incomplete": "模型配置需补填，请检查连接和上下文容量",
         }
         super().__init__(messages[reason])
 
@@ -50,6 +50,9 @@ def incomplete_registration_fields(registration: ModelRegistration):
     fields = []
     for name in ("provider", "model"):
         if not getattr(registration, name).strip():
+            fields.append(name)
+    for name in ("context_window_tokens", "max_output_tokens"):
+        if getattr(registration, name) is None:
             fields.append(name)
     base_url = registration.base_url.strip()
     try:

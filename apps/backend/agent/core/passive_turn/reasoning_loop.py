@@ -31,7 +31,8 @@ from agent.tools.base import normalize_tool_result
 from agent.tools.registry import ToolRegistry
 from agent.tools.tool_search import tool_search_call_context
 from agent.tools.turn_scope import tool_turn
-from agent.provider import ContextLengthError
+from agent.provider import ContextLengthError, LLMProvider
+from agent.prompting.input_budget import InputBudget
 from .helpers import turn_tool_names
 from .reply_recovery import complete_reply
 
@@ -46,7 +47,40 @@ class _PassiveReasoningLoopMixin:
     def _request_tokens_with_tools(
         self, messages: list[dict], schemas: list[dict]
     ) -> int:
-        return support.estimate_messages_tokens(messages, schemas)
+        budget = self._request_budget(messages, schemas)
+        return (
+            budget.estimate.tokens
+            if budget is not None
+            else support.estimate_messages_tokens(messages, schemas)
+        )
+
+    def _request_budget(
+        self,
+        messages: list[dict],
+        schemas: list[dict],
+        max_tokens: int | None = None,
+        *,
+        call_purpose: str = "default",
+    ) -> InputBudget | None:
+        provider = self._llm.provider
+        if not isinstance(provider, LLMProvider):
+            return None
+        budget = provider.input_budget(
+            messages=messages,
+            tools=schemas,
+            model=self._llm_config.model,
+            max_tokens=(
+                self._llm_config.max_tokens if max_tokens is None else max_tokens
+            ),
+            call_purpose=call_purpose,
+        )
+        return budget if isinstance(budget, InputBudget) else None
+
+    def _request_threshold(
+        self, messages: list[dict], schemas: list[dict], max_tokens: int | None = None
+    ) -> int:
+        budget = self._request_budget(messages, schemas, max_tokens)
+        return budget.trigger_tokens if budget is not None else 0
 
     @tool_turn
     async def run(
@@ -230,14 +264,13 @@ class _PassiveReasoningLoopMixin:
                 ),
                 external_only=external_restricted,
             )
-            threshold = int(getattr(self, "_memory_input_token_threshold", 0))
-            if (
-                threshold > 0
-                and self._request_tokens_with_tools(messages, schemas) >= threshold
-            ):
+            threshold = self._request_threshold(messages, schemas)
+            request_tokens = self._request_tokens_with_tools(messages, schemas)
+            if threshold > 0 and request_tokens >= threshold:
                 raise ContextLengthError(
                     "推理过程中追加工具结果后输入超过预算，已停止继续调用模型。"
                 )
+            react_input_samples[-1] = request_tokens
             reply_output = RoleReplyOutput(
                 on_content_delta, enabled=reply_moods is not None
             )
@@ -270,7 +303,10 @@ class _PassiveReasoningLoopMixin:
             if on_content_delta is not None and response.content:
                 streamed = True
             for call in completion.calls:
-                if call.cache_prompt_tokens is not None:
+                if (
+                    call.cache_prompt_tokens is not None
+                    and call.cache_hit_tokens is not None
+                ):
                     react_cache_seen = True
                     react_cache_prompt_tokens += call.cache_prompt_tokens
                     react_cache_hit_tokens += call.cache_hit_tokens or 0

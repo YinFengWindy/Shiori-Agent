@@ -7,6 +7,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Generator, Literal
 
+from agent.prompting.input_budget import BudgetPolicy
+from agent.prompting.usage_anchor import UsageAnchors
 from agent.config_models import ModelRegistration
 from agent.provider import LLMCallPurpose, LLMProvider, LLMResponse, StreamDelta
 
@@ -44,10 +46,13 @@ class RoleModelRuntime:
         role_store: RoleStore,
         registrations: list[ModelRegistration],
         dev_mode: bool = False,
+        budget_policy: BudgetPolicy | None = None,
     ) -> None:
         self._roles = role_store
         self._registrations = {item.id: item for item in registrations}
         self._dev_mode = dev_mode
+        self._budget_policy = budget_policy or BudgetPolicy()
+        self._usage_anchors = UsageAnchors()
         self._providers: dict[tuple[str, str], LLMProvider] = {}
 
     def resolve(self, role_id: str, purpose: ModelPurpose) -> RoleModelSnapshot:
@@ -71,6 +76,10 @@ class RoleModelRuntime:
                 extra_body=extra_body,
                 provider_name=registration.provider,
                 payload_snapshot_enabled=self._dev_mode,
+                context_window_tokens=registration.context_window_tokens,
+                max_output_tokens=registration.max_output_tokens,
+                budget_policy=self._budget_policy,
+                usage_anchors=self._usage_anchors,
             )
             self._providers[key] = provider
         return RoleModelSnapshot(
@@ -164,6 +173,14 @@ class RoleAwareProvider(LLMProvider):
 
     def __init__(self, fallback: LLMProvider) -> None:
         self._fallback = fallback
+
+    def input_budget(self, **request):
+        """Resolve preflight capacity from the very same active role snapshot."""
+        snapshot = _current_snapshot.get()
+        provider = snapshot.provider if snapshot is not None else self._fallback
+        if snapshot is not None:
+            request = {**request, "model": snapshot.model, "extra_body": None}
+        return provider.input_budget(**request)
 
     async def chat(
         self,

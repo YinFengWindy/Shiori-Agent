@@ -128,7 +128,7 @@ async def test_retirement_releases_generation_even_if_handler_cleanup_fails():
 
 def _config(model=""):
     registration = (
-        f'[[llm.registrations]]\nid = "{_REGISTRATION}"\nprovider = "openai"\n'
+        f'[[llm.registrations]]\ncontext_window_tokens = 128000\nmax_output_tokens = 32768\nid = "{_REGISTRATION}"\nprovider = "openai"\n'
         f'model = "{model}"\napi_key = "fake-key"\n'
         if model
         else "[llm]\nregistrations = []\n"

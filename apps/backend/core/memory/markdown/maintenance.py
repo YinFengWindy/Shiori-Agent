@@ -38,7 +38,6 @@ from .contracts import (
 from .listening import ListeningConsolidation
 from .listening_trigger import ListeningTrigger
 from .formatting import (
-    _budget_view,
     _format_consolidation_error,
     _select_consolidation_window,
     _session_role_id,
@@ -81,7 +80,6 @@ class MarkdownMemoryMaintenance:
         provider: "LLMProvider",
         model: str,
         keep_count: int,
-        input_token_threshold: int = 75000,
         event_bus: "EventBus | None" = None,
         recent_context_provider: "LLMProvider | None" = None,
         recent_context_model: str | None = None,
@@ -96,7 +94,6 @@ class MarkdownMemoryMaintenance:
             provider=provider,
             model=model,
             keep_count=keep_count,
-            input_token_threshold=input_token_threshold,
             recent_context_provider=recent_context_provider,
             recent_context_model=recent_context_model,
         )
@@ -109,7 +106,6 @@ class MarkdownMemoryMaintenance:
         )
         self.listening_trigger = ListeningTrigger(self.listening)
         self._keep_count = keep_count
-        self._input_token_threshold = max(0, int(input_token_threshold))
         self._consolidation_min_new_messages = max(5, keep_count // 2)
         self._get_session: Callable[[str], object] | None = None
         self._commit_consolidation: (
@@ -131,7 +127,7 @@ class MarkdownMemoryMaintenance:
         self._maintenance_locks: dict[str, asyncio.Lock] = {}
         self._maintenance_failures: dict[str, str] = {}
         self._ensure_tasks: dict[
-            tuple[str, ContextScope | None], asyncio.Task[bool]
+            tuple[str, ContextScope | None, int], asyncio.Task[bool]
         ] = {}
         if event_bus is not None:
             event_bus.on(TurnCommitted, self.on_turn_committed)
@@ -231,18 +227,22 @@ class MarkdownMemoryMaintenance:
         session_key: str,
         current_content: str = "",
         scope: ContextScope | None = None,
+        *,
+        input_token_threshold: int,
     ) -> bool:
         """Finish token-triggered consolidation before sending a model request.
 
         ``scope`` 是回合所在的上下文（非角色会话为 None）：预算只按这类上下文从
         自己游标起的历史估算。
         """
-        ensure_key = (session_key, scope)
+        ensure_key = (session_key, scope, input_token_threshold)
         existing_ensure = self._ensure_tasks.get(ensure_key)
         if existing_ensure is not None and not existing_ensure.done():
             return await existing_ensure
         task = asyncio.create_task(
-            self._ensure_consolidation(session_key, current_content, scope),
+            self._ensure_consolidation(
+                session_key, current_content, scope, input_token_threshold
+            ),
             name=f"markdown-memory-ensure:{session_key}",
         )
         self._ensure_tasks[ensure_key] = task
@@ -253,7 +253,11 @@ class MarkdownMemoryMaintenance:
                 self._ensure_tasks.pop(ensure_key, None)
 
     async def _ensure_consolidation(
-        self, session_key: str, current_content: str, scope: ContextScope | None
+        self,
+        session_key: str,
+        current_content: str,
+        scope: ContextScope | None,
+        input_token_threshold: int,
     ) -> bool:
         """Run the token-triggered consolidation shared by concurrent callers."""
         if self._get_session is None or self._commit_consolidation is None:
@@ -265,10 +269,12 @@ class MarkdownMemoryMaintenance:
         if session is None:
             return False
         view = self._scope_view(session, scope)
+        threshold = input_token_threshold
         for force in (False, True):
             result = await self.consolidate(
                 ConsolidateRequest(
                     session=session,
+                    input_budget_exceeded=True,
                     force=force,
                     current_content=current_content,
                     scope=scope,
@@ -277,14 +283,12 @@ class MarkdownMemoryMaintenance:
             if result.trace.get("mode") == "failed":
                 return False
             if not _session_input_over_budget(
-                session, self._input_token_threshold, current_content, view
+                session, threshold, current_content, view
             ):
                 return True
             if result.trace.get("mode") != "markdown":
                 return False
-        return not _session_input_over_budget(
-            session, self._input_token_threshold, current_content, view
-        )
+        return not _session_input_over_budget(session, threshold, current_content, view)
 
     def _enqueue_maintenance(self, session_key: str) -> None:
         if self._get_session is None or self._commit_consolidation is None:
@@ -376,10 +380,6 @@ class MarkdownMemoryMaintenance:
                 session,
                 keep_count=self._keep_count,
                 consolidation_min_new_messages=self._consolidation_min_new_messages,
-                input_token_threshold=self._input_token_threshold,
-                input_token_estimate=_estimate_session_input_tokens(
-                    session, view=_budget_view(views)
-                ),
                 archive_all=False,
                 force=False,
                 views=views,
@@ -455,20 +455,11 @@ class MarkdownMemoryMaintenance:
             view.scope: consolidation_cursor(request.session, view.scope)
             for view in views
         }
-        # 只有一类上下文时按它自己的历史估算预算；回合正文只计入回合所在的那一类。
-        budget_view = _budget_view(views)
-        current_content = (
-            request.current_content
-            if budget_view is None or request.scope in (None, budget_view.scope)
-            else ""
-        )
         draft = await self._worker.prepare_consolidation(
             request.session,
             archive_all=request.archive_all,
             force=request.force,
-            input_token_estimate=_estimate_session_input_tokens(
-                request.session, current_content, budget_view
-            ),
+            input_budget_exceeded=request.input_budget_exceeded,
             user_threads=user_threads,
             group_environment=group_environment,
             views=views,

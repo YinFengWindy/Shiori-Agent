@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from agent.prompting.token_estimate import estimate_input
 from agent.core.types import ChatMessage, HistoryMessage, to_tool_call_groups
 from agent.prompting import (
     PromptSectionRender,
@@ -171,7 +172,7 @@ def estimate_history_budget(history: list[dict]) -> dict[str, int]:
     return {
         "messages": len(history),
         "chars": chars,
-        "tokens": max(1, chars // 3),
+        "tokens": estimate_input(history),
     }
 
 
@@ -230,14 +231,7 @@ def estimate_messages_tokens(
     The shared estimator keeps all request paths on the same serialization and
     safety margin instead of each caller maintaining a subtly different formula.
     """
-    if not messages and not tools:
-        return 0
-    payload = json.dumps(
-        {"messages": messages, "tools": tools or []},
-        ensure_ascii=False,
-        default=str,
-    )
-    return max(1, len(payload) // 3 + max(0, int(safety_tokens)))
+    return estimate_input(messages, tools) + max(0, int(safety_tokens))
 
 
 def predict_current_user_source_ref(

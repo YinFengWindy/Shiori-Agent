@@ -51,6 +51,12 @@ export function ModelRegistrationFields({ registration, onChange, compact = fals
       <SettingsField {...fieldLayout} label="模型">
         <input aria-label="模型" className={inputClass} placeholder={preset?.modelHint} value={registration.model} onChange={(event) => onChange((current) => ({ ...current, model: event.target.value }))} />
       </SettingsField>
+      <SettingsField {...fieldLayout} label="上下文窗口（token）">
+        <input aria-label="上下文窗口" className={inputClass} type="number" min="1" step="1" required placeholder="需补填" value={registration.contextWindowTokens ?? ""} onChange={(event) => onChange((current) => ({ ...current, contextWindowTokens: event.target.value === "" ? null : Number(event.target.value) }))} />
+      </SettingsField>
+      <SettingsField {...fieldLayout} label="模型最大输出（token）">
+        <input aria-label="模型最大输出" className={inputClass} type="number" min="1" step="1" required placeholder="需补填" value={registration.maxOutputTokens ?? ""} onChange={(event) => onChange((current) => ({ ...current, maxOutputTokens: event.target.value === "" ? null : Number(event.target.value) }))} />
+      </SettingsField>
       <SettingsField {...fieldLayout} label="思考强度">
         <Select aria-label="思考强度" className={inputClass} value={registration.effort} onValueChange={(value) => onChange((current) => ({ ...current, effort: value as ModelRegistrationFormData["effort"] }))} options={modelEffortOptions} />
       </SettingsField>

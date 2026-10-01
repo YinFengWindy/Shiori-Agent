@@ -304,3 +304,22 @@ describe("migrated channel tables", () => {
     assert.doesNotMatch(rendered, /\[channels/);
   });
 });
+
+
+it("model capacities and context policy roundtrip while legacy profiles stay incomplete", async () => {
+  const legacy = loadSettingsData('[llm]\n[[llm.registrations]]\nid="legacy"\nprovider="openai"\nmodel="model"\n');
+  assert.equal(legacy.formData.models.registrations[0].contextWindowTokens, null);
+  assert.equal(legacy.formData.models.registrations[0].maxOutputTokens, null);
+  const draft = structuredClone(legacy.formData);
+  Object.assign(draft.models.registrations[0], { contextWindowTokens: 128000, maxOutputTokens: 32768 });
+  Object.assign(draft.advanced, { contextTriggerRatio: 0.8, contextTargetRatio: 0.5, contextSafetyMarginTokens: 2048 });
+  let saved = "";
+  const result = await saveSettings(draft, async (request) => { saved = request.config_toml; return { ok: true }; });
+  assert.equal(result.ok, true);
+  const restored = loadSettingsData(saved).formData;
+  assert.equal(restored.models.registrations[0].contextWindowTokens, 128000);
+  assert.equal(restored.models.registrations[0].maxOutputTokens, 32768);
+  assert.equal(restored.advanced.contextTriggerRatio, 0.8);
+  assert.equal(restored.advanced.contextTargetRatio, 0.5);
+  assert.equal(restored.advanced.contextSafetyMarginTokens, 2048);
+});
