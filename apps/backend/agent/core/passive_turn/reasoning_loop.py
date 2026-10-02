@@ -191,6 +191,19 @@ class _PassiveReasoningLoopMixin:
                 "yes" if len(visible_names) == len(always_on) else "maybe",
             )
 
+        def request_schemas() -> list[dict]:
+            # 允许集合每次现算：回合中途注册的未声明工具不会进入 schema，
+            # 本回合 tool_search 新解锁的工具会进入下一次请求。
+            return self._tools.get_schemas(
+                names=turn_tool_names(
+                    self._tools,
+                    list(visible_order) if visible_order is not None else None,
+                    disabled=disabled,
+                    external_restricted=external_restricted,
+                ),
+                external_only=external_restricted,
+            )
+
         iteration = -1
         while True:
             iteration += 1
@@ -249,16 +262,7 @@ class _PassiveReasoningLoopMixin:
                 ),
                 step_ctx.input_tokens_estimate,
             )
-            # 允许集合每轮现算：回合中途注册的未声明工具不会进入 schema。
-            schemas = self._tools.get_schemas(
-                names=turn_tool_names(
-                    self._tools,
-                    list(visible_order) if visible_order is not None else None,
-                    disabled=disabled,
-                    external_restricted=external_restricted,
-                ),
-                external_only=external_restricted,
-            )
+            schemas = request_schemas()
 
             def schemas_for_history(history_names: list[str]) -> list[dict]:
                 if visible_names is None:
@@ -731,7 +735,7 @@ class _PassiveReasoningLoopMixin:
                     tool_chain_group["reasoning_content"] = response.thinking
                 tool_chain.append(tool_chain_group)
                 # 下一次请求按统一预算估算，并把当前模型的输入硬上限交给观察者。
-                pressure_budget = self._request_budget(messages, schemas)
+                pressure_budget = self._request_budget(messages, request_schemas())
                 pressure_tokens = (
                     pressure_budget.estimate.tokens
                     if pressure_budget is not None

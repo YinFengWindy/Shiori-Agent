@@ -22,7 +22,7 @@ from core.compaction import (
     CompactionResult,
 )
 from core.compaction_summary import WorkingSummaryWriter
-from session.maintenance_progress import window_key
+from session.maintenance_progress import MaintenanceProgress, window_key
 from .compaction_render import CompactionRenderer
 from .context_window import ContextWindow
 from .compaction import (
@@ -77,7 +77,7 @@ if TYPE_CHECKING:
     from agent.tool_hooks.base import ToolHook
     from agent.tools.registry import ToolRegistry
     from conversation.context_scope import ContextView
-    from session.manager import SessionManager
+    from session.manager import Session, SessionManager
     from core.memory.markdown import MarkdownMemoryMaintenance
 
 logger = logging.getLogger("agent.core.passive_turn")
@@ -348,11 +348,7 @@ class DefaultReasoner(
         # The model and policy are execution snapshots, before any history render.
         policy = CompactionPolicy(self._llm_config.compaction_retained_turns)
         message_limit = len(session.messages)
-        snapshot = self._session_manager.window_snapshot(
-            session.key, context_view, message_limit=message_limit
-        )
-        progress = snapshot.maintenance_progress
-        assert progress is not None
+        snapshot, progress = self._window_snapshot(session, context_view, message_limit)
         window_id = window_key(context_view)
         protected_current: dict | None = None
         compaction_results: list[dict] = []
@@ -402,21 +398,13 @@ class DefaultReasoner(
         attempts = self._build_attempt_plans(total_history)
         for attempt, plan in enumerate(attempts):
             if attempt:
-                snapshot = self._session_manager.window_snapshot(
-                    session.key,
-                    context_view,
-                    message_limit=message_limit,
-                    expected=progress,
+                snapshot, refreshed = self._window_snapshot(
+                    session, context_view, message_limit, expected=progress
                 )
-                refreshed = snapshot.maintenance_progress
-                assert refreshed is not None
                 if base_history is None or refreshed.window_versions.get(
                     window_id, 0
                 ) != progress.window_versions.get(window_id, 0):
                     source_history = get_window_history(snapshot, context_view)
-            current_progress = snapshot.maintenance_progress
-            assert current_progress is not None
-            working_summary = current_progress.summaries.get(window_id, "")
             history_window = min(plan["history_window"], len(source_history))
             # 与历史同一窗口里非用户本人消息的来源，加上本群旁听块里的（#539），
             # 外部回合据此注入成员档案（#498）。
@@ -425,18 +413,9 @@ class DefaultReasoner(
                 context_view,
                 self._heard_for_turn(context_view),
             )
-            preloaded: set[str] | None = None
-            preloaded_order: list[str] = []
-            if self._tool_search_enabled:
-                # 历史窗口里用过或解锁过的工具继续可见，直到窗口维护移出原文。
-                preloaded_order = get_window_preloaded_tools(
-                    snapshot, context_view, self._tools
-                )
-                preloaded = set(preloaded_order)
-                logger.info(
-                    "[tool_search] history preloaded=%s",
-                    preloaded_order if preloaded_order else "[]",
-                )
+            preloaded, preloaded_order, turn_injection_prompt = self._window_tools(
+                snapshot, context_view, disabled_tools, external_restricted
+            )
             retry_attempts.append(
                 {
                     "name": plan["name"],
@@ -448,16 +427,6 @@ class DefaultReasoner(
             history_for_attempt = self._slice_history(
                 source_history,
                 history_window,
-            )
-            turn_injection_prompt = build_turn_injection_prompt(
-                tools=self._tools,
-                tool_search_enabled=self._tool_search_enabled,
-                visible_names=(
-                    (preloaded or set()) | disabled_tools
-                    if self._tool_search_enabled
-                    else None
-                ),
-                external_only=external_restricted,
             )
             render_input = PromptRenderInput(
                 session_key=session.key,
@@ -493,8 +462,8 @@ class DefaultReasoner(
                 replace_current_input(
                     prompt_render.messages, protected_current, owned_current
                 )
-            initial_messages = with_working_summary(
-                prompt_render.messages, working_summary
+            initial_messages = self._with_window_summary(
+                prompt_render.messages, snapshot, context_view
             )
 
             request_prefix_length = len(initial_messages)
@@ -650,6 +619,73 @@ class DefaultReasoner(
                 )
         return TurnRunResult(reply="（安全重试异常）", context_retry=retry_trace)
 
+    def _window_snapshot(
+        self,
+        session: "SessionLike",
+        context_view: "ContextView | None",
+        message_limit: int,
+        *,
+        expected: MaintenanceProgress | None = None,
+    ) -> tuple["Session", MaintenanceProgress]:
+        """Read the window snapshot up to ``message_limit`` and its progress."""
+        if self._session_manager is None:
+            raise RuntimeError("DefaultReasoner 读取窗口快照需要 session_manager")
+        snapshot = self._session_manager.window_snapshot(
+            session.key, context_view, message_limit=message_limit, expected=expected
+        )
+        progress = snapshot.maintenance_progress
+        assert progress is not None
+        return snapshot, progress
+
+    def _window_tools(
+        self,
+        snapshot: "Session",
+        context_view: "ContextView | None",
+        disabled_tools: set[str],
+        external_restricted: bool,
+    ) -> tuple[set[str] | None, list[str], str]:
+        """Window-preloaded deferred tools, their order and the deferred-tool hint.
+
+        Tools used or unlocked in the original window stay visible until window
+        maintenance removes those originals; without tool search nothing is
+        preloaded and the visible set is None (all tools).
+        """
+        preloaded: set[str] | None = None
+        preloaded_order: list[str] = []
+        if self._tool_search_enabled:
+            preloaded_order = get_window_preloaded_tools(
+                snapshot, context_view, self._tools
+            )
+            preloaded = set(preloaded_order)
+            logger.info(
+                "[tool_search] history preloaded=%s",
+                preloaded_order if preloaded_order else "[]",
+            )
+        injection = build_turn_injection_prompt(
+            tools=self._tools,
+            tool_search_enabled=self._tool_search_enabled,
+            visible_names=(
+                (preloaded or set()) | disabled_tools
+                if self._tool_search_enabled
+                else None
+            ),
+            external_only=external_restricted,
+        )
+        return preloaded, preloaded_order, injection
+
+    @staticmethod
+    def _with_window_summary(
+        messages: list[dict],
+        snapshot: "Session",
+        context_view: "ContextView | None",
+    ) -> list[dict]:
+        """Attach the snapshot window's working summary to rendered messages."""
+        progress = snapshot.maintenance_progress
+        assert progress is not None
+        return with_working_summary(
+            messages, progress.summaries.get(window_key(context_view), "")
+        )
+
     def _request_compaction(
         self,
         *,
@@ -723,30 +759,19 @@ class DefaultReasoner(
         from .minimal_request import current_input
 
         message_limit = len(session.messages)
-        snapshot = self._session_manager.window_snapshot(
-            session.key, None, message_limit=message_limit
+        snapshot, _ = self._window_snapshot(session, None, message_limit)
+        preloaded, preloaded_order, injection = self._window_tools(
+            snapshot, None, set(), False
         )
-        progress = snapshot.maintenance_progress
-        assert progress is not None
-        preloaded_order = (
-            get_window_preloaded_tools(snapshot, None, self._tools)
-            if self._tool_search_enabled
-            else []
-        )
-        preloaded = set(preloaded_order) if self._tool_search_enabled else None
         render_input = replace(
             render_input,
             history=get_window_history(snapshot, None),
             session_metadata=get_session_metadata(snapshot),
-            turn_injection_prompt=build_turn_injection_prompt(
-                tools=self._tools,
-                tool_search_enabled=self._tool_search_enabled,
-                visible_names=preloaded,
-            ),
+            turn_injection_prompt=injection,
         )
         prompt_render = await self.render_prompt(render_input)
-        initial_messages = with_working_summary(
-            prompt_render.messages, progress.summaries.get(window_key(None), "")
+        initial_messages = self._with_window_summary(
+            prompt_render.messages, snapshot, None
         )
         compaction = self._request_compaction(
             session_key=session.key,

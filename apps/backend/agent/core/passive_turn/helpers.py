@@ -22,7 +22,8 @@ if TYPE_CHECKING:
     from agent.tools.registry import ToolRegistry
 
 
-# 窗口按压缩水位起算；给出 start_index 时条数上限不生效，只需为正。
+# Session.history_window 要求条数为正；下面每次调用都传 history_start 给出的
+# start_index，此时条数上限不生效。依赖 start_index 总是存在，不是真实的条数窗口。
 _WINDOW_MESSAGES = 500
 
 
