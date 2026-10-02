@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from infra.persistence.json_store import atomic_save_json, load_json, save_json
+from shiori_sdk.files.json import atomic_save_json, load_json, save_json
 
 
 def test_load_json_returns_default_only_when_file_is_missing(tmp_path: Path):

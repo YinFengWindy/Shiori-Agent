@@ -7,7 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from PIL import Image
-from agent.tools.base import ToolResult
+from shiori_sdk.tools import ToolResult
 
 from .windows import TargetError, WindowIdentity, inspect_window
 

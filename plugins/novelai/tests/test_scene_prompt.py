@@ -4,8 +4,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.provider import LLMResponse, ToolCall
-from bus.events_lifecycle import SceneObservationCommitted
+from shiori_sdk.testing.services import (
+    FakeModelResponse,
+    FakeToolCall,
+)
+from shiori_sdk.role_events import SceneObservationCommitted
 from plugins.novelai.backend.scene_prompt import prepare_scene_prompt
 
 
@@ -32,9 +35,9 @@ async def test_prompt_model_uses_only_frozen_scene_and_validates_provider_parame
     )
     provider = SimpleNamespace(
         chat=AsyncMock(
-            return_value=LLMResponse(
+            return_value=FakeModelResponse(
                 content="",
-                tool_calls=[ToolCall("cg", "submit_scene_image_prompt", payload)],
+                tool_calls=[FakeToolCall("cg", "submit_scene_image_prompt", payload)],
             )
         )
     )
@@ -63,9 +66,9 @@ async def test_prompt_model_uses_only_frozen_scene_and_validates_provider_parame
 async def test_invalid_provider_prompt_is_visible_failure(payload):
     provider = SimpleNamespace(
         chat=AsyncMock(
-            return_value=LLMResponse(
+            return_value=FakeModelResponse(
                 content="",
-                tool_calls=[ToolCall("cg", "submit_scene_image_prompt", payload)],
+                tool_calls=[FakeToolCall("cg", "submit_scene_image_prompt", payload)],
             )
         )
     )

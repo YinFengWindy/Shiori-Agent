@@ -1,31 +1,23 @@
-"""Legacy generated assets and exact requests migrate together."""
+"""Plugin path normalization honors the migration owner's returned destination."""
 
 import json
-from pathlib import Path
-
+from shiori_sdk.testing.memory import FakeMemoryStorage
 from plugins.novelai.backend.storage import storage_root
 
 
-def test_generation_migration_normalizes_records_and_retains_legacy_identity(
-    tmp_path: Path,
-):
+def test_normalization_uses_explicit_storage_destination(tmp_path):
+    root = tmp_path / "selected-owner-root"
+    root.mkdir()
     old = tmp_path / "private_runtime/novelai"
-    output = old / "outputs/record/output.png"
-    output.parent.mkdir(parents=True)
-    output.write_bytes(b"image")
-    record = {"id": "record", "output_paths": [str(output)], "base_image_path": ""}
-    (old / "records.jsonl").write_text(json.dumps(record) + "\n", encoding="utf-8")
-    (output.parent / "meta.json").write_text(json.dumps(record), encoding="utf-8")
-    (output.parent / "request.json").write_text(
-        '{"parameters":{"seed":12}}', encoding="utf-8"
-    )
-    root = storage_root(tmp_path)
-    migrated = json.loads((root / "records.jsonl").read_text(encoding="utf-8"))
-    assert migrated["original_output_paths"] == [str(output)]
-    assert migrated["output_paths"] == [str(root / "outputs/record/output.png")]
-    assert Path(migrated["output_paths"][0]).read_bytes() == b"image"
-    assert (root / "outputs/record/request.json").read_text(
-        encoding="utf-8"
-    ) == '{"parameters":{"seed":12}}'
-    assert output.is_file()
-    assert storage_root(tmp_path) == root
+    record = {"output_paths": [str(old / "outputs/image.png")], "base_image_path": ""}
+    (root / "records.jsonl").write_text(json.dumps(record), encoding="utf-8")
+
+    class Storage(FakeMemoryStorage):
+        def migrate_data(self, workspace, plugin_id, name, source):
+            assert source == old and plugin_id == "novelai"
+            return root
+
+    assert storage_root(tmp_path, Storage()) == root
+    normalized = json.loads((root / "records.jsonl").read_text(encoding="utf-8"))
+    assert normalized["output_paths"] == [str(root / "outputs/image.png")]
+    assert normalized["original_output_paths"] == record["output_paths"]

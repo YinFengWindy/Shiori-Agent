@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from shiori_sdk.memory.committed import TurnCommitted as TurnCommitted
+from shiori_sdk.role_events import RoleDeleted as RoleDeleted
+from shiori_sdk.role_events import (
+    SceneTurnSource as SceneTurnSource,
+    SceneTransition as SceneTransition,
+    SceneObservationCommitted as SceneObservationCommitted,
+)
+
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal
-
-from shiori_sdk.memory.committed import TurnCommitted as TurnCommitted
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent.core.types import ToolCallGroup
@@ -98,13 +104,6 @@ class TurnFailed:
 
 
 @dataclass(frozen=True)
-class RoleDeleted:
-    """Signals that role-owned runtime sidecars must discard their state."""
-
-    role_id: str
-
-
-@dataclass(frozen=True)
 class ProactiveMessageCommitted:
     """Signals that a proactive role message is available in its shared session.
 
@@ -123,30 +122,6 @@ class ProactiveMessageCommitted:
     assistant_response: str = ""
     tools_used: tuple[str, ...] = ()
     message_id: str = ""
-
-
-SceneTransition = Literal["started", "same", "changed", "closed", "none"]
-SceneTurnSource = Literal["passive", "proactive"]
-
-
-@dataclass(frozen=True)
-class SceneObservationCommitted:
-    """Describes one persistent scene and its current visual beat."""
-
-    session_key: str
-    channel: str
-    chat_id: str
-    role_id: str
-    source: SceneTurnSource
-    transition: SceneTransition
-    scene_key: str = ""
-    visual_key: str = ""
-    visual_description: str = ""
-    role_name: str = ""
-    role_description: str = ""
-    user_message: str = ""
-    assistant_reply: str = ""
-    tools_used: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

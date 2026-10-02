@@ -36,6 +36,12 @@ SDK_PLUGINS = frozenset(
         "plugin_undo",
         "observe",
         "status_commands",
+        "meme",
+        "novelai",
+        "story",
+        "screen_perception",
+        "browser_use",
+        "computer_use",
     }
 )
 SLOW_PLUGINS = ("telegram", "feishu", "qqbot")

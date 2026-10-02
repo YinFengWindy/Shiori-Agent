@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from agent.tools.base import Tool, ToolResult
+from shiori_sdk.tools import Tool, ToolResult
 
 from .browser import BrowserSessions
 

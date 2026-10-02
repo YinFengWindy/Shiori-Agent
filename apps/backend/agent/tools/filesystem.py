@@ -1,5 +1,7 @@
 """文件系统工具：读取、写入、编辑文件，以及列举目录。"""
 
+from shiori_sdk.files.paths import resolve_path as _resolve_path
+
 import base64
 import asyncio
 import builtins
@@ -16,27 +18,6 @@ from core.common.media import detect_image_mime_from_header
 
 logger = logging.getLogger(__name__)
 _FILE_MUTATION_LOCKS: dict[str, asyncio.Lock] = {}
-
-
-def _resolve_path(path: str, allowed_dir: Path | None = None) -> Path:
-    """解析路径（展开 ~ 并取绝对路径），可选限制在允许目录内。
-
-    相对路径规则：
-    - 若提供了 allowed_dir，相对路径基于 allowed_dir 解析（工作目录为 allowed_dir）
-    - 否则相对路径基于进程 cwd 解析
-    """
-    p = Path(path).expanduser()
-    if not p.is_absolute() and allowed_dir is not None:
-        resolved = (allowed_dir / p).resolve()
-    else:
-        resolved = p.resolve()
-    if allowed_dir is not None:
-        allowed_root = allowed_dir.resolve()
-        try:
-            resolved.relative_to(allowed_root)
-        except ValueError as exc:
-            raise PermissionError(f"路径 {path} 超出允许目录 {allowed_dir}") from exc
-    return resolved
 
 
 def _strip_utf8_bom(text: str) -> tuple[str, bool]:

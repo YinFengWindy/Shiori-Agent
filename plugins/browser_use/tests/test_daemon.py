@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from plugins.browser_use.backend import daemon as module
+from shiori_sdk.testing.processes import FakeProcesses
 from plugins.browser_use.backend.daemon import BrowserDaemon
 
 
@@ -22,8 +22,10 @@ async def test_live_process_without_listening_socket_times_out_and_is_reaped(
     process = Mock(pid=123, returncode=None)
     process.wait = AsyncMock(return_value=0)
     job = Mock()
-    monkeypatch.setattr(module, "spawn_owned", AsyncMock(return_value=(process, job)))
-    daemon = BrowserDaemon(tmp_path / "fixed.exe", tmp_path, environment(tmp_path))
+    monkeypatch.setattr(FakeProcesses, "spawn", AsyncMock(return_value=(process, job)))
+    daemon = BrowserDaemon(
+        tmp_path / "fixed.exe", tmp_path, environment(tmp_path), FakeProcesses()
+    )
     with pytest.raises(TimeoutError):
         await daemon.start(0.03)
     job.close.assert_called_once()
@@ -34,7 +36,9 @@ async def test_live_process_without_listening_socket_times_out_and_is_reaped(
 async def test_job_failure_still_closes_log_and_reaps_process(tmp_path, monkeypatch):
     process = Mock(pid=123, returncode=None)
     process.wait = AsyncMock(return_value=0)
-    daemon = BrowserDaemon(tmp_path / "fixed.exe", tmp_path, environment(tmp_path))
+    daemon = BrowserDaemon(
+        tmp_path / "fixed.exe", tmp_path, environment(tmp_path), FakeProcesses()
+    )
     daemon._process = process
     daemon._job = Mock()
     daemon._job.close.side_effect = RuntimeError("job failure")
@@ -52,7 +56,7 @@ async def test_existing_session_fingerprint_is_never_adopted(tmp_path):
     socket.mkdir(parents=True)
     marker = socket / "owned.config"
     marker.write_text("existing", encoding="utf-8")
-    daemon = BrowserDaemon(tmp_path / "fixed.exe", tmp_path, env)
+    daemon = BrowserDaemon(tmp_path / "fixed.exe", tmp_path, env, FakeProcesses())
     with pytest.raises(FileExistsError):
         await daemon.start(1)
     assert marker.read_text(encoding="utf-8") == "existing"

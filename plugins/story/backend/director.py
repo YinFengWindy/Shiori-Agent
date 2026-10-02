@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Protocol
+from shiori_sdk.models import ModelProvider
 
 from .errors import StoryInvalidOutputError, StoryProviderUnavailableError
 from .models import (
@@ -29,7 +30,7 @@ class StoryDirector(Protocol):
 class ProviderStoryDirector:
     """Use the existing LLM provider without coupling Story to AgentLoop sessions."""
 
-    def __init__(self, *, provider: Any | None, model: str) -> None:
+    def __init__(self, *, provider: ModelProvider | None, model: str) -> None:
         self._provider = provider
         self._model = model.strip()
 

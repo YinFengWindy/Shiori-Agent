@@ -15,8 +15,8 @@ from typing import Awaitable, Literal, TypeVar
 
 import httpx
 
-from agent.plugin_host.bridge_events import PluginRpcError
-from core.common.error_summary import summarize_exception_for_user
+from shiori_sdk.rpc import PluginRpcError
+from shiori_sdk.errors import summarize_exception_for_user
 
 TokenState = Literal["configured", "missing", "placeholder"]
 T = TypeVar("T")

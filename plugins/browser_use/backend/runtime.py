@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import sys
 
-from bootstrap.paths import resource_root
-
 
 @dataclass(frozen=True)
 class BrowserRuntime:
@@ -15,11 +13,11 @@ class BrowserRuntime:
     chrome: Path
 
     @classmethod
-    def resolve(cls) -> "BrowserRuntime":
+    def resolve(cls, resources: Path) -> "BrowserRuntime":
         """Finds only Shiori's prepared components, never system browser or npm fallbacks."""
         if sys.platform != "win32":
             raise RuntimeError("Browser Use 首版仅支持 Windows x64")
-        root = resource_root() / "native" / "browser-use"
+        root = resources / "native" / "browser-use"
         runtime = cls(root / "agent-browser.exe", root / "chrome-win64" / "chrome.exe")
         for path in (runtime.agent_browser, runtime.chrome):
             if not path.is_file():

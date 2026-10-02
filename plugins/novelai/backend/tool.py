@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 
 from .models import GenerateImageRequest
 from .service import NovelAIService

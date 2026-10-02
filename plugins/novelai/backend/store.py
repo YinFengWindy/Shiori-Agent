@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from .storage import storage_root
-from session.media_assets import original_media_path
+from shiori_sdk.extensions import PrivateStorage
+from collections.abc import Callable
 
 from .models import (
     GeneratedImageRecord,
@@ -21,9 +22,16 @@ from .models import (
 class NovelAIStore:
     """Persist generated images and metadata under the plugin-owned data root."""
 
-    def __init__(self, workspace: Path) -> None:
+    def __init__(
+        self,
+        workspace: Path,
+        *,
+        storage: PrivateStorage,
+        original_media: Callable[[str], str],
+    ) -> None:
         self._workspace = workspace
-        self._root = storage_root(workspace)
+        self._root = storage_root(workspace, storage)
+        self._original_media = original_media
         self._outputs_root = self._root / "outputs"
         self._records_path = self._root / "records.jsonl"
         self._outputs_root.mkdir(parents=True, exist_ok=True)
@@ -96,9 +104,7 @@ class NovelAIStore:
     ) -> NovelAIGenerationSource | None:
         """Load the persisted record and exact request snapshot for one output path."""
 
-        target_path = self._canonical_path(
-            original_media_path(self._workspace, output_path)
-        )
+        target_path = self._canonical_path(self._original_media(output_path))
         if not target_path:
             return None
         for payload in reversed(self._read_record_payloads()):

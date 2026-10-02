@@ -856,3 +856,16 @@ Before-turn command contributors read `CommandFrame.command` and request
 `abort_command(reply)`, so abort construction/context preservation remain host-owned.
 The optional Observe reader is queried through `dependencies.get_optional("observe")`
 each time; availability is scoped to the active provider generation.
+
+
+### SDK 3.0 role and process capabilities (#588)
+
+Role, generation and native-tool plugins use the manifest-granted SDK
+`ServicePluginContext`: `roles`, `models`, `sessions`, `http`, `resources`,
+`processes`, `tool_turn`, `background` and `runtime`. The role model activation
+context is held across awaits; runtime background tasks retain the current
+generation. MCP and owned process cleanup remain implemented by the host,
+including Windows Job ownership before execution. See the SDK README for the
+small contracts and independent test fixtures. Plugin-private generation, Story
+and observation policy is unchanged. Story/NovelAI and Meme/Citation remain
+explicit dependencies; desktop-pet integration is tested on the host side.

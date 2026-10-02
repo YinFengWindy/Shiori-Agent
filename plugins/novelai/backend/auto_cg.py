@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from agent.plugin_host.kv import PluginKVStore
-from agent.tool_hooks.types import HookOutcome
+from shiori_sdk.storage import KeyValueStore
+from shiori_sdk.tool_hooks import HookOutcome
 
 _THIRD_PERSON_PROMPT_TERMS = (
     "third-person view",
@@ -23,7 +23,7 @@ class AutoCgPolicy:
     _COOLDOWN_TURNS = 5
     _STATE_KEY = "auto_cg_sessions"
 
-    def __init__(self, kv_store: PluginKVStore) -> None:
+    def __init__(self, kv_store: KeyValueStore) -> None:
         self._kv_store = kv_store
 
     def advance_turn(self, session_key: str) -> None:

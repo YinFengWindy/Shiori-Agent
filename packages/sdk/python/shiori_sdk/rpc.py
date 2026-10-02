@@ -31,3 +31,16 @@ class RpcCapability(Protocol):
         *,
         concurrency: Concurrency = Concurrency.MUTATION,
     ) -> None: ...
+
+    async def emit(self, name: str, payload: dict[str, object]) -> bool: ...
+
+
+class PluginRpcError(RuntimeError):
+    """A stable plugin-owned error code carried across the RPC boundary."""
+
+    def __init__(
+        self, code: str, message: str, *, details: dict[str, object] | None = None
+    ):
+        super().__init__(message)
+        self.code = code
+        self.details = details

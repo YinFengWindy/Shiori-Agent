@@ -4,6 +4,8 @@ display_name: Browser Use
 version: "0.1.0"
 desc: 独立浏览器中的网页操作与截图
 capabilities:
+  - resources
+  - processes
   - tools
   - workspace
   - config

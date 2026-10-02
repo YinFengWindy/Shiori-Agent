@@ -5,15 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from agent.plugin_host.data_migration import migrate_private_data
-from infra.persistence.json_store import atomic_save_json
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.extensions import PrivateStorage
+from shiori_sdk.files.json import atomic_save_json
+from shiori_sdk.files.text import atomic_save_text
 
 
-def storage_root(workspace: Path) -> Path:
+def storage_root(workspace: Path, storage: PrivateStorage) -> Path:
     """Migrate generation artifacts without removing cross-owner legacy sources."""
     old = workspace / "private_runtime" / "novelai"
-    root = migrate_private_data(workspace, "novelai", "generation", old)
+    root = storage.migrate_data(workspace, "novelai", "generation", old)
     marker = root / ".paths-migrated.json"
     if marker.exists() or not root.exists():
         return root

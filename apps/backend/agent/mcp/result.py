@@ -8,24 +8,7 @@ from typing import Any
 from agent.tools.base import ToolResult
 
 
-class McpToolError(RuntimeError):
-    """Represents a structured JSON-RPC error returned by an MCP tool."""
-
-    def __init__(
-        self,
-        *,
-        server: str,
-        tool_name: str,
-        message: str,
-        code: int | None = None,
-        data: Any = None,
-    ) -> None:
-        self.server = server
-        self.tool_name = tool_name
-        self.message = message
-        self.code = code
-        self.data = data
-        super().__init__(f"MCP tool error ({server}/{tool_name}): {message}")
+from shiori_sdk.mcp import McpToolError as McpToolError
 
 
 def decode_tool_result(

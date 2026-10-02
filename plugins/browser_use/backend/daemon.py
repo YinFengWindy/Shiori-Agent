@@ -4,17 +4,19 @@ import asyncio
 from pathlib import Path
 from typing import BinaryIO
 
-from infra.process.owned_spawn import spawn_owned
-from infra.process.windows_job import WindowsJob
+from shiori_sdk.processes import Processes, ProcessOwner
 
 
 class BrowserDaemon:
     """Starts the official daemon entry under a Job before MCP can issue commands."""
 
-    def __init__(self, executable: Path, profile: Path, env: dict[str, str]) -> None:
+    def __init__(
+        self, executable: Path, profile: Path, env: dict[str, str], processes: Processes
+    ) -> None:
+        self._processes = processes
         self._executable, self._profile, self._env = executable, profile, env
         self._process: asyncio.subprocess.Process | None = None
-        self._job: WindowsJob | None = None
+        self._job: ProcessOwner | None = None
         self._log: BinaryIO | None = None
 
     async def start(self, timeout: float) -> None:
@@ -36,7 +38,7 @@ class BrowserDaemon:
         self._log = (self._profile / "daemon.log").open("w+b")
         try:
             async with asyncio.timeout(timeout):
-                self._process, self._job = await spawn_owned(
+                self._process, self._job = await self._processes.spawn(
                     str(self._executable),
                     env={**self._env, "AGENT_BROWSER_DAEMON": "1"},
                     cwd=str(self._profile),

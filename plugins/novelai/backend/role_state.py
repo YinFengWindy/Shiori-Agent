@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from core.roles.store import RoleStore
-from bus.events_lifecycle import RoleDeleted
+from shiori_sdk.roles import Roles
+from shiori_sdk.role_events import RoleDeleted
 
 PLUGIN_ID = "novelai"
 
@@ -11,12 +11,12 @@ PLUGIN_ID = "novelai"
 class NovelAIRoleState:
     """Own the CG preference schema without storing plugin fields in roles."""
 
-    def __init__(self, roles: RoleStore) -> None:
+    def __init__(self, roles: Roles) -> None:
         self._roles = roles
 
     def enabled(self, role_id: str) -> bool:
         """Read the persisted plugin namespace for a still-existing role."""
-        with self._roles.lock:
+        with self._roles.read_scope():
             if self._roles.get_role(role_id) is None:
                 return False
             return self.project(role_id, self._roles.extensions.read(PLUGIN_ID))[
@@ -25,7 +25,7 @@ class NovelAIRoleState:
 
     def reconcile(self) -> None:
         """Prune deleted-role preferences, including deletions while disabled."""
-        with self._roles.lock:
+        with self._roles.read_scope():
             role_ids = {role.id for role in self._roles.list_roles()}
             data = self._roles.extensions.read(PLUGIN_ID)
             deleted_ids = set(data) - role_ids
@@ -50,7 +50,7 @@ class NovelAIRoleState:
         data[role_id] = {**data.get(role_id, {}), "auto_scene_cg_enabled": enabled}
 
     @staticmethod
-    def project(role_id: str, data: dict[str, Any]) -> dict[str, bool]:
+    def project(role_id: str, data: dict[str, Any]) -> dict[str, Any]:
         """Expose the plugin's editable projection separately from RoleRecord."""
         return {
             "autoSceneCgEnabled": bool(

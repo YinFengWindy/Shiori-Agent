@@ -7,8 +7,9 @@ from pathlib import Path
 from uuid import uuid4
 from typing import Any
 
-from agent.mcp.client import McpClient, McpToolError
-from agent.tools.base import ToolResult
+from shiori_sdk.mcp import McpSession, McpToolError
+from shiori_sdk.processes import Processes
+from shiori_sdk.tools import ToolResult
 
 from .config import BrowserUseConfig
 from .daemon import BrowserDaemon
@@ -25,7 +26,9 @@ class BrowserSession:
         role_id: str,
         config: BrowserUseConfig,
         runtime: BrowserRuntime,
+        processes: Processes,
     ) -> None:
+        self._processes = processes
         identity = hashlib.sha256(role_id.encode()).hexdigest()
         self.profile = root / "profiles" / identity
         namespace = (
@@ -54,7 +57,7 @@ class BrowserSession:
             AGENT_BROWSER_IDLE_TIMEOUT_MS="0",
             AGENT_BROWSER_SOCKET_DIR=str(root / "run"),
         )
-        self._client: McpClient | None = None
+        self._client: McpSession | None = None
         self._daemon: BrowserDaemon | None = None
         self._lease: ProfileLease | None = None
         self._lock = asyncio.Lock()
@@ -74,10 +77,10 @@ class BrowserSession:
         # The CLI's auto-spawned daemon loses its stderr reader when CLI exits.
         # Owning the daemon directly keeps diagnostics valid (including tab close).
         self._daemon = BrowserDaemon(
-            self._runtime.agent_browser, self.profile, self._env
+            self._runtime.agent_browser, self.profile, self._env, self._processes
         )
         await self._daemon.start(self._config.timeout_seconds)
-        self._client = McpClient(
+        self._client = self._processes.mcp(
             "browser_use",
             [str(self._runtime.agent_browser), "mcp", "--tools", "core"],
             env=self._env,

@@ -12,9 +12,9 @@ from typing import Any
 
 import httpx
 
-from agent.tools.filesystem import _resolve_path
-from core.common.media import detect_image_mime_from_header
-from core.roles.store import RoleStore
+from shiori_sdk.files.paths import resolve_path as _resolve_path
+from shiori_sdk.media import detect_image_mime_from_header
+from shiori_sdk.roles import Roles
 
 from .client import NovelAIClient
 from .failures import (
@@ -61,16 +61,16 @@ class NovelAIService:
         settings: NovelAISettings,
         client: NovelAIClient,
         store: NovelAIStore,
-        role_store: RoleStore,
+        role_store: Roles,
         workspace: Path,
-        prompt_tag_store: PromptTagStore | None = None,
+        prompt_tag_store: PromptTagStore,
     ) -> None:
         self._settings = settings
         self._client = client
         self._store = store
         self._role_store = role_store
         self._workspace = workspace
-        self._prompt_tag_store = prompt_tag_store or PromptTagStore(workspace)
+        self._prompt_tag_store = prompt_tag_store
 
     async def generate(
         self,
@@ -262,17 +262,13 @@ class NovelAIService:
             role = self._role_store.get_role(clean_role_id)
             if role is None:
                 raise KeyError(f"role 不存在: {clean_role_id}")
-            updated_with_asset = self._role_store.update_role(
-                clean_role_id,
-                illustration_sources=[output_path],
+            role_asset_path = self._role_store.add_illustration(
+                clean_role_id, output_path
             )
-            role_asset_path = updated_with_asset.illustrations[-1]
-            updated = self._role_store.update_role(
-                clean_role_id,
-                chat_background=role_asset_path,
+            wrote_back_to_role = self._role_store.set_chat_background(
+                clean_role_id, role_asset_path
             )
             role_asset_paths = [role_asset_path]
-            wrote_back_to_role = role_asset_path in updated.illustrations
 
         record = GeneratedImageRecord(
             id=record_id,

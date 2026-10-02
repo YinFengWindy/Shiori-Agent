@@ -1,7 +1,7 @@
 """Registers Browser Use lazily and binds cleanup to the v2 plugin effect scope."""
 
-from agent.plugin_host.plugin_data import plugin_data_dir
-from agent.plugin_host.runtime_context import PluginRuntimeContext
+from shiori_sdk.storage import plugin_data_dir
+from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
 
 from .browser import BrowserSessions
 from .config import BrowserUseConfig
@@ -15,6 +15,8 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     sessions = BrowserSessions(
         plugin_data_dir(ctx.workspace, ctx.plugin_id),
         BrowserUseConfig.model_validate(ctx.config.as_dict()),
+        processes=ctx.processes,
+        resources=ctx.resources.root,
     )
     for tool in browser_tools(sessions):
         ctx.tools.register(

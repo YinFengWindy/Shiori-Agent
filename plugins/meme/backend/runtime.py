@@ -6,15 +6,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
-from core.roles import RoleStore
-from bootstrap.paths import common_emojis_paths
+from shiori_sdk.roles import Roles
+from collections.abc import Iterable
 
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
 
-def load_common_emojis(workspace: Path) -> dict[str, str]:
+def load_common_emojis(paths: Iterable[Path]) -> dict[str, str]:
     """Load the user-sendable emoji list shared with the desktop picker."""
-    for path in common_emojis_paths(workspace):
+    for path in paths:
         if not path.is_file():
             continue
         try:
@@ -179,8 +179,8 @@ class MemeDecorator:
 class RoleReactionCatalog:
     """Resolves role-owned sendable assets while retaining the legacy meme catalog."""
 
-    def __init__(self, workspace: Path, legacy_catalog: MemeCatalog) -> None:
-        self._roles = RoleStore(workspace)
+    def __init__(self, roles: Roles, legacy_catalog: MemeCatalog) -> None:
+        self._roles = roles
         self._legacy = legacy_catalog
 
     def build_prompt_block(
@@ -244,11 +244,11 @@ class RoleReactionCatalog:
                 return None
             if category is not None:
                 candidates = [
-                    self._roles.roles_dir / path
+                    self._roles.asset_path(path)
                     for path in role.illustrations
                     if role.asset_category_bindings.get(path) == category.id
-                    and (self._roles.roles_dir / path).is_file()
-                    and (self._roles.roles_dir / path).suffix.lower() in _IMAGE_SUFFIXES
+                    and (self._roles.asset_path(path)).is_file()
+                    and (self._roles.asset_path(path)).suffix.lower() in _IMAGE_SUFFIXES
                 ]
                 return str(random.choice(candidates)) if candidates else None
         return self._legacy.pick_image(tag)
@@ -260,7 +260,7 @@ class RoleReactionCatalog:
         available_category_ids = {
             role.asset_category_bindings.get(path)
             for path in role.illustrations
-            if (self._roles.roles_dir / path).is_file()
+            if (self._roles.asset_path(path)).is_file()
         }
         return [
             (category.id, category.name)

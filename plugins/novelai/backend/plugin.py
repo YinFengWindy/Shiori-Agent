@@ -13,14 +13,14 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from agent.lifecycle.types import (
+from shiori_sdk.lifecycle import (
     AfterReasoningCtx,
     AfterToolResultCtx,
 )
-from bus.events_lifecycle import RoleDeleted, SceneObservationCommitted
-from core.net.http import get_default_http_requester
+from shiori_sdk.role_events import RoleDeleted, SceneObservationCommitted
 
 from .auto_cg import AutoCgPolicy
+from .api import ImageGenerationAPI
 from .auto_cg_controller import AutoCgController
 from .client import NovelAIClient
 from .config import NovelAIConfig
@@ -33,7 +33,7 @@ from .store import NovelAIStore
 from .tool import GenerateImageTool
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     if workspace is None:
         raise RuntimeError("NovelAI 插件需要 workspace")
     settings = _load_settings(ctx)
-    role_store = ctx.role_store
+    role_store = ctx.roles
     if role_store is None:
         raise RuntimeError("NovelAI 插件需要 role_store")
     role_state = NovelAIRoleState(role_store)
@@ -114,12 +114,14 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             "novelai", NovelAIRoleState.write_draft, NovelAIRoleState.project
         ),
     )
-    novelai_store = NovelAIStore(workspace)
-    prompt_tag_store = PromptTagStore(workspace)
+    novelai_store = NovelAIStore(
+        workspace, storage=ctx.storage, original_media=ctx.sessions.original_media_path
+    )
+    prompt_tag_store = PromptTagStore(workspace, storage=ctx.storage)
     service = NovelAIService(
         settings=settings,
         client=NovelAIClient(
-            get_default_http_requester("external_default"),
+            ctx.http,
             settings,
         ),
         store=novelai_store,
@@ -132,7 +134,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         context_provider=ctx.tools.get_context,
     )
     # Dependent plugins receive this generation's NovelAI API, never a host image-provider abstraction.
-    ctx.expose(tool)
+    api: ImageGenerationAPI = tool
+    ctx.expose(api)
     ctx.tools.register(
         tool,
         risk="external-side-effect",
@@ -146,7 +149,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     auto_cg_controller = AutoCgController(
         role_store=role_store,
         policy=auto_cg,
-        session_manager=ctx.session_manager,
+        background=ctx.background,
+        session_manager=ctx.sessions,
         generate_tool=tool,
         tool_registry=ctx.tools,
         light_provider=ctx.light_provider,
@@ -175,8 +179,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
             novelai_service=service,
             novelai_store=novelai_store,
             prompt_tag_store=prompt_tag_store,
-            session_manager=ctx.session_manager,
-            relationship_runtime=ctx.relationship_runtime,
+            session_manager=ctx.sessions,
         ),
     )
 
@@ -199,7 +202,7 @@ def _register_rpc(ctx: "PluginRuntimeContext", handlers: NovelAIRpcHandlers) -> 
     # deferring the import to setup() keeps the plugin's module-load path from
     # requiring the desktop bridge dependency chain (matches the discipline
     # documented on agent.plugin_host.capabilities.RpcCapability.register).
-    from desktop_bridge.method_policy import Concurrency
+    from shiori_sdk.rpc import Concurrency
 
     ctx.rpc.register("generate", handlers.generate, concurrency=Concurrency.INTEGRATION)
     ctx.rpc.register(

@@ -28,6 +28,21 @@ from agent.tools.registry import ToolRegistry
 from desktop_bridge.method_policy import Concurrency, Handler
 
 
+@pytest.mark.asyncio
+async def test_runtime_background_rejects_closed_scope_and_closes_coroutine():
+    scope = EffectScope("closed")
+    background = BackgroundCapability(scope, "closed")
+    await scope.dispose_all()
+
+    async def work() -> None:
+        raise AssertionError("A retired plugin must not start background work")
+
+    operation = work()
+    with pytest.raises(RuntimeError):
+        background.spawn_runtime(operation, name="late")
+    assert inspect.getcoroutinestate(operation) == inspect.CORO_CLOSED
+
+
 class _FakeRegistry:
     """记录 register/unregister 调用的最小 ToolRegistry 替身。"""
 

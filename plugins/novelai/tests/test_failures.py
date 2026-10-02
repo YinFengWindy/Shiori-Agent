@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from agent.plugin_host.bridge_events import PluginRpcError
+from shiori_sdk.rpc import PluginRpcError
 from plugins.novelai.backend.failures import (
     NETWORK,
     NOT_CONFIGURED,

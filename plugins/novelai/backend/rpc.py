@@ -14,6 +14,7 @@ registration and per-method concurrency lives in ``plugin.py``.
 from __future__ import annotations
 
 from typing import Any
+from shiori_sdk.sessions import PluginSessions
 
 
 from .failures import call_with_rpc_failures
@@ -32,14 +33,12 @@ class NovelAIRpcHandlers:
         novelai_service: NovelAIService,
         novelai_store: NovelAIStore,
         prompt_tag_store: PromptTagStore,
-        session_manager: Any,
-        relationship_runtime: Any | None,
+        session_manager: PluginSessions,
     ) -> None:
         self._service = novelai_service
         self._store = novelai_store
         self._prompt_tag_store = prompt_tag_store
         self._session_manager = session_manager
-        self._relationship_runtime = relationship_runtime
         self._regenerating_message_media: set[tuple[str, str, int]] = set()
 
     async def generate(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -114,7 +113,7 @@ class NovelAIRpcHandlers:
             ).strip()
             if not new_path:
                 raise RuntimeError("NovelAI 重新生成未返回图片路径")
-            session = await self._session_manager.replace_message_media(
+            projection = await self._session_manager.replace_message_media(
                 session_key=session_key,
                 message_id=message_id,
                 media_index=media_index,
@@ -123,15 +122,7 @@ class NovelAIRpcHandlers:
             )
         finally:
             self._regenerating_message_media.discard(target)
-        presenter = self._presenter()
-        message = next(
-            item for item in session.messages if str(item.get("id") or "") == message_id
-        )
-        return {
-            "result": result.to_public_payload(),
-            "session": presenter.serialize_summary(session),
-            "message": presenter.serialize_message(message),
-        }
+        return {"result": result.to_public_payload(), **projection}
 
     async def history(self, payload: dict[str, Any]) -> dict[str, Any]:
         """``plugin.novelai.history``: recent generation records for one role."""
@@ -159,15 +150,6 @@ class NovelAIRpcHandlers:
 
         self._prompt_tag_store.delete(str(payload.get("id") or ""))
         return {}
-
-    def _presenter(self) -> Any:
-        # Lazy import: keeps the plugin's module-load path from pulling in the
-        # full desktop bridge dependency chain when the plugin loads outside a
-        # desktop bridge process (mirrors the same discipline already applied
-        # by agent.plugin_host.capabilities.RpcCapability for method_policy).
-        from desktop_bridge.session_presenter import DesktopSessionPresenter
-
-        return DesktopSessionPresenter(None, self._relationship_runtime)
 
     def _role_id(self, payload: dict[str, Any]) -> str:
         return str(payload.get("role_id") or "").strip()

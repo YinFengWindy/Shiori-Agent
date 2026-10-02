@@ -3,7 +3,7 @@
 import sqlite3
 from pathlib import Path
 
-from infra.persistence.owned_assets import copy_owned_asset
+from shiori_sdk.files.assets import copy_owned_asset
 
 
 def adopt_image(database_path: Path, value: str, workspace: Path | None = None) -> str:

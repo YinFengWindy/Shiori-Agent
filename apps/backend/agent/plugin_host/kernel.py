@@ -19,6 +19,17 @@ from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
+from agent.plugin_host.roles import HostRoles
+from agent.plugin_host.models import HostRoleModels
+from agent.plugin_host.sessions import HostPluginSessions
+from agent.plugin_host.processes import HostProcesses, HostResources
+from agent.tools.turn_scope import current_tool_turn
+from agent.tools.registry import ToolRegistry
+from core.roles.role_runtime import RoleRuntimeRegistry
+from agent.provider import LLMProvider
+from core.net.http import get_default_http_requester
+from shiori_sdk.http import HttpClient
+from desktop_bridge.session_presenter import DesktopSessionPresenter
 from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.storage import PluginStorage
@@ -113,7 +124,7 @@ class HostServices:
     """宿主提供给插件装配的服务集合；capability 只暴露其中被声明的切面。"""
 
     event_bus: EventBus
-    tool_registry: Any = None
+    tool_registry: ToolRegistry | None = None
     workspace: Path | None = None
     # 宿主唯一的 RoleStore 实例（bootstrap 里的 canonical 那个）。插件经
     # role_store capability 拿到的必须是它本身，见 manifest.KNOWN_CAPABILITIES
@@ -122,8 +133,9 @@ class HostServices:
     session_manager: SessionManager | None = None
     memory_engine: MemoryEngine | None = None
     app_config: Any = None
-    light_provider: Any = None
+    light_provider: LLMProvider | None = None
     light_model: str = ""
+    http: HttpClient | None = None
     plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     raw_plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     relationship_runtime: Any = None
@@ -131,7 +143,7 @@ class HostServices:
     # 本地状态（.kv.json）不会随目录重命名搬走，需要从这里
     # 一次性迁移；打包形态下该目录不存在，字段为 None 即可。
     legacy_plugin_root: Path | None = None
-    role_runtime_registry: Any = None
+    role_runtime_registry: RoleRuntimeRegistry | None = None
     scene_observations: SceneObservationDemand = field(
         default_factory=SceneObservationDemand
     )
@@ -454,12 +466,15 @@ class PluginKernel:
             if "rpc" in handle.record.manifest.capabilities
             else None
         )
+        capabilities = self._build_capabilities(handle, rpc=rpc)
+        grants = handle.record.manifest.capabilities
+        services = self._services
         context: PluginSetupContext = PluginRuntimeContext(
             plugin_id=handle.plugin_id,
             plugin_dir=handle.record.plugin_dir,
             manifest=handle.record.manifest,
             effects=handle.effects,
-            capabilities=self._build_capabilities(handle, rpc=rpc),
+            capabilities=capabilities,
             lifecycle=(
                 LifecycleCapability(handle.contributions, handle.effects)
                 if "lifecycle" in handle.record.manifest.capabilities
@@ -506,11 +521,66 @@ class PluginKernel:
             ),
             session_manager=self._services.session_manager,
             memory_engine=self._services.memory_engine,
+            roles=(
+                HostRoles(services.role_store).as_capability()
+                if services.role_store is not None
+                else None
+            ),
+            models=(
+                HostRoleModels(services.role_runtime_registry).as_capability()
+                if services.role_runtime_registry is not None
+                else None
+            ),
+            sessions=(
+                HostPluginSessions(
+                    services.session_manager,
+                    services.workspace,
+                    DesktopSessionPresenter(None, services.relationship_runtime),
+                ).as_capability()
+                if services.session_manager is not None
+                and services.workspace is not None
+                else None
+            ),
+            tools=ToolsCapability(
+                services.tool_registry,
+                handle.effects,
+                handle.contributions,
+                handle.plugin_id,
+            ),
+            kv=(
+                open_plugin_kv(
+                    workspace=services.workspace,
+                    plugin_id=handle.plugin_id,
+                    plugin_dir=handle.record.plugin_dir,
+                    legacy_plugin_root=services.legacy_plugin_root,
+                )
+                if "kv" in grants
+                else None
+            ),
+            http=(
+                (services.http or get_default_http_requester("external_default"))
+                if "http" in grants
+                else None
+            ),
+            resources=HostResources().as_capability(),
+            processes=HostProcesses().as_capability(),
+            tool_turn=current_tool_turn,
+            runtime=PluginRuntimeLifecycle(
+                services.is_reload,
+                handle.drainers,
+                was_active=handle.plugin_id in services.previously_active_plugins,
+            ),
+            scene_observations=SceneObservationsCapability(
+                services.scene_observations, handle.effects
+            ),
+            light_provider=services.light_provider,
+            light_model=services.light_model,
             publish_api=lambda api: setattr(handle, "instance", api),
         )
         context.as_hook_context()
         context.as_command_context()
         context.as_observe_context()
+        context.as_service_context()
         await setup_fn(
             context.as_memory_context()
             if "memory" in handle.record.manifest.capabilities
@@ -527,14 +597,16 @@ class PluginKernel:
             ),
             "events": lambda: None,
             "diagnostics": lambda: None,
+            "roles": lambda: None,
+            "models": lambda: None,
+            "sessions": lambda: None,
+            "http": lambda: None,
+            "resources": lambda: None,
+            "processes": lambda: None,
+            "tool_turn": lambda: None,
             "storage": lambda: None,
             "memory": lambda: None,
-            "kv": lambda: open_plugin_kv(
-                workspace=services.workspace,
-                plugin_id=handle.plugin_id,
-                plugin_dir=handle.record.plugin_dir,
-                legacy_plugin_root=services.legacy_plugin_root,
-            ),
+            "kv": lambda: None,
             "config": lambda: None,
             "tools": lambda: ToolsCapability(
                 services.tool_registry,

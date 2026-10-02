@@ -15,7 +15,7 @@ caller (`fetch_role_mood`) always requests
 `response_format={"type": "json_object"}`.
 """
 
-from core.common.llm_output_log import summarize_llm_output_for_log
+from shiori_sdk.redaction import summarize_llm_output_for_log
 
 
 def test_summarize_llm_output_for_log_returns_short_text_unchanged() -> None:

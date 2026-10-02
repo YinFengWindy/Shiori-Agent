@@ -48,10 +48,10 @@ uv run python scripts/verify_plugin_tests.py --output /absolute/path/outside-rep
 
 ## SDK 隔离与导入守护
 
-citation/context_pressure/default_memory/shell_safety/shell_restore/tool_loop_guard/plugin_undo/observe/status_commands 已迁入 `shiori-sdk[testing]`，安装声明不再依赖宿主。
-`uv run python scripts/verify_plugin_tests.py --sdk-only` 仅为这九个插件构建
+citation/context_pressure/default_memory/shell_safety/shell_restore/tool_loop_guard/plugin_undo/observe/status_commands/meme/novelai/story/screen_perception/browser_use/computer_use 已迁入 `shiori-sdk[testing]`，安装声明不再依赖宿主。
+`uv run python scripts/verify_plugin_tests.py --sdk-only` 仅为这十五个插件构建
 SDK/插件 wheel，逐一在仓库外普通安装、执行全部测试，并断言没有
-shiori-agent、testkit、宿主测试支持与源码路径注入；default_memory 只在验证自己时安装。普通全插件验证也对这九个插件
+shiori-agent、testkit、宿主测试支持与源码路径注入；default_memory 只在验证自己时安装。普通全插件验证也对这十五个插件
 使用相同无宿主路径；其余插件保留真实宿主安装与资源检查。
 
 `uv run python -m scripts.verify_sdk` 另外安装 SDK wheel 并执行 SDK 自身测试；
@@ -68,3 +68,11 @@ backend/tests 的宿主导入（含类型导入和字面量动态导入）。豁
 命令 abort、可选 provider 卸载/重载与全局 handler 还原留在对应宿主模块测试。
 宿主配置事务使用中性 numeric_config schema，不依赖 ToolLoopGuardConfig 策略。
 宿主 passive-turn 验证有界错误日志与 TurnFailed/提交协议，不读取 Observe 私有表。
+
+#588 批次中，生成/自动 CG、Story 状态与取消、屏幕观察以及浏览器/电脑工具策略
+由插件自己的 SDK fake 测试验证。真实 RoleStore 原子扩展、会话素材归属与呈现、
+runtime lease、kernel 卸载顺序及 screen_perception/desktop_pet 组合留在宿主测试。
+原 Windows 浏览器/Driver 的显式 native-runtime 验收入口随集成用例移到
+`tests/backend/agent/plugin_host/test_processes_{browser_use,computer_use}.py`；
+真实 Windows owned_spawn/WindowsJob/MCP 清理随 PR 的窄范围 Windows job 执行。
+独立插件测试不会通过桌宠的依赖重新安装宿主，Story 明确声明 Windows 所需 tzdata。

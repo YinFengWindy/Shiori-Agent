@@ -6,8 +6,11 @@ desc: 视觉小说故事模式、存档与 CG 图库
 dependencies:
   - novelai
 capabilities:
+  - background
+  - storage
+  - roles
   - dependencies
   - rpc
   - runtime
   - workspace
-  - role_runtime_registry
+  - models

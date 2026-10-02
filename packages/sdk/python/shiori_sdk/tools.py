@@ -3,7 +3,7 @@
 import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 
 @dataclass
@@ -21,6 +21,22 @@ class ToolResult:
         if self.content_blocks:
             return f"[多模态结果 {len(self.content_blocks)} blocks]"
         return ""
+
+
+class ToolsCapability(Protocol):
+    """Register scoped tools and inspect the current host execution context."""
+
+    def register(
+        self,
+        tool: "Tool",
+        *,
+        risk: str = "read-write",
+        always_on: bool = False,
+        search_hint: str | None = None,
+        external_allowed: bool = False,
+    ) -> None: ...
+    def get_tool(self, name: str) -> "Tool | None": ...
+    def get_context(self) -> dict[str, str]: ...
 
 
 def normalize_tool_result(result: str | ToolResult) -> ToolResult:

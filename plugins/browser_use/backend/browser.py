@@ -2,9 +2,10 @@
 
 import asyncio
 from pathlib import Path
+from shiori_sdk.processes import Processes
 from typing import Any
 
-from agent.tools.base import ToolResult
+from shiori_sdk.tools import ToolResult
 
 from .config import BrowserUseConfig
 from .runtime import BrowserRuntime
@@ -19,8 +20,11 @@ class BrowserSessions:
         root: Path,
         config: BrowserUseConfig,
         *,
+        processes: Processes,
+        resources: Path,
         runtime: BrowserRuntime | None = None,
     ) -> None:
+        self._processes, self._resources = processes, resources
         self._root, self._config, self._runtime = root, config, runtime
         self._sessions: dict[str, BrowserSession] = {}
         self._active: dict[asyncio.Task[str | ToolResult], BrowserSession] = {}
@@ -47,7 +51,8 @@ class BrowserSessions:
                 self._root,
                 role_id,
                 self._config,
-                self._runtime or BrowserRuntime.resolve(),
+                self._runtime or BrowserRuntime.resolve(self._resources),
+                self._processes,
             )
         session = self._sessions[role_id]
         task = asyncio.create_task(session.call(name, arguments))

@@ -8,6 +8,10 @@ import asyncio
 import inspect
 import logging
 from typing import TYPE_CHECKING, Any
+from collections.abc import Coroutine
+from core.common.runtime_tasks import create_runtime_task
+from agent.tools.registry import ToolRegistry
+from shiori_sdk.tools import Tool
 from uuid import uuid4
 
 from agent.plugin_host.diagnostics import ChannelDeclarationError
@@ -83,7 +87,7 @@ class ToolsCapability:
 
     def __init__(
         self,
-        registry: Any,
+        registry: ToolRegistry | None,
         effects: EffectScope,
         contributions: PluginContributions,
         plugin_id: str,
@@ -95,7 +99,7 @@ class ToolsCapability:
 
     def register(
         self,
-        tool: Any,
+        tool: Tool,
         *,
         risk: str = "read-write",
         always_on: bool = False,
@@ -132,7 +136,7 @@ class ToolsCapability:
         if name in self._contributions.tool_names:
             self._contributions.tool_names.remove(name)
 
-    def get_tool(self, name: str) -> Any:
+    def get_tool(self, name: str) -> Tool | None:
         """Looks up another tool by name (e.g. to invoke it directly).
 
         Read-only passthrough to the underlying ``ToolRegistry`` — unlike
@@ -575,6 +579,29 @@ class BackgroundCapability:
     def __init__(self, effects: EffectScope, plugin_id: str) -> None:
         self._effects = effects
         self._plugin_id = plugin_id
+
+    def spawn_runtime[T](
+        self, coro: Coroutine[object, object, T], *, name: str
+    ) -> asyncio.Task[T]:
+        """Retain the current runtime until work finishes; own cancellation on unload."""
+        try:
+            self._effects.ensure_active(f"background:{name}")
+        except RuntimeError:
+            coro.close()
+            raise
+        task = create_runtime_task(coro, name=name)
+
+        async def dispose() -> None:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+        try:
+            self._effects.add(f"background:{name}", dispose)
+        except BaseException:
+            task.cancel()
+            raise
+        return task
 
     def spawn(self, coro: Any, *, name: str) -> asyncio.Task[Any]:
         """启动作用域任务；开始卸载后拒绝启动并关闭尚未运行的协程。"""
