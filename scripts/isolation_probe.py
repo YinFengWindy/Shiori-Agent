@@ -12,7 +12,11 @@ from urllib.request import url2pathname
 
 
 def audit() -> dict[str, object]:
-    """Fail if imports, installations, or executed modules escape the private environment."""
+    """Fail if imports, installations, or executed modules escape the private environment.
+
+    The probe runs stdlib-only outside the checkout, so distribution naming
+    rules come from ``isolation.json`` (written from ``scripts.sdk_boundaries``).
+    """
     config = json.loads(Path("isolation.json").read_text(encoding="utf-8"))
     repository = Path(config["repository"]).resolve()
     wheelhouse = Path(config["wheelhouse"]).resolve()
@@ -30,7 +34,7 @@ def audit() -> dict[str, object]:
         assert not direct or not json.loads(direct).get("dir_info", {}).get(
             "editable"
         ), f"Editable installation: {name}"
-        if name.startswith("shiori-"):
+        if name.startswith(config["local_prefix"]):
             # Index installs record no direct_url.json; a wheel file does.
             origin = json.loads(direct or "{}").get("url", "")
             assert origin.startswith(
@@ -39,12 +43,10 @@ def audit() -> dict[str, object]:
             wheel = Path(url2pathname(urlparse(origin).path)).resolve()
             assert wheel.is_relative_to(wheelhouse), (name, str(wheel))
         installed[name] = dist.version
-    assert (
-        not {"shiori-agent", "shiori-host-testing", "shiori-plugin-testkit"}
-        & installed.keys()
-    )
+    assert not set(config["host_distributions"]) & installed.keys()
     allowed = set(config["allowed_plugins"])
-    assert {name for name in installed if name.startswith("shiori-plugin-")} == allowed
+    plugins = {name for name in installed if name.startswith(config["plugin_prefix"])}
+    assert plugins == allowed
     paths = {}
     for name, module in tuple(sys.modules.items()):
         origin = getattr(module, "__file__", None)

@@ -28,6 +28,9 @@
     "scripts/check_sdk_imports.py",
     "scripts/sdk_boundaries.py",
     "scripts/sdk_resource_edges.py",
+    "scripts/sdk_strings.py",
+    "scripts/commands.py",
+    "scripts/wheelhouse.py",
     "scripts/isolation_probe.py",
     "scripts/verify_host_distribution.py",
     "scripts/verify_sdk.py"

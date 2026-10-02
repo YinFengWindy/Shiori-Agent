@@ -11,8 +11,13 @@ import tomllib
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
-from scripts.sdk_boundaries import host_roots
+from scripts.sdk_boundaries import (
+    HOST_DISTRIBUTIONS,
+    PLUGIN_DISTRIBUTION_PREFIX,
+    host_roots,
+)
 from scripts.sdk_resource_edges import resource_edges
+from scripts.sdk_strings import literal_strings
 
 ROOT = Path(__file__).resolve().parents[1]
 HOST_ROOTS = host_roots(ROOT)
@@ -31,6 +36,16 @@ def _scope_nodes(node: ast.AST):
 def _identities(node: ast.AST, bindings: dict[str, set[str]]) -> set[str]:
     if isinstance(node, ast.Name):
         return bindings.get(node.id, set())
+    # getattr(module, "name") with a literal name is the same attribute access.
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "getattr"
+        and len(node.args) >= 2
+        and isinstance(node.args[1], ast.Constant)
+        and isinstance(node.args[1].value, str)
+    ):
+        node = ast.Attribute(value=node.args[0], attr=node.args[1].value)
     if isinstance(node, ast.Attribute):
         return {
             f"{name}.{node.attr}"
@@ -111,7 +126,7 @@ def _scope_imports(
     for node in nodes:
         if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value:
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            values = _strings(node.value, strings)
+            values = literal_strings(node.value, strings)
             for target in targets:
                 if isinstance(target, ast.Name):
                     strings.setdefault(target.id, set()).update(values)
@@ -148,7 +163,7 @@ def _scope_imports(
                     if keyword.arg in {"name", "target", "package", "anchor"}
                 ]
                 for argument in arguments:
-                    for name in _strings(argument, strings):
+                    for name in literal_strings(argument, strings):
                         # pkgutil.resolve_name also accepts "module:attribute".
                         if name.replace(":", ".").split(".")[0] in forbidden:
                             edges[name] += 1
@@ -156,28 +171,6 @@ def _scope_imports(
             node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
         ):
             _scope_imports(node, bindings, edges, forbidden, strings)
-
-
-def _strings(node: ast.AST, bindings: dict[str, set[str]]) -> set[str]:
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return {node.value}
-    if isinstance(node, ast.Name):
-        return bindings.get(node.id, set())
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return {
-            left + right
-            for left in _strings(node.left, bindings)
-            for right in _strings(node.right, bindings)
-        }
-    if isinstance(node, ast.JoinedStr):
-        values = {""}
-        for part in node.values:
-            child = part.value if isinstance(part, ast.FormattedValue) else part
-            values = {
-                left + right for left in values for right in _strings(child, bindings)
-            }
-        return values
-    return set()
 
 
 def host_imports(source: str, forbidden: frozenset[str] = HOST_ROOTS) -> Counter[str]:
@@ -278,13 +271,9 @@ def dependency_violations(root: Path) -> list[str]:
             requirements.extend(extra)
         for requirement in requirements:
             name = canonicalize_name(Requirement(requirement).name)
-            if name in {
-                "shiori-agent",
-                "shiori-host-testing",
-                "shiori-plugin-testkit",
-            } or (
+            if name in HOST_DISTRIBUTIONS or (
                 path.is_relative_to(root / "packages/sdk")
-                and name.startswith("shiori-plugin-")
+                and name.startswith(PLUGIN_DISTRIBUTION_PREFIX)
             ):
                 errors.append(
                     f"{path.relative_to(root).as_posix()}: forbidden dependency {requirement}"

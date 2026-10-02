@@ -111,8 +111,13 @@ Installed entry origins and hashes cover the target's complete declared plugin c
 The import guard has no exemptions. It checks SDK and plugin Python sources,
 tests, stubs and packaged testing helpers, including TYPE_CHECKING, import aliases,
 literal/string-composed dynamic imports, string patch targets, `importlib.resources`
-and `pkgutil` resource access, and host resource paths built from `__file__`
-(`Path`/`pathlib.Path`, `os.path.dirname`/`join`) or from the working directory.
+and `pkgutil` resource access (attribute, alias or literal `getattr` forms), and host
+resource paths built from `__file__` (`Path`/`pathlib.Path`, `os.path.dirname`/
+`split`/`join`, literal `*[...]` arguments, folded string concatenation) or from the
+working directory starting with a host top-level entry (actual backend packages,
+`apps/`, `packages/`, `tests/`). Path values are followed through names bound in the
+same module only; paths passed through attributes or call results (for example
+`self.root.parents[3]`) are left to external execution.
 Exclusions are judged relative to the scanned package: virtual environments,
 caches and a plugin's root-level `build/`/`dist/` outputs; package-internal
 directories such as `backend/build/` are scanned wherever the checkout lives.

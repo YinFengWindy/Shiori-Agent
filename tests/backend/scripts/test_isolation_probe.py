@@ -9,6 +9,11 @@ import sys
 import pytest
 
 from scripts import isolation_probe
+from scripts.sdk_boundaries import (
+    HOST_DISTRIBUTIONS,
+    LOCAL_DISTRIBUTION_PREFIX,
+    PLUGIN_DISTRIBUTION_PREFIX,
+)
 
 
 def _wheel_origin(wheel: Path) -> str:
@@ -46,6 +51,9 @@ def environment(tmp_path: Path) -> Path:
                 ],
                 "sdk_version": "3.0.0",
                 "wheelhouse": str(tmp_path / "wheels"),
+                "local_prefix": LOCAL_DISTRIBUTION_PREFIX,
+                "plugin_prefix": PLUGIN_DISTRIBUTION_PREFIX,
+                "host_distributions": sorted(HOST_DISTRIBUTIONS),
             }
         ),
         encoding="utf-8",

@@ -8,13 +8,9 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from scripts.verify_plugin_tests import (
-    REPOSITORY,
-    UV,
-    build_wheels,
-    install_from_wheelhouse,
-    run,
-)
+from scripts.commands import UV, run
+from scripts.verify_plugin_tests import REPOSITORY, build_wheels
+from scripts.wheelhouse import install_from_wheelhouse
 
 
 def check_host_wheel(wheel: Path, log: Path) -> None:

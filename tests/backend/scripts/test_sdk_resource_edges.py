@@ -25,6 +25,15 @@ from scripts.sdk_resource_edges import resource_edges
         "import pathlib\nroot = pathlib.Path.cwd()\nconfig = root / 'apps' / 'backend' / 'config.yaml'",
         "import os\nconfig = os.path.join(os.getcwd(), 'apps', 'backend', 'config.yaml')",
         "prompts = Path('apps') / 'backend' / 'prompts'",
+        "import os\nroot = os.path.join(os.path.split(__file__)[0], '..', '..', '..')",
+        "import os\nroot = os.path.join(os.path.dirname(__file__), *['..', '..', '..'])",
+        "import os\nroot = os.path.join(os.path.dirname(__file__), *('..', '..', '..'))",
+        "root = Path(__file__).parent / ('..' + '/../..')",
+        "up = '..'\nroot = Path(__file__).parent / f'{up}/{up}/{up}'",
+        "config = Path.cwd() / ('apps/' + 'backend')",
+        "config = Path('bootstrap') / 'config.yaml'",
+        "import os\nprompt = os.path.join(os.getcwd(), 'prompts', 'system.md')",
+        "entry = Path.cwd() / 'main.py'",
     ],
 )
 def test_repository_layout_escapes_are_rejected(tmp_path: Path, source: str) -> None:
@@ -52,6 +61,10 @@ def test_plugin_owned_paths_in_attribute_os_path_and_cwd_forms_are_allowed(
         "schema = os.path.join(here, 'schemas', 'config.json')\n"
         "state = os.path.join(os.path.dirname(here), 'manifest.yaml')\n"
         "output = pathlib.Path.cwd() / 'data' / 'backend' / 'cache.json'\n"
+        "name = os.path.split(__file__)[1]\n"
+        "data = os.path.join(here, *['data', 'cache.json'])\n"
+        "bundled = Path(__file__).parent / ('bootstrap' + '.yaml')\n"
+        "fixture = Path('fixtures') / 'reply.json'\n"
         "label = ', '.join(['apps', 'backend'])\n"
     )
     assert not resource_edges(ast.parse(source), owner / "backend/plugin.py", owner)

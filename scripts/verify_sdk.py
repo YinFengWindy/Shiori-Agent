@@ -8,14 +8,13 @@ import sys
 import tempfile
 from pathlib import Path
 
+from scripts.commands import UV, run
 from scripts.verify_plugin_tests import (
     REPOSITORY,
-    UV,
     build_wheel,
-    install_from_wheelhouse,
-    run,
     write_provenance_probe,
 )
+from scripts.wheelhouse import install_from_wheelhouse
 
 
 def main() -> None:

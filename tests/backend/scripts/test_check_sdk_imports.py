@@ -136,6 +136,8 @@ def test_every_actual_host_root_is_forbidden_even_for_typing(root: str) -> None:
         "from pkgutil import get_data\nget_data('prompts', 'system.md')",
         "import pkgutil\npkgutil.get_data('shiori_runtime_resources', 'common_emojis.json')",
         "import pkgutil as loader\nloader.resolve_name('agent.provider:LLMProvider')",
+        "import pkgutil\ngetattr(pkgutil, 'get_data')('prompts', 'system.md')",
+        "import importlib\nload = getattr(importlib, 'import_module')\nload('agent.provider')",
         "import importlib\nname = 'agent' + '.provider'\nimportlib.import_module(name)",
         "from importlib import import_module\nroot = 'agent'\nimport_module(f'{root}.provider')",
     ],

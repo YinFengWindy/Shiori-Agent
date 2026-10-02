@@ -6,7 +6,6 @@ from collections.abc import Callable
 import json
 from pathlib import Path
 import threading
-import zipfile
 
 import pytest
 
@@ -470,7 +469,9 @@ def test_each_plugin_and_async_probe_own_separate_pytest_temp_directories(
             artifact_root=output,
             wheelhouse=output / "wheels",
             sources={plugin_id: output / "sources" / plugin_id},
-            wheel=output / "wheels" / f"{plugin_id}.whl",
+            wheel=output
+            / "wheels"
+            / f"shiori_plugin_{plugin_id}-0.1.0-py3-none-any.whl",
         )
 
     assert len(temporary_roots) == len(set(temporary_roots)) == 4
@@ -505,7 +506,7 @@ def test_target_provenance_covers_installed_siblings_and_every_staged_source(
         artifact_root=output,
         wheelhouse=output / "wheels",
         sources=sources,
-        wheel=output / "wheels/meme.whl",
+        wheel=output / "wheels/shiori_plugin_meme-0.1.0-py3-none-any.whl",
     )
     assert received["allowed"] == ["shiori-plugin-citation", "shiori-plugin-meme"]
     assert set(received["modules"]) == {
@@ -515,86 +516,3 @@ def test_target_provenance_covers_installed_siblings_and_every_staged_source(
     # Installed-module provenance is the dependency closure, while execution
     # rejection covers even other targets sharing this artifact's staged tree.
     assert received["sources"] == set(sources.values())
-
-
-def _wheel(wheelhouse: Path, name: str, version: str, *requires: str) -> Path:
-    wheel = wheelhouse / f"{name.replace('-', '_')}-{version}-py3-none-any.whl"
-    with zipfile.ZipFile(wheel, "w") as archive:
-        archive.writestr(
-            f"{name.replace('-', '_')}-{version}.dist-info/METADATA",
-            f"Name: {name}\nVersion: {version}\n"
-            + "".join(f"Requires-Dist: {requirement}\n" for requirement in requires),
-        )
-    return wheel
-
-
-def test_shiori_packages_install_offline_from_wheelhouse_files_only(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    wheelhouse = tmp_path / "wheels"
-    wheelhouse.mkdir()
-    sdk = _wheel(
-        wheelhouse,
-        "shiori-sdk",
-        "3.0.0",
-        "httpx>=0.28",
-        "pytest-asyncio>=1; extra == 'testing'",
-    )
-    meme = _wheel(
-        wheelhouse,
-        "shiori-plugin-meme",
-        "0.1.0",
-        "shiori-sdk==3.0.0",
-        "shiori-plugin-citation==0.1.0",
-        "shiori-sdk[testing]==3.0.0; extra == 'test'",
-    )
-    citation = _wheel(wheelhouse, "shiori-plugin-citation", "0.1.0")
-    commands: list[list[str]] = []
-    monkeypatch.setattr(
-        runner, "run", lambda command, **kwargs: commands.append(command) or ""
-    )
-    runner.install_from_wheelhouse(
-        tmp_path / "python",
-        wheelhouse,
-        ["shiori-plugin-meme[test]"],
-        cwd=tmp_path,
-        log=tmp_path / "install.log",
-    )
-    local, remote, check = commands
-    assert {"--no-index", "--no-deps"} <= set(local)
-    assert "--find-links" not in local
-    assert set(local[-3:]) == {str(sdk), str(meme), str(citation)}
-    assert remote[-2:] == ["httpx>=0.28", "pytest-asyncio>=1"]
-    assert check[1:3] == ["pip", "check"]
-
-
-@pytest.mark.parametrize(
-    "local,third_party",
-    [
-        # A shiori dependency missing from the wheelhouse is never fetched.
-        (["shiori-plugin-story"], []),
-        (["shiori-sdk"], ["shiori-plugin-novelai"]),
-        # A local root missing from the wheelhouse is not treated as remote.
-        (["unbuilt-target"], []),
-    ],
-)
-def test_shiori_packages_cannot_fall_back_to_an_index(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    local: list[str],
-    third_party: list[str],
-) -> None:
-    wheelhouse = tmp_path / "wheels"
-    wheelhouse.mkdir()
-    _wheel(wheelhouse, "shiori-sdk", "3.0.0")
-    _wheel(wheelhouse, "shiori-plugin-story", "0.1.0", "shiori-plugin-novelai")
-    monkeypatch.setattr(runner, "run", lambda *args, **kwargs: pytest.fail("ran"))
-    with pytest.raises(ValueError, match="wheelhouse"):
-        runner.install_from_wheelhouse(
-            tmp_path / "python",
-            wheelhouse,
-            local,
-            third_party=third_party,
-            cwd=tmp_path,
-            log=tmp_path / "install.log",
-        )
