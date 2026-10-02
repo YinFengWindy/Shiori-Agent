@@ -1,12 +1,11 @@
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any, Literal
+from shiori_sdk.tool_hooks import HookDecision, HookOutcome as HookOutcome
 
 HookEvent = Literal["pre_tool_use", "post_tool_use", "post_tool_error"]
 ToolSource = Literal["passive", "proactive", "subagent"]
 ToolExecStatus = Literal["success", "denied", "error"]
-HookDecision = Literal["pass", "deny"]
 
 
 @dataclass
@@ -30,19 +29,6 @@ class HookContext:
     current_arguments: dict[str, Any]
     result: Any = ""
     error: str = ""
-
-
-@dataclass
-class HookOutcome:
-    decision: HookDecision = "pass"
-    updated_input: dict[str, Any] | None = None
-    extra_message: str = ""
-    reason: str = ""
-    # 结构化收尾意图：与 AfterStepCtx.early_stop 同一族的信号，替代过去对
-    # reason 字符串前缀（如 "tool_loop_guard:"）做插件身份嗅探。只有 deny
-    # 且 finalize=True 才要求宿主截断剩余批次并进入既有总结流程；普通 deny
-    # （finalize 保持默认 False）继续走今天的行为，不被误当成收尾。
-    finalize: bool = False
 
 
 @dataclass

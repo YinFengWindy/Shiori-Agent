@@ -4,13 +4,13 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-from agent.lifecycle.types import PreToolCtx
-from agent.tool_hooks import HookOutcome
+from shiori_sdk.tool_hooks import PreToolCtx
+from shiori_sdk.tool_hooks import HookOutcome
 
 from .config import ToolLoopGuardConfig
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.extensions import HookPluginContext as PluginRuntimeContext
 
 _EXCLUDED_TOOLS = frozenset({"task_output", "task_stop"})
 
@@ -93,7 +93,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     用户在 [plugins.tool_loop_guard] 里配置的 repeat_limit 从未生效过。迁移到 v2 后
     ctx.config 读的是 PluginConfig(services.plugin_configs[id])，配置现在真的会生效
     （见 plugins/tool_loop_guard/tests/test_plugin.py 的
-    test_repeat_limit_config_actually_takes_effect_after_v2_migration）。
+    test_configured_threshold_applies_and_requests_finalize）。
     这是修正一个既有 bug，不是刻意的新行为，默认值仍是 3。
 
     #239：manifest 现在声明了 config_model（``ToolLoopGuardConfig``），所以这里

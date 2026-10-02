@@ -29,7 +29,7 @@ SDK 的 pytest 插件在整个会话内按参数与证书环境变量缓存 http
 
 ## 插件副本运行
 
-每个插件的 `TESTING.md` 都随包提供仓库外安装与运行命令。拿到插件副本及私有 wheelhouse 后，进入副本目录，先 `uv venv .venv --python 3.12`，再按该文件安装真实宿主、testkit、默认记忆与 `.[test]`，最后执行 `uv run --no-project --python .venv python -m pytest -c pyproject.toml tests`。私有 wheel 缺失时应补齐构建产物，不能改为导入原仓库。
+每个插件的 `TESTING.md` 都随包提供仓库外安装与运行命令。拿到插件副本及私有 wheelhouse 后，进入副本目录，先 `uv venv .venv --python 3.12`，再按该文件安装 `.[test]`（未迁移插件仍需要宿主、testkit 与默认记忆），最后执行 `uv run --no-project --python .venv python -m pytest -c pyproject.toml tests`。私有 wheel 缺失时应补齐构建产物，不能改为导入原仓库。
 
 ## 仓库外验收
 
@@ -48,10 +48,10 @@ uv run python scripts/verify_plugin_tests.py --output /absolute/path/outside-rep
 
 ## SDK 隔离与导入守护
 
-citation/context_pressure/default_memory 已迁入 `shiori-sdk[testing]`，安装声明不再依赖宿主。
-`uv run python scripts/verify_plugin_tests.py --sdk-only` 仅为这三个插件构建
+citation/context_pressure/default_memory/shell_safety/shell_restore/tool_loop_guard/plugin_undo/observe/status_commands 已迁入 `shiori-sdk[testing]`，安装声明不再依赖宿主。
+`uv run python scripts/verify_plugin_tests.py --sdk-only` 仅为这九个插件构建
 SDK/插件 wheel，逐一在仓库外普通安装、执行全部测试，并断言没有
-shiori-agent、testkit、宿主测试支持与源码路径注入；default_memory 只在验证自己时安装。普通全插件验证也对这三个插件
+shiori-agent、testkit、宿主测试支持与源码路径注入；default_memory 只在验证自己时安装。普通全插件验证也对这九个插件
 使用相同无宿主路径；其余插件保留真实宿主安装与资源检查。
 
 `uv run python -m scripts.verify_sdk` 另外安装 SDK wheel 并执行 SDK 自身测试；
@@ -61,3 +61,10 @@ CI 的 sdk-artifacts job 与既有宿主测试并存，不发布产物到公共�
 `uv run python scripts/check_sdk_imports.py --base <base-commit>` 检查 SDK 与插件
 backend/tests 的宿主导入（含类型导入和字面量动态导入）。豁免以每个文件、符号及
 次数记录在 `scripts/sdk_import_exemptions.json`，只能随迁移删除，不能增加。
+
+
+#587 批次中，shell 策略、循环阈值、撤销回复、Observe 落盘和状态命令输出
+都在六插件自己的 SDK-only 测试中。真实 AgentLoop/SubAgent 执行、会话撤销事务、
+命令 abort、可选 provider 卸载/重载与全局 handler 还原留在对应宿主模块测试。
+宿主配置事务使用中性 numeric_config schema，不依赖 ToolLoopGuardConfig 策略。
+宿主 passive-turn 验证有界错误日志与 TurnFailed/提交协议，不读取 Observe 私有表。

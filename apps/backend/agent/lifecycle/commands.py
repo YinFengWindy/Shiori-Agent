@@ -3,10 +3,7 @@
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
 
 
-def normalize_command(content: str) -> str:
-    """Return the lowercase command head, without Telegram's bot suffix or args."""
-    parts = content.strip().split(maxsplit=1)
-    return parts[0].lower().split("@", 1)[0] if parts else ""
+from shiori_sdk.commands import normalize_command as normalize_command
 
 
 def abort_command(state: TurnState, reply: str) -> BeforeTurnCtx:

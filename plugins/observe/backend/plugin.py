@@ -5,8 +5,8 @@ import logging
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
-from bus.events_lifecycle import TurnCommitted
-from core.memory.events import MemoryWritten, RetrievalCompleted
+from shiori_sdk.memory.committed import TurnCommitted
+from shiori_sdk.memory.events import MemoryWritten, RetrievalCompleted
 
 from .collector import GlobalErrorCollector
 from .retention import run_retention_if_needed
@@ -14,7 +14,7 @@ from .telemetry import ObserveTelemetry
 from .writer import TraceWriter
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.extensions import ObservePluginContext as PluginRuntimeContext
 
 logger = logging.getLogger("plugin.observe")
 
@@ -38,13 +38,13 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
     from .storage import prepare_storage
 
-    db_path = prepare_storage(workspace)
+    db_path = prepare_storage(workspace, ctx.storage)
     writer = TraceWriter(db_path)
     writer_task = ctx.background.spawn(writer.run(), name="writer")
     await writer.wait_ready(writer_task)
     _ = ctx.background.spawn(run_retention_if_needed(db_path), name="retention")
 
-    collector = GlobalErrorCollector(writer)
+    collector = GlobalErrorCollector(writer, ctx.diagnostics)
     # 安装过程本身可能部分成功，先登记清理以覆盖 setup 的失败回滚。
     ctx.effect("collector", collector.uninstall)
     collector.install()

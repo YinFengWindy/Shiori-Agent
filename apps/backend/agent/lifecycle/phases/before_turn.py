@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 
+from shiori_sdk.commands import CommandInput
+from agent.lifecycle.commands import abort_command
 from bus.event_bus import EventBus
 from session.manager.models import consolidation_cursor
 from agent.core.runtime_support import SessionLike
@@ -30,7 +32,23 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class BeforeTurnFrame(PhaseFrame[TurnState, BeforeTurnCtx]):
-    pass
+    """Host frame exposing a bounded command view to lifecycle contributors."""
+
+    @property
+    def command(self) -> CommandInput:
+        """Read memory progress without exposing session persistence internals."""
+        session = self.input.session
+        return CommandInput(
+            content=self.input.msg.content,
+            session_key=self.input.session_key,
+            messages=tuple(session.messages) if session is not None else (),
+            last_consolidated=session.last_consolidated if session is not None else 0,
+            has_session=session is not None,
+        )
+
+    def abort_command(self, reply: str) -> None:
+        """Create the ordinary host abort context before any retrieval or LLM call."""
+        self.slots["session:ctx"] = abort_command(self.input, reply)
 
 
 BeforeTurnModules: TypeAlias = list[PhaseModule[BeforeTurnFrame]]

@@ -14,27 +14,20 @@ import re
 import threading
 import traceback
 import types
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
-from core.error_context import current_session_key as current_session_key
-from core.common.global_hook_stack import install_global_hooks, uninstall_global_hooks
+from shiori_sdk.diagnostics import (
+    Diagnostics,
+    SysExceptHook as _SysExceptHook,
+    ThreadExceptHook as _ThreadExceptHook,
+    LoopExceptHandler as _LoopExceptHandler,
+)
 from .events import GlobalErrorTrace
-
-_SysExceptHook = Callable[
-    [type[BaseException], BaseException, "types.TracebackType | None"], object
-]
-_ThreadExceptHook = Callable[["threading.ExceptHookArgs"], object]
-_LoopExceptHandler = Callable[[asyncio.AbstractEventLoop, "dict[str, Any]"], object]
 
 logger = logging.getLogger("observe.collector")
 
-# 仓库根：traceback 里"属于本项目"的帧以此为界，同时覆盖 apps/backend/** 与 plugins/**。
-# 插件迁到顶层 plugins/ 后，这个边界才把插件自身的帧也算作本项目代码。
-_REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 _FLUSH_INTERVAL = 10.0
 _MESSAGE_MAX = 500
 _TRACEBACK_MAX = 4000
@@ -73,8 +66,9 @@ class _BucketAgg:
 
 
 class GlobalErrorCollector:
-    def __init__(self, writer: _Emitter) -> None:
+    def __init__(self, writer: _Emitter, diagnostics: Diagnostics) -> None:
         self._writer = writer
+        self._diagnostics = diagnostics
         self._lock = threading.Lock()
         self._buckets: dict[tuple[str, str], _BucketAgg] = {}
         self._flush_task: asyncio.Task[None] | None = None
@@ -106,7 +100,7 @@ class GlobalErrorCollector:
                 self._flush_loop(), name="observe_error_flush"
             )
         self._prev_excepthook, self._prev_threadhook, self._prev_loop_handler = (
-            install_global_hooks(
+            self._diagnostics.install_global_hooks(
                 self,
                 handler,
                 self._on_sys_except,
@@ -122,7 +116,7 @@ class GlobalErrorCollector:
             return
         self._installed = False
         # 1. 还原钩子
-        uninstall_global_hooks(self)
+        self._diagnostics.uninstall_global_hooks(self)
         self._log_handler = None
         # 2. 停 flush task 并最终 flush
         if self._flush_task is not None:
@@ -205,7 +199,7 @@ class GlobalErrorCollector:
             _ = self._prev_threadhook(args)
 
     def _on_loop_except(
-        self, loop: asyncio.AbstractEventLoop, context: dict[str, Any]
+        self, loop: asyncio.AbstractEventLoop, context: dict[str, object]
     ) -> None:
         exc = context.get("exception")
         if isinstance(exc, BaseException):
@@ -248,8 +242,8 @@ class GlobalErrorCollector:
             message=message,
             traceback_text=tb_text,
             level=level,
-            top_frame=_top_app_frame(tb),
-            session_key=current_session_key.get(),
+            top_frame=self._diagnostics.top_frame(tb),
+            session_key=self._diagnostics.session_key(),
         )
 
     # ── flush ────────────────────────────────────
@@ -301,7 +295,7 @@ class _CollectorLogHandler(logging.Handler):
                 error_type = exc_type.__name__
                 message = str(exc_value) if exc_value else record.getMessage()
                 tb_text = "".join(traceback.format_exception(exc_type, exc_value, tb))
-                top_frame = _top_app_frame(tb)
+                top_frame = self._collector._diagnostics.top_frame(tb)
             else:
                 error_type = "LogError"
                 message = record.getMessage()
@@ -315,7 +309,7 @@ class _CollectorLogHandler(logging.Handler):
                 traceback_text=tb_text,
                 level=record.levelname,
                 top_frame=top_frame,
-                session_key=current_session_key.get(),
+                session_key=self._collector._diagnostics.session_key(),
             )
         except Exception:
             pass
@@ -328,18 +322,3 @@ def _fingerprint(error_type: str, message: str, top_frame: str) -> str:
     norm = _NORM_NUM.sub("#", _NORM_HEX.sub("#", message))
     raw = f"{error_type}|{norm}|{top_frame}"
     return hashlib.sha1(raw.encode("utf-8", errors="replace")).hexdigest()[:16]
-
-
-# 取 traceback 中第一个属于本项目的栈帧 "relpath:lineno"；没有则取最内层帧。
-def _top_app_frame(tb: types.TracebackType | None) -> str:
-    frames: list[traceback.FrameSummary] = traceback.extract_tb(tb) if tb else []
-    if not frames:
-        return "?"
-    chosen: traceback.FrameSummary = frames[-1]
-    for frame in frames:
-        try:
-            rel = Path(frame.filename).resolve().relative_to(_REPOSITORY_ROOT)
-        except ValueError:
-            continue
-        return f"{rel}:{frame.lineno or 0}"
-    return f"{Path(chosen.filename).name}:{chosen.lineno or 0}"

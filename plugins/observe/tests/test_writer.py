@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from contextlib import suppress
 import importlib
 import json
@@ -7,15 +8,14 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
-
 import pytest
+from shiori_sdk.testing.diagnostics import FakeDiagnostics
 
 _observe_db = importlib.import_module("plugins.observe.backend.db")
 _observe_events = importlib.import_module("plugins.observe.backend.events")
 _observe_retention = importlib.import_module("plugins.observe.backend.retention")
 _observe_writer = importlib.import_module("plugins.observe.backend.writer")
 _observe_collector = importlib.import_module("plugins.observe.backend.collector")
-_diagnostic_log = importlib.import_module("core.common.diagnostic_log")
 
 open_db = cast(Callable[[Path], sqlite3.Connection], getattr(_observe_db, "open_db"))
 RagHitLog = getattr(_observe_events, "RagHitLog")
@@ -23,9 +23,7 @@ RagQueryLog = getattr(_observe_events, "RagQueryLog")
 TurnTrace = getattr(_observe_events, "TurnTrace")
 GlobalErrorTrace = getattr(_observe_events, "GlobalErrorTrace")
 GlobalErrorCollector = getattr(_observe_collector, "GlobalErrorCollector")
-current_session_key = getattr(_observe_collector, "current_session_key")
-diagnostic_context = getattr(_diagnostic_log, "diagnostic_context")
-diagnostic_line = getattr(_diagnostic_log, "diagnostic_line")
+
 _run_cleanup = cast(Callable[[Path], None], getattr(_observe_retention, "_run_cleanup"))
 _write_turn = getattr(_observe_writer, "_write_turn")
 TraceWriter = getattr(_observe_writer, "TraceWriter")
@@ -75,23 +73,6 @@ async def test_ready_writer_persists_queued_event(tmp_path: Path):
         _ = task.cancel()
         with suppress(asyncio.CancelledError):
             await task
-
-
-def test_diagnostic_line_uses_fixed_field_order():
-    line = diagnostic_line(
-        "PassiveTurnPipeline.run",
-        event="start",
-        flow="passive",
-        phase="before_turn",
-        session="telegram:1",
-        turn="abc123",
-        action="run",
-    )
-    assert line == (
-        "[PassiveTurnPipeline.run] event=start flow=passive phase=before_turn "
-        "session=telegram:1 turn=abc123 tick=- action=run reason=- "
-        'duration_ms=- counts=- error_type=- error_fp=- note="-"'
-    )
 
 
 def test_write_turn_persists_raw_output_and_meme_fields(tmp_path):
@@ -343,20 +324,31 @@ async def test_global_error_collector_captures_error_log_with_context(tmp_path):
     db_path = tmp_path / "observe.db"
     writer = TraceWriter(db_path)
     task = asyncio.create_task(writer.run())
-    collector = GlobalErrorCollector(writer)
+    diagnostics = FakeDiagnostics()
+    collector = GlobalErrorCollector(writer, diagnostics)
     test_logger = logging.getLogger("tests.observe.collector")
     row = None
     uninstalled = False
     try:
         collector.install()
-        token = current_session_key.set("telegram:1")
+        token = diagnostics.current_session.set("telegram:1")
         try:
             try:
                 raise RuntimeError("provider failed 123")
             except RuntimeError:
-                test_logger.exception("provider failed 123")
+                record = test_logger.makeRecord(
+                    test_logger.name,
+                    logging.ERROR,
+                    __file__,
+                    0,
+                    "provider failed 123",
+                    (),
+                    sys.exc_info(),
+                )
+                assert diagnostics.handler is not None
+                diagnostics.handler.emit(record)
         finally:
-            current_session_key.reset(token)
+            diagnostics.current_session.reset(token)
         await collector.uninstall()
         uninstalled = True
         await writer.drain()

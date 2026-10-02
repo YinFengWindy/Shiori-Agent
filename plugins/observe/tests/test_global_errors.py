@@ -7,8 +7,8 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
-
 import pytest
+from shiori_sdk.testing.diagnostics import FakeDiagnostics
 
 _db = importlib.import_module("plugins.observe.backend.db")
 _events = importlib.import_module("plugins.observe.backend.events")
@@ -19,7 +19,7 @@ _writermod = importlib.import_module("plugins.observe.backend.writer")
 open_db = cast(Callable[[Path], sqlite3.Connection], getattr(_db, "open_db"))
 GlobalErrorTrace = getattr(_events, "GlobalErrorTrace")
 GlobalErrorCollector = getattr(_collector, "GlobalErrorCollector")
-current_session_key = getattr(_collector, "current_session_key")
+
 _fingerprint = getattr(_collector, "_fingerprint")
 _write_global_error = getattr(_writermod, "_write_global_error")
 
@@ -115,7 +115,8 @@ def test_write_global_error_separate_bucket_is_new_row(tmp_path):
 
 def test_collector_dedups_and_counts():
     emitter = _RecordingEmitter()
-    col = GlobalErrorCollector(emitter)
+    diagnostics = FakeDiagnostics()
+    col = GlobalErrorCollector(emitter, diagnostics)
     for _ in range(5):
         col.capture(
             source="log",
@@ -136,7 +137,8 @@ def test_collector_dedups_and_counts():
 
 def test_collector_flush_clears_so_next_flush_emits_delta():
     emitter = _RecordingEmitter()
-    col = GlobalErrorCollector(emitter)
+    diagnostics = FakeDiagnostics()
+    col = GlobalErrorCollector(emitter, diagnostics)
     col.capture(
         source="log",
         logger_name="x",
@@ -158,13 +160,23 @@ def test_collector_flush_clears_so_next_flush_emits_delta():
 @pytest.mark.asyncio
 async def test_install_captures_logger_error_and_skips_observe():
     emitter = _RecordingEmitter()
-    col = GlobalErrorCollector(emitter)
+    diagnostics = FakeDiagnostics()
+    col = GlobalErrorCollector(emitter, diagnostics)
     prev_excepthook = sys.excepthook
     prev_threadhook = threading.excepthook
     col.install()
     try:
-        logging.getLogger("agent.looping.core").error("boom")
-        logging.getLogger("observe.writer").error("self failure")  # 应被跳过
+        assert diagnostics.handler is not None
+        diagnostics.handler.emit(
+            logging.LogRecord(
+                "agent.looping.core", logging.ERROR, __file__, 1, "boom", (), None
+            )
+        )
+        diagnostics.handler.emit(
+            logging.LogRecord(
+                "observe.writer", logging.ERROR, __file__, 1, "self failure", (), None
+            )
+        )  # 应被跳过
         col._flush()
     finally:
         await col.uninstall()
@@ -179,13 +191,19 @@ async def test_install_captures_logger_error_and_skips_observe():
 @pytest.mark.asyncio
 async def test_install_captures_exception_with_traceback():
     emitter = _RecordingEmitter()
-    col = GlobalErrorCollector(emitter)
+    diagnostics = FakeDiagnostics()
+    col = GlobalErrorCollector(emitter, diagnostics)
     col.install()
     try:
         try:
             raise ValueError("bad value 42")
         except ValueError:
-            logging.getLogger("agent.x").exception("caught")
+            assert diagnostics.handler is not None
+            diagnostics.handler.emit(
+                logging.LogRecord(
+                    "agent.x", logging.ERROR, __file__, 1, "caught", (), sys.exc_info()
+                )
+            )
         col._flush()
     finally:
         await col.uninstall()

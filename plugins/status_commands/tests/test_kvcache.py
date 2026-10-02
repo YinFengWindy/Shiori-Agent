@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from agent.plugin_host.dependencies import PluginDependencies
+from shiori_sdk.testing.extensions import FakeDependencies
 from plugins.observe.backend.telemetry import KVCacheTurn
 
 
@@ -26,10 +26,8 @@ async def test_cache_command_queries_public_reader_with_bounded_limit(
     backend, command_frame, content, limit
 ):
     query = Mock(return_value=())
-    dependencies = PluginDependencies(
-        (),
-        Mock(return_value=SimpleNamespace(recent_cache_turns=query)),
-        optional_declared=("observe",),
+    dependencies = FakeDependencies(
+        {"observe": SimpleNamespace(recent_cache_turns=query)}
     )
     frame = command_frame(content)
     await backend.KVCacheCommandModule(dependencies).run(frame)
@@ -47,10 +45,8 @@ async def test_cache_report_keeps_totals_per_turn_time_bars_and_previews(
             "[SYSTEM_CONTEXT_FRAME] hidden", "2026-09-11T04:04:00Z", None, None
         ),
     )
-    dependencies = PluginDependencies(
-        (),
-        Mock(return_value=SimpleNamespace(recent_cache_turns=Mock(return_value=turns))),
-        optional_declared=("observe",),
+    dependencies = FakeDependencies(
+        {"observe": SimpleNamespace(recent_cache_turns=Mock(return_value=turns))}
     )
     frame = command_frame("/kvcache")
     await backend.KVCacheCommandModule(dependencies).run(frame)
@@ -68,10 +64,8 @@ async def test_storage_failure_replies_but_programming_errors_propagate(
     backend, command_frame
 ):
     query = Mock(side_effect=[OSError("read failed"), AttributeError("bad API")])
-    dependencies = PluginDependencies(
-        (),
-        Mock(return_value=SimpleNamespace(recent_cache_turns=query)),
-        optional_declared=("observe",),
+    dependencies = FakeDependencies(
+        {"observe": SimpleNamespace(recent_cache_turns=query)}
     )
     module = backend.KVCacheCommandModule(dependencies)
     frame = command_frame("/kvcache")
@@ -86,7 +80,7 @@ async def test_storage_failure_replies_but_programming_errors_propagate(
 async def test_unrelated_commands_do_not_query_telemetry(
     backend, command_frame, content
 ):
-    dependencies = Mock(spec=PluginDependencies)
+    dependencies = Mock(spec=FakeDependencies)
     frame = command_frame(content)
     await backend.KVCacheCommandModule(dependencies).run(frame)
     assert "session:ctx" not in frame.slots
@@ -95,7 +89,7 @@ async def test_unrelated_commands_do_not_query_telemetry(
 
 @pytest.mark.asyncio
 async def test_prior_abort_is_not_overwritten(backend, command_frame):
-    dependencies = Mock(spec=PluginDependencies)
+    dependencies = Mock(spec=FakeDependencies)
     frame = command_frame("/kvcache")
     previous = object()
     frame.slots["session:ctx"] = previous

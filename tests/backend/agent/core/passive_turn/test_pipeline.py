@@ -4,8 +4,6 @@ from agent.lifecycle.phases.before_turn import MemoryConsolidationFailedError
 
 import asyncio
 import json
-import sqlite3
-from contextlib import suppress
 from conversation.listening import GroupListeningControl
 from conversation.service import ConversationService
 from datetime import datetime, timedelta, timezone
@@ -41,8 +39,6 @@ from core.roles.reply_state import RoleReply
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
 from core.memory.group_environment import GroupEnvironment
-from plugins.observe.backend.collector import GlobalErrorCollector
-from plugins.observe.backend.writer import TraceWriter
 
 
 @pytest.fixture
@@ -376,8 +372,8 @@ def _isolation_pipeline(manager, *, input_token_threshold=75000):
 
 @pytest.mark.parametrize("summary", [False, True])
 @pytest.mark.parametrize("retry_failure", ["empty", "request"])
-async def test_empty_reply_failure_is_persisted_without_committing_role_reply(
-    tmp_path, retry_failure, summary
+async def test_empty_reply_failure_reports_diagnostics_without_committing_role_reply(
+    tmp_path, retry_failure, summary, caplog
 ):
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")
@@ -418,32 +414,23 @@ async def test_empty_reply_failure_is_persisted_without_committing_role_reply(
     reasoner._llm = LLMServices(provider=provider, light_provider=provider)
     failed_events = []
     pipeline._bus.observe = AsyncMock(side_effect=failed_events.append)
-    db_path = tmp_path / "observe.db"
-    writer = TraceWriter(db_path)
-    writer_task = asyncio.create_task(writer.run())
-    collector = GlobalErrorCollector(writer)
-    try:
-        await writer.wait_ready(writer_task)
-        collector.install()
+    with caplog.at_level("ERROR", logger="agent.core.passive_turn"):
         result = await pipeline.run(
             _turn(USER_DM), session.key, dispatch_outbound=False
         )
-        await collector.uninstall()
-        await writer.drain()
-    finally:
-        await collector.uninstall()
-        writer_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await writer_task
     assert result.content == "处理消息时出错，请稍后再试。"
     assert result.committed_message_id is None
     assert provider.chat.await_count == (3 if summary else 2)
     assert manager._store.fetch_session_messages(session.key) == []
     assert any(type(event).__name__ == "TurnFailed" for event in failed_events)
-    with sqlite3.connect(db_path) as conn:
-        records = conn.execute("SELECT traceback_text FROM global_errors").fetchall()
+    records = [
+        record
+        for record in caplog.records
+        if record.name == "agent.core.passive_turn"
+        and "EmptyReplyError" in record.getMessage()
+    ]
     assert len(records) == 1
-    diagnostic_text = records[0][0]
+    diagnostic_text = records[0].getMessage()
     assert "EmptyReplyError" in diagnostic_text
     payload = diagnostic_text.split("模型未产出有效正文。 ", 1)[1].split("\n", 1)[0]
     facts = json.loads(payload)

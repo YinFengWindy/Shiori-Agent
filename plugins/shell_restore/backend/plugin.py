@@ -7,10 +7,10 @@ import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent.lifecycle.types import PreToolCtx
+from shiori_sdk.tool_hooks import PreToolCtx
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.extensions import HookPluginContext as PluginRuntimeContext
 
 logger = logging.getLogger("plugin.shell_restore")
 

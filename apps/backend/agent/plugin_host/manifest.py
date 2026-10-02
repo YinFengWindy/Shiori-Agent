@@ -32,6 +32,8 @@ KNOWN_CAPABILITIES = frozenset(
         "kv",
         "config",
         "background",
+        "diagnostics",
+        "storage",
         "bot_commands",
         "rpc",
         "dependencies",

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 
 
 class _DummyTool(Tool):
