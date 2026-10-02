@@ -331,3 +331,32 @@ def test_registration_capacity_roundtrip_and_legacy_incomplete():
     assert saved.model_registrations[0].context_window_tokens == 128000
     assert saved.model_registrations[0].max_output_tokens == 32768
     assert not incomplete_registration_fields(saved.model_registrations[0])
+
+
+@pytest.mark.parametrize("value", [0, 2, 7])
+def test_compaction_retained_turns_loads_independently_of_memory_window(value):
+    from agent.config import load_config_data
+
+    config = load_config_data(
+        {
+            "agent": {
+                "context": {"compaction_retained_turns": value, "memory_window": 40}
+            }
+        }
+    )
+    assert config.compaction_retained_turns == value
+    assert config.memory_window == 40
+
+
+@pytest.mark.parametrize("value", [-1, 1.5, True, "2", None])
+def test_compaction_retained_turns_rejects_invalid_configuration(value):
+    from agent.config import load_config_data
+
+    with pytest.raises(ValueError, match="非负整数"):
+        load_config_data({"agent": {"context": {"compaction_retained_turns": value}}})
+
+
+def test_compaction_retained_turns_defaults_to_two():
+    from agent.config import load_config_data
+
+    assert load_config_data({}).compaction_retained_turns == 2

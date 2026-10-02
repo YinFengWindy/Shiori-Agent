@@ -53,7 +53,6 @@ async def test_real_relationship_failure_keeps_window_pending_until_consumer_ret
     memory_harness,
 ):
     from conversation.context_scope import history_start, user_context_view
-    from core.context_window import ContextWindowMaintenance
     from core.roles.relationship_runtime import (
         RelationshipSnapshotOptimizer,
         RoleRelationshipRuntimeService,
@@ -89,12 +88,11 @@ async def test_real_relationship_failure_keeps_window_pending_until_consumer_ret
     session.add_message("assistant", "yes")
     h.manager.save(session)
     view = user_context_view(h.manager.workspace, "mira")
-    prepared = await h.manager.prepare_window(session.key, view, keep_count=0)
+    prepared = await h.manager.prepare_window(session.key, view, keep_turns=0)
     assert prepared is not None
-    window = ContextWindowMaintenance(h.manager, h.maintenance)
-    failed = await window.apply(prepared)
-    assert not failed.committed and failed.failure_stage == "consumers"
-    assert failed.memory_committed
+    failed = await h.maintenance.ensure_memory_for_window(prepared)
+    assert failed.trace["mode"] == "failed" and failed.trace["step"] == "consumers"
+    assert failed.trace["memory_committed"]
     assert history_start(session, view) == 0
     assert session.maintenance_progress.memory_version == 1
     assert session.maintenance_progress.relationship_version == 0
@@ -109,7 +107,11 @@ async def test_real_relationship_failure_keeps_window_pending_until_consumer_ret
     provider.chat.return_value = SimpleNamespace(
         content='{"role_self_view":"我想继续和你聊茶。","relation_tags":["亲近"],"relation_state":{"closeness":0.7},"behavior_profile":{}}'
     )
-    assert (await window.apply(prepared)).committed
+    retried = await h.maintenance.ensure_memory_for_window(prepared)
+    assert retried.trace["memory_covered"]
+    assert await h.manager.commit_window(
+        prepared, "state", prepared.removed_message_ids
+    )
     assert len(h.prompts) == extraction_calls and len(h.events) == 1
     assert provider.chat.await_count == 2
     assert session.maintenance_progress.relationship_version == 1

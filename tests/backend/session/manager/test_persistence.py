@@ -30,8 +30,10 @@ async def test_stale_message_rewrite_preserves_progress_and_clear_invalidates_it
         ),
         AsyncMock(),
     )
-    prepared = await manager.prepare_window(session.key, None, keep_count=0)
-    assert prepared is not None and await manager.commit_window(prepared)
+    prepared = await manager.prepare_window(session.key, None, keep_turns=0)
+    assert prepared is not None and await manager.commit_window(
+        prepared, "state", prepared.removed_message_ids
+    )
     stale.messages[0]["content"] = "edited"
     manager.save(stale)
     restored = manager.get_or_create(session.key)

@@ -14,6 +14,9 @@ def test_invalidation_discards_every_derived_artifact_without_mutating_previous_
         legacy_cuts={"user": 2},
         windows={"user": 4},
         window_versions={"user": 3},
+        summaries={"user": "working state"},
+        summary_source_ids={"user": ["message"]},
+        request_owners={"user": "connection:model"},
         generation=2,
         memory_version=7,
         recent_context_version=5,
@@ -32,6 +35,9 @@ def test_invalidation_discards_every_derived_artifact_without_mutating_previous_
         not invalidated.legacy_cuts
         and not invalidated.windows
         and not invalidated.window_versions
+        and not invalidated.summaries
+        and not invalidated.summary_source_ids
+        and not invalidated.request_owners
     )
     assert (
         invalidated.recent_context_version

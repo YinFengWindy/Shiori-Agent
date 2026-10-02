@@ -1,8 +1,16 @@
 from typing import Any, cast
 import asyncio
+from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+
+import pytest
+
+from core.compaction import CompactionFailedError
+from session.manager import SessionManager
+from agent.tools.base import Tool
+from agent.tools.registry import ToolRegistry
 
 from agent.core.passive_turn import DefaultReasoner
 from agent.core.runtime_support import ToolDiscoveryState
@@ -11,7 +19,7 @@ from agent.core.types import ContextRenderResult
 from agent.core.types import ContextRequest
 from agent.core.types import ReasonerResult
 from agent.looping.ports import LLMConfig
-from agent.provider import ContentSafetyError, ContextLengthError
+from agent.provider import ContentSafetyError, ContextLengthError, LLMResponse, ToolCall
 from bus.events import InboundMessage
 
 
@@ -34,20 +42,33 @@ def _msg():
     )
 
 
-def _session():
-    return SimpleNamespace(
-        key="s:1",
-        messages=[{"role": "user", "content": str(i)} for i in range(6)],
-        get_history=lambda max_messages, start_index=None, include=None: [
-            {"role": "user", "content": str(i)} for i in range(6)
-        ],
-        get_history_tool_names=lambda max_messages, start_index, include=None: [
-            "always",
-            "x",
-            "uninstalled",
-        ],
-        last_consolidated=3,
-    )
+def _session(manager: SessionManager):
+    session = manager.get_or_create("s:1")
+    for index in range(3):
+        session.add_message("user", str(index * 2))
+        session.add_message(
+            "assistant",
+            str(index * 2 + 1),
+            tool_chain=(
+                [
+                    {
+                        "calls": [
+                            {
+                                "call_id": name,
+                                "name": name,
+                                "arguments": {},
+                                "result": "done",
+                            }
+                            for name in ["always", "x", "uninstalled"]
+                        ]
+                    }
+                ]
+                if index == 0
+                else []
+            ),
+        )
+    manager.save(session)
+    return session
 
 
 def _tools():
@@ -65,9 +86,18 @@ def _tools():
     )
 
 
-def _make_reasoner(*, discovery: ToolDiscoveryState, tool_search_enabled: bool):
+def _make_reasoner(
+    *,
+    manager: SessionManager,
+    discovery: ToolDiscoveryState,
+    tool_search_enabled: bool,
+    provider=None,
+    tools=None,
+):
     def _render(request: ContextRequest, **kwargs: object) -> ContextRenderResult:
-        messages = list(request.history) + [{"role": "user"}]
+        messages = list(request.history) + [
+            {"role": "user", "content": request.current_message}
+        ]
         return ContextRenderResult(
             system_prompt="",
             turn_injection_context=_stub_turn_injection_context(
@@ -81,12 +111,16 @@ def _make_reasoner(*, discovery: ToolDiscoveryState, tool_search_enabled: bool):
         llm=cast(
             Any,
             LLMServices(
-                provider=SimpleNamespace(chat=AsyncMock()),
+                provider=(
+                    provider
+                    if provider is not None
+                    else SimpleNamespace(chat=AsyncMock())
+                ),
                 light_provider=SimpleNamespace(),
             ),
         ),
         llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=256),
-        tools=cast(Any, _tools()),
+        tools=cast(Any, tools if tools is not None else _tools()),
         discovery=discovery,
         tool_search_enabled=tool_search_enabled,
         memory_window=10,
@@ -96,12 +130,15 @@ def _make_reasoner(*, discovery: ToolDiscoveryState, tool_search_enabled: bool):
                 render=_render,
             ),
         ),
-        session_manager=cast(Any, SimpleNamespace(save_async=AsyncMock())),
+        session_manager=manager,
     )
 
 
-def test_reasoner_run_turn_retries_and_preloads_history_tools():
-    reasoner = _make_reasoner(discovery=ToolDiscoveryState(), tool_search_enabled=True)
+def test_reasoner_run_turn_retries_and_preloads_history_tools(tmp_path):
+    manager = SessionManager(tmp_path)
+    reasoner = _make_reasoner(
+        manager=manager, discovery=ToolDiscoveryState(), tool_search_enabled=True
+    )
     reasoner.run = AsyncMock(
         side_effect=[
             ContentSafetyError("blocked"),
@@ -112,7 +149,7 @@ def test_reasoner_run_turn_retries_and_preloads_history_tools():
         ]
     )
 
-    result = asyncio.run(reasoner.run_turn(msg=_msg(), session=cast(Any, _session())))
+    result = asyncio.run(reasoner.run_turn(msg=_msg(), session=_session(manager)))
 
     assert result.reply == "ok"
     assert result.tools_used == ["tool_search", "x"]
@@ -125,17 +162,27 @@ def test_reasoner_run_turn_retries_and_preloads_history_tools():
         assert call.kwargs["preloaded_tool_order"] == ["x"]
 
 
-def test_reasoner_run_turn_context_length_all_fail_returns_fallback():
-    reasoner = _make_reasoner(discovery=ToolDiscoveryState(), tool_search_enabled=False)
-    reasoner.run = AsyncMock(side_effect=[ContextLengthError("long")] * 7)
+def test_reasoner_run_turn_context_length_failure_is_explicit_without_retry(tmp_path):
+    manager = SessionManager(tmp_path)
+    reasoner = _make_reasoner(
+        manager=manager, discovery=ToolDiscoveryState(), tool_search_enabled=False
+    )
+    reasoner.run = AsyncMock(side_effect=ContextLengthError("long"))
+    session = _session(manager)
+    original_ids = [message["id"] for message in session.messages]
+    with pytest.raises(CompactionFailedError) as caught:
+        asyncio.run(reasoner.run_turn(msg=_msg(), session=session))
+    assert caught.value.result.failure_stage == "provider"
+    assert caught.value.result.error == "long"
+    assert not caught.value.result.committed
+    assert reasoner.run.await_count == 1
+    assert [message["id"] for message in session.messages] == original_ids
 
-    result = asyncio.run(reasoner.run_turn(msg=_msg(), session=cast(Any, _session())))
-    assert "上下文过长" in str(result.reply)
-    assert result.tools_used == []
-    assert result.tool_chain == []
 
-
-def test_reasoner_run_turn_context_length_trims_dynamic_sections_before_history():
+def test_reasoner_run_turn_content_safety_trims_dynamic_sections_before_history(
+    tmp_path,
+):
+    manager = SessionManager(tmp_path)
     calls: list[dict] = []
 
     def _render(request: ContextRequest, **kwargs: object) -> ContextRenderResult:
@@ -174,11 +221,11 @@ def test_reasoner_run_turn_context_length_trims_dynamic_sections_before_history(
                 render=_render,
             ),
         ),
-        session_manager=cast(Any, SimpleNamespace(save_async=AsyncMock())),
+        session_manager=manager,
     )
     reasoner.run = AsyncMock(
         side_effect=[
-            ContextLengthError("long"),
+            ContentSafetyError("blocked"),
             ReasonerResult(
                 reply="ok",
                 metadata={"tools_used": [], "tool_chain": []},
@@ -186,11 +233,55 @@ def test_reasoner_run_turn_context_length_trims_dynamic_sections_before_history(
         ]
     )
 
-    result = asyncio.run(reasoner.run_turn(msg=_msg(), session=cast(Any, _session())))
+    result = asyncio.run(reasoner.run_turn(msg=_msg(), session=_session(manager)))
     assert result.reply == "ok"
     assert result.tools_used == []
     assert result.tool_chain == []
-    assert calls[0]["history_len"] == 6
+    assert calls[0]["history_len"] == 10
     assert calls[0]["disabled_sections"] == set()
-    assert calls[1]["history_len"] == 6
+    assert calls[1]["history_len"] == calls[0]["history_len"]
     assert calls[1]["disabled_sections"] == {"skills_catalog"}
+
+
+def test_provider_context_failure_after_side_effect_never_replays_the_tool(tmp_path):
+    class SideEffectTool(Tool):
+        name = "side_effect"
+        description = "Record one external operation"
+        parameters = {"type": "object", "properties": {}}
+
+        def __init__(self):
+            self.calls = 0
+
+        async def execute(self, **kwargs):
+            self.calls += 1
+            return "already committed"
+
+    manager = SessionManager(tmp_path)
+    session = _session(manager)
+    original = deepcopy(session.messages)
+    tool = SideEffectTool()
+    registry = ToolRegistry()
+    registry.register(tool, always_on=True)
+    provider = SimpleNamespace(
+        chat=AsyncMock(
+            side_effect=[
+                LLMResponse(
+                    content="", tool_calls=[ToolCall("once", "side_effect", {})]
+                ),
+                ContextLengthError("tool result does not fit"),
+            ]
+        )
+    )
+    reasoner = _make_reasoner(
+        manager=manager,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        provider=provider,
+        tools=registry,
+    )
+    with pytest.raises(CompactionFailedError) as caught:
+        asyncio.run(reasoner.run_turn(msg=_msg(), session=session))
+    assert caught.value.result.failure_stage == "provider"
+    assert tool.calls == 1
+    assert provider.chat.await_count == 2
+    assert session.messages == original

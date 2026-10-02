@@ -24,8 +24,6 @@ async def test_tools_are_only_returned_to_an_explicit_dispatching_caller(
         model="m",
         max_tokens=512,
         role_reply=True,
-        input_token_threshold=100,
-        estimate_request=lambda *_: 1,
         session="role:mira",
         channel="qq",
         iteration=1,

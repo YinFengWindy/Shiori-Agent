@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable
 
 from agent.core.reply_output import RoleReplyOutput
 from agent.provider import LLMProvider, LLMResponse
+from .compaction import ensure_request_budget
 from .empty_reply import EmptyReplyError, recovery_diagnostics, response_diagnostics
 
 logger = logging.getLogger("agent.core.passive_turn")
@@ -40,8 +41,6 @@ async def complete_reply(
     max_tokens: int,
     role_reply: bool,
     on_content_delta: Callable[[dict[str, str]], Awaitable[None]] | None = None,
-    input_token_threshold: int,
-    estimate_request: Callable[[list[dict], list[dict]], int],
     session: str,
     channel: str,
     iteration: int,
@@ -79,12 +78,7 @@ async def complete_reply(
             "content": "你刚才没有给出正式回复。请根据已有结果直接回复用户。",
         },
     ]
-    if (
-        input_token_threshold > 0
-        and estimate_request(retry_messages, []) >= input_token_threshold
-    ):
-        # A ContextLengthError would restart run_turn and replay prior tools.
-        raise EmptyReplyError(recovery_state("budget_exceeded", 0))
+    await ensure_request_budget(retry_messages, [], provider, model, max_tokens)
     retry_output = RoleReplyOutput(on_content_delta, enabled=role_reply)
     try:
         retry_response = await provider.chat(

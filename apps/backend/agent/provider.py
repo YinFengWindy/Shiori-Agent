@@ -472,6 +472,14 @@ class LLMProvider:
             ),
         )
 
+    def context_model(self, model: str) -> str:
+        """Actual model selected for this execution's context diagnostics."""
+        return model
+
+    def context_identity(self, model: str) -> str:
+        """Stable connection/model ownership for persisted derived context windows."""
+        return f"{self._connection_identity}:{model}"
+
     def input_budget(self, **request) -> InputBudget | None:
         """Evaluate the same normalized payload and output cap used by chat."""
         kwargs, _ = self._prepare_request(**request)

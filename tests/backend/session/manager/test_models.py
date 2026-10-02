@@ -170,3 +170,35 @@ def test_message_thread_id_reads_stored_or_in_memory_threads():
     assert message_thread_id({"thread_id": " t1 "}) == "t1"
     assert message_thread_id({"metadata": {"thread_id": "t2"}}) == "t2"
     assert message_thread_id({"metadata": "not a dict"}) == ""
+
+
+def test_native_tool_history_survives_reopen_as_a_complete_exchange(tmp_path):
+    from session.manager import SessionManager
+
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:native")
+    call = {
+        "id": "native-call",
+        "type": "function",
+        "function": {"name": "write_file", "arguments": '{"path":"report.txt"}'},
+    }
+    session.add_message("user", "write report")
+    session.add_message("assistant", "", tool_calls=[call])
+    session.add_message("tool", "report saved", tool_call_id="native-call")
+    session.add_message("assistant", "completed")
+    manager.save(session)
+    reloaded = SessionManager(tmp_path).get_or_create(session.key)
+    history = reloaded.get_history(start_index=0)
+    assert [item["role"] for item in history] == [
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+    ]
+    assert history[1]["tool_calls"] == [call]
+    assert history[2] == {
+        "role": "tool",
+        "tool_call_id": "native-call",
+        "content": "report saved",
+    }
+    assert reloaded.get_history_tool_names(start_index=0) == ["write_file"]

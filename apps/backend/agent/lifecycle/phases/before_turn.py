@@ -55,20 +55,11 @@ BeforeTurnModules: TypeAlias = list[PhaseModule[BeforeTurnFrame]]
 
 
 class MemoryConsolidator(Protocol):
-    """Schedule memory and delegate independent model-window maintenance."""
+    """Schedule semantic memory independently of model-window compaction."""
 
     def request_memory_consolidation(self, session_key: str) -> None: ...
 
     def get_memory_consolidation_failure(self, session_key: str) -> str | None: ...
-
-    async def ensure_context_window(
-        self,
-        session_key: str,
-        current_content: str = "",
-        view: ContextView | None = None,
-        *,
-        input_token_threshold: int,
-    ) -> bool: ...
 
 
 class MemoryConsolidationFailedError(RuntimeError):

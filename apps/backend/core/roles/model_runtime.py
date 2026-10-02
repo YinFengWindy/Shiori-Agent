@@ -174,6 +174,23 @@ class RoleAwareProvider(LLMProvider):
     def __init__(self, fallback: LLMProvider) -> None:
         self._fallback = fallback
 
+    def context_model(self, model: str) -> str:
+        """Actual role-selected model, shared with the speaking request snapshot."""
+        snapshot = _current_snapshot.get()
+        return (
+            snapshot.model
+            if snapshot is not None
+            else self._fallback.context_model(model)
+        )
+
+    def context_identity(self, model: str) -> str:
+        """Resolve window ownership with the same immutable role model snapshot."""
+        snapshot = _current_snapshot.get()
+        provider = snapshot.provider if snapshot is not None else self._fallback
+        return provider.context_identity(
+            snapshot.model if snapshot is not None else model
+        )
+
     def input_budget(self, **request):
         """Resolve preflight capacity from the very same active role snapshot."""
         snapshot = _current_snapshot.get()

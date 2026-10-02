@@ -452,19 +452,43 @@ async def test_recovery_rejects_unexpected_tools_without_execution():
     assert provider.chat.await_count == 2
 
 
-async def test_recovery_budget_check_stops_before_second_request(monkeypatch):
-    provider = AsyncMock()
-    provider.chat.return_value = LLMResponse(content="")
-    reasoner = make_reasoner(provider, ToolRegistry())
-    reasoner._request_threshold = lambda *_: 100
-    monkeypatch.setattr(
-        reasoner, "_request_tokens_with_tools", Mock(side_effect=[1, 100])
+async def test_recovery_budget_check_stops_before_second_request():
+    from agent.provider import LLMProvider
+    from agent.prompting.input_budget import BudgetPolicy
+    from agent.prompting.usage_anchor import usage_context
+    from core.compaction import CompactionFailedError
+
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=2000,
+        max_output_tokens=100,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
-    with pytest.raises(EmptyReplyError) as caught:
-        await reasoner.run([{"role": "user", "content": "你好"}])
-    assert caught.value.diagnostics["outcome"] == "budget_exceeded"
-    assert caught.value.diagnostics["retries"] == 0
-    assert provider.chat.await_count == 1
+    provider._create_with_retry = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="", tool_calls=[]),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=1499, completion_tokens=1, total_tokens=1500
+            ),
+        )
+    )
+    reasoner = make_reasoner(provider, ToolRegistry())
+    reasoner._llm_config.max_tokens = 100
+    try:
+        with (
+            usage_context(("cli:recovery",)),
+            pytest.raises(CompactionFailedError) as caught,
+        ):
+            await reasoner.run([{"role": "user", "content": "你好"}])
+        assert caught.value.result.failure_stage == "budget"
+        assert provider._create_with_retry.await_count == 1
+    finally:
+        await provider.aclose()
 
 
 async def test_mood_fetch_never_overwrites_main_response_thinking():
