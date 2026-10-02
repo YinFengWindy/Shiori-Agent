@@ -26,7 +26,12 @@ from core.memory.external_writes import commit_external_layers
 from core.memory.member_profiles import MemberProfiles
 from session.manager.consolidation import ConsolidationCommitRequest
 from session.manager.models import consolidation_cursor
-from session.manager.consumers import MemoryConsumersFailedError
+from session.manager.consumers import (
+    MemoryConsumersFailedError,
+    mark_published,
+    publication_fields,
+    unpublished_entries,
+)
 from session.manager.window import WindowPreparation
 from session.maintenance_progress import (
     effective_progress,
@@ -556,14 +561,8 @@ class MarkdownMemoryMaintenance:
         Each entry is checkpointed as published, so a later consumer failure
         never republishes it; memory extraction is never repeated.
         """
-        for entry in (*payload.get("backlog", ()), payload):
-            if entry.get("published"):
-                continue
-            publication = {
-                key: value
-                for key, value in entry.items()
-                if key not in ("published", "backlog")
-            }
+        for entry in unpublished_entries(payload):
+            publication = publication_fields(entry)
             publication["history_entry_payloads"] = [
                 (item, weight) for item, weight in entry["history_entry_payloads"]
             ]
@@ -571,7 +570,7 @@ class MarkdownMemoryMaintenance:
                 self._event_bus,
                 **publication,
             )
-            entry["published"] = True
+            mark_published(payload, entry)
             if self._record_publication is not None:
                 self._record_publication(session.key, payload)
         if self._after_consolidation is not None:

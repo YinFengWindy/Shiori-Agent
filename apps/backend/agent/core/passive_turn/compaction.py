@@ -101,20 +101,29 @@ class RequestCompaction:
             return
         # Within the hard input limit the original request is always sendable.
         sendable = not force and budget.estimate.tokens < budget.input_limit_tokens
+
+        def send_unchanged():
+            # last_request reflects only this request, never a compaction failure.
+            self.last_result = self.controller.progress_result(
+                replace(
+                    self.last_result
+                    or CompactionResult(model=provider.context_model(model)),
+                    phase="request",
+                    model=provider.context_model(model),
+                    budget=asdict(budget),
+                    final_budget=asdict(budget),
+                    after_tokens=budget.estimate.tokens,
+                    after_source=budget.estimate.source,
+                ),
+                self.session_key,
+                self.view,
+            )
+
         if not force and (
             not budget.needs_trim
             or (sendable and (self.degraded or self.compaction_failed))
         ):
-            self.last_result = replace(
-                self.last_result
-                or CompactionResult(model=provider.context_model(model)),
-                phase="request",
-                model=provider.context_model(model),
-                budget=asdict(budget),
-                final_budget=asdict(budget),
-                after_tokens=budget.estimate.tokens,
-                after_source=budget.estimate.source,
-            )
+            send_unchanged()
             return
         tail = messages[self.prefix_length :]
         next_prefix_length = self.prefix_length
@@ -168,11 +177,7 @@ class RequestCompaction:
                 budget=budget,
                 render=render,
                 measure=measure,
-                reason=(
-                    "hard_limit"
-                    if force or budget.estimate.tokens >= budget.input_limit_tokens
-                    else "auto_threshold"
-                ),
+                reason="auto_threshold" if sendable else "hard_limit",
                 # Degrading is only for requests the hard limit cannot carry.
                 render_minimal=(
                     render_minimal
@@ -186,15 +191,11 @@ class RequestCompaction:
             self.results.append(exc.result.dump())
             if not sendable:
                 raise
-            # The controller already recorded the staged failure; send unchanged.
-            self.compaction_failed = True
-            self.last_result = replace(
-                exc.result,
-                phase="request",
-                final_budget=asdict(budget),
-                after_tokens=budget.estimate.tokens,
-                after_source=budget.estimate.source,
-            )
+            # The controller already recorded the staged failure as the last
+            # compaction. A busy gate is no compaction attempt; retry next request.
+            if exc.result.failure_stage != "busy":
+                self.compaction_failed = True
+            send_unchanged()
             return
         messages[:] = candidate
         schemas[:] = candidate_schemas

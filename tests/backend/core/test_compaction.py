@@ -170,8 +170,8 @@ async def test_budget_estimates_turns_before_memory_and_summarizes_once(
         render=render,
         measure=lambda messages: _budget(500 + messages[0]["retained"] * 1000),
     )
-    # Two local estimates without memory work, then one real render.
-    assert candidates == [(4, 0), (6, 0), (6, 6)]
+    # Local estimates without memory work, then one real render.
+    assert candidates == [(4, 0), (6, 0), (8, 0), (6, 6)]
     assert result.retained_turns == 1 and result.after_tokens == 1500
     assert result.retained_reduction_reason == "budget"
     assert session.last_consolidated == history_start(session, None) == 6
@@ -192,7 +192,8 @@ async def test_over_target_within_hard_limit_commits_most_turns_without_degradin
     async def render(prepared, summary):
         return [{"role": "user", "content": "x", "retained": prepared.retained_turns}]
 
-    # Target 1600, hard limit 3780: 2 turns exceed the limit, 1 turn only the target.
+    # Target 1600, hard limit 3780; estimates add the 2000-token summary limit:
+    # 2 turns exceed the limit, 1 turn only the target.
     _, result = await controller.ensure(
         session_key=session.key,
         view=None,
@@ -202,11 +203,11 @@ async def test_over_target_within_hard_limit_commits_most_turns_without_degradin
         render=render,
         render_minimal=minimal,
         measure=lambda messages: _budget(
-            3900 if messages[0]["retained"] == 2 else 3000
+            3900 if messages[0]["retained"] == 2 else 1700
         ),
     )
     assert result.committed and not result.degraded and not result.tools_disabled
-    assert result.retained_turns == 1 and result.after_tokens == 3000
+    assert result.retained_turns == 1 and result.after_tokens == 1700
     assert history_start(session, None) == 6
     assert controller.writer.generate.await_count == 1
     minimal.assert_not_awaited()
@@ -409,13 +410,19 @@ async def test_consumer_failure_commits_window_and_keeps_pending_work(memory_har
 async def test_persistent_consumer_failure_still_commits_new_memory_and_window(
     memory_harness,
 ):
+    from core.memory.events import ConsolidationCommitted
+
     h = memory_harness
     session = h.manager.get_or_create("cli:consumer-down")
     _turn(session)
     h.manager.save(session)
-    h.maintenance._after_consolidation = AsyncMock(
-        side_effect=RuntimeError("relationship unavailable")
-    )
+    down = True
+
+    def publish(event):
+        if down:
+            raise RuntimeError("memory engine unavailable")
+
+    h.bus.on(ConsolidationCommitted, publish)
     controller = _controller(h)
     await _ensure(controller, session, keep=0)
     first_ref = session.maintenance_progress.pending_consumers["source_ref"]
@@ -425,15 +432,54 @@ async def test_persistent_consumer_failure_still_commits_new_memory_and_window(
     assert result.committed and result.memory_cursor == 4
     assert history_start(session, None) == 4
     pending = session.maintenance_progress.pending_consumers
-    assert pending["source_ref"] != first_ref
+    assert pending["source_ref"] != first_ref and not pending.get("published")
     assert [entry["source_ref"] for entry in pending["backlog"]] == [first_ref]
-    assert len(h.events) == 2
     calls = len(h.prompts)
-    h.maintenance._after_consolidation = AsyncMock()
+    down = False
     await h.maintenance.consolidate(ConsolidateRequest(session))
-    assert len(h.prompts) == calls and len(h.events) == 2
+    assert len(h.prompts) == calls
     assert not session.maintenance_progress.pending_consumers
     assert session.maintenance_progress.relationship_version == 2
+    assert {first_ref, pending["source_ref"]} <= {e.source_ref for e in h.events}
+
+
+async def test_measured_overflow_falls_back_to_zero_turns_before_degrading(
+    memory_harness,
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:fallback")
+    for _ in range(4):
+        _turn(session)
+    h.manager.save(session)
+    controller = _controller(h)
+    minimal = AsyncMock(return_value=[])
+
+    async def render(prepared, summary):
+        return [
+            {"role": "user", "content": summary, "retained": prepared.retained_turns}
+        ]
+
+    def measure(messages):
+        # Every estimate fits the hard limit; the real summary does not with turns.
+        real = messages[0]["content"] == "tasks: finish the tea plan"
+        real = real and messages[0]["retained"]
+        return _budget(3900 if real else 1000)
+
+    _, result = await controller.ensure(
+        session_key=session.key,
+        view=None,
+        policy=CompactionPolicy(2),
+        message_limit=len(session.messages),
+        budget=_budget(3500),
+        render=render,
+        render_minimal=minimal,
+        measure=measure,
+    )
+    assert result.committed and not result.degraded
+    assert result.retained_turns == 0 and result.after_tokens == 1000
+    assert history_start(session, None) == 8
+    assert controller.writer.generate.await_count == 2
+    minimal.assert_not_awaited()
 
 
 async def test_minimal_expands_memory_to_unfinished_originals_without_committing_cut(

@@ -22,9 +22,6 @@ if TYPE_CHECKING:
     from session.manager import SessionManager
     from session.manager.window import WindowPreparation
 
-# Local estimates count the summary at its hard limit (three ASCII chars a token).
-_SUMMARY_PLACEHOLDER = "x" * (SUMMARY_TOKEN_LIMIT * 3)
-
 
 @dataclass(frozen=True)
 class CompactionPolicy:
@@ -277,41 +274,25 @@ class CompactionController:
         )
         if chosen is not None:
             prepared, reduced = chosen
-            state = replace(
-                state,
-                retained_turns=prepared.retained_turns,
-                can_compact=True,
-                phase="memory",
-                retained_start=prepared.stop,
-                snapshot_stop=message_limit,
-                attempts=state.attempts + 1,
-                retained_reduction_reason="budget" if reduced else "",
+            state = replace(state, snapshot_stop=message_limit)
+            state, summary, messages = await self._attempt(
+                state, prepared, render, measure, reduced=reduced
             )
-            state = await self._memory(state, prepared)
-            state = replace(state, phase="summary")
-            try:
-                summary = await self.writer.generate(prepared)
-                summary_content = summary.content
-            except Exception as exc:
-                raise CompactionFailedError(
-                    replace(state, failure_stage="summary", error=str(exc))
-                ) from exc
-            try:
-                messages = await render(prepared, summary.content)
-                after = measure(messages)
-                state = replace(
-                    state,
-                    phase="validation",
-                    after_tokens=after.estimate.tokens,
-                    after_source=after.estimate.source,
-                    final_budget=asdict(after),
+            summary_content = summary.content
+            if not _fits(state) and prepared.retained_turns > 0:
+                # The estimate was wrong: measure once more with zero turns,
+                # extending memory and regenerating the summary for that range.
+                fewest = await self._prepare(
+                    state, session_key, view, keep_turns=0, message_limit=message_limit
                 )
-            except Exception as exc:
-                raise CompactionFailedError(
-                    replace(state, failure_stage="validation", error=str(exc))
-                ) from exc
+                if fewest is not None and fewest.stop != prepared.stop:
+                    prepared = fewest
+                    state, summary, messages = await self._attempt(
+                        state, prepared, render, measure, reduced=True
+                    )
+                    summary_content = summary.content
             # The target line is the ideal; only the hard input limit fails.
-            if after.estimate.tokens < after.input_limit_tokens:
+            if _fits(state):
                 return messages, await self._commit(
                     state, prepared, summary, session_key, view
                 )
@@ -330,9 +311,55 @@ class CompactionController:
                 state,
                 failure_stage="budget",
                 failure_kind="local_budget",
-                error="保留 0 个已完成轮次后仍超出模型输入上限；当前输入、附件和工具交换保持完整",
+                error=(
+                    f"保留 {state.retained_turns} 个已完成轮次后仍超出模型输入上限；"
+                    "当前输入、附件和工具交换保持完整"
+                ),
             )
         )
+
+    async def _attempt(
+        self,
+        state: CompactionResult,
+        prepared: WindowPreparation,
+        render: Callable[[WindowPreparation, str], Awaitable[list[dict]]],
+        measure: Callable[[list[dict]], InputBudget],
+        *,
+        reduced: bool,
+    ):
+        """Commit memory, generate one summary and measure the rendered request."""
+        state = replace(
+            state,
+            retained_turns=prepared.retained_turns,
+            can_compact=True,
+            phase="memory",
+            retained_start=prepared.stop,
+            attempts=state.attempts + 1,
+            retained_reduction_reason="budget" if reduced else "",
+        )
+        state = await self._memory(state, prepared)
+        state = replace(state, phase="summary")
+        try:
+            summary = await self.writer.generate(prepared)
+        except Exception as exc:
+            raise CompactionFailedError(
+                replace(state, failure_stage="summary", error=str(exc))
+            ) from exc
+        try:
+            messages = await render(prepared, summary.content)
+            after = measure(messages)
+        except Exception as exc:
+            raise CompactionFailedError(
+                replace(state, failure_stage="validation", error=str(exc))
+            ) from exc
+        state = replace(
+            state,
+            phase="validation",
+            after_tokens=after.estimate.tokens,
+            after_source=after.estimate.source,
+            final_budget=asdict(after),
+        )
+        return state, summary, messages
 
     async def _choose_retention(
         self,
@@ -347,12 +374,13 @@ class CompactionController:
     ):
         """Pick one retention by local estimate, before any memory or summary work.
 
-        The summary is counted at its hard limit. The first count projected below
+        Each candidate renders without a summary, then adds the summary's token
+        hard limit, whatever the estimator. The first count projected below
         the target wins; otherwise the largest count projected below the hard
         input limit; otherwise the fewest turns, left to the measured result.
         Returns the preparation and whether it retains fewer turns than the first.
         """
-        candidates: list[tuple[WindowPreparation, InputBudget]] = []
+        candidates: list[tuple[WindowPreparation, int, InputBudget]] = []
         seen: set[int] = set()
         for keep in range(min(policy.retained_turns, message_limit), -1, -1):
             prepared = await self._prepare(
@@ -363,25 +391,26 @@ class CompactionController:
             self._assert_owner(state, session_key, view)
             seen.add(prepared.stop)
             try:
-                projected = measure(await render(prepared, _SUMMARY_PLACEHOLDER))
+                projected = measure(await render(prepared, ""))
             except Exception as exc:
                 raise CompactionFailedError(
                     replace(state, failure_stage="validation", error=str(exc))
                 ) from exc
-            candidates.append((prepared, projected))
-            if projected.estimate.tokens < projected.target_tokens:
+            tokens = projected.estimate.tokens + SUMMARY_TOKEN_LIMIT
+            candidates.append((prepared, tokens, projected))
+            if tokens < projected.target_tokens:
                 break
         if not candidates:
             return None
         first = candidates[0][0]
         fits = [
             prepared
-            for prepared, projected in candidates
-            if projected.estimate.tokens < projected.target_tokens
+            for prepared, tokens, projected in candidates
+            if tokens < projected.target_tokens
         ] or [
             prepared
-            for prepared, projected in candidates
-            if projected.estimate.tokens < projected.input_limit_tokens
+            for prepared, tokens, projected in candidates
+            if tokens < projected.input_limit_tokens
         ]
         chosen = fits[0] if fits else candidates[-1][0]
         return chosen, chosen is not first
@@ -594,3 +623,9 @@ class CompactionController:
                 )
             )
         return messages, replace(state, degraded=True, phase="degraded")
+
+
+def _fits(state: CompactionResult):
+    """The measured request is below the hard input limit."""
+    final = state.final_budget or {}
+    return (state.after_tokens or 0) < final.get("input_limit_tokens", 0)

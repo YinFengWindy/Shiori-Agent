@@ -219,7 +219,7 @@ async def _over_trigger_scope(h, key, generate):
         session.add_message("assistant", "noted")
     h.manager.save(session)
     messages = [
-        {"role": "system", "content": "optional " * 2000},
+        {"role": "system", "content": "optional " * 4000},
         {"role": "user", "content": "current"},
     ]
     probe = LLMProvider(
@@ -232,7 +232,7 @@ async def _over_trigger_scope(h, key, generate):
     await probe.aclose()
     provider = LLMProvider(
         api_key="test",
-        model_context_window=int(initial.estimate.tokens / 0.8),
+        model_context_window=int(initial.estimate.tokens / 0.78),
         default_max_tokens=100,
         budget_policy=BudgetPolicy(safety_margin_tokens=100),
     )
@@ -300,8 +300,10 @@ async def test_auto_failure_within_hard_limit_sends_original_and_records_it(
         latest = controller.latest(session.key, None)
         assert latest is not None
         assert latest["phase"] == "failed" and latest["failure_stage"] == "summary"
+        # The request observation carries no compaction failure.
         assert scope.last_result is not None
-        assert scope.last_result.failure_stage == "summary"
+        assert scope.last_result.phase == "request"
+        assert not scope.last_result.failure_stage
         # The rest of this turn sends as-is; the next turn tries again.
         await scope.ensure(messages, schemas, provider, "m", 100, "default")
         assert controller.writer.generate.await_count == 1
