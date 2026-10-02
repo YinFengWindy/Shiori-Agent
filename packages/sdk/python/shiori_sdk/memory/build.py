@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from shiori_sdk.http import HttpRequester
+from shiori_sdk.extensions import PrivateStorage
 from shiori_sdk.models import ModelProvider
 from shiori_sdk.runtime import EventsCapability
 
@@ -32,7 +33,7 @@ class MemoryBuildConfig:
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
 
 
-class MemoryStorage(Protocol):
+class MemoryStorage(PrivateStorage, Protocol):
     """Host-owned config migration and database leases used during construction."""
 
     def resolve_config(
@@ -42,9 +43,6 @@ class MemoryStorage(Protocol):
         plugin_dir: Path,
         workspace: Path | None,
         default_text: str | None = None,
-    ) -> Path: ...
-    def migrate_data(
-        self, workspace: Path, plugin_id: str, name: str, source: Path
     ) -> Path: ...
     def open_database(self, path: Path) -> sqlite3.Connection: ...
 

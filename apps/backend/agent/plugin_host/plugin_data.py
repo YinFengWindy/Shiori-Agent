@@ -23,32 +23,20 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
 import tomllib
 
 from agent.plugin_host.kv import PluginKVStore
+from shiori_sdk.storage import (
+    PLUGIN_DATA_DIRNAME as PLUGIN_DATA_DIRNAME,
+    plugin_data_dir as plugin_data_dir,
+)
 from infra.persistence.json_store import atomic_save_json
 
 logger = logging.getLogger(__name__)
 
-# workspace 下存放各插件私有数据的目录名
-PLUGIN_DATA_DIRNAME = "plugin-data"
 _KV_FILENAME = "kv.json"
 _LEGACY_KV_FILENAME = ".kv.json"
-
-
-def plugin_data_dir(workspace: Path, plugin_id: str) -> Path:
-    """Returns the writable per-plugin data directory under the workspace."""
-    if (
-        not plugin_id
-        or plugin_id in {".", ".."}
-        or any(
-            parser(plugin_id).name != plugin_id or parser(plugin_id).is_absolute()
-            for parser in (PurePosixPath, PureWindowsPath)
-        )
-    ):
-        raise ValueError(f"插件 ID 不能包含路径: {plugin_id!r}")
-    return workspace / PLUGIN_DATA_DIRNAME / plugin_id
 
 
 def migrate_plugin_file(

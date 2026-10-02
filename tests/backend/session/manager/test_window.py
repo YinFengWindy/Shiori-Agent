@@ -203,3 +203,56 @@ async def test_window_write_failure_cannot_publish_only_summary_or_cut(
         await manager.commit_window(prepared, "new state", prepared.removed_message_ids)
     assert session.maintenance_progress.dump() == previous
     assert history_start(session, view) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["generation", "model", "binding"])
+async def test_retry_window_snapshot_rejects_changed_ownership(tmp_path, change):
+    manager, session, view = _session(tmp_path)
+    await manager.bind_window_request(session.key, view, "connection:model-a")
+    initial = manager.window_snapshot(session.key, view, message_limit=6)
+    assert initial.maintenance_progress is not None
+    if change == "generation":
+        await manager.invalidate_maintenance(session.key)
+    elif change == "model":
+        await manager.bind_window_request(session.key, view, "connection:model-b")
+    else:
+        identities = UserIdentityStore(tmp_path)
+        identities.pair(
+            identities.create_pairing_code().code,
+            record=AccountRecord(
+                id="qq:101",
+                plugin_id="qq",
+                platform="qq",
+                platform_account_id="101",
+                config_ref="101",
+                role_id="mira",
+            ),
+            user_id="owner",
+            scope="platform",
+            chat=IdentityChat("qq:101", "qq", "owner"),
+        )
+    with pytest.raises(ValueError, match="归属或代次"):
+        manager.window_snapshot(
+            session.key, view, message_limit=6, expected=initial.maintenance_progress
+        )
+
+
+@pytest.mark.asyncio
+async def test_retry_snapshot_reads_new_cut_but_excludes_later_appends(tmp_path):
+    manager, session, view = _session(tmp_path)
+    initial = manager.window_snapshot(session.key, view, message_limit=6)
+    prepared = await manager.prepare_window(session.key, view, keep_turns=1)
+    assert prepared is not None
+    await _memory(manager, session)
+    assert await manager.commit_window(
+        prepared, "committed state", prepared.removed_message_ids
+    )
+    session.add_message("user", "future", thread_id=desktop_thread_id("mira"))
+    manager.save(session)
+    snapshot = manager.window_snapshot(
+        session.key, view, message_limit=6, expected=initial.maintenance_progress
+    )
+    assert len(snapshot.messages) == 6
+    assert history_start(snapshot, view) == 4
+    assert snapshot.maintenance_progress.summaries["user"] == "committed state"

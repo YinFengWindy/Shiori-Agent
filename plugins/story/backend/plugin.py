@@ -15,6 +15,8 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     """Registers Story RPC, storage, background work and its required NovelAI API."""
     from desktop_bridge.method_policy import Concurrency
 
+    if ctx.workspace is None:
+        raise RuntimeError("story requires a workspace")
     novelai = ctx.dependencies.require("novelai")
     handler = StorySimulationHandler(
         workspace=ctx.workspace,

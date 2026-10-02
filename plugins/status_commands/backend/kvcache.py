@@ -5,21 +5,40 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Protocol, runtime_checkable
+from collections.abc import Sequence
 from zoneinfo import ZoneInfo
 
-from agent.lifecycle.commands import abort_command, normalize_command
-from agent.plugin_host.dependencies import PluginDependencies
-from agent.prompting import is_context_frame
+from shiori_sdk.commands import CommandFrame, normalize_command
+from shiori_sdk.lifecycle import LifecycleFrame
+from shiori_sdk.extensions import Dependencies
+from shiori_sdk.commands import CommandInput
+from shiori_sdk.prompting import is_context_frame
 
 from .formatting import content_to_text, preview_text
 
-if TYPE_CHECKING:
-    from agent.lifecycle.phases.before_turn import BeforeTurnFrame
-    from agent.lifecycle.types import TurnState
 
-    KVCacheTurn = Any
-    ObserveTelemetry = Any
+class CacheTurn(Protocol):
+    """Public cache fields supplied by an optional telemetry provider."""
+
+    @property
+    def reply(self) -> str: ...
+    @property
+    def timestamp(self) -> str: ...
+    @property
+    def prompt_tokens(self) -> int | None: ...
+    @property
+    def hit_tokens(self) -> int | None: ...
+
+
+@runtime_checkable
+class CacheReader(Protocol):
+    """Observe's public reader, resolved afresh for each command."""
+
+    def recent_cache_turns(
+        self, session_key: str, *, limit: int = 5
+    ) -> Sequence[CacheTurn]: ...
+
 
 logger = logging.getLogger("plugin.status_commands")
 _SESSION_SLOT = "session:session"
@@ -35,27 +54,29 @@ class KVCacheCommandModule:
     requires = ("before_turn.acquire_session", _SESSION_SLOT)
     produces = (_CTX_SLOT,)
 
-    def __init__(self, dependencies: PluginDependencies) -> None:
+    def __init__(self, dependencies: Dependencies) -> None:
         self._dependencies = dependencies
 
-    async def run(self, frame: BeforeTurnFrame):
+    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
         """Handle cache commands before retrieval, keeping prior aborts intact."""
-        if _CTX_SLOT in frame.slots:
+        if _CTX_SLOT in frame.slots or not isinstance(frame, CommandFrame):
             return frame
-        state = frame.input
-        command = normalize_command(state.msg.content)
+        state = frame.command
+        command = normalize_command(state.content)
         if command not in {"/kvcache", "/cache_status"}:
             return frame
         logger.info("[status_commands:%s] 命中命令: %s", type(self).__name__, command)
-        frame.slots[_CTX_SLOT] = abort_command(state, self._build_reply(state))
+        frame.abort_command(self._build_reply(state))
         return frame
 
-    def _build_reply(self, state: TurnState) -> str:
+    def _build_reply(self, state: CommandInput) -> str:
         # Re-resolve each command so provider unload/reload cannot retain a stale API.
-        reader: ObserveTelemetry | None = self._dependencies.get_optional("observe")
+        reader = self._dependencies.get_optional("observe")
         if reader is None:
             return "KVCache 不可用（observe 未安装、未启用或未提供遥测接口）。"
-        args = state.msg.content.strip().split()
+        if not isinstance(reader, CacheReader):
+            raise TypeError("observe export does not implement recent_cache_turns")
+        args = state.content.strip().split()
         limit = 5
         if len(args) > 1:
             try:
@@ -71,7 +92,7 @@ class KVCacheCommandModule:
         return _format_cache_status(turns)
 
 
-def _format_cache_status(turns: tuple[KVCacheTurn, ...]) -> str:
+def _format_cache_status(turns: Sequence[CacheTurn]) -> str:
     if not turns:
         return "暂无 KVCache 数据。"
     overall_prompt = sum(turn.prompt_tokens or 0 for turn in turns)

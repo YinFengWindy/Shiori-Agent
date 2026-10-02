@@ -4,11 +4,11 @@ import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent.lifecycle.types import PreToolCtx
-from agent.tool_hooks import HookOutcome
+from shiori_sdk.tool_hooks import PreToolCtx
+from shiori_sdk.tool_hooks import HookOutcome
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.extensions import HookPluginContext as PluginRuntimeContext
 
 INTERACTIVE_COMMANDS = {
     "vi",

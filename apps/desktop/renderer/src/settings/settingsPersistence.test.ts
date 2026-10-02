@@ -170,9 +170,9 @@ describe("core proactive preferences in settings drafts", () => {
 
 describe("compaction draft validation", () => {
   it("retains invalid drafts without calling the save bridge", async () => {
-    for (const value of [-1, 1.5]) {
+    for (const value of [-1, 1.5, null]) {
       const draft = createSettingsFormData();
-      draft.advanced.compactionRetainedTurns = value;
+      Object.assign(draft.advanced, { compactionRetainedTurns: value });
       const result = await saveSettingsPageData({
         saveSettings: async () => { throw new Error("invalid draft must not be submitted"); },
         readSettings: async () => { throw new Error("invalid draft must not refresh"); },

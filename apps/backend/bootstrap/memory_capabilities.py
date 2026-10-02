@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from agent.config_models import Config
-from agent.plugin_host.data_migration import migrate_private_data
+from agent.plugin_host.storage import PluginStorage
 from agent.plugin_host.local_config import resolve_local_config
 from core.roles import RoleStore
 from core.roles.policy import is_shared_memory_enabled
@@ -11,7 +11,7 @@ from infra.persistence.sqlite_lifecycle import open_owned_database
 from shiori_sdk.memory.build import EmbeddingConfig, MemoryBuildConfig
 
 
-class HostMemoryStorage:
+class HostMemoryStorage(PluginStorage):
     """Preserves the host's atomic migration receipts and live-database lease lock."""
 
     def resolve_config(
@@ -28,11 +28,6 @@ class HostMemoryStorage:
             workspace=workspace,
             default_text=default_text,
         )
-
-    def migrate_data(
-        self, workspace: Path, plugin_id: str, name: str, source: Path
-    ) -> Path:
-        return migrate_private_data(workspace, plugin_id, name, source)
 
     def open_database(self, path: Path):
         return open_owned_database(path, check_same_thread=False)

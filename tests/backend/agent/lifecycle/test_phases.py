@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import importlib
-import sqlite3
-from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -72,177 +69,12 @@ from agent.turns.outbound import DeliveryReceipt, OutboundDispatch
 from conversation.store import ConversationStore
 from session.manager import SessionManager
 
-_observe_db = importlib.import_module("plugins.observe.backend.db")
-open_observe_db = cast(
-    Callable[[Path], sqlite3.Connection],
-    getattr(_observe_db, "open_db"),
-)
-
 _now = datetime.now()
-
-
-class _MemoryStatusPluginModule:
-    slot = "test.memory_status"
-    requires = ("before_turn.acquire_session", "session:session")
-    produces = ("session:ctx",)
-
-    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        if "session:ctx" in frame.slots:
-            return frame
-        state = frame.input
-        if state.msg.content != "/memory_status":
-            return frame
-        session = state.session
-        if session is None:
-            return frame
-        messages = list(getattr(session, "messages", []))
-        last = max(0, int(getattr(session, "last_consolidated", 0)))
-        last = min(last, len(messages))
-        frame.slots["session:ctx"] = BeforeTurnCtx(
-            session_key=state.session_key,
-            channel=state.msg.channel,
-            chat_id=state.msg.chat_id,
-            content=state.msg.content,
-            timestamp=state.msg.timestamp,
-            skill_names=[],
-            retrieved_memory_block="",
-            retrieval_trace_raw=None,
-            history_messages=(),
-            context_scope=None,
-            abort=True,
-            abort_reply=_format_memory_status_reply(messages, last),
-        )
-        return frame
 
 
 class _DummyOutbound:
     async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt:
         return DeliveryReceipt.queued()
-
-
-class _KVCachePluginModule:
-    slot = "test.kvcache"
-    requires = ("before_turn.acquire_session", "session:session")
-    produces = ("session:ctx",)
-
-    def __init__(self, db_path) -> None:
-        self._db_path = db_path
-
-    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        if "session:ctx" in frame.slots:
-            return frame
-        state = frame.input
-        if state.msg.content != "/kvcache":
-            return frame
-        frame.slots["session:ctx"] = BeforeTurnCtx(
-            session_key=state.session_key,
-            channel=state.msg.channel,
-            chat_id=state.msg.chat_id,
-            content=state.msg.content,
-            timestamp=state.msg.timestamp,
-            skill_names=[],
-            retrieved_memory_block="",
-            retrieval_trace_raw=None,
-            history_messages=(),
-            context_scope=None,
-            abort=True,
-            abort_reply=_build_kvcache_reply(state, self._db_path),
-        )
-        return frame
-
-
-def _format_memory_status_reply(
-    messages: list[dict[str, object]], last_consolidated: int
-) -> str:
-    consolidated_user = _count_real_user_messages(messages[:last_consolidated])
-    total_user = _count_real_user_messages(messages)
-    pending_user = max(0, total_user - consolidated_user)
-    last_user_message = _latest_real_user_content(messages[:last_consolidated])
-
-    lines = ["记忆整理状态："]
-    if last_consolidated <= 0 or not last_user_message:
-        lines.append("当前会话还没有完成过记忆整理。")
-    elif pending_user == 0:
-        lines.append("当前会话已经整理到最新的用户消息。")
-    else:
-        lines.append(f"上次整理到 {pending_user} 条用户消息之前。")
-    if last_user_message:
-        lines.extend(
-            ["", "最后已整理的用户消息：", f"“{_preview_text(last_user_message)}”"]
-        )
-    lines.extend(
-        [
-            "",
-            f"尚未整理的用户消息数：{pending_user}",
-            f"当前会话消息数：{len(messages)}",
-        ]
-    )
-    return "\n".join(lines)
-
-
-def _build_kvcache_reply(state: TurnState, db_path) -> str:
-    if not db_path or not db_path.exists():
-        return "暂无 KVCache 数据（observe 数据库不存在）。"
-    conn = open_observe_db(db_path)
-    try:
-        rows = conn.execute(
-            """SELECT llm_output, ts, react_cache_prompt_tokens, react_cache_hit_tokens
-               FROM turns WHERE session_key=? AND source='agent'
-               ORDER BY id DESC LIMIT ?""",
-            [state.session_key, 5],
-        ).fetchall()
-    finally:
-        conn.close()
-    if not rows:
-        return "暂无 KVCache 数据。"
-    overall_prompt = sum(r[2] or 0 for r in rows)
-    overall_hit = sum(r[3] or 0 for r in rows)
-    overall_pct = (overall_hit / overall_prompt * 100) if overall_prompt > 0 else 0.0
-    lines = [f"最近 {len(rows)} 轮 KVCache 状态（总命中率 {overall_pct:.2f}%）", ""]
-    for llm_output, ts, prompt_tokens, hit_tokens in rows:
-        content = str(llm_output or "").strip()
-        preview = _preview_text(content.replace("\n", " "), limit=80)
-        hit = hit_tokens or 0
-        prompt = prompt_tokens or 0
-        pct = (hit / prompt * 100) if prompt > 0 else 0.0
-        lines.append(preview or "（无内容）")
-        lines.append(_format_ts(str(ts)))
-        lines.append(f"{hit:,} / {prompt:,}")
-        lines.append(f"{pct:.2f}%")
-        lines.append("")
-    return "\n".join(lines).rstrip("\n")
-
-
-def _count_real_user_messages(messages: list[dict[str, object]]) -> int:
-    return sum(1 for item in messages if _is_real_user_message(item))
-
-
-def _latest_real_user_content(messages: list[dict[str, object]]) -> str:
-    for item in reversed(messages):
-        if _is_real_user_message(item):
-            return str(item.get("content", "")).strip()
-    return ""
-
-
-def _is_real_user_message(item: dict[str, object]) -> bool:
-    content = str(item.get("content", "")).strip()
-    return (
-        item.get("role") == "user"
-        and bool(content)
-        and "data-system-context-frame" not in content
-    )
-
-
-def _preview_text(text: str, limit: int = 80) -> str:
-    normalized = " ".join(text.split())
-    if len(normalized) <= limit:
-        return normalized
-    return normalized[: limit - 1] + "…"
-
-
-def _format_ts(ts: str) -> str:
-    match = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    return f"{match.month}-{match.day} {match:%H:%M}"
 
 
 def _inbound() -> InboundMessage:
@@ -452,7 +284,7 @@ async def test_before_turn_chain_can_abort():
             bus,
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
-            plugin_modules=[_MemoryStatusPluginModule()],
+            plugin_modules=[],
         ),
         frame_factory=BeforeTurnFrame,
     )
@@ -462,50 +294,6 @@ async def test_before_turn_chain_can_abort():
     ctx = await phase.run(state)
     assert ctx.abort is True
     assert ctx.abort_reply == "rate limited"
-
-
-@pytest.mark.asyncio
-async def test_before_turn_memory_status_command_aborts_without_context_prepare():
-    bus = EventBus()
-    session = _DummySession("telegram:123")
-    session.messages = [
-        {
-            "role": "user",
-            "content": '<system-reminder data-system-context-frame="true">内部</system-reminder>',
-        },
-        {"role": "user", "content": "帮我看看 Telegram 流式消息为什么重复发送"},
-        {"role": "assistant", "content": "已修复"},
-        {"role": "user", "content": "再看一下超时问题"},
-    ]
-    session.last_consolidated = 3
-    session_mgr = SimpleNamespace(get_or_create=lambda key: session)
-    ctx_store = SimpleNamespace(prepare=AsyncMock())
-
-    phase = Phase(
-        default_before_turn_modules(
-            bus,
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-            plugin_modules=[_MemoryStatusPluginModule()],
-        ),
-        frame_factory=BeforeTurnFrame,
-    )
-    msg = InboundMessage(
-        channel="telegram",
-        sender="user",
-        chat_id="123",
-        content="/memory_status",
-        timestamp=_now,
-    )
-    state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
-    ctx = await phase.run(state)
-    assert ctx.abort is True
-    assert "上次整理到 1 条用户消息之前。" in ctx.abort_reply
-    assert "帮我看看 Telegram 流式消息为什么重复发送" in ctx.abort_reply
-    assert "尚未整理的用户消息数：1" in ctx.abort_reply
-    assert "当前会话消息数：4" in ctx.abort_reply
-    assert "内部" not in ctx.abort_reply
-    ctx_store.prepare.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -799,7 +587,7 @@ async def test_before_turn_accepts_custom_command_module():
             bus,
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
-            plugin_modules=[_MemoryStatusPluginModule(), CustomCommandModule()],
+            plugin_modules=[CustomCommandModule()],
         ),
         frame_factory=BeforeTurnFrame,
     )
@@ -875,80 +663,6 @@ async def test_before_turn_accepts_plugin_modules():
     assert ctx.extra_metadata["late_seen"] == "retrieved block"
     assert ctx.extra_hints == ["hint from before turn"]
     ctx_store.prepare.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_before_turn_kvcache_command(tmp_path):
-    bus = EventBus()
-    session = _DummySession("telegram:123")
-    session_mgr = SimpleNamespace(get_or_create=lambda key: session)
-    ctx_store = SimpleNamespace(prepare=AsyncMock())
-
-    db_path = tmp_path / "plugin-data" / "observe" / "observe.db"
-    conn = open_observe_db(db_path)
-    conn.execute(
-        """INSERT INTO turns (source, session_key, user_msg, llm_output, ts,
-           react_cache_prompt_tokens, react_cache_hit_tokens)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        [
-            "agent",
-            "telegram:123",
-            "之前的问题",
-            "这是之前的回答",
-            "2026-04-29T16:14:00.123456+00:00",
-            52564,
-            50560,
-        ],
-    )
-    conn.execute(
-        """INSERT INTO turns (source, session_key, user_msg, llm_output, ts,
-           react_cache_prompt_tokens, react_cache_hit_tokens)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        [
-            "agent",
-            "telegram:123",
-            "新的问题",
-            "这是新的回答\n有多行",
-            "2026-04-29T16:15:00+00:00",
-            50000,
-            40000,
-        ],
-    )
-    conn.commit()
-    conn.close()
-
-    phase = Phase(
-        default_before_turn_modules(
-            bus,
-            cast(SessionManager, session_mgr),
-            cast(ContextStore, ctx_store),
-            plugin_modules=[_KVCachePluginModule(db_path)],
-        ),
-        frame_factory=BeforeTurnFrame,
-    )
-    msg = InboundMessage(
-        channel="telegram",
-        sender="user",
-        chat_id="123",
-        content="/kvcache",
-        timestamp=_now,
-    )
-    state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
-
-    ctx = await phase.run(state)
-
-    assert ctx.abort is True
-    assert "最近 2 轮 KVCache 状态" in ctx.abort_reply
-    assert "总命中率" in ctx.abort_reply
-    assert "这是之前的回答" in ctx.abort_reply
-    assert "这是新的回答" in ctx.abort_reply
-    assert "4-29 16:14" in ctx.abort_reply
-    assert "4-29 16:15" in ctx.abort_reply
-    assert "50,560 / 52,564" in ctx.abort_reply
-    assert "96.19%" in ctx.abort_reply
-    assert "80.00%" in ctx.abort_reply
-    assert ctx.abort_reply.count("\n\n") <= 2
-    ctx_store.prepare.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -2028,3 +1742,45 @@ async def test_before_turn_leaves_listening_budget_to_complete_request_preflight
     # Partial history cannot decide the final model budget, including listening.
     await _guard_group_turn(manager, consolidator)
     assert consolidator.ensured == []
+
+
+@pytest.mark.asyncio
+async def test_sdk_command_frame_aborts_before_retrieval_and_keeps_session_metadata():
+    from shiori_sdk.commands import CommandFrame
+
+    class Command:
+        slot = "test.command"
+        requires = ("before_turn.acquire_session", "session:session")
+        produces = ("session:ctx",)
+
+        async def run(self, frame):
+            assert isinstance(frame, CommandFrame)
+            assert frame.command.content == "/example"
+            assert frame.command.session_key == "telegram:123"
+            assert frame.command.messages == ({"role": "user", "content": "kept"},)
+            assert frame.command.last_consolidated == 1
+            frame.abort_command("neutral command reply")
+            return frame
+
+    session = _DummySession("telegram:123")
+    session.messages = [{"role": "user", "content": "kept"}]
+    session.last_consolidated = 1
+    context = SimpleNamespace(prepare=AsyncMock())
+    phase = Phase(
+        default_before_turn_modules(
+            EventBus(),
+            cast(SessionManager, SimpleNamespace(get_or_create=lambda key: session)),
+            cast(ContextStore, context),
+            plugin_modules=[Command()],
+        ),
+        frame_factory=BeforeTurnFrame,
+    )
+    message = _inbound()
+    message.content = "/example"
+    result = await phase.run(
+        TurnState(msg=message, session_key=session.key, dispatch_outbound=True)
+    )
+    assert result.abort and result.abort_reply == "neutral command reply"
+    assert result.channel == message.channel and result.timestamp == message.timestamp
+    context.prepare.assert_not_called()
+    assert len(session.messages) == 1 and session.last_consolidated == 1

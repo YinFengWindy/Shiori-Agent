@@ -42,7 +42,9 @@ class CompactionRenderer:
     heard: Callable[[], list[HeardLine]]
 
     def _snapshot(self, prepared: WindowPreparation):
-        stored = self.sessions.get_or_create(prepared.session_key)
+        stored = self.sessions.window_snapshot(
+            prepared.session_key, self.view, message_limit=self.message_limit
+        )
         progress = MaintenanceProgress.load(
             self.sessions.maintenance_progress(stored).dump()
         )

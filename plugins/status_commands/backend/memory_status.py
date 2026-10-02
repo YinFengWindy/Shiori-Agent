@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from agent.lifecycle.commands import abort_command, normalize_command
-from agent.prompting import is_context_frame
+from shiori_sdk.commands import CommandFrame, normalize_command
+from shiori_sdk.lifecycle import LifecycleFrame
+from shiori_sdk.prompting import is_context_frame
 
 from .formatting import content_to_text, preview_text
-
-if TYPE_CHECKING:
-    from agent.lifecycle.phases.before_turn import BeforeTurnFrame
 
 logger = logging.getLogger("plugin.status_commands")
 _SESSION_SLOT = "session:session"
@@ -25,23 +23,22 @@ class MemoryStatusCommandModule:
     requires = ("before_turn.acquire_session", _SESSION_SLOT)
     produces = (_CTX_SLOT,)
 
-    async def run(self, frame: BeforeTurnFrame):
+    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
         """Handle memory-status commands, preserving an earlier command abort."""
-        if _CTX_SLOT in frame.slots:
+        if _CTX_SLOT in frame.slots or not isinstance(frame, CommandFrame):
             return frame
-        state = frame.input
-        command = normalize_command(state.msg.content)
+        state = frame.command
+        command = normalize_command(state.content)
         if command not in {
             "/memorystatus",
             "/memory_status",
             "/compact_status",
         }:
             return frame
-        session = state.session
-        if session is None:
+        if not state.has_session:
             return frame
-        messages = list(getattr(session, "messages", []))
-        last = max(0, int(getattr(session, "last_consolidated", 0)))
+        messages = [dict(message) for message in state.messages]
+        last = max(0, state.last_consolidated)
         last = min(last, len(messages))
         logger.info(
             "[%s:%s] 命中命令: %s",
@@ -49,9 +46,7 @@ class MemoryStatusCommandModule:
             self.__class__.__name__,
             command,
         )
-        frame.slots[_CTX_SLOT] = abort_command(
-            state, _format_memory_status_reply(messages, last)
-        )
+        frame.abort_command(_format_memory_status_reply(messages, last))
         return frame
 
 

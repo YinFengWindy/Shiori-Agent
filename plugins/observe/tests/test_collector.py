@@ -1,49 +1,35 @@
-import asyncio
+"""Collector attribution is delegated to the injected diagnostic owner."""
+
 import logging
-import sys
-from types import SimpleNamespace
-
 import pytest
-
+from types import SimpleNamespace
+from shiori_sdk.testing.diagnostics import FakeDiagnostics
 from plugins.observe.backend.collector import GlobalErrorCollector
 
 
 @pytest.mark.asyncio
-async def test_old_collector_retirement_preserves_new_hooks_and_records_once():
-    previous = sys.excepthook
-    old_events, new_events = [], []
-    old = GlobalErrorCollector(SimpleNamespace(emit=old_events.append))
-    new = GlobalErrorCollector(SimpleNamespace(emit=new_events.append))
-    old.install()
-    new.install()
-    try:
-        logging.getLogger("app.test").error("one observed error")
-        await old.uninstall()
-        assert sys.excepthook == new._on_sys_except
-        assert asyncio.get_running_loop().get_exception_handler() == new._on_loop_except
-        await new.uninstall()
-        assert not old_events
-        assert len(new_events) == 1
-        assert new_events[0].count == 1
-        assert sys.excepthook == previous
-    finally:
-        await new.uninstall()
-        await old.uninstall()
-
-
-@pytest.mark.asyncio
-async def test_discarded_collector_restores_active_generation():
+async def test_injected_context_attribution_flush_and_idempotent_uninstall():
     events = []
-    active = GlobalErrorCollector(SimpleNamespace(emit=events.append))
-    candidate = GlobalErrorCollector(SimpleNamespace(emit=lambda event: None))
-    active.install()
-    candidate.install()
-    try:
-        await candidate.uninstall()
-        assert sys.excepthook == active._on_sys_except
-        logging.getLogger("app.test").error("active remains")
-        await active.uninstall()
-        assert len(events) == 1
-    finally:
-        await candidate.uninstall()
-        await active.uninstall()
+    diagnostics = FakeDiagnostics()
+    diagnostics.current_session.set("external:1")
+    collector = GlobalErrorCollector(SimpleNamespace(emit=events.append), diagnostics)
+    collector.install()
+    collector.install()
+    assert diagnostics.owners == [collector]
+    assert diagnostics.handler is not None
+    diagnostics.handler.emit(
+        logging.LogRecord(
+            "external.plugin",
+            logging.ERROR,
+            "/elsewhere/pkg/plugin.py",
+            12,
+            "failure 12",
+            (),
+            None,
+        )
+    )
+    await collector.uninstall()
+    await collector.uninstall()
+    assert diagnostics.owners == []
+    assert len(events) == 1
+    assert events[0].session_keys == ["external:1"]

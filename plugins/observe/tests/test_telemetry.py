@@ -12,6 +12,7 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
+from plugins.observe.backend.storage import database_path
 
 
 @pytest.fixture
@@ -37,7 +38,7 @@ def test_missing_storage_returns_no_data_without_creating_files(
     tmp_path: Path, backend
 ):
     workspace = tmp_path / "not-created"
-    reader = backend.telemetry.ObserveTelemetry(workspace)
+    reader = backend.telemetry.ObserveTelemetry(database_path(workspace))
     assert reader.recent_cache_turns("session") == ()
     assert not workspace.exists()
 
@@ -46,10 +47,8 @@ def test_missing_storage_returns_no_data_without_creating_files(
 async def test_real_writer_query_filters_orders_limits_and_preserves_nulls(
     tmp_path: Path, backend
 ):
-    writer = backend.writer.TraceWriter(
-        tmp_path / "plugin-data" / "observe" / "observe.db"
-    )
-    reader = backend.telemetry.ObserveTelemetry(tmp_path)
+    writer = backend.writer.TraceWriter(database_path(tmp_path))
+    reader = backend.telemetry.ObserveTelemetry(database_path(tmp_path))
     task = asyncio.create_task(writer.run())
     try:
         for index in range(35):
@@ -102,7 +101,7 @@ async def test_real_writer_query_filters_orders_limits_and_preserves_nulls(
 
 
 def test_reader_opens_existing_database_read_only(tmp_path: Path, backend, monkeypatch):
-    path = tmp_path / "plugin-data" / "observe" / "observe.db"
+    path = database_path(tmp_path)
     connection = backend.writer.open_db(path)
     connection.close()
     original_connect = sqlite3.connect
@@ -115,14 +114,19 @@ def test_reader_opens_existing_database_read_only(tmp_path: Path, backend, monke
 
     monkeypatch.setattr(sqlite3, "connect", assert_read_only)
     assert (
-        backend.telemetry.ObserveTelemetry(tmp_path).recent_cache_turns("session") == ()
+        backend.telemetry.ObserveTelemetry(database_path(tmp_path)).recent_cache_turns(
+            "session"
+        )
+        == ()
     )
 
 
 def test_storage_errors_preserve_the_sqlite_cause(tmp_path: Path, backend):
-    path = tmp_path / "plugin-data" / "observe" / "observe.db"
+    path = database_path(tmp_path)
     path.parent.mkdir(parents=True)
     _ = path.write_bytes(b"not a database")
     with pytest.raises(OSError, match="读取 KVCache") as error:
-        backend.telemetry.ObserveTelemetry(tmp_path).recent_cache_turns("session")
+        backend.telemetry.ObserveTelemetry(database_path(tmp_path)).recent_cache_turns(
+            "session"
+        )
     assert isinstance(error.value.__cause__, sqlite3.Error)

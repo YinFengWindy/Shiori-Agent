@@ -1,11 +1,14 @@
 from __future__ import annotations
-
 from agent.prompting.token_estimate import estimate_tokens
-
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
-
 from core.common.message_source import MessageSource
+from shiori_sdk.prompting import (
+    SYSTEM_CONTEXT_FRAME_MARKER as SYSTEM_CONTEXT_FRAME_MARKER,
+    LEGACY_CONTEXT_FRAME_MARKER as LEGACY_CONTEXT_FRAME_MARKER,
+    SYSTEM_CONTEXT_FRAME_END as SYSTEM_CONTEXT_FRAME_END,
+    is_context_frame as is_context_frame,
+)
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -65,16 +68,6 @@ _CONTEXT_FRAME_SECTIONS = {
     "group_listening",
     "retrieved_memory",
 }
-SYSTEM_CONTEXT_FRAME_MARKER = '<system-reminder data-system-context-frame="true">'
-SYSTEM_CONTEXT_FRAME_END = "</system-reminder>"
-LEGACY_CONTEXT_FRAME_MARKER = "[SYSTEM_CONTEXT_FRAME]"
-
-
-def is_context_frame(content: str) -> bool:
-    text = content.lstrip()
-    return text.startswith("<system-reminder") or text.startswith(
-        LEGACY_CONTEXT_FRAME_MARKER
-    )
 
 
 def build_context_frame_message(content: str) -> dict[str, str]:

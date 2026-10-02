@@ -20,6 +20,10 @@ from typing import Any, cast
 from uuid import uuid4
 
 from agent.plugin_host.avatars import AvatarsCapability
+from agent.plugin_host.config import PluginConfig
+from agent.plugin_host.storage import PluginStorage
+from core.common.diagnostics import HostDiagnostics
+from session.manager import SessionManager
 from agent.plugin_host.capabilities import (
     AccountsCapability,
     BackgroundCapability,
@@ -115,7 +119,7 @@ class HostServices:
     # role_store capability 拿到的必须是它本身，见 manifest.KNOWN_CAPABILITIES
     # 里那段注释：另起一个实例就是另起一把写锁。
     role_store: RoleStore | None = None
-    session_manager: Any = None
+    session_manager: SessionManager | None = None
     memory_engine: MemoryEngine | None = None
     app_config: Any = None
     light_provider: Any = None
@@ -478,8 +482,35 @@ class PluginKernel:
                 else None
             ),
             rpc=rpc,
+            workspace=self._services.workspace,
+            config=PluginConfig(
+                self._services.plugin_configs.get(handle.plugin_id, {}),
+                raw_values=self._services.raw_plugin_configs.get(handle.plugin_id),
+            ),
+            tool_hooks=ToolHooksCapability(
+                handle.contributions, handle.effects, handle.plugin_id
+            ),
+            bot_commands=BotCommandsCapability(handle.contributions, handle.effects),
+            dependencies=PluginDependencies(
+                handle.record.manifest.dependencies,
+                self._dependency_api,
+                optional_declared=handle.record.manifest.optional_dependencies,
+            ),
+            background=BackgroundCapability(handle.effects, handle.plugin_id),
+            storage=PluginStorage(),
+            diagnostics=HostDiagnostics(
+                [
+                    (f"plugins/{record.name}", record.plugin_dir.resolve())
+                    for record in self.discover()
+                ]
+            ),
+            session_manager=self._services.session_manager,
+            memory_engine=self._services.memory_engine,
             publish_api=lambda api: setattr(handle, "instance", api),
         )
+        context.as_hook_context()
+        context.as_command_context()
+        context.as_observe_context()
         await setup_fn(
             context.as_memory_context()
             if "memory" in handle.record.manifest.capabilities
@@ -489,14 +520,14 @@ class PluginKernel:
     def _build_capabilities(
         self, handle: PluginHandle, *, rpc: RpcCapability | None
     ) -> dict[str, Any]:
-        from agent.plugin_host.config import PluginConfig
-
         services = self._services
         builders: dict[str, Any] = {
             "scene_observations": lambda: SceneObservationsCapability(
                 services.scene_observations, handle.effects
             ),
             "events": lambda: None,
+            "diagnostics": lambda: None,
+            "storage": lambda: None,
             "memory": lambda: None,
             "kv": lambda: open_plugin_kv(
                 workspace=services.workspace,
@@ -504,10 +535,7 @@ class PluginKernel:
                 plugin_dir=handle.record.plugin_dir,
                 legacy_plugin_root=services.legacy_plugin_root,
             ),
-            "config": lambda: PluginConfig(
-                services.plugin_configs.get(handle.plugin_id, {}),
-                raw_values=services.raw_plugin_configs.get(handle.plugin_id),
-            ),
+            "config": lambda: None,
             "tools": lambda: ToolsCapability(
                 services.tool_registry,
                 handle.effects,
@@ -515,9 +543,7 @@ class PluginKernel:
                 handle.plugin_id,
             ),
             "lifecycle": lambda: None,
-            "tool_hooks": lambda: ToolHooksCapability(
-                handle.contributions, handle.effects, handle.plugin_id
-            ),
+            "tool_hooks": lambda: None,
             "proactive_gates": lambda: ProactiveGatesCapability(
                 handle.contributions, handle.effects
             ),
@@ -543,18 +569,10 @@ class PluginKernel:
             "avatars": lambda: AvatarsCapability(
                 services.role_store.avatars, handle.effects, handle.plugin_id
             ),
-            "background": lambda: BackgroundCapability(
-                handle.effects, handle.plugin_id
-            ),
-            "bot_commands": lambda: BotCommandsCapability(
-                handle.contributions, handle.effects
-            ),
+            "background": lambda: None,
+            "bot_commands": lambda: None,
             "rpc": lambda: rpc,
-            "dependencies": lambda: PluginDependencies(
-                handle.record.manifest.dependencies,
-                self._dependency_api,
-                optional_declared=handle.record.manifest.optional_dependencies,
-            ),
+            "dependencies": lambda: None,
             "runtime": lambda: PluginRuntimeLifecycle(
                 services.is_reload,
                 handle.drainers,

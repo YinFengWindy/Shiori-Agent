@@ -322,7 +322,8 @@ async def test_real_turn_history_append_uses_usage_anchor_with_replaced_context_
 
 
 @pytest.mark.parametrize(
-    "boundary", ["initial", "tool", "recovery", "finalize", "unfit"]
+    "boundary",
+    ["initial", "tool", "recovery", "finalize", "unfit", "safety_after_tool"],
 )
 async def test_all_request_boundaries_compact_without_replaying_current_tools(
     memory_harness, boundary, monkeypatch
@@ -349,6 +350,7 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         "recovery": 3000,
         "finalize": 3000,
         "unfit": 3000,
+        "safety_after_tool": 3000,
     }[boundary]
     for index in range(5):
         session.add_message("user", f"task {index} " + "x" * width)
@@ -421,7 +423,12 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
             tokens = 200
         else:
             sent.append(deepcopy(kwargs))
-            if len(sent) == 1 and boundary in {"tool", "finalize", "unfit"}:
+            if len(sent) == 1 and boundary in {
+                "tool",
+                "finalize",
+                "unfit",
+                "safety_after_tool",
+            }:
                 text = "working"
                 calls = [
                     SimpleNamespace(
@@ -429,6 +436,8 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
                         function=SimpleNamespace(name="side_effect", arguments="{}"),
                     )
                 ]
+            elif len(sent) == 2 and boundary == "safety_after_tool":
+                raise ContentSafetyError("current tool output rejected")
             elif len(sent) == 1 and boundary == "recovery":
                 text = ""
             else:
@@ -476,6 +485,23 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         )
     )
     try:
+        if boundary == "safety_after_tool":
+            with pytest.raises(
+                ContentSafetyError, match="current tool output rejected"
+            ):
+                await reasoner.run_turn(
+                    msg=InboundMessage(
+                        channel="cli",
+                        sender="user",
+                        chat_id="four-boundaries",
+                        content="current input",
+                    ),
+                    session=session,
+                )
+            assert tool.calls == 1 and len(sent) == 2
+            assert history_start(session, None) > 0
+            assert session.maintenance_progress.summaries
+            return
         if boundary == "unfit":
             from core.compaction import CompactionFailedError
 
@@ -521,7 +547,7 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         assert "archived_tool" not in [
             schema["function"]["name"] for schema in final.get("tools", [])
         ]
-        if boundary in {"tool", "finalize", "unfit"}:
+        if boundary in {"tool", "finalize", "unfit", "safety_after_tool"}:
             assert tool.calls == 1
             assert "current-call" in serialized and "y" * 9000 in serialized
         else:
@@ -683,3 +709,184 @@ async def test_provider_context_rejection_after_tools_never_restarts_turn(
         )
     assert caught.value.result.failure_stage == "provider"
     assert tool.execute.await_count == 1 and provider.chat.await_count == 2
+
+
+@pytest.mark.parametrize("scope", ["session", "external"])
+async def test_safety_retry_reads_committed_compaction_with_frozen_input_and_history(
+    memory_harness, monkeypatch, scope
+):
+    import json
+    from agent.provider import LLMProvider
+    from agent.prompting.input_budget import BudgetPolicy
+    from conversation.context_scope import history_start, turn_context_view
+    from conversation.service import network_thread_id
+    from session.maintenance_progress import window_key
+
+    h = memory_harness
+    key = "role:mira" if scope == "external" else "cli:safety-compaction"
+    session = h.manager.get_or_create(key)
+    session.metadata["role_id"] = "mira"
+    thread = network_thread_id("mira", "qq", "group") if scope == "external" else ""
+    view = turn_context_view(h.manager.workspace, "mira", thread) if thread else None
+    session.add_message(
+        "user",
+        "x" * 24000,
+        thread_id=thread,
+        metadata={"message_source": {"sender_id": "old-member", "group_name": "group"}},
+    )
+    session.add_message(
+        "assistant",
+        "keep this task",
+        thread_id=thread,
+        tool_chain=[
+            {
+                "calls": [
+                    {
+                        "call_id": "historic",
+                        "name": "archived_tool",
+                        "arguments": {},
+                        "result": "historic operation finished",
+                    }
+                ]
+            }
+        ],
+    )
+    h.manager.save(session)
+    initial_ids = [message["id"] for message in session.messages]
+    registry = ToolRegistry()
+    registry.register(_ArchivedTool(), external_allowed=True)
+    monkeypatch.setattr(
+        "agent.core.passive_turn.reasoning_loop.fetch_role_mood",
+        AsyncMock(return_value=None),
+    )
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=10000,
+        max_output_tokens=200,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
+    )
+    msg = InboundMessage(
+        channel="qq" if thread else "cli",
+        sender="friend",
+        chat_id="group" if thread else "safety-compaction",
+        content="continue the task",
+        media=["original.png"],
+    )
+    sent, renders = [], []
+    summary_calls = 0
+
+    async def create(kwargs, **unused):
+        nonlocal summary_calls
+        if "Rewrite the current working state" in kwargs["messages"][0]["content"]:
+            summary_calls += 1
+            source = json.loads(kwargs["messages"][-1]["content"])
+            text = json.dumps(
+                {
+                    "tasks": "continue the task",
+                    "constraints": "do not repeat historic operation",
+                    "decisions": "",
+                    "unfinished": "next step",
+                    "tool_state": "historic operation done",
+                    "entities": "task",
+                    "source_message_ids": [source["messages"][0]["id"]],
+                }
+            )
+        else:
+            sent.append(deepcopy(kwargs))
+            if len(sent) == 1:
+                # New arrivals belong to the next execution, even during a safety retry.
+                session.add_message(
+                    "user",
+                    "future message must stay out",
+                    thread_id=thread,
+                    metadata={"message_source": {"sender_id": "future-member"}},
+                )
+                session.add_message("assistant", "future answer", thread_id=thread)
+                await h.manager.save_async(session)
+                msg.content = "mutated input must stay out"
+                msg.media[:] = ["changed.png"]
+                reasoner._llm_config.compaction_retained_turns = 0
+                raise ContentSafetyError("reject once after successful compaction")
+            text = "continued from working state"
+        tokens = provider._budget_for_request(kwargs).estimate.tokens
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=text, tool_calls=[]),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=tokens, completion_tokens=20, total_tokens=tokens + 20
+            ),
+        )
+
+    async def render(request):
+        renders.append(deepcopy(request))
+        current = [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "data:image/png;base64," + request.media[0],
+                    "detail": "low",
+                },
+            },
+            {"type": "text", "text": request.content},
+        ]
+        return PromptRenderResult(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "constraint; members="
+                    + ",".join(source.sender_id for source in request.window_sources)
+                    + request.turn_injection_prompt,
+                },
+                *request.history,
+                {"role": "user", "content": current},
+            ]
+        )
+
+    provider._create_with_retry = create
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider, provider),
+        llm_config=LLMConfig(model="controlled", max_tokens=200),
+        tools=registry,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=True,
+        memory_window=40,
+        context=AsyncMock(),
+        session_manager=h.manager,
+        compaction_memory=h.maintenance,
+    )
+    reasoner.render_prompt = render
+    try:
+        result = await reasoner.run_turn(msg=msg, session=session, context_view=view)
+        assert result.reply == "continued from working state"
+        assert len(sent) == 2 and summary_calls == 1
+        assert [len(request.history) for request in renders] == [4, 0, 0]
+        assert renders[-1].window_sources == ()
+        assert sent[0]["messages"][-1] == sent[1]["messages"][-1]
+        for request in sent:
+            text = json.dumps(request, ensure_ascii=False)
+            assert "[working_state]" in text and "continue the task" in text
+            assert "original.png" in text
+            assert (
+                "future message" not in text
+                and "mutated input" not in text
+                and "changed.png" not in text
+            )
+            assert "x" * 1000 not in text
+            assert request.get("tools", []) == []
+        outcomes = result.context_retry["compaction"]
+        assert isinstance(outcomes, list) and len(outcomes) == 1
+        assert (
+            outcomes[0]["committed"] and outcomes[0]["configured_retained_turns"] == 2
+        )
+        assert history_start(session, view) == 2
+        reloaded = SessionManager(h.manager.workspace).get_or_create(key)
+        assert [message["id"] for message in reloaded.messages[:2]] == initial_ids
+        assert len(reloaded.messages) == 4
+        assert reloaded.maintenance_progress.summaries[window_key(view)]
+        assert reloaded.messages[2]["content"] == "future message must stay out"
+    finally:
+        await provider.aclose()

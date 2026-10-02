@@ -344,8 +344,8 @@ describe("compaction retention settings", () => {
   it("rejects negative and fractional retention before applying settings", async () => {
     configureSettingsConfigPath(join(tmpdir(), "unused-compaction-invalid.toml"));
     const draft = loadSettingsData("[llm]\n").formData;
-    for (const value of [-1, 1.5, Number.POSITIVE_INFINITY]) {
-      draft.advanced.compactionRetainedTurns = value;
+    for (const value of [-1, 1.5, Number.POSITIVE_INFINITY, null]) {
+      Object.assign(draft.advanced, { compactionRetainedTurns: value });
       const result = await saveSettings(draft, async () => { throw new Error("must not apply"); });
       assert.equal(result.ok, false);
       assert.match(result.error?.message ?? "", /非负整数/);

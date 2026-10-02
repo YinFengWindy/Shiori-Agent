@@ -18,7 +18,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 _CONFIG_FIXTURE_DIR = (
     _REPOSITORY_ROOT / "tests" / "fixtures" / "plugins" / "config_fixture"
 )
-_TOOL_LOOP_GUARD_PLUGIN_DIR = _REPOSITORY_ROOT / "plugins" / "tool_loop_guard"
+_NUMERIC_FIXTURE_DIR = _REPOSITORY_ROOT / "tests/fixtures/plugins/numeric_config"
 _HELLO_FIXTURE_DIR = _REPOSITORY_ROOT / "tests" / "fixtures" / "plugins" / "hello"
 _NULLABLE_FIXTURE_DIR = (
     _REPOSITORY_ROOT / "tests" / "fixtures" / "plugins" / "nullable_config"
@@ -34,11 +34,11 @@ def _config(*, extra: str = "") -> str:
 
 
 def _stage_plugin_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stages config_fixture (has ConfigModel), tool_loop_guard (has ConfigModel), hello (has
+    """Stages config_fixture (has ConfigModel), numeric_config (has ConfigModel), hello (has
     none) and a nullable-default model."""
     root = tmp_path / "plugin_dirs"
     shutil.copytree(_CONFIG_FIXTURE_DIR, root / "config_fixture")
-    _ = stage_plugin_package(_TOOL_LOOP_GUARD_PLUGIN_DIR, root / "tool_loop_guard")
+    _ = stage_plugin_package(_NUMERIC_FIXTURE_DIR, root / "numeric_config")
     _ = stage_plugin_package(_HELLO_FIXTURE_DIR, root / "hello")
     _ = stage_plugin_package(_NULLABLE_FIXTURE_DIR, root / "nullable_config")
     monkeypatch.setattr(
@@ -528,27 +528,27 @@ async def test_set_rejects_a_dotted_key_form_it_cannot_locate(tmp_path, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_get_returns_schema_and_default_repeat_limit_for_tool_loop_guard(
+async def test_get_returns_schema_and_default_capacity_for_numeric_config(
     tmp_path, monkeypatch
 ):
     _stage_plugin_dirs(tmp_path, monkeypatch)
     service, _, app = await _start_service(tmp_path)
     try:
         response = await _request(
-            service, "plugin.config.get", {"plugin_id": "tool_loop_guard"}
+            service, "plugin.config.get", {"plugin_id": "numeric_config"}
         )
 
         assert response.error is None, response.error
-        assert response.payload["schema"]["title"] == "ToolLoopGuardConfig"
-        # 未写入过配置：值来自模型默认值补全，迁移前后默认值都必须是 3。
-        assert response.payload["values"]["repeat_limit"] == 3
+        assert response.payload["schema"]["title"] == "NumericConfig"
+        # Missing stored values are filled from the neutral fixture schema.
+        assert response.payload["values"]["capacity"] == 3
     finally:
         await service.aclose()
         await app.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_set_validates_and_persists_repeat_limit_for_tool_loop_guard(
+async def test_set_validates_and_persists_capacity_for_numeric_config(
     tmp_path, monkeypatch
 ):
     _stage_plugin_dirs(tmp_path, monkeypatch)
@@ -558,30 +558,30 @@ async def test_set_validates_and_persists_repeat_limit_for_tool_loop_guard(
             service,
             "plugin.config.set",
             {
-                "plugin_id": "tool_loop_guard",
+                "plugin_id": "numeric_config",
                 "operation_id": "op-valid",
-                "values": {"repeat_limit": 5},
+                "values": {"capacity": 5},
             },
         )
 
         assert response.error is None, response.error
-        assert response.payload["values"]["repeat_limit"] == 5
-        assert "repeat_limit = 5" in path.read_text(encoding="utf-8")
+        assert response.payload["values"]["capacity"] == 5
+        assert "capacity = 5" in path.read_text(encoding="utf-8")
 
         after = await _request(
-            service, "plugin.config.get", {"plugin_id": "tool_loop_guard"}
+            service, "plugin.config.get", {"plugin_id": "numeric_config"}
         )
-        assert after.payload["values"]["repeat_limit"] == 5
+        assert after.payload["values"]["capacity"] == 5
     finally:
         await service.aclose()
         await app.shutdown()
 
     restarted = load_config_text(path.read_text(encoding="utf-8"))
-    assert restarted.plugins["tool_loop_guard"]["repeat_limit"] == 5
+    assert restarted.plugins["numeric_config"]["capacity"] == 5
 
 
 @pytest.mark.asyncio
-async def test_illegal_persisted_repeat_limit_fails_load_but_stays_repairable(
+async def test_illegal_persisted_capacity_fails_load_but_stays_repairable(
     tmp_path, monkeypatch
 ):
     """#239 补漏：因为自己存量配置非法而 setup() 失败的插件，必须仍然能通过
@@ -590,22 +590,20 @@ async def test_illegal_persisted_repeat_limit_fails_load_but_stays_repairable(
     修复前，config schema 是作为 setup 回滚 effect 注册的：setup 一失败就跟着
     其它 effect 一起被回滚注销，plugin.config.get/set 立刻变回
     plugin_config_unsupported——用户唯一的出路是手改 config.toml，而这正是
-    AC5（plugin.config.get/set 可读写、校验 repeat_limit）这条验收标准要保证
-    永远可用的通道。这个洞不是 tool_loop_guard 独有的：任何在 setup() 里校验
+    AC5（plugin.config.get/set 可读写、校验 capacity）这条验收标准要保证
+    永远可用的通道。这个洞不是 numeric_config 独有的：任何在 setup() 里校验
     自己 config_model 的插件（novelai、config_fixture）今天都有同样的问题。
     """
     _stage_plugin_dirs(tmp_path, monkeypatch)
     service, path, app = await _start_service(
-        tmp_path, _config(extra="\n[plugins.tool_loop_guard]\nrepeat_limit = 1\n")
+        tmp_path, _config(extra="\n[plugins.numeric_config]\ncapacity = 1\n")
     )
     try:
         kernel = app.core.plugin_manager
         assert kernel is not None
-        state = next(
-            item for item in kernel.states() if item["id"] == "tool_loop_guard"
-        )
+        state = next(item for item in kernel.states() if item["id"] == "numeric_config")
         assert state["state"] == "FAILED"
-        assert "repeat_limit" in state["error"]
+        assert "capacity" in state["error"]
 
         # Plugins 页面走的是 plugins.list，不是 kernel.states() 本身：确认
         # FAILED 状态、诊断文案和"有配置表单"这三件事都真的传到了那个通道上，
@@ -617,38 +615,38 @@ async def test_illegal_persisted_repeat_limit_fails_load_but_stays_repairable(
         list_entry = next(
             item
             for item in list_response.payload["plugins"]
-            if item["id"] == "tool_loop_guard"
+            if item["id"] == "numeric_config"
         )
         assert list_entry["state"] == "FAILED"
-        assert "repeat_limit" in list_entry["error"]
+        assert "capacity" in list_entry["error"]
         assert list_entry["has_config_schema"] is True
 
         # 依然能读到 schema：FAILED 不等于"配置通道不可用"。
         get_response = await _request(
-            service, "plugin.config.get", {"plugin_id": "tool_loop_guard"}
+            service, "plugin.config.get", {"plugin_id": "numeric_config"}
         )
         assert get_response.error is None, get_response.error
-        assert get_response.payload["schema"]["title"] == "ToolLoopGuardConfig"
+        assert get_response.payload["schema"]["title"] == "NumericConfig"
 
         # 用合法值修复：必须成功，而不是 plugin_config_unsupported。
         set_response = await _request(
             service,
             "plugin.config.set",
             {
-                "plugin_id": "tool_loop_guard",
+                "plugin_id": "numeric_config",
                 "operation_id": "op-repair",
-                "values": {"repeat_limit": 5},
+                "values": {"capacity": 5},
             },
         )
         assert set_response.error is None, set_response.error
-        assert set_response.payload["values"]["repeat_limit"] == 5
-        assert "repeat_limit = 5" in path.read_text(encoding="utf-8")
+        assert set_response.payload["values"]["capacity"] == 5
+        assert "capacity = 5" in path.read_text(encoding="utf-8")
 
         # 修复后热应用重新加载：插件应当变回 ACTIVE，Plugins 页面同步反映。
         after_kernel = app.core.plugin_manager
         assert after_kernel is not None
         after_state = next(
-            item for item in after_kernel.states() if item["id"] == "tool_loop_guard"
+            item for item in after_kernel.states() if item["id"] == "numeric_config"
         )
         assert after_state["state"] == "ACTIVE"
 
@@ -657,7 +655,7 @@ async def test_illegal_persisted_repeat_limit_fails_load_but_stays_repairable(
         after_entry = next(
             item
             for item in after_list.payload["plugins"]
-            if item["id"] == "tool_loop_guard"
+            if item["id"] == "numeric_config"
         )
         assert after_entry["state"] == "ACTIVE"
         assert after_entry["error"] == ""
@@ -799,51 +797,49 @@ async def test_a_typed_literal_replaces_the_reference(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_a_reference_is_type_checked_by_its_resolved_value(tmp_path, monkeypatch):
     """整数字段里的 ``${VAR}``：按展开值校验，按原始引用落盘；非法时照常报错。"""
-    monkeypatch.setenv("SHIORI_TEST_REPEAT_LIMIT", "5")
+    monkeypatch.setenv("SHIORI_TEST_CAPACITY", "5")
     _stage_plugin_dirs(tmp_path, monkeypatch)
     service, path, app = await _start_service(
         tmp_path,
         _config(
-            extra='\n[plugins.tool_loop_guard]\nrepeat_limit = "${SHIORI_TEST_REPEAT_LIMIT}"\n'
+            extra='\n[plugins.numeric_config]\ncapacity = "${SHIORI_TEST_CAPACITY}"\n'
         ),
     )
     try:
         loaded = await _request(
-            service, "plugin.config.get", {"plugin_id": "tool_loop_guard"}
+            service, "plugin.config.get", {"plugin_id": "numeric_config"}
         )
-        assert loaded.payload["values"] == {
-            "repeat_limit": "${SHIORI_TEST_REPEAT_LIMIT}"
-        }
+        assert loaded.payload["values"] == {"capacity": "${SHIORI_TEST_CAPACITY}"}
 
         kept = await _request(
             service,
             "plugin.config.set",
             {
-                "plugin_id": "tool_loop_guard",
+                "plugin_id": "numeric_config",
                 "operation_id": "op-keep",
                 "values": loaded.payload["values"],
             },
         )
         assert kept.error is None, kept.error
-        assert 'repeat_limit = "${SHIORI_TEST_REPEAT_LIMIT}"' in path.read_text(
+        assert 'capacity = "${SHIORI_TEST_CAPACITY}"' in path.read_text(
             encoding="utf-8"
         )
 
         # 展开值不满足模型约束时，校验错误照常冒出来，且不回显展开后的值。
-        monkeypatch.setenv("SHIORI_TEST_REPEAT_LIMIT", "1")
+        monkeypatch.setenv("SHIORI_TEST_CAPACITY", "1")
         before = path.read_text(encoding="utf-8")
         rejected = await _request(
             service,
             "plugin.config.set",
             {
-                "plugin_id": "tool_loop_guard",
+                "plugin_id": "numeric_config",
                 "operation_id": "op-invalid-reference",
                 "values": loaded.payload["values"],
             },
         )
         assert rejected.error is not None
         assert rejected.error.code == "plugin_config_invalid"
-        assert "repeat_limit" in rejected.error.message
+        assert "capacity" in rejected.error.message
         assert all("input" not in item for item in rejected.error.details["errors"])
         assert path.read_text(encoding="utf-8") == before
     finally:

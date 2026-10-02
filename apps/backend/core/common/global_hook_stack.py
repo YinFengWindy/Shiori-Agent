@@ -6,26 +6,34 @@ import logging
 import sys
 import threading
 from dataclasses import dataclass
-from typing import Any
+import asyncio
+from shiori_sdk.diagnostics import SysExceptHook, ThreadExceptHook, LoopExceptHandler
 
 
 @dataclass
 class _Hooks:
     owner: object
     handler: logging.Handler
-    system: Any
-    thread: Any
-    loop: Any
-    loop_handler: Any
+    system: SysExceptHook
+    thread: ThreadExceptHook
+    loop: asyncio.AbstractEventLoop | None
+    loop_handler: LoopExceptHandler
 
 
 _owners: list[_Hooks] = []
-_original_system: Any = None
-_original_thread: Any = None
-_original_loop_handlers: dict[Any, Any] = {}
+_original_system: SysExceptHook | None = None
+_original_thread: ThreadExceptHook | None = None
+_original_loop_handlers: dict[asyncio.AbstractEventLoop, LoopExceptHandler | None] = {}
 
 
-def install_global_hooks(owner, handler, system, thread, loop, loop_handler):
+def install_global_hooks(
+    owner: object,
+    handler: logging.Handler,
+    system: SysExceptHook,
+    thread: ThreadExceptHook,
+    loop: asyncio.AbstractEventLoop | None,
+    loop_handler: LoopExceptHandler,
+) -> tuple[SysExceptHook | None, ThreadExceptHook | None, LoopExceptHandler | None]:
     """Installs one active collector, returning the original non-collector hooks."""
     global _original_system, _original_thread
     if not _owners:
@@ -42,10 +50,14 @@ def install_global_hooks(owner, handler, system, thread, loop, loop_handler):
     threading.excepthook = thread
     if loop is not None:
         loop.set_exception_handler(loop_handler)
-    return _original_system, _original_thread, _original_loop_handlers.get(loop)
+    return (
+        _original_system,
+        _original_thread,
+        (_original_loop_handlers.get(loop) if loop is not None else None),
+    )
 
 
-def uninstall_global_hooks(owner) -> None:
+def uninstall_global_hooks(owner: object) -> None:
     """Removes any retired owner without restoring another retired collector."""
     index = next(
         (index for index, item in enumerate(_owners) if item.owner is owner), None
@@ -58,9 +70,9 @@ def uninstall_global_hooks(owner) -> None:
         previous = _owners[-1] if _owners else None
         if previous is not None:
             logging.getLogger().addHandler(previous.handler)
-        if sys.excepthook == hooks.system:
+        if sys.excepthook == hooks.system and _original_system is not None:
             sys.excepthook = previous.system if previous else _original_system
-        if threading.excepthook == hooks.thread:
+        if threading.excepthook == hooks.thread and _original_thread is not None:
             threading.excepthook = previous.thread if previous else _original_thread
         if hooks.loop is not None and not hooks.loop.is_closed():
             if hooks.loop.get_exception_handler() == hooks.loop_handler:

@@ -2,7 +2,7 @@
 
 import pytest
 
-from session.manager import Session
+from .conftest import Session
 
 
 @pytest.mark.asyncio

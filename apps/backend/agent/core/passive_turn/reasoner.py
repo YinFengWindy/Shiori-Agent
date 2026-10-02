@@ -342,10 +342,14 @@ class DefaultReasoner(
                 context_view,
                 provider.context_identity(self._llm_config.model),
             )
-        progress = self._session_manager.maintenance_progress(
-            self._session_manager.get_or_create(session.key)
+        snapshot = self._session_manager.window_snapshot(
+            session.key, context_view, message_limit=message_limit
         )
-        working_summary = progress.summaries.get(window_key(context_view), "")
+        progress = snapshot.maintenance_progress
+        assert progress is not None
+        window_id = window_key(context_view)
+        protected_current: dict | None = None
+        compaction_results: list[dict] = []
 
         # 1. 先准备 retry trace、history 和 preload 工具集合。
         turn_started_at = time.perf_counter()
@@ -359,32 +363,9 @@ class DefaultReasoner(
         source_history = (
             base_history
             if base_history is not None
-            else get_window_history(session, self._memory_window, context_view)
+            else get_window_history(snapshot, self._memory_window, context_view)
         )
         total_history = len(source_history)
-        # 与历史同一窗口里非用户本人消息的来源，加上本群旁听块里的（#539），
-        # 外部回合据此注入成员档案（#498）。
-        window_sources = get_window_sources(
-            session,
-            self._memory_window,
-            context_view,
-            self._heard_for_turn(context_view),
-        )
-        preloaded: set[str] | None = None
-        preloaded_order: list[str] = []
-        if self._tool_search_enabled:
-            # 历史窗口里用过或解锁过的工具继续可见，直到窗口维护移出原文。
-            preloaded_order = get_window_preloaded_tools(
-                session,
-                self._memory_window,
-                context_view,
-                self._tools,
-            )
-            preloaded = set(preloaded_order)
-            logger.info(
-                "[tool_search] history preloaded=%s",
-                preloaded_order if preloaded_order else "[]",
-            )
         stream_sink = (
             self._stream_sink_factory(msg)
             if self._stream_sink_factory is not None
@@ -414,17 +395,59 @@ class DefaultReasoner(
         # 2. 安全审查重试保留既有裁剪；预算压力只由统一控制器处理。
         attempts = self._build_attempt_plans(total_history)
         for attempt, plan in enumerate(attempts):
+            if attempt:
+                snapshot = self._session_manager.window_snapshot(
+                    session.key,
+                    context_view,
+                    message_limit=message_limit,
+                    expected=progress,
+                )
+                refreshed = snapshot.maintenance_progress
+                assert refreshed is not None
+                if base_history is None or refreshed.window_versions.get(
+                    window_id, 0
+                ) != progress.window_versions.get(window_id, 0):
+                    source_history = get_window_history(
+                        snapshot, self._memory_window, context_view
+                    )
+            current_progress = snapshot.maintenance_progress
+            assert current_progress is not None
+            working_summary = current_progress.summaries.get(window_id, "")
+            history_window = min(plan["history_window"], len(source_history))
+            # 与历史同一窗口里非用户本人消息的来源，加上本群旁听块里的（#539），
+            # 外部回合据此注入成员档案（#498）。
+            window_sources = get_window_sources(
+                snapshot,
+                self._memory_window,
+                context_view,
+                self._heard_for_turn(context_view),
+            )
+            preloaded: set[str] | None = None
+            preloaded_order: list[str] = []
+            if self._tool_search_enabled:
+                # 历史窗口里用过或解锁过的工具继续可见，直到窗口维护移出原文。
+                preloaded_order = get_window_preloaded_tools(
+                    snapshot,
+                    self._memory_window,
+                    context_view,
+                    self._tools,
+                )
+                preloaded = set(preloaded_order)
+                logger.info(
+                    "[tool_search] history preloaded=%s",
+                    preloaded_order if preloaded_order else "[]",
+                )
             retry_attempts.append(
                 {
                     "name": plan["name"],
-                    "history_window": plan["history_window"],
+                    "history_window": history_window,
                     "disabled_sections": sorted(plan["disabled_sections"]),
                 }
             )
             # 重试只裁剪请求上下文，保留完整会话历史和记忆整合位置。
             history_for_attempt = self._slice_history(
                 source_history,
-                plan["history_window"],
+                history_window,
             )
             turn_injection_prompt = build_turn_injection_prompt(
                 tools=self._tools,
@@ -450,7 +473,7 @@ class DefaultReasoner(
                 disabled_sections=plan["disabled_sections"],
                 turn_injection_prompt=turn_injection_prompt,
                 extra_hints=extra_hints,
-                session_metadata=get_session_metadata(session),
+                session_metadata=get_session_metadata(snapshot),
                 context_scope=(
                     context_view.scope if context_view is not None else None
                 ),
@@ -458,6 +481,11 @@ class DefaultReasoner(
                 window_sources=window_sources,
             )
             prompt_render = await self.render_prompt(render_input)
+            if protected_current is None:
+                protected_current = deepcopy(prompt_render.messages[-1])
+            elif protected_current.get("role") == "user":
+                # A fresh window must not reread or replace this execution's input.
+                prompt_render.messages[-1] = deepcopy(protected_current)
             initial_messages = with_working_summary(
                 prompt_render.messages, working_summary
             )
@@ -467,7 +495,7 @@ class DefaultReasoner(
                 context_view,
                 message_limit,
                 render_input,
-                deepcopy(initial_messages[-1]),
+                deepcopy(protected_current),
                 self.render_prompt,
                 self._tools,
                 self._tool_search_enabled,
@@ -475,6 +503,7 @@ class DefaultReasoner(
                 external_restricted,
                 lambda: self._heard_for_turn(context_view),
             )
+            request_prefix_length = len(initial_messages)
             compaction = (
                 RequestCompaction(
                     self._compaction,
@@ -482,9 +511,10 @@ class DefaultReasoner(
                     context_view,
                     policy,
                     message_limit,
-                    len(initial_messages),
+                    request_prefix_length,
                     renderer.render,
                     renderer.history_tools,
+                    results=compaction_results,
                 )
                 if self._compaction is not None
                 else None
@@ -580,6 +610,15 @@ class DefaultReasoner(
                     ),
                 )
             except ContentSafetyError:
+                prefix_length = (
+                    compaction.prefix_length if compaction else request_prefix_length
+                )
+                if any(
+                    message.get("tool_calls")
+                    for message in initial_messages[prefix_length:]
+                ):
+                    # Restarting a speaking attempt would execute its tools again.
+                    raise
                 if attempt < len(attempts) - 1:
                     next_plan = attempts[attempt + 1]
                     logger.warning(

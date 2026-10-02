@@ -1,0 +1,4 @@
+api: 2
+id: numeric_config
+capabilities: [config]
+config_model: NumericConfig

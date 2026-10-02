@@ -1,3 +1,4 @@
+import { compactionRetainedTurnsError } from "../../../src/settingsContract.js";
 import type {
   DesktopApi,
   SaveSettingsResult,
@@ -59,9 +60,9 @@ export async function saveSettingsPageData(
   draft: SettingsFormData,
   options?: SettingsSaveOptions,
 ): Promise<SettingsPageSaveResult> {
-  const retainedTurns = draft.advanced.compactionRetainedTurns ?? 2;
-  if (!Number.isSafeInteger(retainedTurns) || retainedTurns < 0) {
-    return { saveResult: { ok: false, error: { code: "settings_validation_error", message: "压缩后保留原文轮数必须是非负整数" } }, snapshot: null, nextDraft: cloneSettings(draft) };
+  const retentionError = compactionRetainedTurnsError(draft.advanced.compactionRetainedTurns);
+  if (retentionError) {
+    return { saveResult: { ok: false, error: { code: "settings_validation_error", message: retentionError } }, snapshot: null, nextDraft: cloneSettings(draft) };
   }
   const saveResult = await api.saveSettings(cloneSettings(draft), options);
   return refreshSavedSettings(api, draft, saveResult);

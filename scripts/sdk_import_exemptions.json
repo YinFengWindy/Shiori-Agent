@@ -418,51 +418,6 @@
   "plugins/novelai/tests/test_service.py": {
     "core.roles.store.RoleStore": 1
   },
-  "plugins/observe/backend/collector.py": {
-    "core.common.global_hook_stack.install_global_hooks": 1,
-    "core.common.global_hook_stack.uninstall_global_hooks": 1,
-    "core.error_context.current_session_key": 1
-  },
-  "plugins/observe/backend/plugin.py": {
-    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
-    "bus.events_lifecycle.TurnCommitted": 1,
-    "core.memory.events.MemoryWritten": 1,
-    "core.memory.events.RetrievalCompleted": 1
-  },
-  "plugins/observe/backend/storage.py": {
-    "agent.plugin_host.data_migration.migrate_private_data": 1,
-    "agent.plugin_host.plugin_data.plugin_data_dir": 1
-  },
-  "plugins/observe/tests/test_plugin.py": {
-    "agent.plugin_host.HostServices": 1,
-    "agent.plugin_host.PluginKernel": 1,
-    "agent.plugin_host.capabilities.BackgroundCapability": 1,
-    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
-    "bus.event_bus.EventBus": 1,
-    "bus.events_lifecycle.TurnCommitted": 1,
-    "core.common.global_hook_stack": 1,
-    "core.memory.events.MemoryWritten": 1,
-    "core.memory.events.RetrievalCompleted": 1,
-    "core.memory.events.RetrievalHitSummary": 1,
-    "shiori_plugin_testkit.packages.stage_plugin_package": 1
-  },
-  "plugins/observe/tests/test_writer.py": {
-    "core.common.diagnostic_log": 1
-  },
-  "plugins/plugin_undo/backend/plugin.py": {
-    "agent.lifecycle.commands.abort_command": 1,
-    "agent.lifecycle.commands.normalize_command": 1,
-    "agent.lifecycle.phases.before_turn.BeforeTurnFrame": 1,
-    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
-    "session.manager.SessionManager": 1
-  },
-  "plugins/plugin_undo/tests/test_plugin.py": {
-    "agent.plugin_host.HostServices": 1,
-    "agent.plugin_host.PluginKernel": 1,
-    "bus.event_bus.EventBus": 1,
-    "session.manager.SessionManager": 1,
-    "shiori_plugin_testkit.packages.stage_plugin_package": 1
-  },
   "plugins/qq/backend/accounts_actions.py": {
     "core.accounts.target_contract.UncertainDeliveryError": 1,
     "core.common.media.detect_image_mime_from_header": 1
@@ -723,73 +678,6 @@
   "plugins/screen_perception/tests/test_tool.py": {
     "agent.tools.registry.ToolRegistry": 1
   },
-  "plugins/shell_restore/backend/plugin.py": {
-    "agent.lifecycle.types.PreToolCtx": 1,
-    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1
-  },
-  "plugins/shell_restore/tests/test_rm_hook.py": {
-    "agent.plugin_host.HostServices": 1,
-    "agent.plugin_host.PluginKernel": 1,
-    "agent.tool_hooks.ToolExecutionRequest": 1,
-    "agent.tool_hooks.ToolExecutor": 1,
-    "bus.event_bus.EventBus": 1,
-    "shiori_plugin_testkit.packages.stage_plugin_package": 1
-  },
-  "plugins/shell_safety/backend/plugin.py": {
-    "agent.lifecycle.types.PreToolCtx": 1,
-    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
-    "agent.tool_hooks.HookOutcome": 1
-  },
-  "plugins/shell_safety/tests/test_plugin.py": {
-    "agent.plugin_host.HostServices": 1,
-    "agent.plugin_host.PluginKernel": 1,
-    "agent.tool_hooks.ToolExecutionRequest": 1,
-    "agent.tool_hooks.ToolExecutor": 1,
-    "bus.event_bus.EventBus": 1,
-    "shiori_plugin_testkit.packages.stage_plugin_package": 1
-  },
-  "plugins/status_commands/backend/kvcache.py": {
-    "agent.lifecycle.commands.abort_command": 1,
-    "agent.lifecycle.commands.normalize_command": 1,
-    "agent.lifecycle.phases.before_turn.BeforeTurnFrame": 1,
-    "agent.lifecycle.types.TurnState": 1,
-    "agent.plugin_host.dependencies.PluginDependencies": 1,
-    "agent.prompting.is_context_frame": 1
-  },
-  "plugins/status_commands/backend/memory_status.py": {
-    "agent.lifecycle.commands.abort_command": 1,
-    "agent.lifecycle.commands.normalize_command": 1,
-    "agent.lifecycle.phases.before_turn.BeforeTurnFrame": 1,
-    "agent.prompting.is_context_frame": 1
-  },
-  "plugins/status_commands/backend/plugin.py": {
-    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1
-  },
-  "plugins/status_commands/tests/conftest.py": {
-    "agent.core.passive_turn.ContextStore": 1,
-    "agent.lifecycle.phases.before_turn.BeforeTurnFrame": 1,
-    "agent.lifecycle.phases.before_turn.default_before_turn_modules": 1,
-    "agent.lifecycle.types.TurnState": 1,
-    "agent.plugin_host.HostServices": 1,
-    "agent.plugin_host.PluginKernel": 1,
-    "bus.event_bus.EventBus": 1,
-    "bus.events.InboundMessage": 1,
-    "session.manager.Session": 1,
-    "shiori_plugin_testkit.packages.plugin_directory": 1,
-    "shiori_plugin_testkit.packages.stage_plugin_package": 1
-  },
-  "plugins/status_commands/tests/test_kvcache.py": {
-    "agent.plugin_host.dependencies.PluginDependencies": 1
-  },
-  "plugins/status_commands/tests/test_memory_status.py": {
-    "session.manager.Session": 1
-  },
-  "plugins/status_commands/tests/test_plugin.py": {
-    "agent.plugin_host.capabilities.BotCommandsCapability": 1,
-    "bus.events_lifecycle.TurnCommitted": 1,
-    "shiori_plugin_testkit.packages.plugin_directory": 1,
-    "shiori_plugin_testkit.packages.stage_plugin_package": 1
-  },
   "plugins/story/backend/assets.py": {
     "infra.persistence.owned_assets.copy_owned_asset": 1
   },
@@ -960,32 +848,6 @@
     "agent.plugin_host.plugin_data.plugin_data_dir": 1,
     "bus.event_bus.EventBus": 1,
     "core.roles.store.RoleStore": 1,
-    "shiori_plugin_testkit.packages.stage_plugin_package": 1
-  },
-  "plugins/tool_loop_guard/backend/plugin.py": {
-    "agent.lifecycle.types.PreToolCtx": 1,
-    "agent.plugin_host.runtime_context.PluginRuntimeContext": 1,
-    "agent.tool_hooks.HookOutcome": 1
-  },
-  "plugins/tool_loop_guard/tests/test_plugin.py": {
-    "agent.looping.core.AgentLoop": 1,
-    "agent.looping.ports.AgentLoopConfig": 1,
-    "agent.looping.ports.AgentLoopDeps": 1,
-    "agent.looping.ports.LLMConfig": 1,
-    "agent.looping.ports.MemoryServices": 1,
-    "agent.plugin_host.HostServices": 1,
-    "agent.plugin_host.PluginKernel": 1,
-    "agent.provider.LLMResponse": 1,
-    "agent.provider.ToolCall": 1,
-    "agent.subagent.SubAgent": 1,
-    "agent.tool_hooks.base.ToolHook": 1,
-    "agent.tools.base.Tool": 1,
-    "agent.tools.registry.ToolRegistry": 1,
-    "bus.event_bus.EventBus": 1,
-    "core.net.http.SharedHttpResources": 1,
-    "core.net.http.clear_default_shared_http_resources": 1,
-    "core.net.http.configure_default_shared_http_resources": 1,
-    "shiori_plugin_testkit.memory.FakeMemoryEngine": 1,
     "shiori_plugin_testkit.packages.stage_plugin_package": 1
   }
 }

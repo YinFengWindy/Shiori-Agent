@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from session.maintenance_progress import (
@@ -14,7 +14,7 @@ from session.maintenance_progress import (
 
 from session.turns import retention_stop
 from .manager import _ManagerCoreMixin
-from .models import consolidation_cursor
+from .models import Session, consolidation_cursor
 
 if TYPE_CHECKING:
     from conversation.context_scope import ContextView
@@ -63,6 +63,38 @@ class _WindowMixin(_ManagerCoreMixin):
             next_progress.request_owners[key] = owner
             self._store.write_maintenance_progress(session.key, next_progress.dump())
             session.maintenance_progress = next_progress
+
+    def window_snapshot(
+        self,
+        session_key: str,
+        view: ContextView | None,
+        *,
+        message_limit: int,
+        expected: MaintenanceProgress | None = None,
+    ) -> Session:
+        """Read committed state without importing messages after this execution began.
+
+        A retry can observe a newer cut/summary, but must retain the original
+        identity, model owner and generation. Undo or a changed binding requires
+        a new execution instead of sending a request under its old ContextView.
+        """
+        session = self.get_or_create(session_key)
+        progress = self.maintenance_progress(session, allow_invalidation=True)
+        key = window_key(view)
+        if expected is not None and (
+            progress.ownership != expected.ownership
+            or progress.generation != expected.generation
+            or progress.request_owners.get(key, "")
+            != expected.request_owners.get(key, "")
+            or progress.ownership != ownership_key(view.user_threads if view else None)
+            or progress.cursor(view) > message_limit
+        ):
+            raise ValueError("上下文窗口归属或代次已变化，请重新准备回合")
+        return replace(
+            session,
+            messages=session.messages[:message_limit],
+            maintenance_progress=progress,
+        )
 
     async def prepare_window(
         self,
