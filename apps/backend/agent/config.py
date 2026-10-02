@@ -217,8 +217,11 @@ def _parse_model_registration(payload: dict[str, Any]) -> ModelRegistration:
         api_key=_resolve(str(payload.get("api_key") or "")),
         model=str(payload.get("model") or "").strip(),
         effort=cast(Any, effort),
-        context_window_tokens=payload.get("context_window_tokens"),
-        max_output_tokens=payload.get("max_output_tokens"),
+        # Legacy context_window_tokens migrates; legacy max_output_tokens is dropped.
+        model_context_window=payload.get(
+            "model_context_window", payload.get("context_window_tokens")
+        ),
+        model_auto_compact_token_limit=payload.get("model_auto_compact_token_limit"),
     )
 
 

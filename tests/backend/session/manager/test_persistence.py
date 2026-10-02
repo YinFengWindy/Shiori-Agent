@@ -36,6 +36,7 @@ async def test_stale_message_rewrite_preserves_progress_and_clear_invalidates_it
     )
     stale.messages[0]["content"] = "edited"
     manager.save(stale)
+    manager.invalidate(session.key)
     restored = manager.get_or_create(session.key)
     assert restored.last_consolidated == history_start(restored, None) == 2
     restored.clear()

@@ -328,8 +328,9 @@ class LLMProvider:
         provider_name: str = "",
         force_disable_thinking: bool = False,
         payload_snapshot_enabled: bool | None = None,
-        context_window_tokens: int | None = None,
-        max_output_tokens: int | None = None,
+        model_context_window: int | None = None,
+        model_auto_compact_token_limit: int | None = None,
+        default_max_tokens: int | None = None,
         budget_policy: BudgetPolicy | None = None,
         usage_anchors: UsageAnchors | None = None,
     ) -> None:
@@ -340,8 +341,12 @@ class LLMProvider:
             base_url=normalized_base_url,
             max_retries=0,
         )
-        self._context_window_tokens = context_window_tokens
-        self._max_output_tokens = max_output_tokens
+        if model_context_window is not None and default_max_tokens is None:
+            # A budgeted model must always know the output it reserves.
+            raise ValueError("有上下文窗口的模型必须提供默认输出 token 上限")
+        self._model_context_window = model_context_window
+        self._model_auto_compact_token_limit = model_auto_compact_token_limit
+        self._default_max_tokens = default_max_tokens
         self._budget_policy = budget_policy or BudgetPolicy()
         self._usage_anchors = usage_anchors or UsageAnchors()
         self._connection_identity = hashlib.sha256(
@@ -390,8 +395,8 @@ class LLMProvider:
             base_url=self._base_url,
             model=model,
         )
-        if max_tokens is None and self._max_output_tokens is not None:
-            max_tokens = self._max_output_tokens
+        if max_tokens is None and self._default_max_tokens is not None:
+            max_tokens = self._default_max_tokens
         if (
             call_purpose == "auxiliary"
             and auxiliary_max_tokens is not None
@@ -425,7 +430,7 @@ class LLMProvider:
             ),
         )
 
-        if self._context_window_tokens is not None:
+        if self._model_context_window is not None:
             forbidden = {
                 "messages",
                 "tools",
@@ -458,12 +463,13 @@ class LLMProvider:
     def _budget_for_request(
         self, kwargs: dict, *, calibrate: bool = True
     ) -> InputBudget | None:
-        if self._context_window_tokens is None or self._max_output_tokens is None:
+        if self._model_context_window is None:
             return None
         request = self._input_request(kwargs)
+        # The reservation is this request's actual output cap, never a model maximum.
         return build_input_budget(
-            context_window_tokens=self._context_window_tokens,
-            max_output_tokens=self._max_output_tokens,
+            model_context_window=self._model_context_window,
+            model_auto_compact_token_limit=self._model_auto_compact_token_limit,
             output_tokens=kwargs["max_tokens"],
             policy=self._budget_policy,
             estimate=(
@@ -481,7 +487,7 @@ class LLMProvider:
         return model
 
     def context_identity(self, model: str) -> str:
-        """Stable connection/model ownership for persisted derived context windows."""
+        """Connection/model identity reported by context status; windows ignore it."""
         return f"{self._connection_identity}:{model}"
 
     def input_budget(self, **request) -> InputBudget | None:
@@ -509,8 +515,8 @@ class LLMProvider:
     ) -> LLMResponse:
         """Generates a reply; auxiliary work opts out of configured reasoning.
 
-        With an explicit model profile, max_tokens=None reserves and sends its
-        maximum output capability. Unprofiled utility providers retain uncapped
+        max_tokens=None reserves and sends the provider's default output cap
+        (the global agent max_tokens). Providers without one retain uncapped
         requests. Finite budgets are sent unchanged for default calls.
         DeepSeek and DashScope explicitly disable thinking and apply the optional
         auxiliary output cap, bounded by max_tokens when set. Generic compatible

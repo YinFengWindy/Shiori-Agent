@@ -35,52 +35,63 @@ class InputBudget:
     """Complete request input, independent of model output capability or turn totals."""
 
     estimate: InputEstimate
-    context_window_tokens: int
+    model_context_window: int
     output_reservation_tokens: int
     safety_margin_tokens: int
     input_limit_tokens: int
     trigger_tokens: int
     target_tokens: int
     schema_tokens: int
-    max_output_tokens: int | None = None
+    model_auto_compact_token_limit: int | None = None
     trigger_ratio: float = 0.75
     target_ratio: float = 0.40
 
     @property
     def needs_trim(self) -> bool:
-        """Compression begins at the first ratio or hard-limit boundary."""
+        """Compression begins at the first threshold or hard-limit boundary."""
         return self.estimate.tokens >= self.trigger_tokens
 
 
 def build_input_budget(
     *,
-    context_window_tokens: int,
-    max_output_tokens: int,
+    model_context_window: int,
     output_tokens: int,
     policy: BudgetPolicy,
     estimate: InputEstimate,
+    model_auto_compact_token_limit: int | None = None,
     schema_tokens: int = 0,
 ) -> InputBudget:
-    """Validate actual output reservation and compute bounded input thresholds."""
-    if type(output_tokens) is not int or not 0 < output_tokens <= max_output_tokens:
-        raise ValueError("本次输出 token 上限必须为正整数，且不得超过模型最大输出能力")
-    available = context_window_tokens - output_tokens - policy.safety_margin_tokens
+    """Compute bounded input thresholds for one request.
+
+    The hard limit reserves this request's actual output cap and the safety
+    margin. Auto compaction starts at the registered model threshold, or the
+    global trigger ratio when absent, whichever is not later than the hard
+    limit; the target stays a ratio of the window under the same limit.
+    """
+    if type(output_tokens) is not int or output_tokens <= 0:
+        raise ValueError("本次输出 token 上限必须为正整数")
+    available = model_context_window - output_tokens - policy.safety_margin_tokens
     if available <= 0:
         raise ValueError("模型上下文扣除本次输出预留和安全余量后没有有效输入空间")
-    trigger = min(available, max(1, int(context_window_tokens * policy.trigger_ratio)))
+    threshold = (
+        max(1, int(model_context_window * policy.trigger_ratio))
+        if model_auto_compact_token_limit is None
+        else model_auto_compact_token_limit
+    )
+    trigger = min(available, threshold)
     target = min(
-        available, max(1, int(context_window_tokens * policy.target_ratio)), trigger
+        available, max(1, int(model_context_window * policy.target_ratio)), trigger
     )
     return InputBudget(
         estimate,
-        context_window_tokens,
+        model_context_window,
         output_tokens,
         policy.safety_margin_tokens,
         available,
         trigger,
         target,
         schema_tokens,
-        max_output_tokens,
+        model_auto_compact_token_limit,
         policy.trigger_ratio,
         policy.target_ratio,
     )

@@ -3,8 +3,8 @@ import { errorFeedback } from "@shiori/sdk/host-internal";
 /** The provider's complete normalized input and actual output reservation. */
 export type ContextBudget = {
   estimate: { tokens: number; source: "actual" | "anchor_delta" | "local" };
-  context_window_tokens: number;
-  max_output_tokens: number | null;
+  model_context_window: number;
+  model_auto_compact_token_limit: number | null;
   output_reservation_tokens: number;
   safety_margin_tokens: number;
   input_limit_tokens: number;
@@ -53,7 +53,6 @@ export type ContextCompactionResult = {
   removed_categories?: string[];
   tools_disabled?: boolean;
   failure_kind?: string;
-  request_owner?: string;
   generation?: number;
   request_usage?: Record<string, unknown>;
 };
@@ -66,7 +65,7 @@ export type ChatContextStatus = {
   model_identity: string;
   tokens: number | null;
   source: "actual" | "anchor_delta" | "local" | null;
-  context_window_tokens: number | null;
+  model_context_window: number | null;
   input_limit_tokens: number | null;
   can_compact: boolean;
   busy: boolean;
@@ -89,7 +88,7 @@ export type ChatContextStatus = {
 /** Display only server usage; unknown capacity or usage never becomes zero. */
 export function contextUsageLabel(status: ChatContextStatus | null) {
   const tokens = status?.tokens;
-  const capacity = status?.context_window_tokens;
+  const capacity = status?.model_context_window;
   if (tokens == null || capacity == null || capacity <= 0 || !Number.isFinite(tokens) || !Number.isFinite(capacity)) {
     return { label: "上下文用量未知", ratio: null };
   }

@@ -14,8 +14,8 @@ registrations = []
 # api_key = "${MODEL_API_KEY}"
 # base_url = "https://your-provider.example/v1"
 # effort = "none"
-# context_window_tokens = 128000 # 必须按服务商文档填写实际容量
-# max_output_tokens = 32768 # 模型能力，单次输出由 agent.max_tokens 限制
+# model_context_window = 128000 # 必须按服务商文档填写实际容量
+# model_auto_compact_token_limit = 96000 # 可选，须小于窗口；不填按 agent.context.trigger_ratio 计算
 
 # =============================================================================
 # 可选：桌宠语音交互

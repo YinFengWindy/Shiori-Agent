@@ -18,8 +18,7 @@ from core.roles.store import RoleStore
 
 def registration(identifier: str, model: str) -> ModelRegistration:
     return ModelRegistration(
-        context_window_tokens=128000,
-        max_output_tokens=32768,
+        model_context_window=128000,
         id=identifier,
         provider="openai",
         base_url="https://example.com/v1",
@@ -32,7 +31,9 @@ def registration(identifier: str, model: str) -> ModelRegistration:
 def test_empty_runtime_keeps_roles_browsable_and_reports_missing_capability(tmp_path):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
-    runtime = RoleModelRuntime(role_store=store, registrations=[])
+    runtime = RoleModelRuntime(
+        default_max_tokens=8192, role_store=store, registrations=[]
+    )
     assert runtime.availability("mira")["reason"] == "no_models"
     with pytest.raises(ModelConfigurationError) as caught:
         runtime.resolve("mira", "chat")
@@ -54,7 +55,9 @@ def test_runtime_reports_unbound_and_dangling_model_choices(tmp_path, binding, r
         },
     )
     runtime = RoleModelRuntime(
-        role_store=store, registrations=[registration("model", "chat")]
+        default_max_tokens=8192,
+        role_store=store,
+        registrations=[registration("model", "chat")],
     )
     assert runtime.availability("mira")["reason"] == reason
 
@@ -70,6 +73,7 @@ def test_availability_does_not_construct_provider_and_reports_incomplete_fields(
         runtime_config={"dialogue_model_registration_id": "model"},
     )
     runtime = RoleModelRuntime(
+        default_max_tokens=8192,
         role_store=store,
         registrations=[
             replace(
@@ -97,7 +101,9 @@ def test_accepted_snapshot_is_retained_for_nested_activation(tmp_path):
         runtime_config={"dialogue_model_registration_id": "first"},
     )
     runtime = RoleModelRuntime(
-        role_store=store, registrations=[registration("first", "chat")]
+        default_max_tokens=8192,
+        role_store=store,
+        registrations=[registration("first", "chat")],
     )
     with runtime.activate("mira", "chat") as accepted:
         store.update_role("mira", runtime_config={"dialogue_model_registration_id": ""})
@@ -117,7 +123,9 @@ async def test_generation_reuses_provider_and_releases_it_once_on_close(tmp_path
         runtime_config={"dialogue_model_registration_id": "first"},
     )
     runtime = RoleModelRuntime(
-        role_store=store, registrations=[registration("first", "chat")]
+        default_max_tokens=8192,
+        role_store=store,
+        registrations=[registration("first", "chat")],
     )
     with patch("core.roles.model_runtime.LLMProvider") as provider_class:
         provider_class.return_value.aclose = AsyncMock()
@@ -141,6 +149,7 @@ def test_runtime_resolves_dialogue_and_visual_fallback(tmp_path) -> None:
         runtime_config={"dialogue_model_registration_id": dialogue.id},
     )
     runtime = RoleModelRuntime(
+        default_max_tokens=8192,
         role_store=store,
         registrations=[dialogue, visual],
     )
@@ -171,6 +180,7 @@ def test_runtime_snapshot_stays_stable_after_role_selection_changes(tmp_path) ->
         runtime_config={"dialogue_model_registration_id": first.id},
     )
     runtime = RoleModelRuntime(
+        default_max_tokens=8192,
         role_store=store,
         registrations=[first, second],
     )
@@ -193,8 +203,7 @@ def test_runtime_snapshot_stays_stable_after_role_selection_changes(tmp_path) ->
 def test_runtime_uses_role_dialogue_effort_override(tmp_path) -> None:
     dialogue = registration("00000000-0000-4000-a000-000000000001", "chat-model")
     visual = ModelRegistration(
-        context_window_tokens=128000,
-        max_output_tokens=32768,
+        model_context_window=128000,
         id="00000000-0000-4000-a000-000000000002",
         provider="openai",
         base_url="https://example.com/v1",
@@ -210,6 +219,7 @@ def test_runtime_uses_role_dialogue_effort_override(tmp_path) -> None:
         runtime_config={"dialogue_model_registration_id": dialogue.id},
     )
     runtime = RoleModelRuntime(
+        default_max_tokens=8192,
         role_store=store,
         registrations=[dialogue, visual],
     )
@@ -293,6 +303,7 @@ async def test_auxiliary_call_preserves_role_snapshot_and_main_reasoning(
         },
     )
     runtime = RoleModelRuntime(
+        default_max_tokens=8192,
         role_store=store,
         registrations=[
             replace(registration("selected", model), provider=provider_name)
@@ -326,12 +337,12 @@ async def test_auxiliary_call_preserves_role_snapshot_and_main_reasoning(
     assert main_before.get("extra_body") == main_extra
     assert main_before.get("reasoning_effort") == main_effort
     if max_tokens is None:
-        assert main_before["max_tokens"] == 32768
+        assert main_before["max_tokens"] == 8192
     else:
         assert main_before["max_tokens"] == max_tokens
     assert auxiliary.get("extra_body") == auxiliary_extra
     if provider_name == "openai" and max_tokens is None:
-        assert auxiliary["max_tokens"] == 32768
+        assert auxiliary["max_tokens"] == 8192
     else:
         assert auxiliary["max_tokens"] == (
             max_tokens if provider_name == "openai" else 512
@@ -377,12 +388,15 @@ def test_old_model_registration_is_browsable_but_cannot_start_a_conversation(tmp
     )
     old = replace(
         registration("old", "same-name"),
-        context_window_tokens=None,
-        max_output_tokens=None,
+        model_context_window=None,
     )
-    runtime = RoleModelRuntime(role_store=store, registrations=[old])
+    runtime = RoleModelRuntime(
+        default_max_tokens=8192,
+        role_store=store,
+        registrations=[old],
+    )
     status = runtime.availability("mira")
     assert not status["available"]
-    assert status["fields"] == ["context_window_tokens", "max_output_tokens"]
+    assert status["fields"] == ["model_context_window"]
     with pytest.raises(ModelConfigurationError, match="需补填"):
         runtime.resolve("mira", "chat")

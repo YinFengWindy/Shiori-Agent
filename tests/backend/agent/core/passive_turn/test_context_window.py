@@ -33,8 +33,8 @@ def _window(h, keep=2):
 
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=128000,
-        max_output_tokens=8192,
+        model_context_window=128000,
+        default_max_tokens=8192,
         budget_policy=BudgetPolicy(safety_margin_tokens=100),
     )
     provider.chat = AsyncMock(side_effect=AssertionError("inspection called a model"))
@@ -171,7 +171,7 @@ async def test_idle_read_is_model_free_and_manual_uses_completed_turns_below_tri
     try:
         state = await window.inspect(session=session, context_view=None, msg=msg)
         assert state["tokens"] < 128000 * 0.75
-        assert state["context_window_tokens"] == 128000
+        assert state["model_context_window"] == 128000
         assert state["input_limit_tokens"] == 123900
         assert state["source"] == "local" and state["can_compact"]
         assert not h.prompts
@@ -181,7 +181,6 @@ async def test_idle_read_is_model_free_and_manual_uses_completed_turns_below_tri
         assert state["result"]["committed"]
         assert state["result"]["configured_retained_turns"] == keep
         assert state["result"]["retained_turns"] == keep
-        assert state["budget"]["max_output_tokens"] == 8192
         assert state["budget"]["output_reservation_tokens"] == 4000
         assert state["budget"]["estimate"]["tokens"] == state["tokens"]
         assert state["compaction_count"] == 1
@@ -300,5 +299,31 @@ async def test_no_complete_turn_is_unavailable_without_model_work(memory_harness
         assert not result["can_compact"] and result["result"] is None
         assert not h.prompts
         provider.chat.assert_not_awaited()
+    finally:
+        await provider.aclose()
+
+
+async def test_status_under_another_model_keeps_window_and_writes_nothing(
+    memory_harness,
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:switch")
+    session.metadata["role_id"] = "mira"
+    for index in range(3):
+        _turn(session, f"tea task {index}")
+    h.manager.save(session)
+    window, provider = _window(h, 1)
+    msg = InboundMessage(channel="cli", sender="u", chat_id="switch", content="")
+    try:
+        compacted = await window.inspect(
+            session=session, context_view=None, msg=msg, compact=True
+        )
+        assert compacted["window_start"] == 4
+        stored = h.manager._store.get_session_meta(session.key)
+        # A vision/other model only changes usage anchors, never the window.
+        window.config.model = "vision-model"
+        state = await window.inspect(session=session, context_view=None, msg=msg)
+        assert state["window_start"] == 4 and history_start(session, None) == 4
+        assert h.manager._store.get_session_meta(session.key) == stored
     finally:
         await provider.aclose()

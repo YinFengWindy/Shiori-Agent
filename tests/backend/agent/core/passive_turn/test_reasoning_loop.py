@@ -460,8 +460,8 @@ async def test_recovery_budget_check_stops_before_second_request():
 
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=2000,
-        max_output_tokens=100,
+        model_context_window=2000,
+        default_max_tokens=100,
         budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
     provider._create_with_retry = AsyncMock(

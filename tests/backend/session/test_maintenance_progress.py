@@ -1,14 +1,9 @@
 """Invalidation replaces derived state without publishing changes to old readers."""
 
-import pytest
-
 from session.maintenance_progress import MaintenanceProgress
 
 
-@pytest.mark.parametrize("ownership", [None, "new owner"])
-def test_invalidation_discards_every_derived_artifact_without_mutating_previous_state(
-    ownership,
-):
+def test_invalidation_discards_every_derived_artifact_without_mutating_previous_state():
     previous = MaintenanceProgress(
         ownership="old owner",
         legacy_cuts={"user": 2},
@@ -16,7 +11,6 @@ def test_invalidation_discards_every_derived_artifact_without_mutating_previous_
         window_versions={"user": 3},
         summaries={"user": "working state"},
         summary_source_ids={"user": ["message"]},
-        request_owners={"user": "connection:model"},
         generation=2,
         memory_version=7,
         recent_context_version=5,
@@ -27,9 +21,9 @@ def test_invalidation_discards_every_derived_artifact_without_mutating_previous_
         consumer_error="unavailable",
     )
     snapshot = previous.dump()
-    invalidated = previous.invalidated(ownership=ownership)
+    invalidated = previous.invalidated()
     assert previous.dump() == snapshot
-    assert invalidated.ownership == ("old owner" if ownership is None else ownership)
+    assert invalidated.ownership == "old owner"
     assert invalidated.generation == 3 and invalidated.memory_version == 8
     assert (
         not invalidated.legacy_cuts
@@ -37,7 +31,6 @@ def test_invalidation_discards_every_derived_artifact_without_mutating_previous_
         and not invalidated.window_versions
         and not invalidated.summaries
         and not invalidated.summary_source_ids
-        and not invalidated.request_owners
     )
     assert (
         invalidated.recent_context_version
@@ -47,3 +40,14 @@ def test_invalidation_discards_every_derived_artifact_without_mutating_previous_
     )
     assert not invalidated.recent_context_source_ids
     assert not invalidated.pending_consumers and not invalidated.consumer_error
+
+
+def test_rebinding_away_and_back_never_revives_an_unscoped_session_window():
+    unbound = MaintenanceProgress(
+        windows={"session": 4},
+        summaries={"session": "state"},
+        summary_source_ids={"session": ["message"]},
+    )
+    restored = unbound.rebound('["thread:mira:desktop"]').rebound("")
+    assert restored.windows["session"] == 0
+    assert not restored.summaries and not restored.summary_source_ids

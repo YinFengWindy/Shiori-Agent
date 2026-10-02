@@ -83,8 +83,8 @@ async def test_summary_request_includes_old_state_and_attachments_without_base64
     assert prepared is not None
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=10000,
-        max_output_tokens=2000,
+        model_context_window=10000,
+        default_max_tokens=2000,
         budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
     provider.chat = AsyncMock(
@@ -121,8 +121,8 @@ async def test_auxiliary_overflow_or_truncation_never_produces_a_summary(
     # The input case leaves less room than the instructions alone need.
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=2100 if failure == "input" else 4000,
-        max_output_tokens=2000,
+        model_context_window=2100 if failure == "input" else 4000,
+        default_max_tokens=2000,
         budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
     provider.chat = AsyncMock(
@@ -136,7 +136,7 @@ async def test_auxiliary_overflow_or_truncation_never_produces_a_summary(
                 prepared
             )
         assert provider.chat.await_count == (0 if failure == "input" else 1)
-        assert not session.maintenance_progress.summaries
+        assert not manager.maintenance_progress(session).summaries
     finally:
         await provider.aclose()
 
@@ -164,8 +164,8 @@ async def test_native_tool_exchange_survives_storage_and_enters_summary_sources(
     assert prepared is not None and len(prepared.removed_message_ids) == 4
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=10000,
-        max_output_tokens=2000,
+        model_context_window=10000,
+        default_max_tokens=2000,
         budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
     provider.chat = AsyncMock(
@@ -217,8 +217,8 @@ async def test_oversized_removed_range_is_folded_in_budgeted_batches(tmp_path):
     assert prepared is not None
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=8000,
-        max_output_tokens=2000,
+        model_context_window=8000,
+        default_max_tokens=2000,
         budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
     first_id = session.messages[0]["id"]

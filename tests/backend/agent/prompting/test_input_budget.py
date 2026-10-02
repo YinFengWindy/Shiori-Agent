@@ -8,8 +8,7 @@ def budget(**overrides):
     return build_input_budget(
         **(
             {
-                "context_window_tokens": 128000,
-                "max_output_tokens": 64000,
+                "model_context_window": 128000,
                 "output_tokens": 32000,
                 "policy": BudgetPolicy(safety_margin_tokens=4000),
                 "estimate": InputEstimate(93000, "local"),
@@ -32,14 +31,33 @@ def test_output_reservation_uses_actual_cap_and_hard_limit_precedes_ratio():
     assert not smaller.needs_trim
 
 
+def test_output_cap_is_bounded_only_by_window_not_a_model_maximum():
+    value = budget(output_tokens=64001, estimate=InputEstimate(1000, "local"))
+    assert value.input_limit_tokens == 128000 - 64001 - 4000
+    assert value.trigger_tokens == value.input_limit_tokens
+
+
+@pytest.mark.parametrize(
+    ("limit", "trigger"),
+    [(None, 96000), (50000, 50000), (120000, 116000)],
+)
+def test_trigger_is_earliest_of_registered_limit_or_ratio_and_hard_limit(
+    limit, trigger
+):
+    value = budget(model_auto_compact_token_limit=limit, output_tokens=8000)
+    assert value.input_limit_tokens == 116000
+    assert value.trigger_tokens == trigger
+    assert value.target_tokens == min(51200, trigger)
+
+
 def test_target_is_bounded_when_output_reservation_is_large():
-    value = budget(max_output_tokens=120000, output_tokens=100000)
+    value = budget(output_tokens=100000)
     assert (
         value.input_limit_tokens == value.target_tokens == value.trigger_tokens == 24000
     )
 
 
-@pytest.mark.parametrize("output", [0, -1, 64001, 1.5, True])
+@pytest.mark.parametrize("output", [0, -1, 1.5, True])
 def test_invalid_actual_output_is_rejected(output):
     with pytest.raises(ValueError, match="本次输出"):
         budget(output_tokens=output)
@@ -47,7 +65,7 @@ def test_invalid_actual_output_is_rejected(output):
 
 def test_no_input_space_is_an_explicit_configuration_error():
     with pytest.raises(ValueError, match="没有有效输入空间"):
-        budget(context_window_tokens=36000)
+        budget(model_context_window=36000)
 
 
 @pytest.mark.parametrize(

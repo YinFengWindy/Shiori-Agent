@@ -64,7 +64,7 @@ from agent.lifecycle.types import (
     PromptRenderResult,
 )
 from agent.prompting import DEFAULT_CONTEXT_TRIM_PLANS
-from agent.provider import ContentSafetyError, ContextLengthError, LLMProvider
+from agent.provider import ContentSafetyError, ContextLengthError
 from agent.tool_hooks import ToolExecutor
 from agent.tools.external_access import external_tools_restricted
 from bus.event_bus import EventBus
@@ -349,13 +349,6 @@ class DefaultReasoner(
         # The model and policy are execution snapshots, before any history render.
         policy = CompactionPolicy(self._llm_config.compaction_retained_turns)
         message_limit = len(session.messages)
-        provider = self._llm.provider
-        if self._compaction is not None and isinstance(provider, LLMProvider):
-            await self._session_manager.bind_window_request(
-                session.key,
-                context_view,
-                provider.context_identity(self._llm_config.model),
-            )
         snapshot = self._session_manager.window_snapshot(
             session.key, context_view, message_limit=message_limit
         )

@@ -77,7 +77,7 @@ class ContextWindow:
             "model_identity": self.provider.context_identity(self.config.model),
             "tokens": before.estimate.tokens,
             "source": before.estimate.source,
-            "context_window_tokens": before.context_window_tokens,
+            "model_context_window": before.model_context_window,
             "input_limit_tokens": before.input_limit_tokens,
             "budget": asdict(before),
             "configured_retained_turns": policy.retained_turns,

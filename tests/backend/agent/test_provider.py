@@ -1159,8 +1159,8 @@ async def test_profile_budget_matches_normalized_request_and_usage_without_cache
 
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=128000,
-        max_output_tokens=64000,
+        model_context_window=128000,
+        default_max_tokens=64000,
         budget_policy=BudgetPolicy(safety_margin_tokens=4000),
     )
     usage = SimpleNamespace(prompt_tokens=888, completion_tokens=17, total_tokens=905)
@@ -1217,8 +1217,8 @@ async def test_auxiliary_usage_never_invalidates_or_overwrites_conversation_anch
     provider = LLMProvider(
         api_key="test",
         provider_name="deepseek",
-        context_window_tokens=128000,
-        max_output_tokens=32768,
+        model_context_window=128000,
+        default_max_tokens=32768,
     )
     provider._client = _FakeClient(
         [
@@ -1262,8 +1262,8 @@ async def test_profile_rejects_output_override_and_hard_input_overflow_before_ne
 
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=1000,
-        max_output_tokens=600,
+        model_context_window=1000,
+        default_max_tokens=600,
         budget_policy=BudgetPolicy(safety_margin_tokens=10),
     )
     provider._client = _FakeClient([])
@@ -1275,8 +1275,8 @@ async def test_profile_rejects_output_override_and_hard_input_overflow_before_ne
     )
     with pytest.raises(ContextLengthError):
         await provider.chat(**request)
-    with pytest.raises(ValueError, match="本次输出"):
-        await provider.chat(**{**request, "max_tokens": 601})
+    with pytest.raises(ValueError, match="没有有效输入空间"):
+        await provider.chat(**{**request, "max_tokens": 990})
     with pytest.raises(ValueError, match="extra_body"):
         await provider.chat(**request, extra_body={"max_tokens": 1})
     assert not provider._client.calls
@@ -1286,7 +1286,7 @@ async def test_normalized_outgoing_payload_is_isolated_from_concurrent_caller_ed
     from agent.prompting.usage_anchor import usage_context
 
     provider = LLMProvider(
-        api_key="test", context_window_tokens=128000, max_output_tokens=32768
+        api_key="test", model_context_window=128000, default_max_tokens=32768
     )
     source_messages = [{"role": "user", "content": [{"type": "text", "text": "原文"}]}]
     source_tools = [
@@ -1317,7 +1317,7 @@ async def test_tool_choice_change_invalidates_actual_usage_anchor():
     from agent.prompting.usage_anchor import usage_context
 
     provider = LLMProvider(
-        api_key="test", context_window_tokens=128000, max_output_tokens=32768
+        api_key="test", model_context_window=128000, default_max_tokens=32768
     )
     provider._client = _FakeClient([_Response(usage={"prompt_tokens": 400})])
     request = dict(

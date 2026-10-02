@@ -66,10 +66,11 @@ async def prepare_context_window_request(
     search_enabled: bool,
     render_prompt: Callable[[PromptRenderInput], Awaitable[PromptRenderResult]],
 ) -> ContextWindowRequest:
-    """Assemble persisted context with no synthetic user message or draft retrieval."""
-    await sessions.bind_window_request(
-        session_key, view, provider.context_identity(model)
-    )
+    """Assemble persisted context with no synthetic user message or draft retrieval.
+
+    Read-only: the window is model independent, so measuring under any model
+    (including a vision model) never writes session state.
+    """
     limit = len(sessions.get_or_create(session_key).messages)
     snapshot = sessions.window_snapshot(session_key, view, message_limit=limit)
     progress = sessions.maintenance_progress(snapshot)
@@ -113,6 +114,6 @@ async def prepare_context_window_request(
         progress.summaries.get(window_key(view), ""),
         [schema["function"]["name"] for schema in request.schemas],
     )
-    # A role/model/identity change while rendering invalidates this entire read.
+    # A role/identity change or undo while rendering invalidates this entire read.
     sessions.window_snapshot(session_key, view, message_limit=limit, expected=progress)
     return request

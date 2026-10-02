@@ -18,6 +18,7 @@ from conversation.service import desktop_thread_id, network_thread_id
 from core.accounts import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
 from session.manager import Session
+from session.maintenance_progress import effective_progress
 
 QQ = AccountRecord(
     id="qq:101",
@@ -161,6 +162,10 @@ def test_each_context_reads_history_from_its_own_cursor(tmp_path: Path) -> None:
     } == before
     assert history_start(Session("cli:legacy", last_consolidated=2), None) == 2
 
+    # The first memory commit persists the migrated progress (manager-owned);
+    # readers derive it without freezing anything into the cached session.
+    assert session.maintenance_progress is None
+    session.maintenance_progress = effective_progress(session, user.user_threads)
     session.context_cursors = {"user": 0, "external": 5}
     # Memory advances do not change the already migrated model window.
     assert history(user, history_start(session, user)) == before["user"]

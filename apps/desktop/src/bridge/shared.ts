@@ -92,10 +92,10 @@ export type ModelRegistrationFormData = {
   apiKey: string;
   model: string;
   effort: "none" | "low" | "high" | "max";
-  /** Empty only for an incomplete draft or legacy profile. */
-  contextWindowTokens?: number | null;
-  /** Model capability; the actual request cap is advanced.maxTokens. */
-  maxOutputTokens?: number | null;
+  /** Required for conversation; empty only for an incomplete draft. */
+  modelContextWindow?: number | null;
+  /** Optional auto compaction trigger, below the window; empty uses the global ratio. */
+  modelAutoCompactTokenLimit?: number | null;
 };
 
 export type SettingsFormData = {

@@ -21,6 +21,7 @@ async def test_late_first_read_of_other_group_uses_frozen_legacy_cut(tmp_path):
     manager._store.update_last_consolidated(
         legacy.key, 2, context_cursors={"user": 2, "external": 4}
     )
+    manager.invalidate(legacy.key)
     session = manager.get_or_create(legacy.key)
     view_a = turn_context_view(tmp_path, "mira", a)
     assert history_start(session, view_a) == 4

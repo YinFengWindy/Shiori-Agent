@@ -22,12 +22,9 @@ async def test_normal_request_keeps_actual_progress_without_overwriting_last_com
     h.manager.save(session)
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=100000,
-        max_output_tokens=2000,
+        model_context_window=100000,
+        default_max_tokens=2000,
         budget_policy=BudgetPolicy(safety_margin_tokens=100),
-    )
-    await h.manager.bind_window_request(
-        session.key, None, provider.context_identity("m")
     )
     messages = [
         {"role": "system", "content": "constraints"},
@@ -108,8 +105,8 @@ async def test_degraded_recovery_over_budget_records_the_same_failure_without_se
     ]
     probe = LLMProvider(
         api_key="test",
-        context_window_tokens=10000,
-        max_output_tokens=100,
+        model_context_window=10000,
+        default_max_tokens=100,
         budget_policy=BudgetPolicy(safety_margin_tokens=100),
     )
     initial = probe.input_budget(messages=minimal, tools=[], model="m", max_tokens=100)
@@ -117,8 +114,8 @@ async def test_degraded_recovery_over_budget_records_the_same_failure_without_se
     await probe.aclose()
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=initial.estimate.tokens + 201,
-        max_output_tokens=100,
+        model_context_window=initial.estimate.tokens + 201,
+        default_max_tokens=100,
         budget_policy=BudgetPolicy(safety_margin_tokens=100),
     )
     transport = AsyncMock(

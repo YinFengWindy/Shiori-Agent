@@ -59,23 +59,7 @@ async def test_append_after_prepare_is_not_compacted_and_duplicate_commit_is_sta
 
 
 @pytest.mark.asyncio
-async def test_invalidation_keeps_originals_and_rejects_old_preparation(tmp_path):
-    manager, session, view = _session(tmp_path)
-    prepared = await manager.prepare_window(session.key, view, keep_turns=0)
-    assert prepared is not None
-    await _memory(manager, session)
-    assert await manager.commit_window(prepared, "state", prepared.removed_message_ids)
-    ids = [m["id"] for m in session.messages]
-    await manager.invalidate_maintenance(session.key)
-    assert history_start(session, view) == session.last_consolidated == 0
-    assert not await manager.commit_window(
-        prepared, "state", prepared.removed_message_ids
-    )
-    assert [m["id"] for m in manager._store.fetch_session_messages(session.key)] == ids
-
-
-@pytest.mark.asyncio
-async def test_user_shares_window_with_bound_private_and_binding_change_invalidates(
+async def test_binding_change_invalidates_shared_window_but_keeps_memory_cursors(
     tmp_path,
 ):
     manager, session, _view = _session(tmp_path)
@@ -110,13 +94,15 @@ async def test_user_shares_window_with_bound_private_and_binding_change_invalida
     identities.unbind(identity.id)
     changed = user_context_view(tmp_path, "mira")
     assert history_start(session, changed) == 0
-    session = manager.get_or_create(session.key)
-    assert session.context_cursors == {"user": 0, "external": 0}
     assert not await manager.commit_window(
         prepared, "state", prepared.removed_message_ids
     )
     with pytest.raises(ValueError, match="身份归属"):
         await manager.prepare_window(session.key, view, keep_turns=0)
+    assert history_start(session, changed) == 0
+    assert not session.maintenance_progress.summaries
+    # Already consolidated memory is not extracted again under the new binding.
+    assert session.context_cursors["user"] == 6
 
 
 @pytest.mark.asyncio
@@ -169,23 +155,6 @@ async def test_same_id_semantic_rewrite_rejects_prepared_window(tmp_path, field,
 
 
 @pytest.mark.asyncio
-async def test_model_switch_invalidates_summary_and_cut_but_keeps_memory(tmp_path):
-    manager, session, view = _session(tmp_path)
-    await manager.bind_window_request(session.key, view, "connection:model-a")
-    prepared = await manager.prepare_window(session.key, view, keep_turns=1)
-    assert prepared is not None
-    await _memory(manager, session)
-    assert await manager.commit_window(prepared, "state", prepared.removed_message_ids)
-    await manager.bind_window_request(session.key, view, "connection:model-b")
-    assert history_start(session, view) == 0
-    assert not session.maintenance_progress.summaries
-    assert session.context_cursors["user"] == 6
-    assert not await manager.commit_window(
-        prepared, "state", prepared.removed_message_ids
-    )
-
-
-@pytest.mark.asyncio
 async def test_window_write_failure_cannot_publish_only_summary_or_cut(
     tmp_path, monkeypatch
 ):
@@ -206,16 +175,13 @@ async def test_window_write_failure_cannot_publish_only_summary_or_cut(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["generation", "model", "binding"])
+@pytest.mark.parametrize("change", ["generation", "binding"])
 async def test_retry_window_snapshot_rejects_changed_ownership(tmp_path, change):
     manager, session, view = _session(tmp_path)
-    await manager.bind_window_request(session.key, view, "connection:model-a")
     initial = manager.window_snapshot(session.key, view, message_limit=6)
     assert initial.maintenance_progress is not None
     if change == "generation":
-        await manager.invalidate_maintenance(session.key)
-    elif change == "model":
-        await manager.bind_window_request(session.key, view, "connection:model-b")
+        assert await manager.undo_last_turn(session.key) is not None
     else:
         identities = UserIdentityStore(tmp_path)
         identities.pair(
@@ -256,3 +222,81 @@ async def test_retry_snapshot_reads_new_cut_but_excludes_later_appends(tmp_path)
     assert len(snapshot.messages) == 6
     assert history_start(snapshot, view) == 4
     assert snapshot.maintenance_progress.summaries["user"] == "committed state"
+
+
+@pytest.mark.asyncio
+async def test_undo_keeps_windows_that_did_not_lose_summarized_messages(tmp_path):
+    manager, session, view = _session(tmp_path)
+    group = network_thread_id("mira", "qq", "group")
+    session.add_message("user", "group", thread_id=group)
+    session.add_message("assistant", "group", thread_id=group)
+    manager.save(session)
+    external = turn_context_view(tmp_path, "mira", group)
+    user_cut = await manager.prepare_window(session.key, view, keep_turns=1)
+    external_cut = await manager.prepare_window(session.key, external, keep_turns=0)
+    assert user_cut is not None and external_cut is not None
+    request = ConsolidationCommitRequest(
+        session.key,
+        tuple(m["id"] for m in session.messages),
+        expected_context_cursors={"user": 0, "external": 0},
+        context_cursors={"user": 8, "external": 8},
+    )
+    assert await manager.commit_consolidation(request, AsyncMock())
+    assert await manager.commit_window(user_cut, "user", user_cut.removed_message_ids)
+    assert await manager.commit_window(
+        external_cut, "group", external_cut.removed_message_ids
+    )
+
+    # The group turn was summarized: only its own window is invalidated.
+    assert await manager.undo_last_turn(session.key) is not None
+    assert history_start(session, external) == 0
+    assert history_start(session, view) == 4
+    assert session.maintenance_progress.summaries == {"user": "user"}
+    # The retained desktop turn is after the cut: the window stays compacted.
+    assert await manager.undo_last_turn(session.key) is not None
+    assert history_start(session, view) == 4
+    assert session.maintenance_progress.summaries == {"user": "user"}
+
+
+@pytest.mark.asyncio
+async def test_unaffected_window_reads_the_same_cut_after_binding_change(tmp_path):
+    manager, session, _view = _session(tmp_path)
+    group = network_thread_id("mira", "qq", "group")
+    session.add_message("user", "group", thread_id=group)
+    session.add_message("assistant", "group", thread_id=group)
+    manager.save(session)
+    external = turn_context_view(tmp_path, "mira", group)
+    prepared = await manager.prepare_window(session.key, external, keep_turns=0)
+    assert prepared is not None
+    request = ConsolidationCommitRequest(
+        session.key,
+        tuple(m["id"] for m in session.messages),
+        expected_context_cursors={"external": 0},
+        context_cursors={"external": 8},
+    )
+    assert await manager.commit_consolidation(request, AsyncMock())
+    assert await manager.commit_window(prepared, "group", prepared.removed_message_ids)
+    stored = manager._store.get_session_meta(session.key)
+    identities = UserIdentityStore(tmp_path)
+    identities.pair(
+        identities.create_pairing_code().code,
+        record=AccountRecord(
+            id="qq:101",
+            plugin_id="qq",
+            platform="qq",
+            platform_account_id="101",
+            config_ref="101",
+            role_id="mira",
+        ),
+        user_id="owner",
+        scope="platform",
+        chat=IdentityChat("qq:101", "qq", "owner"),
+    )
+    rebound = turn_context_view(tmp_path, "mira", group)
+    # Reading the cached session agrees with the normalized snapshot.
+    assert history_start(session, rebound) == 8
+    snapshot = manager.window_snapshot(session.key, rebound, message_limit=8)
+    assert history_start(snapshot, rebound) == 8
+    # A read never publishes the derived rebinding into the cache or the store.
+    assert session.maintenance_progress.ownership == prepared.ownership
+    assert manager._store.get_session_meta(session.key) == stored
