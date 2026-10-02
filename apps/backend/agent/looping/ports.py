@@ -36,6 +36,7 @@ class LLMConfig:
     max_tokens: int = 8192
     tool_search_enabled: bool = False
     multimodal: bool = True
+    compaction_retained_turns: int = 2
 
 
 @dataclass
@@ -44,7 +45,7 @@ class MemoryConfig:
 
     @property
     def keep_count(self) -> int:
-        """旧配置对应的条数策略；窗口和记忆各自使用，不联动两类进度。"""
+        """旧条数配置只决定记忆整理阈值；与压缩保留轮数独立。"""
         aligned_window = max(4, ((max(1, self.window) + 3) // 4) * 4)
         return aligned_window // 2
 

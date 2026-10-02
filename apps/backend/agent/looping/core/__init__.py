@@ -2,8 +2,6 @@
 
 import asyncio
 
-from conversation.context_scope import ContextView
-from core.context_window import ContextWindowMaintenance
 
 from .assembly import _AssemblyMixin
 from .helpers import (
@@ -69,28 +67,6 @@ class AgentLoop(
         if self._markdown_memory is None:
             return
         self._markdown_memory.maintenance.request_background_consolidation(session_key)
-
-    async def ensure_context_window(
-        self,
-        session_key: str,
-        current_content: str = "",
-        view: ContextView | None = None,
-        *,
-        input_token_threshold: int,
-    ) -> bool:
-        """Maintain the real model window after completing its memory prerequisite."""
-        if self._markdown_memory is None:
-            return False
-        maintenance = self._markdown_memory.maintenance
-        return await ContextWindowMaintenance(
-            self.session_manager, maintenance
-        ).ensure_budget(
-            session_key,
-            current_content,
-            view,
-            keep_count=self._context_keep_count,
-            input_token_threshold=input_token_threshold,
-        )
 
     def get_memory_consolidation_failure(self, session_key: str) -> str | None:
         """返回指定会话最近一次后台记忆整理的明确失败原因。"""

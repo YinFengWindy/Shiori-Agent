@@ -20,6 +20,7 @@ from bus.event_bus import EventBus
 from bus.events import InboundMessage
 from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted
 from shiori_sdk.lifecycle import LifecycleFrame
+from session.manager import SessionManager
 
 
 class _RequestSummary:
@@ -167,7 +168,8 @@ def test_default_reasoner_runs_tool_loop_and_returns_reasoner_result():
     )
 
 
-def test_default_reasoner_run_turn_uses_tool_context_snapshot():
+def test_default_reasoner_run_turn_uses_tool_context_snapshot(tmp_path):
+    manager = SessionManager(tmp_path)
     provider = _Provider(
         [
             LLMResponse(content="", tool_calls=[ToolCall("c1", "context_probe", {})]),
@@ -193,7 +195,7 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot():
         tool_search_enabled=False,
         memory_window=40,
         context=cast(Any, SimpleNamespace(render=lambda *_args, **_kwargs: None)),
-        session_manager=cast(Any, SimpleNamespace(save_async=AsyncMock())),
+        session_manager=manager,
     )
     tools.set_context(
         session_key="telegram:123",
@@ -212,13 +214,8 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot():
             or PromptRenderResult(messages=[{"role": "user", "content": "hi"}])
         )
     )
-    session = SimpleNamespace(
-        key="telegram:123",
-        metadata={"role_id": "mira"},
-        last_consolidated=0,
-        get_history=lambda max_messages=500, start_index=None, include=None: [],
-        messages=[],
-    )
+    session = manager.get_or_create("telegram:123")
+    session.metadata["role_id"] = "mira"
     msg = InboundMessage(
         channel="telegram",
         sender="user",
@@ -455,7 +452,8 @@ def test_default_reasoner_continues_without_after_step_stop_request():
     assert provider.calls[1]["tools"]
 
 
-def test_default_reasoner_observes_tool_lifecycle_events():
+def test_default_reasoner_observes_tool_lifecycle_events(tmp_path):
+    manager = SessionManager(tmp_path)
     provider = _Provider(
         [
             LLMResponse(content="", tool_calls=[ToolCall("c1", "dummy", {"x": 7})]),
@@ -497,15 +495,10 @@ def test_default_reasoner_observes_tool_lifecycle_events():
                 ),
             ),
         ),
-        session_manager=cast(Any, SimpleNamespace()),
+        session_manager=manager,
         event_bus=event_bus,
     )
-    session = SimpleNamespace(
-        key="telegram:123",
-        messages=[],
-        get_history=lambda max_messages=40, start_index=None, include=None: [],
-        last_consolidated=0,
-    )
+    session = manager.get_or_create("telegram:123")
     msg = InboundMessage(
         content="hi",
         media=[],
@@ -762,7 +755,8 @@ def test_default_reasoner_preloaded_tool_not_in_deferred_list():
     )
 
 
-def test_default_reasoner_run_turn_uses_context_render():
+def test_default_reasoner_run_turn_uses_context_render(tmp_path):
+    manager = SessionManager(tmp_path)
     provider = _Provider([LLMResponse(content="done", tool_calls=[])])
     tools = ToolRegistry()
     tools.register(_DummyTool(), always_on=True)
@@ -792,19 +786,13 @@ def test_default_reasoner_run_turn_uses_context_render():
                 ),
             ),
         ),
-        session_manager=cast(
-            Any, SimpleNamespace(save_async=lambda *_args, **_kwargs: None)
-        ),
+        session_manager=manager,
     )
 
-    session = SimpleNamespace(
-        key="cli:1",
-        messages=[{"role": "assistant", "content": "old"}],
-        get_history=lambda max_messages=40, start_index=None, include=None: [
-            {"role": "assistant", "content": "old"}
-        ],
-        last_consolidated=0,
-    )
+    session = manager.get_or_create("cli:1")
+    session.add_message("user", "previous input")
+    session.add_message("assistant", "old")
+    manager.save(session)
     msg = InboundMessage(
         content="hi",
         media=[],
@@ -819,7 +807,8 @@ def test_default_reasoner_run_turn_uses_context_render():
     assert result.reply == "done"
 
 
-def test_default_reasoner_run_turn_reports_llm_timeout():
+def test_default_reasoner_run_turn_reports_llm_timeout(tmp_path):
+    manager = SessionManager(tmp_path)
     provider = _TimeoutProvider()
     tools = ToolRegistry()
     tools.register(_DummyTool(), always_on=True)
@@ -843,16 +832,9 @@ def test_default_reasoner_run_turn_reports_llm_timeout():
                 ),
             ),
         ),
-        session_manager=cast(
-            Any, SimpleNamespace(save_async=lambda *_args, **_kwargs: None)
-        ),
+        session_manager=manager,
     )
-    session = SimpleNamespace(
-        key="cli:1",
-        messages=[],
-        get_history=lambda max_messages=40, start_index=None, include=None: [],
-        last_consolidated=0,
-    )
+    session = manager.get_or_create("cli:1")
     msg = InboundMessage(
         content="hi",
         media=[],

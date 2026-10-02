@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-from bootstrap.memory_capabilities import HostMemoryRoles, HostMemoryStorage
 from core.roles import RoleStore
 from core.roles.memory_document_requests import RoleMemoryDocumentReader
 from core.roles.memory_service import RoleMemoryService
@@ -15,6 +14,10 @@ class HostMemoryCapability:
     def __init__(
         self, workspace: Path, roles: RoleStore, engine: MemoryEngine | None
     ) -> None:
+        # Bootstrap imports plugin storage while building these adapters; resolve
+        # them at construction so either public entrypoint can be imported first.
+        from bootstrap.memory_capabilities import HostMemoryRoles, HostMemoryStorage
+
         self.workspace = workspace
         self.engine = engine
         self.roles = HostMemoryRoles(roles)

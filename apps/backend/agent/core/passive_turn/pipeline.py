@@ -41,6 +41,7 @@ from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import TurnFailed
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from core.common.error_summary import summarize_exception_for_user
+from core.compaction import CompactionFailedError
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
@@ -429,7 +430,7 @@ class PassiveTurnPipeline:
                         duration_ms=int((time.perf_counter() - started) * 1000),
                     )
                 )
-            except MemoryConsolidationFailedError:
+            except (MemoryConsolidationFailedError, CompactionFailedError):
                 raise
             except Exception as exc:
                 if isinstance(exc, EmptyReplyError):

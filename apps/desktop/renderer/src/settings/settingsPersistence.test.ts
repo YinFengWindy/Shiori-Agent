@@ -167,3 +167,19 @@ describe("core proactive preferences in settings drafts", () => {
     });
   }
 });
+
+describe("compaction draft validation", () => {
+  it("retains invalid drafts without calling the save bridge", async () => {
+    for (const value of [-1, 1.5, null]) {
+      const draft = createSettingsFormData();
+      Object.assign(draft.advanced, { compactionRetainedTurns: value });
+      const result = await saveSettingsPageData({
+        saveSettings: async () => { throw new Error("invalid draft must not be submitted"); },
+        readSettings: async () => { throw new Error("invalid draft must not refresh"); },
+      }, draft);
+      assert.equal(result.saveResult.ok, false);
+      assert.equal(result.nextDraft.advanced.compactionRetainedTurns, value);
+      assert.equal(result.nextDraft.advanced.memoryWindow, 20);
+    }
+  });
+});

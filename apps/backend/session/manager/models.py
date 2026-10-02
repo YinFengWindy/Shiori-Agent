@@ -158,6 +158,16 @@ class Session:
                 )
                 continue
 
+            if role == "tool":
+                # Native exchanges survive save/reopen just like embedded tool_chain.
+                out.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": m["tool_call_id"],
+                        "content": m.get("content", ""),
+                    }
+                )
+                continue
             if role != "assistant":
                 continue
 
@@ -204,6 +214,8 @@ class Session:
             if content:
                 content = _append_proactive_meta(content, m)
             assistant_msg = {"role": "assistant", "content": content}
+            if m.get("tool_calls"):
+                assistant_msg["tool_calls"] = m["tool_calls"]
             reasoning_content = m.get("reasoning_content")
             if isinstance(reasoning_content, str):
                 assistant_msg["reasoning_content"] = reasoning_content
@@ -229,6 +241,8 @@ class Session:
         ):
             if m.get("role") != "assistant" or m.get("proactive"):
                 continue
+            for call in m.get("tool_calls") or []:
+                names.setdefault(call["function"]["name"], None)
             for group in m.get("tool_chain") or []:
                 for call in group.get("calls") or []:
                     names.setdefault(call["name"], None)

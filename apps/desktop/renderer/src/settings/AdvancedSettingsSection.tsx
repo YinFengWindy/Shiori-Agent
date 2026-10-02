@@ -1,3 +1,4 @@
+import { desktopSettingsDefaults } from "../../../src/settingsContract.js";
 import { SettingsField as Field } from "./SettingsField";
 import { SettingsGroup, SettingsNumberInput, SettingsToggleField, settingsGroupStackClass } from "./SettingsFieldPrimitives";
 import { advancedSettingsGroups, type AdvancedSettingsField } from "./advancedSettingsFields";
@@ -19,7 +20,7 @@ export function AdvancedSettingsSection({
       <SettingsNumberInput
         ariaLabel={field.label}
         unit={field.unit}
-        value={draft.advanced[field.key] ?? 0}
+        value={draft.advanced[field.key] ?? (field.key === "compactionRetainedTurns" ? desktopSettingsDefaults.compactionRetainedTurns : 0)}
         onChange={(value) => setAdvanced({ [field.key]: value })}
       />
     </Field>

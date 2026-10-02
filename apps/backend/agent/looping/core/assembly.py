@@ -52,7 +52,6 @@ class _AssemblyMixin:
         self.bus = deps.bus
         self.tools = deps.tools
         self.memory_window = config.memory.window
-        self._context_keep_count = config.memory.keep_count
         self._running = False
         self._processing_state = deps.processing_state
         self._event_bus = deps.event_bus or EventBus()
@@ -161,7 +160,9 @@ class _AssemblyMixin:
             context=self._context,
             session_manager=self.session_manager,
             event_bus=self._event_bus,
-            memory_consolidator=cast("MemoryConsolidator", self),
+            compaction_memory=(
+                self._markdown_memory.maintenance if self._markdown_memory else None
+            ),
         )
 
         # 3. 最后串 passive prepare / execute / commit 主链。

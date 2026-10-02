@@ -11,6 +11,7 @@ from agent.core.types import LLMToolCall, ReasonerResult
 from agent.core.reply_completion import fetch_role_mood
 from agent.core.reply_output import RoleReplyOutput
 from .reply_recovery import complete_reply
+from .compaction import ensure_request_budget
 from core.roles.reply_state import RoleReply
 from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted
 
@@ -110,14 +111,13 @@ class _PassiveReasoningResultMixin:
         ]
 
         if reply_moods is not None:
-            threshold = self._request_threshold(summary_messages, [])
-            from core.roles.reply_state import InvalidRoleReply
-
-            if (
-                threshold > 0
-                and self._request_tokens_with_tools(summary_messages, []) >= threshold
-            ):
-                raise InvalidRoleReply("角色阶段性回复超出当前回合输入预算")
+            await ensure_request_budget(
+                summary_messages,
+                [],
+                self._llm.provider,
+                self._llm_config.model,
+                self._llm_config.max_tokens,
+            )
             response = await self._llm.provider.chat(
                 messages=summary_messages,
                 tools=[],
@@ -132,8 +132,6 @@ class _PassiveReasoningResultMixin:
                 model=self._llm_config.model,
                 max_tokens=self._llm_config.max_tokens,
                 role_reply=True,
-                input_token_threshold=threshold,
-                estimate_request=self._request_tokens_with_tools,
                 session=session,
                 channel=channel,
                 iteration=iteration,
@@ -154,11 +152,14 @@ class _PassiveReasoningResultMixin:
 
         # Auxiliary summaries use their actual smaller output reservation too.
         summary_cap = min(_SUMMARY_MAX_TOKENS, self._llm_config.max_tokens)
-        budget = self._request_budget(
-            summary_messages, [], summary_cap, call_purpose="auxiliary"
+        await ensure_request_budget(
+            summary_messages,
+            [],
+            self._llm.provider,
+            self._llm_config.model,
+            summary_cap,
+            purpose="auxiliary",
         )
-        if budget is not None and budget.needs_trim:
-            raise ValueError("阶段性总结超过当前输入预算")
         # 2. 先尝试让模型给一段中文收尾总结。
         try:
             response = await self._llm.provider.chat(

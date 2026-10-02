@@ -1,3 +1,4 @@
+import { compactionRetainedTurnsError } from "../../../src/settingsContract.js";
 import type {
   DesktopApi,
   SaveSettingsResult,
@@ -59,6 +60,10 @@ export async function saveSettingsPageData(
   draft: SettingsFormData,
   options?: SettingsSaveOptions,
 ): Promise<SettingsPageSaveResult> {
+  const retentionError = compactionRetainedTurnsError(draft.advanced.compactionRetainedTurns);
+  if (retentionError) {
+    return { saveResult: { ok: false, error: { code: "settings_validation_error", message: retentionError } }, snapshot: null, nextDraft: cloneSettings(draft) };
+  }
   const saveResult = await api.saveSettings(cloneSettings(draft), options);
   return refreshSavedSettings(api, draft, saveResult);
 }

@@ -115,6 +115,7 @@ def load_config_data(data: dict[str, Any]) -> Config:
         max_iterations=int(
             agent_cfg.get("max_iterations", data.get("max_iterations", 10))
         ),
+        compaction_retained_turns=agent_context.get("compaction_retained_turns", 2),
         memory_window=int(
             agent_context.get("memory_window", data.get("memory_window", 40))
         ),

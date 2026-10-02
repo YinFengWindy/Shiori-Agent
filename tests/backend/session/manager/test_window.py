@@ -42,13 +42,15 @@ async def test_append_after_prepare_is_not_compacted_and_duplicate_commit_is_sta
     tmp_path,
 ):
     manager, session, view = _session(tmp_path)
-    prepared = await manager.prepare_window(session.key, view, keep_count=2)
+    prepared = await manager.prepare_window(session.key, view, keep_turns=1)
     assert prepared is not None
     await _memory(manager, session)
     session.add_message("user", "concurrent", thread_id=desktop_thread_id("mira"))
     await manager.save_async(session)
-    assert await manager.commit_window(prepared)
-    assert not await manager.commit_window(prepared)
+    assert await manager.commit_window(prepared, "state", prepared.removed_message_ids)
+    assert not await manager.commit_window(
+        prepared, "state", prepared.removed_message_ids
+    )
     assert history_start(session, view) == 4
     assert session.get_history(
         start_index=history_start(session, view), include=view.includes
@@ -59,14 +61,16 @@ async def test_append_after_prepare_is_not_compacted_and_duplicate_commit_is_sta
 @pytest.mark.asyncio
 async def test_invalidation_keeps_originals_and_rejects_old_preparation(tmp_path):
     manager, session, view = _session(tmp_path)
-    prepared = await manager.prepare_window(session.key, view, keep_count=0)
+    prepared = await manager.prepare_window(session.key, view, keep_turns=0)
     assert prepared is not None
     await _memory(manager, session)
-    assert await manager.commit_window(prepared)
+    assert await manager.commit_window(prepared, "state", prepared.removed_message_ids)
     ids = [m["id"] for m in session.messages]
     await manager.invalidate_maintenance(session.key)
     assert history_start(session, view) == session.last_consolidated == 0
-    assert not await manager.commit_window(prepared)
+    assert not await manager.commit_window(
+        prepared, "state", prepared.removed_message_ids
+    )
     assert [m["id"] for m in manager._store.fetch_session_messages(session.key)] == ids
 
 
@@ -98,31 +102,35 @@ async def test_user_shares_window_with_bound_private_and_binding_change_invalida
     private = turn_context_view(
         tmp_path, "mira", network_thread_id("mira", "qq", "owner")
     )
-    prepared = await manager.prepare_window(session.key, view, keep_count=0)
+    prepared = await manager.prepare_window(session.key, view, keep_turns=0)
     assert prepared is not None
     await _memory(manager, session)
-    assert await manager.commit_window(prepared)
+    assert await manager.commit_window(prepared, "state", prepared.removed_message_ids)
     assert history_start(session, private) == history_start(session, view) == 6
     identities.unbind(identity.id)
     changed = user_context_view(tmp_path, "mira")
     assert history_start(session, changed) == 0
     session = manager.get_or_create(session.key)
     assert session.context_cursors == {"user": 0, "external": 0}
-    assert not await manager.commit_window(prepared)
+    assert not await manager.commit_window(
+        prepared, "state", prepared.removed_message_ids
+    )
     with pytest.raises(ValueError, match="身份归属"):
-        await manager.prepare_window(session.key, view, keep_count=0)
+        await manager.prepare_window(session.key, view, keep_turns=0)
 
 
 @pytest.mark.asyncio
 async def test_chat_turn_undo_invalidates_windows_and_prepared_versions(tmp_path):
     manager, session, view = _session(tmp_path)
-    prepared = await manager.prepare_window(session.key, view, keep_count=0)
+    prepared = await manager.prepare_window(session.key, view, keep_turns=0)
     assert prepared is not None
     await _memory(manager, session)
-    assert await manager.commit_window(prepared)
+    assert await manager.commit_window(prepared, "state", prepared.removed_message_ids)
     assert await manager.undo_last_turn(session.key) is not None
     assert history_start(session, view) == 0
-    assert not await manager.commit_window(prepared)
+    assert not await manager.commit_window(
+        prepared, "state", prepared.removed_message_ids
+    )
     assert len(session.messages) == 4  # Only the explicitly undone turn is removed.
 
 
@@ -147,12 +155,104 @@ async def test_chat_turn_undo_invalidates_windows_and_prepared_versions(tmp_path
 )
 async def test_same_id_semantic_rewrite_rejects_prepared_window(tmp_path, field, value):
     manager, session, view = _session(tmp_path)
-    prepared = await manager.prepare_window(session.key, view, keep_count=2)
+    prepared = await manager.prepare_window(session.key, view, keep_turns=1)
     assert prepared is not None
     await _memory(manager, session)
     original_id = session.messages[0]["id"]
     session.messages[0][field] = value
     manager.save(session)
     assert session.messages[0]["id"] == original_id
-    assert not await manager.commit_window(prepared)
+    assert not await manager.commit_window(
+        prepared, "state", prepared.removed_message_ids
+    )
     assert history_start(session, view) == 0
+
+
+@pytest.mark.asyncio
+async def test_model_switch_invalidates_summary_and_cut_but_keeps_memory(tmp_path):
+    manager, session, view = _session(tmp_path)
+    await manager.bind_window_request(session.key, view, "connection:model-a")
+    prepared = await manager.prepare_window(session.key, view, keep_turns=1)
+    assert prepared is not None
+    await _memory(manager, session)
+    assert await manager.commit_window(prepared, "state", prepared.removed_message_ids)
+    await manager.bind_window_request(session.key, view, "connection:model-b")
+    assert history_start(session, view) == 0
+    assert not session.maintenance_progress.summaries
+    assert session.context_cursors["user"] == 6
+    assert not await manager.commit_window(
+        prepared, "state", prepared.removed_message_ids
+    )
+
+
+@pytest.mark.asyncio
+async def test_window_write_failure_cannot_publish_only_summary_or_cut(
+    tmp_path, monkeypatch
+):
+    manager, session, view = _session(tmp_path)
+    prepared = await manager.prepare_window(session.key, view, keep_turns=0)
+    assert prepared is not None
+    await _memory(manager, session)
+    previous = session.maintenance_progress.dump()
+
+    def fail(*args):
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(manager._store, "write_maintenance_progress", fail)
+    with pytest.raises(OSError):
+        await manager.commit_window(prepared, "new state", prepared.removed_message_ids)
+    assert session.maintenance_progress.dump() == previous
+    assert history_start(session, view) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["generation", "model", "binding"])
+async def test_retry_window_snapshot_rejects_changed_ownership(tmp_path, change):
+    manager, session, view = _session(tmp_path)
+    await manager.bind_window_request(session.key, view, "connection:model-a")
+    initial = manager.window_snapshot(session.key, view, message_limit=6)
+    assert initial.maintenance_progress is not None
+    if change == "generation":
+        await manager.invalidate_maintenance(session.key)
+    elif change == "model":
+        await manager.bind_window_request(session.key, view, "connection:model-b")
+    else:
+        identities = UserIdentityStore(tmp_path)
+        identities.pair(
+            identities.create_pairing_code().code,
+            record=AccountRecord(
+                id="qq:101",
+                plugin_id="qq",
+                platform="qq",
+                platform_account_id="101",
+                config_ref="101",
+                role_id="mira",
+            ),
+            user_id="owner",
+            scope="platform",
+            chat=IdentityChat("qq:101", "qq", "owner"),
+        )
+    with pytest.raises(ValueError, match="归属或代次"):
+        manager.window_snapshot(
+            session.key, view, message_limit=6, expected=initial.maintenance_progress
+        )
+
+
+@pytest.mark.asyncio
+async def test_retry_snapshot_reads_new_cut_but_excludes_later_appends(tmp_path):
+    manager, session, view = _session(tmp_path)
+    initial = manager.window_snapshot(session.key, view, message_limit=6)
+    prepared = await manager.prepare_window(session.key, view, keep_turns=1)
+    assert prepared is not None
+    await _memory(manager, session)
+    assert await manager.commit_window(
+        prepared, "committed state", prepared.removed_message_ids
+    )
+    session.add_message("user", "future", thread_id=desktop_thread_id("mira"))
+    manager.save(session)
+    snapshot = manager.window_snapshot(
+        session.key, view, message_limit=6, expected=initial.maintenance_progress
+    )
+    assert len(snapshot.messages) == 6
+    assert history_start(snapshot, view) == 4
+    assert snapshot.maintenance_progress.summaries["user"] == "committed state"

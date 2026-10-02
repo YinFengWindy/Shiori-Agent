@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -860,3 +862,15 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
 
     assert mcp_registry is not None
     assert mcp_registry.list_servers() == "当前没有已注册的 MCP server。"
+
+
+def test_wiring_imports_without_preloading_the_plugin_kernel():
+    result = subprocess.run(
+        [sys.executable, "-c", "import bootstrap.wiring"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

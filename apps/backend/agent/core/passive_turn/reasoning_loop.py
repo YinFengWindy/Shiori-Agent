@@ -31,10 +31,11 @@ from agent.tools.base import normalize_tool_result
 from agent.tools.registry import ToolRegistry
 from agent.tools.tool_search import tool_search_call_context
 from agent.tools.turn_scope import tool_turn
-from agent.provider import ContextLengthError, LLMProvider
+from agent.provider import LLMProvider
 from agent.prompting.input_budget import InputBudget
 from .helpers import turn_tool_names
 from .reply_recovery import complete_reply
+from .compaction import ensure_request_budget
 
 logger = logging.getLogger("agent.core.passive_turn")
 
@@ -75,12 +76,6 @@ class _PassiveReasoningLoopMixin:
             call_purpose=call_purpose,
         )
         return budget if isinstance(budget, InputBudget) else None
-
-    def _request_threshold(
-        self, messages: list[dict], schemas: list[dict], max_tokens: int | None = None
-    ) -> int:
-        budget = self._request_budget(messages, schemas, max_tokens)
-        return budget.trigger_tokens if budget is not None else 0
 
     @tool_turn
     async def run(
@@ -264,12 +259,33 @@ class _PassiveReasoningLoopMixin:
                 ),
                 external_only=external_restricted,
             )
-            threshold = self._request_threshold(messages, schemas)
-            request_tokens = self._request_tokens_with_tools(messages, schemas)
-            if threshold > 0 and request_tokens >= threshold:
-                raise ContextLengthError(
-                    "推理过程中追加工具结果后输入超过预算，已停止继续调用模型。"
+
+            def schemas_for_history(history_names: list[str]) -> list[dict]:
+                if visible_names is None:
+                    return schemas
+                kept = (
+                    set(history_names)
+                    | self._tools.get_always_on_names()
+                    | set(tools_used)
+                    | set(tools_unlocked)
                 )
+                return self._tools.get_schemas(
+                    names=[name for name in (visible_order or []) if name in kept],
+                    external_only=external_restricted,
+                )
+
+            await ensure_request_budget(
+                messages,
+                schemas,
+                self._llm.provider,
+                self._llm_config.model,
+                self._llm_config.max_tokens,
+                schemas_for_history=schemas_for_history,
+            )
+            if visible_names is not None:
+                visible_order = [schema["function"]["name"] for schema in schemas]
+                visible_names = set(visible_order)
+            request_tokens = self._request_tokens_with_tools(messages, schemas)
             react_input_samples[-1] = request_tokens
             reply_output = RoleReplyOutput(
                 on_content_delta, enabled=reply_moods is not None
@@ -291,8 +307,6 @@ class _PassiveReasoningLoopMixin:
                 max_tokens=self._llm_config.max_tokens,
                 role_reply=reply_moods is not None,
                 on_content_delta=on_content_delta,
-                input_token_threshold=threshold,
-                estimate_request=self._request_tokens_with_tools,
                 session=tool_event_session_key,
                 channel=tool_event_channel,
                 iteration=iteration + 1,

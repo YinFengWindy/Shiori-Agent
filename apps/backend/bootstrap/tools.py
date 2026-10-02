@@ -577,6 +577,7 @@ def build_core_runtime(
                 max_tokens=config.max_tokens,
                 tool_search_enabled=config.tool_search_enabled,
                 multimodal=config.multimodal,
+                compaction_retained_turns=config.compaction_retained_turns,
             ),
             memory=MemoryConfig(
                 window=config.memory_window,

@@ -12,11 +12,26 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime
+from copy import deepcopy
+
+from core.compaction import (
+    CompactionController,
+    CompactionPolicy,
+    CompactionFailedError,
+    CompactionResult,
+)
+from core.compaction_summary import WorkingSummaryWriter
+from session.maintenance_progress import window_key
+from .compaction_render import CompactionRenderer
+from .compaction import (
+    RequestCompaction,
+    request_compaction_scope,
+    with_working_summary,
+)
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 from .helpers import (
     build_turn_injection_prompt,
-    turn_tool_names,
     extract_model_facing_turn,
     get_window_history,
     get_window_preloaded_tools,
@@ -35,10 +50,6 @@ from agent.lifecycle.phases.before_step import (
     BeforeStepFrame,
     default_before_step_modules,
 )
-from agent.lifecycle.phases.before_turn import (
-    MemoryConsolidationFailedError,
-    MemoryConsolidator,
-)
 from agent.lifecycle.phases.prompt_render import (
     PromptRenderFrame,
     default_prompt_render_modules,
@@ -52,7 +63,7 @@ from agent.lifecycle.types import (
     PromptRenderResult,
 )
 from agent.prompting import DEFAULT_CONTEXT_TRIM_PLANS
-from agent.provider import ContentSafetyError, ContextLengthError
+from agent.provider import ContentSafetyError, ContextLengthError, LLMProvider
 from agent.tool_hooks import ToolExecutor
 from agent.tools.external_access import external_tools_restricted
 from bus.event_bus import EventBus
@@ -65,6 +76,7 @@ if TYPE_CHECKING:
     from agent.tools.registry import ToolRegistry
     from conversation.context_scope import ContextView
     from session.manager import SessionManager
+    from core.memory.markdown import MarkdownMemoryMaintenance
 
 logger = logging.getLogger("agent.core.passive_turn")
 
@@ -171,7 +183,7 @@ class DefaultReasoner(
         context: "ContextBuilder | None" = None,
         session_manager: "SessionManager | None" = None,
         event_bus: "EventBus | None" = None,
-        memory_consolidator: MemoryConsolidator | None = None,
+        compaction_memory: MarkdownMemoryMaintenance | None = None,
     ) -> None:
         self._llm = llm
         self._llm_config = llm_config
@@ -182,7 +194,20 @@ class DefaultReasoner(
         self._context = context
         self._session_manager = session_manager
         self._event_bus = event_bus
-        self._memory_consolidator = memory_consolidator
+        self._compaction = (
+            CompactionController(
+                session_manager,
+                compaction_memory,
+                WorkingSummaryWriter(
+                    session_manager,
+                    llm.provider,
+                    llm_config.model,
+                    llm_config.max_tokens,
+                ),
+            )
+            if session_manager is not None and compaction_memory is not None
+            else None
+        )
         self._prompt_render_plugin_modules: list[object] = []
         self._before_step_plugin_modules: list[object] = []
         self._after_step_plugin_modules: list[object] = []
@@ -307,6 +332,25 @@ class DefaultReasoner(
         if self._prompt_render is None:
             self._prompt_render = self._build_prompt_render_phase(self._context)
 
+        # The model and policy are execution snapshots, before any history render.
+        policy = CompactionPolicy(self._llm_config.compaction_retained_turns)
+        message_limit = len(session.messages)
+        provider = self._llm.provider
+        if self._compaction is not None and isinstance(provider, LLMProvider):
+            await self._session_manager.bind_window_request(
+                session.key,
+                context_view,
+                provider.context_identity(self._llm_config.model),
+            )
+        snapshot = self._session_manager.window_snapshot(
+            session.key, context_view, message_limit=message_limit
+        )
+        progress = snapshot.maintenance_progress
+        assert progress is not None
+        window_id = window_key(context_view)
+        protected_current: dict | None = None
+        compaction_results: list[dict] = []
+
         # 1. 先准备 retry trace、history 和 preload 工具集合。
         turn_started_at = time.perf_counter()
         first_content_at: float | None = None
@@ -319,32 +363,9 @@ class DefaultReasoner(
         source_history = (
             base_history
             if base_history is not None
-            else get_window_history(session, self._memory_window, context_view)
+            else get_window_history(snapshot, self._memory_window, context_view)
         )
         total_history = len(source_history)
-        # 与历史同一窗口里非用户本人消息的来源，加上本群旁听块里的（#539），
-        # 外部回合据此注入成员档案（#498）。
-        window_sources = get_window_sources(
-            session,
-            self._memory_window,
-            context_view,
-            self._heard_for_turn(context_view),
-        )
-        preloaded: set[str] | None = None
-        preloaded_order: list[str] = []
-        if self._tool_search_enabled:
-            # 历史窗口里用过或解锁过的工具继续可见，直到窗口维护移出原文。
-            preloaded_order = get_window_preloaded_tools(
-                session,
-                self._memory_window,
-                context_view,
-                self._tools,
-            )
-            preloaded = set(preloaded_order)
-            logger.info(
-                "[tool_search] history preloaded=%s",
-                preloaded_order if preloaded_order else "[]",
-            )
         stream_sink = (
             self._stream_sink_factory(msg)
             if self._stream_sink_factory is not None
@@ -368,147 +389,144 @@ class DefaultReasoner(
         )
         tool_execution_context = self._tools.get_context()
         account_delivery_state: dict[str, bool] = {}
-        budget_repaired = False
         role_metadata = get_session_metadata(session)
         previous_mood_updated_at = str(role_metadata.get("current_mood_updated_at", ""))
 
-        # 2. 再按 trim plan + history window 顺序逐轮尝试。
+        # 2. 安全审查重试保留既有裁剪；预算压力只由统一控制器处理。
         attempts = self._build_attempt_plans(total_history)
         for attempt, plan in enumerate(attempts):
+            if attempt:
+                snapshot = self._session_manager.window_snapshot(
+                    session.key,
+                    context_view,
+                    message_limit=message_limit,
+                    expected=progress,
+                )
+                refreshed = snapshot.maintenance_progress
+                assert refreshed is not None
+                if base_history is None or refreshed.window_versions.get(
+                    window_id, 0
+                ) != progress.window_versions.get(window_id, 0):
+                    source_history = get_window_history(
+                        snapshot, self._memory_window, context_view
+                    )
+            current_progress = snapshot.maintenance_progress
+            assert current_progress is not None
+            working_summary = current_progress.summaries.get(window_id, "")
+            history_window = min(plan["history_window"], len(source_history))
+            # 与历史同一窗口里非用户本人消息的来源，加上本群旁听块里的（#539），
+            # 外部回合据此注入成员档案（#498）。
+            window_sources = get_window_sources(
+                snapshot,
+                self._memory_window,
+                context_view,
+                self._heard_for_turn(context_view),
+            )
+            preloaded: set[str] | None = None
+            preloaded_order: list[str] = []
+            if self._tool_search_enabled:
+                # 历史窗口里用过或解锁过的工具继续可见，直到窗口维护移出原文。
+                preloaded_order = get_window_preloaded_tools(
+                    snapshot,
+                    self._memory_window,
+                    context_view,
+                    self._tools,
+                )
+                preloaded = set(preloaded_order)
+                logger.info(
+                    "[tool_search] history preloaded=%s",
+                    preloaded_order if preloaded_order else "[]",
+                )
             retry_attempts.append(
                 {
                     "name": plan["name"],
-                    "history_window": plan["history_window"],
+                    "history_window": history_window,
                     "disabled_sections": sorted(plan["disabled_sections"]),
                 }
             )
             # 重试只裁剪请求上下文，保留完整会话历史和记忆整合位置。
             history_for_attempt = self._slice_history(
                 source_history,
-                plan["history_window"],
+                history_window,
             )
-            while True:
-                turn_injection_prompt = build_turn_injection_prompt(
-                    tools=self._tools,
-                    tool_search_enabled=self._tool_search_enabled,
-                    visible_names=(
-                        (preloaded or set()) | disabled_tools
-                        if self._tool_search_enabled
-                        else None
-                    ),
-                    external_only=external_restricted,
-                )
-                prompt_render = await self.render_prompt(
-                    PromptRenderInput(
-                        session_key=session.key,
-                        message_source=MessageSource.from_inbound(msg),
-                        channel=msg.channel,
-                        chat_id=msg.chat_id,
-                        content=msg.content,
-                        media=msg.media if msg.media else None,
-                        timestamp=msg.timestamp,
-                        history=history_for_attempt,
-                        skill_names=skill_names,
-                        retrieved_memory_block=retrieved_memory_block,
-                        disabled_sections=plan["disabled_sections"],
-                        turn_injection_prompt=turn_injection_prompt,
-                        extra_hints=extra_hints,
-                        session_metadata=get_session_metadata(session),
-                        context_scope=(
-                            context_view.scope if context_view is not None else None
-                        ),
-                        thread_id=inbound_thread_id(msg),
-                        window_sources=window_sources,
-                    )
-                )
-                initial_messages = prompt_render.messages
-                schemas = self._tools.get_schemas(
-                    names=turn_tool_names(
-                        self._tools,
-                        (
-                            self._tools.get_registered_order(
-                                self._tools.get_always_on_names() | (preloaded or set())
-                            )
-                            if self._tool_search_enabled
-                            else None
-                        ),
-                        disabled=disabled_tools,
-                        external_restricted=external_restricted,
-                    ),
-                    external_only=external_restricted,
-                )
-                budget = self._request_budget(initial_messages, schemas)
-                threshold = (
-                    (budget.target_tokens if budget_repaired else budget.trigger_tokens)
-                    if budget is not None
-                    else 0
-                )
-                request_tokens = self._request_tokens_with_tools(
-                    initial_messages, schemas
-                )
-                if threshold <= 0 or request_tokens < threshold:
-                    break
-                if budget_repaired:
-                    break
-                ensure = cast(
-                    "Callable[..., Awaitable[bool]]",
-                    getattr(
-                        self._memory_consolidator,
-                        "ensure_context_window",
-                        None,
-                    ),
-                )
-                # 预算按本回合所在上下文估算，整理也只为这类上下文腾出空间。
-                if not callable(ensure) or not await ensure(
+            turn_injection_prompt = build_turn_injection_prompt(
+                tools=self._tools,
+                tool_search_enabled=self._tool_search_enabled,
+                visible_names=(
+                    (preloaded or set()) | disabled_tools
+                    if self._tool_search_enabled
+                    else None
+                ),
+                external_only=external_restricted,
+            )
+            render_input = PromptRenderInput(
+                session_key=session.key,
+                message_source=MessageSource.from_inbound(msg),
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                content=msg.content,
+                media=msg.media if msg.media else None,
+                timestamp=msg.timestamp,
+                history=history_for_attempt,
+                skill_names=skill_names,
+                retrieved_memory_block=retrieved_memory_block,
+                disabled_sections=plan["disabled_sections"],
+                turn_injection_prompt=turn_injection_prompt,
+                extra_hints=extra_hints,
+                session_metadata=get_session_metadata(snapshot),
+                context_scope=(
+                    context_view.scope if context_view is not None else None
+                ),
+                thread_id=inbound_thread_id(msg),
+                window_sources=window_sources,
+            )
+            prompt_render = await self.render_prompt(render_input)
+            if protected_current is None:
+                protected_current = deepcopy(prompt_render.messages[-1])
+            elif protected_current.get("role") == "user":
+                # A fresh window must not reread or replace this execution's input.
+                prompt_render.messages[-1] = deepcopy(protected_current)
+            initial_messages = with_working_summary(
+                prompt_render.messages, working_summary
+            )
+
+            renderer = CompactionRenderer(
+                self._session_manager,
+                context_view,
+                message_limit,
+                render_input,
+                deepcopy(protected_current),
+                self.render_prompt,
+                self._tools,
+                self._tool_search_enabled,
+                disabled_tools,
+                external_restricted,
+                lambda: self._heard_for_turn(context_view),
+            )
+            request_prefix_length = len(initial_messages)
+            compaction = (
+                RequestCompaction(
+                    self._compaction,
                     session.key,
-                    msg.content,
                     context_view,
-                    **(
-                        {"input_token_threshold": budget.target_tokens}
-                        if budget is not None
-                        else {}
-                    ),
-                ):
-                    raise MemoryConsolidationFailedError(
-                        "记忆整理没有可处理的历史或未产生进展，已停止发送超限上下文。"
-                    )
-                budget_repaired = True
-                window_sources = get_window_sources(
-                    session,
-                    self._memory_window,
-                    context_view,
-                    self._heard_for_turn(context_view),
+                    policy,
+                    message_limit,
+                    request_prefix_length,
+                    renderer.render,
+                    renderer.history_tools,
+                    results=compaction_results,
                 )
-                if self._tool_search_enabled:
-                    preloaded_order = get_window_preloaded_tools(
-                        session,
-                        self._memory_window,
-                        context_view,
-                        self._tools,
-                    )
-                    preloaded = set(preloaded_order)
-                source_history = get_window_history(
-                    session, self._memory_window, context_view
-                )
-                history_for_attempt = self._slice_history(
-                    source_history,
-                    plan["history_window"],
-                )
-            if (
-                threshold > 0
-                and request_tokens >= threshold
-                and attempt + 1 < len(attempts)
-            ):
-                continue
-            if threshold > 0 and request_tokens >= threshold:
-                raise MemoryConsolidationFailedError(
-                    "记忆整理和上下文裁剪后输入仍超过预算，已停止发送超限上下文。"
-                )
+                if self._compaction is not None
+                else None
+            )
             llm_user_content, llm_context_frame = extract_model_facing_turn(
                 initial_messages
             )
             try:
-                with account_delivery_scope(account_delivery_state):
+                with (
+                    account_delivery_scope(account_delivery_state),
+                    request_compaction_scope(compaction),
+                ):
                     result = await self.run(
                         initial_messages,
                         request_time=msg.timestamp,
@@ -548,6 +566,8 @@ class DefaultReasoner(
                     )
 
                 retry_trace["request_usage"] = result.metadata.get("request_usage", {})
+                if compaction is not None:
+                    retry_trace["compaction"] = compaction.results
                 if isinstance(llm_user_content, (str, list)):
                     retry_trace["llm_user_content"] = llm_user_content
                 if isinstance(llm_context_frame, str) and llm_context_frame.strip():
@@ -590,6 +610,15 @@ class DefaultReasoner(
                     ),
                 )
             except ContentSafetyError:
+                prefix_length = (
+                    compaction.prefix_length if compaction else request_prefix_length
+                )
+                if any(
+                    message.get("tool_calls")
+                    for message in initial_messages[prefix_length:]
+                ):
+                    # Restarting a speaking attempt would execute its tools again.
+                    raise
                 if attempt < len(attempts) - 1:
                     next_plan = attempts[attempt + 1]
                     logger.warning(
@@ -605,22 +634,20 @@ class DefaultReasoner(
                         reply="你的消息触发了安全审查，无法处理。",
                         context_retry=retry_trace,
                     )
-            except ContextLengthError:
-                if attempt < len(attempts) - 1:
-                    next_plan = attempts[attempt + 1]
-                    logger.warning(
-                        "上下文超长 (attempt=%d)，切到 plan=%s window=%d disabled=%s",
-                        attempt + 1,
-                        next_plan["name"],
-                        next_plan["history_window"],
-                        sorted(next_plan["disabled_sections"]),
+            except ContextLengthError as exc:
+                # A provider rejection after tools must never replay the entire turn.
+                raise CompactionFailedError(
+                    CompactionResult(
+                        failure_stage="provider",
+                        error=str(exc),
+                        reason="provider_context_length",
+                        memory_committed=(
+                            any(item["memory_committed"] for item in compaction.results)
+                            if compaction
+                            else False
+                        ),
                     )
-                else:
-                    logger.warning("上下文超长：所有窗口均失败，请求不带历史仍超长")
-                    return TurnRunResult(
-                        reply="上下文过长无法处理，请尝试新建对话。",
-                        context_retry=retry_trace,
-                    )
+                ) from exc
             except asyncio.TimeoutError:
                 logger.warning("LLM 流响应超时 (attempt=%d)，远端连接中断", attempt + 1)
                 return TurnRunResult(
