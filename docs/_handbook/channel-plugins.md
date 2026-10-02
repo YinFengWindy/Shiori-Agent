@@ -8,7 +8,7 @@
 | --- | --- |
 | `plugins/qqbot/` | 结构最紧凑：Gateway + REST，mixin 拆分入站、出站、流式 |
 | `plugins/telegram/` | 轮询连接、bot 命令菜单（`uses_bot_commands`）、编辑消息式流式预览 |
-| `plugins/qq/` | 第三方 SDK 带进程级全局配置时，如何在换代时写入与恢复 |
+| `plugins/qq/` | 按账号管理 OneBot 连接和私有 NapCat 实例，处理扫码登录、重连及进程清理 |
 | `plugins/feishu/` | SDK 自带线程和事件循环时的线程模型、CardKit 流式卡片、`status()` |
 
 ## 1. 包布局与 manifest

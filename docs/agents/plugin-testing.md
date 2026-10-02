@@ -87,7 +87,7 @@ runtime lease、kernel 卸载顺序及 screen_perception/desktop_pet 组合留�
 
 QQ 已在同票完成 SDK-only 安装验证；平台原文来源/引用的纯函数与测试分别归 `shiori_sdk.channels.message_source`、`reply_context` 及 SDK 镜像测试。投递账本、账号重启/删除与头像持久化集成留在宿主对应 owner 测试。NapCat 使用宿主 `Processes.popen`，Windows CI 保留已有进程测试并加入同步能力和 QQ 直接调用者。
 
-#589 已完成四渠道。Telegram 以 SDK fake 验证命令菜单、用户名/话题、媒体和流式，飞书保留真实离线 HTTP/WebSocket 线程替身验证；两者的存储/生命周期宿主集成继续由根 CI 执行。SDK wheel 冒烟执行镜像后的纯值测试和新增公共 fake 测试。桌宠的 Python 后端与测试已由 #590 迁入 SDK；#591 做全插件最终发行验收。
+#589 已完成四渠道。Telegram 以 SDK fake 验证命令菜单、用户名/话题、媒体和流式，飞书保留真实离线 HTTP/WebSocket 线程替身验证；两者的存储/生命周期宿主集成继续由根 CI 执行。SDK wheel 冒烟执行镜像后的纯值测试和新增公共 fake 测试。桌宠的 Python 后端与测试已由 #590 迁入 SDK；全插件隔离与两种 SDK 产物安装由上述 CI 流程持续验证。
 
 #590 的桌宠包校验、binding/pets RPC、启用互斥、清理重试与动作限流在插件内使用 SDK fake。实际角色事务/锁、资产迁移凭证与 kernel 装配、停用/重载由宿主集成验证。桌宠安装只依赖 SDK 与 Pillow，最后 44 条 Python 宿主导入豁免已删除。局部开发可使用 `uv run python -m pytest plugins/desktop_pet/tests`；仓库外非 editable 验证用 `uv run python -m scripts.verify_plugin_tests --plugins desktop_pet`。
 

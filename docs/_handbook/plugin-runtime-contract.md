@@ -858,15 +858,24 @@ with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature
 history; all current examples target the unified 3.x ABI.
 
-Python contracts, shared lifecycle values, event handler/effect types and pure test
-fakes now belong to `shiori_sdk`. citation, context_pressure, default_memory, shell_safety, shell_restore,
-tool_loop_guard, plugin_undo, observe and status_commands consume SDK contracts and their
-declared third-party dependencies. Memory construction, resource handoff and setup
-capabilities are documented in the shared guide; the default memory implementation
-and vector compatibility rules are owned entirely by its plugin. Other plugins remain under a decreasing import baseline until their
-respective migration tickets. The SDK never imports host modules or creates host
-storage. See [the shared SDK guide](../../packages/sdk/README.md) for installation,
-capability typing, testing and artifact checks.
+Python contracts, shared lifecycle values, event handler/effect types and
+independent test fakes belong to `shiori_sdk`. All 20 baseline plugins consume SDK
+contracts and explicitly declared dependencies: browser_use, citation, computer_use,
+context_pressure, default_memory, desktop_pet, feishu, meme, novelai, observe,
+plugin_undo, qq, qqbot, screen_perception, shell_restore, shell_safety,
+status_commands, story, telegram and tool_loop_guard.
+
+Every plugin's backend, tests and packaged test support are guarded against host
+implementation dependencies without migration exemptions. Repository-external
+verification installs each target and its declared closure as ordinary wheels,
+uses `shiori-sdk[testing]`, and executes the tests without the host. The SDK never
+imports host or concrete plugin implementations or creates host storage. Real
+AppRuntime, channel, window and process integration remains in separate host CI;
+`shiori-host-testing` provides Python runtime fixtures. Memory construction,
+resource handoff and typed setup capabilities are documented in
+[the shared SDK guide](../../packages/sdk/README.md);
+the default memory implementation and vector compatibility rules belong to its
+plugin. The guide also covers installation, testing and artifact checks.
 
 
 The hook/command/observation setup surfaces are `HookPluginContext`,

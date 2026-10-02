@@ -23,15 +23,17 @@ plugin's production peer imports.
 ## Python
 
 The wheel contains contracts and pure values, without a dependency on the host.
-The first public surface is intentionally small: `PluginRuntimeContext`,
+The core lifecycle surface includes `PluginRuntimeContext`,
 `LifecycleFrame`, `LifecycleModule`, `LifecycleCapability`, `EventsCapability`,
 `Dispose`, `EventHandler`, `AfterStepCtx`, `AfterReasoningCtx` and `ResponseMetadata`.
 The host owns phase execution, storage, capability authorization and cleanup.
 `setup(ctx)` receives its declared capabilities; undeclared access raises
 `CapabilityNotGranted`. Runtime injection is checked through a static
 `PluginSetupContext` without the legacy context's dynamic attribute fallback.
-Further capabilities enter the SDK with their owning migration, not as copies of
-host services.
+Typed setup contexts also cover memory, hooks, commands, diagnostics, role/model
+and process services, channels and accounts. Their capability protocols and
+independent testing fixtures are documented below; host service implementations
+remain in the host.
 
 ```python
 from shiori_sdk import PluginRuntimeContext
