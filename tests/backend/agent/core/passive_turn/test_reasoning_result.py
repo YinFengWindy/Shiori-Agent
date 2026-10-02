@@ -272,7 +272,11 @@ async def test_non_role_finalize_degrades_then_rejects_invalid_response(
             turn_usage(),
             request_compaction_scope(scope),
             pytest.raises(
-                EmptyReplyError if outcome == "empty" else CompactionFailedError
+                {
+                    "empty": EmptyReplyError,
+                    "network": OSError,
+                    "tool": CompactionFailedError,
+                }[outcome]
             ),
         ):
             await reasoner._summarize_incomplete_progress(
@@ -288,10 +292,15 @@ async def test_non_role_finalize_degrades_then_rejects_invalid_response(
         assert all(not request.get("tools") for request in sent)
         assert all("summary_request" in str(request["messages"]) for request in sent)
         latest = controller.latest(session.key, None)
-        assert latest is not None and latest["phase"] == "failed"
-        assert latest["failure_stage"] == (
-            "provider" if outcome == "network" else "response"
-        )
+        assert latest is not None
+        if outcome == "network":
+            # An ordinary provider failure is not a compaction failure.
+            assert latest["phase"] != "failed"
+            latest = controller.latest(session.key, None, request=True)
+            assert latest is not None and latest["failure_kind"] == "provider_error"
+        else:
+            assert latest["phase"] == "failed"
+            assert latest["failure_stage"] == "response"
         assert latest["request_usage"]["last_request"]["purpose"] == "auxiliary"
         assert not session.maintenance_progress.summaries and len(session.messages) == 2
     finally:
