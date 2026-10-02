@@ -8,3 +8,5 @@ capabilities:
   - workspace
   - events
   - background
+  - diagnostics
+  - storage

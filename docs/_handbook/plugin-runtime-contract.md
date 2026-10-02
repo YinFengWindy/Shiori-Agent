@@ -834,10 +834,25 @@ update the declared range when migrating. The 2.x sections above describe featur
 history; all current examples target the unified 3.x ABI.
 
 Python contracts, shared lifecycle values, event handler/effect types and pure test
-fakes now belong to `shiori_sdk`. citation, context_pressure and default_memory consume SDK contracts and their
+fakes now belong to `shiori_sdk`. citation, context_pressure, default_memory, shell_safety, shell_restore,
+tool_loop_guard, plugin_undo, observe and status_commands consume SDK contracts and their
 declared third-party dependencies. Memory construction, resource handoff and setup
 capabilities are documented in the shared guide; the default memory implementation
 and vector compatibility rules are owned entirely by its plugin. Other plugins remain under a decreasing import baseline until their
 respective migration tickets. The SDK never imports host modules or creates host
 storage. See [the shared SDK guide](../../packages/sdk/README.md) for installation,
 capability typing, testing and artifact checks.
+
+
+The hook/command/observation setup surfaces are `HookPluginContext`,
+`CommandPluginContext` and `ObservePluginContext` in `shiori_sdk.extensions`.
+Observe declares `diagnostics` and `storage` alongside events/background/workspace.
+Diagnostics connects to the owning host's global handler stack and active session;
+code roots are resolved from installed host packages and discovered plugin roots.
+The plugin never guesses a repository root. `storage.migrate_data` uses the existing
+host migration receipts and leases. These ports are part of Runtime API 3.0.
+
+Before-turn command contributors read `CommandFrame.command` and request
+`abort_command(reply)`, so abort construction/context preservation remain host-owned.
+The optional Observe reader is queried through `dependencies.get_optional("observe")`
+each time; availability is scoped to the active provider generation.

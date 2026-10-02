@@ -1,68 +1,43 @@
 from __future__ import annotations
-
 import asyncio
 import os
 import shlex
 from pathlib import Path
-from typing import Any
 import pytest
-
-from agent.plugin_host import HostServices, PluginKernel
-from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
-from bus.event_bus import EventBus
-from shiori_plugin_testkit.packages import stage_plugin_package
-
-PLUGIN_DIR = Path(__file__).resolve().parents[1]
-
-
-async def _invoke(tool_name: str, arguments: dict[str, Any]) -> Any:
-    return {"tool": tool_name, "arguments": dict(arguments)}
-
-
-def _run(coro: Any) -> Any:
-    return asyncio.run(coro)
+from shiori_sdk.tool_hooks import PreToolCtx
+from shiori_sdk.testing.extensions import FakeExtensionContext
+from plugins.shell_restore.backend.plugin import setup
 
 
 def _make_plugin_root(tmp_path: Path) -> Path:
-    root = tmp_path / "plugins"
-    root.mkdir()
-    stage_plugin_package(PLUGIN_DIR, root / "shell_restore")
-    return root
+    return tmp_path / "plugins"
 
 
-def _run_shell(root: Path, command: str) -> Any:
-    bus = EventBus()
-    kernel = PluginKernel(
-        [root],
-        services=HostServices(event_bus=bus, workspace=root.parent / "workspace"),
-    )
-    _run(kernel.load_all())
-    return _run(
-        ToolExecutor(kernel.tool_hooks).execute(
-            ToolExecutionRequest(
-                call_id="c1",
-                tool_name="shell",
-                arguments={"command": command, "description": "测试命令"},
-                source="passive",
-            ),
-            _invoke,
+def _run_shell(root: Path, command: str):
+    async def run():
+        ctx = FakeExtensionContext("shell_restore", workspace=root.parent / "workspace")
+        await setup(ctx)
+        event = PreToolCtx(
+            "", "", "", "shell", {"command": command, "description": "测试命令"}
         )
-    )
+        outcome = await ctx.tool_hooks.dispatch(event)
+        if outcome.updated_input is None:
+            outcome.updated_input = event.arguments
+        await ctx.aclose()
+        return outcome
+
+    return asyncio.run(run())
 
 
-def test_shell_restore_hook_name_matches_legacy_convention(tmp_path: Path) -> None:
-    """hook 名由 ToolHooksCapability 统一生成，须与旧系统
-    f"plugin:{instance.name}:{md.handler_name}" 逐字一致（#182 评审）。"""
-    bus = EventBus()
-    kernel = PluginKernel(
-        [_make_plugin_root(tmp_path)],
-        services=HostServices(event_bus=bus, workspace=tmp_path / "workspace"),
-    )
-    _run(kernel.load_all())
-
-    assert [h.name for h in kernel.tool_hooks] == [
-        "plugin:shell_restore:rewrite_rm_to_mv"
-    ]
+@pytest.mark.asyncio
+async def test_setup_registers_the_filtered_handler(tmp_path):
+    ctx = FakeExtensionContext("shell_restore", workspace=tmp_path)
+    await setup(ctx)
+    assert len(ctx.tool_hooks.handlers) == 1
+    assert ctx.tool_hooks.handlers[0].tool_name_filter == "shell"
+    assert ctx.tool_hooks.handlers[0].handler_name == "rewrite_rm_to_mv"
+    await ctx.aclose()
+    assert ctx.tool_hooks.handlers == []
 
 
 def test_shell_rm_hook_rewrites_rm_and_creates_restore_dir(tmp_path: Path) -> None:
@@ -71,16 +46,9 @@ def test_shell_rm_hook_rewrites_rm_and_creates_restore_dir(tmp_path: Path) -> No
     try:
         result = _run_shell(_make_plugin_root(tmp_path), "rm -rf foo bar")
 
-        assert result.status == "success"
+        assert result.decision == "pass"
         assert restore_dir.is_dir()
-        assert shlex.split(result.final_arguments["command"]) == [
-            "mv",
-            "--",
-            "foo",
-            "bar",
-            str(restore_dir),
-        ]
-        assert shlex.split(result.output["arguments"]["command"]) == [
+        assert shlex.split(result.updated_input["command"]) == [
             "mv",
             "--",
             "foo",
@@ -97,8 +65,8 @@ def test_shell_rm_hook_rewrites_sudo_rm(tmp_path: Path) -> None:
     try:
         result = _run_shell(_make_plugin_root(tmp_path), "sudo rm -f /tmp/a")
 
-        assert result.status == "success"
-        assert shlex.split(result.final_arguments["command"]) == [
+        assert result.decision == "pass"
+        assert shlex.split(result.updated_input["command"]) == [
             "sudo",
             "mv",
             "--",
@@ -115,9 +83,9 @@ def test_shell_rm_hook_skips_non_rm_command(tmp_path: Path) -> None:
     try:
         result = _run_shell(_make_plugin_root(tmp_path), "ls -la")
 
-        assert result.status == "success"
+        assert result.decision == "pass"
         assert not restore_dir.exists()
-        assert result.final_arguments["command"] == "ls -la"
+        assert result.updated_input["command"] == "ls -la"
     finally:
         os.environ.pop("AKASIC_RESTORE_DIR", None)
 
@@ -135,9 +103,7 @@ def test_default_recovery_is_workspace_isolated_and_leaves_legacy_home_untouched
         project.mkdir()
         result = _run_shell(_make_plugin_root(project), "rm document.txt")
         target = project / "workspace/recovery/shell_restore"
-        assert shlex.split(result.final_arguments["command"])[-1] == str(
-            target.resolve()
-        )
+        assert shlex.split(result.updated_input["command"])[-1] == str(target.resolve())
         assert target.is_dir()
         assert not (project / "workspace/plugin-data/shell_restore").exists()
     assert list(legacy.iterdir()) == [legacy / "original.txt"]

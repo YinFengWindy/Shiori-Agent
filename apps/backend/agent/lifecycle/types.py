@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
-
 from agent.prompting.assembler import PromptSectionRender
 from bus.events import InboundMessage, OutboundMessage
 from conversation.context_scope import source_belongs_to_user
@@ -15,6 +13,7 @@ from shiori_sdk.lifecycle import (
     AfterStepCtx as AfterStepCtx,
 )
 from shiori_sdk.lifecycle import AfterToolResultCtx as AfterToolResultCtx
+from shiori_sdk.tool_hooks import PreToolCtx as PreToolCtx
 
 if TYPE_CHECKING:
     from agent.core.runtime_support import SessionLike, TurnRunResult
@@ -247,19 +246,3 @@ class BeforeToolCallCtx:
     chat_id: str
     tool_name: str
     arguments: dict[str, Any]
-
-
-@dataclass
-class PreToolCtx:
-    """pre-tool hook 上下文 — mutable，handler 返回 dict 表示新 arguments"""
-
-    session_key: str
-    channel: str
-    chat_id: str
-    tool_name: str
-    arguments: dict[str, Any]
-    call_id: str = ""
-    source: str = ""
-    request_text: str = ""
-    tool_batch: tuple[dict[str, Any], ...] = field(default_factory=tuple)
-    tool_batch_index: int = 0

@@ -25,7 +25,19 @@ UV = str(Path(sys.executable).with_name("uv.exe" if os.name == "nt" else "uv"))
 if not Path(UV).is_file():
     UV = "uv"
 # Measured as the longest suites in CI; starting them first shortens the pool's tail.
-SDK_PLUGINS = frozenset({"citation", "context_pressure", "default_memory"})
+SDK_PLUGINS = frozenset(
+    {
+        "citation",
+        "context_pressure",
+        "default_memory",
+        "shell_safety",
+        "shell_restore",
+        "tool_loop_guard",
+        "plugin_undo",
+        "observe",
+        "status_commands",
+    }
+)
 SLOW_PLUGINS = ("telegram", "feishu", "qqbot")
 
 

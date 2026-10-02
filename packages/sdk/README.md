@@ -83,7 +83,8 @@ uv run python scripts/check_sdk_imports.py --base <base-commit>
 The artifact probes install tarball/wheel non-editably outside the checkout. The
 wheel probe first collects/runs an unrelated test with only the base SDK and pytest,
 checks the missing-extra diagnostic, then installs the extra and runs all SDK tests.
-The plugin probe executes citation, context_pressure and default_memory with no
+The plugin probe executes citation, context_pressure, default_memory, shell_safety,
+shell_restore, tool_loop_guard, plugin_undo, observe and status_commands with no
 host or testkit; default_memory is installed only for its own target. It verifies installed
 origins and that async failures really execute. The original full host CI and
 legacy plugin integration job remain enabled.
@@ -127,3 +128,47 @@ while RPC registration remains plugin-owned. `BeforeTurnObservation` exposes onl
 inspection fields; `AfterToolResultCtx` is the shared result event. Standalone tests
 can use `FakeMemoryPluginContext`, `FakeMemoryRoles`, `FakeMemoryStorage` and
 `FakeBuildResources`; real migration and runtime assembly remain host integration tests.
+
+
+## Tool policies, commands and observation
+
+`shiori_sdk.tools` owns `Tool`, `ToolResult` and result normalization; `tool_hooks`
+owns `PreToolCtx`, `HookOutcome` and registration. Policies remain in plugins.
+`HookOutcome(finalize=True, decision="deny")` requests host summarization while
+ordinary denial leaves the existing execution flow intact. `HookPluginContext`
+provides granted config, workspace and hook registration.
+
+Before-turn command modules accept a `CommandFrame`, read its immutable
+`CommandInput`, and call `frame.abort_command(reply)`. The host constructs the
+ordinary abort result, retaining channel, timestamp and context scope and skipping
+retrieval/model calls. `last_consolidated` is memory progress, not model compaction.
+`SessionUndo` supplies an atomic undo result and invokes a memory source resolver
+before deleting messages. The optional `MemoryUndo` extension supports dry-run and
+real cleanup. A command resolves it from the current memory engine; engines lacking
+that extension keep working without memory undo. `CommandPluginContext` also
+provides command-menu registration and current declared dependency exports.
+
+Observe uses `ObservePluginContext` with `background`, `storage` and `diagnostics`.
+The migration port is shared with memory construction. The host owns receipt/lease
+handling, the active error session, installed package and external plugin code roots,
+and the process-global hook stack. The plugin owns fingerprinting, deduplication,
+flush and SQLite. Register collector cleanup before installing global hooks; stop
+subscriptions before final flush, then cancel retention and writer in reverse order.
+Source checkout depth is never a plugin contract.
+
+Status commands declare `observe` as an optional manifest dependency and resolve
+its public `recent_cache_turns` export for each command. Unload yields an unavailable
+reply; reload uses the new export. Consumers do not inspect Observe's database.
+
+`testing.extensions.FakeExtensionContext`, `testing.hooks.FakeToolHooks`,
+`testing.commands.FakeCommandFrame` / `FakeSessionUndo` and
+`testing.diagnostics.FakeDiagnostics` provide independent contract doubles.
+Diagnostics fakes record callbacks without modifying process-wide handlers. Global
+hook restoration and real lifecycle ordering stay in host integration tests.
+
+
+`shiori_sdk.storage.plugin_data_dir` and `PLUGIN_DATA_DIRNAME` own the pure canonical
+private-data layout and portable plugin-ID validation; host migration and SDK fakes
+use the same helper. `PrivateStorage.migrate_data` returns the authoritative target.
+Observe passes that resolved database path to both writer and public telemetry reader,
+so an injected storage root remains consistent and reads never create storage.

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
-from agent.lifecycle.commands import abort_command, normalize_command
-from session.manager import SessionManager
+from shiori_sdk.commands import CommandFrame, normalize_command
+from shiori_sdk.lifecycle import LifecycleFrame
+from shiori_sdk.sessions import SessionUndo, MemoryUndo
 
 if TYPE_CHECKING:
-    from agent.lifecycle.phases.before_turn import BeforeTurnFrame
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.extensions import CommandPluginContext as PluginRuntimeContext
 
 logger = logging.getLogger("plugin.undo")
 
@@ -26,22 +26,24 @@ class UndoCommandModule:
     def __init__(self, plugin: "PluginUndo") -> None:
         self._plugin = plugin
 
-    async def run(self, frame: BeforeTurnFrame):
+    async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
         """Short-circuit a matching command unless an earlier module handled it."""
-        if _CTX_SLOT in frame.slots:
+        if _CTX_SLOT in frame.slots or not isinstance(frame, CommandFrame):
             return frame
-        state = frame.input
-        if normalize_command(state.msg.content) != "/undo":
+        state = frame.command
+        if normalize_command(state.content) != "/undo":
             return frame
         reply = await self._plugin.undo(state.session_key)
-        frame.slots[_CTX_SLOT] = abort_command(state, reply)
+        frame.abort_command(reply)
         return frame
 
 
 class PluginUndo:
     """Coordinate public session undo and memory source cleanup."""
 
-    def __init__(self, session_manager: SessionManager, memory_engine: Any) -> None:
+    def __init__(
+        self, session_manager: SessionUndo, memory_engine: MemoryUndo | None
+    ) -> None:
         self._session_manager = session_manager
         self._memory_engine = memory_engine
 
@@ -107,18 +109,14 @@ class PluginUndo:
 
 
 def _undo_memory_sources(
-    memory_engine: Any,
+    memory_engine: MemoryUndo | None,
     message_ids: list[str],
     *,
     dry_run: bool,
 ) -> dict[str, object]:
     if memory_engine is None:
         return {"affected_ids": [], "restored_ids": [], "rollback_source_ids": []}
-    undo = getattr(memory_engine, "undo_by_message_sources", None)
-    if not callable(undo):
-        return {"affected_ids": [], "restored_ids": [], "rollback_source_ids": []}
-    result = undo(message_ids, dry_run=dry_run)
-    return cast(dict[str, object], result if isinstance(result, dict) else {})
+    return memory_engine.undo_by_message_sources(message_ids, dry_run=dry_run)
 
 
 def _string_list(value: object) -> list[str]:
@@ -131,6 +129,9 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     """Register scoped undo command and before-turn contribution."""
     if ctx.session_manager is None:
         raise RuntimeError("plugin_undo requires a session manager")
-    plugin = PluginUndo(ctx.session_manager, ctx.memory_engine)
+    engine = ctx.memory_engine
+    plugin = PluginUndo(
+        ctx.session_manager, engine if isinstance(engine, MemoryUndo) else None
+    )
     ctx.lifecycle.contribute("before_turn", [UndoCommandModule(plugin)])
     ctx.bot_commands.add("undo", "撤销上一轮对话")

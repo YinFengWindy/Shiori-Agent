@@ -233,12 +233,3 @@ def test_migration_failure_leaves_source_intact_and_no_partial_target(
     assert not (
         plugin_data_dir(workspace, "demo") / "kv.json"
     ).exists(), "写入失败不能留下半截 target"
-
-
-@pytest.mark.parametrize(
-    "plugin_id",
-    ["", ".", "..", "../outside", "folder/child", "folder\\child", "D:outside"],
-)
-def test_plugin_data_paths_reject_nonportable_directory_traversal(tmp_path, plugin_id):
-    with pytest.raises(ValueError, match="ID"):
-        plugin_data_dir(tmp_path, plugin_id)

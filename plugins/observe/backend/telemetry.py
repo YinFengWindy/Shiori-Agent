@@ -21,10 +21,8 @@ class KVCacheTurn:
 class ObserveTelemetry:
     """Expose immutable cache snapshots without giving consumers storage access."""
 
-    def __init__(self, workspace: Path) -> None:
-        from .storage import database_path
-
-        self._db_path = database_path(workspace)
+    def __init__(self, db_path: Path) -> None:
+        self._db_path = db_path
 
     def recent_cache_turns(
         self, session_key: str, *, limit: int = 5
