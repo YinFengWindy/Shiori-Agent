@@ -19,7 +19,7 @@ from shiori_sdk.tools import ToolResult
 
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
-from tests.backend.agent.plugin_host.conftest import make_kernel
+from tests.support.plugin_kernel import make_kernel
 
 
 def _owned_descendants(baseline: set[int]) -> set[int]:

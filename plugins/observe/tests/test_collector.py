@@ -61,27 +61,3 @@ async def test_retiring_the_old_collector_keeps_the_new_one_recording_once():
     finally:
         await new.uninstall()
         await old.uninstall()
-
-
-@pytest.mark.asyncio
-async def test_discarded_candidate_collector_restores_the_active_generation():
-    diagnostics = FakeDiagnostics()
-    events, discarded = [], []
-    active = GlobalErrorCollector(SimpleNamespace(emit=events.append), diagnostics)
-    candidate = GlobalErrorCollector(
-        SimpleNamespace(emit=discarded.append), diagnostics
-    )
-    active.install()
-    candidate.install()
-    try:
-        await candidate.uninstall()
-        assert diagnostics.owners == [active]
-        assert diagnostics.system == active._on_sys_except
-        assert diagnostics.handler is not None
-        diagnostics.handler.emit(_error("active remains"))
-        await active.uninstall()
-        assert len(events) == 1
-        assert discarded == []
-    finally:
-        await candidate.uninstall()
-        await active.uninstall()

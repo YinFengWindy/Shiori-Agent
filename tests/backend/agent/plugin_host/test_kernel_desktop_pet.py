@@ -48,12 +48,19 @@ def _services(store: RoleStore) -> HostServices:
 
 
 def _load(services: HostServices) -> PluginKernel:
-    """Loads a fresh staged copy so every kernel owns its own import path."""
-    with tempfile.TemporaryDirectory() as tmp:
-        stage_plugin_package(PLUGIN_DIR, Path(tmp) / PLUGIN_ID)
-        kernel = PluginKernel([Path(tmp)], services=services)
-        asyncio.run(kernel.load_all())
-        return kernel
+    """Loads a fresh staged copy so every kernel owns its own plugin root.
+
+    The copy lives under the test's workspace (a pytest ``tmp_path``), so it
+    stays on disk for the kernel's whole lifetime, including later reloads.
+    """
+    assert services.workspace is not None
+    staging = services.workspace / "staged-plugins"
+    staging.mkdir(exist_ok=True)
+    root = Path(tempfile.mkdtemp(dir=staging))
+    stage_plugin_package(PLUGIN_DIR, root / PLUGIN_ID)
+    kernel = PluginKernel([root], services=services)
+    asyncio.run(kernel.load_all())
+    return kernel
 
 
 def _call(kernel: PluginKernel, method: str, payload: dict[str, Any]) -> Any:

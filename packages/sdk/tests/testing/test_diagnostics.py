@@ -1,5 +1,6 @@
 """FakeDiagnostics follows the host's newest-live-owner hook semantics."""
 
+import asyncio
 import logging
 
 from shiori_sdk.testing.diagnostics import FakeDiagnostics
@@ -16,9 +17,13 @@ class _Owner(logging.Handler):
         """Event-loop exception handler."""
 
 
-def _install(diagnostics: FakeDiagnostics, owner: _Owner) -> None:
+def _install(
+    diagnostics: FakeDiagnostics,
+    owner: _Owner,
+    loop: asyncio.AbstractEventLoop | None = None,
+) -> None:
     diagnostics.install_global_hooks(
-        owner, owner, owner.system, owner.thread, None, owner.loop_handler
+        owner, owner, owner.system, owner.thread, loop, owner.loop_handler
     )
 
 
@@ -47,3 +52,30 @@ def test_discarding_the_newest_owner_restores_the_previous_generation():
     diagnostics.uninstall_global_hooks(active)
     assert diagnostics.owners == []
     assert diagnostics.handler is None and diagnostics.system is None
+
+
+def test_fallback_restores_the_original_loop_handler_across_different_loops():
+    first_loop, second_loop = asyncio.new_event_loop(), asyncio.new_event_loop()
+    try:
+        diagnostics, active, candidate = FakeDiagnostics(), _Owner(), _Owner()
+        _install(diagnostics, active, first_loop)
+        _install(diagnostics, candidate, second_loop)
+        diagnostics.uninstall_global_hooks(candidate)
+        assert diagnostics.handler is active
+        assert diagnostics.system == active.system
+        assert diagnostics.loop_handler is None
+    finally:
+        first_loop.close()
+        second_loop.close()
+
+
+def test_owner_installed_twice_is_removed_one_registration_at_a_time():
+    diagnostics, owner = FakeDiagnostics(), _Owner()
+    _install(diagnostics, owner)
+    _install(diagnostics, owner)
+    diagnostics.uninstall_global_hooks(owner)
+    _assert_active(diagnostics, owner)
+    assert diagnostics.owners == [owner]
+    diagnostics.uninstall_global_hooks(owner)
+    assert diagnostics.owners == []
+    assert diagnostics.handler is None and diagnostics.loop_handler is None
