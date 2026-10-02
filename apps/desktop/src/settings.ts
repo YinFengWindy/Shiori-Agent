@@ -134,6 +134,7 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
         devMode: Boolean(agent.dev_mode),
         streamingEnabled: Boolean(asRecord(asRecord(parsed.desktop).chat).streaming_enabled),
         memoryWindow: Number(agentContext.memory_window ?? 40),
+        compactionRetainedTurns: Number(agentContext.compaction_retained_turns ?? 2),
         contextTriggerRatio: Number(agentContext.trigger_ratio ?? 0.75),
         contextTargetRatio: Number(agentContext.target_ratio ?? 0.4),
         contextSafetyMarginTokens: Number(agentContext.safety_margin_tokens ?? 4096),
@@ -183,6 +184,7 @@ function renderSettingsToml(formData: SettingsFormData): string {
     ...renderProactiveStrategies(formData.proactiveStrategies),
     "[agent.context]",
     `memory_window = ${formData.advanced.memoryWindow}`,
+    `compaction_retained_turns = ${formData.advanced.compactionRetainedTurns ?? 2}`,
     `trigger_ratio = ${formData.advanced.contextTriggerRatio ?? 0.75}`,
     `target_ratio = ${formData.advanced.contextTargetRatio ?? 0.4}`,
     `safety_margin_tokens = ${formData.advanced.contextSafetyMarginTokens ?? 4096}`,
@@ -268,6 +270,8 @@ function validateSettings(formData: SettingsFormData): void {
     if (registration.contextWindowTokens != null && registration.maxOutputTokens != null && registration.maxOutputTokens > registration.contextWindowTokens) throw new Error("模型最大输出能力不得超过上下文窗口");
     registrationIds.add(registration.id);
   }
+  const retainedTurns = formData.advanced.compactionRetainedTurns ?? 2;
+  if (!Number.isSafeInteger(retainedTurns) || retainedTurns < 0) throw new Error("压缩后保留原文轮数必须是非负整数");
   const trigger = formData.advanced.contextTriggerRatio ?? 0.75;
   const target = formData.advanced.contextTargetRatio ?? 0.4;
   const safety = formData.advanced.contextSafetyMarginTokens ?? 4096;

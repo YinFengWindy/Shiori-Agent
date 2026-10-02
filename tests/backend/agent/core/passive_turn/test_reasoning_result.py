@@ -1,11 +1,11 @@
 """Auxiliary budget summaries remain separate from role-facing replies."""
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
+from types import SimpleNamespace
 
 import pytest
 
 from agent.core.passive_turn import DefaultReasoner
-from agent.core.passive_turn.empty_reply import EmptyReplyError
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import LLMResponse
@@ -83,31 +83,54 @@ async def test_internal_budget_summary_uses_auxiliary_purpose(
     assert request["tools"] == []
 
 
-async def test_role_summary_recovery_obeys_input_budget_and_skips_mood(monkeypatch):
-    provider = AsyncMock()
-    provider.chat.return_value = LLMResponse(content="")
+async def test_role_summary_recovery_obeys_input_budget_and_skips_mood():
+    from agent.provider import LLMProvider
+    from agent.prompting.input_budget import BudgetPolicy
+    from agent.prompting.usage_anchor import usage_context
+    from core.compaction import CompactionFailedError
+
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=2000,
+        max_output_tokens=100,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
+    )
+    provider._create_with_retry = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="", tool_calls=[]),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=1499, completion_tokens=1, total_tokens=1500
+            ),
+        )
+    )
     reasoner = DefaultReasoner(
-        llm=LLMServices(provider=provider, light_provider=provider),
-        llm_config=LLMConfig(),
+        llm=LLMServices(provider, provider),
+        llm_config=LLMConfig(max_tokens=100),
         tools=ToolRegistry(),
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
         memory_window=40,
     )
-    monkeypatch.setattr(reasoner, "_request_threshold", lambda *_: 100)
-    monkeypatch.setattr(
-        "agent.core.passive_turn.reasoning_result.support.estimate_messages_tokens",
-        Mock(side_effect=[1, 100]),
-    )
-    with pytest.raises(EmptyReplyError) as caught:
-        await reasoner._summarize_incomplete_progress(
-            [{"role": "user", "content": "检查"}],
-            reason="early_stop",
-            iteration=1,
-            tools_used=[],
-            reply_moods=("平静",),
-            session="role:mira",
-            channel="qq",
-        )
-    assert caught.value.diagnostics["outcome"] == "budget_exceeded"
-    assert provider.chat.await_count == 1
+    try:
+        with (
+            usage_context(("cli:summary-recovery",)),
+            pytest.raises(CompactionFailedError) as caught,
+        ):
+            await reasoner._summarize_incomplete_progress(
+                [{"role": "user", "content": "检查"}],
+                reason="early_stop",
+                iteration=1,
+                tools_used=[],
+                reply_moods=("平静",),
+                session="role:mira",
+                channel="qq",
+            )
+        assert caught.value.result.failure_stage == "budget"
+        assert provider._create_with_retry.await_count == 1
+    finally:
+        await provider.aclose()

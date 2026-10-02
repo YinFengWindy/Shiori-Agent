@@ -24,11 +24,12 @@ describe("advancedSettingsGroups", () => {
       max_tokens: "token",
       max_iterations: "步",
       memory_window: "条",
+      compaction_retained_turns: "轮",
       memory_optimizer_interval_seconds: "秒",
       trigger_ratio: undefined,
       target_ratio: undefined,
       safety_margin_tokens: "token",
     });
-    assert.deepEqual(advancedSettingsGroups.map((group) => group.title), ["对话", "能力", "记忆整理", "开发者"]);
+    assert.deepEqual(advancedSettingsGroups.map((group) => group.title), ["对话", "能力", "记忆整理", "上下文压缩", "开发者"]);
   });
 });

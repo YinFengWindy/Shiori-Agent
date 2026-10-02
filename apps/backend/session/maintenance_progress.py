@@ -73,6 +73,9 @@ class MaintenanceProgress:
     legacy_cuts: dict[str, int] = field(default_factory=dict)
     windows: dict[str, int] = field(default_factory=dict)
     window_versions: dict[str, int] = field(default_factory=dict)
+    summaries: dict[str, str] = field(default_factory=dict)
+    summary_source_ids: dict[str, list[str]] = field(default_factory=dict)
+    request_owners: dict[str, str] = field(default_factory=dict)
     generation: int = 0
     memory_version: int = 0
     recent_context_version: int = 0

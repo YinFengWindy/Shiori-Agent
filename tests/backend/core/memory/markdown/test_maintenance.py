@@ -15,12 +15,15 @@ from agent.looping.ports import SessionServices
 from bus.event_bus import EventBus
 from bus.events_lifecycle import TurnCommitted
 from agent.core.passive_turn.helpers import get_window_history
-from conversation.context_scope import turn_context_view, user_context_view
+from conversation.context_scope import (
+    history_start,
+    turn_context_view,
+    user_context_view,
+)
 from conversation.service import desktop_thread_id, network_thread_id
 from core.memory.events import ConsolidationCommitted
 from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
 from core.roles import RoleStore
-from core.context_window import ContextWindowMaintenance
 from core.memory.group_environment import (
     SUMMARY_LABEL_KEY,
     SUMMARY_UPDATED_AT_KEY,
@@ -756,17 +759,14 @@ async def test_group_turn_budget_force_only_advances_the_external_cursor(
         tmp_path, manager, keep_count=4
     )
     try:
-        # 阈值为 1，普通整理后仍超预算，于是走强制整理；预算始终降不下来。
-        assert (
-            await ContextWindowMaintenance(manager, maintenance).ensure_budget(
-                session.key,
-                "群里新消息",
-                turn_context_view(tmp_path, "mira", group),
-                keep_count=4,
-                input_token_threshold=1,
-            )
-            is False
+        prepared = await manager.prepare_window(
+            session.key, turn_context_view(tmp_path, "mira", group), keep_turns=0
         )
+        assert prepared is not None
+        result = await maintenance.ensure_memory_for_window(prepared)
+        assert result.trace["mode"] == "markdown"
+        # The prerequisite owner advances memory only; publication belongs to compaction.
+        assert history_start(session, prepared.view) == 0
     finally:
         await event_bus.aclose()
 

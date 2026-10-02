@@ -23,7 +23,6 @@ export const advancedSettingsGroups: readonly AdvancedSettingsGroup[] = [
     fields: [
       { kind: "number", key: "maxTokens", configKey: "max_tokens", label: "单次回复长度上限", unit: "token" },
       { kind: "number", key: "maxIterations", configKey: "max_iterations", label: "单次任务最多步数", unit: "步" },
-      { kind: "number", key: "memoryWindow", configKey: "memory_window", label: "上下文保留消息数", unit: "条" },
     ],
   },
   {
@@ -36,8 +35,15 @@ export const advancedSettingsGroups: readonly AdvancedSettingsGroup[] = [
   {
     title: "记忆整理",
     fields: [
+      { kind: "number", key: "memoryWindow", configKey: "memory_window", label: "记忆整理消息基数", unit: "条" },
       { kind: "toggle", key: "memoryOptimizerEnabled", configKey: "memory_optimizer_enabled", label: "后台整理记忆" },
       { kind: "number", key: "memoryOptimizerIntervalSeconds", configKey: "memory_optimizer_interval_seconds", label: "整理间隔", unit: "秒" },
+    ],
+  },
+  {
+    title: "上下文压缩",
+    fields: [
+      { kind: "number", key: "compactionRetainedTurns", configKey: "compaction_retained_turns", label: "压缩后保留原文轮数", unit: "轮" },
       { kind: "number", key: "contextTriggerRatio", configKey: "trigger_ratio", label: "上下文压缩触发比例" },
       { kind: "number", key: "contextTargetRatio", configKey: "target_ratio", label: "上下文压缩目标比例" },
       { kind: "number", key: "contextSafetyMarginTokens", configKey: "safety_margin_tokens", label: "输入安全余量", unit: "token" },

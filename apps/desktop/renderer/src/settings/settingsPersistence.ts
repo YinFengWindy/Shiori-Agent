@@ -59,6 +59,10 @@ export async function saveSettingsPageData(
   draft: SettingsFormData,
   options?: SettingsSaveOptions,
 ): Promise<SettingsPageSaveResult> {
+  const retainedTurns = draft.advanced.compactionRetainedTurns ?? 2;
+  if (!Number.isSafeInteger(retainedTurns) || retainedTurns < 0) {
+    return { saveResult: { ok: false, error: { code: "settings_validation_error", message: "压缩后保留原文轮数必须是非负整数" } }, snapshot: null, nextDraft: cloneSettings(draft) };
+  }
   const saveResult = await api.saveSettings(cloneSettings(draft), options);
   return refreshSavedSettings(api, draft, saveResult);
 }

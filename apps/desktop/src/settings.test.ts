@@ -323,3 +323,32 @@ it("model capacities and context policy roundtrip while legacy profiles stay inc
   assert.equal(restored.advanced.contextTargetRatio, 0.5);
   assert.equal(restored.advanced.contextSafetyMarginTokens, 2048);
 });
+
+describe("compaction retention settings", () => {
+  it("defaults to two turns and round-trips zero and custom retention independently from memory", async () => {
+    configureSettingsConfigPath(join(tmpdir(), "unused-compaction-settings.toml"));
+    const draft = loadSettingsData("[agent.context]\nmemory_window = 44\n").formData;
+    assert.equal(draft.advanced.compactionRetainedTurns, 2);
+    for (const retainedTurns of [0, 7]) {
+      draft.advanced.compactionRetainedTurns = retainedTurns;
+      const result = await saveSettings(draft, async (request) => {
+        const reloaded = loadSettingsData(request.config_toml).formData;
+        assert.equal(reloaded.advanced.compactionRetainedTurns, retainedTurns);
+        assert.equal(reloaded.advanced.memoryWindow, 44);
+        return { ok: true, generation: 2 };
+      });
+      assert.equal(result.ok, true);
+    }
+  });
+
+  it("rejects negative and fractional retention before applying settings", async () => {
+    configureSettingsConfigPath(join(tmpdir(), "unused-compaction-invalid.toml"));
+    const draft = loadSettingsData("[llm]\n").formData;
+    for (const value of [-1, 1.5, Number.POSITIVE_INFINITY]) {
+      draft.advanced.compactionRetainedTurns = value;
+      const result = await saveSettings(draft, async () => { throw new Error("must not apply"); });
+      assert.equal(result.ok, false);
+      assert.match(result.error?.message ?? "", /非负整数/);
+    }
+  });
+});

@@ -1,6 +1,7 @@
 """Passive turns own same-role desktop pushes until their ordered SQL commit."""
 
-from agent.lifecycle.phases.before_turn import MemoryConsolidationFailedError
+from core.compaction import CompactionController, CompactionFailedError
+from core.compaction_summary import WorkingSummaryWriter
 
 import asyncio
 import json
@@ -628,21 +629,50 @@ async def test_bound_stranger_dm_rebuilds_user_visibility_after_binding(
     assert sum("sdm-old" in text for text in history) == 2
 
 
-async def test_input_budget_counts_only_the_turn_context(tmp_path):
-    _bind(tmp_path, "902")
-    manager = SessionManager(tmp_path)
-    _seed_role_session(manager, group_text="x" * 40000)
+async def test_input_budget_counts_only_the_turn_context(memory_harness, monkeypatch):
+    h = memory_harness
+    _bind(h.manager.workspace, "902")
+    _seed_role_session(h.manager, group_text="x" * 40000)
+    monkeypatch.setattr(
+        "agent.core.passive_turn.reasoning_loop.fetch_role_mood",
+        AsyncMock(return_value=None),
+    )
 
     for thread, runs in ((DESKTOP, True), (GROUP_B, True), (GROUP_A, False)):
-        pipeline, reasoner = _isolation_pipeline(manager, input_token_threshold=2000)
-        if runs:
-            await pipeline.run(_turn(thread), "role:mira", dispatch_outbound=False)
-        else:
-            with pytest.raises(MemoryConsolidationFailedError):
+        pipeline, reasoner = _isolation_pipeline(h.manager, input_token_threshold=2000)
+        # Exercise the real unified guard instead of replacing the entire loop.
+        reasoner.run = DefaultReasoner.run.__get__(reasoner, DefaultReasoner)
+        provider = reasoner._llm.provider
+        provider.chat = AsyncMock(return_value=LLMResponse(content="ok"))
+        reasoner._compaction = CompactionController(
+            h.manager,
+            h.maintenance,
+            WorkingSummaryWriter(h.manager, provider, "controlled", 2000),
+        )
+        try:
+            if runs:
                 await pipeline.run(_turn(thread), "role:mira", dispatch_outbound=False)
-        # The large group A message only weighs on group A's own turns, where
-        # the complete request preflight stops before the model is called.
-        assert reasoner.run.await_count == (1 if runs else 0)
+            else:
+                with pytest.raises(CompactionFailedError) as caught:
+                    await pipeline.run(
+                        _turn(thread), "role:mira", dispatch_outbound=False
+                    )
+                # Group A's own source exceeds even the auxiliary summary budget.
+                assert caught.value.result.failure_stage == "summary"
+                assert caught.value.result.memory_committed
+            assert provider.chat.await_count == (1 if runs else 0)
+        finally:
+            await provider.aclose()
+    from conversation.context_scope import history_start, turn_context_view
+
+    session = h.manager.get_or_create("role:mira")
+    for thread in (DESKTOP, GROUP_B, GROUP_A):
+        assert (
+            history_start(
+                session, turn_context_view(h.manager.workspace, "mira", thread)
+            )
+            == 0
+        )
 
 
 async def test_channel_pushes_during_a_turn_are_committed_with_it_under_their_chat(

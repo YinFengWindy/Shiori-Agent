@@ -30,102 +30,7 @@ class _ArchivedTool(Tool):
         return "ok"
 
 
-@pytest.mark.parametrize("consumer_fails", [False, True])
-async def test_real_budget_path_preserves_memory_status_and_refreshes_tools(
-    memory_harness, consumer_fails
-):
-    from agent.looping.core import AgentLoop
-    from agent.looping.ports import SessionServices
-    from agent.provider import LLMProvider
-    from agent.prompting.input_budget import BudgetPolicy
-    from core.context_window import WindowMaintenanceFailedError
-    from core.memory.markdown import MarkdownMemoryRuntime
-
-    h = memory_harness
-    session = h.manager.get_or_create("cli:real-budget")
-    session.metadata["role_id"] = "mira"
-    session.add_message("user", "tea " * 2500)
-    session.add_message(
-        "assistant",
-        "tea",
-        tool_chain=[
-            {
-                "calls": [
-                    {
-                        "call_id": "old",
-                        "name": "archived_tool",
-                        "arguments": {},
-                        "result": "done",
-                    }
-                ]
-            }
-        ],
-    )
-    h.manager.save(session)
-    loop = AgentLoop.__new__(AgentLoop)
-    loop._context_keep_count = 20
-    loop._session_services = SessionServices(session_manager=h.manager)
-    loop._markdown_memory = MarkdownMemoryRuntime(
-        store=h.maintenance._store,
-        maintenance=h.maintenance,
-        workspace=h.manager.workspace,
-    )
-    if consumer_fails:
-
-        async def fail(_session):
-            raise RuntimeError("relationship unavailable")
-
-        h.maintenance._after_consolidation = fail
-    provider = LLMProvider(
-        api_key="test",
-        context_window_tokens=2000,
-        max_output_tokens=100,
-        budget_policy=BudgetPolicy(safety_margin_tokens=20),
-    )
-    registry = ToolRegistry()
-    registry.register(_ArchivedTool())
-    reasoner = DefaultReasoner(
-        llm=LLMServices(provider=provider, light_provider=provider),
-        llm_config=LLMConfig(max_tokens=100),
-        tools=registry,
-        discovery=ToolDiscoveryState(),
-        tool_search_enabled=True,
-        memory_window=40,
-        context=AsyncMock(),
-        session_manager=h.manager,
-        memory_consolidator=loop,
-    )
-    reasoner.render_prompt = AsyncMock(
-        side_effect=lambda request: PromptRenderResult(
-            messages=[*request.history, {"role": "user", "content": request.content}],
-        )
-    )
-    reasoner.run = AsyncMock(return_value=ReasonerResult(reply="ok"))
-    msg = InboundMessage(
-        channel="cli", sender="user", chat_id="real-budget", content="continue"
-    )
-    try:
-        if consumer_fails:
-            with pytest.raises(WindowMaintenanceFailedError) as failure:
-                await reasoner.run_turn(msg=msg, session=session)
-            assert failure.value.result.memory_committed
-            assert failure.value.result.failure_stage == "consumers"
-            reasoner.run.assert_not_awaited()
-        else:
-            result = await reasoner.run_turn(msg=msg, session=session)
-            assert result.reply == "ok"
-            assert reasoner.run.await_args.kwargs["preloaded_tools"] == set()
-            assert reasoner.run.await_args.args[0] == [
-                {"role": "user", "content": "continue"}
-            ]
-        assert session.last_consolidated == 2
-        assert len(session.messages) == 2
-        assert len(h.events) == 1
-    finally:
-        await provider.aclose()
-
-
-@pytest.mark.parametrize("error_type", [ContentSafetyError, ContextLengthError])
+@pytest.mark.parametrize("error_type", [ContentSafetyError])
 @pytest.mark.parametrize("last_consolidated", [0, 6])
 @pytest.mark.parametrize(
     "success_attempt", [1, 5, 6, None], ids=["catalog", "half", "empty", "exhausted"]
@@ -153,8 +58,10 @@ async def test_run_turn_retry_preserves_persisted_history(
             ),
             AsyncMock(),
         )
-        prepared = await manager.prepare_window(session.key, None, keep_count=6)
-        assert prepared is not None and await manager.commit_window(prepared)
+        prepared = await manager.prepare_window(session.key, None, keep_turns=2)
+        assert prepared is not None and await manager.commit_window(
+            prepared, "state", prepared.removed_message_ids
+        )
     original_messages = deepcopy(session.messages)
     source_history = session.get_history(start_index=last_consolidated)
     msg = InboundMessage(
@@ -216,10 +123,15 @@ async def test_run_turn_retry_preserves_persisted_history(
         reasoner.run.await_args_list, expected_windows, strict=True
     ):
         expected_history = source_history[-window:] if window else []
-        assert call.args[0] == [
-            *expected_history,
-            {"role": "user", "content": msg.content},
-        ]
+        from agent.core.passive_turn.compaction import with_working_summary
+
+        assert call.args[0] == with_working_summary(
+            [
+                *expected_history,
+                {"role": "user", "content": msg.content},
+            ],
+            "state" if last_consolidated else "",
+        )
     attempts = result.context_retry["attempts"]
     assert isinstance(attempts, list)
     assert [attempt["history_window"] for attempt in attempts] == expected_windows
@@ -255,68 +167,6 @@ async def test_run_turn_retry_preserves_persisted_history(
     assert reloaded.last_consolidated == last_consolidated
 
 
-async def test_run_turn_repairs_rendered_input_budget_before_reasoning(tmp_path):
-    manager = SessionManager(tmp_path)
-    session = manager.get_or_create("cli:budget")
-    session.add_message("user", "x" * 1000)
-    await manager.save_async(session)
-    msg = InboundMessage(
-        channel="cli",
-        sender="user",
-        chat_id="budget",
-        content="hello",
-        media=[],
-        timestamp=datetime.now(timezone.utc),
-    )
-
-    async def consolidate(
-        _session_key: str, _content: str, _scope: object, **kwargs
-    ) -> bool:
-        session.maintenance_progress.windows["session"] = len(session.messages)
-        return True
-
-    from agent.provider import LLMProvider
-    from agent.prompting.input_budget import BudgetPolicy
-
-    provider = LLMProvider(
-        api_key="test",
-        context_window_tokens=400,
-        max_output_tokens=50,
-        budget_policy=BudgetPolicy(safety_margin_tokens=10),
-    )
-    reasoner = DefaultReasoner(
-        llm=LLMServices(provider=provider, light_provider=provider),
-        llm_config=LLMConfig(max_tokens=50),
-        tools=ToolRegistry(),
-        discovery=ToolDiscoveryState(),
-        tool_search_enabled=False,
-        memory_window=40,
-        context=AsyncMock(),
-        session_manager=manager,
-        memory_consolidator=SimpleNamespace(
-            ensure_context_window=AsyncMock(side_effect=consolidate)
-        ),
-    )
-    reasoner.render_prompt = AsyncMock(
-        side_effect=lambda request: PromptRenderResult(
-            messages=[
-                *request.history,
-                {"role": "user", "content": request.content},
-            ]
-        )
-    )
-    reasoner.run = AsyncMock(return_value=ReasonerResult(reply="ok"))
-
-    result = await reasoner.run_turn(msg=msg, session=session)
-
-    assert result.reply == "ok"
-    reasoner._memory_consolidator.ensure_context_window.assert_awaited_once_with(
-        "cli:budget", "hello", None, input_token_threshold=160
-    )
-    assert reasoner.run.await_args.args[0] == [{"role": "user", "content": "hello"}]
-    await provider.aclose()
-
-
 @pytest.mark.parametrize(
     "scope,sender_is_user,expected",
     [
@@ -345,6 +195,7 @@ async def test_run_turn_restricts_tools_only_for_external_non_user_sender(
     context_view = (
         ContextView(
             scope=scope,
+            thread_id="qq:group-1",
             user_threads=UserContextThreads(
                 role_id="mira", bound_chat_thread_ids=frozenset()
             ),
@@ -470,52 +321,365 @@ async def test_real_turn_history_append_uses_usage_anchor_with_replaced_context_
     await provider.aclose()
 
 
-async def test_model_budget_forces_existing_consolidation_even_below_old_history_threshold(
-    tmp_path,
+@pytest.mark.parametrize(
+    "boundary", ["initial", "tool", "recovery", "finalize", "unfit"]
+)
+async def test_all_request_boundaries_compact_without_replaying_current_tools(
+    memory_harness, boundary, monkeypatch
 ):
+    import json
     from agent.provider import LLMProvider
     from agent.prompting.input_budget import BudgetPolicy
+    from conversation.context_scope import history_start
 
-    manager = SessionManager(tmp_path)
-    session = manager.get_or_create("cli:small-model")
-    session.add_message("user", "中文" * 250)
+    h = memory_harness
+    session = h.manager.get_or_create("cli:four-boundaries")
+    session.metadata["role_id"] = "mira"
+    monkeypatch.setattr(
+        "agent.core.passive_turn.reasoning_loop.fetch_role_mood",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "agent.core.passive_turn.reasoning_result.fetch_role_mood",
+        AsyncMock(return_value=None),
+    )
+    width = {
+        "initial": 5000,
+        "tool": 3000,
+        "recovery": 3000,
+        "finalize": 3000,
+        "unfit": 3000,
+    }[boundary]
+    for index in range(5):
+        session.add_message("user", f"task {index} " + "x" * width)
+        session.add_message(
+            "assistant",
+            "noted",
+            tool_chain=(
+                [
+                    {
+                        "calls": [
+                            {
+                                "call_id": "past",
+                                "name": "archived_tool",
+                                "arguments": {},
+                                "result": "done",
+                            }
+                        ]
+                    }
+                ]
+                if index == 0
+                else []
+            ),
+        )
+    h.manager.save(session)
+
+    class SideEffectTool(Tool):
+        name = "side_effect"
+        description = "Execute the current operation"
+        parameters = {"type": "object", "properties": {}}
+
+        def __init__(self):
+            self.calls = 0
+
+        async def execute(self, **kwargs):
+            self.calls += 1
+            return "result " + "y" * 9000
+
+    tool = SideEffectTool()
+    registry = ToolRegistry()
+    if boundary != "recovery":
+        registry.register(tool, always_on=True)
+        registry.register(_ArchivedTool())
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=1200,
+        context_window_tokens=10000,
         max_output_tokens=200,
         budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
-    calls = []
+    sent, summary_inputs = [], []
 
-    async def consolidate(key, content, scope, *, input_token_threshold):
-        calls.append((key, input_token_threshold))
-        session.maintenance_progress.windows["session"] = len(session.messages)
-        return True
+    async def create(kwargs, **unused):
+        calls = []
+        if "Rewrite the current working state" in kwargs["messages"][0]["content"]:
+            data = json.loads(kwargs["messages"][-1]["content"])
+            summary_inputs.append(data)
+            if boundary == "initial":
+                # A concurrent settings save cannot change this execution's policy.
+                reasoner._llm_config.compaction_retained_turns = 0
+            text = json.dumps(
+                {
+                    "tasks": "continue the original task",
+                    "constraints": "preserve operation",
+                    "decisions": "",
+                    "unfinished": "next step",
+                    "tool_state": "past tool completed",
+                    "entities": "task",
+                    "source_message_ids": [data["messages"][0]["id"]],
+                }
+            )
+            tokens = 200
+        else:
+            sent.append(deepcopy(kwargs))
+            if len(sent) == 1 and boundary in {"tool", "finalize", "unfit"}:
+                text = "working"
+                calls = [
+                    SimpleNamespace(
+                        id="current-call",
+                        function=SimpleNamespace(name="side_effect", arguments="{}"),
+                    )
+                ]
+            elif len(sent) == 1 and boundary == "recovery":
+                text = ""
+            else:
+                text = "continued the original task"
+            tokens = (
+                7480
+                if boundary == "recovery" and len(sent) == 1
+                else provider._budget_for_request(kwargs).estimate.tokens
+            )
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=text, tool_calls=calls),
+                    finish_reason="tool_calls" if calls else "stop",
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=tokens, completion_tokens=5, total_tokens=tokens + 5
+            ),
+        )
 
+    provider._create_with_retry = create
     reasoner = DefaultReasoner(
-        llm=LLMServices(provider=provider, light_provider=provider),
-        llm_config=LLMConfig(model="small", max_tokens=100),
+        llm=LLMServices(provider, provider),
+        llm_config=LLMConfig(
+            model="controlled",
+            max_tokens=200,
+            max_iterations=1 if boundary == "finalize" else 5,
+        ),
+        tools=registry,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=True,
+        memory_window=40,
+        context=AsyncMock(),
+        session_manager=h.manager,
+        compaction_memory=h.maintenance,
+    )
+    reasoner.render_prompt = AsyncMock(
+        side_effect=lambda request: PromptRenderResult(
+            messages=[
+                {"role": "system", "content": "system constraint"},
+                *request.history,
+                {"role": "user", "content": request.content},
+            ]
+        )
+    )
+    try:
+        if boundary == "unfit":
+            from core.compaction import CompactionFailedError
+
+            with pytest.raises(CompactionFailedError) as caught:
+                await reasoner.run_turn(
+                    msg=InboundMessage(
+                        channel="cli",
+                        sender="user",
+                        chat_id="four-boundaries",
+                        content="current" + "z" * 3000,
+                    ),
+                    session=session,
+                )
+            assert caught.value.result.failure_stage == "budget"
+            assert caught.value.result.memory_committed
+            assert tool.calls == 1 and len(sent) == 1
+            assert (
+                history_start(session, None) == 0
+                and not session.maintenance_progress.summaries
+            )
+            return
+        result = await reasoner.run_turn(
+            msg=InboundMessage(
+                channel="cli",
+                sender="user",
+                chat_id="four-boundaries",
+                content="current input must survive",
+            ),
+            session=session,
+        )
+        assert result.reply == "continued the original task"
+        outcomes = result.context_retry["compaction"]
+        assert isinstance(outcomes, list) and outcomes[-1]["committed"]
+        assert outcomes[-1]["configured_retained_turns"] == 2
+        assert summary_inputs and history_start(session, None) > 0
+        assert len(session.messages) == 10
+        final = sent[-1]
+        serialized = json.dumps(final)
+        assert (
+            "current input must survive" in serialized
+            and "[working_state]" in serialized
+        )
+        assert "archived_tool" not in [
+            schema["function"]["name"] for schema in final.get("tools", [])
+        ]
+        if boundary in {"tool", "finalize", "unfit"}:
+            assert tool.calls == 1
+            assert "current-call" in serialized and "y" * 9000 in serialized
+        else:
+            assert tool.calls == 0
+        if boundary == "recovery":
+            assert final["messages"][-1]["role"] == "user"
+            assert "正式回复" in final["messages"][-1]["content"]
+        budget = provider.input_budget(
+            messages=final["messages"],
+            tools=final.get("tools", []),
+            model="controlled",
+            max_tokens=200,
+        )
+        assert budget.estimate.tokens < budget.target_tokens
+    finally:
+        await provider.aclose()
+
+
+async def test_real_prompt_renderer_continues_with_working_state_and_bounded_originals(
+    memory_harness, monkeypatch
+):
+    import json
+    from agent.context import ContextBuilder
+    from agent.provider import LLMProvider
+    from agent.prompting.input_budget import BudgetPolicy
+    from core.roles import RoleStore
+
+    h = memory_harness
+    roles = RoleStore(h.manager.workspace)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="必须保留的角色约束")
+    session = h.manager.get_or_create("cli:real-render")
+    session.metadata["role_id"] = "mira"
+    for index in range(5):
+        session.add_message("user", f"phase {index}: " + "work " * 6000)
+        session.add_message("assistant", f"completed phase {index}")
+    h.manager.save(session)
+    monkeypatch.setattr(
+        "agent.core.passive_turn.reasoning_loop.fetch_role_mood",
+        AsyncMock(return_value=None),
+    )
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=64000,
+        max_output_tokens=2000,
+        budget_policy=BudgetPolicy(safety_margin_tokens=200),
+    )
+    spoken = []
+
+    async def create(kwargs, **unused):
+        if "Rewrite the current working state" in kwargs["messages"][0]["content"]:
+            source = json.loads(kwargs["messages"][-1]["content"])
+            content = json.dumps(
+                {
+                    "tasks": "deliver original report",
+                    "constraints": "do not repeat write",
+                    "decisions": "use report.txt",
+                    "unfinished": "verify report",
+                    "tool_state": "write finished",
+                    "entities": "report.txt",
+                    "source_message_ids": [source["messages"][0]["id"]],
+                }
+            )
+        else:
+            spoken.append(deepcopy(kwargs))
+            content = "verify report.txt"
+        tokens = provider._budget_for_request(kwargs).estimate.tokens
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=content, tool_calls=[]),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=tokens, completion_tokens=50, total_tokens=tokens + 50
+            ),
+        )
+
+    provider._create_with_retry = create
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider, provider),
+        llm_config=LLMConfig(model="controlled", max_tokens=2000),
         tools=ToolRegistry(),
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
         memory_window=40,
+        context=ContextBuilder(
+            h.manager.workspace, h.maintenance._store, runtime_roles=roles
+        ),
+        session_manager=h.manager,
+        compaction_memory=h.maintenance,
+    )
+    try:
+        result = await reasoner.run_turn(
+            msg=InboundMessage(
+                channel="cli",
+                sender="user",
+                chat_id="real-render",
+                content="请接着完成报告",
+            ),
+            session=session,
+            retrieved_memory_block="检索内容也计入完整预算",
+        )
+        outcomes = result.context_retry["compaction"]
+        assert result.reply == "verify report.txt"
+        assert isinstance(outcomes, list) and outcomes[-1]["committed"]
+        request = spoken[-1]
+        text = json.dumps(request, ensure_ascii=False)
+        assert "必须保留的角色约束" in text
+        assert "deliver original report" in text and "verify report" in text
+        assert "请接着完成报告" in text and "检索内容也计入完整预算" in text
+        assert "phase 4" in text and "phase 0:" not in text
+        budget = provider.input_budget(
+            messages=request["messages"], tools=[], model="controlled", max_tokens=2000
+        )
+        assert budget.estimate.tokens < budget.target_tokens
+    finally:
+        await provider.aclose()
+
+
+async def test_provider_context_rejection_after_tools_never_restarts_turn(
+    memory_harness,
+):
+    from agent.provider import LLMResponse, ToolCall
+    from core.compaction import CompactionFailedError
+
+    h = memory_harness
+    session = h.manager.get_or_create("cli:reject")
+    tool = _ArchivedTool()
+    tool.execute = AsyncMock(return_value="side effect finished")
+    registry = ToolRegistry()
+    registry.register(tool)
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(content="", tool_calls=[ToolCall("once", "archived_tool", {})]),
+        ContextLengthError("provider rejected input"),
+    ]
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider, provider),
+        llm_config=LLMConfig(),
+        tools=registry,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
         context=AsyncMock(),
-        session_manager=manager,
-        memory_consolidator=SimpleNamespace(ensure_context_window=consolidate),
+        session_manager=h.manager,
     )
     reasoner.render_prompt = AsyncMock(
-        side_effect=lambda request: PromptRenderResult(
-            messages=[*request.history, {"role": "user", "content": request.content}]
+        return_value=PromptRenderResult(
+            messages=[{"role": "user", "content": "do once"}]
         )
     )
-    reasoner.run = AsyncMock(return_value=ReasonerResult(reply="ok"))
-    result = await reasoner.run_turn(
-        msg=InboundMessage(
-            channel="cli", sender="user", chat_id="small-model", content="继续"
-        ),
-        session=session,
-    )
-    assert result.reply == "ok"
-    assert calls == [(session.key, 480)]
-    assert reasoner.run.call_args.args[0] == [{"role": "user", "content": "继续"}]
-    await provider.aclose()
+    with pytest.raises(CompactionFailedError) as caught:
+        await reasoner.run_turn(
+            msg=InboundMessage(
+                channel="cli", sender="user", chat_id="reject", content="do once"
+            ),
+            session=session,
+        )
+    assert caught.value.result.failure_stage == "provider"
+    assert tool.execute.await_count == 1 and provider.chat.await_count == 2

@@ -137,6 +137,8 @@ export type SettingsFormData = {
     devMode: boolean;
     streamingEnabled: boolean;
     memoryWindow: number;
+    /** Completed original turns preferred after compaction; zero protects only the current turn. */
+    compactionRetainedTurns?: number;
     searchEnabled: boolean;
     spawnEnabled: boolean;
     /** Preserves the core scene observation switch across unrelated settings saves. */

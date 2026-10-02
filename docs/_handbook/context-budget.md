@@ -6,15 +6,19 @@
 
 `agent.context` 的 `trigger_ratio`、`target_ratio`、`safety_margin_tokens` 默认分别为 0.75、0.4、4096。比例以模型上下文窗口为基数，触发与目标都不超过 `窗口 − 实际输出上限 − 安全余量`。无有效输入空间或输出超过模型能力时明确报错。已移除旧的固定 `consolidation_input_token_threshold` 设置。
 
-预算只计算 provider 最终归一化后的完整消息、工具 schema 和响应格式，不再额外扣 schema。初始请求、工具循环、空回复恢复、阶段性收尾共用此依据。初始超预算经 `AgentLoop.ensure_context_window` 进入独立窗口维护：先准备原文范围，再补齐对应记忆，最后提交窗口水位；重新渲染后按完整请求检查目标，再沿用既有裁剪计划。当前仍使用既有保留条数策略；有界工作摘要、保留轮数和统一控制器由 #565 接入。
+预算只计算 provider 最终归一化后的完整消息、工具 schema 和响应格式，不再额外扣 schema。初始请求、工具循环、空回复恢复、阶段性收尾在 provider 前调用同一个 `CompactionController`。按 #393 的实际用量/锚点增量/本地估算触发，按同一完整请求重渲染验证目标预算；保留当前输入、附件及本轮已执行的完整工具交换，预算失败直接返回 `CompactionFailedError`，不会重放工具或沿旧裁剪计划绕过前置。安全审查重试仍保留原有边界，最小请求降级留给 #567。
+
+`agent.context.compaction_retained_turns` 是独立非负整数策略，默认 2；高级设置单位为轮，0 只取消额外保留已完成轮次，当前轮仍受保护。一次执行冻结策略，保存不会立即压缩。优先保留最近 N 个完整已完成轮次，预算不足时依次纳入更早轮次到摘要，最低为 0。工具调用/结果必须闭合；中断、连续输入与内部恢复提示不冒充新完成轮次。只在压缩提交时改变窗口，之后持续追加。`memory_window` 仍是记忆整理的旧消息基数，不参与轮数计算或联动修改。
+
+工作摘要整体重写，独立于 `RECENT_CONTEXT.md`、HISTORY/PENDING、memory2 和关系产物。JSON 包含 tasks、constraints、decisions、unfinished、tool_state、entities、source_message_ids；要求保留旧摘要里仍生效的任务状态。本地保守估算硬校验 2000 token 上限，提示目标 1000–1800；失败、输出截断或来源 ID 无效不发布。待移出消息中的原生工具关联和嵌入工具链均保留，图片以附件引用表述，避免把 Base64 文本送入摘要。摘要自身是有限的 auxiliary 请求，检查实际输入/输出预算，超限明确失败，不递归压缩或截断原始范围。
 
 `sessions.maintenance_progress` 单独保存窗口水位、版本、身份归属和消费者进度，普通消息保存不覆盖它。用户上下文共享 `user` 窗口；外部群与陌生私聊以实际 thread id 各自保存窗口。记忆继续使用 `last_consolidated` / `user_cursor` / `external_cursor`，单独整理记忆不会缩短原文窗口或撤下历史解锁工具。历史、工具和成员来源统一使用 `history_start` 的窗口水位。
 
-`ContextWindowMaintenance.apply` 与 `MarkdownMemoryMaintenance.ensure_memory_for_window` 是同一前置能力：按待移出范围补齐所属记忆类别的整个前缀，不等平时阈值，并跳过已整理范围。群 A 的补齐会覆盖前缀里交错的群 B 消息，但只推进 A 的窗口。提交由 SessionManager 校验消息前缀（含正文、工具与会话归属）、身份归属、失效代次和窗口版本；并发追加不进入旧准备范围。
+`CompactionController.ensure` 调用 `MarkdownMemoryMaintenance.ensure_memory_for_window` 作为必需前置：按待移出范围补齐所属记忆类别的整个前缀，不等平时阈值，并跳过已整理范围。群 A 的补齐会覆盖前缀里交错的群 B 消息，但只推进 A 的窗口。提交由 SessionManager 校验消息前缀（含正文、工具与会话归属）、身份归属、实际连接/模型归属、失效代次和窗口版本；摘要、来源和窗口水位原子持久化，并发追加不进入旧准备范围。压缩后会重新渲染成员来源和工具提示，移除旧历史解锁工具，同时保留本轮使用或解锁的工具。
 
-首次迁移一次冻结旧 user/external 有效水位，之后才允许记忆前进；从未读取的群 B 也使用冻结值。绑定变化失效旧窗口和维护进度。`invalidate_maintenance` 只失效派生状态，原始消息不删除；显式聊天撤销仍删除指定回合，同时失效窗口与消费者版本，其他原文保留。
+首次迁移一次冻结旧 user/external 有效水位，之后才允许记忆前进；从未读取的群 B 也使用冻结值。绑定变化失效旧窗口和维护进度；连接/模型变化撤销对应派生摘要与窗口，不撤销已经提交的记忆。`invalidate_maintenance` 只失效派生状态，原始消息不删除；显式聊天撤销仍删除指定回合，同时失效窗口与消费者版本，其他原文保留。
 
-记忆提交保存 `memory_version`、近期语境来源消息与更新版本，并持久化待发布的消费者输入。事件发布和关系完成各有版本；事件成功但关系失败只重试关系，不再次触发 memory2 提取。后置失败通过 `WindowMaintenanceFailedError.result` 明确携带 `memory_committed` 与 `failure_stage`，窗口水位保持不变。心情仍由逐轮正式回复状态 owner 更新。
+记忆提交保存 `memory_version`、近期语境来源消息与更新版本，并持久化待发布的消费者输入。事件发布和关系完成各有版本；事件成功但关系失败只重试关系，不再次触发 memory2 提取。后置失败通过 `CompactionFailedError.result` 明确携带 `memory_committed` 与 `failure_stage`，窗口水位保持不变。心情仍由逐轮正式回复状态 owner 更新。
 
 关系优化器记录 provider 错误后继续抛出；周期任务在单个角色边界捕获并继续后续角色和周期，记忆后置调用则保留未完成消费者。扩大待压缩范围重试时，`memory_committed` 保留此前记忆已提交的事实，前置结果中的 `memory_covered` 单独表示当前移出范围是否全部完成整理；窗口提交仍按实际消息覆盖校验，不能用已有部分记忆提交代替完整覆盖。
 
@@ -25,3 +29,5 @@
 本地估算按字符类别计算文本，非 ASCII 字符按每字 2 token 保守计入。图片独立预留 4096 token（显式 low detail 为 85），不读取 Base64 文本长度作为 token 数。它仍是估算；真实 provider 的图片计算可能不同，后续实际 prompt_tokens 用于校准。
 
 验证使用了受控中文、带图、非缓存 usage、流式尾部 usage、动态 context frame、真实提示渲染与会话续接、身份/连接切换及并发迟到响应测试。未调用真实 provider；中文/图片误差和缓存命中效果仍未取得真实数据，不能据测试桩数值宣称已验证。
+
+`CompactionResult` 共用于自动和后续手动入口，记录模型、容量预算、前后用量与来源、执行/失败阶段、配置/实际保留轮数、窗口范围与版本、记忆游标/版本，以及是否需要前置和是否已经提交记忆。失败结果不会把已提交的记忆误报为回滚。

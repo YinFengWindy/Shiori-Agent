@@ -1,0 +1,189 @@
+"""Working summaries validate size/provenance and budget their own request."""
+
+import json
+from unittest.mock import AsyncMock
+
+import pytest
+
+from agent.prompting.input_budget import BudgetPolicy
+from agent.provider import LLMProvider, LLMResponse
+from core.compaction_summary import WorkingSummaryWriter, validate_summary
+from session.manager import SessionManager
+
+
+def _payload(ids, **changes):
+    return json.dumps(
+        {
+            "tasks": "continue the plan",
+            "constraints": "keep privacy",
+            "decisions": "chosen",
+            "unfinished": "finish",
+            "tool_state": "complete",
+            "entities": "project",
+            "source_message_ids": ids,
+            **changes,
+        },
+        ensure_ascii=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "not json",
+        "{}",
+        _payload(["invented"]),
+        _payload(["old"], tasks="中" * 1000),
+        _payload(["old"], decisions=[]),
+        _payload([]),
+    ],
+)
+def test_rejects_invalid_or_oversized_state(content):
+    with pytest.raises((ValueError, TypeError)):
+        validate_summary(content, {"old"})
+
+
+def test_valid_old_and_new_provenance_survives_replacement():
+    summary = validate_summary(_payload(["old", "new", "old"]), {"old", "new"})
+    assert summary.source_ids == ("old", "new")
+    assert "keep privacy" in summary.content
+
+
+async def test_summary_request_includes_old_state_and_attachments_without_base64(
+    tmp_path,
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:summary")
+    session.add_message(
+        "user",
+        "inspect image",
+        media=["image.png"],
+        llm_user_content=[
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/png;base64," + "X" * 50000},
+            }
+        ],
+    )
+    session.add_message(
+        "assistant",
+        "image inspected",
+        tool_chain=[
+            {"calls": [{"call_id": "one", "name": "inspect", "result": "found entity"}]}
+        ],
+    )
+    manager.save(session)
+    progress = manager.maintenance_progress(session)
+    progress.summaries["session"] = _payload(
+        ["earlier"], tasks="older unfinished promise"
+    )
+    progress.summary_source_ids["session"] = ["earlier"]
+    manager._store.write_maintenance_progress(session.key, progress.dump())
+    prepared = await manager.prepare_window(session.key, None, keep_turns=0)
+    assert prepared is not None
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=10000,
+        max_output_tokens=2000,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
+    )
+    provider.chat = AsyncMock(
+        return_value=LLMResponse(
+            content=_payload(["earlier", session.messages[0]["id"]])
+        )
+    )
+    try:
+        result = await WorkingSummaryWriter(
+            manager, provider, "explicit", 2000
+        ).generate(prepared)
+        sent = provider.chat.await_args.kwargs
+        assert sent["call_purpose"] == "auxiliary" and sent["max_tokens"] == 2000
+        source = sent["messages"][-1]["content"]
+        assert "older unfinished promise" in source
+        assert "found entity" in source and "image.png" in source
+        assert "base64" not in source and "X" * 100 not in source
+        assert result.source_ids[0] == "earlier"
+    finally:
+        await provider.aclose()
+
+
+@pytest.mark.parametrize("failure", ["input", "truncated"])
+async def test_auxiliary_overflow_or_truncation_never_produces_a_summary(
+    tmp_path, failure
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:summary-budget")
+    session.add_message("user", "x" * (10000 if failure == "input" else 10))
+    session.add_message("assistant", "done")
+    manager.save(session)
+    prepared = await manager.prepare_window(session.key, None, keep_turns=0)
+    assert prepared is not None
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=4000,
+        max_output_tokens=2000,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
+    )
+    provider.chat = AsyncMock(
+        return_value=LLMResponse(
+            content=_payload([session.messages[0]["id"]]), finish_reason="length"
+        )
+    )
+    try:
+        with pytest.raises(ValueError):
+            await WorkingSummaryWriter(manager, provider, "explicit", 2000).generate(
+                prepared
+            )
+        assert provider.chat.await_count == (0 if failure == "input" else 1)
+        assert not session.maintenance_progress.summaries
+    finally:
+        await provider.aclose()
+
+
+async def test_native_tool_exchange_survives_storage_and_enters_summary_sources(
+    tmp_path,
+):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:native")
+    call = {
+        "id": "native-call",
+        "type": "function",
+        "function": {"name": "write_file", "arguments": '{"path":"report.txt"}'},
+    }
+    session.add_message("user", "write report")
+    session.add_message("assistant", "", tool_calls=[call])
+    session.add_message(
+        "tool", "report saved", tool_call_id="native-call", name="write_file"
+    )
+    session.add_message("assistant", "completed")
+    manager.save(session)
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create(session.key)
+    prepared = await manager.prepare_window(session.key, None, keep_turns=0)
+    assert prepared is not None and len(prepared.removed_message_ids) == 4
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=10000,
+        max_output_tokens=2000,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
+    )
+    provider.chat = AsyncMock(
+        return_value=LLMResponse(
+            content=_payload(
+                [session.messages[0]["id"]],
+                tool_state="report saved; do not repeat write_file",
+            )
+        )
+    )
+    try:
+        await WorkingSummaryWriter(manager, provider, "explicit", 2000).generate(
+            prepared
+        )
+        sources = json.loads(
+            provider.chat.await_args.kwargs["messages"][-1]["content"]
+        )["messages"]
+        assert sources[1]["tool_calls"] == [call]
+        assert sources[2]["tool_call_id"] == "native-call"
+        assert sources[2]["content"] == "report saved"
+    finally:
+        await provider.aclose()
