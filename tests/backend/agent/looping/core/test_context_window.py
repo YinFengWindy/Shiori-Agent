@@ -36,6 +36,7 @@ def _control(tmp_path, *, configured=True):
         runtime_config={"dialogue_model_registration_id": "model"},
     )
     models = RoleModelRuntime(
+        default_max_tokens=8192,
         role_store=roles,
         registrations=(
             [
@@ -45,8 +46,7 @@ def _control(tmp_path, *, configured=True):
                     model="actual-selected",
                     api_key="test",
                     base_url="",
-                    context_window_tokens=128000,
-                    max_output_tokens=8192,
+                    model_context_window=128000,
                 )
             ]
             if configured
@@ -188,7 +188,7 @@ async def test_incomplete_model_is_unknown_and_does_not_execute_provider(tmp_pat
     loop, models = _control(tmp_path, configured=False)
     try:
         status = await loop.inspect_context_window(_msg(loop), "role:mira")
-        assert status["tokens"] is None and status["context_window_tokens"] is None
+        assert status["tokens"] is None and status["model_context_window"] is None
         assert not status["can_compact"] and "模型" in status["reason"]
         loop._reasoner.context_window.inspect.assert_not_awaited()
     finally:

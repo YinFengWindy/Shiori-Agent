@@ -74,8 +74,7 @@ async def test_first_turn_seeds_once_across_channels_and_runtime_generations(
     )
     registrations = [
         ModelRegistration(
-            context_window_tokens=128000,
-            max_output_tokens=32768,
+            model_context_window=128000,
             id=key,
             provider="openai",
             model=key,
@@ -88,7 +87,9 @@ async def test_first_turn_seeds_once_across_channels_and_runtime_generations(
     monkeypatch.setattr(
         "core.roles.model_runtime.LLMProvider", lambda **kwargs: provider
     )
-    models = RoleModelRuntime(role_store=store, registrations=registrations)
+    models = RoleModelRuntime(
+        default_max_tokens=8192, role_store=store, registrations=registrations
+    )
     repository = RoleRepository(store)
     registry = RoleRuntimeRegistry(
         repository,
@@ -156,11 +157,11 @@ async def test_unbound_first_turn_stops_before_seed_and_can_retry_after_binding(
         "core.roles.model_runtime.LLMProvider", lambda **kwargs: provider
     )
     models = RoleModelRuntime(
+        default_max_tokens=8192,
         role_store=store,
         registrations=[
             ModelRegistration(
-                context_window_tokens=128000,
-                max_output_tokens=32768,
+                model_context_window=128000,
                 id="dialogue",
                 provider="openai",
                 model="selected",
@@ -207,11 +208,11 @@ async def test_text_reply_respects_when_its_model_snapshot_is_accepted(
         "core.roles.model_runtime.LLMProvider", lambda **kwargs: provider
     )
     models = RoleModelRuntime(
+        default_max_tokens=8192,
         role_store=store,
         registrations=[
             ModelRegistration(
-                context_window_tokens=128000,
-                max_output_tokens=32768,
+                model_context_window=128000,
                 id=key,
                 provider="openai",
                 model=key,
@@ -275,11 +276,11 @@ async def test_image_reply_preserves_accepted_snapshot_after_initialization(
         "core.roles.model_runtime.LLMProvider", lambda **kwargs: provider
     )
     models = RoleModelRuntime(
+        default_max_tokens=8192,
         role_store=store,
         registrations=[
             ModelRegistration(
-                context_window_tokens=128000,
-                max_output_tokens=32768,
+                model_context_window=128000,
                 id=key,
                 provider="openai",
                 model=key,

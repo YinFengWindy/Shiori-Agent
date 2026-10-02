@@ -147,7 +147,7 @@ async def test_child_visible_request_and_usage_never_replace_parent(background):
     from core.common.runtime_tasks import create_runtime_task
 
     provider = LLMProvider(
-        api_key="test", context_window_tokens=128000, max_output_tokens=8192
+        api_key="test", model_context_window=128000, default_max_tokens=8192
     )
     child_started, child_release = asyncio.Event(), asyncio.Event()
 

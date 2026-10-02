@@ -1,10 +1,10 @@
 # 模型输入预算
 
-模型注册显式保存 `context_window_tokens`、`max_output_tokens`。旧条目缺失时保持未填写，角色可浏览，但不可发起模型对话。设置和首次引导不从模型名称推测容量。
+模型注册必填 `model_context_window`，可选 `model_auto_compact_token_limit`（须为正整数且小于窗口，否则设置页、首次引导与后端加载都拒绝保存并给出原因）。旧注册的 `context_window_tokens` 加载时迁移为 `model_context_window`，旧 `max_output_tokens` 丢弃、阈值留空，下次保存只写新字段；缺少窗口的条目保持未填写，角色可浏览，但不可发起模型对话。设置和首次引导不从模型名称推测容量。
 
-`agent.max_tokens` 是本次输出上限；注册的最大输出能力只是校验上限。带模型档案的未限定输出请求明确发送注册上限并预留相同数量；辅助请求按实际 provider 策略应用更小上限。`extra_body` 不能覆盖消息、模型、工具、输出预算或响应格式。
+输出预留等于本次请求实际发送的 `max_tokens`：主对话为全局 `agent.max_tokens`，带模型档案但未显式限定输出的请求也发送并预留全局 `agent.max_tokens`；调用处显式传值的辅助请求保持各自上限，并按实际 provider 策略应用更小的辅助上限。`extra_body` 不能覆盖消息、模型、工具、输出预算或响应格式。
 
-`agent.context` 的 `trigger_ratio`、`target_ratio`、`safety_margin_tokens` 默认分别为 0.75、0.4、4096。比例以模型上下文窗口为基数，触发与目标都不超过 `窗口 − 实际输出上限 − 安全余量`。无有效输入空间或输出超过模型能力时明确报错。已移除旧的固定 `consolidation_input_token_threshold` 设置。
+`agent.context` 的 `trigger_ratio`、`target_ratio`、`safety_margin_tokens` 默认分别为 0.75、0.4、4096。硬上限 = `窗口 − 本次输出预留 − 安全余量`。自动压缩触发点 = min(注册的 `model_auto_compact_token_limit`，未填时 `窗口 × trigger_ratio`；硬上限)；目标为 `窗口 × target_ratio`，同样不超过硬上限与触发点。无有效输入空间时明确报错。已移除旧的固定 `consolidation_input_token_threshold` 设置。
 
 预算只计算 provider 最终归一化后的完整消息、工具 schema 和响应格式，不再额外扣 schema。初始请求、工具循环、空回复恢复、阶段性收尾在 provider 前调用同一个 `CompactionController`。按 #393 的实际用量/锚点增量/本地估算触发，按同一完整请求重渲染验证目标预算；保留当前输入、附件及本轮已执行的完整工具交换，普通目标预算耗尽后进入同一控制器的最小请求；不会重放工具或沿旧裁剪计划绕过前置。安全审查在当前轮尚未调用工具时可以重试；每次重新读取已提交摘要、水位、成员来源与历史工具，保留本轮原始消息截止位置、当前输入/附件及策略快照。原身份/模型归属或失效代次变化则终止旧回合，不能借重试引入并发追加的新消息或重放工具。最小请求仅作用于当前请求，最多准备一次；真实 provider 超长最多在当前调用边界发出原始、普通压缩和最小请求共 3 次请求，不重新执行工具循环。
 
@@ -32,7 +32,7 @@
 
 `CompactionResult` 共用于自动和手动入口，记录模型、容量预算、前后用量与来源、执行/失败阶段、配置/实际保留轮数、窗口范围与版本、记忆游标/版本，以及是否需要前置和是否已经提交记忆。失败结果不会把已提交的记忆误报为回滚。
 
-桌面 `chat.context.status` 通过 `ContextWindow` 和正式 `CompactionRenderer` / prompt owner 读取持久化窗口，以实际角色模型的 provider 归一化请求和 usage 锚点测量；不执行模型、预检索或普通回合，不包含未发送草稿/附件/引用。圆环分母始终是 `context_window_tokens`，来源为实际或明确标注的估算；未知保留 null。角色/模型/连接变化使旧读取失效，聊天完成、手动操作完成/失败和运行时更新会刷新。角色工作与独立记忆维护在各自 gate / lock 释放后发布刷新事件，忙碌状态随完成或失败恢复，不轮询、不伪造任务进度。
+桌面 `chat.context.status` 通过 `ContextWindow` 和正式 `CompactionRenderer` / prompt owner 读取持久化窗口，以实际角色模型的 provider 归一化请求和 usage 锚点测量；不执行模型、预检索或普通回合，不包含未发送草稿/附件/引用。圆环分母始终是 `model_context_window`，来源为实际或明确标注的估算；未知保留 null。角色/模型/连接变化使旧读取失效，聊天完成、手动操作完成/失败和运行时更新会刷新。角色工作与独立记忆维护在各自 gate / lock 释放后发布刷新事件，忙碌状态随完成或失败恢复，不轮询、不伪造任务进度。
 
 圆环和 `/compact` 调用 `chat.context.compact` / 同一宿主控制面，低于自动阈值也执行同一 `CompactionController`。没有当前运行轮次时直接从持久化完整轮次选界，复用全局保留策略；不新增聊天消息、不改变草稿、不给心情 owner 发布正式回复。角色共享 gate 拒绝与回复/压缩并发，控制器自己的会话 gate 也保护非角色入口。命令在渠道正常准入后、普通回合处理前拦截，沿真实 thread 所属用户或外部上下文执行；桌面在消息落库前拦截。`status_commands` 插件的 `/compact_status` 仍是记忆整理状态别名，不触发压缩。操作成功反馈前后用量；记忆已提交的后续失败明确显示“记忆已整理、压缩失败”，保留旧摘要与窗口以便重试。原文继续保存在 sessions.db，检索和撤销仍由各自 owner 处理。
 

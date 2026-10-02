@@ -477,6 +477,7 @@ def build_core_runtime(
         registrations=config.model_registrations,
         dev_mode=config.dev_mode,
         budget_policy=config.context_budget,
+        default_max_tokens=config.max_tokens,
     )
     track_build_resource(role_model_resolver, role_model_resolver.aclose)
     role_repository = RoleRepository(role_store)

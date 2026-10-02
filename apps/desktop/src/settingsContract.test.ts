@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { compactionRetainedTurnsError, desktopSettingsDefaults } from "./settingsContract.js";
+import { compactionRetainedTurnsError, desktopSettingsDefaults, modelCapacityError } from "./settingsContract.js";
 
 describe("compactionRetainedTurnsError", () => {
   it("accepts the default, zero and custom whole-turn retention", () => {
@@ -12,5 +12,19 @@ describe("compactionRetainedTurnsError", () => {
     for (const value of [null, "2", true, {}, -1, 0.5, Number.MAX_SAFE_INTEGER + 1, Number.NaN, Number.POSITIVE_INFINITY]) {
       assert.equal(compactionRetainedTurnsError(value), "压缩后保留原文轮数必须是非负整数");
     }
+  });
+});
+
+describe("modelCapacityError", () => {
+  it("keeps an empty window saveable and accepts a threshold below the window", () => {
+    assert.equal(modelCapacityError({ modelContextWindow: null, modelAutoCompactTokenLimit: null }), null);
+    assert.equal(modelCapacityError({ modelContextWindow: 128000, modelAutoCompactTokenLimit: 100000 }), null);
+  });
+
+  it("names the reason a threshold at or beyond the window, or not positive, is rejected", () => {
+    assert.equal(modelCapacityError({ modelContextWindow: 128000, modelAutoCompactTokenLimit: 128000 }), "自动压缩阈值必须小于上下文窗口");
+    assert.equal(modelCapacityError({ modelContextWindow: null, modelAutoCompactTokenLimit: 1000 }), "自动压缩阈值必须小于上下文窗口");
+    assert.equal(modelCapacityError({ modelContextWindow: 128000, modelAutoCompactTokenLimit: 0 }), "自动压缩阈值必须是正整数");
+    assert.equal(modelCapacityError({ modelContextWindow: 0 }), "上下文窗口必须是正整数");
   });
 });

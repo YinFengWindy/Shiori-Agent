@@ -51,8 +51,8 @@ _DRAFT = {
     "capacity_draft",
     [
         {},
-        {"context_window_tokens": None, "max_output_tokens": None},
-        {"context_window_tokens": 0, "max_output_tokens": 0},
+        {"model_context_window": None, "model_auto_compact_token_limit": None},
+        {"model_context_window": 0, "model_auto_compact_token_limit": 0},
     ],
 )
 async def test_probe_sends_one_tiny_request_with_the_draft_connection(

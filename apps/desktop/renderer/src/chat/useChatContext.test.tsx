@@ -9,7 +9,7 @@ import type { ChatContextStatus } from "./chatContextState";
 
 function state(role = "mira", tokens = 32000): ChatContextStatus {
   return { session_key: `role:${role}`, context_key: "user", model: "model", model_identity: role,
-    tokens, source: "local", context_window_tokens: 128000, input_limit_tokens: 100000,
+    tokens, source: "local", model_context_window: 128000, input_limit_tokens: 100000,
     can_compact: true, busy: false, reason: "", result: null };
 }
 

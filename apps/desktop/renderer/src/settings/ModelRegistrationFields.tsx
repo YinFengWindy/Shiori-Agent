@@ -6,7 +6,13 @@ import { SettingsField } from "./SettingsField";
 import type { ModelConnectionTestOutcome } from "./modelConnectionTest";
 import { SettingsSecretInput, settingsInputClass } from "./SettingsFieldPrimitives";
 import { ModelConnectionTestAction } from "./ModelConnectionTestAction";
+import { modelCapacityError } from "../../../src/settingsContract.js";
+import { InlineError } from "../shared/feedback/InlineError";
 import { applyProviderPreset, customProviderPresetId, findProviderPreset, modelProviderOptions } from "./modelProviderPresets";
+
+function optionalTokenCount(value: string) {
+  return value === "" ? null : Number(value);
+}
 
 /**
  * Model registration fields shared by the catalog and first-run setup.
@@ -19,6 +25,7 @@ export function ModelRegistrationFields({ registration, onChange, compact = fals
   compact?: boolean;
   onConnectionTested?: (result: ModelConnectionTestOutcome) => void;
 }) {
+  const capacityError = modelCapacityError(registration);
   const fieldLayout = { layout: compact ? "stack" : "side", dense: compact } as const;
   const inputClass = settingsInputClass;
   // 「自定义」 chosen explicitly stays selected even while the values still equal a preset.
@@ -52,10 +59,13 @@ export function ModelRegistrationFields({ registration, onChange, compact = fals
         <input aria-label="模型" className={inputClass} placeholder={preset?.modelHint} value={registration.model} onChange={(event) => onChange((current) => ({ ...current, model: event.target.value }))} />
       </SettingsField>
       <SettingsField {...fieldLayout} label="上下文窗口（token）">
-        <input aria-label="上下文窗口" className={inputClass} type="number" min="1" step="1" required placeholder="需补填" value={registration.contextWindowTokens ?? ""} onChange={(event) => onChange((current) => ({ ...current, contextWindowTokens: event.target.value === "" ? null : Number(event.target.value) }))} />
+        <input aria-label="上下文窗口" className={inputClass} type="number" min="1" step="1" required placeholder="需补填" value={registration.modelContextWindow ?? ""} onChange={(event) => onChange((current) => ({ ...current, modelContextWindow: optionalTokenCount(event.target.value) }))} />
       </SettingsField>
-      <SettingsField {...fieldLayout} label="模型最大输出（token）">
-        <input aria-label="模型最大输出" className={inputClass} type="number" min="1" step="1" required placeholder="需补填" value={registration.maxOutputTokens ?? ""} onChange={(event) => onChange((current) => ({ ...current, maxOutputTokens: event.target.value === "" ? null : Number(event.target.value) }))} />
+      <SettingsField {...fieldLayout} label="自动压缩阈值（token）">
+        <div className="grid gap-2">
+          <input aria-label="自动压缩阈值" className={inputClass} type="number" min="1" step="1" placeholder="可选" value={registration.modelAutoCompactTokenLimit ?? ""} onChange={(event) => onChange((current) => ({ ...current, modelAutoCompactTokenLimit: optionalTokenCount(event.target.value) }))} />
+          {capacityError ? <InlineError persona={false} message={capacityError} /> : null}
+        </div>
       </SettingsField>
       <SettingsField {...fieldLayout} label="思考强度">
         <Select aria-label="思考强度" className={inputClass} value={registration.effort} onValueChange={(value) => onChange((current) => ({ ...current, effort: value as ModelRegistrationFormData["effort"] }))} options={modelEffortOptions} />

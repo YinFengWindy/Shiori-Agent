@@ -160,6 +160,7 @@ class DesktopBridgeService:
                 registrations=registrations,
                 dev_mode=bool(getattr(config, "dev_mode", False)),
                 budget_policy=config.context_budget,
+                default_max_tokens=config.max_tokens,
             )
             if isinstance(registrations, list)
             else None

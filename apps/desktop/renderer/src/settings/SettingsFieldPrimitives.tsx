@@ -73,9 +73,10 @@ export function SettingsSecretInput({
 }
 
 /**
- * Numeric settings input with an optional unit suffix. Keeps the last valid
- * number while the text is momentarily unparsable (same rule as
- * `parseSettingsNumber`).
+ * Numeric settings input with an optional unit suffix. The typed text is kept
+ * locally, so intermediate forms such as `0.` or an empty box stay editable
+ * while the last parsed number (same rule as `parseSettingsNumber`) is
+ * reported; an external value change replaces the text.
  */
 export function SettingsNumberInput({
   value,
@@ -92,6 +93,13 @@ export function SettingsNumberInput({
   min?: number;
   max?: number;
 }) {
+  const [text, setText] = useState(() => String(value));
+  const [reported, setReported] = useState(value);
+  if (!Object.is(value, reported)) {
+    // Adopt values replaced from outside (load, reset) without an effect round-trip.
+    setReported(value);
+    setText(String(value));
+  }
   return (
     <div className="relative flex items-center">
       <input
@@ -100,8 +108,14 @@ export function SettingsNumberInput({
         inputMode="decimal"
         // A textbox cannot carry aria-value*; the accepted range is a hover hint and the backend validates.
         title={min !== undefined || max !== undefined ? `${min ?? "…"} – ${max ?? "…"}` : undefined}
-        value={String(value)}
-        onChange={(event) => onChange(parseSettingsNumber(event.target.value, value))}
+        value={text}
+        onChange={(event) => {
+          const next = parseSettingsNumber(event.target.value, value);
+          setText(event.target.value);
+          setReported(next);
+          if (!Object.is(next, value)) onChange(next);
+        }}
+        onBlur={() => setText(String(value))}
       />
       {unit ? <span className="pointer-events-none absolute right-3 text-caption text-ink-muted" aria-hidden="true">{unit}</span> : null}
     </div>

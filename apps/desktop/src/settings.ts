@@ -11,7 +11,7 @@ import type {
   SettingsSnapshot,
 } from "./bridge/shared.js";
 import { parseHotkey } from "./voice/hotkey.js";
-import { compactionRetainedTurnsError, desktopSettingsDefaults } from "./settingsContract.js";
+import { compactionRetainedTurnsError, desktopSettingsDefaults, modelCapacityError } from "./settingsContract.js";
 
 type RuntimeSettingsApplier = (request: RuntimeApplyRequest) => Promise<SaveSettingsResult>;
 
@@ -61,6 +61,10 @@ function renderProactiveStrategies(values: SettingsFormData["proactiveStrategies
   return lines.length ? ["[agent.proactive_strategies]", ...lines, ""] : [];
 }
 
+function optionalNumber(value: unknown) {
+  return value == null ? null : Number(value);
+}
+
 function loadModelRegistrations(llm: Record<string, unknown>): ModelRegistrationFormData[] {
   const raw = Array.isArray(llm.registrations) ? llm.registrations : [];
   return raw.map((value) => {
@@ -71,8 +75,9 @@ function loadModelRegistrations(llm: Record<string, unknown>): ModelRegistration
       baseUrl: String(item.base_url ?? ""),
       apiKey: String(item.api_key ?? ""),
       model: String(item.model ?? ""),
-      contextWindowTokens: item.context_window_tokens == null ? null : Number(item.context_window_tokens),
-      maxOutputTokens: item.max_output_tokens == null ? null : Number(item.max_output_tokens),
+      // Legacy context_window_tokens migrates; legacy max_output_tokens is dropped.
+      modelContextWindow: optionalNumber(item.model_context_window ?? item.context_window_tokens),
+      modelAutoCompactTokenLimit: optionalNumber(item.model_auto_compact_token_limit),
       effort: String(item.effort ?? "none") as "none" | "low" | "high" | "max",
     };
   });
@@ -169,8 +174,8 @@ function renderSettingsToml(formData: SettingsFormData): string {
       `api_key = ${quote(registration.apiKey)}`,
       `model = ${quote(registration.model.trim())}`,
       `effort = ${quote(registration.effort)}`,
-      ...(registration.contextWindowTokens == null ? [] : [`context_window_tokens = ${registration.contextWindowTokens}`]),
-      ...(registration.maxOutputTokens == null ? [] : [`max_output_tokens = ${registration.maxOutputTokens}`]),
+      ...(registration.modelContextWindow == null ? [] : [`model_context_window = ${registration.modelContextWindow}`]),
+      ...(registration.modelAutoCompactTokenLimit == null ? [] : [`model_auto_compact_token_limit = ${registration.modelAutoCompactTokenLimit}`]),
       "",
     ]),
     "[agent]",
@@ -264,10 +269,8 @@ function validateSettings(formData: SettingsFormData): void {
     if (!["none", "low", "high", "max"].includes(registration.effort)) {
       throw new Error("Effort 必须是 none、low、high 或 max");
     }
-    for (const value of [registration.contextWindowTokens, registration.maxOutputTokens]) {
-      if (value != null && (!Number.isSafeInteger(value) || value <= 0)) throw new Error("模型容量必须是正整数");
-    }
-    if (registration.contextWindowTokens != null && registration.maxOutputTokens != null && registration.maxOutputTokens > registration.contextWindowTokens) throw new Error("模型最大输出能力不得超过上下文窗口");
+    const capacityError = modelCapacityError(registration);
+    if (capacityError) throw new Error(capacityError);
     registrationIds.add(registration.id);
   }
   const retentionError = compactionRetainedTurnsError(formData.advanced.compactionRetainedTurns);

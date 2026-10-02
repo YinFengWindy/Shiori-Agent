@@ -1191,10 +1191,10 @@ async def test_roles_create_binds_the_first_registered_model(
 
     config = SimpleNamespace(
         context_budget=BudgetPolicy(),
+        max_tokens=8192,
         model_registrations=[
             ModelRegistration(
-                context_window_tokens=128000,
-                max_output_tokens=32768,
+                model_context_window=128000,
                 id=registration_id,
                 provider="openai",
                 base_url="http://127.0.0.1:1/v1",

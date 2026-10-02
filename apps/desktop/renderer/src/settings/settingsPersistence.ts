@@ -1,4 +1,4 @@
-import { compactionRetainedTurnsError } from "../../../src/settingsContract.js";
+import { compactionRetainedTurnsError, modelCapacityError } from "../../../src/settingsContract.js";
 import type {
   DesktopApi,
   SaveSettingsResult,
@@ -60,9 +60,11 @@ export async function saveSettingsPageData(
   draft: SettingsFormData,
   options?: SettingsSaveOptions,
 ): Promise<SettingsPageSaveResult> {
-  const retentionError = compactionRetainedTurnsError(draft.advanced.compactionRetainedTurns);
-  if (retentionError) {
-    return { saveResult: { ok: false, error: { code: "settings_validation_error", message: retentionError } }, snapshot: null, nextDraft: cloneSettings(draft) };
+  // Reject invalid drafts before the transaction so the page keeps the reason and the edit.
+  const validationError = compactionRetainedTurnsError(draft.advanced.compactionRetainedTurns)
+    ?? draft.models.registrations.map(modelCapacityError).find((error) => error !== null);
+  if (validationError) {
+    return { saveResult: { ok: false, error: { code: "settings_validation_error", message: validationError } }, snapshot: null, nextDraft: cloneSettings(draft) };
   }
   const saveResult = await api.saveSettings(cloneSettings(draft), options);
   return refreshSavedSettings(api, draft, saveResult);

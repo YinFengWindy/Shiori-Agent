@@ -21,7 +21,7 @@ test("the ring remains keyboard-focusable when unavailable and reports readable 
 });
 
 test("the button triggers one transaction and the busy state has no fake progress value", async () => {
-  const status: ChatContextStatus = { session_key: "role:mira", context_key: "user", model: "m", model_identity: "m", tokens: 32000, source: "actual", context_window_tokens: 128000, input_limit_tokens: 100000, can_compact: true, busy: false, reason: "", result: null };
+  const status: ChatContextStatus = { session_key: "role:mira", context_key: "user", model: "m", model_identity: "m", tokens: 32000, source: "actual", model_context_window: 128000, input_limit_tokens: 100000, can_compact: true, busy: false, reason: "", result: null };
   let calls = 0;
   const onCompact = async () => { calls++; };
   const view = await mountTestComponent(<ChatContextRing status={status} busy={false} notice="" unavailable="" onCompact={onCompact} />);

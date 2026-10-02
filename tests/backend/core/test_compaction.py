@@ -76,8 +76,7 @@ def _advance_generation(h, session_key):
 
 def _budget(tokens):
     return build_input_budget(
-        context_window_tokens=4000,
-        max_output_tokens=200,
+        model_context_window=4000,
         output_tokens=200,
         policy=BudgetPolicy(safety_margin_tokens=20),
         estimate=InputEstimate(tokens, "local"),

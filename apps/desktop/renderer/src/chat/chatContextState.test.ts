@@ -4,7 +4,7 @@ import { contextResultFeedback, contextResultLabel, contextUsageLabel, type Chat
 
 const status: ChatContextStatus = {
   session_key: "role:mira", context_key: "user", model: "model", model_identity: "identity",
-  tokens: 32000, source: "actual", context_window_tokens: 128000, input_limit_tokens: 100000,
+  tokens: 32000, source: "actual", model_context_window: 128000, input_limit_tokens: 100000,
   can_compact: true, busy: false, reason: "", result: null,
 };
 
@@ -12,7 +12,7 @@ test("usage divides by total model capacity and preserves unknown values", () =>
   assert.equal(contextUsageLabel(status).ratio, .25);
   assert.match(contextUsageLabel(status).label, /25%（实际）/);
   assert.match(contextUsageLabel({ ...status, source: "anchor_delta" }).label, /锚点估算/);
-  for (const value of [null, { ...status, tokens: null }, { ...status, context_window_tokens: 0 }]) {
+  for (const value of [null, { ...status, tokens: null }, { ...status, model_context_window: 0 }]) {
     assert.deepEqual(contextUsageLabel(value), { label: "上下文用量未知", ratio: null });
   }
 });

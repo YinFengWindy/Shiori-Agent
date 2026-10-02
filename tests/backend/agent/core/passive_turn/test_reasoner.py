@@ -95,8 +95,8 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
     registry.register(tool, always_on=True)
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=100000 if case == "normal" else 20000,
-        max_output_tokens=2000,
+        model_context_window=100000 if case == "normal" else 20000,
+        default_max_tokens=2000,
         budget_policy=BudgetPolicy(safety_margin_tokens=100),
     )
     events = []
@@ -257,7 +257,6 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
                 final_fact = events[-1].status
                 assert final_fact["after_source"] == "local"
                 assert final_fact["final_budget"]["schema_tokens"] == 0
-                assert final_fact["final_budget"]["max_output_tokens"] == 2000
                 assert final_fact["final_budget"]["output_reservation_tokens"] == 300
                 assert (
                     final_fact["request_usage"]["last_request"]["prompt_tokens"] is None
@@ -493,7 +492,7 @@ async def test_real_turn_history_append_uses_usage_anchor_with_replaced_context_
         AsyncMock(return_value=None),
     )
     provider = LLMProvider(
-        api_key="test", context_window_tokens=128000, max_output_tokens=32768
+        api_key="test", model_context_window=128000, default_max_tokens=32768
     )
     estimates = []
     sent = []
@@ -650,8 +649,8 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         registry.register(_ArchivedTool())
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=10000,
-        max_output_tokens=200,
+        model_context_window=10000,
+        default_max_tokens=200,
         budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
     sent, summary_inputs = [], []
@@ -925,8 +924,8 @@ async def test_real_prompt_renderer_continues_with_working_state_and_bounded_ori
     )
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=64000,
-        max_output_tokens=2000,
+        model_context_window=64000,
+        default_max_tokens=2000,
         budget_policy=BudgetPolicy(safety_margin_tokens=200),
     )
     spoken = []
@@ -1096,8 +1095,8 @@ async def test_safety_retry_reads_committed_compaction_with_frozen_input_and_his
     )
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=10000,
-        max_output_tokens=200,
+        model_context_window=10000,
+        default_max_tokens=200,
         budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
     msg = InboundMessage(

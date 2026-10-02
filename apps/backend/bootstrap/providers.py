@@ -53,8 +53,11 @@ def build_providers(
         stream_idle_timeout_s=_MAIN_STREAM_IDLE_TIMEOUT_S,
         provider_name=config.provider,
         payload_snapshot_enabled=payload_snapshot_enabled,
-        context_window_tokens=config.model_registrations[0].context_window_tokens,
-        max_output_tokens=config.model_registrations[0].max_output_tokens,
+        model_context_window=config.model_registrations[0].model_context_window,
+        model_auto_compact_token_limit=(
+            config.model_registrations[0].model_auto_compact_token_limit
+        ),
+        default_max_tokens=config.max_tokens,
         budget_policy=config.context_budget,
     )
     track_build_resource(provider, provider.aclose)

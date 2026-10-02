@@ -25,3 +25,21 @@ describe("SettingsFieldPrimitives", () => {
     assert.doesNotMatch(toggleMarkup, /已启用|未启用/);
   });
 });
+
+it("SettingsNumberInput accepts a decimal ratio typed from an empty box", async () => {
+  const { mountTestComponent, changeInputValue } = await import("@shiori/sdk/testing");
+  const { SettingsNumberInput } = await import("./SettingsFieldPrimitives.js");
+  const state = { value: 0.75 };
+  const view = await mountTestComponent(null);
+  const render = () => view.render(<SettingsNumberInput ariaLabel="触发比例" value={state.value} onChange={(value) => { state.value = value; void render(); }} />);
+  try {
+    await render();
+    const input = view.container.querySelector("input");
+    assert.ok(input);
+    for (const typed of ["", "0", "0.", "0.8"]) {
+      await changeInputValue(input, typed);
+      assert.equal(input.value, typed);
+    }
+    assert.equal(state.value, 0.8);
+  } finally { await view.cleanup(); }
+});
