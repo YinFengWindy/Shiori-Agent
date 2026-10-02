@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from shiori_sdk.testing.memory import FakeModelResponse as LLMResponse
+from shiori_sdk.testing.models import FakeModelResponse as LLMResponse
 
 from plugins.default_memory.backend.semantic.procedure_tagger import (
     ProcedureTagger,

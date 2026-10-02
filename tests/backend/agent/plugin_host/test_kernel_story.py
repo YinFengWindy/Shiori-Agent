@@ -12,7 +12,7 @@ from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from core.roles.store import RoleStore
 from session.manager import SessionManager
-from shiori_sdk.testing.services import FakeHttp
+from shiori_sdk.testing.http import FakeHttp
 from shiori_sdk.testing.bridge import plugin_bridge_request
 from shiori_sdk.rpc import Concurrency
 

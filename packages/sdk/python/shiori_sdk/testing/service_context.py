@@ -1,54 +1,20 @@
-"""One explicit SDK setup fixture for role, generation and native plugins."""
+"""Compose explicit SDK capability fixtures for service plugin setup."""
 
-from collections.abc import Awaitable, Callable
-from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
-from shiori_sdk.models import ModelSnapshot, ChatProvider
-from shiori_sdk.roles import RoleView
+from shiori_sdk.models import ChatProvider
 from shiori_sdk.plugin_services import ServicePluginContext
 from .extensions import FakeExtensionContext
 from .memory_context import FakeRpc
 from .processes import FakeProcesses, current_tool_turn
 from .roles import FakeRoles
-from .services import FakeTools, FakeKV, FakeResources, FakeSessions, FakeHttp
-
-
-class FakeModels:
-    """Select explicitly seeded snapshots and record the requested role/purpose."""
-
-    def __init__(self):
-        self.snapshots: dict[tuple[str, str], ModelSnapshot] = {}
-        self.activations: list[tuple[str, str]] = []
-
-    @asynccontextmanager
-    async def activate(self, role_id: str, purpose: Literal["chat", "vision"]):
-        """Hold a test-supplied snapshot over an awaited operation."""
-        self.activations.append((role_id, purpose))
-        yield self.snapshots[role_id, purpose]
-
-
-class FakeRuntimeLifecycle:
-    """Record drain requests without constructing a host generation."""
-
-    def __init__(self):
-        self.was_active = False
-        self.drainers: list[Callable[[], Awaitable[None]]] = []
-
-    def on_drain(self, callback: Callable[[], Awaitable[None]]) -> None:
-        """Retain a drainer for an explicit test transition."""
-        self.drainers.append(callback)
-
-
-class FakeSceneObservations:
-    """Retain observation predicates as fixture-visible contributions."""
-
-    def __init__(self):
-        self.predicates: list[Callable[[RoleView], bool]] = []
-
-    def request(self, predicate: Callable[[RoleView], bool]) -> None:
-        """Record demand without starting a scene observer."""
-        self.predicates.append(predicate)
+from .tools import FakeTools
+from .storage import FakeKV
+from .resources import FakeResources
+from .sessions import FakeSessions
+from .http import FakeHttp
+from .runtime import FakeRuntimeLifecycle
+from .scene_observations import FakeSceneObservations
+from .models import FakeModels
 
 
 class FakeServiceContext(FakeExtensionContext):

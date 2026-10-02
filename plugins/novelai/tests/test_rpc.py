@@ -14,7 +14,7 @@ from plugins.novelai.backend.models import GenerateImageResult, GeneratedImageRe
 from plugins.novelai.backend.prompt_tags import PromptTagStore
 from plugins.novelai.backend.rpc import NovelAIRpcHandlers
 from plugins.novelai.backend.store import NovelAIStore
-from shiori_sdk.testing.services import FakeSessions as SessionManager
+from shiori_sdk.testing.sessions import FakeSessions as SessionManager
 
 
 def _handlers(

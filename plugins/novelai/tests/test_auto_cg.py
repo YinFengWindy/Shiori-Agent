@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from shiori_sdk.testing.services import FakeKV
+from shiori_sdk.testing.storage import FakeKV
 from shiori_sdk.tool_hooks import HookOutcome
 from plugins.novelai.backend.auto_cg import AutoCgPolicy
 

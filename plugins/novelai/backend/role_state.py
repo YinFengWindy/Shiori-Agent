@@ -1,7 +1,5 @@
 """NovelAI role preferences participating in the host's single role commit."""
 
-from typing import Any
-
 from shiori_sdk.roles import Roles
 from shiori_sdk.role_events import RoleDeleted
 
@@ -42,18 +40,30 @@ class NovelAIRoleState:
         self.reconcile()
 
     @staticmethod
-    def write_draft(role_id: str, values: dict[str, Any], data: dict[str, Any]) -> None:
+    def write_draft(
+        role_id: str, values: dict[str, object], data: dict[str, object]
+    ) -> None:
         """Validate a detached draft before the shared atomic manifest save."""
         enabled = values.get("autoSceneCgEnabled")
         if not isinstance(enabled, bool):
             raise ValueError("NovelAI autoSceneCgEnabled 必须是布尔值")
-        data[role_id] = {**data.get(role_id, {}), "auto_scene_cg_enabled": enabled}
+        data[role_id] = {
+            **_role_preferences(role_id, data),
+            "auto_scene_cg_enabled": enabled,
+        }
 
     @staticmethod
-    def project(role_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    def project(role_id: str, data: dict[str, object]) -> dict[str, bool]:
         """Expose the plugin's editable projection separately from RoleRecord."""
         return {
             "autoSceneCgEnabled": bool(
-                data.get(role_id, {}).get("auto_scene_cg_enabled", False)
+                _role_preferences(role_id, data).get("auto_scene_cg_enabled", False)
             )
         }
+
+
+def _role_preferences(role_id: str, data: dict[str, object]) -> dict[str, object]:
+    preferences = data.get(role_id, {})
+    if not isinstance(preferences, dict):
+        raise ValueError("NovelAI 角色设置必须是对象")
+    return preferences

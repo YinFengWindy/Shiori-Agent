@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import asyncio
-import inspect
 import logging
 from typing import TYPE_CHECKING, Any
 from collections.abc import Coroutine
@@ -584,48 +583,52 @@ class BackgroundCapability:
         self, coro: Coroutine[object, object, T], *, name: str
     ) -> asyncio.Task[T]:
         """Retain the current runtime until work finishes; own cancellation on unload."""
+        return self._spawn(coro, name=name, retain_runtime=True)
+
+    def spawn[T](
+        self, coro: Coroutine[object, object, T], *, name: str
+    ) -> asyncio.Task[T]:
+        """启动作用域任务；开始卸载后拒绝启动并关闭尚未运行的协程。"""
+        return self._spawn(
+            coro, name=f"plugin:{self._plugin_id}:{name}", retain_runtime=False
+        )
+
+    def _spawn[T](
+        self,
+        coro: Coroutine[object, object, T],
+        *,
+        name: str,
+        retain_runtime: bool,
+    ) -> asyncio.Task[T]:
         try:
             self._effects.ensure_active(f"background:{name}")
-        except RuntimeError:
+            task = (
+                create_runtime_task(coro, name=name)
+                if retain_runtime
+                else asyncio.create_task(coro, name=name)
+            )
+        except BaseException:
             coro.close()
             raise
-        task = create_runtime_task(coro, name=name)
-
-        async def dispose() -> None:
-            if not task.done():
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
-
         try:
-            self._effects.add(f"background:{name}", dispose)
+            # Register at the actual spawn point to preserve LIFO ordering with
+            # each task's resources, and release completed results immediately.
+            release = self._effects.add(
+                f"background:{name}", lambda: self._cancel(task)
+            )
         except BaseException:
             task.cancel()
             raise
-        return task
-
-    def spawn(self, coro: Any, *, name: str) -> asyncio.Task[Any]:
-        """启动作用域任务；开始卸载后拒绝启动并关闭尚未运行的协程。"""
-        try:
-            self._effects.ensure_active(f"background:{name}")
-        except RuntimeError:
-            if inspect.iscoroutine(coro):
-                coro.close()
-            raise
-        task: asyncio.Task[Any] = asyncio.create_task(
-            coro, name=f"plugin:{self._plugin_id}:{name}"
-        )
-        self._effects.add(f"background:{name}", lambda: self._cancel(task))
+        # Business errors remain with the caller or asyncio's error handler.
+        task.add_done_callback(lambda _completed: release())
         return task
 
     @staticmethod
-    async def _cancel(task: asyncio.Task[Any]) -> None:
+    async def _cancel(task: asyncio.Task[object]) -> None:
         if task.done():
             return
-        _ = task.cancel()
+        task.cancel()
         try:
             await task
-        except (
-            asyncio.CancelledError,
-            Exception,
-        ):  # noqa: BLE001 - 卸载路径只收敛不传播
+        except asyncio.CancelledError:
             pass

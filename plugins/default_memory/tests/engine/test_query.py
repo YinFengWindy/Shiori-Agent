@@ -15,7 +15,7 @@ from shiori_sdk.memory.engine import (
     MemoryScope,
 )
 from shiori_sdk.models import ModelProvider as LLMProvider
-from shiori_sdk.testing.memory import FakeModelResponse as LLMResponse
+from shiori_sdk.testing.models import FakeModelResponse as LLMResponse
 
 import plugins.default_memory.backend.semantic.retriever as retriever_module
 from plugins.default_memory.backend.engine.lifecycle import DefaultMemoryEngine

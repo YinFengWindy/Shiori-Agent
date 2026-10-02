@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from shiori_sdk.testing.services import FakeModelResponse
+from shiori_sdk.testing.models import FakeModelResponse
 from plugins.story.backend.director import ProviderStoryDirector
 from plugins.story.backend.errors import StoryInvalidOutputError
 from plugins.story.backend.models import StoryContext

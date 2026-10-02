@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from shiori_sdk.testing.services import FakeKV
+from shiori_sdk.testing.storage import FakeKV
 
 from shiori_sdk.role_events import SceneObservationCommitted
 from plugins.novelai.backend.auto_cg import AutoCgPolicy

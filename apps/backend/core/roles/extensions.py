@@ -11,18 +11,15 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
+from shiori_sdk.roles import DraftWriter, RoleProjector
 
 from .manifest import RoleManifestRepository
-
-# A participant mutates only its detached namespace; persistence is the caller's.
-DraftWriter = Callable[[str, dict[str, Any], dict[str, Any]], None]
-Projector = Callable[[str, dict[str, Any]], dict[str, Any]]
 
 
 @dataclass
 class _Participant:
     write: DraftWriter
-    project: Projector
+    project: RoleProjector
     leases: set[object] = field(default_factory=set)
 
 
@@ -33,7 +30,7 @@ class RoleExtensions:
         self._repository = repository
         self._participants: dict[str, _Participant] = {}
 
-    def register(self, plugin_id: str, write: DraftWriter, project: Projector):
+    def register(self, plugin_id: str, write: DraftWriter, project: RoleProjector):
         """Leases an identical participant across overlapping runtime generations."""
         with self._repository.lock:
             participant = self._participants.get(plugin_id)
@@ -92,13 +89,13 @@ class RoleExtensions:
                 participant.write(role_id, values, data.setdefault(plugin_id, {}))
             return data
 
-    def project(self, role_id: str) -> dict[str, Any]:
+    def project(self, role_id: str) -> dict[str, dict[str, object]]:
         """Projects active plugin snapshots separately from the core role record."""
         with self._repository.lock:
             data = self._repository.load_payload().get("plugin_data", {})
             return {
-                plugin_id: participant.project(
-                    role_id, deepcopy(data.get(plugin_id, {}))
+                plugin_id: dict(
+                    participant.project(role_id, deepcopy(data.get(plugin_id, {})))
                 )
                 for plugin_id, participant in self._participants.items()
             }

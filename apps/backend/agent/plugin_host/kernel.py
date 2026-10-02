@@ -597,9 +597,7 @@ class PluginKernel:
     ) -> dict[str, Any]:
         services = self._services
         builders: dict[str, Any] = {
-            "scene_observations": lambda: SceneObservationsCapability(
-                services.scene_observations, handle.effects
-            ),
+            "scene_observations": lambda: None,
             "events": lambda: None,
             "diagnostics": lambda: None,
             "roles": lambda: None,
@@ -613,12 +611,7 @@ class PluginKernel:
             "memory": lambda: None,
             "kv": lambda: None,
             "config": lambda: None,
-            "tools": lambda: ToolsCapability(
-                services.tool_registry,
-                handle.effects,
-                handle.contributions,
-                handle.plugin_id,
-            ),
+            "tools": lambda: None,
             "lifecycle": lambda: None,
             "tool_hooks": lambda: None,
             "proactive_gates": lambda: ProactiveGatesCapability(
@@ -650,11 +643,7 @@ class PluginKernel:
             "bot_commands": lambda: None,
             "rpc": lambda: rpc,
             "dependencies": lambda: None,
-            "runtime": lambda: PluginRuntimeLifecycle(
-                services.is_reload,
-                handle.drainers,
-                was_active=handle.plugin_id in services.previously_active_plugins,
-            ),
+            "runtime": lambda: None,
             "role_runtime_registry": lambda: services.role_runtime_registry,
             # 直传引用，无需 effect 包装：宿主拥有这些服务的生命周期，插件只读，
             # 卸载时无需撤销任何登记。

@@ -12,7 +12,7 @@ from shiori_sdk.memory.engine import (
 )
 from shiori_sdk.memory.events import ConsolidationCommitted, TurnIngested
 from shiori_sdk.testing.events import FakeEvents as EventBus
-from shiori_sdk.testing.memory import FakeModelResponse as LLMResponse
+from shiori_sdk.testing.models import FakeModelResponse as LLMResponse
 
 from plugins.default_memory.backend.engine.lifecycle import DefaultMemoryEngine
 from plugins.default_memory.backend.semantic.store import MemoryStore2

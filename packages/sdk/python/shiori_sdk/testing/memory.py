@@ -9,9 +9,6 @@ from shiori_sdk.memory.build import BuildResource
 from shiori_sdk.storage import plugin_data_dir
 
 
-from .services import FakeModelResponse as FakeModelResponse
-
-
 class FakeMemoryRoles:
     """Role existence and explicit authorization represented as sets."""
 

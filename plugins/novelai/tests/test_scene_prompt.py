@@ -4,10 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from shiori_sdk.testing.services import (
-    FakeModelResponse,
-    FakeToolCall,
-)
+from shiori_sdk.testing.models import FakeModelResponse, FakeToolCall
 from shiori_sdk.role_events import SceneObservationCommitted
 from plugins.novelai.backend.scene_prompt import prepare_scene_prompt
 

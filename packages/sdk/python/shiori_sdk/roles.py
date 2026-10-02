@@ -1,6 +1,6 @@
 """Role snapshots, assets and plugin namespaces, without a role-store aggregate."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
@@ -31,8 +31,10 @@ class RoleView(Protocol):
     def to_dict(self) -> dict[str, object]: ...
 
 
+# A participant mutates only its detached namespace; persistence stays with the host.
 type DraftWriter = Callable[[str, dict[str, object], dict[str, object]], None]
-type RoleProjector = Callable[[str, dict[str, object]], dict[str, object]]
+# A read-only result permits precise plugin value types such as dict[str, bool].
+type RoleProjector = Callable[[str, dict[str, object]], Mapping[str, object]]
 
 
 class RoleExtensions(Protocol):

@@ -21,7 +21,7 @@ from shiori_sdk.role_events import SceneObservationCommitted
 from shiori_sdk.role_events import RoleDeleted
 from core.roles.store import RoleStore
 from session.manager import SessionManager
-from shiori_sdk.testing.services import FakeHttp
+from shiori_sdk.testing.http import FakeHttp
 
 PLUGIN_DIR = plugin_directory("novelai")
 _PLUGIN_CONFIG = {"novelai": {"enabled": True, "token": "novel-token"}}
