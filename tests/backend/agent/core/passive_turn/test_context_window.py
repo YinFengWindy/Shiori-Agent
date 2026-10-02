@@ -217,7 +217,7 @@ async def test_manual_failure_preserves_window_and_reports_memory_commit_then_re
         )
     else:
         window.controller.writer.generate = AsyncMock(
-            return_value=WorkingSummary("x" * 300000, (session.messages[0]["id"],))
+            return_value=WorkingSummary("x" * 400000, (session.messages[0]["id"],))
         )
     msg = InboundMessage(channel="cli", sender="user", chat_id="failure", content="")
     try:

@@ -6,9 +6,49 @@ from typing import Any
 from .manager import _ManagerCoreMixin
 from session.maintenance_progress import MaintenanceProgress
 
+# Consumer payload keys. A pending payload is the newest commit; ``backlog``
+# holds only older commits whose event publication has not happened yet.
+PUBLISHED = "published"
+BACKLOG = "backlog"
+
 
 class MemoryConsumersFailedError(RuntimeError):
     """Memory facts and cursor committed; an awaited downstream consumer failed."""
+
+
+def unpublished_entries(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Commits still awaiting publication, oldest first, as live references."""
+    return [
+        entry
+        for entry in (*payload.get(BACKLOG, ()), payload)
+        if entry and not entry.get(PUBLISHED)
+    ]
+
+
+def publication_fields(entry: dict[str, Any]) -> dict[str, Any]:
+    """The extracted commit itself, without consumer bookkeeping keys."""
+    return {k: v for k, v in entry.items() if k not in (PUBLISHED, BACKLOG)}
+
+
+def mark_published(payload: dict[str, Any], entry: dict[str, Any]) -> None:
+    """Mark one commit published; published backlog entries carry no more work.
+
+    Relationship refresh is session-wide, so the newest payload alone keeps the
+    pending marker; this keeps the backlog bounded by unpublished commits.
+    """
+    entry[PUBLISHED] = True
+    backlog = [item for item in payload.get(BACKLOG, ()) if not item.get(PUBLISHED)]
+    if backlog:
+        payload[BACKLOG] = backlog
+    else:
+        payload.pop(BACKLOG, None)
+
+
+def carry_unpublished(previous: dict[str, Any], payload: dict[str, Any]) -> None:
+    """Queue an earlier commit's unpublished work ahead of a new payload in place."""
+    backlog = [publication_fields(entry) for entry in unpublished_entries(previous)]
+    if backlog:
+        payload[BACKLOG] = backlog
 
 
 class _MemoryConsumersMixin(_ManagerCoreMixin):
@@ -24,9 +64,10 @@ class _MemoryConsumersMixin(_ManagerCoreMixin):
         if meta is None or not meta.get("maintenance_progress"):
             raise RuntimeError("memory publication has no committed progress")
         progress = MaintenanceProgress.load(meta["maintenance_progress"])
-        payload["published"] = True
         progress.pending_consumers = payload
-        progress.published_version = progress.memory_version
+        # The caller marks each published entry; the newest is published last.
+        if payload.get(PUBLISHED):
+            progress.published_version = progress.memory_version
         self._store.write_maintenance_progress(session_key, progress.dump())
 
     async def retry_memory_consumers(
