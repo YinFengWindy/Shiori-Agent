@@ -35,6 +35,7 @@ from shiori_sdk.channels.message_source import (
 )
 from core.identity import IdentityChat, UserIdentityStore
 from shiori_sdk.channels.identity import IdentityScope
+from shiori_sdk.channels.projection import plugin_metadata, project_inbound
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
 from core.roles.role_runtime import RoleExecutionContext
@@ -147,9 +148,7 @@ class ChannelHub:
         the avatars the phone shows with it). A dropped message, or one past
         the group's daily cap, is not.
         """
-        metadata = dict(message.metadata or {})
-        metadata.pop(SENDER_IS_USER_KEY, None)
-        metadata.pop(REPLY_TO_SENDER_IS_USER_KEY, None)
+        metadata = plugin_metadata(message)
         account_id = str(metadata.get("account_id") or "").strip()
         if not account_id or not str(message.sender or "").strip():
             return None
@@ -325,34 +324,15 @@ class ChannelHub:
         metadata: dict[str, Any],
     ) -> InboundMessage:
         """``message`` addressed to ``role_id``'s session through ``thread``."""
-        external_message_id = str(
-            metadata.get("external_message_id") or metadata.get("message_id") or ""
-        ).strip()
-        if external_message_id:
-            metadata["external_message_id"] = external_message_id
-        metadata["role_id"] = role_id
-        metadata["thread_id"] = thread.id
-        metadata["session_key_override"] = self._service.sessions.derive_session_key(
-            role_id
-        )
-        metadata.setdefault("context_channel", message.channel)
-        metadata.setdefault("context_chat_id", message.chat_id)
-        metadata["transport_channel"] = message.channel
-        metadata["transport_chat_id"] = message.chat_id
-        metadata["sender_id"] = message.sender
-        if "chat_type" not in metadata:
-            metadata["chat_type"] = self._channel_directory.default_chat_type(
+        return project_inbound(
+            message,
+            metadata,
+            role_id=role_id,
+            thread_id=thread.id,
+            session_key=self._service.sessions.derive_session_key(role_id),
+            default_chat_type=self._channel_directory.default_chat_type(
                 message.channel
-            )
-        metadata.setdefault("source", "role_account")
-        return InboundMessage(
-            channel=message.channel,
-            sender=message.sender,
-            chat_id=message.chat_id,
-            content=message.content,
-            timestamp=message.timestamp,
-            media=list(message.media),
-            metadata=metadata,
+            ),
         )
 
     def _remember_contact_name(

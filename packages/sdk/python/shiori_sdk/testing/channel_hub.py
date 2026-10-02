@@ -1,10 +1,10 @@
 """Explicit channel routing decisions and delivery receipts for plugin tests."""
 
 from collections.abc import Callable
-from dataclasses import replace
 
 from shiori_sdk.channels.chat_types import is_group_chat_type
 from shiori_sdk.channels.message_source import addresses_account
+from shiori_sdk.channels.projection import plugin_metadata, project_inbound
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 
 
@@ -17,6 +17,11 @@ class FakeChannelHub:
     code a private message may claim. Like the host, a group message that does
     not address ``platform_account_id`` starts no turn; with ``listening`` it
     is handed to ``on_heard`` as kept in the group's listening records.
+
+    Projection is the host's own (``shiori_sdk.channels.projection``); each
+    chat's thread is ``thread:<role_id>:<channel>:<chat_id>``, and a turn whose
+    platform message ID that thread already received is marked
+    ``conversation_duplicate`` as the host does.
     """
 
     def __init__(
@@ -29,16 +34,19 @@ class FakeChannelHub:
         pairing_code: str | None = None,
         platform_account_id: str = "",
         listening: bool = False,
+        default_chat_type: str = "private",
     ):
         self.allowed, self.blocked, self.session_key = allowed, blocked, session_key
         self.role_id, self.pairing_code = role_id, pairing_code
         self.platform_account_id, self.listening = platform_account_id, listening
+        self.default_chat_type = default_chat_type
         # Every message offered to account routing, before any decision.
         self.offered: list[InboundMessage] = []
         self.deliveries: list[dict[str, object]] = []
         # (sender, content, scope) of every pairing attempt, claimed or not.
         self.pairings: list[tuple[str, str, str]] = []
-        self._seen_external_ids: set[str] = set()
+        # (thread_id, external_message_id) of every turn already routed.
+        self._stored_turns: set[tuple[str, str]] = set()
 
     def is_sender_allowed(self, **kwargs: object) -> bool:
         """Return the fixture's selected admission decision."""
@@ -67,33 +75,35 @@ class FakeChannelHub:
         self.offered.append(message)
         if not self.is_sender_allowed():
             return None
-        if is_group_chat_type(message.metadata.get("chat_type")) and not (
-            addresses_account(message.metadata, self.platform_account_id)
+        metadata = plugin_metadata(message)
+        metadata["source"] = "role_account"
+        if is_group_chat_type(metadata.get("chat_type")) and not addresses_account(
+            metadata, self.platform_account_id
         ):
+            # Kept in the listening records, never a turn: no duplicate marking.
             if self.listening and message.content.strip() and on_heard is not None:
-                on_heard(self._project(message))
+                on_heard(self._project(message, metadata))
             return None
-        return self._project(message)
-
-    def _project(self, message: InboundMessage) -> InboundMessage:
-        """Stamp the host's role-session fields and mark replayed platform ids."""
-        metadata = dict(message.metadata)
-        external_message_id = str(
-            metadata.get("external_message_id") or metadata.get("message_id") or ""
-        ).strip()
+        routed = self._project(message, metadata)
+        external_message_id = str(routed.metadata.get("external_message_id") or "")
         if external_message_id:
-            metadata["external_message_id"] = external_message_id
-            # The host marks input whose platform id its thread already stored.
-            if external_message_id in self._seen_external_ids:
-                metadata["conversation_duplicate"] = True
-            self._seen_external_ids.add(external_message_id)
-        metadata["role_id"] = self.role_id
-        metadata["session_key_override"] = self.session_key
-        metadata["transport_channel"] = message.channel
-        metadata["transport_chat_id"] = message.chat_id
-        metadata["sender_id"] = message.sender
-        metadata.setdefault("source", "role_account")
-        return replace(message, media=list(message.media), metadata=metadata)
+            turn = (str(routed.metadata["thread_id"]), external_message_id)
+            if turn in self._stored_turns:
+                routed.metadata["conversation_duplicate"] = True
+            self._stored_turns.add(turn)
+        return routed
+
+    def _project(
+        self, message: InboundMessage, metadata: dict[str, object]
+    ) -> InboundMessage:
+        return project_inbound(
+            message,
+            metadata,
+            role_id=self.role_id,
+            thread_id=f"thread:{self.role_id}:{message.channel}:{message.chat_id}",
+            session_key=self.session_key,
+            default_chat_type=self.default_chat_type,
+        )
 
     def claim_pairing(self, message: InboundMessage, *, scope: str) -> bool:
         """Consume the fixture's pairing code; a blocked sender cannot pair."""

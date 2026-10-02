@@ -144,6 +144,9 @@ async def test_deltas_coalesce_into_one_card_finished_in_place(
         if path.endswith("/content")
     )
     assert harness.hub.delivery_statuses() == ["sent"]
+    # The finished turn leaves no live card, buffered text or refresh behind.
+    streamer = harness.channel._streamer
+    assert (streamer._cards, streamer._buffers, streamer._tasks) == ({}, {}, {})
 
 
 async def test_a_long_final_reply_continues_in_follow_up_cards(

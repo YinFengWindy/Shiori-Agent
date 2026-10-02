@@ -16,6 +16,9 @@ class FakeMessageBus:
         self.inbound: list[InboundMessage] = []
         self._inbound: asyncio.Queue[InboundMessage] = asyncio.Queue()
         self.outbound: dict[str, list[OutboundHandler]] = {}
+        # (channel, chat_id, external_message_id) of replies a test marks as
+        # still queued in the host; the fake itself dispatches immediately.
+        self.pending_outbound: set[tuple[str, str, str]] = set()
 
     async def publish_inbound(self, msg: InboundMessage) -> None:
         """Record input and make it available to a waiting test."""
@@ -51,8 +54,8 @@ class FakeMessageBus:
     def has_pending_outbound(
         self, channel: str, chat_id: str, external_message_id: str
     ) -> bool:
-        """The fake dispatches immediately and never owns a pending reply queue."""
-        return False
+        """Whether the test marked this turn's committed reply as still queued."""
+        return (channel, chat_id, external_message_id) in self.pending_outbound
 
 
 class FakeAttachmentStore:

@@ -25,7 +25,7 @@ from shiori_sdk.accounts import ViaAccount
 from shiori_sdk.storage import read_mapping
 from shiori_sdk.channels.services import ChannelHub
 from shiori_sdk.channels.chat_types import CHAT_ID_COMMANDS, ChatTypeDeclaration
-from shiori_sdk.channels.services import AttachmentStore
+from shiori_sdk.channels.services import AttachmentStore, PushSenders
 from shiori_sdk.channels.identity_index import SessionIdentityIndex
 from .dedupe import MessageDeduper
 from shiori_sdk.channels import ChannelContext
@@ -149,7 +149,7 @@ class TelegramChannel(
         self._event_bus: EventBus | None = None
         self._outbound_bound = False
         self._events_bound = False
-        self._push_tool = None
+        self._push_tool: PushSenders | None = None
         self._intake: ChannelIntake | None = None
         self._event_bindings = (
             EventBinding(TurnStarted, self._on_turn_started),
