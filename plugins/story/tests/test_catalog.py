@@ -35,3 +35,23 @@ def test_unopened_story_images_are_copied_before_catalog_returns(tmp_path):
     finally:
         copied.close()
         catalog.close()
+
+
+def test_catalog_opens_under_the_root_returned_by_storage_migration(tmp_path):
+    """The legacy ``stories`` directory is handed to the storage owner once."""
+    selected = tmp_path / "selected-owner-root"
+    requests = []
+
+    class Storage(FakeMemoryStorage):
+        def migrate_data(self, workspace, plugin_id, name, source):
+            requests.append((workspace, plugin_id, name, source))
+            return selected
+
+    catalog = StoryCatalog(tmp_path, storage=Storage())
+    try:
+        assert requests == [(tmp_path, "story", "stories", tmp_path / "stories")]
+        assert catalog.root == selected
+        assert catalog.db_path == selected / "catalog.db"
+        assert catalog.db_path.is_file()
+    finally:
+        catalog.close()

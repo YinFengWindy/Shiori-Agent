@@ -17,7 +17,8 @@ from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
 from session.manager import Session
 import asyncio
-import builtins
+import sys
+from agent.plugin_host import kernel as kernel_module
 from agent.plugin_host.capabilities import BotCommandsCapability
 from shiori_sdk.memory.committed import TurnCommitted
 
@@ -183,26 +184,45 @@ async def test_status_commands_stay_active_without_observe(
         }
         assert kernel.bot_commands == _COMMANDS
         assert "还没有完成过记忆整理" in await run_command(kernel, bus, "/memorystatus")
-        assert (
-            await run_command(kernel, bus, "/kvcache")
-            == "KVCache 不可用（observe 未安装、未启用或未提供遥测接口）。"
-        )
+        assert "KVCache 不可用" in await run_command(kernel, bus, "/kvcache")
+
+
+def _owns(import_path: str, module_name: str) -> bool:
+    return module_name == import_path or module_name.startswith(import_path + ".")
 
 
 @pytest.mark.asyncio
-async def test_missing_provider_does_not_import_its_implementation(
-    kernel_factory, run_command, monkeypatch
+@pytest.mark.parametrize("observe", ["missing", "disabled"])
+async def test_unavailable_provider_implementation_is_never_imported(
+    kernel_factory, run_command, monkeypatch, observe
 ):
-    original_import = builtins.__import__
+    """The kernel imports plugin entries as ``akasic_plugin_{namespace}_{id}``.
 
-    def reject_observe(name, *args, **kwargs):
-        if name.startswith("plugins.observe"):
-            raise AssertionError("optional provider imported at runtime")
-        return original_import(name, *args, **kwargs)
+    Spy on that real import call and on ``sys.modules``: the consumer must be
+    imported under its kernel path while the optional provider never is.
+    """
+    consumer = "akasic_plugin_status_integration_status_commands"
+    provider = "akasic_plugin_status_integration_observe"
+    for name in tuple(sys.modules):
+        if _owns(provider, name) or _owns("plugins.observe", name):
+            monkeypatch.delitem(sys.modules, name)
+    imported: list[str] = []
+    original_import = kernel_module._import_module
 
-    monkeypatch.setattr(builtins, "__import__", reject_observe)
-    async with kernel_factory() as (kernel, bus):
+    def record_import(module_name, *args, **kwargs):
+        imported.append(module_name)
+        return original_import(module_name, *args, **kwargs)
+
+    monkeypatch.setattr(kernel_module, "_import_module", record_import)
+    async with kernel_factory(observe=observe) as (kernel, bus):
         assert "KVCache 不可用" in await run_command(kernel, bus, "/kvcache")
+        loaded = set(sys.modules)
+
+    assert imported == [consumer]
+    assert any(_owns(consumer, name) for name in loaded)
+    assert not any(
+        _owns(provider, name) or _owns("plugins.observe", name) for name in loaded
+    )
 
 
 @pytest.mark.asyncio
@@ -227,10 +247,9 @@ async def test_real_observe_writer_and_provider_reload_use_current_api(
         async with asyncio.timeout(5):
             while not first_api.recent_cache_turns("telegram:1"):
                 await asyncio.sleep(0.01)
-        reply = await run_command(kernel, bus, "/KVCACHE@MyBot 1")
-        assert "⚡ KVCache · 最近 1 轮" in reply
-        assert "Token  800 / 1,000" in reply
-        assert "80.0%" in reply and "真实回复" in reply
+        # Wording and layout belong to the plugin tests; here only the real
+        # writer's committed turn must reach the consumer through the export.
+        assert "真实回复" in await run_command(kernel, bus, "/KVCACHE@MyBot 1")
         assert await kernel.unload("observe") == []
         assert kernel.before_turn_modules == modules
         assert kernel.bot_commands == _COMMANDS

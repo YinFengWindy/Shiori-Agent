@@ -53,6 +53,35 @@ def test_database_snapshot_includes_uncheckpointed_wal_and_survives_reset(tmp_pa
     assert not target.exists()
 
 
+def test_directory_snapshot_includes_nested_databases_with_committed_wal(tmp_path):
+    """A migrated directory carries WAL-only commits of databases nested inside it."""
+    old = tmp_path / "library"
+    nested = old / "entry-1/entry.db"
+    nested.parent.mkdir(parents=True)
+    connection = sqlite3.connect(nested)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA wal_autocheckpoint=0")
+        connection.execute("CREATE TABLE saved_content(value TEXT)")
+        connection.execute("INSERT INTO saved_content VALUES ('entry survives')")
+        connection.commit()
+        assert Path(str(nested) + "-wal").stat().st_size > 0
+
+        target = migrate_private_data(tmp_path, "demo", "library", old)
+
+        copied = sqlite3.connect(target / "entry-1/entry.db")
+        try:
+            assert copied.execute("SELECT value FROM saved_content").fetchone() == (
+                "entry survives",
+            )
+        finally:
+            copied.close()
+        assert target == tmp_path / "plugin-data/demo/library"
+        assert nested.is_file()
+    finally:
+        connection.close()
+
+
 def test_conflicting_target_is_never_replaced(tmp_path):
     source = tmp_path / "old.json"
     source.write_text('{"old": true}', encoding="utf-8")

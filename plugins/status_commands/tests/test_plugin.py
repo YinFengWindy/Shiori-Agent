@@ -22,7 +22,7 @@ async def test_optional_provider_is_resolved_again_for_every_command(command_fra
             await module.run(frame)
         return frame.slots["session:ctx"].abort_reply
 
-    assert "KVCache 不可用" in await reply()
+    assert await reply() == "KVCache 不可用（observe 未安装、未启用或未提供遥测接口）。"
     exports["observe"] = SimpleNamespace(
         recent_cache_turns=lambda *a, **kw: (
             KVCacheTurn("reply", "2026-09-11T04:05:00Z", 1000, 800),
