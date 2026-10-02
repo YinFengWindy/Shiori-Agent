@@ -106,6 +106,10 @@ class _RenderPromptModule:
             session_metadata=ctx.session_metadata,
         )
         messages = list(rendered.messages)
+        if not frame.input.include_current_message:
+            # The envelope owner always appends the current input last. Idle
+            # inspection keeps every persisted row and context frame, but no draft.
+            messages.pop()
         if ctx.extra_hints:
             messages.append(
                 build_context_hint_message(

@@ -63,11 +63,11 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
     : "";
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0 max-w-[220px] shrink">
       <button
         ref={buttonRef}
         className={cx(
-          "inline-flex h-[30px] max-w-[220px] items-center gap-1.5 rounded-md px-2 text-xs text-ink-secondary transition hover:bg-surface-soft hover:text-ink focus:outline-none disabled:opacity-40",
+          "inline-flex h-[30px] max-w-full items-center gap-1.5 rounded-md px-2 text-xs text-ink-secondary transition hover:bg-surface-soft hover:text-ink focus:outline-none disabled:opacity-40",
           open && "bg-surface-soft text-ink",
         )}
         type="button"

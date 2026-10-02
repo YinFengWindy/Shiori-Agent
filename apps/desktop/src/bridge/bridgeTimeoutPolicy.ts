@@ -10,7 +10,7 @@ export const bridgeTimeoutPolicy = Object.freeze({
 
 /** Returns a deadline, or null for a transaction that must await its committed outcome. */
 export function bridgeRequestTimeoutMs(method: string, requestedTimeoutMs?: number): number | null {
-  if (method === "runtime.apply") return null;
+  if (method === "runtime.apply" || method === "chat.context.compact") return null;
   if (requestedTimeoutMs !== undefined) {
     if (!Number.isInteger(requestedTimeoutMs) || requestedTimeoutMs <= 0 || requestedTimeoutMs > 2_147_483_647) {
       throw new Error("请求超时必须是有效的正整数毫秒数");

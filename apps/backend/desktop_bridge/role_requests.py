@@ -145,6 +145,14 @@ class DesktopRoleRequestHandler:
                 dict(previous.runtime_config),
                 aggregate.role.runtime_config,
             )
+            await self._publish_event(
+                {
+                    "id": "",
+                    "type": "event",
+                    "method": "roles.updated",
+                    "payload": {"role_id": role_id},
+                }
+            )
             return {"role": self._role_presenter.serialize(aggregate.role)}
         if method == "roles.delete":
             role_id = str(payload.get("role_id") or "").strip()

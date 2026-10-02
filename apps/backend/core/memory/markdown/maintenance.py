@@ -6,6 +6,7 @@ import asyncio
 import logging
 from collections import deque
 from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +15,7 @@ from bus.events_lifecycle import (
     SKIP_POST_MEMORY_KEY,
     TurnCommitted,
 )
+from bus.events_context import ContextWindowChanged
 from conversation.context_scope import (
     ContextView,
     UserContextThreads,
@@ -267,8 +269,7 @@ class MarkdownMemoryMaintenance:
         task.add_done_callback(lambda t: self._on_maintenance_done(t, session_key))
 
     async def _run_maintenance_queue(self, session_key: str) -> None:
-        lock = self._maintenance_locks.setdefault(session_key, asyncio.Lock())
-        async with lock:
+        async with self._maintenance_gate(session_key):
             while True:
                 queue = self._maintenance_queues.get(session_key)
                 if not queue:
@@ -357,9 +358,23 @@ class MarkdownMemoryMaintenance:
         session_key = str(getattr(request.session, "key", "") or "")
         if not session_key:
             return await self._consolidate_unlocked(request)
-        lock = self._maintenance_locks.setdefault(session_key, asyncio.Lock())
-        async with lock:
+        async with self._maintenance_gate(session_key):
             return await self._consolidate_unlocked(request)
+
+    @asynccontextmanager
+    async def _maintenance_gate(self, session_key: str):
+        lock = self._maintenance_locks.setdefault(session_key, asyncio.Lock())
+        try:
+            async with lock:
+                yield
+        finally:
+            if self._event_bus is not None:
+                await self._event_bus.observe(ContextWindowChanged(session_key, ""))
+
+    def is_busy(self, session_key: str) -> bool:
+        """Report memory prerequisite activity without starting maintenance."""
+        lock = self._maintenance_locks.get(session_key)
+        return lock is not None and lock.locked()
 
     async def _consolidate_unlocked(
         self, request: ConsolidateRequest

@@ -9,6 +9,37 @@ from desktop_bridge.session_presenter import DesktopSessionPresenter
 from session.manager import Session
 
 
+async def test_compact_command_is_intercepted_before_persistence_and_turn_dispatch():
+    context = Mock()
+    context.invoke = AsyncMock(return_value={"tokens": 12, "result": None})
+    app, roles, start = Mock(), Mock(), Mock()
+    handler = DesktopChatRequestHandler(
+        role_service=roles,
+        app_service=app,
+        chat_service=Mock(),
+        start_chat_turn=start,
+        session_presenter=Mock(),
+        sanitize_voice_metrics=Mock(),
+        context_requests=context,
+    )
+    response = await handler.handle(
+        "chat.send",
+        {
+            "role_id": "mira",
+            "content": " /COMPACT@Bot ",
+            "media": ["draft-image.png"],
+            "reply_to_content": "draft quote",
+        },
+        request_id="command",
+        emit_event=AsyncMock(),
+    )
+    assert response == {"context": {"tokens": 12, "result": None}}
+    context.invoke.assert_awaited_once_with("mira", compact=True)
+    app.persist_desktop_user_message.assert_not_called()
+    roles.open_role_async.assert_not_called()
+    start.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_send_serializes_returned_user_message_when_session_tail_has_changed():
     session = Session(key="role:mira")

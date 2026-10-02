@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Generator, TypeVar
 from uuid import uuid4
+from bus.event_bus import EventBus
+from bus.events_context import ContextWindowChanged
 
 from .services import RoleRepository
 from .store import RoleRecord
@@ -114,10 +116,12 @@ class RoleRuntime:
         model_resolver: RoleModelRuntime | None = None,
         execution_state: RoleExecutionState | None = None,
         self_initializer: RoleSelfInitializer | None = None,
+        event_bus: EventBus | None = None,
     ) -> None:
         self._role = role
         self._model_resolver = model_resolver
         self._self_initializer = self_initializer
+        self._event_bus = event_bus
         # A role session is shared by every transport, so all mutable role work
         # must enter one role-wide turn gate regardless of its source thread.
         self._execution = execution_state or RoleExecutionState()
@@ -146,6 +150,11 @@ class RoleRuntime:
         """Returns the number of work items currently executing in this runtime."""
 
         return self._execution.active_work
+
+    @property
+    def busy(self) -> bool:
+        """Whether a role operation owns the shared turn gate, across generations."""
+        return self._execution.turn_lock.locked()
 
     @property
     def models_enabled(self) -> bool:
@@ -182,22 +191,34 @@ class RoleRuntime:
         self,
         context: RoleExecutionContext,
         operation: Callable[[], Awaitable[T]],
+        *,
+        reject_busy: bool = False,
     ) -> T:
         """Runs role work serially across all transport threads."""
 
         self._validate_context(context)
-        async with self._execution.turn_lock:
-            self._validate_context(context)
-            self._execution.active_work += 1
-            task = asyncio.current_task()
-            if task is not None:
-                self._execution.tasks.add(task)
-            try:
-                return await operation()
-            finally:
+        if reject_busy and self.busy:
+            raise RuntimeError("当前角色正在回复或整理上下文，请稍后重试")
+        try:
+            async with self._execution.turn_lock:
+                self._validate_context(context)
+                self._execution.active_work += 1
+                task = asyncio.current_task()
                 if task is not None:
-                    self._execution.tasks.discard(task)
-                self._execution.active_work -= 1
+                    self._execution.tasks.add(task)
+                try:
+                    return await operation()
+                finally:
+                    if task is not None:
+                        self._execution.tasks.discard(task)
+                    self._execution.active_work -= 1
+        finally:
+            # Formal/proactive commits are observed while this gate is held.
+            # Publish the refresh only after release, including failed work.
+            if self._event_bus is not None:
+                await self._event_bus.observe(
+                    ContextWindowChanged(f"role:{self.role_id}", "")
+                )
 
     async def run_passive_turn(
         self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]
@@ -266,8 +287,10 @@ class RoleRuntimeRegistry:
         model_resolver: RoleModelRuntime | None = None,
         shared_execution: RoleRuntimeRegistry | None = None,
         self_initializer: RoleSelfInitializer | None = None,
+        event_bus: EventBus | None = None,
     ) -> None:
         self._repository = repository
+        self._event_bus = event_bus
         self._model_resolver = model_resolver
         self._self_initializer = self_initializer
         self._runtimes: dict[str, RoleRuntime] = {}
@@ -301,6 +324,7 @@ class RoleRuntimeRegistry:
                 model_resolver=self._model_resolver,
                 execution_state=execution,
                 self_initializer=self._self_initializer,
+                event_bus=self._event_bus,
             )
             self._runtimes[role.id] = runtime
             return runtime

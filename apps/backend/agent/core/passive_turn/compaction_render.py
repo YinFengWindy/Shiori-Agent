@@ -16,12 +16,14 @@ from .helpers import (
     get_session_metadata,
     get_window_preloaded_tools,
     get_window_sources,
+    turn_tool_names,
 )
+from .tool_visibility import initial_tool_order
 
 if TYPE_CHECKING:
     from agent.tools.registry import ToolRegistry
     from conversation.context_scope import ContextView
-    from session.manager import SessionManager
+    from session.manager import Session, SessionManager
     from session.manager.window import WindowPreparation
 
 
@@ -33,7 +35,7 @@ class CompactionRenderer:
     view: ContextView | None
     message_limit: int
     input: PromptRenderInput
-    current_message: dict
+    current_message: dict | None
     render_prompt: Callable[[PromptRenderInput], Awaitable[PromptRenderResult]]
     tools: ToolRegistry
     search_enabled: bool
@@ -61,13 +63,42 @@ class CompactionRenderer:
             self._snapshot(prepared), 500, self.view, self.tools
         )
 
+    def tool_schemas(self, history: list[str]):
+        """Resolve initial schemas using this renderer's tool visibility policy."""
+        names = (
+            initial_tool_order(
+                self.tools,
+                history,
+                disabled=self.disabled_tools,
+                external_restricted=self.external_restricted,
+            )
+            if self.search_enabled
+            else turn_tool_names(
+                self.tools,
+                None,
+                disabled=self.disabled_tools,
+                external_restricted=self.external_restricted,
+            )
+        )
+        return self.tools.get_schemas(
+            names=names, external_only=self.external_restricted
+        )
+
     async def render(
         self, prepared: WindowPreparation, summary: str, visible_tools: list[str]
     ) -> list[dict]:
         """Re-render dynamic context while protecting current input and attachments."""
         snapshot = self._snapshot(prepared)
+        return await self.render_snapshot(
+            snapshot, prepared.stop, summary, visible_tools
+        )
+
+    async def render_snapshot(
+        self, snapshot: Session, start: int, summary: str, visible_tools: list[str]
+    ) -> list[dict]:
+        """Render both the current and candidate windows through the prompt owner."""
         history = snapshot.get_history(
-            start_index=prepared.stop, include=history_filter(self.view)
+            start_index=start, include=history_filter(self.view)
         )
         sources = get_window_sources(snapshot, 500, self.view, self.heard())
         injection = build_turn_injection_prompt(
@@ -89,6 +120,9 @@ class CompactionRenderer:
                 turn_injection_prompt=injection,
             )
         )
-        if self.current_message.get("role") == "user":
+        if (
+            self.current_message is not None
+            and self.current_message.get("role") == "user"
+        ):
             candidate.messages[-1] = deepcopy(self.current_message)
         return with_working_summary(candidate.messages, summary)

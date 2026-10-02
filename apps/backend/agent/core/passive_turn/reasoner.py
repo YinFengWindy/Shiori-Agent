@@ -23,6 +23,7 @@ from core.compaction import (
 from core.compaction_summary import WorkingSummaryWriter
 from session.maintenance_progress import window_key
 from .compaction_render import CompactionRenderer
+from .context_window import ContextWindow
 from .compaction import (
     RequestCompaction,
     request_compaction_scope,
@@ -209,6 +210,18 @@ class DefaultReasoner(
             else None
         )
         self._prompt_render_plugin_modules: list[object] = []
+        self.context_window = (
+            ContextWindow(
+                session_manager,
+                self._compaction,
+                llm.provider,
+                llm_config,
+                tools,
+                self.render_prompt,
+            )
+            if session_manager is not None and self._compaction is not None
+            else None
+        )
         self._before_step_plugin_modules: list[object] = []
         self._after_step_plugin_modules: list[object] = []
         self._tool_executor = ToolExecutor([])

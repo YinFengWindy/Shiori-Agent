@@ -4,6 +4,26 @@ import { BridgeError, type SessionPayload } from "@shiori/sdk";
 import { mountTestComponent } from "@shiori/sdk/testing";
 import { createDesktopChatSend } from "./desktopChatSend";
 
+test("direct desktop /compact callers never create optimistic chat rows or sending state", async () => {
+  const original: SessionPayload = { key: "role:mira", created_at: "", updated_at: "", last_consolidated: 0, metadata: {}, messages: [] };
+  const methods: string[] = [];
+  const view = await mountTestComponent(null, { windowGlobals: { miraDesktop: { invoke: async ({ method }: { method: string }) => {
+    methods.push(method);
+    return { payload: { reason: "没有可压缩的完整轮次", result: null } };
+  } } } });
+  const unexpected = () => assert.fail("command touched the chat turn");
+  const controller = createDesktopChatSend({
+    activeRoleIdRef: { current: "mira" }, activeSessionRef: { current: original }, sendingSessionsRef: { current: {} }, pendingUserMessagesRef: { current: {} }, latestTurnIdsRef: { current: {} },
+    reportSendFailure: unexpected, markSessionSending: unexpected,
+    isLatestChatTurn: () => true, isCurrentChatTurn: () => true, completeChatTurn: unexpected,
+    updateCommittedActiveSession: unexpected, cacheRoleSession: unexpected, commitSessionMessageUpdate: unexpected,
+  });
+  try {
+    assert.equal(await controller.sendMessage({ content: "/COMPACT@Bot", attachments: ["draft.png"], replyTarget: null }), false);
+    assert.deepEqual(methods, ["chat.context.compact"]);
+  } finally { await view.cleanup(); }
+});
+
 test("a rejected send preserves its diagnostic through failed session recovery", async () => {
   const original: SessionPayload = { key: "role:mira", created_at: "", updated_at: "", last_consolidated: 0, metadata: { role_id: "mira" }, messages: [] };
   const activeSessionRef: { current: SessionPayload | null } = { current: original };

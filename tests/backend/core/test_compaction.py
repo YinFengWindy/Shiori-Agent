@@ -1,6 +1,7 @@
 """Compaction publishes only validated complete windows after real memory work."""
 
 from types import SimpleNamespace
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -23,6 +24,36 @@ from core.compaction_summary import WorkingSummary
 from core.memory.markdown import ConsolidateRequest
 from session.manager import SessionManager
 from session.maintenance_progress import window_key
+
+
+async def test_controller_rejects_duplicate_non_role_session_before_summary(
+    memory_harness,
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:duplicate")
+    _turn(session)
+    h.manager.save(session)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def summary(prepared):
+        entered.set()
+        await release.wait()
+        return WorkingSummary("task", prepared.removed_message_ids)
+
+    controller = _controller(h, summary)
+    first = asyncio.create_task(_ensure(controller, session, keep=0))
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        with pytest.raises(CompactionFailedError) as error:
+            await _ensure(controller, session, keep=0)
+        assert error.value.result.failure_stage == "busy"
+        assert controller.writer.generate.await_count == 1
+        release.set()
+        await first
+        assert not controller.is_busy(session.key)
+    finally:
+        release.set()
+        await first
 
 
 def _turn(session, label="tea", thread=""):
