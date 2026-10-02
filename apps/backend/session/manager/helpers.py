@@ -48,14 +48,19 @@ def role_id_from_session_key(key: str) -> str:
     return clean_key.removeprefix(_ROLE_SESSION_PREFIX).strip()
 
 
-def _truncate_tool_result(content: object) -> str:
+def truncate_tool_result(content: object, limit: int = _TOOL_RESULT_CHAR_BUDGET) -> str:
+    """Keep head and tail of a tool result within ``limit`` chars for model input.
+
+    Model history and working-summary sources share this rule so the summary never
+    sees more tool output than the model did.
+    """
     text = content if isinstance(content, str) else str(content)
-    if len(text) <= _TOOL_RESULT_CHAR_BUDGET:
+    if len(text) <= limit:
         return text
-    omitted = len(text) - _TOOL_RESULT_CHAR_BUDGET
+    omitted = len(text) - limit
     while True:
         marker = f"…{omitted} chars truncated…"
-        keep = max(0, _TOOL_RESULT_CHAR_BUDGET - len(marker))
+        keep = max(0, limit - len(marker))
         actual_omitted = len(text) - keep
         if actual_omitted == omitted:
             break

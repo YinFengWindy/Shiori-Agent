@@ -644,10 +644,11 @@ async def test_input_budget_counts_only_the_turn_context(memory_harness, monkeyp
                     await pipeline.run(
                         _turn(thread), "role:mira", dispatch_outbound=False
                     )
-                # Group A's own source exceeds even the auxiliary summary budget.
+                # Group A's own source is truncated into one in-budget summary
+                # request; the stub reply is not a valid summary.
                 assert caught.value.result.failure_stage == "summary"
                 assert caught.value.result.memory_committed
-            assert provider.chat.await_count == (1 if runs else 0)
+            assert provider.chat.await_count == 1
         finally:
             await provider.aclose()
     from conversation.context_scope import history_start, turn_context_view
