@@ -578,6 +578,71 @@ async def test_manual_budget_failure_never_calls_minimal_renderer(memory_harness
     minimal.assert_not_awaited()
 
 
+@pytest.mark.parametrize("reason, retained", [("manual", 2), ("auto_threshold", 1)])
+async def test_manual_keeps_configured_turns_between_target_and_hard_limit(
+    memory_harness, reason, retained
+):
+    h = memory_harness
+    session = h.manager.get_or_create(f"cli:between-{reason}")
+    for _ in range(4):
+        _turn(session)
+    h.manager.save(session)
+    controller = _controller(h)
+
+    def measure(messages):
+        # Window 20000: target 8000, hard limit 19780. With the 2000-token
+        # summary allowance two turns project to 12000, one turn to 5000.
+        return build_input_budget(
+            model_context_window=20000,
+            output_tokens=200,
+            policy=BudgetPolicy(safety_margin_tokens=20),
+            estimate=InputEstimate(
+                10000 if messages[0]["retained"] == 2 else 3000, "local"
+            ),
+        )
+
+    async def render(prepared, summary):
+        return [{"role": "user", "content": "x", "retained": prepared.retained_turns}]
+
+    _, result = await controller.ensure(
+        session_key=session.key,
+        view=None,
+        policy=CompactionPolicy(2),
+        message_limit=len(session.messages),
+        budget=_budget(3500),
+        render=render,
+        measure=measure,
+        reason=reason,
+    )
+    assert result.committed and result.retained_turns == retained
+    assert result.retained_reduction_reason == ("" if retained == 2 else "budget")
+
+
+async def test_manual_without_removable_configured_turns_commits_nothing(
+    memory_harness,
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:manual-retained")
+    _turn(session)
+    _turn(session)
+    h.manager.save(session)
+    controller = _controller(h)
+    with pytest.raises(CompactionFailedError) as caught:
+        await controller.ensure(
+            session_key=session.key,
+            view=None,
+            policy=CompactionPolicy(2),
+            message_limit=len(session.messages),
+            budget=_budget(3500),
+            render=AsyncMock(return_value=[]),
+            measure=lambda _: _budget(100),
+            reason="manual",
+        )
+    assert caught.value.result.failure_stage == "no_turns"
+    assert history_start(session, None) == 0 and not h.prompts
+    controller.writer.generate.assert_not_awaited()
+
+
 async def test_observation_from_another_binding_at_the_same_generation_is_stale():
     from core.compaction import CompactionResult
     from session.maintenance_progress import MaintenanceProgress

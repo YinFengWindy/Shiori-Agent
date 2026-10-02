@@ -16,6 +16,8 @@ from session.maintenance_progress import window_key
 from session.manager.models import consolidation_cursor
 from shiori_sdk.context import ContextBudgetObserved
 
+NO_COMPLETE_TURNS = "没有可压缩的完整轮次"
+
 if TYPE_CHECKING:
     from conversation.context_scope import ContextView
     from core.memory.markdown import MarkdownMemoryMaintenance
@@ -270,8 +272,19 @@ class CompactionController:
                 message_limit=message_limit,
                 render=render,
                 measure=measure,
+                manual=reason == "manual",
             )
         )
+        if chosen is None and reason == "manual":
+            # Manual compaction never goes below the configured retention just
+            # because nothing older is left; only the budget may reduce it.
+            raise CompactionFailedError(
+                replace(
+                    state,
+                    failure_stage="no_turns",
+                    error=NO_COMPLETE_TURNS,
+                )
+            )
         if chosen is not None:
             prepared, reduced = chosen
             state = replace(state, snapshot_stop=message_limit)
@@ -371,6 +384,7 @@ class CompactionController:
         message_limit: int,
         render: Callable[[WindowPreparation, str], Awaitable[list[dict]]],
         measure: Callable[[list[dict]], InputBudget],
+        manual: bool = False,
     ):
         """Pick one retention by local estimate, before any memory or summary work.
 
@@ -379,13 +393,24 @@ class CompactionController:
         the target wins; otherwise the largest count projected below the hard
         input limit; otherwise the fewest turns, left to the measured result.
         Returns the preparation and whether it retains fewer turns than the first.
+        A manual run keeps the configured count whenever it fits the hard limit,
+        and returns None when the configured retention removes nothing.
         """
+
+        def acceptable(tokens: int, projected: InputBudget) -> bool:
+            # Manual runs only reduce retention when the budget truly requires it.
+            line = projected.input_limit_tokens if manual else projected.target_tokens
+            return tokens < line
+
         candidates: list[tuple[WindowPreparation, int, InputBudget]] = []
         seen: set[int] = set()
-        for keep in range(min(policy.retained_turns, message_limit), -1, -1):
+        configured = min(policy.retained_turns, message_limit)
+        for keep in range(configured, -1, -1):
             prepared = await self._prepare(
                 state, session_key, view, keep_turns=keep, message_limit=message_limit
             )
+            if prepared is None and manual and keep == configured:
+                return None
             if prepared is None or prepared.stop in seen:
                 continue
             self._assert_owner(state, session_key, view)
@@ -398,7 +423,7 @@ class CompactionController:
                 ) from exc
             tokens = projected.estimate.tokens + SUMMARY_TOKEN_LIMIT
             candidates.append((prepared, tokens, projected))
-            if tokens < projected.target_tokens:
+            if acceptable(tokens, projected):
                 break
         if not candidates:
             return None
@@ -406,7 +431,7 @@ class CompactionController:
         fits = [
             prepared
             for prepared, tokens, projected in candidates
-            if tokens < projected.target_tokens
+            if acceptable(tokens, projected)
         ] or [
             prepared
             for prepared, tokens, projected in candidates

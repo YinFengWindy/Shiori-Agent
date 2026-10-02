@@ -193,13 +193,20 @@ class RoleRuntime:
         operation: Callable[[], Awaitable[T]],
         *,
         reject_busy: bool = False,
+        notify_context: bool = True,
     ) -> T:
-        """Runs role work serially across all transport threads."""
+        """Runs role work serially across all transport threads.
 
-        self._validate_context(context)
-        if reject_busy and self.busy:
-            raise RuntimeError("当前角色正在回复或整理上下文，请稍后重试")
+        Every operation, including a rejected one, publishes one context refresh
+        after release. Only callers that cannot change the conversation (role
+        state) or publish their own refresh (manual compaction) pass
+        ``notify_context=False``.
+        """
+
         try:
+            self._validate_context(context)
+            if reject_busy and self.busy:
+                raise RuntimeError("当前角色正在回复或整理上下文，请稍后重试")
             async with self._execution.turn_lock:
                 self._validate_context(context)
                 self._execution.active_work += 1
@@ -215,7 +222,7 @@ class RoleRuntime:
         finally:
             # Formal/proactive commits are observed while this gate is held.
             # Publish the refresh only after release, including failed work.
-            if self._event_bus is not None:
+            if notify_context and self._event_bus is not None:
                 await self._event_bus.observe(
                     ContextWindowChanged(f"role:{self.role_id}", "")
                 )
@@ -263,7 +270,7 @@ class RoleRuntime:
     ) -> T:
         """Serializes mutations to role-wide state such as relationship data."""
 
-        return await self.execute_thread(context, operation)
+        return await self.execute_thread(context, operation, notify_context=False)
 
     def _validate_context(self, context: RoleExecutionContext) -> None:
         if self._execution.closing:
@@ -353,16 +360,6 @@ class RoleRuntimeRegistry:
             request_id=request_id,
             delivery_key=delivery_key,
         )
-
-    async def dispatch_thread(
-        self,
-        context: RoleExecutionContext,
-        operation: Callable[[], Awaitable[T]],
-    ) -> T:
-        """Runs a thread turn through the runtime selected by its explicit context."""
-
-        runtime = await self.get(context.role_id)
-        return await runtime.execute_thread(context, operation)
 
     async def dispatch_passive_turn(
         self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]

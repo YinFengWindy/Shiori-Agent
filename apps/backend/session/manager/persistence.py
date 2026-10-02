@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Any
 
 from .models import Session, message_thread_id
-from session.maintenance_progress import MaintenanceProgress
 from session.store.common import ContextScope
 
 
@@ -209,9 +208,10 @@ class _PersistenceMixin:
         if not rows:
             last = 0
             cursors = {scope: 0 for scope in cursors} if cursors else None
-            if meta and meta.get("maintenance_progress"):
-                previous = MaintenanceProgress.load(meta["maintenance_progress"])
-                cleared_progress = previous.invalidated()
+            if meta:
+                # Even never-persisted progress stamps observations (generation
+                # 0); advancing the derived progress expires them on clear.
+                cleared_progress = self.maintenance_progress(session).invalidated()
         self._store.replace_session_messages(
             session.key,
             rows=rows,

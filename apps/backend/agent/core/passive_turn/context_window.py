@@ -14,6 +14,7 @@ from core.compaction import (
     CompactionController,
     CompactionFailedError,
     CompactionPolicy,
+    NO_COMPLETE_TURNS,
 )
 from core.compaction_feedback import compaction_feedback
 from session.manager import Session, SessionManager
@@ -67,7 +68,11 @@ class ContextWindow:
         before = request.measure(request.messages)
         limit = request.renderer.message_limit
         prepared = await self.sessions.prepare_window(
-            session.key, context_view, keep_turns=0, message_limit=limit
+            session.key,
+            context_view,
+            # The same bound as the controller's configured candidate.
+            keep_turns=min(policy.retained_turns, limit),
+            message_limit=limit,
         )
         progress = self.sessions.maintenance_progress(session)
         state = {
@@ -103,7 +108,7 @@ class ContextWindow:
             ),
             "can_compact": prepared is not None,
             "busy": False,
-            "reason": "" if prepared else "没有可压缩的完整轮次",
+            "reason": "" if prepared else NO_COMPLETE_TURNS,
             "result": None,
         }
         if not compact or prepared is None:

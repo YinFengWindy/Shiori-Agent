@@ -36,10 +36,12 @@ def format_compaction_status(state: dict) -> str:
     if not result["committed"]:
         prefix = "记忆已整理、压缩失败" if result["memory_committed"] else "压缩失败"
         return f"{prefix}：{result['error']}"
-    return (
+    status = (
         f"上下文已压缩：{result['before_tokens']} → {result['after_tokens']} token（估算）；"
         f"保留 {result['retained_turns']} 个完整轮次，原文从位置 {result['retained_start']} 保留。"
     )
+    reduction = result.get("reduction")
+    return f"{status}{reduction}。" if reduction else status
 
 
 class _ContextWindowMixin:
@@ -99,8 +101,9 @@ class _ContextWindowMixin:
 
         try:
             if compact and runtime and context:
+                # The surrounding finally publishes this operation's refresh.
                 return await runtime.execute_thread(
-                    context, with_model, reject_busy=True
+                    context, with_model, reject_busy=True, notify_context=False
                 )
             return await with_model()
         except ModelConfigurationError as error:
