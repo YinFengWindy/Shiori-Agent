@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Awaitable, Callable, TYPE_CHECKING
 
+from agent.context import without_attachment_tool_hints
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
 from agent.prompting.listening_block import HeardLine
 from conversation.context_scope import history_filter
@@ -144,7 +145,10 @@ class CompactionRenderer:
             )
         )
         if self.current_message is not None:
+            # Tools are disabled here, so drop instructions to call read_file.
             replace_current_input(
-                candidate.messages, self.current_message, candidate.current_message
+                candidate.messages,
+                without_attachment_tool_hints(self.current_message),
+                candidate.current_message,
             )
         return with_working_summary(candidate.messages, summary)

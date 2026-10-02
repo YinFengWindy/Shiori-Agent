@@ -188,7 +188,6 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
         "memory_failure": "memory",
         "summary_failure": "summary",
         "provider_limit": "provider",
-        "provider_error": "provider",
     }
     try:
         if case in expected:
@@ -205,15 +204,24 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
                 assert caught.value.result.memory_committed
             if case in {"memory_failure", "summary_failure"}:
                 assert caught.value.result.degradation_attempts == 0
-            if case.startswith("provider"):
+            if case == "provider_limit":
                 assert len(sent) == 1
-                assert caught.value.result.failure_kind == (
-                    "provider_context_length"
-                    if case == "provider_limit"
-                    else "provider_error"
-                )
+                assert caught.value.result.failure_kind == "provider_context_length"
             else:
                 assert not sent
+        elif case == "provider_error":
+            # Ordinary provider failures keep their type for the pipeline boundary.
+            with pytest.raises(OSError, match="model connection failed"):
+                await reasoner.run_turn(
+                    msg=msg,
+                    session=session,
+                    context_view=view,
+                    retrieved_memory_block="OPTIONAL_RETRIEVAL " * 1500,
+                    extra_hints=["OPTIONAL_HINT call archived_tool " * 300],
+                )
+            assert len(sent) == 1
+            latest = reasoner._compaction.latest(session.key, view)
+            assert latest is not None and latest["phase"] != "failed"
         elif case == "unexpected_tool":
             with pytest.raises(CompactionFailedError) as caught:
                 await reasoner.run_turn(
@@ -802,10 +810,13 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
                 ):
                     await reasoner.run_turn(**args)
             elif boundary == "provider_retry_failure":
-                with pytest.raises(CompactionFailedError) as caught:
+                with pytest.raises(OSError, match="network unavailable"):
                     await reasoner.run_turn(**args)
-                assert caught.value.result.failure_kind == "provider_error"
-                latest = reasoner._compaction.latest(session.key, None)
+                compaction = reasoner._compaction.latest(session.key, None)
+                assert compaction is not None and compaction["phase"] != "failed"
+                latest = reasoner._compaction.latest(session.key, None, request=True)
+                assert latest is not None
+                assert latest["failure_kind"] == "provider_error"
                 assert latest["request_usage"]["last_request"]["prompt_tokens"] is None
                 assert (
                     latest["request_usage"]["cumulative"]["prompt_tokens_unknown_calls"]

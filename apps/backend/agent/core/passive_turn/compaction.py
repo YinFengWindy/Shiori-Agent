@@ -212,10 +212,15 @@ class RequestCompaction:
         failure_stage: str = "provider",
         request_attempted: bool = True,
     ):
-        """Record the actual final request and staged failure, with no payload text."""
+        """Record the actual final request and staged failure, with no payload text.
+
+        An ordinary provider failure is a fact about this request only; it never
+        replaces the last compaction outcome nor this scope's compaction state.
+        """
         from agent.provider import ContextLengthError, LocalBudgetExceeded
 
         result = self.last_result or CompactionResult()
+        ordinary = False
         if budget is not None:
             result = replace(
                 result,
@@ -224,26 +229,25 @@ class RequestCompaction:
                 after_source=budget.estimate.source,
             )
         if error is not None:
+            if failure_stage == "response":
+                kind = "response_error"
+            elif isinstance(error, LocalBudgetExceeded):
+                kind = "local_budget"
+            elif isinstance(error, ContextLengthError):
+                kind = "provider_context_length"
+            else:
+                kind = "provider_error"
+            ordinary = kind == "provider_error"
             result = replace(
                 result,
-                phase="failed",
+                # "request" keeps an ordinary failure out of last_compaction.
+                phase="request" if ordinary else "failed",
                 failure_stage=failure_stage,
-                failure_kind=(
-                    "response_error"
-                    if failure_stage == "response"
-                    else (
-                        "local_budget"
-                        if isinstance(error, LocalBudgetExceeded)
-                        else (
-                            "provider_context_length"
-                            if isinstance(error, ContextLengthError)
-                            else "provider_error"
-                        )
-                    )
-                ),
+                failure_kind=kind,
                 error=str(error),
             )
-        self.last_result = result
+        if not ordinary:
+            self.last_result = result
         await self.controller.record(
             self.session_key,
             self.view,
