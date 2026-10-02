@@ -1,10 +1,11 @@
 """Atomic passive-turn undo owned by the session manager."""
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from session.store.common import ContextScope
-from session.maintenance_progress import MaintenanceProgress
+from session.maintenance_progress import MaintenanceProgress, message_window_key
 
 from .manager import _ManagerCoreMixin
 from .models import effective_context_cursors
@@ -73,19 +74,19 @@ class _UndoMixin(_ManagerCoreMixin):
                 str(messages[index].get("thread_id") or "") for index in indices
             }
 
-            progress = (
-                MaintenanceProgress.load(meta["maintenance_progress"])
-                if meta and meta.get("maintenance_progress")
-                else None
+            # Normalized (legacy-migrated, rebound) progress: shifted cuts must be
+            # derived before the deletion moves the memory cursors they freeze.
+            progress = _progress_after_undo(
+                self.maintenance_progress(self.get_or_create(session_key)),
+                messages,
+                indices,
+                user_threads,
             )
-            if progress is not None:
-                progress = progress.invalidated()
 
             def refresh_projections() -> None:
-                if progress is not None:
-                    self._store.write_maintenance_progress(
-                        session_key, progress.dump(), commit=False
-                    )
+                self._store.write_maintenance_progress(
+                    session_key, progress.dump(), commit=False
+                )
                 for thread_id in sorted(thread_ids - {""}):
                     thread = self.conversation_store.get_thread(thread_id)
                     if thread is not None:
@@ -117,6 +118,50 @@ class _UndoMixin(_ManagerCoreMixin):
                 last_consolidated_before=old_last,
                 last_consolidated_after=new_last,
             )
+
+
+def _shifted(cut: int, indices: list[int]) -> int:
+    """切点在删除 ``indices`` 后的新下标：只减去它之前被删的条数。"""
+    return cut - sum(index < cut for index in indices)
+
+
+def _progress_after_undo(
+    progress: MaintenanceProgress,
+    messages: list[dict[str, Any]],
+    indices: list[int],
+    user_threads: "UserContextThreads | None",
+) -> MaintenanceProgress:
+    """撤销后的维护进度：只失效真正受影响的上下文窗口。
+
+    某上下文的有效切点（自身窗口或迁移冻结切点）之前有被删的本上下文消息、
+    或被删消息属于它的工作摘要来源时，该窗口与摘要失效；其他窗口与迁移冻结
+    切点保持，只随删除平移下标。代次照常推进，让撤销前准备的窗口与回合草稿
+    全部过期。
+    """
+    deleted_ids = {str(messages[index]["id"]) for index in indices}
+
+    def owns(key: str, message: dict[str, Any]) -> bool:
+        return key == "session" or message_window_key(message, user_threads) == key
+
+    # Contexts relying only on a legacy cut have no window entry yet.
+    keys = set(progress.windows) | {
+        message_window_key(messages[index], user_threads) for index in indices
+    }
+    affected = {
+        key
+        for key in keys
+        if any(
+            index < progress.cut(key) and owns(key, messages[index])
+            for index in indices
+        )
+        or deleted_ids & set(progress.summary_source_ids.get(key, []))
+    }
+    kept = progress.without_windows(affected).invalidated(keep_windows=True)
+    return replace(
+        kept,
+        legacy_cuts={k: _shifted(c, indices) for k, c in kept.legacy_cuts.items()},
+        windows={k: _shifted(c, indices) for k, c in kept.windows.items()},
+    )
 
 
 def _rolled_back_context_cursors(
@@ -175,9 +220,5 @@ def _rolled_back_cursor(
         rollback_source_ids=rollback_source_ids,
     )
     return rollback_index, max(
-        0,
-        min(
-            rollback_index - sum(index < rollback_index for index in indices),
-            len(messages) - len(indices),
-        ),
+        0, min(_shifted(rollback_index, indices), len(messages) - len(indices))
     )

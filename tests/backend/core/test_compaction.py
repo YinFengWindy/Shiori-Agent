@@ -67,6 +67,13 @@ def _turn(session, label="tea", thread=""):
     session.add_message("assistant", "done", thread_id=thread)
 
 
+def _advance_generation(h, session_key):
+    """Simulate an undo/rebinding that lands while the controller is working."""
+    progress = h.manager.maintenance_progress(h.manager.get_or_create(session_key))
+    progress.generation += 1
+    h.manager._store.write_maintenance_progress(session_key, progress.dump())
+
+
 def _budget(tokens):
     return build_input_budget(
         context_window_tokens=4000,
@@ -322,10 +329,9 @@ async def test_stale_window_commit_reports_successful_memory_without_publication
     h.manager.save(session)
 
     async def render(prepared, summary):
-        await h.manager.bind_window_request(session.key, None, "new-model")
+        _advance_generation(h, session.key)
         return [{"role": "system", "content": summary}]
 
-    await h.manager.bind_window_request(session.key, None, "old-model")
     with pytest.raises(CompactionFailedError) as caught:
         await _ensure(_controller(h), session, keep=0, render=render)
     assert caught.value.result.failure_stage == "window"
@@ -407,11 +413,10 @@ async def test_stale_minimal_owner_is_rejected_and_not_adopted_by_latest(
 ):
     h = memory_harness
     session = h.manager.get_or_create("cli:stale-minimal")
-    await h.manager.bind_window_request(session.key, None, "old")
     controller = _controller(h)
 
     async def minimal(summary):
-        await h.manager.bind_window_request(session.key, None, "new")
+        _advance_generation(h, session.key)
         return [{"role": "user", "content": "current"}]
 
     with pytest.raises(CompactionFailedError) as caught:
@@ -452,3 +457,27 @@ async def test_manual_budget_failure_never_calls_minimal_renderer(memory_harness
         and caught.value.result.failure_stage == "budget"
     )
     minimal.assert_not_awaited()
+
+
+async def test_observation_from_another_binding_at_the_same_generation_is_stale():
+    from core.compaction import CompactionResult
+    from session.maintenance_progress import MaintenanceProgress
+
+    # Unpersisted rebinding A→B and A→C both derive generation 1 from (A, 0).
+    sessions = SimpleNamespace(
+        get_or_create=lambda key: None,
+        progress=MaintenanceProgress(ownership="B", generation=1),
+    )
+    sessions.maintenance_progress = lambda session: sessions.progress
+    controller = CompactionController(sessions, None, None)  # type: ignore[arg-type]
+    await controller.record(
+        "role:mira",
+        None,
+        CompactionResult(phase="completed", ownership="B", generation=1),
+        request_usage={},
+        request_attempted=True,
+    )
+    assert controller.latest("role:mira", None) is not None
+    sessions.progress = MaintenanceProgress(ownership="C", generation=1)
+    assert controller.latest("role:mira", None) is None
+    assert controller.latest("role:mira", None, request=True) is None

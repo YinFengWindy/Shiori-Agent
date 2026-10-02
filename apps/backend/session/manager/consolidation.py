@@ -76,7 +76,7 @@ class _ConsolidationMixin(_ManagerCoreMixin):
             raise ValueError("整理游标超出准备的消息范围")
         async with self._lock(request.session_key):
             session = self.get_or_create(request.session_key)
-            progress = self.maintenance_progress(session, allow_invalidation=True)
+            progress = self.maintenance_progress(session, persist=True)
             from conversation.context_scope import role_session_user_threads
             from session.maintenance_progress import ownership_key
 

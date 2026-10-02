@@ -26,9 +26,6 @@ async def test_normal_request_keeps_actual_progress_without_overwriting_last_com
         max_output_tokens=2000,
         budget_policy=BudgetPolicy(safety_margin_tokens=100),
     )
-    await h.manager.bind_window_request(
-        session.key, None, provider.context_identity("m")
-    )
     messages = [
         {"role": "system", "content": "constraints"},
         {"role": "user", "content": "current"},

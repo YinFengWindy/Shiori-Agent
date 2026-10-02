@@ -481,7 +481,7 @@ class LLMProvider:
         return model
 
     def context_identity(self, model: str) -> str:
-        """Stable connection/model ownership for persisted derived context windows."""
+        """Connection/model identity reported by context status; windows ignore it."""
         return f"{self._connection_identity}:{model}"
 
     def input_budget(self, **request) -> InputBudget | None:

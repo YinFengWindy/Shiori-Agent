@@ -39,7 +39,7 @@ class _MemoryConsumersMixin(_ManagerCoreMixin):
 
         async with self._lock(session_key):
             session = self.get_or_create(session_key)
-            progress = self.maintenance_progress(session, allow_invalidation=True)
+            progress = self.maintenance_progress(session, persist=True)
             if not progress.pending_consumers:
                 return
 

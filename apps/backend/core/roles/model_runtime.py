@@ -184,7 +184,7 @@ class RoleAwareProvider(LLMProvider):
         )
 
     def context_identity(self, model: str) -> str:
-        """Resolve window ownership with the same immutable role model snapshot."""
+        """Resolve the reported model identity from the same role model snapshot."""
         snapshot = _current_snapshot.get()
         provider = snapshot.provider if snapshot is not None else self._fallback
         return provider.context_identity(

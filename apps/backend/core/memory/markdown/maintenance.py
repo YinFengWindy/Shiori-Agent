@@ -28,7 +28,11 @@ from session.manager.consolidation import ConsolidationCommitRequest
 from session.manager.models import consolidation_cursor
 from session.manager.consumers import MemoryConsumersFailedError
 from session.manager.window import WindowPreparation
-from session.maintenance_progress import ownership_key, message_prefix_stamp
+from session.maintenance_progress import (
+    effective_progress,
+    message_prefix_stamp,
+    ownership_key,
+)
 from session.store.common import ContextScope
 
 from .consolidation import _MarkdownConsolidationWorker
@@ -453,8 +457,9 @@ class MarkdownMemoryMaintenance:
             view.scope: consolidation_cursor(request.session, view.scope)
             for view in views
         }
-        progress = getattr(request.session, "maintenance_progress", None)
-        expected_generation = progress.generation if progress is not None else None
+        expected_generation = effective_progress(
+            request.session, user_threads
+        ).generation
         expected_ownership = ownership_key(user_threads)
         draft = await self._worker.prepare_consolidation(
             request.session,
@@ -510,9 +515,7 @@ class MarkdownMemoryMaintenance:
                     draft,
                     expected_cursor=expected_cursor,
                     expected_context_cursors=expected_context_cursors,
-                    expected_ownership=(
-                        expected_ownership if progress is not None else None
-                    ),
+                    expected_ownership=expected_ownership,
                     expected_generation=expected_generation,
                     consumer_payload=payload,
                     expected_prefix_stamp=expected_prefix_stamp,
