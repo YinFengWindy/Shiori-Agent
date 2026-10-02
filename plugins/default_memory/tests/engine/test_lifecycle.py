@@ -15,7 +15,6 @@ from shiori_sdk.testing.events import FakeEvents as EventBus
 from shiori_sdk.testing.models import FakeModelResponse as LLMResponse
 
 from plugins.default_memory.backend.engine.lifecycle import DefaultMemoryEngine
-from plugins.default_memory.backend.semantic.store import MemoryStore2
 
 
 async def test_default_memory_engine_handles_turn_committed_via_event_bus(make_engine):
@@ -205,8 +204,10 @@ async def test_implicit_long_term_extraction_uses_auxiliary_budget(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_post_response_extraction_receives_current_role_memory(tmp_path) -> None:
-    store = MemoryStore2(tmp_path / "memory2.db")
+async def test_post_response_extraction_receives_current_role_memory(
+    tmp_path, make_store
+) -> None:
+    store = make_store(tmp_path / "memory2.db")
     try:
         store.upsert_item(
             "preference",

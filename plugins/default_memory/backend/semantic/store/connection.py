@@ -28,20 +28,20 @@ logger = logging.getLogger(__name__)
 
 
 class _StoreConnection:
+    # 打开前视为已关闭：构造失败（含缺少 opener 或租约被拒）时 __del__ 不触碰未建立的连接。
+    _closed = True
+
     def __init__(
         self,
         db_path: str | Path,
         vec_dim: int = VEC_DIM,
         *,
-        open_database: Callable[[Path], sqlite3.Connection] | None = None,
+        open_database: Callable[[Path], sqlite3.Connection],
     ) -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = (
-            open_database(self.db_path)
-            if open_database is not None
-            else sqlite3.connect(self.db_path, check_same_thread=False)
-        )
+        # 连接必须经宿主存储端口打开，以受数据库租约约束；不提供裸连接兜底。
+        self._db = open_database(self.db_path)
         self._lock = threading.RLock()
         self._closed = False
         try:

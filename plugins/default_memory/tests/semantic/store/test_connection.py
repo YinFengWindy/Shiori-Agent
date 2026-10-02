@@ -3,10 +3,10 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from plugins.default_memory.backend.semantic.store import MemoryStore2
 
-
-def test_memory_store_runtime_migrates_emotional_weight_column(tmp_path: Path):
+def test_memory_store_runtime_migrates_emotional_weight_column(
+    tmp_path: Path, make_store
+):
     db_path = tmp_path / "legacy.db"
     conn = sqlite3.connect(str(db_path))
     conn.executescript("""
@@ -28,7 +28,7 @@ def test_memory_store_runtime_migrates_emotional_weight_column(tmp_path: Path):
     conn.commit()
     conn.close()
 
-    store = MemoryStore2(db_path)
+    store = make_store(db_path)
     try:
         cols = {
             row[1]

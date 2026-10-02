@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from plugins.default_memory.backend.semantic.store import MemoryStore2
 
-
-def test_upsert_consolidation_event_fills_missing_happened_at_on_duplicate(tmp_path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+def test_upsert_consolidation_event_fills_missing_happened_at_on_duplicate(
+    tmp_path, make_store
+):
+    store = make_store(tmp_path / "memory2.db")
 
     store.upsert_consolidation_event(
         source_ref="session@1",
@@ -25,8 +25,8 @@ def test_upsert_consolidation_event_fills_missing_happened_at_on_duplicate(tmp_p
     assert items[0]["happened_at"] == "2026-03-08T12:00:00"
 
 
-def test_upsert_item_reinforces_equivalent_summaries(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "mem.db")
+def test_upsert_item_reinforces_equivalent_summaries(tmp_path: Path, make_store):
+    store = make_store(tmp_path / "mem.db")
     try:
         first = store.upsert_item(
             "procedure", "Hello   world", [1.0, 0.0], source_ref="s1"
@@ -51,8 +51,10 @@ def test_upsert_item_reinforces_equivalent_summaries(tmp_path: Path):
         store.close()
 
 
-def test_upsert_consolidation_event_is_idempotent_per_source_ref(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "mem.db")
+def test_upsert_consolidation_event_is_idempotent_per_source_ref(
+    tmp_path: Path, make_store
+):
+    store = make_store(tmp_path / "mem.db")
     try:
         created = store.upsert_consolidation_event(
             source_ref="r1", summary="Event A", embedding=[0.0, 1.0]
@@ -67,8 +69,10 @@ def test_upsert_consolidation_event_is_idempotent_per_source_ref(tmp_path: Path)
         store.close()
 
 
-def test_record_replacements_keeps_both_summaries_and_extras(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "mem.db")
+def test_record_replacements_keeps_both_summaries_and_extras(
+    tmp_path: Path, make_store
+):
+    store = make_store(tmp_path / "mem.db")
     try:
         old_res = store.upsert_item(
             "procedure",

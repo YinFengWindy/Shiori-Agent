@@ -34,7 +34,6 @@ def _make_default_engine(
     engine._tagger = tagger
     engine._post_response_worker = post_response_worker
     engine._event_bus = event_publisher
-    engine.closeables = []
     engine._wire_memory2_events()
     return engine
 

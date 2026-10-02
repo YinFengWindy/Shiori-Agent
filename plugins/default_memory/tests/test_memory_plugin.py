@@ -37,7 +37,11 @@ async def test_build_transfers_allocations_and_closes_independently(tmp_path):
     runtime = MemoryPlugin().build(deps)
     assert runtime.engine.describe().name == "default"
     assert len(runtime.resources) == 2
-    assert [resource.value for resource in runtime.resources] == runtime.closeables
+    engine = runtime.engine
+    assert [resource.value for resource in runtime.resources] == [
+        engine._v2_store,
+        engine._embedder,
+    ]
     await deps.resources.aclose()
 
 

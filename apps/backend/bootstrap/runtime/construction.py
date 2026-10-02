@@ -36,14 +36,6 @@ def track_build_resource(resource: T, cleanup: Callable[[], object]) -> T:
     return resource
 
 
-def track_build_closeables(resources: list[object]) -> None:
-    """Accepts the existing memory plugin closeable contract during construction."""
-    for resource in resources:
-        cleanup = getattr(resource, "aclose", None) or getattr(resource, "close", None)
-        if cleanup is not None:
-            track_build_resource(resource, cleanup)
-
-
 async def prepare_core_runtime(*args, builder: Callable[..., CoreRuntime], **kwargs):
     """Completes sync assembly or closes all partially constructed resources first."""
     async with AsyncExitStack() as cleanup:

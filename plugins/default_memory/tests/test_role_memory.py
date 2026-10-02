@@ -16,10 +16,11 @@ from plugins.default_memory.backend.semantic.store import MemoryStore2
 @pytest.mark.asyncio
 async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_detail(
     tmp_path: Path,
+    make_store,
 ) -> None:
     workspace = tmp_path / "workspace"
     roles = FakeMemoryRoles(("mira", "atlas"))
-    store = MemoryStore2(tmp_path / "memory.db")
+    store = make_store(tmp_path / "memory.db")
     try:
         first_id = store.upsert_item(
             "preference",
@@ -111,8 +112,9 @@ async def test_semantic_rpc_filters_role_status_and_page_and_rejects_cross_role_
 @pytest.mark.asyncio
 async def test_semantic_list_declares_role_facets_and_sorts_by_occurrence_time(
     tmp_path: Path,
+    make_store,
 ) -> None:
-    store = MemoryStore2(tmp_path / "memory.db")
+    store = make_store(tmp_path / "memory.db")
     try:
         reader = _store_reader(tmp_path, store, "mira", "atlas")
         # Written in reverse occurrence order so record-time sorting cannot pass.
@@ -211,8 +213,10 @@ def _store_reader(tmp_path: Path, store: MemoryStore2, *role_ids: str):
 
 
 @pytest.mark.asyncio
-async def test_semantic_list_matches_like_wildcards_literally(tmp_path: Path) -> None:
-    store = MemoryStore2(tmp_path / "memory.db")
+async def test_semantic_list_matches_like_wildcards_literally(
+    tmp_path: Path, make_store
+) -> None:
+    store = make_store(tmp_path / "memory.db")
     try:
         reader = _store_reader(tmp_path, store, "mira")
         for summary in ("Mira tea", "Mira 100% coffee", "Mira snake_case", "a\\b"):
@@ -234,8 +238,9 @@ async def test_semantic_list_matches_like_wildcards_literally(tmp_path: Path) ->
 @pytest.mark.asyncio
 async def test_semantic_detail_accepts_items_the_list_shows_for_padded_role_id(
     tmp_path: Path,
+    make_store,
 ) -> None:
-    store = MemoryStore2(tmp_path / "memory.db")
+    store = make_store(tmp_path / "memory.db")
     try:
         reader = _store_reader(tmp_path, store, "mira", "atlas")
         padded_id = store.upsert_item(

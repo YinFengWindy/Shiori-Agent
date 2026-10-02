@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+
 from plugins.default_memory.backend.engine import DefaultMemoryEngine
 from plugins.default_memory.backend.semantic.store import MemoryStore2
 
@@ -23,8 +24,8 @@ def _engine_admin_undo(store: MemoryStore2) -> DefaultMemoryEngine:
     return engine
 
 
-def test_undo_marks_direct_source_memory_superseded(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+def test_undo_marks_direct_source_memory_superseded(tmp_path: Path, make_store):
+    store = make_store(tmp_path / "memory2.db")
     try:
         engine = _engine_admin_undo(store)
         item_id = _item_id_admin_undo(
@@ -44,8 +45,8 @@ def test_undo_marks_direct_source_memory_superseded(tmp_path: Path):
         store.close()
 
 
-def test_undo_dry_run_does_not_change_memory_status(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+def test_undo_dry_run_does_not_change_memory_status(tmp_path: Path, make_store):
+    store = make_store(tmp_path / "memory2.db")
     try:
         engine = _engine_admin_undo(store)
         item_id = _item_id_admin_undo(
@@ -65,8 +66,8 @@ def test_undo_dry_run_does_not_change_memory_status(tmp_path: Path):
         store.close()
 
 
-def test_undo_marks_consolidation_window_memory_superseded(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+def test_undo_marks_consolidation_window_memory_superseded(tmp_path: Path, make_store):
+    store = make_store(tmp_path / "memory2.db")
     try:
         engine = _engine_admin_undo(store)
         base = json.dumps(["cli:1:0", "cli:1:1", "cli:1:2"], ensure_ascii=False)
@@ -104,8 +105,10 @@ def test_undo_marks_consolidation_window_memory_superseded(tmp_path: Path):
         store.close()
 
 
-def test_undo_restores_old_memory_replaced_by_affected_new_memory(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+def test_undo_restores_old_memory_replaced_by_affected_new_memory(
+    tmp_path: Path, make_store
+):
+    store = make_store(tmp_path / "memory2.db")
     try:
         engine = _engine_admin_undo(store)
         old_id = _item_id_admin_undo(

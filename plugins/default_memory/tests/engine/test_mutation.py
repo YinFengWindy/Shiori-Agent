@@ -14,7 +14,6 @@ from shiori_sdk.memory.engine import (
 from shiori_sdk.testing.memory import FakeMemoryRoles
 
 from plugins.default_memory.backend.semantic.memorizer import Memorizer
-from plugins.default_memory.backend.semantic.store import MemoryStore2
 
 
 async def test_default_memory_engine_ingest_delegates_to_post_worker(make_engine):
@@ -202,9 +201,9 @@ async def test_default_memory_engine_allows_authorized_shared_write(
 
 
 async def test_default_memory_engine_forget_filters_to_matching_role_and_scope(
-    tmp_path: Path, make_engine
+    tmp_path: Path, make_engine, make_store
 ):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = make_store(tmp_path / "memory2.db")
     engine = make_engine(retriever=cast(Any, SimpleNamespace()))
     engine._v2_store = store
     try:
@@ -460,12 +459,13 @@ async def test_memorize_tool_cover_branches(
 @pytest.mark.asyncio
 async def test_memorize_tool_should_not_create_second_active_procedure_when_incremental_update(
     make_engine,
+    make_store,
 ):
     class _Embedder:
         async def embed(self, text: str) -> list[float]:
             return [1.0, 0.0]
 
-    store = MemoryStore2(":memory:")
+    store = make_store(":memory:")
     memorizer = Memorizer(store, cast(Any, _Embedder()))
     tool = make_engine(
         retriever=MagicMock(),

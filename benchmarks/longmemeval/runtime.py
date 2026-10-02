@@ -124,17 +124,4 @@ async def create_runtime(config_path: Path, workspace: Path) -> BenchmarkRuntime
 
 
 async def close_runtime(rt: BenchmarkRuntime) -> None:
-    closeables = getattr(rt.core.memory_runtime, "closeables", [])
-    for obj in closeables:
-        close = getattr(obj, "close", None) or getattr(obj, "aclose", None)
-        if close:
-            try:
-                import asyncio
-                import inspect
-
-                if inspect.iscoroutinefunction(close):
-                    await close()
-                else:
-                    await asyncio.to_thread(close)
-            except Exception as e:
-                logger.warning("close failed: %s", e)
+    await rt.core.memory_runtime.aclose()

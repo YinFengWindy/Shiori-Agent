@@ -163,7 +163,10 @@ and live-database leases. Compatibility failures use
 
 Construction must register every allocation with `deps.resources.register(value,
 cleanup)` before allocating the next resource. Call `transfer()` only after the
-engine is complete and return its records in `MemoryPluginRuntime.resources`.
+engine is complete and return its records in `MemoryPluginRuntime.resources`;
+this is the only ownership handoff, and the runtime has no separate list of
+closeable objects. Memory databases are opened only through
+`deps.storage.open_database(path)` so the host's live-database lease applies.
 The caller retains an outer construction cleanup scope until all host assembly
 succeeds, then consumes those exact callbacks at shutdown (including opaque values
 with no close method). Returned callbacks run once; cleanup continues in reverse
