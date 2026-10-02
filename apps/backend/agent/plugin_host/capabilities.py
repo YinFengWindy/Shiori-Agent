@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from collections.abc import Coroutine
 from core.common.runtime_tasks import create_runtime_task
 from agent.tools.registry import ToolRegistry
+from shiori_sdk.lifecycle import PHASE_SLOTS, require_phase_slot
 from shiori_sdk.tools import Tool
 from uuid import uuid4
 
@@ -34,17 +35,6 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
-
-# Shiori 定义的 7 个 phase 槽位；顺序与 AgentLoop 接线一致
-PHASE_SLOTS = (
-    "before_turn",
-    "before_reasoning",
-    "prompt_render",
-    "before_step",
-    "after_step",
-    "after_reasoning",
-    "after_turn",
-)
 
 
 class PluginContributions:
@@ -165,8 +155,7 @@ class LifecycleCapability:
         self._effects = effects
 
     def contribute(self, slot: str, modules: Sequence[object]) -> None:
-        if slot not in PHASE_SLOTS:
-            raise ValueError(f"未知 phase 槽位: {slot}")
+        require_phase_slot(slot)
         self._effects.ensure_active(f"phase:{slot}")
         target = self._contributions.phase_modules[slot]
         target.extend(modules)

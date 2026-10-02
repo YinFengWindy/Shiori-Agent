@@ -6,6 +6,23 @@ from datetime import datetime
 from typing import Protocol, runtime_checkable
 from .prompting import PromptSectionRender
 
+# The seven host phases plugins may contribute to, in AgentLoop wiring order.
+PHASE_SLOTS = (
+    "before_turn",
+    "before_reasoning",
+    "prompt_render",
+    "before_step",
+    "after_step",
+    "after_reasoning",
+    "after_turn",
+)
+
+
+def require_phase_slot(slot: str) -> None:
+    """Rejects a contribution target outside ``PHASE_SLOTS`` the same way as the host."""
+    if slot not in PHASE_SLOTS:
+        raise ValueError(f"未知 phase 槽位: {slot}")
+
 
 class LifecycleFrame(Protocol):
     """A phase's shared slots; input and output remain owned by that phase."""
@@ -15,10 +32,21 @@ class LifecycleFrame(Protocol):
 
 
 class LifecycleModule(Protocol):
-    """A contribution preserves its concrete frame while updating shared slots."""
+    """A contribution preserves its concrete frame while updating shared slots.
+
+    ``requires`` names the module slots or frame slots that must exist before this
+    module runs; ``produces`` names the frame slots it writes. The host orders and
+    validates a phase's modules by them; an empty sequence declares no ordering.
+    """
 
     @property
     def slot(self) -> str: ...
+
+    @property
+    def requires(self) -> Sequence[str]: ...
+
+    @property
+    def produces(self) -> Sequence[str]: ...
 
     async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT: ...
 
@@ -82,6 +110,21 @@ class AfterReasoningCtx:
     media: list[str] = field(default_factory=list)
     meme_tag: str | None = None
     outbound_metadata: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class AfterTurnCtx:
+    """Observation snapshot fanned out after a turn; replace it to add metadata."""
+
+    session_key: str
+    channel: str
+    chat_id: str
+    reply: str
+    tools_used: tuple[str, ...]
+    thinking: str | None
+    # Pre-dispatch intent: dispatch has NOT happened yet when handlers run.
+    will_dispatch: bool
+    extra_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

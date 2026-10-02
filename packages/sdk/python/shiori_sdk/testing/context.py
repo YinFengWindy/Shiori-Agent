@@ -9,7 +9,12 @@ from .lifecycle import FakeLifecycle
 
 
 class FakePluginContext:
-    """Records setup effects and exports without instantiating any host services."""
+    """Records setup effects and exports without instantiating any host services.
+
+    ``capabilities`` are the grants, normally a manifest's declaration (see the
+    ``sdk_context`` fixture). Only ``lifecycle`` and ``events`` have fakes here;
+    other declared names are recorded in ``granted`` for specialized fakes.
+    """
 
     def __init__(
         self,
@@ -18,12 +23,9 @@ class FakePluginContext:
         *,
         capabilities: tuple[str, ...] = ("lifecycle", "events"),
     ) -> None:
-        unknown = set(capabilities) - {"lifecycle", "events"}
-        if unknown:
-            raise ValueError(f"Unsupported fake capabilities: {sorted(unknown)}")
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
-        self.granted = tuple(sorted(capabilities))
+        self.granted = tuple(sorted(set(capabilities)))
         self.exported: object | None = None
         self._lifecycle = FakeLifecycle()
         self._events = FakeEvents()
@@ -35,7 +37,7 @@ class FakePluginContext:
             raise RuntimeError("Plugin scope is closed")
         if name not in self.granted:
             raise CapabilityNotGranted(
-                f"Plugin {self.plugin_id} did not request {name}"
+                f"插件 {self.plugin_id} 未声明 capability '{name}'"
             )
 
     @property

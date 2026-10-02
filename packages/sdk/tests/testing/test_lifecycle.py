@@ -1,11 +1,15 @@
 """Lifecycle fake retains real module identity and withdraws contributions on close."""
 
+import pytest
+
 from shiori_sdk.lifecycle import LifecycleFrame
 from shiori_sdk.testing import FakeFrame, FakeLifecycle
 
 
 class Module:
     slot = "test.export"
+    requires = ()
+    produces = ("test:value",)
 
     async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
         frame.slots["test:value"] = 42
@@ -22,4 +26,11 @@ async def test_lifecycle_records_and_executes_the_registered_module() -> None:
     assert await registered[0].run(frame) is frame
     assert frame.slots == {"test:value": 42}
     lifecycle.close()
+    assert lifecycle.modules == {}
+
+
+def test_lifecycle_rejects_an_unknown_phase_slot_like_the_host() -> None:
+    lifecycle = FakeLifecycle()
+    with pytest.raises(ValueError, match="未知 phase 槽位: after_everything"):
+        lifecycle.contribute("after_everything", [Module()])
     assert lifecycle.modules == {}

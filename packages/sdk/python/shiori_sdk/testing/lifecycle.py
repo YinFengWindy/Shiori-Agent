@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from shiori_sdk.lifecycle import LifecycleModule
+from shiori_sdk.lifecycle import LifecycleModule, require_phase_slot
 
 
 @dataclass
@@ -21,9 +21,10 @@ class FakeLifecycle:
         self._closed = False
 
     def contribute(self, slot: str, modules: Sequence[LifecycleModule]) -> None:
-        """Adds modules in registration order for inspection and explicit execution."""
+        """Adds modules in registration order; unknown phase slots fail like the host."""
         if self._closed:
             raise RuntimeError("Plugin scope is closed")
+        require_phase_slot(slot)
         self.modules.setdefault(slot, []).extend(modules)
 
     def close(self) -> None:

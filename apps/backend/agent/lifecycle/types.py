@@ -14,6 +14,7 @@ from shiori_sdk.lifecycle import (
     AfterStepCtx as AfterStepCtx,
 )
 from shiori_sdk.lifecycle import AfterToolResultCtx as AfterToolResultCtx
+from shiori_sdk.lifecycle import AfterTurnCtx as AfterTurnCtx
 from shiori_sdk.tool_hooks import PreToolCtx as PreToolCtx
 
 if TYPE_CHECKING:
@@ -204,20 +205,6 @@ class TurnSnapshot:
     state: TurnState
     outbound: OutboundMessage
     ctx: AfterReasoningCtx
-
-
-@dataclass(frozen=True)
-class AfterTurnCtx:
-    # after-* fanout ctx 是观察快照；需要补充 metadata 时由 PhaseModule replace 新实例。
-    session_key: str
-    channel: str
-    chat_id: str
-    reply: str
-    tools_used: tuple[str, ...]
-    thinking: str | None
-    # pre-dispatch intent flag: dispatch has NOT happened yet when Tap handlers run
-    will_dispatch: bool
-    extra_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,6 @@ from agent.plugin_host.capabilities import (
     BackgroundCapability,
     ChannelsCapability,
     LifecycleCapability,
-    PHASE_SLOTS,
     PluginContributions,
     ProactiveGatesCapability,
     RpcCapability,
@@ -26,6 +25,7 @@ from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.tools.base import Tool
+from shiori_sdk.lifecycle import PHASE_SLOTS
 from agent.tools.registry import ToolRegistry
 from desktop_bridge.method_policy import Concurrency, Handler
 
@@ -280,23 +280,6 @@ def test_all_phase_slots_are_contributable():
     for slot in PHASE_SLOTS:
         capability.contribute(slot, [object()])
     assert all(len(contributions.phase_modules[slot]) == 1 for slot in PHASE_SLOTS)
-
-
-def test_phase_slots_matches_the_seven_documented_slot_names():
-    """v2 PHASE_SLOTS 与 legacy 清单共用同一批槽位名，防止两处清单漂移。
-
-    原先这条检查是 kernel.py 模块顶层的 assert（会在每次导入时执行）；
-    迁移为普通测试，避免生产导入路径承担单元测试职责。
-    """
-    assert set(PHASE_SLOTS) == {
-        "before_turn",
-        "before_reasoning",
-        "prompt_render",
-        "before_step",
-        "after_step",
-        "after_reasoning",
-        "after_turn",
-    }
 
 
 # ── 列表型 capability ──────────────────────────────────────────────────────

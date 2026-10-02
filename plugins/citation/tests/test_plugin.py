@@ -237,3 +237,15 @@ async def test_setup_registers_modules(sdk_context: FakePluginContext) -> None:
         type(module).__name__
         for module in sdk_context.lifecycle.modules["after_reasoning"]
     ] == ["CitationAfterReasoningModule", "ProtocolTagCleanupModule"]
+
+
+@pytest.mark.parametrize(
+    "module", [CitationAfterReasoningModule(), ProtocolTagCleanupModule()]
+)
+@pytest.mark.parametrize("slots", [{}, {"reasoning:ctx": "not a ctx"}])
+async def test_modules_reject_a_missing_or_mistyped_reasoning_ctx(
+    module: CitationAfterReasoningModule | ProtocolTagCleanupModule,
+    slots: dict[str, object],
+) -> None:
+    with pytest.raises(TypeError, match="reasoning:ctx must hold AfterReasoningCtx"):
+        await module.run(FakeFrame(slots=slots))

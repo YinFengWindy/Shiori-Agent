@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `3.0.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `3.1.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `channels` | no | static channel declarations (Runtime API 2.2); requires the `channels` capability |
@@ -83,15 +83,17 @@ version whose additions it uses.
 | `2.5.0` | required `chat_types` session-type declarations on manifest `channels` entries (replacing the channel-level `chat_id_label` / `chat_id_hint`) | #397 |
 | `2.6.0` | the `accounts` capability: `ctx.accounts.register(...)` / `report(...)` for host-owned communication account registration and ownership, released with the plugin scope | #419 |
 | `2.7.0` | `ctx.tools.register(..., external_allowed=)` to declare a tool usable in external-context turns; from this host on, undeclared plugin tools are unavailable in restricted external-context turns, including tools of existing packages that require an older `runtime_api` (host policy, not an API break) | #489 |
-| `2.8.0` | the `@shiori/sdk` renderer peer, resolved to the host's own instance through the renderer import map (see [Runtime API 2.8 plugin SDK peer](#runtime-api-28-plugin-sdk-peer)) | #503 (#440 T1) |
-| `2.9.0` | `@shiori/sdk` shared renderer primitives: components, class names, icons, pure helpers and hooks, plus the UI module, host service, account and role contract types (see [Runtime API 2.9 plugin SDK primitives](#runtime-api-29-plugin-sdk-primitives)) | #504 (#440 T2) |
-| `2.10.0` | the host services context (`PluginHostServicesProvider` / `usePluginHostServices`) exported by `@shiori/sdk`, plus `host.config` (the plugin's own config: read, save a patch, subscribe) and `host.assets` (local path to displayable URL) (see [Runtime API 2.10 host services context, config and assets](#runtime-api-210-host-services-context-config-and-assets)) | #505 (#440 T3) |
-| `2.11.0` | `ctx.reportFailure(operation, error)` on the background `setup(ctx)`: a handled background failure recorded in the host's desktop diagnostic log; `@shiori/sdk` also becomes the source of the `desktop.surface` and `app.background` contract types (see [Runtime API 2.11 background failure reporting and surface/background types](#runtime-api-211-background-failure-reporting-and-surfacebackground-types)) | #508 (#440) |
+| `2.8.0` | the `@shiori/plugin-sdk` renderer peer (renamed `@shiori/sdk` in 3.0.0), resolved to the host's own instance through the renderer import map (see [Runtime API 2.8 plugin SDK peer](#runtime-api-28-plugin-sdk-peer)) | #503 (#440 T1) |
+| `2.9.0` | `@shiori/plugin-sdk` shared renderer primitives: components, class names, icons, pure helpers and hooks, plus the UI module, host service, account and role contract types (see [Runtime API 2.9 plugin SDK primitives](#runtime-api-29-plugin-sdk-primitives)) | #504 (#440 T2) |
+| `2.10.0` | the host services context (`PluginHostServicesProvider` / `usePluginHostServices`) exported by `@shiori/plugin-sdk`, plus `host.config` (the plugin's own config: read, save a patch, subscribe) and `host.assets` (local path to displayable URL) (see [Runtime API 2.10 host services context, config and assets](#runtime-api-210-host-services-context-config-and-assets)) | #505 (#440 T3) |
+| `2.11.0` | `ctx.reportFailure(operation, error)` on the background `setup(ctx)`: a handled background failure recorded in the host's desktop diagnostic log; `@shiori/plugin-sdk` also becomes the source of the `desktop.surface` and `app.background` contract types (see [Runtime API 2.11 background failure reporting and surface/background types](#runtime-api-211-background-failure-reporting-and-surfacebackground-types)) | #508 (#440) |
 | `2.12.0` | the `avatars` capability: `ctx.avatars.refresh(kind, channel, id, fetch)` hands channel senders' and chats' platform avatars to a host-owned cache, released with the plugin scope (see [Runtime API 2.12 channel avatars](#runtime-api-212-channel-avatars)) | #514 |
 | `2.13.0` | optional `group_listening: true` on manifest `channels` entries: the channel hands every group message to the host, so its groups offer 群聊旁听 (see [Runtime API 2.2 channel declarations](#runtime-api-22-channel-declarations)) | #538 (#527) |
 | `2.14.0` | optional `on_heard=` keyword on `ctx.channel_hub.route_account_inbound`: called with the projected message only when an unaddressed group message is stored in the listening records, so a channel can refresh the avatars it shows (see channel-plugins handbook) | #553 |
-| `2.15.0` | quoted messages (#555): `infra.channels.reply_context.with_reply_quote` wraps a routed message with the message it quotes (text never truncated, quoted pictures ahead of its own) and records `reply_to_content` / `reply_to_sender_name` / `reply_to_media`; the hub sets `reply_to_sender_is_user` on a routed message whose quoted sender is bound to the user (plugins cannot set it) | #555 |
-| `2.16.0` | SDK `CrossfadeLayers` and `SidebarResizeHandle`; packages importing either require `runtime_api: ">=3.0.0 <4.0.0"`. The host no longer provides NcatBot; external `host_dependencies` declarations requiring it are rejected by the existing missing-dependency check. QQ uses per-account OneBot sockets; `psutil` remains a production dependency. | #576 |
+| `2.15.0` | quoted messages (#555): `infra.channels.reply_context.with_reply_quote` (public as `shiori_sdk.channels.reply_context.with_reply_quote` since 3.0.0) wraps a routed message with the message it quotes (text never truncated, quoted pictures ahead of its own) and records `reply_to_content` / `reply_to_sender_name` / `reply_to_media`; the hub sets `reply_to_sender_is_user` on a routed message whose quoted sender is bound to the user (plugins cannot set it) | #555 |
+| `2.16.0` | SDK `CrossfadeLayers` and `SidebarResizeHandle`; packages importing either require `runtime_api: ">=2.16.0 <3.0.0"`. The host no longer provides NcatBot; external `host_dependencies` declarations requiring it are rejected by the existing missing-dependency check. QQ uses per-account OneBot sockets; `psutil` remains a production dependency. | #576 |
+| `3.0.0` | **breaking**: the unified Shiori SDK. `@shiori/plugin-sdk` becomes `@shiori/sdk` (no alias) and shares version and source tree `packages/sdk/` with the Python `shiori-sdk`, which owns plugin-facing Python contracts, lifecycle values and independent test fakes; every 2.x range is rejected with `incompatible_runtime` (see [Runtime API 3.0](#runtime-api-30-unified-shiori-sdk)) | #551 (#585–#591) |
+| `3.1.0` | `shiori_sdk.lifecycle` gains `AfterTurnCtx`, `PHASE_SLOTS` / `require_phase_slot` and `requires` / `produces` on the `LifecycleModule` protocol; `shiori-sdk[testing]`'s `sdk_context` grants only the plugin manifest's `capabilities`, and `FakeLifecycle` rejects unknown phase slots like the host | #620 (#619) |
 
 2.2 and 2.3 first ship together in the release that turns every external
 channel into a plugin (#363): no released host advertises 2.2 alone, and
@@ -851,8 +853,8 @@ for commands and how to validate its directory/zip from a host environment.
 
 ## Runtime API 3.0: unified Shiori SDK
 
-`@shiori/sdk` and `shiori-sdk` share version 3.0.0 and the source tree
-`packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
+`@shiori/sdk` and `shiori-sdk` share one version (3.0.0 at introduction, now
+3.1.0) and the source tree `packages/sdk/`. External packages must declare `runtime_api: ">=3.0.0 <4.0.0"`.
 The previous frontend package name has no alias. Existing 2.x ranges are rejected
 with `incompatible_runtime` before backend execution; rebuild renderer peers and
 update the declared range when migrating. The 2.x sections above describe feature
