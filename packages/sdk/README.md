@@ -89,8 +89,10 @@ declared dependency closure. No host or default-memory package is injected.
 Each suite and its awaited failure probe owns a separate pytest temporary directory.
 Provenance checks run before and after the suite, checking host absence, all
 distribution origins, editable installs, repository path injection and SDK versions.
-An execution probe rejects backend/testing code loaded from the staged source copy,
-including temporary module aliases removed before the suite ends.
+An execution probe starts before initial conftests and rejects implementation code
+from every staged target/dependency tree or the original checkout (including SDK
+sources), even when a temporary module alias is removed before the suite ends.
+Installed entry origins and hashes cover the target's complete declared plugin closure.
 
 The import guard has no exemptions. It checks SDK and plugin Python sources,
 tests, stubs and packaged testing helpers, including TYPE_CHECKING, import aliases,

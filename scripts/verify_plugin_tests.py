@@ -113,7 +113,11 @@ def build_wheels(
 
 
 def write_provenance_probe(
-    case: Path, modules: dict[str, str], allowed: list[str]
+    case: Path,
+    modules: dict[str, str],
+    allowed: list[str],
+    *,
+    source_packages: Iterable[Path],
 ) -> None:
     """Copy a standalone probe; the child never imports runner code from the checkout."""
     shutil.copyfile(
@@ -126,9 +130,7 @@ def write_provenance_probe(
         "host_roots": sorted(host_roots(REPOSITORY) - {"tests"}),
         "allowed_plugins": allowed,
         "modules": modules,
-        "source_packages": sorted(
-            {str(Path(source).parents[1]) for source in modules.values()}
-        ),
+        "source_packages": sorted(str(source.resolve()) for source in source_packages),
         "sdk_version": json.loads(
             (REPOSITORY / "packages/sdk/package.json").read_text(encoding="utf-8")
         )["version"],
@@ -146,12 +148,13 @@ def verify_plugin(
     *,
     artifact_root: Path,
     wheelhouse: Path,
-    source: Path,
+    sources: Mapping[str, Path],
     wheel: Path,
 ) -> dict[str, object]:
     """Runs all target tests with only the target and its declared sibling dependencies installed."""
     case = case_directory(artifact_root, plugin_id)
     case.mkdir(parents=True)
+    source = sources[plugin_id]
     venv = case / "venv"
     run(
         [UV, "venv", "--python", sys.executable, str(venv)],
@@ -177,8 +180,14 @@ def verify_plugin(
     allowed = ["shiori-plugin-" + name.replace("_", "-") for name in sorted(ids)]
     write_provenance_probe(
         case,
-        {f"plugins.{plugin_id}.backend.plugin": str(source / "backend/plugin.py")},
+        {
+            f"plugins.{name}.backend.plugin": str(sources[name] / "backend/plugin.py")
+            for name in sorted(ids)
+        },
         allowed,
+        # Other targets also coexist in the artifact's staging directory. No
+        # test may execute their uninstalled implementations through an alias.
+        source_packages=sources.values(),
     )
     output = run(
         [
@@ -424,7 +433,7 @@ def main(argv: list[str] | None = None) -> None:
             plugin_id,
             artifact_root=artifact_root,
             wheelhouse=wheelhouse,
-            source=copies[plugin_id],
+            sources=copies,
             wheel=wheels[plugin_id],
         ),
         artifact_root=artifact_root,

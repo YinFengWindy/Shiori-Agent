@@ -460,15 +460,55 @@ def test_each_plugin_and_async_probe_own_separate_pytest_temp_directories(
         return "1 passed"
 
     monkeypatch.setattr(runner, "run", run)
-    monkeypatch.setattr(runner, "write_provenance_probe", lambda *args: None)
+    monkeypatch.setattr(runner, "write_provenance_probe", lambda *args, **kwargs: None)
     for plugin_id in ("first", "second"):
         _plugin(repository, plugin_id)
         runner.verify_plugin(
             plugin_id,
             artifact_root=output,
             wheelhouse=output / "wheels",
-            source=output / "sources" / plugin_id,
+            sources={plugin_id: output / "sources" / plugin_id},
             wheel=output / "wheels" / f"{plugin_id}.whl",
         )
 
     assert len(temporary_roots) == len(set(temporary_roots)) == 4
+
+
+def test_target_provenance_covers_installed_siblings_and_every_staged_source(
+    repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _plugin(repository, "meme", dependencies=("shiori-plugin-citation",))
+    _plugin(repository, "citation")
+    output = tmp_path / "artifacts"
+    sources = {
+        name: output / "sources" / name
+        for name in ("meme", "citation", "another_target")
+    }
+    received = {}
+
+    def write_probe(case, modules, allowed, *, source_packages):
+        received.update(modules=modules, allowed=allowed, sources=set(source_packages))
+
+    def run(command, *, cwd, log, expected=0):
+        if expected == 1:
+            (cwd / "awaited.txt").write_text("awaited", encoding="utf-8")
+            return "1 failed: expected async failure probe"
+        return "1 passed"
+
+    monkeypatch.setattr(runner, "write_provenance_probe", write_probe)
+    monkeypatch.setattr(runner, "run", run)
+    runner.verify_plugin(
+        "meme",
+        artifact_root=output,
+        wheelhouse=output / "wheels",
+        sources=sources,
+        wheel=output / "wheels/meme.whl",
+    )
+    assert received["allowed"] == ["shiori-plugin-citation", "shiori-plugin-meme"]
+    assert set(received["modules"]) == {
+        "plugins.meme.backend.plugin",
+        "plugins.citation.backend.plugin",
+    }
+    # Installed-module provenance is the dependency closure, while execution
+    # rejection covers even other targets sharing this artifact's staged tree.
+    assert received["sources"] == set(sources.values())

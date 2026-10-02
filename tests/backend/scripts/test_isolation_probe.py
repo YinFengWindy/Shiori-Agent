@@ -32,7 +32,10 @@ def environment(tmp_path: Path) -> Path:
                 "host_roots": ["agent", "infra", "main"],
                 "allowed_plugins": [],
                 "modules": {},
-                "source_packages": [str(tmp_path / "sources/demo")],
+                "source_packages": [
+                    str(tmp_path / "sources/demo"),
+                    str(tmp_path / "sources/sibling"),
+                ],
                 "sdk_version": "3.0.0",
             }
         ),
@@ -41,7 +44,9 @@ def environment(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _audit(environment: Path, injection: str = "") -> subprocess.CompletedProcess[str]:
+def _audit(
+    environment: Path, injection: str = "", *, before_session: bool = False
+) -> subprocess.CompletedProcess[str]:
     # -I -S removes this repository's editable development environment entirely.
     source = f"""
 import runpy, sys, sysconfig
@@ -50,8 +55,10 @@ site = str(Path('site').resolve())
 sys.path.insert(0, site)
 sysconfig.get_paths = lambda: {{'purelib': site}}
 probe = runpy.run_path('probe.py')
+probe['pytest_load_initial_conftests'](None, None, None)
+{injection if before_session else ""}
 probe['pytest_sessionstart'](None)
-{injection}
+{injection if not before_session else ""}
 probe['audit']()
 """
     return subprocess.run(
@@ -117,3 +124,53 @@ def test_execution_from_uninstalled_source_copy_is_rejected(environment: Path) -
     result = _audit(environment, "runpy.run_path('sources/demo/backend/runtime.py')")
     assert result.returncode != 0
     assert "source copy instead of installed wheel" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "relative,diagnostic",
+    [
+        (
+            "sources/sibling/backend/runtime.py",
+            "source copy instead of installed wheel",
+        ),
+        ("sources/sibling/testing/helper.py", "source copy instead of installed wheel"),
+        (
+            "repository/packages/sdk/python/shiori_sdk/helper.py",
+            "Repository implementation executed",
+        ),
+    ],
+)
+def test_temporary_sibling_or_sdk_alias_is_rejected_before_it_can_be_removed(
+    environment: Path, relative: str, diagnostic: str
+) -> None:
+    source = environment / relative
+    source.parent.mkdir(parents=True)
+    source.write_text("VALUE = 42\n", encoding="utf-8")
+    result = _audit(
+        environment,
+        f"""
+import importlib.util
+spec = importlib.util.spec_from_file_location('temporary_alias', {relative!r})
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+try:
+    spec.loader.exec_module(module)
+finally:
+    del sys.modules[spec.name]
+""",
+        before_session=True,
+    )
+    assert result.returncode != 0
+    assert diagnostic in result.stderr
+
+
+def test_external_sibling_tests_remain_executable(environment: Path) -> None:
+    source = environment / "sources/sibling/tests/test_demo.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("VALUE = 42\n", encoding="utf-8")
+    assert (
+        _audit(
+            environment, "runpy.run_path('sources/sibling/tests/test_demo.py')"
+        ).returncode
+        == 0
+    )

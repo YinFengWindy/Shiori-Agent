@@ -75,7 +75,7 @@ def main() -> None:
     )
     shutil.copytree(source / "tests", output / "tests")
     shutil.copyfile(source / "pyproject.toml", output / "pyproject.toml")
-    write_provenance_probe(output, {}, [])
+    write_provenance_probe(output, {}, [], source_packages=[])
     run(
         [str(python), "-c", "import verify_provenance; verify_provenance.audit()"],
         cwd=output,

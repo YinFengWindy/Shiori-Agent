@@ -68,15 +68,16 @@ def audit() -> dict[str, object]:
         "sdk_version": version("shiori-sdk"),
         "repository_path_injection": False,
         "editable": False,
+        "source_packages": config["source_packages"],
     }
     Path("provenance.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     return result
 
 
-def pytest_sessionstart(session) -> None:
-    """Check the environment before collecting or executing plugin tests."""
-    audit()
+def pytest_load_initial_conftests(early_config, parser, args) -> None:
+    """Guard executed source before even the external test conftests are imported."""
     config = json.loads(Path("isolation.json").read_text(encoding="utf-8"))
+    repository = Path(config["repository"]).resolve()
     sources = [Path(source).resolve() for source in config["source_packages"]]
 
     def check_execution(event: str, arguments: tuple[object, ...]) -> None:
@@ -86,6 +87,10 @@ def pytest_sessionstart(session) -> None:
         if not filename or filename.startswith("<"):
             return
         path = Path(filename).resolve()
+        assert not path.is_relative_to(repository), (
+            "Repository implementation executed instead of installed wheel",
+            path,
+        )
         for source in sources:
             if path.is_relative_to(source):
                 relative = path.relative_to(source)
@@ -97,6 +102,11 @@ def pytest_sessionstart(session) -> None:
     # The exec event observes temporary alias modules even if fixtures remove
     # them from sys.modules before sessionfinish. Test files remain external.
     sys.addaudithook(check_execution)
+
+
+def pytest_sessionstart(session) -> None:
+    """Check the environment before collecting or executing plugin tests."""
+    audit()
 
 
 def pytest_sessionfinish(session, exitstatus) -> None:
