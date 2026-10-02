@@ -1,7 +1,7 @@
 """Registers independent tools and tears down the entire owned Driver generation."""
 
-from agent.plugin_host.plugin_data import plugin_data_dir
-from agent.plugin_host.runtime_context import PluginRuntimeContext
+from shiori_sdk.storage import plugin_data_dir
+from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
 
 from .config import ComputerUseConfig
 from .desktop import ComputerDesktop
@@ -15,6 +15,9 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     desktop = ComputerDesktop(
         plugin_data_dir(ctx.workspace, ctx.plugin_id),
         ComputerUseConfig.model_validate(ctx.config.as_dict()),
+        processes=ctx.processes,
+        resources=ctx.resources.root,
+        current_turn=ctx.tool_turn,
     )
     for tool in computer_tools(desktop):
         ctx.tools.register(

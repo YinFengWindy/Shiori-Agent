@@ -1,14 +1,14 @@
 from pathlib import Path
 
-from agent.plugin_host.kv import PluginKVStore
-from agent.tool_hooks.types import HookOutcome
+from shiori_sdk.testing.storage import FakeKV
+from shiori_sdk.tool_hooks import HookOutcome
 from plugins.novelai.backend.auto_cg import AutoCgPolicy
 
 
 def test_auto_cg_policy_enforces_cooldown_dedup_and_manual_bypass(
     tmp_path: Path,
 ) -> None:
-    policy = AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json"))
+    policy = AutoCgPolicy(FakeKV())
     session_key = "role:mira"
     policy.advance_turn(session_key)
     arguments = {
@@ -65,7 +65,7 @@ def test_auto_cg_policy_enforces_cooldown_dedup_and_manual_bypass(
 def test_auto_cg_policy_requires_scene_key_and_isolates_sessions(
     tmp_path: Path,
 ) -> None:
-    kv_store = PluginKVStore(tmp_path / ".kv.json")
+    kv_store = FakeKV()
     policy = AutoCgPolicy(kv_store)
 
     policy.advance_turn("role:mira")
@@ -73,6 +73,7 @@ def test_auto_cg_policy_requires_scene_key_and_isolates_sessions(
     policy.advance_turn("role:yuki")
 
     sessions = kv_store.get("auto_cg_sessions")
+    assert isinstance(sessions, dict)
     assert sessions["role:mira"] == {"turn": 2}
     assert sessions["role:yuki"] == {"turn": 1}
     missing_key = policy.guard("role:mira", {"intent": "scene_cg"})
@@ -81,7 +82,7 @@ def test_auto_cg_policy_requires_scene_key_and_isolates_sessions(
 
 
 def test_auto_cg_policy_reports_current_cooldown(tmp_path: Path) -> None:
-    policy = AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json"))
+    policy = AutoCgPolicy(FakeKV())
     session_key = "role:mira"
     policy.advance_turn(session_key)
     policy.record_success(session_key, "rain")
@@ -97,7 +98,7 @@ def test_auto_cg_policy_reports_current_cooldown(tmp_path: Path) -> None:
 def test_auto_cg_policy_allows_new_visual_beat_after_cooldown(
     tmp_path: Path,
 ) -> None:
-    policy = AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json"))
+    policy = AutoCgPolicy(FakeKV())
     session_key = "role:mira"
     policy.advance_turn(session_key)
     policy.record_success(session_key, "bedroom-waiting")
@@ -129,7 +130,7 @@ def test_auto_cg_policy_allows_new_visual_beat_after_cooldown(
 
 
 def test_auto_cg_third_person_terms_are_idempotent(tmp_path: Path) -> None:
-    policy = AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json"))
+    policy = AutoCgPolicy(FakeKV())
     prepared = policy.guard(
         "role:mira",
         {

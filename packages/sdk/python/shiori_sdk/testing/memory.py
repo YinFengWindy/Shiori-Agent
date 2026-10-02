@@ -3,18 +3,10 @@
 import inspect
 import sqlite3
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 
 from shiori_sdk.memory.build import BuildResource
 from shiori_sdk.storage import plugin_data_dir
-
-
-@dataclass
-class FakeModelResponse:
-    """Text response for model-boundary tests."""
-
-    content: str | None
 
 
 class FakeMemoryRoles:

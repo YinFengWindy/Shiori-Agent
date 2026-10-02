@@ -5,9 +5,13 @@ import json
 import logging
 from typing import Any, Protocol, cast
 
-from bus.events_lifecycle import SceneObservationCommitted
-from core.roles.store import RoleStore
-from core.common.runtime_tasks import create_runtime_task
+from shiori_sdk.role_events import SceneObservationCommitted
+from shiori_sdk.roles import Roles
+from shiori_sdk.extensions import BackgroundTasks
+from shiori_sdk.sessions import PluginSessions
+from shiori_sdk.models import ChatProvider
+from shiori_sdk.tools import Tool
+
 
 from .auto_cg import AutoCgPolicy
 from .role_state import NovelAIRoleState
@@ -28,7 +32,19 @@ class _ToolLookup(Protocol):
     former directly, ``plugin.py`` passes the latter.
     """
 
-    def get_tool(self, name: str) -> Any: ...
+    def get_tool(self, name: str) -> Tool | None: ...
+
+
+class ScenePromptProvider(Protocol):
+    """Plugin prompt conversion seam, operating on the same injected model API."""
+
+    async def __call__(
+        self,
+        provider: ChatProvider | None,
+        *,
+        model: str,
+        event: SceneObservationCommitted,
+    ) -> dict[str, str]: ...
 
 
 class AutoCgController:
@@ -37,15 +53,17 @@ class AutoCgController:
     def __init__(
         self,
         *,
-        role_store: RoleStore,
+        role_store: Roles,
         policy: AutoCgPolicy,
-        session_manager: Any,
+        session_manager: PluginSessions,
+        background: BackgroundTasks,
         generate_tool: GenerateImageTool,
         tool_registry: _ToolLookup,
-        light_provider: Any = None,
+        light_provider: ChatProvider | None = None,
         light_model: str = "",
-        prompt_provider: Any = prepare_scene_prompt,
+        prompt_provider: ScenePromptProvider = prepare_scene_prompt,
     ) -> None:
+        self._background = background
         self._light_provider = light_provider
         self._light_model = light_model
         self._prompt_provider = prompt_provider
@@ -85,7 +103,7 @@ class AutoCgController:
         required = event.transition in _REQUIRED_TRANSITIONS
         if not required and self._policy.cooldown_remaining(event.session_key) > 0:
             return
-        task = create_runtime_task(
+        task = self._background.spawn_runtime(
             self._run(event, role_id=role_id, bypass_cooldown=required),
             name=f"novelai_auto_cg:{event.session_key}",
         )

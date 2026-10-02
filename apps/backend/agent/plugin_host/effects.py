@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+from collections.abc import Callable
 from shiori_sdk.runtime import Dispose as Dispose
 from dataclasses import dataclass
 
@@ -48,10 +49,21 @@ class EffectScope:
         if self._closing:
             raise RuntimeError(f"EffectScope({self._owner}) 已处置，拒绝登记: {label}")
 
-    def add(self, label: str, dispose: Dispose) -> None:
-        """Register a resource disposer, run in LIFO order after event unsubscription."""
+    def add(self, label: str, dispose: Dispose) -> Callable[[], None]:
+        """Register LIFO cleanup and return an idempotent ownership-release handle."""
         self.ensure_active(label)
-        self._effects.append(Effect(label=label, dispose=dispose))
+        effect = Effect(label=label, dispose=dispose)
+        self._effects.append(effect)
+
+        def release() -> None:
+            # Match this registration by identity, including duplicate labels or
+            # callbacks. Completion during cleanup must not remove another owner.
+            for index, registered in enumerate(self._effects):
+                if registered is effect:
+                    del self._effects[index]
+                    break
+
+        return release
 
     def add_subscription(self, label: str, dispose: Dispose) -> None:
         """Host-only subscription registration; no plugin-defined cleanup priorities."""

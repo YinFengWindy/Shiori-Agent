@@ -438,3 +438,42 @@ def test_sdk_selection_does_not_add_default_memory_or_host(repository: Path) -> 
     assert runner.plugin_dependencies(
         {"citation"}, extras=frozenset({"test"}), include_host=False
     ) == {"citation"}
+
+
+def test_each_plugin_and_async_probe_own_separate_pytest_temp_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repository = tmp_path / "repository"
+    monkeypatch.setattr(runner, "REPOSITORY", repository)
+    output = tmp_path / "evidence"
+    temporary_roots: list[Path] = []
+
+    def run(command: list[str], *, cwd: Path, log: Path, expected: int = 0) -> str:
+        if "pytest" not in command:
+            return ""
+        # Both subprocesses must bypass pytest's shared numbered-directory
+        # cleanup, and a probe must not clean its suite's retained evidence.
+        assert "--basetemp" in command
+        temporary = Path(command[command.index("--basetemp") + 1])
+        assert temporary.parent == cwd
+        assert not temporary.is_relative_to(repository)
+        temporary_roots.append(temporary)
+        if expected == 1:
+            (cwd / "awaited.txt").write_text("awaited", encoding="utf-8")
+            return "1 failed: expected async failure probe"
+        return "1 passed"
+
+    monkeypatch.setattr(runner, "run", run)
+    for plugin_id in ("first", "second"):
+        _plugin(repository, plugin_id)
+        runner.verify_plugin(
+            plugin_id,
+            artifact_root=output,
+            wheelhouse=output / "wheels",
+            source=output / "sources" / plugin_id,
+            host=None,
+            kit=None,
+            wheel=output / "wheels" / f"{plugin_id}.whl",
+        )
+
+    assert len(temporary_roots) == len(set(temporary_roots)) == 4

@@ -92,17 +92,18 @@ async def setup(ctx):
 | `channels` / `bot_commands` | 贡献 manifest 已声明的渠道（见[渠道声明](#渠道声明)）及机器人命令 |
 | `avatars` | `ctx.avatars.refresh(kind, channel, id, fetch)`：到期时在后台用插件的下载把发送者或群的平台头像交给宿主缓存，`fetch` 返回 None 即记为无头像；卸载取消在途获取（见[渠道插件](channel-plugins.md)） |
 | `rpc` | 注册 `plugin.<id>.<method>`，发送同命名空间事件 |
-| `background` | `ctx.background.spawn(coro, name=...)`；卸载取消并等待任务 |
+| `background` | `spawn` 管理作用域任务；`spawn_runtime` 另保留当前 runtime lease，卸载取消并等待任务 |
 | `kv` | 工作区 `plugin-data/<id>/kv.json` 中的私有状态 |
 | `config` | 本代插件配置快照 |
 | `dependencies` | 读取已声明提供方的本代公开 API |
 | `runtime` | 本代是否重载、前代是否活动，以及收尾任务登记 |
-| `workspace` / `role_store` / `session_manager` / `memory_engine` | 获取宿主拥有的实际服务 |
-| `scene_observations` / `role_runtime_registry` | 场景观察需求与角色运行时协作 |
+| `workspace` / `roles` / `sessions` | 工作区、角色快照/素材、会话元数据/素材替换；不导出完整存储聚合 |
+| `scene_observations` / `models` | 场景观察需求与按角色持有的 chat/vision 模型快照 |
+| `http` / `resources` / `processes` / `tool_turn` | 注入 HTTP、资源路径、MCP/进程所有权和当前工具回合 |
 
 外部上下文（群聊、陌生私聊）里，发送者不是已绑定用户的回合只能使用声明过外部可用的工具：`ctx.tools.register(tool, ..., external_allowed=True)`。默认不声明，即这类回合看不到、也调不动该工具；已绑定用户本人的消息不受限。只给陌生人触发也安全的工具声明，例如 NovelAI 的 `generate_image`。MCP 工具不能声明。规则见[运行时契约](plugin-runtime-contract.md#tools-in-external-contexts-489)。
 
-能力名的完整权威清单位于 `agent/plugin_host/manifest.py`。不要自己构造另一份 RoleStore 来写同一份角色文件，应获取宿主共享的 `role_store`。能力是架构边界，不是 Python 进程内安全沙箱。
+能力名的完整权威清单位于 `agent/plugin_host/manifest.py`。不要自己构造另一份 RoleStore 来写同一份角色文件，应获取宿主共享的 `roles` 窄接口；未迁移的渠道和桌宠仍暂用旧能力。能力是架构边界，不是 Python 进程内安全沙箱。
 
 其它外部资源用 `ctx.effect("label", disposer)` 登记清理；disposer 可同步或异步。Python 插件作用域分两段处置：先停止接收新事件并撤销所有 `ctx.events.on` 订阅，再按登记的逆序（LIFO）清理其余 effect，包括自定义 disposer、后台任务与贡献。订阅和资源的登记先后不影响退订优先规则；其它资源之间仍需按依赖顺序登记，例如先登记 writer，再登记需要向 writer 最终 flush 的采集器，使采集器先清理。
 
@@ -307,5 +308,5 @@ Story 播放偏好保留为设备 renderer 的 `localStorage["shiori.story-prefe
 `runtime_api: ">=3.0.0 <4.0.0"`。SDK 主文档位于
 [packages/sdk/README.md](../../packages/sdk/README.md)，包括 wheel/tarball 构建、
 公开协议和 `shiori-sdk[testing]` 的无宿主测试入口。
-citation/context_pressure 已完成迁移。尚未公开的能力按对应迁移票进入 SDK；
+citation/context_pressure、默认记忆、钩子/观测/状态命令和角色/生成/屏幕/浏览器/电脑工具已完成迁移。尚未公开的能力按对应迁移票进入 SDK；
 渠道等未迁移插件暂时保留现有 testkit 与真实宿主集成测试，不把宿主服务复制进 SDK。

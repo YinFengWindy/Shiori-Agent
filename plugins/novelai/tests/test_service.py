@@ -1,4 +1,5 @@
 from __future__ import annotations
+from shiori_sdk.testing.memory import FakeMemoryStorage
 
 import base64
 import json
@@ -22,7 +23,7 @@ from plugins.novelai.backend.models import (
 from plugins.novelai.backend.prompt_tags import PromptTagStore
 from plugins.novelai.backend.service import NovelAIService
 from plugins.novelai.backend.store import NovelAIStore
-from core.roles.store import RoleStore
+from shiori_sdk.testing.roles import FakeRoles
 
 _TINY_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sXkD1gAAAAASUVORK5CYII="
@@ -38,9 +39,12 @@ async def test_regenerate_reuses_exact_request_parameters_with_fresh_seed(
     service = NovelAIService(
         settings=settings,
         client=client,
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
+        prompt_tag_store=PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
     )
     source = NovelAIGenerationSource(
         record=GeneratedImageRecord(
@@ -147,9 +151,12 @@ async def test_service_persists_generated_image_and_metadata(tmp_path: Path) -> 
     service = NovelAIService(
         settings=settings,
         client=_FakeClient(_json_response(), settings),
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
+        prompt_tag_store=PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
     )
 
     result = await service.generate(
@@ -200,9 +207,12 @@ async def test_service_rejects_non_english_tags_before_external_call(
     service = NovelAIService(
         settings=settings,
         client=client,
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
+        prompt_tag_store=PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
     )
 
     with pytest.raises(ValueError, match=rf"{field_name} 仅支持英文 NovelAI tags"):
@@ -219,7 +229,7 @@ async def test_service_rejects_non_english_tags_before_external_call(
 @pytest.mark.asyncio
 async def test_service_expands_prompts_from_tag_knowledge_base(tmp_path: Path) -> None:
     settings = NovelAISettings(token="novel-token")
-    prompt_tags = PromptTagStore(tmp_path)
+    prompt_tags = PromptTagStore(tmp_path, storage=FakeMemoryStorage())
     prompt_tags.upsert(
         {
             "id": "rain",
@@ -235,8 +245,10 @@ async def test_service_expands_prompts_from_tag_knowledge_base(tmp_path: Path) -
     service = NovelAIService(
         settings=settings,
         client=_FakeClient(_json_response(), settings),
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
         prompt_tag_store=prompt_tags,
     )
@@ -260,8 +272,10 @@ async def test_service_does_not_match_prompt_tags_without_source_text(
     service = NovelAIService(
         settings=settings,
         client=_FakeClient(_json_response(), settings),
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
         prompt_tag_store=prompt_tags,
     )
@@ -282,9 +296,12 @@ async def test_service_img2img_requires_base_image_path(tmp_path: Path) -> None:
     service = NovelAIService(
         settings=settings,
         client=_FakeClient(_json_response(), settings),
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
+        prompt_tag_store=PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
     )
 
     with pytest.raises(ValueError, match="base_image_path"):
@@ -303,9 +320,12 @@ async def test_service_img2img_uses_custom_strength_and_noise(tmp_path: Path) ->
     service = NovelAIService(
         settings=settings,
         client=client,
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
+        prompt_tag_store=PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
     )
     base_image = tmp_path / "base.png"
     base_image.write_bytes(_TINY_PNG)
@@ -328,7 +348,7 @@ async def test_service_img2img_uses_custom_strength_and_noise(tmp_path: Path) ->
 
 @pytest.mark.asyncio
 async def test_service_auto_writeback_updates_role_assets(tmp_path: Path) -> None:
-    role_store = RoleStore(tmp_path)
+    role_store = FakeRoles(tmp_path)
     _ = role_store.create_role(
         role_id="mira",
         name="Mira",
@@ -341,9 +361,12 @@ async def test_service_auto_writeback_updates_role_assets(tmp_path: Path) -> Non
     service = NovelAIService(
         settings=settings,
         client=_FakeClient(_json_response(), settings),
-        store=NovelAIStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
         role_store=role_store,
         workspace=tmp_path,
+        prompt_tag_store=PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
     )
 
     result = await service.generate(
@@ -380,9 +403,12 @@ async def test_service_rewrites_v45_subscription_error(tmp_path: Path) -> None:
     service = NovelAIService(
         settings=settings,
         client=client,
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
+        prompt_tag_store=PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
     )
 
     with pytest.raises(ValueError, match="诊断信息：subscription.active=False"):
@@ -404,9 +430,12 @@ async def test_service_uses_nsfw_model_when_switch_enabled(tmp_path: Path) -> No
     service = NovelAIService(
         settings=settings,
         client=client,
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
+        prompt_tag_store=PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
     )
 
     _ = await service.generate(
@@ -428,9 +457,12 @@ async def test_service_refuses_unexpanded_env_placeholder_before_any_request(
     service = NovelAIService(
         settings=settings,
         client=client,
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
+        prompt_tag_store=PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
     )
 
     with pytest.raises(NovelAINotConfiguredError, match="NOVELAI_TOKEN 未设置"):
@@ -454,9 +486,12 @@ async def test_service_upstream_error_carries_status_and_scrubs_token(
     service = NovelAIService(
         settings=settings,
         client=_FakeClient(response, settings),
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
+        prompt_tag_store=PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
     )
 
     with pytest.raises(NovelAIUpstreamError) as caught:
@@ -492,9 +527,12 @@ def test_unreadable_success_response_is_an_upstream_failure(
     service = NovelAIService(
         settings=settings,
         client=_FakeClient(response, settings),
-        store=NovelAIStore(tmp_path),
-        role_store=RoleStore(tmp_path),
+        store=NovelAIStore(
+            tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+        ),
+        role_store=FakeRoles(tmp_path),
         workspace=tmp_path,
+        prompt_tag_store=PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
     )
     with pytest.raises(NovelAIResponseError) as caught:
         service._extract_primary_image(response)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.common.media import detect_image_mime_from_header
+from shiori_sdk.media import detect_image_mime_from_header
 
 
 @pytest.mark.parametrize(

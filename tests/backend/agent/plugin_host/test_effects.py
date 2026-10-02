@@ -8,6 +8,24 @@ from agent.plugin_host.effects import EffectScope
 
 
 @pytest.mark.asyncio
+async def test_releasing_one_registration_preserves_an_identical_sibling():
+    scope = EffectScope("duplicate-registration")
+    disposed: list[str] = []
+
+    def dispose() -> None:
+        disposed.append("closed")
+
+    release_first = scope.add("same", dispose)
+    release_second = scope.add("same", dispose)
+    release_first()
+    release_first()
+    assert scope.labels == ["same"]
+    assert await scope.dispose_all() == []
+    release_second()
+    assert disposed == ["closed"]
+
+
+@pytest.mark.asyncio
 async def test_dispose_all_runs_in_reverse_order():
     scope = EffectScope("demo")
     order: list[str] = []

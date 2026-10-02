@@ -4,14 +4,14 @@ from typing import Any
 
 import httpx
 
-from core.net.http import HttpRequester
+from shiori_sdk.http import HttpClient
 from .models import NovelAISettings
 
 
 class NovelAIClient:
     """Thin HTTP client responsible for calling the upstream NovelAI API."""
 
-    def __init__(self, requester: HttpRequester, settings: NovelAISettings) -> None:
+    def __init__(self, requester: HttpClient, settings: NovelAISettings) -> None:
         self._requester = requester
         self._settings = settings
 

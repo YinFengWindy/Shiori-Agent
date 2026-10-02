@@ -1,7 +1,6 @@
 """Owns the on-demand screen tool and its in-flight analyses."""
 
-from agent.plugin_host.runtime_context import PluginRuntimeContext
-from core.roles import RoleRepository
+from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
 
 from .capture import PrimaryScreenCapture
 from .model import ObservationModelAdapter
@@ -10,15 +9,15 @@ from .tool import ObserveScreenTool
 
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Registers role-bound screen perception independently of presentation plugins."""
-    if ctx.role_store is None or ctx.role_runtime_registry is None:
+    if ctx.roles is None or ctx.models is None:
         raise RuntimeError("屏幕感知插件需要角色存储与模型运行时")
     tool = ObserveScreenTool(
         capture=PrimaryScreenCapture(),
         analyzer=ObservationModelAdapter(
-            roles=RoleRepository(ctx.role_store),
+            roles=ctx.roles,
             provider=None,
             model="",
-            role_runtime_registry=ctx.role_runtime_registry,
+            models=ctx.models,
         ),
     )
     ctx.tools.register(

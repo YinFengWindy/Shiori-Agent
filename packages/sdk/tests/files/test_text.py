@@ -2,7 +2,7 @@
 
 from pathlib import Path
 import pytest
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.files.text import atomic_save_text
 
 
 def test_atomic_save_creates_utf8_file(tmp_path):

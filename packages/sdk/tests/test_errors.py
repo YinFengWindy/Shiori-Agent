@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.common.error_summary import summarize_exception_for_user
+from shiori_sdk.errors import summarize_exception_for_user
 
 
 class ProviderError(Exception):

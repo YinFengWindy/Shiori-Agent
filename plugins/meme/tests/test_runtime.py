@@ -78,7 +78,9 @@ def test_load_common_emojis_prefers_packaged_resource(
     )
     monkeypatch.setattr(sys, "_MEIPASS", str(packaged_root), raising=False)
 
-    assert load_common_emojis(workspace) == {"heart": "<packaged-heart>"}
+    assert load_common_emojis((packaged_root / "common_emojis.json",)) == {
+        "heart": "<packaged-heart>"
+    }
 
 
 # ── MemeCatalog: basic loading ─────────────────────────────────────────────────
@@ -356,4 +358,4 @@ def test_load_common_emojis_prefers_workspace_override(tmp_path: Path) -> None:
         '[{"name": "heart", "value": "workspace override"}]', encoding="utf-8"
     )
 
-    assert load_common_emojis(tmp_path) == {"heart": "workspace override"}
+    assert load_common_emojis((asset,)) == {"heart": "workspace override"}

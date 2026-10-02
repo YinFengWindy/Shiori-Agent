@@ -1,11 +1,13 @@
 """Concurrent turns cannot interleave desktop input or reuse cancelled generations."""
 
+from shiori_sdk.testing.processes import FakeProcesses
+
 import asyncio
 
 import pytest
 
-from agent.mcp.client import McpToolError
-from agent.tools.turn_scope import current_tool_turn, tool_turn
+from shiori_sdk.mcp import McpToolError
+from shiori_sdk.testing.processes import current_tool_turn, tool_turn
 from plugins.computer_use.backend.config import ComputerUseConfig
 from plugins.computer_use.backend.desktop import ComputerDesktop
 
@@ -59,7 +61,16 @@ def desktop(tmp_path, monkeypatch):
         return session
 
     monkeypatch.setattr("plugins.computer_use.backend.desktop.DesktopSession", factory)
-    return ComputerDesktop(tmp_path, ComputerUseConfig()), sessions
+    return (
+        ComputerDesktop(
+            tmp_path,
+            ComputerUseConfig(),
+            processes=FakeProcesses(),
+            resources=tmp_path,
+            current_turn=current_tool_turn,
+        ),
+        sessions,
+    )
 
 
 async def test_ownership_persists_between_calls_and_roles(desktop):

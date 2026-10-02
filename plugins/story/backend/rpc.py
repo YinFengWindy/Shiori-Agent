@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from core.roles import RoleStore, RoleRuntimeRegistry
-from core.common.runtime_tasks import create_runtime_task
+from shiori_sdk.roles import Roles
+from shiori_sdk.models import RoleModels
+from shiori_sdk.extensions import BackgroundTasks, PrivateStorage
+from plugins.novelai.backend.api import ImageGenerationAPI
 
 
 from .catalog import StoryCatalog
@@ -48,17 +50,20 @@ class StorySimulationHandler:
         self,
         *,
         workspace: Path,
-        role_store: RoleStore,
+        role_store: Roles,
+        background: BackgroundTasks,
+        storage: PrivateStorage,
         director: StoryDirector | None = None,
-        role_runtime_registry: RoleRuntimeRegistry | None = None,
-        image_tool: Any | None = None,
+        models: RoleModels | None = None,
+        image_tool: ImageGenerationAPI | None = None,
     ) -> None:
         self._roles = role_store
         self._workspace = workspace
-        self._catalog = StoryCatalog(workspace)
+        self._catalog = StoryCatalog(workspace, storage=storage)
+        self._background = background
         self._repositories: dict[str, StoryRepository] = {}
         self._director = director
-        self._role_runtime_registry = role_runtime_registry
+        self._models = models
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._resource_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
         self._image_generator = StoryImageGenerator(image_tool)
@@ -527,7 +532,7 @@ class StorySimulationHandler:
         existing = self._resource_tasks.get(resource_id)
         if existing is not None and not existing.done():
             return
-        task = create_runtime_task(
+        task = self._background.spawn_runtime(
             service.generate_resource(resource, emit_event),
             name=f"story-resource:{resource_id}",
         )
@@ -548,7 +553,7 @@ class StorySimulationHandler:
         existing = self._tasks.get(turn_id)
         if existing is not None and not existing.done():
             return
-        task = create_runtime_task(
+        task = self._background.spawn_runtime(
             self._generate_turn(service, turn, emit_event),
             name=f"story-director:{turn_id}",
         )
@@ -572,7 +577,7 @@ class StorySimulationHandler:
                 schedule_visual_resource=self._schedule_story_cg,
             )
             return
-        if self._role_runtime_registry is None:
+        if self._models is None:
             await self._fail_generation(
                 service,
                 turn,
@@ -592,8 +597,7 @@ class StorySimulationHandler:
             )
             return
         try:
-            runtime = await self._role_runtime_registry.get(role_id)
-            with runtime.activate_model("chat") as snapshot:
+            async with self._models.activate(role_id, "chat") as snapshot:
                 runtime_service = self._service(
                     service.repository,
                     director=ProviderStoryDirector(

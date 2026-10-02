@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import inspect
+import weakref
 
 import pytest
 
@@ -26,6 +28,102 @@ from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
 from desktop_bridge.method_policy import Concurrency, Handler
+
+
+@pytest.mark.asyncio
+async def test_runtime_background_rejects_closed_scope_and_closes_coroutine():
+    scope = EffectScope("closed")
+    background = BackgroundCapability(scope, "closed")
+    await scope.dispose_all()
+
+    async def work() -> None:
+        raise AssertionError("A retired plugin must not start background work")
+
+    operation = work()
+    with pytest.raises(RuntimeError):
+        background.spawn_runtime(operation, name="late")
+    assert inspect.getcoroutinestate(operation) == inspect.CORO_CLOSED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("runtime", [False, True])
+@pytest.mark.parametrize("fail", [False, True])
+async def test_finished_background_tasks_release_results_and_tracebacks(runtime, fail):
+    scope = EffectScope("task-retention")
+    capability = BackgroundCapability(scope, "task-retention")
+    spawn = capability.spawn_runtime if runtime else capability.spawn
+
+    class Payload:
+        """A result, or a local retained by a failed task's traceback."""
+
+    payload_refs: list[weakref.ReferenceType[Payload]] = []
+
+    async def work() -> Payload:
+        payload = Payload()
+        payload_refs.append(weakref.ref(payload))
+        if fail:
+            raise ValueError("controlled task failure")
+        return payload
+
+    tasks = [spawn(work(), name=f"work-{index}") for index in range(100)]
+    task_refs = [weakref.ref(task) for task in tasks]
+    await asyncio.gather(*tasks, return_exceptions=True)
+    del tasks
+    # Release the loop's completion callbacks and the awaited gather future.
+    await asyncio.sleep(0)
+    gc.collect()
+
+    assert all(reference() is None for reference in task_refs)
+    assert all(reference() is None for reference in payload_refs)
+    assert scope.labels == []
+    assert await scope.dispose_all() == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("runtime", [False, True])
+async def test_background_cleanup_preserves_interleaved_resource_order(runtime):
+    scope = EffectScope("interleaved")
+    capability = BackgroundCapability(scope, "interleaved")
+    spawn = capability.spawn_runtime if runtime else capability.spawn
+    stopped: list[str] = []
+
+    async def worker(name: str, started: asyncio.Event) -> None:
+        started.set()
+        try:
+            await asyncio.Future()
+        finally:
+            await asyncio.sleep(0)
+            stopped.append(f"task:{name}")
+
+    for name in ("first", "second"):
+        scope.add(
+            f"resource:{name}", lambda name=name: stopped.append(f"resource:{name}")
+        )
+        started = asyncio.Event()
+        spawn(worker(name, started), name=name)
+        await started.wait()
+
+    assert await scope.dispose_all() == []
+    assert stopped == ["task:second", "resource:second", "task:first", "resource:first"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_background_reports_failure_raised_during_cleanup():
+    scope = EffectScope("cleanup-failure")
+    capability = BackgroundCapability(scope, "cleanup-failure")
+    started = asyncio.Event()
+    failure = ValueError("resource flush failed")
+
+    async def worker() -> None:
+        started.set()
+        try:
+            await asyncio.Future()
+        finally:
+            raise failure
+
+    capability.spawn_runtime(worker(), name="worker")
+    await started.wait()
+    assert await scope.dispose_all() == [failure]
 
 
 class _FakeRegistry:
@@ -413,7 +511,8 @@ async def test_rpc_events_report_delivery_and_reject_disposed_producers():
 
 
 @pytest.mark.asyncio
-async def test_background_task_cancelled_and_awaited_on_dispose():
+@pytest.mark.parametrize("runtime", [False, True])
+async def test_background_task_cancelled_and_awaited_on_dispose(runtime):
     scope = EffectScope("demo")
     started = asyncio.Event()
     cleaned: list[str] = []
@@ -426,10 +525,12 @@ async def test_background_task_cancelled_and_awaited_on_dispose():
             cleaned.append("cancelled")
             raise
 
-    task = BackgroundCapability(scope, "demo_plugin").spawn(worker(), name="worker")
+    capability = BackgroundCapability(scope, "demo_plugin")
+    spawn = capability.spawn_runtime if runtime else capability.spawn
+    task = spawn(worker(), name="worker")
     await started.wait()
     assert not task.done()
-    assert task.get_name() == "plugin:demo_plugin:worker"
+    assert task.get_name() == ("worker" if runtime else "plugin:demo_plugin:worker")
 
     _ = await scope.dispose_all()
     # dispose 必须等到任务真正退出，而不是只发出取消

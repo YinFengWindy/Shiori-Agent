@@ -1,5 +1,7 @@
 """Session manager cancellation preserves ownership, including calls queued on a lock."""
 
+from shiori_sdk.testing.processes import FakeProcesses
+
 import asyncio
 from unittest.mock import AsyncMock
 
@@ -22,6 +24,8 @@ def manager(tmp_path, monkeypatch):
         tmp_path,
         BrowserUseConfig(),
         runtime=BrowserRuntime(tmp_path / "binary", tmp_path / "chrome"),
+        processes=FakeProcesses(),
+        resources=tmp_path,
     )
 
 
@@ -106,7 +110,7 @@ async def test_close_reaps_all_roles_even_if_one_fails(manager):
 async def test_close_during_startup_cancels_old_actions_before_releasing_owner(
     tmp_path, monkeypatch, phase
 ):
-    from agent.mcp.client import McpClient
+    from shiori_sdk.testing.processes import FakeMcpSession
     from plugins.browser_use.backend.daemon import BrowserDaemon
     from plugins.browser_use.backend.profile import ProfileLease
 
@@ -129,13 +133,15 @@ async def test_close_during_startup_cancels_old_actions_before_releasing_owner(
     action = AsyncMock(return_value="action AFTER close")
     monkeypatch.setattr(BrowserDaemon, "start", daemon_start)
     monkeypatch.setattr(BrowserDaemon, "close", daemon_close)
-    monkeypatch.setattr(McpClient, "connect", connect)
-    monkeypatch.setattr(McpClient, "disconnect", disconnect)
-    monkeypatch.setattr(McpClient, "call", action)
+    monkeypatch.setattr(FakeMcpSession, "connect", connect)
+    monkeypatch.setattr(FakeMcpSession, "disconnect", disconnect)
+    monkeypatch.setattr(FakeMcpSession, "call", action)
     manager = BrowserSessions(
         tmp_path,
         BrowserUseConfig(),
         runtime=BrowserRuntime(tmp_path / "binary", tmp_path / "chrome"),
+        processes=FakeProcesses(),
+        resources=tmp_path,
     )
     opening = asyncio.create_task(manager.call("role", "agent_browser_open", {}))
     await started.wait()
@@ -177,7 +183,8 @@ async def test_close_during_startup_cancels_old_actions_before_releasing_owner(
 async def test_mcp_initialization_error_retires_generation_before_retry(
     tmp_path, monkeypatch
 ):
-    from agent.mcp.client import McpClient, McpToolError
+    from shiori_sdk.testing.processes import FakeMcpSession
+    from shiori_sdk.mcp import McpToolError
     from plugins.browser_use.backend.daemon import BrowserDaemon
 
     error = McpToolError(
@@ -187,15 +194,17 @@ async def test_mcp_initialization_error_retires_generation_before_retry(
     daemon_close = AsyncMock()
     disconnect = AsyncMock()
     monkeypatch.setattr(BrowserDaemon, "close", daemon_close)
-    monkeypatch.setattr(McpClient, "connect", AsyncMock(side_effect=[error, []]))
+    monkeypatch.setattr(FakeMcpSession, "connect", AsyncMock(side_effect=[error, []]))
     monkeypatch.setattr(
-        McpClient, "call", AsyncMock(return_value="new generation opened")
+        FakeMcpSession, "call", AsyncMock(return_value="new generation opened")
     )
-    monkeypatch.setattr(McpClient, "disconnect", disconnect)
+    monkeypatch.setattr(FakeMcpSession, "disconnect", disconnect)
     manager = BrowserSessions(
         tmp_path,
         BrowserUseConfig(),
         runtime=BrowserRuntime(tmp_path / "binary", tmp_path / "chrome"),
+        processes=FakeProcesses(),
+        resources=tmp_path,
     )
     with pytest.raises(McpToolError) as raised:
         await manager.call("role", "agent_browser_open", {})
@@ -212,7 +221,7 @@ async def test_mcp_initialization_error_retires_generation_before_retry(
 async def test_cancelled_close_is_owned_until_plugin_unload_finishes(
     tmp_path, monkeypatch
 ):
-    from agent.mcp.client import McpClient
+    from shiori_sdk.testing.processes import FakeMcpSession
     from plugins.browser_use.backend.daemon import BrowserDaemon
 
     close_started = asyncio.Event()
@@ -229,13 +238,15 @@ async def test_cancelled_close_is_owned_until_plugin_unload_finishes(
     daemon_close = AsyncMock()
     disconnect = AsyncMock()
     monkeypatch.setattr(BrowserDaemon, "close", daemon_close)
-    monkeypatch.setattr(McpClient, "connect", AsyncMock())
-    monkeypatch.setattr(McpClient, "call", AsyncMock(side_effect=remote_call))
-    monkeypatch.setattr(McpClient, "disconnect", disconnect)
+    monkeypatch.setattr(FakeMcpSession, "connect", AsyncMock())
+    monkeypatch.setattr(FakeMcpSession, "call", AsyncMock(side_effect=remote_call))
+    monkeypatch.setattr(FakeMcpSession, "disconnect", disconnect)
     manager = BrowserSessions(
         tmp_path,
         BrowserUseConfig(),
         runtime=BrowserRuntime(tmp_path / "binary", tmp_path / "chrome"),
+        processes=FakeProcesses(),
+        resources=tmp_path,
     )
     await manager.call("role", "agent_browser_open", {})
     session = manager._sessions["role"]
@@ -299,7 +310,7 @@ async def test_abandoned_close_failure_remains_owned_until_unload_observes_it(ma
 
 
 async def test_closing_one_role_does_not_serialize_other_roles(tmp_path, monkeypatch):
-    from agent.mcp.client import McpClient
+    from shiori_sdk.testing.processes import FakeMcpSession
     from plugins.browser_use.backend.daemon import BrowserDaemon
 
     blocked = asyncio.Event()
@@ -317,15 +328,17 @@ async def test_closing_one_role_does_not_serialize_other_roles(tmp_path, monkeyp
 
     monkeypatch.setattr(BrowserDaemon, "start", start)
     monkeypatch.setattr(BrowserDaemon, "close", close)
-    monkeypatch.setattr(McpClient, "connect", AsyncMock())
+    monkeypatch.setattr(FakeMcpSession, "connect", AsyncMock())
     monkeypatch.setattr(
-        McpClient, "call", AsyncMock(return_value="other role succeeds")
+        FakeMcpSession, "call", AsyncMock(return_value="other role succeeds")
     )
-    monkeypatch.setattr(McpClient, "disconnect", AsyncMock())
+    monkeypatch.setattr(FakeMcpSession, "disconnect", AsyncMock())
     manager = BrowserSessions(
         tmp_path,
         BrowserUseConfig(),
         runtime=BrowserRuntime(tmp_path / "binary", tmp_path / "chrome"),
+        processes=FakeProcesses(),
+        resources=tmp_path,
     )
     first = asyncio.create_task(manager.call("first", "agent_browser_open", {}))
     await blocked.wait()

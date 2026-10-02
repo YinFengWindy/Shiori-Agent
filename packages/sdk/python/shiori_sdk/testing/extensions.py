@@ -73,6 +73,12 @@ class FakeBackground:
         self.context.effect(f"background:{name}", cancel)
         return task
 
+    def spawn_runtime[T](
+        self, coro: Coroutine[object, object, T], *, name: str
+    ) -> asyncio.Task[T]:
+        """Exercise real scheduling without a host generation lease."""
+        return self.spawn(coro, name=name)
+
 
 class FakeExtensionContext(FakePluginContext):
     """Inject only SDK fakes; no host install, config, database or session services."""

@@ -37,6 +37,12 @@ class BackgroundTasks(Protocol):
         self, coro: Coroutine[object, object, T], *, name: str
     ) -> asyncio.Task[T]: ...
 
+    def spawn_runtime[T](
+        self, coro: Coroutine[object, object, T], *, name: str
+    ) -> asyncio.Task[T]:
+        """Retain the calling runtime lease until task completion and cleanup."""
+        ...
+
 
 class PrivateStorage(Protocol):
     """Delegate migration to the host owner and use its returned destination.

@@ -4,6 +4,9 @@ display_name: Computer Use
 version: "0.1.0"
 desc: Windows 窗口操作与截图
 capabilities:
+  - tool_turn
+  - resources
+  - processes
   - tools
   - workspace
   - config

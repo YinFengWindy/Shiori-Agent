@@ -33,6 +33,16 @@ from shiori_sdk.runtime import (
 )
 
 
+from shiori_sdk.plugin_services import ServicePluginContext, RuntimeLifecycle
+from shiori_sdk.roles import Roles, SceneObservations
+from shiori_sdk.models import ChatProvider, RoleModels
+from shiori_sdk.sessions import PluginSessions
+from shiori_sdk.tools import ToolsCapability as SdkToolsCapability
+from agent.plugin_host.kv import PluginKVStore
+from shiori_sdk.http import HttpClient
+from shiori_sdk.processes import Processes, Resources, ToolTurn
+
+
 class PluginSetupContext:
     """v2 插件在 setup(ctx) 中拿到的唯一句柄。
 
@@ -63,6 +73,19 @@ class PluginSetupContext:
         diagnostics: Diagnostics | None = None,
         session_manager: SessionManager | None = None,
         memory_engine: MemoryEngine | None = None,
+        roles: Roles | None = None,
+        models: RoleModels | None = None,
+        sessions: PluginSessions | None = None,
+        tools: SdkToolsCapability | None = None,
+        kv: PluginKVStore | None = None,
+        http: HttpClient | None = None,
+        resources: Resources | None = None,
+        processes: Processes | None = None,
+        tool_turn: Callable[[], ToolTurn] | None = None,
+        runtime: RuntimeLifecycle | None = None,
+        scene_observations: SceneObservations | None = None,
+        light_provider: ChatProvider | None = None,
+        light_model: str | None = None,
     ) -> None:
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
@@ -84,6 +107,19 @@ class PluginSetupContext:
         self._diagnostics = diagnostics
         self._session_manager = session_manager
         self._memory_engine = memory_engine
+        self._roles = roles
+        self._models = models
+        self._sessions = sessions
+        self._tools = tools
+        self._kv = kv
+        self._http = http
+        self._resources = resources
+        self._processes = processes
+        self._tool_turn = tool_turn
+        self._runtime = runtime
+        self._scene_observations = scene_observations
+        self._light_provider = light_provider
+        self._light_model = light_model
 
     def as_sdk_context(self) -> SdkRuntimeContext:
         """Checks the setup boundary against this static base, without __getattr__."""
@@ -224,6 +260,101 @@ class PluginSetupContext:
 
     def as_observe_context(self) -> ObservePluginContext:
         """Check the observe setup boundary without dynamic attributes."""
+        return self
+
+    @property
+    def roles(self) -> Roles:
+        """Return the explicitly granted roles SDK capability."""
+        if "roles" not in self.granted or self._roles is None:
+            raise CapabilityNotGranted("Plugin did not request roles")
+        return self._roles
+
+    @property
+    def models(self) -> RoleModels:
+        """Return the explicitly granted models SDK capability."""
+        if "models" not in self.granted or self._models is None:
+            raise CapabilityNotGranted("Plugin did not request models")
+        return self._models
+
+    @property
+    def sessions(self) -> PluginSessions:
+        """Return the explicitly granted sessions SDK capability."""
+        if "sessions" not in self.granted or self._sessions is None:
+            raise CapabilityNotGranted("Plugin did not request sessions")
+        return self._sessions
+
+    @property
+    def tools(self) -> SdkToolsCapability:
+        """Return the explicitly granted tools SDK capability."""
+        if "tools" not in self.granted or self._tools is None:
+            raise CapabilityNotGranted("Plugin did not request tools")
+        return self._tools
+
+    @property
+    def kv(self) -> PluginKVStore:
+        """Return the explicitly granted kv SDK capability."""
+        if "kv" not in self.granted or self._kv is None:
+            raise CapabilityNotGranted("Plugin did not request kv")
+        return self._kv
+
+    @property
+    def http(self) -> HttpClient:
+        """Return the explicitly granted http SDK capability."""
+        if "http" not in self.granted or self._http is None:
+            raise CapabilityNotGranted("Plugin did not request http")
+        return self._http
+
+    @property
+    def resources(self) -> Resources:
+        """Return the explicitly granted resources SDK capability."""
+        if "resources" not in self.granted or self._resources is None:
+            raise CapabilityNotGranted("Plugin did not request resources")
+        return self._resources
+
+    @property
+    def processes(self) -> Processes:
+        """Return the explicitly granted processes SDK capability."""
+        if "processes" not in self.granted or self._processes is None:
+            raise CapabilityNotGranted("Plugin did not request processes")
+        return self._processes
+
+    @property
+    def tool_turn(self) -> Callable[[], ToolTurn]:
+        """Return the explicitly granted tool_turn SDK capability."""
+        if "tool_turn" not in self.granted or self._tool_turn is None:
+            raise CapabilityNotGranted("Plugin did not request tool_turn")
+        return self._tool_turn
+
+    @property
+    def runtime(self) -> RuntimeLifecycle:
+        """Return the explicitly granted runtime SDK capability."""
+        if "runtime" not in self.granted or self._runtime is None:
+            raise CapabilityNotGranted("Plugin did not request runtime")
+        return self._runtime
+
+    @property
+    def scene_observations(self) -> SceneObservations:
+        """Return the explicitly granted scene_observations SDK capability."""
+        if "scene_observations" not in self.granted or self._scene_observations is None:
+            raise CapabilityNotGranted("Plugin did not request scene_observations")
+        return self._scene_observations
+
+    @property
+    def light_provider(self) -> ChatProvider | None:
+        """Return the explicitly granted light_provider SDK capability."""
+        if "light_provider" not in self.granted:
+            raise CapabilityNotGranted("Plugin did not request light_provider")
+        return self._light_provider
+
+    @property
+    def light_model(self) -> str:
+        """Return the explicitly granted light_model SDK capability."""
+        if "light_model" not in self.granted or self._light_model is None:
+            raise CapabilityNotGranted("Plugin did not request light_model")
+        return self._light_model
+
+    def as_service_context(self) -> ServicePluginContext:
+        """Check service injection without the legacy dynamic attribute path."""
         return self
 
 

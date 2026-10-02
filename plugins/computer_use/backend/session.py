@@ -4,8 +4,9 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from agent.mcp.client import McpClient
-from agent.tools.base import ToolResult
+from shiori_sdk.mcp import McpSession
+from shiori_sdk.processes import Processes
+from shiori_sdk.tools import ToolResult
 
 from .config import ComputerUseConfig
 from .lease import DesktopLease
@@ -16,9 +17,16 @@ from .targets import WindowTargets
 class DesktopSession:
     """Owns only Driver children; existing desktop applications are never terminated."""
 
-    def __init__(self, root: Path, config: ComputerUseConfig) -> None:
+    def __init__(
+        self,
+        root: Path,
+        config: ComputerUseConfig,
+        processes: Processes,
+        resources: Path,
+    ) -> None:
+        self._processes, self._resources = processes, resources
         self._root, self._config = root, config
-        self._client: McpClient | None = None
+        self._client: McpSession | None = None
         self._lease: DesktopLease | None = None
         self._lock = asyncio.Lock()
         self._targets = WindowTargets()
@@ -36,9 +44,11 @@ class DesktopSession:
                 raise RuntimeError("Computer Use 任务已停止")
             async with asyncio.timeout(self._config.timeout_seconds):
                 if self._client is None:
-                    executable = resolve_driver()
+                    executable = resolve_driver(self._resources)
                     self._lease = DesktopLease()
-                    self._client = driver_client(self._root, executable)
+                    self._client = driver_client(
+                        self._root, executable, self._processes
+                    )
                     await self._client.connect()
                     self.ready = True
                 if self.stopped:

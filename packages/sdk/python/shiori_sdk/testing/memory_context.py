@@ -15,6 +15,7 @@ class FakeRpc:
     def __init__(self):
         self.handlers: dict[str, RpcHandler] = {}
         self.concurrency: dict[str, Concurrency] = {}
+        self.events: list[tuple[str, dict[str, object]]] = []
 
     def register(
         self,
@@ -25,6 +26,11 @@ class FakeRpc:
     ) -> None:
         self.handlers[name] = handler
         self.concurrency[name] = concurrency
+
+    async def emit(self, name: str, payload: dict[str, object]) -> bool:
+        """Record one plugin event for assertion."""
+        self.events.append((name, payload))
+        return True
 
 
 class FakeMemoryCapability:

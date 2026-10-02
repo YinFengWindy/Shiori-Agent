@@ -7,8 +7,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
-from infra.persistence.owned_assets import copy_owned_asset
+from shiori_sdk.files.assets import copy_owned_asset
 from .storage import storage_root
+from shiori_sdk.extensions import PrivateStorage
 
 _MAX_MATCHES = 5
 _ALLOWED_RATINGS = {"general", "sensitive", "adult"}
@@ -56,9 +57,9 @@ class PromptTagExpansion:
 class PromptTagStore:
     """Persist and validate the workspace-owned prompt-tag catalog."""
 
-    def __init__(self, workspace: Path) -> None:
+    def __init__(self, workspace: Path, *, storage: PrivateStorage) -> None:
         self._workspace = workspace
-        self._root = storage_root(workspace)
+        self._root = storage_root(workspace, storage)
         self._path = self._root / "prompt_tags.json"
         self.list_entries()
 

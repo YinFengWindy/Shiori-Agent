@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from shiori_sdk.models import ChatProvider
 
-from bus.events_lifecycle import SceneObservationCommitted
+from shiori_sdk.role_events import SceneObservationCommitted
 from .prompt_validation import validate_novelai_prompt
 
 _TOOL_NAME = "submit_scene_image_prompt"
@@ -32,7 +32,7 @@ _SCHEMA = {
 
 
 async def prepare_scene_prompt(
-    provider: Any, *, model: str, event: SceneObservationCommitted
+    provider: ChatProvider | None, *, model: str, event: SceneObservationCommitted
 ) -> dict[str, str]:
     """Builds and validates provider parameters only after automatic-CG admission."""
     if provider is None or not model.strip():
@@ -70,12 +70,16 @@ async def prepare_scene_prompt(
         raise ValueError("自动场景 CG 提示词参数无效")
     if any(not isinstance(value, str) for value in payload.values()):
         raise ValueError("自动场景 CG 提示词参数必须是字符串")
-    if not payload["prompt"].strip() or payload["size_preset"] not in {
+    prompt = payload["prompt"]
+    negative = payload["negative_prompt"]
+    if not isinstance(prompt, str) or not isinstance(negative, str):
+        raise ValueError("Invalid prompt text")
+    if not prompt.strip() or payload["size_preset"] not in {
         "square",
         "landscape",
         "portrait",
     }:
         raise ValueError("自动场景 CG 缺少提示词或尺寸无效")
-    validate_novelai_prompt(payload["prompt"], field_name="prompt")
-    validate_novelai_prompt(payload["negative_prompt"], field_name="negative_prompt")
-    return dict(payload)
+    validate_novelai_prompt(prompt, field_name="prompt")
+    validate_novelai_prompt(negative, field_name="negative_prompt")
+    return {key: str(value) for key, value in payload.items()}

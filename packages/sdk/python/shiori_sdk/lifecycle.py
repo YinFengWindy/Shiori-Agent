@@ -4,6 +4,7 @@ from collections.abc import MutableMapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol, runtime_checkable
+from .prompting import PromptSectionRender
 
 
 class LifecycleFrame(Protocol):
@@ -107,3 +108,27 @@ class BeforeTurnObservation(Protocol):
     def retrieved_memory_block(self) -> str: ...
     @property
     def retrieval_trace_raw(self) -> object | None: ...
+
+
+@dataclass
+class PromptRenderCtx:
+    """Prompt gate fields shared by role reaction contributions."""
+
+    # render/before-step ctx 走 GATE 链，插件可直接改写字段影响后续阶段。
+    # read-only by convention
+    session_key: str
+    channel: str
+    chat_id: str
+    content: str
+    media: list[str] | None
+    timestamp: datetime
+    history: list[dict[str, object]]
+    skill_names: list[str] | None
+    retrieved_memory_block: str
+    disabled_sections: set[str]
+    turn_injection_prompt: str
+    session_metadata: dict[str, object] = field(default_factory=dict)
+    extra_hints: list[str] = field(default_factory=list)
+    # writable
+    system_sections_top: list[PromptSectionRender] = field(default_factory=list)
+    system_sections_bottom: list[PromptSectionRender] = field(default_factory=list)
