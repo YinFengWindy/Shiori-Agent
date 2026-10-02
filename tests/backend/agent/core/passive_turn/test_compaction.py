@@ -205,3 +205,106 @@ async def test_degraded_recovery_over_budget_records_the_same_failure_without_se
         assert transport.await_count == 1
     finally:
         await provider.aclose()
+
+
+_TOOL = {"type": "function", "function": {"name": "read_file", "parameters": {}}}
+
+
+async def _over_trigger_scope(h, key, generate):
+    """A request above the trigger but inside the hard input limit."""
+    session = h.manager.get_or_create(key)
+    session.metadata["role_id"] = "mira"
+    for label in ("tea", "plan"):
+        session.add_message("user", label)
+        session.add_message("assistant", "noted")
+    h.manager.save(session)
+    messages = [
+        {"role": "system", "content": "optional " * 2000},
+        {"role": "user", "content": "current"},
+    ]
+    probe = LLMProvider(
+        api_key="test", context_window_tokens=100000, max_output_tokens=100
+    )
+    initial = probe.input_budget(
+        messages=messages, tools=[_TOOL], model="m", max_tokens=100
+    )
+    assert initial is not None
+    await probe.aclose()
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=int(initial.estimate.tokens / 0.8),
+        max_output_tokens=100,
+        budget_policy=BudgetPolicy(safety_margin_tokens=100),
+    )
+    controller = CompactionController(
+        h.manager,
+        h.maintenance,
+        SimpleNamespace(model_name="m", generate=AsyncMock(side_effect=generate)),
+    )
+    scope = RequestCompaction(
+        controller,
+        session.key,
+        None,
+        CompactionPolicy(1),
+        4,
+        1,
+        AsyncMock(return_value=messages[:1]),
+        lambda _: [],
+        render_minimal=AsyncMock(return_value=messages[1:]),
+    )
+    return session, provider, controller, scope, messages
+
+
+async def test_over_target_within_hard_limit_keeps_tools_and_summarizes_once(
+    memory_harness,
+):
+    from conversation.context_scope import history_start
+
+    session, provider, controller, scope, messages = await _over_trigger_scope(
+        memory_harness,
+        "cli:over-trigger",
+        lambda prepared: WorkingSummary("tea", prepared.removed_message_ids),
+    )
+    schemas = [_TOOL]
+    try:
+        budget = provider.input_budget(
+            messages=messages, tools=schemas, model="m", max_tokens=100
+        )
+        assert budget is not None and budget.needs_trim
+        assert budget.target_tokens < budget.estimate.tokens < budget.input_limit_tokens
+        await scope.ensure(messages, schemas, provider, "m", 100, "default")
+        assert scope.last_result is not None and scope.last_result.committed
+        assert not scope.degraded and schemas == [_TOOL]
+        assert scope.last_result.retained_turns == 1
+        assert history_start(session, None) == 2
+        assert controller.writer.generate.await_count == 1
+        scope.render_minimal.assert_not_awaited()
+    finally:
+        await provider.aclose()
+
+
+async def test_auto_failure_within_hard_limit_sends_original_and_records_it(
+    memory_harness,
+):
+    async def fail(prepared):
+        raise RuntimeError("summary model unavailable")
+
+    session, provider, controller, scope, messages = await _over_trigger_scope(
+        memory_harness, "cli:auto-failure", fail
+    )
+    original = [dict(message) for message in messages]
+    schemas = [_TOOL]
+    try:
+        await scope.ensure(messages, schemas, provider, "m", 100, "default")
+        assert messages == original and schemas == [_TOOL] and not scope.degraded
+        latest = controller.latest(session.key, None)
+        assert latest is not None
+        assert latest["phase"] == "failed" and latest["failure_stage"] == "summary"
+        assert scope.last_result is not None
+        assert scope.last_result.failure_stage == "summary"
+        # The rest of this turn sends as-is; the next turn tries again.
+        await scope.ensure(messages, schemas, provider, "m", 100, "default")
+        assert controller.writer.generate.await_count == 1
+        scope.render_minimal.assert_not_awaited()
+    finally:
+        await provider.aclose()

@@ -147,7 +147,9 @@ async def test_policy_preserves_complete_turns_then_appends_until_next_compactio
     assert len(messages) == keep * 2 + 2
 
 
-async def test_budget_reduces_turns_and_expands_memory_prerequisite(memory_harness):
+async def test_budget_estimates_turns_before_memory_and_summarizes_once(
+    memory_harness,
+):
     h = memory_harness
     session = h.manager.get_or_create("cli:reduce")
     for _ in range(4):
@@ -168,10 +170,46 @@ async def test_budget_reduces_turns_and_expands_memory_prerequisite(memory_harne
         render=render,
         measure=lambda messages: _budget(500 + messages[0]["retained"] * 1000),
     )
-    assert candidates == [(4, 4), (6, 6)]
+    # Two local estimates without memory work, then one real render.
+    assert candidates == [(4, 0), (6, 0), (6, 6)]
     assert result.retained_turns == 1 and result.after_tokens == 1500
+    assert result.retained_reduction_reason == "budget"
     assert session.last_consolidated == history_start(session, None) == 6
-    assert controller.writer.generate.await_count == 2
+    assert controller.writer.generate.await_count == 1
+
+
+async def test_over_target_within_hard_limit_commits_most_turns_without_degrading(
+    memory_harness,
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:hard-limit")
+    for _ in range(4):
+        _turn(session)
+    h.manager.save(session)
+    controller = _controller(h)
+    minimal = AsyncMock(return_value=[])
+
+    async def render(prepared, summary):
+        return [{"role": "user", "content": "x", "retained": prepared.retained_turns}]
+
+    # Target 1600, hard limit 3780: 2 turns exceed the limit, 1 turn only the target.
+    _, result = await controller.ensure(
+        session_key=session.key,
+        view=None,
+        policy=CompactionPolicy(2),
+        message_limit=len(session.messages),
+        budget=_budget(3500),
+        render=render,
+        render_minimal=minimal,
+        measure=lambda messages: _budget(
+            3900 if messages[0]["retained"] == 2 else 3000
+        ),
+    )
+    assert result.committed and not result.degraded and not result.tools_disabled
+    assert result.retained_turns == 1 and result.after_tokens == 3000
+    assert history_start(session, None) == 6
+    assert controller.writer.generate.await_count == 1
+    minimal.assert_not_awaited()
 
 
 async def test_zero_retention_over_budget_preserves_memory_without_publishing_window(
@@ -183,7 +221,7 @@ async def test_zero_retention_over_budget_preserves_memory_without_publishing_wi
     h.manager.save(session)
     controller = _controller(h)
     with pytest.raises(CompactionFailedError) as caught:
-        await _ensure(controller, session, measure=lambda _: _budget(3000))
+        await _ensure(controller, session, measure=lambda _: _budget(3900))
     result = caught.value.result
     assert result.failure_stage == "budget" and result.memory_committed
     assert session.last_consolidated == 2 and history_start(session, None) == 0
@@ -208,10 +246,16 @@ async def test_downstream_failure_keeps_committed_memory_and_retries_without_ext
 
     original = h.manager.commit_window
     render = None
+
+    async def fail_rendering_summary(prepared, summary):
+        if summary == "tasks: finish the tea plan":
+            raise RuntimeError("controlled failure")
+        return [{"role": "user", "content": "current"}]
+
     if stage == "summary":
         controller.writer.generate.side_effect = fail
     elif stage == "validation":
-        render = fail
+        render = fail_rendering_summary
     else:
         monkeypatch.setattr(h.manager, "commit_window", fail)
     with pytest.raises(CompactionFailedError) as caught:
@@ -328,7 +372,8 @@ async def test_stale_window_commit_reports_successful_memory_without_publication
     h.manager.save(session)
 
     async def render(prepared, summary):
-        _advance_generation(h, session.key)
+        if summary == "tasks: finish the tea plan":
+            _advance_generation(h, session.key)
         return [{"role": "system", "content": summary}]
 
     with pytest.raises(CompactionFailedError) as caught:
@@ -339,7 +384,7 @@ async def test_stale_window_commit_reports_successful_memory_without_publication
     assert not session.maintenance_progress.summaries
 
 
-async def test_consumer_failure_retains_memory_and_pending_work(memory_harness):
+async def test_consumer_failure_commits_window_and_keeps_pending_work(memory_harness):
     h = memory_harness
     session = h.manager.get_or_create("cli:consumer-fail")
     _turn(session)
@@ -348,18 +393,47 @@ async def test_consumer_failure_retains_memory_and_pending_work(memory_harness):
         side_effect=RuntimeError("relationship unavailable")
     )
     controller = _controller(h)
-    with pytest.raises(CompactionFailedError) as caught:
-        await _ensure(controller, session, keep=0)
-    assert caught.value.result.failure_stage == "consumers"
-    assert (
-        caught.value.result.memory_committed and caught.value.result.memory_cursor == 2
-    )
-    controller.writer.generate.assert_not_awaited()
+    _, result = await _ensure(controller, session, keep=0)
+    assert result.committed and result.memory_committed and result.memory_cursor == 2
+    assert history_start(session, None) == 2
+    progress = session.maintenance_progress
+    assert progress.consumer_error and progress.pending_consumers
+    assert progress.relationship_version == 0
     calls = len(h.prompts)
     h.maintenance._after_consolidation = AsyncMock()
-    await _ensure(controller, session, keep=0)
+    await h.maintenance.consolidate(ConsolidateRequest(session))
     assert len(h.prompts) == calls
     assert session.maintenance_progress.relationship_version == 1
+
+
+async def test_persistent_consumer_failure_still_commits_new_memory_and_window(
+    memory_harness,
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:consumer-down")
+    _turn(session)
+    h.manager.save(session)
+    h.maintenance._after_consolidation = AsyncMock(
+        side_effect=RuntimeError("relationship unavailable")
+    )
+    controller = _controller(h)
+    await _ensure(controller, session, keep=0)
+    first_ref = session.maintenance_progress.pending_consumers["source_ref"]
+    _turn(session, "next tea")
+    h.manager.save(session)
+    _, result = await _ensure(controller, session, keep=0)
+    assert result.committed and result.memory_cursor == 4
+    assert history_start(session, None) == 4
+    pending = session.maintenance_progress.pending_consumers
+    assert pending["source_ref"] != first_ref
+    assert [entry["source_ref"] for entry in pending["backlog"]] == [first_ref]
+    assert len(h.events) == 2
+    calls = len(h.prompts)
+    h.maintenance._after_consolidation = AsyncMock()
+    await h.maintenance.consolidate(ConsolidateRequest(session))
+    assert len(h.prompts) == calls and len(h.events) == 2
+    assert not session.maintenance_progress.pending_consumers
+    assert session.maintenance_progress.relationship_version == 2
 
 
 async def test_minimal_expands_memory_to_unfinished_originals_without_committing_cut(
@@ -393,10 +467,10 @@ async def test_minimal_expands_memory_to_unfinished_originals_without_committing
         render=render,
         render_minimal=minimal,
         measure=lambda messages: _budget(
-            3000 if messages[0]["content"] == "too large" else 100
+            3900 if messages[0]["content"] == "too large" else 100
         ),
     )
-    assert calls == [(2, 2)]
+    assert calls == [(2, 0), (2, 2)]
     assert result.memory_stop == 3 and result.degraded and not result.committed
     assert controller.writer.generate.await_count == 2
     assert len(session.messages) == 3 and history_start(session, None) == 0
@@ -448,7 +522,7 @@ async def test_manual_budget_failure_never_calls_minimal_renderer(memory_harness
             budget=_budget(3500),
             render=AsyncMock(return_value=[]),
             render_minimal=minimal,
-            measure=lambda _: _budget(3000),
+            measure=lambda _: _budget(3900),
             reason="manual",
         )
     assert (

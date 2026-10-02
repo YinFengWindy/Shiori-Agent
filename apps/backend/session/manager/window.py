@@ -189,8 +189,8 @@ def _valid_preparation(
         and 0 <= prepared.start < prepared.stop <= len(prepared.expected_message_ids)
         and tuple(str(m["id"]) for m in prefix) == prepared.expected_message_ids
         and message_prefix_stamp(prefix) == prepared.prefix_stamp
-        and not progress.consumer_error
-        and not progress.pending_consumers
+        # Only committed memory for the removed range gates a cut; downstream
+        # consumers (relationship snapshots) retry on their own schedule.
         and all(
             index < cursor
             for index, message in enumerate(prefix)

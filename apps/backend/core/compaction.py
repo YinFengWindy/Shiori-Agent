@@ -7,7 +7,11 @@ from typing import Awaitable, Callable, TYPE_CHECKING
 
 from agent.prompting.input_budget import InputBudget
 from agent.prompting.usage_accounting import current_usage
-from core.compaction_summary import WorkingSummaryWriter
+from core.compaction_summary import (
+    SUMMARY_TOKEN_LIMIT,
+    WorkingSummary,
+    WorkingSummaryWriter,
+)
 from session.maintenance_progress import window_key
 from session.manager.models import consolidation_cursor
 from shiori_sdk.context import ContextBudgetObserved
@@ -17,6 +21,9 @@ if TYPE_CHECKING:
     from core.memory.markdown import MarkdownMemoryMaintenance
     from session.manager import SessionManager
     from session.manager.window import WindowPreparation
+
+# Local estimates count the summary at its hard limit (three ASCII chars a token).
+_SUMMARY_PLACEHOLDER = "x" * (SUMMARY_TOKEN_LIMIT * 3)
 
 
 @dataclass(frozen=True)
@@ -255,19 +262,21 @@ class CompactionController:
         )
         summary_content = progress.summaries.get(window_key(view), "")
         self._assert_owner(state, session_key, view)
-        attempted_stops: set[int] = set()
-        for keep in (
-            []
+        chosen = (
+            None
             if minimal_only
-            else range(min(policy.retained_turns, message_limit), -1, -1)
-        ):
-            prepared = await self._prepare(
-                state, session_key, view, keep_turns=keep, message_limit=message_limit
+            else await self._choose_retention(
+                state,
+                session_key,
+                view,
+                policy=policy,
+                message_limit=message_limit,
+                render=render,
+                measure=measure,
             )
-            if prepared is None or prepared.stop in attempted_stops:
-                continue
-            self._assert_owner(state, session_key, view)
-            attempted_stops.add(prepared.stop)
+        )
+        if chosen is not None:
+            prepared, reduced = chosen
             state = replace(
                 state,
                 retained_turns=prepared.retained_turns,
@@ -276,9 +285,7 @@ class CompactionController:
                 retained_start=prepared.stop,
                 snapshot_stop=message_limit,
                 attempts=state.attempts + 1,
-                retained_reduction_reason=(
-                    "budget" if len(attempted_stops) > 1 else ""
-                ),
+                retained_reduction_reason="budget" if reduced else "",
             )
             state = await self._memory(state, prepared)
             state = replace(state, phase="summary")
@@ -303,36 +310,11 @@ class CompactionController:
                 raise CompactionFailedError(
                     replace(state, failure_stage="validation", error=str(exc))
                 ) from exc
-            if after.estimate.tokens >= after.target_tokens:
-                continue
-            try:
-                committed = await self.sessions.commit_window(
-                    prepared, summary.content, summary.source_ids
+            # The target line is the ideal; only the hard input limit fails.
+            if after.estimate.tokens < after.input_limit_tokens:
+                return messages, await self._commit(
+                    state, prepared, summary, session_key, view
                 )
-            except Exception as exc:
-                raise CompactionFailedError(
-                    replace(state, failure_stage="window", error=str(exc))
-                ) from exc
-            if not committed:
-                raise CompactionFailedError(
-                    replace(
-                        state,
-                        failure_stage="window",
-                        error="窗口准备已过期或记忆覆盖不完整",
-                    )
-                )
-            progress = self.sessions.maintenance_progress(
-                self.sessions.get_or_create(session_key)
-            )
-            return messages, replace(
-                state,
-                committed=True,
-                phase="completed",
-                window_version=progress.window_versions[window_key(view)],
-                memory_version=progress.memory_version,
-                compaction_count=state.compaction_count + 1,
-                window_start=prepared.stop,
-            )
         if render_minimal is not None and reason != "manual":
             return await self._minimal(
                 state,
@@ -348,8 +330,98 @@ class CompactionController:
                 state,
                 failure_stage="budget",
                 failure_kind="local_budget",
-                error="保留 0 个已完成轮次后仍无法满足目标预算；当前输入、附件和工具交换保持完整",
+                error="保留 0 个已完成轮次后仍超出模型输入上限；当前输入、附件和工具交换保持完整",
             )
+        )
+
+    async def _choose_retention(
+        self,
+        state: CompactionResult,
+        session_key: str,
+        view: ContextView | None,
+        *,
+        policy: CompactionPolicy,
+        message_limit: int,
+        render: Callable[[WindowPreparation, str], Awaitable[list[dict]]],
+        measure: Callable[[list[dict]], InputBudget],
+    ):
+        """Pick one retention by local estimate, before any memory or summary work.
+
+        The summary is counted at its hard limit. The first count projected below
+        the target wins; otherwise the largest count projected below the hard
+        input limit; otherwise the fewest turns, left to the measured result.
+        Returns the preparation and whether it retains fewer turns than the first.
+        """
+        candidates: list[tuple[WindowPreparation, InputBudget]] = []
+        seen: set[int] = set()
+        for keep in range(min(policy.retained_turns, message_limit), -1, -1):
+            prepared = await self._prepare(
+                state, session_key, view, keep_turns=keep, message_limit=message_limit
+            )
+            if prepared is None or prepared.stop in seen:
+                continue
+            self._assert_owner(state, session_key, view)
+            seen.add(prepared.stop)
+            try:
+                projected = measure(await render(prepared, _SUMMARY_PLACEHOLDER))
+            except Exception as exc:
+                raise CompactionFailedError(
+                    replace(state, failure_stage="validation", error=str(exc))
+                ) from exc
+            candidates.append((prepared, projected))
+            if projected.estimate.tokens < projected.target_tokens:
+                break
+        if not candidates:
+            return None
+        first = candidates[0][0]
+        fits = [
+            prepared
+            for prepared, projected in candidates
+            if projected.estimate.tokens < projected.target_tokens
+        ] or [
+            prepared
+            for prepared, projected in candidates
+            if projected.estimate.tokens < projected.input_limit_tokens
+        ]
+        chosen = fits[0] if fits else candidates[-1][0]
+        return chosen, chosen is not first
+
+    async def _commit(
+        self,
+        state: CompactionResult,
+        prepared: WindowPreparation,
+        summary: WorkingSummary,
+        session_key: str,
+        view: ContextView | None,
+    ):
+        """Publish the validated summary and cut together, or fail the window stage."""
+        try:
+            committed = await self.sessions.commit_window(
+                prepared, summary.content, summary.source_ids
+            )
+        except Exception as exc:
+            raise CompactionFailedError(
+                replace(state, failure_stage="window", error=str(exc))
+            ) from exc
+        if not committed:
+            raise CompactionFailedError(
+                replace(
+                    state,
+                    failure_stage="window",
+                    error="窗口准备已过期或记忆覆盖不完整",
+                )
+            )
+        progress = self.sessions.maintenance_progress(
+            self.sessions.get_or_create(session_key)
+        )
+        return replace(
+            state,
+            committed=True,
+            phase="completed",
+            window_version=progress.window_versions[window_key(view)],
+            memory_version=progress.memory_version,
+            compaction_count=state.compaction_count + 1,
+            window_start=prepared.stop,
         )
 
     def progress_result(
@@ -398,8 +470,12 @@ class CompactionController:
             memory_committed=committed,
             memory_status="committed" if committed else "covered",
         )
-        if trace.get("mode") == "failed" or not trace.get("memory_covered"):
-            consumers = trace.get("step") == "consumers"
+        consumers = trace.get("step") == "consumers"
+        # Downstream consumers (relationship snapshots) retry on their own; only
+        # uncovered memory for the removed range blocks the window.
+        if not trace.get("memory_covered") or (
+            trace.get("mode") == "failed" and not consumers
+        ):
             raise CompactionFailedError(
                 replace(
                     state,

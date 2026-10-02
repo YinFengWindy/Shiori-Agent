@@ -128,6 +128,14 @@ class _ConsolidationMixin(_ManagerCoreMixin):
                     progress.recent_context_source_ids = list(
                         request.expected_message_ids
                     )
+                previous = progress.pending_consumers
+                if previous:
+                    # Unfinished consumer work from an earlier commit stays queued
+                    # ahead of this one instead of being overwritten.
+                    request.consumer_payload["backlog"] = [
+                        *previous.get("backlog", ()),
+                        {k: v for k, v in previous.items() if k != "backlog"},
+                    ]
                 progress.pending_consumers = request.consumer_payload
                 with self._store.transaction():
                     self._store.write_maintenance_progress(

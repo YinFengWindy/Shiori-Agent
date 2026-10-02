@@ -24,9 +24,10 @@ class _MemoryConsumersMixin(_ManagerCoreMixin):
         if meta is None or not meta.get("maintenance_progress"):
             raise RuntimeError("memory publication has no committed progress")
         progress = MaintenanceProgress.load(meta["maintenance_progress"])
-        payload["published"] = True
         progress.pending_consumers = payload
-        progress.published_version = progress.memory_version
+        # The caller marks each published entry; the newest is published last.
+        if payload.get("published"):
+            progress.published_version = progress.memory_version
         self._store.write_maintenance_progress(session_key, progress.dump())
 
     async def retry_memory_consumers(

@@ -186,7 +186,6 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
     expected = {
         "too_large": "minimal_budget",
         "memory_failure": "memory",
-        "consumer_failure": "consumers",
         "summary_failure": "summary",
         "provider_limit": "provider",
         "provider_error": "provider",
@@ -204,7 +203,7 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
             assert caught.value.result.failure_stage == expected[case]
             if case not in {"memory_failure"}:
                 assert caught.value.result.memory_committed
-            if case in {"memory_failure", "consumer_failure", "summary_failure"}:
+            if case in {"memory_failure", "summary_failure"}:
                 assert caught.value.result.degradation_attempts == 0
             if case.startswith("provider"):
                 assert len(sent) == 1
@@ -738,6 +737,8 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
             model="controlled",
             max_tokens=200,
             max_iterations=1 if boundary == "finalize" else 5,
+            # Leave no turns for the forced retry, so a rejection must degrade.
+            compaction_retained_turns=0 if boundary.startswith("provider_retry") else 2,
         ),
         tools=registry,
         discovery=ToolDiscoveryState(),
@@ -842,20 +843,23 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
             outcomes = result.context_retry["compaction"]
             assert isinstance(outcomes, list)
             outcome = outcomes[-1]
-            assert outcome["degraded"] and not outcome["committed"]
-            assert outcome["degradation_attempts"] == 1 and outcome["memory_committed"]
+            # Over the target but within the hard limit: commit, keep tools.
+            assert outcome["committed"] and not outcome["degraded"]
+            assert outcome["memory_committed"] and not outcome["tools_disabled"]
             assert tool.calls == 1 and len(sent) == 2
-            assert not sent[-1].get("tools")
+            assert sent[-1].get("tools")
             assert "OLD_TOOL_HISTORY_MUST_NOT_REAPPEAR" not in str(sent[-1]["messages"])
             assert "y" * 9000 in str(sent[-1]["messages"])
-            assert not any(
-                m.get("tool_calls") or m.get("role") == "tool"
-                for m in sent[-1]["messages"]
+            budget = provider.input_budget(
+                messages=sent[-1]["messages"],
+                tools=sent[-1]["tools"],
+                model="controlled",
+                max_tokens=200,
             )
-            assert (
-                history_start(session, None) == 0
-                and not session.maintenance_progress.summaries
-            )
+            assert budget is not None
+            assert budget.target_tokens <= budget.estimate.tokens
+            assert budget.estimate.tokens < budget.input_limit_tokens
+            assert history_start(session, None) > 0
             return
         result = await reasoner.run_turn(
             msg=InboundMessage(
@@ -895,7 +899,7 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
             model="controlled",
             max_tokens=200,
         )
-        assert budget.estimate.tokens < budget.target_tokens
+        assert budget.estimate.tokens < budget.input_limit_tokens
     finally:
         await provider.aclose()
 
@@ -1197,7 +1201,8 @@ async def test_safety_retry_reads_committed_compaction_with_frozen_input_and_his
         result = await reasoner.run_turn(msg=msg, session=session, context_view=view)
         assert result.reply == "continued from working state"
         assert len(sent) == 2 and summary_calls == 1
-        assert [len(request.history) for request in renders] == [4, 0, 0]
+        # Initial, one retention estimate, the compacted request, the safety retry.
+        assert [len(request.history) for request in renders] == [4, 0, 0, 0]
         assert renders[-1].window_sources == ()
         assert sent[0]["messages"][-1] == sent[1]["messages"][-1]
         for request in sent:
