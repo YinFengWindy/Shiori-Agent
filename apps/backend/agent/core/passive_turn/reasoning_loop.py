@@ -730,7 +730,13 @@ class _PassiveReasoningLoopMixin:
                 if response.thinking is not None:
                     tool_chain_group["reasoning_content"] = response.thinking
                 tool_chain.append(tool_chain_group)
-                pressure_tokens = support.estimate_messages_tokens(messages)
+                # 下一次请求按统一预算估算，并把当前模型的输入硬上限交给观察者。
+                pressure_budget = self._request_budget(messages, schemas)
+                pressure_tokens = (
+                    pressure_budget.estimate.tokens
+                    if pressure_budget is not None
+                    else support.estimate_messages_tokens(messages)
+                )
                 # 7a. AfterStep 模块链（工具分支）：通知观察者本轮工具执行完毕。
                 after_step = await self._after_step.run(
                     AfterStepCtx(
@@ -745,6 +751,11 @@ class _PassiveReasoningLoopMixin:
                         tool_chain_partial=tuple(tool_chain),
                         partial_thinking=response.thinking,
                         has_more=True,
+                        input_limit_tokens=(
+                            pressure_budget.input_limit_tokens
+                            if pressure_budget is not None
+                            else None
+                        ),
                     )
                 )
                 if after_step.early_stop:

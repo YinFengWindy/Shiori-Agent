@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
@@ -13,6 +14,8 @@ from .token_estimate import estimate_tokens
 from .usage_accounting import turn_usage
 
 _context: ContextVar[tuple | None] = ContextVar("input_usage_context", default=None)
+# Each anchor retains a full request copy; keep only the most recently used contexts.
+MAX_ANCHOR_CONTEXTS = 64
 _independent_anchors: ContextVar[UsageAnchors | None] = ContextVar(
     "independent_usage_anchors", default=None
 )
@@ -104,12 +107,24 @@ def input_cost(request: dict) -> int:
 
 
 class UsageAnchors:
-    """Calibrate append-only requests and reject responses superseded in flight."""
+    """Calibrate append-only requests and reject responses superseded in flight.
 
-    def __init__(self) -> None:
+    At most ``max_contexts`` contexts are retained; touching a context makes it
+    the most recent and the least recently used one is forgotten entirely.
+    """
+
+    def __init__(self, max_contexts: int = MAX_ANCHOR_CONTEXTS) -> None:
+        if max_contexts <= 0:
+            raise ValueError("max_contexts 必须为正整数")
+        self._max_contexts = max_contexts
         self._anchors: dict[tuple, _Anchor] = {}
         self._pending: dict[tuple, object] = {}
-        self._views: dict[tuple, tuple] = {}
+        # Insertion order is recency order: the first entry is evicted first.
+        self._views: OrderedDict[tuple, tuple] = OrderedDict()
+
+    def _forget(self, key: tuple) -> None:
+        self._anchors.pop(key, None)
+        self._pending.pop(key, None)
 
     def _key(self, request: dict) -> tuple | None:
         context = _context.get()
@@ -117,9 +132,12 @@ class UsageAnchors:
             return None
         key = context[:3]
         if self._views.get(key) != context:
-            self._anchors.pop(key, None)
-            self._pending.pop(key, None)
+            self._forget(key)
             self._views[key] = context
+        self._views.move_to_end(key)
+        while len(self._views) > self._max_contexts:
+            evicted, _ = self._views.popitem(last=False)
+            self._forget(evicted)
         return key
 
     def estimate(self, request: dict) -> InputEstimate:
@@ -144,8 +162,7 @@ class UsageAnchors:
                 "anchor_delta",
             )
         if key is not None:
-            self._anchors.pop(key, None)
-            self._pending.pop(key, None)
+            self._forget(key)
         return InputEstimate(local, "local")
 
     def begin(self, request: dict) -> tuple[tuple | None, object, dict]:

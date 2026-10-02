@@ -123,7 +123,6 @@ def _make_reasoner(
         tools=cast(Any, tools if tools is not None else _tools()),
         discovery=discovery,
         tool_search_enabled=tool_search_enabled,
-        memory_window=10,
         context=cast(
             Any,
             SimpleNamespace(
@@ -214,7 +213,6 @@ def test_reasoner_run_turn_content_safety_trims_dynamic_sections_before_history(
         tools=cast(Any, _tools()),
         discovery=discovery,
         tool_search_enabled=False,
-        memory_window=10,
         context=cast(
             Any,
             SimpleNamespace(

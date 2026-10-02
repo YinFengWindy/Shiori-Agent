@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
-from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
+from agent.lifecycle.types import PromptRenderInput
 from core.roles.reply_state import RoleReply
 
 if TYPE_CHECKING:
+    from agent.core.types import ReasonerResult
     from session.manager.models import HistoryFilter
 
 
@@ -113,21 +114,16 @@ class TurnRunResult:
     role_reply_mood_fresh: bool = False
 
 
-class AgentLoopRunner(Protocol):
+class WindowTurnRunner(Protocol):
+    """Runs an internal turn on the session's compaction window and its summary."""
+
     async def __call__(
         self,
-        initial_messages: list[dict],
+        *,
+        session: SessionLike,
+        render_input: PromptRenderInput,
         request_time: datetime | None = None,
-        preloaded_tools: set[str] | None = None,
-        tool_event_session_key: str = "",
         tool_event_channel: str = "",
         tool_event_chat_id: str = "",
-        tool_execution_context: dict[str, str] | None = None,
-    ) -> tuple[str, list[str], list[dict], set[str] | None, str | None]: ...
-
-
-class PromptRenderRunner(Protocol):
-    async def __call__(
-        self,
-        input: PromptRenderInput,
-    ) -> PromptRenderResult: ...
+        tool_execution_context: dict[str, Any] | None = None,
+    ) -> ReasonerResult: ...

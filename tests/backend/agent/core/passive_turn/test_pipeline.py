@@ -341,7 +341,6 @@ def _isolation_pipeline(manager, *, input_token_threshold=75000):
         tools=ToolRegistry(),
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
         context=AsyncMock(),
         session_manager=manager,
     )

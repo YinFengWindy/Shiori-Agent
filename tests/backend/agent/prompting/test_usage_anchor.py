@@ -98,3 +98,23 @@ def test_missing_usage_does_not_create_a_zero_anchor_and_snapshot_is_immutable()
         estimate = tracker.estimate(payload)
         assert estimate.source == "anchor_delta"
         assert estimate.tokens > 50
+
+
+def test_least_recently_used_context_is_evicted_beyond_the_bound():
+    tracker = UsageAnchors(max_contexts=2)
+    contexts = [("role:a", "external", thread, ()) for thread in ("g1", "g2", "g3")]
+    with usage_context(contexts[0]):
+        tracker.finish(tracker.begin(request()), 900)
+    with usage_context(contexts[1]):
+        tracker.finish(tracker.begin(request()), 900)
+    with usage_context(contexts[0]):
+        assert tracker.estimate(request()).source == "actual"
+    with usage_context(contexts[2]):
+        tracker.finish(tracker.begin(request()), 900)
+
+    # Reading also refreshes recency, so the evicted context is checked last.
+    sources = []
+    for context in (contexts[2], contexts[0], contexts[1]):
+        with usage_context(context):
+            sources.append(tracker.estimate(request()).source)
+    assert sources == ["actual", "actual", "local"]

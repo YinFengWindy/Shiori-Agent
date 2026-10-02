@@ -43,11 +43,10 @@ def test_window_sources_are_the_external_members_seen_since_consolidation() -> N
 
     external = get_window_sources(
         session,
-        50,
         ContextView(scope="external", user_threads=user_threads, thread_id=group),
     )
     user = get_window_sources(
-        session, 50, ContextView(scope="user", user_threads=user_threads)
+        session, ContextView(scope="user", user_threads=user_threads)
     )
 
     # 整理过的与用户本人的消息都不在其中；按时间先后排列。
@@ -78,8 +77,8 @@ def test_window_sources_start_from_the_external_cursor() -> None:
         ),
     )
 
-    sources = get_window_sources(session, 50, view)
-    history = get_window_history(session, 50, view)
+    sources = get_window_sources(session, view)
+    history = get_window_history(session, view)
 
     assert [source.sender_id for source in sources] == ["666"]
     user_turns = [m["content"] for m in history if m["role"] == "user"]
@@ -124,7 +123,7 @@ def test_window_sources_merge_the_heard_members_by_time() -> None:
         ),
     )
 
-    sources = get_window_sources(session, 50, view, heard)
+    sources = get_window_sources(session, view, heard)
 
     # 用户本人的旁听发言不算；旁听里被 @ 到的 888 随来源进入窗口。
     assert [source.sender_id for source in sources] == ["222", "111", "333"]

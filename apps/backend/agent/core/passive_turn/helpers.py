@@ -22,9 +22,12 @@ if TYPE_CHECKING:
     from agent.tools.registry import ToolRegistry
 
 
+# 窗口按压缩水位起算；给出 start_index 时条数上限不生效，只需为正。
+_WINDOW_MESSAGES = 500
+
+
 def get_window_history(
     session: "SessionLike",
-    memory_window: int,
     context_view: "ContextView | None" = None,
 ) -> list[dict]:
     """读取回合所在实际上下文的窗口水位之后的可见原文。
@@ -34,7 +37,7 @@ def get_window_history(
     """
 
     return session.get_history(
-        max_messages=memory_window,
+        max_messages=_WINDOW_MESSAGES,
         start_index=history_start(session, context_view),
         include=history_filter(context_view),
     )
@@ -42,13 +45,12 @@ def get_window_history(
 
 def get_window_tool_names(
     session: "SessionLike",
-    memory_window: int,
     context_view: "ContextView | None" = None,
 ) -> list[str]:
     """读取与 get_window_history 同一窗口内用过或解锁过的工具名。"""
 
     return session.get_history_tool_names(
-        max_messages=memory_window,
+        max_messages=_WINDOW_MESSAGES,
         start_index=history_start(session, context_view),
         include=history_filter(context_view),
     )
@@ -56,7 +58,6 @@ def get_window_tool_names(
 
 def get_window_preloaded_tools(
     session: SessionLike,
-    memory_window: int,
     context_view: ContextView | None,
     tools: ToolRegistry,
 ) -> list[str]:
@@ -64,14 +65,13 @@ def get_window_preloaded_tools(
     always_on = tools.get_always_on_names()
     return [
         name
-        for name in get_window_tool_names(session, memory_window, context_view)
+        for name in get_window_tool_names(session, context_view)
         if name not in always_on and tools.has_tool(name)
     ]
 
 
 def get_window_sources(
     session: "SessionLike",
-    memory_window: int,
     context_view: "ContextView | None",
     heard: Sequence[HeardLine] = (),
 ) -> "tuple[MessageSource, ...]":
@@ -86,7 +86,7 @@ def get_window_sources(
     spoken = [
         message
         for message in session.history_window(
-            memory_window,
+            _WINDOW_MESSAGES,
             start_index=history_start(session, context_view),
             include=context_view.includes,
         )

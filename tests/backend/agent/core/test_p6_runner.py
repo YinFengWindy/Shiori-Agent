@@ -7,7 +7,7 @@ from typing import Any, cast
 import pytest
 
 from agent.context import ContextBuilder
-from agent.lifecycle.types import PromptRenderResult
+from agent.core.types import ReasonerResult
 from agent.looping.ports import SessionServices
 from agent.tools.registry import ToolRegistry
 from agent.core.runner import CoreRunner, CoreRunnerDeps
@@ -49,7 +49,6 @@ async def test_core_runner_routes_passive_message_to_agent_core():
 @pytest.mark.asyncio
 async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
     session = MagicMock()
-    session.get_history.return_value = [{"role": "user", "content": "old"}]
     session.metadata = {"role_id": "mira"}
     session.key = "scheduler:job-1"
     session.messages = [{"id": "telegram:123:9"}]
@@ -97,12 +96,10 @@ async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
         set_context=MagicMock(),
         get_context=MagicMock(return_value=dict(tool_context)),
     )
-    run_agent_loop_fn = AsyncMock(
-        return_value=("done", ["spawn"], [{"name": "spawn"}], None, None)
-    )
-    prompt_render_fn = AsyncMock(
-        return_value=PromptRenderResult(
-            messages=[{"role": "system", "content": "prompt"}]
+    run_window_turn_fn = AsyncMock(
+        return_value=ReasonerResult(
+            reply="done",
+            metadata={"tools_used": ["spawn"], "tool_chain": [{"name": "spawn"}]},
         )
     )
     runner = CoreRunner(
@@ -117,9 +114,7 @@ async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
             session=cast(SessionServices, session_svc),
             context=cast(ContextBuilder, context),
             tools=cast(ToolRegistry, tools),
-            memory_window=12,
-            run_agent_loop_fn=run_agent_loop_fn,
-            prompt_render_fn=prompt_render_fn,
+            run_window_turn_fn=run_window_turn_fn,
         )
     )
     out = await runner.process(item, "scheduler:job-1", dispatch_outbound=False)
@@ -140,13 +135,12 @@ async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
         current_user_source_ref="telegram:123:9",
         defer_push_session_sync="true",
     )
-    prompt_render_fn.assert_awaited_once()
-    render_input = prompt_render_fn.await_args.args[0]
+    run_window_turn_fn.assert_awaited_once()
+    loop_kwargs = run_window_turn_fn.await_args.kwargs
+    assert loop_kwargs["session"] is session
+    render_input = loop_kwargs["render_input"]
     assert render_input.session_key == "scheduler:job-1"
     assert "后台任务回传" in render_input.content
-    run_agent_loop_fn.assert_awaited_once()
-    loop_kwargs = run_agent_loop_fn.await_args.kwargs
-    assert loop_kwargs["tool_event_session_key"] == "scheduler:job-1"
     assert loop_kwargs["tool_event_channel"] == "telegram"
     assert loop_kwargs["tool_event_chat_id"] == "123"
     assert loop_kwargs["tool_execution_context"] == tool_context

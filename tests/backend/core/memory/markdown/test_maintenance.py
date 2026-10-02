@@ -510,19 +510,19 @@ async def test_external_growth_leaves_the_user_context_window_and_cursor_alone(
     manager.save(session)
     user_view = user_context_view(tmp_path, "mira")
     external_view = turn_context_view(tmp_path, "mira", group)
-    user_history = get_window_history(session, 500, user_view)
+    user_history = get_window_history(session, user_view)
     provider, event_bus, _events, maintenance = _recording_maintenance(
         tmp_path, manager, keep_count=4
     )
     try:
         external = await maintenance.consolidate(ConsolidateRequest(session=session))
-        user_history_after_external = get_window_history(session, 500, user_view)
+        user_history_after_external = get_window_history(session, user_view)
         # 桌面这边攒够一批（本类最后 4 条之外至少 5 条）才整理，只推进用户游标。
         for index in range(4):
             session.add_message("user", f"桌面第 {index} 句", thread_id=desktop)
             session.add_message("assistant", f"回桌面第 {index} 句", thread_id=desktop)
         await manager.save_async(session)
-        external_history = get_window_history(session, 500, external_view)
+        external_history = get_window_history(session, external_view)
         user = await maintenance.consolidate(ConsolidateRequest(session=session))
     finally:
         await event_bus.aclose()
@@ -537,8 +537,8 @@ async def test_external_growth_leaves_the_user_context_window_and_cursor_alone(
     reloaded = manager.get_or_create(session.key)
     assert len(external_history) == 26
     assert external_history[-1]["content"] == "回群友第 11 句"
-    assert get_window_history(reloaded, 500, external_view) == (external_history)
-    user_history = get_window_history(reloaded, 500, user_view)
+    assert get_window_history(reloaded, external_view) == (external_history)
+    user_history = get_window_history(reloaded, user_view)
     assert len(user_history) == 10
     assert user_history[-1]["content"] == "回桌面第 3 句"
     assert consolidation_cursor(reloaded, "external") == 24
@@ -777,7 +777,7 @@ async def test_group_turn_budget_force_only_advances_the_external_cursor(
     _add_group_turns(session, group, 3)
     manager.save(session)
     user_view = user_context_view(tmp_path, "mira")
-    user_history = get_window_history(session, 500, user_view)
+    user_history = get_window_history(session, user_view)
     _provider, event_bus, _events, maintenance = _recording_maintenance(
         tmp_path, manager, keep_count=4
     )
@@ -795,7 +795,7 @@ async def test_group_turn_budget_force_only_advances_the_external_cursor(
 
     manager.invalidate(session.key)
     reloaded = manager.get_or_create(session.key)
-    assert get_window_history(reloaded, 500, user_view) == user_history
+    assert get_window_history(reloaded, user_view) == user_history
     assert consolidation_cursor(reloaded, "user") == 0
     assert consolidation_cursor(reloaded, "external") == len(reloaded.messages)
 

@@ -156,7 +156,6 @@ class _AssemblyMixin:
             tools=deps.tools,
             discovery=self._tool_discovery,
             tool_search_enabled=self._tool_search_enabled,
-            memory_window=config.memory.keep_count,
             context=self._context,
             session_manager=self.session_manager,
             event_bus=self._event_bus,
@@ -197,9 +196,7 @@ class _AssemblyMixin:
                 session=session_svc,
                 context=self._context,
                 tools=deps.tools,
-                memory_window=config.memory.keep_count,
-                run_agent_loop_fn=self._run_agent_loop,
-                prompt_render_fn=self._reasoner.render_prompt,
+                run_window_turn_fn=self._reasoner.run_window_turn,
             )
         )
 

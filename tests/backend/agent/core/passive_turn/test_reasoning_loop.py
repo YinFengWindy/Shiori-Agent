@@ -55,7 +55,6 @@ def make_reasoner(provider, tools, *, max_iterations=5, tool_search_enabled=Fals
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=tool_search_enabled,
-        memory_window=40,
     )
 
 

@@ -4,11 +4,7 @@ from typing import TYPE_CHECKING, cast
 
 from agent.core.passive_support import predict_current_user_source_ref
 from agent.core.passive_turn import get_session_metadata
-from agent.core.runtime_support import (
-    AgentLoopRunner,
-    PromptRenderRunner,
-    TurnRunResult,
-)
+from agent.core.runtime_support import TurnRunResult, WindowTurnRunner
 from agent.lifecycle.types import PromptRenderInput
 from agent.looping.ports import SessionServices
 from bus.events import InboundMessage, OutboundMessage, SpawnCompletionItem
@@ -25,11 +21,14 @@ async def process_spawn_completion_event(
     session_svc: SessionServices,
     pipeline: "PassiveTurnPipeline",
     tools: "ToolRegistry",
-    memory_window: int,
-    run_agent_loop_fn: AgentLoopRunner,
-    prompt_render_fn: PromptRenderRunner,
+    run_window_turn_fn: WindowTurnRunner,
     dispatch_outbound: bool = True,
 ) -> OutboundMessage:
+    """Report a background task result to the user through the main model.
+
+    The passback runs on the session's compaction window and working summary
+    inside the request compaction scope, then goes through post-reasoning.
+    """
     # 1. 先读取 session 和内部事件，准备要给主模型的回传消息。
     session = session_svc.session_manager.get_or_create(key)
     event = item.event
@@ -99,33 +98,30 @@ async def process_spawn_completion_event(
         ),
         defer_push_session_sync="true",
     )
-    tool_execution_context = tools.get_context()
-    prompt_render = await prompt_render_fn(
-        PromptRenderInput(
+    # History, tool hint and metadata come from the session window snapshot.
+    reasoned = await run_window_turn_fn(
+        session=session,
+        render_input=PromptRenderInput(
             session_key=key,
             channel=item.channel,
             chat_id=item.chat_id,
             content=current_message,
             media=None,
             timestamp=item.timestamp,
-            history=session.get_history(max_messages=memory_window),
+            history=[],
             skill_names=None,
             retrieved_memory_block="",
             disabled_sections=set(),
             turn_injection_prompt="",
-            session_metadata=session_metadata,
-        )
-    )
-    initial_messages = prompt_render.messages
-    final_content, tools_used, tool_chain, _, _thinking = await run_agent_loop_fn(
-        initial_messages,
+        ),
         request_time=item.timestamp,
-        preloaded_tools=None,
-        tool_event_session_key=key,
         tool_event_channel=item.channel,
         tool_event_chat_id=item.chat_id,
-        tool_execution_context=tool_execution_context,
+        tool_execution_context=tools.get_context(),
     )
+    final_content: str | None = reasoned.reply
+    tools_used = list(reasoned.metadata.get("tools_used") or [])
+    tool_chain = list(reasoned.metadata.get("tool_chain") or [])
     if final_content is None:
         if status == "completed":
             final_content = "后台任务已完成。"

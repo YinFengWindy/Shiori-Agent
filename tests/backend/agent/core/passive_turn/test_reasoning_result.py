@@ -28,7 +28,6 @@ async def test_role_summary_normalizes_legacy_content_before_mood_call():
         tools=ToolRegistry(),
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
     )
 
     content, tokens, role_reply, recovery = (
@@ -67,7 +66,6 @@ async def test_internal_budget_summary_uses_auxiliary_purpose(
         tools=ToolRegistry(),
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
     )
 
     result = await reasoner._summarize_incomplete_progress(
@@ -115,7 +113,6 @@ async def test_role_summary_recovery_obeys_input_budget_and_skips_mood():
         tools=ToolRegistry(),
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
     )
     try:
         with (
@@ -179,7 +176,6 @@ async def test_non_role_finalize_degrades_then_rejects_invalid_response(
         tools,
         ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=20,
         context=ContextBuilder(
             h.manager.workspace, h.maintenance._store, runtime_roles=roles
         ),
