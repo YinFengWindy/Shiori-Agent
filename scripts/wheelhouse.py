@@ -82,11 +82,18 @@ def wheelhouse_closure(
 
     Each ``local`` requirement and every ``shiori-*`` dependency must be a wheel
     built into ``wheelhouse``; one missing there fails instead of falling back
-    to a same-named index package.
+    to a same-named index package. Several wheels of one package are ambiguous
+    and fail rather than one silently replacing another.
     """
-    available: dict[str, Path] = {
-        parse_wheel_filename(wheel.name)[0]: wheel for wheel in wheelhouse.glob("*.whl")
-    }
+    available: dict[str, Path] = {}
+    for wheel in sorted(wheelhouse.glob("*.whl")):
+        name = parse_wheel_filename(wheel.name)[0]
+        if name in available:
+            raise ValueError(
+                f"Wheelhouse {wheelhouse} holds several {name} wheels: "
+                f"{available[name].name}, {wheel.name}"
+            )
+        available[name] = wheel
     reached, external = requirement_closure(
         local,
         lambda name, _extra: (

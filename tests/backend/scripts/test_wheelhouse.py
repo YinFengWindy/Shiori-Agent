@@ -105,3 +105,14 @@ def test_closure_applies_extras_per_edge_and_markers_per_context() -> None:
         ("sibling", "base-only"),
         ("target", 'tool; extra == "test"'),
     }
+
+
+def test_several_wheels_of_one_package_fail_instead_of_one_winning(
+    tmp_path: Path,
+) -> None:
+    house = tmp_path / "wheels"
+    house.mkdir()
+    _wheel(house, "shiori-sdk", "3.0.0")
+    _wheel(house, "shiori-sdk", "3.1.0")
+    with pytest.raises(ValueError, match="several shiori-sdk wheels"):
+        installer.wheelhouse_closure(["shiori-sdk"], house)

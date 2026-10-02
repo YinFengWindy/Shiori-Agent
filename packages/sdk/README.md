@@ -113,11 +113,16 @@ tests, stubs and packaged testing helpers, including TYPE_CHECKING, import alias
 literal/string-composed dynamic imports, string patch targets, `importlib.resources`
 and `pkgutil` resource access (attribute, alias or literal `getattr` forms), and host
 resource paths built from `__file__` (`Path`/`pathlib.Path`, `os.path.dirname`/
-`split`/`join`, literal `*[...]` arguments, folded string concatenation) or from the
-working directory starting with a host top-level entry (actual backend packages,
-`apps/`, `packages/`, `tests/`). Path values are followed through names bound in the
-same module only; paths passed through attributes or call results (for example
-`self.root.parents[3]`) are left to external execution.
+`split`/`join`, literal `*[...]` arguments, `os.pardir`, `p /= ...`, folded string
+concatenation) or rooted at the working directory (`Path.cwd()`, `os.getcwd()`, or a
+relative literal as the base of a complete path expression, `open("...")` included)
+that names the host layout: `apps/`, `tests/backend/`, an existing entry below
+`apps/backend/`, or a file inside an existing host package directory. Fragments
+appended to another path are not judged alone; `str()` and `posixpath.join` build
+plain strings. Path values are followed through names bound in the same module only;
+paths passed through attributes, containers, call results or loops (for example
+`self.root.parents[3]`, `parents[-1]`, `__spec__.origin`, `sys.path[0]`) are left to
+external execution.
 Exclusions are judged relative to the scanned package: virtual environments,
 caches and a plugin's root-level `build/`/`dist/` outputs; package-internal
 directories such as `backend/build/` are scanned wherever the checkout lives.

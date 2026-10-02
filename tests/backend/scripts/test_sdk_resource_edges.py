@@ -34,11 +34,38 @@ from scripts.sdk_resource_edges import resource_edges
         "config = Path('bootstrap') / 'config.yaml'",
         "import os\nprompt = os.path.join(os.getcwd(), 'prompts', 'system.md')",
         "entry = Path.cwd() / 'main.py'",
+        "import os\nroot = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, os.pardir)",
+        "source = open('bootstrap/app.py').read()",
+        "with open(os.path.join('prompts', 'agent.py')) as file:\n    pass",
+        "root = Path(__file__).parent\nroot /= '../../..'",
     ],
 )
 def test_repository_layout_escapes_are_rejected(tmp_path: Path, source: str) -> None:
     owner = tmp_path / "plugins/demo"
     assert resource_edges(ast.parse(source), owner / "backend/plugin.py", owner)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Fragments appended to a plugin-owned base are not working-directory paths.
+        "prompt = Path(__file__).parent / Path('prompts') / 'a.md'",
+        "HERE = Path(__file__).parent\nprompt = HERE.joinpath(Path('prompts', 'a.md'))",
+        "SUB = Path('utils')\nhelpers = Path(__file__).parent / SUB",
+        # str() and posixpath.join build strings such as keys and URLs.
+        "SCOPE = 'session'\nkey = str(SCOPE)",
+        "import os\nkey = os.path.join('core', 'enabled')",
+        "import posixpath\nroute = posixpath.join('agent', 'v1')",
+        # A plugin test's own fixtures under tests/ are not the host test tree.
+        "fixture = Path('tests') / 'fixtures' / 'x.json'",
+        "root = Path(__file__).parent\nroot /= 'data'",
+    ],
+)
+def test_plugin_paths_named_like_host_packages_are_allowed(
+    tmp_path: Path, source: str
+) -> None:
+    owner = tmp_path / "plugins/demo"
+    assert not resource_edges(ast.parse(source), owner / "backend/plugin.py", owner)
 
 
 def test_plugin_owned_resources_and_explicit_sibling_resources_are_allowed(
