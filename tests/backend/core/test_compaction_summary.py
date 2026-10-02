@@ -113,14 +113,15 @@ async def test_auxiliary_overflow_or_truncation_never_produces_a_summary(
 ):
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("cli:summary-budget")
-    session.add_message("user", "x" * (10000 if failure == "input" else 10))
+    session.add_message("user", "x" * 10)
     session.add_message("assistant", "done")
     manager.save(session)
     prepared = await manager.prepare_window(session.key, None, keep_turns=0)
     assert prepared is not None
+    # The input case leaves less room than the instructions alone need.
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=4000,
+        context_window_tokens=2100 if failure == "input" else 4000,
         max_output_tokens=2000,
         budget_policy=BudgetPolicy(safety_margin_tokens=20),
     )
@@ -185,5 +186,67 @@ async def test_native_tool_exchange_survives_storage_and_enters_summary_sources(
         assert sources[1]["tool_calls"] == [call]
         assert sources[2]["tool_call_id"] == "native-call"
         assert sources[2]["content"] == "report saved"
+    finally:
+        await provider.aclose()
+
+
+async def test_oversized_removed_range_is_folded_in_budgeted_batches(tmp_path):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:summary-batches")
+    session.add_message("user", "paste " + "p" * 60000)
+    session.add_message("assistant", "noted")
+    for index in range(6):
+        session.add_message("user", f"fetch page {index}")
+        session.add_message(
+            "assistant",
+            f"page {index} fetched",
+            tool_chain=[
+                {
+                    "calls": [
+                        {
+                            "call_id": f"fetch-{index}",
+                            "name": "web_fetch",
+                            "result": f"head-{index}-" + "w" * 40000 + "-tail",
+                        }
+                    ]
+                }
+            ],
+        )
+    manager.save(session)
+    prepared = await manager.prepare_window(session.key, None, keep_turns=0)
+    assert prepared is not None
+    provider = LLMProvider(
+        api_key="test",
+        context_window_tokens=8000,
+        max_output_tokens=2000,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
+    )
+    first_id = session.messages[0]["id"]
+    requests = []
+
+    async def fake_chat(**kwargs):
+        budget = provider.input_budget(**kwargs)
+        assert budget is not None
+        requests.append(
+            (budget.estimate.tokens, budget.input_limit_tokens, kwargs["messages"])
+        )
+        return LLMResponse(content=_payload([first_id], tasks=f"step {len(requests)}"))
+
+    provider.chat = AsyncMock(side_effect=fake_chat)
+    try:
+        result = await WorkingSummaryWriter(
+            manager, provider, "explicit", 2000
+        ).generate(prepared)
+        assert len(requests) > 1
+        assert all(tokens <= limit for tokens, limit, _ in requests)
+        # Each later batch rewrites the previous batch's state, not the original.
+        for index, (_, _, messages) in enumerate(requests[1:], start=1):
+            payload = json.loads(messages[-1]["content"])
+            assert f"step {index}" in payload["previous_state"]
+        sent = "".join(messages[-1]["content"] for _, _, messages in requests)
+        assert "chars truncated" in sent and "w" * 10001 not in sent
+        assert all("-tail" in sent and f"head-{i}-" in sent for i in range(6))
+        assert json.loads(result.content)["tasks"] == f"step {len(requests)}"
+        assert result.source_ids == (first_id,)
     finally:
         await provider.aclose()

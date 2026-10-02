@@ -18,7 +18,7 @@ from .helpers import (
     _append_proactive_meta,
     _build_proactive_history_messages,
     _rebuild_user_content,
-    _truncate_tool_result,
+    truncate_tool_result,
     starts_turn,
 )
 
@@ -207,7 +207,7 @@ class Session:
                         {
                             "role": "tool",
                             "tool_call_id": c["call_id"],
-                            "content": _truncate_tool_result(c.get("result", "")),
+                            "content": truncate_tool_result(c.get("result", "")),
                         }
                     )
 

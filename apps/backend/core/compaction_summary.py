@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agent.prompting.token_estimate import estimate_tokens
 from agent.provider import is_truncated_finish_reason
 from session.maintenance_progress import window_key
 from conversation.context_scope import stored_message_source
+from session.manager.helpers import _TOOL_RESULT_CHAR_BUDGET, truncate_tool_result
 from session.manager.models import message_thread_id
 
 if TYPE_CHECKING:
@@ -18,6 +19,19 @@ if TYPE_CHECKING:
     from session.manager.window import WindowPreparation
 
 SUMMARY_TOKEN_LIMIT = 2000
+# Below this a message no longer carries usable content; fail instead of shrinking.
+_MIN_TEXT_CHARS = 200
+_SOURCE_KEYS = (
+    "id",
+    "role",
+    "content",
+    "media",
+    "tool_chain",
+    "tool_calls",
+    "tool_call_id",
+    "name",
+    "timestamp",
+)
 _FIELDS = ("tasks", "constraints", "decisions", "unfinished", "tool_state", "entities")
 _PROMPT = """Rewrite the current working state as one JSON object. This is task state,
 not long-term memory or RECENT_CONTEXT. Preserve all still-valid earlier state;
@@ -61,8 +75,48 @@ def validate_summary(content: str, allowed_ids: set[str]) -> WorkingSummary:
     return WorkingSummary(normalized, tuple(dict.fromkeys(ids)))
 
 
+def _summary_source(message: dict[str, Any]) -> dict[str, Any]:
+    """Project one stored message into summary input, bounded like model history.
+
+    Original text, attachment references and completed tool outcomes are the
+    semantic source. Never stringify llm_user_content's Base64 image blocks.
+    """
+    source = {key: message[key] for key in _SOURCE_KEYS if key in message} | {
+        "source": stored_message_source(message).to_metadata(),
+        "thread_id": message_thread_id(message),
+    }
+    if source.get("tool_chain"):
+        source["tool_chain"] = [
+            group
+            | {
+                "calls": [
+                    call
+                    | (
+                        {"result": truncate_tool_result(call["result"])}
+                        if "result" in call
+                        else {}
+                    )
+                    for call in group.get("calls") or []
+                ]
+            }
+            for group in source["tool_chain"]
+        ]
+    return source
+
+
+def _shrink(value: Any, limit: int) -> Any:
+    """Apply the tool-result truncation rule to every text longer than ``limit``."""
+    if isinstance(value, str):
+        return truncate_tool_result(value, limit) if len(value) > limit else value
+    if isinstance(value, dict):
+        return {key: _shrink(item, limit) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_shrink(item, limit) for item in value]
+    return value
+
+
 class WorkingSummaryWriter:
-    """Generate once using a separately budgeted auxiliary request, never recurse."""
+    """Fold removed messages into one bounded state within the auxiliary budget."""
 
     def __init__(
         self,
@@ -82,50 +136,44 @@ class WorkingSummaryWriter:
         return self.provider.context_model(self.model)
 
     async def generate(self, prepared: WindowPreparation) -> WorkingSummary:
-        """Rewrite old valid state together with exactly the newly removed raw range."""
+        """Rewrite old valid state together with exactly the newly removed raw range.
+
+        A range that fits the request budget is rewritten in one call. Larger ranges
+        are cut into consecutive batches; each batch rewrites the state produced by
+        the previous one, so the result stays within the summary hard limit.
+        """
         session = self.sessions.get_or_create(prepared.session_key)
         progress = self.sessions.maintenance_progress(session)
         key = window_key(prepared.view)
         removed = set(prepared.removed_message_ids)
-        # Original text, attachment references and completed tool outcomes are the
-        # semantic source. Never stringify llm_user_content's Base64 image blocks.
-        sources = [
-            {
-                key: message[key]
-                for key in (
-                    "id",
-                    "role",
-                    "content",
-                    "media",
-                    "tool_chain",
-                    "tool_calls",
-                    "tool_call_id",
-                    "name",
-                    "timestamp",
-                )
-                if key in message
-            }
-            | {
-                "source": stored_message_source(message).to_metadata(),
-                "thread_id": message_thread_id(message),
-            }
+        pending = [
+            _summary_source(message)
             for message in session.messages
             if message.get("id") in removed
         ]
         allowed = removed | set(progress.summary_source_ids.get(key, []))
-        messages = [
+        state = progress.summaries.get(key, "")
+        summary: WorkingSummary | None = None
+        while summary is None or pending:
+            count, messages = self._next_batch(state, pending)
+            summary = await self._rewrite(messages, allowed)
+            state = summary.content
+            pending = pending[count:]
+        return summary
+
+    def _request(self, state: str, sources: list[dict[str, Any]]) -> list[dict]:
+        return [
             {"role": "system", "content": _PROMPT},
             {
                 "role": "user",
                 "content": json.dumps(
-                    {
-                        "previous_state": progress.summaries.get(key, ""),
-                        "messages": sources,
-                    },
+                    {"previous_state": state, "messages": sources},
                     ensure_ascii=False,
                 ),
             },
         ]
+
+    def _fits(self, messages: list[dict]) -> bool:
         budget = self.provider.input_budget(
             messages=messages,
             tools=[],
@@ -133,8 +181,35 @@ class WorkingSummaryWriter:
             max_tokens=self.max_tokens,
             call_purpose="auxiliary",
         )
-        if budget is not None and budget.estimate.tokens > budget.input_limit_tokens:
-            raise ValueError("工作摘要请求超过模型输入预算")
+        return budget is None or budget.estimate.tokens <= budget.input_limit_tokens
+
+    def _next_batch(
+        self, state: str, pending: list[dict[str, Any]]
+    ) -> tuple[int, list[dict]]:
+        """Pick the longest prefix of ``pending`` whose request fits the budget."""
+        messages = self._request(state, pending)
+        if self._fits(messages):
+            return len(pending), messages
+        # Request size grows with the prefix, so binary search the largest fit.
+        low, high = 0, len(pending) - 1
+        while low < high:
+            middle = (low + high + 1) // 2
+            if self._fits(self._request(state, pending[:middle])):
+                low = middle
+            else:
+                high = middle - 1
+        if low:
+            return low, self._request(state, pending[:low])
+        # A single message alone exceeds the batch: tighten truncation until it fits.
+        limit = _TOOL_RESULT_CHAR_BUDGET
+        while limit >= _MIN_TEXT_CHARS:
+            messages = self._request(state, [_shrink(pending[0], limit)])
+            if self._fits(messages):
+                return 1, messages
+            limit //= 2
+        raise ValueError("工作摘要请求超过模型输入预算")
+
+    async def _rewrite(self, messages: list[dict], allowed: set[str]) -> WorkingSummary:
         response = await self.provider.chat(
             messages=messages,
             tools=[],
