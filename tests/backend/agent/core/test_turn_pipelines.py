@@ -1,12 +1,11 @@
 import asyncio
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.core.runtime_support import SessionLike, TurnRunResult
+from agent.core.runtime_support import TurnRunResult
 from agent.looping.core import AgentLoop
 from agent.looping.interrupt import TurnInterruptState
 from agent.lifecycle.facade import TurnLifecycle
@@ -26,6 +25,7 @@ from core.common.channel_directory import ChannelDirectory
 from core.memory.engine import MemoryQueryResult
 from core.roles import RoleRepository, RoleStore, RoleRuntimeRegistry
 from bootstrap.wiring import wire_turn_lifecycle
+from session.manager import SessionManager
 
 
 class _NoopTool(Tool):
@@ -310,6 +310,7 @@ def _make_loop(
     tmp_path: Path,
     *,
     retrieval_pipeline: MemoryRetrievalPipeline | None = None,
+    session_manager: SessionManager | None = None,
 ) -> AgentLoop:
     tools = ToolRegistry()
     tools.register(_NoopTool())
@@ -319,7 +320,9 @@ def _make_loop(
             provider=cast(Any, _Provider()),
             light_provider=cast(Any, _Provider()),
             tools=tools,
-            session_manager=MagicMock(),
+            session_manager=(
+                session_manager if session_manager is not None else MagicMock()
+            ),
             workspace=tmp_path,
             memory_services=MemoryServices(engine=cast(Any, _FakeMemoryEngine())),
             retrieval_pipeline=retrieval_pipeline,
@@ -505,7 +508,8 @@ async def test_desktop_interrupt_state_is_not_spliced_into_follow_up_message(
 @pytest.mark.asyncio
 async def test_agent_loop_afterstep_fires_with_turn_lifecycle_wiring(tmp_path: Path):
     RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
-    loop = _make_loop(tmp_path)
+    manager = SessionManager(tmp_path)
+    loop = _make_loop(tmp_path, session_manager=manager)
     session_key = "cli:123"
     loop._active_turn_states[session_key] = TurnInterruptState(
         session_key=session_key,
@@ -516,19 +520,13 @@ async def test_agent_loop_afterstep_fires_with_turn_lifecycle_wiring(tmp_path: P
         active_turn_states=loop.active_turn_states,
     )
     msg = InboundMessage(channel="cli", sender="u", chat_id="123", content="你好")
-    session = SimpleNamespace(
-        key=session_key,
-        messages=[],
-        metadata={"role_id": "mira"},
-        last_consolidated=0,
-        get_history=MagicMock(return_value=[]),
-        add_message=MagicMock(),
-    )
-    loop.session_manager.get_or_create.return_value = session
+    session = manager.get_or_create(session_key)
+    session.metadata["role_id"] = "mira"
+    manager.save(session)
 
     await loop._reasoner.run_turn(
         msg=msg,
-        session=cast(SessionLike, session),
+        session=session,
         base_history=[],
     )
 
