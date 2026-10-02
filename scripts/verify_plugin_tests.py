@@ -42,6 +42,7 @@ SDK_PLUGINS = frozenset(
         "screen_perception",
         "browser_use",
         "computer_use",
+        "qqbot",
     }
 )
 SLOW_PLUGINS = ("telegram", "feishu", "qqbot")

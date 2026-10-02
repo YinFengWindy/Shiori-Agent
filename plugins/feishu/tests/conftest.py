@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from shiori_sdk.testing.channel_intake import FakeChannelIntake as ChannelIntake
 import asyncio
 import io
 import json
@@ -340,6 +341,7 @@ def build_harness(
     bus, push_tool, hub = Bus(), PushTool(), Hub(allowed=allowed, blocked=blocked)
     event_bus, interrupts = EventBus(), Interrupts()
     context = ChannelContext(
+        intake_factory=ChannelIntake,
         bus=cast(Any, bus),
         session_manager=cast(Any, SimpleNamespace()),
         event_bus=event_bus,

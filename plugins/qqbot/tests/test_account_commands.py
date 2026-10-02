@@ -1,65 +1,26 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from shiori_sdk.testing.accounts import FakeAccounts
+from shiori_sdk.testing.extensions import FakeConfig
+
 from types import SimpleNamespace
 
 import httpx
 import pytest
 
 import plugins.qqbot.backend.gateway as gateway_module
-from agent.plugin_host.kv import PluginKVStore
+from shiori_sdk.testing.storage import FakeKV
 from plugins.qqbot.backend.account_channel import QQBotAccountsChannel
 from plugins.qqbot.backend.accounts import QQBotAccountStore
 from plugins.qqbot.backend.channel import QQBotChannel
 
 
-@dataclass
-class _AccountRecord:
-    id: str
-
-
-class _Accounts:
-    def __init__(self):
-        self.reports = []
-        self.roles = {}
-        self.avatars = {}
-
-    def register(
-        self,
-        *,
-        platform,
-        platform_account_id,
-        config_ref,
-        role_id,
-        display_name=None,
-        avatar_url=None,
-    ):
-        self.roles[platform_account_id] = role_id
-        if avatar_url is not None:
-            self.avatars[platform_account_id] = avatar_url
-        assert platform == "qqbot"
-        assert config_ref == f"app:{platform_account_id}"
-        return SimpleNamespace(record=_AccountRecord(platform_account_id))
-
-    def check_owner(self, *, config_ref, role_id, **_identity):
-        if not role_id:
-            raise ValueError("账号没有所属角色")
-
-    def register_saved(self, *, response_rules=None, **fields):
-        # The host refuses an entry without an owner; the plugin must skip it.
-        return self.register(**fields) if fields.get("role_id") else None
-
-    def role_exists(self, role_id):
-        return True
-
-    def report(self, account_id, **kwargs):
-        self.reports.append((account_id, kwargs))
-
-
 def _manager(tmp_path):
-    store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
-    accounts = _Accounts()
-    manager = QQBotAccountsChannel(SimpleNamespace(accounts=accounts), store, ())
+    store = QQBotAccountStore(FakeKV())
+    accounts = FakeAccounts("qqbot", id_factory=lambda value: value)
+    manager = QQBotAccountsChannel(
+        SimpleNamespace(config=FakeConfig(), accounts=accounts), store, ()
+    )
     return manager, store, accounts
 
 
@@ -243,7 +204,7 @@ async def test_deleted_application_closes_gateway_and_forgets_credentials(
     assert [row["app_id"] for row in store.list()] == ["100", "200"]
     await manager.purge_account("100")
     assert [row["app_id"] for row in store.list()] == ["200"]
-    assert "secret-100" not in (tmp_path / "qqbot.json").read_text(encoding="utf-8")
+    assert "secret-100" not in repr(store._kv.get("application_accounts"))
     assert manager._identity.account_id("100") == ""
     with pytest.raises(KeyError, match="QQ 机器人账号不存在"):
         manager._identity.app_for_account({"account_id": "100"})

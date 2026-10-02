@@ -1,0 +1,176 @@
+"""Session types a channel declares, and the chat IDs each type accepts.
+
+A channel plugin's manifest may list the session types its chat IDs name
+(private chat, group chat), each with an optional internal prefix such as QQ's
+``gqq:``. Role bindings store the chosen type next to the chat ID; the
+declarations let the core check that the two agree without knowing any channel
+by name.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Literal
+
+# Every role binding names one of these; the host-owned desktop session is private.
+ChatType = Literal["private", "group"]
+CHAT_TYPE_PRIVATE: ChatType = "private"
+CHAT_TYPE_GROUP: ChatType = "group"
+CHAT_TYPES: tuple[ChatType, ...] = (CHAT_TYPE_PRIVATE, CHAT_TYPE_GROUP)
+
+# Inbound ``chat_type`` values naming a group conversation (Telegram also
+# reports ``supergroup``).
+_GROUP_CHAT_TYPES = frozenset({"group", "supergroup"})
+
+# Outbound reply metadata key: extra member IDs the role chose to mention in a
+# group reply. Channel plugins also address the triggering sender by their
+# platform's convention; private replies never carry it.
+REPLY_MENTION_IDS_KEY = "mention_ids"
+
+
+def parse_mention_ids(value: object) -> tuple[str, ...]:
+    """Member IDs to mention: a list of non-empty strings or integers.
+
+    The single host rule for model-chosen mentions, shared by account target
+    arguments and group replies. Returns the stripped, deduplicated IDs in
+    order (empty for None or an empty list); raises ``ValueError`` otherwise.
+    Whether an ID is usable on a platform is its channel plugin's check.
+    """
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError("mention_ids 必须是成员 ID 列表")
+    ids: list[str] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, (str, int)):
+            raise ValueError("mention_ids 必须是成员 ID 列表")
+        member = str(item).strip()
+        if not member:
+            raise ValueError("mention_ids 不能包含空成员 ID")
+        ids.append(member)
+    return tuple(dict.fromkeys(ids))
+
+
+def is_group_chat_type(value: object) -> bool:
+    """Whether an inbound message's ``chat_type`` names a group conversation."""
+    return str(value or "").strip().lower() in _GROUP_CHAT_TYPES
+
+
+def parse_chat_type(value: object, field_name: str) -> ChatType:
+    """Returns ``value`` as a session type; raises ``ValueError`` naming ``field_name``.
+
+    The single check shared by manifest declarations and role bindings.
+    """
+    for chat_type in CHAT_TYPES:
+        if value == chat_type:
+            return chat_type
+    raise ValueError(f"{field_name} 必须是 {' / '.join(CHAT_TYPES)} 之一")
+
+
+@dataclass(frozen=True)
+class ChatTypeDeclaration:
+    """One session type a channel supports, as declared in its plugin manifest.
+
+    ``prefix`` is prepended to the user-entered number to form the stored chat
+    ID (``gqq:`` + group number); ``None`` stores the number as is.
+    ``chat_id_label`` / ``chat_id_hint`` only feed the binding form.
+    """
+
+    type: ChatType
+    label: str
+    chat_id_label: str
+    chat_id_hint: str | None = None
+    prefix: str | None = None
+
+    def to_dict(self) -> dict[str, str | None]:
+        """Returns the JSON-compatible bridge representation."""
+        return {
+            "type": self.type,
+            "label": self.label,
+            "chat_id_label": self.chat_id_label,
+            "chat_id_hint": self.chat_id_hint,
+            "prefix": self.prefix,
+        }
+
+
+# Channel name -> declared session types; channels without declarations are absent.
+ChatTypeDeclarations = Mapping[str, tuple[ChatTypeDeclaration, ...]]
+
+
+def validate_chat_id_for_type(
+    chat_id: str,
+    chat_type: ChatType,
+    declarations: tuple[ChatTypeDeclaration, ...],
+) -> None:
+    """Rejects a chat ID that does not match its binding's declared session type.
+
+    The selected type must be declared. A declared prefix must lead the chat ID
+    exactly once and be followed by a non-empty remainder (an ID in whatever
+    form the channel uses, not necessarily digits) that itself carries no
+    declared prefix, so a pasted ``gqq:gqq:123`` is refused. A chat ID carrying
+    another declared type's prefix names that other type. ``chat_id`` is
+    already stripped. Raises ``ValueError`` with the expected form.
+    """
+    selected = next((item for item in declarations if item.type == chat_type), None)
+    if selected is None:
+        supported = "、".join(item.label for item in declarations)
+        raise ValueError(f"该渠道不支持此会话类型，可选：{supported}")
+    if selected.prefix is not None:
+        remainder = chat_id[len(selected.prefix) :].strip()
+        if (
+            not chat_id.startswith(selected.prefix)
+            or not remainder
+            or any(
+                item.prefix is not None and remainder.startswith(item.prefix)
+                for item in declarations
+            )
+        ):
+            raise ValueError(
+                f"{selected.label}会话 ID 必须是 {selected.prefix}<{selected.chat_id_label}>"
+                "，前缀只写一次"
+            )
+    # Manifest parsing rejects prefixes nested in one another, so a match here
+    # can only mean the chat ID names the other type.
+    for other in declarations:
+        if (
+            other is not selected
+            and other.prefix is not None
+            and chat_id.startswith(other.prefix)
+        ):
+            raise ValueError(
+                f"会话 ID {chat_id} 是{other.label}格式，与所选的{selected.label}不符"
+            )
+
+
+# ``/chatid`` (and its old alias ``/myid``) asks a channel which session a chat
+# is, so the user can bind it. Each channel plugin answers it itself.
+CHAT_ID_COMMANDS = frozenset({"/chatid", "/myid"})
+
+
+def is_chat_id_command(text: str) -> bool:
+    """Whether ``text`` is ``/chatid`` or ``/myid`` (a ``@bot`` suffix is allowed)."""
+    words = text.strip().split(maxsplit=1)
+    return bool(words) and words[0].lower().split("@", 1)[0] in CHAT_ID_COMMANDS
+
+
+def chat_id_command_reply(
+    chat_id: str,
+    chat_type: ChatType,
+    declarations: tuple[ChatTypeDeclaration, ...],
+) -> str:
+    """The reply to ``/chatid``: what the binding form asks for this session.
+
+    Names the declared session type and the number the user types, i.e. the
+    chat ID without the type's internal prefix (``gqq:831907794`` answers
+    ``831907794``). Raises ``ValueError`` if the channel does not declare the
+    type.
+    """
+    declaration = next((item for item in declarations if item.type == chat_type), None)
+    if declaration is None:
+        raise ValueError(f"渠道未声明会话类型 {chat_type}")
+    prefix = declaration.prefix
+    number = (
+        chat_id[len(prefix) :] if prefix and chat_id.startswith(prefix) else chat_id
+    )
+    return f"会话类型：{declaration.label}\n{declaration.chat_id_label}：{number}"

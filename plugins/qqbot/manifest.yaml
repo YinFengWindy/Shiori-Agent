@@ -6,6 +6,7 @@ desc: 官方 QQBot 渠道
 capabilities:
   - channels
   - kv
+  - config
   - accounts
   - rpc
 channels:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from infra.channels.intake import ChannelIntake
 import logging
 
 import pytest
@@ -33,6 +34,7 @@ class _Member:
 
 def _context() -> ChannelContext:
     return ChannelContext(
+        intake_factory=ChannelIntake,
         bus=None,  # type: ignore[arg-type]
         session_manager=None,  # type: ignore[arg-type]
         event_bus=None,  # type: ignore[arg-type]

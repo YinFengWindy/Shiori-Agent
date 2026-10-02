@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.common.channel_chat_types import (
+from shiori_sdk.channels.chat_types import (
     ChatType,
     ChatTypeDeclaration,
     chat_id_command_reply,

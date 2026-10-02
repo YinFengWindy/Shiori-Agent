@@ -40,3 +40,39 @@ class HttpClient(Protocol):
         budget: RequestBudget | None = None,
     ) -> httpx.Response: ...
     async def get(self, url: str, *, headers: dict[str, str]) -> httpx.Response: ...
+
+
+class ChannelHttp(Protocol):
+    """Budgeted transport for channel media and local platform services."""
+
+    async def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: dict[str, object] | None = None,
+        content: bytes | str | None = None,
+        json: object = None,
+        follow_redirects: bool = False,
+        timeout_s: float | None = None,
+        budget: RequestBudget | None = None,
+    ) -> httpx.Response: ...
+    async def get(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        follow_redirects: bool = False,
+        timeout_s: float | None = None,
+        budget: RequestBudget | None = None,
+    ) -> httpx.Response: ...
+
+
+class HttpResources(Protocol):
+    """Profiles share host-managed connections and are closed by their runtime owner."""
+
+    @property
+    def external_default(self) -> ChannelHttp: ...
+    @property
+    def local_service(self) -> ChannelHttp: ...

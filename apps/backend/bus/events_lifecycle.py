@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from shiori_sdk.channel_events import (
+    TurnStarted as TurnStarted,
+    StreamDeltaReady as StreamDeltaReady,
+    TurnCancelled as TurnCancelled,
+)
+
 from shiori_sdk.memory.committed import TurnCommitted as TurnCommitted
 from shiori_sdk.role_events import RoleDeleted as RoleDeleted
 from shiori_sdk.role_events import (
@@ -9,7 +15,6 @@ from shiori_sdk.role_events import (
 )
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -38,39 +43,6 @@ def _empty_tool_chain() -> list[dict[str, Any]]:
 
 def _empty_tool_call_groups() -> list["ToolCallGroup"]:
     return []
-
-
-@dataclass(frozen=True)
-class TurnStarted:
-    session_key: str
-    channel: str
-    chat_id: str
-    content: str
-    timestamp: datetime
-    role_id: str = ""
-    # Stable inbound transport identity, retained even if a newer message arrives.
-    external_message_id: str = ""
-
-
-@dataclass(frozen=True)
-class StreamDeltaReady:
-    session_key: str
-    channel: str
-    chat_id: str
-    content_delta: str = ""
-    thinking_delta: str = ""
-    role_id: str = ""
-    external_message_id: str = ""
-
-
-@dataclass(frozen=True)
-class TurnCancelled:
-    """Signals that an originating turn will not produce more stream deltas."""
-
-    session_key: str
-    channel: str
-    chat_id: str
-    external_message_id: str = ""
 
 
 @dataclass

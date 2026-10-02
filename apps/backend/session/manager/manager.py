@@ -77,3 +77,12 @@ class _ManagerCoreMixin:
         except Exception as e:
             logging.warning("Failed to read channel metadata for %s: %s", channel, e)
             return []
+
+    async def remember_channel_identity(
+        self, channel: str, chat_id: str, key: str, value: str
+    ) -> None:
+        """Persist channel identity metadata only when the normalized value changes."""
+        session = self.get_or_create(f"{channel}:{chat_id}")
+        if session.metadata.get(key) != value:
+            session.metadata[key] = value
+            await self.save_async(session)

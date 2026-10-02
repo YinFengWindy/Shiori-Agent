@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 import pytest
@@ -11,11 +10,6 @@ from agent.config import load_config_text
 from bootstrap.app import AppRuntime, RuntimeFeatures
 from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
-
-_REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
-_QQBOT_PLUGIN_DIR = _REPOSITORY_ROOT / "plugins" / "qqbot"
-_TELEGRAM_PLUGIN_DIR = _REPOSITORY_ROOT / "plugins" / "telegram"
-_QQ_PLUGIN_DIR = _REPOSITORY_ROOT / "plugins" / "qq"
 
 # 不联网的渠道插件：配置 fail = true 时启动失败，用来覆盖 active/failed。
 _FAKE_CHANNEL_PLUGIN_PY = """
@@ -69,9 +63,17 @@ async def _list_channels(
     fake_plugins: tuple[str, ...] = (),
 ) -> dict[str, dict]:
     root = tmp_path / "plugin_dirs"
-    shutil.copytree(_QQBOT_PLUGIN_DIR, root / "qqbot")
-    shutil.copytree(_TELEGRAM_PLUGIN_DIR, root / "telegram")
-    shutil.copytree(_QQ_PLUGIN_DIR, root / "qq")
+    _write_fake_channel_plugin(root, "declared")
+    declaration = root / "declared" / "manifest.yaml"
+    declaration.write_text(
+        declaration.read_text(encoding="utf-8").replace("name: fake", "name: declared"),
+        encoding="utf-8",
+    )
+    entry = root / "declared" / "backend" / "plugin.py"
+    entry.write_text(
+        entry.read_text(encoding="utf-8").replace('name = "fake"', 'name = "declared"'),
+        encoding="utf-8",
+    )
     for plugin_id in fake_plugins:
         _write_fake_channel_plugin(root, plugin_id)
     monkeypatch.setattr(
@@ -106,62 +108,38 @@ async def _list_channels(
 
 
 @pytest.mark.asyncio
-async def test_lists_desktop_builtins_and_account_ready_qqbot(tmp_path, monkeypatch):
+async def test_lists_desktop_and_public_channel_declarations(tmp_path, monkeypatch):
     rows = await _list_channels(tmp_path, monkeypatch)
-    assert list(rows) == ["desktop", "qq", "qqbot", "telegram"]
+    assert list(rows) == ["desktop", "declared"]
     assert rows["desktop"]["state"] == "active"
-    # Telegram、QQ 都已迁为插件：同名渠道由插件声明提供，不再有内置行（#363 T4/T5）。
-    assert rows["qq"]["plugin_id"] == "qq"
-    assert rows["qq"]["label"] == "QQ（NapCat）"
-    # QQ keeps its account manager registered so an empty plugin can add an account.
-    assert rows["qq"]["state"] == "active"
-    assert rows["qq"]["status"] == {"connected": False}
-    assert rows["telegram"]["plugin_id"] == "telegram"
-    assert rows["telegram"]["label"] == "Telegram"
-    # Telegram keeps its Bot group registered so an empty plugin can add a Bot.
-    assert rows["telegram"]["state"] == "active"
-    assert rows["qqbot"] == {
-        "name": "qqbot",
-        "label": "QQBot",
-        "contact_label": None,
+    assert rows["declared"] == {
+        "name": "declared",
+        "label": "Fake",
+        "contact_label": "Fake 用户 ID",
         "chat_types": [
             {
                 "type": "private",
                 "label": "私聊",
-                "chat_id_label": "用户 OpenID",
-                "chat_id_hint": "对方的用户 OpenID",
-                "prefix": "c2c:",
+                "chat_id_label": "用户 ID",
+                "chat_id_hint": None,
+                "prefix": None,
             }
         ],
-        "plugin_id": "qqbot",
+        "plugin_id": "declared",
         "plugin_enabled": True,
         "state": "active",
         "error": "",
-        "status": None,
+        "status": {"connected": True, "account": "fake-bot"},
     }
 
 
 @pytest.mark.asyncio
 async def test_disabled_plugin_channel_stays_listed(tmp_path, monkeypatch):
     rows = await _list_channels(
-        tmp_path, monkeypatch, "[plugins.qqbot]\nenabled = false\n"
+        tmp_path, monkeypatch, "[plugins.declared]\nenabled = false\n"
     )
-    assert rows["qqbot"]["plugin_enabled"] is False
-    assert rows["qqbot"]["state"] == "plugin_disabled"
-
-
-@pytest.mark.asyncio
-async def test_disabled_migrated_channel_plugins_keep_their_channels_listed(
-    tmp_path, monkeypatch
-):
-    rows = await _list_channels(
-        tmp_path,
-        monkeypatch,
-        "[plugins.telegram]\nenabled = false\n\n[plugins.qq]\nenabled = false\n",
-    )
-    for name in ("telegram", "qq"):
-        assert rows[name]["plugin_id"] == name
-        assert rows[name]["state"] == "plugin_disabled"
+    assert rows["declared"]["plugin_enabled"] is False
+    assert rows["declared"]["state"] == "plugin_disabled"
 
 
 @pytest.mark.asyncio

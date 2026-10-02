@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.accounts.rules import response_rules_from_dict, response_rules_to_dict
+from shiori_sdk.accounts.rules import response_rules_from_dict, response_rules_to_dict
 
 
 def test_normalizes_blocked_sender_ids_and_round_trips():

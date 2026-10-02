@@ -11,8 +11,8 @@ import pytest
 
 from plugins.qqbot.backend.channel import QQBotChannel
 from plugins.qqbot.backend.stream_delivery import _StreamState
-from bus.events import OutboundMessage
-from bus.errors import NonRetryableDeliveryError
+from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.channels.errors import NonRetryableDeliveryError
 
 
 @pytest.mark.parametrize("terminal", [False, True])

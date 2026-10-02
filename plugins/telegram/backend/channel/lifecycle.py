@@ -28,7 +28,7 @@ from core.common.channel_chat_types import CHAT_ID_COMMANDS, ChatTypeDeclaration
 from infra.channels.base import AttachmentStore, MessageDeduper, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
 from infra.channels.intake import ChannelIntake
-from session.manager import SessionManager
+from shiori_sdk.channels.services import ChannelSessions as SessionManager
 
 from ..utils import (
     TelegramLiveEditQueue,
@@ -55,7 +55,7 @@ logger = logging.getLogger("plugins.telegram.channel")
 
 if TYPE_CHECKING:
     from agent.plugin_host.avatars import AvatarsCapability
-    from agent.plugin_host.capabilities import AccountsCapability
+    from shiori_sdk.accounts.capability import AccountsCapability
     from agent.plugin_host.kv import PluginKVStore
     from core.accounts import ConnectionState
 

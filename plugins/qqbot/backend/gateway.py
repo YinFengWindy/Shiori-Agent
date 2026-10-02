@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import httpx
+from shiori_sdk.accounts import ConnectionState
 
 from .formatting import API_BASE, TOKEN_URL
 
@@ -162,7 +163,7 @@ class _GatewayMixin:
         return token
 
     def _report_status(
-        self, state: str, error: str = "", name: str = "", bot_id: str = ""
+        self, state: ConnectionState, error: str = "", name: str = "", bot_id: str = ""
     ) -> None:
         self._connection_state = state
         if (

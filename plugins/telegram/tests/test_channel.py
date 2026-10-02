@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from shiori_sdk.testing.channel_intake import FakeChannelIntake as ChannelIntake
 import asyncio
 import importlib
 import sys
@@ -59,6 +60,14 @@ class _SessionManager:
 
     def get_channel_metadata(self, channel: str):
         return []
+
+    async def remember_channel_identity(
+        self, channel: str, chat_id: str, key: str, value: str
+    ) -> None:
+        session = self.get_or_create(f"{channel}:{chat_id}")
+        if session.metadata.get(key) != value:
+            session.metadata[key] = value
+            await self.save_async(session)
 
     def role_session_key(self, role_id: str) -> str:
         return f"role:{role_id}"
@@ -964,6 +973,7 @@ async def test_plugin_channel_takes_runtime_state_and_commands_from_context(
     push_tool = _PushTool()
     hub = SimpleNamespace(name="hub")
     ctx = ChannelContext(
+        intake_factory=ChannelIntake,
         bus=bus,  # type: ignore[arg-type]
         session_manager=_SessionManager(tmp_path),  # type: ignore[arg-type]
         event_bus=EventBus(),

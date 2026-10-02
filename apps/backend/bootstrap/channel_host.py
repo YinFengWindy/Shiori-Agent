@@ -10,10 +10,10 @@ from core.common.task_collector import TaskCollector
 from infra.channels.account_group import SupportsMemberChannels
 from infra.channels.contract import (
     Channel,
-    ChannelContext,
     ChannelStatus,
     SupportsChannelStatus,
 )
+from infra.channels.runtime_context import RuntimeChannelContext
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def _failure(name: str, phase: str, error: BaseException) -> ChannelFailure:
 class ChannelHost:
     def __init__(
         self,
-        ctx_factory: Callable[[Channel], ChannelContext],
+        ctx_factory: Callable[[Channel], RuntimeChannelContext],
         *,
         transport_lock: asyncio.Lock | None = None,
     ) -> None:

@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from agent.plugin_host.avatars import AvatarsCapability
-    from agent.plugin_host.capabilities import AccountsCapability
+    from shiori_sdk.accounts.capability import AccountsCapability
     from agent.plugin_host.kv import PluginKVStore
     from core.accounts import ConnectionState as AccountConnectionState
 

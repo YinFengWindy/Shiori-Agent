@@ -7,13 +7,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from core.accounts import VIA_ACCOUNT_KEY
-from core.accounts.target_contract import (
+from shiori_sdk.accounts import VIA_ACCOUNT_KEY
+from shiori_sdk.accounts.targets import (
     GROUP_MEMBER_TARGET,
     UncertainDeliveryError,
     account_send_media,
 )
-from core.common.media import detect_image_mime_from_header
+from shiori_sdk.media import detect_image_mime_from_header
 
 from .formatting import SUPPORTED_IMAGE_MIME_TYPES
 

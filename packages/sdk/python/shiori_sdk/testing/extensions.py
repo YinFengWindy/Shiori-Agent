@@ -17,10 +17,15 @@ class FakeConfig:
 
     def __init__(self, values: dict[str, object] | None = None):
         self.values = values or {}
+        self.references: dict[str, str] = {}
 
     def as_dict(self) -> dict[str, object]:
         """Return an isolated snapshot for plugin validation."""
         return dict(self.values)
+
+    def resolve_reference(self, value: str) -> str:
+        """Return a test-provided runtime resolution, keeping unknown references unchanged."""
+        return self.references.get(value, value)
 
 
 class FakeBotCommands:

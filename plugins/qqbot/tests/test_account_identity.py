@@ -1,63 +1,25 @@
 from __future__ import annotations
 
+from shiori_sdk.testing.accounts import FakeAccounts
+from shiori_sdk.testing.extensions import FakeConfig
+
 from types import SimpleNamespace
 
-from agent.plugin_host.kv import PluginKVStore
+from shiori_sdk.testing.storage import FakeKV
 from plugins.qqbot.backend.account_identity import QQBotAccountIdentity
 from plugins.qqbot.backend.accounts import QQBotAccountStore
 
 
-class _Accounts:
-    def __init__(self):
-        self.reports = []
-        self.roles = {}
-        self.avatars = {}
-
-    def register(
-        self,
-        *,
-        platform,
-        platform_account_id,
-        config_ref,
-        role_id,
-        display_name=None,
-        avatar_url=None,
-    ):
-        self.roles[platform_account_id] = role_id
-        if avatar_url is not None:
-            self.avatars[platform_account_id] = avatar_url
-        assert platform == "qqbot"
-        assert config_ref == f"app:{platform_account_id}"
-        return SimpleNamespace(
-            record=SimpleNamespace(id=f"account-{platform_account_id}")
-        )
-
-    def check_owner(self, *, config_ref, role_id, **_identity):
-        if not role_id:
-            raise ValueError("账号没有所属角色")
-
-    def register_saved(self, *, response_rules=None, **fields):
-        # The host refuses an entry without an owner; the plugin must skip it.
-        return self.register(**fields) if fields.get("role_id") else None
-
-    def role_exists(self, role_id):
-        return True
-
-    def report(self, account_id, **kwargs):
-        self.reports.append((account_id, kwargs))
-
-    def unregister(self, account_id):
-        pass
-
-
 def test_gateway_status_and_bot_identity_are_account_scoped(tmp_path):
-    store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
+    store = QQBotAccountStore(FakeKV())
     for app_id in ("100", "200"):
         store.save(
             {"app_id": app_id, "client_secret": f"secret-{app_id}", "role_id": app_id}
         )
-    accounts = _Accounts()
-    identity = QQBotAccountIdentity(SimpleNamespace(accounts=accounts), store)
+    accounts = FakeAccounts("qqbot", id_factory=lambda value: f"account-{value}")
+    identity = QQBotAccountIdentity(
+        SimpleNamespace(config=FakeConfig(), accounts=accounts), store
+    )
 
     identity.report("100", "online", "", "Bot One", "bot-one")
     identity.report("200", "login_required", "invalid secret", "")
@@ -71,9 +33,15 @@ def test_gateway_status_and_bot_identity_are_account_scoped(tmp_path):
 
 
 def test_candidate_ready_identity_is_not_persisted_before_handover(tmp_path):
-    store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
+    store = QQBotAccountStore(FakeKV())
     store.save({"app_id": "100", "client_secret": "working", "role_id": "mira"})
-    identity = QQBotAccountIdentity(SimpleNamespace(accounts=_Accounts()), store)
+    identity = QQBotAccountIdentity(
+        SimpleNamespace(
+            config=FakeConfig(),
+            accounts=FakeAccounts("qqbot", id_factory=lambda value: f"account-{value}"),
+        ),
+        store,
+    )
 
     identity.begin_handoff("100")
     identity.report("100", "online", "", "Replacement", "new-bot")
@@ -84,9 +52,15 @@ def test_candidate_ready_identity_is_not_persisted_before_handover(tmp_path):
 
 
 def test_via_account_names_the_application_and_its_bot(tmp_path):
-    store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
+    store = QQBotAccountStore(FakeKV())
     store.save({"app_id": "100", "client_secret": "s", "role_id": "mira"})
-    identity = QQBotAccountIdentity(SimpleNamespace(accounts=_Accounts()), store)
+    identity = QQBotAccountIdentity(
+        SimpleNamespace(
+            config=FakeConfig(),
+            accounts=FakeAccounts("qqbot", id_factory=lambda value: f"account-{value}"),
+        ),
+        store,
+    )
     assert identity.via_account("100")["prefix"] == "QQ 机器人（AppID 100）"
 
     identity.report("100", "online", "", "Bot One", "bot-one")

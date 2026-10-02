@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from bus.event_bus import EventBus, Handler
+from shiori_sdk.runtime import EventsCapability as EventBus, EventHandler as Handler
 
 E = TypeVar("E")
 

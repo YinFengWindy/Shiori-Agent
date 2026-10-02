@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from core.channels.chat_id_command import answer_chat_id_command
-from core.common.channel_chat_types import ChatTypeDeclaration
+from shiori_sdk.channels.chat_id_command import answer_chat_id_command
+from shiori_sdk.channels.chat_types import ChatTypeDeclaration
 
 _QQ = (
     ChatTypeDeclaration("private", "私聊", "QQ 号"),

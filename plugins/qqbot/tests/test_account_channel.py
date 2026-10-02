@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from shiori_sdk.testing.accounts import FakeAccounts
+from shiori_sdk.testing.extensions import FakeConfig
+
+from shiori_sdk.testing.channel_intake import FakeChannelIntake as ChannelIntake
 import asyncio
 import logging
 from pathlib import Path
@@ -8,54 +12,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.plugin_host.kv import PluginKVStore
-from agent.tools.message_push import MessagePushTool
-from bus.event_bus import EventBus
-from bus.events import InboundMessage
-from bus.queue import MessageBus
-from infra.channels.base import AttachmentStore
-from infra.channels.contract import ChannelContext
+from shiori_sdk.testing.storage import FakeKV
+from shiori_sdk.testing.channel_services import FakePushSenders as MessagePushTool
+from shiori_sdk.testing.events import FakeEvents as EventBus
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.testing.channel_services import FakeMessageBus as MessageBus
+from shiori_sdk.testing.channel_services import FakeAttachmentStore as AttachmentStore
+from shiori_sdk.channels import ChannelContext
 from plugins.qqbot.backend.account_channel import QQBotAccountsChannel
 from plugins.qqbot.backend.accounts import QQBotAccountStore
 from plugins.qqbot.backend.channel import QQBotChannel
-
-
-class _Accounts:
-    def __init__(self):
-        self.roles = {}
-        self.avatars = {}
-
-    def register(
-        self,
-        *,
-        platform,
-        platform_account_id,
-        config_ref,
-        role_id,
-        display_name=None,
-        avatar_url=None,
-    ):
-        self.roles[platform_account_id] = role_id
-        if avatar_url is not None:
-            self.avatars[platform_account_id] = avatar_url
-        return SimpleNamespace(record=SimpleNamespace(id=platform_account_id))
-
-    def check_owner(self, *, config_ref, role_id, **_identity):
-        if not role_id:
-            raise ValueError("账号没有所属角色")
-
-    def register_saved(self, *, response_rules=None, **fields):
-        # The host refuses an entry without an owner; the plugin must skip it.
-        return self.register(**fields) if fields.get("role_id") else None
-
-    def role_exists(self, role_id):
-        return True
-
-    def report(self, account_id, **kwargs):
-        pass
-
-    def unregister(self, account_id):
-        pass
 
 
 class _Bus:
@@ -104,13 +70,21 @@ async def test_connected_applications_inherit_current_intake_state(
     initially_paused: bool,
     reconnect: bool,
 ) -> None:
-    store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
+    store = QQBotAccountStore(FakeKV())
     account = {"app_id": "200", "client_secret": "secret", "role_id": "mira"}
     if reconnect:
         store.save(account)
-    manager = QQBotAccountsChannel(SimpleNamespace(accounts=_Accounts()), store, ())
+    manager = QQBotAccountsChannel(
+        SimpleNamespace(
+            config=FakeConfig(),
+            accounts=FakeAccounts("qqbot", id_factory=lambda value: value),
+        ),
+        store,
+        (),
+    )
     bus = MessageBus()
     runtime = ChannelContext(
+        intake_factory=ChannelIntake,
         bus=bus,
         session_manager=MagicMock(),
         event_bus=EventBus(),
@@ -163,13 +137,14 @@ async def test_connected_applications_inherit_current_intake_state(
         assert bus.inbound_size == 0
     finally:
         await manager.stop()
+    assert runtime.event_bus._subscriptions == []
 
 
 @pytest.mark.asyncio
 async def test_one_public_channel_starts_isolated_application_gateways(
     tmp_path, monkeypatch
 ):
-    store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
+    store = QQBotAccountStore(FakeKV())
     # Without an owner role the host refuses the application.
     store.save({"app_id": "100", "client_secret": "unowned-secret"})
     store.save(
@@ -181,7 +156,14 @@ async def test_one_public_channel_starts_isolated_application_gateways(
             "targets": [],
         }
     )
-    manager = QQBotAccountsChannel(SimpleNamespace(accounts=_Accounts()), store, ())
+    manager = QQBotAccountsChannel(
+        SimpleNamespace(
+            config=FakeConfig(),
+            accounts=FakeAccounts("qqbot", id_factory=lambda value: value),
+        ),
+        store,
+        (),
+    )
     started = []
 
     async def start(self, ctx, *, public_hooks=True):
@@ -208,7 +190,7 @@ async def test_connected_avatar_is_stored_reregistered_and_kept_on_failed_refres
     tmp_path, monkeypatch, avatar_fetch
 ):
     avatar = "data:image/png;base64,iVBORw0KGgo="
-    store = QQBotAccountStore(PluginKVStore(tmp_path / "qqbot.json"))
+    store = QQBotAccountStore(FakeKV())
     store.save({"app_id": "200", "client_secret": "secret", "role_id": "mira"})
 
     async def start(self, ctx, *, public_hooks=True):
@@ -220,10 +202,12 @@ async def test_connected_avatar_is_stored_reregistered_and_kept_on_failed_refres
     monkeypatch.setattr(QQBotChannel, "start", start)
     monkeypatch.setattr(QQBotChannel, "stop", stop)
 
-    async def connect(fetched: str | None) -> _Accounts:
+    async def connect(fetched: str | None) -> FakeAccounts:
         avatar_fetch.return_value = fetched
-        accounts = _Accounts()
-        manager = QQBotAccountsChannel(SimpleNamespace(accounts=accounts), store, ())
+        accounts = FakeAccounts("qqbot", id_factory=lambda value: value)
+        manager = QQBotAccountsChannel(
+            SimpleNamespace(config=FakeConfig(), accounts=accounts), store, ()
+        )
         await manager.start(
             SimpleNamespace(bus=_Bus(), push_tool=_Push(), event_bus=EventBus())
         )

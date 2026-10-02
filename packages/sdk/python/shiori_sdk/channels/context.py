@@ -1,0 +1,40 @@
+"""Explicitly granted setup services consumed by channel plugins."""
+
+from typing import Protocol
+
+from shiori_sdk.accounts.capability import AccountsCapability
+from shiori_sdk.extensions import ConfigValues
+from shiori_sdk.rpc import RpcCapability
+from shiori_sdk.runtime import PluginRuntimeContext
+from shiori_sdk.storage import KeyValueStore
+from . import Channel
+from .chat_types import ChatTypeDeclaration
+
+
+class ChannelDeclarations(Protocol):
+    """Read validated public channel declarations without exposing manifest internals."""
+
+    def channel_chat_types(self, name: str) -> tuple[ChatTypeDeclaration, ...]: ...
+
+
+class ChannelsCapability(Protocol):
+    """Contribute declared transports to the host lifecycle."""
+
+    def add(self, channel: Channel) -> None: ...
+
+
+class ChannelPluginContext(PluginRuntimeContext, Protocol):
+    """The statically checked setup boundary for channel and account plugins."""
+
+    @property
+    def manifest(self) -> ChannelDeclarations: ...
+    @property
+    def channels(self) -> ChannelsCapability: ...
+    @property
+    def accounts(self) -> AccountsCapability: ...
+    @property
+    def kv(self) -> KeyValueStore: ...
+    @property
+    def config(self) -> ConfigValues: ...
+    @property
+    def rpc(self) -> RpcCapability: ...

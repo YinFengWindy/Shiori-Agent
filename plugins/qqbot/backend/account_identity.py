@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from core.accounts import ViaAccount, stored_response_rules
+from shiori_sdk.accounts import ViaAccount, stored_response_rules, ConnectionState
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.channels.context import ChannelPluginContext
 
     from .accounts import QQBotAccountStore
 
@@ -17,7 +17,7 @@ _CAPABILITIES = frozenset({"private", "c2c", "known_targets", "send"})
 class QQBotAccountIdentity:
     """Keep bot identity and connection reports separate from gateway routing."""
 
-    def __init__(self, ctx: PluginRuntimeContext, store: QQBotAccountStore) -> None:
+    def __init__(self, ctx: ChannelPluginContext, store: QQBotAccountStore) -> None:
         self._ctx = ctx
         self._store = store
         self._account_ids: dict[str, str] = {}
@@ -123,7 +123,12 @@ class QQBotAccountIdentity:
         return self._pending_identity.pop(app_id, ("", ""))
 
     def report(
-        self, app_id: str, state: str, error: str, name: str, bot_id: str = ""
+        self,
+        app_id: str,
+        state: ConnectionState,
+        error: str,
+        name: str,
+        bot_id: str = "",
     ) -> None:
         """Publish connection state and verified bot display identity."""
         if app_id in self._handoffs or app_id not in self._account_ids:
@@ -144,7 +149,9 @@ class QQBotAccountIdentity:
             self.register(row, name)
         self._report_connection(app_id, state, error)
 
-    def _report_connection(self, app_id: str, state: str, error: str) -> None:
+    def _report_connection(
+        self, app_id: str, state: ConnectionState, error: str
+    ) -> None:
         self._ctx.accounts.report(
             self._account_ids[app_id],
             connection=state,

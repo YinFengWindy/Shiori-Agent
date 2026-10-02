@@ -59,7 +59,7 @@ channels:
 渠道插件保存每个账号的身份、所属角色、响应规则和凭据。宿主只保留已加载账号的内存索引；`[plugins.<id>]` 只用于插件启停及与账号无关的插件设置。现有实现可对照 `plugins/telegram/backend/bots.py`、`plugins/qq/backend/accounts_runtime.py`、`plugins/qqbot/backend/accounts.py` 和 `plugins/feishu/backend/plugin.py`。
 
 - `setup` 始终贡献 manifest 声明的渠道。多账号渠道可用 `AccountChannelGroup` 管理账号连接，新增或断开账号不需要重载运行时。
-- 插件从 `ctx.kv` 或自己的工作区存储读取账号；恢复时先用 `ctx.accounts.role_exists(role_id)` 清理所属角色已删除的账号，再用 `register_saved(...)` 登记。读取失败或无效数据用 `reject(...)` 报告，不影响其它账号。
+- 插件从 `ctx.kv` 或自己的工作区存储读取账号；凭据引用保持原文保存，在连接时通过已声明的 `config` 能力调用 `ctx.config.resolve_reference(value)`；恢复时先用 `ctx.accounts.role_exists(role_id)` 清理所属角色已删除的账号，再用 `register_saved(...)` 登记。读取失败或无效数据用 `reject(...)` 报告，不影响其它账号。
 - 新增账号前校验平台身份，并用 `ctx.accounts.check_owner(...)` 检查角色与账号归属；插件保存数据后用 `register(...)` 登记，再按连接状态调用 `report(...)`。账号 ID 由宿主生成，格式为 `<插件 id>:<平台账号>`。
 - 宿主对头像只有一条约定：`register(..., avatar_url=...)` / `register_saved(...)` 的 `avatar_url` 必须是空字符串（无头像），或不超过 256 KiB、内容与声明类型一致的 PNG/JPEG/GIF/WebP base64 `data:image/...` URI，否则登记被拒绝（远程 URL 同样被拒）。头像的获取、编码和缓存都由插件自己完成：插件在后台下载平台头像、自行转成 data URI 并存进插件存储，下载失败保留已存头像且不影响连接；后台任务由插件自己持有，并在断开、删除或停止时取消。
 - 发送者与群的头像交给宿主缓存（Runtime API 2.12，manifest 声明 `avatars`）：角色收下一条消息后调用 `ctx.avatars.refresh(kind, channel, id, fetch)`，`kind` 为 `"sender"`（发送者 ID）或 `"chat"`（会话 ID，群为群头像、私聊为对方头像），`fetch` 是插件自己的异步下载，返回图片字节，平台上没有头像时返回 None。宿主判断是否到期（7 天）、在后台执行、校验缩图并单独存文件；失败只记警告，不影响收发。细节见[运行时契约](plugin-runtime-contract.md#runtime-api-212-channel-avatars)，实现可对照 `plugins/qq/backend/accounts_avatar.py`。
@@ -69,7 +69,7 @@ channels:
 
 ## 3. 渠道对象契约
 
-协议定义在 `apps/backend/infra/channels/contract.py`。必需部分：
+协议定义在 `shiori_sdk.channels`。必需部分：
 
 ```python
 class DemoChatChannel:
@@ -89,10 +89,10 @@ class DemoChatChannel:
 - **启停归宿主**。ChannelHost 负责 `start`/`stop` 和换代，不要用 `ctx.background` 自己起连接。
 - **`configuration_key`**：保存任何设置都会准备新运行代。key 与上一代相同的渠道直接复用旧连接（不断线），宿主会对新构造但没用上的实例调用一次 `stop()`，所以**构造函数不能产生流量**，连接只在 `start` 里建立。key 应覆盖所有会影响连接的设置；不提供 key 的渠道每次换代都会重建。
 - **`start` / `stop` 要可重复调用**：`stop` 对从未启动的实例也要安全；换代失败回滚时，宿主会对已停止的旧实例再次调用 `start`。`start` 里订阅和注册要用标志位防止重复（参考飞书的 `_events_bound`、`_outbound_bound`）。
-- **入站闸门**：换代期间宿主先 `pause_intake()`，新连接以 `ctx.intake_paused=True` 启动，发布后再 `resume_intake()`。用 `infra.channels.intake.ChannelIntake` 实现即可：它在暂停时缓冲入站消息，溢出或关闭时回复「渠道配置正在切换」提示，`stop` 时调用 `close()` 排空。
+- **入站闸门**：换代期间宿主先 `pause_intake()`，新连接以 `ctx.intake_paused=True` 启动，发布后再 `resume_intake()`。在 `start(ctx)` 中调用 `ctx.intake_factory(accept, send)` 获取 `shiori_sdk.channels.services.ChannelIntake`：它在暂停时缓冲入站消息，溢出或关闭时回复「渠道配置正在切换」提示，`stop` 时调用 `close()` 排空。
 - **`stop` 的顺序**：先切断新工作的来源（暂停入站、退订事件、断开连接），再取消或等待在途任务，最后注销出站与推送注册。
 
-`ChannelContext` 提供本代的宿主服务：`bus`（消息总线）、`session_manager`、`event_bus`、`push_tool`（`message_push` 工具）、`attachment_store`（入站媒体落盘）、`http_resources`、`interrupt_controller`（`/stop`）、`bot_commands`、`log`、`channel_hub`（账号准入与路由）、`intake_paused`。
+消息值从 `shiori_sdk.messages` 导入，流式事件从 `shiori_sdk.channel_events` 导入。`ChannelContext` 通过 Protocol 提供本代的宿主服务：`bus`（消息总线）、`session_manager`、`event_bus`、`push_tool`（`message_push` 工具）、`attachment_store`（入站媒体落盘）、`http_resources`、`interrupt_controller`（`/stop`）、`bot_commands`、`log`、`channel_hub`（账号准入与路由）、`intake_paused`。
 
 ## 4. 入站、会话键与 chat_id 约定
 
@@ -109,12 +109,12 @@ class DemoChatChannel:
 
 - **chat_id 是渠道本地的会话标识**，必须稳定。一个渠道有多种会话类型时用前缀区分，例如 QQBot 的 `c2c:<openid>` / `group:<openid>`、QQ（NapCat）群聊的 `gqq:<群号>`。
 - **访问控制由接收账号的响应规则决定**。插件将规则与账号一起保存，入站时交给 `ChannelHub` 判断；黑名单支持发送者 ID 与忽略大小写的渠道别名（如 Telegram 用户名）。`/stop` 等控制命令走同一账号准入。`/chatid`（别名 `/myid`）由渠道插件自己识别并回复会话类型与号码，不进入角色对话。
-- **会话键**：准入后的消息用所属角色的 `role:<role_id>`（路由写进 `session_key_override`）。出站处理和流式状态统一用 `infra.channels.session_key.resolve_outbound_session_key(msg, default_channel=self.name)` 计算，与 `TurnStarted` / `StreamDeltaReady` 的 `session_key` 对齐。
+- **会话键**：准入后的消息用所属角色的 `role:<role_id>`（路由写进 `session_key_override`）。出站处理和流式状态统一用 `shiori_sdk.channels.session_key.resolve_outbound_session_key(msg, default_channel=self.name)` 计算，与 `TurnStarted` / `StreamDeltaReady` 的 `session_key` 对齐。
 - 用户引用了一条历史消息时，用 `infra.channels.reply_context.build_inbound_text_with_reply_context()` 拼进正文，保持各渠道的格式一致。能取到被引用消息原文的渠道，改在 `route_account_inbound` 放行之后调 `with_reply_quote(message, own_id=<接收账号平台 ID>, text=, sender_name=, media=<被引用图片的本地路径>, has_pictures=<被引用消息是否带图>)`（#555，目前只有 QQ）：本回合看到拼好的正文与被引用图片，存下的仍是对方自己的正文与图片，引用进元数据 `reply_to_content` / `reply_to_sender_name` / `reply_to_media`（发送者 ID 仍是路由前上报的 `reply_to_sender_id`），小手机据此显示引用块。「来自 X」由宿主写成：你自己 / 你的用户（宿主按绑定身份标 `reply_to_sender_is_user`，插件不能自己设）/ 昵称（ID …）/ ID …。旁听的群消息不经过这一步。
 
 ### 经由账号快照
 
-契约定义在 `apps/backend/core/accounts/models.py`：`ViaAccount` 与元数据键 `VIA_ACCOUNT_KEY = "via_account"`。快照描述消息当时经由的账号，由插件自己构造，宿主原样存进消息元数据，不回头查账号索引，所以账号删除后历史消息里的快照照样可读；旧消息没有快照时不显示，也不回填。
+契约定义在 `shiori_sdk.accounts`：`ViaAccount` 与元数据键 `VIA_ACCOUNT_KEY = "via_account"`。快照描述消息当时经由的账号，由插件自己构造，宿主原样存进消息元数据，不回头查账号索引，所以账号删除后历史消息里的快照照样可读；旧消息没有快照时不显示，也不回填。
 
 ```python
 ViaAccount(
@@ -134,7 +134,7 @@ ViaAccount(
 
 桌面端用户在「我的身份」里生成一次性配对码（10 分钟有效，只存在内存中，重启后失效），再用自己的平台账号私聊发给任一角色的账号，宿主据此记住用户在该平台的身份（`core/identity`，存于工作区 `user_identities.json`）。插件只负责：
 
-- **识别私聊并声明作用域**：私聊消息交给 `route_account_inbound` 之前，调用 `core.channels.pairing_command.answer_pairing_code(hub, message, scope=..., send=...)`；返回 `True` 时丢弃这条消息（不进入会话、不触发角色回复），宿主已经通过 `send` 回复「已绑定」。群聊消息不调用。`message.sender` 是要绑定的平台用户 ID，`message.metadata` 必须带接收账号的 `account_id`。
+- **识别私聊并声明作用域**：私聊消息交给 `route_account_inbound` 之前，调用 `shiori_sdk.channels.pairing_command.answer_pairing_code(hub, message, scope=..., send=...)`；返回 `True` 时丢弃这条消息（不进入会话、不触发角色回复），宿主已经通过 `send` 回复「已绑定」。群聊消息不调用。`message.sender` 是要绑定的平台用户 ID，`message.metadata` 必须带接收账号的 `account_id`。
 - **`scope` 按平台决定**：`"platform"` 表示用户 ID 在整个平台内唯一（QQ 号、Telegram 用户 ID），绑定对该插件的所有账号生效；`"account"` 表示 ID 只对接收它的应用有效（飞书 open_id、QQBot openid），绑定只对这个账号生效。
 
 其余由宿主完成：`ChannelHub.claim_pairing` 校验配对码（错误、过期、已用都不绑定）并记下配对所在的私聊；`route_account_inbound` 给已绑定的发送者（按作用域匹配）写入 `metadata["sender_is_user"] = True`（插件自带的该字段会被丢弃），来源前缀随之显示 `；发送者: 你的用户`（群消息里每个发送者都标明：`你的用户（ID …）` 或 `群友「昵称」（ID …）`，并列出结构化 @ 的成员 ID，#553），并记下这位用户之后私聊过的会话。
@@ -162,13 +162,13 @@ async def stop(self):
 ```
 
 - `subscribe_outbound` 接收 Agent 回合的最终回复（`OutboundMessage`）。发送成功或失败后调用 `ctx.channel_hub.mark_delivery(msg, default_channel=self.name, delivery_status="sent"|"failed", external_message_id=..., via_account=...)`，让会话里的消息状态正确；`via_account` 只在 `sent` 时传发送账号的快照。
-- **群聊被动回复点名触发者**：回复的 `msg.metadata` 带着触发消息的元数据（`chat_type`、`sender_id`、`external_message_id` 等）。`chat_type` 为群聊（`core.common.channel_chat_types.is_group_chat_type`）时，插件按平台惯例点名触发者：QQ 在开头 @ 发送者，Telegram 回复触发消息。模型额外选择要 @ 的成员放在 `metadata["mention_ids"]`（键名 `REPLY_MENTION_IDS_KEY`，只有群聊回复会带），插件一并提及；其中平台用不了的 ID 记 warning 后跳过，回复照常发出（触发者仍被点名）。私聊回复不受影响；没有群聊的渠道忽略这些字段。
+- **群聊被动回复点名触发者**：回复的 `msg.metadata` 带着触发消息的元数据（`chat_type`、`sender_id`、`external_message_id` 等）。`chat_type` 为群聊（`shiori_sdk.channels.chat_types.is_group_chat_type`）时，插件按平台惯例点名触发者：QQ 在开头 @ 发送者，Telegram 回复触发消息。模型额外选择要 @ 的成员放在 `metadata["mention_ids"]`（键名 `REPLY_MENTION_IDS_KEY`，只有群聊回复会带），插件一并提及；其中平台用不了的 ID 记 warning 后跳过，回复照常发出（触发者仍被点名）。私聊回复不受影响；没有群聊的渠道忽略这些字段。
 - `register_channel` 让模型能用 `message_push` 主动发消息。`description` 会写进工具描述的「当前可用渠道」列表，用一句话说明渠道身份和 chat_id 格式；工具描述只列出当前已注册、未停用的渠道。
 - `unregister_channel` 传入自己的 `text` 回调，只注销本实例的注册，不会误删换代后新连接的注册。
 
 ### 账号目标发送（`account.send` / `account.targets`）
 
-模型通过宿主的 `account_list`、`account_targets`、`account_send` 工具和 `message_push` 改投使用账号，参数里只有渠道 ID（插件 ID），宿主按「每个渠道一个账号」找到当前角色的账号，再以 `account_id` 调用插件 RPC。常量与请求形状在 `apps/backend/core/accounts/target_contract.py`：
+模型通过宿主的 `account_list`、`account_targets`、`account_send` 工具和 `message_push` 改投使用账号，参数里只有渠道 ID（插件 ID），宿主按「每个渠道一个账号」找到当前角色的账号，再以 `account_id` 调用插件 RPC。常量与请求形状在 `shiori_sdk.accounts.targets`：
 
 - `account.targets` 收到 `account_id`、`kind`、`group_id`、`member_id`。
 - `account.send` 收到 `account_id`、`message`、`media`，以及 `AccountTarget.to_payload()`：`target_kind`、`target_id`、`message_thread_id`（整数或 `None`）、`group_id`（仅 `group_member`，否则为空字符串）、`mention_ids`（仅 `group`，可为空列表）。

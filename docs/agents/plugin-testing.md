@@ -48,10 +48,10 @@ uv run python scripts/verify_plugin_tests.py --output /absolute/path/outside-rep
 
 ## SDK 隔离与导入守护
 
-citation/context_pressure/default_memory/shell_safety/shell_restore/tool_loop_guard/plugin_undo/observe/status_commands/meme/novelai/story/screen_perception/browser_use/computer_use 已迁入 `shiori-sdk[testing]`，安装声明不再依赖宿主。
-`uv run python scripts/verify_plugin_tests.py --sdk-only` 仅为这十五个插件构建
+citation/context_pressure/default_memory/shell_safety/shell_restore/tool_loop_guard/plugin_undo/observe/status_commands/meme/novelai/story/screen_perception/browser_use/computer_use/qqbot 已迁入 `shiori-sdk[testing]`，安装声明不再依赖宿主。
+`uv run python scripts/verify_plugin_tests.py --sdk-only` 仅为这十六个插件构建
 SDK/插件 wheel，逐一在仓库外普通安装、执行全部测试，并断言没有
-shiori-agent、testkit、宿主测试支持与源码路径注入；default_memory 只在验证自己时安装。普通全插件验证也对这十五个插件
+shiori-agent、testkit、宿主测试支持与源码路径注入；default_memory 只在验证自己时安装。普通全插件验证也对这十六个插件
 使用相同无宿主路径；其余插件保留真实宿主安装与资源检查。
 
 `uv run python -m scripts.verify_sdk` 另外安装 SDK wheel 并执行 SDK 自身测试；
@@ -76,3 +76,5 @@ runtime lease、kernel 卸载顺序及 screen_perception/desktop_pet 组合留�
 `tests/backend/agent/plugin_host/test_processes_{browser_use,computer_use}.py`；
 真实 Windows owned_spawn/WindowsJob/MCP 清理随 PR 的窄范围 Windows job 执行。
 独立插件测试不会通过桌宠的依赖重新安装宿主，Story 明确声明 Windows 所需 tzdata。
+
+#589 渠道迁移先以 QQBot 完成独立验证。账号、规则、目标、会话键、消息与渠道声明的纯值测试随定义移入 `packages/sdk/tests/accounts` 和 `packages/sdk/tests/channels`；真实消息总线/AgentLoop 流式与取消验证留在 `tests/backend/agent/looping/test_core_qqbot_streaming.py`，通过公开渠道启动、外部 HTTP/WebSocket 替身装配。重载与角色删除保留在宿主 plugin_management 集成测试，平台凭据和私有连接状态断言留在 QQBot 自己的测试。

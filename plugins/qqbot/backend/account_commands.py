@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from .accounts import resolve_secret
 from .channel import QQBotChannel
 
 if TYPE_CHECKING:
-    from infra.channels.contract import ChannelContext
+    from shiori_sdk.channels import ChannelContext
 
     from .account_identity import QQBotAccountIdentity
     from .accounts import QQBotAccountStore
@@ -23,6 +24,7 @@ class _AccountCommandsMixin:
     _channels: dict[str, QQBotChannel]
     _runtime: ChannelContext | None
     _avatar_tasks: dict[str, asyncio.Task[None]]
+    _resolve_reference: Callable[[str], str]
 
     def _refresh_avatar(self, app_id: str, channel: QQBotChannel) -> None:
         """Owned by the composite channel, which tracks the refresh tasks."""
@@ -69,7 +71,7 @@ class _AccountCommandsMixin:
         secret = supplied or (previous["client_secret"] if previous else "")
         if not secret:
             raise ValueError("QQBot App Secret 不能为空")
-        resolved = resolve_secret(secret)
+        resolved = resolve_secret(secret, self._resolve_reference)
         if not resolved:
             raise ValueError("QQBot App Secret 环境变量未设置")
         await self._preflight(app_id, resolved)

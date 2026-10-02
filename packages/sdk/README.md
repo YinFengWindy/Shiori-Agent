@@ -86,7 +86,7 @@ checks the missing-extra diagnostic, then installs the extra and runs all SDK te
 The plugin probe executes citation, context_pressure, default_memory, shell_safety,
 shell_restore, tool_loop_guard, plugin_undo, observe and status_commands with no
 host or testkit, plus meme, novelai, story, screen_perception, browser_use and
-computer_use. default_memory is installed only for its own target. It verifies installed
+computer_use and qqbot. default_memory is installed only for its own target. It verifies installed
 origins and that async failures really execute. The original full host CI and
 legacy plugin integration job remain enabled.
 

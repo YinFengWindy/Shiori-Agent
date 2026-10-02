@@ -15,6 +15,9 @@ class ConfigValues(Protocol):
     """Resolved plugin-owned configuration snapshot."""
 
     def as_dict(self) -> dict[str, object]: ...
+    def resolve_reference(self, value: str) -> str:
+        """Resolve a stored credential reference at use time without persisting its value."""
+        ...
 
 
 class BotCommands(Protocol):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.accounts.target_contract import AccountTarget, account_send_media
+from shiori_sdk.accounts.targets import AccountTarget, account_send_media
 
 
 def test_target_options_travel_to_the_plugin_payload() -> None:

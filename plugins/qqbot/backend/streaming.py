@@ -5,7 +5,7 @@ import logging
 from collections.abc import Coroutine
 from typing import Any
 
-from bus.events_lifecycle import StreamDeltaReady, TurnCancelled, TurnStarted
+from shiori_sdk.channel_events import StreamDeltaReady, TurnCancelled, TurnStarted
 
 from .formatting import (
     CHANNEL,

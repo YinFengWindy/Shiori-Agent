@@ -8,7 +8,7 @@ from pathlib import PurePath
 from typing import Any
 
 from core.common.media import detect_image_mime_from_header
-from infra.channels.base import AttachmentStore
+from shiori_sdk.channels.services import AttachmentStore
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 
 from .api import FeishuApi
