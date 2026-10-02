@@ -26,7 +26,12 @@ from core.memory.external_writes import commit_external_layers
 from core.memory.member_profiles import MemberProfiles
 from session.manager.consolidation import ConsolidationCommitRequest
 from session.manager.models import consolidation_cursor
-from session.manager.consumers import MemoryConsumersFailedError
+from session.manager.consumers import (
+    MemoryConsumersFailedError,
+    mark_published,
+    publication_fields,
+    unpublished_entries,
+)
 from session.manager.window import WindowPreparation
 from session.maintenance_progress import (
     effective_progress,
@@ -390,6 +395,7 @@ class MarkdownMemoryMaintenance:
         某个窗口失败时立即返回失败，此前已提交的窗口保留。
         """
         session = request.session
+        retry_failure: ConsolidateResult | None = None
         if self._retry_consumers is not None:
             try:
                 await self._retry_consumers(
@@ -397,7 +403,9 @@ class MarkdownMemoryMaintenance:
                     lambda payload: self._consume_payload(session, payload),
                 )
             except MemoryConsumersFailedError as exc:
-                return ConsolidateResult(
+                # Consumers retry on their own; new memory still commits and carries
+                # the pending work along (commit_consolidation keeps it as backlog).
+                retry_failure = ConsolidateResult(
                     trace={
                         "mode": "failed",
                         "step": "consumers",
@@ -420,8 +428,11 @@ class MarkdownMemoryMaintenance:
                 break
             if outcome.trace.get("mode") == "markdown":
                 committed.append(outcome)
-        if outcome.trace.get("mode") == "failed" or not committed:
+        if outcome.trace.get("mode") == "failed":
             return outcome
+        if not committed:
+            # Nothing new committed: the still-pending consumer failure stands.
+            return retry_failure or outcome
         return ConsolidateResult(
             consolidated_count=sum(item.consolidated_count for item in committed),
             trace={
@@ -545,17 +556,21 @@ class MarkdownMemoryMaintenance:
         )
 
     async def _consume_payload(self, session: object, payload: dict[str, Any]) -> None:
-        if not payload.get("published"):
-            publication = {
-                key: value for key, value in payload.items() if key != "published"
-            }
+        """Publish every unpublished commit (older backlog first), then refresh once.
+
+        Each entry is checkpointed as published, so a later consumer failure
+        never republishes it; memory extraction is never repeated.
+        """
+        for entry in unpublished_entries(payload):
+            publication = publication_fields(entry)
             publication["history_entry_payloads"] = [
-                (entry, weight) for entry, weight in payload["history_entry_payloads"]
+                (item, weight) for item, weight in entry["history_entry_payloads"]
             ]
             await publish_user_layer(
                 self._event_bus,
                 **publication,
             )
+            mark_published(payload, entry)
             if self._record_publication is not None:
                 self._record_publication(session.key, payload)
         if self._after_consolidation is not None:
