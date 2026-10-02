@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +24,23 @@ class ObserveTelemetry:
 
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
+
+    def recent_context_budgets(
+        self, session_key: str, context_key: str, *, limit: int = 10
+    ) -> tuple[dict, ...]:
+        """Read staged request facts for exactly one permitted context owner."""
+        if not self._db_path.is_file():
+            return ()
+        try:
+            uri = self._db_path.resolve().as_uri() + "?mode=ro"
+            with closing(sqlite3.connect(uri, uri=True)) as connection:
+                rows = connection.execute(
+                    "SELECT ts, status_json FROM context_budgets WHERE session_key=? AND context_key=? ORDER BY id DESC LIMIT ?",
+                    (session_key, context_key, max(1, min(100, limit))),
+                ).fetchall()
+        except sqlite3.Error as exc:
+            raise OSError("读取上下文预算遥测失败") from exc
+        return tuple({"timestamp": ts, "status": json.loads(raw)} for ts, raw in rows)
 
     def recent_cache_turns(
         self, session_key: str, *, limit: int = 5

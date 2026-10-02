@@ -11,6 +11,11 @@ _FAILURE_MESSAGES = {
     "window": "上下文已变化，请重试",
     "budget": "压缩后仍超出模型预算，请调整模型配置后重试",
     "busy": "上下文正在压缩，请稍后重试",
+    "preparation": "上下文准备失败，请稍后重试",
+    "minimal_preparation": "最小请求准备失败，请稍后重试",
+    "minimal_budget": "当前输入及必要结果仍超出模型预算，请调整模型配置后重试",
+    "provider": "模型请求失败，请稍后重试",
+    "response": "模型未返回有效回复，请稍后重试",
 }
 
 

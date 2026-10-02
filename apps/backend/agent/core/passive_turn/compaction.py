@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Awaitable, Callable, TYPE_CHECKING
 
 from core.compaction import (
@@ -14,6 +14,9 @@ from core.compaction import (
     CompactionResult,
 )
 from agent.provider import LLMProvider
+from agent.prompting.usage_accounting import current_usage
+from session.maintenance_progress import window_key
+from .minimal_request import completed_tool_results
 
 if TYPE_CHECKING:
     from conversation.context_scope import ContextView
@@ -33,6 +36,27 @@ class RequestCompaction:
     render: Callable[[WindowPreparation, str, list[str]], Awaitable[list[dict]]]
     history_tools: Callable[[WindowPreparation], list[str]]
     results: list[dict] = field(default_factory=list)
+    render_minimal: Callable[[str], Awaitable[list[dict]]] | None = None
+    degraded: bool = False
+    tools_started: bool = False
+    last_result: CompactionResult | None = None
+
+    def __post_init__(self) -> None:
+        progress = self.controller.sessions.maintenance_progress(
+            self.controller.sessions.get_or_create(self.session_key)
+        )
+        self.last_result = self.controller.progress_result(
+            CompactionResult(
+                request_owner=progress.request_owners.get(window_key(self.view), ""),
+                generation=progress.generation,
+                ownership=progress.ownership,
+                reason="",
+                configured_retained_turns=self.policy.retained_turns,
+                snapshot_stop=self.message_limit,
+            ),
+            self.session_key,
+            self.view,
+        )
 
     async def ensure(
         self,
@@ -43,9 +67,14 @@ class RequestCompaction:
         max_tokens: int,
         purpose: str,
         schemas_for_history: Callable[[list[str]], list[dict]] | None = None,
+        *,
+        force: bool = False,
+        minimal_only: bool = False,
     ) -> None:
         """Re-render only persisted history; carry the exact current-turn suffix along."""
 
+        if self.degraded:
+            schemas.clear()
         candidate_schemas = schemas
 
         def measure(candidate: list[dict]):
@@ -67,10 +96,28 @@ class RequestCompaction:
             max_tokens=max_tokens,
             call_purpose=purpose,
         )
-        if budget is None or not budget.needs_trim:
+        if budget is None:
+            return
+        if not force and (
+            not budget.needs_trim
+            or (self.degraded and budget.estimate.tokens < budget.input_limit_tokens)
+        ):
+            self.last_result = replace(
+                self.last_result
+                or CompactionResult(model=provider.context_model(model)),
+                phase="request",
+                model=provider.context_model(model),
+                budget=asdict(budget),
+                final_budget=asdict(budget),
+                after_tokens=budget.estimate.tokens,
+                after_source=budget.estimate.source,
+            )
             return
         tail = messages[self.prefix_length :]
         next_prefix_length = self.prefix_length
+        self.tools_started = self.tools_started or any(
+            m.get("tool_calls") for m in tail
+        )
 
         async def render(prepared: WindowPreparation, summary: str):
             nonlocal next_prefix_length, candidate_schemas
@@ -84,6 +131,31 @@ class RequestCompaction:
             next_prefix_length = len(prefix)
             return [*prefix, *tail]
 
+        async def render_minimal(summary: str):
+            nonlocal next_prefix_length, candidate_schemas
+            assert self.render_minimal is not None
+            candidate_schemas = []
+            prefix = await self.render_minimal(summary)
+            next_prefix_length = len(prefix)
+            return [*prefix, *completed_tool_results(tail)]
+
+        if self.degraded:
+            failure = CompactionFailedError(
+                replace(
+                    self.last_result or CompactionResult(),
+                    failure_stage="minimal_budget",
+                    failure_kind="local_budget",
+                    error="最小请求已超出输入预算",
+                    final_budget=asdict(budget),
+                    after_tokens=budget.estimate.tokens,
+                    after_source=budget.estimate.source,
+                )
+            )
+            self.last_result = failure.result
+            self.results.append(failure.result.dump())
+            await self.controller.record(self.session_key, self.view, failure.result)
+            raise failure
+
         try:
             candidate, result = await self.controller.ensure(
                 session_key=self.session_key,
@@ -93,6 +165,16 @@ class RequestCompaction:
                 budget=budget,
                 render=render,
                 measure=measure,
+                reason=(
+                    "hard_limit"
+                    if force or budget.estimate.tokens >= budget.input_limit_tokens
+                    else "auto_threshold"
+                ),
+                render_minimal=(
+                    render_minimal if self.render_minimal is not None else None
+                ),
+                minimal_only=minimal_only,
+                prior_result=self.last_result,
             )
         except CompactionFailedError as exc:
             self.results.append(exc.result.dump())
@@ -100,7 +182,58 @@ class RequestCompaction:
         messages[:] = candidate
         schemas[:] = candidate_schemas
         self.prefix_length = next_prefix_length
+        self.degraded = result.degraded
+        self.last_result = result
         self.results.append(result.dump())
+
+    async def observe_request(
+        self,
+        budget,
+        *,
+        error: BaseException | None = None,
+        failure_stage: str = "provider",
+        request_attempted: bool = True,
+    ):
+        """Record the actual final request and staged failure, with no payload text."""
+        from agent.provider import ContextLengthError, LocalBudgetExceeded
+
+        result = self.last_result or CompactionResult()
+        if budget is not None:
+            result = replace(
+                result,
+                final_budget=asdict(budget),
+                after_tokens=budget.estimate.tokens,
+                after_source=budget.estimate.source,
+            )
+        if error is not None:
+            result = replace(
+                result,
+                phase="failed",
+                failure_stage=failure_stage,
+                failure_kind=(
+                    "response_error"
+                    if failure_stage == "response"
+                    else (
+                        "local_budget"
+                        if isinstance(error, LocalBudgetExceeded)
+                        else (
+                            "provider_context_length"
+                            if isinstance(error, ContextLengthError)
+                            else "provider_error"
+                        )
+                    )
+                ),
+                error=str(error),
+            )
+        self.last_result = result
+        await self.controller.record(
+            self.session_key,
+            self.view,
+            result,
+            request_usage=current_usage(),
+            request_attempted=request_attempted,
+        )
+        return result
 
 
 _current: ContextVar[RequestCompaction | None] = ContextVar(
@@ -116,6 +249,17 @@ def request_compaction_scope(scope: RequestCompaction | None):
         yield
     finally:
         _current.reset(token)
+
+
+def request_tools_disabled() -> bool:
+    """A degraded request cannot execute unsolicited provider tool calls."""
+    scope = _current.get()
+    return scope is not None and scope.degraded
+
+
+def current_request_compaction() -> RequestCompaction | None:
+    """Return the isolated request owner to the provider-call boundary."""
+    return _current.get()
 
 
 async def ensure_request_budget(

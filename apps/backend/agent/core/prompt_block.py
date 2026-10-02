@@ -591,6 +591,7 @@ class SystemPromptBuilder:
         ctx: TurnContext,
         *,
         disabled_sections: set[str] | None = None,
+        allowed_sections: set[str] | None = None,
     ) -> SystemPromptBuildResult:
         # 1. 先准备输出容器和禁用集合。
         renders: list[PromptSectionRender] = []
@@ -600,7 +601,9 @@ class SystemPromptBuilder:
 
         # 2. 再逐个渲染 prompt block。
         for block in self._blocks:
-            if block.label in disabled:
+            if block.label in disabled or (
+                allowed_sections is not None and block.label not in allowed_sections
+            ):
                 continue
             cache_hit = False
             rendered: str | None = None

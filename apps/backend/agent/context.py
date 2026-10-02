@@ -325,6 +325,8 @@ class ContextBuilder:
         bind_session_metadata = getattr(self.memory, "bind_session_metadata", None)
         if callable(bind_session_metadata):
             bind_session_metadata(session_metadata)
+        if request.minimal_request:
+            return self._render_minimal(request, session_metadata)
         merged_top = list(system_sections_top or [])
         role_cache_prefix = build_role_cache_prefix_section(
             workspace=self.workspace,
@@ -372,6 +374,59 @@ class ContextBuilder:
             turn_injection_context=dict(assembled.turn_injection_context),
             messages=list(assembled.messages),
             debug_breakdown=list(assembled.debug_breakdown),
+        )
+
+    def _render_minimal(
+        self, request: ContextRequest, metadata: dict[str, Any] | None
+    ) -> ContextRenderResult:
+        # Only the owning prompt blocks can retain identity and channel rules.
+        # Tool routing, retrieval, catalogs and plugin injections are not rendered.
+        from agent.prompting.minimal import MINIMAL_BEHAVIOR_RULES
+
+        role = build_role_system_section(
+            workspace=self.workspace, session_metadata=metadata
+        )
+        context = TurnContext(
+            workspace=self.workspace,
+            memory=self.memory,
+            skills=self.skills,
+            skill_names=[],
+            channel=request.channel,
+            chat_id=request.chat_id,
+            retrieved_memory_block="",
+            role_id=str((metadata or {}).get("role_id") or ""),
+            context_scope=request.context_scope,
+            thread_id=request.thread_id,
+            message_source=request.message_source,
+        )
+        built = self._system_prompt_builder.build(
+            context,
+            allowed_sections={
+                "self_model",
+                "session_context",
+                "user_identities",
+                "external_turn_rules",
+            },
+        )
+        prompt = "\n\n".join(
+            [role.content if role else "", built.system_prompt, MINIMAL_BEHAVIOR_RULES]
+        )
+        messages = self._envelope_builder.build(
+            history=[],
+            current_message=request.current_message,
+            system_prompt=prompt,
+            context_frame="",
+            channel=request.channel,
+            chat_id=request.chat_id,
+            message_timestamp=request.message_timestamp,
+            message_source=request.message_source,
+            media=request.media,
+        )
+        return ContextRenderResult(
+            system_prompt=prompt,
+            turn_injection_context={},
+            messages=messages,
+            debug_breakdown=built.debug_breakdown,
         )
 
     def _build_system_prompt_result(

@@ -36,7 +36,8 @@ from agent.prompting.input_budget import InputBudget
 from .helpers import turn_tool_names
 from .tool_visibility import initial_tool_order
 from .reply_recovery import complete_reply
-from .compaction import ensure_request_budget
+from .budgeted_request import budgeted_chat
+from .compaction import ensure_request_budget, request_tools_disabled
 
 logger = logging.getLogger("agent.core.passive_turn")
 
@@ -289,7 +290,8 @@ class _PassiveReasoningLoopMixin:
             reply_output = RoleReplyOutput(
                 on_content_delta, enabled=reply_moods is not None
             )
-            response = await self._llm.provider.chat(
+            response = await budgeted_chat(
+                self._llm.provider,
                 messages=messages,
                 tools=schemas,
                 model=self._llm_config.model,
@@ -309,7 +311,7 @@ class _PassiveReasoningLoopMixin:
                 session=tool_event_session_key,
                 channel=tool_event_channel,
                 iteration=iteration + 1,
-                allow_tool_calls=True,
+                allow_tool_calls=not request_tools_disabled(),
             )
             response = completion.response
             reply_recovery = completion.diagnostics

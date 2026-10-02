@@ -12,6 +12,7 @@ import logging
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
+from shiori_sdk.context import ContextBudgetObserved
 
 from .db import open_db
 from .events import GlobalErrorTrace, MemoryWriteTrace, RagQueryLog, TurnTrace
@@ -45,7 +46,11 @@ class TraceWriter:
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
         self._queue: asyncio.Queue[
-            TurnTrace | RagQueryLog | MemoryWriteTrace | GlobalErrorTrace
+            TurnTrace
+            | RagQueryLog
+            | MemoryWriteTrace
+            | GlobalErrorTrace
+            | ContextBudgetObserved
         ] = asyncio.Queue(maxsize=_QUEUE_MAX)
         self._dropped = 0
         self._ready = asyncio.Event()
@@ -53,7 +58,14 @@ class TraceWriter:
     # ── 公共接口 ─────────────────────────────────
 
     def emit(
-        self, event: TurnTrace | RagQueryLog | MemoryWriteTrace | GlobalErrorTrace
+        self,
+        event: (
+            TurnTrace
+            | RagQueryLog
+            | MemoryWriteTrace
+            | GlobalErrorTrace
+            | ContextBudgetObserved
+        ),
     ) -> None:
         """非阻塞 emit。Queue 满时 drop 并记录计数。"""
         try:
@@ -117,7 +129,13 @@ class TraceWriter:
     def _write_one(
         self,
         conn,
-        event: TurnTrace | RagQueryLog | MemoryWriteTrace | GlobalErrorTrace,
+        event: (
+            TurnTrace
+            | RagQueryLog
+            | MemoryWriteTrace
+            | GlobalErrorTrace
+            | ContextBudgetObserved
+        ),
     ) -> None:
         ts = _now_iso()
         if isinstance(event, TurnTrace):
@@ -128,6 +146,18 @@ class TraceWriter:
             _write_memory_write(conn, event, ts)
         elif isinstance(event, GlobalErrorTrace):
             _write_global_error(conn, event)
+        elif isinstance(event, ContextBudgetObserved):
+            with conn:
+                conn.execute(
+                    "INSERT INTO context_budgets (ts, session_key, context_key, status_json, error) VALUES (?, ?, ?, ?, ?)",
+                    (
+                        ts,
+                        event.session_key,
+                        event.context_key,
+                        json.dumps(event.status, ensure_ascii=False),
+                        event.status.get("failure_stage") or None,
+                    ),
+                )
 
 
 # ── DB 写入函数 ───────────────────────────────────────────────────────────────

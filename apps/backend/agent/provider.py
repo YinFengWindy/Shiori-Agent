@@ -22,7 +22,7 @@ from openai import AsyncOpenAI
 
 from core.common.llm_output_log import summarize_llm_output_for_log
 from agent.prompting.input_budget import BudgetPolicy, InputBudget, build_input_budget
-from agent.prompting.usage_accounting import record_usage
+from agent.prompting.usage_accounting import record_usage, record_failed_usage
 from agent.prompting.token_estimate import estimate_tokens
 from agent.prompting.usage_anchor import (
     UsageAnchors,
@@ -68,6 +68,10 @@ class ContentSafetyError(Exception):
 
 class ContextLengthError(Exception):
     """LLM provider 因上下文超长拒绝请求"""
+
+
+class LocalBudgetExceeded(ContextLengthError):
+    """The local request estimate exceeded capacity before any provider call."""
 
 
 @dataclass
@@ -528,7 +532,7 @@ class LLMProvider:
         )
         budget = self._budget_for_request(kwargs, calibrate=call_purpose == "default")
         if budget is not None and budget.estimate.tokens > budget.input_limit_tokens:
-            raise ContextLengthError("完整请求超过模型可用输入预算")
+            raise LocalBudgetExceeded("完整请求超过模型可用输入预算")
         anchors = request_anchors(self._usage_anchors)
         ticket = (
             anchors.begin(self._input_request(kwargs))
@@ -536,78 +540,84 @@ class LLMProvider:
             else None
         )
 
-        if on_content_delta is not None:
-            response = await self._chat_streaming(
-                kwargs,
-                on_content_delta,
-                strategy,
-                payload_snapshot_enabled=payload_snapshot_enabled,
+        try:
+            if on_content_delta is not None:
+                response = await self._chat_streaming(
+                    kwargs,
+                    on_content_delta,
+                    strategy,
+                    payload_snapshot_enabled=payload_snapshot_enabled,
+                )
+                return self._finalize_response(
+                    response, budget, anchors, ticket, call_purpose
+                )
+
+            resp = cast(
+                Any,
+                await self._create_with_retry(
+                    kwargs,
+                    payload_snapshot_enabled=payload_snapshot_enabled,
+                ),
+            )
+            msg = resp.choices[0].message
+            finish_reason = _finish_reason_of(resp.choices[0])
+            _warn_if_truncated(model=model, finish_reason=finish_reason, stream=False)
+
+            tool_calls = []
+            if msg.tool_calls:
+                for tc in msg.tool_calls:
+                    try:
+                        arguments = json.loads(tc.function.arguments)
+                    except json.JSONDecodeError as exc:
+                        logger.warning(
+                            "[LLM工具参数解析失败] model=%s finish_reason=%s tool=%s err=%s "
+                            "raw=%s",
+                            model,
+                            finish_reason,
+                            tc.function.name,
+                            exc,
+                            summarize_llm_output_for_log(tc.function.arguments),
+                        )
+                        raise
+                    tool_calls.append(
+                        ToolCall(id=tc.id, name=tc.function.name, arguments=arguments)
+                    )
+
+            raw, thinking, provider_fields = strategy.extract_message(msg, msg.content)
+            cache_prompt_tokens, cache_hit_tokens, total_tokens = _extract_usage(
+                getattr(resp, "usage", None)
+            )
+            if tool_calls:
+                provider_fields = strategy.provider_fields_for_tool_call(
+                    provider_fields,
+                    kwargs,
+                )
+            response = LLMResponse(
+                prompt_tokens=cache_prompt_tokens,
+                completion_tokens=_coerce_int(
+                    _get_field(getattr(resp, "usage", None), "completion_tokens")
+                ),
+                input_budget=budget,
+                content=raw,
+                tool_calls=tool_calls,
+                thinking=thinking,
+                provider_fields=provider_fields,
+                cache_prompt_tokens=cache_prompt_tokens,
+                cache_hit_tokens=cache_hit_tokens,
+                total_tokens=total_tokens,
+                finish_reason=finish_reason,
+                model=model,
+                raw_content_length=len(msg.content or ""),
+                raw_content_blank=not (msg.content or "").strip(),
+                refused=bool(_get_field(msg, "refusal"))
+                or finish_reason == "content_filter",
             )
             return self._finalize_response(
                 response, budget, anchors, ticket, call_purpose
             )
-
-        resp = cast(
-            Any,
-            await self._create_with_retry(
-                kwargs,
-                payload_snapshot_enabled=payload_snapshot_enabled,
-            ),
-        )
-        msg = resp.choices[0].message
-        finish_reason = _finish_reason_of(resp.choices[0])
-        _warn_if_truncated(model=model, finish_reason=finish_reason, stream=False)
-
-        tool_calls = []
-        if msg.tool_calls:
-            for tc in msg.tool_calls:
-                try:
-                    arguments = json.loads(tc.function.arguments)
-                except json.JSONDecodeError as exc:
-                    logger.warning(
-                        "[LLM工具参数解析失败] model=%s finish_reason=%s tool=%s err=%s "
-                        "raw=%s",
-                        model,
-                        finish_reason,
-                        tc.function.name,
-                        exc,
-                        summarize_llm_output_for_log(tc.function.arguments),
-                    )
-                    raise
-                tool_calls.append(
-                    ToolCall(id=tc.id, name=tc.function.name, arguments=arguments)
-                )
-
-        raw, thinking, provider_fields = strategy.extract_message(msg, msg.content)
-        cache_prompt_tokens, cache_hit_tokens, total_tokens = _extract_usage(
-            getattr(resp, "usage", None)
-        )
-        if tool_calls:
-            provider_fields = strategy.provider_fields_for_tool_call(
-                provider_fields,
-                kwargs,
-            )
-        response = LLMResponse(
-            prompt_tokens=cache_prompt_tokens,
-            completion_tokens=_coerce_int(
-                _get_field(getattr(resp, "usage", None), "completion_tokens")
-            ),
-            input_budget=budget,
-            content=raw,
-            tool_calls=tool_calls,
-            thinking=thinking,
-            provider_fields=provider_fields,
-            cache_prompt_tokens=cache_prompt_tokens,
-            cache_hit_tokens=cache_hit_tokens,
-            total_tokens=total_tokens,
-            finish_reason=finish_reason,
-            model=model,
-            raw_content_length=len(msg.content or ""),
-            raw_content_blank=not (msg.content or "").strip(),
-            refused=bool(_get_field(msg, "refusal"))
-            or finish_reason == "content_filter",
-        )
-        return self._finalize_response(response, budget, anchors, ticket, call_purpose)
+        except Exception:
+            record_failed_usage(model=model, purpose=call_purpose, budget=budget)
+            raise
 
     def _finalize_response(
         self,

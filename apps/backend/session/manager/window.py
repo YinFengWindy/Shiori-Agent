@@ -36,6 +36,7 @@ class WindowPreparation:
     prefix_stamp: str
     retained_turns: int = 0
     request_owner: str = ""
+    request_only: bool = False
 
 
 class _WindowMixin(_ManagerCoreMixin):
@@ -103,6 +104,7 @@ class _WindowMixin(_ManagerCoreMixin):
         *,
         keep_turns: int,
         message_limit: int | None = None,
+        request_only: bool = False,
     ) -> WindowPreparation | None:
         """Freeze a complete-turn prefix without touching memory or current requests."""
         if type(keep_turns) is not int or keep_turns < 0:
@@ -123,7 +125,11 @@ class _WindowMixin(_ManagerCoreMixin):
             if not members:
                 return None
             bounded_messages = session.messages[:message_limit]
-            stop, retained = retention_stop(bounded_messages, members, keep_turns)
+            stop, retained = (
+                (len(bounded_messages), 0)
+                if request_only
+                else retention_stop(bounded_messages, members, keep_turns)
+            )
             removed = tuple(
                 str(session.messages[index].get("id") or "")
                 for index in members
@@ -145,7 +151,16 @@ class _WindowMixin(_ManagerCoreMixin):
                 message_prefix_stamp(session.messages),
                 retained,
                 progress.request_owners.get(key, ""),
+                request_only,
             )
+
+    async def validate_request_window(self, prepared: WindowPreparation) -> bool:
+        """Validate a transient omission without publishing a cut or summary."""
+        async with self._lock(prepared.session_key):
+            session = self.get_or_create(prepared.session_key)
+            progress = self.maintenance_progress(session, allow_invalidation=True)
+            messages = self._store.fetch_session_messages(prepared.session_key)
+            return _valid_preparation(session, progress, messages, prepared)
 
     async def commit_window(
         self, prepared: WindowPreparation, summary: str, source_ids: tuple[str, ...]
@@ -161,46 +176,55 @@ class _WindowMixin(_ManagerCoreMixin):
             key = window_key(prepared.view)
             messages = self._store.fetch_session_messages(prepared.session_key)
             if (
-                not summary.strip()
+                prepared.request_only
+                or not summary.strip()
                 or not source_ids
                 or not set(source_ids).issubset(
                     set(prepared.removed_message_ids)
                     | set(progress.summary_source_ids.get(key, []))
                 )
-                or progress.request_owners.get(key, "") != prepared.request_owner
-                or progress.ownership != prepared.ownership
-                or progress.generation != prepared.generation
-                or progress.window_versions.get(key, 0) != prepared.version
-                or progress.cursor(prepared.view) != prepared.start
-                or tuple(
-                    str(m["id"]) for m in messages[: len(prepared.expected_message_ids)]
-                )
-                != prepared.expected_message_ids
-                or message_prefix_stamp(messages[: len(prepared.expected_message_ids)])
-                != prepared.prefix_stamp
-                or not 0
-                <= prepared.start
-                < prepared.stop
-                <= len(prepared.expected_message_ids)
+                or not _valid_preparation(session, progress, messages, prepared)
             ):
-                return False
-            scope = prepared.view.scope if prepared.view else None
-            memory_cursor = consolidation_cursor(session, scope)
-            # Compare actual members of the removed range against the category
-            # cursor; never compare the external-thread cut as if it were a scope.
-            if any(
-                index >= memory_cursor
-                and str(message["id"]) in prepared.removed_message_ids
-                for index, message in enumerate(messages)
-            ):
-                return False
-            if progress.consumer_error or progress.pending_consumers:
                 return False
             next_progress = MaintenanceProgress.load(progress.dump())
             next_progress.windows[key] = prepared.stop
             next_progress.summaries[key] = summary
             next_progress.summary_source_ids[key] = list(source_ids)
             next_progress.window_versions[key] = prepared.version + 1
+            next_progress.compaction_counts[key] = (
+                progress.compaction_counts.get(key, 0) + 1
+            )
             self._store.write_maintenance_progress(session.key, next_progress.dump())
             session.maintenance_progress = next_progress
             return True
+
+
+def _valid_preparation(
+    session: Session,
+    progress: MaintenanceProgress,
+    messages: list[dict],
+    prepared: WindowPreparation,
+) -> bool:
+    """Shared ownership, content and memory gate for durable and transient cuts."""
+    prefix = messages[: len(prepared.expected_message_ids)]
+    cursor = consolidation_cursor(
+        session, prepared.view.scope if prepared.view else None
+    )
+    key = window_key(prepared.view)
+    return (
+        progress.ownership == prepared.ownership
+        and progress.generation == prepared.generation
+        and progress.request_owners.get(key, "") == prepared.request_owner
+        and progress.window_versions.get(key, 0) == prepared.version
+        and progress.cursor(prepared.view) == prepared.start
+        and 0 <= prepared.start < prepared.stop <= len(prepared.expected_message_ids)
+        and tuple(str(m["id"]) for m in prefix) == prepared.expected_message_ids
+        and message_prefix_stamp(prefix) == prepared.prefix_stamp
+        and not progress.consumer_error
+        and not progress.pending_consumers
+        and all(
+            index < cursor
+            for index, message in enumerate(prefix)
+            if str(message["id"]) in prepared.removed_message_ids
+        )
+    )

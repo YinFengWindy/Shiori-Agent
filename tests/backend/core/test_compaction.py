@@ -355,3 +355,100 @@ async def test_consumer_failure_retains_memory_and_pending_work(memory_harness):
     await _ensure(controller, session, keep=0)
     assert len(h.prompts) == calls
     assert session.maintenance_progress.relationship_version == 1
+
+
+async def test_minimal_expands_memory_to_unfinished_originals_without_committing_cut(
+    memory_harness,
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:minimal-incomplete")
+    _turn(session)
+    session.add_message("user", "unfinished original input")
+    h.manager.save(session)
+    controller = _controller(h)
+    calls = []
+
+    async def render(prepared, summary):
+        calls.append((prepared.stop, session.last_consolidated))
+        return [{"role": "system", "content": "too large"}]
+
+    async def minimal(summary):
+        assert session.last_consolidated == 3
+        return [
+            {"role": "system", "content": summary},
+            {"role": "user", "content": "current"},
+        ]
+
+    _, result = await controller.ensure(
+        session_key=session.key,
+        view=None,
+        policy=CompactionPolicy(0),
+        message_limit=3,
+        budget=_budget(3500),
+        render=render,
+        render_minimal=minimal,
+        measure=lambda messages: _budget(
+            3000 if messages[0]["content"] == "too large" else 100
+        ),
+    )
+    assert calls == [(2, 2)]
+    assert result.memory_stop == 3 and result.degraded and not result.committed
+    assert controller.writer.generate.await_count == 2
+    assert len(session.messages) == 3 and history_start(session, None) == 0
+    assert not session.maintenance_progress.summaries
+    assert (
+        session.maintenance_progress.relationship_version
+        == session.maintenance_progress.memory_version
+    )
+
+
+async def test_stale_minimal_owner_is_rejected_and_not_adopted_by_latest(
+    memory_harness,
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:stale-minimal")
+    await h.manager.bind_window_request(session.key, None, "old")
+    controller = _controller(h)
+
+    async def minimal(summary):
+        await h.manager.bind_window_request(session.key, None, "new")
+        return [{"role": "user", "content": "current"}]
+
+    with pytest.raises(CompactionFailedError) as caught:
+        await controller.ensure(
+            session_key=session.key,
+            view=None,
+            policy=CompactionPolicy(),
+            message_limit=0,
+            budget=_budget(3500),
+            render=AsyncMock(),
+            render_minimal=minimal,
+            measure=lambda _: _budget(100),
+        )
+    assert caught.value.result.failure_stage == "window"
+    assert controller.latest(session.key, None) is None
+
+
+async def test_manual_budget_failure_never_calls_minimal_renderer(memory_harness):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:manual-budget")
+    _turn(session)
+    h.manager.save(session)
+    minimal = AsyncMock(return_value=[])
+    with pytest.raises(CompactionFailedError) as caught:
+        await _controller(h).ensure(
+            session_key=session.key,
+            view=None,
+            policy=CompactionPolicy(0),
+            message_limit=2,
+            budget=_budget(3500),
+            render=AsyncMock(return_value=[]),
+            render_minimal=minimal,
+            measure=lambda _: _budget(3000),
+            reason="manual",
+        )
+    assert (
+        caught.value.result.memory_committed
+        and caught.value.result.failure_stage == "budget"
+    )
+    minimal.assert_not_awaited()
