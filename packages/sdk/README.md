@@ -114,15 +114,19 @@ literal/string-composed dynamic imports, string patch targets, `importlib.resour
 and `pkgutil` resource access (attribute, alias or literal `getattr` forms), and host
 resource paths built from `__file__` (`Path`/`pathlib.Path`, `os.path.dirname`/
 `split`/`join`, literal `*[...]` arguments, `os.pardir`, `p /= ...`, folded string
-concatenation) or rooted at the working directory (`Path.cwd()`, `os.getcwd()`, or a
-relative literal as the base of a complete path expression, `open("...")` included)
-that names the host layout: `apps/`, `tests/backend/`, an existing entry below
-`apps/backend/`, or a file inside an existing host package directory. Fragments
-appended to another path are not judged alone; `str()` and `posixpath.join` build
-plain strings. Path values are followed through names bound in the same module only;
-paths passed through attributes, containers, call results or loops (for example
-`self.root.parents[3]`, `parents[-1]`, `__spec__.origin`, `sys.path[0]`) are left to
-external execution.
+concatenation) or explicitly rooted at the working directory (`Path.cwd()`,
+`os.getcwd()`, `Path()`, including `os.getcwd() + "/apps/backend"`) that names the host
+layout. A relative path counts as cwd-rooted only when it reaches a file-system sink
+listed in `scripts/sdk_path_sinks.py` (`open`, `io.open`, `os.listdir`/`chdir`/...,
+`glob`, `shutil.*`, `sys.path.insert`/`append`, file-system methods of concrete
+pathlib paths). Host layout means `apps/` or `tests/backend/` (rejected anywhere), an
+existing entry below `apps/backend/`, or a file inside an existing host package
+directory. Ordinary call arguments, `PurePath` values, `str()` and `posixpath.join`
+are not file-system paths; `os.path` functions are recognized through imports only.
+Each violation counts once. Path values are followed through names bound in the
+same module only; paths passed through attributes, containers, call results or loops
+(for example `self.root.parents[3]`, `parents[-1]`, `__spec__.origin`,
+`sys.path[0]`, repeated `parent` in a loop) are left to external execution.
 Exclusions are judged relative to the scanned package: virtual environments,
 caches and a plugin's root-level `build/`/`dist/` outputs; package-internal
 directories such as `backend/build/` are scanned wherever the checkout lives.
