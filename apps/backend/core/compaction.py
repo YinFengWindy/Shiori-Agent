@@ -103,13 +103,15 @@ class CompactionController:
         self.writer = writer
         self._active: set[str] = set()
         self._observe = observe
-        self._latest: dict[tuple[str, str], tuple[int, dict]] = {}
-        self._latest_compaction: dict[tuple[str, str], tuple[int, dict]] = {}
+        # Observations carry (ownership, generation): an unpersisted rebinding can
+        # reuse a generation number under another ownership.
+        self._latest: dict[tuple[str, str], tuple[str, int, dict]] = {}
+        self._latest_compaction: dict[tuple[str, str], tuple[str, int, dict]] = {}
 
     def latest(
         self, session_key: str, view: ContextView | None, *, request: bool = False
     ) -> dict | None:
-        """Return only observations still owned by the current generation.
+        """Return only observations still owned by the current binding and generation.
 
         Windows are model independent, so a model switch keeps observations.
         """
@@ -120,8 +122,8 @@ class CompactionController:
         stored = (self._latest if request else self._latest_compaction).get(
             (session_key, key)
         )
-        if stored and stored[0] == progress.generation:
-            return dict(stored[1])
+        if stored and stored[:2] == (progress.ownership, progress.generation):
+            return dict(stored[2])
         return None
 
     async def record(
@@ -145,8 +147,11 @@ class CompactionController:
             request_usage if request_usage is not None else current_usage()
         )
         key = window_key(view)
-        if result.generation == progress.generation:
-            observation = (result.generation, payload)
+        if (result.ownership, result.generation) == (
+            progress.ownership,
+            progress.generation,
+        ):
+            observation = (result.ownership, result.generation, payload)
             if request_attempted:
                 self._latest[(session_key, key)] = observation
             if result.phase != "request":

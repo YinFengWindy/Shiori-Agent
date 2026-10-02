@@ -264,15 +264,9 @@ def history_filter(view: ContextView | None) -> HistoryFilter | None:
 
 def history_start(session: object, view: ContextView | None) -> int:
     """模型历史及派生工具可见性使用窗口进度，与记忆游标独立。"""
-    from session.maintenance_progress import legacy_progress, ownership_key
+    from session.maintenance_progress import effective_progress
 
-    progress = getattr(session, "maintenance_progress", None)
-    if progress is None:
-        progress = legacy_progress(
-            session, ownership_key(view.user_threads if view else None)
-        )
-        session.maintenance_progress = progress
-    return progress.cursor(view)
+    return effective_progress(session, view.user_threads if view else None).cursor(view)
 
 
 def role_context_views(user_threads: UserContextThreads) -> tuple[ContextView, ...]:

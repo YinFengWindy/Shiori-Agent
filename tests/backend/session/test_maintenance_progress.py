@@ -40,3 +40,14 @@ def test_invalidation_discards_every_derived_artifact_without_mutating_previous_
     )
     assert not invalidated.recent_context_source_ids
     assert not invalidated.pending_consumers and not invalidated.consumer_error
+
+
+def test_rebinding_away_and_back_never_revives_an_unscoped_session_window():
+    unbound = MaintenanceProgress(
+        windows={"session": 4},
+        summaries={"session": "state"},
+        summary_source_ids={"session": ["message"]},
+    )
+    restored = unbound.rebound('["thread:mira:desktop"]').rebound("")
+    assert restored.windows["session"] == 0
+    assert not restored.summaries and not restored.summary_source_ids

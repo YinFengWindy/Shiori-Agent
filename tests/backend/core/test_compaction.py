@@ -457,3 +457,27 @@ async def test_manual_budget_failure_never_calls_minimal_renderer(memory_harness
         and caught.value.result.failure_stage == "budget"
     )
     minimal.assert_not_awaited()
+
+
+async def test_observation_from_another_binding_at_the_same_generation_is_stale():
+    from core.compaction import CompactionResult
+    from session.maintenance_progress import MaintenanceProgress
+
+    # Unpersisted rebinding A→B and A→C both derive generation 1 from (A, 0).
+    sessions = SimpleNamespace(
+        get_or_create=lambda key: None,
+        progress=MaintenanceProgress(ownership="B", generation=1),
+    )
+    sessions.maintenance_progress = lambda session: sessions.progress
+    controller = CompactionController(sessions, None, None)  # type: ignore[arg-type]
+    await controller.record(
+        "role:mira",
+        None,
+        CompactionResult(phase="completed", ownership="B", generation=1),
+        request_usage={},
+        request_attempted=True,
+    )
+    assert controller.latest("role:mira", None) is not None
+    sessions.progress = MaintenanceProgress(ownership="C", generation=1)
+    assert controller.latest("role:mira", None) is None
+    assert controller.latest("role:mira", None, request=True) is None

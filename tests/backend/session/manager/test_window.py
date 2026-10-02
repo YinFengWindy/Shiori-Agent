@@ -256,3 +256,47 @@ async def test_undo_keeps_windows_that_did_not_lose_summarized_messages(tmp_path
     assert await manager.undo_last_turn(session.key) is not None
     assert history_start(session, view) == 4
     assert session.maintenance_progress.summaries == {"user": "user"}
+
+
+@pytest.mark.asyncio
+async def test_unaffected_window_reads_the_same_cut_after_binding_change(tmp_path):
+    manager, session, _view = _session(tmp_path)
+    group = network_thread_id("mira", "qq", "group")
+    session.add_message("user", "group", thread_id=group)
+    session.add_message("assistant", "group", thread_id=group)
+    manager.save(session)
+    external = turn_context_view(tmp_path, "mira", group)
+    prepared = await manager.prepare_window(session.key, external, keep_turns=0)
+    assert prepared is not None
+    request = ConsolidationCommitRequest(
+        session.key,
+        tuple(m["id"] for m in session.messages),
+        expected_context_cursors={"external": 0},
+        context_cursors={"external": 8},
+    )
+    assert await manager.commit_consolidation(request, AsyncMock())
+    assert await manager.commit_window(prepared, "group", prepared.removed_message_ids)
+    stored = manager._store.get_session_meta(session.key)
+    identities = UserIdentityStore(tmp_path)
+    identities.pair(
+        identities.create_pairing_code().code,
+        record=AccountRecord(
+            id="qq:101",
+            plugin_id="qq",
+            platform="qq",
+            platform_account_id="101",
+            config_ref="101",
+            role_id="mira",
+        ),
+        user_id="owner",
+        scope="platform",
+        chat=IdentityChat("qq:101", "qq", "owner"),
+    )
+    rebound = turn_context_view(tmp_path, "mira", group)
+    # Reading the cached session agrees with the normalized snapshot.
+    assert history_start(session, rebound) == 8
+    snapshot = manager.window_snapshot(session.key, rebound, message_limit=8)
+    assert history_start(snapshot, rebound) == 8
+    # A read never publishes the derived rebinding into the cache or the store.
+    assert session.maintenance_progress.ownership == prepared.ownership
+    assert manager._store.get_session_meta(session.key) == stored

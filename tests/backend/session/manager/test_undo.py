@@ -380,3 +380,36 @@ async def test_undo_ignores_memory_sources_from_the_other_context(tmp_path: Path
     assert result is not None
     reloaded = manager.get_or_create(session.key)
     assert reloaded.context_cursors == {"user": 6, "external": 6}
+
+
+@pytest.mark.asyncio
+async def test_undo_before_a_legacy_cut_invalidates_like_an_explicit_window(
+    tmp_path: Path,
+):
+    from conversation.context_scope import (
+        history_start,
+        turn_context_view,
+        user_context_view,
+    )
+    from conversation.service import desktop_thread_id, network_thread_id
+
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    group = network_thread_id("mira", "qq", "g1")
+    desktop = desktop_thread_id("mira")
+    for index, thread_id in enumerate((group, desktop, group, desktop)):
+        session.add_message("user", f"u{index}", thread_id=thread_id)
+        session.add_message("assistant", f"a{index}", thread_id=thread_id)
+    manager.save(session)
+    manager._store.update_last_consolidated(
+        session.key, 8, context_cursors={"user": 8, "external": 8}
+    )
+    manager.invalidate(session.key)
+
+    assert await manager.undo_last_turn(session.key) is not None
+
+    session = manager.get_or_create(session.key)
+    # The undone desktop turn sat before the frozen user cut: that window restarts.
+    assert history_start(session, user_context_view(tmp_path, "mira")) == 0
+    # The group context lost nothing; its frozen cut only shifts.
+    assert history_start(session, turn_context_view(tmp_path, "mira", group)) == 6

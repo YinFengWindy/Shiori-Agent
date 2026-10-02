@@ -136,7 +136,7 @@ async def test_auxiliary_overflow_or_truncation_never_produces_a_summary(
                 prepared
             )
         assert provider.chat.await_count == (0 if failure == "input" else 1)
-        assert not session.maintenance_progress.summaries
+        assert not manager.maintenance_progress(session).summaries
     finally:
         await provider.aclose()
 

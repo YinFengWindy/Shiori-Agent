@@ -1,10 +1,11 @@
 """Atomic passive-turn undo owned by the session manager."""
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from session.store.common import ContextScope
-from session.maintenance_progress import MaintenanceProgress
+from session.maintenance_progress import MaintenanceProgress, message_window_key
 
 from .manager import _ManagerCoreMixin
 from .models import effective_context_cursors
@@ -119,6 +120,11 @@ class _UndoMixin(_ManagerCoreMixin):
             )
 
 
+def _shifted(cut: int, indices: list[int]) -> int:
+    """切点在删除 ``indices`` 后的新下标：只减去它之前被删的条数。"""
+    return cut - sum(index < cut for index in indices)
+
+
 def _progress_after_undo(
     progress: MaintenanceProgress,
     messages: list[dict[str, Any]],
@@ -127,50 +133,35 @@ def _progress_after_undo(
 ) -> MaintenanceProgress:
     """撤销后的维护进度：只失效真正受影响的上下文窗口。
 
-    某窗口的切点之前有被删的本上下文消息、或被删消息属于它的工作摘要来源时，
-    该窗口与摘要失效；其他窗口与迁移冻结切点保持，只随删除平移下标。
-    代次照常推进，让撤销前准备的窗口与回合草稿全部过期。
+    某上下文的有效切点（自身窗口或迁移冻结切点）之前有被删的本上下文消息、
+    或被删消息属于它的工作摘要来源时，该窗口与摘要失效；其他窗口与迁移冻结
+    切点保持，只随删除平移下标。代次照常推进，让撤销前准备的窗口与回合草稿
+    全部过期。
     """
-    from conversation.context_scope import ContextView
-
     deleted_ids = {str(messages[index]["id"]) for index in indices}
 
     def owns(key: str, message: dict[str, Any]) -> bool:
-        if user_threads is None or key == "session":
-            return True
-        view = (
-            ContextView(scope="user", user_threads=user_threads)
-            if key == "user"
-            else ContextView(
-                scope="external",
-                user_threads=user_threads,
-                thread_id=key.removeprefix("external:"),
-            )
-        )
-        return view.includes(message)
+        return key == "session" or message_window_key(message, user_threads) == key
 
+    # Contexts relying only on a legacy cut have no window entry yet.
+    keys = set(progress.windows) | {
+        message_window_key(messages[index], user_threads) for index in indices
+    }
     affected = {
         key
-        for key, cut in progress.windows.items()
-        if any(index < cut and owns(key, messages[index]) for index in indices)
+        for key in keys
+        if any(
+            index < progress.cut(key) and owns(key, messages[index])
+            for index in indices
+        )
         or deleted_ids & set(progress.summary_source_ids.get(key, []))
     }
-    kept = progress.without_windows(affected)
-
-    def shifted(cuts: dict[str, int]) -> dict[str, int]:
-        return {
-            key: cut - sum(index < cut for index in indices)
-            for key, cut in cuts.items()
-        }
-
-    result = progress.invalidated()
-    result.legacy_cuts = shifted(kept.legacy_cuts)
-    result.windows = shifted(kept.windows)
-    result.window_versions = kept.window_versions
-    result.compaction_counts = kept.compaction_counts
-    result.summaries = kept.summaries
-    result.summary_source_ids = kept.summary_source_ids
-    return result
+    kept = progress.without_windows(affected).invalidated(keep_windows=True)
+    return replace(
+        kept,
+        legacy_cuts={k: _shifted(c, indices) for k, c in kept.legacy_cuts.items()},
+        windows={k: _shifted(c, indices) for k, c in kept.windows.items()},
+    )
 
 
 def _rolled_back_context_cursors(
@@ -229,9 +220,5 @@ def _rolled_back_cursor(
         rollback_source_ids=rollback_source_ids,
     )
     return rollback_index, max(
-        0,
-        min(
-            rollback_index - sum(index < rollback_index for index in indices),
-            len(messages) - len(indices),
-        ),
+        0, min(_shifted(rollback_index, indices), len(messages) - len(indices))
     )

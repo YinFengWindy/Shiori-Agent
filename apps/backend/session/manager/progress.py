@@ -1,10 +1,6 @@
 """Maintenance state migration and identity normalization owned by SessionManager."""
 
-from session.maintenance_progress import (
-    MaintenanceProgress,
-    legacy_progress,
-    ownership_key,
-)
+from session.maintenance_progress import MaintenanceProgress, effective_progress
 
 from .manager import _ManagerCoreMixin
 from .models import Session
@@ -45,27 +41,20 @@ class _ProgressMixin(_ManagerCoreMixin):
         """
         from conversation.context_scope import role_session_user_threads
 
+        user_threads = role_session_user_threads(self.workspace, session.key)
         # Projection callbacks can read a cached session inside an owning SQL
         # transaction. Never publish its uncommitted cursor/state into that cache.
-        if (
-            self._store._conn.in_transaction
-            and session.maintenance_progress is not None
-        ):
-            return session.maintenance_progress
-        stamp = ownership_key(role_session_user_threads(self.workspace, session.key))
+        if self._store._conn.in_transaction:
+            return effective_progress(session, user_threads)
         meta = self._store.get_session_meta(session.key)
         if meta is not None:
             session.last_consolidated = meta["last_consolidated"]
             session.context_cursors = meta["context_cursors"]
         raw = meta.get("maintenance_progress") if meta else None
-        progress = (
-            MaintenanceProgress.load(raw) if raw else legacy_progress(session, stamp)
-        )
-        if progress.ownership != stamp:
-            # Visibility changed: affected windows must not keep a cut or summary
-            # built from messages they can no longer (or can now) see.
-            progress = progress.rebound(stamp)
+        # The cache mirrors only persisted state; normalization stays derived.
+        session.maintenance_progress = MaintenanceProgress.load(raw) if raw else None
+        progress = effective_progress(session, user_threads)
         if persist and raw != progress.dump():
             self._store.write_maintenance_progress(session.key, progress.dump())
-        session.maintenance_progress = progress
+            session.maintenance_progress = progress
         return progress
