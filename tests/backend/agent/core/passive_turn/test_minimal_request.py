@@ -5,6 +5,7 @@ import pytest
 from agent.core.passive_turn.minimal_request import (
     completed_tool_results,
     current_input,
+    replace_current_input,
 )
 
 
@@ -58,3 +59,19 @@ def test_owned_current_input_wins_over_identical_history_and_trailing_hint():
     hint = {"role": "user", "content": "<system-reminder>optional</system-reminder>"}
     assert current_input([old, owned, hint], owned) is owned
     assert current_input([old, owned, hint]) is owned
+
+
+def test_replacing_current_input_uses_identity_and_copies_nested_attachments():
+    old = {"role": "user", "content": "same"}
+    owned = dict(old)
+    hint = {"role": "user", "content": "<system-reminder>optional</system-reminder>"}
+    frozen = {
+        "role": "user",
+        "content": [{"type": "image_url", "image_url": {"url": "original.png"}}],
+    }
+    messages = [old, owned, hint]
+    replace_current_input(messages, frozen, owned)
+    assert messages[0] is old and messages[2] is hint
+    assert messages[1] == frozen and messages[1] is not frozen
+    frozen["content"][0]["image_url"]["url"] = "changed.png"
+    assert messages[1]["content"][0]["image_url"]["url"] == "original.png"

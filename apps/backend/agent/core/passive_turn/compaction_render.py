@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass, replace
 from typing import Awaitable, Callable, TYPE_CHECKING
 
@@ -19,7 +18,7 @@ from .helpers import (
     turn_tool_names,
 )
 from .tool_visibility import initial_tool_order
-from .minimal_request import current_input
+from .minimal_request import replace_current_input
 
 if TYPE_CHECKING:
     from agent.tools.registry import ToolRegistry
@@ -125,10 +124,9 @@ class CompactionRenderer:
             self.current_message is not None
             and self.current_message.get("role") == "user"
         ):
-            owned = current_input(candidate.messages, candidate.current_message)
-            candidate.messages[
-                next(i for i, item in enumerate(candidate.messages) if item is owned)
-            ] = deepcopy(self.current_message)
+            replace_current_input(
+                candidate.messages, self.current_message, candidate.current_message
+            )
         return with_working_summary(candidate.messages, summary)
 
     async def render_minimal(self, summary: str) -> list[dict]:
@@ -146,8 +144,7 @@ class CompactionRenderer:
             )
         )
         if self.current_message is not None:
-            owned = current_input(candidate.messages, candidate.current_message)
-            candidate.messages[
-                next(i for i, item in enumerate(candidate.messages) if item is owned)
-            ] = deepcopy(self.current_message)
+            replace_current_input(
+                candidate.messages, self.current_message, candidate.current_message
+            )
         return with_working_summary(candidate.messages, summary)

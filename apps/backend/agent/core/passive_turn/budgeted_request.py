@@ -31,6 +31,11 @@ async def budgeted_chat(provider: LLMProvider, **kwargs):
             raise
         except Exception as exc:
             mark_speaking_request(after=previous_calls)
+            result = await scope.observe_request(
+                None,
+                error=exc,
+                request_attempted=not isinstance(exc, LocalBudgetExceeded),
+            )
             if (
                 isinstance(exc, ContextLengthError)
                 and not isinstance(exc, LocalBudgetExceeded)
@@ -50,7 +55,6 @@ async def budgeted_chat(provider: LLMProvider, **kwargs):
                 if scope.degraded:
                     kwargs["tools"] = []
                 continue
-            result = await scope.observe_request(None, error=exc)
             raise CompactionFailedError(result) from exc
         mark_speaking_request(after=previous_calls)
         budget = response.input_budget or provider.input_budget(

@@ -140,17 +140,21 @@ class RequestCompaction:
             return [*prefix, *completed_tool_results(tail)]
 
         if self.degraded:
-            result = replace(
-                self.last_result or CompactionResult(),
-                failure_stage="minimal_budget",
-                failure_kind="local_budget",
-                error="最小请求已超出输入预算",
-                final_budget=asdict(budget),
-                after_tokens=budget.estimate.tokens,
-                after_source=budget.estimate.source,
+            failure = CompactionFailedError(
+                replace(
+                    self.last_result or CompactionResult(),
+                    failure_stage="minimal_budget",
+                    failure_kind="local_budget",
+                    error="最小请求已超出输入预算",
+                    final_budget=asdict(budget),
+                    after_tokens=budget.estimate.tokens,
+                    after_source=budget.estimate.source,
+                )
             )
-            await self.controller.record(self.session_key, self.view, result)
-            raise CompactionFailedError(result)
+            self.last_result = failure.result
+            self.results.append(failure.result.dump())
+            await self.controller.record(self.session_key, self.view, failure.result)
+            raise failure
 
         try:
             candidate, result = await self.controller.ensure(
@@ -188,6 +192,7 @@ class RequestCompaction:
         *,
         error: BaseException | None = None,
         failure_stage: str = "provider",
+        request_attempted: bool = True,
     ):
         """Record the actual final request and staged failure, with no payload text."""
         from agent.provider import ContextLengthError, LocalBudgetExceeded
@@ -222,7 +227,11 @@ class RequestCompaction:
             )
         self.last_result = result
         await self.controller.record(
-            self.session_key, self.view, result, request_usage=current_usage()
+            self.session_key,
+            self.view,
+            result,
+            request_usage=current_usage(),
+            request_attempted=request_attempted,
         )
         return result
 

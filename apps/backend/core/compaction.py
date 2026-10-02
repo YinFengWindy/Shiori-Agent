@@ -132,8 +132,9 @@ class CompactionController:
         result: CompactionResult,
         *,
         request_usage: dict | None = None,
+        request_attempted: bool = False,
     ) -> None:
-        """Publish payload-free staged facts for status and the SDK observer."""
+        """Publish facts; only the provider boundary may replace the last request."""
         progress = self.sessions.maintenance_progress(
             self.sessions.get_or_create(session_key)
         )
@@ -149,15 +150,15 @@ class CompactionController:
             progress.request_owners.get(key, ""),
             progress.generation,
         ):
-            self._latest[(session_key, key)] = (
+            observation = (
                 result.request_owner,
                 result.generation,
                 payload,
             )
+            if request_attempted:
+                self._latest[(session_key, key)] = observation
             if result.phase != "request":
-                self._latest_compaction[(session_key, key)] = self._latest[
-                    (session_key, key)
-                ]
+                self._latest_compaction[(session_key, key)] = observation
         if self._observe is not None:
             await self._observe(ContextBudgetObserved(session_key, key, payload))
 

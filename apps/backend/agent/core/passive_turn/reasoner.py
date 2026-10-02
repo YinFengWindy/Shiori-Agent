@@ -495,7 +495,7 @@ class DefaultReasoner(
                 window_sources=window_sources,
             )
             prompt_render = await self.render_prompt(render_input)
-            from .minimal_request import current_input
+            from .minimal_request import current_input, replace_current_input
 
             owned_current = current_input(
                 prompt_render.messages, prompt_render.current_message
@@ -504,13 +504,9 @@ class DefaultReasoner(
                 protected_current = deepcopy(owned_current)
             elif protected_current.get("role") == "user":
                 # A fresh window must not reread or replace this execution's input.
-                prompt_render.messages[
-                    next(
-                        i
-                        for i, item in enumerate(prompt_render.messages)
-                        if item is owned_current
-                    )
-                ] = deepcopy(protected_current)
+                replace_current_input(
+                    prompt_render.messages, protected_current, owned_current
+                )
             initial_messages = with_working_summary(
                 prompt_render.messages, working_summary
             )

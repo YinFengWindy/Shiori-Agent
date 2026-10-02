@@ -61,6 +61,15 @@ def current_input(messages: list[dict], owned: dict | None = None) -> dict:
     )
 
 
+def replace_current_input(
+    messages: list[dict], replacement: dict, owned: dict | None = None
+) -> None:
+    """Restore the frozen input by owner identity without sharing mutable attachments."""
+    current = current_input(messages, owned)
+    index = next(index for index, message in enumerate(messages) if message is current)
+    messages[index] = deepcopy(replacement)
+
+
 def _frame(message: dict) -> bool:
     content = message.get("content")
     return isinstance(content, str) and is_context_frame(content)
