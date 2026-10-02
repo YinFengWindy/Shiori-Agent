@@ -20,7 +20,7 @@ SQLite、检索、去重、撤销和后处理使用插件自己的实现；真�
 仓库维护者可以执行：
 
 ```sh
-uv run python scripts/verify_plugin_tests.py --plugins default_memory --sdk-only
+uv run python -m scripts.verify_plugin_tests --plugins default_memory
 ```
 
 该命令在仓库外构建并安装普通 wheel，执行全部测试和异步失败探针，检查已安装

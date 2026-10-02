@@ -8,7 +8,7 @@
 | --- | --- |
 | `plugins/qqbot/` | 结构最紧凑：Gateway + REST，mixin 拆分入站、出站、流式 |
 | `plugins/telegram/` | 轮询连接、bot 命令菜单（`uses_bot_commands`）、编辑消息式流式预览 |
-| `plugins/qq/` | 第三方 SDK 带进程级全局配置时，如何在换代时写入与恢复 |
+| `plugins/qq/` | 按账号管理 OneBot 连接和私有 NapCat 实例，处理扫码登录、重连及进程清理 |
 | `plugins/feishu/` | SDK 自带线程和事件循环时的线程模型、CardKit 流式卡片、`status()` |
 
 ## 1. 包布局与 manifest
@@ -222,7 +222,7 @@ async def stop(self):
 仓库内运行 `uv run pytest -c pytest.ini plugins/<id>/tests`；合并前用隔离环境验收：
 
 ```sh
-uv run python scripts/verify_plugin_tests.py --sdk-only --plugins <id>
+uv run python -m scripts.verify_plugin_tests --plugins <id>
 ```
 
 它从副本构建非 editable wheel、在干净 venv 里跑插件测试并审计模块来源，细节见 [插件测试](../agents/plugin-testing.md)。

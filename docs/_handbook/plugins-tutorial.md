@@ -103,7 +103,7 @@ async def setup(ctx):
 
 外部上下文（群聊、陌生私聊）里，发送者不是已绑定用户的回合只能使用声明过外部可用的工具：`ctx.tools.register(tool, ..., external_allowed=True)`。默认不声明，即这类回合看不到、也调不动该工具；已绑定用户本人的消息不受限。只给陌生人触发也安全的工具声明，例如 NovelAI 的 `generate_image`。MCP 工具不能声明。规则见[运行时契约](plugin-runtime-contract.md#tools-in-external-contexts-489)。
 
-能力名的完整权威清单位于 `agent/plugin_host/manifest.py`。不要自己构造另一份 RoleStore 来写同一份角色文件，应获取宿主共享的 `roles` 窄接口；未迁移的渠道和桌宠仍暂用旧能力。能力是架构边界，不是 Python 进程内安全沙箱。
+能力名的完整权威清单位于 `agent/plugin_host/manifest.py`。不要自己构造另一份 RoleStore 来写同一份角色文件，应获取宿主共享的 `roles` 窄接口。渠道使用 `ChannelPluginContext` 的账号、渠道和头像等协议；桌宠使用 `ServicePluginContext` 的角色、存储、工具和 RPC 协议，renderer 通过 SDK surface 能力声明交互。能力是架构边界，不是 Python 进程内安全沙箱。
 
 其它外部资源用 `ctx.effect("label", disposer)` 登记清理；disposer 可同步或异步。Python 插件作用域分两段处置：先停止接收新事件并撤销所有 `ctx.events.on` 订阅，再按登记的逆序（LIFO）清理其余 effect，包括自定义 disposer、后台任务与贡献。订阅和资源的登记先后不影响退订优先规则；其它资源之间仍需按依赖顺序登记，例如先登记 writer，再登记需要向 writer 最终 flush 的采集器，使采集器先清理。
 
@@ -273,15 +273,15 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 # staged = stage_plugin_package(PLUGIN_DIR, tmp_path / "plugins/example")
 ```
 
-兄弟插件通过 `plugin_directory("citation")` 定位，并在 `pyproject.toml` 明确声明安装依赖；不得推导原仓库路径，也不得导入宿主测试树。异步测试由 pytest-asyncio 执行，公共支持来自 SDK 的 pytest entry point；独立插件测试不安装宿主。真实 AppRuntime 集成 fixture 由宿主开发包 `shiori-host-testing` 提供，在宿主 `tests/conftest.py` 注册。
+兄弟插件通过 `plugin_directory("citation")` 定位，并在 `pyproject.toml` 明确声明安装依赖；不得推导原仓库路径，也不得导入宿主测试树。异步测试由 pytest-asyncio 执行，公共支持来自 SDK 的 pytest entry point；独立插件测试不安装宿主。真实 AppRuntime 集成 fixture 由宿主开发包 `shiori-host-testing` 提供，仅在显式安装该包时通过其 pytest entry point 注册。
 
-仓库开发使用 `uv sync --dev`，再 `uv run pytest plugins/example/tests`。仓库外验收运行 `uv run python scripts/verify_plugin_tests.py --plugins example --output <仓库外新目录>`：从副本构建非 editable wheel，在独立环境运行真实插件测试，检查模块来源，并确认 await 后故意失败的异步断言真正执行。完整步骤见 [插件测试](../agents/plugin-testing.md) 与各包 `TESTING.md`。
+仓库开发使用 `uv sync --dev`，再 `uv run pytest plugins/example/tests`。仓库外验收运行 `uv run python -m scripts.verify_plugin_tests --plugins example --output <仓库外新目录>`：从副本构建非 editable wheel，在独立环境运行真实插件测试，检查模块来源，并确认 await 后故意失败的异步断言真正执行。完整步骤见 [插件测试](../agents/plugin-testing.md) 与各包 `TESTING.md`。
 
 旧停用标记仅由配置启动升级读取：按当前 manifest 身份写入缺失的 `[plugins.<id>].enabled = false`，显式配置优先。持久化失败保留原配置与标记，重试不会覆盖已保存选择；无法确认当前插件身份时保留标记，等待包可用。内核日常启停不读取标记。已归核心的主动/场景偏好保持各自升级逻辑。
 
 通用 KV 位于 `agent/plugin_host/kv.py`，旧 `.kv.json` 的现存可恢复数据仍由 `plugin_data` 原子迁入工作区。旧 `workspace/plugins/<id>/kv.json` 优先于包内 `.kv.json`，统一原子迁入 `workspace/plugin-data/<id>/`。历史 `plugin_config.json` 迁移复用宿主静态 discovery，只为通过准入的内置 owner 处理数据；`CONFLICT`、`UNTRUSTED`、`BLOCKED` 保留来源且不导入。旧 workspace 中已有 manifest 的包不能作为其它 ID 的配置来源；没有 manifest 的旧数据目录按 ID 迁移。目录别名必须唯一且不与其它 ID 相撞；旧后端代码目录只按唯一包目录名归属。主 TOML 已提交的迁移凭证会独立补齐 workspace 完成标记，即使准入随后变更，也不会重读、导入或删除旧来源。有效来源从旧 workspace、当前包或旧 `apps/backend/plugins/<id>` 归档到该数据目录，并在持久化启动时一次性升级为主配置的 `[plugins.<id>]`；已有 v2 配置整表优先，仅含旧宿主 `enabled` 的表保留开关并导入参数。成功标记独立保存在数据目录，之后编辑、删键或删除整表都不会重新读取旧 JSON。旧源只在落盘成功后删除，未选中的候选保留；写入失败保留旧源并中止启动。default_memory 的 `config.local.toml` 同样迁入各自数据目录，加载和初始化共用路径解析，默认值来自代码，运行时不向安装包写入。升级前已被安装器删除的数据无法恢复。
 
-已迁移记忆插件通过 SDK 注入的 `MemoryStorage` 解析配置与迁移私有数据；宿主实现继续复用 `plugin_data` / `data_migration` 的原子迁移与凭证。尚未迁移插件的内部调用随对应 SDK 批次归位。历史独立数据在 owner 打开存储之前迁移。默认 memory2 与 observe 数据库分别位于 `plugin-data/default_memory/memory2.db`、`plugin-data/observe/observe.db`。显式 `db_path` 保持不变；引擎、初始化、向量兼容性检查和管理脚本使用相同的 owning resolver。旧库仍被进程内 owner 使用时拒绝迁移并要求重启，避免准备新运行时代际时截断旧库的后续提交。
+记忆插件通过 SDK 注入的 `MemoryStorage` 解析配置与迁移私有数据；宿主实现继续复用 `plugin_data` / `data_migration` 的原子迁移与凭证。所有插件通过声明的 SDK 协议使用宿主能力。历史独立数据在 owner 打开存储之前迁移。默认 memory2 与 observe 数据库分别位于 `plugin-data/default_memory/memory2.db`、`plugin-data/observe/observe.db`。显式 `db_path` 保持不变；引擎、初始化、向量兼容性检查和管理脚本使用相同的 owning resolver。旧库仍被进程内 owner 使用时拒绝迁移并要求重启，避免准备新运行时代际时截断旧库的后续提交。
 
 SQLite 用 backup API 复制包含已提交 WAL 的一致快照，不能只复制 `.db` 主文件。目标发布前保存内容凭证；未确认的已有目标报冲突并保留双方。完成凭证位于 `private_runtime/plugin-data-migrations/<id>/`，独立于可删除的插件目录，因此清理插件数据后不会从旧位置复活状态。旧来源通常保留为升级备份，运行时不再向旧来源写入；确认备份和引用后可人工归档。桌宠旧 pet 子目录是例外：验证新素材并提交全部新引用后，由 owner 删除旧 pet 文件以维持包删除语义，不影响其他角色素材。不要删除迁移凭证来“修复”空数据。
 
@@ -308,5 +308,7 @@ Story 播放偏好保留为设备 renderer 的 `localStorage["shiori.story-prefe
 `runtime_api: ">=3.0.0 <4.0.0"`。SDK 主文档位于
 [packages/sdk/README.md](../../packages/sdk/README.md)，包括 wheel/tarball 构建、
 公开协议和 `shiori-sdk[testing]` 的无宿主测试入口。
-citation/context_pressure、默认记忆、钩子/观测/状态命令和角色/生成/屏幕/浏览器/电脑工具已完成迁移。尚未公开的能力按对应迁移票进入 SDK；
-渠道等未迁移插件暂时保留现有 testkit 与真实宿主集成测试，不把宿主服务复制进 SDK。
+全部 20 个内置插件，包括四个外部渠道和桌宠，均使用 SDK 契约及 `shiori-sdk[testing]` 独立测试支持。
+宿主导入守护没有迁移豁免，仓库外验证只安装目标及其显式依赖，不安装宿主。
+真实 AppRuntime、渠道、窗口和进程集成由宿主测试及 `shiori-host-testing` 验证；
+SDK 只定义公开协议和独立 fake，宿主保留服务实现。

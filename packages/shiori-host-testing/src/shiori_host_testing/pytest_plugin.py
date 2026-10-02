@@ -1,4 +1,4 @@
-"""Fixtures registered by the explicitly installed testkit distribution."""
+"""Fixtures registered by the explicitly installed host testing distribution."""
 
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager

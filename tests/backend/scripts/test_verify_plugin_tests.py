@@ -47,22 +47,19 @@ def test_target_test_only_dependency_is_added_without_changing_runtime(
     _plugin(
         repository,
         "status_commands",
-        dependencies=("shiori-agent==0.1.0",),
+        dependencies=("shiori-sdk==3.0.0",),
         optional={
-            "test": ("shiori-plugin-testkit==0.1.0", "shiori-plugin-observe==0.1.0")
+            "test": ("shiori-sdk[testing]==3.0.0", "shiori-plugin-observe==0.1.0")
         },
     )
     _plugin(repository, "observe")
 
     assert runner.plugin_dependencies({"status_commands"}) == {
         "status_commands",
-        "default_memory",
     }
     assert runner.plugin_dependencies(
         {"status_commands"}, extras=frozenset({"test"})
-    ) == {"status_commands", "default_memory", "observe"}
-    # There is deliberately no plugins/testkit directory in this repository.
-    assert not (repository / "plugins/testkit").exists()
+    ) == {"status_commands", "observe"}
 
 
 def test_sibling_runtime_chain_does_not_inherit_target_test_extra(
@@ -79,7 +76,6 @@ def test_sibling_runtime_chain_does_not_inherit_target_test_extra(
 
     assert runner.plugin_dependencies({"target"}, extras=frozenset({"test"})) == {
         "target",
-        "default_memory",
         "observe",
         "citation",
     }
@@ -98,7 +94,6 @@ def test_explicit_sibling_extra_is_processed_after_its_runtime_context(
 
     assert runner.plugin_dependencies({"target"}) == {
         "target",
-        "default_memory",
         "observe",
         "audit",
     }
@@ -119,7 +114,6 @@ def test_inactive_markers_do_not_require_missing_plugin_directories(
 
     assert runner.plugin_dependencies({"target"}, extras=frozenset({"test"})) == {
         "target",
-        "default_memory",
     }
 
 
@@ -133,9 +127,7 @@ def test_markers_use_the_active_extra_and_preserve_base_runtime_dependencies(
             'shiori-plugin-runtime; extra != "test"',
             'shiori-plugin-observe; extra == "test" and python_version >= "3"',
         ),
-        optional={
-            "test": ("Shiori_Plugin_Testkit", "shiori-plugin-citation[render_tools]")
-        },
+        optional={"test": ("Shiori_Sdk", "shiori-plugin-citation[render_tools]")},
     )
     _plugin(repository, "runtime")
     _plugin(repository, "observe")
@@ -148,7 +140,6 @@ def test_markers_use_the_active_extra_and_preserve_base_runtime_dependencies(
 
     assert runner.plugin_dependencies({"target"}, extras=frozenset({"test"})) == {
         "target",
-        "default_memory",
         "runtime",
         "observe",
         "citation",
@@ -343,7 +334,6 @@ def test_main_summarizes_all_failures_writes_results_and_exits_non_zero(
         return destination / f"{source.name}.whl"
 
     monkeypatch.setattr(runner, "build_wheel", build_wheel)
-    monkeypatch.setattr(runner, "check_host_wheel", lambda wheel, log: None)
     calls: list[str] = []
     fake = _fake_verify(calls, command_failure="broken", assertion_failure="crash")
     monkeypatch.setattr(runner, "verify_plugin", lambda plugin_id, **_: fake(plugin_id))
@@ -370,12 +360,8 @@ def test_main_summarizes_all_failures_writes_results_and_exits_non_zero(
         "build-alpha.log",
         "build-broken.log",
         "build-crash.log",
-        "build-default_memory.log",
-        "build-host-testing.log",
-        "build-host.log",
         "build-sdk.log",
         "build-telegram.log",
-        "build-testkit.log",
     ]
     results = json.loads((output / "results.json").read_text(encoding="utf-8"))
     assert [(entry["plugin"], entry["status"]) for entry in results] == [
@@ -419,7 +405,6 @@ def test_jobs_defaults_to_cpu_count_for_builds_and_verification(
     _plugin(tmp_path / "repository", "default_memory")
     monkeypatch.setattr(runner, "stage_plugin_package", lambda source, target: target)
     monkeypatch.setattr(runner, "build_wheels", build_wheels)
-    monkeypatch.setattr(runner, "check_host_wheel", lambda wheel, log: None)
     monkeypatch.setattr(runner, "verify_all", verify_all)
     monkeypatch.setattr(runner.os, "cpu_count", lambda: 7)
 
@@ -435,9 +420,20 @@ def test_sdk_selection_does_not_add_default_memory_or_host(repository: Path) -> 
         dependencies=("shiori-sdk==3.0.0",),
         optional={"test": ("shiori-sdk[testing]==3.0.0",)},
     )
-    assert runner.plugin_dependencies(
-        {"citation"}, extras=frozenset({"test"}), include_host=False
-    ) == {"citation"}
+    assert runner.plugin_dependencies({"citation"}, extras=frozenset({"test"})) == {
+        "citation"
+    }
+
+
+@pytest.mark.parametrize(
+    "dependency", ["shiori-agent", "shiori-host-testing", "shiori-plugin-testkit"]
+)
+def test_dependency_closure_rejects_host_packages(
+    repository: Path, dependency: str
+) -> None:
+    _plugin(repository, "demo", optional={"test": (dependency,)})
+    with pytest.raises(ValueError, match="forbidden host dependency"):
+        runner.plugin_dependencies({"demo"}, extras=frozenset({"test"}))
 
 
 def test_each_plugin_and_async_probe_own_separate_pytest_temp_directories(
@@ -464,16 +460,55 @@ def test_each_plugin_and_async_probe_own_separate_pytest_temp_directories(
         return "1 passed"
 
     monkeypatch.setattr(runner, "run", run)
+    monkeypatch.setattr(runner, "write_provenance_probe", lambda *args, **kwargs: None)
     for plugin_id in ("first", "second"):
         _plugin(repository, plugin_id)
         runner.verify_plugin(
             plugin_id,
             artifact_root=output,
             wheelhouse=output / "wheels",
-            source=output / "sources" / plugin_id,
-            host=None,
-            kit=None,
+            sources={plugin_id: output / "sources" / plugin_id},
             wheel=output / "wheels" / f"{plugin_id}.whl",
         )
 
     assert len(temporary_roots) == len(set(temporary_roots)) == 4
+
+
+def test_target_provenance_covers_installed_siblings_and_every_staged_source(
+    repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _plugin(repository, "meme", dependencies=("shiori-plugin-citation",))
+    _plugin(repository, "citation")
+    output = tmp_path / "artifacts"
+    sources = {
+        name: output / "sources" / name
+        for name in ("meme", "citation", "another_target")
+    }
+    received = {}
+
+    def write_probe(case, modules, allowed, *, source_packages):
+        received.update(modules=modules, allowed=allowed, sources=set(source_packages))
+
+    def run(command, *, cwd, log, expected=0):
+        if expected == 1:
+            (cwd / "awaited.txt").write_text("awaited", encoding="utf-8")
+            return "1 failed: expected async failure probe"
+        return "1 passed"
+
+    monkeypatch.setattr(runner, "write_provenance_probe", write_probe)
+    monkeypatch.setattr(runner, "run", run)
+    runner.verify_plugin(
+        "meme",
+        artifact_root=output,
+        wheelhouse=output / "wheels",
+        sources=sources,
+        wheel=output / "wheels/meme.whl",
+    )
+    assert received["allowed"] == ["shiori-plugin-citation", "shiori-plugin-meme"]
+    assert set(received["modules"]) == {
+        "plugins.meme.backend.plugin",
+        "plugins.citation.backend.plugin",
+    }
+    # Installed-module provenance is the dependency closure, while execution
+    # rejection covers even other targets sharing this artifact's staged tree.
+    assert received["sources"] == set(sources.values())

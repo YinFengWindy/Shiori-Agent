@@ -5,7 +5,6 @@
   "venv": ".venv",
   "extraPaths": [
     "apps/backend",
-    "packages/shiori-plugin-testkit/src",
     "packages/sdk/python",
     "packages/shiori-host-testing/src"
   ],

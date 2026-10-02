@@ -1,4 +1,4 @@
-"""Host-only fixtures. Plugin tests load their installed testkit independently."""
+"""Host-only fixtures. Plugin tests load installed SDK support independently."""
 
 from tests.support.scheduler import (
     fixed_now,

@@ -444,7 +444,7 @@ async def test_core_scene_demand_respects_followup_strategy_and_independent_cons
 async def test_core_stop_preflights_before_teardown_and_force_continues_after_failure(
     tmp_path, monkeypatch
 ):
-    from shiori_plugin_testkit.packages import stage_plugin_package
+    from shiori_sdk.testing.packages import stage_plugin_package
     from agent.config_models import Config
     from agent.plugin_host import PluginRestartRequired
     from bootstrap.app import AppRuntime, RuntimeFeatures

@@ -1,67 +1,73 @@
 # 插件测试
 
-插件的 Python 测试随 `plugins/<id>/tests/` 保存。插件包的 `pyproject.toml` 声明 SDK（未迁移插件暂时声明宿主）依赖、兄弟插件依赖、`test` extra 和 pytest 配置。新增含测试的插件必须提供此声明；独立验证会因缺失声明直接失败。
+插件的 Python 测试随 `plugins/<id>/tests/` 保存。每个 `pyproject.toml` 显式声明 `shiori-sdk`、兄弟插件和第三方依赖、`test` extra 与 pytest 配置。所有插件单测只通过 `shiori-sdk[testing]` 使用独立 fake；真实宿主装配测试在 `tests/backend/`。
 
 ## 仓库开发
 
 在仓库根目录运行：
 
 ```sh
-uv sync --dev
-uv run pytest
+uv sync --dev --locked
+uv run pytest plugins/example/tests
 ```
 
-`uv.lock` 与本地 source 声明会安装真实宿主、默认记忆和测试支持包。使用既有 requirements 入口时，在仓库根目录向项目虚拟环境安装 `apps/backend/requirements/development.txt`；其中的相对路径刻意从根目录解析。该入口同时安装本地宿主、默认记忆、testkit 和质量工具。
+`uv.lock` 安装真实宿主、默认记忆及 `shiori-host-testing`，用于宿主开发和集成验证。requirements 入口为 `apps/backend/requirements/development.txt`，其本地相对路径从仓库根目录解析。Python 验证统一使用仓库虚拟环境。
 
-根目录不再有 `conftest.py`。`tests/conftest.py` 与 `tests/support/` 只提供宿主测试所需的 fixture；生产依赖使用项目环境中安装的真实包，测试在各自边界 mock 网络请求，不全局替换第三方模块。插件测试不得导入这些模块，不得从父目录推导原仓库路径。插件自己的文件可相对 `__file__` 定位；已声明的兄弟插件通过 `shiori_sdk.testing.packages.plugin_directory()` 定位。整包暂存统一调用 `stage_plugin_package(source: Path, target: Path) -> Path`（同一模块），它保留插件源码、manifest、测试及资源，排除 `.venv`、含 `pyvenv.cfg` 的环境目录、构建缓存与包级运行状态；不要在各插件中复制 ignore 规则。宿主的 v2 fixture 也直接使用整包暂存；迁移回归在暂存后显式构造历史状态文件，不保留旧布局适配器。独立支持测试位于 `packages/sdk/tests/testing/`，真实 AppRuntime fixture 与对应测试分别位于 `packages/shiori-host-testing/src/shiori_host_testing/`、`tests/backend/shiori_host_testing/`。根 pytest 和测试类型检查均显式覆盖。
+`tests/conftest.py` 与 `tests/support/` 只提供宿主 fixture；插件不得导入宿主测试树，也不得从源文件父目录推导原仓库资源。插件自己的资源可相对 `__file__` 定位；已声明兄弟插件通过 `shiori_sdk.testing.packages.plugin_directory()` 定位。整包暂存统一调用 `stage_plugin_package(source, target)`，排除虚拟环境、构建缓存和运行状态。SDK 支持测试位于 `packages/sdk/tests/testing/`；真实 AppRuntime fixture 和 workspace-backed memory fake 位于 `packages/shiori-host-testing/src/shiori_host_testing/`，对应测试位于 `tests/backend/shiori_host_testing/`。
 
-SDK 的 pytest 插件在整个会话内按参数与证书环境变量缓存 httpx 的 SSL 上下文，避免每个 client 重复加载 CA 证书；宿主测试与插件独立运行都会启用。测试不得修改从 httpx 拿到的 SSL 上下文。
+`shiori-host-testing` 的 pytest 入口仅在明确安装此私有宿主包时注册。SDK 自己的 pytest 入口允许仅安装基础 SDK 的消费者正常收集、运行无关测试；需要 fake 时会提示安装 testing extra。测试 TLS 上下文按参数和证书环境变量缓存，测试不得修改共享 SSL 上下文。
 
 ## 可安装边界
 
-- `shiori-agent` 是真实生产 Python 模块组成的私有 runtime wheel，使用显式包清单，不包含测试树、其他插件或用户状态。
-- `shiori-plugin-default-memory` 是真实 `AppRuntime` 的必需依赖，由宿主明确声明。
-- `shiori-sdk[testing]` 提供独立 ctx/capability fake、包资源定位、bridge helper 与 pytest 入口；不安装宿主、不打开宿主存储。
-- `shiori-plugin-testkit` 仅供未迁移插件暂存，转发 SDK 的独立 helper 和宿主 `shiori_host_testing` 的真实启动 fixture；旧记忆 fake 尚待对应插件迁移后删除。
-- 每个插件的 wheel 只包含该插件后端及其声明资源，测试从插件副本运行。Story 显式依赖 NovelAI，Meme 显式依赖 citation；未声明的兄弟插件不能隐式获得。
+- `shiori-sdk[testing]` 提供契约 fake、包定位、bridge helper 与 pytest 支持，不安装或实例化宿主。
+- `shiori-agent` 是真实生产模块组成的私有 runtime wheel，明确依赖默认记忆；不包含宿主测试、其他插件或用户状态。
+- `shiori-host-testing` 提供真实宿主集成能力，只安装在宿主开发环境。
+- 插件 wheel 只包含本包后端、明确打包的 testing helper 与资源。Story→NovelAI、Meme→citation 为公开运行时依赖；status_commands 的 test extra→Observe 是显式测试依赖。没有声明的兄弟插件不会被注入。
 
-上述包只在私有 wheelhouse 或本地开发环境使用，不发布 PyPI，契约版本与兼容范围见 `packages/sdk/README.md`。普通部署和 PyInstaller 打包入口保持不变。生产技能、配置模板及共享 emoji 由 `bootstrap.paths` 统一定位，wheel 构建和桌面 bundle 使用相同源资源。
+这些包只构建为本地/CI 产物，不发布 npm 或 PyPI。统一版本与 Runtime API 为 3.0.0，详见 `packages/sdk/README.md`。
 
 ## 插件副本运行
 
-每个插件的 `TESTING.md` 都随包提供仓库外安装与运行命令。拿到插件副本及私有 wheelhouse 后，进入副本目录，先 `uv venv .venv --python 3.12`，再按该文件安装 `.[test]`（未迁移插件仍需要宿主、testkit 与默认记忆），最后执行 `uv run --no-project --python .venv python -m pytest -c pyproject.toml tests`。私有 wheel 缺失时应补齐构建产物，不能改为导入原仓库。
+每个插件的 `TESTING.md` 随包提供安装命令。取得插件副本及私有 wheelhouse 后，在副本目录执行：
+
+```sh
+uv venv .venv --python 3.12
+uv pip install --python .venv --find-links /absolute/path/to/wheelhouse ".[test]"
+uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
+```
+
+不要使用 editable 安装、设置指向原仓库的 `PYTHONPATH` 或复制宿主 conftest。私有 wheel 缺失时补齐产物，不改为从原仓库导入。
 
 ## 仓库外验收
 
 ```sh
-uv run python scripts/verify_plugin_tests.py --output /absolute/path/outside-repository/plugin-isolation
+uv run python -m scripts.verify_plugin_tests --output /absolute/path/outside-repository/plugin-isolation
 ```
 
-输出目录必须在仓库外且是新目录。不传 `--output` 会创建系统临时目录。可用 `--plugins novelai story` 只验证受影响插件；不传时发现所有具有 Python 测试的插件。`--jobs N` 控制 wheel 构建与插件验证的并发数，默认为 CPU 数；已知耗时最长的插件（telegram、feishu、qqbot）优先调度。
+输出必须是仓库外的新目录；省略时创建系统临时目录。`--plugins novelai story` 选择目标，省略时发现所有有 Python 测试的插件；`--jobs N` 控制并发，默认 CPU 数。不存在迁移豁免、白名单或宿主安装分支。基准 20 插件为 browser_use、citation、computer_use、context_pressure、default_memory、desktop_pet、feishu、meme、novelai、observe、plugin_undo、qq、qqbot、screen_perception、shell_restore、shell_safety、status_commands、story、telegram、tool_loop_guard；新增插件自动纳入发现。
 
-脚本将被测插件复制到输出目录，从副本构建 wheel，并构建真实宿主和 testkit wheel。每个目标有单独的干净 venv，仅安装宿主、testkit、目标与其声明依赖。闭包按实际安装的 `目标[test]` 计算：目标的 `project.dependencies` 与 `project.optional-dependencies.test` 都参与构建和来源审计；仅供测试的兄弟依赖（例如状态命令测试使用的 observe）应放在 test extra，不进入运行时依赖。传递兄弟插件只跟随运行时依赖和依赖边显式请求的 extras，不自动启用兄弟的 test extra。环境 marker 按实际测试解释器及已启用 extra 求值；testkit 单独构建，不当作插件目录。安装为非 editable；不会共享已安装的其他测试目标。子进程清空 Python/pytest 导入注入与服务凭证，不调用真实收费模型。
+脚本在仓库外暂存插件并构建普通 wheel，每个目标使用独立 venv，只安装目标 `[test]`、SDK/testing 与显式依赖。闭包合并运行时和目标 test extra，传递兄弟依赖只启用依赖边显式请求的 extra，marker 按执行解释器求值。不会默认加入 default_memory 或宿主；任何选中的宿主依赖直接失败。静态守护还检查所有未选中的 optional extra。
 
-每个目标执行全部测试后验证宿主模块来自该环境的 site-packages、目标插件代码与副本一致、安装依赖闭包正确、没有 editable 安装；还实际读取内置技能、共享 emoji 并调用初始化流程复制配置模板。最后单独运行故意在 `await` 后失败的异步用例，要求退出码 1 和执行标记，证明 pytest 真正等待了协程。
+每套 pytest 的开始与结束均审计实际宿主顶层包不可导入、已安装分发来自本环境、没有 editable 或仓库路径注入、插件闭包精确、目标代码与副本相同、SDK 版本与 Runtime API 一致。执行探针在初始 conftest 加载前启用，覆盖全部已暂存目标及兄弟依赖的 backend/testing，并拒绝执行仓库内 SDK/宿主源码；临时模块别名即使随后从 sys.modules 删除也不能绕过。已安装入口的来源与哈希覆盖当前目标声明的完整插件依赖闭包，测试本身仍从副本 tests 运行。独立 suite/probe basetemp 避免并行清理彼此证据。全部单测以 `-W error` 真实执行；另开解释器运行故意在 await 后失败的异步用例，要求退出码 1 和执行标记。
 
-`results.json`、`host-wheel-files.txt`、各包的 `pytest.log`、`provenance.json`、`async-failure.log` 是验收证据。预期失败的异步探针不算插件失败。wheel 构建失败会停止验证；单个插件的失败或依赖缺失不会中止其余插件，全部跑完后列出失败插件及其日志路径并以非零退出；命令失败指向该命令的日志，其他异常的完整 traceback 写入 `cases/<id>/failure.log`。`results.json` 由主线程在每个插件完成后重写一次（超时中断也保留已完成的证据），按插件排序，包含通过与失败条目及各自耗时。CI 在独立的 `plugin-isolation` job 中对全部插件执行此流程并上传证据，不能用只收集测试或跳过宿主集成用例替代。
+`results.json`、各包 `pytest.log`、`provenance.json`、`async-failure.log` 记录实际结果、包版本/来源和无宿主证明。异步探针预期失败不算插件失败。单插件失败会保留日志并继续其余目标，最终以非零退出；结果每完成一包原子写入。构建失败立即停止。
 
+## 守护与 CI
 
-## SDK 隔离与导入守护
+```sh
+uv run python -m scripts.check_sdk_imports
+uv run python -m scripts.verify_sdk
+uv run python -m scripts.verify_host_distribution
+pnpm run sdk:smoke
+```
 
-citation/context_pressure/default_memory/shell_safety/shell_restore/tool_loop_guard/plugin_undo/observe/status_commands/meme/novelai/story/screen_perception/browser_use/computer_use/qqbot/qq/telegram/feishu/desktop_pet 已迁入 `shiori-sdk[testing]`，安装声明不再依赖宿主。
-`uv run python scripts/verify_plugin_tests.py --sdk-only` 仅为这二十个插件构建
-SDK/插件 wheel，逐一在仓库外普通安装、执行全部测试，并断言没有
-shiori-agent、testkit、宿主测试支持与源码路径注入；default_memory 只在验证自己时安装。普通全插件验证也对这二十个插件
-使用相同无宿主路径；其余插件保留真实宿主安装与资源检查。
+Python 守护检查 SDK、所有插件 Python 源码/测试/打包辅助目录和 .pyi，包含 TYPE_CHECKING、动态导入别名、可求值字符串拼接、字符串 patch、宿主资源包和源目录向外推导。宿主清单从实际 backend 包/模块发现，同时禁止已移除的旧宿主入口；SDK 还禁止具体插件实现依赖。规则有针对性反例，但不是任意 Python 程序的安全沙箱；仓库外真实执行负责检出未被静态识别、实际触发的环境依赖。
 
-`uv run python -m scripts.verify_sdk` 另外安装 SDK wheel 并执行 SDK 自身测试；
-`pnpm run sdk:smoke` 安装 npm tarball，检查所有子入口、DOM 测试工具和声明。
-CI 的 sdk-artifacts job 与既有宿主测试并存，不发布产物到公共注册表。
+五个 CI job 保留：check-and-test 覆盖宿主集成与真实生产 wheel 资源；plugin-isolation 执行全部插件；desktop-check-and-test 验证 renderer；sdk-artifacts 构建并在仓库外安装 npm tarball/Python wheel、执行 SDK 单测；windows-process-lifecycle 验证 Windows 进程。宿主 wheel 探针保留生产技能、emoji、配置模板初始化和排除私有状态的断言，与无宿主插件证据独立。
 
-`uv run python scripts/check_sdk_imports.py --base <base-commit>` 检查 SDK 与插件
-backend/tests/testing（含随 wheel 打包的测试辅助代码）的宿主导入（含类型导入和字面量动态导入）。豁免以每个文件、符号及
-次数记录在 `scripts/sdk_import_exemptions.json`，只能随迁移删除，不能增加。
+`pnpm typecheck` 包含不引用宿主 ambient types 的 `plugins/tsconfig.json`。TypeScript 的边界测试检查真实编译依赖图，并以直接调用、计算属性、解构和类型引用反例阻止宿主全局 bridge 依赖。桌宠通过 SDK surface 能力使用真实 windowId/role 快照。
 
+## 真实宿主集成的所有权
 
 #587 批次中，shell 策略、循环阈值、撤销回复、Observe 落盘和状态命令输出
 都在六插件自己的 SDK-only 测试中。真实 AgentLoop/SubAgent 执行、会话撤销事务、
@@ -81,9 +87,9 @@ runtime lease、kernel 卸载顺序及 screen_perception/desktop_pet 组合留�
 
 QQ 已在同票完成 SDK-only 安装验证；平台原文来源/引用的纯函数与测试分别归 `shiori_sdk.channels.message_source`、`reply_context` 及 SDK 镜像测试。投递账本、账号重启/删除与头像持久化集成留在宿主对应 owner 测试。NapCat 使用宿主 `Processes.popen`，Windows CI 保留已有进程测试并加入同步能力和 QQ 直接调用者。
 
-#589 已完成四渠道。Telegram 以 SDK fake 验证命令菜单、用户名/话题、媒体和流式，飞书保留真实离线 HTTP/WebSocket 线程替身验证；两者的存储/生命周期宿主集成继续由根 CI 执行。SDK wheel 冒烟执行镜像后的纯值测试和新增公共 fake 测试。桌宠的 Python 后端与测试已由 #590 迁入 SDK；#591 做全插件最终发行验收。
+#589 已完成四渠道。Telegram 以 SDK fake 验证命令菜单、用户名/话题、媒体和流式，飞书保留真实离线 HTTP/WebSocket 线程替身验证；两者的存储/生命周期宿主集成继续由根 CI 执行。SDK wheel 冒烟执行镜像后的纯值测试和新增公共 fake 测试。桌宠的 Python 后端与测试已由 #590 迁入 SDK；全插件隔离与两种 SDK 产物安装由上述 CI 流程持续验证。
 
-#590 的桌宠包校验、binding/pets RPC、启用互斥、清理重试与动作限流在插件内使用 SDK fake。实际角色事务/锁、资产迁移凭证与 kernel 装配、停用/重载由宿主集成验证。桌宠安装只依赖 SDK 与 Pillow，最后 44 条 Python 宿主导入豁免已删除。局部开发可使用 `uv run python -m pytest plugins/desktop_pet/tests`；仓库外非 editable 验证用 `uv run python scripts/verify_plugin_tests.py --plugins desktop_pet --sdk-only`。
+#590 的桌宠包校验、binding/pets RPC、启用互斥、清理重试与动作限流在插件内使用 SDK fake。实际角色事务/锁、资产迁移凭证与 kernel 装配、停用/重载由宿主集成验证。桌宠安装只依赖 SDK 与 Pillow，最后 44 条 Python 宿主导入豁免已删除。局部开发可使用 `uv run python -m pytest plugins/desktop_pet/tests`；仓库外非 editable 验证用 `uv run python -m scripts.verify_plugin_tests --plugins desktop_pet`。
 
 
 桌宠 renderer 的控制策略移到 `plugins/desktop_pet/background/controller.test.ts`，surface 几何、惯性、ready/hide/reload/window identity 由宿主 `src/surface/host.test.ts` 的中性 fixture 验证。`desktopPetSurfaceController.test.ts` 保留真实 surface/voice/controller 的公开能力装配，验证隐藏与 ASR 期间角色替换的取消行为。原私有 KV 耦合测试随耦合实现一起移除。

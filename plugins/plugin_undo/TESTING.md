@@ -9,6 +9,6 @@ uv pip install --python .venv --find-links /path/to/wheelhouse ".[test]"
 uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 ```
 
-这是普通 wheel 安装，不使用 editable，也不需要 `shiori-agent`、`shiori-plugin-testkit`、`shiori-host-testing` 或默认记忆插件。不要设置 `PYTHONPATH` 指向原仓库，不要复制宿主 tests/conftest。公共测试能力来自 `shiori_sdk.testing`；实际宿主执行、会话事务、配置恢复和全局钩子集成在宿主测试树验证。
+这是普通 wheel 安装，不使用 editable，也不需要 `shiori-agent`、`shiori-host-testing` 或默认记忆插件。不要设置 `PYTHONPATH` 指向原仓库，不要复制宿主 tests/conftest。公共测试能力来自 `shiori_sdk.testing`；实际宿主执行、会话事务、配置恢复和全局钩子集成在宿主测试树验证。
 
-仓库维护者可以运行 `uv run python scripts/verify_plugin_tests.py --plugins plugin_undo --sdk-only`，脚本在仓库外构建和安装 wheel、执行全部单测并审计依赖来源与异步执行。暂存插件包使用 `shiori_sdk.testing.packages.stage_plugin_package`，会排除虚拟环境和构建状态。
+仓库维护者可以运行 `uv run python -m scripts.verify_plugin_tests --plugins plugin_undo`，脚本在仓库外构建和安装 wheel、执行全部单测并审计依赖来源与异步执行。暂存插件包使用 `shiori_sdk.testing.packages.stage_plugin_package`，会排除虚拟环境和构建状态。

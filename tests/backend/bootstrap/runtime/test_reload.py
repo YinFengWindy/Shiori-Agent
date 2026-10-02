@@ -221,7 +221,7 @@ async def test_publish_rechecks_hot_unload_before_handover_or_commit(
     tmp_path, monkeypatch
 ):
     from pathlib import Path
-    from shiori_plugin_testkit.packages import stage_plugin_package
+    from shiori_sdk.testing.packages import stage_plugin_package
     from agent.plugin_host import PluginRestartRequired
 
     root = tmp_path / "host_plugins"
@@ -276,7 +276,7 @@ async def test_unpublished_unsafe_candidate_is_forcibly_reclaimed_on_failure(
 ):
     import asyncio
     from pathlib import Path
-    from shiori_plugin_testkit.packages import stage_plugin_package
+    from shiori_sdk.testing.packages import stage_plugin_package
     import bootstrap.runtime.reload as reload_module
 
     root = tmp_path / "host_plugins"

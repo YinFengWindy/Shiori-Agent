@@ -1,4 +1,4 @@
-"""Fixtures registered by the testkit pytest plugin."""
+"""Fixtures registered by the host testing pytest plugin."""
 
 from __future__ import annotations
 

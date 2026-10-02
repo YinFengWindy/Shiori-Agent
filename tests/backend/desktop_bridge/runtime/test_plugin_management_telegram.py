@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from shiori_plugin_testkit.bridge import plugin_bridge_request
+from shiori_sdk.testing.bridge import plugin_bridge_request
 from telegram import Bot
 
 from agent.plugin_host.kv import PluginKVStore

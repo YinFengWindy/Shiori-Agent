@@ -13,11 +13,12 @@ from pathlib import Path
 
 import pytest
 from plugins.observe.backend.storage import database_path
+from shiori_sdk.testing.packages import plugin_directory
 
 
 @pytest.fixture
 def backend():
-    package = Path(__file__).resolve().parents[1] / "backend"
+    package = plugin_directory("observe") / "backend"
     name = "test_observe_telemetry_backend"
     spec = importlib.util.spec_from_file_location(
         name, package / "__init__.py", submodule_search_locations=[str(package)]

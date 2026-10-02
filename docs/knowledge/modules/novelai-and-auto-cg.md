@@ -42,7 +42,7 @@ Story 播放偏好继续保存在设备 renderer 的 `localStorage["shiori.story
 
 `_migrate_legacy_novelai_config()` 仍由宿主在加载插件前升级旧配置。共享场景事件、角色存储、会话呈现与资产服务是宿主契约，插件可以复用；本次归位不等同于将全部宿主服务封装为独立 SDK。UI 通过注入的宿主服务访问角色列表、文件选择与事件，不直接使用 Electron 全局对象。
 
-NovelAI 与故事的业务回归分别随 `plugins/novelai/tests/`、`plugins/story/tests/` 保存，前端单测与各自 `ui/` 源文件并列；包括配置往返、依赖启停等通过宿主执行的集成用例。显式安装的 `shiori-plugin-testkit` 提供不含插件业务断言的真实宿主启动 fixture；插件不读取仓库测试树。独立运行流程见 [插件测试](../../agents/plugin-testing.md)。
+NovelAI 与故事的业务回归分别随 `plugins/novelai/tests/`、`plugins/story/tests/` 保存，前端单测与各自 `ui/` 源文件并列；包括配置往返、依赖启停等通过宿主执行的集成用例。插件测试使用显式安装的 `shiori-sdk[testing]`；真实宿主启动 fixture 由 `shiori-host-testing` 提供，仅供宿主集成测试使用。插件不读取仓库测试树。独立运行流程见 [插件测试](../../agents/plugin-testing.md)。
 
 验收覆盖真实插件配置读写、依赖缺失与循环阻断、NovelAI 启停导致的故事入口/RPC变化、既有数据保留、跨代事件隔离、角色偏好保存及图片重生成的会话归属。
 

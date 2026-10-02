@@ -1522,7 +1522,6 @@ dev = [
     { name = "rich" },
     { name = "ruff" },
     { name = "shiori-host-testing" },
-    { name = "shiori-plugin-testkit" },
 ]
 
 [package.metadata]
@@ -1564,7 +1563,6 @@ dev = [
     { name = "rich", specifier = ">=15.0.0" },
     { name = "ruff", specifier = ">=0.15" },
     { name = "shiori-host-testing", editable = "packages/shiori-host-testing" },
-    { name = "shiori-plugin-testkit", editable = "packages/shiori-plugin-testkit" },
 ]
 
 [[package]]
@@ -1606,23 +1604,6 @@ requires-dist = [
     { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2025.2" },
 ]
 provides-extras = ["test"]
-
-[[package]]
-name = "shiori-plugin-testkit"
-version = "0.1.0"
-source = { editable = "packages/shiori-plugin-testkit" }
-dependencies = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "shiori-host-testing" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pytest", specifier = ">=9.0" },
-    { name = "pytest-asyncio", specifier = ">=1.3" },
-    { name = "shiori-host-testing", specifier = "==0.1.0" },
-]
 
 [[package]]
 name = "shiori-sdk"

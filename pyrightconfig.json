@@ -5,7 +5,6 @@
   "venv": ".venv",
   "extraPaths": [
     "apps/backend",
-    "packages/shiori-plugin-testkit/src",
     "packages/sdk/python",
     "packages/shiori-host-testing/src"
   ],
@@ -24,10 +23,13 @@
     "apps/backend/prompts",
     "apps/backend/session",
     "apps/backend/utils",
-    "packages/shiori-plugin-testkit/src",
     "scripts/verify_plugin_tests.py",
     "packages/shiori-host-testing/src",
     "scripts/check_sdk_imports.py",
+    "scripts/sdk_boundaries.py",
+    "scripts/sdk_resource_edges.py",
+    "scripts/isolation_probe.py",
+    "scripts/verify_host_distribution.py",
     "scripts/verify_sdk.py"
   ],
   "exclude": [

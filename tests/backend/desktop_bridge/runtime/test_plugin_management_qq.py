@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from shiori_plugin_testkit.bridge import plugin_bridge_request
-from shiori_plugin_testkit.packages import stage_plugin_package
+from shiori_sdk.testing.bridge import plugin_bridge_request
+from shiori_sdk.testing.packages import stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel
 from bus.event_bus import EventBus

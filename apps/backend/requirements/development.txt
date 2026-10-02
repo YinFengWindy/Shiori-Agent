@@ -10,12 +10,11 @@ pytest-asyncio>=1.3.0
 pytest-cov>=6.0.0
 pyinstaller>=6.18.0
 
-# Local host/testkit distributions are private and resolved together from this checkout.
+# Local host/SDK testing distributions are private and resolved from this checkout.
 -e ./packages/sdk
 -e .
 -e ./plugins/default_memory
 -e ./packages/shiori-host-testing
--e ./packages/shiori-plugin-testkit
 
 # QQ login QR fixtures (not used by the production runtime).
 qrcode>=8.2

@@ -16,7 +16,7 @@ from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 
 # 整包暂存由公共 testkit 提供。
-from shiori_plugin_testkit.packages import stage_plugin_package as stage_plugin_package
+from shiori_sdk.testing.packages import stage_plugin_package as stage_plugin_package
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 PLUGIN_FIXTURES = REPOSITORY_ROOT / "tests/fixtures/plugins"

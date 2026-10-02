@@ -7,7 +7,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from shiori_plugin_testkit.packages import plugin_directory, stage_plugin_package
+from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
 from agent.core.passive_turn import AgentCore, AgentCoreDeps
 from agent.core.response_parser import parse_response

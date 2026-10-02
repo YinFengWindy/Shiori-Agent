@@ -11,7 +11,7 @@ import pytest
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
 from agent.looping.core import AgentLoop
-from shiori_plugin_testkit.memory import FakeMemoryEngine
+from shiori_host_testing.memory import FakeMemoryEngine
 from agent.looping.ports import (
     AgentLoopConfig,
     AgentLoopDeps,

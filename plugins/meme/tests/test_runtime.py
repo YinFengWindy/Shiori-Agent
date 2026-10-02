@@ -1,33 +1,13 @@
 """Unit tests for plugins/meme/backend/runtime.py."""
 
-import importlib.util
 import json
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-PLUGIN_DIR = Path(__file__).resolve().parents[1]
-
-
-def _load_meme_runtime() -> Any:
-    path = PLUGIN_DIR / "backend" / "runtime.py"
-    spec = importlib.util.spec_from_file_location("test_meme_runtime", path)
-    if spec is None or spec.loader is None:
-        raise ImportError(str(path))
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-_meme_runtime = _load_meme_runtime()
-MemeCatalog = _meme_runtime.MemeCatalog
-MemeDecorator = _meme_runtime.MemeDecorator
-load_common_emojis = _meme_runtime.load_common_emojis
-
+from plugins.meme.backend.runtime import MemeCatalog, MemeDecorator, load_common_emojis
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
