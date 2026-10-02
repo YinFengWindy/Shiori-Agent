@@ -1,12 +1,11 @@
-import pytest
+"""Mixed event bindings detach the exact handlers they registered and can rebind."""
 
 from shiori_sdk.event_binding import EventBinding
-from bus.event_bus import EventBus
+from shiori_sdk.testing import FakeEvents
 
 
-@pytest.mark.asyncio
-async def test_mixed_bindings_remove_captured_bound_methods_and_can_rebind():
-    seen = []
+async def test_mixed_bindings_remove_captured_bound_methods_and_can_rebind() -> None:
+    seen: list[object] = []
 
     class Receiver:
         def text(self, event: str) -> None:
@@ -17,7 +16,7 @@ async def test_mixed_bindings_remove_captured_bound_methods_and_can_rebind():
 
     receiver = Receiver()
     bindings = (EventBinding(str, receiver.text), EventBinding(int, receiver.number))
-    bus = EventBus()
+    bus = FakeEvents()
     try:
         for binding in bindings:
             binding.bind(bus)
