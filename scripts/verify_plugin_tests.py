@@ -285,6 +285,9 @@ def verify_plugin(
             str(python),
             "-m",
             "pytest",
+            # Concurrent case processes must not clean pytest's shared temp root.
+            "--basetemp",
+            str(case / "pytest-tmp"),
             "-p",
             "verify_provenance",
             "-c",
@@ -306,6 +309,9 @@ def verify_plugin(
             str(python),
             "-m",
             "pytest",
+            # Keep probe cleanup separate from this case's suite evidence too.
+            "--basetemp",
+            str(case / "async-failure-tmp"),
             "-c",
             str(source / "pyproject.toml"),
             str(probe),
