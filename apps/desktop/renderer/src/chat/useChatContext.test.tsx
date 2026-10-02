@@ -73,6 +73,41 @@ test("a late compact from another role cannot release the new role's busy operat
   } finally { await view.cleanup(); }
 });
 
+test("model changes during compaction refresh the current model after the old operation completes", async () => {
+  const view = await setup();
+  try {
+    await view.finish(0);
+    let compact!: Promise<void>;
+    await act(async () => { compact = view.hook().compact(); });
+    await act(async () => notifyChatModelChange("mira", true));
+    await act(async () => notifyChatModelChange("mira", false));
+    await view.finish(2, { ...state(), model: "new-model", busy: true, can_compact: false, reason: "正在压缩" });
+    await view.emit("chat.context.updated");
+    assert.equal(view.pending.length, 3);
+    await view.finish(1, { ...state("mira", 100), model: "old-model" });
+    assert.equal(view.hook().status?.model, "new-model");
+    assert.equal(view.pending[3]?.method, "chat.context.status");
+    await view.finish(3, { ...state("mira", 200), model: "new-model" });
+    await compact;
+    assert.equal(view.hook().status?.tokens, 200);
+    assert.equal(view.hook().status?.model, "new-model");
+    assert.equal(view.hook().busy, false);
+  } finally { await view.cleanup(); }
+});
+
+test("unmount invalidates compaction ownership before its completion can refresh", async () => {
+  const view = await setup();
+  try {
+    await view.finish(0);
+    let compact!: Promise<void>;
+    await act(async () => { compact = view.hook().compact(); });
+    await view.render(null);
+    await view.finish(1);
+    await compact;
+    assert.equal(view.pending.length, 2);
+  } finally { await view.cleanup(); }
+});
+
 test("completion and external compaction events refresh the same context", async () => {
   const view = await setup();
   try {

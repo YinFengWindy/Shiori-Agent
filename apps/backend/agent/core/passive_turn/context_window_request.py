@@ -19,8 +19,7 @@ from session.manager import SessionManager
 from session.manager.window import WindowPreparation
 from session.maintenance_progress import window_key
 from .compaction_render import CompactionRenderer
-from .helpers import get_window_preloaded_tools, turn_tool_names
-from .tool_visibility import initial_tool_order
+from .helpers import get_window_preloaded_tools
 
 
 @dataclass
@@ -46,31 +45,9 @@ class ContextWindowRequest:
             raise ValueError("模型档案缺少上下文容量")
         return budget
 
-    def tool_schemas(self, history: list[str]):
-        """Resolve the same initial schema set used by ordinary speaking turns."""
-        renderer = self.renderer
-        names = (
-            initial_tool_order(
-                renderer.tools,
-                history,
-                disabled=renderer.disabled_tools,
-                external_restricted=renderer.external_restricted,
-            )
-            if renderer.search_enabled
-            else turn_tool_names(
-                renderer.tools,
-                None,
-                disabled=renderer.disabled_tools,
-                external_restricted=renderer.external_restricted,
-            )
-        )
-        return renderer.tools.get_schemas(
-            names=names, external_only=renderer.external_restricted
-        )
-
     async def render(self, prepared: WindowPreparation, summary: str):
         """Drop only tools owned by removed history before checking the candidate."""
-        self.schemas = self.tool_schemas(self.renderer.history_tools(prepared))
+        self.schemas = self.renderer.tool_schemas(self.renderer.history_tools(prepared))
         return await self.renderer.render(
             prepared, summary, [s["function"]["name"] for s in self.schemas]
         )
@@ -127,7 +104,7 @@ async def prepare_context_window_request(
         lambda: turn_heard(sessions, view),
     )
     request = ContextWindowRequest(renderer, provider, model, max_tokens, [], [])
-    request.schemas = request.tool_schemas(
+    request.schemas = renderer.tool_schemas(
         get_window_preloaded_tools(snapshot, 500, view, tools)
     )
     request.messages = await renderer.render_snapshot(

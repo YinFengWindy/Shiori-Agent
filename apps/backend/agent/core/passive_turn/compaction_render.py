@@ -16,7 +16,9 @@ from .helpers import (
     get_session_metadata,
     get_window_preloaded_tools,
     get_window_sources,
+    turn_tool_names,
 )
+from .tool_visibility import initial_tool_order
 
 if TYPE_CHECKING:
     from agent.tools.registry import ToolRegistry
@@ -59,6 +61,27 @@ class CompactionRenderer:
         """Only tools belonging to the candidate original window remain preloaded."""
         return get_window_preloaded_tools(
             self._snapshot(prepared), 500, self.view, self.tools
+        )
+
+    def tool_schemas(self, history: list[str]):
+        """Resolve initial schemas using this renderer's tool visibility policy."""
+        names = (
+            initial_tool_order(
+                self.tools,
+                history,
+                disabled=self.disabled_tools,
+                external_restricted=self.external_restricted,
+            )
+            if self.search_enabled
+            else turn_tool_names(
+                self.tools,
+                None,
+                disabled=self.disabled_tools,
+                external_restricted=self.external_restricted,
+            )
+        )
+        return self.tools.get_schemas(
+            names=names, external_only=self.external_restricted
         )
 
     async def render(

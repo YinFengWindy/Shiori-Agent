@@ -52,7 +52,7 @@ export function useChatContext(activeRoleId: string, sessionKey: string, bridgeR
         if (!operation.current) void refresh();
       }
     });
-    return () => { invalidate(); off(); offModels(); };
+    return () => { invalidate(); operation.current = null; off(); offModels(); };
   }, [activeRoleId, invalidate, refresh, sessionKey]);
 
   const unavailable = !bridgeReady ? "桌面服务未连接" : !activeRoleId ? "请选择角色" : sending ? "正在回复" : busy ? "正在整理记忆并压缩上下文" : status?.busy ? status.reason : "";
@@ -74,7 +74,6 @@ export function useChatContext(activeRoleId: string, sessionKey: string, bridgeR
       setStatus(result);
       const message = contextResultLabel(result);
       setNotice(message);
-      await refresh();
     } catch (error) {
       if (ticket === generation.current) {
         const failure = errorFeedback(error, "上下文操作未完成，请稍后重试");
@@ -83,10 +82,12 @@ export function useChatContext(activeRoleId: string, sessionKey: string, bridgeR
         feedback.error(message, { detail: failure.detail });
       }
     } finally {
-      // Scope cleanup owns new contexts; a late operation cannot unlock them.
+      // Even an invalidated result must refresh a model changed within this
+      // scope. Scope cleanup revokes ownership on role changes and unmount.
       if (operation.current === owner) {
         operation.current = null;
         setBusy(false);
+        await refresh();
       }
     }
   }, [activeRoleId, bridgeReady, refresh, sending, sessionKey, status, unavailable]);

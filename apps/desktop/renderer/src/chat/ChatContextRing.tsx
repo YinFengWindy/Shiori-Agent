@@ -1,7 +1,6 @@
 import { useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { cx } from "@shiori/sdk";
-import { compactIconButtonClass } from "../shared/styles";
+import { compactPressableClass, cx } from "@shiori/sdk";
 import { contextUsageLabel, type ChatContextStatus } from "./chatContextState";
 import { useChatComposerPopover } from "./useChatComposerPopover";
 
@@ -24,7 +23,7 @@ export function ChatContextRing({ status, busy, notice, unavailable, onCompact }
   return <>
     <button
       ref={button}
-      className={cx(compactIconButtonClass, "context-ring-button h-[30px] w-[30px] rounded-full", disabled && "cursor-default text-ink-faint")}
+      className={cx(compactPressableClass, "context-ring-button grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full", disabled ? "cursor-default text-ink-faint" : "cursor-pointer text-ink-muted hover:bg-surface-hover hover:text-ink")}
       type="button"
       aria-label={`压缩上下文；${usage.label}；${reason}`}
       aria-describedby={open ? id : undefined}
