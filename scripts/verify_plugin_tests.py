@@ -6,7 +6,6 @@ import argparse
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import time
@@ -16,68 +15,22 @@ from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from packaging.requirements import Requirement
-from packaging.utils import canonicalize_name
+from packaging.utils import canonicalize_name, parse_wheel_filename
 from shiori_sdk.testing.packages import stage_plugin_package
 
-from scripts.sdk_boundaries import host_roots
+from scripts.commands import UV, CommandFailed, run
+from scripts.sdk_boundaries import (
+    HOST_DISTRIBUTIONS,
+    LOCAL_DISTRIBUTION_PREFIX,
+    PLUGIN_DISTRIBUTION_PREFIX,
+    host_roots,
+    plugin_distribution,
+    plugin_id_of,
+)
+from scripts.wheelhouse import install_from_wheelhouse, requirement_closure
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-UV = str(Path(sys.executable).with_name("uv.exe" if os.name == "nt" else "uv"))
-if not Path(UV).is_file():
-    UV = "uv"
 SLOW_PLUGINS = ("telegram", "feishu", "qqbot")
-
-
-class CommandFailed(RuntimeError):
-    """An external command exited unexpectedly; ``log`` holds its complete output."""
-
-    def __init__(self, message: str, *, log: Path) -> None:
-        super().__init__(message)
-        self.log = log
-
-
-def clean_environment() -> dict[str, str]:
-    """Drops import injection and service credentials before any external test process."""
-    result = {
-        key: value
-        for key, value in os.environ.items()
-        if not key.upper().startswith(("PYTHON", "PYTEST"))
-        and not any(
-            word in key.upper()
-            for word in (
-                "API_KEY",
-                "TOKEN",
-                "SECRET",
-                "PASSWORD",
-                "CREDENTIAL",
-                "OPENAI",
-            )
-        )
-    }
-    result.update(PYTHONNOUSERSITE="1", PYTHONUTF8="1", UV_LINK_MODE="copy")
-    return result
-
-
-def run(command: list[str], *, cwd: Path, log: Path, expected: int = 0) -> str:
-    """Records exact execution evidence and raises on unexpected test/install outcomes."""
-    result = subprocess.run(
-        command,
-        cwd=cwd,
-        env=clean_environment(),
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
-    log.write_text(result.stdout, encoding="utf-8")
-    if result.returncode != expected:
-        raise CommandFailed(
-            f"Expected exit {expected}, got {result.returncode}; see {log}\n{result.stdout[-6000:]}",
-            log=log,
-        )
-    return result.stdout
 
 
 def build_wheel(source: Path, destination: Path, log: Path) -> Path:
@@ -118,6 +71,7 @@ def write_provenance_probe(
     allowed: list[str],
     *,
     source_packages: Iterable[Path],
+    wheelhouse: Path,
 ) -> None:
     """Copy a standalone probe; the child never imports runner code from the checkout."""
     shutil.copyfile(
@@ -131,6 +85,12 @@ def write_provenance_probe(
         "allowed_plugins": allowed,
         "modules": modules,
         "source_packages": sorted(str(source.resolve()) for source in source_packages),
+        # Every installed shiori-* distribution must come from these wheel files.
+        "wheelhouse": str(wheelhouse.resolve()),
+        # The probe is copied stdlib-only, so naming rules arrive as data.
+        "local_prefix": LOCAL_DISTRIBUTION_PREFIX,
+        "plugin_prefix": PLUGIN_DISTRIBUTION_PREFIX,
+        "host_distributions": sorted(HOST_DISTRIBUTIONS),
         "sdk_version": json.loads(
             (REPOSITORY / "packages/sdk/package.json").read_text(encoding="utf-8")
         )["version"],
@@ -162,22 +122,15 @@ def verify_plugin(
         log=case / "venv.log",
     )
     python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    run(
-        [
-            UV,
-            "pip",
-            "install",
-            "--python",
-            str(python),
-            "--find-links",
-            str(wheelhouse),
-            f"{wheel}[test]",
-        ],
+    install_from_wheelhouse(
+        python,
+        wheelhouse,
+        [f"{parse_wheel_filename(wheel.name)[0]}[test]"],
         cwd=case,
         log=case / "install.log",
     )
     ids = plugin_dependencies({plugin_id}, extras=frozenset({"test"}))
-    allowed = ["shiori-plugin-" + name.replace("_", "-") for name in sorted(ids)]
+    allowed = [plugin_distribution(name) for name in sorted(ids)]
     write_provenance_probe(
         case,
         {
@@ -188,6 +141,7 @@ def verify_plugin(
         # Other targets also coexist in the artifact's staging directory. No
         # test may execute their uninstalled implementations through an alias.
         source_packages=sources.values(),
+        wheelhouse=wheelhouse,
     )
     output = run(
         [
@@ -255,47 +209,37 @@ def plugin_dependencies(
     requirements; siblings receive only extras explicitly requested on their edge.
     Host/testkit requirements are rejected, including requirements on selected extras.
     """
-    resolved: set[str] = set()
-    visited: set[tuple[str, str]] = set()
-    pending: list[tuple[str, str]] = []
-    for plugin_id in plugin_ids:
-        pending.append((plugin_id, ""))
-        pending.extend((plugin_id, canonicalize_name(extra)) for extra in extras)
-    while pending:
-        plugin_id, extra = pending.pop()
-        if (plugin_id, extra) in visited:
-            continue
-        visited.add((plugin_id, extra))
+
+    def declared(name: str, extra: str) -> list[str] | None:
+        directory = plugin_id_of(name)
+        if directory is None:
+            return None
         project = tomllib.loads(
-            (REPOSITORY / "plugins" / plugin_id / "pyproject.toml").read_text(
+            (REPOSITORY / "plugins" / directory / "pyproject.toml").read_text(
                 encoding="utf-8"
             )
         )["project"]
-        resolved.add(plugin_id)
         requirements = list(project.get("dependencies", []))
         # Optional groups are evaluated in their own active extra context. Runtime
         # requirements also get the base context, matching normal package installs.
         for group, optional in project.get("optional-dependencies", {}).items():
             if extra and canonicalize_name(group) == extra:
                 requirements.extend(optional)
-        for raw_requirement in requirements:
-            requirement = Requirement(raw_requirement)
-            if requirement.marker and not requirement.marker.evaluate({"extra": extra}):
-                continue
-            name = canonicalize_name(requirement.name)
-            if name in {"shiori-agent", "shiori-plugin-testkit", "shiori-host-testing"}:
-                raise ValueError(
-                    f"{plugin_id} declares forbidden host dependency: {raw_requirement}"
-                )
-            if not name.startswith("shiori-plugin-"):
-                continue
-            sibling = name.removeprefix("shiori-plugin-").replace("-", "_")
-            pending.append((sibling, ""))
-            pending.extend(
-                (sibling, canonicalize_name(selected))
-                for selected in requirement.extras
+        return requirements
+
+    selected = ",".join(sorted(extras))
+    roots = [
+        plugin_distribution(plugin) + (f"[{selected}]" if selected else "")
+        for plugin in plugin_ids
+    ]
+    local, external = requirement_closure(roots, declared)
+    for declarer, requirement in external:
+        if canonicalize_name(requirement.name) in HOST_DISTRIBUTIONS:
+            raise ValueError(
+                f"{declarer and plugin_id_of(declarer)} declares forbidden host "
+                f"dependency: {requirement}"
             )
-    return resolved
+    return {directory for name in local if (directory := plugin_id_of(name))}
 
 
 def schedule(plugin_ids: Iterable[str]) -> list[str]:

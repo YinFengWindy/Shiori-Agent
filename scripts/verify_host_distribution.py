@@ -8,7 +8,9 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from scripts.verify_plugin_tests import REPOSITORY, UV, build_wheels, run
+from scripts.commands import UV, run
+from scripts.verify_plugin_tests import REPOSITORY, build_wheels
+from scripts.wheelhouse import install_from_wheelhouse
 
 
 def check_host_wheel(wheel: Path, log: Path) -> None:
@@ -91,19 +93,9 @@ def main() -> None:
         log=output / "venv.log",
     )
     python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    run(
-        [
-            UV,
-            "pip",
-            "install",
-            "--python",
-            str(python),
-            "--find-links",
-            str(output),
-            str(wheels["host"]),
-        ],
-        cwd=output,
-        log=output / "install.log",
+    # The host, SDK and default memory come only from the wheels built above.
+    install_from_wheelhouse(
+        python, output, ["shiori-agent"], cwd=output, log=output / "install.log"
     )
     run([str(python), "-c", _RESOURCE_PROBE], cwd=output, log=output / "resources.log")
     print(f"Host wheel/resource evidence: {output}")

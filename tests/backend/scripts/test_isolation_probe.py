@@ -9,6 +9,15 @@ import sys
 import pytest
 
 from scripts import isolation_probe
+from scripts.sdk_boundaries import (
+    HOST_DISTRIBUTIONS,
+    LOCAL_DISTRIBUTION_PREFIX,
+    PLUGIN_DISTRIBUTION_PREFIX,
+)
+
+
+def _wheel_origin(wheel: Path) -> str:
+    return json.dumps({"url": wheel.as_uri(), "archive_info": {}})
 
 
 @pytest.fixture
@@ -24,6 +33,10 @@ def environment(tmp_path: Path) -> Path:
     (metadata / "METADATA").write_text(
         "Name: shiori-sdk\nVersion: 3.0.0\n", encoding="utf-8"
     )
+    (metadata / "direct_url.json").write_text(
+        _wheel_origin(tmp_path / "wheels/shiori_sdk-3.0.0-py3-none-any.whl"),
+        encoding="utf-8",
+    )
     shutil.copyfile(isolation_probe.__file__, tmp_path / "probe.py")
     (tmp_path / "isolation.json").write_text(
         json.dumps(
@@ -37,6 +50,10 @@ def environment(tmp_path: Path) -> Path:
                     str(tmp_path / "sources/sibling"),
                 ],
                 "sdk_version": "3.0.0",
+                "wheelhouse": str(tmp_path / "wheels"),
+                "local_prefix": LOCAL_DISTRIBUTION_PREFIX,
+                "plugin_prefix": PLUGIN_DISTRIBUTION_PREFIX,
+                "host_distributions": sorted(HOST_DISTRIBUTIONS),
             }
         ),
         encoding="utf-8",
@@ -114,6 +131,27 @@ def test_unexpected_or_editable_distributions_fail(
         f"Name: {name}\nVersion: 3.0.0\n", encoding="utf-8"
     )
     (metadata / "direct_url.json").write_text(extra, encoding="utf-8")
+    assert _audit(environment).returncode != 0
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        # An index install records no direct URL at all.
+        None,
+        json.dumps({"url": "file:///elsewhere/shiori_sdk-3.0.0-py3-none-any.whl"}),
+        json.dumps({"url": "https://example.invalid/shiori_sdk-3.0.0.whl"}),
+    ],
+    ids=["index", "outside-wheelhouse", "remote-url"],
+)
+def test_shiori_distribution_not_installed_from_the_wheelhouse_fails(
+    environment: Path, origin: str | None
+) -> None:
+    direct = environment / "site/shiori_sdk-3.0.0.dist-info/direct_url.json"
+    if origin is None:
+        direct.unlink()
+    else:
+        direct.write_text(origin, encoding="utf-8")
     assert _audit(environment).returncode != 0
 
 

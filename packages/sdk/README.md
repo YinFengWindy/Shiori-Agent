@@ -96,7 +96,10 @@ wheel probe first collects/runs an unrelated test with only the base SDK and pyt
 checks the missing-extra diagnostic, then installs the extra and runs all SDK tests.
 The plugin probe discovers all plugin suites (currently all 20 baseline plugins),
 builds ordinary wheels from external copies, and installs only each target's
-declared dependency closure. No host or default-memory package is injected.
+declared dependency closure. Every `shiori-*` package comes from the local
+wheelhouse with `--no-index --no-deps`; a missing local wheel fails instead of
+falling back to an index. Third-party requirements are installed separately and
+`uv pip check` verifies the result. No host or default-memory package is injected.
 Each suite and its awaited failure probe owns a separate pytest temporary directory.
 Provenance checks run before and after the suite, checking host absence, all
 distribution origins, editable installs, repository path injection and SDK versions.
@@ -107,8 +110,30 @@ Installed entry origins and hashes cover the target's complete declared plugin c
 
 The import guard has no exemptions. It checks SDK and plugin Python sources,
 tests, stubs and packaged testing helpers, including TYPE_CHECKING, import aliases,
-literal/string-composed dynamic imports, string patch targets and source-relative
-host resource guesses. Host roots follow the actual backend package/module tree.
+literal/string-composed dynamic imports, string patch targets, `importlib.resources`
+and `pkgutil` resource access (attribute, alias or literal `getattr` forms), and host
+resource paths built from `__file__` (`Path`/`pathlib.Path`, `os.path.dirname`/
+`split`/`join`, literal `*[...]` arguments, `os.pardir`, `p /= ...`, folded string
+concatenation) or explicitly rooted at the working directory (`Path.cwd()`,
+`os.getcwd()`, `Path()`, including `os.getcwd() + "/apps/backend"`) that names the host
+layout. A relative path counts as cwd-rooted only when it reaches a file-system sink
+listed in `scripts/sdk_path_sinks.py` (`open`, `io.open`, `os.listdir`/`chdir`/...,
+`glob`, `shutil.*`, `sys.path.insert`/`append`, file-system methods of concrete
+pathlib paths). Host layout (one definition in `scripts/sdk_repository_layout.py`) means a path or
+literal starting with `apps/backend`, `apps/desktop` or `tests/backend` (rejected
+anywhere; URLs, prose and plugin-internal `.../tests/backend/...` are not), an
+existing entry below `apps/backend/`, or a file inside an existing host package
+directory. Ordinary call arguments, `PurePath` values, `str()` and `posixpath.join`
+are not file-system paths; `os.path` functions are recognized through imports only.
+Each violation counts once, at the value where it first appears; paths derived
+from it are the same violation. Path values are followed through names bound in the
+same module only; paths passed through attributes, containers, call results or loops
+(for example `self.root.parents[3]`, `parents[-1]`, `__spec__.origin`,
+`sys.path[0]`, repeated `parent` in a loop) are left to external execution.
+Exclusions are judged relative to the scanned package: virtual environments,
+caches and a plugin's root-level `build/`/`dist/` outputs; package-internal
+directories such as `backend/build/` are scanned wherever the checkout lives.
+Host roots follow the actual backend package/module tree.
 SDK dependencies cannot point to concrete plugins. Declared public sibling plugin
 dependencies remain valid. This static guard is complemented by external execution;
 it does not claim to sandbox arbitrary Python.

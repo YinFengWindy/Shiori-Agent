@@ -461,6 +461,7 @@ def test_each_plugin_and_async_probe_own_separate_pytest_temp_directories(
 
     monkeypatch.setattr(runner, "run", run)
     monkeypatch.setattr(runner, "write_provenance_probe", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "install_from_wheelhouse", lambda *args, **kwargs: None)
     for plugin_id in ("first", "second"):
         _plugin(repository, plugin_id)
         runner.verify_plugin(
@@ -468,7 +469,9 @@ def test_each_plugin_and_async_probe_own_separate_pytest_temp_directories(
             artifact_root=output,
             wheelhouse=output / "wheels",
             sources={plugin_id: output / "sources" / plugin_id},
-            wheel=output / "wheels" / f"{plugin_id}.whl",
+            wheel=output
+            / "wheels"
+            / f"shiori_plugin_{plugin_id}-0.1.0-py3-none-any.whl",
         )
 
     assert len(temporary_roots) == len(set(temporary_roots)) == 4
@@ -486,7 +489,7 @@ def test_target_provenance_covers_installed_siblings_and_every_staged_source(
     }
     received = {}
 
-    def write_probe(case, modules, allowed, *, source_packages):
+    def write_probe(case, modules, allowed, *, source_packages, wheelhouse):
         received.update(modules=modules, allowed=allowed, sources=set(source_packages))
 
     def run(command, *, cwd, log, expected=0):
@@ -497,12 +500,13 @@ def test_target_provenance_covers_installed_siblings_and_every_staged_source(
 
     monkeypatch.setattr(runner, "write_provenance_probe", write_probe)
     monkeypatch.setattr(runner, "run", run)
+    monkeypatch.setattr(runner, "install_from_wheelhouse", lambda *args, **kwargs: None)
     runner.verify_plugin(
         "meme",
         artifact_root=output,
         wheelhouse=output / "wheels",
         sources=sources,
-        wheel=output / "wheels/meme.whl",
+        wheel=output / "wheels/shiori_plugin_meme-0.1.0-py3-none-any.whl",
     )
     assert received["allowed"] == ["shiori-plugin-citation", "shiori-plugin-meme"]
     assert set(received["modules"]) == {

@@ -1,89 +1,120 @@
-"""Detect repository-layout resource access without rejecting plugin-owned files."""
+"""Detect repository-layout resource access without rejecting plugin-owned files.
+
+Three rules share one module evaluation (``scripts.sdk_path_values``):
+
+* a complete path expression derived from ``__file__`` must stay inside the
+  owning package, and one anchored at the working directory (``Path.cwd()``,
+  ``os.getcwd()``, ``Path()``) must not name the host layout;
+* a relative path reaching a file-system sink (``scripts.sdk_path_sinks``) must
+  not name the host layout; other calls receive keys or plugin-relative names;
+* literals starting with a repository directory are rejected anywhere
+  (``scripts.sdk_layout_literals``).
+
+The layout itself is defined in ``scripts.sdk_repository_layout``. A violation
+is counted once, at the value where it first appears: paths derived from an
+already violating path (``a = R / "a"``, ``p /= "x"``, a sink reading it) are the
+same violation. Known limits are listed in sdk_path_values.
+"""
 
 import ast
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 
+from scripts.sdk_layout_literals import layout_literals
+from scripts.sdk_path_sinks import sink_paths
+from scripts.sdk_path_values import PathValues, anchored
+from scripts.sdk_repository_layout import HOST_BACKEND, host_layout, repository_prefix
 
-def _path(node: ast.AST, bindings: dict[str, Path], source: Path) -> Path | None:
-    if isinstance(node, ast.Name):
-        return source if node.id == "__file__" else bindings.get(node.id)
-    if isinstance(node, ast.Call):
-        if isinstance(node.func, ast.Name) and node.func.id == "Path" and node.args:
-            return _path(node.args[0], bindings, source)
-        if isinstance(node.func, ast.Attribute) and node.func.attr in {
-            "resolve",
-            "absolute",
-        }:
-            return _path(node.func.value, bindings, source)
-    if isinstance(node, ast.Attribute) and node.attr == "parent":
-        base = _path(node.value, bindings, source)
-        return base.parent if base else None
-    if (
-        isinstance(node, ast.Subscript)
-        and isinstance(node.value, ast.Attribute)
-        and node.value.attr == "parents"
-        and isinstance(node.slice, ast.Constant)
-        and isinstance(node.slice.value, int)
-    ):
-        base = _path(node.value.value, bindings, source)
-        if base and 0 <= node.slice.value < len(base.parents):
-            return base.parents[node.slice.value]
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
-        base = _path(node.left, bindings, source)
-        if (
-            base
-            and isinstance(node.right, ast.Constant)
-            and isinstance(node.right.value, str)
-        ):
-            return (base / node.right.value).resolve()
-    return None
+# A rule maps one path value to its violation label, or None.
+Rule = Callable[[Path], str | None]
 
 
-def resource_edges(tree: ast.AST, source: Path, owner: Path) -> Counter[str]:
-    """Reject paths derived from source ancestors outside the owning SDK/plugin package."""
-    bindings: dict[str, Path] = {}
-    edges: Counter[str] = Counter()
+def _expression_rule(owner: Path, backend: Path) -> Rule:
+    """Complete expressions: source-derived, cwd-anchored and repository paths."""
+
+    def violation(value: Path) -> str | None:
+        anchor = anchored(value)
+        if anchor is None:
+            if value.is_relative_to(owner):
+                return None
+            return "repository-layout path outside owning package"
+        kind, layout = anchor
+        if kind == "cwd" and host_layout(layout, backend):
+            return f"repository resource via working directory: {layout}"
+        if kind == "relative" and repository_prefix(layout):
+            return f"repository resource: {layout}"
+        return None
+
+    return violation
+
+
+def _sink_rule(backend: Path) -> Rule:
+    """Relative paths that a file-system operation resolves against the cwd."""
+
+    def violation(value: Path) -> str | None:
+        anchor = anchored(value)
+        if anchor and anchor[0] == "relative" and host_layout(anchor[1], backend):
+            return f"repository resource via file-system access: {anchor[1]}"
+        return None
+
+    return violation
+
+
+def resource_edges(
+    tree: ast.AST,
+    source: Path,
+    owner: Path,
+    backend: Path = HOST_BACKEND,
+) -> Counter[str]:
+    """Reject host-layout paths derived from source ancestors or the working directory.
+
+    ``source`` and ``owner`` must be normalized the same way (both resolved).
+    Paths below the owning SDK/plugin package stay allowed.
+    """
+    values = PathValues(tree, source)
     nodes = list(ast.walk(tree))
     parents = {
         child: parent for parent in nodes for child in ast.iter_child_nodes(parent)
     }
-    # Resolve simple path aliases until stable, including aliases used earlier in
-    # function bodies. This is a lint check, not a sandbox for arbitrary Python.
-    for _ in range(len(nodes)):
-        changed = False
-        for node in nodes:
-            if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value:
-                targets = (
-                    node.targets if isinstance(node, ast.Assign) else [node.target]
-                )
-                value = _path(node.value, bindings, source)
-                for target in targets:
-                    if (
-                        isinstance(target, ast.Name)
-                        and value
-                        and bindings.get(target.id) != value
-                    ):
-                        bindings[target.id] = value
-                        changed = True
-        if not changed:
-            break
-    for node in nodes:
-        value = _path(node, bindings, source)
-        if value and not value.is_relative_to(owner):
-            edges["repository-layout path outside owning package"] += 1
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            parent = parents.get(node)
-            # Documentation is not file access. Explicit fixture/runtime path
-            # inputs (tmp_path / "...") are also independent of source layout.
-            if isinstance(parent, ast.Expr) or (
-                isinstance(parent, ast.BinOp) and isinstance(parent.op, ast.Div)
-            ):
+    expression = _expression_rule(owner, backend)
+    sink = _sink_rule(backend)
+    edges: Counter[str] = Counter()
+    origins: set[Path] = set()
+    judged: set[int] = set()
+
+    def judge(paths: set[Path], rule: Rule, node: ast.AST) -> None:
+        for value in paths:
+            label = rule(value)
+            if label is None:
                 continue
-            normalized = node.value.replace("\\", "/")
-            if any(
-                part in normalized
-                for part in ("apps/backend/", "tests/backend/", "apps/desktop/")
-            ):
-                edges[f"repository resource: {node.value}"] += 1
+            judged.update(id(child) for child in ast.walk(node))
+            origin = values.origin(
+                value,
+                lambda base: expression(base) is not None or sink(base) is not None,
+            )
+            if origin not in origins:
+                origins.add(origin)
+                edges[label] += 1
+
+    # Source order, so a violation is reported where it is first written.
+    for node in sorted(
+        (node for node in nodes if hasattr(node, "lineno")),
+        key=lambda node: (node.lineno, node.col_offset),
+    ):
+        if isinstance(node, ast.AugAssign):
+            judge(values.evaluate(node.target), expression, node)
+        # Names repeat a value judged where it was bound; nested parts of a
+        # larger path expression are judged as that expression.
+        elif (
+            isinstance(node, ast.expr)
+            and not isinstance(node, ast.Name)
+            and node in parents
+            and not values.evaluate(parents[node])
+        ):
+            judge(values.evaluate(node), expression, node)
+        if isinstance(node, ast.Call):
+            for path in sink_paths(node, values):
+                judge(values.argument(path), sink, path)
+    edges.update(layout_literals(nodes, parents, judged))
     return edges

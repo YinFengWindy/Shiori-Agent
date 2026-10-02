@@ -83,6 +83,42 @@ def test_scan_includes_sdk_plugin_tests_and_packaged_support(tmp_path: Path) -> 
     assert set(scan(tmp_path)) == set(paths)
 
 
+def test_scan_reports_violations_when_the_checkout_is_below_a_build_directory(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "build" / ".venv" / "checkout"
+    plugin = root / "plugins/demo/backend/plugin.py"
+    plugin.parent.mkdir(parents=True)
+    (root / "packages/sdk/python").mkdir(parents=True)
+    (root / "packages/sdk/tests").mkdir(parents=True)
+    plugin.write_text("from bus.event_bus import EventBus\n", encoding="utf-8")
+    assert set(scan(root)) == {"plugins/demo/backend/plugin.py"}
+
+
+def test_scan_includes_package_internal_build_directories_but_not_build_outputs(
+    tmp_path: Path,
+) -> None:
+    scanned = [
+        "plugins/demo/backend/build/helper.py",
+        "plugins/demo/testing/dist/stub.pyi",
+    ]
+    skipped = [
+        # setuptools output next to pyproject.toml, not the importable package.
+        "plugins/demo/build/lib/plugins/demo/backend/plugin.py",
+        "plugins/demo/dist/plugin.py",
+        "plugins/demo/.venv/Lib/site-packages/host.py",
+        "plugins/demo/environment/Lib/site-packages/host.py",
+    ]
+    for name in (*scanned, *skipped):
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("from bus.event_bus import EventBus\n", encoding="utf-8")
+    (tmp_path / "plugins/demo/environment/pyvenv.cfg").write_text("", encoding="utf-8")
+    (tmp_path / "packages/sdk/python").mkdir(parents=True)
+    (tmp_path / "packages/sdk/tests").mkdir(parents=True)
+    assert set(scan(tmp_path)) == set(scanned)
+
+
 @pytest.mark.parametrize("root", sorted(HOST_ROOTS))
 def test_every_actual_host_root_is_forbidden_even_for_typing(root: str) -> None:
     assert host_imports(f"if TYPE_CHECKING:\n    import {root}.internal")
@@ -98,6 +134,10 @@ def test_every_actual_host_root_is_forbidden_even_for_typing(root: str) -> None:
         "monkeypatch.delattr('session.manager.SessionManager')",
         "from importlib.resources import files\nfiles('shiori_runtime_resources')",
         "from pkgutil import get_data\nget_data('prompts', 'system.md')",
+        "import pkgutil\npkgutil.get_data('shiori_runtime_resources', 'common_emojis.json')",
+        "import pkgutil as loader\nloader.resolve_name('agent.provider:LLMProvider')",
+        "import pkgutil\ngetattr(pkgutil, 'get_data')('prompts', 'system.md')",
+        "import importlib\nload = getattr(importlib, 'import_module')\nload('agent.provider')",
         "import importlib\nname = 'agent' + '.provider'\nimportlib.import_module(name)",
         "from importlib import import_module\nroot = 'agent'\nimport_module(f'{root}.provider')",
     ],
