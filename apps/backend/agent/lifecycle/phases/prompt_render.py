@@ -84,9 +84,10 @@ class _RenderPromptModule:
 
     async def run(self, frame: PromptRenderFrame) -> PromptRenderFrame:
         ctx = cast(PromptRenderCtx, frame.slots[_CTX_SLOT])
+        minimal = frame.input.minimal_request
         rendered = self._context.render(
             ContextRequest(
-                history=ctx.history,
+                history=[] if minimal else ctx.history,
                 current_message=ctx.content,
                 media=ctx.media,
                 skill_names=ctx.skill_names,
@@ -100,24 +101,28 @@ class _RenderPromptModule:
                 context_scope=frame.input.context_scope,
                 thread_id=frame.input.thread_id,
                 window_sources=frame.input.window_sources,
+                minimal_request=minimal,
             ),
-            system_sections_top=ctx.system_sections_top,
-            system_sections_bottom=ctx.system_sections_bottom,
+            system_sections_top=[] if minimal else ctx.system_sections_top,
+            system_sections_bottom=[] if minimal else ctx.system_sections_bottom,
             session_metadata=ctx.session_metadata,
         )
         messages = list(rendered.messages)
+        current_message = messages[-1] if frame.input.include_current_message else None
         if not frame.input.include_current_message:
             # The envelope owner always appends the current input last. Idle
             # inspection keeps every persisted row and context frame, but no draft.
             messages.pop()
-        if ctx.extra_hints:
+        if ctx.extra_hints and not minimal:
             messages.append(
                 build_context_hint_message(
                     "plugin_hints",
                     "\n".join(ctx.extra_hints),
                 )
             )
-        frame.slots[_RESULT_SLOT] = PromptRenderResult(messages=messages)
+        frame.slots[_RESULT_SLOT] = PromptRenderResult(
+            messages=messages, current_message=current_message
+        )
         return frame
 
 

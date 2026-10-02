@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast
 
 from shiori_sdk.memory.committed import TurnCommitted
 from shiori_sdk.memory.events import MemoryWritten, RetrievalCompleted
+from shiori_sdk.context import ContextBudgetObserved
 
 from .collector import GlobalErrorCollector
 from .retention import run_retention_if_needed
@@ -50,6 +51,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     collector.install()
 
     ctx.events.on(TurnCommitted, lambda event: _observe_turn_committed(writer, event))
+    ctx.events.on(ContextBudgetObserved, writer.emit)
     ctx.events.on(RetrievalCompleted, lambda event: _observe_retrieval(writer, event))
     ctx.events.on(MemoryWritten, lambda event: _observe_memory_written(writer, event))
     ctx.expose(ObserveTelemetry(db_path))

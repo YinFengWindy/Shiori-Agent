@@ -11,6 +11,7 @@ from agent.core.types import LLMToolCall, ReasonerResult
 from agent.core.reply_completion import fetch_role_mood
 from agent.core.reply_output import RoleReplyOutput
 from .reply_recovery import complete_reply
+from .budgeted_request import budgeted_chat
 from .compaction import ensure_request_budget
 from core.roles.reply_state import RoleReply
 from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted
@@ -110,36 +111,48 @@ class _PassiveReasoningResultMixin:
             support.build_context_hint_message("summary_request", summary_prompt)
         ]
 
+        # Both speaking modes share the same guarded request and empty-reply
+        # recovery. A failed model call is not a successful progress summary.
+        summary_cap = (
+            self._llm_config.max_tokens
+            if reply_moods is not None
+            else min(_SUMMARY_MAX_TOKENS, self._llm_config.max_tokens)
+        )
+        purpose = "default" if reply_moods is not None else "auxiliary"
+        await ensure_request_budget(
+            summary_messages,
+            [],
+            self._llm.provider,
+            self._llm_config.model,
+            summary_cap,
+            purpose=purpose,
+        )
+        response = await budgeted_chat(
+            self._llm.provider,
+            messages=summary_messages,
+            tools=[],
+            model=self._llm_config.model,
+            max_tokens=summary_cap,
+            call_purpose=purpose,
+        )
+        completion = await complete_reply(
+            response,
+            output=RoleReplyOutput(None, enabled=reply_moods is not None),
+            messages=summary_messages,
+            provider=self._llm.provider,
+            model=self._llm_config.model,
+            max_tokens=summary_cap,
+            role_reply=reply_moods is not None,
+            session=session,
+            channel=channel,
+            iteration=iteration,
+            call_purpose=purpose,
+        )
+        content = completion.response.content
+        assert content is not None
+        role_reply = None
         if reply_moods is not None:
-            await ensure_request_budget(
-                summary_messages,
-                [],
-                self._llm.provider,
-                self._llm_config.model,
-                self._llm_config.max_tokens,
-            )
-            response = await self._llm.provider.chat(
-                messages=summary_messages,
-                tools=[],
-                model=self._llm_config.model,
-                max_tokens=self._llm_config.max_tokens,
-            )
-            completion = await complete_reply(
-                response,
-                output=RoleReplyOutput(None, enabled=True),
-                messages=summary_messages,
-                provider=self._llm.provider,
-                model=self._llm_config.model,
-                max_tokens=self._llm_config.max_tokens,
-                role_reply=True,
-                session=session,
-                channel=channel,
-                iteration=iteration,
-            )
-            content = completion.response.content
-            assert content is not None
-            # 心情/想法通过一次独立调用获取；失败时返回 None，由调用方降级为
-            # 沿用上一轮心情，绝不阻塞这段阶段性总结的投递。
+            # The independent mood owner retains its existing best-effort behavior.
             role_reply = await fetch_role_mood(
                 provider=self._llm.provider,
                 model=self._llm_config.model,
@@ -148,45 +161,7 @@ class _PassiveReasoningResultMixin:
                 content=content,
                 moods=reply_moods,
             )
-            return content, completion.total_tokens, role_reply, completion.diagnostics
-
-        # Auxiliary summaries use their actual smaller output reservation too.
-        summary_cap = min(_SUMMARY_MAX_TOKENS, self._llm_config.max_tokens)
-        await ensure_request_budget(
-            summary_messages,
-            [],
-            self._llm.provider,
-            self._llm_config.model,
-            summary_cap,
-            purpose="auxiliary",
-        )
-        # 2. 先尝试让模型给一段中文收尾总结。
-        try:
-            response = await self._llm.provider.chat(
-                messages=summary_messages,
-                tools=[],
-                model=self._llm_config.model,
-                max_tokens=min(_SUMMARY_MAX_TOKENS, self._llm_config.max_tokens),
-                call_purpose="auxiliary",
-            )
-            text = (response.content or "").strip()
-            if text:
-                return text, response.total_tokens, None, None
-        except Exception as exc:
-            logger.warning("生成预算收尾总结失败: %s", exc)
-
-        # 3. 模型收尾失败时，返回固定兜底文案。
-        tool_text = "、".join(tools_used[-8:]) if tools_used else "无"
-        done = f"已尝试 {iteration} 轮，调用工具 {len(tools_used)} 次（{tool_text}）。"
-        return (
-            (
-                f"这次任务还没完全收束。{done}"
-                "我先停在当前进度，后续会继续基于已有工具结果补齐缺失信息并给你最终结论。"
-            ),
-            None,
-            None,
-            None,
-        )
+        return content, completion.total_tokens, role_reply, completion.diagnostics
 
     def _build_result(
         self,

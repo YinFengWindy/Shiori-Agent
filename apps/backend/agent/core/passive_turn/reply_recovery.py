@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from agent.core.reply_output import RoleReplyOutput
-from agent.provider import LLMProvider, LLMResponse
-from .compaction import ensure_request_budget
+from agent.provider import LLMProvider, LLMResponse, LLMCallPurpose
+from .budgeted_request import budgeted_chat
+from .compaction import current_request_compaction, ensure_request_budget
 from .empty_reply import EmptyReplyError, recovery_diagnostics, response_diagnostics
+from core.compaction import CompactionFailedError
 
 logger = logging.getLogger("agent.core.passive_turn")
 
@@ -45,6 +47,7 @@ async def complete_reply(
     channel: str,
     iteration: int,
     allow_tool_calls: bool = False,
+    call_purpose: LLMCallPurpose = "default",
 ) -> CompletedReply:
     """Normalize the response and recover empty final text without replaying tools."""
     normalized = await output.finish(response.content)
@@ -62,14 +65,21 @@ async def complete_reply(
             iteration=iteration,
         )
 
+    async def reject(outcome: str, retries: int):
+        error = EmptyReplyError(recovery_state(outcome, retries))
+        scope = current_request_compaction()
+        if scope is not None:
+            await scope.observe_request(None, error=error, failure_stage="response")
+        raise error
+
     if response.tool_calls:
         if allow_tool_calls:
             return CompletedReply(response, (response,))
-        raise EmptyReplyError(recovery_state("unexpected_tool_calls", 0))
+        await reject("unexpected_tool_calls", 0)
     if (response.content or "").strip():
         return CompletedReply(response, (response,))
     if facts["refused"]:
-        raise EmptyReplyError(recovery_state("refused", 0))
+        await reject("refused", 0)
     logger.warning("[空回复重试] %s", recovery_state("retrying", 0))
     retry_messages = messages + [
         {"role": "assistant", "content": ""},
@@ -78,16 +88,22 @@ async def complete_reply(
             "content": "你刚才没有给出正式回复。请根据已有结果直接回复用户。",
         },
     ]
-    await ensure_request_budget(retry_messages, [], provider, model, max_tokens)
+    await ensure_request_budget(
+        retry_messages, [], provider, model, max_tokens, purpose=call_purpose
+    )
     retry_output = RoleReplyOutput(on_content_delta, enabled=role_reply)
     try:
-        retry_response = await provider.chat(
+        retry_response = await budgeted_chat(
+            provider,
             messages=retry_messages,
             tools=[],
             model=model,
             max_tokens=max_tokens,
+            call_purpose=call_purpose,
             on_content_delta=retry_output.callback,
         )
+    except CompactionFailedError:
+        raise
     except Exception as exc:
         # Recovery failures must not become successful timeout text or history retries.
         raise EmptyReplyError(
@@ -101,10 +117,10 @@ async def complete_reply(
     )
     retry_response.content = normalized
     if retry_response.tool_calls:
-        raise EmptyReplyError(recovery_state("unexpected_tool_calls", 1))
+        await reject("unexpected_tool_calls", 1)
     if not (retry_response.content or "").strip():
         outcome = "refused" if attempts[-1]["refused"] else "exhausted"
-        raise EmptyReplyError(recovery_state(outcome, 1))
+        await reject(outcome, 1)
     # Preserve thinking already streamed when recovery does not supply its own.
     retry_response.thinking = retry_response.thinking or response.thinking
     diagnostics = recovery_state("recovered", 1)

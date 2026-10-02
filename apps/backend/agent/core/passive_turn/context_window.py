@@ -1,5 +1,6 @@
 """Budget inspection and manual compaction, without executing a conversation turn."""
 
+from dataclasses import asdict
 from typing import Awaitable, Callable
 
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
@@ -17,6 +18,7 @@ from core.compaction import (
 from core.compaction_feedback import compaction_feedback
 from session.manager import Session, SessionManager
 from session.maintenance_progress import window_key
+from session.manager.models import consolidation_cursor
 from .context_window_request import prepare_context_window_request
 
 
@@ -67,6 +69,7 @@ class ContextWindow:
         prepared = await self.sessions.prepare_window(
             session.key, context_view, keep_turns=0, message_limit=limit
         )
+        progress = self.sessions.maintenance_progress(session)
         state = {
             "session_key": session.key,
             "context_key": window_key(context_view),
@@ -76,6 +79,28 @@ class ContextWindow:
             "source": before.estimate.source,
             "context_window_tokens": before.context_window_tokens,
             "input_limit_tokens": before.input_limit_tokens,
+            "budget": asdict(before),
+            "configured_retained_turns": policy.retained_turns,
+            "window_start": progress.cursor(context_view),
+            "compaction_count": progress.compaction_counts.get(
+                window_key(context_view), 0
+            ),
+            "window_version": progress.window_versions.get(window_key(context_view), 0),
+            "memory_cursor": consolidation_cursor(
+                session, context_view.scope if context_view else None
+            ),
+            "memory_version": progress.memory_version,
+            "published_version": progress.published_version,
+            "relationship_version": progress.relationship_version,
+            "memory_status": (
+                "consumer_failed"
+                if progress.consumer_error
+                else ("pending_consumers" if progress.pending_consumers else "covered")
+            ),
+            "last_compaction": self.controller.latest(session.key, context_view),
+            "last_request": self.controller.latest(
+                session.key, context_view, request=True
+            ),
             "can_compact": prepared is not None,
             "busy": False,
             "reason": "" if prepared else "没有可压缩的完整轮次",
@@ -98,15 +123,9 @@ class ContextWindow:
         except CompactionFailedError as error:
             result = error.result
             failure = error.__cause__ or error
+        # Memory can commit even when the window fails. Re-read both owners,
+        # and re-render the persisted request rather than exposing a rejected draft.
+        state = await self.inspect(session=session, context_view=context_view, msg=msg)
         state["result"] = compaction_feedback(result, failure)
         state["reason"] = state["result"]["error"]
-        if result.committed:
-            state["tokens"] = result.after_tokens
-            state["source"] = result.after_source
-            state["can_compact"] = (
-                await self.sessions.prepare_window(
-                    session.key, context_view, keep_turns=0, message_limit=limit
-                )
-                is not None
-            )
         return state

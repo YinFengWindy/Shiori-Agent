@@ -97,6 +97,12 @@ async def test_idle_read_is_model_free_and_manual_uses_completed_turns_below_tri
         assert state["result"]["committed"]
         assert state["result"]["configured_retained_turns"] == keep
         assert state["result"]["retained_turns"] == keep
+        assert state["budget"]["max_output_tokens"] == 8192
+        assert state["budget"]["output_reservation_tokens"] == 4000
+        assert state["budget"]["estimate"]["tokens"] == state["tokens"]
+        assert state["compaction_count"] == 1
+        assert state["window_start"] == state["result"]["retained_start"]
+        assert state["memory_version"] == state["result"]["memory_version"]
         assert history_start(session, None) == 12 - 2 * keep
         assert session.messages == original
         assert h.prompts and all(
@@ -137,6 +143,9 @@ async def test_manual_failure_preserves_window_and_reports_memory_commit_then_re
         )
         assert result["result"]["committed"] is False
         assert result["result"]["memory_committed"] is (failure != "memory")
+        assert result["memory_version"] == result["result"]["memory_version"]
+        assert result["window_start"] == 0 and result["compaction_count"] == 0
+        assert result["budget"]["estimate"]["tokens"] == result["tokens"]
         assert history_start(session, None) == 0
         assert session.messages == original
         calls = len(h.prompts)

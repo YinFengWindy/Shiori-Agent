@@ -19,6 +19,7 @@ from .helpers import (
     turn_tool_names,
 )
 from .tool_visibility import initial_tool_order
+from .minimal_request import current_input
 
 if TYPE_CHECKING:
     from agent.tools.registry import ToolRegistry
@@ -124,5 +125,29 @@ class CompactionRenderer:
             self.current_message is not None
             and self.current_message.get("role") == "user"
         ):
-            candidate.messages[-1] = deepcopy(self.current_message)
+            owned = current_input(candidate.messages, candidate.current_message)
+            candidate.messages[
+                next(i for i, item in enumerate(candidate.messages) if item is owned)
+            ] = deepcopy(self.current_message)
+        return with_working_summary(candidate.messages, summary)
+
+    async def render_minimal(self, summary: str) -> list[dict]:
+        """Render essential constraints with this execution's exact input and owner."""
+        candidate = await self.render_prompt(
+            replace(
+                self.input,
+                history=[],
+                retrieved_memory_block="",
+                skill_names=[],
+                turn_injection_prompt="",
+                extra_hints=[],
+                window_sources=(),
+                minimal_request=True,
+            )
+        )
+        if self.current_message is not None:
+            owned = current_input(candidate.messages, candidate.current_message)
+            candidate.messages[
+                next(i for i, item in enumerate(candidate.messages) if item is owned)
+            ] = deepcopy(self.current_message)
         return with_working_summary(candidate.messages, summary)

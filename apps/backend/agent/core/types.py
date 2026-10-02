@@ -87,6 +87,8 @@ class ContextRequest:
     thread_id: str = ""
     # 本回合可见历史窗口里非用户本人消息的来源，旧的在前；外部回合据此注入成员档案（#498）。
     window_sources: tuple[MessageSource, ...] = ()
+    # Last-resort speaking request; retain identity/permissions and no tool routing.
+    minimal_request: bool = False
 
 
 @dataclass
