@@ -120,9 +120,8 @@ class FakeExtensionContext(FakePluginContext):
     def workspace(self) -> Path:
         """Returns the supplied workspace, failing like a host that has none."""
         if self._workspace is None:
-            raise HostServiceUnavailable(
-                f"插件 {self.plugin_id} 声明了 capability 'workspace'，"
-                "但宿主未提供服务 workspace"
+            raise HostServiceUnavailable.for_capability(
+                self.plugin_id, "workspace", ("workspace",)
             )
         return self._workspace
 
@@ -130,9 +129,8 @@ class FakeExtensionContext(FakePluginContext):
     def session_manager(self) -> SessionUndo:
         """Returns the supplied session undo service, failing like a host without one."""
         if self._session_manager is None:
-            raise HostServiceUnavailable(
-                f"插件 {self.plugin_id} 声明了 capability 'session_manager'，"
-                "但宿主未提供服务 session_manager"
+            raise HostServiceUnavailable.for_capability(
+                self.plugin_id, "session_manager", ("session_manager",)
             )
         return self._session_manager
 

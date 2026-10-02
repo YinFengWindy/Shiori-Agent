@@ -13,8 +13,6 @@ async def setup(ctx: PluginRuntimeContext) -> None:
         capture=PrimaryScreenCapture(),
         analyzer=ObservationModelAdapter(
             roles=ctx.roles,
-            provider=None,
-            model="",
             models=ctx.models,
         ),
     )

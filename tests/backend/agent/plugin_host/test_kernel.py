@@ -854,6 +854,7 @@ async def setup(ctx):
         ("memory", "role_store", True),
         ("memory", "workspace", False),
         ("http", "http", True),
+        ("light_model", "light_model", True),
         ("tools", "tool_registry", True),
         ("kv", "workspace", False),
     ],

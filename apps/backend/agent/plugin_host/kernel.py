@@ -58,7 +58,10 @@ from agent.plugin_host.discovery import discover_plugins
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
-from agent.plugin_host.host_service_requirements import require_host_services
+from agent.plugin_host.host_service_requirements import (
+    provided_service,
+    require_host_services,
+)
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import (
     ManifestError,
@@ -133,7 +136,8 @@ class HostServices:
     memory_engine: MemoryEngine | None = None
     app_config: Any = None
     light_provider: LLMProvider | None = None
-    light_model: str = ""
+    # None = 宿主未提供轻量模型名；bootstrap 总会解析出一个（缺省回落到主模型）。
+    light_model: str | None = None
     # http capability 的唯一来源：bootstrap 注入共享 external_default 请求器，
     # 内核不再回退到进程级默认实例；缺失时声明 http 的插件 setup 前失败。
     http: HttpClient | None = None
@@ -462,19 +466,7 @@ class PluginKernel:
         setup_fn = cast("Callable[[SdkRuntimeContext], Awaitable[None]]", setup)
         grants = handle.record.manifest.capabilities
         services = self._services
-        require_host_services(
-            handle.plugin_id,
-            grants,
-            {
-                "tool_registry": services.tool_registry,
-                "workspace": services.workspace,
-                "role_store": services.role_store,
-                "session_manager": services.session_manager,
-                "role_runtime_registry": services.role_runtime_registry,
-                "light_provider": services.light_provider,
-                "http": services.http,
-            },
-        )
+        require_host_services(handle.plugin_id, grants, services)
         rpc = (
             RpcCapability(
                 self.rpc, handle.effects, handle.plugin_id, self._services.event_bus
@@ -573,12 +565,14 @@ class PluginKernel:
             ),
             kv=(
                 open_plugin_kv(
-                    workspace=services.workspace,
+                    workspace=provided_service(
+                        handle.plugin_id, "kv", services.workspace
+                    ),
                     plugin_id=handle.plugin_id,
                     plugin_dir=handle.record.plugin_dir,
                     legacy_plugin_root=services.legacy_plugin_root,
                 )
-                if "kv" in grants and services.workspace is not None
+                if "kv" in grants
                 else None
             ),
             http=services.http if "http" in grants else None,

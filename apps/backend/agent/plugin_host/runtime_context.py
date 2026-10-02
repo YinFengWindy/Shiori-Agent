@@ -9,7 +9,7 @@ from session.manager import SessionManager
 
 from agent.plugin_host.capabilities import LifecycleCapability, RpcCapability
 from agent.plugin_host.effects import Dispose, EffectScope
-from agent.plugin_host.host_service_requirements import host_service_unavailable
+from agent.plugin_host.host_service_requirements import provided_service
 from agent.plugin_host.manifest import PluginManifest
 from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
 from shiori_sdk.memory.context import MemoryCapability, MemoryPluginContext
@@ -28,7 +28,6 @@ from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.diagnostics import Diagnostics
 from shiori_sdk.runtime import (
     CapabilityNotGranted as CapabilityNotGranted,
-    HostServiceUnavailable as HostServiceUnavailable,
 )
 from shiori_sdk.runtime import (
     EventsCapability,
@@ -152,13 +151,11 @@ class PluginSetupContext:
         """Returns granted capability names, for diagnostics."""
         return tuple(sorted(self._capabilities))
 
-    def _provided[T](self, capability: str, service: str, value: T | None) -> T:
+    def _provided[T](self, capability: str, value: T | None) -> T:
         """Separates an undeclared capability from a host that lacks its service."""
         if capability not in self.granted:
             raise CapabilityNotGranted(f"Plugin did not request {capability}")
-        if value is None:
-            raise host_service_unavailable(self.plugin_id, capability, service)
-        return value
+        return provided_service(self.plugin_id, capability, value)
 
     def effect(self, label: str, dispose: Dispose) -> None:
         """登记资源清理；卸载先停用/退订 ctx.events.on，再逆序撤销其它 effect。
@@ -189,7 +186,7 @@ class PluginSetupContext:
     @property
     def memory(self) -> MemoryCapability:
         """Returns the typed memory surface granted to this plugin."""
-        return self._provided("memory", "workspace/role_store", self._memory)
+        return self._provided("memory", self._memory)
 
     @property
     def rpc(self) -> RpcCapability:
@@ -201,7 +198,7 @@ class PluginSetupContext:
     @property
     def workspace(self) -> Path:
         """Return the explicitly granted workspace capability."""
-        return self._provided("workspace", "workspace", self._workspace)
+        return self._provided("workspace", self._workspace)
 
     @property
     def config(self) -> ConfigValues:
@@ -255,9 +252,7 @@ class PluginSetupContext:
     @property
     def session_manager(self) -> SessionManager:
         """Return the explicitly granted session_manager capability."""
-        return self._provided(
-            "session_manager", "session_manager", self._session_manager
-        )
+        return self._provided("session_manager", self._session_manager)
 
     @property
     def memory_engine(self) -> MemoryEngine | None:
@@ -285,32 +280,32 @@ class PluginSetupContext:
     @property
     def roles(self) -> Roles:
         """Return the explicitly granted roles SDK capability."""
-        return self._provided("roles", "role_store", self._roles)
+        return self._provided("roles", self._roles)
 
     @property
     def models(self) -> RoleModels:
         """Return the explicitly granted models SDK capability."""
-        return self._provided("models", "role_runtime_registry", self._models)
+        return self._provided("models", self._models)
 
     @property
     def sessions(self) -> PluginSessions:
         """Return the explicitly granted sessions SDK capability."""
-        return self._provided("sessions", "session_manager/workspace", self._sessions)
+        return self._provided("sessions", self._sessions)
 
     @property
     def tools(self) -> SdkToolsCapability:
         """Return the explicitly granted tools SDK capability."""
-        return self._provided("tools", "tool_registry", self._tools)
+        return self._provided("tools", self._tools)
 
     @property
     def kv(self) -> PluginKVStore:
         """Return the explicitly granted kv SDK capability."""
-        return self._provided("kv", "workspace", self._kv)
+        return self._provided("kv", self._kv)
 
     @property
     def http(self) -> HttpClient:
         """Return the explicitly granted http SDK capability."""
-        return self._provided("http", "http", self._http)
+        return self._provided("http", self._http)
 
     @property
     def resources(self) -> Resources:
@@ -343,21 +338,17 @@ class PluginSetupContext:
     @property
     def scene_observations(self) -> SceneObservations:
         """Return the explicitly granted scene_observations SDK capability."""
-        if "scene_observations" not in self.granted or self._scene_observations is None:
-            raise CapabilityNotGranted("Plugin did not request scene_observations")
-        return self._scene_observations
+        return self._provided("scene_observations", self._scene_observations)
 
     @property
     def light_provider(self) -> ChatProvider:
         """Return the explicitly granted light_provider SDK capability."""
-        return self._provided("light_provider", "light_provider", self._light_provider)
+        return self._provided("light_provider", self._light_provider)
 
     @property
     def light_model(self) -> str:
         """Return the explicitly granted light_model SDK capability."""
-        if "light_model" not in self.granted or self._light_model is None:
-            raise CapabilityNotGranted("Plugin did not request light_model")
-        return self._light_model
+        return self._provided("light_model", self._light_model)
 
     def as_service_context(self) -> ServicePluginContext:
         """Check service injection without the legacy dynamic attribute path."""
@@ -373,7 +364,7 @@ class PluginSetupContext:
     @property
     def accounts(self) -> AccountsCapability:
         """Return statically checked account registration and lifecycle services."""
-        return self._provided("accounts", "role_store", self._accounts)
+        return self._provided("accounts", self._accounts)
 
     def as_channel_context(self) -> ChannelPluginContext:
         """Check the actual setup boundary without dynamic legacy attributes."""
@@ -382,7 +373,7 @@ class PluginSetupContext:
     @property
     def avatars(self) -> AvatarsCapability:
         """Return the explicitly granted shared avatar-cache contract."""
-        return self._provided("avatars", "role_store", self._avatars)
+        return self._provided("avatars", self._avatars)
 
 
 class PluginRuntimeContext(PluginSetupContext):

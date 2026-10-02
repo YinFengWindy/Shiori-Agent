@@ -14,7 +14,7 @@ from .sessions import FakeSessions
 from .http import FakeHttp
 from .runtime import FakeRuntimeLifecycle
 from .scene_observations import FakeSceneObservations
-from .models import FakeModels
+from .models import FakeChatProvider, FakeModels
 
 
 class FakeServiceContext(FakeExtensionContext):
@@ -40,8 +40,8 @@ class FakeServiceContext(FakeExtensionContext):
         self.tool_turn = current_tool_turn
         self.runtime = FakeRuntimeLifecycle()
         self.scene_observations = FakeSceneObservations()
-        self.light_provider: ChatProvider | None = None
-        self.light_model = ""
+        self.light_provider: ChatProvider = FakeChatProvider()
+        self.light_model = "fake-light-model"
 
     def as_capability(self) -> ServicePluginContext:
         """Check that fake and actual host implement the same setup surface."""

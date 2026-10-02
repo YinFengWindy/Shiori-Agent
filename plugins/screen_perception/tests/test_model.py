@@ -7,10 +7,16 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from shiori_sdk.testing.models import FakeModels
+
 from plugins.screen_perception.backend.model import ObservationModelAdapter
 
 
 def _adapter(provider=None) -> ObservationModelAdapter:
+    models = FakeModels()
+    models.snapshots["mira", "vision"] = SimpleNamespace(
+        provider=provider or SimpleNamespace(), model="vision-model"
+    )
     return ObservationModelAdapter(
         roles=SimpleNamespace(
             get_role=lambda _role_id: SimpleNamespace(
@@ -19,8 +25,7 @@ def _adapter(provider=None) -> ObservationModelAdapter:
                 system_prompt="用中文回复",
             )
         ),
-        provider=provider or SimpleNamespace(),
-        model="vision-model",
+        models=models,
     )
 
 
@@ -147,8 +152,6 @@ async def test_analyze_uses_the_role_visual_model_snapshot() -> None:
                 name="Mira", description="陪伴者", system_prompt="用中文回复"
             )
         ),
-        provider=None,
-        model="",
         models=_RoleRuntimeRegistry(),
     )
 

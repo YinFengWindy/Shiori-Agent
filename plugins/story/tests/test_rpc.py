@@ -2,6 +2,7 @@ from __future__ import annotations
 from shiori_sdk.testing.memory import FakeMemoryStorage
 from shiori_sdk.testing.extensions import FakeBackground
 from shiori_sdk.testing.context import FakePluginContext
+from shiori_sdk.testing.models import FakeModels
 
 import asyncio
 import json
@@ -31,6 +32,7 @@ async def test_existing_story_opens_workspace_relative_images_as_owned_copies(tm
     source = tmp_path / "legacy.png"
     source.write_bytes(b"CG")
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=FakeRoles(tmp_path),
         storage=FakeMemoryStorage(),
@@ -277,6 +279,7 @@ async def test_create_story_generates_opening_and_replays_request(tmp_path) -> N
         to_dict=lambda: {"id": "role-1", "name": "澪", "system_prompt": "保持克制"},
     )
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(
             get_role=lambda role_id: role if role_id == role.id else None
@@ -340,6 +343,7 @@ async def test_create_story_requires_a_non_blank_creation_id(
     tmp_path, creation_id
 ) -> None:
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: None),
         director=OpeningDirector(),
@@ -509,6 +513,7 @@ async def test_opening_background_is_saved_to_its_story_visual_gallery(
         to_dict=lambda: {"id": "role-1", "name": "澪"},
     )
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
         director=OpeningDirector(),
@@ -570,6 +575,7 @@ async def test_progression_visual_prompt_creates_async_cg_instead_of_opening_bac
 ) -> None:
     role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
         director=ProgressionVisualDirector(),
@@ -650,6 +656,7 @@ async def test_failed_progression_cg_can_retry_without_creating_a_new_turn(
     role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
     image_tool = RetryableImageTool(fail_on_call=2)
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
         director=ProgressionVisualDirector(),
@@ -754,6 +761,7 @@ async def test_ready_cg_regeneration_replaces_the_existing_gallery_resource(
     role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
     image_tool = SequentialImageTool()
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
         director=ProgressionVisualDirector(),
@@ -859,6 +867,7 @@ async def test_repeated_character_visual_does_not_create_another_cg_for_the_same
     role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
     image_tool = SequentialImageTool()
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
         director=RepeatedCharacterVisualDirector(),
@@ -975,6 +984,7 @@ async def test_repeated_character_visual_does_not_create_another_cg_for_the_same
 async def test_failed_opening_keeps_story_without_a_visual_resource(tmp_path) -> None:
     role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
         director=FailingOpeningDirector(),
@@ -1020,6 +1030,7 @@ async def test_failed_opening_retries_with_the_same_creation_request(tmp_path) -
     role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
     director = FailTwiceOpeningDirector()
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
         director=director,
@@ -1172,6 +1183,7 @@ async def test_story_recovery_restarts_an_interrupted_player_turn(tmp_path) -> N
 @pytest.mark.asyncio
 async def test_create_story_rejects_exact_time_as_a_story_period(tmp_path) -> None:
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: None),
         director=OpeningDirector(),
@@ -1215,6 +1227,7 @@ async def test_create_story_recovers_from_an_interrupted_initialization(
 
     role = SimpleNamespace(id="role-1", to_dict=role_snapshot)
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
         director=OpeningDirector(),
@@ -1279,6 +1292,7 @@ async def test_create_story_reuses_a_provisioning_entry_after_process_restart(
     catalog.close()
 
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
         director=OpeningDirector(),
@@ -1344,6 +1358,7 @@ async def test_create_story_repairs_an_opening_turn_left_before_activation(
 
     director = BlockingOpeningDirector()
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
         director=director,
@@ -1386,6 +1401,7 @@ async def test_story_list_quarantines_an_active_entry_with_a_missing_database(
     catalog.close()
 
     handler = StorySimulationHandler(
+        models=FakeModels(),
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: None),
         director=OpeningDirector(),

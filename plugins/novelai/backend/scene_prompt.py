@@ -32,10 +32,10 @@ _SCHEMA = {
 
 
 async def prepare_scene_prompt(
-    provider: ChatProvider | None, *, model: str, event: SceneObservationCommitted
+    provider: ChatProvider, *, model: str, event: SceneObservationCommitted
 ) -> dict[str, str]:
     """Builds and validates provider parameters only after automatic-CG admission."""
-    if provider is None or not model.strip():
+    if not model.strip():
         raise RuntimeError("自动场景 CG 缺少提示词模型")
     snapshot = {
         "visual_description": event.visual_description,
