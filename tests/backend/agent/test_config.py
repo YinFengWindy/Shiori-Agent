@@ -342,6 +342,9 @@ def test_legacy_capacity_migrates_window_and_drops_output_capability():
     assert current.model_auto_compact_token_limit == 150000
     missing = _registration(provider="openai", model="m", api_key="test")
     assert incomplete_registration_fields(missing) == ("model_context_window",)
+    # An incomplete registration may keep its threshold until the window is filled.
+    pending = _registration(model_auto_compact_token_limit=1000)
+    assert pending.model_auto_compact_token_limit == 1000
 
 
 @pytest.mark.parametrize("value", [0, 2, 7])

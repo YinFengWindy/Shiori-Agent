@@ -49,10 +49,10 @@ class ModelRegistration:
             value = getattr(self, name)
             if value is not None and (type(value) is not int or value <= 0):
                 raise ValueError(f"模型注册 {name} 必须是正整数")
+        # An incomplete registration keeps its threshold until the window is filled.
         limit = self.model_auto_compact_token_limit
-        if limit is not None and (
-            self.model_context_window is None or limit >= self.model_context_window
-        ):
+        window = self.model_context_window
+        if limit is not None and window is not None and limit >= window:
             raise ValueError("自动压缩阈值必须小于上下文窗口")
 
 

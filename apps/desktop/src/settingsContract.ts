@@ -11,18 +11,29 @@ export const desktopSettingsDefaults = Object.freeze({
   compactionRetainedTurns: 2,
 });
 
+type ModelCapacity = Pick<ModelRegistrationFormData, "modelContextWindow" | "modelAutoCompactTokenLimit">;
+
 /**
- * Validates entered model capacities at both draft and persistence boundaries.
- * An empty window stays saveable as an incomplete registration; an auto
- * compaction threshold must be a positive integer below the window.
+ * Validates entered model capacities per field, shared by the settings page,
+ * first-run setup and the persistence boundary. An empty window stays
+ * saveable as an incomplete registration, so the threshold is then only
+ * checked on its own; with a valid window it must stay below it.
  */
-export function modelCapacityError(registration: Pick<ModelRegistrationFormData, "modelContextWindow" | "modelAutoCompactTokenLimit">) {
-  const { modelContextWindow: contextWindow, modelAutoCompactTokenLimit: limit } = registration;
-  if (contextWindow != null && (!Number.isSafeInteger(contextWindow) || contextWindow <= 0)) return "上下文窗口必须是正整数";
-  if (limit == null) return null;
-  if (!Number.isSafeInteger(limit) || limit <= 0) return "自动压缩阈值必须是正整数";
-  if (contextWindow == null || limit >= contextWindow) return "自动压缩阈值必须小于上下文窗口";
-  return null;
+export function modelCapacityErrors({ modelContextWindow: contextWindow, modelAutoCompactTokenLimit: limit }: ModelCapacity) {
+  const errors: Partial<Record<keyof ModelCapacity, string>> = {};
+  const windowValid = contextWindow != null && Number.isSafeInteger(contextWindow) && contextWindow > 0;
+  if (contextWindow != null && !windowValid) errors.modelContextWindow = "上下文窗口必须是正整数";
+  if (limit != null) {
+    if (!Number.isSafeInteger(limit) || limit <= 0) errors.modelAutoCompactTokenLimit = "自动压缩阈值必须是正整数";
+    else if (windowValid && limit >= contextWindow) errors.modelAutoCompactTokenLimit = "自动压缩阈值必须小于上下文窗口";
+  }
+  return errors;
+}
+
+/** First capacity error reason, or null when every entered capacity is valid. */
+export function modelCapacityError(registration: ModelCapacity) {
+  const errors = modelCapacityErrors(registration);
+  return errors.modelContextWindow ?? errors.modelAutoCompactTokenLimit ?? null;
 }
 
 /** Validates completed-turn retention at both draft and persistence boundaries. */

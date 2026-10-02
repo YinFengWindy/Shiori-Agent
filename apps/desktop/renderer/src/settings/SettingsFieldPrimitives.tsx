@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { SettingsField } from "./SettingsField";
 import { SettingsToggleCard, cardClass, compactPressableClass, cx } from "@shiori/sdk";
-import { parseSettingsNumber } from "./settingsSectionUtils";
+import { parseCompleteSettingsNumber } from "./settingsSectionUtils";
 
 /** Shared compact field styling for editable settings values. */
 export const settingsInputClass = "w-full rounded-md border border-line bg-surface-soft px-2.5 py-2 text-body-sm text-ink transition placeholder:text-ink-faint hover:border-line-strong focus:bg-surface";
@@ -74,9 +74,10 @@ export function SettingsSecretInput({
 
 /**
  * Numeric settings input with an optional unit suffix. The typed text is kept
- * locally, so intermediate forms such as `0.` or an empty box stay editable
- * while the last parsed number (same rule as `parseSettingsNumber`) is
- * reported; an external value change replaces the text.
+ * locally, so an empty box or intermediate forms such as `0.` stay editable;
+ * only complete numbers (`parseCompleteSettingsNumber`) are reported, and
+ * leaving the box with anything else restores the current value. An external
+ * value change replaces the text.
  */
 export function SettingsNumberInput({
   value,
@@ -110,12 +111,15 @@ export function SettingsNumberInput({
         title={min !== undefined || max !== undefined ? `${min ?? "…"} – ${max ?? "…"}` : undefined}
         value={text}
         onChange={(event) => {
-          const next = parseSettingsNumber(event.target.value, value);
           setText(event.target.value);
+          const next = parseCompleteSettingsNumber(event.target.value);
+          if (next === null || Object.is(next, value)) return;
           setReported(next);
-          if (!Object.is(next, value)) onChange(next);
+          onChange(next);
         }}
-        onBlur={() => setText(String(value))}
+        onBlur={() => {
+          if (parseCompleteSettingsNumber(text) === null) setText(String(value));
+        }}
       />
       {unit ? <span className="pointer-events-none absolute right-3 text-caption text-ink-muted" aria-hidden="true">{unit}</span> : null}
     </div>
