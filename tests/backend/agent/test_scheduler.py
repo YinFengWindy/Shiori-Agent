@@ -68,6 +68,9 @@ async def test_recurring_desktop_delivery_persists_once_per_occurrence(tmp_path,
     sessions = SessionManager(tmp_path)
     event_bus = EventBus()
     provider = MagicMock()
+    # This delivery fixture has no model capacity profile; the provider contract
+    # returns None for its budget instead of a truthy, unconfigured mock.
+    provider.input_budget.return_value = None
     # Passive replies are plain content now (#303): no JSON envelope. A
     # follow-up mood/thought call still fires for this role-backed session,
     # but its own malformed reply degrades quietly and must not affect the
