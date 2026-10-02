@@ -227,9 +227,8 @@ async def test_response_rule_denial_uses_account_status_wording(
     make_harness: Any, make_event: Any, monkeypatch: Any
 ) -> None:
     harness = make_harness()
-    monkeypatch.setattr(
-        harness.hub, "route_account_inbound", lambda _message: None, raising=False
-    )
+    # Admitted by the sender check, then refused by the account's response rules.
+    monkeypatch.setattr(harness.hub, "route_account_inbound", lambda *_a, **_k: None)
     connection = await harness.start()
 
     connection.emit(make_event())
@@ -308,19 +307,16 @@ async def test_chatid_answers_without_entering_the_role(
 
 
 async def test_pairing_code_binds_with_app_scope_without_entering_the_role(
-    make_harness: Any, make_event: Any, monkeypatch: Any
+    make_harness: Any, make_event: Any
 ) -> None:
     harness = make_harness()
     harness.hub.pairing_code = "K7M2Q9XZ"
-    monkeypatch.setattr(
-        harness.hub, "route_account_inbound", harness.hub.route_inbound, raising=False
-    )
     connection = await harness.start()
 
     connection.emit(make_event(content={"text": "K7M2Q9XZ"}))
     await harness.settle()
 
-    assert harness.hub.pairings == [("K7M2Q9XZ", "account")]
+    assert harness.hub.pairings == [(OPEN_ID, "K7M2Q9XZ", "account")]
     assert harness.api.sent_texts() == ["已绑定"]
     assert harness.bus.inbound == []
 

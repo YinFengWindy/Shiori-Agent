@@ -9,6 +9,16 @@ import pytest
 from shiori_sdk.messages import OutboundMessage
 from plugins.telegram.backend.channel.outbound import _OutboundMixin
 from plugins.telegram.backend.utils import TelegramOutboundLimiter
+from shiori_sdk.testing.channel_hub import FakeChannelHub
+
+
+def _receipts(channel: _OutboundMixin) -> list[tuple[object, object, object]]:
+    hub = channel._channel_hub
+    assert isinstance(hub, FakeChannelHub)
+    return [
+        (item["delivery_status"], item["external_message_id"], item["via_account"])
+        for item in hub.deliveries
+    ]
 
 
 def reply_channel(receipt):
@@ -21,7 +31,7 @@ def reply_channel(receipt):
         )
     )
     channel._channel = "telegram"
-    channel._channel_hub = Mock()
+    channel._channel_hub = FakeChannelHub()
     # Receipt bookkeeping is under test, not Telegram pacing: zero intervals keep
     # chunked, media and stream-edit sends from waiting on per-chat slots.
     channel._telegram_outbound_limiter = TelegramOutboundLimiter(
@@ -85,13 +95,7 @@ async def test_response_records_first_retained_receipt(
         committed_message_id="committed",
     )
     await channel._on_response(message)
-    channel._channel_hub.mark_delivery.assert_called_once_with(
-        message,
-        default_channel="telegram",
-        delivery_status="sent",
-        external_message_id=expected,
-        via_account=None,
-    )
+    assert _receipts(channel) == [("sent", expected, None)]
     if streamed:
         channel._app.bot.send_message.assert_awaited_once()
         channel._app.bot.edit_message_text.assert_awaited_once()
@@ -126,13 +130,7 @@ async def test_failed_or_cancelled_send_is_never_marked_sent(failure):
     )
     with pytest.raises(type(failure)):
         await channel._on_response(message)
-    channel._channel_hub.mark_delivery.assert_called_once_with(
-        message,
-        default_channel="telegram",
-        delivery_status="failed",
-        external_message_id="",
-        via_account=None,
-    )
+    assert _receipts(channel) == [("failed", "", None)]
 
 
 @pytest.mark.parametrize("plain_fallback", [False, True])
@@ -162,13 +160,7 @@ async def test_partial_chunk_failure_retains_first_receipt(
     with pytest.raises(type(failure)):
         await channel._on_response(message)
     assert channel._app.bot.send_message.await_count == 2
-    channel._channel_hub.mark_delivery.assert_called_once_with(
-        message,
-        default_channel="telegram",
-        delivery_status="failed",
-        external_message_id="301",
-        via_account=None,
-    )
+    assert _receipts(channel) == [("failed", "301", None)]
 
 
 async def test_failed_stream_finalization_retains_acknowledged_message():
@@ -184,13 +176,7 @@ async def test_failed_stream_finalization_retains_acknowledged_message():
     )
     with pytest.raises(RuntimeError, match="edit failed"):
         await channel._on_response(message)
-    channel._channel_hub.mark_delivery.assert_called_once_with(
-        message,
-        default_channel="telegram",
-        delivery_status="failed",
-        external_message_id="301",
-        via_account=None,
-    )
+    assert _receipts(channel) == [("failed", "301", None)]
 
 
 _VIA = {
@@ -223,13 +209,7 @@ async def test_group_reply_answers_its_trigger_and_mentions_chosen_members() -> 
     assert sent["reply_parameters"].message_id == 55
     assert sent["text"].startswith("@902 ")
     assert sent["entities"][0]["url"] == "tg://user?id=902"
-    channel._channel_hub.mark_delivery.assert_called_once_with(
-        message,
-        default_channel="telegram",
-        delivery_status="sent",
-        external_message_id="301",
-        via_account=_VIA,
-    )
+    assert _receipts(channel) == [("sent", "301", _VIA)]
 
 
 async def test_private_reply_neither_quotes_nor_mentions() -> None:
@@ -275,7 +255,5 @@ async def test_group_reply_skips_unusable_chosen_mentions_and_still_sends(
     assert sent["reply_parameters"].message_id == 55
     assert sent["text"].startswith("@902 ")
     assert "@alice" not in sent["text"]
-    assert (
-        channel._channel_hub.mark_delivery.call_args.kwargs["delivery_status"] == "sent"
-    )
+    assert [status for status, _id, _via in _receipts(channel)] == ["sent"]
     assert "@alice" in caplog.text

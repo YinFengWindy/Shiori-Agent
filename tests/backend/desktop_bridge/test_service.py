@@ -25,7 +25,8 @@ from shiori_sdk.role_events import RoleDeleted
 from shiori_sdk.memory.committed import TurnCommitted
 from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
-from conversation.service import LegacySessionDescriptor, network_thread_id
+from conversation.service import LegacySessionDescriptor
+from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.channels.message_source import MessageSource
 from core.roles import RoleStore
 from core.roles.errors import RoleNotFoundError

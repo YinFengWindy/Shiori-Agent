@@ -7,7 +7,7 @@ from agent.core.passive_turn.compaction_render import CompactionRenderer
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
 from agent.tools.registry import ToolRegistry
 from conversation.context_scope import turn_context_view
-from conversation.service import network_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from session.manager import SessionManager
 
 

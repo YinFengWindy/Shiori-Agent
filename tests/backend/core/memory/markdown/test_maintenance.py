@@ -21,7 +21,8 @@ from conversation.context_scope import (
     turn_context_view,
     user_context_view,
 )
-from conversation.service import desktop_thread_id, network_thread_id
+from conversation.service import desktop_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.memory.events import ConsolidationCommitted
 from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
 from core.roles import RoleStore

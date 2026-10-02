@@ -12,6 +12,12 @@ type Sender = Callable[[str, str], Awaitable[str | None]]
 type OutboundHandler = Callable[[OutboundMessage], Awaitable[None]]
 type InboundHandler = Callable[[InboundMessage], Awaitable[None]]
 
+# Admission limits shared by the host intake and the SDK fake.
+CHANNEL_INTAKE_CAPACITY = 256
+"""Messages one paused connection buffers before replying with a retry notice."""
+CHANNEL_INTAKE_RETRY_NOTICE = "渠道配置正在切换，这条消息尚未处理，请稍后重新发送。"
+"""Reply for input that a closed, full or failing intake could not admit."""
+
 
 class MessageBus(Protocol):
     """Publish admitted input and register connection-owned reply handlers."""

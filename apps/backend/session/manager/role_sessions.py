@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from conversation.service import role_thread_prefix
+from shiori_sdk.channels.threads import role_thread_prefix
 
 from .models import Session
 

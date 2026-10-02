@@ -36,10 +36,53 @@ class FakeHttp:
         budget: RequestBudget | None = None,
     ) -> httpx.Response:
         """Fail at the injected transport boundary if a test forgot its response."""
+        return self._dispatch("GET", url, headers)
+
+    def _dispatch(
+        self, method: str, url: str, headers: dict[str, str] | None
+    ) -> httpx.Response:
+        """Record the request and answer it with the fixture's handler."""
         if self.handler is None:
-            raise AssertionError(f"Unconfigured HTTP GET: {url}")
-        request = httpx.Request("GET", url, headers=headers)
+            raise AssertionError(f"Unconfigured HTTP {method}: {url}")
+        request = httpx.Request(method, url, headers=headers)
         self.requests.append(request)
         response = self.handler(request)
         response.request = request
         return response
+
+
+class FakeChannelHttp(FakeHttp):
+    """Channel transport profile that answers only through a configured handler."""
+
+    async def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: dict[str, object] | None = None,
+        content: bytes | str | None = None,
+        json: object = None,
+        follow_redirects: bool = False,
+        timeout_s: float | None = None,
+        budget: RequestBudget | None = None,
+    ) -> httpx.Response:
+        """Fail at the injected transport boundary if a test forgot its response."""
+        return self._dispatch(method, url, headers)
+
+
+class FakeHttpResources:
+    """The host's channel HTTP profiles, each refusing unconfigured requests."""
+
+    def __init__(
+        self,
+        *,
+        external_default: FakeChannelHttp | None = None,
+        local_service: FakeChannelHttp | None = None,
+    ):
+        self.external_default = (
+            external_default if external_default is not None else FakeChannelHttp()
+        )
+        self.local_service = (
+            local_service if local_service is not None else FakeChannelHttp()
+        )

@@ -1,136 +1,98 @@
 from __future__ import annotations
 
-from shiori_sdk.testing.channel_intake import FakeChannelIntake as ChannelIntake
 import base64
 import json
-import logging
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 
-from shiori_sdk.testing.events import FakeEvents as EventBus
+from shiori_sdk.channels.services import CHANNEL_INTAKE_RETRY_NOTICE
 from shiori_sdk.messages import InboundMessage, OutboundMessage
-from shiori_sdk.channels import ChannelContext
+from shiori_sdk.testing.channel_context import (
+    FakeChannelDeclarations,
+    fake_channel_context,
+)
+from shiori_sdk.testing.channel_hub import FakeChannelHub
+from shiori_sdk.testing.channel_services import (
+    FakeInterruptController,
+    FakeMessageBus,
+    FakePushSenders,
+)
+from shiori_sdk.testing.events import FakeEvents
 import plugins.qqbot.backend.channel as qqbot_channel
 from plugins.qqbot.backend.channel import QQBotChannel
 
 
-def _channel(*args, **kwargs) -> QQBotChannel:
+async def _started(
+    tmp_path: Path,
+    *args: Any,
+    bus: FakeMessageBus | None = None,
+    hub: FakeChannelHub | None = None,
+    interrupt_controller: FakeInterruptController | None = None,
+    **kwargs: Any,
+) -> QQBotChannel:
+    """A channel started through the host's public start context, without a gateway."""
     channel = QQBotChannel(*args, **kwargs)
-    channel._intake = ChannelIntake(channel._accept_inbound, channel.send)
-    return channel
-
-
-class _Bus:
-    def __init__(self) -> None:
-        self.inbound: list[InboundMessage] = []
-        self.outbound: list[tuple[str, object]] = []
-
-    async def publish_inbound(self, message: InboundMessage) -> None:
-        self.inbound.append(message)
-
-    def subscribe_outbound(self, channel: str, callback: object) -> None:
-        self.outbound.append((channel, callback))
-
-    def unsubscribe_outbound(self, channel: str, callback: object) -> None:
-        self.outbound = [item for item in self.outbound if item != (channel, callback)]
-
-
-class _PushTool:
-    def __init__(self) -> None:
-        self.registrations: list[tuple[str, list[str]]] = []
-        self.removed: list[str] = []
-
-    def register_channel(self, name: str, **kwargs: object) -> None:
-        self.registrations.append((name, sorted(kwargs)))
-
-    def unregister_channel(self, name: str, **kwargs: object) -> None:
-        self.removed.append(name)
-
-
-class _Hub:
-    def __init__(self, *, allowed: bool = True, blocked: bool = False) -> None:
-        self.allowed = allowed
-        self.blocked = blocked
-        self.deliveries: list[tuple[str, str]] = []
-
-    def is_sender_allowed(self, **kwargs: object) -> bool:
-        return self.allowed
-
-    def is_sender_blocked(self, **kwargs: object) -> bool:
-        return self.blocked
-
-    def route_inbound(self, message: InboundMessage) -> InboundMessage:
-        external_message_id = str(message.metadata.get("external_message_id") or "")
-        seen_ids = getattr(self, "_seen_ids", set())
-        if external_message_id in seen_ids:
-            message.metadata["conversation_duplicate"] = True
-        seen_ids.add(external_message_id)
-        self._seen_ids = seen_ids
-        message.metadata["role_id"] = "mira"
-        return message
-
-    def resolve_runtime_session_key(self, channel: str, chat_id: str) -> str:
-        return "role:mira"
-
-    def mark_delivery(self, message: OutboundMessage, **kwargs: object) -> None:
-        self.deliveries.append((str(kwargs["delivery_status"]), message.chat_id))
-
-
-def _context(bus: _Bus, push_tool: _PushTool, hub: _Hub) -> ChannelContext:
-    return ChannelContext(
-        intake_factory=ChannelIntake,
-        bus=cast(Any, bus),
-        session_manager=cast(Any, SimpleNamespace()),
-        event_bus=EventBus(),
-        push_tool=cast(Any, push_tool),
-        attachment_store=MagicMock(),
-        http_resources=cast(Any, SimpleNamespace()),
-        interrupt_controller=None,
-        bot_commands=[],
-        log=logging.getLogger("test.qqbot"),
-        channel_hub=cast(Any, hub),
-    )
-
-
-@pytest.mark.asyncio
-async def test_qqbot_channel_registers_and_stops_cleanly(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    bus = _Bus()
-    push_tool = _PushTool()
-    channel = _channel("app", "secret")
 
     async def _no_gateway_loop() -> None:
         return None
 
     channel._gateway_loop = _no_gateway_loop
-    context = _context(bus, push_tool, _Hub())
+    await channel.start(
+        fake_channel_context(
+            tmp_path,
+            bus=bus,
+            channel_hub=hub,
+            interrupt_controller=interrupt_controller,
+        )
+    )
+    return channel
+
+
+def _receipts(hub: FakeChannelHub) -> list[tuple[object, object]]:
+    return [(item["delivery_status"], item["chat_id"]) for item in hub.deliveries]
+
+
+@pytest.mark.asyncio
+async def test_qqbot_channel_registers_and_stops_cleanly(tmp_path: Path) -> None:
+    bus = FakeMessageBus()
+    push_tool = FakePushSenders()
+    events = FakeEvents()
+    channel = QQBotChannel("app", "secret")
+
+    async def _no_gateway_loop() -> None:
+        return None
+
+    channel._gateway_loop = _no_gateway_loop
     assert channel._client is None
-    await channel.start(context)
+    await channel.start(
+        fake_channel_context(tmp_path, bus=bus, push_tool=push_tool, event_bus=events)
+    )
     client = channel._client
     assert client is not None and not client.is_closed
-    assert bus.outbound[0][0] == "qqbot"
+    assert list(bus.outbound) == ["qqbot"]
+    assert sorted(push_tool.registrations["qqbot"]) == [
+        "description",
+        "image",
+        "stream_text",
+        "text",
+    ]
     await channel.stop()
     assert client.is_closed
     assert channel._client is None
 
-    assert bus.outbound == []
-    assert context.event_bus._subscriptions == []
-    assert push_tool.removed == ["qqbot"]
-    assert push_tool.registrations == [
-        ("qqbot", ["description", "image", "stream_text", "text"])
-    ]
+    assert bus.outbound == {}
+    assert events._subscriptions == []
+    assert push_tool.registrations == {}
 
 
 @pytest.mark.asyncio
-async def test_qqbot_pauses_intake_until_removal_is_rolled_back():
-    channel = _channel("app", "secret")
-    channel._bus = _Bus()
+async def test_qqbot_pauses_intake_until_removal_is_rolled_back(tmp_path: Path):
+    bus = FakeMessageBus()
+    channel = await _started(tmp_path, "app", "secret", bus=bus)
     channel._send_input_notify = AsyncMock()
     channel.pause_intake()
     await channel._handle_dispatch(
@@ -141,15 +103,17 @@ async def test_qqbot_pauses_intake_until_removal_is_rolled_back():
             "content": "buffered",
         },
     )
-    assert channel._bus.inbound == []
+    assert bus.inbound == []
     channel.resume_intake()
     await channel._intake.drain()
-    assert [item.content for item in channel._bus.inbound] == ["buffered"]
+    assert [item.content for item in bus.inbound] == ["buffered"]
     await channel.stop()
 
 
 @pytest.mark.asyncio
-async def test_qqbot_reports_pending_input_before_closing_original_account(monkeypatch):
+async def test_qqbot_reports_pending_input_before_closing_original_account(
+    monkeypatch, tmp_path: Path
+):
     notices = []
 
     async def send(self, chat_id, text):
@@ -157,12 +121,18 @@ async def test_qqbot_reports_pending_input_before_closing_original_account(monke
         notices.append((self._app_id, chat_id, text))
 
     monkeypatch.setattr(QQBotChannel, "send", send)
-    channel = _channel("old-account", "secret")
+    channel = QQBotChannel("old-account", "secret")
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(lambda _request: httpx.Response(200))
     )
     channel._client = client
-    channel._bus = _Bus()
+
+    async def _no_gateway_loop() -> None:
+        return None
+
+    channel._gateway_loop = _no_gateway_loop
+    bus = FakeMessageBus()
+    await channel.start(fake_channel_context(tmp_path, bus=bus))
     channel.pause_intake()
     await channel._publish_inbound(
         InboundMessage(
@@ -173,10 +143,10 @@ async def test_qqbot_reports_pending_input_before_closing_original_account(monke
         )
     )
     await channel.stop()
-    assert channel._bus.inbound == []
-    assert len(notices) == 1
-    assert notices[0][:2] == ("old-account", "c2c:old-account:user")
-    assert "重新发送" in notices[0][2]
+    assert bus.inbound == []
+    assert notices == [
+        ("old-account", "c2c:old-account:user", CHANNEL_INTAKE_RETRY_NOTICE)
+    ]
     assert client.is_closed
     assert channel._client is None
 
@@ -224,7 +194,7 @@ async def test_qqbot_gateway_sends_identify_payload(
     monkeypatch.setattr(qqbot_channel.websockets, "connect", lambda _url: websocket)
 
     statuses: list[tuple[str, str, str, str]] = []
-    await _channel(
+    await QQBotChannel(
         "app", "secret", on_status=lambda *status: statuses.append(status)
     )._run_gateway("wss://gateway.invalid", "token")
 
@@ -242,11 +212,11 @@ async def test_qqbot_gateway_sends_identify_payload(
 
 
 @pytest.mark.asyncio
-async def test_qqbot_c2c_inbound_is_role_routed_and_deduplicated() -> None:
-    bus = _Bus()
-    channel = _channel("app", "secret")
-    channel._bus = bus
-    channel._channel_hub = _Hub()
+async def test_qqbot_c2c_inbound_is_role_routed_and_deduplicated(
+    tmp_path: Path,
+) -> None:
+    bus = FakeMessageBus()
+    channel = await _started(tmp_path, "app", "secret", bus=bus)
     channel._send_input_notify = AsyncMock()
 
     event = {
@@ -261,22 +231,28 @@ async def test_qqbot_c2c_inbound_is_role_routed_and_deduplicated() -> None:
     assert bus.inbound[0].chat_id == "c2c:app:user-1"
     assert bus.inbound[0].metadata["role_id"] == "mira"
     assert channel._send_input_notify.await_count == 2
+    await channel.stop()
 
 
 @pytest.mark.asyncio
-async def test_c2c_inbound_is_scoped_to_its_application_account() -> None:
-    bus = _Bus()
+async def test_c2c_inbound_is_scoped_to_its_application_account(
+    tmp_path: Path,
+) -> None:
+    bus = FakeMessageBus()
     via = {
         "platform": "qqbot",
         "platform_account_id": "app-1",
         "display_name": "Bot",
         "prefix": "QQ 机器人「Bot」（AppID app-1）",
     }
-    channel = _channel(
-        "app-1", "secret", account_id="account-1", via_account=lambda: via
+    channel = await _started(
+        tmp_path,
+        "app-1",
+        "secret",
+        bus=bus,
+        account_id="account-1",
+        via_account=lambda: via,
     )
-    channel._bus = bus
-    channel._channel_hub = _Hub()
     channel._send_input_notify = AsyncMock()
 
     await channel._handle_c2c(
@@ -287,14 +263,15 @@ async def test_c2c_inbound_is_scoped_to_its_application_account() -> None:
     assert bus.inbound[0].metadata["account_id"] == "account-1"
     assert bus.inbound[0].metadata["qqbot_app_id"] == "app-1"
     assert bus.inbound[0].metadata["via_account"] == via
+    await channel.stop()
 
 
 @pytest.mark.asyncio
-async def test_qqbot_c2c_inbound_requires_role_binding() -> None:
-    bus = _Bus()
-    channel = _channel("app", "secret")
-    channel._bus = bus
-    channel._channel_hub = _Hub(allowed=False)
+async def test_qqbot_c2c_inbound_requires_role_binding(tmp_path: Path) -> None:
+    bus = FakeMessageBus()
+    channel = await _started(
+        tmp_path, "app", "secret", bus=bus, hub=FakeChannelHub(allowed=False)
+    )
     channel._send_input_notify = AsyncMock()
 
     await channel._handle_c2c(
@@ -309,11 +286,12 @@ async def test_qqbot_c2c_inbound_requires_role_binding() -> None:
     # No side effect for a rejected sender: no input notify, no reply anchor.
     channel._send_input_notify.assert_not_awaited()
     assert channel._last_c2c_msg_id == {}
+    await channel.stop()
 
 
 @pytest.mark.asyncio
 async def test_qqbot_send_uses_official_markdown_api() -> None:
-    channel = _channel("app", "secret")
+    channel = QQBotChannel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(return_value={})
 
@@ -335,7 +313,7 @@ async def test_qqbot_send_uses_official_markdown_api() -> None:
 
 @pytest.mark.asyncio
 async def test_qqbot_send_image_uploads_public_url_then_sends_media() -> None:
-    channel = _channel("app", "secret")
+    channel = QQBotChannel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(side_effect=[{"file_info": "uploaded-file"}, {}])
 
@@ -371,7 +349,7 @@ async def test_qqbot_send_image_uploads_local_gif_without_converting(
     raw = b"GIF89a" + b"animated-sticker-data"
     image = tmp_path / "sticker.gif"
     image.write_bytes(raw)
-    channel = _channel("app", "secret")
+    channel = QQBotChannel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(side_effect=[{"file_info": "gif-file"}, {}])
 
@@ -391,7 +369,7 @@ async def test_qqbot_send_image_rejects_unsupported_local_file(
 ) -> None:
     image = tmp_path / "not-an-image.txt"
     image.write_text("not an image", encoding="utf-8")
-    channel = _channel("app", "secret")
+    channel = QQBotChannel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock()
 
@@ -404,7 +382,7 @@ async def test_qqbot_send_image_rejects_unsupported_local_file(
 
 @pytest.mark.asyncio
 async def test_qqbot_send_image_requires_file_info_from_upload() -> None:
-    channel = _channel("app", "secret")
+    channel = QQBotChannel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(return_value={})
 
@@ -415,10 +393,9 @@ async def test_qqbot_send_image_requires_file_info_from_upload() -> None:
 
 
 @pytest.mark.asyncio
-async def test_qqbot_response_records_delivery_for_role_thread() -> None:
-    hub = _Hub()
-    channel = _channel("app", "secret")
-    channel._channel_hub = hub
+async def test_qqbot_response_records_delivery_for_role_thread(tmp_path: Path) -> None:
+    hub = FakeChannelHub()
+    channel = await _started(tmp_path, "app", "secret", hub=hub)
     channel.send = AsyncMock()
 
     await channel._on_response(
@@ -435,14 +412,16 @@ async def test_qqbot_response_records_delivery_for_role_thread() -> None:
     )
 
     channel.send.assert_awaited_once_with("c2c:app:user-1", "回复")
-    assert hub.deliveries == [("sent", "c2c:app:user-1")]
+    assert _receipts(hub) == [("sent", "c2c:app:user-1")]
+    await channel.stop()
 
 
 @pytest.mark.asyncio
-async def test_qqbot_response_sends_media_and_records_delivery_after_success() -> None:
-    hub = _Hub()
-    channel = _channel("app", "secret")
-    channel._channel_hub = hub
+async def test_qqbot_response_sends_media_and_records_delivery_after_success(
+    tmp_path: Path,
+) -> None:
+    hub = FakeChannelHub()
+    channel = await _started(tmp_path, "app", "secret", hub=hub)
     channel.send = AsyncMock()
     channel.send_image = AsyncMock()
 
@@ -460,14 +439,16 @@ async def test_qqbot_response_sends_media_and_records_delivery_after_success() -
         (("c2c:app:user-1", "first.png"),),
         (("c2c:app:user-1", "second.png"),),
     ]
-    assert hub.deliveries == [("sent", "c2c:app:user-1")]
+    assert _receipts(hub) == [("sent", "c2c:app:user-1")]
+    await channel.stop()
 
 
 @pytest.mark.asyncio
-async def test_qqbot_response_marks_media_failure_without_sent_status() -> None:
-    hub = _Hub()
-    channel = _channel("app", "secret")
-    channel._channel_hub = hub
+async def test_qqbot_response_marks_media_failure_without_sent_status(
+    tmp_path: Path,
+) -> None:
+    hub = FakeChannelHub()
+    channel = await _started(tmp_path, "app", "secret", hub=hub)
     channel.send_image = AsyncMock(side_effect=RuntimeError("upload failed"))
 
     with pytest.raises(RuntimeError, match="upload failed"):
@@ -480,42 +461,42 @@ async def test_qqbot_response_marks_media_failure_without_sent_status() -> None:
             )
         )
 
-    assert hub.deliveries == [("failed", "c2c:app:user-1")]
+    assert _receipts(hub) == [("failed", "c2c:app:user-1")]
+    await channel.stop()
 
 
 @pytest.mark.asyncio
-async def test_qqbot_stop_uses_bound_role_session() -> None:
-    hub = _Hub()
-    interrupt = SimpleNamespace(
-        request_interrupt=MagicMock(return_value=SimpleNamespace(message="已中断"))
-    )
-    channel = _channel("app", "secret")
-    channel._channel_hub = hub
-    channel._interrupt_controller = interrupt
+async def test_qqbot_stop_uses_bound_role_session(tmp_path: Path) -> None:
+    interrupt = FakeInterruptController(message="已中断")
+    channel = await _started(tmp_path, "app", "secret", interrupt_controller=interrupt)
     channel.send = AsyncMock()
 
     await channel._handle_stop("c2c:app:user-1", "user-1")
 
-    interrupt.request_interrupt.assert_called_once_with(
-        session_key="role:mira",
-        sender="user-1",
-        command="/stop",
-    )
+    assert interrupt.requests == [
+        {"session_key": "role:mira", "sender": "user-1", "command": "/stop"}
+    ]
     channel.send.assert_awaited_once_with("c2c:app:user-1", "已中断")
+    await channel.stop()
 
 
 @pytest.mark.asyncio
-async def test_qqbot_stop_from_unadmitted_sender_is_ignored() -> None:
-    interrupt = SimpleNamespace(request_interrupt=MagicMock())
-    channel = _channel("app", "secret")
-    channel._channel_hub = _Hub(allowed=False)
-    channel._interrupt_controller = interrupt
+async def test_qqbot_stop_from_unadmitted_sender_is_ignored(tmp_path: Path) -> None:
+    interrupt = FakeInterruptController()
+    channel = await _started(
+        tmp_path,
+        "app",
+        "secret",
+        hub=FakeChannelHub(allowed=False),
+        interrupt_controller=interrupt,
+    )
     channel.send = AsyncMock()
 
     await channel._handle_stop("c2c:app:user-1", "user-1")
 
-    interrupt.request_interrupt.assert_not_called()
+    assert interrupt.requests == []
     channel.send.assert_not_awaited()
+    await channel.stop()
 
 
 @pytest.mark.asyncio
@@ -524,27 +505,32 @@ async def test_qqbot_stop_from_unadmitted_sender_is_ignored() -> None:
     [
         # Unbound chats are answered: that is how the OpenID to bind is found.
         (
-            _Hub(allowed=False),
+            FakeChannelHub(allowed=False),
             [("c2c:app:user-1", "会话类型：私聊\n用户 OpenID：user-1")],
         ),
-        (_Hub(), [("c2c:app:user-1", "会话类型：私聊\n用户 OpenID：user-1")]),
-        (_Hub(allowed=False, blocked=True), []),
+        (
+            FakeChannelHub(),
+            [("c2c:app:user-1", "会话类型：私聊\n用户 OpenID：user-1")],
+        ),
+        (FakeChannelHub(allowed=False, blocked=True), []),
     ],
     ids=["unbound", "bound", "blacklisted"],
 )
 async def test_qqbot_chatid_answers_without_entering_the_role(
-    hub: _Hub, replies: list[tuple[str, str]]
+    tmp_path: Path, hub: FakeChannelHub, replies: list[tuple[str, str]]
 ) -> None:
-    from shiori_sdk.testing.channel_context import FakeChannelDeclarations
-
     manifest = FakeChannelDeclarations(
         Path(qqbot_channel.__file__).resolve().parents[1]
     )
-    assert manifest is not None
-    bus = _Bus()
-    channel = _channel("app", "secret", chat_types=manifest.channel_chat_types("qqbot"))
-    channel._bus = bus
-    channel._channel_hub = hub
+    bus = FakeMessageBus()
+    channel = await _started(
+        tmp_path,
+        "app",
+        "secret",
+        bus=bus,
+        hub=hub,
+        chat_types=manifest.channel_chat_types("qqbot"),
+    )
     channel._send_input_notify = AsyncMock()
     channel.send = AsyncMock()
 
@@ -556,11 +542,12 @@ async def test_qqbot_chatid_answers_without_entering_the_role(
     assert bus.inbound == []
     channel._send_input_notify.assert_not_awaited()
     assert channel._last_c2c_msg_id == {}
+    await channel.stop()
 
 
 @pytest.mark.asyncio
 async def test_qqbot_push_senders_return_the_platform_message_id() -> None:
-    channel = _channel("app", "secret")
+    channel = QQBotChannel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(
         side_effect=[
@@ -584,7 +571,7 @@ async def test_qqbot_push_senders_return_the_platform_message_id() -> None:
 
 @pytest.mark.asyncio
 async def test_qqbot_stream_fallback_returns_the_plain_message_id() -> None:
-    channel = _channel("app", "secret")
+    channel = QQBotChannel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(return_value={"id": "plain-id"})
 
@@ -592,30 +579,15 @@ async def test_qqbot_stream_fallback_returns_the_plain_message_id() -> None:
     assert await channel.send_stream("c2c:app:user-1", "回复") == "plain-id"
 
 
-class _PairingHub(_Hub):
-    """An account-routing hub whose pending pairing code is ``PAIR1234``."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.pairings: list[tuple[str, str, str]] = []
-
-    def route_account_inbound(self, message: InboundMessage) -> InboundMessage:
-        return self.route_inbound(message)
-
-    def claim_pairing(self, message: InboundMessage, *, scope: str) -> bool:
-        self.pairings.append((message.sender, message.content, scope))
-        return message.content == "PAIR1234"
-
-
 @pytest.mark.asyncio
-async def test_qqbot_pairing_code_binds_with_app_scope_without_entering_the_role() -> (
-    None
-):
-    bus = _Bus()
-    hub = _PairingHub()
-    channel = _channel("app-1", "secret", account_id="account-1")
-    channel._bus = bus
-    channel._channel_hub = hub
+async def test_qqbot_pairing_code_binds_with_app_scope_without_entering_the_role(
+    tmp_path: Path,
+) -> None:
+    bus = FakeMessageBus()
+    hub = FakeChannelHub(pairing_code="PAIR1234")
+    channel = await _started(
+        tmp_path, "app-1", "secret", bus=bus, hub=hub, account_id="account-1"
+    )
     channel._send_input_notify = AsyncMock()
     channel.send = AsyncMock()
 
@@ -630,3 +602,4 @@ async def test_qqbot_pairing_code_binds_with_app_scope_without_entering_the_role
     ]
     channel.send.assert_awaited_once_with("c2c:app-1:user-1", "已绑定")
     assert [message.content for message in bus.inbound] == ["你好"]
+    await channel.stop()

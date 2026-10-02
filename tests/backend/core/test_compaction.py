@@ -14,7 +14,8 @@ from conversation.context_scope import (
     turn_context_view,
     user_context_view,
 )
-from conversation.service import network_thread_id, desktop_thread_id
+from conversation.service import desktop_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from core.compaction import (
     CompactionController,
     CompactionFailedError,

@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from conversation.service import desktop_thread_id, network_thread_id
+from conversation.service import desktop_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from core.memory.user_group_speech import (
     USER_GROUP_SPEECH_LIMIT,
     collect_user_group_speech,

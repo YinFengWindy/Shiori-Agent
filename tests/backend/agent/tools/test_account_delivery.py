@@ -17,11 +17,8 @@ from agent.tools.account_delivery import (
 from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus
 from conversation.push_sync import ExternalPushSyncService
-from conversation.service import (
-    ConversationService,
-    LegacySessionDescriptor,
-    network_thread_id,
-)
+from conversation.service import ConversationService, LegacySessionDescriptor
+from shiori_sdk.channels.threads import network_thread_id
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
 from shiori_sdk.accounts.targets import AccountTarget

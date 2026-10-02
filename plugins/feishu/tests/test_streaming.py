@@ -143,7 +143,10 @@ async def test_deltas_coalesce_into_one_card_finished_in_place(
         for m, path, _b in api.calls
         if path.endswith("/content")
     )
-    assert harness.hub.deliveries == ["sent"]
+    assert harness.hub.delivery_statuses() == ["sent"]
+    # The finished turn leaves no live card, buffered text or refresh behind.
+    streamer = harness.channel._streamer
+    assert (streamer._cards, streamer._buffers, streamer._tasks) == ({}, {}, {})
 
 
 async def test_a_long_final_reply_continues_in_follow_up_cards(
@@ -179,7 +182,7 @@ async def test_card_creation_failure_falls_back_to_a_normal_message(
     assert len(harness.api.bodies("create_card")) == 1
     assert harness.api.bodies("stream_text") == []
     assert harness.api.sent_texts() == ["半句话。"]
-    assert harness.hub.deliveries == ["sent"]
+    assert harness.hub.delivery_statuses() == ["sent"]
 
 
 async def test_a_failed_final_frame_recalls_the_card_before_the_fallback(

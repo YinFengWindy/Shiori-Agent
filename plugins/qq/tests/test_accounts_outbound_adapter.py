@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
 from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.testing.channel_context import fake_channel_context
+from shiori_sdk.testing.channel_hub import FakeChannelHub
 from plugins.qq.backend.accounts_actions import qq_image_segment
 from plugins.qq.backend.accounts_outbound_adapter import QQOutboundAdapter
 
@@ -21,14 +22,22 @@ _VIA = {
 
 
 class _Adapter(QQOutboundAdapter):
-    def __init__(self) -> None:
+    def __init__(self, tmp_path: Path) -> None:
         self._sockets = {}
-        self._ctx = SimpleNamespace(channel_hub=Mock())
+        self.hub = FakeChannelHub()
+        self._ctx = fake_channel_context(tmp_path, channel_hub=self.hub)
         self.send_target = AsyncMock(return_value={"message_id": "88"})
 
     def via_account(self, account_id: str) -> dict[str, str]:
         assert account_id == "qq:101"
         return _VIA
+
+
+def _receipts(adapter: _Adapter) -> list[tuple[object, object, object]]:
+    return [
+        (item["delivery_status"], item["external_message_id"], item["via_account"])
+        for item in adapter.hub.deliveries
+    ]
 
 
 def _reply(
@@ -48,8 +57,8 @@ def _reply(
 
 
 @pytest.mark.asyncio
-async def test_group_reply_mentions_trigger_then_chosen_members() -> None:
-    adapter = _Adapter()
+async def test_group_reply_mentions_trigger_then_chosen_members(tmp_path: Path) -> None:
+    adapter = _Adapter(tmp_path)
     message = _reply("gqq:777", chat_type="group", mention_ids=["903", "902"])
 
     await adapter._on_response(message)
@@ -57,18 +66,12 @@ async def test_group_reply_mentions_trigger_then_chosen_members() -> None:
     adapter.send_target.assert_awaited_once_with(
         "qq:101", "group", "777", "好", mention_ids=("902", "903"), images=()
     )
-    adapter._ctx.channel_hub.mark_delivery.assert_called_once_with(
-        message,
-        default_channel="qq",
-        delivery_status="sent",
-        external_message_id="88",
-        via_account=_VIA,
-    )
+    assert _receipts(adapter) == [("sent", "88", _VIA)]
 
 
 @pytest.mark.asyncio
-async def test_private_reply_mentions_nobody() -> None:
-    adapter = _Adapter()
+async def test_private_reply_mentions_nobody(tmp_path: Path) -> None:
+    adapter = _Adapter(tmp_path)
 
     await adapter._on_response(_reply("902", chat_type="private", mention_ids=["9"]))
 
@@ -79,9 +82,9 @@ async def test_private_reply_mentions_nobody() -> None:
 
 @pytest.mark.asyncio
 async def test_group_reply_skips_unusable_chosen_mentions_and_still_sends(
-    caplog: pytest.LogCaptureFixture,
+    caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
-    adapter = _Adapter()
+    adapter = _Adapter(tmp_path)
     message = _reply("gqq:777", chat_type="group", mention_ids=["小明", "903"])
 
     with caplog.at_level("WARNING"):
@@ -90,16 +93,13 @@ async def test_group_reply_skips_unusable_chosen_mentions_and_still_sends(
     adapter.send_target.assert_awaited_once_with(
         "qq:101", "group", "777", "好", mention_ids=("902", "903"), images=()
     )
-    assert (
-        adapter._ctx.channel_hub.mark_delivery.call_args.kwargs["delivery_status"]
-        == "sent"
-    )
+    assert [status for status, _id, _via in _receipts(adapter)] == ["sent"]
     assert "小明" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_private_reply_sends_its_images_with_the_text() -> None:
-    adapter = _Adapter()
+async def test_private_reply_sends_its_images_with_the_text(tmp_path: Path) -> None:
+    adapter = _Adapter(tmp_path)
 
     await adapter._on_response(
         _reply("902", media=["/cg/a.png", "https://x/b.png"], chat_type="private")
@@ -116,8 +116,8 @@ async def test_private_reply_sends_its_images_with_the_text() -> None:
 
 
 @pytest.mark.asyncio
-async def test_group_reply_sends_images_and_keeps_mentions() -> None:
-    adapter = _Adapter()
+async def test_group_reply_sends_images_and_keeps_mentions(tmp_path: Path) -> None:
+    adapter = _Adapter(tmp_path)
     message = _reply(
         "gqq:777", media=["/cg/a.png"], chat_type="group", mention_ids=["903"]
     )
@@ -132,18 +132,12 @@ async def test_group_reply_sends_images_and_keeps_mentions() -> None:
         mention_ids=("902", "903"),
         images=("/cg/a.png",),
     )
-    adapter._ctx.channel_hub.mark_delivery.assert_called_once_with(
-        message,
-        default_channel="qq",
-        delivery_status="sent",
-        external_message_id="88",
-        via_account=_VIA,
-    )
+    assert _receipts(adapter) == [("sent", "88", _VIA)]
 
 
 @pytest.mark.asyncio
-async def test_image_only_reply_is_sent() -> None:
-    adapter = _Adapter()
+async def test_image_only_reply_is_sent(tmp_path: Path) -> None:
+    adapter = _Adapter(tmp_path)
 
     await adapter._on_response(
         _reply("902", content="", media=["/cg/a.png"], chat_type="private")
@@ -152,15 +146,12 @@ async def test_image_only_reply_is_sent() -> None:
     adapter.send_target.assert_awaited_once_with(
         "qq:101", "private", "902", "", mention_ids=(), images=("/cg/a.png",)
     )
-    assert (
-        adapter._ctx.channel_hub.mark_delivery.call_args.kwargs["delivery_status"]
-        == "sent"
-    )
+    assert [status for status, _id, _via in _receipts(adapter)] == ["sent"]
 
 
 @pytest.mark.asyncio
 async def test_invalid_local_image_marks_the_reply_failed(tmp_path: Path) -> None:
-    adapter = _Adapter()
+    adapter = _Adapter(tmp_path)
 
     async def build_message(
         *_args: object, images: tuple[str, ...] = (), **_kw: object
@@ -175,10 +166,4 @@ async def test_invalid_local_image_marks_the_reply_failed(tmp_path: Path) -> Non
     with pytest.raises(ValueError, match="QQ 图片文件不存在"):
         await adapter._on_response(message)
 
-    adapter._ctx.channel_hub.mark_delivery.assert_called_once_with(
-        message,
-        default_channel="qq",
-        delivery_status="failed",
-        external_message_id="",
-        via_account=None,
-    )
+    assert _receipts(adapter) == [("failed", "", None)]

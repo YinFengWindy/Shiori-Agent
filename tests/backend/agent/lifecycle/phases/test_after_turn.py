@@ -17,7 +17,7 @@ from agent.account_delivery import AccountDelivery
 from agent.account_delivery.turn_state import account_delivery_scope
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 from conversation.context_scope import turn_context_view
-from conversation.service import network_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from core.accounts import AccountRegistry
 from shiori_sdk.accounts.targets import AccountTarget
 from core.accounts.delivery_ledger import AccountDeliveryLedger

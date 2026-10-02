@@ -12,11 +12,8 @@ from agent.account_delivery import AccountDelivery
 from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
-from conversation.service import (
-    LegacySessionDescriptor,
-    desktop_thread_id,
-    network_thread_id,
-)
+from conversation.service import LegacySessionDescriptor, desktop_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.accounts.targets import AccountTarget
 from shiori_sdk.channels.chat_types import CHAT_TYPE_PRIVATE
 from core.common.channel_directory import DESKTOP_CHANNEL

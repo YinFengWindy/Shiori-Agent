@@ -24,8 +24,8 @@ from conversation.service import (
     ConversationService,
     LegacySessionDescriptor,
     desktop_thread_id,
-    network_thread_id,
 )
+from shiori_sdk.channels.threads import network_thread_id
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
 from shiori_sdk.accounts.models import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore

@@ -328,7 +328,8 @@ async def test_undo_projection_failure_rolls_back_messages_cursor_all_states_and
 async def test_undo_rolls_back_each_context_cursor(
     tmp_path: Path, cursors: dict[str, int], expected: dict[str, int]
 ):
-    from conversation.service import desktop_thread_id, network_thread_id
+    from conversation.service import desktop_thread_id
+    from shiori_sdk.channels.threads import network_thread_id
 
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")
@@ -357,7 +358,8 @@ async def test_undo_rolls_back_each_context_cursor(
 @pytest.mark.asyncio
 async def test_undo_ignores_memory_sources_from_the_other_context(tmp_path: Path):
     """另一类上下文的记忆来源不会把本类游标多拉回（#523）。"""
-    from conversation.service import desktop_thread_id, network_thread_id
+    from conversation.service import desktop_thread_id
+    from shiori_sdk.channels.threads import network_thread_id
 
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")
@@ -391,7 +393,8 @@ async def test_undo_before_a_legacy_cut_invalidates_like_an_explicit_window(
         turn_context_view,
         user_context_view,
     )
-    from conversation.service import desktop_thread_id, network_thread_id
+    from conversation.service import desktop_thread_id
+    from shiori_sdk.channels.threads import network_thread_id
 
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")

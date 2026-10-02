@@ -9,6 +9,8 @@ from telegram.ext import ExtBot
 
 from plugins.telegram.backend.channel.lifecycle import TelegramChannel
 from plugins.telegram.backend.channel.polling import ObservedBot
+from shiori_sdk.testing.accounts import FakeAccounts
+from shiori_sdk.testing.channel_context import fake_channel_context
 from shiori_sdk.testing.storage import FakeKV
 
 
@@ -52,16 +54,40 @@ def test_observed_topics_are_private_to_the_receiving_bot(tmp_path):
     assert first_known["-1001"]["username"] == ""
 
 
-@pytest.mark.asyncio
-async def test_verified_identity_and_polling_status_are_account_scoped():
-    channel = TelegramChannel("123:abc", name="telegram_first", config_ref="first")
-    accounts = Mock()
-    accounts.register.return_value = SimpleNamespace(
-        record=SimpleNamespace(id="account-1")
+def _account_channel(
+    accounts: FakeAccounts, known_store: FakeKV | None = None
+) -> TelegramChannel:
+    """A Bot channel owned by role ``mira``, as the plugin's Bot setup builds it."""
+    return TelegramChannel(
+        "123:abc",
+        name="telegram_first",
+        config_ref="first",
+        accounts=accounts,
+        known_store=known_store,
+        role_id="mira",
     )
-    channel._accounts = accounts
-    channel._known_store = Mock()
-    channel._intake = Mock()
+
+
+def _connections(accounts: FakeAccounts) -> list[object]:
+    return [report["connection"] for _account_id, report in accounts.reports]
+
+
+def _registered(accounts: FakeAccounts, channel: TelegramChannel) -> str:
+    """Register the Bot as its first start would, returning its host account ID."""
+    snapshot = accounts.register(
+        platform="telegram",
+        platform_account_id="123",
+        config_ref="first",
+        role_id="mira",
+    )
+    channel._account_id = snapshot.record.id
+    return snapshot.record.id
+
+
+@pytest.mark.asyncio
+async def test_verified_identity_and_polling_status_are_account_scoped(tmp_path):
+    accounts, store = FakeAccounts("telegram"), FakeKV()
+    channel = _account_channel(accounts, store)
     channel._bind_runtime = Mock()
     channel._rebuild_user_map = Mock()
     channel._register_bot_commands = AsyncMock()
@@ -81,23 +107,19 @@ async def test_verified_identity_and_polling_status_are_account_scoped():
         start=AsyncMock(),
         updater=SimpleNamespace(start_polling=AsyncMock()),
     )
-    await channel.start()
+    await channel.start(fake_channel_context(tmp_path))
     assert channel._avatar_task is not None
     await channel._avatar_task
     assert channel.status()["connected"] is True
     assert channel.status()["account"] == "@first_bot"
-    assert [call.kwargs["connection"] for call in accounts.report.call_args_list] == [
-        "connecting",
-        "online",
-    ]
-    assert any(
-        call.kwargs.get("display_name") == "First Bot"
-        for call in accounts.register.call_args_list
-    )
-    channel._known_store.set.assert_any_call(
-        "identity:first",
-        {"bot_id": "123", "name": "First Bot", "username": "first_bot"},
-    )
+    assert _connections(accounts) == ["connecting", "online"]
+    [account] = accounts.records.values()
+    assert account.record.display_name == "First Bot"
+    assert store.get("identity:first") == {
+        "bot_id": "123",
+        "name": "First Bot",
+        "username": "first_bot",
+    }
     assert channel.via_account() == {
         "platform": "telegram",
         "platform_account_id": "123",
@@ -107,14 +129,9 @@ async def test_verified_identity_and_polling_status_are_account_scoped():
 
 
 @pytest.mark.asyncio
-async def test_auth_failure_reports_only_this_account_and_cleans_up():
-    channel = TelegramChannel("123:abc", name="telegram_first", config_ref="first")
-    accounts = Mock()
-    accounts.register.return_value = SimpleNamespace(
-        record=SimpleNamespace(id="account-1")
-    )
-    channel._accounts = accounts
-    channel._intake = Mock(close=AsyncMock())
+async def test_auth_failure_reports_only_this_account_and_cleans_up(tmp_path):
+    accounts = FakeAccounts("telegram")
+    channel = _account_channel(accounts)
     channel._bind_runtime = Mock()
     channel._unbind_runtime = Mock()
     channel._rebuild_user_map = Mock()
@@ -125,20 +142,17 @@ async def test_auth_failure_reports_only_this_account_and_cleans_up():
         shutdown=AsyncMock(),
     )
     with pytest.raises(InvalidToken):
-        await channel.start()
-    assert [call.kwargs["connection"] for call in accounts.report.call_args_list] == [
-        "connecting",
-        "login_required",
-    ]
+        await channel.start(fake_channel_context(tmp_path))
+    assert _connections(accounts) == ["connecting", "login_required"]
     channel._app.shutdown.assert_awaited_once()
     channel._unbind_runtime.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_transient_polling_error_waits_for_actual_inbound_recovery():
-    channel = TelegramChannel("123:abc", name="telegram_first", config_ref="first")
-    channel._accounts = Mock()
-    channel._account_id = "account-1"
+    accounts = FakeAccounts("telegram")
+    channel = _account_channel(accounts)
+    _registered(accounts, channel)
     channel._online = True
     channel._app = SimpleNamespace(
         updater=SimpleNamespace(running=True),
@@ -147,13 +161,13 @@ async def test_transient_polling_error_waits_for_actual_inbound_recovery():
     channel._on_polling_error(NetworkError("temporary"))
     assert channel._online is False
     assert channel.can_send() is True
-    assert channel._accounts.report.call_args.kwargs["connection"] == "connecting"
+    assert _connections(accounts)[-1] == "connecting"
     channel._on_polling_error(TelegramError("permanent polling failure"))
     assert channel._online is False
-    assert channel._accounts.report.call_args.kwargs["connection"] == "error"
+    assert _connections(accounts)[-1] == "error"
     channel.mark_online()
     assert channel._online is True
-    assert channel._accounts.report.call_args.kwargs["connection"] == "online"
+    assert _connections(accounts)[-1] == "online"
     channel._polling_conflict_task = Mock()
     channel._on_polling_error(TelegramError("another failure"))
     channel.mark_online()
@@ -163,18 +177,16 @@ async def test_transient_polling_error_waits_for_actual_inbound_recovery():
 @pytest.mark.asyncio
 async def test_channel_recovers_on_empty_successful_poll(monkeypatch):
     monkeypatch.setattr(ExtBot, "get_updates", AsyncMock(return_value=()))
-    accounts = Mock()
-    channel = TelegramChannel(
-        "123:abc", name="telegram_first", config_ref="first", accounts=accounts
-    )
+    accounts = FakeAccounts("telegram")
+    channel = _account_channel(accounts)
     bot = channel.bot
     assert isinstance(bot, ObservedBot)
-    channel._account_id = "account-1"
+    _registered(accounts, channel)
     channel._online = False
     channel._app = Mock(updater=Mock(running=True))
     await bot.get_updates()
     assert channel._online is True
-    assert accounts.report.call_args.kwargs["connection"] == "online"
+    assert _connections(accounts) == ["online"]
 
 
 @pytest.mark.asyncio
@@ -184,14 +196,8 @@ async def test_bot_photo_is_stored_and_kept_when_its_refresh_fails(tmp_path, fet
     old = "data:image/png;base64,AAAA"
     store = FakeKV()
     store.set("avatar:first", old)
-    channel = TelegramChannel("123:abc", name="telegram_first", config_ref="first")
-    accounts = Mock()
-    accounts.register.return_value = SimpleNamespace(
-        record=SimpleNamespace(id="account-1")
-    )
-    channel._accounts = accounts
-    channel._known_store = store
-    channel._intake = Mock()
+    accounts = FakeAccounts("telegram")
+    channel = _account_channel(accounts, store)
     channel._bind_runtime = Mock()
     channel._rebuild_user_map = Mock()
     channel._register_bot_commands = AsyncMock()
@@ -218,16 +224,27 @@ async def test_bot_photo_is_stored_and_kept_when_its_refresh_fails(tmp_path, fet
         updater=SimpleNamespace(start_polling=AsyncMock()),
     )
 
-    await channel.start()
+    await channel.start(fake_channel_context(tmp_path))
     assert channel._avatar_task is not None
     await channel._avatar_task
 
     bot.get_user_profile_photos.assert_awaited_once_with(123, limit=1)
     fresh = "data:image/png;base64,iVBORw0KGgo="
     assert store.get("avatar:first") == (fresh if fetch_ok else old)
-    avatars = [
-        call.kwargs["avatar_url"]
-        for call in accounts.register.call_args_list
-        if "avatar_url" in call.kwargs
-    ]
-    assert avatars == ([fresh] if fetch_ok else [])
+    # A failed refresh registers no avatar; the stored one stays the Bot's.
+    assert accounts.avatars["123"] == (fresh if fetch_ok else "")
+
+
+@pytest.mark.asyncio
+async def test_start_without_intake_fails_before_registering_or_reporting(tmp_path):
+    accounts = FakeAccounts("telegram")
+    channel = _account_channel(accounts)
+
+    def no_intake(accept, send):
+        raise RuntimeError("intake unavailable")
+
+    with pytest.raises(RuntimeError, match="intake unavailable"):
+        await channel.start(fake_channel_context(tmp_path, intake_factory=no_intake))
+
+    assert accounts.records == {}
+    assert accounts.reports == []

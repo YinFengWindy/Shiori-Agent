@@ -23,7 +23,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from conversation.service import desktop_chat_id, network_thread_id
+from conversation.service import desktop_chat_id
+from shiori_sdk.channels.threads import network_thread_id
 from conversation.store import ConversationStore
 from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.accounts.targets import AccountTarget

@@ -28,11 +28,8 @@ from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
 from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
-from conversation.service import (
-    desktop_thread_id,
-    network_thread_id,
-    scheduler_thread_id,
-)
+from conversation.service import desktop_thread_id, scheduler_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.accounts.models import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
 from core.roles import RoleStore

@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-from shiori_sdk.testing.channel_intake import FakeChannelIntake as ChannelIntake
 import asyncio
 import json
-import logging
 from datetime import datetime
-from types import SimpleNamespace
-from typing import Any, cast
-from unittest.mock import MagicMock
+from pathlib import Path
 
 import httpx
 import pytest
 
-from shiori_sdk.testing.events import FakeEvents as EventBus
+from shiori_sdk.testing.channel_context import fake_channel_context
+from shiori_sdk.testing.channel_hub import FakeChannelHub
+from shiori_sdk.testing.channel_services import FakeMessageBus
+from shiori_sdk.testing.events import FakeEvents
 from shiori_sdk.messages import InboundMessage, OutboundMessage
-from shiori_sdk.channel_events import TurnStarted, StreamDeltaReady
-from shiori_sdk.channels import ChannelContext
+from shiori_sdk.channel_events import StreamDeltaReady, TurnCancelled, TurnStarted
 import plugins.qqbot.backend.streaming as qqbot_streaming
 from plugins.qqbot.backend.channel import QQBotChannel
 from plugins.qqbot.testing.http import MESSAGE_PATH, STREAM_PATH, QQBotHttp
@@ -26,50 +24,9 @@ SESSION_KEY = "role:mira"
 CHAT_ID = "c2c:app:user-1"
 
 
-class _Bus:
-    def __init__(self) -> None:
-        self.inbound: list[InboundMessage] = []
-
-    async def publish_inbound(self, message: InboundMessage) -> None:
-        self.inbound.append(message)
-
-    def subscribe_outbound(self, channel: str, callback: object) -> None:
-        return None
-
-    def unsubscribe_outbound(self, channel: str, callback: object) -> None:
-        return None
-
-
-class _PushTool:
-    def register_channel(self, name: str, **kwargs: object) -> None:
-        return None
-
-    def unregister_channel(self, name: str, **kwargs: object) -> None:
-        return None
-
-
-class _Hub:
-    """Routes like the real hub: the reply runs on the bound role's session."""
-
-    def __init__(self) -> None:
-        self.deliveries: list[str] = []
-
-    def is_sender_allowed(self, **kwargs: object) -> bool:
-        return True
-
-    def route_inbound(self, message: InboundMessage) -> InboundMessage:
-        message.metadata.update(
-            {"role_id": "mira", "session_key_override": SESSION_KEY}
-        )
-        return message
-
-    def mark_delivery(self, message: OutboundMessage, **kwargs: object) -> None:
-        self.deliveries.append(str(kwargs["delivery_status"]))
-
-
 async def _started_channel(
-    api: QQBotHttp,
-) -> tuple[QQBotChannel, EventBus, _Hub, InboundMessage]:
+    api: QQBotHttp, tmp_path: Path, bus: FakeMessageBus | None = None
+) -> tuple[QQBotChannel, FakeEvents, FakeChannelHub, InboundMessage]:
     channel = QQBotChannel("app", "secret")
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(api.handler))
 
@@ -77,29 +34,18 @@ async def _started_channel(
         return None
 
     channel._gateway_loop = _no_gateway
-    event_bus = EventBus()
-    hub = _Hub()
-    bus = _Bus()
+    event_bus = FakeEvents()
+    # Routes like the real hub: the reply runs on the bound role's session.
+    hub = FakeChannelHub(session_key=SESSION_KEY)
+    bus = bus if bus is not None else FakeMessageBus()
     await channel.start(
-        ChannelContext(
-            intake_factory=ChannelIntake,
-            bus=cast(Any, bus),
-            session_manager=cast(Any, SimpleNamespace()),
-            event_bus=event_bus,
-            push_tool=cast(Any, _PushTool()),
-            attachment_store=MagicMock(),
-            http_resources=cast(Any, SimpleNamespace()),
-            interrupt_controller=None,
-            bot_commands=[],
-            log=logging.getLogger("test.qqbot"),
-            channel_hub=cast(Any, hub),
-        )
+        fake_channel_context(tmp_path, bus=bus, event_bus=event_bus, channel_hub=hub)
     )
     await channel._handle_c2c(
         {"id": "msg-1", "author": {"user_openid": "user-1"}, "content": "天气如何"}
     )
     await channel._intake.drain()
-    [inbound] = bus.inbound
+    [inbound] = bus.inbound[-1:]
     await event_bus.emit(
         TurnStarted(
             session_key=SESSION_KEY,
@@ -113,7 +59,7 @@ async def _started_channel(
     return channel, event_bus, hub, inbound
 
 
-def _stream_sink(channel: QQBotChannel, event_bus: EventBus, inbound: InboundMessage):
+def _stream_sink(channel: QQBotChannel, event_bus: FakeEvents, inbound: InboundMessage):
     """Emit the public stream contract; real AgentLoop wiring is covered by host tests."""
     if not channel.supports_stream_events(inbound.chat_id):
         return None
@@ -132,6 +78,14 @@ def _stream_sink(channel: QQBotChannel, event_bus: EventBus, inbound: InboundMes
         )
 
     return emit
+
+
+def _assert_no_turn_state(channel: QQBotChannel) -> None:
+    """A finished or abandoned turn leaves no preview state behind."""
+    assert channel._live_states == {}
+    assert channel._reply_buffers == {}
+    assert channel._live_stop_events == {}
+    assert channel._live_tasks == set()
 
 
 def _final_reply(content: str) -> OutboundMessage:
@@ -163,10 +117,11 @@ def test_qqbot_opts_c2c_chats_into_stream_events_and_prompt_rules() -> None:
 @pytest.mark.asyncio
 async def test_qqbot_turn_streams_a_live_preview_then_finishes_it_in_place(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0.01)
     api = QQBotHttp()
-    channel, event_bus, hub, inbound = await _started_channel(api)
+    channel, event_bus, hub, inbound = await _started_channel(api, tmp_path)
     sink = _stream_sink(channel, event_bus, inbound)
     assert sink is not None
 
@@ -191,17 +146,96 @@ async def test_qqbot_turn_streams_a_live_preview_then_finishes_it_in_place(
         ("msg-1", "msg-1", bodies[0]["msg_seq"])
     }
     assert api.markdown_messages() == []
-    assert hub.deliveries == ["sent"]
+    assert hub.delivery_statuses() == ["sent"]
+    _assert_no_turn_state(channel)
+    await channel.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("final_queued", [False, True])
+async def test_cancelled_turn_keeps_its_preview_only_for_a_queued_final(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, final_queued: bool
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = QQBotHttp()
+    bus = FakeMessageBus()
+    channel, event_bus, hub, inbound = await _started_channel(api, tmp_path, bus)
+    sink = _stream_sink(channel, event_bus, inbound)
+    assert sink is not None
+    await sink("取消前的预览")
+    await channel._drain_live_tasks()
+    if final_queued:
+        bus.pending_outbound.add(("qqbot", CHAT_ID, "msg-1"))
+
+    await event_bus.emit(TurnCancelled(SESSION_KEY, "qqbot", CHAT_ID, "msg-1"))
+
+    recalls = [path for method, path, _body in api.calls if method == "DELETE"]
+    if final_queued:
+        # The committed reply still owns the preview and finishes it in place.
+        assert recalls == []
+        assert set(channel._live_states) == {(SESSION_KEY, CHAT_ID, "msg-1")}
+        bus.pending_outbound.clear()
+        await channel._on_response(_final_reply("已经提交的完整回复"))
+        assert hub.delivery_statuses() == ["sent"]
+        assert api.stream_bodies()[-1]["input_state"] == 10
+    else:
+        assert recalls == ["/v2/users/user-1/messages/stream-1"]
+    _assert_no_turn_state(channel)
+    await channel.stop()
+
+
+@pytest.mark.asyncio
+async def test_old_final_after_a_newer_turn_clears_only_its_own_turn(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = QQBotHttp()
+    bus = FakeMessageBus()
+    channel, event_bus, hub, first = await _started_channel(api, tmp_path, bus)
+    first_sink = _stream_sink(channel, event_bus, first)
+    assert first_sink is not None
+    await first_sink("第一轮预览")
+    await channel._drain_live_tasks()
+
+    await channel._handle_c2c(
+        {"id": "msg-2", "author": {"user_openid": "user-1"}, "content": "第二问"}
+    )
+    await channel._intake.drain()
+    second = bus.inbound[-1]
+    await event_bus.emit(
+        TurnStarted(
+            session_key=SESSION_KEY,
+            channel="qqbot",
+            chat_id=CHAT_ID,
+            content=second.content,
+            timestamp=datetime.now(),
+            external_message_id="msg-2",
+        )
+    )
+    second_sink = _stream_sink(channel, event_bus, second)
+    assert second_sink is not None
+    await second_sink("第二轮预览")
+    await channel._drain_live_tasks()
+
+    await channel._on_response(_final_reply("第一轮完整回复"))
+    assert set(channel._live_states) == {(SESSION_KEY, CHAT_ID, "msg-2")}
+    second_reply = _final_reply("第二轮完整回复")
+    second_reply.metadata["external_message_id"] = "msg-2"
+    await channel._on_response(second_reply)
+
+    assert hub.delivery_statuses() == ["sent", "sent"]
+    _assert_no_turn_state(channel)
     await channel.stop()
 
 
 @pytest.mark.asyncio
 async def test_qqbot_final_reply_cancels_a_throttled_refresh(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 60.0)
     api = QQBotHttp()
-    channel, event_bus, _hub, inbound = await _started_channel(api)
+    channel, event_bus, _hub, inbound = await _started_channel(api, tmp_path)
     sink = _stream_sink(channel, event_bus, inbound)
     assert sink is not None
 
@@ -223,11 +257,11 @@ async def test_qqbot_final_reply_cancels_a_throttled_refresh(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("blocked_index", [0, 1])
 async def test_final_reply_waits_for_inflight_stream_id_and_index(
-    monkeypatch: pytest.MonkeyPatch, blocked_index: int
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, blocked_index: int
 ) -> None:
     monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
     api = QQBotHttp()
-    channel, event_bus, hub, inbound = await _started_channel(api)
+    channel, event_bus, hub, inbound = await _started_channel(api, tmp_path)
     entered = asyncio.Event()
     release = asyncio.Event()
 
@@ -262,7 +296,7 @@ async def test_final_reply_waits_for_inflight_stream_id_and_index(
         assert bodies[-1]["input_state"] == 10
         assert bodies[-1]["content_raw"] == "完整回复"
         assert api.markdown_messages() == []
-        assert hub.deliveries == ["sent"]
+        assert hub.delivery_statuses() == ["sent"]
     finally:
         release.set()
         await final
@@ -272,11 +306,11 @@ async def test_final_reply_waits_for_inflight_stream_id_and_index(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["timeout", "server", "missing_id", "recall"])
 async def test_uncertain_stream_or_failed_recall_never_resends_or_marks_sent(
-    monkeypatch: pytest.MonkeyPatch, failure: str
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: str
 ) -> None:
     monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
     api = QQBotHttp()
-    channel, event_bus, hub, inbound = await _started_channel(api)
+    channel, event_bus, hub, inbound = await _started_channel(api, tmp_path)
 
     def handler(request: httpx.Request) -> httpx.Response:
         result = api.handler(request)
@@ -302,7 +336,7 @@ async def test_uncertain_stream_or_failed_recall_never_resends_or_marks_sent(
         with pytest.raises((httpx.HTTPError, RuntimeError)):
             await channel._on_response(_final_reply("半句话。"))
         assert api.markdown_messages() == []
-        assert hub.deliveries == ["failed"]
+        assert hub.delivery_statuses() == ["failed"]
         assert channel._live_states == {}
         assert channel._live_tasks == set()
     finally:
@@ -312,11 +346,11 @@ async def test_uncertain_stream_or_failed_recall_never_resends_or_marks_sent(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("cancel_terminal", [False, True])
 async def test_cancelled_final_delivery_waits_for_receipt_and_never_marks_sent(
-    monkeypatch: pytest.MonkeyPatch, cancel_terminal: bool
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cancel_terminal: bool
 ) -> None:
     monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
     api = QQBotHttp()
-    channel, event_bus, hub, inbound = await _started_channel(api)
+    channel, event_bus, hub, inbound = await _started_channel(api, tmp_path)
     entered = asyncio.Event()
     release = asyncio.Event()
 
@@ -345,7 +379,7 @@ async def test_cancelled_final_delivery_waits_for_receipt_and_never_marks_sent(
         release.set()
         with pytest.raises(asyncio.CancelledError):
             await final
-        assert hub.deliveries == ["failed"]
+        assert hub.delivery_statuses() == ["failed"]
         assert api.markdown_messages() == []
         assert channel._live_tasks == set()
         assert channel._live_states == {}
@@ -359,11 +393,12 @@ async def test_cancelled_final_delivery_waits_for_receipt_and_never_marks_sent(
 @pytest.mark.asyncio
 async def test_qqbot_withdraws_a_broken_preview_before_the_fallback_message(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0.01)
     api = QQBotHttp()
     api.fail_stream_from = 1
-    channel, event_bus, hub, inbound = await _started_channel(api)
+    channel, event_bus, hub, inbound = await _started_channel(api, tmp_path)
     sink = _stream_sink(channel, event_bus, inbound)
     assert sink is not None
 
@@ -379,7 +414,7 @@ async def test_qqbot_withdraws_a_broken_preview_before_the_fallback_message(
     ]
     assert len(api.stream_bodies()) == 3
     assert api.markdown_messages() == ["半句话。"]
-    assert hub.deliveries == ["sent"]
+    assert hub.delivery_statuses() == ["sent"]
     await channel.stop()
 
 
@@ -390,17 +425,18 @@ async def test_qqbot_group_chats_do_not_get_stream_events() -> None:
         channel="qqbot", sender="u", chat_id="group:g1", content="hi"
     )
 
-    assert _stream_sink(channel, EventBus(), group) is None
+    assert _stream_sink(channel, FakeEvents(), group) is None
 
 
 @pytest.mark.asyncio
 async def test_rejected_first_preview_safely_falls_back_once(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
     api = QQBotHttp()
     api.fail_stream_from = 0
-    channel, event_bus, hub, inbound = await _started_channel(api)
+    channel, event_bus, hub, inbound = await _started_channel(api, tmp_path)
     sink = _stream_sink(channel, event_bus, inbound)
     assert sink is not None
     try:
@@ -410,6 +446,6 @@ async def test_rejected_first_preview_safely_falls_back_once(
         assert len(api.stream_bodies()) == 1
         assert api.markdown_messages() == ["半句话。"]
         assert not any(method == "DELETE" for method, _, _ in api.calls)
-        assert hub.deliveries == ["sent"]
+        assert hub.delivery_statuses() == ["sent"]
     finally:
         await channel.stop()

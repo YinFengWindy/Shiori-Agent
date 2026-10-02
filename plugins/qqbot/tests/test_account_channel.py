@@ -1,43 +1,21 @@
 from __future__ import annotations
 
-from shiori_sdk.testing.accounts import FakeAccounts
-from shiori_sdk.testing.extensions import FakeConfig
 
-from shiori_sdk.testing.channel_intake import FakeChannelIntake as ChannelIntake
 import asyncio
-import logging
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
+from shiori_sdk.testing.accounts import FakeAccounts
 from shiori_sdk.testing.storage import FakeKV
-from shiori_sdk.testing.channel_services import FakePushSenders as MessagePushTool
-from shiori_sdk.testing.events import FakeEvents as EventBus
+from shiori_sdk.testing.channel_context import fake_channel_context
+from shiori_sdk.testing.channel_services import FakeMessageBus
+from shiori_sdk.testing.events import FakeEvents
 from shiori_sdk.messages import InboundMessage
-from shiori_sdk.testing.channel_services import FakeMessageBus as MessageBus
-from shiori_sdk.testing.channel_services import FakeAttachmentStore as AttachmentStore
-from shiori_sdk.channels import ChannelContext
 from plugins.qqbot.backend.account_channel import QQBotAccountsChannel
 from plugins.qqbot.backend.accounts import QQBotAccountStore
 from plugins.qqbot.backend.channel import QQBotChannel
-
-
-class _Bus:
-    def subscribe_outbound(self, channel, callback):
-        pass
-
-    def unsubscribe_outbound(self, channel, callback):
-        pass
-
-
-class _Push:
-    def register_channel(self, channel, **kwargs):
-        pass
-
-    def unregister_channel(self, channel, **kwargs):
-        pass
 
 
 @pytest.fixture
@@ -69,31 +47,19 @@ async def test_connected_applications_inherit_current_intake_state(
     connected_gateways: dict[str, QQBotChannel],
     initially_paused: bool,
     reconnect: bool,
+    setup_context,
 ) -> None:
     store = QQBotAccountStore(FakeKV())
     account = {"app_id": "200", "client_secret": "secret", "role_id": "mira"}
     if reconnect:
         store.save(account)
-    manager = QQBotAccountsChannel(
-        SimpleNamespace(
-            config=FakeConfig(),
-            accounts=FakeAccounts("qqbot", id_factory=lambda value: value),
-        ),
-        store,
-        (),
-    )
-    bus = MessageBus()
-    runtime = ChannelContext(
-        intake_factory=ChannelIntake,
+    manager = QQBotAccountsChannel(setup_context(), store, ())
+    bus = FakeMessageBus()
+    events = FakeEvents()
+    runtime = fake_channel_context(
+        tmp_path / "attachments",
         bus=bus,
-        session_manager=MagicMock(),
-        event_bus=EventBus(),
-        push_tool=MessagePushTool(),
-        attachment_store=AttachmentStore(tmp_path / "attachments"),
-        http_resources=MagicMock(),
-        interrupt_controller=None,
-        bot_commands=[],
-        log=logging.getLogger("test.qqbot.accounts"),
+        event_bus=events,
         intake_paused=initially_paused,
     )
     await manager.start(runtime)
@@ -137,12 +103,12 @@ async def test_connected_applications_inherit_current_intake_state(
         assert bus.inbound_size == 0
     finally:
         await manager.stop()
-    assert runtime.event_bus._subscriptions == []
+    assert events._subscriptions == []
 
 
 @pytest.mark.asyncio
 async def test_one_public_channel_starts_isolated_application_gateways(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, setup_context
 ):
     store = QQBotAccountStore(FakeKV())
     # Without an owner role the host refuses the application.
@@ -156,14 +122,7 @@ async def test_one_public_channel_starts_isolated_application_gateways(
             "targets": [],
         }
     )
-    manager = QQBotAccountsChannel(
-        SimpleNamespace(
-            config=FakeConfig(),
-            accounts=FakeAccounts("qqbot", id_factory=lambda value: value),
-        ),
-        store,
-        (),
-    )
+    manager = QQBotAccountsChannel(setup_context(), store, ())
     started = []
 
     async def start(self, ctx, *, public_hooks=True):
@@ -174,8 +133,7 @@ async def test_one_public_channel_starts_isolated_application_gateways(
 
     monkeypatch.setattr(QQBotChannel, "start", start)
     monkeypatch.setattr(QQBotChannel, "stop", stop)
-    runtime = SimpleNamespace(bus=_Bus(), push_tool=_Push(), event_bus=EventBus())
-    await manager.start(runtime)
+    await manager.start(fake_channel_context(tmp_path))
     try:
         # The unowned application is not registered, so it is not served.
         assert started == [("200", False)]
@@ -187,7 +145,7 @@ async def test_one_public_channel_starts_isolated_application_gateways(
 
 @pytest.mark.asyncio
 async def test_connected_avatar_is_stored_reregistered_and_kept_on_failed_refresh(
-    tmp_path, monkeypatch, avatar_fetch
+    tmp_path, monkeypatch, avatar_fetch, setup_context
 ):
     avatar = "data:image/png;base64,iVBORw0KGgo="
     store = QQBotAccountStore(FakeKV())
@@ -204,13 +162,10 @@ async def test_connected_avatar_is_stored_reregistered_and_kept_on_failed_refres
 
     async def connect(fetched: str | None) -> FakeAccounts:
         avatar_fetch.return_value = fetched
-        accounts = FakeAccounts("qqbot", id_factory=lambda value: value)
-        manager = QQBotAccountsChannel(
-            SimpleNamespace(config=FakeConfig(), accounts=accounts), store, ()
-        )
-        await manager.start(
-            SimpleNamespace(bus=_Bus(), push_tool=_Push(), event_bus=EventBus())
-        )
+        context = setup_context()
+        accounts = context.accounts
+        manager = QQBotAccountsChannel(context, store, ())
+        await manager.start(fake_channel_context(tmp_path))
         await asyncio.gather(*manager._avatar_tasks.values())
         await manager.stop()
         return accounts

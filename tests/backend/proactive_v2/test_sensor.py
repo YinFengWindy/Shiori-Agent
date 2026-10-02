@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from conversation.service import desktop_thread_id, network_thread_id
+from conversation.service import desktop_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.accounts.models import AccountRecord
 from core.desktop_presence import DesktopPresence
 from core.identity import IdentityChat

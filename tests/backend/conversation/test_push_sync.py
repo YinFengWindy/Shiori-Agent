@@ -9,7 +9,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.turns.turn_pushes import TurnPushDrafts, current_turn_pushes
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ExternalTextPushed, ProactiveMessageCommitted
-from conversation.service import network_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from conversation.push_sync import ExternalPushSyncService
 from session.manager import SessionManager
 

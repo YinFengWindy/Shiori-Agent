@@ -329,17 +329,17 @@ async def test_start_registers_hooks_and_stop_releases_everything(
     before = len(_feishu_threads())
     await harness.start()
 
-    assert harness.bus.outbound[0][0] == "feishu"
-    registered = harness.push_tool.registered["feishu"]
+    assert list(harness.bus.outbound) == ["feishu"]
+    registered = harness.push_tool.registrations["feishu"]
     assert sorted(registered) == ["description", "file", "image", "text"]
     assert "oc_" in str(registered["description"])
     assert len(_feishu_threads()) == before + 1
 
     await harness.channel.stop()
 
-    assert harness.bus.outbound == []
+    assert harness.bus.outbound == {}
     assert harness.event_bus._subscriptions == []
-    assert harness.push_tool.removed == ["feishu"]
+    assert harness.push_tool.registrations == {}
     assert harness.channel._api._client is None
     assert len(_feishu_threads()) == before
     assert harness.channel.status()["connected"] is False
@@ -360,7 +360,7 @@ async def test_stop_twice_after_start(harness: Any) -> None:
     await harness.channel.stop()
     await harness.channel.stop()
 
-    assert harness.push_tool.removed == ["feishu"]
+    assert harness.push_tool.registrations == {}
 
 
 async def test_channel_can_restart_after_stop(harness: Any, make_event: Any) -> None:
@@ -429,7 +429,7 @@ async def test_final_reply_without_streaming_is_a_markdown_card(
     card = json.loads(body["content"])
     assert body["msg_type"] == "interactive" and card["schema"] == "2.0"
     assert card["body"]["elements"][0] == {"tag": "markdown", "content": "**你好**"}
-    assert harness.hub.deliveries == ["sent"]
+    assert harness.hub.delivery_statuses() == ["sent"]
 
 
 async def test_reply_to_quotes_the_original_message(harness: Any) -> None:
@@ -485,7 +485,7 @@ async def test_failed_delivery_is_marked_and_raised(
             OutboundMessage(channel="feishu", chat_id=CHAT_ID, content="x")
         )
 
-    assert harness.hub.deliveries == ["failed"]
+    assert harness.hub.delivery_statuses() == ["failed"]
 
 
 async def test_images_and_files_are_uploaded_then_sent(
@@ -566,7 +566,7 @@ async def test_a_refused_quote_falls_back_to_a_plain_message(harness: Any) -> No
 
     assert harness.api.keys() == ["reply", "send"]
     assert harness.api.sent_texts()[-1] == "仍然送达"
-    assert harness.hub.deliveries == ["sent"]
+    assert harness.hub.delivery_statuses() == ["sent"]
 
 
 async def test_push_senders_return_the_first_platform_message_id(

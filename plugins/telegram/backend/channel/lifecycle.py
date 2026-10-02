@@ -25,7 +25,7 @@ from shiori_sdk.accounts import ViaAccount
 from shiori_sdk.storage import read_mapping
 from shiori_sdk.channels.services import ChannelHub
 from shiori_sdk.channels.chat_types import CHAT_ID_COMMANDS, ChatTypeDeclaration
-from shiori_sdk.channels.services import AttachmentStore, IntakeFactory
+from shiori_sdk.channels.services import AttachmentStore, PushSenders
 from shiori_sdk.channels.identity_index import SessionIdentityIndex
 from .dedupe import MessageDeduper
 from shiori_sdk.channels import ChannelContext
@@ -81,12 +81,6 @@ class TelegramChannel(
     def __init__(
         self,
         token: str,
-        bus: MessageBus | None = None,
-        session_manager: SessionManager | None = None,
-        bot_commands: list[tuple[str, str]] | None = None,
-        event_bus: EventBus | None = None,
-        interrupt_controller: InterruptController | None = None,
-        channel_hub: "ChannelHub | None" = None,
         chat_types: tuple[ChatTypeDeclaration, ...] = (),
         name: str = _CHANNEL,
         config_ref: str = "",
@@ -94,11 +88,8 @@ class TelegramChannel(
         avatars: "AvatarsCapability | None" = None,
         known_store: "KeyValueStore | None" = None,
         role_id: str | None = None,
-        intake_factory: IntakeFactory | None = None,
-        attachment_store: AttachmentStore | None = None,
     ) -> None:
-        # bus / session_manager 在宿主里由 start(ctx) 注入；构造参数只留给
-        # 不经 ChannelHost 直接驱动渠道的测试。
+        # 消息总线、会话、事件、中断、宿主路由、intake 与附件目录只来自 start(ctx)。
         if accounts is not None and not config_ref:
             raise ValueError("An account-backed Telegram channel needs its Bot ref")
         self._token = token
@@ -120,17 +111,15 @@ class TelegramChannel(
         self._bot_name = ""
         # The manifest's session types, for answering ``/chatid``.
         self._chat_types = chat_types
-        self._bus: MessageBus | None = bus
-        self._interrupt_controller = interrupt_controller
+        self._bus: MessageBus | None = None
+        self._interrupt_controller: InterruptController | None = None
         self._channel = name
         self._message_deduper = MessageDeduper(_SEEN_MSG_MAXSIZE)
-        self._channel_hub = channel_hub
+        self._channel_hub: ChannelHub | None = None
         self._session_manager: SessionManager | None = None
-        self._attachments = attachment_store
+        self._attachments: AttachmentStore | None = None
         self._identity_index: SessionIdentityIndex | None = None
         self.user_map: dict[str, str] = {}
-        if session_manager is not None:
-            self._bind_session_manager(session_manager)
         if accounts is None:
             self._app = Application.builder().token(token).build()
         else:
@@ -139,7 +128,7 @@ class TelegramChannel(
             self._app = (
                 Application.builder().bot(ObservedBot(token, self.mark_online)).build()
             )
-        self._bot_commands = bot_commands or []
+        self._bot_commands: list[tuple[str, str]] = []
         self._app.add_handler(CommandHandler("stop", self._on_stop_command))
         self._app.add_handler(
             CommandHandler(
@@ -157,15 +146,11 @@ class TelegramChannel(
         self._app.add_handler(
             MessageHandler(filters.Document.ALL & ~filters.COMMAND, self._on_document)
         )
-        self._event_bus = event_bus
+        self._event_bus: EventBus | None = None
         self._outbound_bound = False
         self._events_bound = False
-        self._push_tool = None
-        self._intake: ChannelIntake | None = (
-            intake_factory(self._accept_inbound, self.send)
-            if intake_factory is not None
-            else None
-        )
+        self._push_tool: PushSenders | None = None
+        self._intake: ChannelIntake | None = None
         self._event_bindings = (
             EventBinding(TurnStarted, self._on_turn_started),
             EventBinding(StreamDeltaReady, self._on_stream_delta),
@@ -204,7 +189,11 @@ class TelegramChannel(
         """Registration owns one runtime generation, so it cannot be reused."""
         return None
 
-    async def start(self, ctx: ChannelContext | None = None) -> None:
+    async def start(self, ctx: ChannelContext) -> None:
+        # Admission is built before any account side effect, so a context that
+        # cannot provide intake fails without registering or reporting the Bot.
+        self._intake = ctx.intake_factory(self._accept_inbound, self.send)
+        self._attachments = ctx.attachment_store
         if self._accounts is not None and self._account_id is None:
             candidate_id = bot_account_id(self._token)
             account = self._accounts.register(
@@ -217,31 +206,24 @@ class TelegramChannel(
         if self._accounts is not None:
             candidate_id = bot_account_id(self._token)
             self._report_account("connecting")
-        if ctx is not None:
-            self._intake = ctx.intake_factory(self._accept_inbound, self.send)
-            self._attachments = ctx.attachment_store
-        if self._intake is None:
-            raise RuntimeError("TelegramChannel requires injected intake")
-        self._intake.start(paused=ctx.intake_paused if ctx is not None else False)
-        if ctx is not None:
-            self._bus = ctx.bus
-            self._event_bus = ctx.event_bus
-            self._interrupt_controller = ctx.interrupt_controller
-            self._push_tool = ctx.push_tool
-            # 启动时的命令列表随连接固定；命令变化由宿主的复用键触发重建。
-            self._bot_commands = list(ctx.bot_commands)
-            if ctx.channel_hub is not None:
-                self._channel_hub = ctx.channel_hub
-            if self._session_manager is not ctx.session_manager:
-                self._bind_session_manager(ctx.session_manager)
-            ctx.push_tool.register_channel(
-                self.name,
-                text=self.send,
-                stream_text=self.send_stream,
-                file=self.send_file,
-                image=self.send_image,
-                target_resolver=self._resolve_chat_id,
-            )
+        self._intake.start(paused=ctx.intake_paused)
+        self._bus = ctx.bus
+        self._event_bus = ctx.event_bus
+        self._interrupt_controller = ctx.interrupt_controller
+        self._push_tool = ctx.push_tool
+        # 启动时的命令列表随连接固定；命令变化由宿主的复用键触发重建。
+        self._bot_commands = list(ctx.bot_commands)
+        self._channel_hub = ctx.channel_hub
+        if self._session_manager is not ctx.session_manager:
+            self._bind_session_manager(ctx.session_manager)
+        ctx.push_tool.register_channel(
+            self.name,
+            text=self.send,
+            stream_text=self.send_stream,
+            file=self.send_file,
+            image=self.send_image,
+            target_resolver=self._resolve_chat_id,
+        )
         self._bind_runtime()
         self._rebuild_user_map()
         try:

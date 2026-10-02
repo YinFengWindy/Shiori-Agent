@@ -5,7 +5,8 @@ import pytest
 
 from agent.tools.message_lookup import FetchMessagesTool, SearchMessagesTool
 from agent.tools.registry import ToolRegistry
-from conversation.service import desktop_thread_id, network_thread_id
+from conversation.service import desktop_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from prompts.agent import build_agent_behavior_rules_prompt
 from session.manager import SessionManager
 from session.store import SessionStore

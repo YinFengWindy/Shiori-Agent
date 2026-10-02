@@ -1,25 +1,19 @@
 from __future__ import annotations
 
-from shiori_sdk.testing.accounts import FakeAccounts
-from shiori_sdk.testing.extensions import FakeConfig
-
-from types import SimpleNamespace
-
 from shiori_sdk.testing.storage import FakeKV
 from plugins.qqbot.backend.account_identity import QQBotAccountIdentity
 from plugins.qqbot.backend.accounts import QQBotAccountStore
 
 
-def test_gateway_status_and_bot_identity_are_account_scoped(tmp_path):
+def test_gateway_status_and_bot_identity_are_account_scoped(tmp_path, setup_context):
     store = QQBotAccountStore(FakeKV())
     for app_id in ("100", "200"):
         store.save(
             {"app_id": app_id, "client_secret": f"secret-{app_id}", "role_id": app_id}
         )
-    accounts = FakeAccounts("qqbot", id_factory=lambda value: f"account-{value}")
-    identity = QQBotAccountIdentity(
-        SimpleNamespace(config=FakeConfig(), accounts=accounts), store
-    )
+    context = setup_context(lambda value: f"account-{value}")
+    accounts = context.accounts
+    identity = QQBotAccountIdentity(context, store)
 
     identity.report("100", "online", "", "Bot One", "bot-one")
     identity.report("200", "login_required", "invalid secret", "")
@@ -32,15 +26,13 @@ def test_gateway_status_and_bot_identity_are_account_scoped(tmp_path):
     assert accounts.reports[1][1]["capabilities"] == frozenset()
 
 
-def test_candidate_ready_identity_is_not_persisted_before_handover(tmp_path):
+def test_candidate_ready_identity_is_not_persisted_before_handover(
+    tmp_path, setup_context
+):
     store = QQBotAccountStore(FakeKV())
     store.save({"app_id": "100", "client_secret": "working", "role_id": "mira"})
     identity = QQBotAccountIdentity(
-        SimpleNamespace(
-            config=FakeConfig(),
-            accounts=FakeAccounts("qqbot", id_factory=lambda value: f"account-{value}"),
-        ),
-        store,
+        setup_context(lambda value: f"account-{value}"), store
     )
 
     identity.begin_handoff("100")
@@ -51,15 +43,11 @@ def test_candidate_ready_identity_is_not_persisted_before_handover(tmp_path):
     identity.end_handoff("100")
 
 
-def test_via_account_names_the_application_and_its_bot(tmp_path):
+def test_via_account_names_the_application_and_its_bot(tmp_path, setup_context):
     store = QQBotAccountStore(FakeKV())
     store.save({"app_id": "100", "client_secret": "s", "role_id": "mira"})
     identity = QQBotAccountIdentity(
-        SimpleNamespace(
-            config=FakeConfig(),
-            accounts=FakeAccounts("qqbot", id_factory=lambda value: f"account-{value}"),
-        ),
-        store,
+        setup_context(lambda value: f"account-{value}"), store
     )
     assert identity.via_account("100")["prefix"] == "QQ 机器人（AppID 100）"
 
