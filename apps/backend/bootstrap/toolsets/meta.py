@@ -4,7 +4,7 @@ from __future__ import annotations
 from agent.background.subagent_manager import SubagentManager
 from agent.policies.delegation import DelegationPolicy
 from agent.tool_bundles import build_readonly_research_tools
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.meta import register_common_meta_tools
 from agent.tools.registry import ToolRegistry
 from agent.tools.spawn import SpawnManageTool, SpawnTool

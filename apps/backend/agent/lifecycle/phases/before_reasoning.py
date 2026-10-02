@@ -14,7 +14,7 @@ from agent.lifecycle.phase import (
 )
 from agent.lifecycle.types import BeforeReasoningCtx, BeforeReasoningInput
 from bus.event_bus import EventBus
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder

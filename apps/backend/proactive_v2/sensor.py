@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from agent.prompting import is_context_frame
+from shiori_sdk.prompting import is_context_frame
 from conversation.context_scope import user_context_view
 from proactive_v2.energy import compute_energy, d_recent
 from proactive_v2.presence import PresenceStore

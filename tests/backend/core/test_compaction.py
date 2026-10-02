@@ -410,7 +410,7 @@ async def test_consumer_failure_commits_window_and_keeps_pending_work(memory_har
 async def test_persistent_consumer_failure_still_commits_new_memory_and_window(
     memory_harness,
 ):
-    from core.memory.events import ConsolidationCommitted
+    from shiori_sdk.memory.events import ConsolidationCommitted
 
     h = memory_harness
     session = h.manager.get_or_create("cli:consumer-down")

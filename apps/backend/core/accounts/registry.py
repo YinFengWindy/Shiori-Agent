@@ -10,7 +10,7 @@ from dataclasses import replace
 from threading import RLock
 from typing import Callable
 
-from .models import (
+from shiori_sdk.accounts.models import (
     AccountAccess,
     AccountDeleteHandler,
     AccountDeletingError,

@@ -14,7 +14,7 @@ import agent.looping.core as loop_core
 from agent.looping.ports import SessionServices
 from bus.event_bus import EventBus
 from bus.events_context import ContextWindowChanged
-from bus.events_lifecycle import TurnCommitted
+from shiori_sdk.memory.committed import TurnCommitted
 from agent.core.passive_turn.helpers import get_window_history
 from conversation.context_scope import (
     history_start,
@@ -22,7 +22,7 @@ from conversation.context_scope import (
     user_context_view,
 )
 from conversation.service import desktop_thread_id, network_thread_id
-from core.memory.events import ConsolidationCommitted
+from shiori_sdk.memory.events import ConsolidationCommitted
 from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
 from core.roles import RoleStore
 from core.memory.group_environment import (

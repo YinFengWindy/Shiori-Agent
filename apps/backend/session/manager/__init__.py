@@ -23,7 +23,7 @@ from .models import Session
 from .persistence import _PersistenceMixin
 from .projection import _ProjectionMixin
 from .role_sessions import _RoleSessionsMixin
-from .undo_result import UndoSessionResult
+from shiori_sdk.sessions import UndoSessionResult
 from .undo import _UndoMixin
 from .progress import _ProgressMixin
 from .consumers import _MemoryConsumersMixin

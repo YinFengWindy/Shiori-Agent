@@ -8,7 +8,7 @@ from agent.looping.ports import LLMConfig
 from agent.prompting.usage_anchor import turn_usage_context
 from agent.provider import LLMProvider
 from agent.tools.registry import ToolRegistry
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import ContextView
 from core.compaction import (
     CompactionController,

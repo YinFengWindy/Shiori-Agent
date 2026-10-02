@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ExternalImagePushed, ExternalTextPushed
 from core.common.runtime_scope import current_runtime_lease

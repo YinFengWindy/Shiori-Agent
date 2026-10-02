@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
-from core.common.message_source import PERSISTED_USER_CONTENT_KEY
+from shiori_sdk.channels.message_source import PERSISTED_USER_CONTENT_KEY
 from core.roles import RoleAggregateService
-from infra.channels.reply_context import build_inbound_text_with_reply_context
+from shiori_sdk.channels.reply_context import build_inbound_text_with_reply_context
 
 from .app_service import DesktopAppService
 from .chat_service import ChatTurnBusyError, DesktopChatService

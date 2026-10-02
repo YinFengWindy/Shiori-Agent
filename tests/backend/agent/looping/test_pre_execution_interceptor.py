@@ -11,7 +11,7 @@ from agent.looping.ports import (
     MemoryServices,
 )
 from agent.provider import LLMResponse, ToolCall
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
 from tests.backend.memory_fakes import FakeMemoryEngine
 

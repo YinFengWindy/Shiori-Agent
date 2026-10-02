@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from core.accounts.target_contract import AccountTarget, UncertainDeliveryError
+from shiori_sdk.accounts.targets import AccountTarget, UncertainDeliveryError
 from agent.account_delivery import AccountDelivery
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger

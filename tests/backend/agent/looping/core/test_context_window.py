@@ -11,7 +11,7 @@ from agent.core.passive_turn.reasoner import DefaultReasoner
 from agent.looping.core.context_window import _ContextWindowMixin
 from agent.looping.core.processing import _ProcessingMixin
 from bus.event_bus import EventBus
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from bus.events_context import ContextWindowChanged
 from bus.processing import ProcessingState
 from conversation.service import desktop_thread_id, network_thread_id

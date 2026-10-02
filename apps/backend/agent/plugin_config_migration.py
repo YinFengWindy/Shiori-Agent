@@ -5,15 +5,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from agent.plugin_host.plugin_data import (
-    migrate_plugin_file,
-    plugin_data_dir,
-    remove_migrated_source,
-)
+from agent.plugin_host.plugin_data import migrate_plugin_file, remove_migrated_source
+from shiori_sdk.storage import plugin_data_dir
 from agent.plugin_host.discovery import discover_plugins
 from bootstrap.paths import REPOSITORY_ROOT, plugin_roots
-from infra.persistence.json_store import atomic_save_json
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.files.json import atomic_save_json
+from shiori_sdk.files.text import atomic_save_text
 from infra.persistence.toml_store import render_toml
 
 _FILENAME = "plugin_config.json"

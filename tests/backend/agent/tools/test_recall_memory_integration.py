@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import agent.tools.recall_memory as recall_memory_module
 import pytest
 from agent.tools.recall_memory import RecallMemoryTool
-from core.memory.engine import (
+from shiori_sdk.memory.engine import (
     EvidenceRef,
     MemoryQueryResult,
     MemoryRecord,

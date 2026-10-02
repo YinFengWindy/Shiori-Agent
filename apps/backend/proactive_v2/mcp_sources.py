@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from agent.tools.base import ToolResult
+from shiori_sdk.tools import ToolResult
 from core.common.workspace import resolve_default_workspace
 
 logger = logging.getLogger(__name__)

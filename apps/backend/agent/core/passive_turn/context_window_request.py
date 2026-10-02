@@ -12,9 +12,9 @@ from agent.prompting.listening_block import turn_heard
 from agent.provider import LLMProvider
 from agent.tools.external_access import external_tools_restricted
 from agent.tools.registry import ToolRegistry
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import ContextView
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from session.manager import SessionManager
 from session.manager.window import WindowPreparation
 from session.maintenance_progress import window_key

@@ -8,7 +8,7 @@ from conversation.listening_store import GroupListeningStore
 from conversation.models import ContactRecord, ThreadRecord
 from conversation.projector import ConversationStateProjector
 from conversation.store import ConversationStore
-from core.common.channel_chat_types import (
+from shiori_sdk.channels.chat_types import (
     CHAT_TYPE_GROUP,
     CHAT_TYPE_PRIVATE,
     ChatType,

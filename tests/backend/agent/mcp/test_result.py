@@ -3,7 +3,7 @@
 import pytest
 
 from agent.mcp.result import decode_tool_result
-from agent.tools.base import ToolResult
+from shiori_sdk.tools import ToolResult
 
 
 def test_structured_snapshot_identity_is_available_to_adapter_and_current_model():

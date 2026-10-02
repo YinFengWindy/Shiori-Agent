@@ -6,7 +6,7 @@ from typing import Any
 from agent.background.subagent_manager import SubagentManager
 from agent.policies.delegation import DelegationPolicy
 from agent.tool_hooks.base import ToolHook
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
 import logging
 

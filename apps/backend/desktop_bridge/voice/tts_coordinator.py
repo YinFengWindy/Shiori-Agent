@@ -7,7 +7,7 @@ import threading
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from desktop_bridge.models import BridgeEvent
+from shiori_sdk.bridge import BridgeEvent
 from desktop_bridge.voice.role_tts_settings import RoleTtsSettings
 from desktop_bridge.voice.tts_text import TtsSentenceBuffer
 from desktop_bridge.voice.voice_models import (

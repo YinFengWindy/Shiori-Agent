@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from conversation.context_scope import ContextView
-    from core.common.message_source import MessageSource
+    from shiori_sdk.channels.message_source import MessageSource
 
 # 受限回合调用允许集合外的工具时，回给模型的工具结果。
 EXTERNAL_TOOL_DENIED = "这个工具只有你的用户能让你使用；回复时用你平时私聊里对他的称呼"

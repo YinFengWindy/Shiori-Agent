@@ -10,7 +10,7 @@ import pytest
 from agent.core.passive_turn import DefaultContextStore
 from agent.core.types import RetrievalTrace
 from agent.retrieval.protocol import RetrievalResult
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 
 
 class _DummySession:
@@ -217,7 +217,7 @@ async def test_default_context_store_queries_memory_engine_only_in_user_context(
     from agent.looping.ports import MemoryServices
     from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
     from conversation.context_scope import ContextView, UserContextThreads
-    from core.memory.engine import MemoryQueryResult
+    from shiori_sdk.memory.engine import MemoryQueryResult
 
     engine = SimpleNamespace(
         query=AsyncMock(return_value=MemoryQueryResult(text_block="你的私人记忆"))

@@ -16,16 +16,16 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from agent.tools.account_delivery import shared_account_delivery
-from core.accounts.target_contract import ACCOUNT_TARGET_PROPERTIES, AccountTarget
-from core.memory.engine import MemoryQuery, MemoryScope
-from agent.prompting import is_context_frame
+from shiori_sdk.accounts.targets import ACCOUNT_TARGET_PROPERTIES, AccountTarget
+from shiori_sdk.memory.engine import MemoryQuery, MemoryScope
+from shiori_sdk.prompting import is_context_frame
 from proactive_v2.context import AgentTickContext
 from proactive_v2.reply_output import parse_push_reply, reply_properties
 from proactive_v2.outbound_text import normalize_outbound_text
 from proactive_v2.time import format_beijing_timestamp
 
 if TYPE_CHECKING:
-    from core.memory.engine import MemoryRetrievalApi
+    from shiori_sdk.memory.engine import MemoryRetrievalApi
     from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
 

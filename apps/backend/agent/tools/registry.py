@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, TypedDict, cast
 
-from agent.tools.base import Tool, ToolResult
+from shiori_sdk.tools import Tool, ToolResult
 from agent.tools.external_access import EXTERNAL_TOOL_DENIED, ExternalArgumentLimit
 from agent.tools.search_backend import KeywordSearchBackend, SearchBackend
 

@@ -13,8 +13,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from agent.tools.base import Tool, ToolResult
-from core.common.media import detect_image_mime_from_header
+from shiori_sdk.tools import Tool, ToolResult
+from shiori_sdk.media import detect_image_mime_from_header
 
 logger = logging.getLogger(__name__)
 _FILE_MUTATION_LOCKS: dict[str, asyncio.Lock] = {}

@@ -8,7 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from agent.prompting import PromptSectionMeta, PromptSectionRender, SectionCache
+from agent.prompting import PromptSectionMeta, SectionCache
+from shiori_sdk.prompting import PromptSectionRender
 from agent.prompting.listening_block import heard_for_prompt, render_heard_block
 from core.identity import identities_for_account
 from core.memory.member_profiles import MemberProfiles, render_member_profiles
@@ -35,7 +36,7 @@ if TYPE_CHECKING:
     from agent.skills import SkillsLoader
     from core.roles import RoleStore
     from conversation.context_scope import ContextScope
-    from core.common.message_source import MessageSource
+    from shiori_sdk.channels.message_source import MessageSource
     from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
 

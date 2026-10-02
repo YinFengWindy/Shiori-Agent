@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ProactiveMessageCommitted, SceneObservationCommitted
+from bus.events_lifecycle import ProactiveMessageCommitted
+from shiori_sdk.role_events import SceneObservationCommitted
 from core.roles.store import RoleStore
 from core.scene.controller import SceneAwarenessController
 from core.scene.contracts import SceneDecision

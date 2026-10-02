@@ -10,7 +10,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from core.memory.events import ConsolidationCommitted
+from shiori_sdk.memory.events import ConsolidationCommitted
 
 from .formatting import append_entries_to_journal
 

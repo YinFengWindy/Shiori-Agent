@@ -314,7 +314,7 @@ async def test_mcp_pool_retries_explicit_read_transport_failure_once():
 
 @pytest.mark.asyncio
 async def test_mcp_pool_does_not_retry_json_rpc_tool_error():
-    from agent.mcp.client import McpToolError
+    from shiori_sdk.mcp import McpToolError
 
     class _ErrorClient:
         def __init__(self) -> None:
@@ -418,7 +418,7 @@ async def test_acknowledge_content_entries_async_passes_ttl_hours(monkeypatch):
 
 
 def test_decode_mcp_images_rejects_non_text_proactive_payload_explicitly():
-    from agent.tools.base import ToolResult
+    from shiori_sdk.tools import ToolResult
 
     assert mcp_sources._decode_result('{"event": "text"}') == {"event": "text"}
     with pytest.raises(ValueError, match="require text results"):
@@ -447,7 +447,7 @@ def test_decode_structured_context_does_not_parse_concatenated_text(text):
 
 
 def test_decode_text_tool_result_retains_legacy_json_behavior():
-    from agent.tools.base import ToolResult
+    from shiori_sdk.tools import ToolResult
 
     assert mcp_sources._decode_result(ToolResult(text='[{"kind": "alert"}]')) == [
         {"kind": "alert"}

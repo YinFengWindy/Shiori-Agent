@@ -6,11 +6,11 @@ import base64
 
 import pytest
 
-from core.accounts import (
+from core.accounts import AccountRegistry
+from shiori_sdk.accounts.models import (
     AccountDeletingError,
     AccountDeletionPlan,
     AccountNotFoundError,
-    AccountRegistry,
     AccountResponseRules,
 )
 

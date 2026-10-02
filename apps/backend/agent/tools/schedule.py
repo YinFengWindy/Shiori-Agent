@@ -12,7 +12,7 @@ from agent.scheduler import (
     DEFAULT_SCHEDULE_TIMEZONE,
     SchedulerService,
 )
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 
 
 class ScheduleTool(Tool):

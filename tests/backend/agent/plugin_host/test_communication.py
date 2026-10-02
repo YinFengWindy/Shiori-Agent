@@ -4,7 +4,8 @@ import asyncio
 
 import pytest
 
-from agent.plugin_host.bridge_events import PluginBridgeEvent, PluginRpcError
+from agent.plugin_host.bridge_events import PluginBridgeEvent
+from shiori_sdk.rpc import PluginRpcError
 from agent.plugin_host.communication import communication_name
 from agent.plugin_host.rpc import PluginRpcRegistry
 from bus.event_bus import EventBus

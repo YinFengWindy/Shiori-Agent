@@ -3,7 +3,7 @@
 import pytest
 
 from agent.tools.account_delivery import ACCOUNT_SEND_EXTERNAL_LIMIT
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
 
 

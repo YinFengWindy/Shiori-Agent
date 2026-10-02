@@ -9,7 +9,7 @@ import pytest
 
 from agent.config_models import Config
 from bootstrap.app import AppRuntime, RuntimeFeatures
-from bus.events import OutboundMessage
+from shiori_sdk.messages import OutboundMessage
 from core.common.runtime_scope import bind_runtime
 
 # 渠道插件：token 即账号，换 token 就是换账号；Transport 由测试注入，便于记录发送。

@@ -16,7 +16,7 @@ from agent.lifecycle.phases.after_reasoning import (
 )
 from agent.lifecycle.types import AfterReasoningInput, TurnState
 from bus.event_bus import EventBus
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import turn_context_view
 from conversation.service import network_thread_id
 from core.roles import RoleRelationshipRuntimeService, RoleStore

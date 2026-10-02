@@ -5,8 +5,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from bus.events import InboundMessage, OutboundMessage, SpawnCompletionItem
-from bus.errors import NonRetryableDeliveryError
+from bus.events import SpawnCompletionItem
+from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.channels.errors import NonRetryableDeliveryError
 from bus.queue import MessageBus
 from bootstrap.runtime.generations import RuntimeCandidate
 

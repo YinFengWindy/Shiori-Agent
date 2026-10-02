@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
 
-from agent.tools.base import Tool
-from core.memory.engine import (
+from shiori_sdk.tools import Tool
+from shiori_sdk.memory.engine import (
     EvidenceRef,
     MemoryQuery,
     MemoryQueryFilters,
@@ -17,7 +17,7 @@ from core.memory.engine import (
 )
 
 if TYPE_CHECKING:
-    from core.memory.engine import MemoryRetrievalApi
+    from shiori_sdk.memory.engine import MemoryRetrievalApi
 
 _LOCAL_TZ = ZoneInfo("Asia/Shanghai")
 _RECENT_PRESETS = {

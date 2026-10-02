@@ -2,15 +2,13 @@ from __future__ import annotations
 
 from core.roles.errors import RoleNotFoundError
 
-from core.common.error_summary import (
-    public_validation_message,
-    summarize_exception_for_user,
-)
+from shiori_sdk.errors import public_validation_message, summarize_exception_for_user
 
-from agent.plugin_host.bridge_events import PluginBridgeEvent, PluginRpcError
+from agent.plugin_host.bridge_events import PluginBridgeEvent
+from shiori_sdk.rpc import PluginRpcError
 
 from contextlib import ExitStack
-from core.accounts import AccountDeletingError, AccountNotFoundError
+from shiori_sdk.accounts.models import AccountDeletingError, AccountNotFoundError
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.common.cleanup import run_cleanup_steps
 from core.common.task_collector import TaskCollector
@@ -27,11 +25,9 @@ from agent.tools.message_push import MessagePushTool
 from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus
 from bus.events_context import ContextWindowChanged
-from bus.events_lifecycle import (
-    ProactiveMessageCommitted,
-    RoleDeleted,
-    TurnCommitted,
-)
+from bus.events_lifecycle import ProactiveMessageCommitted
+from shiori_sdk.role_events import RoleDeleted
+from shiori_sdk.memory.committed import TurnCommitted
 from conversation.listening import GroupListeningControl
 from conversation.listening_store import ListeningMessage
 from conversation.service import ConversationService
@@ -51,7 +47,7 @@ from desktop_bridge.chat_requests import DesktopChatRequestHandler
 from desktop_bridge.context_requests import DesktopContextRequests
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.method_policy import MethodPolicy, resolve_plugin_method_policy
-from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
+from shiori_sdk.bridge import BridgeError, BridgeEvent, BridgeResponse
 from desktop_bridge.phone_listening_requests import (
     PHONE_LISTENING_HEARD,
     DesktopPhoneListeningRequestHandler,

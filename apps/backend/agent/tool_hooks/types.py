@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
-from shiori_sdk.tool_hooks import HookDecision, HookOutcome as HookOutcome
+from shiori_sdk.tool_hooks import HookDecision
 
 HookEvent = Literal["pre_tool_use", "post_tool_use", "post_tool_error"]
 ToolSource = Literal["passive", "proactive", "subagent"]

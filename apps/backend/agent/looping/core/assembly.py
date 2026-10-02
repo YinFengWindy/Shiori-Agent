@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agent.lifecycle.phases.before_turn import MemoryConsolidator
-    from core.memory.engine import MemoryEngine
+    from shiori_sdk.memory.engine import MemoryEngine
     from core.memory.markdown import MemoryProfileApi
 
 

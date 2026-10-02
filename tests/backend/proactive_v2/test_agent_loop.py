@@ -24,7 +24,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.prompting import is_context_frame
+from shiori_sdk.prompting import is_context_frame
 from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import GatewayDeps, GatewayResult
 from proactive_v2.tools import ToolDeps

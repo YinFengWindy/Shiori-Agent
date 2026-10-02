@@ -44,7 +44,7 @@ class _ToolLoopGuard:
         return HookOutcome(
             decision="deny",
             reason=(f"连续重复调用工具 {state.repeat_count} 次，已截断并进入收尾。"),
-            # 结构化收尾意图（见 agent.tool_hooks.HookOutcome.finalize）：宿主
+            # 结构化收尾意图（见 shiori_sdk.tool_hooks.HookOutcome.finalize）：宿主
             # 靠这个字段截断剩余批次并进入既有总结流程，不再靠 reason 前缀
             # 猜插件身份——任何插件都能用同一个字段表达"该收尾了"。
             finalize=True,

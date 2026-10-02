@@ -7,7 +7,7 @@ import logging
 
 from agent.plugin_host.effects import EffectScope
 from core.channel_avatars import AvatarKey, ChannelAvatarStore
-from shiori_sdk.channels.avatars import AvatarFetch as AvatarFetch
+from shiori_sdk.channels.avatars import AvatarFetch
 
 logger = logging.getLogger(__name__)
 

@@ -12,7 +12,7 @@ from agent.account_delivery import AccountDelivery
 from agent.account_delivery.turn_state import account_delivery_scope
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
-from core.accounts.target_contract import AccountTarget, UncertainDeliveryError
+from shiori_sdk.accounts.targets import AccountTarget, UncertainDeliveryError
 from core.identity import IdentityChat, UserIdentityStore
 
 
@@ -233,7 +233,7 @@ async def test_invalid_snapshot_after_send_still_returns_the_recorded_receipt(
 ) -> None:
     service, _accounts, rpc, _ledger, account_id = _service(tmp_path)
     rpc.via = via
-    with caplog.at_level("ERROR", logger="core.accounts.models"):
+    with caplog.at_level("ERROR", logger="shiori_sdk.accounts.models"):
         receipt = await service.send(
             "chat", "mira", AccountTarget("private", "42"), "hi"
         )

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from core.memory.engine import MemoryIngestRequest, MemoryScope
+from shiori_sdk.memory.engine import MemoryIngestRequest, MemoryScope
 
 from .dataset import LMEInstance
 from .runtime import BenchmarkRuntime

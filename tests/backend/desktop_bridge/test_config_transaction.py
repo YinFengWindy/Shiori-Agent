@@ -6,7 +6,7 @@ import pytest
 
 from desktop_bridge import config_transaction
 from desktop_bridge.config_transaction import ConfigTransaction
-from infra.persistence.json_store import atomic_save_json
+from shiori_sdk.files.json import atomic_save_json
 
 
 def test_commit_preserves_utf8_and_updates_both_files(tmp_path):

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.memory.engine import MemoryIngestResult
+from shiori_sdk.memory.engine import MemoryIngestResult
 from benchmarks.longmemeval.dataset import LMEInstance, LMETurn
 from benchmarks.longmemeval.ingest import _ingest_turns, ingest_instance
 

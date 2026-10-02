@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from infra.channels.intake import ChannelIntake
 
 

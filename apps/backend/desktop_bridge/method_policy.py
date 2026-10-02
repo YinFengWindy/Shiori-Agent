@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from agent.plugin_host.rpc import PluginRpcRegistry
 
 
-from shiori_sdk.rpc import Concurrency as Concurrency
+from shiori_sdk.rpc import Concurrency
 
 
 class Handler(Enum):

@@ -7,8 +7,8 @@ import pytest
 from agent.tools.message_push import MessagePushTool
 from bootstrap.channel_host import ChannelHost, ChannelHandoverError
 from bus.queue import MessageBus
-from bus.events import OutboundMessage
-from infra.channels.contract import ChannelContext
+from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.channels import ChannelContext
 from infra.channels.intake import ChannelIntake
 
 
@@ -181,7 +181,7 @@ async def test_commit_failure_repauses_candidate_before_async_cleanup_can_flush_
     async def start_with_pending_input(ctx):
         await start(ctx)
         intake.start(paused=ctx.intake_paused)
-        from bus.events import InboundMessage
+        from shiori_sdk.messages import InboundMessage
 
         await intake.submit(
             InboundMessage(

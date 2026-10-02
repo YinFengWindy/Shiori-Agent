@@ -1,14 +1,12 @@
-"""Pure redaction and bounded model-output summaries shared by all callers."""
+"""Pure credential redaction shared by all callers."""
 
 from __future__ import annotations
 
 import re
 
-_LOG_OUTPUT_MAX_CHARS = 500
-
 # Credential-shaped key names covered by the two key/value patterns below.
-# `fetch_role_mood` - this helper's main caller - always requests
-# `response_format={"type": "json_object"}`, so a leaked credential most
+# Model output is the dominant input (the host's mood fetch always requests
+# `response_format={"type": "json_object"}`), so a leaked credential most
 # often shows up JSON-quoted (`"api_key": "..."`), not bare `k=v`; both
 # shapes are covered, see the patterns below.
 # The separator class includes a literal space: a model echoing a credential
@@ -69,19 +67,4 @@ def redact_secrets(text: str) -> str:
     return redacted
 
 
-def summarize_llm_output_for_log(
-    content: str | None, *, limit: int = _LOG_OUTPUT_MAX_CHARS
-) -> str:
-    """Render raw model output for a log line: credential-scrubbed and
-    length-capped so a parse/format failure stays diagnosable after the
-    fact without risking a log flood or leaking secrets.
-    """
-    if not content:
-        return "<empty>"
-    text = redact_secrets(content)
-    if len(text) <= limit:
-        return text
-    return f"{text[:limit]}...(+{len(text) - limit} chars)"
-
-
-__all__ = ["redact_secrets", "summarize_llm_output_for_log"]
+__all__ = ["redact_secrets"]

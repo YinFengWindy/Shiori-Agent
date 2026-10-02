@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from conversation.listening import GroupListeningControl, ListenableGroup
 from conversation.service import network_thread_id
 

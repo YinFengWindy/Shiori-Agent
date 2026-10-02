@@ -4,9 +4,10 @@ from datetime import datetime
 
 import pytest
 
-from agent.lifecycle.commands import abort_command, normalize_command
+from agent.lifecycle.commands import abort_command
+from shiori_sdk.commands import normalize_command
 from agent.lifecycle.types import TurnState
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 
 
 @pytest.mark.parametrize(

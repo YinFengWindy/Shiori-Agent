@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from bus.event_bus import EventBus
     from bus.processing import ProcessingState
     from bus.queue import MessageBus
-    from core.memory.engine import MemoryEngine
+    from shiori_sdk.memory.engine import MemoryEngine
     from core.memory.runtime import MemoryRuntime
     from proactive_v2.presence import PresenceStore
     from core.roles.relationship_runtime import RoleRelationshipRuntimeService

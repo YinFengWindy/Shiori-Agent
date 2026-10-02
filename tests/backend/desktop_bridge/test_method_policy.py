@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from desktop_bridge.method_policy import (
     METHOD_POLICIES,
-    Concurrency,
     Handler,
     OwnerRouting,
     method_policy,
 )
+from shiori_sdk.rpc import Concurrency
 
 
 def test_unregistered_methods_keep_conservative_defaults():

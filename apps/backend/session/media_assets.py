@@ -10,8 +10,8 @@ import threading
 from pathlib import Path
 
 from infra.persistence.sqlite_transaction import immediate_transaction
-from infra.persistence.text_store import atomic_save_text
-from infra.persistence.owned_assets import copy_owned_asset
+from shiori_sdk.files.text import atomic_save_text
+from shiori_sdk.files.assets import copy_owned_asset
 
 _MEDIA_LOCK = threading.RLock()
 

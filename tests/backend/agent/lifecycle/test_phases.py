@@ -11,29 +11,31 @@ import pytest
 from agent.context import ContextBuilder
 from agent.core.passive_support import build_context_hint_message
 from agent.core.passive_turn import ContextStore
-from agent.core.response_parser import ResponseMetadata
+from shiori_sdk.lifecycle import ResponseMetadata
 from agent.core.runtime_support import TurnRunResult
 from agent.core.types import ContextBundle, HistoryMessage
 from agent.lifecycle.phase import Phase
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
-from bus.events_lifecycle import TurnCommitted
+from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.memory.committed import TurnCommitted
 from core.roles import RoleStore
 from agent.lifecycle.types import (
-    AfterReasoningCtx,
     AfterReasoningInput,
-    AfterStepCtx,
-    AfterTurnCtx,
     BeforeReasoningCtx,
     BeforeReasoningInput,
     BeforeStepCtx,
     BeforeStepInput,
     BeforeTurnCtx,
-    PromptRenderCtx,
     PromptRenderInput,
     TurnSnapshot,
     TurnState,
+)
+from shiori_sdk.lifecycle import (
+    AfterReasoningCtx,
+    AfterStepCtx,
+    AfterTurnCtx,
+    PromptRenderCtx,
 )
 from agent.lifecycle.phases.after_reasoning import (
     AfterReasoningFrame,
@@ -64,7 +66,7 @@ from agent.lifecycle.phases.prompt_render import (
     PromptRenderFrame,
     default_prompt_render_modules,
 )
-from agent.prompting import PromptSectionRender
+from shiori_sdk.prompting import PromptSectionRender
 from agent.turns.outbound import DeliveryReceipt, OutboundDispatch
 from conversation.store import ConversationStore
 from session.manager import SessionManager

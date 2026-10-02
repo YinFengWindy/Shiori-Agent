@@ -2,7 +2,7 @@
 
 from agent.looping.core import AgentLoop
 from agent.looping.core.context_window import context_unavailable
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from core.roles import RoleAggregateService
 from .app_service import DesktopAppService
 from .chat_service import DesktopChatService

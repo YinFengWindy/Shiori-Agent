@@ -11,7 +11,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from agent.plugin_host.package_paths import package_path
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.files.text import atomic_save_text
 
 
 def application_session() -> str:

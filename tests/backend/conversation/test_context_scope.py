@@ -15,7 +15,7 @@ from conversation.context_scope import (
     user_context_view,
 )
 from conversation.service import desktop_thread_id, network_thread_id
-from core.accounts import AccountRecord
+from shiori_sdk.accounts.models import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
 from session.manager import Session
 from session.maintenance_progress import effective_progress

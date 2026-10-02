@@ -36,7 +36,7 @@ def save_migrated_config(
     """
     # 局部导入：迁移只在升级后的首次启动命中，不让每次加载配置都拉入 TOML 编辑模块。
     from desktop_bridge.plugin_config_text import UnlocatableTable
-    from infra.persistence.text_store import atomic_save_text
+    from shiori_sdk.files.text import atomic_save_text
     from infra.persistence.toml_store import render_toml
 
     accept = is_complete or (lambda document: document == migrated)

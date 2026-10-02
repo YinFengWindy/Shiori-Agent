@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from conversation.service import ConversationService
 from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles
 

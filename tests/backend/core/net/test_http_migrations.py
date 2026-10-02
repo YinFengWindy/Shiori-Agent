@@ -5,13 +5,13 @@ import pytest
 from agent.tools.web_fetch import WebFetchTool
 from core.net.http import (
     HttpRequester,
-    RequestBudget,
     RetryPolicy,
     SharedHttpResources,
     clear_default_shared_http_resources,
     configure_default_shared_http_resources,
     get_default_shared_http_resources,
 )
+from shiori_sdk.http import RequestBudget
 
 
 def _build_requester(handler) -> HttpRequester:

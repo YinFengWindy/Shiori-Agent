@@ -18,7 +18,7 @@ from agent.lifecycle.phases.before_reasoning import (
 from agent.lifecycle.types import BeforeReasoningInput, BeforeTurnCtx, TurnState
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import turn_context_view
 from conversation.service import network_thread_id
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate

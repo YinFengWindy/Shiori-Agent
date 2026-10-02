@@ -272,9 +272,10 @@ async def test_published_generation_keeps_before_turn_capture_until_old_after_tu
     from datetime import datetime
     from unittest.mock import AsyncMock
     from agent.config_models import Config
-    from agent.lifecycle.types import BeforeTurnCtx, AfterTurnCtx
+    from agent.lifecycle.types import BeforeTurnCtx
+    from shiori_sdk.lifecycle import AfterTurnCtx
     from bootstrap.app import AppRuntime, RuntimeFeatures
-    from bus.events_lifecycle import SceneObservationCommitted
+    from shiori_sdk.role_events import SceneObservationCommitted
     from core.common.runtime_scope import bind_runtime
     from core.scene.contracts import SceneDecision
 

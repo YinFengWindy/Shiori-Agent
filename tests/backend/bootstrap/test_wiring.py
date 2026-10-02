@@ -13,7 +13,7 @@ from agent.config import Config
 from agent.config_models import Config as ConfigModel
 from agent.config_models import WiringConfig
 from agent.lifecycle.facade import TurnLifecycle
-from agent.lifecycle.types import AfterStepCtx
+from shiori_sdk.lifecycle import AfterStepCtx
 from agent.looping.interrupt import TurnInterruptState
 from agent.tools.registry import ToolRegistry
 from bootstrap.tools import (
@@ -747,7 +747,7 @@ def test_memory_plugin_resolver_loads_plugin_directory(monkeypatch, tmp_path: Pa
 
 
 def test_memory_plugin_resolver_loads_default_package():
-    from core.memory.plugin import MemoryPlugin
+    from shiori_sdk.memory.build import MemoryPlugin
 
     plugin = resolve_memory_plugin("default")
 

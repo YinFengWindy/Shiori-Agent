@@ -5,7 +5,8 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from desktop_bridge.method_policy import Concurrency, MethodPolicy, method_policy
+from desktop_bridge.method_policy import MethodPolicy, method_policy
+from shiori_sdk.rpc import Concurrency
 
 logger = logging.getLogger("desktop.bridge.dispatcher")
 

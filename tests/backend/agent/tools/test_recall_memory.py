@@ -6,7 +6,7 @@ import pytest
 
 from agent.tools.recall_memory import RecallMemoryTool
 from agent.tools.registry import ToolRegistry
-from core.memory.engine import MemoryQueryResult, MemoryToolSpec
+from shiori_sdk.memory.engine import MemoryQueryResult, MemoryToolSpec
 
 
 @pytest.mark.asyncio

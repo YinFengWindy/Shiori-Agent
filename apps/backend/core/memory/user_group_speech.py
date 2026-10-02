@@ -19,8 +19,8 @@ from typing import Any
 
 from conversation.service import role_thread_prefix
 from conversation.store import ConversationStore
-from core.common.channel_chat_types import is_group_chat_type
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.chat_types import is_group_chat_type
+from shiori_sdk.channels.message_source import MessageSource
 from core.common.text import truncate_text
 from core.common.timekit import parse_local_iso
 from session.manager.helpers import role_session_key

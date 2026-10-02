@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from shiori_sdk.memory.build import BuildResource
 
 if TYPE_CHECKING:
-    from core.memory.engine import (
+    from shiori_sdk.memory.engine import (
         MemoryEngine,
         MemoryMutation,
         MemoryMutationResult,

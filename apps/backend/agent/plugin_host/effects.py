@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import logging
 from collections.abc import Callable
-from shiori_sdk.runtime import Dispose as Dispose
+from shiori_sdk.runtime import Dispose
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)

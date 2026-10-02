@@ -4,11 +4,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from bus.events import InboundMessage
-from shiori_sdk.tool_chain import ToolCall as ToolCall
-from shiori_sdk.tool_chain import ToolCallGroup as ToolCallGroup
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.tool_chain import ToolCall
+from shiori_sdk.tool_chain import ToolCallGroup
 
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 
 if TYPE_CHECKING:
     from conversation.context_scope import ContextScope

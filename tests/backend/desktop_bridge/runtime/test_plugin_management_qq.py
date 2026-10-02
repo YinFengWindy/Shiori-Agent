@@ -8,7 +8,7 @@ from shiori_sdk.testing.packages import stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel
 from bus.event_bus import EventBus
-from core.accounts import AccountResponseRules
+from shiori_sdk.accounts.models import AccountResponseRules
 from core.roles.store import RoleStore
 from core.net.http import SharedHttpResources
 from plugins.qq.backend.accounts_store import QQAccountsStore, QQConnectionConfig

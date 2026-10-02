@@ -2,13 +2,11 @@ from __future__ import annotations
 from agent.prompting.token_estimate import estimate_tokens
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from shiori_sdk.prompting import (
-    PromptSectionRender as PromptSectionRender,
-    SYSTEM_CONTEXT_FRAME_MARKER as SYSTEM_CONTEXT_FRAME_MARKER,
-    LEGACY_CONTEXT_FRAME_MARKER as LEGACY_CONTEXT_FRAME_MARKER,
-    SYSTEM_CONTEXT_FRAME_END as SYSTEM_CONTEXT_FRAME_END,
-    is_context_frame as is_context_frame,
+    PromptSectionRender,
+    SYSTEM_CONTEXT_FRAME_MARKER,
+    SYSTEM_CONTEXT_FRAME_END,
 )
 
 if TYPE_CHECKING:

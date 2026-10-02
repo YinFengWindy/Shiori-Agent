@@ -36,7 +36,7 @@ class DesktopPluginRequestHandler:
         context = payload.get("__plugin_context")
         target = method.split(".", 2)[1]
         if isinstance(context, dict):
-            from agent.plugin_host.bridge_events import PluginRpcError
+            from shiori_sdk.rpc import PluginRpcError
 
             if not self._registry.communication.authorize(
                 str(context.get("plugin_id") or ""),

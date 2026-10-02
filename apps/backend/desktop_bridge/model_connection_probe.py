@@ -19,7 +19,7 @@ import openai
 
 from agent.config_models import ModelRegistration
 from agent.provider import LLMProvider
-from core.common.error_summary import summarize_exception_for_user
+from shiori_sdk.errors import summarize_exception_for_user
 from core.roles.model_errors import incomplete_connection_fields
 
 PROBE_TIMEOUT_S = 20.0

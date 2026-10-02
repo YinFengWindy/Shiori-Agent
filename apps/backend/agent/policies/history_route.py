@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
 
-from agent.llm_json import load_json_object_loose
+from shiori_sdk.json import load_json_object_loose
 from agent.looping.constants import _FLOW_SEQUENCE_PATTERN, _FLOW_TRIGGER_WORDS
 
 RouteDecisionSource = Literal["heuristic", "llm", "fallback"]

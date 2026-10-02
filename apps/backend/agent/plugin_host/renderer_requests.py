@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-from agent.plugin_host.bridge_events import PluginRpcError
+from shiori_sdk.rpc import PluginRpcError
 
 
 @dataclass

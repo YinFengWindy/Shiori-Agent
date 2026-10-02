@@ -12,7 +12,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.tools.web_fetch import WebFetchTool
 from agent.tools.web_search import WebSearchTool
-from core.memory.engine import MemoryToolProfile, MemoryToolSpec
+from shiori_sdk.memory.engine import MemoryToolProfile, MemoryToolSpec
 
 
 class _MemoryEngineStub:

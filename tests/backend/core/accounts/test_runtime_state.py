@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.accounts.models import AccountRecord
+from shiori_sdk.accounts.models import AccountRecord
 from core.accounts.runtime_state import AccountRuntimeState
 
 

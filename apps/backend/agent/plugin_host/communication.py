@@ -6,7 +6,8 @@ from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
-from agent.plugin_host.bridge_events import PluginBridgeEvent, PluginRpcError
+from agent.plugin_host.bridge_events import PluginBridgeEvent
+from shiori_sdk.rpc import PluginRpcError
 from agent.plugin_host.renderer_requests import RendererRequests
 
 

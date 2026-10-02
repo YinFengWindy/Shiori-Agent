@@ -13,12 +13,12 @@ from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import ContentSafetyError, ContextLengthError
 from agent.tools.registry import ToolRegistry
 from agent.tools.turn_scope import current_tool_turn
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import ContextView, UserContextThreads
-from core.common.message_source import SENDER_IS_USER_KEY, MessageSource
+from shiori_sdk.channels.message_source import SENDER_IS_USER_KEY, MessageSource
 from session.manager import SessionManager
 from session.manager.consolidation import ConsolidationCommitRequest
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 
 
 class _ArchivedTool(Tool):

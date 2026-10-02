@@ -11,12 +11,8 @@ from agent.core.types import ReasonerResult
 from agent.core.reply_completion import fetch_role_mood
 from agent.core.reply_output import RoleReplyOutput
 from core.roles.reply_state import RoleReply
-from agent.lifecycle.types import (
-    AfterStepCtx,
-    AfterToolResultCtx,
-    BeforeStepInput,
-    BeforeToolCallCtx,
-)
+from agent.lifecycle.types import BeforeStepInput, BeforeToolCallCtx
+from shiori_sdk.lifecycle import AfterStepCtx, AfterToolResultCtx
 from agent.tool_hooks import (
     ToolExecutionRequest,
     append_finalize_skipped_tool_results,
@@ -27,7 +23,7 @@ from agent.tool_runtime import (
     append_tool_result,
     tool_call_batch_snapshot,
 )
-from agent.tools.base import normalize_tool_result
+from shiori_sdk.tools import normalize_tool_result
 from agent.tools.registry import ToolRegistry
 from agent.tools.tool_search import tool_search_call_context
 from agent.tools.turn_scope import tool_turn

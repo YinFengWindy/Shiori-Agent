@@ -1,6 +1,6 @@
 """Public stage copy and existing diagnostic redaction for manual context work."""
 
-from core.common.error_summary import summarize_exception_for_user
+from shiori_sdk.errors import summarize_exception_for_user
 from core.compaction import NO_COMPLETE_TURNS, CompactionResult
 
 _FAILURE_MESSAGES = {

@@ -2,7 +2,7 @@
 
 from typing import Any, cast
 
-from bus.events_lifecycle import TurnCommitted
+from shiori_sdk.memory.committed import TurnCommitted
 from session.manager import Session
 
 

@@ -7,11 +7,11 @@ import shutil
 import threading
 from pathlib import Path
 
-from infra.persistence.json_store import atomic_save_json
+from shiori_sdk.files.json import atomic_save_json
 from infra.persistence.sqlite_lifecycle import require_inactive_data
 
 from .data_snapshot import data_digest, snapshot_data
-from .plugin_data import plugin_data_dir
+from shiori_sdk.storage import plugin_data_dir
 
 _LOCK = threading.RLock()
 

@@ -28,10 +28,10 @@ import tomllib
 
 from agent.plugin_host.kv import PluginKVStore
 from shiori_sdk.storage import (
-    PLUGIN_DATA_DIRNAME as PLUGIN_DATA_DIRNAME,
-    plugin_data_dir as plugin_data_dir,
+    plugin_data_dir,
 )
-from infra.persistence.json_store import atomic_save_json
+from shiori_sdk.files.json import atomic_save_json
+from shiori_sdk.files.text import atomic_save_text
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +58,6 @@ def migrate_plugin_file(
     if filename.endswith(".json"):
         atomic_save_json(target, json.loads(source.read_text(encoding="utf-8")))
     else:
-        from infra.persistence.text_store import atomic_save_text
-
         text = source.read_text(encoding="utf-8")
         if filename.endswith(".toml"):
             tomllib.loads(text)

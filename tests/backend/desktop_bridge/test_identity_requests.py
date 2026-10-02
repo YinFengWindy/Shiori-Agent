@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 import pytest
 from PIL import Image
 
-from core.accounts import AccountRecord, AccountRegistry
+from core.accounts import AccountRegistry
+from shiori_sdk.accounts.models import AccountRecord
 from core.channel_avatars import AvatarKey, ChannelAvatarStore
 from core.identity import IdentityChat, UserIdentityStore
 from desktop_bridge.identity_requests import DesktopIdentityRequestHandler

@@ -12,11 +12,8 @@ from core.error_context import current_session_key
 from ..interrupt import (
     TurnInterruptState,
 )
-from bus.events import (
-    InboundItem,
-    InboundMessage,
-    OutboundMessage,
-)
+from bus.events import InboundItem
+from shiori_sdk.messages import InboundMessage, OutboundMessage
 from bus.processing import ProcessingState
 
 from typing import TYPE_CHECKING
@@ -378,10 +375,10 @@ class _ProcessingMixin:
     ) -> tuple[str, list[str], list[dict], set[str] | None, str | None]:
         from agent.core.passive_turn import build_turn_injection_prompt
         from agent.prompting import (
-            PromptSectionRender,
             build_context_frame_content,
             build_context_frame_message,
         )
+        from shiori_sdk.prompting import PromptSectionRender
 
         # 1. 补充 deferred tools hint（与 run_turn 路径保持一致）。
         visible = preloaded_tools if self._tool_search_enabled else None

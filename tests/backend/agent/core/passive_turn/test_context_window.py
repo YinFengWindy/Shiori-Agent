@@ -12,7 +12,7 @@ from agent.core.runtime_support import ToolDiscoveryState
 from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import LLMProvider
 from agent.prompting.input_budget import BudgetPolicy
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import history_start, turn_context_view
 from conversation.service import network_thread_id
 from core.compaction_summary import WorkingSummary

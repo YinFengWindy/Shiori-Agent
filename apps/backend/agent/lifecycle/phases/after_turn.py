@@ -19,15 +19,13 @@ from agent.lifecycle.phase import (
     collect_prefixed_slots,
     topo_sort_modules,
 )
-from agent.lifecycle.types import AfterTurnCtx, TurnSnapshot, TurnState
+from agent.lifecycle.types import TurnSnapshot, TurnState
+from shiori_sdk.lifecycle import AfterTurnCtx
 from agent.turns.outbound import OutboundDispatch, OutboundPort
 from bus.event_bus import EventBus
-from bus.events import OutboundMessage
-from bus.events_lifecycle import (
-    NOT_USER_AUTHORED_KEY,
-    SKIP_POST_MEMORY_KEY,
-    TurnCommitted,
-)
+from shiori_sdk.messages import OutboundMessage
+from bus.events_lifecycle import NOT_USER_AUTHORED_KEY, SKIP_POST_MEMORY_KEY
+from shiori_sdk.memory.committed import TurnCommitted
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder

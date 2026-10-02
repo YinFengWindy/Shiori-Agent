@@ -6,11 +6,8 @@ from typing import Any
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.executor import ToolExecutor
 from agent.tool_hooks.finalize import is_finalize_denial
-from agent.tool_hooks.types import (
-    HookContext,
-    HookOutcome,
-    ToolExecutionRequest,
-)
+from agent.tool_hooks.types import HookContext, ToolExecutionRequest
+from shiori_sdk.tool_hooks import HookOutcome
 
 
 class _SpyHook(ToolHook):

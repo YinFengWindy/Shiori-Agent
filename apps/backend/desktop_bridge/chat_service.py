@@ -10,14 +10,14 @@ from agent.looping.core import AgentLoop
 from agent.looping.interrupt import TurnInterruptState
 from bus.event_bus import EventBus
 from conversation.service import desktop_thread_id
-from bus.events_lifecycle import (
+from bus.events_lifecycle import TurnFailed
+from shiori_sdk.channel_events import (
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
-    TurnCommitted,
-    TurnFailed,
 )
-from desktop_bridge.models import BridgeEvent
+from shiori_sdk.memory.committed import TurnCommitted
+from shiori_sdk.bridge import BridgeEvent
 from desktop_bridge.chat_completion import build_chat_terminal_event
 from desktop_bridge.turn_messages import committed_turn_messages
 from desktop_bridge.voice.role_tts_settings import resolve_role_tts_settings
@@ -26,10 +26,7 @@ from desktop_bridge.voice.tts_coordinator import TtsTurnCoordinator
 from desktop_bridge.voice.voice_service import VoiceService
 from session.manager import Session, SessionManager
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
-from core.common.error_summary import (
-    public_validation_message,
-    summarize_exception_for_user,
-)
+from shiori_sdk.errors import public_validation_message, summarize_exception_for_user
 from core.roles.self_initializer import SelfInitializationError
 from core.roles.model_errors import ModelConfigurationError
 from core.common.runtime_tasks import create_runtime_task

@@ -31,7 +31,7 @@ related:
 ## 修改影响
 
 - 修改消息模型：检查 bus 事件、Session store、Conversation projector、桌面 presenter、渠道格式化与记忆采样。
-- 修改会话键规则：检查 `apps/backend/infra/channels/session_key.py`、角色绑定、群聊成员隔离和历史迁移。
+- 修改会话键规则：检查 `packages/sdk/python/shiori_sdk/channels/session_key.py`、角色绑定、群聊成员隔离和历史迁移。
 - 修改线程删除或归档：检查 Session 缓存、搜索索引、桌面导航和后台任务引用。
 - 修改主动消息写入：确保消息同时完成投递与 Conversation/Session 同步。
 

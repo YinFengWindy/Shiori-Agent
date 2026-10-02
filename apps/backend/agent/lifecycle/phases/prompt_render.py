@@ -12,8 +12,9 @@ from agent.lifecycle.phase import (
     collect_prefixed_slots,
     topo_sort_modules,
 )
-from agent.lifecycle.types import PromptRenderCtx, PromptRenderInput, PromptRenderResult
-from agent.prompting import PromptSectionRender
+from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
+from shiori_sdk.lifecycle import PromptRenderCtx
+from shiori_sdk.prompting import PromptSectionRender
 from bus.event_bus import EventBus
 
 if TYPE_CHECKING:

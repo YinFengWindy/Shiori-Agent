@@ -23,11 +23,11 @@ import pytest
 
 from agent.looping.core import AgentLoop
 from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
-from bus.events_lifecycle import TurnCancelled, TurnStarted
+from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.channel_events import TurnCancelled, TurnStarted
 from bus.queue import MessageBus
 from core.common.channel_directory import ChannelDirectory
-from infra.channels.contract import ChannelContext
+from shiori_sdk.channels import ChannelContext
 import plugins.qqbot.backend.streaming as qqbot_streaming
 from plugins.qqbot.backend.channel import QQBotChannel
 from plugins.qqbot.testing.http import MESSAGE_PATH, STREAM_PATH, QQBotHttp

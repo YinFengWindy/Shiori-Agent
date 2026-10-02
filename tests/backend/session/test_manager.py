@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agent.prompting import is_context_frame
+from shiori_sdk.prompting import is_context_frame
 from session.manager import (
     Session,
     SessionManager,

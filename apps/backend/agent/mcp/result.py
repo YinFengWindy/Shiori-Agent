@@ -5,10 +5,10 @@ import binascii
 import json
 from typing import Any
 
-from agent.tools.base import ToolResult
+from shiori_sdk.tools import ToolResult
 
 
-from shiori_sdk.mcp import McpToolError as McpToolError
+from shiori_sdk.mcp import McpToolError
 
 
 def decode_tool_result(

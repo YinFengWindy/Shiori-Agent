@@ -1,6 +1,6 @@
 import pytest
 
-from bus.event_binding import EventBinding
+from shiori_sdk.event_binding import EventBinding
 from bus.event_bus import EventBus
 
 

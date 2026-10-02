@@ -13,11 +13,12 @@ import pytest
 
 from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
-from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
+from shiori_sdk.channel_events import StreamDeltaReady
+from shiori_sdk.memory.committed import TurnCommitted
 from core.roles import RoleStore
 from core.roles.relationship_runtime import RoleRelationshipRuntimeService
 from desktop_bridge import DesktopBridgeServer, DesktopBridgeService
-from desktop_bridge.models import BridgeResponse
+from shiori_sdk.bridge import BridgeResponse
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
 from core.memory.group_environment import GroupEnvironment

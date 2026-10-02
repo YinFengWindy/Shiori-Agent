@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from core.channels.hub import ChannelHub
 
 from .services import RoleAggregateService

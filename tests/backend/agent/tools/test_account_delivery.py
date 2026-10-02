@@ -24,7 +24,7 @@ from conversation.service import (
 )
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
-from core.accounts.target_contract import AccountTarget
+from shiori_sdk.accounts.targets import AccountTarget
 from core.identity import IdentityChat, UserIdentityStore
 from session.manager import SessionManager
 

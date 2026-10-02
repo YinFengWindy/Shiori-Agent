@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.group_context import group_context_response
 from conversation.service import ConversationService
 from core.memory.external_writes import edit_group_environment

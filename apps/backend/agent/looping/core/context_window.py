@@ -1,13 +1,13 @@
 """Host context-window control plane; channel commands keep normal admission."""
 
-from bus.events import InboundMessage, OutboundMessage
+from shiori_sdk.messages import InboundMessage, OutboundMessage
 from bus.events_context import ContextWindowChanged
 from conversation.context_scope import session_context_view
 from core.roles.model_errors import ModelConfigurationError
 from shiori_sdk.commands import normalize_command
 from agent.core.passive_turn.reasoner import DefaultReasoner
 from session.maintenance_progress import window_key
-from core.common.error_summary import public_validation_message
+from shiori_sdk.errors import public_validation_message
 
 
 def context_unavailable(session_key: str, reason: str, *, busy: bool = False) -> dict:

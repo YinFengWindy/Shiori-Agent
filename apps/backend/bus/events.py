@@ -11,8 +11,7 @@ if TYPE_CHECKING:
 
 
 from shiori_sdk.messages import (
-    InboundMessage as InboundMessage,
-    OutboundMessage as OutboundMessage,
+    InboundMessage,
 )
 
 

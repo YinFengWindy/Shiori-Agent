@@ -14,7 +14,7 @@ from conversation.listening_store import GroupListeningStore
 from conversation.listening_switches import ListeningOperator, ListeningSettings
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService
-from core.common.channel_chat_types import CHAT_TYPE_GROUP, ChatType
+from shiori_sdk.channels.chat_types import CHAT_TYPE_GROUP, ChatType
 
 
 @dataclass(frozen=True)

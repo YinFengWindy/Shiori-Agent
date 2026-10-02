@@ -16,7 +16,7 @@ from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import OutboundPort
 from bus.event_bus import EventBus
-from core.accounts.target_contract import AccountTarget
+from shiori_sdk.accounts.targets import AccountTarget
 
 # The platform user ID every faked bound chat reaches.
 BOUND_USER_ID = "bound-user"

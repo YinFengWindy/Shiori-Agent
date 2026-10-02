@@ -12,7 +12,7 @@ import pytest
 import pytest_asyncio
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
-from agent.core.response_parser import ResponseMetadata
+from shiori_sdk.lifecycle import ResponseMetadata
 from agent.core.runtime_support import TurnRunResult
 from agent.looping.ports import SessionServices
 from agent.lifecycle.phases.after_reasoning import (
@@ -20,16 +20,12 @@ from agent.lifecycle.phases.after_reasoning import (
     default_after_reasoning_modules,
 )
 from agent.lifecycle.phases.prompt_render import default_prompt_render_modules
-from agent.lifecycle.types import (
-    AfterReasoningCtx,
-    AfterReasoningInput,
-    PromptRenderCtx,
-    TurnState,
-)
+from agent.lifecycle.types import AfterReasoningInput, TurnState
+from shiori_sdk.lifecycle import AfterReasoningCtx, PromptRenderCtx
 from agent.plugin_host import HostServices, PluginKernel
 from agent.plugin_host.events import ScopedEventBus
 from bus.event_bus import EventBus
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from core.roles import RoleStore
 from session.manager import Session, SessionManager
 

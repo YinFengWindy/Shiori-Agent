@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from bus.events import InboundMessage, OutboundMessage
+from shiori_sdk.messages import InboundMessage, OutboundMessage
 from core.channels import ChannelHub
-from core.accounts.models import AccountResponseRules
+from shiori_sdk.accounts.models import AccountResponseRules
 from core.common.channel_directory import ChannelDirectory
 from core.roles import RoleAggregateService, RoleStore
 from session.manager import SessionManager
@@ -672,8 +672,8 @@ def _via(platform_account_id: str = "self") -> dict[str, str]:
 async def test_plugin_snapshots_are_stored_as_given_and_outlive_the_account(
     tmp_path: Path,
 ) -> None:
-    from core.accounts import AccountDeletionPlan
-    from core.common.message_source import MessageSource
+    from shiori_sdk.accounts.models import AccountDeletionPlan
+    from shiori_sdk.channels.message_source import MessageSource
 
     session_manager = SessionManager(tmp_path)
     service = RoleAggregateService.from_runtime(

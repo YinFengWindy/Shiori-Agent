@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from agent.tool_hooks.types import HookContext, HookEvent, HookOutcome
+from agent.tool_hooks.types import HookContext, HookEvent
+from shiori_sdk.tool_hooks import HookOutcome
 
 
 class ToolHook(ABC):

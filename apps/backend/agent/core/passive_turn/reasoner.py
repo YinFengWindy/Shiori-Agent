@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from agent.tools.turn_scope import tool_turn
 from agent.account_delivery.turn_state import account_delivery_scope
 
 from core.roles.reply_state import role_mood_catalog
-from core.common.channel_chat_types import is_group_chat_type
+from shiori_sdk.channels.chat_types import is_group_chat_type
 
 import asyncio
 import logging
@@ -58,12 +58,12 @@ from agent.lifecycle.phases.prompt_render import (
 )
 from agent.lifecycle.types import (
     inbound_thread_id,
-    AfterStepCtx,
     BeforeStepCtx,
     BeforeStepInput,
     PromptRenderInput,
     PromptRenderResult,
 )
+from shiori_sdk.lifecycle import AfterStepCtx
 from agent.prompting import DEFAULT_CONTEXT_TRIM_PLANS
 from agent.provider import ContentSafetyError, ContextLengthError
 from agent.tool_hooks import ToolExecutor

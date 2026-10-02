@@ -147,7 +147,7 @@ async def test_core_motives_follow_generation_publication_and_rollback(
     tmp_path, monkeypatch
 ):
     from unittest.mock import MagicMock
-    from bus.events_lifecycle import SceneObservationCommitted
+    from shiori_sdk.role_events import SceneObservationCommitted
     from proactive_v2.config import ProactiveStrategiesConfig
 
     monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])

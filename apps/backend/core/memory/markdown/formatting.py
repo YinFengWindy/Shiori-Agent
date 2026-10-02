@@ -7,8 +7,8 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
-from agent.llm_json import load_json_object_loose
-from agent.prompting import is_context_frame
+from shiori_sdk.json import load_json_object_loose
+from shiori_sdk.prompting import is_context_frame
 from conversation.context_scope import (
     ContextView,
     UserContextThreads,

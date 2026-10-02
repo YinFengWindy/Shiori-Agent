@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import now_iso
+from shiori_sdk.values import now_iso
 from .store import RoleStore
 
 _BINDING_KEYS = ("dialogue_model_registration_id", "visual_model_registration_id")

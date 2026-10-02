@@ -2,8 +2,9 @@
 
 from typing import Any
 
-from agent.mcp.client import McpClient, McpToolInfo
-from agent.tools.base import Tool, ToolResult
+from agent.mcp.client import McpClient
+from shiori_sdk.mcp import McpToolInfo
+from shiori_sdk.tools import Tool, ToolResult
 
 
 class McpToolWrapper(Tool):

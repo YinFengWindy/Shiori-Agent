@@ -18,7 +18,7 @@ import logging
 
 from agent.provider import LLMProvider, LLMResponse, is_truncated_finish_reason
 from core.common.llm_output_log import summarize_llm_output_for_log
-from core.common.channel_chat_types import REPLY_MENTION_IDS_KEY
+from shiori_sdk.channels.chat_types import REPLY_MENTION_IDS_KEY
 from core.roles.reply_state import (
     RoleReply,
     role_mood_prompt,

@@ -30,7 +30,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from conversation.service import scheduler_thread_id
 from session.manager.helpers import role_session_key
 from core.common.timekit import parse_iso as _parse_iso
-from infra.persistence.json_store import atomic_save_json, load_json
+from shiori_sdk.files.json import atomic_save_json, load_json
 from agent.scheduler_cron import is_cron_expr, next_cron_fire
 
 logger = logging.getLogger(__name__)

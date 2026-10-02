@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from core.scene.contracts import SceneDecision
-from infra.persistence.json_store import atomic_save_json, load_json
+from shiori_sdk.files.json import atomic_save_json, load_json
 
 _STATE_KEY = "scene_awareness_sessions"
 

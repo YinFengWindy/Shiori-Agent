@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from agent.context import ContextBuilder
     from agent.core.runtime_support import SessionLike
     from agent.retrieval.protocol import MemoryRetrievalPipeline
-    from bus.events import InboundMessage
+    from shiori_sdk.messages import InboundMessage
     from conversation.context_scope import ContextView
 
 

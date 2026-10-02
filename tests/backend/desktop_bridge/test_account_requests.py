@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from core.accounts import (
+from core.accounts import AccountRegistry
+from shiori_sdk.accounts.models import (
     AccountDeletionPlan,
     AccountNotFoundError,
-    AccountRegistry,
     AccountResponseRules,
 )
 from desktop_bridge.account_requests import DesktopAccountRequestHandler

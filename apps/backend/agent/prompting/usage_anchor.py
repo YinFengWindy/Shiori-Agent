@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import wraps
 
-from .assembler import SYSTEM_CONTEXT_FRAME_MARKER
+from shiori_sdk.prompting import SYSTEM_CONTEXT_FRAME_MARKER
 from .token_estimate import estimate_tokens
 from .usage_accounting import turn_usage
 

@@ -1,6 +1,6 @@
 """Host fixture with one scoped tool contribution."""
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 
 
 class WeatherTool(Tool):

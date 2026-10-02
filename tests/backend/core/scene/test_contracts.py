@@ -3,7 +3,7 @@ from dataclasses import fields
 import pytest
 
 from agent.provider import ToolCall
-from bus.events_lifecycle import SceneObservationCommitted
+from shiori_sdk.role_events import SceneObservationCommitted
 from core.scene.contracts import (
     SCENE_DECISION_TOOL_NAME,
     SceneDecision,

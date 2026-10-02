@@ -20,11 +20,13 @@ from agent.turns.outbound import DeliveryReceipt, PushToolOutboundPort
 from agent.turns.result import TurnResult, TurnOutbound
 from core.roles.reply_state import RoleReply
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ProactiveMessageCommitted, RoleDeleted, TurnCommitted
+from bus.events_lifecycle import ProactiveMessageCommitted
+from shiori_sdk.role_events import RoleDeleted
+from shiori_sdk.memory.committed import TurnCommitted
 from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
 from conversation.service import LegacySessionDescriptor, network_thread_id
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from core.roles import RoleStore
 from core.roles.errors import RoleNotFoundError
 from core.roles.services import RoleAggregateService
@@ -1235,7 +1237,7 @@ async def test_roles_create_binds_the_first_registered_model(
 
 @pytest.mark.asyncio
 async def test_account_edits_during_deletion_report_account_deleting(tmp_path) -> None:
-    from core.accounts import AccountDeletionPlan
+    from shiori_sdk.accounts.models import AccountDeletionPlan
 
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="m")

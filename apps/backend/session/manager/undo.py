@@ -9,7 +9,7 @@ from session.maintenance_progress import MaintenanceProgress, message_window_key
 
 from .manager import _ManagerCoreMixin
 from .models import effective_context_cursors
-from .undo_result import UndoSessionResult
+from shiori_sdk.sessions import UndoSessionResult
 from .undo_selection import _compute_rollback_index, _find_last_passive_turn
 
 if TYPE_CHECKING:

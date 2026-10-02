@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent.tools.base import ToolResult
+from shiori_sdk.tools import ToolResult
 from agent.tools.filesystem import (
     EditFileTool,
     ListDirTool,
@@ -14,9 +14,9 @@ from agent.tools.filesystem import (
     _IMAGE_TARGET_B64_LEN,
     _READ_MAX_BYTES,
     _FILE_MUTATION_LOCKS,
-    _resolve_path,
     _run_with_file_mutation_lock,
 )
+from shiori_sdk.files.paths import resolve_path as _resolve_path
 
 
 def _as_text(value: str | ToolResult) -> str:

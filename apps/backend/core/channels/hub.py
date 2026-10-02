@@ -5,13 +5,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from bus.events import InboundMessage, OutboundMessage
+from shiori_sdk.messages import InboundMessage, OutboundMessage
 from core.common.channel_directory import ChannelDirectory
-from core.common.channel_chat_types import is_group_chat_type
+from shiori_sdk.channels.chat_types import is_group_chat_type
 from core.common.channel_identifiers import normalize_sender_id
-from core.accounts import (
+from core.accounts import AccountRegistry
+from shiori_sdk.accounts.models import (
     VIA_ACCOUNT_KEY,
-    AccountRegistry,
     AccountSnapshot,
     ViaAccount,
     account_serves_channel,
@@ -23,7 +23,7 @@ from conversation.service import (
     LegacySessionDescriptor,
     network_thread_id,
 )
-from core.common.message_source import (
+from shiori_sdk.channels.message_source import (
     GROUP_NAME_KEY,
     REPLY_TO_SENDER_ID_KEY,
     REPLY_TO_SENDER_IS_USER_KEY,
@@ -33,7 +33,8 @@ from core.common.message_source import (
     addresses_account,
     display_name,
 )
-from core.identity import IdentityChat, IdentityScope, UserIdentityStore
+from core.identity import IdentityChat, UserIdentityStore
+from shiori_sdk.channels.identity import IdentityScope
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
 from core.roles.role_runtime import RoleExecutionContext

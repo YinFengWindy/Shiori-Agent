@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from bus.events_lifecycle import TurnCommitted
-from desktop_bridge.models import BridgeEvent
+from shiori_sdk.memory.committed import TurnCommitted
+from shiori_sdk.bridge import BridgeEvent
 
 
 def build_chat_terminal_event(

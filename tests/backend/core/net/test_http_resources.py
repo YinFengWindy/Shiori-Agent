@@ -9,11 +9,11 @@ import pytest
 
 from core.net.http import (
     HttpRequester,
-    RequestBudget,
     RetryPolicy,
     SharedHttpResources,
     shared_ssl_context,
 )
+from shiori_sdk.http import RequestBudget
 
 
 @pytest.fixture

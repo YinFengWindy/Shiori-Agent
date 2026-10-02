@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from conversation.store import ConversationStore
-from core.accounts.target_contract import AccountTarget
+from shiori_sdk.accounts.targets import AccountTarget
 from core.desktop_presence import DesktopPresence
 from core.identity import IdentityChat
 from core.roles import RoleProactiveCandidate, RoleStore

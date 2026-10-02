@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import Any, cast
 
-from agent.tools.base import Tool, ToolResult, normalize_tool_result
+from shiori_sdk.tools import Tool, ToolResult, normalize_tool_result
 
 
 @dataclass(frozen=True)

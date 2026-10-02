@@ -17,9 +17,9 @@ from agent.lifecycle.facade import TurnLifecycle
 from agent.plugin_host import HostServices, PluginKernel
 from bootstrap.wiring import wire_turn_lifecycle
 from bus.event_bus import EventBus
-from bus.events import InboundMessage
-from bus.events_lifecycle import TurnCommitted
 from core.roles import RoleStore
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.memory.committed import TurnCommitted
 
 
 class _DummySession:

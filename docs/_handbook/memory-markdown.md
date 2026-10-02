@@ -197,7 +197,7 @@ Optimizer 定时任务
 
 ## 向量记忆 API——谁在调它
 
-`apps/backend/core/memory/engine.py` 定义了一套抽象协议（`MemoryEngine`），由四个子协议组成。引擎本身是一个 **plugin**——`[memory].engine` 配置项指定用哪个实现，留空 = `default_memory` 插件。协议与实现解耦。
+`packages/sdk/python/shiori_sdk/memory/engine.py` 定义了一套抽象协议（`MemoryEngine`），由四个子协议组成。引擎本身是一个 **plugin**——`[memory].engine` 配置项指定用哪个实现，留空 = `default_memory` 插件。协议与实现解耦。
 
 ### API 协议一览
 

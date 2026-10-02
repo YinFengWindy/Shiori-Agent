@@ -10,7 +10,7 @@ from agent.lifecycle.phase import (
     collect_prefixed_slots,
     topo_sort_modules,
 )
-from agent.lifecycle.types import AfterStepCtx
+from shiori_sdk.lifecycle import AfterStepCtx
 
 
 @dataclass

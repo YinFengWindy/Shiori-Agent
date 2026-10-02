@@ -7,7 +7,7 @@ import pytest
 from shiori_sdk.testing.bridge import plugin_bridge_request
 
 from agent.plugin_host.kv import PluginKVStore
-from agent.plugin_host.plugin_data import plugin_data_dir
+from shiori_sdk.storage import plugin_data_dir
 from core.roles.store import RoleStore
 from plugins.qqbot.backend.accounts import QQBotAccountStore
 

@@ -8,7 +8,7 @@ from typing import Any
 
 from bootstrap.paths import REPOSITORY_ROOT, plugin_roots
 from agent.plugin_host.manifest import ManifestError, load_manifest
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.files.text import atomic_save_text
 from infra.persistence.toml_store import render_toml
 
 

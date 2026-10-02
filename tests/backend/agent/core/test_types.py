@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-from agent.core.types import (
-    HistoryMessage,
-    ToolCall,
-    ToolCallGroup,
-    to_tool_call_groups,
-)
+from agent.core.types import HistoryMessage, to_tool_call_groups
+from shiori_sdk.tool_chain import ToolCall, ToolCallGroup
 
 
 def test_to_tool_call_groups_returns_empty_list_for_empty_chain():

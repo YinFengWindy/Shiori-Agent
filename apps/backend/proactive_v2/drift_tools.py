@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent.tools.base import Tool, ToolResult
+from shiori_sdk.tools import Tool, ToolResult
 from agent.tools.filesystem import EditFileTool, ReadFileTool, WriteFileTool
 from agent.tools.message_lookup import UserContextMessageTool
 from agent.tools.registry import ToolRegistry

@@ -8,11 +8,7 @@ from typing import Literal, NotRequired, TypedDict
 
 from core.common.task_collector import TaskCollector
 from infra.channels.account_group import SupportsMemberChannels
-from infra.channels.contract import (
-    Channel,
-    ChannelStatus,
-    SupportsChannelStatus,
-)
+from shiori_sdk.channels import Channel, ChannelStatus, SupportsChannelStatus
 from infra.channels.runtime_context import RuntimeChannelContext
 
 logger = logging.getLogger(__name__)
