@@ -12,14 +12,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.prompting import is_context_frame
+from shiori_sdk.prompting import is_context_frame
 from agent.skills import BUILTIN_SKILLS_DIR
 from agent.core.proactive_turn import ProactiveTurnPipeline, ProactiveTurnPipelineDeps
 from agent.core.proactive_turn.gates import ProactiveGateChain
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.message_lookup import SearchMessagesTool
 from agent.tools.recall_memory import RecallMemoryTool
-from core.memory.engine import MemoryQueryResult, MemoryToolSpec
+from shiori_sdk.memory.engine import MemoryQueryResult, MemoryToolSpec
 from conversation.service import (
     ConversationService,
     LegacySessionDescriptor,
@@ -27,7 +27,7 @@ from conversation.service import (
     network_thread_id,
 )
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
-from core.accounts import AccountRecord
+from shiori_sdk.accounts.models import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
 from agent.tools.registry import ToolRegistry
 from agent.looping.ports import SessionServices

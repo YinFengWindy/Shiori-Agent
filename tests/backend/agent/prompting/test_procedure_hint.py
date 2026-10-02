@@ -3,12 +3,8 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
 
-from agent.prompting import (
-    PromptSectionRender,
-    build_context_frame_content,
-    build_context_frame_message,
-    is_context_frame,
-)
+from agent.prompting import build_context_frame_content, build_context_frame_message
+from shiori_sdk.prompting import PromptSectionRender, is_context_frame
 
 from agent.looping.core import AgentLoop
 from agent.looping.ports import (
@@ -18,7 +14,7 @@ from agent.looping.ports import (
     MemoryServices,
 )
 from agent.provider import LLMResponse, ToolCall
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
 from tests.backend.memory_fakes import FakeMemoryEngine
 

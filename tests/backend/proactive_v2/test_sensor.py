@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from conversation.service import desktop_thread_id, network_thread_id
-from core.accounts import AccountRecord
+from shiori_sdk.accounts.models import AccountRecord
 from core.desktop_presence import DesktopPresence
 from core.identity import IdentityChat
 from core.roles import RoleStore

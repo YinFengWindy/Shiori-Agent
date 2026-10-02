@@ -1,5 +1,5 @@
 """
-infra.persistence.json_store — 统一 JSON 文件持久化基础工具。
+shiori_sdk.files.json — 统一 JSON 文件持久化基础工具。
 
 替代散落在各模块的 _load()/_save() 重复实现，提供：
 - 原子写（tmp 文件 + rename）

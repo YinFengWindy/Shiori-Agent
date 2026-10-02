@@ -10,11 +10,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from bus.events_lifecycle import (
-    NOT_USER_AUTHORED_KEY,
-    SKIP_POST_MEMORY_KEY,
-    TurnCommitted,
-)
+from bus.events_lifecycle import NOT_USER_AUTHORED_KEY, SKIP_POST_MEMORY_KEY
+from shiori_sdk.memory.committed import TurnCommitted
 from bus.events_context import ContextWindowChanged
 from conversation.context_scope import (
     ContextView,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-from bus.events_lifecycle import SceneTransition
+from shiori_sdk.role_events import SceneTransition
 
 if TYPE_CHECKING:
     from agent.provider import ToolCall

@@ -10,7 +10,7 @@ from conversation.context_scope import (
 )
 from conversation.service import desktop_thread_id, network_thread_id
 from core.identity import UserIdentityStore, IdentityChat
-from core.accounts import AccountRecord
+from shiori_sdk.accounts.models import AccountRecord
 from session.manager import SessionManager
 from session.manager.consolidation import ConsolidationCommitRequest
 

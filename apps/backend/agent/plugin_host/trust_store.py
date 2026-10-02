@@ -7,7 +7,7 @@ import os
 import re
 from pathlib import Path
 
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.files.text import atomic_save_text
 
 
 class PluginTrustStore:

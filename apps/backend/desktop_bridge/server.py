@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.common.error_summary import summarize_exception_for_user
+from shiori_sdk.errors import summarize_exception_for_user
 
 import asyncio
 import json
@@ -13,7 +13,7 @@ from pathlib import Path
 from bootstrap.app import AppRuntime
 from bootstrap.tools import CoreRuntime
 from core.roles import RoleStore
-from desktop_bridge.models import BridgeError, BridgeResponse
+from shiori_sdk.bridge import BridgeError, BridgeResponse
 from desktop_bridge.request_dispatcher import BridgeRequestDispatcher
 from desktop_bridge.runtime.factory import build_desktop_service
 from desktop_bridge.stream_writer import BridgeStreamWriter

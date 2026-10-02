@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from core.common.message_source import USER_SENDER_LABEL, MessageSource
+from shiori_sdk.channels.message_source import USER_SENDER_LABEL, MessageSource
 from core.common.text import truncate_text
 from core.common.timekit import parse_local_iso
 

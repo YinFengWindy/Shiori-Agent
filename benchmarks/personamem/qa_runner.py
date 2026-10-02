@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 
 from .dataset import PersonaMemInstance
 

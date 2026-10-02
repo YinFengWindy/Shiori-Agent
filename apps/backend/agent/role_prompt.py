@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from agent.prompting import PromptSectionRender
+from shiori_sdk.prompting import PromptSectionRender
 from core.roles import RoleStore
 from core.roles.role_macros import expand_role_macros
 from core.roles.role_prompt_compiler import RolePromptCompiler

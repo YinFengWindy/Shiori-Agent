@@ -1,6 +1,7 @@
 """Publication-scoped ownership of scene intake and background tasks."""
 
-from agent.lifecycle.types import AfterTurnCtx, BeforeTurnCtx
+from agent.lifecycle.types import BeforeTurnCtx
+from shiori_sdk.lifecycle import AfterTurnCtx
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
 from core.scene.controller import SceneAwarenessController

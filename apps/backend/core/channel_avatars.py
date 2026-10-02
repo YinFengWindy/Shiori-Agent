@@ -20,9 +20,9 @@ from threading import RLock
 from typing import Any, Literal
 
 from core.common.media import write_png_thumbnail
-from infra.persistence.json_store import atomic_save_json, load_json
+from shiori_sdk.files.json import atomic_save_json, load_json
 from infra.persistence.keyed_names import keyed_file_name
-from infra.persistence.text_store import atomic_save_bytes
+from shiori_sdk.files.text import atomic_save_bytes
 
 # 头像多久重新获取一次：超过这个时间后，该发送者或会话下次有消息时再取。
 AVATAR_TTL = timedelta(days=7)

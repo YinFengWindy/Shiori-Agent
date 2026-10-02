@@ -5,9 +5,10 @@ from __future__ import annotations
 import inspect
 from typing import Any, cast
 
-from agent.lifecycle.types import PreToolCtx
+from shiori_sdk.tool_hooks import PreToolCtx
 from agent.tool_hooks.base import ToolHook
-from agent.tool_hooks.types import HookContext, HookOutcome
+from agent.tool_hooks.types import HookContext
+from shiori_sdk.tool_hooks import HookOutcome
 
 
 def build_hook_name(plugin_id: str, handler_name: str) -> str:

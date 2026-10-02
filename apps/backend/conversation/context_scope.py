@@ -32,7 +32,7 @@ from conversation.service import (
     is_scheduler_thread,
     network_thread_id,
 )
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from core.identity import UserIdentity, UserIdentityStore
 from session.manager.helpers import role_id_from_session_key, role_session_key
 from session.manager.models import (

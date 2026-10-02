@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from agent.lifecycle.types import AfterToolResultCtx
+from shiori_sdk.lifecycle import AfterToolResultCtx
 from agent.plugin_host import HostServices, PluginKernel
 from bus.event_bus import EventBus
 from core.roles import RoleStore

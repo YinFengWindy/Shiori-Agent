@@ -2,7 +2,8 @@ from copy import deepcopy
 
 import pytest
 
-from agent.prompting.assembler import build_context_frame_content, PromptSectionRender
+from agent.prompting.assembler import build_context_frame_content
+from shiori_sdk.prompting import PromptSectionRender
 from agent.prompting.usage_anchor import UsageAnchors, input_cost, usage_context
 
 

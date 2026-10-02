@@ -23,13 +23,14 @@ from agent.looping.ports import LLMConfig, LLMServices
 from agent.provider import ContentSafetyError, LLMResponse, ToolCall
 from agent.core.passive_turn.empty_reply import EmptyReplyError
 from agent.tool_hooks.base import ToolHook
-from agent.tool_hooks.types import HookContext, HookOutcome
+from agent.tool_hooks.types import HookContext
+from shiori_sdk.tool_hooks import HookOutcome
 from agent.tools.account_delivery import ACCOUNT_SEND_EXTERNAL_LIMIT, AccountSendTool
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
 from agent.tools.external_access import EXTERNAL_TOOL_DENIED
 from agent.tools.tool_search import ToolSearchTool
-from core.accounts.target_contract import AccountTarget
+from shiori_sdk.accounts.targets import AccountTarget
 from core.identity import IdentityChat
 
 

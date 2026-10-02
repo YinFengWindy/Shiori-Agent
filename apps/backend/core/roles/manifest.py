@@ -4,7 +4,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from infra.persistence.json_store import atomic_save_json, load_json
+from shiori_sdk.files.json import atomic_save_json, load_json
 
 from .models import RoleRecord
 from .migration import CURRENT_MANIFEST_VERSION, migrate_manifest_payload

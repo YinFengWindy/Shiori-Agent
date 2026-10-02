@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 
 from agent.plugin_host.rpc import PluginRpcRegistry
-from desktop_bridge.method_policy import Concurrency, Handler, MethodPolicy
+from desktop_bridge.method_policy import Handler, MethodPolicy
+from shiori_sdk.rpc import Concurrency
 
 
 async def _echo(payload):

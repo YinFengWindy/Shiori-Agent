@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from core.common.timekit import parse_iso
-from infra.persistence.json_store import atomic_save_json, load_json
+from shiori_sdk.files.json import atomic_save_json, load_json
 
 logger = logging.getLogger(__name__)
 

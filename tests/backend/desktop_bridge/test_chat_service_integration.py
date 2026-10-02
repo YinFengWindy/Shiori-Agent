@@ -14,7 +14,7 @@ from agent.lifecycle.types import BeforeReasoningCtx, BeforeTurnCtx
 from agent.looping.interrupt import TurnInterruptState
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from desktop_bridge.chat_service import DesktopChatService
 from session.manager import SessionManager
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY

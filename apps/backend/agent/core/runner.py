@@ -4,12 +4,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent.looping.handlers import process_spawn_completion_event
-from bus.events import (
-    InboundItem,
-    InboundMessage,
-    OutboundMessage,
-    SpawnCompletionItem,
-)
+from bus.events import InboundItem, SpawnCompletionItem
+from shiori_sdk.messages import InboundMessage, OutboundMessage
 
 if TYPE_CHECKING:
     from agent.core.passive_turn import AgentCore

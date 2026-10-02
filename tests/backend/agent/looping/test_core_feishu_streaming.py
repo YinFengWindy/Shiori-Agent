@@ -2,7 +2,7 @@
 
 from agent.looping.core import AgentLoop
 from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
+from shiori_sdk.messages import InboundMessage, OutboundMessage
 from bus.queue import MessageBus
 from core.common.channel_directory import ChannelDirectory
 from plugins.feishu.tests.conftest import build_harness, message_event, CHAT_ID

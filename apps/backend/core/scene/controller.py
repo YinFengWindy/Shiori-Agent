@@ -8,15 +8,13 @@ from collections.abc import Callable
 
 from agent.core.passive_support import to_history_messages
 from agent.core.types import HistoryMessage
-from agent.lifecycle.types import AfterTurnCtx, BeforeTurnCtx
+from agent.lifecycle.types import BeforeTurnCtx
+from shiori_sdk.lifecycle import AfterTurnCtx
 from core.scene.state import SceneStateStore
 from core.roles.models import RoleRecord
 from bus.event_bus import EventBus
-from bus.events_lifecycle import (
-    ProactiveMessageCommitted,
-    SceneObservationCommitted,
-    SceneTurnSource,
-)
+from bus.events_lifecycle import ProactiveMessageCommitted
+from shiori_sdk.role_events import SceneObservationCommitted, SceneTurnSource
 from conversation.context_scope import history_filter, session_context_view
 from core.roles.store import RoleStore
 from core.common.runtime_tasks import create_runtime_task

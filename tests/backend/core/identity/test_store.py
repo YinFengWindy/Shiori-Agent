@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from core.accounts import AccountRecord
-from core.identity import IdentityChat, IdentityScope, UserIdentity, UserIdentityStore
+from shiori_sdk.accounts.models import AccountRecord
+from core.identity import IdentityChat, UserIdentity, UserIdentityStore
+from shiori_sdk.channels.identity import IdentityScope
 
 
 def _account(plugin_id: str, platform_account_id: str) -> AccountRecord:

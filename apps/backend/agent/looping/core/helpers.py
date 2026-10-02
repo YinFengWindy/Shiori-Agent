@@ -6,7 +6,8 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TypeAlias, cast
 
-from bus.events import InboundItem, InboundMessage
+from bus.events import InboundItem
+from shiori_sdk.messages import InboundMessage
 
 from ..interrupt import TurnInterruptState
 

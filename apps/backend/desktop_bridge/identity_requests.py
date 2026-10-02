@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from core.accounts import AccountRecord, AccountRegistry, account_serves_channel
+from core.accounts import AccountRegistry
+from shiori_sdk.accounts.models import AccountRecord, account_serves_channel
 from core.channel_avatars import AvatarIndex, ChannelAvatarStore
 from core.identity import UserIdentity, UserIdentityStore
 

@@ -8,8 +8,9 @@ from typing import Any
 from session.manager import SessionManager
 
 from agent.plugin_host.capabilities import LifecycleCapability, RpcCapability
-from agent.plugin_host.effects import Dispose, EffectScope
+from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.host_service_requirements import provided_service
+from shiori_sdk.runtime import Dispose
 from agent.plugin_host.manifest import PluginManifest
 from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
 from shiori_sdk.memory.context import MemoryCapability, MemoryPluginContext
@@ -27,7 +28,7 @@ from shiori_sdk.tool_hooks import ToolHooksCapability
 from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.diagnostics import Diagnostics
 from shiori_sdk.runtime import (
-    CapabilityNotGranted as CapabilityNotGranted,
+    CapabilityNotGranted,
 )
 from shiori_sdk.runtime import (
     EventsCapability,

@@ -213,7 +213,7 @@ async def test_role_update_commits_generic_plugin_draft_and_projects_its_owner(
 async def test_role_delete_first_deletes_its_accounts_through_their_plugins(
     tmp_path: Path,
 ) -> None:
-    from core.accounts import AccountDeletionPlan
+    from shiori_sdk.accounts.models import AccountDeletionPlan
 
     role_store = RoleStore(tmp_path)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="Mira")

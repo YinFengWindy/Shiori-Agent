@@ -18,9 +18,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent.mcp.client import McpToolInfo
+from shiori_sdk.mcp import McpToolInfo
 from agent.mcp.tool import McpToolWrapper
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.external_access import EXTERNAL_TOOL_DENIED
 from agent.tools.registry import ToolRegistry
 from agent.tools.search_backend import _default_normalize

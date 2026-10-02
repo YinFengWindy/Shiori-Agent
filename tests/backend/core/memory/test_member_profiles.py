@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from core.accounts import AccountRecord
-from core.common.message_source import MessageSource
+from shiori_sdk.accounts.models import AccountRecord
+from shiori_sdk.channels.message_source import MessageSource
 from core.identity import BoundUserSenders, UserIdentity
 from core.memory.member_profiles import (
     MEMBER_PROMPT_CHAR_LIMIT,

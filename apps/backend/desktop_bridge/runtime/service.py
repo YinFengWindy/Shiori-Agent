@@ -21,7 +21,7 @@ from desktop_bridge.method_policy import (
     OwnerRouting,
     resolve_plugin_method_policy,
 )
-from desktop_bridge.models import BridgeError, BridgeResponse
+from shiori_sdk.bridge import BridgeError, BridgeResponse
 from desktop_bridge.runtime.apply import RuntimeApplyError, RuntimeSettingsApplication
 from desktop_bridge.runtime.desktop_presence import report_desktop_presence
 from desktop_bridge.runtime.proactive_target import preview_proactive_target

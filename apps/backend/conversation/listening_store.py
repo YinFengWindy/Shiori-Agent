@@ -24,7 +24,7 @@ from typing import Any
 
 from conversation.listening_cursors import ListeningCursors
 from conversation.listening_switches import ListeningSwitches
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from core.common.timekit import parse_local_iso
 from infra.persistence.sqlite_transaction import immediate_transaction
 

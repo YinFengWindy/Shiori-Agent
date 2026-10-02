@@ -14,12 +14,12 @@ from agent.lifecycle.phases.before_turn import (
 from agent.lifecycle.types import TurnState
 from agent.plugin_host import HostServices, PluginKernel
 from bus.event_bus import EventBus
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from session.manager import Session
 import asyncio
 import builtins
 from agent.plugin_host.capabilities import BotCommandsCapability
-from bus.events_lifecycle import TurnCommitted
+from shiori_sdk.memory.committed import TurnCommitted
 
 PLUGIN_ROOT = plugin_directory("status_commands")
 

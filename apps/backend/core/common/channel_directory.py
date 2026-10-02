@@ -9,9 +9,9 @@ name the core owns is the reserved ``desktop`` transport.
 from __future__ import annotations
 
 from shiori_sdk.channels.hooks import (
-    SupportsStreamEvents as SupportsStreamEvents,
-    SupportsSystemPromptHint as SupportsSystemPromptHint,
-    SupportsDefaultChatType as SupportsDefaultChatType,
+    SupportsStreamEvents,
+    SupportsSystemPromptHint,
+    SupportsDefaultChatType,
 )
 
 from collections.abc import Callable

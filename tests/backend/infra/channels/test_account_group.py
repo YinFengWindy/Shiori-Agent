@@ -8,7 +8,7 @@ import logging
 import pytest
 
 from infra.channels.account_group import AccountChannelGroup
-from infra.channels.contract import ChannelContext
+from shiori_sdk.channels import ChannelContext
 
 
 class _Member:

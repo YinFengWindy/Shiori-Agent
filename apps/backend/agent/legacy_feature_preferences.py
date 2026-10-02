@@ -5,7 +5,7 @@ from typing import Any
 import tomllib
 
 from desktop_bridge.plugin_config_text import merge_table
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.files.text import atomic_save_text
 
 
 def load_boolean_preferences(

@@ -8,9 +8,9 @@ import pytest
 
 from agent.looping.core import AgentLoop
 from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
-from bus.events_lifecycle import TurnCancelled
-from core.common.message_source import MessageSource
+from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.channel_events import TurnCancelled
+from shiori_sdk.channels.message_source import MessageSource
 
 
 @pytest.mark.asyncio

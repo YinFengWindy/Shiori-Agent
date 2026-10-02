@@ -14,8 +14,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from conversation.context_scope import stored_message_source
-from core.common.channel_chat_types import is_group_chat_type
-from core.common.message_source import USER_SENDER_LABEL
+from shiori_sdk.channels.chat_types import is_group_chat_type
+from shiori_sdk.channels.message_source import USER_SENDER_LABEL
 from core.identity import BoundUserSenders
 from core.memory.group_environment import (
     GroupEnvironmentSnapshot,

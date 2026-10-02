@@ -241,7 +241,7 @@ def test_role_store_persists_proactive_policy_without_legacy_candidates(
 
 @pytest.mark.asyncio
 async def test_deleting_a_role_forgets_the_user_identity_on_its_accounts(tmp_path):
-    from core.accounts import AccountDeletionPlan
+    from shiori_sdk.accounts.models import AccountDeletionPlan
     from core.identity import IdentityChat
 
     store = RoleStore(tmp_path)

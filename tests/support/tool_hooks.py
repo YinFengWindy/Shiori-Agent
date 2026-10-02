@@ -22,7 +22,7 @@ from agent.plugin_host import HostServices, PluginKernel
 from agent.provider import LLMResponse
 from agent.subagent import SubAgent
 from agent.tool_hooks.base import ToolHook
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from core.net.http import (

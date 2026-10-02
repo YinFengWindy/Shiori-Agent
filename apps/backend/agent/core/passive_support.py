@@ -8,11 +8,8 @@ from typing import TYPE_CHECKING
 
 from agent.prompting.token_estimate import estimate_input
 from agent.core.types import ChatMessage, HistoryMessage, to_tool_call_groups
-from agent.prompting import (
-    PromptSectionRender,
-    build_context_frame_content,
-    build_context_frame_message,
-)
+from agent.prompting import build_context_frame_content, build_context_frame_message
+from shiori_sdk.prompting import PromptSectionRender
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder

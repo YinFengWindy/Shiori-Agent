@@ -6,8 +6,8 @@ import json
 import logging
 from pathlib import Path
 
-from infra.persistence.json_store import atomic_save_json, load_json
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.files.json import atomic_save_json, load_json
+from shiori_sdk.files.text import atomic_save_text
 
 logger = logging.getLogger(__name__)
 

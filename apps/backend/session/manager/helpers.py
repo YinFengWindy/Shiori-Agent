@@ -11,11 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from core.common.text import truncate_text
-from agent.prompting import (
-    PromptSectionRender,
-    build_context_frame_content,
-    build_context_frame_message,
-)
+from agent.prompting import build_context_frame_content, build_context_frame_message
+from shiori_sdk.prompting import PromptSectionRender
 
 logger = logging.getLogger(__name__)
 

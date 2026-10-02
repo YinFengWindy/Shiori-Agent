@@ -25,7 +25,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.account_delivery import AccountDelivery
 from core.accounts import AccountRegistry
 from core.accounts.delivery_ledger import AccountDeliveryLedger
-from core.accounts.target_contract import AccountTarget
+from shiori_sdk.accounts.targets import AccountTarget
 from agent.turns.outbound import PushToolOutboundPort
 from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService

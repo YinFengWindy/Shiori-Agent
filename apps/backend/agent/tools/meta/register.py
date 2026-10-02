@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.filesystem import EditFileTool, WriteFileTool
 from agent.tools.forget_memory import ForgetMemoryTool
 from agent.tools.memorize import MemorizeTool
@@ -13,7 +13,7 @@ from agent.tools.recall_memory import RecallMemoryTool
 from agent.tools.registry import ToolRegistry
 from agent.tools.shell import ShellTool, ShellTaskOutputTool, ShellTaskStopTool
 from agent.tools.tool_search import ToolSearchTool
-from core.memory.engine import MemoryEngine, MemoryToolSpec
+from shiori_sdk.memory.engine import MemoryEngine, MemoryToolSpec
 
 
 class _MemorySignalTool(Tool):

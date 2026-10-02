@@ -7,7 +7,8 @@ from agent.core.passive_turn import get_session_metadata
 from agent.core.runtime_support import TurnRunResult, WindowTurnRunner
 from agent.lifecycle.types import PromptRenderInput
 from agent.looping.ports import SessionServices
-from bus.events import InboundMessage, OutboundMessage, SpawnCompletionItem
+from bus.events import SpawnCompletionItem
+from shiori_sdk.messages import InboundMessage, OutboundMessage
 
 if TYPE_CHECKING:
     from agent.core.passive_turn import PassiveTurnPipeline

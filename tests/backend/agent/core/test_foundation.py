@@ -1,4 +1,4 @@
-from bus.events import InboundMessage, OutboundMessage
+from shiori_sdk.messages import InboundMessage, OutboundMessage
 from agent.core.types import (
     ChatMessage,
     ContextBundle,

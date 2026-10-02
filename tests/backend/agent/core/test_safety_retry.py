@@ -9,7 +9,7 @@ import pytest
 
 from core.compaction import CompactionFailedError
 from session.manager import SessionManager
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
 
 from agent.core.passive_turn import DefaultReasoner
@@ -20,7 +20,7 @@ from agent.core.types import ContextRequest
 from agent.core.types import ReasonerResult
 from agent.looping.ports import LLMConfig
 from agent.provider import ContentSafetyError, ContextLengthError, LLMResponse, ToolCall
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 
 
 def _stub_turn_injection_context(

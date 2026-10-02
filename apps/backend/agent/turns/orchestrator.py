@@ -17,8 +17,8 @@ from conversation.service import (
     desktop_thread_id,
     network_thread_id,
 )
-from core.accounts.target_contract import AccountTarget
-from core.common.channel_chat_types import CHAT_TYPE_PRIVATE
+from shiori_sdk.accounts.targets import AccountTarget
+from shiori_sdk.channels.chat_types import CHAT_TYPE_PRIVATE
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.roles.reply_state import (
     RoleReplyContext,

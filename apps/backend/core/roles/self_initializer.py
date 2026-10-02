@@ -11,7 +11,7 @@ from core.memory.markdown_schema import normalize_memory_document
 
 from .memory_service import RoleMemoryService
 from .model_runtime import RoleModelSnapshot
-from .models import now_iso
+from shiori_sdk.values import now_iso
 from .self_seed import LlmRoleSelfSeedGenerator
 from .self_seed_state import resolve_self_seed_state, self_fingerprint
 from .store import RoleStore

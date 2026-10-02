@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
-from agent.tools.base import Tool, ToolResult
+from shiori_sdk.tools import Tool, ToolResult
 from conversation.context_scope import ContextView, session_context_view
 from conversation.service import desktop_thread_id
 from session.manager.helpers import (

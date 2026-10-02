@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from agent.prompting import is_context_frame
+from shiori_sdk.prompting import is_context_frame
 
 
 def completed_tool_results(messages: list[dict]) -> list[dict]:

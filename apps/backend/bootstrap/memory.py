@@ -9,11 +9,8 @@ from agent.skills import SkillsLoader
 from agent.tools.meta import register_memory_meta_tools
 from agent.tools.registry import ToolRegistry
 from core.memory.markdown import build_markdown_memory_runtime
-from core.memory.plugin import (
-    DisabledMemoryEngine,
-    MemoryPluginBuildDeps,
-    MemoryPluginRuntime,
-)
+from core.memory.plugin import DisabledMemoryEngine
+from shiori_sdk.memory.build import MemoryPluginBuildDeps, MemoryPluginRuntime
 from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
 from core.roles import RoleStore

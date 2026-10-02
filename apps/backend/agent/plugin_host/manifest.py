@@ -10,7 +10,7 @@ from pathlib import Path
 
 from shiori_sdk.runtime import parse_capabilities
 
-from core.common.channel_chat_types import (
+from shiori_sdk.channels.chat_types import (
     ChatTypeDeclaration,
     ChatTypeDeclarations,
     parse_chat_type,

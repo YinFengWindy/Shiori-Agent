@@ -4,8 +4,8 @@ import pytest
 
 from agent.looping.core import AgentLoop
 from bus.event_bus import EventBus
-from bus.events import InboundMessage
-from bus.events_lifecycle import TurnStarted
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.channel_events import TurnStarted
 
 
 @pytest.mark.asyncio

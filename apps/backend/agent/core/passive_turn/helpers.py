@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence, Set as AbstractSet
 from typing import TYPE_CHECKING, Any
 
-from agent.prompting import is_context_frame
+from shiori_sdk.prompting import is_context_frame
 from agent.prompting.listening_block import HeardLine
 from core.common.timekit import parse_local_iso
 from conversation.context_scope import (
@@ -17,7 +17,7 @@ from conversation.context_scope import (
 
 if TYPE_CHECKING:
     from agent.core.runtime_support import SessionLike
-    from core.common.message_source import MessageSource
+    from shiori_sdk.channels.message_source import MessageSource
     from conversation.context_scope import ContextView
     from agent.tools.registry import ToolRegistry
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from bootstrap.paths import REPOSITORY_ROOT
 from agent.plugin_host.plugin_data import legacy_plugin_files, migrate_plugin_file
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.files.text import atomic_save_text
 
 
 def resolve_local_config(

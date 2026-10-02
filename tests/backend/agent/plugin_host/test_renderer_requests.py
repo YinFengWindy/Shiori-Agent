@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent.plugin_host.bridge_events import PluginRpcError
+from shiori_sdk.rpc import PluginRpcError
 from agent.plugin_host.renderer_requests import RendererRequests
 
 

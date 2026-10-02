@@ -6,7 +6,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from .models import RoleAssetCategory, RoleRecord, normalize_rel_path
+from .models import RoleAssetCategory, RoleRecord
+from shiori_sdk.values import normalize_rel_path
 
 
 class RoleAssetStore:

@@ -187,7 +187,7 @@ def test_role_deleted_while_disabled_prunes_pet_data_and_whole_asset_root(
 
 
 def test_live_role_deleted_reconciles_and_unload_removes_draft_participant(tmp_path):
-    from bus.events_lifecycle import RoleDeleted
+    from shiori_sdk.role_events import RoleDeleted
 
     store = RoleStore(tmp_path)
     _bind_pet(tmp_path, store=store)

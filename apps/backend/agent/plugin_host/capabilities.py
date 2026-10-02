@@ -23,11 +23,11 @@ if TYPE_CHECKING:
     from agent.core.proactive_turn.gates import ProactiveGate
     from agent.plugin_host.rpc import PluginRpcRegistry, RpcHandler
     from agent.tool_hooks.base import ToolHook
-    from desktop_bridge.method_policy import Concurrency
-    from infra.channels.contract import Channel
-    from core.accounts import (
+    from shiori_sdk.rpc import Concurrency
+    from shiori_sdk.channels import Channel
+    from core.accounts import AccountRegistry
+    from shiori_sdk.accounts.models import (
         AccountDeleteHandler,
-        AccountRegistry,
         AccountResponseRules,
         AccountRulesHandler,
         AccountSnapshot,
@@ -543,7 +543,8 @@ class RpcCapability:
     ) -> None:
         # 局部导入：核心插件运行时不在模块加载期就拉入桌面桥接的完整依赖链，
         # 只在插件真正调用 ctx.rpc.register 时（应用已启动）才需要这些类型。
-        from desktop_bridge.method_policy import Concurrency, Handler, MethodPolicy
+        from desktop_bridge.method_policy import Handler, MethodPolicy
+        from shiori_sdk.rpc import Concurrency
 
         full_name = f"plugin.{self._plugin_id}.{name}"
         self._effects.ensure_active(f"rpc:{full_name}")

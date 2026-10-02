@@ -7,7 +7,6 @@ from agent.tool_hooks.finalize import (
 )
 from agent.tool_hooks.types import (
     HookContext,
-    HookOutcome,
     HookTraceItem,
     ToolExecutionRequest,
     ToolExecutionResult,
@@ -16,7 +15,6 @@ from agent.tool_hooks.types import (
 __all__ = [
     "FINALIZE_SKIPPED_TOOL_CALL_MESSAGE",
     "HookContext",
-    "HookOutcome",
     "HookTraceItem",
     "ToolExecutionRequest",
     "ToolExecutionResult",

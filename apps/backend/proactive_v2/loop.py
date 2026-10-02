@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, cast
 
 if TYPE_CHECKING:
-    from core.memory.engine import MemoryRetrievalApi
+    from shiori_sdk.memory.engine import MemoryRetrievalApi
     from core.memory.group_environment import GroupEnvironment
     from core.memory.markdown import MemoryProfileApi
 

@@ -12,9 +12,10 @@ from PIL import Image
 from conversation.listening import GroupListeningControl
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService, LegacySessionDescriptor
-from core.accounts import AccountRecord, AccountRegistry
+from core.accounts import AccountRegistry
+from shiori_sdk.accounts.models import AccountRecord
 from core.channel_avatars import AvatarKey, ChannelAvatarStore
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from core.identity import IdentityChat, UserIdentityStore
 from desktop_bridge.phone_requests import DesktopPhoneRequestHandler
 from desktop_bridge.session_presenter import DesktopSessionPresenter

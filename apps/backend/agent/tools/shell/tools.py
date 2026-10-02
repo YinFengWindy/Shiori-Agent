@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, cast
 from uuid import uuid4
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 
 from .background import (
     _BG_REGISTRY,

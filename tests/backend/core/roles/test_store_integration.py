@@ -6,7 +6,7 @@ from datetime import datetime
 
 import pytest
 
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from core.roles import (
     RoleAggregateService,
     RoleStore,

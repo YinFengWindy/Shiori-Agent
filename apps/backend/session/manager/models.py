@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from core.common.message_source import MessageSource, with_message_source
+from shiori_sdk.channels.message_source import MessageSource, with_message_source
 from session.store.common import CONTEXT_SCOPES, ContextScope
 from session.maintenance_progress import MaintenanceProgress
 

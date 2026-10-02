@@ -8,7 +8,7 @@ from functools import cache
 from typing import Any, Literal
 
 import httpx
-from shiori_sdk.http import RequestBudget as RequestBudget
+from shiori_sdk.http import RequestBudget
 
 HttpProfile = Literal["external_default", "feed_fetcher", "local_service"]
 

@@ -13,7 +13,7 @@ from agent.tools.registry import ToolRegistry
 from agent.tools.tool_search import ToolSearchTool
 from bootstrap.toolsets.groups import register_group_tools
 from conversation.context_scope import ContextView, UserContextThreads
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from core.memory.group_environment import GroupEnvironment
 from session.manager import SessionManager
 

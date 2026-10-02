@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from bus.event_bus import EventBus
-from bus.events_lifecycle import TurnCommitted
-from core.memory.events import ConsolidationCommitted
+from shiori_sdk.memory.committed import TurnCommitted
+from shiori_sdk.memory.events import ConsolidationCommitted
 from core.memory.markdown import (
     ConsolidateRequest,
     ConsolidateResult,

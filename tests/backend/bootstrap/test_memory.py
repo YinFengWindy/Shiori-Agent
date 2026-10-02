@@ -14,10 +14,8 @@ from agent.tools.registry import ToolRegistry
 from bootstrap.memory import build_memory_runtime, ensure_memory_plugin_storage
 from bootstrap.paths import REPOSITORY_ROOT
 from bootstrap.runtime.construction import prepare_core_runtime
-from core.memory.engine import (
-    MemoryCapability,
-)
-from core.memory.plugin import MemoryPluginRuntime
+from shiori_sdk.memory.engine import MemoryCapability
+from shiori_sdk.memory.build import MemoryPluginRuntime
 from core.net.http import HttpRequester, SharedHttpResources
 from session.store import SessionStore
 

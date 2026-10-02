@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from shiori_sdk.lifecycle import ResponseMetadata as ResponseMetadata
+from shiori_sdk.lifecycle import ResponseMetadata
 
 from dataclasses import dataclass
 import json

@@ -1,4 +1,4 @@
-from bus.events_lifecycle import TurnCommitted
+from shiori_sdk.memory.committed import TurnCommitted
 from desktop_bridge.turn_messages import committed_turn_messages
 from session.manager import Session
 

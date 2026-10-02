@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, replace
 from typing import Any
 
-from core.common.channel_chat_types import parse_mention_ids
+from shiori_sdk.channels.chat_types import parse_mention_ids
 
 logger = logging.getLogger(__name__)
 

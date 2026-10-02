@@ -10,19 +10,19 @@ import json
 from typing import Any
 
 from agent.account_delivery import AccountDelivery
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.external_access import ExternalArgumentLimit
 from agent.tools.message_push import record_delivered_push
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ExternalTextPushed
-from core.accounts.target_contract import (
+from shiori_sdk.accounts.targets import (
     ACCOUNT_TARGET_PROPERTIES,
     USER_TARGET,
     AccountTarget,
     account_send_media,
     is_user_target,
 )
-from core.common.channel_chat_types import CHAT_TYPE_PRIVATE
+from shiori_sdk.channels.chat_types import CHAT_TYPE_PRIVATE
 
 
 class AccountListTool(Tool):

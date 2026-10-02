@@ -10,10 +10,11 @@ from pathlib import Path
 from threading import RLock
 from uuid import uuid4
 
-from core.accounts import AccountRecord
-from infra.persistence.json_store import atomic_save_json, load_json
+from shiori_sdk.accounts.models import AccountRecord
+from shiori_sdk.files.json import atomic_save_json, load_json
 
-from .models import IdentityChat, IdentityScope, UserIdentity, match_identity
+from .models import IdentityChat, UserIdentity, match_identity
+from shiori_sdk.channels.identity import IdentityScope
 from .pairing import PairingCode, PairingCodes
 
 logger = logging.getLogger(__name__)

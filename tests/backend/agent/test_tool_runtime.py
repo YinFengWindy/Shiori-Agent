@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from agent.tool_runtime import append_tool_result
-from agent.tools.base import ToolResult
+from shiori_sdk.tools import ToolResult
 
 
 def test_append_tool_result_supports_multimodal_blocks() -> None:

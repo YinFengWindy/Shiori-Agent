@@ -5,14 +5,14 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from agent.context import ContextBuilder
 from agent.lifecycle.facade import TurnLifecycle
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from bootstrap.memory_plugins import load_memory_plugin_module, normalize_memory_engine
 from bootstrap.toolsets.mcp import McpToolsetProvider
 from bootstrap.toolsets.memory import MemoryToolsetProvider
 from bootstrap.toolsets.meta import CommonMetaToolsetProvider, SpawnToolsetProvider
 from bootstrap.toolsets.protocol import ToolsetProvider
 from bootstrap.toolsets.schedule import SchedulerToolsetProvider
-from core.memory.plugin import MemoryPlugin
+from shiori_sdk.memory.build import MemoryPlugin
 from core.roles import RoleStore
 
 if TYPE_CHECKING:
@@ -53,7 +53,7 @@ def wire_turn_lifecycle(
     *,
     active_turn_states: Mapping[str, "TurnInterruptState"],
 ) -> None:
-    from agent.lifecycle.types import AfterStepCtx
+    from shiori_sdk.lifecycle import AfterStepCtx
 
     async def _progress_reporter(ctx: AfterStepCtx) -> None:
         state = active_turn_states.get(ctx.session_key)

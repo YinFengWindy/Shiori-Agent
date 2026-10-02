@@ -10,9 +10,10 @@ from conversation.context_scope import user_context_threads
 from conversation.listening import GroupListeningControl
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService
-from core.accounts import AccountRegistry, account_for_channel
+from core.accounts import AccountRegistry
+from shiori_sdk.accounts.models import account_for_channel
 from core.channel_avatars import AvatarIndex, ChannelAvatarStore
-from core.common.message_source import (
+from shiori_sdk.channels.message_source import (
     REPLY_TO_CONTENT_KEY,
     REPLY_TO_MEDIA_KEY,
     REPLY_TO_SENDER_NAME_KEY,

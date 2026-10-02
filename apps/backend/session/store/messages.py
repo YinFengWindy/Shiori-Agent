@@ -7,7 +7,7 @@ from collections.abc import Callable, Collection
 from datetime import datetime
 from typing import Any
 
-from infra.persistence.sqlite_like import LIKE_ESCAPE_CLAUSE, like_contains
+from shiori_sdk.sql import LIKE_ESCAPE_CLAUSE, like_contains
 
 from .common import _MESSAGE_SELECT_COLUMNS, ContextScope, thread_filter_sql
 from session.media_assets import preserve_media

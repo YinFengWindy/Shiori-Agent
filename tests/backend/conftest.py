@@ -9,7 +9,7 @@ import pytest_asyncio
 
 from agent.provider import LLMProvider
 from bus.event_bus import EventBus
-from core.memory.events import ConsolidationCommitted
+from shiori_sdk.memory.events import ConsolidationCommitted
 from core.memory.group_environment import GroupEnvironment
 from core.memory.markdown import (
     MarkdownMemoryMaintenance,

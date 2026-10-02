@@ -20,7 +20,7 @@ from desktop_bridge.runtime.plugin_package_store import (
     owned_child,
     remove_owned_directory,
 )
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.files.text import atomic_save_text
 
 logger = logging.getLogger(__name__)
 

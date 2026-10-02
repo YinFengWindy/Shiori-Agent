@@ -12,7 +12,7 @@ from agent.plugin_host import HostServices, PluginKernel
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
-from agent.plugin_host.plugin_data import plugin_data_dir
+from shiori_sdk.storage import plugin_data_dir
 from core.roles.store import RoleStore
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
@@ -1532,7 +1532,7 @@ def _write_renderer_gated_plugin(
         encoding="utf-8",
     )
     (directory / "backend/plugin.py").write_text(
-        "from agent.tools.base import Tool\n\n\n"
+        "from shiori_sdk.tools import Tool\n\n\n"
         "class DemoTool(Tool):\n"
         f"    name = {plugin_id + '_tool'!r}\n"
         "    description = 'demo'\n"

@@ -3,7 +3,7 @@
 from typing import Any
 
 from agent.mcp.registry import McpServerRegistry
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 
 
 class McpAddTool(Tool):

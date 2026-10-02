@@ -36,7 +36,7 @@ from agent.tool_runtime import (
     tool_call_batch_snapshot,
 )
 from agent.tool_hooks.types import ToolExecutionResult
-from agent.tools.base import Tool, normalize_tool_result
+from shiori_sdk.tools import Tool, normalize_tool_result
 
 logger = logging.getLogger(__name__)
 

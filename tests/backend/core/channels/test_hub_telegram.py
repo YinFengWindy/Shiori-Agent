@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, Mock
 
 from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
+from shiori_sdk.messages import InboundMessage, OutboundMessage
 from bus.queue import MessageBus
 from core.channels import ChannelHub
 from core.roles import RoleAggregateService, RoleStore
 from core.net.http import SharedHttpResources
 from infra.channels.base import AttachmentStore
-from infra.channels.contract import ChannelContext
+from shiori_sdk.channels import ChannelContext
 from infra.channels.intake import ChannelIntake
 from plugins.telegram.backend.channel.lifecycle import TelegramChannel, Application
 from session.manager import SessionManager

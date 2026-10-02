@@ -20,9 +20,8 @@ from .models import (
     RoleProactiveConfig,
     RoleRecord,
     default_asset_category,
-    normalize_rel_path,
-    now_iso,
 )
+from shiori_sdk.values import normalize_rel_path, now_iso
 from .extensions import RoleExtensions
 from .profile_models import RoleProfile
 

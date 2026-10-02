@@ -25,8 +25,8 @@ from datetime import datetime
 
 from conversation.service import desktop_chat_id, network_thread_id
 from conversation.store import ConversationStore
-from core.accounts import AccountRecord
-from core.accounts.target_contract import AccountTarget
+from shiori_sdk.accounts.models import AccountRecord
+from shiori_sdk.accounts.targets import AccountTarget
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.desktop_presence import DesktopPresence
 from core.identity import IdentityChat, UserIdentity, identities_for_account

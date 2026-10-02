@@ -8,7 +8,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from contextvars import Context
 
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 
 logger = logging.getLogger(__name__)
 _RETRY_MESSAGE = "渠道配置正在切换，这条消息尚未处理，请稍后重新发送。"

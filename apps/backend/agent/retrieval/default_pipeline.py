@@ -7,7 +7,7 @@ from agent.retrieval.protocol import (
     RetrievalRequest,
     RetrievalResult,
 )
-from core.memory.engine import (
+from shiori_sdk.memory.engine import (
     MemoryQuery,
     MemoryQueryFilters,
     MemoryQueryResult,

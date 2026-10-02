@@ -1,4 +1,4 @@
-from bus.events_lifecycle import TurnCommitted
+from shiori_sdk.memory.committed import TurnCommitted
 from desktop_bridge.chat_completion import build_chat_terminal_event
 
 

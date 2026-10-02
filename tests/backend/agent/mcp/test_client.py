@@ -7,8 +7,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.mcp.client import McpClient, McpToolError, _infer_cwd
-from agent.tools.base import ToolResult
+from agent.mcp.client import McpClient, _infer_cwd
+from shiori_sdk.mcp import McpToolError
+from shiori_sdk.tools import ToolResult
 
 _SERVER = r"""
 import json, sys, threading, time, os

@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from conversation.service import ConversationService, LegacySessionDescriptor
-from core.accounts import AccountRecord
+from shiori_sdk.accounts.models import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
 from core.memory.group_environment import (
     GROUP_EDIT_REVISION_KEY,

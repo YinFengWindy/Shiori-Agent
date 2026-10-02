@@ -9,7 +9,8 @@ from core.memory.markdown_schema import (
     replace_memory_section,
 )
 
-from .models import RoleRecord, now_iso as _now_iso
+from .models import RoleRecord
+from shiori_sdk.values import now_iso as _now_iso
 from .self_seed_state import resolve_self_seed_state, self_fingerprint
 
 

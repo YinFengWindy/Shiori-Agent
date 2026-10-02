@@ -13,7 +13,7 @@ from conversation.listening import GroupListeningControl
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.accounts import AccountRegistry
 from core.channel_avatars import AvatarKey, ChannelAvatarStore
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from core.identity import IdentityChat, UserIdentityStore
 from desktop_bridge.phone_listening_requests import DesktopPhoneListeningRequestHandler
 from desktop_bridge.phone_requests import DesktopPhoneRequestHandler

@@ -16,12 +16,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from core.accounts import AccountRecord, account_for_channel
+from shiori_sdk.accounts.models import AccountRecord, account_for_channel
 
 from shiori_sdk.channels.identity import (
-    IdentityScope as IdentityScope,
-    IDENTITY_SCOPES as IDENTITY_SCOPES,
-    parse_identity_scope as parse_identity_scope,
+    IdentityScope,
+    parse_identity_scope,
 )
 
 

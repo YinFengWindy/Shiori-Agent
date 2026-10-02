@@ -3,7 +3,11 @@ from pathlib import Path
 
 import pytest
 from agent.tools.forget_memory import ForgetMemoryTool
-from core.memory.engine import MemoryMutation, MemoryMutationResult, MemoryToolSpec
+from shiori_sdk.memory.engine import (
+    MemoryMutation,
+    MemoryMutationResult,
+    MemoryToolSpec,
+)
 
 
 class _Records:

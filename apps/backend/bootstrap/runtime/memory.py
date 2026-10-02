@@ -3,9 +3,6 @@
 from pathlib import Path
 
 from agent.config_models import Config
-from shiori_sdk.memory.build import (
-    MemoryStorageIncompatibleError as MemoryStorageIncompatibleError,
-)
 
 from bootstrap.memory_capabilities import HostMemoryStorage, memory_build_config
 from bootstrap.memory_plugins import normalize_memory_engine

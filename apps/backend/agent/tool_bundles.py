@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.filesystem import ListDirTool, ReadFileTool
 from agent.tools.web_fetch import WebFetchTool
 from agent.tools.web_search import WebSearchTool

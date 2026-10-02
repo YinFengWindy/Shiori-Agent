@@ -13,7 +13,7 @@ from core.roles.store import RoleStore
 from core.common.channel_directory import ChannelDirectory
 from core.net.http import SharedHttpResources
 from infra.channels.base import AttachmentStore
-from infra.channels.contract import Channel
+from shiori_sdk.channels import Channel
 from infra.channels.runtime_context import RuntimeChannelContext
 from session.manager import SessionManager
 

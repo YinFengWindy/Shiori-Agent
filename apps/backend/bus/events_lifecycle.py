@@ -1,29 +1,10 @@
 from __future__ import annotations
 
-from shiori_sdk.channel_events import (
-    ToolCallStarted as ToolCallStarted,
-    ToolCallCompleted as ToolCallCompleted,
-)
-
-from shiori_sdk.channel_events import (
-    TurnStarted as TurnStarted,
-    StreamDeltaReady as StreamDeltaReady,
-    TurnCancelled as TurnCancelled,
-)
-
-from shiori_sdk.memory.committed import TurnCommitted as TurnCommitted
-from shiori_sdk.role_events import RoleDeleted as RoleDeleted
-from shiori_sdk.role_events import (
-    SceneTurnSource as SceneTurnSource,
-    SceneTransition as SceneTransition,
-    SceneObservationCommitted as SceneObservationCommitted,
-)
-
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from agent.core.types import ToolCallGroup
+    from shiori_sdk.tool_chain import ToolCallGroup
 
 
 def _empty_media() -> list[str]:
@@ -73,7 +54,7 @@ class TurnFailed:
     """A passive turn failed before any reply was committed.
 
     `error_summary` is user-safe: exception type plus one scrubbed line (see
-    `core.common.error_summary`), never a traceback.
+    `shiori_sdk.errors`), never a traceback.
     """
 
     session_key: str

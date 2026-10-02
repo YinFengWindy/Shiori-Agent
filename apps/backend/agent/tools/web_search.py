@@ -5,7 +5,7 @@ WebSearch 工具 — 基于 Exa MCP 公开端点，无需 API Key
 import json
 from typing import Any
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 
 _MCP_URL = "https://mcp.exa.ai/mcp"
 _DEFAULT_NUM_RESULTS = 8

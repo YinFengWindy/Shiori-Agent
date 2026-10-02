@@ -1,7 +1,7 @@
 """Observable external lifecycle fixture using host-provided capabilities."""
 
-from agent.tools.base import Tool
-from bus.events_lifecycle import RoleDeleted
+from shiori_sdk.tools import Tool
+from shiori_sdk.role_events import RoleDeleted
 
 VERSION = "__FIXTURE_VERSION__"
 

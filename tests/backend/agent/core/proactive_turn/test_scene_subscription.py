@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock
 import pytest
 from bus.event_bus import EventBus
-from bus.events_lifecycle import SceneObservationCommitted
+from shiori_sdk.role_events import SceneObservationCommitted
 from agent.core.proactive_turn.scene_subscription import SceneFollowupSubscription
 
 

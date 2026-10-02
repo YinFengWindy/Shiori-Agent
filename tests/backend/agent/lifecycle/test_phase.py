@@ -7,17 +7,11 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bus.event_bus import EventBus
-from agent.core.response_parser import ResponseMetadata
+from shiori_sdk.lifecycle import ResponseMetadata
 from agent.lifecycle.facade import TurnLifecycle
 from agent.lifecycle.phase import Phase, PhaseFrame, topo_sort_modules
-from agent.lifecycle.types import (
-    AfterReasoningCtx,
-    AfterStepCtx,
-    AfterTurnCtx,
-    BeforeReasoningCtx,
-    BeforeStepCtx,
-    BeforeTurnCtx,
-)
+from agent.lifecycle.types import BeforeReasoningCtx, BeforeStepCtx, BeforeTurnCtx
+from shiori_sdk.lifecycle import AfterReasoningCtx, AfterStepCtx, AfterTurnCtx
 
 
 @dataclass

@@ -77,7 +77,7 @@ def test_failed_toml_write_leaves_source_and_retry_succeeds(tmp_path, monkeypatc
         raise OSError("disk full")
 
     with monkeypatch.context() as patch:
-        patch.setattr("infra.persistence.text_store.atomic_save_text", fail)
+        patch.setattr("agent.plugin_host.plugin_data.atomic_save_text", fail)
         with pytest.raises(OSError, match="disk full"):
             local_config.resolve_local_config(**kwargs)
     assert source.read_text(encoding="utf-8") == 'db_path = "keep.db"\n'

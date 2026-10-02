@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-from agent.llm_json import load_json_object_loose
+from shiori_sdk.json import load_json_object_loose
 from agent.provider import LLMProvider
 from conversation.context_scope import (
     UserContextThreads,
@@ -18,7 +18,8 @@ from conversation.context_scope import (
 from core.memory.markdown import resolve_markdown_store
 from session.manager import SessionManager
 
-from ..scene_followup_runtime import SceneFollowupRuntime, SceneTransition
+from ..scene_followup_runtime import SceneFollowupRuntime
+from shiori_sdk.role_events import SceneTransition
 from ..store import RoleStore
 from .loneliness import (
     _NIGHT_SUPPRESSION_END_HOUR,

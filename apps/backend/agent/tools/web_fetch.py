@@ -11,12 +11,9 @@ import html2text
 from lxml import html as lxml_html
 from lxml.etree import ParserError
 
-from agent.tools.base import Tool
-from core.net.http import (
-    HttpRequester,
-    RequestBudget,
-    get_default_http_requester,
-)
+from shiori_sdk.tools import Tool
+from core.net.http import HttpRequester, get_default_http_requester
+from shiori_sdk.http import RequestBudget
 
 _MAX_BYTES = 5 * 1024 * 1024  # 5MB，与 OpenCode 一致
 _DEFAULT_TIMEOUT = 30  # 秒

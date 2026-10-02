@@ -3,9 +3,6 @@
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
 
 
-from shiori_sdk.commands import normalize_command as normalize_command
-
-
 def abort_command(state: TurnState, reply: str) -> BeforeTurnCtx:
     """Reply to a handled command without retrieval, history, or LLM execution."""
     return BeforeTurnCtx(

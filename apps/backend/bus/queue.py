@@ -4,8 +4,9 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
-from bus.events import InboundItem, OutboundMessage
-from bus.errors import NonRetryableDeliveryError
+from bus.events import InboundItem
+from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.channels.errors import NonRetryableDeliveryError
 
 logger = logging.getLogger(__name__)
 

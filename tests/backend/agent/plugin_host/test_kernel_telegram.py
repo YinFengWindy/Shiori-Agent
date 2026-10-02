@@ -7,7 +7,7 @@ from shiori_sdk.testing.packages import stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel
 from agent.plugin_host.kv import PluginKVStore
-from agent.plugin_host.plugin_data import plugin_data_dir
+from shiori_sdk.storage import plugin_data_dir
 from bus.event_bus import EventBus
 from core.roles.store import RoleStore
 

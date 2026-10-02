@@ -18,15 +18,11 @@ from agent.plugin_host.manifest import (
     load_manifest,
 )
 from agent.plugin_host.rpc import PluginRpcRegistry
-from agent.plugin_host.runtime_context import (
-    CapabilityNotGranted,
-    PluginRuntimeContext,
-)
+from agent.plugin_host.runtime_context import PluginRuntimeContext
 from agent.plugin_host.tool_hooks import PluginToolHook
 from agent.plugin_host.unload import PluginRestartRequired
 
 __all__ = [
-    "CapabilityNotGranted",
     "ChannelDeclaration",
     "ConfigModelError",
     "DEFAULT_ENTRY",

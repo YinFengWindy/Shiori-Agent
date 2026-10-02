@@ -11,7 +11,8 @@ from agent.core.types import ReasonerResult
 from agent.looping.ports import SessionServices
 from agent.tools.registry import ToolRegistry
 from agent.core.runner import CoreRunner, CoreRunnerDeps
-from bus.events import InboundMessage, OutboundMessage, SpawnCompletionItem
+from bus.events import SpawnCompletionItem
+from shiori_sdk.messages import InboundMessage, OutboundMessage
 from bus.internal_events import SpawnCompletionEvent
 
 

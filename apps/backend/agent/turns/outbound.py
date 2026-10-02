@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from bus.events import OutboundMessage
+from shiori_sdk.messages import OutboundMessage
 from agent.tools.message_push import PENDING_TURN_DELIVERY
 
 _INTERNAL_CITATION_RE = re.compile(r"\s*§cited:\[[^\]]*\]§\s*")

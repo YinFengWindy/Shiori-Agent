@@ -8,16 +8,16 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agent.account_delivery.turn_state import mark_account_delivery_sent
-from core.accounts import (
+from core.accounts import AccountRegistry
+from shiori_sdk.accounts.models import (
     VIA_ACCOUNT_KEY,
     AccountAccess,
     AccountNotFoundError,
-    AccountRegistry,
     AccountSnapshot,
     delivered_via_account,
 )
 from core.accounts.delivery_ledger import AccountDeliveryAttempt, AccountDeliveryLedger
-from core.accounts.target_contract import (
+from shiori_sdk.accounts.targets import (
     ACCOUNT_SEND_MEDIA_KEY,
     ACCOUNT_SEND_METHOD,
     ACCOUNT_TARGETS_METHOD,

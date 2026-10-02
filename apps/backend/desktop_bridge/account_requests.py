@@ -4,12 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.accounts import (
-    AccountRegistry,
-    AccountSnapshot,
-    response_rules_from_dict,
-    response_rules_to_dict,
-)
+from core.accounts import AccountRegistry
+from shiori_sdk.accounts.models import AccountSnapshot
+from shiori_sdk.accounts.rules import response_rules_from_dict, response_rules_to_dict
 
 
 def _serialize(snapshot: AccountSnapshot) -> dict[str, Any]:

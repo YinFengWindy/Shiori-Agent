@@ -8,7 +8,7 @@ from agent.config import Config
 from agent.memory import MemoryStore
 from bootstrap.memory import ensure_memory_plugin_storage
 from bootstrap.paths import resource_root
-from infra.persistence.json_store import save_json
+from shiori_sdk.files.json import save_json
 from session.store import SessionStore
 
 # Canonical template copied into the user-owned workspace during setup.

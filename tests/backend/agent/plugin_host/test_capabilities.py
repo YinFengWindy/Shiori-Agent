@@ -25,9 +25,10 @@ from agent.plugin_host.capabilities import (
 from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.rpc import PluginRpcRegistry
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
-from desktop_bridge.method_policy import Concurrency, Handler
+from desktop_bridge.method_policy import Handler
+from shiori_sdk.rpc import Concurrency
 
 
 @pytest.mark.asyncio
@@ -604,11 +605,8 @@ async def test_closed_scope_rejects_contributions_before_mutating_registries():
 
 @pytest.mark.asyncio
 async def test_account_hooks_and_accounts_live_and_leave_with_the_plugin_instance():
-    from core.accounts import (
-        AccountDeletionPlan,
-        AccountRegistry,
-        AccountResponseRules,
-    )
+    from core.accounts import AccountRegistry
+    from shiori_sdk.accounts.models import AccountDeletionPlan, AccountResponseRules
 
     registry = AccountRegistry({"mira", "other"}.__contains__)
     registry.publish_generation("g1")

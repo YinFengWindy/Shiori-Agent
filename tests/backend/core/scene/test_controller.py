@@ -10,13 +10,12 @@ from unittest.mock import AsyncMock
 import pytest
 
 from agent.core.types import HistoryMessage
-from agent.lifecycle.types import AfterTurnCtx, BeforeTurnCtx
+from agent.lifecycle.types import BeforeTurnCtx
+from shiori_sdk.lifecycle import AfterTurnCtx
 from core.scene.state import SceneStateStore
 from bus.event_bus import EventBus
-from bus.events_lifecycle import (
-    ProactiveMessageCommitted,
-    SceneObservationCommitted,
-)
+from bus.events_lifecycle import ProactiveMessageCommitted
+from shiori_sdk.role_events import SceneObservationCommitted
 from core.roles.store import RoleStore
 from core.scene.contracts import SceneDecisionProtocolError
 from core.scene.controller import SceneAwarenessController

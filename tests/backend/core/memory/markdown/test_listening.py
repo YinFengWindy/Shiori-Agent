@@ -14,7 +14,7 @@ from agent.provider import LLMProvider
 from bus.event_bus import EventBus
 from conversation.listening_store import GroupListeningStore
 from conversation.service import desktop_thread_id, network_thread_id
-from core.memory.events import ConsolidationCommitted
+from shiori_sdk.memory.events import ConsolidationCommitted
 from core.memory.group_environment import GroupEnvironment
 from core.memory.markdown import (
     MarkdownMemoryMaintenance,

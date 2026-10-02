@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from conversation.models import ThreadRecord
 from conversation.service import ConversationService
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentSnapshot

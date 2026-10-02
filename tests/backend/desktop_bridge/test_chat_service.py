@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from bus.event_bus import EventBus
-from bus.events_lifecycle import (
+from bus.events_lifecycle import TurnFailed
+from shiori_sdk.channel_events import (
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
-    TurnCommitted,
-    TurnFailed,
 )
+from shiori_sdk.memory.committed import TurnCommitted
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.voice.voice_service import (
     VoiceOperationMetrics,

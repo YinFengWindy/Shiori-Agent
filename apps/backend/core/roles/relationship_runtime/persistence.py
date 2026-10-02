@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from infra.persistence.json_store import atomic_save_json, load_json
+from shiori_sdk.files.json import atomic_save_json, load_json
 
 _SNAPSHOT_FILE = "relationship_snapshot.json"
 _RUNTIME_FILE = "loneliness_runtime.json"

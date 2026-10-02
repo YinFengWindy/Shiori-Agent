@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.memory import MemoryStore
-from core.memory.engine import (
+from shiori_sdk.memory.engine import (
     EngineProfile,
     MemoryCapability,
     MemoryEngineDescriptor,

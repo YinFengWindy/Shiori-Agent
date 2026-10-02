@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from conversation.service import ConversationService
-from core.common.message_source import PERSISTED_USER_CONTENT_KEY
+from shiori_sdk.channels.message_source import PERSISTED_USER_CONTENT_KEY
 from core.roles import RoleAggregateService, RoleRelationshipRuntimeService
 from session.manager import Session, SessionManager
 from session.manager.helpers import role_id_from_session_key

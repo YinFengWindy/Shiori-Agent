@@ -4,12 +4,12 @@ from pathlib import Path
 import pytest
 
 from agent.context import ContextBuilder, ContextRequest, MessageEnvelopeBuilder
-from agent.prompting import SYSTEM_CONTEXT_FRAME_MARKER
-from bus.events import InboundMessage
+from shiori_sdk.prompting import SYSTEM_CONTEXT_FRAME_MARKER
+from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import ContextScope
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.common.channel_directory import ChannelDirectory
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from core.identity import IdentityChat
 from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpdate
 from core.memory.member_profiles import MemberKey, MemberProfile, MemberProfiles

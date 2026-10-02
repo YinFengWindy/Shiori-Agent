@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from bus.events_lifecycle import (
-    StreamDeltaReady,
-)
+from shiori_sdk.channel_events import StreamDeltaReady
 
 from .helpers import (
     StreamDelta,

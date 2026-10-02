@@ -20,7 +20,7 @@ from pathlib import Path
 from conversation.context_scope import load_user_context_threads
 from conversation.store import ConversationStore
 from core.memory.role_paths import keyed_markdown_name, role_memory_dir
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.files.text import atomic_save_text
 
 # 用户上下文注入最近动态的时间窗与数量上限。
 RECENT_ACTIVITY_WINDOW = timedelta(days=3)

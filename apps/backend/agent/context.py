@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.common.message_source import MessageSource, with_message_source
+from shiori_sdk.channels.message_source import MessageSource, with_message_source
 from agent.core.types import ContextRenderResult, ContextRequest
 from agent.core.prompt_block import (
     ActiveSkillsPromptBlock,
@@ -32,9 +32,9 @@ from agent.core.prompt_block import (
 from agent.prompting import (
     PromptAssembler,
     PromptSectionMeta,
-    PromptSectionRender,
     build_context_frame_message,
 )
+from shiori_sdk.prompting import PromptSectionRender
 from agent.role_prompt import (
     build_role_cache_prefix_section,
     build_role_system_section,

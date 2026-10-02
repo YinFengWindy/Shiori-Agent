@@ -8,10 +8,8 @@ from pathlib import Path
 import pytest
 
 import agent.plugin_host.plugin_data as plugin_data
-from agent.plugin_host.plugin_data import (
-    open_plugin_kv,
-    plugin_data_dir,
-)
+from agent.plugin_host.plugin_data import open_plugin_kv
+from shiori_sdk.storage import plugin_data_dir
 
 
 @pytest.mark.parametrize("existing", ["old-only", "new-only", "both"])

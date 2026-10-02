@@ -16,8 +16,9 @@ import pytest
 from agent.provider import LLMResponse, ToolCall
 from agent.subagent import SubAgent
 from agent.tool_hooks.base import ToolHook
-from agent.tool_hooks.types import HookContext, HookOutcome
-from agent.tools.base import Tool
+from agent.tool_hooks.types import HookContext
+from shiori_sdk.tool_hooks import HookOutcome
+from shiori_sdk.tools import Tool
 
 
 class _CounterTool(Tool):

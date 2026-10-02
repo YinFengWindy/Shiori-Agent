@@ -37,10 +37,10 @@ from agent.lifecycle.types import (
 from agent.turns.turn_pushes import TurnPushDrafts
 from agent.turns.outbound import DeliveryReceipt, OutboundDispatch, OutboundPort
 from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
+from shiori_sdk.messages import InboundMessage, OutboundMessage
 from bus.events_lifecycle import TurnFailed
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
-from core.common.error_summary import summarize_exception_for_user
+from shiori_sdk.errors import summarize_exception_for_user
 from core.compaction import CompactionFailedError
 
 if TYPE_CHECKING:

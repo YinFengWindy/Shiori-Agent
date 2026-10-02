@@ -9,7 +9,7 @@ from agent.core.passive_turn.helpers import (
 from agent.prompting.listening_block import HeardLine
 from conversation.context_scope import ContextView, UserContextThreads
 from conversation.service import desktop_thread_id, network_thread_id
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from session.manager.models import Session
 
 

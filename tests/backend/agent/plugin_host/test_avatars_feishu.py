@@ -13,7 +13,7 @@ from PIL import Image
 from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.kv import PluginKVStore
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from core.channel_avatars import ChannelAvatarStore
 from plugins.feishu.backend.api import FeishuApi
 from plugins.feishu.backend.contacts import FeishuContacts

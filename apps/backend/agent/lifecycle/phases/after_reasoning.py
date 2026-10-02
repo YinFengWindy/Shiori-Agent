@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
-from core.common.message_source import (
+from shiori_sdk.channels.message_source import (
     PERSISTED_USER_CONTENT_KEY,
     REPLY_TO_MEDIA_KEY,
     MessageSource,
@@ -14,9 +14,10 @@ from agent.core.passive_support import (
     update_session_runtime_metadata,
 )
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY, build_session_message
-from agent.core.response_parser import parse_response, ParsedResponse, ResponseMetadata
+from agent.core.response_parser import parse_response, ParsedResponse
+from shiori_sdk.lifecycle import ResponseMetadata
 from core.roles.reply_state import InvalidRoleReply, RoleReply, reply_state_metadata
-from core.common.channel_chat_types import REPLY_MENTION_IDS_KEY, is_group_chat_type
+from shiori_sdk.channels.chat_types import REPLY_MENTION_IDS_KEY, is_group_chat_type
 from agent.lifecycle.phase import (
     PhaseFrame,
     PhaseModule,
@@ -24,13 +25,10 @@ from agent.lifecycle.phase import (
     collect_prefixed_slots,
     topo_sort_modules,
 )
-from agent.lifecycle.types import (
-    AfterReasoningCtx,
-    AfterReasoningInput,
-    AfterReasoningResult,
-)
+from agent.lifecycle.types import AfterReasoningInput, AfterReasoningResult
+from shiori_sdk.lifecycle import AfterReasoningCtx
 from bus.event_bus import EventBus
-from bus.events import OutboundMessage
+from shiori_sdk.messages import OutboundMessage
 
 if TYPE_CHECKING:
     from agent.looping.ports import LLMConfig, LLMServices

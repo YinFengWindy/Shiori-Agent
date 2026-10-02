@@ -8,7 +8,7 @@ import time
 
 from datetime import datetime, timezone
 
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 
 from .dataset import LMEInstance
 from .runtime import BenchmarkRuntime

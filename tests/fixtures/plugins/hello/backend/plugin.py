@@ -1,6 +1,7 @@
 """Host fixture with scoped lifecycle subscriptions."""
 
-from agent.lifecycle.types import BeforeTurnCtx, AfterStepCtx
+from agent.lifecycle.types import BeforeTurnCtx
+from shiori_sdk.lifecycle import AfterStepCtx
 
 after_step_calls: list[str] = []
 

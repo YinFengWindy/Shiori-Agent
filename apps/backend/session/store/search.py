@@ -7,11 +7,7 @@ import sqlite3
 from collections.abc import Callable, Collection
 from typing import Any
 
-from infra.persistence.sqlite_like import (
-    LIKE_ESCAPE_CLAUSE,
-    like_contains,
-    like_prefix,
-)
+from shiori_sdk.sql import LIKE_ESCAPE_CLAUSE, like_contains, like_prefix
 
 from .common import _MESSAGE_SELECT_COLUMNS, thread_filter_sql
 

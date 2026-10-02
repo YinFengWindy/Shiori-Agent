@@ -13,12 +13,12 @@ from agent.lifecycle.types import PromptRenderResult
 from agent.looping.ports import LLMConfig
 from agent.core.passive_turn.empty_reply import EmptyReplyError
 from agent.provider import LLMResponse, ToolCall
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
 from agent.tools.tool_search import ToolSearchTool
 from bus.event_bus import EventBus
-from bus.events import InboundMessage
-from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.channel_events import ToolCallCompleted, ToolCallStarted
 from shiori_sdk.lifecycle import LifecycleFrame
 from session.manager import SessionManager
 
@@ -620,7 +620,7 @@ def test_default_reasoner_preflight_includes_deferred_tool_names():
     """调用方（如 _run_agent_loop）负责注入 deferred tools hint；run() 本身不再自动注入。"""
     from agent.core.passive_turn import build_turn_injection_prompt
     from agent.prompting import build_context_frame_content, build_context_frame_message
-    from agent.prompting import PromptSectionRender
+    from shiori_sdk.prompting import PromptSectionRender
 
     provider = _Provider(
         [

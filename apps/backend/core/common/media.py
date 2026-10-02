@@ -7,11 +7,6 @@ from typing import BinaryIO
 from PIL import Image
 
 
-from shiori_sdk.media import (
-    detect_image_mime_from_header as detect_image_mime_from_header,
-)
-
-
 def write_png_thumbnail(
     data: bytes,
     target: Path | BinaryIO,

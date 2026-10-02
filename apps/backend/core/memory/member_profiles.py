@@ -20,10 +20,10 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from core.common.message_source import MessageSource
+from shiori_sdk.channels.message_source import MessageSource
 from core.identity import BoundUserSenders
 from core.memory.role_paths import keyed_markdown_name, role_memory_dir
-from infra.persistence.text_store import atomic_save_text
+from shiori_sdk.files.text import atomic_save_text
 
 # 完整档案正文的固定小节与篇幅上限（整篇字数，注入时原样使用，不再截取）。
 MEMBER_PROFILE_SECTIONS = ("印象", "他说过的自己", "与我的互动")

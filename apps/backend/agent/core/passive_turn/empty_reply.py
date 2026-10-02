@@ -7,7 +7,7 @@ from typing import Any
 
 from agent.provider import LLMResponse, is_truncated_finish_reason
 from core.common.diagnostic_log import current_diagnostic_context
-from core.common.error_summary import summarize_exception_for_user
+from shiori_sdk.errors import summarize_exception_for_user
 
 
 def response_diagnostics(

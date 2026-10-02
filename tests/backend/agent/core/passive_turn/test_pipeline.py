@@ -25,7 +25,7 @@ from agent.tool_hooks.executor import ToolExecutor
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 from agent.turns.turn_pushes import current_turn_pushes
 from conversation.push_sync import ExternalPushSyncService
 from conversation.service import (
@@ -33,7 +33,7 @@ from conversation.service import (
     network_thread_id,
     scheduler_thread_id,
 )
-from core.accounts import AccountRecord
+from shiori_sdk.accounts.models import AccountRecord
 from core.identity import IdentityChat, UserIdentityStore
 from core.roles import RoleStore
 from core.roles.reply_state import RoleReply

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from agent.prompting import is_context_frame
+from shiori_sdk.prompting import is_context_frame
 
 
 def _is_context_frame_message(message: dict[str, Any]) -> bool:

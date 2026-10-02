@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from conversation.service import network_thread_id
-from core.accounts import AccountRecord
+from shiori_sdk.accounts.models import AccountRecord
 from core.identity import BoundUserSenders, UserIdentity
 from core.memory.group_environment import GroupEnvironmentSnapshot
 from core.memory.markdown.contracts import ConsolidationSegments, ConsolidationWindow

@@ -14,7 +14,7 @@ from .reply_recovery import complete_reply
 from .budgeted_request import budgeted_chat
 from .compaction import ensure_request_budget
 from core.roles.reply_state import RoleReply
-from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted
+from shiori_sdk.channel_events import ToolCallCompleted, ToolCallStarted
 
 logger = logging.getLogger("agent.core.passive_turn")
 

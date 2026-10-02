@@ -10,12 +10,8 @@ import pytest
 
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.manifest import PluginManifest
-from shiori_sdk import HostServiceUnavailable
-
-from agent.plugin_host.runtime_context import (
-    CapabilityNotGranted,
-    PluginRuntimeContext,
-)
+from agent.plugin_host.runtime_context import PluginRuntimeContext
+from shiori_sdk.runtime import CapabilityNotGranted, HostServiceUnavailable
 
 
 def _make_context(

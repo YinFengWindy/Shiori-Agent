@@ -1,6 +1,6 @@
 """Owns one stdio MCP connection with a single reader and correlated requests."""
 
-from shiori_sdk.mcp import McpToolInfo as McpToolInfo
+from shiori_sdk.mcp import McpToolInfo
 
 import asyncio
 import json
@@ -11,10 +11,10 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
-from agent.mcp.result import McpToolError as McpToolError, decode_tool_result
+from agent.mcp.result import decode_tool_result
 from infra.process.owned_spawn import spawn_owned
 from infra.process.windows_job import WindowsJob
-from agent.tools.base import ToolResult
+from shiori_sdk.tools import ToolResult
 
 logger = logging.getLogger(__name__)
 _RECV_TIMEOUT = 30.0

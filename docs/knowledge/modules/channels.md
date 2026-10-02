@@ -22,7 +22,7 @@ related:
 
 ## 统一边界
 
-外部渠道全部由插件提供，宿主只拥有 `desktop`，不再有内置渠道或「频道」设置分区（#363）。`apps/backend/infra/channels/contract.py` 定义 Channel 合约、可选钩子与 `ChannelContext`；插件在 manifest 静态声明渠道，`setup` 里经 `ctx.channels.add()` 贡献实例。`apps/backend/bootstrap/channels.py` 的 `start_channels` 只装配插件贡献的渠道：构造共享上下文，按 `configuration_key`（声明 `uses_bot_commands` 的渠道再加上 bot 命令列表）跨代复用未变的连接；`bootstrap/channel_host.py` 负责启停、换代时的入站暂停与回滚、已移除连接的排空。`apps/backend/core/channels/hub.py` 做账号准入与入站路由，`core/common/channel_directory.py` 按渠道名向已发布的连接查询钩子。`desktop_bridge/runtime/channel_listing.py` 的 `channels.list` 把 `desktop` 与各插件的静态声明合并上运行状态，供角色绑定面板使用。渠道配置在各自的 `[plugins.<id>]`，由「设置 › 插件」的自动表单编辑。
+外部渠道全部由插件提供，宿主只拥有 `desktop`，不再有内置渠道或「频道」设置分区（#363）。`packages/sdk/python/shiori_sdk/channels/` 定义 Channel 合约、可选钩子与 `ChannelContext`；插件在 manifest 静态声明渠道，`setup` 里经 `ctx.channels.add()` 贡献实例。`apps/backend/bootstrap/channels.py` 的 `start_channels` 只装配插件贡献的渠道：构造共享上下文，按 `configuration_key`（声明 `uses_bot_commands` 的渠道再加上 bot 命令列表）跨代复用未变的连接；`bootstrap/channel_host.py` 负责启停、换代时的入站暂停与回滚、已移除连接的排空。`apps/backend/core/channels/hub.py` 做账号准入与入站路由，`core/common/channel_directory.py` 按渠道名向已发布的连接查询钩子。`desktop_bridge/runtime/channel_listing.py` 的 `channels.list` 把 `desktop` 与各插件的静态声明合并上运行状态，供角色绑定面板使用。渠道配置在各自的 `[plugins.<id>]`，由「设置 › 插件」的自动表单编辑。
 
 | 插件 | 渠道名 | 结构 |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ QQ 群会话的规范 chat_id 是 `gqq:<群号>`，裸号一律是私聊。渠�
 
 ## 标识与投递
 
-`session_key.py`、`reply_context.py` 和公共 channel identifier helper 负责稳定定位账号、聊天、线程与回复上下文。群聊过滤和成员隔离必须在入站边界明确处理。typing、流式编辑等辅助动作允许独立失败，但最终消息投递和权威会话写入必须可观测。
+SDK 的 `shiori_sdk.channels.session_key`、`shiori_sdk.channels.reply_context` 和公共 channel identifier helper 负责稳定定位账号、聊天、线程与回复上下文。群聊过滤和成员隔离必须在入站边界明确处理。typing、流式编辑等辅助动作允许独立失败，但最终消息投递和权威会话写入必须可观测。
 
 「谁能和角色说话」由接收账号的响应规则决定（私聊/群聊开关、黑名单，均为账号级设置，所有群聊共用；群聊里角色只在被 @ 或被回复时开口，其余群消息丢弃，#537；「被回复」要靠插件上报被回复消息的发送者 `reply_to_sender_id`，目前只有 QQ 上报，Telegram 只认 @），规则连同账号身份、所属角色和凭据保存在账号所属插件自己的存储里，宿主只在内存里按已加载插件登记的账号建索引（#450）。入站准入由 `ChannelHub` 统一判断：接收账号属于某个角色、其插件已加载且在线，发送者不在账号黑名单里即放行；黑名单条目按发送者 ID 精确匹配，或按渠道别名（Telegram 用户名）忽略大小写匹配；`/stop` 走同一准入。`/chatid`（别名 `/myid`）由各渠道插件自己回复会话类型与号码，不进入角色对话。
 

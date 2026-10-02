@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from agent.tools.base import Tool
-from core.memory.engine import MemoryMutation, MemoryScope, MemoryToolSpec
+from shiori_sdk.tools import Tool
+from shiori_sdk.memory.engine import MemoryMutation, MemoryScope, MemoryToolSpec
 
 if TYPE_CHECKING:
-    from core.memory.engine import MemoryWriteApi
+    from shiori_sdk.memory.engine import MemoryWriteApi
 
 
 class ForgetMemoryTool(Tool):

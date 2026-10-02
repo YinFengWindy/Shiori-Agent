@@ -7,7 +7,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, runtime_checkable, Protocol
 
 if TYPE_CHECKING:
-    from infra.channels.contract import Channel, ChannelContext
+    from shiori_sdk.channels import Channel, ChannelContext
 
 logger = logging.getLogger(__name__)
 

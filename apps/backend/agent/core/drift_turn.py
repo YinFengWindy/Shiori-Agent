@@ -27,11 +27,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 from agent.core.prompt_block import strip_recent_turns
-from agent.prompting import (
-    PromptSectionRender,
-    build_context_frame_content,
-    build_context_frame_message,
-)
+from agent.prompting import build_context_frame_content, build_context_frame_message
+from shiori_sdk.prompting import PromptSectionRender
 from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
 from agent.tool_hooks.base import ToolHook
 from proactive_v2.context import AgentTickContext

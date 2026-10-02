@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from bus.events_lifecycle import SceneTransition
-from infra.persistence.json_store import atomic_save_json, load_json
+from shiori_sdk.role_events import SceneTransition
+from shiori_sdk.files.json import atomic_save_json, load_json
 
 _FOLLOWUP_DELAYS_MINUTES = (5, 3, 1)
 _MAX_SCENE_LIFETIME = timedelta(hours=1)

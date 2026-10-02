@@ -1,7 +1,7 @@
 """Generation-owned subscription supplying neutral scene facts to followup state."""
 
 from bus.event_bus import EventBus
-from bus.events_lifecycle import SceneObservationCommitted
+from shiori_sdk.role_events import SceneObservationCommitted
 from core.roles.relationship_runtime import RoleRelationshipRuntimeService
 
 

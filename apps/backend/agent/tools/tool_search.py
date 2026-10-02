@@ -2,7 +2,7 @@ import json
 from collections.abc import Set as AbstractSet
 from typing import TYPE_CHECKING, Any
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 from agent.tools.external_access import EXTERNAL_TOOL_DENIED
 from agent.tools.registry import _META_TOOLS
 

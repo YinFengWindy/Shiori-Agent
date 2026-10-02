@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bus.event_bus import EventBus
-from desktop_bridge.models import BridgeResponse
+from shiori_sdk.bridge import BridgeResponse
 from desktop_bridge.server import DesktopBridgeServer
 from core.memory.group_environment import GroupEnvironment
 from session.manager import SessionManager

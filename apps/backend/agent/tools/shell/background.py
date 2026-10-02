@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 
 from .constants import (
     _BG_EVICT_DELAY_S,
