@@ -1,4 +1,5 @@
 from __future__ import annotations
+from shiori_sdk.testing.memory import FakeMemoryStorage
 
 import json
 from pathlib import Path
@@ -64,7 +65,9 @@ def _write_generation_source(
 def test_find_generation_source_by_output_path_loads_exact_request_snapshot(
     tmp_path: Path,
 ) -> None:
-    store = NovelAIStore(tmp_path)
+    store = NovelAIStore(
+        tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+    )
     output_path = (
         tmp_path
         / "private_runtime"
@@ -89,7 +92,9 @@ def test_find_generation_source_by_output_path_loads_exact_request_snapshot(
 def test_find_generation_source_by_output_path_rejects_untracked_image(
     tmp_path: Path,
 ) -> None:
-    store = NovelAIStore(tmp_path)
+    store = NovelAIStore(
+        tmp_path, storage=FakeMemoryStorage(), original_media=lambda value: value
+    )
 
     assert (
         store.find_generation_source_by_output_path(str(tmp_path / "other.png")) is None
@@ -98,7 +103,9 @@ def test_find_generation_source_by_output_path_rejects_untracked_image(
 
 def test_list_records_preserves_stored_workspace_paths(tmp_path: Path) -> None:
     workspace = tmp_path / ".shiori" / "workspace"
-    store = NovelAIStore(workspace)
+    store = NovelAIStore(
+        workspace, storage=FakeMemoryStorage(), original_media=lambda value: value
+    )
     relative_output = Path("2026-07-12") / "record-1" / "output-1.png"
     current_output = (
         workspace / "private_runtime" / "novelai" / "outputs" / relative_output

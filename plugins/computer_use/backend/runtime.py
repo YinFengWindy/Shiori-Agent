@@ -5,15 +5,15 @@ from pathlib import Path
 import platform
 import sys
 
-from agent.mcp.client import McpClient
-from bootstrap.paths import resource_root
+from shiori_sdk.processes import Processes
+from shiori_sdk.mcp import McpSession
 
 
-def resolve_driver() -> Path:
+def resolve_driver(resources: Path) -> Path:
     """Resolves prepared or frozen files; never uses a global installation."""
     if sys.platform != "win32" or platform.machine().lower() not in {"amd64", "x86_64"}:
         raise RuntimeError("Computer Use 首版仅支持 Windows x64")
-    root = resource_root() / "native" / "computer-use"
+    root = resources / "native" / "computer-use"
     for name in ("cua-driver.exe", "cua-driver-uia.exe"):
         if not (root / name).is_file():
             raise FileNotFoundError(
@@ -22,7 +22,7 @@ def resolve_driver() -> Path:
     return root / "cua-driver.exe"
 
 
-def driver_client(root: Path, executable: Path) -> McpClient:
+def driver_client(root: Path, executable: Path, processes: Processes) -> McpSession:
     """Owns a direct stdio runtime and isolates all Driver config/state in plugin-data."""
     root.mkdir(parents=True, exist_ok=True)
     # Driver reads HOME/USERPROFILE directly, including saved config and updates.
@@ -39,7 +39,7 @@ def driver_client(root: Path, executable: Path) -> McpClient:
         CUA_DRIVER_TELEMETRY_HOME=str(root / "telemetry"),
         CUA_DRIVER_RS_UPDATE_CHECK="0",
     )
-    return McpClient(
+    return processes.mcp(
         "computer_use",
         [str(executable), "mcp", "--direct"],
         env=env,

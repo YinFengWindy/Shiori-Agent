@@ -1,5 +1,7 @@
 """Namespaced plugin events and failures transported by the desktop boundary."""
 
+from shiori_sdk.rpc import PluginRpcError as PluginRpcError
+
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,14 +14,3 @@ class PluginBridgeEvent:
     payload: dict[str, Any]
     registry: object
     dispatched: bool = False
-
-
-class PluginRpcError(RuntimeError):
-    """A stable plugin-owned error code carried across the RPC boundary."""
-
-    def __init__(
-        self, code: str, message: str, *, details: dict[str, Any] | None = None
-    ):
-        super().__init__(message)
-        self.code = code
-        self.details = details

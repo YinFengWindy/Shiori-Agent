@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 from uuid import uuid4
 
-from core.roles.models import RoleRecord
+from shiori_sdk.roles import RoleView
 
 from .continuity import ContinuityGuard
 from .director import StoryDirector
@@ -53,7 +53,7 @@ class StorySimulationService:
         story_id: str,
         title: str,
         background: str,
-        role: RoleRecord,
+        role: RoleView,
         player_profile: StoryPlayerProfile,
         story_date: str,
         time_band: str,

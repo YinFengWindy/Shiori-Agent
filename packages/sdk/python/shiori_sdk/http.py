@@ -25,3 +25,18 @@ class HttpRequester(Protocol):
         timeout_s: float,
         budget: RequestBudget,
     ) -> httpx.Response: ...
+
+
+class HttpClient(Protocol):
+    """External generation requests use the host-selected transport budget by default."""
+
+    async def post(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, object],
+        timeout_s: float | None = None,
+        budget: RequestBudget | None = None,
+    ) -> httpx.Response: ...
+    async def get(self, url: str, *, headers: dict[str, str]) -> httpx.Response: ...

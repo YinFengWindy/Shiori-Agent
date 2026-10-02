@@ -5,5 +5,5 @@ version: "0.1.0"
 desc: 按需读取主屏幕，供当前角色进行只读分析
 capabilities:
   - tools
-  - role_store
-  - role_runtime_registry
+  - roles
+  - models

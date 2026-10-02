@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -13,7 +13,7 @@ from plugins.screen_perception.backend.model import ObservationModelAdapter
 def _adapter(provider=None) -> ObservationModelAdapter:
     return ObservationModelAdapter(
         roles=SimpleNamespace(
-            get_required=lambda _role_id: SimpleNamespace(
+            get_role=lambda _role_id: SimpleNamespace(
                 name="Mira",
                 description="陪伴者",
                 system_prompt="用中文回复",
@@ -135,24 +135,21 @@ async def test_analyze_uses_the_role_visual_model_snapshot() -> None:
     activations: list[tuple[str, str]] = []
 
     class _RoleRuntimeRegistry:
-        async def get(self, role_id: str):
+        @asynccontextmanager
+        async def activate(self, role_id: str, purpose: str):
             self.role_id = role_id
-            return self
-
-        @contextmanager
-        def activate_model(self, purpose: str):
             activations.append((self.role_id, purpose))
             yield SimpleNamespace(provider=provider, model="role-vision-model")
 
     adapter = ObservationModelAdapter(
         roles=SimpleNamespace(
-            get_required=lambda _role_id: SimpleNamespace(
+            get_role=lambda _role_id: SimpleNamespace(
                 name="Mira", description="陪伴者", system_prompt="用中文回复"
             )
         ),
         provider=None,
         model="",
-        role_runtime_registry=_RoleRuntimeRegistry(),
+        models=_RoleRuntimeRegistry(),
     )
 
     await adapter.analyze(_payload())

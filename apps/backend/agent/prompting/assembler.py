@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from core.common.message_source import MessageSource
 from shiori_sdk.prompting import (
+    PromptSectionRender as PromptSectionRender,
     SYSTEM_CONTEXT_FRAME_MARKER as SYSTEM_CONTEXT_FRAME_MARKER,
     LEGACY_CONTEXT_FRAME_MARKER as LEGACY_CONTEXT_FRAME_MARKER,
     SYSTEM_CONTEXT_FRAME_END as SYSTEM_CONTEXT_FRAME_END,
@@ -15,14 +16,6 @@ if TYPE_CHECKING:
 
     from agent.context import ContextBuilder
     from conversation.context_scope import ContextScope
-
-
-@dataclass(frozen=True)
-class PromptSectionRender:
-    name: str
-    content: str
-    is_static: bool
-    cache_hit: bool = False
 
 
 @dataclass(frozen=True)

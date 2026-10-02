@@ -4,24 +4,28 @@ from functools import partial
 from typing import Any
 from uuid import uuid4
 
-from agent.plugin_host.bridge_events import PluginRpcError
-from agent.plugin_host.runtime_context import PluginRuntimeContext
-from core.roles import RoleStore
+from shiori_sdk.rpc import PluginRpcError
+from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
+from plugins.novelai.backend.api import ImageGenerationAPI
 from .errors import StorySimulationError
 from .rpc import StorySimulationHandler
 
 
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Registers Story RPC, storage, background work and its required NovelAI API."""
-    from desktop_bridge.method_policy import Concurrency
+    from shiori_sdk.rpc import Concurrency
 
     if ctx.workspace is None:
         raise RuntimeError("story requires a workspace")
     novelai = ctx.dependencies.require("novelai")
+    if not isinstance(novelai, ImageGenerationAPI):
+        raise TypeError("NovelAI dependency must export ImageGenerationAPI")
     handler = StorySimulationHandler(
         workspace=ctx.workspace,
-        role_store=RoleStore(ctx.workspace),
-        role_runtime_registry=ctx.role_runtime_registry,
+        role_store=ctx.roles,
+        storage=ctx.storage,
+        background=ctx.background,
+        models=ctx.models,
         image_tool=novelai,
     )
     # Only an already-active predecessor can own persisted in-flight turns.

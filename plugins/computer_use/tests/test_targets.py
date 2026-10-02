@@ -7,7 +7,7 @@ from io import BytesIO
 from PIL import Image
 import pytest
 
-from agent.tools.base import ToolResult
+from shiori_sdk.tools import ToolResult
 from plugins.computer_use.backend.targets import WindowTargets
 from plugins.computer_use.backend.windows import WindowIdentity
 

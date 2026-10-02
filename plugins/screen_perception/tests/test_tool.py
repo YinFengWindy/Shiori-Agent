@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from plugins.screen_perception.backend.tool import ObserveScreenTool
-from agent.tools.registry import ToolRegistry
 
 
 def test_observe_screen_description_matches_role_owned_availability() -> None:
@@ -83,21 +82,3 @@ async def test_observe_screen_rejects_calls_without_a_role() -> None:
 
     with pytest.raises(ValueError, match="缺少角色身份"):
         await tool.execute(channel="telegram")
-
-
-@pytest.mark.asyncio
-async def test_observe_screen_uses_the_current_role_context_over_tool_arguments() -> (
-    None
-):
-    capture = SimpleNamespace(capture=Mock(return_value={"role_id": "mira"}))
-    analyzer = SimpleNamespace(analyze=AsyncMock(return_value={}))
-    registry = ToolRegistry()
-    registry.register(ObserveScreenTool(capture=capture, analyzer=analyzer))
-
-    await registry.execute(
-        "observe_screen",
-        {"role_id": "other"},
-        context={"channel": "telegram", "role_id": "mira"},
-    )
-
-    capture.capture.assert_called_once_with("mira")

@@ -6,6 +6,7 @@ from agent.prompting.assembler import PromptSectionRender
 from bus.events import InboundMessage, OutboundMessage
 from conversation.context_scope import source_belongs_to_user
 from core.common.message_source import MessageSource
+from shiori_sdk.lifecycle import PromptRenderCtx as PromptRenderCtx
 from shiori_sdk.lifecycle import (
     AfterReasoningCtx as AfterReasoningCtx,
 )
@@ -149,32 +150,6 @@ class PromptRenderInput:
     window_sources: tuple[MessageSource, ...] = ()
     # Idle context inspection has no draft/current turn; use the same owner render.
     include_current_message: bool = True
-
-
-@dataclass
-class PromptRenderCtx:
-    # render/before-step ctx 走 GATE 链，插件可直接改写字段影响后续阶段。
-    # read-only by convention
-    session_key: str
-    channel: str
-    chat_id: str
-    content: str
-    media: list[str] | None
-    timestamp: datetime
-    history: list[dict[str, Any]]
-    skill_names: list[str] | None
-    retrieved_memory_block: str
-    disabled_sections: set[str]
-    turn_injection_prompt: str
-    session_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
-    extra_hints: list[str] = field(default_factory=_empty_str_list)
-    # writable
-    system_sections_top: list[PromptSectionRender] = field(
-        default_factory=_empty_prompt_sections
-    )
-    system_sections_bottom: list[PromptSectionRender] = field(
-        default_factory=_empty_prompt_sections
-    )
 
 
 @dataclass(frozen=True)

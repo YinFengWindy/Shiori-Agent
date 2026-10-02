@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import Any
 from weakref import WeakSet
 
-from agent.mcp.client import McpToolError
-from agent.tools.base import ToolResult
-from agent.tools.turn_scope import ToolTurnScope, current_tool_turn
+from shiori_sdk.mcp import McpToolError
+from shiori_sdk.tools import ToolResult
+from shiori_sdk.processes import ToolTurn, Processes
+from collections.abc import Callable
 
 from .config import ComputerUseConfig
 from .session import DesktopSession
@@ -17,13 +18,26 @@ from .windows import TargetError
 class ComputerDesktop:
     """Keeps a role's lease across observations, actions and model waits in one turn."""
 
-    def __init__(self, root: Path, config: ComputerUseConfig) -> None:
+    def __init__(
+        self,
+        root: Path,
+        config: ComputerUseConfig,
+        *,
+        processes: Processes,
+        resources: Path,
+        current_turn: Callable[[], ToolTurn],
+    ) -> None:
+        self._processes, self._resources, self._current_turn = (
+            processes,
+            resources,
+            current_turn,
+        )
         self._root, self._config = root, config
-        self._owner: tuple[ToolTurnScope, str] | None = None
+        self._owner: tuple[ToolTurn, str] | None = None
         self._session: DesktopSession | None = None
         self._active: set[asyncio.Task[str | ToolResult]] = set()
         self._closing: asyncio.Task[None] | None = None
-        self._revoked: WeakSet[ToolTurnScope] = WeakSet()
+        self._revoked: WeakSet[ToolTurn] = WeakSet()
         self._closed = False
 
     async def call(
@@ -32,7 +46,7 @@ class ComputerDesktop:
         """Rejects competing roles/turns immediately rather than queueing stale intent."""
         if self._closed:
             raise RuntimeError("Computer Use 插件已停用")
-        scope = current_tool_turn()
+        scope = self._current_turn()
         if not role_id.strip():
             raise ValueError("Computer Use 缺少宿主角色身份")
         if scope in self._revoked:
@@ -46,7 +60,9 @@ class ComputerDesktop:
             return "Computer Use 桌面控制已释放。"
         if self._session is None:
             self._owner = (scope, role_id)
-            self._session = DesktopSession(self._root, self._config)
+            self._session = DesktopSession(
+                self._root, self._config, self._processes, self._resources
+            )
             scope.own(self, lambda: self._release(scope))
         session = self._session
         task = asyncio.create_task(session.call(name, arguments))
@@ -65,7 +81,7 @@ class ComputerDesktop:
         finally:
             self._active.discard(task)
 
-    async def _release(self, scope: ToolTurnScope) -> None:
+    async def _release(self, scope: ToolTurn) -> None:
         self._revoked.add(scope)
         if self._owner is None and self._closing is None:
             return

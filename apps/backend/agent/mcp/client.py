@@ -1,12 +1,13 @@
 """Owns one stdio MCP connection with a single reader and correlated requests."""
 
+from shiori_sdk.mcp import McpToolInfo as McpToolInfo
+
 import asyncio
 import json
 import logging
 import os
 from collections import deque
 from contextlib import suppress
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -20,15 +21,6 @@ _RECV_TIMEOUT = 30.0
 _CONNECT_TIMEOUT = 8.0
 # agent-browser permits 10 MiB images; allow base64 plus JSON and text metadata.
 _STREAM_LIMIT = 20 * 1024 * 1024
-
-
-@dataclass
-class McpToolInfo:
-    """A discovered remote tool schema."""
-
-    name: str
-    description: str
-    input_schema: dict[str, Any]
 
 
 def _infer_cwd(command: list[str]) -> str | None:

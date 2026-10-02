@@ -172,3 +172,21 @@ jobs:
             ${{ runner.temp }}/sdk-plugin-isolation/**/*.log
             ${{ runner.temp }}/sdk-plugin-isolation/**/provenance.json
             ${{ runner.temp }}/sdk-plugin-isolation/results.json
+
+  windows-process-lifecycle:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+      - name: Install isolated project environment
+        run: uv sync --dev --locked
+      - name: Verify owned process, MCP and turn lifecycle
+        env:
+          PYTHONUTF8: "1"
+        run: .venv/Scripts/pytest.exe -q tests/backend/infra/process tests/backend/agent/mcp tests/backend/agent/tools/test_turn_scope.py tests/backend/agent/plugin_host/test_processes_browser_use.py tests/backend/agent/plugin_host/test_processes_computer_use.py plugins/browser_use/tests plugins/computer_use/tests

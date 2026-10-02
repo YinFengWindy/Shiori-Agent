@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from plugins.novelai.backend.api import ImageGenerationAPI
+from shiori_sdk.tools import normalize_tool_result
 
 from .errors import (
     StoryInvalidOutputError,
@@ -16,7 +18,7 @@ _STORY_CG_MODEL = "nai-diffusion-4-5-full"
 class StoryImageGenerator:
     """Adapt the plugin's ``generate_image`` tool to the Story resource contract."""
 
-    def __init__(self, image_tool: Any | None) -> None:
+    def __init__(self, image_tool: ImageGenerationAPI | None) -> None:
         self._image_tool = image_tool
 
     async def generate(self, *, story: dict[str, Any], resource: dict[str, Any]) -> str:
@@ -41,7 +43,7 @@ class StoryImageGenerator:
             intent="scene_cg",
             scene_key=f"story:{story.get('id', '')}:visual:{resource.get('id', '')}",
         )
-        raw = str(getattr(result, "text", result) or "").strip()
+        raw = normalize_tool_result(result).text.strip()
         try:
             payload = json.loads(raw)
         except (TypeError, ValueError) as exc:

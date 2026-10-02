@@ -5,8 +5,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent.lifecycle.types import AfterReasoningCtx, PromptRenderCtx
-from agent.prompting import PromptSectionRender
+from shiori_sdk.lifecycle import AfterReasoningCtx, PromptRenderCtx
+from shiori_sdk.prompting import PromptSectionRender
 from .runtime import (
     MemeCatalog,
     RoleReactionCatalog,
@@ -15,8 +15,10 @@ from .runtime import (
 )
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
-    from session.manager import SessionManager
+    from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
+    from shiori_sdk.sessions import PluginSessions
+    from shiori_sdk.roles import Roles
+    from shiori_sdk.processes import Resources
 
 _CTX_SLOT = "prompt:ctx"
 _MEME_RE = re.compile(r"<meme:([a-zA-Z0-9_-]+)>", re.IGNORECASE)
@@ -53,24 +55,21 @@ class MemePromptModule:
         return frame
 
 
-def _private_catalog(workspace: Path) -> Path:
-    from agent.plugin_host.data_migration import migrate_private_data
-
-    return migrate_private_data(workspace, "meme", "library", workspace / "memes")
-
-
 class _MemeReactions:
     def __init__(
-        self, workspace: Path, session_manager: "SessionManager | None"
+        self,
+        workspace: Path,
+        session_manager: "PluginSessions | None",
+        roles: "Roles",
+        resources: "Resources",
+        catalog: Path,
     ) -> None:
-        self._workspace = workspace
+        self._emoji_paths = resources.common_emojis(workspace)
         self._session_manager = session_manager
-        self._role_catalog = RoleReactionCatalog(
-            workspace, MemeCatalog(_private_catalog(workspace))
-        )
+        self._role_catalog = RoleReactionCatalog(roles, MemeCatalog(catalog))
         self._role_decorator = RoleReactionDecorator(
             self._role_catalog,
-            load_common_emojis(workspace),
+            load_common_emojis(self._emoji_paths),
         )
 
     async def decorate_meme(self, ctx: AfterReasoningCtx) -> AfterReasoningCtx:
@@ -95,7 +94,7 @@ class _MemeReactions:
         """Render the available role images and shared emoji catalog."""
         return self._role_catalog.build_prompt_block(
             role_id=role_id,
-            emojis=(load_common_emojis(self._workspace) if role_id else {}),
+            emojis=(load_common_emojis(self._emoji_paths) if role_id else {}),
         )
 
     def _role_id_for_session(self, session_key: str) -> str:
@@ -111,7 +110,15 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     """Register prompt and reply contributions within the plugin effect scope."""
     if ctx.workspace is None:
         raise ValueError("meme 插件需要 workspace")
-    reactions = _MemeReactions(ctx.workspace, ctx.session_manager)
+    reactions = _MemeReactions(
+        ctx.workspace,
+        ctx.sessions,
+        ctx.roles,
+        ctx.resources,
+        ctx.storage.migrate_data(
+            ctx.workspace, "meme", "library", ctx.workspace / "memes"
+        ),
+    )
     ctx.lifecycle.contribute("prompt_render", [MemePromptModule(reactions)])
     # The scoped event runs inside after_reasoning.emit, before citation's
     # protocol_cleanup stage can consume valid meme/emoji tags.

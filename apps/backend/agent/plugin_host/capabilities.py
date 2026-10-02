@@ -5,9 +5,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import asyncio
-import inspect
 import logging
 from typing import TYPE_CHECKING, Any
+from collections.abc import Coroutine
+from core.common.runtime_tasks import create_runtime_task
+from agent.tools.registry import ToolRegistry
+from shiori_sdk.tools import Tool
 from uuid import uuid4
 
 from agent.plugin_host.diagnostics import ChannelDeclarationError
@@ -83,7 +86,7 @@ class ToolsCapability:
 
     def __init__(
         self,
-        registry: Any,
+        registry: ToolRegistry | None,
         effects: EffectScope,
         contributions: PluginContributions,
         plugin_id: str,
@@ -95,7 +98,7 @@ class ToolsCapability:
 
     def register(
         self,
-        tool: Any,
+        tool: Tool,
         *,
         risk: str = "read-write",
         always_on: bool = False,
@@ -132,7 +135,7 @@ class ToolsCapability:
         if name in self._contributions.tool_names:
             self._contributions.tool_names.remove(name)
 
-    def get_tool(self, name: str) -> Any:
+    def get_tool(self, name: str) -> Tool | None:
         """Looks up another tool by name (e.g. to invoke it directly).
 
         Read-only passthrough to the underlying ``ToolRegistry`` — unlike
@@ -576,29 +579,56 @@ class BackgroundCapability:
         self._effects = effects
         self._plugin_id = plugin_id
 
-    def spawn(self, coro: Any, *, name: str) -> asyncio.Task[Any]:
+    def spawn_runtime[T](
+        self, coro: Coroutine[object, object, T], *, name: str
+    ) -> asyncio.Task[T]:
+        """Retain the current runtime until work finishes; own cancellation on unload."""
+        return self._spawn(coro, name=name, retain_runtime=True)
+
+    def spawn[T](
+        self, coro: Coroutine[object, object, T], *, name: str
+    ) -> asyncio.Task[T]:
         """启动作用域任务；开始卸载后拒绝启动并关闭尚未运行的协程。"""
+        return self._spawn(
+            coro, name=f"plugin:{self._plugin_id}:{name}", retain_runtime=False
+        )
+
+    def _spawn[T](
+        self,
+        coro: Coroutine[object, object, T],
+        *,
+        name: str,
+        retain_runtime: bool,
+    ) -> asyncio.Task[T]:
         try:
             self._effects.ensure_active(f"background:{name}")
-        except RuntimeError:
-            if inspect.iscoroutine(coro):
-                coro.close()
+            task = (
+                create_runtime_task(coro, name=name)
+                if retain_runtime
+                else asyncio.create_task(coro, name=name)
+            )
+        except BaseException:
+            coro.close()
             raise
-        task: asyncio.Task[Any] = asyncio.create_task(
-            coro, name=f"plugin:{self._plugin_id}:{name}"
-        )
-        self._effects.add(f"background:{name}", lambda: self._cancel(task))
+        try:
+            # Register at the actual spawn point to preserve LIFO ordering with
+            # each task's resources, and release completed results immediately.
+            release = self._effects.add(
+                f"background:{name}", lambda: self._cancel(task)
+            )
+        except BaseException:
+            task.cancel()
+            raise
+        # Business errors remain with the caller or asyncio's error handler.
+        task.add_done_callback(lambda _completed: release())
         return task
 
     @staticmethod
-    async def _cancel(task: asyncio.Task[Any]) -> None:
+    async def _cancel(task: asyncio.Task[object]) -> None:
         if task.done():
             return
-        _ = task.cancel()
+        task.cancel()
         try:
             await task
-        except (
-            asyncio.CancelledError,
-            Exception,
-        ):  # noqa: BLE001 - 卸载路径只收敛不传播
+        except asyncio.CancelledError:
             pass

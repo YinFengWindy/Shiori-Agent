@@ -1,8 +1,16 @@
 """Pure canonical plugin data paths; migration and persistence remain host-owned."""
 
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import Protocol
 
 PLUGIN_DATA_DIRNAME = "plugin-data"
+
+
+class KeyValueStore(Protocol):
+    """Opaque plugin-owned JSON values retained across generations."""
+
+    def get(self, key: str, default: object = None) -> object: ...
+    def set(self, key: str, value: object) -> None: ...
 
 
 def plugin_data_dir(workspace: Path, plugin_id: str) -> Path:

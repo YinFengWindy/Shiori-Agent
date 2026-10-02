@@ -85,7 +85,8 @@ wheel probe first collects/runs an unrelated test with only the base SDK and pyt
 checks the missing-extra diagnostic, then installs the extra and runs all SDK tests.
 The plugin probe executes citation, context_pressure, default_memory, shell_safety,
 shell_restore, tool_loop_guard, plugin_undo, observe and status_commands with no
-host or testkit; default_memory is installed only for its own target. It verifies installed
+host or testkit, plus meme, novelai, story, screen_perception, browser_use and
+computer_use. default_memory is installed only for its own target. It verifies installed
 origins and that async failures really execute. The original full host CI and
 legacy plugin integration job remain enabled.
 
@@ -172,3 +173,45 @@ private-data layout and portable plugin-ID validation; host migration and SDK fa
 use the same helper. `PrivateStorage.migrate_data` returns the authoritative target.
 Observe passes that resolved database path to both writer and public telemetry reader,
 so an injected storage root remains consistent and reads never create storage.
+
+## Role, generation and native services
+
+`plugin_services.ServicePluginContext` describes statically checked setup inputs.
+Properties require the corresponding manifest grant; the context does not grant
+access merely because the interface declares a property.
+
+| Capability | Contract and ownership |
+| --- | --- |
+| `roles` | Detached role snapshots, explicit asset resolution/adoption and opaque role-extension transactions. The host keeps its canonical RoleStore and write lock. |
+| `models` | `async with ctx.models.activate(role_id, "chat" or "vision")` holds the host-selected provider/model snapshot across awaited work. No runtime registry or full Config is exported. |
+| `sessions` | Session metadata, original media provenance, atomic image replacement and its host-owned desktop projection. |
+| `http` | `HttpClient` uses the injected external transport and its default retry/budget policy. Memory's bounded `HttpRequester` remains separate. |
+| `background` | `spawn` owns scoped tasks; `spawn_runtime` additionally retains the calling runtime generation until task completion. Both cancel and join outstanding work on unload. |
+| `processes` | Creates explicit MCP sessions and owned child processes through the host's existing McpClient/owned_spawn/WindowsJob implementations. The SDK contains no process implementation. |
+| `resources` | Supplies source/frozen resource roots and shared emoji paths; plugins do not guess checkout depth. |
+| `tool_turn` | Returns the current host turn identity and awaited ownership finalizers. Model arguments cannot forge it. |
+| `runtime` | `was_active` and `on_drain` preserve accepted work during generation replacement. |
+
+`Roles.read_scope()` keeps a plugin's multi-read namespace reconciliation atomic
+against canonical role edits. Plugins retain their schemas and policies; only
+host storage operations cross this boundary. `PrivateStorage.migrate_data`
+returns the authoritative directory and is mandatory when constructing plugin
+catalogs. Neither plugins nor SDK fakes recreate the host's migration owner.
+
+Shared prompt-section, scene-observation, RPC-error and MCP values have one SDK
+definition. `files`, `media`, `errors` and `redaction` contain standalone helpers
+operating on explicit values/paths. Native discovery, HTTP transport, role/session
+storage and runtime leases remain host-owned.
+
+`testing.service_context.FakeServiceContext` composes independent role, session,
+tool, HTTP, resource, process, RPC and task fixtures. Native calls fail until a
+test explicitly supplies their result. Plugin policy tests execute with only the
+SDK and declared sibling dependencies (Story → NovelAI; Meme → Citation).
+Individual fixtures live in their owning `testing.tools`, `testing.storage`,
+`testing.sessions`, `testing.resources`, `testing.models`, `testing.http`,
+`testing.runtime` and `testing.scene_observations` modules; the context only
+assembles them. Role draft writers and covariant read-only projectors are defined
+once in `shiori_sdk.roles` and used by both the host and independent fixtures.
+Actual kernel ordering, role saves, session media adoption, runtime lease
+retention, screen/desktop-pet integration and Windows Job cleanup remain in host
+tests. PR CI includes a dedicated Windows process-lifecycle job.

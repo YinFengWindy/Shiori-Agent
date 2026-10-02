@@ -6,7 +6,7 @@ import asyncio
 import json
 from typing import Any, Protocol
 
-from agent.tools.base import Tool
+from shiori_sdk.tools import Tool
 
 
 class ScreenCapture(Protocol):
