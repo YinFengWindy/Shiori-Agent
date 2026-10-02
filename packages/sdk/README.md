@@ -1,9 +1,11 @@
 # Shiori SDK
 
 `@shiori/sdk` and `shiori-sdk` are the TypeScript and Python distributions of the
-same plugin contract. Both are version **3.0.0**, with Runtime API **3.0.0**.
+same plugin contract. Both are version **3.1.0**, with Runtime API **3.1.0**.
 They are built locally and in CI; this repository does not publish them to npm or PyPI.
-External plugin manifests declare `runtime_api: ">=3.0.0 <4.0.0"`. The host rejects
+External plugin manifests declare `runtime_api: ">=3.0.0 <4.0.0"`, or
+`">=3.1.0 <4.0.0"` when they use the 3.1 lifecycle additions (`AfterTurnCtx`,
+`PHASE_SLOTS`, `require_phase_slot`, `LifecycleModule.requires` / `produces`). The host rejects
 an incompatible range with an `incompatible_runtime` diagnostic before executing
 the plugin backend. Version 3 requires rebuilding existing renderer imports.
 
@@ -55,8 +57,15 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 Install `shiori-sdk[testing]` for pytest/pytest-asyncio, `sdk_context`,
 `FakePluginContext`, `FakeLifecycle`, `FakeEvents`, `FakeFrame`, package staging,
 bridge request helpers and shared test TLS contexts. Fakes store only test values
-in memory; they never open host persistence. `FakeLifecycle` records modules for
-explicit execution; it does not simulate the host phase dependency sorter.
+in memory; they never open host persistence. `sdk_context` reads the nearest
+`manifest.yaml` above the test file (within the pytest rootdir; override the
+`sdk_plugin_dir` fixture otherwise) and grants only its declared `capabilities`,
+validated against the host's `KNOWN_CAPABILITIES`, so undeclared access raises
+`CapabilityNotGranted` as in the host. The manifest is only read: `plugin_dir`
+is an isolated temporary directory, and bundled files are package assets. `FakeLifecycle`
+records modules for explicit execution and rejects slots outside
+`shiori_sdk.lifecycle.PHASE_SLOTS` like the host; it does not simulate the host
+phase dependency sorter.
 HTTP response contracts and tolerant JSON helpers declare httpx/json-repair as
 runtime dependencies. pytest-asyncio and test fixtures remain optional.
 The base wheel can coexist with pytest without the testing extra: unrelated tests

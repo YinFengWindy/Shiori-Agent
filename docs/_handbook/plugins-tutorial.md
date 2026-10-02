@@ -58,7 +58,7 @@ class ExampleConfig(BaseModel):
 
 ```python
 # backend/plugin.py
-from agent.lifecycle.types import AfterTurnCtx
+from shiori_sdk.lifecycle import AfterTurnCtx
 from .config import ExampleConfig
 
 async def setup(ctx):
@@ -172,11 +172,11 @@ class QQBotChannel:
 
 ## 阶段与依赖
 
-阶段槽位为 `before_turn`、`before_reasoning`、`prompt_render`、`before_step`、`after_step`、`after_reasoning`、`after_turn`。模块声明唯一 `slot`、所需 `requires` 和导出的 `produces`；宿主核心拥有具体执行顺序与帧语义。
+阶段槽位为 `before_turn`、`before_reasoning`、`prompt_render`、`before_step`、`after_step`、`after_reasoning`、`after_turn`（SDK 的 `shiori_sdk.lifecycle.PHASE_SLOTS`；向其它名称 `contribute` 会抛 `ValueError`）。模块按 `shiori_sdk.lifecycle.LifecycleModule` 协议声明唯一 `slot`、所需 `requires` 和导出的 `produces`（无依赖或无导出时写空元组）；宿主核心拥有具体执行顺序与帧语义。用到 `AfterTurnCtx`、`PHASE_SLOTS`、`require_phase_slot` 或按该协议声明 `requires` / `produces` 的外部包声明 `runtime_api: ">=3.1.0 <4.0.0"`。
 
 ```python
-from agent.lifecycle.types import PromptRenderCtx
-from agent.prompting import PromptSectionRender
+from shiori_sdk.lifecycle import PromptRenderCtx
+from shiori_sdk.prompting import PromptSectionRender
 
 class ExamplePrompt:
     """Adds a prompt section after the host creates its prompt context."""
@@ -219,7 +219,7 @@ async def setup(ctx):
 主窗口在构建时发现 `plugins/*/ui/index.tsx`，默认导出 `PluginUiModule`：
 
 ```tsx
-import type { PluginUiModule } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
+import type { PluginUiModule } from "@shiori/sdk";
 
 const exampleUi: PluginUiModule = {
   pluginId: "example",
@@ -272,6 +272,8 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 # 在 tmp_path 下整包暂存，保留源码/manifest/资源，排除运行状态和构建缓存。
 # staged = stage_plugin_package(PLUGIN_DIR, tmp_path / "plugins/example")
 ```
+
+SDK 的 `sdk_context` fixture 从测试文件向上（不越过 pytest rootdir）找到本包 `manifest.yaml`，只授予其 `capabilities` 声明的能力（未知能力名与宿主一样报错）；访问未声明的能力抛 `CapabilityNotGranted`，与宿主一致。manifest 只用于读取，`plugin_dir` 是隔离的临时目录；包内文件按包资源读取，不要写入 `plugin_dir`。测试不在包内时，在 `conftest.py` 覆盖 `sdk_plugin_dir` fixture。
 
 兄弟插件通过 `plugin_directory("citation")` 定位，并在 `pyproject.toml` 明确声明安装依赖；不得推导原仓库路径，也不得导入宿主测试树。异步测试由 pytest-asyncio 执行，公共支持来自 SDK 的 pytest entry point；独立插件测试不安装宿主。真实 AppRuntime 集成 fixture 由宿主开发包 `shiori-host-testing` 提供，仅在显式安装该包时通过其 pytest entry point 注册。
 

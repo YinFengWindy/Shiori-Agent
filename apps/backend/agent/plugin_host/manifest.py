@@ -8,6 +8,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from shiori_sdk.runtime import parse_capabilities
+
 from core.common.channel_chat_types import (
     ChatTypeDeclaration,
     ChatTypeDeclarations,
@@ -15,55 +17,6 @@ from core.common.channel_chat_types import (
 )
 
 logger = logging.getLogger(__name__)
-
-# manifest 只能声明这里列出的宿主能力
-KNOWN_CAPABILITIES = frozenset(
-    {
-        "tools",
-        "lifecycle",
-        "tool_hooks",
-        "proactive_gates",
-        "channels",
-        "accounts",
-        # 渠道发送者与群的头像缓存（#514）
-        "avatars",
-        "events",
-        "scene_observations",
-        "kv",
-        "config",
-        "background",
-        "diagnostics",
-        "storage",
-        "roles",
-        "models",
-        "sessions",
-        "http",
-        "resources",
-        "processes",
-        "tool_turn",
-        "bot_commands",
-        "rpc",
-        "dependencies",
-        "runtime",
-        "role_runtime_registry",
-        # 批 B（#183）新增：直传宿主服务引用，供渠道/事件/记忆壳插件读取。这些
-        # 字段本身没有装配/回滚语义（不像 tools/kv 等需要 effect 包装），
-        # 因此不各建一个 Capability 类，直接在 kernel._build_capabilities 里
-        # 透传 HostServices 的同名字段。
-        "workspace",
-        # 共享宿主那一个 RoleStore 实例。与 workspace 并列而不是让插件自己
-        # RoleStore(ctx.workspace)：后者每次都新建一个 RoleManifestRepository，
-        # 而写锁是 **按实例的** threading.RLock。两个实例写同一份 roles.json 时
-        # atomic_save_json 只保证单次写原子、不防丢更新。
-        "role_store",
-        "memory_engine",
-        "memory",
-        "session_manager",
-        "light_provider",
-        "light_model",
-        "relationship_runtime",
-    }
-)
 
 # 插件包布局为 plugins/<id>/{backend,ui,tests}/，后端入口固定在 backend/ 下
 DEFAULT_ENTRY = "backend/plugin.py"
@@ -263,18 +216,11 @@ def _parse_manifest(
 
 
 def _parse_capabilities(raw: dict[str, object], manifest_path: Path) -> tuple[str, ...]:
-    value = raw.get("capabilities")
-    if value is None:
-        raise ManifestError(f"v2 manifest 缺少 capabilities 声明: {manifest_path}")
-    if not isinstance(value, list):
-        raise ManifestError(f"capabilities 必须是列表: {manifest_path}")
-    names = tuple(str(item) for item in value)
-    unknown = [name for name in names if name not in KNOWN_CAPABILITIES]
-    if unknown:
-        raise ManifestError(
-            f"manifest 声明了未知 capability {unknown}: {manifest_path}"
-        )
-    return names
+    # 校验规则与已知能力集合归 SDK，宿主与 SDK 测试替身共用同一份。
+    try:
+        return parse_capabilities(raw.get("capabilities"), manifest_path)
+    except ValueError as exc:
+        raise ManifestError(str(exc)) from exc
 
 
 def _parse_channels(

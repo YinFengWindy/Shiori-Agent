@@ -1,6 +1,6 @@
 # 独立运行 Python 测试
 
-将本插件目录复制到 Shiori 仓库外，准备包含 `shiori-sdk` 3.0.0 wheel 的私有 wheelhouse；其他第三方依赖由包元数据解析。
+将本插件目录复制到 Shiori 仓库外，准备包含 `shiori-sdk` 3.1.0 wheel 的私有 wheelhouse；其他第三方依赖由包元数据解析。
 在插件副本目录执行：
 
 ```sh

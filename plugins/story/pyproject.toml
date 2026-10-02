@@ -6,10 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "shiori-plugin-story"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["shiori-sdk>=3.0.0,<4", "shiori-plugin-novelai==0.1.0", "tzdata>=2025.2"]
+dependencies = ["shiori-sdk>=3.1.0,<4", "shiori-plugin-novelai==0.1.0", "tzdata>=2025.2"]
 
 [project.optional-dependencies]
-test = ["shiori-sdk[testing]>=3.0.0,<4"]
+test = ["shiori-sdk[testing]>=3.1.0,<4"]
 
 [tool.setuptools]
 include-package-data = false

@@ -1,7 +1,7 @@
 # 独立运行 Python 测试
 
 本插件只依赖 `shiori-sdk` 和声明的第三方包。把插件目录复制到仓库外，准备含
-`shiori_sdk-3.0.0` 与 `shiori_plugin_default_memory-0.1.0` wheel 的私有 wheelhouse。
+`shiori_sdk-3.1.0` 与 `shiori_plugin_default_memory-0.1.0` wheel 的私有 wheelhouse。
 无需安装 Shiori 宿主、testkit 或宿主测试支持。
 
 在插件副本目录执行（替换 wheelhouse 为实际绝对路径）：

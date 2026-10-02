@@ -22,6 +22,21 @@ _INLINE_MEMORY_REF_RE = re.compile(
 )
 
 
+def _reasoning_ctx(frame: LifecycleFrame) -> AfterReasoningCtx:
+    """Returns the reply gate context both modules require before they run.
+
+    The host only runs these modules after ``after_reasoning.build_ctx`` has filled
+    the slot, so anything else (including absence) is a wiring error, not a skip.
+    """
+    ctx = frame.slots.get(_REASONING_CTX_SLOT)
+    if not isinstance(ctx, AfterReasoningCtx):
+        raise TypeError(
+            f"{_REASONING_CTX_SLOT} must hold AfterReasoningCtx, "
+            f"got {type(ctx).__name__}"
+        )
+    return ctx
+
+
 class CitationAfterReasoningModule:
     """Extracts citation metadata and removes citation markers from the reply."""
 
@@ -30,9 +45,7 @@ class CitationAfterReasoningModule:
     produces = (_REASONING_CTX_SLOT, _PERSIST_CITED_SLOT)
 
     async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
-        ctx = frame.slots.get(_REASONING_CTX_SLOT)
-        if not isinstance(ctx, AfterReasoningCtx):
-            return frame
+        ctx = _reasoning_ctx(frame)
         reply = ctx.reply
         cleaned, cited_ids = extract_cited_ids(reply)
         cleaned = strip_inline_memory_refs(cleaned)
@@ -55,9 +68,7 @@ class ProtocolTagCleanupModule:
     produces = (_REASONING_CTX_SLOT,)
 
     async def run[FrameT: LifecycleFrame](self, frame: FrameT) -> FrameT:
-        ctx = frame.slots.get(_REASONING_CTX_SLOT)
-        if not isinstance(ctx, AfterReasoningCtx):
-            return frame
+        ctx = _reasoning_ctx(frame)
         reply = ctx.reply
         cleaned = strip_inline_memory_refs(strip_trailing_protocol_tags(reply))
         if cleaned != reply:

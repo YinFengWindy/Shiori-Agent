@@ -217,7 +217,7 @@ async def stop(self):
 - **账号与 setup**：用 `shiori_sdk.testing.channel_context.FakeChannelPluginContext` 上下文执行公开 `setup`；断言真实 manifest 声明、插件存储恢复、孤立账号处理和 SDK capability 调用。真实 PluginKernel/AppRuntime 重载与角色删除放在宿主集成测试。
 - **渠道行为**：平台 REST 用 `httpx.MockTransport` 替代，长连接用假连接；`ChannelContext` 直接构造，`channel_hub`、`push_tool` 可用简单替身（参考 `plugins/feishu/tests/conftest.py`）。至少覆盖：未登记、离线或无所属角色的接收账号被拒绝，响应规则准入、入站去重、`pause_intake` 期间缓冲、`stop` 对未启动实例安全、流式收尾与失败回退。
 - **真实运行时**：宿主测试侧的 `shiori_host_testing` 提供 `plugin_runtime` fixture，验证设置保存、热换代、账号删除和 runtime drain；插件单测不加载它。
-- `pyproject.toml` 声明 `test = ["shiori-sdk[testing]==3.0.0"]` extra 和 pytest 配置（`-W error`、`asyncio_mode = "auto"`），`TESTING.md` 写明仓库外运行方式和真机验收清单。
+- `pyproject.toml` 声明 `dependencies = ["shiori-sdk>=3.1.0,<4"]`、`test = ["shiori-sdk[testing]>=3.1.0,<4"]` extra 和 pytest 配置（`-W error`、`asyncio_mode = "auto"`），`TESTING.md` 写明仓库外运行方式和真机验收清单。
 
 仓库内运行 `uv run pytest -c pytest.ini plugins/<id>/tests`；合并前用隔离环境验收：
 

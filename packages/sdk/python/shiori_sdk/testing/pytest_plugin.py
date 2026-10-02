@@ -17,7 +17,7 @@ class _MissingTestingExtra:
 
 def pytest_configure(config: pytest.Config) -> None:
     """Registers optional fixtures without requiring them for unrelated test suites."""
-    if all(find_spec(name) is not None for name in ("pytest_asyncio", "httpx")):
+    if all(find_spec(name) is not None for name in ("pytest_asyncio", "httpx", "yaml")):
         from . import pytest_fixtures
 
         config.pluginmanager.register(pytest_fixtures, "shiori_sdk_testing")

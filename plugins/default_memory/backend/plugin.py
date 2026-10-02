@@ -28,6 +28,7 @@ _META_RE = re.compile(r"（(?P<meta>[^（）]*(?:证据|src|有印象|不确定)
 class ContextPrepareRecordModule:
     slot = "default_memory.inspector"
     requires = ("before_turn.emit", _CTX_SLOT)
+    produces = ()
 
     def __init__(self, recorder: "_DefaultMemoryRecorder") -> None:
         self._recorder = recorder

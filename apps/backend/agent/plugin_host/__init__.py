@@ -1,6 +1,6 @@
 """插件内核公共入口：内核、manifest、运行时上下文与 capability 契约。"""
 
-from agent.plugin_host.capabilities import PHASE_SLOTS, PluginContributions
+from agent.plugin_host.capabilities import PluginContributions
 from agent.plugin_host.config_schema import (
     ConfigModelError,
     PluginConfigSchemaRegistry,
@@ -13,7 +13,6 @@ from agent.plugin_host.kernel import HostServices, PluginKernel
 from agent.plugin_host.manifest import (
     DEFAULT_ENTRY,
     ChannelDeclaration,
-    KNOWN_CAPABILITIES,
     ManifestError,
     PluginManifest,
     load_manifest,
@@ -33,9 +32,7 @@ __all__ = [
     "DEFAULT_ENTRY",
     "EffectScope",
     "HostServices",
-    "KNOWN_CAPABILITIES",
     "ManifestError",
-    "PHASE_SLOTS",
     "PluginConfigSchemaRegistry",
     "PluginContributions",
     "PluginHandle",

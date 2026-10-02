@@ -1,6 +1,6 @@
 # 独立运行 Python 测试
 
-将本插件复制到 Shiori 仓库外；wheelhouse 只需 `shiori_sdk-3.0.0` wheel。插件声明 httpx、psutil 和 websockets；测试声明 SDK testing、qrcode 与 Pillow，不安装宿主或旧 testkit。
+将本插件复制到 Shiori 仓库外；wheelhouse 只需 `shiori_sdk-3.1.0` wheel。插件声明 httpx、psutil 和 websockets；测试声明 SDK testing、qrcode 与 Pillow，不安装宿主或旧 testkit。
 
 ```sh
 uv venv .venv --python 3.12

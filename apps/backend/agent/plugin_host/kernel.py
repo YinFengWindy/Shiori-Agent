@@ -126,7 +126,7 @@ class HostServices:
     tool_registry: ToolRegistry | None = None
     workspace: Path | None = None
     # 宿主唯一的 RoleStore 实例（bootstrap 里的 canonical 那个）。插件经
-    # role_store capability 拿到的必须是它本身，见 manifest.KNOWN_CAPABILITIES
+    # role_store capability 拿到的必须是它本身，见 shiori_sdk.runtime.KNOWN_CAPABILITIES
     # 里那段注释：另起一个实例就是另起一把写锁。
     role_store: RoleStore | None = None
     session_manager: SessionManager | None = None
