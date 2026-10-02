@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
-from scripts.verify_plugin_tests import REPOSITORY, UV, build_wheel, run
+from scripts.verify_plugin_tests import (
+    REPOSITORY,
+    UV,
+    build_wheel,
+    run,
+    write_provenance_probe,
+)
 
 
 def main() -> None:
@@ -70,32 +75,26 @@ def main() -> None:
     )
     shutil.copytree(source / "tests", output / "tests")
     shutil.copyfile(source / "pyproject.toml", output / "pyproject.toml")
-    expected = json.loads((source / "package.json").read_text(encoding="utf-8"))[
-        "version"
-    ]
-    probe = f"""
-import importlib.util, json, sysconfig
-from importlib.metadata import distribution, version, PackageNotFoundError
-from pathlib import Path
-import shiori_sdk
-assert shiori_sdk.__version__ == version('shiori-sdk') == {expected!r}
-assert shiori_sdk.RUNTIME_API_VERSION == {expected!r}
-site = Path(sysconfig.get_paths()['purelib']).resolve()
-assert Path(shiori_sdk.__file__).resolve().is_relative_to(site)
-assert not json.loads(distribution('shiori-sdk').read_text('direct_url.json')).get('dir_info', {{}}).get('editable')
-for name in ('agent', 'core', 'bus', 'bootstrap', 'desktop_bridge', 'shiori_plugin_testkit', 'shiori_host_testing'):
-    assert importlib.util.find_spec(name) is None, name
-try:
-    version('shiori-agent')
-except PackageNotFoundError:
-    pass
-else:
-    raise AssertionError('Host unexpectedly installed')
-print('Independent wheel smoke passed:', shiori_sdk.__file__)
-"""
-    run([str(python), "-c", probe], cwd=output, log=output / "smoke.log")
+    write_provenance_probe(output, {}, [])
+    run(
+        [str(python), "-c", "import verify_provenance; verify_provenance.audit()"],
+        cwd=output,
+        log=output / "smoke.log",
+    )
     result = run(
-        [str(python), "-m", "pytest", "-q", "tests"],
+        [
+            str(python),
+            "-m",
+            "pytest",
+            "-p",
+            "verify_provenance",
+            "--basetemp",
+            str(output / "pytest-tmp"),
+            "-q",
+            "-W",
+            "error",
+            "tests",
+        ],
         cwd=output,
         log=output / "pytest.log",
     )

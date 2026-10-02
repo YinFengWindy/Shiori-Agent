@@ -101,7 +101,7 @@ async def test_initial_partial_core_failure_forces_unsafe_plugin_cleanup(
 ):
     import asyncio
     from pathlib import Path
-    from shiori_plugin_testkit.packages import stage_plugin_package
+    from shiori_sdk.testing.packages import stage_plugin_package
     from bootstrap.tools import CoreRuntime
 
     packages = tmp_path / "host_plugins"

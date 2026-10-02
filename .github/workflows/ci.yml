@@ -34,8 +34,8 @@ jobs:
       - name: Run Ruff
         run: .venv/bin/ruff check .
 
-      - name: Enforce SDK import boundary and migration ratchet
-        run: .venv/bin/python scripts/check_sdk_imports.py --base "${{ github.event.pull_request.base.sha }}"
+      - name: Enforce SDK and plugin dependency boundaries
+        run: .venv/bin/python -m scripts.check_sdk_imports
 
       - name: Run pyright
         run: |
@@ -53,6 +53,9 @@ jobs:
           # （宿主、plugins/*/tests/ 与 packages/sdk/tests），
           # 避免遗漏插件或公开 SDK 的用例（#178、#215）。
           .venv/bin/pytest -q -W error
+
+      - name: Verify the installed host wheel and runtime resources
+        run: .venv/bin/python -m scripts.verify_host_distribution
 
   plugin-isolation:
     runs-on: ubuntu-latest
@@ -78,7 +81,7 @@ jobs:
           # is built; the runner strips PYTHON* from every child process.
           PYTHONPATH: packages/sdk/python
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python scripts/verify_plugin_tests.py --output "${{ runner.temp }}/plugin-isolation"
+        run: python -m scripts.verify_plugin_tests --output "${{ runner.temp }}/plugin-isolation"
 
       - name: Upload plugin isolation evidence
         if: always()
@@ -161,17 +164,6 @@ jobs:
         run: pnpm run sdk:smoke
       - name: Build and install wheel and run pure SDK tests outside the repository
         run: .venv/bin/python -m scripts.verify_sdk
-      - name: Run migrated plugins without shiori-agent
-        run: .venv/bin/python scripts/verify_plugin_tests.py --sdk-only --output "${{ runner.temp }}/sdk-plugin-isolation"
-      - name: Upload SDK plugin provenance
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sdk-plugin-isolation-evidence
-          path: |
-            ${{ runner.temp }}/sdk-plugin-isolation/**/*.log
-            ${{ runner.temp }}/sdk-plugin-isolation/**/provenance.json
-            ${{ runner.temp }}/sdk-plugin-isolation/results.json
 
   windows-process-lifecycle:
     runs-on: windows-latest

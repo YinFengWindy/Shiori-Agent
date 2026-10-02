@@ -15,7 +15,7 @@ import pytest
 from agent.config import load_config_text
 from agent.plugin_host.handle import PluginState
 from bootstrap.app import AppRuntime, RuntimeFeatures
-from shiori_plugin_testkit.packages import stage_plugin_package
+from shiori_sdk.testing.packages import stage_plugin_package
 from core.roles.store import RoleStore
 from desktop_bridge.runtime.service import ReloadableDesktopService
 

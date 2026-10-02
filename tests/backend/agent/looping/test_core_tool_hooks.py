@@ -1,4 +1,4 @@
-from shiori_plugin_testkit.memory import FakeMemoryEngine
+from shiori_host_testing.memory import FakeMemoryEngine
 from agent.looping.core import AgentLoop
 from agent.looping.ports import (
     AgentLoopConfig,

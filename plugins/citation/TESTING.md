@@ -14,6 +14,6 @@ uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 执行真实插件模块。Fake 仅记录贡献，不模拟宿主阶段调度。
 真实 Kernel 加载与卸载回归保留在宿主 `test_kernel.py`，由宿主 CI 执行。
 
-仓库维护者可运行 `uv run python scripts/verify_plugin_tests.py --sdk-only`
+仓库维护者可运行 `uv run python -m scripts.verify_plugin_tests`
 构建 wheel、逐插件创建干净环境并记录 `provenance.json` 与异步失败探针。
 统一契约与构建说明见 `packages/sdk/README.md`。

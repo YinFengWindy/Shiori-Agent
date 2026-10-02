@@ -1,3 +1,5 @@
+"""Host integration fake backed by the real MemoryStore when a workspace is supplied."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -21,6 +23,8 @@ from core.memory.markdown import ConsolidateRequest, ConsolidateResult
 
 
 class FakeMemoryEngine:
+    """Test engine for host memory behavior; never installed in plugin isolation."""
+
     def __init__(self, workspace: Path | None = None) -> None:
         self._store = MemoryStore(workspace) if workspace is not None else None
         self.consolidate_calls: list[ConsolidateRequest] = []

@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from shiori_plugin_testkit.bridge import plugin_bridge_request
+from shiori_sdk.testing.bridge import plugin_bridge_request
 
 from agent.plugin_host.kv import PluginKVStore
 from agent.plugin_host.plugin_data import plugin_data_dir

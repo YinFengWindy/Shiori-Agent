@@ -530,7 +530,7 @@ async def test_restart_required_refuses_all_hot_write_routes_before_candidate_or
     tmp_path, monkeypatch
 ):
     from pathlib import Path
-    from shiori_plugin_testkit.packages import stage_plugin_package
+    from shiori_sdk.testing.packages import stage_plugin_package
 
     root = tmp_path / "packages"
     stage_plugin_package(

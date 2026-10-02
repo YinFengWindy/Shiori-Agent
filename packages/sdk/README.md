@@ -61,8 +61,8 @@ The base wheel can coexist with pytest without the testing extra: unrelated test
 collect and run normally. Requesting `sdk_context` without the extra reports the
 installation requirement. Optional fixtures load only when their dependencies exist.
 SDK-only tests never start `AppRuntime`. Real host integration fixtures live in
-`shiori_host_testing`; `shiori-plugin-testkit` temporarily forwards those fixtures
-for unmigrated plugins and retains their legacy memory fake.
+`shiori_host_testing`, including its real workspace-backed memory fake. That
+private development package is never installed in plugin or SDK isolation.
 
 ## Maintenance and validation
 
@@ -76,25 +76,33 @@ pnpm lint
 pnpm typecheck
 pnpm run sdk:smoke
 uv run python -m scripts.verify_sdk
-uv run python scripts/verify_plugin_tests.py --sdk-only
-uv run python scripts/check_sdk_imports.py --base <base-commit>
+uv run python -m scripts.verify_plugin_tests
+uv run python -m scripts.check_sdk_imports
 ```
 
 The artifact probes install tarball/wheel non-editably outside the checkout. The
 wheel probe first collects/runs an unrelated test with only the base SDK and pytest,
 checks the missing-extra diagnostic, then installs the extra and runs all SDK tests.
-The plugin probe executes citation, context_pressure, default_memory, shell_safety,
-shell_restore, tool_loop_guard, plugin_undo, observe and status_commands with no
-host or testkit, plus meme, novelai, story, screen_perception, browser_use and
-computer_use, qqbot, qq, telegram and feishu. default_memory is installed only for its own target. It verifies installed
-origins and that async failures really execute. The original full host CI and
-legacy plugin integration job remain enabled.
+The plugin probe discovers all plugin suites (currently all 20 baseline plugins),
+builds ordinary wheels from external copies, and installs only each target's
+declared dependency closure. No host or default-memory package is injected.
+Each suite and its awaited failure probe owns a separate pytest temporary directory.
+Provenance checks run before and after the suite, checking host absence, all
+distribution origins, editable installs, repository path injection and SDK versions.
+An execution probe rejects backend/testing code loaded from the staged source copy,
+including temporary module aliases removed before the suite ends.
 
-`scripts/sdk_import_exemptions.json` records individual legacy import edges and
-counts, including `TYPE_CHECKING` imports. Remove entries with each migration.
-New edges, increased counts, unused entries and host imports from the SDK or
-graduated plugins fail the guard. PR CI compares the baseline with its exact base
-commit so editing the exemption file cannot silently expand it.
+The import guard has no exemptions. It checks SDK and plugin Python sources,
+tests, stubs and packaged testing helpers, including TYPE_CHECKING, import aliases,
+literal/string-composed dynamic imports, string patch targets and source-relative
+host resource guesses. Host roots follow the actual backend package/module tree.
+SDK dependencies cannot point to concrete plugins. Declared public sibling plugin
+dependencies remain valid. This static guard is complemented by external execution;
+it does not claim to sandbox arbitrary Python.
+
+CI separates all-plugin isolation, SDK artifact tests, host integration and installed
+host-resource checks. Existing renderer and Windows process lifecycle jobs remain.
+
 
 
 ## Memory engines

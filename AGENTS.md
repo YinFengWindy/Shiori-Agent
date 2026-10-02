@@ -40,7 +40,7 @@
 - 视图层中的派生计算（dirty 判断、header title、preview 数据、可见状态等）应优先抽到 selector / pure helper，避免散落在页面主体。
 - 每个测试文件只测试对应源文件的行为，对应关系必须一目了然：
   - TypeScript 单测与被测源文件**同目录并列**（`main.ts` / `main.test.ts`）；Electron、onboarding 这类 e2e 放 `apps/desktop/tests/`。
-  - Python 单测放 `tests/backend/`，目录结构镜像 `apps/backend/`。例外：顶层 `plugins/<id>/` 插件包的单测放 `plugins/<id>/tests/`，与插件包同目录、插件包自包含；插件后端代码位于 `plugins/<id>/backend/`（`manifest.yaml`、`README.md`、`plugin.disabled` 等包级文件留在插件根目录），宿主 fixture 归 `tests/conftest.py`；已迁移插件通过显式安装的 `shiori-sdk[testing]` 获取独立测试支持；未迁移插件暂用 `shiori-plugin-testkit`，不依赖根 conftest 或宿主测试树。独立运行见 `docs/agents/plugin-testing.md`。SDK 自身的单测放在 `packages/sdk/tests/`，结构镜像 `python/shiori_sdk/`；真实宿主 fixture 位于独立开发包 `packages/shiori-host-testing/`，其测试位于 `tests/backend/shiori_host_testing/`，并由根 pytest 与测试类型配置显式收集。
+  - Python 单测放 `tests/backend/`，目录结构镜像 `apps/backend/`。例外：顶层 `plugins/<id>/` 插件包的单测放 `plugins/<id>/tests/`，与插件包同目录、插件包自包含；插件后端代码位于 `plugins/<id>/backend/`（`manifest.yaml`、`README.md`、`plugin.disabled` 等包级文件留在插件根目录），宿主 fixture 归 `tests/conftest.py`；插件通过显式安装的 `shiori-sdk[testing]` 获取独立测试支持，不依赖根 conftest 或宿主测试树。独立运行见 `docs/agents/plugin-testing.md`。SDK 自身的单测放在 `packages/sdk/tests/`，结构镜像 `python/shiori_sdk/`；真实宿主 fixture 位于独立开发包 `packages/shiori-host-testing/`，其测试位于 `tests/backend/shiori_host_testing/`，并由根 pytest 与测试类型配置显式收集。
 - 测试要能证明问题真实存在；不要只写“会通过但证明不了什么”的测试。
 
 ## React 与状态管理

@@ -1,37 +1,20 @@
-"""Reject host imports in SDK/plugins, with a strictly shrinking migration baseline."""
+"""Reject host dependencies in every SDK/plugin source, stub and test support file."""
 
 from __future__ import annotations
 
-import argparse
 import ast
 from collections import Counter
-import json
 from pathlib import Path
-import subprocess
+import tomllib
+
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
+
+from scripts.sdk_boundaries import host_roots
+from scripts.sdk_resource_edges import resource_edges
 
 ROOT = Path(__file__).resolve().parents[1]
-BASELINE = "scripts/sdk_import_exemptions.json"
-# All installed host roots from setup.py, plus host tests and the legacy testkit.
-HOST_ROOTS = frozenset(
-    {
-        "agent",
-        "bootstrap",
-        "bus",
-        "conversation",
-        "core",
-        "desktop_bridge",
-        "infra",
-        "memory2",
-        "proactive_v2",
-        "prompts",
-        "session",
-        "utils",
-        "shiori_runtime_resources",
-        "shiori_host_testing",
-        "tests",
-        "shiori_plugin_testkit",
-    }
-)
+HOST_ROOTS = host_roots(ROOT)
 
 
 def _scope_nodes(node: ast.AST):
@@ -51,25 +34,40 @@ def _identities(node: ast.AST, bindings: dict[str, set[str]]) -> set[str]:
         return {
             f"{name}.{node.attr}"
             for name in _identities(node.value, bindings)
-            if name in {"importlib", "builtins"}
+            if name
+            in {
+                "importlib",
+                "importlib.resources",
+                "builtins",
+                "unittest",
+                "unittest.mock",
+                "unittest.mock.patch",
+            }
         }
     return set()
 
 
 def _scope_imports(
-    scope: ast.AST, inherited: dict[str, set[str]], edges: Counter[str]
+    scope: ast.AST,
+    inherited: dict[str, set[str]],
+    edges: Counter[str],
+    forbidden: frozenset[str],
+    inherited_strings: dict[str, set[str]],
 ) -> None:
     nodes = list(_scope_nodes(scope))
     bindings = {name: set(values) for name, values in inherited.items()}
+    strings = {name: set(values) for name, values in inherited_strings.items()}
     # Local bindings shadow outer aliases. Within a scope, retain every possible
     # imported identity so conditional assignments cannot conceal a host import.
     for node in nodes:
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
             bindings.pop(node.id, None)
+            strings.pop(node.id, None)
     if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
         for arg in ast.walk(scope.args):
             if isinstance(arg, ast.arg):
                 bindings.pop(arg.arg, None)
+                strings.pop(arg.arg, None)
     for node in nodes:
         names: list[str] = []
         if isinstance(node, ast.Import):
@@ -85,12 +83,14 @@ def _scope_imports(
                     f"{node.module}.{alias.name}"
                 )
         for name in names:
-            if name.split(".")[0] in HOST_ROOTS:
+            if name.split(".")[0] in forbidden:
                 edges[name] += 1
 
     # Follow simple callable aliases (load = import_module, including alias chains).
     changed = True
-    while changed:
+    for _ in range(len(nodes)):
+        if not changed:
+            break
         changed = False
         for node in nodes:
             if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value:
@@ -103,125 +103,158 @@ def _scope_imports(
                         previous = bindings.setdefault(target.id, set())
                         changed |= not identities <= previous
                         previous.update(identities)
+    # String assignments are evaluated once in source order. Re-evaluating
+    # `name = name + suffix` in the alias fixed point grows values forever.
+    # Retain possible earlier values for conditional assignments conservatively.
     for node in nodes:
-        if isinstance(node, ast.Call) and _identities(node.func, bindings) & {
-            "importlib.import_module",
-            "builtins.__import__",
-        }:
-            argument = (
-                node.args[0]
-                if node.args
-                else next(
-                    (
-                        keyword.value
-                        for keyword in node.keywords
-                        if keyword.arg == "name"
-                    ),
-                    None,
-                )
+        if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value:
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            values = _strings(node.value, strings)
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    strings.setdefault(target.id, set()).update(values)
+    for node in nodes:
+        if isinstance(node, ast.Call):
+            identities = _identities(node.func, bindings)
+            dynamic = bool(
+                identities
+                & {
+                    "importlib.import_module",
+                    "builtins.__import__",
+                    "unittest.mock.patch",
+                    "unittest.mock.patch.multiple",
+                    "importlib.resources.files",
+                    "importlib.resources.read_text",
+                    "importlib.resources.read_binary",
+                    "importlib.resources.open_text",
+                    "importlib.resources.open_binary",
+                    "pkgutil.get_data",
+                }
             )
-            if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
-                if argument.value.split(".")[0] in HOST_ROOTS:
-                    edges[argument.value] += 1
+            # pytest's monkeypatch is a fixture rather than an imported function;
+            # a dotted string target still names a concrete import dependency.
+            patch = isinstance(node.func, ast.Attribute) and node.func.attr in {
+                "setattr",
+                "delattr",
+                "setitem",
+            }
+            if dynamic or patch:
+                arguments = node.args[:1] or [
+                    keyword.value
+                    for keyword in node.keywords
+                    if keyword.arg in {"name", "target", "package", "anchor"}
+                ]
+                for argument in arguments:
+                    for name in _strings(argument, strings):
+                        if name.split(".")[0] in forbidden:
+                            edges[name] += 1
         elif isinstance(
             node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
         ):
-            _scope_imports(node, bindings, edges)
+            _scope_imports(node, bindings, edges, forbidden, strings)
 
 
-def host_imports(source: str) -> Counter[str]:
+def _strings(node: ast.AST, bindings: dict[str, set[str]]) -> set[str]:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return {node.value}
+    if isinstance(node, ast.Name):
+        return bindings.get(node.id, set())
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return {
+            left + right
+            for left in _strings(node.left, bindings)
+            for right in _strings(node.right, bindings)
+        }
+    if isinstance(node, ast.JoinedStr):
+        values = {""}
+        for part in node.values:
+            child = part.value if isinstance(part, ast.FormattedValue) else part
+            values = {
+                left + right for left in values for right in _strings(child, bindings)
+            }
+        return values
+    return set()
+
+
+def host_imports(source: str, forbidden: frozenset[str] = HOST_ROOTS) -> Counter[str]:
     """Counts host edges, including typed imports and aliased dynamic import calls."""
     edges: Counter[str] = Counter()
-    _scope_imports(ast.parse(source), {"__import__": {"builtins.__import__"}}, edges)
+    _scope_imports(
+        ast.parse(source), {"__import__": {"builtins.__import__"}}, edges, forbidden, {}
+    )
     return edges
 
 
 def scan(root: Path) -> dict[str, dict[str, int]]:
     """Scans SDK and plugin sources, tests and packaged test support, never builds."""
     folders = [root / "packages/sdk/python", root / "packages/sdk/tests"]
-    folders.extend(
-        area
-        for plugin in (root / "plugins").iterdir()
-        if plugin.is_dir()
-        for area in (plugin / "backend", plugin / "tests", plugin / "testing")
-    )
+    # Include arbitrary packaged support directories as well as backend/tests:
+    # moving an import into a new Python package must not evade the guard.
+    folders.extend(plugin for plugin in (root / "plugins").iterdir() if plugin.is_dir())
     found: dict[str, dict[str, int]] = {}
     for folder in folders:
         for path in sorted((*folder.rglob("*.py"), *folder.rglob("*.pyi"))):
             if any(part in {".venv", "build", "__pycache__"} for part in path.parts):
                 continue
-            imports = host_imports(path.read_text(encoding="utf-8"))
+            source = path.read_text(encoding="utf-8")
+            sdk = path.is_relative_to(root / "packages/sdk")
+            forbidden = HOST_ROOTS | {"plugins"} if sdk else HOST_ROOTS
+            imports = host_imports(source, forbidden)
+            owner = (
+                root / "packages/sdk"
+                if sdk
+                else root / "plugins" / path.relative_to(root / "plugins").parts[0]
+            )
+            imports.update(
+                resource_edges(ast.parse(source), path.resolve(), owner.resolve())
+            )
             if imports:
                 found[path.relative_to(root).as_posix()] = dict(sorted(imports.items()))
     return dict(sorted(found.items()))
 
 
-def violations(
-    actual: dict[str, dict[str, int]], allowed: dict[str, dict[str, int]]
-) -> list[str]:
-    """Lists new or increased edges; unused exemptions must also be removed."""
+def dependency_violations(root: Path) -> list[str]:
+    """Forbid host requirements in every extra and concrete plugin requirements in SDK."""
     errors = []
-    for path in actual.keys() | allowed.keys():
-        current, previous = actual.get(path, {}), allowed.get(path, {})
-        for name in current.keys() | previous.keys():
-            count, limit = current.get(name, 0), previous.get(name, 0)
-            if count != limit:
-                errors.append(f"{path}: {name}: found {count}, exemption {limit}")
-    return sorted(errors)
+    for path in (
+        root / "packages/sdk/pyproject.toml",
+        *(root / "plugins").glob("*/pyproject.toml"),
+    ):
+        project = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
+        requirements = list(project.get("dependencies", []))
+        for extra in project.get("optional-dependencies", {}).values():
+            requirements.extend(extra)
+        for requirement in requirements:
+            name = canonicalize_name(Requirement(requirement).name)
+            if name in {
+                "shiori-agent",
+                "shiori-host-testing",
+                "shiori-plugin-testkit",
+            } or (
+                path.is_relative_to(root / "packages/sdk")
+                and name.startswith("shiori-plugin-")
+            ):
+                errors.append(
+                    f"{path.relative_to(root).as_posix()}: forbidden dependency {requirement}"
+                )
+    return errors
 
 
-def ratchet(
-    current: dict[str, dict[str, int]], previous: dict[str, dict[str, int]]
-) -> list[str]:
-    """Rejects baseline edits that add files, import edges or occurrences."""
+def violations(actual: dict[str, dict[str, int]]) -> list[str]:
+    """Return every forbidden edge; there is no allowlist or migration override."""
     return sorted(
-        f"{path}: exemption increased for {name}"
-        for path, imports in current.items()
+        f"{path}: {name}: {count} forbidden reference(s)"
+        for path, imports in actual.items()
         for name, count in imports.items()
-        if count > previous.get(path, {}).get(name, 0)
     )
 
 
 def main() -> None:
-    """Checks source edges and optionally verifies monotonicity against a Git base."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--base", help="Pinned PR base SHA; exemptions may only decrease"
-    )
-    args = parser.parse_args()
-    allowed = json.loads((ROOT / BASELINE).read_text(encoding="utf-8"))
-    errors = violations(scan(ROOT), allowed)
-    # SDK and graduated plugins can never be re-added, even during bootstrap.
-    for path in allowed:
-        if not path.startswith("plugins/") or path.split("/")[1] in {
-            "citation",
-            "context_pressure",
-        }:
-            errors.append(f"{path}: migrated code cannot have import exemptions")
-    if args.base:
-        result = subprocess.run(
-            ["git", "show", f"{args.base}:{BASELINE}"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-        )
-        if result.returncode == 0:
-            errors.extend(ratchet(allowed, json.loads(result.stdout)))
-        else:
-            # Only the foundation PR can introduce this baseline. A missing ref is
-            # an error; an existing base without the new file is its bootstrap.
-            subprocess.run(
-                ["git", "cat-file", "-e", f"{args.base}^{{commit}}"],
-                cwd=ROOT,
-                check=True,
-            )
-            print("Introducing the SDK migration baseline on an existing base commit")
+    """Check all SDK and plugin boundaries without migration exemptions."""
+    errors = violations(scan(ROOT)) + dependency_violations(ROOT)
     if errors:
         raise SystemExit("\n".join(errors))
-    print(
-        f"SDK import boundary passed ({sum(map(len, allowed.values()))} remaining legacy edges)"
-    )
+    print("SDK/plugin boundary passed (zero forbidden references, no exemptions)")
 
 
 if __name__ == "__main__":

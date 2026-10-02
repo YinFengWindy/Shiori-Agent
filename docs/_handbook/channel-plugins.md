@@ -222,7 +222,7 @@ async def stop(self):
 仓库内运行 `uv run pytest -c pytest.ini plugins/<id>/tests`；合并前用隔离环境验收：
 
 ```sh
-uv run python scripts/verify_plugin_tests.py --sdk-only --plugins <id>
+uv run python -m scripts.verify_plugin_tests --plugins <id>
 ```
 
 它从副本构建非 editable wheel、在干净 venv 里跑插件测试并审计模块来源，细节见 [插件测试](../agents/plugin-testing.md)。

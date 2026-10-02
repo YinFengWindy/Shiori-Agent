@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from shiori_plugin_testkit.packages import stage_plugin_package
+from shiori_sdk.testing.packages import stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel
 from agent.plugin_host.kv import PluginKVStore
