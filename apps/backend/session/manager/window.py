@@ -35,36 +35,10 @@ class WindowPreparation:
     stop: int
     prefix_stamp: str
     retained_turns: int = 0
-    request_owner: str = ""
     request_only: bool = False
 
 
 class _WindowMixin(_ManagerCoreMixin):
-    async def bind_window_request(
-        self, session_key: str, view: ContextView | None, owner: str
-    ) -> None:
-        """Invalidate a derived window when its actual connection/model changes."""
-        async with self._lock(session_key):
-            session = self.get_or_create(session_key)
-            progress = self.maintenance_progress(session, allow_invalidation=True)
-            if progress.ownership != ownership_key(view.user_threads if view else None):
-                raise ValueError("上下文身份归属已变化，请重新准备回合")
-            key = window_key(view)
-            previous = progress.request_owners.get(key)
-            if previous == owner:
-                return
-            next_progress = MaintenanceProgress.load(progress.dump())
-            if previous is not None:
-                next_progress.windows[key] = 0
-                next_progress.summaries.pop(key, None)
-                next_progress.summary_source_ids.pop(key, None)
-                next_progress.window_versions[key] = (
-                    progress.window_versions.get(key, 0) + 1
-                )
-            next_progress.request_owners[key] = owner
-            self._store.write_maintenance_progress(session.key, next_progress.dump())
-            session.maintenance_progress = next_progress
-
     def window_snapshot(
         self,
         session_key: str,
@@ -76,17 +50,14 @@ class _WindowMixin(_ManagerCoreMixin):
         """Read committed state without importing messages after this execution began.
 
         A retry can observe a newer cut/summary, but must retain the original
-        identity, model owner and generation. Undo or a changed binding requires
-        a new execution instead of sending a request under its old ContextView.
+        identity and generation. Undo or a changed binding requires a new
+        execution instead of sending a request under its old ContextView.
         """
         session = self.get_or_create(session_key)
-        progress = self.maintenance_progress(session, allow_invalidation=True)
-        key = window_key(view)
+        progress = self.maintenance_progress(session)
         if expected is not None and (
             progress.ownership != expected.ownership
             or progress.generation != expected.generation
-            or progress.request_owners.get(key, "")
-            != expected.request_owners.get(key, "")
             or progress.ownership != ownership_key(view.user_threads if view else None)
             or progress.cursor(view) > message_limit
         ):
@@ -111,7 +82,7 @@ class _WindowMixin(_ManagerCoreMixin):
             raise ValueError("保留轮数必须是非负整数")
         async with self._lock(session_key):
             session = self.get_or_create(session_key)
-            progress = self.maintenance_progress(session, allow_invalidation=True)
+            progress = self.maintenance_progress(session)
             if progress.ownership != ownership_key(view.user_threads if view else None):
                 raise ValueError("上下文身份归属已变化，请重新准备回合")
             key = window_key(view)
@@ -150,7 +121,6 @@ class _WindowMixin(_ManagerCoreMixin):
                 stop,
                 message_prefix_stamp(session.messages),
                 retained,
-                progress.request_owners.get(key, ""),
                 request_only,
             )
 
@@ -158,7 +128,7 @@ class _WindowMixin(_ManagerCoreMixin):
         """Validate a transient omission without publishing a cut or summary."""
         async with self._lock(prepared.session_key):
             session = self.get_or_create(prepared.session_key)
-            progress = self.maintenance_progress(session, allow_invalidation=True)
+            progress = self.maintenance_progress(session)
             messages = self._store.fetch_session_messages(prepared.session_key)
             return _valid_preparation(session, progress, messages, prepared)
 
@@ -172,7 +142,7 @@ class _WindowMixin(_ManagerCoreMixin):
         """
         async with self._lock(prepared.session_key):
             session = self.get_or_create(prepared.session_key)
-            progress = self.maintenance_progress(session, allow_invalidation=True)
+            progress = self.maintenance_progress(session, persist=True)
             key = window_key(prepared.view)
             messages = self._store.fetch_session_messages(prepared.session_key)
             if (
@@ -214,7 +184,6 @@ def _valid_preparation(
     return (
         progress.ownership == prepared.ownership
         and progress.generation == prepared.generation
-        and progress.request_owners.get(key, "") == prepared.request_owner
         and progress.window_versions.get(key, 0) == prepared.version
         and progress.cursor(prepared.view) == prepared.start
         and 0 <= prepared.start < prepared.stop <= len(prepared.expected_message_ids)

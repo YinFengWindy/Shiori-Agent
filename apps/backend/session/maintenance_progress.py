@@ -76,7 +76,6 @@ class MaintenanceProgress:
     compaction_counts: dict[str, int] = field(default_factory=dict)
     summaries: dict[str, str] = field(default_factory=dict)
     summary_source_ids: dict[str, list[str]] = field(default_factory=dict)
-    request_owners: dict[str, str] = field(default_factory=dict)
     generation: int = 0
     memory_version: int = 0
     recent_context_version: int = 0
@@ -86,17 +85,48 @@ class MaintenanceProgress:
     consumer_error: str = ""
     pending_consumers: dict[str, Any] = field(default_factory=dict)
 
-    def invalidated(self, *, ownership: str | None = None) -> MaintenanceProgress:
+    def invalidated(self) -> MaintenanceProgress:
         """Return a new generation without mutating the previous state snapshot.
 
-        Identity changes supply the new ownership stamp. Undo, explicit reset and
-        clear retain it; their owners separately decide how memory cursors move.
+        Used when every derived artifact is void (explicit clear); undo starts
+        from it and restores the windows its deletion did not affect.
         """
         return MaintenanceProgress(
-            ownership=self.ownership if ownership is None else ownership,
+            ownership=self.ownership,
             generation=self.generation + 1,
             memory_version=self.memory_version + 1,
         )
+
+    def without_windows(self, keys: set[str]) -> MaintenanceProgress:
+        """Return a copy whose ``keys`` windows restart at 0 with no summary.
+
+        Other windows, frozen legacy cuts and memory/consumer progress stay. An
+        explicit 0 overrides the legacy cut, which predates the invalidation.
+        """
+        progress = MaintenanceProgress.load(self.dump())
+        for key in keys:
+            progress.windows[key] = 0
+            progress.summaries.pop(key, None)
+            progress.summary_source_ids.pop(key, None)
+            progress.window_versions[key] = self.window_versions.get(key, 0) + 1
+        return progress
+
+    def rebound(self, ownership: str) -> MaintenanceProgress:
+        """Adopt a new identity binding as a new generation.
+
+        Only the shared user window and external threads that entered or left
+        the user context lose their window; memory cursors and consumer
+        progress are kept, so the new ownership only applies to later
+        consolidation.
+        """
+        before = set(json.loads(self.ownership)) if self.ownership else set()
+        after = set(json.loads(ownership)) if ownership else set()
+        progress = self.without_windows(
+            {"user", *("external:" + thread_id for thread_id in before ^ after)}
+        )
+        progress.ownership = ownership
+        progress.generation += 1
+        return progress
 
     def cursor(self, view: ContextView | None) -> int:
         """Read the effective window cut without changing memory progress."""
@@ -113,8 +143,14 @@ class MaintenanceProgress:
 
     @classmethod
     def load(cls, raw: str) -> MaintenanceProgress:
-        """Read the persisted maintenance contract."""
-        return cls(**json.loads(raw))
+        """Read the persisted maintenance contract.
+
+        ``request_owners`` bound windows to a model before #603; windows are
+        model independent now, so the stale field is dropped on read.
+        """
+        data = json.loads(raw)
+        data.pop("request_owners", None)
+        return cls(**data)
 
 
 def legacy_progress(session: Any, ownership: str) -> MaintenanceProgress:

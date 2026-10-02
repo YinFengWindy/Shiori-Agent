@@ -21,7 +21,7 @@ async def test_cursor_persistence_failure_rolls_back_private_progress(
     tmp_path, monkeypatch
 ):
     manager, session, request = _setup(tmp_path)
-    before = manager._store.get_session_meta(session.key)["maintenance_progress"]
+    before = manager.maintenance_progress(session).dump()
 
     def fail(*args, **kwargs):
         raise OSError("cursor store failed")

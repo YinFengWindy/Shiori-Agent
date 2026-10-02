@@ -65,10 +65,13 @@ class _ManagerCoreMixin:
         return self._write_locks[key]
 
     def get_or_create(self, key: str) -> Session:
+        """Return the cached session; maintenance progress is read once on load.
+
+        Owners that depend on current progress re-read it explicitly through
+        ``maintenance_progress``; the hot path does no extra query.
+        """
         if key in self._cache:
-            session = self._cache[key]
-            self.maintenance_progress(session)
-            return session
+            return self._cache[key]
 
         session = self._load(key)
         if session is None:

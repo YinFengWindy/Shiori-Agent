@@ -1,4 +1,4 @@
-"""Maintenance state migration and invalidation owned by SessionManager."""
+"""Maintenance state migration and identity normalization owned by SessionManager."""
 
 from session.maintenance_progress import (
     MaintenanceProgress,
@@ -6,7 +6,6 @@ from session.maintenance_progress import (
     ownership_key,
 )
 
-from session.store.common import ContextScope
 from .manager import _ManagerCoreMixin
 from .models import Session
 
@@ -21,7 +20,7 @@ class _ProgressMixin(_ManagerCoreMixin):
         """Stamp a recent-turn refresh separately from memory and relationships."""
         async with self._lock(session_key):
             session = self.get_or_create(session_key)
-            progress = self.maintenance_progress(session, allow_invalidation=True)
+            progress = self.maintenance_progress(session, persist=True)
             current_ids = tuple(str(m.get("id") or "") for m in session.messages)
             if (
                 progress.ownership != ownership
@@ -35,9 +34,15 @@ class _ProgressMixin(_ManagerCoreMixin):
             session.maintenance_progress = updated
 
     def maintenance_progress(
-        self, session: Session, *, allow_invalidation: bool = False
+        self, session: Session, *, persist: bool = False
     ) -> MaintenanceProgress:
-        """Load or migrate progress, invalidating stale identity ownership first."""
+        """Load progress, normalizing legacy state and identity ownership.
+
+        Normalization is a pure function of the stored state and the current
+        binding, so readers (status queries, window preparation) compute it in
+        memory only. Write owners holding the session lock pass ``persist`` to
+        store it before publishing their own change.
+        """
         from conversation.context_scope import role_session_user_threads
 
         # Projection callbacks can read a cached session inside an owning SQL
@@ -56,43 +61,11 @@ class _ProgressMixin(_ManagerCoreMixin):
         progress = (
             MaintenanceProgress.load(raw) if raw else legacy_progress(session, stamp)
         )
-        if progress.ownership != stamp and (
-            allow_invalidation or not self._lock(session.key).locked()
-        ):
-            # Visibility changed: replay only currently permitted messages. Old
-            # windows and consumer snapshots must never establish a new cut.
-            progress = progress.invalidated(ownership=stamp)
-            cursors: dict[ContextScope, int] | None = (
-                {"user": 0, "external": 0} if stamp else None
-            )
-            with self._store.transaction():
-                self._store.update_last_consolidated(
-                    session.key, 0, context_cursors=cursors, commit=False
-                )
-                self._store.write_maintenance_progress(
-                    session.key, progress.dump(), commit=False
-                )
-            session.set_consolidation_cursors(0, cursors)
-        if raw != progress.dump():
+        if progress.ownership != stamp:
+            # Visibility changed: affected windows must not keep a cut or summary
+            # built from messages they can no longer (or can now) see.
+            progress = progress.rebound(stamp)
+        if persist and raw != progress.dump():
             self._store.write_maintenance_progress(session.key, progress.dump())
         session.maintenance_progress = progress
         return progress
-
-    async def invalidate_maintenance(self, session_key: str) -> None:
-        """Invalidate derived maintenance without deleting any original message."""
-        async with self._lock(session_key):
-            session = self.get_or_create(session_key)
-            old = self.maintenance_progress(session)
-            progress = old.invalidated()
-            cursors: dict[ContextScope, int] | None = (
-                {"user": 0, "external": 0} if old.ownership else None
-            )
-            with self._store.transaction():
-                self._store.write_maintenance_progress(
-                    session_key, progress.dump(), commit=False
-                )
-                self._store.update_last_consolidated(
-                    session_key, 0, context_cursors=cursors, commit=False
-                )
-            session.maintenance_progress = progress
-            session.set_consolidation_cursors(0, cursors)

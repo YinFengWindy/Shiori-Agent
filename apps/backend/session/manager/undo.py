@@ -73,19 +73,19 @@ class _UndoMixin(_ManagerCoreMixin):
                 str(messages[index].get("thread_id") or "") for index in indices
             }
 
-            progress = (
-                MaintenanceProgress.load(meta["maintenance_progress"])
-                if meta and meta.get("maintenance_progress")
-                else None
+            # Normalized (legacy-migrated, rebound) progress: shifted cuts must be
+            # derived before the deletion moves the memory cursors they freeze.
+            progress = _progress_after_undo(
+                self.maintenance_progress(self.get_or_create(session_key)),
+                messages,
+                indices,
+                user_threads,
             )
-            if progress is not None:
-                progress = progress.invalidated()
 
             def refresh_projections() -> None:
-                if progress is not None:
-                    self._store.write_maintenance_progress(
-                        session_key, progress.dump(), commit=False
-                    )
+                self._store.write_maintenance_progress(
+                    session_key, progress.dump(), commit=False
+                )
                 for thread_id in sorted(thread_ids - {""}):
                     thread = self.conversation_store.get_thread(thread_id)
                     if thread is not None:
@@ -117,6 +117,60 @@ class _UndoMixin(_ManagerCoreMixin):
                 last_consolidated_before=old_last,
                 last_consolidated_after=new_last,
             )
+
+
+def _progress_after_undo(
+    progress: MaintenanceProgress,
+    messages: list[dict[str, Any]],
+    indices: list[int],
+    user_threads: "UserContextThreads | None",
+) -> MaintenanceProgress:
+    """撤销后的维护进度：只失效真正受影响的上下文窗口。
+
+    某窗口的切点之前有被删的本上下文消息、或被删消息属于它的工作摘要来源时，
+    该窗口与摘要失效；其他窗口与迁移冻结切点保持，只随删除平移下标。
+    代次照常推进，让撤销前准备的窗口与回合草稿全部过期。
+    """
+    from conversation.context_scope import ContextView
+
+    deleted_ids = {str(messages[index]["id"]) for index in indices}
+
+    def owns(key: str, message: dict[str, Any]) -> bool:
+        if user_threads is None or key == "session":
+            return True
+        view = (
+            ContextView(scope="user", user_threads=user_threads)
+            if key == "user"
+            else ContextView(
+                scope="external",
+                user_threads=user_threads,
+                thread_id=key.removeprefix("external:"),
+            )
+        )
+        return view.includes(message)
+
+    affected = {
+        key
+        for key, cut in progress.windows.items()
+        if any(index < cut and owns(key, messages[index]) for index in indices)
+        or deleted_ids & set(progress.summary_source_ids.get(key, []))
+    }
+    kept = progress.without_windows(affected)
+
+    def shifted(cuts: dict[str, int]) -> dict[str, int]:
+        return {
+            key: cut - sum(index < cut for index in indices)
+            for key, cut in cuts.items()
+        }
+
+    result = progress.invalidated()
+    result.legacy_cuts = shifted(kept.legacy_cuts)
+    result.windows = shifted(kept.windows)
+    result.window_versions = kept.window_versions
+    result.compaction_counts = kept.compaction_counts
+    result.summaries = kept.summaries
+    result.summary_source_ids = kept.summary_source_ids
+    return result
 
 
 def _rolled_back_context_cursors(

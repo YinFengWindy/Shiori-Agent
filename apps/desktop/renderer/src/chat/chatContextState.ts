@@ -53,7 +53,6 @@ export type ContextCompactionResult = {
   removed_categories?: string[];
   tools_disabled?: boolean;
   failure_kind?: string;
-  request_owner?: string;
   generation?: number;
   request_usage?: Record<string, unknown>;
 };

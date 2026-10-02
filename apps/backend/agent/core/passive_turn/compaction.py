@@ -15,7 +15,6 @@ from core.compaction import (
 )
 from agent.provider import LLMProvider
 from agent.prompting.usage_accounting import current_usage
-from session.maintenance_progress import window_key
 from .minimal_request import completed_tool_results
 
 if TYPE_CHECKING:
@@ -47,7 +46,6 @@ class RequestCompaction:
         )
         self.last_result = self.controller.progress_result(
             CompactionResult(
-                request_owner=progress.request_owners.get(window_key(self.view), ""),
                 generation=progress.generation,
                 ownership=progress.ownership,
                 reason="",

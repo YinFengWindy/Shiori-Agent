@@ -67,6 +67,13 @@ def _turn(session, label="tea", thread=""):
     session.add_message("assistant", "done", thread_id=thread)
 
 
+def _advance_generation(h, session_key):
+    """Simulate an undo/rebinding that lands while the controller is working."""
+    progress = h.manager.maintenance_progress(h.manager.get_or_create(session_key))
+    progress.generation += 1
+    h.manager._store.write_maintenance_progress(session_key, progress.dump())
+
+
 def _budget(tokens):
     return build_input_budget(
         context_window_tokens=4000,
@@ -322,10 +329,9 @@ async def test_stale_window_commit_reports_successful_memory_without_publication
     h.manager.save(session)
 
     async def render(prepared, summary):
-        await h.manager.bind_window_request(session.key, None, "new-model")
+        _advance_generation(h, session.key)
         return [{"role": "system", "content": summary}]
 
-    await h.manager.bind_window_request(session.key, None, "old-model")
     with pytest.raises(CompactionFailedError) as caught:
         await _ensure(_controller(h), session, keep=0, render=render)
     assert caught.value.result.failure_stage == "window"
@@ -407,11 +413,10 @@ async def test_stale_minimal_owner_is_rejected_and_not_adopted_by_latest(
 ):
     h = memory_harness
     session = h.manager.get_or_create("cli:stale-minimal")
-    await h.manager.bind_window_request(session.key, None, "old")
     controller = _controller(h)
 
     async def minimal(summary):
-        await h.manager.bind_window_request(session.key, None, "new")
+        _advance_generation(h, session.key)
         return [{"role": "user", "content": "current"}]
 
     with pytest.raises(CompactionFailedError) as caught:

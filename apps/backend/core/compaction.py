@@ -70,7 +70,6 @@ class CompactionResult:
     tools_disabled: bool = False
     failure_kind: str = ""
     final_budget: dict | None = None
-    request_owner: str = ""
     generation: int = 0
     ownership: str = ""
 
@@ -104,13 +103,16 @@ class CompactionController:
         self.writer = writer
         self._active: set[str] = set()
         self._observe = observe
-        self._latest: dict[tuple[str, str], tuple[str, int, dict]] = {}
-        self._latest_compaction: dict[tuple[str, str], tuple[str, int, dict]] = {}
+        self._latest: dict[tuple[str, str], tuple[int, dict]] = {}
+        self._latest_compaction: dict[tuple[str, str], tuple[int, dict]] = {}
 
     def latest(
         self, session_key: str, view: ContextView | None, *, request: bool = False
     ) -> dict | None:
-        """Return only observations still owned by the current model and generation."""
+        """Return only observations still owned by the current generation.
+
+        Windows are model independent, so a model switch keeps observations.
+        """
         progress = self.sessions.maintenance_progress(
             self.sessions.get_or_create(session_key)
         )
@@ -118,11 +120,8 @@ class CompactionController:
         stored = (self._latest if request else self._latest_compaction).get(
             (session_key, key)
         )
-        if stored and stored[:2] == (
-            progress.request_owners.get(key, ""),
-            progress.generation,
-        ):
-            return dict(stored[2])
+        if stored and stored[0] == progress.generation:
+            return dict(stored[1])
         return None
 
     async def record(
@@ -146,15 +145,8 @@ class CompactionController:
             request_usage if request_usage is not None else current_usage()
         )
         key = window_key(view)
-        if (result.request_owner, result.generation) == (
-            progress.request_owners.get(key, ""),
-            progress.generation,
-        ):
-            observation = (
-                result.request_owner,
-                result.generation,
-                payload,
-            )
+        if result.generation == progress.generation:
+            observation = (result.generation, payload)
             if request_attempted:
                 self._latest[(session_key, key)] = observation
             if result.phase != "request":
@@ -246,11 +238,6 @@ class CompactionController:
         state = self.progress_result(
             replace(
                 state,
-                request_owner=(
-                    prior_result.request_owner
-                    if prior_result
-                    else progress.request_owners.get(window_key(view), "")
-                ),
                 generation=(
                     prior_result.generation if prior_result else progress.generation
                 ),
@@ -445,9 +432,6 @@ class CompactionController:
         if (
             progress.generation != state.generation
             or progress.ownership != state.ownership
-            or (
-                state.request_owner != progress.request_owners.get(window_key(view), "")
-            )
         ):
             raise CompactionFailedError(
                 replace(state, failure_stage="window", error="请求归属已变化")
