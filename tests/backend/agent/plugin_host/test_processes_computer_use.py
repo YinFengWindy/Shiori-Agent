@@ -1,6 +1,4 @@
-"""A fixed real Windows Driver observes and changes only a controlled test app."""
-
-from agent.plugin_host.processes import HostProcesses
+"""A fixed real Windows Driver, loaded through the kernel, changes only a test app."""
 
 import asyncio
 import base64
@@ -15,13 +13,22 @@ from uuid import uuid4
 
 import psutil
 import pytest
-
+from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 from shiori_sdk.tools import ToolResult
-from agent.tools.turn_scope import tool_turn, current_tool_turn
-from plugins.computer_use.backend.config import ComputerUseConfig
-from plugins.computer_use.backend.desktop import ComputerDesktop
-from plugins.computer_use.backend.tool import computer_tools
-from plugins.computer_use.backend.windows import inspect_window
+
+from agent.tools.registry import ToolRegistry
+from agent.tools.turn_scope import tool_turn
+from bus.event_bus import EventBus
+from tests.backend.agent.plugin_host.conftest import make_kernel
+
+
+def _driver_pids() -> list[int]:
+    """Driver processes the host spawned below this test process."""
+    return [
+        child.pid
+        for child in psutil.Process().children(recursive=True)
+        if child.name().lower().startswith("cua-driver")
+    ]
 
 
 @pytest.mark.skipif(
@@ -29,10 +36,12 @@ from plugins.computer_use.backend.windows import inspect_window
     reason="Explicit opt-in is required to create the controlled native test window",
 )
 async def test_real_controlled_window(tmp_path, monkeypatch):
-    native = Path(os.environ["SHIORI_COMPUTER_USE_RUNTIME"])
+    # SHIORI_COMPUTER_USE_RUNTIME points at <resources>/native/computer-use; only
+    # the host resources capability is redirected, the plugin resolves it itself.
+    native = Path(os.environ["SHIORI_COMPUTER_USE_RUNTIME"]).resolve()
+    assert native.parent.name == "native" and native.name == "computer-use", native
     monkeypatch.setattr(
-        "plugins.computer_use.backend.session.resolve_driver",
-        lambda _: native / "cua-driver.exe",
+        "agent.plugin_host.processes.resource_root", lambda: native.parent.parent
     )
     evidence = Path(
         os.environ.get("SHIORI_COMPUTER_USE_EVIDENCE", str(tmp_path / "evidence"))
@@ -55,14 +64,18 @@ async def test_real_controlled_window(tmp_path, monkeypatch):
         ],
         creationflags=0x08000000,
     )
-    desktop = ComputerDesktop(
-        tmp_path / "plugin-data",
-        ComputerUseConfig(),
-        processes=HostProcesses(),
-        resources=tmp_path,
-        current_turn=current_tool_turn,
+    roots = tmp_path / "plugins"
+    stage_plugin_package(plugin_directory("computer_use"), roots / "computer_use")
+    registry = ToolRegistry()
+    kernel = make_kernel(
+        [roots],
+        event_bus=EventBus(),
+        tools=registry,
+        workspace=tmp_path / "workspace",
+        plugin_configs={"computer_use": {"enabled": True}},
     )
-    tools = {tool.name: tool for tool in computer_tools(desktop)}
+    await kernel.load_all()
+    assert kernel.loaded_count == 1
     records = []
     driver_pids: list[int] = []
 
@@ -78,9 +91,9 @@ async def test_real_controlled_window(tmp_path, monkeypatch):
         raise AssertionError("Controlled application state did not change as expected")
 
     async def call(name, **arguments):
-        result = await tools["computer_" + name].execute(
-            role_id="acceptance", **arguments
-        )
+        tool = registry.get_tool("computer_" + name)
+        assert tool is not None
+        result = await tool.execute(role_id="acceptance", **arguments)
         records.append(
             {
                 "tool": name,
@@ -111,8 +124,7 @@ async def test_real_controlled_window(tmp_path, monkeypatch):
                 snapshot.content_blocks[0]["image_url"]["url"].split(",", 1)[1]
             )
         )
-        identity = inspect_window(**target)
-        records.append({"physical_bounds": identity.bounds, "dpi": identity.dpi})
+        records.append({"physical_bounds": first["window_bounds"]})
         edit = next(e for e in first["elements"] if e["label"] == "验收输入")
         button = next(e for e in first["elements"] if e["label"] == "验证按钮")
         await call(
@@ -250,7 +262,7 @@ async def test_real_controlled_window(tmp_path, monkeypatch):
             records.append({"scaled_screenshot_coordinate_click": scaled_state})
             records.append(
                 {
-                    "maximized_primary": inspect_window(**target).bounds,
+                    "maximized_primary": max_bounds,
                     "snapshot_id": maximized.structured_content["snapshot_id"],
                 }
             )
@@ -287,16 +299,8 @@ async def test_real_controlled_window(tmp_path, monkeypatch):
                 x=10,
                 y=10,
             )
-        session = desktop._session
-        assert (
-            session is not None
-            and session._client is not None
-            and session._client._process is not None
-        )
-        process = psutil.Process(session._client._process.pid)
-        driver_pids.extend(
-            [process.pid, *(child.pid for child in process.children(recursive=True))]
-        )
+        driver_pids.extend(_driver_pids())
+        assert driver_pids
 
     try:
         await exercise()
@@ -306,7 +310,7 @@ async def test_real_controlled_window(tmp_path, monkeypatch):
             {"owned_driver_pids_exited": driver_pids, "target_app_preserved": True}
         )
     finally:
-        await desktop.close()
+        await kernel.unload("computer_use")
         app.terminate()
         app.wait(timeout=10)
         (evidence / "acceptance.json").write_text(

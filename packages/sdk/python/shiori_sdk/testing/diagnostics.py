@@ -19,6 +19,15 @@ class FakeDiagnostics:
         self.thread: ThreadExceptHook | None = None
         self.loop_handler: LoopExceptHandler | None = None
         self.owners: list[object] = []
+        self._generations: list[
+            tuple[
+                object,
+                logging.Handler,
+                SysExceptHook,
+                ThreadExceptHook,
+                LoopExceptHandler,
+            ]
+        ] = []
         self.frame = "test.py:1"
 
     def session_key(self) -> str | None:
@@ -38,19 +47,25 @@ class FakeDiagnostics:
         loop: asyncio.AbstractEventLoop | None,
         loop_handler: LoopExceptHandler,
     ) -> tuple[SysExceptHook | None, ThreadExceptHook | None, LoopExceptHandler | None]:
-        """Record the callbacks without taking process-global ownership."""
+        """Record the callbacks without taking process-global ownership.
+
+        Like the host, the newest live owner's callbacks are the active ones.
+        """
+        self._generations.append((owner, handler, system, thread, loop_handler))
         self.owners.append(owner)
-        self.handler, self.system, self.thread, self.loop_handler = (
-            handler,
-            system,
-            thread,
-            loop_handler,
-        )
+        self._activate_newest()
         return None, None, None
 
     def uninstall_global_hooks(self, owner: object) -> None:
-        """Record cleanup, including partial-install rollback."""
-        if owner in self.owners:
-            self.owners.remove(owner)
-        if not self.owners:
+        """Remove one owner and fall back to the newest remaining live owner."""
+        self._generations = [item for item in self._generations if item[0] is not owner]
+        self.owners = [item for item in self.owners if item is not owner]
+        self._activate_newest()
+
+    def _activate_newest(self) -> None:
+        if not self._generations:
             self.handler = self.system = self.thread = self.loop_handler = None
+            return
+        _, self.handler, self.system, self.thread, self.loop_handler = (
+            self._generations[-1]
+        )

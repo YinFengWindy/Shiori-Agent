@@ -1,97 +1,26 @@
+"""Feishu applications live in plugin storage; managed only through bridge requests."""
+
 from __future__ import annotations
 
-import asyncio
-from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
-from shiori_sdk.testing.bridge import plugin_bridge_request
-from shiori_sdk.testing.packages import stage_plugin_package
+from shiori_sdk.testing.bridge import PluginBridgeService, plugin_bridge_request
 
-from agent.plugin_host import HostServices, PluginKernel
-from agent.plugin_host.kv import PluginKVStore
-from shiori_sdk.storage import plugin_data_dir
-from bus.event_bus import EventBus
-from shiori_sdk.accounts.models import AccountResponseRules, AccountSnapshot
 from core.roles.store import RoleStore
 
-PLUGIN_DIR = Path(__file__).resolve().parents[4] / "plugins" / "feishu"
+_RULES = {
+    "private_enabled": False,
+    "group_enabled": True,
+    "blocked_sender_ids": ["ou_x"],
+}
 
 
-def _app(app_id: str, role_id: str = "mira", **extra: Any) -> dict[str, Any]:
-    return {
-        "app_id": app_id,
-        "app_secret": "secret",
-        "domain": "feishu",
-        "role_id": role_id,
-        **extra,
-    }
-
-
-def _load(root: Path, roles: RoleStore) -> tuple[list[Any], list[AccountSnapshot]]:
-    """Loads the staged plugin once against ``root``, like one app start."""
-    if not (root / "plugins" / "feishu").exists():
-        stage_plugin_package(PLUGIN_DIR, root / "plugins" / "feishu")
-    kernel = PluginKernel(
-        [root / "plugins"],
-        services=HostServices(event_bus=EventBus(), workspace=root, role_store=roles),
-    )
-    asyncio.run(kernel.load_all())
-    [group] = kernel.channels
-    return group, roles.accounts.list()
-
-
-def _roles(root: Path, *role_ids: str) -> RoleStore:
+def _roles(root, *role_ids: str) -> None:
     roles = RoleStore(root)
     for role_id in role_ids:
-        if roles.get_role(role_id) is None:
-            roles.create_role(role_id=role_id, name=role_id, system_prompt="m")
-    return roles
-
-
-def test_saved_applications_register_separate_accounts_and_channels(
-    tmp_path,
-) -> None:
-    kv = PluginKVStore(plugin_data_dir(tmp_path, "feishu") / "kv.json")
-    kv.set(
-        "applications",
-        [
-            _app("cli_a"),
-            _app("cli_b", "other", domain="lark", app_secret="${MISSING_SECRET}"),
-            _app("cli_c", "third", connection_enabled=False),
-        ],
-    )
-    group, accounts = _load(tmp_path, _roles(tmp_path, "mira", "other", "third"))
-    assert {row.record.id: row.connection for row in accounts} == {
-        "feishu:feishu:cli_a": "connecting",
-        "feishu:lark:cli_b": "login_required",
-        "feishu:feishu:cli_c": "offline",
-    }
-    assert group.member_channel("feishu:feishu:cli_a") is not None
-    assert group.member("lark:cli_b") is None and group.member("feishu:cli_c") is None
-
-
-def test_rules_survive_restart_and_orphaned_apps_are_deleted_on_load(
-    tmp_path,
-) -> None:
-    kv = PluginKVStore(plugin_data_dir(tmp_path, "feishu") / "kv.json")
-    kv.set("applications", [_app("cli_a"), _app("cli_gone", "deleted-role")])
-    for key in ("profile", "targets"):
-        kv.set(f"{key}:feishu:cli_gone", {"stale": True})
-    roles = _roles(tmp_path, "mira")
-    _group, [account] = _load(tmp_path, roles)
-    # The app whose role is gone is deleted with its data, not served.
-    assert [row["app_id"] for row in kv.get("applications")] == ["cli_a"]
-    assert kv.get("profile:feishu:cli_gone") is None
-    assert kv.get("targets:feishu:cli_gone") is None
-
-    rules = AccountResponseRules(private_enabled=False, blocked_sender_ids=("ou_x",))
-    roles.accounts.set_response_rules(account.record.id, rules)
-
-    _group, [restarted] = _load(tmp_path, RoleStore(tmp_path))
-    assert restarted.record.id == "feishu:feishu:cli_a"
-    assert restarted.record.response_rules == rules
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="m")
 
 
 def _verified_bot(request: httpx.Request) -> httpx.Response:
@@ -109,6 +38,27 @@ class _MockedClient(httpx.AsyncClient):
         super().__init__(
             *args, transport=transport or httpx.MockTransport(_verified_bot), **kwargs
         )
+
+
+async def _save(
+    service: PluginBridgeService, role_id: str, app_id: str
+) -> dict[str, Any]:
+    saved = await plugin_bridge_request(
+        service,
+        "plugin.feishu.accounts.save",
+        {"role_id": role_id, "domain": "feishu", "app_id": app_id, "app_secret": "s"},
+    )
+    assert saved.error is None, saved.error
+    return saved.payload
+
+
+async def _set_enabled(service: PluginBridgeService, enabled: bool) -> None:
+    toggled = await plugin_bridge_request(
+        service,
+        "plugins.setEnabled",
+        {"plugin_id": "feishu", "enabled": enabled, "operation_id": f"f-{enabled}"},
+    )
+    assert toggled.error is None, toggled.error
 
 
 @pytest.mark.asyncio
@@ -142,10 +92,7 @@ async def test_saved_app_never_touches_host_config_and_deletes_completely(
         [account] = listed.payload["accounts"]
         assert (account["id"], account["role_id"]) == ("feishu:lark:cli_new", "mira")
         assert path.read_text(encoding="utf-8") == config_before
-        kv = PluginKVStore(plugin_data_dir(tmp_path, "feishu") / "kv.json")
-        [stored] = kv.get("applications")
-        assert stored["app_secret"] == "new-secret"
-        kv.set("profile:lark:cli_new", {"name": "Bot"})
+        assert "new-secret" not in config_before
 
         deleted = await plugin_bridge_request(
             service,
@@ -155,7 +102,52 @@ async def test_saved_app_never_touches_host_config_and_deletes_completely(
         assert deleted.error is None, deleted.error
         after = await plugin_bridge_request(service, "accounts.list")
         assert after.payload["accounts"] == []
-        assert kv.get("applications") == []
-        assert kv.get("profile:lark:cli_new") is None
         assert path.read_text(encoding="utf-8") == config_before
-        assert "new-secret" not in config_before
+        # Deleted completely: another role may now add the same application.
+        readded = await plugin_bridge_request(
+            service,
+            "plugin.feishu.accounts.save",
+            {
+                "role_id": "other",
+                "domain": "lark",
+                "app_id": "cli_new",
+                "app_secret": "s",
+            },
+        )
+        assert readded.error is None, readded.error
+        assert readded.payload == {"account_id": "feishu:lark:cli_new"}
+
+
+@pytest.mark.asyncio
+async def test_rules_survive_reload_and_apps_of_a_role_deleted_while_unloaded_go(
+    plugin_runtime, tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(httpx, "AsyncClient", _MockedClient)
+    _roles(tmp_path, "mira", "gone", "third")
+    async with plugin_runtime(("feishu",)) as (service, _path):
+        kept = (await _save(service, "mira", "cli_a"))["account_id"]
+        await _save(service, "gone", "cli_gone")
+        changed = await plugin_bridge_request(
+            service,
+            "accounts.rules.set",
+            {"account_id": kept, "response_rules": _RULES},
+        )
+        assert changed.error is None, changed.error
+
+        await _set_enabled(service, False)
+        # The unloaded plugin is not asked to clean up the role's application.
+        removed = await plugin_bridge_request(
+            service, "roles.delete", {"role_id": "gone"}
+        )
+        assert removed.error is None, removed.error
+        assert removed.payload["deleted_accounts"] == []
+        await _set_enabled(service, True)
+
+        listed = await plugin_bridge_request(service, "accounts.list")
+        assert [
+            (row["id"], row["response_rules"]) for row in listed.payload["accounts"]
+        ] == [(kept, _RULES)]
+        # The orphaned application was purged on load, so another role can add it.
+        assert await _save(service, "third", "cli_gone") == {
+            "account_id": "feishu:feishu:cli_gone"
+        }

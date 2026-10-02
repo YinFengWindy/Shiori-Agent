@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock
 
+import pytest
 
 from plugins.computer_use.backend.tool import computer_tools
 
@@ -26,3 +27,31 @@ def test_tool_contract_requires_exact_target_and_snapshot_and_hides_admin():
             "computer_release",
         }:
             assert "snapshot_id" in tool.parameters["required"]
+
+
+async def test_role_identity_is_host_context_and_desktop_routes_cannot_escape():
+    """Host context supplies the role; no argument can widen the window target."""
+    desktop = AsyncMock()
+    tool = next(
+        tool for tool in computer_tools(desktop) if tool.name == "computer_type_text"
+    )
+    assert tool.context_precedence == frozenset({"role_id"})
+    args = {
+        "pid": 42,
+        "window_id": 81,
+        "snapshot_id": "s00000001",
+        "observation_id": "observation-1",
+        "element_token": "s00000001:2",
+        "text": "中文",
+    }
+    await tool.execute(role_id="actual", chat_id="chat", **args)
+    desktop.call.assert_awaited_once_with("actual", "type_text", args)
+    for key, value in {
+        "session": "foreign",
+        "target": {"kind": "desktop"},
+        "scope": "desktop",
+        "screenshot_out_file": "C:/out.png",
+        "socket": "foreign",
+    }.items():
+        with pytest.raises(ValueError, match="宿主管理"):
+            await tool.execute(role_id="role", **args, **{key: value})

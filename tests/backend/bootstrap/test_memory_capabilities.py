@@ -1,4 +1,10 @@
-"""Host memory storage migrates default_memory overrides through the plugin's loader."""
+"""Host memory storage resolves memory-plugin config through the local-config owner.
+
+How ``default_memory`` parses the resolved file is asserted in
+``plugins/default_memory/tests/test_config.py``; this file covers the host side:
+every legacy layout migrates once into ``plugin-data`` and later package files
+never shadow the migrated workspace copy.
+"""
 
 from __future__ import annotations
 
@@ -7,10 +13,13 @@ from pathlib import Path
 import pytest
 from bootstrap.memory_capabilities import HostMemoryStorage
 
-from plugins.default_memory.backend.config import (
-    ensure_default_memory_config_file,
-    load_default_memory_config,
-)
+_USER_CONFIG = 'db_path = "user.db"\n[retrieval]\ntop_k_history = 21\n'
+
+
+def _resolve(storage: HostMemoryStorage, package: Path, workspace: Path, **kwargs):
+    return storage.resolve_config(
+        plugin_id="default_memory", plugin_dir=package, workspace=workspace, **kwargs
+    )
 
 
 @pytest.mark.parametrize("location", ["workspace", "package", "old", "old-backend"])
@@ -28,32 +37,20 @@ def test_every_legacy_layout_migrates_once_and_survives_package_replacement(
         / "apps/backend/plugins/default_memory/backend/config.local.toml",
     }[location]
     source.parent.mkdir(parents=True)
-    source.write_text(
-        'db_path = "user.db"\n[retrieval]\ntop_k_history = 21\n', encoding="utf-8"
-    )
+    source.write_text(_USER_CONFIG, encoding="utf-8")
     storage = HostMemoryStorage()
+    target = workspace / "plugin-data/default_memory/config.local.toml"
 
-    cfg = load_default_memory_config(
-        plugin_dir=package, workspace=workspace, storage=storage
-    )
-
-    assert cfg.db_path == "user.db"
-    assert cfg.retrieval.top_k_history == 21
-    target = ensure_default_memory_config_file(
-        plugin_dir=package, workspace=workspace, storage=storage
-    )
-    assert target == workspace / "plugin-data/default_memory/config.local.toml"
+    assert _resolve(storage, package, workspace) == target
+    assert target.read_text(encoding="utf-8") == _USER_CONFIG
     assert not source.exists()
+    assert _resolve(storage, package, workspace, default_text="defaults") == target
     package.mkdir(parents=True, exist_ok=True)
     (package / "config.local.toml").write_text(
         'db_path = "replacement.db"\n', encoding="utf-8"
     )
-    assert (
-        load_default_memory_config(
-            plugin_dir=package, workspace=workspace, storage=storage
-        )
-        == cfg
-    )
+    assert _resolve(storage, package, workspace) == target
+    assert target.read_text(encoding="utf-8") == _USER_CONFIG
 
 
 def test_workspace_config_is_preserved_when_legacy_also_exists(tmp_path: Path) -> None:
@@ -65,7 +62,8 @@ def test_workspace_config_is_preserved_when_legacy_also_exists(tmp_path: Path) -
     legacy.parent.mkdir(parents=True)
     legacy.write_text('db_path = "old.db"\n', encoding="utf-8")
 
-    cfg = load_default_memory_config(workspace=workspace, storage=HostMemoryStorage())
+    resolved = _resolve(HostMemoryStorage(), tmp_path / "package", workspace)
 
-    assert cfg.db_path == "current.db"
+    assert resolved == target
+    assert target.read_text(encoding="utf-8") == 'db_path = "current.db"\n'
     assert legacy.exists()

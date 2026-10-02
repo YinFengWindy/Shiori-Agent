@@ -12,7 +12,7 @@ from plugins.qq.backend.accounts_actions import (
     RepliedMessage,
     qq_chat_target,
 )
-from plugins.qq.backend.onebot import OneBotError
+from plugins.qq.backend.onebot import OneBotDisconnected, OneBotError
 
 
 # The account's QQ number and name, as merged-forward nodes are sent.
@@ -47,6 +47,22 @@ async def test_actions_query_fresh_lists_and_require_actual_send_receipt():
     socket.call.return_value = {"message_id": 89}
     with pytest.raises(ValueError, match="目标 ID"):
         await actions.send_target("account-a", "group", "gqq:777", "hi")
+
+
+@pytest.mark.asyncio
+async def test_lost_connection_is_uncertain_but_a_napcat_rejection_is_not():
+    socket = AsyncMock()
+    actions = QQAccountActions(lambda account_id: socket, AsyncMock(), _SENDER)
+
+    # NapCat may have sent the message before the socket dropped.
+    socket.call.side_effect = OneBotDisconnected("NapCat WebSocket 已断开")
+    with pytest.raises(UncertainDeliveryError):
+        await actions.send_target("account-a", "private", "901", "hi")
+    # A refusal is a definite failure, never reported as possibly delivered.
+    socket.call.side_effect = OneBotError("NapCat send_private_msg 失败: denied")
+    with pytest.raises(OneBotError, match="denied") as rejected:
+        await actions.send_target("account-a", "private", "901", "hi")
+    assert not isinstance(rejected.value, UncertainDeliveryError)
 
 
 @pytest.mark.asyncio

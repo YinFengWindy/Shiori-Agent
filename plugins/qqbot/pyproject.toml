@@ -13,7 +13,7 @@ test = ["shiori-sdk[testing]>=3.1.0,<4"]
 
 [tool.setuptools]
 include-package-data = false
-packages = ["plugins.qqbot", "plugins.qqbot.backend", "plugins.qqbot.testing"]
+packages = ["plugins.qqbot", "plugins.qqbot.backend"]
 package-dir = {"plugins.qqbot" = "."}
 
 [tool.setuptools.package-data]

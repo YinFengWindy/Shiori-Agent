@@ -14,10 +14,10 @@ from shiori_sdk.channel_events import TurnCancelled
 from shiori_sdk.channels.message_source import MessageSource
 from tests.support.tool_hooks import (
     FinalizeOnCallHook,
-    _DummyTool,
-    _FakeProvider,
-    _StrictProvider,
-    _make_agent_loop_with_tools,
+    DummyTool,
+    FakeProvider,
+    StrictProvider,
+    make_agent_loop_with_tools,
 )
 
 
@@ -100,8 +100,8 @@ async def test_finalize_denial_stops_repeated_calls_and_returns_closed_summary(
     tmp_path,
 ):
     """A finalize denial ends the internal loop with a summary, not a template."""
-    tool = _DummyTool("dummy")
-    provider = _StrictProvider(
+    tool = DummyTool("dummy")
+    provider = StrictProvider(
         [
             LLMResponse(content="", tool_calls=[ToolCall("c1", "dummy", {"x": 1})]),
             LLMResponse(content="", tool_calls=[ToolCall("c2", "dummy", {"x": 1})]),
@@ -111,7 +111,7 @@ async def test_finalize_denial_stops_repeated_calls_and_returns_closed_summary(
             ),
         ]
     )
-    loop = _make_agent_loop_with_tools(
+    loop = make_agent_loop_with_tools(
         tmp_path, provider, [tool], hooks=[FinalizeOnCallHook("c3")]
     )
 
@@ -129,10 +129,10 @@ async def test_finalize_denial_stops_repeated_calls_and_returns_closed_summary(
 
 async def test_finalize_denial_truncates_the_rest_of_a_multi_tool_batch(tmp_path):
     """The finalize call's siblings are skipped yet still answered in the chain."""
-    tool_a = _DummyTool("a")
-    tool_b = _DummyTool("b")
+    tool_a = DummyTool("a")
+    tool_b = DummyTool("b")
     hook = FinalizeOnCallHook("a2")
-    provider = _StrictProvider(
+    provider = StrictProvider(
         [
             LLMResponse(
                 content="",
@@ -151,7 +151,7 @@ async def test_finalize_denial_truncates_the_rest_of_a_multi_tool_batch(tmp_path
             LLMResponse(content="已总结当前进度", tool_calls=[]),
         ]
     )
-    loop = _make_agent_loop_with_tools(
+    loop = make_agent_loop_with_tools(
         tmp_path, provider, [tool_a, tool_b], hooks=[hook]
     )
 
@@ -169,8 +169,8 @@ async def test_finalize_denial_truncates_the_rest_of_a_multi_tool_batch(tmp_path
 
 async def test_finalize_denial_of_a_locked_tool_request_keeps_chain_closed(tmp_path):
     """Requests for not-yet-unlocked tools go through the same finalize protocol."""
-    tool = _DummyTool("hidden_tool")
-    provider = _StrictProvider(
+    tool = DummyTool("hidden_tool")
+    provider = StrictProvider(
         [
             LLMResponse(
                 content="", tool_calls=[ToolCall("h1", "hidden_tool", {"x": 1})]
@@ -181,7 +181,7 @@ async def test_finalize_denial_of_a_locked_tool_request_keeps_chain_closed(tmp_p
             LLMResponse(content="已总结当前进度", tool_calls=[]),
         ]
     )
-    loop = _make_agent_loop_with_tools(
+    loop = make_agent_loop_with_tools(
         tmp_path,
         provider,
         [tool],
@@ -201,8 +201,8 @@ async def test_finalize_denial_of_a_locked_tool_request_keeps_chain_closed(tmp_p
 
 
 async def test_max_iterations_returns_progress_summary_not_template(tmp_path):
-    tool = _DummyTool("dummy")
-    provider = _FakeProvider(
+    tool = DummyTool("dummy")
+    provider = FakeProvider(
         [
             LLMResponse(content="", tool_calls=[ToolCall("c1", "dummy", {"x": 1})]),
             LLMResponse(
@@ -210,7 +210,7 @@ async def test_max_iterations_returns_progress_summary_not_template(tmp_path):
             ),
         ]
     )
-    loop = _make_agent_loop_with_tools(tmp_path, provider, [tool])
+    loop = make_agent_loop_with_tools(tmp_path, provider, [tool])
     loop.max_iterations = 1
 
     final, _, _, _vn, _ = await loop._run_agent_loop(

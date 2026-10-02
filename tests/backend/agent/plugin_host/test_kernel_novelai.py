@@ -35,10 +35,9 @@ def _load_novelai_plugin(
 
     Mirrors ``plugins/tool_loop_guard/tests/test_plugin.py``'s pattern: copying
     into a throwaway directory gives every test its own ``import_path`` so
-    tests never collide through ``sys.modules`` caching. The copy only
-    affects the *entry* module's own dynamic import; the plugin's internal
-    ``plugins.novelai.backend.*`` sibling imports still resolve to the real,
-    installed package either way.
+    tests never collide through ``sys.modules`` caching; the plugin's relative
+    sibling imports resolve inside that staged copy, never through the
+    repository package.
     """
     with tempfile.TemporaryDirectory() as tmp:
         plugin_dir = Path(tmp) / "novelai"
@@ -355,9 +354,8 @@ def test_unload_unsubscribes_scene_observation_before_terminating_auto_cg(
 
     async def _run() -> list[Exception]:
         # 1. Trigger the first scene observation and wait for its task to
-        #    actually be parked inside execute() (it is already recorded in
-        #    controller._tasks well before this, synchronously inside
-        #    schedule()).
+        #    actually be parked inside execute() (the plugin already tracks it
+        #    synchronously when the observation is scheduled).
         await event_bus.fanout(_observation())
         await asyncio.wait_for(fake_tool.entered.wait(), timeout=2)
         fake_tool.entered.clear()

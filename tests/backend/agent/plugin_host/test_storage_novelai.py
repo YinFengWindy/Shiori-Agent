@@ -1,13 +1,40 @@
-"""Legacy generated assets and exact requests migrate together."""
+"""Host private-storage migration carries NovelAI's legacy generations on load.
+
+The plugin is loaded through the real ``PluginKernel`` with the real host
+``PluginStorage``; results are read back through ``plugin.novelai.history``.
+Record normalization rules live in ``plugins/novelai/tests/test_storage.py`` and
+directory copy semantics in ``test_data_migration.py``.
+"""
+
+from __future__ import annotations
 
 import json
-from agent.plugin_host.storage import PluginStorage
 from pathlib import Path
+from typing import Any
 
-from plugins.novelai.backend.storage import storage_root
+import pytest
+from shiori_sdk.testing.http import FakeHttp
+from shiori_sdk.testing.models import FakeChatProvider
+from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
+
+from agent.plugin_host import HostServices, PluginKernel
+from agent.tools.registry import ToolRegistry
+from bus.event_bus import EventBus
+from core.roles.store import RoleStore
+from session.manager import SessionManager
 
 
-def test_generation_migration_normalizes_records_and_retains_legacy_identity(
+async def _history(kernel: PluginKernel) -> list[dict[str, Any]]:
+    resolved = kernel.rpc.resolve("plugin.novelai.history")
+    assert resolved is not None
+    _, handler = resolved
+    payload = await handler({"limit": 5})
+    assert payload is not None
+    return payload["records"]
+
+
+@pytest.mark.asyncio
+async def test_loading_novelai_migrates_legacy_generations_and_keeps_identity(
     tmp_path: Path,
 ):
     old = tmp_path / "private_runtime/novelai"
@@ -20,13 +47,34 @@ def test_generation_migration_normalizes_records_and_retains_legacy_identity(
     (output.parent / "request.json").write_text(
         '{"parameters":{"seed":12}}', encoding="utf-8"
     )
-    root = storage_root(tmp_path, PluginStorage())
-    migrated = json.loads((root / "records.jsonl").read_text(encoding="utf-8"))
+    stage_plugin_package(plugin_directory("novelai"), tmp_path / "plugins/novelai")
+    kernel = PluginKernel(
+        [tmp_path / "plugins"],
+        services=HostServices(
+            http=FakeHttp(),
+            light_provider=FakeChatProvider(),
+            light_model="light",
+            event_bus=EventBus(),
+            tool_registry=ToolRegistry(),
+            workspace=tmp_path,
+            role_store=RoleStore(tmp_path),
+            session_manager=SessionManager(tmp_path),
+            plugin_configs={"novelai": {"enabled": True, "token": "novel-token"}},
+        ),
+    )
+    await kernel.load_all()
+
+    [migrated] = await _history(kernel)
     assert migrated["original_output_paths"] == [str(output)]
-    assert migrated["output_paths"] == [str(root / "outputs/record/output.png")]
-    assert Path(migrated["output_paths"][0]).read_bytes() == b"image"
-    assert (root / "outputs/record/request.json").read_text(
+    [moved] = migrated["output_paths"]
+    assert moved != str(output)
+    assert Path(moved).read_bytes() == b"image"
+    assert (Path(moved).parent / "request.json").read_text(
         encoding="utf-8"
     ) == '{"parameters":{"seed":12}}'
     assert output.is_file()
-    assert storage_root(tmp_path, PluginStorage()) == root
+
+    assert await kernel.unload("novelai") == []
+    await kernel.load_all()
+    assert await _history(kernel) == [migrated]
+    assert await kernel.unload("novelai") == []

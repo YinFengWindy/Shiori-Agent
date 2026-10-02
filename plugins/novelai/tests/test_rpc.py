@@ -15,13 +15,13 @@ from plugins.novelai.backend.models import GenerateImageResult, GeneratedImageRe
 from plugins.novelai.backend.prompt_tags import PromptTagStore
 from plugins.novelai.backend.rpc import NovelAIRpcHandlers
 from plugins.novelai.backend.store import NovelAIStore
-from shiori_sdk.testing.sessions import FakeSessions as SessionManager
+from shiori_sdk.testing.sessions import FakeSessions
 
 
 def _handlers(
     *,
     tmp_path: Path,
-    session_manager: SessionManager | None = None,
+    session_manager: FakeSessions | None = None,
     novelai_service=None,
     novelai_store: NovelAIStore | None = None,
     prompt_tag_store: PromptTagStore | None = None,
@@ -34,7 +34,7 @@ def _handlers(
         ),
         prompt_tag_store=prompt_tag_store
         or PromptTagStore(tmp_path, storage=FakeMemoryStorage()),
-        session_manager=session_manager or SessionManager(),
+        session_manager=session_manager or FakeSessions(),
     )
 
 
@@ -171,13 +171,13 @@ _SLOT = {"session_key": _SESSION, "message_id": _MESSAGE, "media_index": 1}
 
 def _regeneration_fixture(
     tmp_path: Path, *, novelai_image: bool = True
-) -> tuple[NovelAIStore, SessionManager, Path]:
+) -> tuple[NovelAIStore, FakeSessions, Path]:
     """Seed a session slot holding a host-owned copy of a NovelAI output.
 
     ``FakeSessions.provenance`` maps the copy back to the original output, the
     same way the host's ``original_media_path`` does for session-owned media.
     """
-    sessions = SessionManager()
+    sessions = FakeSessions()
     store = NovelAIStore(
         tmp_path,
         storage=FakeMemoryStorage(),

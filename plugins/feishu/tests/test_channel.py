@@ -15,6 +15,7 @@ import httpx
 from shiori_sdk.messages import OutboundMessage
 from plugins.feishu.backend import api as feishu_api
 from plugins.feishu.backend.channel import FeishuChannel, resolve_receive_id
+from shiori_sdk.testing.avatars import FakeAvatars
 from shiori_sdk.testing.storage import FakeKV
 
 CHAT_ID = "oc_chat"
@@ -610,3 +611,29 @@ async def test_received_message_carries_the_cached_name_and_refreshes_avatars(
         ("sender", "feishu", OPEN_ID),
         ("chat", "feishu", CHAT_ID),
     }
+
+
+async def test_without_contact_permission_messages_arrive_without_a_name(
+    make_harness: Any, make_event: Any
+) -> None:
+    avatars = FakeAvatars()
+    harness = make_harness(
+        profile_store=FakeKV(), profile_ref="feishu:cli_a", avatars=avatars
+    )
+    # 99991672: the app lacks the contact permission, for both messages.
+    harness.api.fail("contact", (400, 99991672), (400, 99991672))
+    connection = await harness.start()
+
+    connection.emit(make_event())
+    await harness.settle()
+    connection.emit(make_event(message_id="om_in_2", event_id="ev_2"))
+    await harness.settle()
+    # The failed lookup surfaces only in the background avatar refresh.
+    with pytest.raises(ExceptionGroup):
+        await avatars.drain()
+
+    assert [item.content for item in harness.bus.inbound] == ["你好", "你好"]
+    assert all("sender_name" not in item.metadata for item in harness.bus.inbound)
+    # The sender's and the private chat's avatar share one lookup per refresh.
+    assert harness.api.keys().count("contact") == 2
+    assert ("sender", "feishu", OPEN_ID) not in avatars.images

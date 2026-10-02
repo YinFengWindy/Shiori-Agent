@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 
 from plugins.qq.backend.channel.formatting import GROUP_PREFIX
-from plugins.qq.backend.accounts_store import QQConnectionConfig
+from plugins.qq.backend.accounts_store import QQAccountsStore, QQConnectionConfig
+from plugins.qq.backend.napcat_account_files import NapCatAccountFiles
+from shiori_sdk.accounts import AccountResponseRules
 from plugins.qq.backend.plugin import setup
 from shiori_sdk.testing.channel_context import (
     FakeChannelPluginContext,
@@ -108,3 +110,84 @@ async def test_plugin_contributes_one_account_channel(tmp_path):
         await channel.stop()
     finally:
         await ctx.aclose()
+
+
+def _verified(ref: str, uin: str, role_id: str) -> QQConnectionConfig:
+    return QQConnectionConfig(
+        ref,
+        "ws://127.0.0.1:1",
+        f"secret-{ref}",
+        expected_uin=uin,
+        auto_connect=False,
+        verified=True,
+        role_id=role_id,
+    )
+
+
+async def _load(workspace: Path, roles: set[str]) -> FakeChannelPluginContext:
+    """Runs setup on an existing workspace, as an application start does."""
+    ctx = FakeChannelPluginContext("qq", PLUGIN_DIR)
+    ctx.workspace = workspace
+    ctx.accounts.available_roles = roles
+    await setup(ctx.as_capability())
+    return ctx
+
+
+async def _unload(ctx: FakeChannelPluginContext) -> None:
+    try:
+        for channel in ctx.channels.channels:
+            await channel.stop()
+    finally:
+        await ctx.aclose()
+
+
+@pytest.mark.asyncio
+async def test_load_registers_saved_owners_and_deletes_orphaned_data(tmp_path):
+    store = QQAccountsStore(tmp_path)
+    store.save(
+        {
+            "aa": _verified("aa", "101", "gone"),
+            "cc": _verified("cc", "303", "mira"),
+            # Without an owner the data is kept for the user to fix.
+            "dd": _verified("dd", "404", ""),
+        }
+    )
+    napcat = NapCatAccountFiles(store.path.parent / "managed-napcat")
+    # bb has no saved account: it is a temporary login left after a crash.
+    for ref in ("aa", "bb"):
+        napcat.account_dir(ref).mkdir(parents=True)
+
+    ctx = await _load(tmp_path, {"mira"})
+    try:
+        assert {
+            snapshot.record.id: snapshot.record.role_id
+            for snapshot in ctx.accounts.records.values()
+        } == {"qq:303": "mira"}
+        assert list(store.load()) == ["cc", "dd"]
+        assert "secret-aa" not in store.path.read_text(encoding="utf-8")
+        assert not napcat.account_dir("aa").exists()
+        assert not napcat.account_dir("bb").exists()
+    finally:
+        await _unload(ctx)
+
+
+@pytest.mark.asyncio
+async def test_rules_saved_through_the_host_hook_survive_a_restart(tmp_path):
+    QQAccountsStore(tmp_path).save({"aa": _verified("aa", "101", "mira")})
+    rules = AccountResponseRules(private_enabled=False, blocked_sender_ids=("9",))
+    first = await _load(tmp_path, {"mira"})
+    try:
+        assert first.accounts.rules_handler is not None
+        first.accounts.rules_handler("aa", rules)
+    finally:
+        await _unload(first)
+
+    restarted = await _load(tmp_path, {"mira"})
+    try:
+        [snapshot] = restarted.accounts.records.values()
+        assert (snapshot.record.id, snapshot.record.response_rules) == (
+            "qq:101",
+            rules,
+        )
+    finally:
+        await _unload(restarted)

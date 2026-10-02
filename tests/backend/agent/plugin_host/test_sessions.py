@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from agent.plugin_host.sessions import HostPluginSessions
 from desktop_bridge.session_presenter import DesktopSessionPresenter
 from session.manager import SessionManager
@@ -49,3 +51,35 @@ async def test_replace_message_media_swaps_one_slot_and_projects_the_message(
     assert Path(copied).read_bytes() == b"new"
     manager.invalidate(session.key)
     assert sessions.get_message_media(**slot, media_index=1) == copied
+
+
+async def test_rejected_replacement_keeps_the_old_media_bytes_and_path(
+    tmp_path: Path,
+) -> None:
+    """A stale ``expected_path`` aborts before copying; the old slot stays intact."""
+    manager = SessionManager(tmp_path)
+    old, new = tmp_path / "old.png", tmp_path / "new.png"
+    old.write_bytes(b"old")
+    new.write_bytes(b"new")
+    session = manager.get_or_create("role:mira")
+    session.add_message("assistant", "scene", media=[str(old)])
+    manager.save(session)
+    sessions = HostPluginSessions(manager, tmp_path, DesktopSessionPresenter(None))
+    slot = {
+        "session_key": session.key,
+        "message_id": str(session.messages[-1]["id"]),
+        "media_index": 0,
+    }
+    current = sessions.get_message_media(**slot)
+
+    with pytest.raises(ValueError, match="已发生变化"):
+        await sessions.replace_message_media(
+            **slot, expected_path=str(old), new_path=str(new)
+        )
+
+    assert current != str(old)
+    assert sessions.get_message_media(**slot) == current
+    old.unlink()
+    assert Path(current).read_bytes() == b"old"
+    manager.invalidate(session.key)
+    assert sessions.get_message_media(**slot) == current

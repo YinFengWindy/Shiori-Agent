@@ -51,7 +51,9 @@ class FinalizeOnCallHook(ToolHook):
         return HookOutcome()
 
 
-class _DummyTool(Tool):
+class DummyTool(Tool):
+    """Tool with one integer argument that records each execution."""
+
     def __init__(self, name: str = "dummy") -> None:
         self._name = name
         self.calls: list[dict] = []
@@ -79,7 +81,9 @@ class _DummyTool(Tool):
         return f"ok:{kwargs.get('x')}"
 
 
-class _FakeProvider:
+class FakeProvider:
+    """Replays scripted responses and records every chat request."""
+
     def __init__(self, responses: list[LLMResponse]) -> None:
         self._responses = list(responses)
         self.calls: list[dict] = []
@@ -109,7 +113,7 @@ def _assert_no_unresolved_tool_calls(messages: list[dict]) -> None:
         )
 
 
-class _StrictProvider(_FakeProvider):
+class StrictProvider(FakeProvider):
     """Fails the request when any earlier assistant tool call lacks a result."""
 
     async def chat(self, **kwargs):
@@ -118,7 +122,9 @@ class _StrictProvider(_FakeProvider):
         return await super().chat(**kwargs)
 
 
-class _ExitTool(Tool):
+class ExitTool(Tool):
+    """Mandatory exit tool that only counts its invocations."""
+
     def __init__(self, name: str = "checkpoint") -> None:
         self._name = name
         self.called = 0
@@ -144,9 +150,9 @@ class _ExitTool(Tool):
         return "noted"
 
 
-def _make_agent_loop_with_tools(
+def make_agent_loop_with_tools(
     tmp_path: Path,
-    provider: _FakeProvider,
+    provider: FakeProvider,
     tools_to_register: list[Tool],
     *,
     hooks: Sequence[ToolHook] = (),

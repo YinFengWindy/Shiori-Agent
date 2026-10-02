@@ -21,10 +21,10 @@ from shiori_sdk.tool_hooks import HookOutcome
 from shiori_sdk.tools import Tool
 from tests.support.tool_hooks import (
     FinalizeOnCallHook,
-    _DummyTool,
-    _ExitTool,
-    _FakeProvider,
-    _StrictProvider,
+    DummyTool,
+    ExitTool,
+    FakeProvider,
+    StrictProvider,
 )
 
 
@@ -218,10 +218,10 @@ async def test_child_visible_request_and_usage_never_replace_parent(background):
 
 async def test_finalize_denial_truncates_multi_tool_batch_with_closed_chain():
     """Skipped siblings of the finalize call still get tool results."""
-    tool_a = _DummyTool("a")
-    tool_b = _DummyTool("b")
+    tool_a = DummyTool("a")
+    tool_b = DummyTool("b")
     hook = FinalizeOnCallHook("a2")
-    provider = _StrictProvider(
+    provider = StrictProvider(
         [
             LLMResponse(
                 content="",
@@ -255,12 +255,13 @@ async def test_finalize_denial_truncates_multi_tool_batch_with_closed_chain():
     assert hook.seen == ["a1", "b1", "a2"]
     assert len(tool_a.calls) == 1
     assert len(tool_b.calls) == 1
+    assert provider.calls[-1]["tools"] == []
 
 
 async def test_finalize_path_runs_mandatory_exit_with_closed_chain():
-    tool = _DummyTool("dummy")
-    exit_tool = _ExitTool("checkpoint")
-    provider = _StrictProvider(
+    tool = DummyTool("dummy")
+    exit_tool = ExitTool("checkpoint")
+    provider = StrictProvider(
         [
             LLMResponse(content="", tool_calls=[ToolCall("s1", "dummy", {"x": 1})]),
             LLMResponse(content="", tool_calls=[ToolCall("s2", "dummy", {"x": 1})]),
@@ -286,11 +287,12 @@ async def test_finalize_path_runs_mandatory_exit_with_closed_chain():
     assert "记录" in result
     assert len(tool.calls) == 1
     assert exit_tool.called == 1
+    assert provider.calls[-1]["tools"] == []
 
 
 async def test_tool_result_is_returned_to_the_model_unchanged():
-    tool = _DummyTool("shell")
-    provider = _FakeProvider(
+    tool = DummyTool("shell")
+    provider = FakeProvider(
         [
             LLMResponse(
                 content="",
@@ -316,8 +318,8 @@ async def test_tool_result_is_returned_to_the_model_unchanged():
 
 
 async def test_repeated_tool_results_stay_unchanged():
-    tool = _DummyTool("shell")
-    provider = _FakeProvider(
+    tool = DummyTool("shell")
+    provider = FakeProvider(
         [
             LLMResponse(
                 content="",
@@ -350,7 +352,7 @@ async def test_repeated_tool_results_stay_unchanged():
 
 
 async def test_unknown_tool_not_recorded_in_tools_called():
-    provider = _FakeProvider(
+    provider = FakeProvider(
         [
             LLMResponse(
                 content="", tool_calls=[ToolCall("s1", "ghost_tool", {"x": 1})]
@@ -369,8 +371,8 @@ async def test_unknown_tool_not_recorded_in_tools_called():
 
 
 async def test_max_iterations_returns_summary_and_reason():
-    tool = _DummyTool("dummy")
-    provider = _FakeProvider(
+    tool = DummyTool("dummy")
+    provider = FakeProvider(
         [
             LLMResponse(content="", tool_calls=[ToolCall("s1", "dummy", {"x": 1})]),
             LLMResponse(content="已完成检索，剩余整理，下一步继续", tool_calls=[]),
@@ -389,9 +391,9 @@ async def test_max_iterations_returns_summary_and_reason():
 
 
 async def test_max_iterations_summary_failure_uses_fallback():
-    tool = _DummyTool("dummy")
+    tool = DummyTool("dummy")
 
-    class _SummaryFailProvider(_FakeProvider):
+    class _SummaryFailProvider(FakeProvider):
         async def chat(self, **kwargs):
             self.calls.append(kwargs)
             if len(self.calls) == 1:
