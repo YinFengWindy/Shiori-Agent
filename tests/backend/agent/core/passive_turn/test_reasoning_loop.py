@@ -55,7 +55,6 @@ def make_reasoner(provider, tools, *, max_iterations=5, tool_search_enabled=Fals
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=tool_search_enabled,
-        memory_window=40,
     )
 
 
@@ -1158,3 +1157,60 @@ async def test_external_restricted_turn_rechecks_account_send_after_hooks():
     assert call["result"] == "这个工具在这里只能用来发给你的用户"
     delivery.send.assert_not_awaited()
     record.assert_not_awaited()
+
+
+async def test_after_step_receives_the_request_budget_hard_limit():
+    from agent.provider import LLMProvider
+    from agent.prompting.input_budget import BudgetPolicy
+
+    provider = LLMProvider(
+        api_key="test",
+        model_context_window=8000,
+        default_max_tokens=100,
+        budget_policy=BudgetPolicy(safety_margin_tokens=20),
+    )
+    calls = [
+        [
+            SimpleNamespace(
+                id="c1", function=SimpleNamespace(name="counter", arguments="{}")
+            )
+        ],
+        [],
+    ]
+
+    async def create(kwargs, **unused):
+        tool_calls = calls.pop(0)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="" if tool_calls else "完成", tool_calls=tool_calls
+                    ),
+                    finish_reason="tool_calls" if tool_calls else "stop",
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=100, completion_tokens=1, total_tokens=101
+            ),
+        )
+
+    provider._create_with_retry = create
+    tools = ToolRegistry()
+    tools.register(CounterTool(), always_on=True)
+    reasoner = make_reasoner(provider, tools)
+    reasoner._llm_config.max_tokens = 100
+    observed = []
+    run_after_step = reasoner._after_step.run
+
+    async def capture(ctx):
+        observed.append(ctx)
+        return await run_after_step(ctx)
+
+    reasoner._after_step.run = capture
+    try:
+        result = await reasoner.run([{"role": "user", "content": "数一下"}])
+        assert result.reply == "完成"
+        step = next(ctx for ctx in observed if ctx.has_more)
+        assert step.input_limit_tokens == 8000 - 100 - 20
+    finally:
+        await provider.aclose()

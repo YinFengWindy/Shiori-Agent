@@ -40,7 +40,13 @@ class ResponseMetadata:
 
 @dataclass(frozen=True)
 class AfterStepCtx:
-    """Immutable step observation; modules request stopping through export slots."""
+    """Immutable step observation; modules request stopping through export slots.
+
+    ``context_tokens_estimate`` measures the step's next request with the host's
+    unified input budget. ``input_limit_tokens`` is that budget's hard input
+    limit for the current model (window minus output reservation and safety
+    margin); ``None`` when the host has no budget for the model.
+    """
 
     session_key: str
     channel: str
@@ -56,6 +62,7 @@ class AfterStepCtx:
     early_stop: bool = False
     early_stop_reason: str = ""
     extra_metadata: dict[str, object] = field(default_factory=dict)
+    input_limit_tokens: int | None = None
 
 
 @dataclass

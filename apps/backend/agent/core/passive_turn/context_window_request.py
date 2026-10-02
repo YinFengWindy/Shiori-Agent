@@ -106,7 +106,7 @@ async def prepare_context_window_request(
     )
     request = ContextWindowRequest(renderer, provider, model, max_tokens, [], [])
     request.schemas = renderer.tool_schemas(
-        get_window_preloaded_tools(snapshot, 500, view, tools)
+        get_window_preloaded_tools(snapshot, view, tools)
     )
     request.messages = await renderer.render_snapshot(
         snapshot,

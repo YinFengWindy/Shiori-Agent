@@ -61,7 +61,7 @@ class CompactionRenderer:
     def history_tools(self, prepared: WindowPreparation) -> list[str]:
         """Only tools belonging to the candidate original window remain preloaded."""
         return get_window_preloaded_tools(
-            self._snapshot(prepared), 500, self.view, self.tools
+            self._snapshot(prepared), self.view, self.tools
         )
 
     def tool_schemas(self, history: list[str]):
@@ -101,7 +101,7 @@ class CompactionRenderer:
         history = snapshot.get_history(
             start_index=start, include=history_filter(self.view)
         )
-        sources = get_window_sources(snapshot, 500, self.view, self.heard())
+        sources = get_window_sources(snapshot, self.view, self.heard())
         injection = build_turn_injection_prompt(
             tools=self.tools,
             tool_search_enabled=self.search_enabled,

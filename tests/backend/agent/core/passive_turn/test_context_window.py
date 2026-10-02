@@ -47,7 +47,6 @@ def _window(h, keep=2):
         ToolRegistry(),
         ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=20,
         context=ContextBuilder(
             h.manager.workspace,
             MarkdownMemoryStore(h.manager.workspace),

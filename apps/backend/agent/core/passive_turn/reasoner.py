@@ -13,6 +13,7 @@ import time
 from abc import ABC, abstractmethod
 from datetime import datetime
 from copy import deepcopy
+from dataclasses import replace
 
 from core.compaction import (
     CompactionController,
@@ -21,7 +22,7 @@ from core.compaction import (
     CompactionResult,
 )
 from core.compaction_summary import WorkingSummaryWriter
-from session.maintenance_progress import window_key
+from session.maintenance_progress import MaintenanceProgress, window_key
 from .compaction_render import CompactionRenderer
 from .context_window import ContextWindow
 from .compaction import (
@@ -76,7 +77,7 @@ if TYPE_CHECKING:
     from agent.tool_hooks.base import ToolHook
     from agent.tools.registry import ToolRegistry
     from conversation.context_scope import ContextView
-    from session.manager import SessionManager
+    from session.manager import Session, SessionManager
     from core.memory.markdown import MarkdownMemoryMaintenance
 
 logger = logging.getLogger("agent.core.passive_turn")
@@ -180,7 +181,6 @@ class DefaultReasoner(
         discovery: ToolDiscoveryState,
         *,
         tool_search_enabled: bool,
-        memory_window: int,
         context: "ContextBuilder | None" = None,
         session_manager: "SessionManager | None" = None,
         event_bus: "EventBus | None" = None,
@@ -191,7 +191,6 @@ class DefaultReasoner(
         self._tools = tools
         self._discovery = discovery
         self._tool_search_enabled = tool_search_enabled
-        self._memory_window = memory_window
         self._context = context
         self._session_manager = session_manager
         self._event_bus = event_bus
@@ -349,11 +348,7 @@ class DefaultReasoner(
         # The model and policy are execution snapshots, before any history render.
         policy = CompactionPolicy(self._llm_config.compaction_retained_turns)
         message_limit = len(session.messages)
-        snapshot = self._session_manager.window_snapshot(
-            session.key, context_view, message_limit=message_limit
-        )
-        progress = snapshot.maintenance_progress
-        assert progress is not None
+        snapshot, progress = self._window_snapshot(session, context_view, message_limit)
         window_id = window_key(context_view)
         protected_current: dict | None = None
         compaction_results: list[dict] = []
@@ -370,7 +365,7 @@ class DefaultReasoner(
         source_history = (
             base_history
             if base_history is not None
-            else get_window_history(snapshot, self._memory_window, context_view)
+            else get_window_history(snapshot, context_view)
         )
         total_history = len(source_history)
         stream_sink = (
@@ -403,47 +398,24 @@ class DefaultReasoner(
         attempts = self._build_attempt_plans(total_history)
         for attempt, plan in enumerate(attempts):
             if attempt:
-                snapshot = self._session_manager.window_snapshot(
-                    session.key,
-                    context_view,
-                    message_limit=message_limit,
-                    expected=progress,
+                snapshot, refreshed = self._window_snapshot(
+                    session, context_view, message_limit, expected=progress
                 )
-                refreshed = snapshot.maintenance_progress
-                assert refreshed is not None
                 if base_history is None or refreshed.window_versions.get(
                     window_id, 0
                 ) != progress.window_versions.get(window_id, 0):
-                    source_history = get_window_history(
-                        snapshot, self._memory_window, context_view
-                    )
-            current_progress = snapshot.maintenance_progress
-            assert current_progress is not None
-            working_summary = current_progress.summaries.get(window_id, "")
+                    source_history = get_window_history(snapshot, context_view)
             history_window = min(plan["history_window"], len(source_history))
             # 与历史同一窗口里非用户本人消息的来源，加上本群旁听块里的（#539），
             # 外部回合据此注入成员档案（#498）。
             window_sources = get_window_sources(
                 snapshot,
-                self._memory_window,
                 context_view,
                 self._heard_for_turn(context_view),
             )
-            preloaded: set[str] | None = None
-            preloaded_order: list[str] = []
-            if self._tool_search_enabled:
-                # 历史窗口里用过或解锁过的工具继续可见，直到窗口维护移出原文。
-                preloaded_order = get_window_preloaded_tools(
-                    snapshot,
-                    self._memory_window,
-                    context_view,
-                    self._tools,
-                )
-                preloaded = set(preloaded_order)
-                logger.info(
-                    "[tool_search] history preloaded=%s",
-                    preloaded_order if preloaded_order else "[]",
-                )
+            preloaded, preloaded_order, turn_injection_prompt = self._window_tools(
+                snapshot, context_view, disabled_tools, external_restricted
+            )
             retry_attempts.append(
                 {
                     "name": plan["name"],
@@ -455,16 +427,6 @@ class DefaultReasoner(
             history_for_attempt = self._slice_history(
                 source_history,
                 history_window,
-            )
-            turn_injection_prompt = build_turn_injection_prompt(
-                tools=self._tools,
-                tool_search_enabled=self._tool_search_enabled,
-                visible_names=(
-                    (preloaded or set()) | disabled_tools
-                    if self._tool_search_enabled
-                    else None
-                ),
-                external_only=external_restricted,
             )
             render_input = PromptRenderInput(
                 session_key=session.key,
@@ -500,39 +462,22 @@ class DefaultReasoner(
                 replace_current_input(
                     prompt_render.messages, protected_current, owned_current
                 )
-            initial_messages = with_working_summary(
-                prompt_render.messages, working_summary
+            initial_messages = self._with_window_summary(
+                prompt_render.messages, snapshot, context_view
             )
 
-            renderer = CompactionRenderer(
-                self._session_manager,
-                context_view,
-                message_limit,
-                render_input,
-                deepcopy(protected_current),
-                self.render_prompt,
-                self._tools,
-                self._tool_search_enabled,
-                disabled_tools,
-                external_restricted,
-                lambda: self._heard_for_turn(context_view),
-            )
             request_prefix_length = len(initial_messages)
-            compaction = (
-                RequestCompaction(
-                    self._compaction,
-                    session.key,
-                    context_view,
-                    policy,
-                    message_limit,
-                    request_prefix_length,
-                    renderer.render,
-                    renderer.history_tools,
-                    results=compaction_results,
-                    render_minimal=renderer.render_minimal,
-                )
-                if self._compaction is not None
-                else None
+            compaction = self._request_compaction(
+                session_key=session.key,
+                context_view=context_view,
+                policy=policy,
+                message_limit=message_limit,
+                render_input=render_input,
+                current_message=protected_current,
+                prefix_length=request_prefix_length,
+                disabled_tools=disabled_tools,
+                external_restricted=external_restricted,
+                results=compaction_results,
             )
             llm_user_content, llm_context_frame = extract_model_facing_turn(
                 initial_messages
@@ -673,6 +618,187 @@ class DefaultReasoner(
                     context_retry=retry_trace,
                 )
         return TurnRunResult(reply="（安全重试异常）", context_retry=retry_trace)
+
+    def _window_snapshot(
+        self,
+        session: "SessionLike",
+        context_view: "ContextView | None",
+        message_limit: int,
+        *,
+        expected: MaintenanceProgress | None = None,
+    ) -> tuple["Session", MaintenanceProgress]:
+        """Read the window snapshot up to ``message_limit`` and its progress."""
+        if self._session_manager is None:
+            raise RuntimeError("DefaultReasoner 读取窗口快照需要 session_manager")
+        snapshot = self._session_manager.window_snapshot(
+            session.key, context_view, message_limit=message_limit, expected=expected
+        )
+        progress = snapshot.maintenance_progress
+        assert progress is not None
+        return snapshot, progress
+
+    def _window_tools(
+        self,
+        snapshot: "Session",
+        context_view: "ContextView | None",
+        disabled_tools: set[str],
+        external_restricted: bool,
+    ) -> tuple[set[str] | None, list[str], str]:
+        """Window-preloaded deferred tools, their order and the deferred-tool hint.
+
+        Tools used or unlocked in the original window stay visible until window
+        maintenance removes those originals; without tool search nothing is
+        preloaded and the visible set is None (all tools).
+        """
+        preloaded: set[str] | None = None
+        preloaded_order: list[str] = []
+        if self._tool_search_enabled:
+            preloaded_order = get_window_preloaded_tools(
+                snapshot, context_view, self._tools
+            )
+            preloaded = set(preloaded_order)
+            logger.info(
+                "[tool_search] history preloaded=%s",
+                preloaded_order if preloaded_order else "[]",
+            )
+        injection = build_turn_injection_prompt(
+            tools=self._tools,
+            tool_search_enabled=self._tool_search_enabled,
+            visible_names=(
+                (preloaded or set()) | disabled_tools
+                if self._tool_search_enabled
+                else None
+            ),
+            external_only=external_restricted,
+        )
+        return preloaded, preloaded_order, injection
+
+    @staticmethod
+    def _with_window_summary(
+        messages: list[dict],
+        snapshot: "Session",
+        context_view: "ContextView | None",
+    ) -> list[dict]:
+        """Attach the snapshot window's working summary to rendered messages."""
+        progress = snapshot.maintenance_progress
+        assert progress is not None
+        return with_working_summary(
+            messages, progress.summaries.get(window_key(context_view), "")
+        )
+
+    def _request_compaction(
+        self,
+        *,
+        session_key: str,
+        context_view: "ContextView | None",
+        policy: CompactionPolicy,
+        message_limit: int,
+        render_input: PromptRenderInput,
+        current_message: dict | None,
+        prefix_length: int,
+        disabled_tools: set[str],
+        external_restricted: bool,
+        results: list[dict],
+    ) -> RequestCompaction | None:
+        """Build one request's compaction scope over the persisted window prefix.
+
+        Candidate windows are re-rendered from ``render_input`` with the exact
+        ``current_message``; without a compaction owner there is no scope.
+        """
+        if self._compaction is None or self._session_manager is None:
+            return None
+        renderer = CompactionRenderer(
+            self._session_manager,
+            context_view,
+            message_limit,
+            render_input,
+            deepcopy(current_message),
+            self.render_prompt,
+            self._tools,
+            self._tool_search_enabled,
+            disabled_tools,
+            external_restricted,
+            lambda: self._heard_for_turn(context_view),
+        )
+        return RequestCompaction(
+            self._compaction,
+            session_key,
+            context_view,
+            policy,
+            message_limit,
+            prefix_length,
+            renderer.render,
+            renderer.history_tools,
+            results=results,
+            render_minimal=renderer.render_minimal,
+        )
+
+    @turn_usage_context
+    async def run_window_turn(
+        self,
+        *,
+        session: "SessionLike",
+        render_input: PromptRenderInput,
+        request_time: datetime | None = None,
+        tool_event_channel: str = "",
+        tool_event_chat_id: str = "",
+        tool_execution_context: dict[str, Any] | None = None,
+    ) -> ReasonerResult:
+        """Run an internal turn, such as a background task passback, on the window.
+
+        Like ``run_turn``, history starts at the session's compaction window with
+        its working summary, and every request runs inside the request
+        compaction scope, so an over-budget request compacts instead of failing.
+        ``render_input`` carries the internal content; its history, tool hint
+        and metadata are taken from the window snapshot.
+        """
+        if self._session_manager is None:
+            raise RuntimeError(
+                "DefaultReasoner.run_window_turn requires session_manager"
+            )
+        from .minimal_request import current_input
+
+        message_limit = len(session.messages)
+        snapshot, _ = self._window_snapshot(session, None, message_limit)
+        preloaded, preloaded_order, injection = self._window_tools(
+            snapshot, None, set(), False
+        )
+        render_input = replace(
+            render_input,
+            history=get_window_history(snapshot, None),
+            session_metadata=get_session_metadata(snapshot),
+            turn_injection_prompt=injection,
+        )
+        prompt_render = await self.render_prompt(render_input)
+        initial_messages = self._with_window_summary(
+            prompt_render.messages, snapshot, None
+        )
+        compaction = self._request_compaction(
+            session_key=session.key,
+            context_view=None,
+            policy=CompactionPolicy(self._llm_config.compaction_retained_turns),
+            message_limit=message_limit,
+            render_input=render_input,
+            current_message=current_input(
+                prompt_render.messages, prompt_render.current_message
+            ),
+            prefix_length=len(initial_messages),
+            disabled_tools=set(),
+            external_restricted=False,
+            results=[],
+        )
+        with request_compaction_scope(compaction):
+            return await self.run(
+                initial_messages,
+                request_time=request_time,
+                preloaded_tools=preloaded,
+                preloaded_tool_order=preloaded_order,
+                preflight_injected=True,
+                tool_event_session_key=session.key,
+                tool_event_channel=tool_event_channel,
+                tool_event_chat_id=tool_event_chat_id,
+                tool_execution_context=tool_execution_context,
+            )
 
     def _heard_for_turn(self, context_view: "ContextView | None") -> list[HeardLine]:
         """外部回合所在会话旁听块里的消息；用户上下文回合没有旁听。"""

@@ -144,7 +144,6 @@ def test_default_reasoner_runs_tool_loop_and_returns_reasoner_result():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
     )
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
@@ -193,7 +192,6 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot(tmp_path):
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
         context=cast(Any, SimpleNamespace(render=lambda *_args, **_kwargs: None)),
         session_manager=manager,
     )
@@ -262,7 +260,6 @@ def test_default_reasoner_blocks_disabled_tool_even_if_model_calls_it():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
     )
 
     result = asyncio.run(
@@ -311,7 +308,6 @@ def test_default_reasoner_tool_search_cannot_reunlock_disabled_tool():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
-        memory_window=40,
     )
 
     result = asyncio.run(
@@ -358,7 +354,6 @@ def test_default_reasoner_zero_max_iterations_is_unlimited():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
     )
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
@@ -396,7 +391,6 @@ def test_default_reasoner_honors_after_step_stop_after_tool_batch():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
     )
     reasoner.add_after_step_plugin_modules([_RequestSummary()])
 
@@ -442,7 +436,6 @@ def test_default_reasoner_continues_without_after_step_stop_request():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
     )
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
@@ -486,7 +479,6 @@ def test_default_reasoner_observes_tool_lifecycle_events(tmp_path):
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
         context=cast(
             Any,
             SimpleNamespace(
@@ -564,7 +556,6 @@ def test_default_reasoner_observes_blocked_tool_lifecycle_events():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
-        memory_window=40,
         event_bus=event_bus,
     )
 
@@ -615,7 +606,6 @@ def test_default_reasoner_unlocks_tool_search_visibility():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
-        memory_window=40,
     )
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
@@ -656,7 +646,6 @@ def test_default_reasoner_preflight_includes_deferred_tool_names():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
-        memory_window=40,
     )
 
     # 调用方负责在调用 run() 前注入 hint。
@@ -706,7 +695,6 @@ def test_default_reasoner_deferred_tool_direct_call_requires_select():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
-        memory_window=40,
     )
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
@@ -739,7 +727,6 @@ def test_default_reasoner_preloaded_tool_not_in_deferred_list():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
-        memory_window=40,
     )
 
     asyncio.run(
@@ -771,7 +758,6 @@ def test_default_reasoner_run_turn_uses_context_render(tmp_path):
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
         context=cast(
             Any,
             SimpleNamespace(
@@ -823,7 +809,6 @@ def test_default_reasoner_run_turn_reports_llm_timeout(tmp_path):
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
         context=cast(
             Any,
             SimpleNamespace(
@@ -870,7 +855,6 @@ def test_empty_content_with_thinking_triggers_retry_and_succeeds():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
     )
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
@@ -902,7 +886,6 @@ def test_empty_content_with_thinking_retry_still_empty_fails():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
     )
 
     with pytest.raises(EmptyReplyError):
@@ -931,7 +914,6 @@ def test_empty_content_without_thinking_recovers():
         tools=tools,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
     )
 
     result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))

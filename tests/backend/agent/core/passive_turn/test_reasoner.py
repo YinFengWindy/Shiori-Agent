@@ -108,7 +108,6 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
         registry,
         ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
         context=context,
         session_manager=h.manager,
         compaction_memory=h.maintenance,
@@ -324,7 +323,6 @@ async def test_run_turn_retry_preserves_persisted_history(
         tools=ToolRegistry(),
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
         context=AsyncMock(),
         session_manager=manager,
     )
@@ -455,7 +453,6 @@ async def test_run_turn_restricts_tools_only_for_external_non_user_sender(
         tools=ToolRegistry(),
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
         context=AsyncMock(),
         session_manager=manager,
     )
@@ -526,7 +523,6 @@ async def test_real_turn_history_append_uses_usage_anchor_with_replaced_context_
         tools=ToolRegistry(),
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
         context=ContextBuilder(tmp_path, Memory(), runtime_roles=RoleStore(tmp_path)),
         session_manager=manager,
     )
@@ -751,7 +747,6 @@ async def test_all_request_boundaries_compact_without_replaying_current_tools(
         tools=registry,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
-        memory_window=40,
         context=AsyncMock(),
         session_manager=h.manager,
         compaction_memory=h.maintenance,
@@ -982,7 +977,6 @@ async def test_real_prompt_renderer_continues_with_working_state_and_bounded_ori
         tools=ToolRegistry(),
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
         context=ContextBuilder(
             h.manager.workspace, h.maintenance._store, runtime_roles=roles
         ),
@@ -1017,6 +1011,107 @@ async def test_real_prompt_renderer_continues_with_working_state_and_bounded_ori
         await provider.aclose()
 
 
+async def test_window_turn_compacts_an_over_budget_background_passback(
+    memory_harness,
+):
+    """后台任务回传走窗口与工作摘要；超预算时在请求压缩作用域内压缩。"""
+    import json
+    from agent.context import ContextBuilder
+    from agent.lifecycle.types import PromptRenderInput
+    from agent.provider import LLMProvider
+    from agent.prompting.input_budget import BudgetPolicy
+    from core.roles import RoleStore
+    from session.maintenance_progress import window_key
+
+    h = memory_harness
+    roles = RoleStore(h.manager.workspace)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="角色约束")
+    session = h.manager.get_or_create("cli:passback")
+    session.metadata["role_id"] = "mira"
+    for index in range(5):
+        session.add_message("user", f"phase {index}: " + "work " * 6000)
+        session.add_message("assistant", f"completed phase {index}")
+    h.manager.save(session)
+    provider = LLMProvider(
+        api_key="test",
+        model_context_window=64000,
+        default_max_tokens=2000,
+        budget_policy=BudgetPolicy(safety_margin_tokens=200),
+    )
+    spoken = []
+
+    async def create(kwargs, **unused):
+        if "Rewrite the current working state" in kwargs["messages"][0]["content"]:
+            source = json.loads(kwargs["messages"][-1]["content"])
+            content = json.dumps(
+                {
+                    "tasks": "deliver passback summary",
+                    "constraints": "",
+                    "decisions": "",
+                    "unfinished": "",
+                    "tool_state": "",
+                    "entities": "",
+                    "source_message_ids": [source["messages"][0]["id"]],
+                }
+            )
+        else:
+            spoken.append(deepcopy(kwargs))
+            content = "后台结果已整理"
+        tokens = provider._budget_for_request(kwargs).estimate.tokens
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=content, tool_calls=[]),
+                    finish_reason="stop",
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=tokens, completion_tokens=50, total_tokens=tokens + 50
+            ),
+        )
+
+    provider._create_with_retry = create
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider, provider),
+        llm_config=LLMConfig(model="controlled", max_tokens=2000),
+        tools=ToolRegistry(),
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        context=ContextBuilder(
+            h.manager.workspace, h.maintenance._store, runtime_roles=roles
+        ),
+        session_manager=h.manager,
+        compaction_memory=h.maintenance,
+    )
+    try:
+        result = await reasoner.run_window_turn(
+            session=session,
+            render_input=PromptRenderInput(
+                session_key=session.key,
+                channel="cli",
+                chat_id="passback",
+                content="[后台任务回传] 整理完成",
+                media=None,
+                timestamp=datetime.now(),
+                history=[],
+                skill_names=None,
+                retrieved_memory_block="",
+                disabled_sections=set(),
+                turn_injection_prompt="",
+            ),
+        )
+        assert result.reply == "后台结果已整理"
+        progress = h.manager.maintenance_progress(session)
+        assert progress.cursor(None) > 0
+        assert "deliver passback summary" in progress.summaries[window_key(None)]
+        text = json.dumps(spoken[-1], ensure_ascii=False)
+        assert "[后台任务回传] 整理完成" in text
+        assert "deliver passback summary" in text
+        assert "phase 4" in text and "phase 0:" not in text
+    finally:
+        await provider.aclose()
+
+
 async def test_provider_context_rejection_after_tools_never_restarts_turn(
     memory_harness,
 ):
@@ -1040,7 +1135,6 @@ async def test_provider_context_rejection_after_tools_never_restarts_turn(
         tools=registry,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=False,
-        memory_window=40,
         context=AsyncMock(),
         session_manager=h.manager,
     )
@@ -1202,7 +1296,6 @@ async def test_safety_retry_reads_committed_compaction_with_frozen_input_and_his
         tools=registry,
         discovery=ToolDiscoveryState(),
         tool_search_enabled=True,
-        memory_window=40,
         context=AsyncMock(),
         session_manager=h.manager,
         compaction_memory=h.maintenance,

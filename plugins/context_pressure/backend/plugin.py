@@ -7,12 +7,16 @@ _CTX_SLOT = "step:ctx"
 _EARLY_STOP_REASON_SLOT = "step:early_stop_reason"
 _TELEMETRY_PREFIX = "step:telemetry:"
 
-_MODEL_CONTEXT_WINDOW_TOKENS = 1_000_000
-_CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS = _MODEL_CONTEXT_WINDOW_TOKENS * 80 // 100
-
 
 class ContextPressureStopModule:
-    """Requests a summary when an unfinished step crosses the plugin budget."""
+    """Requests a summary once an unfinished step reaches the request hard limit.
+
+    The threshold is the current model's unified-budget hard input limit, read
+    from ``AfterStepCtx.input_limit_tokens``. Below it the next request is still
+    sendable and crossing the compaction trigger is handled by request
+    compaction; at or above it continuing to call tools cannot be sent as-is,
+    so the loop wraps up. Without a model budget the module never stops.
+    """
 
     slot = "context_pressure.stop"
     requires = ("after_step.copy_input", _CTX_SLOT)
@@ -27,14 +31,13 @@ class ContextPressureStopModule:
         ctx = slots.get(_CTX_SLOT)
         if not isinstance(ctx, AfterStepCtx) or not ctx.has_more:
             return frame
+        limit = ctx.input_limit_tokens
         tokens = ctx.context_tokens_estimate
-        if tokens <= _CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS:
+        if limit is None or tokens < limit:
             return frame
         slots[_EARLY_STOP_REASON_SLOT] = "context_pressure"
         slots[f"{_TELEMETRY_PREFIX}context_pressure_tokens"] = tokens
-        slots[f"{_TELEMETRY_PREFIX}context_pressure_threshold"] = (
-            _CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS
-        )
+        slots[f"{_TELEMETRY_PREFIX}context_pressure_threshold"] = limit
         return frame
 
 
