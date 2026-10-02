@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import zipfile
 
 import pytest
 
@@ -33,10 +34,19 @@ def environment(tmp_path: Path) -> Path:
     (metadata / "METADATA").write_text(
         "Name: shiori-sdk\nVersion: 3.0.0\n", encoding="utf-8"
     )
-    (metadata / "direct_url.json").write_text(
-        _wheel_origin(tmp_path / "wheels/shiori_sdk-3.0.0-py3-none-any.whl"),
+    # The installed tree mirrors a real wheel in the wheelhouse byte for byte.
+    files = ["shiori_sdk/__init__.py", "shiori_sdk/testing/__init__.py"]
+    (metadata / "RECORD").write_text(
+        "".join(f"{name},,\n" for name in [*files, f"{metadata.name}/METADATA"]),
         encoding="utf-8",
     )
+    wheel = tmp_path / "wheels/shiori_sdk-3.0.0-py3-none-any.whl"
+    wheel.parent.mkdir()
+    with zipfile.ZipFile(wheel, "w") as archive:
+        for name in [*files, f"{metadata.name}/METADATA"]:
+            archive.write(site / name, name)
+        archive.writestr(f"{metadata.name}/RECORD", "")
+    (metadata / "direct_url.json").write_text(_wheel_origin(wheel), encoding="utf-8")
     shutil.copyfile(isolation_probe.__file__, tmp_path / "probe.py")
     (tmp_path / "isolation.json").write_text(
         json.dumps(
@@ -153,6 +163,63 @@ def test_shiori_distribution_not_installed_from_the_wheelhouse_fails(
     else:
         direct.write_text(origin, encoding="utf-8")
     assert _audit(environment).returncode != 0
+
+
+@pytest.mark.parametrize(
+    "stale",
+    [
+        # A cached older build of the same version replaced a module's content.
+        "shiori_sdk/testing/__init__.py",
+        # A cached older build still ships a module the wheelhouse wheel dropped.
+        "shiori_sdk/testing/removed.py",
+    ],
+    ids=["changed-content", "extra-file"],
+)
+def test_same_version_content_differing_from_the_wheelhouse_wheel_fails(
+    environment: Path, stale: str
+) -> None:
+    (environment / "site" / stale).write_text("OLD = True\n", encoding="utf-8")
+    record = environment / "site/shiori_sdk-3.0.0.dist-info/RECORD"
+    if stale.endswith("removed.py"):
+        with record.open("a", encoding="utf-8") as stream:
+            stream.write(f"{stale},,\n")
+    result = _audit(environment)
+    assert result.returncode != 0
+    assert "differs from wheelhouse wheel" in result.stderr
+
+
+def test_wheel_member_missing_from_the_installation_fails(environment: Path) -> None:
+    # The cached build predates a module that the wheelhouse wheel now ships.
+    wheel = environment / "wheels/shiori_sdk-3.0.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("shiori_sdk/added.py", "NEW = True\n")
+    result = _audit(environment)
+    assert result.returncode != 0
+    assert "shiori_sdk/added.py" in result.stderr
+
+
+def test_recorded_file_in_a_foreign_dist_info_is_not_exempt(
+    environment: Path,
+) -> None:
+    # Only the distribution's own dist-info holds installer-written files.
+    foreign = environment / "site/other-1.0.dist-info/METADATA"
+    foreign.parent.mkdir()
+    foreign.write_text("Name: other\nVersion: 1.0\n", encoding="utf-8")
+    record = environment / "site/shiori_sdk-3.0.0.dist-info/RECORD"
+    with record.open("a", encoding="utf-8") as stream:
+        stream.write("other-1.0.dist-info/METADATA,,\n")
+    result = _audit(environment)
+    assert result.returncode != 0
+    assert "other-1.0.dist-info/METADATA" in result.stderr
+
+
+def test_wheel_with_data_payload_fails(environment: Path) -> None:
+    wheel = environment / "wheels/shiori_sdk-3.0.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("shiori_sdk-3.0.0.data/scripts/tool", "#!python\n")
+    result = _audit(environment)
+    assert result.returncode != 0
+    assert "Unsupported .data payload" in result.stderr
 
 
 def test_execution_from_uninstalled_source_copy_is_rejected(environment: Path) -> None:

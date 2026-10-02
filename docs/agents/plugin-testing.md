@@ -32,9 +32,11 @@ uv run pytest plugins/example/tests
 
 ```sh
 uv venv .venv --python 3.12
-uv pip install --python .venv --find-links /absolute/path/to/wheelhouse ".[test]"
+uv pip install --python .venv --find-links /absolute/path/to/wheelhouse --refresh-package shiori-sdk ".[test]"
 uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 ```
+
+uv 会缓存 `--find-links` 中同名同版本的 wheel，重新构建后不加 `--refresh-package` 会装回缓存里的旧构建；wheelhouse 提供的兄弟插件 wheel（如 meme 依赖的 citation）也各加一个 `--refresh-package <分发名>`，各插件 `TESTING.md` 已列全。
 
 不要使用 editable 安装、设置指向原仓库的 `PYTHONPATH` 或复制宿主 conftest。私有 wheel 缺失时补齐产物，不改为从原仓库导入。
 
@@ -46,7 +48,7 @@ uv run python -m scripts.verify_plugin_tests --output /absolute/path/outside-rep
 
 输出必须是仓库外的新目录；省略时创建系统临时目录。`--plugins novelai story` 选择目标，省略时发现所有有 Python 测试的插件；`--jobs N` 控制并发，默认 CPU 数。不存在迁移豁免、白名单或宿主安装分支。基准 20 插件为 browser_use、citation、computer_use、context_pressure、default_memory、desktop_pet、feishu、meme、novelai、observe、plugin_undo、qq、qqbot、screen_perception、shell_restore、shell_safety、status_commands、story、telegram、tool_loop_guard；新增插件自动纳入发现。
 
-脚本在仓库外暂存插件并构建普通 wheel，每个目标使用独立 venv，只安装目标 `[test]`、SDK/testing 与显式依赖。所有 `shiori-*` 包（SDK、目标与兄弟插件）以 `--no-index --no-deps` 从本地 wheelhouse 的 wheel 文件安装，闭包中缺少本地 wheel 即失败，不会回退到公网同名包；其余第三方依赖单独从索引解析，最后以 `uv pip check` 校验整体依赖，来源探针还要求每个 `shiori-*` 分发记录的来源是 wheelhouse 内的 wheel 文件。`verify_sdk`、`verify_host_distribution` 使用同一安装方式。闭包合并运行时和目标 test extra，传递兄弟依赖只启用依赖边显式请求的 extra，marker 按执行解释器求值。不会默认加入 default_memory 或宿主；任何选中的宿主依赖直接失败。静态守护还检查所有未选中的 optional extra。
+脚本在仓库外暂存插件并构建普通 wheel，每个目标使用独立 venv，只安装目标 `[test]`、SDK/testing 与显式依赖。所有 `shiori-*` 包（SDK、目标与兄弟插件）以 `--no-index --no-deps` 从本地 wheelhouse 的 wheel 文件安装，闭包中缺少本地 wheel 即失败，不会回退到公网同名包；这一步同时加 `--no-cache --reinstall`，uv 缓存或环境中同名同版本的旧构建不能顶替刚构建的 wheel；其余第三方依赖单独从索引解析，最后以 `uv pip check` 校验整体依赖，来源探针还要求每个 `shiori-*` 分发记录的来源是 wheelhouse 内的 wheel 文件，且已安装文件与该 wheel 内容逐字节一致、不含 wheel 之外的包文件。`verify_sdk`、`verify_host_distribution` 使用同一安装方式。闭包合并运行时和目标 test extra，传递兄弟依赖只启用依赖边显式请求的 extra，marker 按执行解释器求值。不会默认加入 default_memory 或宿主；任何选中的宿主依赖直接失败。静态守护还检查所有未选中的 optional extra。
 
 每套 pytest 的开始与结束均审计实际宿主顶层包不可导入、已安装分发来自本环境、没有 editable 或仓库路径注入、插件闭包精确、目标代码与副本相同、SDK 版本与 Runtime API 一致。执行探针在初始 conftest 加载前启用，覆盖全部已暂存目标及兄弟依赖的 backend/testing，并拒绝执行仓库内 SDK/宿主源码；临时模块别名即使随后从 sys.modules 删除也不能绕过。已安装入口的来源与哈希覆盖当前目标声明的完整插件依赖闭包，测试本身仍从副本 tests 运行。独立 suite/probe basetemp 避免并行清理彼此证据。全部单测以 `-W error` 真实执行；另开解释器运行故意在 await 后失败的异步用例，要求退出码 1 和执行标记。
 

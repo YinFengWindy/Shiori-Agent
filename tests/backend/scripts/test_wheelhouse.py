@@ -52,7 +52,10 @@ def test_shiori_packages_install_offline_from_wheelhouse_files_only(
         log=tmp_path / "install.log",
     )
     local, remote, check = commands
-    assert {"--no-index", "--no-deps"} <= set(local)
+    # The cache may hold an older wheel of the same name and version; the
+    # local step must install the wheelhouse file itself, not a cached build.
+    assert {"--no-index", "--no-deps", "--no-cache", "--reinstall"} <= set(local)
+    assert "--no-cache" not in remote
     assert "--find-links" not in local
     assert set(local[-3:]) == {str(sdk), str(meme), str(citation)}
     assert remote[-2:] == ["httpx>=0.28", "pytest-asyncio>=1"]
