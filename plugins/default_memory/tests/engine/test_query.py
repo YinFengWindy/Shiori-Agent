@@ -16,7 +16,6 @@ from shiori_sdk.memory.engine import (
 )
 from shiori_sdk.models import ModelProvider as LLMProvider
 from shiori_sdk.testing.models import FakeModelResponse as LLMResponse
-from shiori_sdk.testing.memory import FakeMemoryStorage
 
 import plugins.default_memory.backend.semantic.retriever as retriever_module
 from plugins.default_memory.backend.engine.lifecycle import DefaultMemoryEngine
@@ -162,13 +161,11 @@ async def test_default_memory_engine_retrieve_falls_back_to_session_scope(make_e
 
 
 async def test_default_memory_engine_role_query_excludes_legacy_unscoped_memory(
-    tmp_path: Path, make_engine
+    tmp_path: Path, make_engine, make_store
 ):
     from plugins.default_memory.backend.semantic.retriever import Retriever
 
-    store = MemoryStore2(
-        tmp_path / "memory.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "memory.db")
     embedder = SimpleNamespace(embed=AsyncMock(return_value=[1.0, 0.0]))
     engine = make_engine(v2_store=store, retriever=Retriever(store, embedder))
 
@@ -202,13 +199,11 @@ async def test_default_memory_engine_role_query_excludes_legacy_unscoped_memory(
 
 
 async def test_default_memory_engine_isolates_relationship_memory_between_roles(
-    tmp_path: Path, make_engine
+    tmp_path: Path, make_engine, make_store
 ):
     from plugins.default_memory.backend.semantic.retriever import Retriever
 
-    store = MemoryStore2(
-        tmp_path / "memory.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "memory.db")
     embedder = SimpleNamespace(embed=AsyncMock(return_value=[1.0, 0.0]))
     engine = make_engine(v2_store=store, retriever=Retriever(store, embedder))
 
@@ -342,11 +337,9 @@ async def test_default_memory_engine_filters_unauthorized_shared_query(
 
 
 async def test_default_memory_engine_timeline_query_honors_role_scope_and_domain_filters(
-    tmp_path: Path, make_engine
+    tmp_path: Path, make_engine, make_store
 ):
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "memory2.db")
     engine = make_engine(retriever=cast(Any, SimpleNamespace()))
     engine._v2_store = store
     try:
@@ -417,11 +410,9 @@ async def test_default_memory_engine_timeline_query_honors_role_scope_and_domain
 
 
 async def test_default_memory_engine_timeline_query_rejects_unauthorized_shared_domain(
-    tmp_path: Path, make_engine
+    tmp_path: Path, make_engine, make_store
 ):
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "memory2.db")
     engine = make_engine(retriever=cast(Any, SimpleNamespace()))
     engine._workspace = tmp_path
     engine._v2_store = store
@@ -447,11 +438,9 @@ async def test_default_memory_engine_timeline_query_rejects_unauthorized_shared_
 
 
 async def test_default_memory_engine_timeline_query_requires_role_scope(
-    tmp_path: Path, make_engine
+    tmp_path: Path, make_engine, make_store
 ):
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "memory2.db")
     engine = make_engine(retriever=cast(Any, SimpleNamespace()))
     engine._v2_store = store
     try:

@@ -17,6 +17,7 @@ from core.memory.plugin import (
 from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
 from core.roles import RoleStore
+from shiori_sdk.memory.build import BuildResource
 
 from bootstrap.memory_capabilities import (
     HostMemoryRoles,
@@ -109,7 +110,7 @@ def build_memory_runtime(
     )
 
     # 插件登记的资源是唯一移交渠道；回滚由 MemoryBuildResources 在外层装配作用域登记。
-    resources = []
+    resources: list[BuildResource] = []
     if _memory_plugin_enabled(config):
         plugin_runtime = _build_memory_plugin_runtime(
             config=config,

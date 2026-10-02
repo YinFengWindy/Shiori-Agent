@@ -6,9 +6,6 @@ from typing import Any, TypeAlias, cast
 from zoneinfo import ZoneInfo
 
 import pytest
-from shiori_sdk.testing.memory import FakeMemoryStorage
-
-from plugins.default_memory.backend.semantic.store import MemoryStore2
 
 
 def _as_record_retrieval_baseline(value: object) -> dict[str, object]:
@@ -23,11 +20,9 @@ def _days_ago_retrieval_baseline(n: int) -> str:
     return (_now_retrieval_baseline() - timedelta(days=n)).isoformat()
 
 
-def test_baseline_cosine_ranking_basic(tmp_path):
+def test_baseline_cosine_ranking_basic(tmp_path, make_store):
     """[PASS] vector_search 按 cosine 相似度降序返回结果。"""
-    store = MemoryStore2(
-        tmp_path / "m.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "m.db")
 
     store.upsert_item("preference", "高相似条目 A", embedding=[1.0, 0.0, 0.0], extra={})
     store.upsert_item(
@@ -49,11 +44,9 @@ def test_baseline_cosine_ranking_basic(tmp_path):
     assert score0 >= score1 >= score2
 
 
-def test_baseline_superseded_excluded_from_retrieval(tmp_path):
+def test_baseline_superseded_excluded_from_retrieval(tmp_path, make_store):
     """[PASS] superseded 条目不出现在检索结果中（include_superseded=False）。"""
-    store = MemoryStore2(
-        tmp_path / "m.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "m.db")
 
     store.upsert_item("procedure", "旧规则（已退休）", embedding=[1.0, 0.0], extra={})
     old_id = store.list_by_type("procedure")[0]["id"]
@@ -68,11 +61,9 @@ def test_baseline_superseded_excluded_from_retrieval(tmp_path):
     assert "新规则（active）" in summaries
 
 
-def test_baseline_score_threshold_filters_low_matches(tmp_path):
+def test_baseline_score_threshold_filters_low_matches(tmp_path, make_store):
     """[PASS] score_threshold 过滤低相似度条目。"""
-    store = MemoryStore2(
-        tmp_path / "m.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "m.db")
 
     # 条目 A：与查询高度相似
     store.upsert_item("preference", "相关条目", embedding=[1.0, 0.0, 0.0], extra={})
@@ -90,11 +81,9 @@ def test_baseline_score_threshold_filters_low_matches(tmp_path):
     assert "不相关条目" not in summaries
 
 
-def test_baseline_top_k_limits_result_count(tmp_path):
+def test_baseline_top_k_limits_result_count(tmp_path, make_store):
     """[PASS] top_k 限制返回数量。"""
-    store = MemoryStore2(
-        tmp_path / "m.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "m.db")
 
     for i in range(10):
         store.upsert_item(
@@ -105,11 +94,9 @@ def test_baseline_top_k_limits_result_count(tmp_path):
     assert len(results) == 3
 
 
-def test_baseline_type_filter_works(tmp_path):
+def test_baseline_type_filter_works(tmp_path, make_store):
     """[PASS] memory_types 过滤只返回指定类型。"""
-    store = MemoryStore2(
-        tmp_path / "m.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "m.db")
 
     store.upsert_item("procedure", "procedure 条目", embedding=[1.0, 0.0], extra={})
     store.upsert_item("preference", "preference 条目", embedding=[0.99, 0.01], extra={})
@@ -125,7 +112,7 @@ def test_baseline_type_filter_works(tmp_path):
     assert len(results) == 1
 
 
-def test_boundary_high_reinforcement_not_boosted(tmp_path):
+def test_boundary_high_reinforcement_not_boosted(tmp_path, make_store):
     """[BOUNDARY] 高 reinforcement 条目不会因频繁访问而排名靠前。
 
     场景：
@@ -144,9 +131,7 @@ def test_boundary_high_reinforcement_not_boosted(tmp_path):
       → A(0.884) > B(0.803)，A 应排前。
       断言应改为 assert results[0]["summary"] == "条目 A（常用且新鲜）"
     """
-    store = MemoryStore2(
-        tmp_path / "m.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "m.db")
 
     # 条目 A：与查询相似度 0.90，reinforcement=10，1天前更新
     store.upsert_item(
@@ -206,7 +191,7 @@ def test_boundary_high_reinforcement_not_boosted(tmp_path):
     assert results[1]["summary"] == "条目 A（常用且新鲜）"
 
 
-def test_boundary_recent_update_not_boosted(tmp_path):
+def test_boundary_recent_update_not_boosted(tmp_path, make_store):
     """[BOUNDARY] 最近被更新（验证）的条目不因 recency 而排名靠前。
 
     场景：
@@ -222,9 +207,7 @@ def test_boundary_recent_update_not_boosted(tmp_path):
       final_B = 0.82*0.92 + 0.18*0.031 ≈ 0.754 + 0.006 = 0.760
       → A 排前，断言应改为 results[0]['summary'] == '条目 A（近期使用）'
     """
-    store = MemoryStore2(
-        tmp_path / "m.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "m.db")
 
     # 条目 A：semantic≈0.88，reinforcement=3，2天前
     store.upsert_item(
@@ -269,13 +252,11 @@ def test_boundary_recent_update_not_boosted(tmp_path):
     )
 
 
-def test_boundary_score_does_not_include_hotness_fields(tmp_path):
+def test_boundary_score_does_not_include_hotness_fields(tmp_path, make_store):
     """[OPTIMIZED] vector_search 现在始终返回 _score_debug 字段，
     包含 semantic/hotness/final 三个拆分分数，便于观测和调试。
     """
-    store = MemoryStore2(
-        tmp_path / "m.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "m.db")
     store.upsert_item("event", "测试条目", embedding=[1.0, 0.0], extra={})
 
     results = store.vector_search(query_vec=[1.0, 0.0], top_k=1, score_threshold=0.0)
@@ -295,10 +276,8 @@ def test_boundary_score_does_not_include_hotness_fields(tmp_path):
     assert abs(score_debug["final"] - score_debug["semantic"]) < 1e-6
 
 
-def test_emotional_weight_extends_hotness_half_life_in_ranking(tmp_path):
-    store = MemoryStore2(
-        tmp_path / "m.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_emotional_weight_extends_hotness_half_life_in_ranking(tmp_path, make_store):
+    store = make_store(tmp_path / "m.db")
     age = _days_ago_retrieval_baseline(20)
 
     low = store.upsert_item(
@@ -343,10 +322,8 @@ def test_emotional_weight_extends_hotness_half_life_in_ranking(tmp_path):
     )
 
 
-def test_vector_search_filters_memory_type(tmp_path: Path):
-    store = MemoryStore2(
-        tmp_path / "mem.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_vector_search_filters_memory_type(tmp_path: Path, make_store):
+    store = make_store(tmp_path / "mem.db")
     try:
         store.upsert_consolidation_event(
             source_ref="r1", summary="Event A", embedding=[0.0, 1.0]
@@ -384,10 +361,8 @@ _EmbeddingRow_temporal_retrieval: TypeAlias = tuple[
 ]
 
 
-def test_store_vector_search_respects_time_range(tmp_path: Path) -> None:
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_store_vector_search_respects_time_range(tmp_path: Path, make_store) -> None:
+    store = make_store(tmp_path / "memory2.db")
     tz = ZoneInfo("Asia/Shanghai")
     store.upsert_item(
         "event",
@@ -420,10 +395,9 @@ def test_store_vector_search_respects_time_range(tmp_path: Path) -> None:
 def test_store_vector_batch_reuses_time_filtered_embedding_rows(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    make_store,
 ) -> None:
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "memory2.db")
     tz = ZoneInfo("Asia/Shanghai")
     store.upsert_item(
         "event",

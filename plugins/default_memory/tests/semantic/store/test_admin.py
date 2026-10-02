@@ -1,16 +1,14 @@
 from datetime import datetime, timedelta
 
 import pytest
-from shiori_sdk.testing.memory import FakeMemoryStorage
 
-from plugins.default_memory.backend.semantic.store import MemoryStore2
 from plugins.default_memory.backend.semantic.store.common import _local_naive_iso
 
 
-def test_invalidate_role_memories_only_supersedes_target_role(tmp_path) -> None:
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_invalidate_role_memories_only_supersedes_target_role(
+    tmp_path, make_store
+) -> None:
+    store = make_store(tmp_path / "memory2.db")
     try:
         mira_id = store.upsert_item(
             "preference",
@@ -33,10 +31,8 @@ def test_invalidate_role_memories_only_supersedes_target_role(tmp_path) -> None:
         store.close()
 
 
-def test_invalidate_role_memories_requires_role_id(tmp_path) -> None:
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_invalidate_role_memories_requires_role_id(tmp_path, make_store) -> None:
+    store = make_store(tmp_path / "memory2.db")
     try:
         try:
             store.invalidate_role_memories("  ")
@@ -50,10 +46,9 @@ def test_invalidate_role_memories_requires_role_id(tmp_path) -> None:
 
 def test_list_role_filter_values_counts_only_the_role_and_skips_blank_domains(
     tmp_path,
+    make_store,
 ) -> None:
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "memory2.db")
     try:
         store.upsert_item(
             "preference",
@@ -83,10 +78,10 @@ def test_list_role_filter_values_counts_only_the_role_and_skips_blank_domains(
         store.close()
 
 
-def test_list_items_for_admin_matches_like_wildcards_literally(tmp_path) -> None:
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_list_items_for_admin_matches_like_wildcards_literally(
+    tmp_path, make_store
+) -> None:
+    store = make_store(tmp_path / "memory2.db")
     try:
         store.upsert_item("preference", "plain tea", embedding=None, source_ref="ref")
         store.upsert_item(
@@ -105,10 +100,9 @@ def test_list_items_for_admin_matches_like_wildcards_literally(tmp_path) -> None
 
 def test_list_items_for_admin_sorts_occurred_at_with_record_time_fallback(
     tmp_path,
+    make_store,
 ) -> None:
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "memory2.db")
     try:
         later = store.upsert_item(
             "event",
@@ -135,10 +129,9 @@ def test_list_items_for_admin_sorts_occurred_at_with_record_time_fallback(
 
 def test_list_items_for_admin_sorts_local_happened_at_and_utc_created_at_as_instants(
     tmp_path,
+    make_store,
 ) -> None:
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "memory2.db")
     try:
         recorded = store.upsert_item("event", "只有记录时间", embedding=None).split(
             ":", 1
@@ -171,10 +164,8 @@ def test_list_items_for_admin_sorts_local_happened_at_and_utc_created_at_as_inst
         store.close()
 
 
-def test_list_items_for_admin_rejects_unknown_sort(tmp_path) -> None:
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_list_items_for_admin_rejects_unknown_sort(tmp_path, make_store) -> None:
+    store = make_store(tmp_path / "memory2.db")
     try:
         with pytest.raises(ValueError, match="unsupported memory sort: summary"):
             store.list_items_for_admin(sort_by="summary")
@@ -182,10 +173,10 @@ def test_list_items_for_admin_rejects_unknown_sort(tmp_path) -> None:
         store.close()
 
 
-def test_get_item_for_admin_normalizes_role_id_like_role_filter(tmp_path) -> None:
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_get_item_for_admin_normalizes_role_id_like_role_filter(
+    tmp_path, make_store
+) -> None:
+    store = make_store(tmp_path / "memory2.db")
     try:
         item_id = store.upsert_item(
             "preference", "你喜欢拿铁", embedding=None, extra={"role_id": "  mira "}

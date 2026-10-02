@@ -124,7 +124,4 @@ async def create_runtime(config_path: Path, workspace: Path) -> BenchmarkRuntime
 
 
 async def close_runtime(rt: BenchmarkRuntime) -> None:
-    try:
-        await rt.core.memory_runtime.aclose()
-    except Exception as e:
-        logger.warning("close failed: %s", e)
+    await rt.core.memory_runtime.aclose()

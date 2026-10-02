@@ -5,17 +5,17 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 import pytest
-from shiori_sdk.testing.memory import FakeMemoryStorage
 
 from plugins.default_memory.backend.semantic.memorizer import (
     Memorizer,
     _parse_history_entry_happened_at,
 )
-from plugins.default_memory.backend.semantic.store import MemoryStore2
 
 
 @pytest.mark.asyncio
-async def test_memorizer_profile_supersede_keeps_high_emotional_weight_item_under_092():
+async def test_memorizer_profile_supersede_keeps_high_emotional_weight_item_under_092(
+    make_store,
+):
     class _Embedder:
         async def embed(self, text: str) -> list[float]:
             mapping = {
@@ -24,7 +24,7 @@ async def test_memorizer_profile_supersede_keeps_high_emotional_weight_item_unde
             }
             return mapping[text]
 
-    store = MemoryStore2(":memory:", open_database=FakeMemoryStorage().open_database)
+    store = make_store(":memory:")
     memorizer = Memorizer(store, cast(Any, _Embedder()))
 
     await memorizer.save_item(
@@ -48,7 +48,9 @@ async def test_memorizer_profile_supersede_keeps_high_emotional_weight_item_unde
 
 
 @pytest.mark.asyncio
-async def test_memorizer_profile_supersede_retires_low_emotional_weight_item_at_091():
+async def test_memorizer_profile_supersede_retires_low_emotional_weight_item_at_091(
+    make_store,
+):
     class _Embedder:
         async def embed(self, text: str) -> list[float]:
             mapping = {
@@ -57,7 +59,7 @@ async def test_memorizer_profile_supersede_retires_low_emotional_weight_item_at_
             }
             return mapping[text]
 
-    store = MemoryStore2(":memory:", open_database=FakeMemoryStorage().open_database)
+    store = make_store(":memory:")
     memorizer = Memorizer(store, cast(Any, _Embedder()))
 
     await memorizer.save_item(
@@ -101,10 +103,8 @@ def test_parse_history_entry_happened_at_from_prefix():
     assert _parse_history_entry_happened_at("用户确认信息") is None
 
 
-def test_save_from_consolidation_writes_happened_at(tmp_path):
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_save_from_consolidation_writes_happened_at(tmp_path, make_store):
+    store = make_store(tmp_path / "memory2.db")
     memorizer = Memorizer(store, cast(Any, _FakeEmbedder_consolidation_idempotency()))
 
     async def _run() -> None:
@@ -123,10 +123,8 @@ def test_save_from_consolidation_writes_happened_at(tmp_path):
     assert items[0]["happened_at"] == "2026-03-08T12:00:00"
 
 
-def test_save_from_consolidation_skips_duplicate_source_ref(tmp_path):
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_save_from_consolidation_skips_duplicate_source_ref(tmp_path, make_store):
+    store = make_store(tmp_path / "memory2.db")
     memorizer = Memorizer(store, cast(Any, _FakeEmbedder_consolidation_idempotency()))
 
     async def _run() -> None:
@@ -160,10 +158,8 @@ class _FakeEmbedder_event_semantic_dedup:
         return list(self._mapping[text])
 
 
-def test_near_duplicate_event_not_saved_again(tmp_path):
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_near_duplicate_event_not_saved_again(tmp_path, make_store):
+    store = make_store(tmp_path / "memory2.db")
     embedder = _FakeEmbedder_event_semantic_dedup(
         {
             "用户把仓库脱敏后公开发布": [1.0, 0.0],
@@ -194,10 +190,8 @@ def test_near_duplicate_event_not_saved_again(tmp_path):
     assert len(items) == 1
 
 
-def test_distinct_event_saves_normally(tmp_path):
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_distinct_event_saves_normally(tmp_path, make_store):
+    store = make_store(tmp_path / "memory2.db")
     embedder = _FakeEmbedder_event_semantic_dedup(
         {
             "用户把仓库脱敏后公开发布": [1.0, 0.0],
@@ -228,10 +222,8 @@ def test_distinct_event_saves_normally(tmp_path):
     assert len(items) == 2
 
 
-def test_reinforcement_incremented_on_dedup(tmp_path):
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_reinforcement_incremented_on_dedup(tmp_path, make_store):
+    store = make_store(tmp_path / "memory2.db")
     embedder = _FakeEmbedder_event_semantic_dedup(
         {
             "用户把仓库脱敏后公开发布": [1.0, 0.0],
@@ -262,10 +254,8 @@ def test_reinforcement_incremented_on_dedup(tmp_path):
     assert items[0]["reinforcement"] == 2
 
 
-def test_emotional_weight_merged_on_event_dedup(tmp_path):
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_emotional_weight_merged_on_event_dedup(tmp_path, make_store):
+    store = make_store(tmp_path / "memory2.db")
     embedder = _FakeEmbedder_event_semantic_dedup(
         {
             "用户把仓库脱敏后公开发布": [1.0, 0.0],
@@ -298,10 +288,8 @@ def test_emotional_weight_merged_on_event_dedup(tmp_path):
     assert items[0]["emotional_weight"] == 8
 
 
-def test_dedup_window_is_7_days(tmp_path):
-    store = MemoryStore2(
-        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
-    )
+def test_dedup_window_is_7_days(tmp_path, make_store):
+    store = make_store(tmp_path / "memory2.db")
     embedder = _FakeEmbedder_event_semantic_dedup(
         {
             "用户把仓库脱敏后公开发布": [1.0, 0.0],
@@ -351,11 +339,9 @@ class _FakeEmbedder_dedup_baseline:
         return list(self._mapping.get(text, [0.0, 0.0, 0.0]))
 
 
-def test_baseline_exact_hash_prevents_double_write(tmp_path):
+def test_baseline_exact_hash_prevents_double_write(tmp_path, make_store):
     """[PASS] content_hash 去重：完全相同的 summary 写两次，DB 只有一条，reinforcement=2。"""
-    store = MemoryStore2(
-        tmp_path / "m.db", open_database=FakeMemoryStorage().open_database
-    )
+    store = make_store(tmp_path / "m.db")
     embedder = _FakeEmbedder_dedup_baseline({"查 Steam 必须用 steam MCP": [1.0, 0.0]})
     memorizer = Memorizer(store, cast(Any, embedder))
 
@@ -388,14 +374,14 @@ class _StaticEmbedder_post_response_worker:
         return list(self._mapping.get(text, [0.0, 0.0]))
 
 
-def test_merge_item_should_keep_procedure_metadata_consistent():
+def test_merge_item_should_keep_procedure_metadata_consistent(make_store):
     embedder = _StaticEmbedder_post_response_worker(
         {
             "查 Steam 必须先用 steam_mcp，不能直接使用 web_search": [1.0, 0.0],
             "合并后的 Steam 查询规则：先用 steam_mcp，再补充区服确认": [0.9, 0.1],
         }
     )
-    store = MemoryStore2(":memory:", open_database=FakeMemoryStorage().open_database)
+    store = make_store(":memory:")
     memorizer = Memorizer(store, cast(Any, embedder))
 
     row_ref = store.upsert_item(
@@ -437,14 +423,14 @@ def test_merge_item_should_keep_procedure_metadata_consistent():
     assert "区服确认" in str(extra), "merge 后的 extra_json 应与新摘要保持一致"
 
 
-def test_merge_item_should_refresh_trigger_tags_for_procedure():
+def test_merge_item_should_refresh_trigger_tags_for_procedure(make_store):
     embedder = _StaticEmbedder_post_response_worker(
         {
             "查 Steam 必须直接使用 web_search": [1.0, 0.0],
             "查 Steam 必须先使用 steam_mcp": [0.9, 0.1],
         }
     )
-    store = MemoryStore2(":memory:", open_database=FakeMemoryStorage().open_database)
+    store = make_store(":memory:")
     memorizer = Memorizer(store, cast(Any, embedder))
 
     row_ref = store.upsert_item(
@@ -489,7 +475,7 @@ def test_merge_item_should_refresh_trigger_tags_for_procedure():
     assert "web_search" not in (tags.get("keywords") or []), "merge 后不应保留旧关键词"
 
 
-def test_save_item_with_supersede_does_not_cross_role_scope():
+def test_save_item_with_supersede_does_not_cross_role_scope(make_store):
     embedder = _StaticEmbedder_post_response_worker(
         {
             "Mira 视角：用户偏好中文回复": [1.0, 0.0],
@@ -497,7 +483,7 @@ def test_save_item_with_supersede_does_not_cross_role_scope():
             "Mira 视角：用户更偏好简洁中文回复": [1.0, 0.0],
         }
     )
-    store = MemoryStore2(":memory:", open_database=FakeMemoryStorage().open_database)
+    store = make_store(":memory:")
     memorizer = Memorizer(store, cast(Any, embedder))
 
     asyncio.run(
