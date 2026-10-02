@@ -223,7 +223,7 @@ async def _over_trigger_scope(h, key, generate):
         {"role": "user", "content": "current"},
     ]
     probe = LLMProvider(
-        api_key="test", context_window_tokens=100000, max_output_tokens=100
+        api_key="test", model_context_window=100000, default_max_tokens=100
     )
     initial = probe.input_budget(
         messages=messages, tools=[_TOOL], model="m", max_tokens=100
@@ -232,8 +232,8 @@ async def _over_trigger_scope(h, key, generate):
     await probe.aclose()
     provider = LLMProvider(
         api_key="test",
-        context_window_tokens=int(initial.estimate.tokens / 0.8),
-        max_output_tokens=100,
+        model_context_window=int(initial.estimate.tokens / 0.8),
+        default_max_tokens=100,
         budget_policy=BudgetPolicy(safety_margin_tokens=100),
     )
     controller = CompactionController(
