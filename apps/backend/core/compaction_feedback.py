@@ -27,7 +27,7 @@ def compaction_feedback(
     payload = result.dump()
     # The single wording for a budget-driven reduction, shown by every surface.
     payload["reduction"] = (
-        f"保留 {result.configured_retained_turns} 个轮次会超出模型输入上限，"
+        f"保留 {result.configured_retained_turns} 个轮次会超出预算，"
         f"本次保留 {result.retained_turns} 个"
         if result.committed
         and result.retained_reduction_reason == "budget"

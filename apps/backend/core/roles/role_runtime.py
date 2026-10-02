@@ -361,16 +361,6 @@ class RoleRuntimeRegistry:
             delivery_key=delivery_key,
         )
 
-    async def dispatch_thread(
-        self,
-        context: RoleExecutionContext,
-        operation: Callable[[], Awaitable[T]],
-    ) -> T:
-        """Runs a thread turn through the runtime selected by its explicit context."""
-
-        runtime = await self.get(context.role_id)
-        return await runtime.execute_thread(context, operation)
-
     async def dispatch_passive_turn(
         self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]
     ) -> T:

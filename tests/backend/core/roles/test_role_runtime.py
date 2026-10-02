@@ -47,6 +47,30 @@ async def test_context_refresh_is_published_after_role_gate_release(tmp_path, fa
     assert observed == [("role:mira", False)]
 
 
+@pytest.mark.parametrize("rejection", ["closing", "busy"])
+async def test_rejected_role_work_still_publishes_one_context_refresh(
+    tmp_path, rejection
+):
+    store = RoleStore(tmp_path)
+    role = store.create_role(role_id="mira", name="Mira", system_prompt="test")
+    bus = EventBus()
+    registry = RoleRuntimeRegistry(RoleRepository(store), event_bus=bus)
+    runtime = await registry.get(role.id)
+    observed = []
+    bus.on(ContextWindowChanged, observed.append)
+    if rejection == "closing":
+        runtime.begin_closing()
+        with pytest.raises(RuntimeError, match="已停止"):
+            await runtime.run_passive_turn(_context(role), AsyncMock())
+    else:
+        async with runtime._execution.turn_lock:
+            with pytest.raises(RuntimeError, match="正在回复"):
+                await runtime.execute_thread(
+                    _context(role), AsyncMock(), reject_busy=True
+                )
+    assert [event.session_key for event in observed] == ["role:mira"]
+
+
 def _context(role, *, thread_id: str = "thread:mira:desktop"):
     return RoleExecutionContext.create(
         role=role,
@@ -344,9 +368,13 @@ async def test_generations_share_role_execution_gate(tmp_path):
     async def second():
         events.append("new")
 
-    old_task = asyncio.create_task(original.dispatch_thread(_context(role), first))
+    old_task = asyncio.create_task(
+        original.dispatch_passive_turn(_context(role), first)
+    )
     await entered.wait()
-    new_task = asyncio.create_task(updated.dispatch_thread(_context(role), second))
+    new_task = asyncio.create_task(
+        updated.dispatch_passive_turn(_context(role), second)
+    )
     await asyncio.sleep(0)
     assert events == []
     assert (await updated.get(role.id)).active_work == 1
@@ -380,9 +408,9 @@ async def test_registry_serializes_work_in_the_same_thread(tmp_path):
         events.append("second")
         return "second"
 
-    first_task = asyncio.create_task(registry.dispatch_thread(context, first))
+    first_task = asyncio.create_task(registry.dispatch_passive_turn(context, first))
     await first_started.wait()
-    second_task = asyncio.create_task(registry.dispatch_thread(context, second))
+    second_task = asyncio.create_task(registry.dispatch_passive_turn(context, second))
     await asyncio.sleep(0)
     assert events == ["first:start"]
 
@@ -413,14 +441,14 @@ async def test_registry_serializes_different_transport_threads_for_one_role(tmp_
         return "second"
 
     first_task = asyncio.create_task(
-        registry.dispatch_thread(
+        registry.dispatch_passive_turn(
             _context(role, thread_id="thread:mira:telegram:1"),
             first,
         )
     )
     await first_started.wait()
     second_task = asyncio.create_task(
-        registry.dispatch_thread(
+        registry.dispatch_passive_turn(
             _context(role, thread_id="thread:mira:qq:2"),
             second,
         )
@@ -452,10 +480,12 @@ async def test_registry_allows_different_roles_to_execute_independently(tmp_path
         await release.wait()
 
     mira_task = asyncio.create_task(
-        registry.dispatch_thread(_context(mira), lambda: wait_for(mira_started))
+        registry.dispatch_passive_turn(_context(mira), lambda: wait_for(mira_started))
     )
     shiori_task = asyncio.create_task(
-        registry.dispatch_thread(_context(shiori), lambda: wait_for(shiori_started))
+        registry.dispatch_passive_turn(
+            _context(shiori), lambda: wait_for(shiori_started)
+        )
     )
     await asyncio.wait_for(
         asyncio.gather(mira_started.wait(), shiori_started.wait()), 0.2
@@ -524,7 +554,7 @@ async def test_registry_refreshes_configuration_without_replacing_the_runtime(tm
 
     assert refreshed_runtime is first_runtime
     assert refreshed_runtime.config_version != context.role_config_version
-    await registry.dispatch_thread(context, lambda: _return_none())
+    await registry.dispatch_passive_turn(context, lambda: _return_none())
     assert (
         refreshed_runtime.config_version
         == RoleExecutionContext.create(
