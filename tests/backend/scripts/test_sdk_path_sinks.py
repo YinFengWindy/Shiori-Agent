@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.sdk_path_sinks import host_layout, sink_paths
+from scripts.sdk_path_sinks import sink_paths
 from scripts.sdk_path_values import PathValues
 
 
@@ -50,23 +50,3 @@ def test_file_system_operations_are_sinks(module: str, expected: list[str]) -> N
 )
 def test_ordinary_calls_are_not_sinks(module: str) -> None:
     assert _sinks(module) == []
-
-
-@pytest.mark.parametrize(
-    "relative,expected",
-    [
-        ("apps/desktop/main.ts", True),
-        ("tests/backend/conftest.py", True),
-        ("bootstrap", True),
-        ("bootstrap/missing.yaml", True),
-        ("core/enabled", False),
-        ("tests/fixtures/x.json", False),
-        ("x.yaml", False),
-    ],
-)
-def test_host_layout_matches_the_actual_backend_tree(
-    tmp_path: Path, relative: str, expected: bool
-) -> None:
-    (tmp_path / "bootstrap").mkdir()
-    (tmp_path / "core").mkdir()
-    assert host_layout(relative, tmp_path) is expected

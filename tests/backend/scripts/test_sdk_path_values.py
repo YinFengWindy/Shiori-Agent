@@ -59,3 +59,15 @@ def test_relative_escapes_keep_their_anchor_and_augmented_assignment_applies_onc
     assert _values("root = Path(__file__).parent\nroot /= 'data'\nroot") == {
         SOURCE.parent / "data"
     }
+
+
+def test_a_violation_is_traced_to_the_first_violating_value() -> None:
+    module = "R = Path(__file__).parents[3]\na = R / 'a'\nb = a / 'b.toml'\nb"
+    tree = ast.parse(module)
+    values = PathValues(tree, SOURCE)
+    last = tree.body[-1]
+    assert isinstance(last, ast.Expr)
+    (value,) = values.evaluate(last.value)
+    inside = SOURCE.parents[2]
+    origin = values.origin(value, lambda path: not path.is_relative_to(inside))
+    assert origin == SOURCE.parents[3]

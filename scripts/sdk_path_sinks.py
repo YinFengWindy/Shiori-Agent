@@ -1,17 +1,14 @@
-"""File-system access points and the host layout a relative path must not name.
+"""File-system access points: where a relative path is resolved against the cwd.
 
 A relative path is only cwd-rooted when it reaches an operation that touches
 the file system; ordinary calls (``asset_path(...)``, ``ctx.resolve(...)``,
 ``storage.write(...)``) receive keys or plugin-relative names. Every sink is
-listed here.
+listed here; the layout they must not name is ``scripts.sdk_repository_layout``.
 """
 
 import ast
-from pathlib import Path
 
 from scripts.sdk_path_values import PathValues, expand_arguments
-
-HOST_BACKEND = Path(__file__).resolve().parents[1] / "apps/backend"
 
 # Qualified function -> positional arguments that are file-system paths.
 FUNCTION_SINKS: dict[str, tuple[int, ...]] = {
@@ -88,27 +85,3 @@ def sink_paths(call: ast.Call, values: PathValues) -> list[ast.expr]:
     ):
         return [call.func.value]
     return []
-
-
-def repository_prefix(relative: str) -> bool:
-    """``apps/`` and ``tests/backend/`` belong to this checkout in any context."""
-    parts = Path(relative).parts
-    return bool(parts) and (parts[0] == "apps" or parts[:2] == ("tests", "backend"))
-
-
-def host_layout(relative: str, backend: Path = HOST_BACKEND) -> bool:
-    """Whether a checkout-relative path names the actual host layout.
-
-    Besides the repository prefixes, the path must exist below the host backend
-    or name a file (it has a suffix) inside an existing host package directory:
-    ``bootstrap/x.yaml`` matches while ``core/enabled`` does not.
-    """
-    if repository_prefix(relative):
-        return True
-    parts = Path(relative).parts
-    if not parts or parts[0] in {".", ".."}:
-        return False
-    target = backend.joinpath(*parts)
-    return target.exists() or (
-        target.parent != backend and target.parent.is_dir() and bool(target.suffix)
-    )

@@ -107,6 +107,9 @@ def test_plugin_owned_paths_in_attribute_os_path_and_cwd_forms_are_allowed(
         "bundled = Path(__file__).parent / ('bootstrap' + '.yaml')\n"
         "fixture = Path('fixtures') / 'reply.json'\n"
         "label = ', '.join(['apps', 'backend'])\n"
+        "url = 'https://github.com/YinFengWindy/Shiori-Agent/tree/main/apps/backend/'\n"
+        "note = 'Moved from apps/backend/ to the SDK.'\n"
+        "data = 'plugins/x/tests/backend/data.json'\n"
     )
     assert not resource_edges(ast.parse(source), owner / "backend/plugin.py", owner)
 
@@ -120,6 +123,11 @@ def test_plugin_owned_paths_in_attribute_os_path_and_cwd_forms_are_allowed(
         "source = open('bootstrap/app.py').read()",
         "source = open('apps/backend/main.py').read()",
         "import os\nbackend = os.getcwd() + '/apps/backend'",
+        # Expression and sink rules see the same value.
+        "text = Path('apps/backend/x.py').read_text()",
+        # Paths derived from a violating path are that same violation.
+        "p = Path.cwd()\np /= 'core'\np /= 'config.py'",
+        "R = Path(__file__).parents[3]\na = R / 'a'\nb = a / 'b.toml'",
     ],
 )
 def test_each_violation_is_counted_once(tmp_path: Path, source: str) -> None:

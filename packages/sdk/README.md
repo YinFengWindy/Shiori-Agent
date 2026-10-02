@@ -119,11 +119,14 @@ concatenation) or explicitly rooted at the working directory (`Path.cwd()`,
 layout. A relative path counts as cwd-rooted only when it reaches a file-system sink
 listed in `scripts/sdk_path_sinks.py` (`open`, `io.open`, `os.listdir`/`chdir`/...,
 `glob`, `shutil.*`, `sys.path.insert`/`append`, file-system methods of concrete
-pathlib paths). Host layout means `apps/` or `tests/backend/` (rejected anywhere), an
+pathlib paths). Host layout (one definition in `scripts/sdk_repository_layout.py`) means a path or
+literal starting with `apps/backend`, `apps/desktop` or `tests/backend` (rejected
+anywhere; URLs, prose and plugin-internal `.../tests/backend/...` are not), an
 existing entry below `apps/backend/`, or a file inside an existing host package
 directory. Ordinary call arguments, `PurePath` values, `str()` and `posixpath.join`
 are not file-system paths; `os.path` functions are recognized through imports only.
-Each violation counts once. Path values are followed through names bound in the
+Each violation counts once, at the value where it first appears; paths derived
+from it are the same violation. Path values are followed through names bound in the
 same module only; paths passed through attributes, containers, call results or loops
 (for example `self.root.parents[3]`, `parents[-1]`, `__spec__.origin`,
 `sys.path[0]`, repeated `parent` in a loop) are left to external execution.

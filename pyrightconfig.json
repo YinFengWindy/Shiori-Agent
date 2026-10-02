@@ -32,6 +32,8 @@
     "scripts/sdk_path_values.py",
     "scripts/sdk_path_sinks.py",
     "scripts/sdk_layout_literals.py",
+    "scripts/sdk_repository_layout.py",
+    "scripts/sdk_module_names.py",
     "scripts/commands.py",
     "scripts/wheelhouse.py",
     "scripts/isolation_probe.py",

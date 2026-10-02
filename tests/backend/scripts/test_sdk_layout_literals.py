@@ -20,6 +20,14 @@ def test_repository_directories_in_literals_are_reported() -> None:
     }
 
 
+def test_urls_prose_and_plugin_internal_paths_are_not_repository_paths() -> None:
+    assert not _literals(
+        "url = 'https://github.com/YinFengWindy/Shiori-Agent/tree/main/apps/backend/'\n"
+        "note = 'Moved from apps/backend/ to the SDK.'\n"
+        "data = 'plugins/x/tests/backend/data.json'\n"
+    )
+
+
 def test_docs_runtime_inputs_and_already_judged_literals_are_skipped() -> None:
     assert not _literals(
         "'apps/backend/ is the host'\nfile = tmp_path / 'apps/backend/x'"

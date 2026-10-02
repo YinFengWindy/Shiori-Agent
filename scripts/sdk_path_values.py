@@ -9,10 +9,11 @@ not modelled; external execution against installed wheels covers those.
 
 import ast
 import os
-from collections.abc import Iterator
+from collections.abc import Callable
 from itertools import product
 from pathlib import Path
 
+from scripts.sdk_module_names import ModuleNames, assignments
 from scripts.sdk_strings import literal_strings
 
 # Lexical stand-ins for the unknown working directory and for paths relative to
@@ -25,19 +26,6 @@ RELATIVE = _ROOT.joinpath("relative", *["_"] * _DEPTH)
 # Only concrete pathlib classes denote file-system paths; PurePath and friends
 # are commonly used for archive members, URLs and keys.
 CONCRETE_PATHS = frozenset({"pathlib.Path", "pathlib.PosixPath", "pathlib.WindowsPath"})
-_PATHLIB_NAMES = frozenset(
-    {
-        "Path",
-        "PosixPath",
-        "WindowsPath",
-        "PurePath",
-        "PurePosixPath",
-        "PureWindowsPath",
-    }
-)
-# Unimported names resolved by convention: standard modules and builtins.
-_MODULES = frozenset({"os", "ntpath", "pathlib", "glob", "shutil", "sys", "io"})
-_BUILTINS = frozenset({"open", "str"})
 _OS_PATH_MODULES = ("os.path", "ntpath")
 _PATH_CONSTANTS = {"os.pardir": "..", "os.curdir": "."}
 
@@ -72,59 +60,21 @@ def expand_arguments(args: list[ast.expr]) -> list[ast.expr] | None:
     return expanded
 
 
-def _assignments(nodes: list[ast.AST]) -> Iterator[tuple[str, ast.expr]]:
-    """Name assignments in source order; ``p /= x`` is ``p = p / x``."""
-    ordered = sorted(
-        (node for node in nodes if isinstance(node, ast.stmt)),
-        key=lambda node: (node.lineno, node.col_offset),
-    )
-    for node in ordered:
-        if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value:
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            for target in targets:
-                if isinstance(target, ast.Name):
-                    yield target.id, node.value
-        elif (
-            isinstance(node, ast.AugAssign)
-            and isinstance(node.op, ast.Div)
-            and isinstance(node.target, ast.Name)
-        ):
-            name = ast.Name(id=node.target.id, ctx=ast.Load())
-            yield node.target.id, ast.BinOp(left=name, op=ast.Div(), right=node.value)
-
-
-def _imports(nodes: list[ast.AST]) -> dict[str, str]:
-    bound: dict[str, str] = {}
-    for node in nodes:
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.asname:
-                    bound[alias.asname] = alias.name
-                else:
-                    root = alias.name.split(".")[0]
-                    bound[root] = root
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            for alias in node.names:
-                bound[alias.asname or alias.name] = f"{node.module}.{alias.name}"
-    return bound
-
-
 class PathValues:
     """Possible path values of the expressions in one module."""
 
     def __init__(self, tree: ast.AST, source: Path) -> None:
         nodes = list(ast.walk(tree))
         self.source = source
-        self.imports = _imports(nodes)
-        self.assigned = {
-            node.id
-            for node in nodes
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
-        } | {node.arg for node in nodes if isinstance(node, ast.arg)}
+        self.names = ModuleNames(nodes)
+        self.qualified = self.names.qualified
+        # Each derived value remembers the value it was first derived from, so a
+        # violation is attributed to the expression where it first appeared.
+        self.derived_from: dict[Path, Path] = {}
         # String values are folded once in source order (as the import guard
         # does); conditional assignments keep every possible value.
         self.strings: dict[str, set[str]] = {}
-        for name, value in _assignments(nodes):
+        for name, value in assignments(nodes):
             self.strings.setdefault(name, set()).update(
                 literal_strings(value, self.strings)
             )
@@ -136,7 +86,7 @@ class PathValues:
         # earlier value; then resolve other aliases (including names used before
         # their definition in function bodies) until stable.
         accumulated: set[str] = set()
-        for name, value in _assignments(nodes):
+        for name, value in assignments(nodes):
             paths = self.evaluate(value)
             if paths:
                 self.paths[name] = paths
@@ -147,7 +97,7 @@ class PathValues:
                 accumulated.add(name)
         for _ in range(len(nodes)):
             changed = False
-            for name, value in _assignments(nodes):
+            for name, value in assignments(nodes):
                 if name in accumulated:
                     continue
                 paths = self.evaluate(value)
@@ -156,25 +106,6 @@ class PathValues:
                     changed = True
             if not changed:
                 break
-
-    def qualified(self, node: ast.AST) -> str | None:
-        """Dotted origin of a name: import-bound, a standard module or a builtin."""
-        if isinstance(node, ast.Name):
-            if node.id in self.imports:
-                return self.imports[node.id]
-            if node.id in self.assigned:
-                return None
-            if node.id in _MODULES:
-                return node.id
-            if node.id in _PATHLIB_NAMES:
-                return f"pathlib.{node.id}"
-            if node.id in _BUILTINS:
-                return f"builtins.{node.id}"
-            return None
-        if isinstance(node, ast.Attribute):
-            base = self.qualified(node.value)
-            return f"{base}.{node.attr}" if base else None
-        return None
 
     def _os_path(self, node: ast.Call) -> str | None:
         """The function name of a genuine ``os.path``/``ntpath`` call."""
@@ -198,6 +129,21 @@ class PathValues:
             return {path.relative_to(RELATIVE).as_posix() for path in paths}
         return set()
 
+    def _derive(self, base: Path, value: Path) -> Path:
+        if value != base:
+            self.derived_from.setdefault(value, base)
+        return value
+
+    def origin(self, value: Path, violates: Callable[[Path], bool]) -> Path:
+        """The earliest value in ``value``'s derivation that already violates."""
+        seen = {value}
+        while (base := self.derived_from.get(value)) and base not in seen:
+            if not violates(base):
+                break
+            seen.add(base)
+            value = base
+        return value
+
     def _join(self, bases: set[Path], values: list[set[str]]) -> set[Path]:
         if not all(values):
             return set()
@@ -205,7 +151,9 @@ class PathValues:
         for base, names in product(bases, product(*values)):
             if any(os.path.isabs(name) or Path(name).anchor for name in names):
                 continue
-            joined.add(Path(os.path.normpath(base.joinpath(*names))))
+            joined.add(
+                self._derive(base, Path(os.path.normpath(base.joinpath(*names))))
+            )
         return joined
 
     def join(self, bases: set[Path], parts: list[ast.expr]) -> set[Path]:
@@ -245,7 +193,7 @@ class PathValues:
         if function in {"abspath", "realpath", "normpath"}:
             return self.argument(args[0])
         if function == "dirname":
-            return {path.parent for path in self.argument(args[0])}
+            return {self._derive(path, path.parent) for path in self.argument(args[0])}
         if function == "join":
             return self.join(self.argument(args[0]), args[1:])
         return set()
@@ -258,7 +206,7 @@ class PathValues:
         index = node.slice.value
         if isinstance(node.value, ast.Attribute) and node.value.attr == "parents":
             return {
-                path.parents[index]
+                self._derive(path, path.parents[index])
                 for path in self.evaluate(node.value.value)
                 if 0 <= index < len(path.parents)
             }
@@ -269,7 +217,10 @@ class PathValues:
             and self._os_path(node.value) == "split"
             and len(node.value.args) == 1
         ):
-            return {path.parent for path in self.evaluate(node.value.args[0])}
+            return {
+                self._derive(path, path.parent)
+                for path in self.evaluate(node.value.args[0])
+            }
         return set()
 
     def evaluate(self, node: ast.AST) -> set[Path]:
@@ -281,7 +232,9 @@ class PathValues:
         if isinstance(node, ast.Call):
             return self._call(node)
         if isinstance(node, ast.Attribute) and node.attr == "parent":
-            return {path.parent for path in self.evaluate(node.value)}
+            return {
+                self._derive(path, path.parent) for path in self.evaluate(node.value)
+            }
         if isinstance(node, ast.Subscript):
             return self._subscript(node)
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):

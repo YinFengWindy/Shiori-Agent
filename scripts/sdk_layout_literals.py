@@ -3,13 +3,13 @@
 import ast
 from collections import Counter
 
-LAYOUT_FRAGMENTS = ("apps/backend/", "tests/backend/", "apps/desktop/")
+from scripts.sdk_repository_layout import layout_literal
 
 
 def layout_literals(
     nodes: list[ast.AST], parents: dict[ast.AST, ast.AST], judged: set[int]
 ) -> Counter[str]:
-    """Counts literals naming repository directories.
+    """Counts literals starting with a repository directory.
 
     ``judged`` holds ids of nodes already reported by a path rule, so one
     violation is counted once. Documentation strings and explicit runtime path
@@ -24,7 +24,6 @@ def layout_literals(
             continue
         if isinstance(parent, ast.BinOp) and isinstance(parent.op, ast.Div):
             continue
-        normalized = node.value.replace("\\", "/")
-        if any(fragment in normalized for fragment in LAYOUT_FRAGMENTS):
+        if layout_literal(node.value):
             edges[f"repository resource: {node.value}"] += 1
     return edges
