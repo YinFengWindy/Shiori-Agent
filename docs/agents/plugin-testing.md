@@ -59,7 +59,7 @@ shiori-agent、testkit、宿主测试支持与源码路径注入；default_memor
 CI 的 sdk-artifacts job 与既有宿主测试并存，不发布产物到公共注册表。
 
 `uv run python scripts/check_sdk_imports.py --base <base-commit>` 检查 SDK 与插件
-backend/tests 的宿主导入（含类型导入和字面量动态导入）。豁免以每个文件、符号及
+backend/tests/testing（含随 wheel 打包的测试辅助代码）的宿主导入（含类型导入和字面量动态导入）。豁免以每个文件、符号及
 次数记录在 `scripts/sdk_import_exemptions.json`，只能随迁移删除，不能增加。
 
 

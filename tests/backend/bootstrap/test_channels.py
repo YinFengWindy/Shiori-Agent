@@ -200,6 +200,10 @@ async def test_start_channels_wires_plugin_channels_with_shared_context(tmp_path
     assert context.interrupt_controller is controller
     assert context.http_resources is resources
     assert context.channel_hub is not None
+    attachment = context.attachment_store.write_bytes(
+        b"shared attachment", prefix="channel_", suffix=".bin"
+    )
+    assert attachment.parent == tmp_path / "uploads"
 
 
 @pytest.mark.asyncio

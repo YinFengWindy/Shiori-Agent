@@ -137,13 +137,13 @@ def host_imports(source: str) -> Counter[str]:
 
 
 def scan(root: Path) -> dict[str, dict[str, int]]:
-    """Scans only SDK sources/tests and each plugin's backend/tests, never builds."""
+    """Scans SDK and plugin sources, tests and packaged test support, never builds."""
     folders = [root / "packages/sdk/python", root / "packages/sdk/tests"]
     folders.extend(
         area
         for plugin in (root / "plugins").iterdir()
         if plugin.is_dir()
-        for area in (plugin / "backend", plugin / "tests")
+        for area in (plugin / "backend", plugin / "tests", plugin / "testing")
     )
     found: dict[str, dict[str, int]] = {}
     for folder in folders:

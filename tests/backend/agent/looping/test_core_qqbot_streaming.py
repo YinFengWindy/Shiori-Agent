@@ -17,7 +17,6 @@ from unittest.mock import MagicMock
 import websockets
 from contextlib import suppress
 from datetime import datetime
-from typing import Any
 
 import httpx
 import pytest
@@ -31,11 +30,10 @@ from core.common.channel_directory import ChannelDirectory
 from infra.channels.contract import ChannelContext
 import plugins.qqbot.backend.streaming as qqbot_streaming
 from plugins.qqbot.backend.channel import QQBotChannel
+from plugins.qqbot.testing.http import MESSAGE_PATH, STREAM_PATH, QQBotHttp
 
 SESSION_KEY = "role:mira"
 CHAT_ID = "c2c:app:user-1"
-STREAM_PATH = "/v2/users/user-1/stream_messages"
-MESSAGE_PATH = "/v2/users/user-1/messages"
 
 
 class _PushTool:
@@ -108,12 +106,11 @@ class _Gateway:
         )
 
 
-class _QQApi:
-    """Records official API calls; stream calls answer with a stream id."""
+class _QQApi(QQBotHttp):
+    """Adds a live gateway and scenario overrides to the shared HTTP fixture."""
 
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, dict[str, Any]]] = []
-        self.fail_stream_from: int | None = None
+        super().__init__()
         self.gateway = _Gateway()
         self.override: (
             Callable[[httpx.Request], httpx.Response | Awaitable[httpx.Response]] | None
@@ -122,32 +119,6 @@ class _QQApi:
     async def dispatch(self, request: httpx.Request) -> httpx.Response:
         result = (self.override or self.handler)(request)
         return await result if inspect.isawaitable(result) else result
-
-    def handler(self, request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/app/getAppAccessToken":
-            return httpx.Response(200, json={"access_token": "tok", "expires_in": 7200})
-        if request.url.path == "/gateway":
-            return httpx.Response(200, json={"url": "wss://gateway.invalid"})
-        body = json.loads(request.content) if request.content else {}
-        self.calls.append((request.method, request.url.path, body))
-        if request.url.path == STREAM_PATH:
-            if (
-                self.fail_stream_from is not None
-                and len(self.stream_bodies()) > self.fail_stream_from
-            ):
-                return httpx.Response(400, json={"message": "stream expired"})
-            return httpx.Response(200, json={"id": "stream-1"})
-        return httpx.Response(200, json={})
-
-    def stream_bodies(self) -> list[dict[str, Any]]:
-        return [body for _m, path, body in self.calls if path == STREAM_PATH]
-
-    def markdown_messages(self) -> list[str]:
-        return [
-            body["markdown"]["content"]
-            for method, path, body in self.calls
-            if method == "POST" and path == MESSAGE_PATH and "markdown" in body
-        ]
 
 
 async def _started_channel(api: _QQApi, monkeypatch: pytest.MonkeyPatch):

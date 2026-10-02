@@ -36,7 +36,7 @@ async def start_channels(
     role_store: RoleStore | None = None,
 ) -> ChannelHost:
     """Constructs a traffic-free host, optionally reusing unchanged connections."""
-    attachment_store = AttachmentStore()
+    attachment_store = AttachmentStore(session_manager.workspace / "uploads")
     channel_hub: ChannelHub | None = None
 
     def _ctx_factory(channel: Channel) -> RuntimeChannelContext:
