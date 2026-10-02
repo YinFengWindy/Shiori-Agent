@@ -46,7 +46,7 @@ def make_kernel(
     session_manager: object = None,
     memory_engine: object = None,
     light_provider: object = None,
-    light_model: str = "",
+    light_model: str | None = None,
     relationship_runtime: object = None,
 ) -> PluginKernel:
     # 独立 workspace 确保 KV 测试能发现错误的插件目录写入。

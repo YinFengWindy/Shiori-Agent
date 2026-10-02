@@ -42,7 +42,6 @@ function createController(overrides: {
   recorder?: FakeRecorder;
   invoke?: (request: { method: string; payload: Record<string, unknown> }) => Promise<BridgeResponse>;
   enabled?: boolean;
-  roleId?: () => string | null;
   runScheduleImmediately?: boolean;
 } = {}) {
   const recorder = overrides.recorder ?? new FakeRecorder();
@@ -53,7 +52,6 @@ function createController(overrides: {
     recorder,
     bridge: { invoke: overrides.invoke ?? (async () => response({ text: "你好" })) },
     isEnabled: () => overrides.enabled ?? true,
-    roleId: overrides.roleId ?? (() => "role-a"),
     publishState: (payload) => events.push(payload),
     createTurnId: () => "voice-turn-1",
     now: () => clock,
@@ -92,7 +90,7 @@ test("submits one ASR result through the existing chat.send method", async () =>
     },
   });
 
-  assert.equal(controller.startPress("hotkey"), true);
+  assert.equal(controller.startPress("hotkey", "role-a"), true);
   controller.release();
   await new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -124,7 +122,7 @@ test("does not call ASR after Esc cancellation or a disabled pet", async () => {
       return response({ text: "never" });
     },
   });
-  assert.equal(controller.startPress("surface"), false);
+  assert.equal(controller.startPress("surface", "role-a"), false);
   assert.deepEqual(recorder.calls, []);
   assert.deepEqual(requests, []);
 });
@@ -140,7 +138,7 @@ test("provider errors stop before chat.send", async () => {
       };
     },
   });
-  controller.startPress("hotkey");
+  controller.startPress("hotkey", "role-a");
   controller.release();
   await new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -159,7 +157,7 @@ test("a recorder startup failure is surfaced without contacting ASR", async () =
       return response();
     },
   });
-  controller.startPress("surface");
+  controller.startPress("surface", "role-a");
   await new Promise<void>((resolve) => setImmediate(resolve));
 
   assert.deepEqual(requests, []);
@@ -174,7 +172,6 @@ test("a new press can start while the previous sentence is speaking", async () =
     recorder: new FakeRecorder(),
     bridge: { invoke: async () => response({ text: "ok" }) },
     isEnabled: () => true,
-    roleId: () => "mira",
     publishState: () => undefined,
     onNewInput: (previous, next) => { turnChanges.push([previous, next]); },
     createTurnId: () => `turn-${turnSequence += 1}`,
@@ -185,14 +182,14 @@ test("a new press can start while the previous sentence is speaking", async () =
     },
     clearSchedule: () => undefined,
   });
-  assert.equal(active.startPress("surface", 0), true);
+  assert.equal(active.startPress("surface", "mira", 0), true);
   active.release();
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(active.currentState.kind, "waiting_reply");
   active.replyStarted(true);
   active.sentenceReady("sentence-1");
 
-  assert.equal(active.startPress("hotkey", 10), true);
+  assert.equal(active.startPress("hotkey", "mira", 10), true);
   await Promise.resolve();
   assert.deepEqual(turnChanges, [[null, "turn-1"], ["turn-1", "turn-2"]]);
   assert.equal(active.currentState.kind, "recording");
@@ -207,7 +204,6 @@ test("a short click or drag does not retire the active voice turn", async () => 
     recorder: new FakeRecorder(),
     bridge: { invoke: async () => response({ text: "ok" }) },
     isEnabled: () => true,
-    roleId: () => "mira",
     publishState: () => undefined,
     onNewInput: (previous, next) => { turnChanges.push([previous, next]); },
     createTurnId: () => `turn-${turnSequence += 1}`,
@@ -218,7 +214,7 @@ test("a short click or drag does not retire the active voice turn", async () => 
     clearSchedule: () => undefined,
   });
 
-  assert.equal(active.startPress("surface", 0), true);
+  assert.equal(active.startPress("surface", "mira", 0), true);
   scheduled.shift()?.();
   await Promise.resolve();
   active.release();
@@ -228,12 +224,12 @@ test("a short click or drag does not retire the active voice turn", async () => 
   assert.equal(active.currentState.kind, "speaking");
   assert.deepEqual(turnChanges, [[null, "turn-1"]]);
 
-  assert.equal(active.startPress("surface", 10), true);
+  assert.equal(active.startPress("surface", "mira", 10), true);
   active.release();
   assert.equal(active.currentState.kind, "speaking");
   assert.deepEqual(turnChanges, [[null, "turn-1"]]);
 
-  assert.equal(active.startPress("surface", 20), true);
+  assert.equal(active.startPress("surface", "mira", 20), true);
   active.pointerMoved();
   scheduled.forEach((callback) => callback());
   await Promise.resolve();
@@ -255,7 +251,7 @@ test("cancelling after release retires a recorder start that is still pending", 
     },
   });
 
-  controller.startPress("hotkey");
+  controller.startPress("hotkey", "role-a");
   controller.release("hotkey");
   controller.cancel();
   pendingStart.resolve();
@@ -273,7 +269,7 @@ test("a startup failure after release remains the reported error", async () => {
   recorder.startPromise = pendingStart.promise;
   const { controller, events } = createController({ recorder });
 
-  controller.startPress("surface");
+  controller.startPress("surface", "role-a");
   controller.release("surface");
   pendingStart.reject(new Error("权限被拒绝"));
   await new Promise<void>((resolve) => setImmediate(resolve));
@@ -293,7 +289,7 @@ test("a cancelled ASR result cannot send a message for a later turn", async () =
     },
   });
 
-  controller.startPress("hotkey");
+  controller.startPress("hotkey", "role-a");
   controller.release("hotkey");
   await new Promise<void>((resolve) => setImmediate(resolve));
   controller.cancel();
@@ -312,7 +308,6 @@ test("cancelling an active reply retires its backend and playback turn", async (
     recorder,
     bridge: { invoke: async () => response({ text: "你好" }) },
     isEnabled: () => true,
-    roleId: () => "role-a",
     publishState: () => undefined,
     createTurnId: () => "turn-a",
     now: () => 300,
@@ -325,7 +320,7 @@ test("cancelling an active reply retires its backend and playback turn", async (
     clearSchedule: () => undefined,
   });
 
-  controller.startPress("hotkey", 0);
+  controller.startPress("hotkey", "role-a", 0);
   controller.release("hotkey");
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(controller.currentState.kind, "waiting_reply");
@@ -340,7 +335,7 @@ test("cancelling an active reply retires its backend and playback turn", async (
 test("pet follow-up events cannot mutate a hotkey-owned gesture", () => {
   const { controller, recorder } = createController({ runScheduleImmediately: false });
 
-  assert.equal(controller.startPress("hotkey", 0), true);
+  assert.equal(controller.startPress("hotkey", "role-a", 0), true);
   controller.release("surface");
   controller.cancel("surface");
 
@@ -351,7 +346,7 @@ test("pet follow-up events cannot mutate a hotkey-owned gesture", () => {
 test("releasing a pet drag returns the controller to idle", () => {
   const { controller } = createController({ runScheduleImmediately: false });
 
-  assert.equal(controller.startPress("surface", 0), true);
+  assert.equal(controller.startPress("surface", "role-a", 0), true);
   controller.pointerMoved();
   assert.deepEqual(controller.currentState, { kind: "dragging" });
 
@@ -362,7 +357,7 @@ test("releasing a pet drag returns the controller to idle", () => {
 
 test("waits for queued playback to drain before reporting a terminal TTS failure", async () => {
   const { controller, events } = createController();
-  controller.startPress("hotkey");
+  controller.startPress("hotkey", "role-a");
   controller.release();
   await new Promise<void>((resolve) => setImmediate(resolve));
   controller.replyStarted(true);
@@ -380,19 +375,16 @@ test("waits for queued playback to drain before reporting a terminal TTS failure
 });
 
 
-test("an accepted press pins its role before recorder and ASR awaits", async () => {
-  let role = "original";
+test("an accepted press sends the transcript to the role it was addressed to", async () => {
   const asr = deferred<BridgeResponse>();
   const requests: { method: string; payload: Record<string, unknown> }[] = [];
   const { controller } = createController({
-    roleId: () => role,
     invoke: async (request) => { requests.push(request); return request.method === "voice.transcribe" ? asr.promise : response(); },
   });
   try {
-    assert.equal(controller.startPress("surface"), true);
+    assert.equal(controller.startPress("surface", "original"), true);
     controller.release("surface");
     await new Promise<void>((resolve) => setImmediate(resolve));
-    role = "replacement";
     asr.resolve(response({ text: "hello" }));
     await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(requests.at(-1)?.method, "chat.send");
@@ -403,13 +395,13 @@ test("an accepted press pins its role before recorder and ASR awaits", async () 
 
 test("cancelling a pending press clears ownership and permits a later press", () => {
   const { controller, recorder, events } = createController({ runScheduleImmediately: false });
-  controller.startPress("surface");
+  controller.startPress("surface", "role-a");
   controller.cancel("surface");
   assert.equal(controller.currentState.kind, "idle");
   assert.equal(controller.currentTurnId, null);
   assert.equal(events.at(-1)?.status, "idle");
   assert.deepEqual(recorder.calls, []);
-  assert.equal(controller.startPress("hotkey"), true);
+  assert.equal(controller.startPress("hotkey", "role-a"), true);
   controller.dispose();
 });
 
@@ -419,7 +411,7 @@ test("cancelling during recorder startup returns idle and retires the awaited ge
   recorder.startPromise = started.promise;
   const requests: string[] = [];
   const { controller } = createController({ recorder, invoke: async (request) => { requests.push(request.method); return response(); } });
-  controller.startPress("surface");
+  controller.startPress("surface", "role-a");
   assert.equal(controller.currentState.kind, "recording");
   controller.cancel();
   assert.equal(controller.currentState.kind, "idle");

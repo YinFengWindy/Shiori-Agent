@@ -17,7 +17,7 @@ function harness() {
   const states: { windowId: number; state: VoiceStatePayload }[] = [];
   const controller: Pick<DesktopVoiceController, "currentState" | "startPress" | "pointerMoved" | "release" | "cancel"> = {
     get currentState() { return state; },
-    startPress: (source, _at, roleId) => { calls.push(["press", source, roleId]); return accepts; },
+    startPress: (source, roleId) => { calls.push(["press", source, roleId]); return accepts; },
     pointerMoved: (source) => { calls.push(["move", source]); },
     release: (source) => { calls.push(["release", source]); },
     cancel: (source) => { calls.push(["cancel", source]); state = { kind: "idle" }; },

@@ -33,44 +33,27 @@ class ObservationModelAdapter:
         self,
         *,
         roles: Roles,
-        provider: ChatProvider | None,
-        model: str,
-        models: RoleModels | None = None,
+        models: RoleModels,
     ) -> None:
         self._roles = roles
-        self._provider = provider
-        self._model = model
         self._models = models
 
     async def analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Analyzes one frame without retaining it or enabling desktop actions."""
+        """Analyzes one frame with the role's vision model, retaining nothing."""
 
-        if self._models is None and (self._provider is None or not self._model):
-            raise RuntimeError("屏幕识别视觉模型未配置")
         frame = parse_observation_frame(payload)
         if self._roles.get_role(frame.role_id) is None:
             raise KeyError(frame.role_id)
         previous_context = self._previous_context(payload.get("previous_observation"))
         recent_bubbles = self._recent_bubbles_context(payload.get("recent_bubbles"))
-        if self._models is not None:
-            async with self._models.activate(frame.role_id, "vision") as snapshot:
-                return await self._analyze_with_provider(
-                    provider=snapshot.provider,
-                    model=snapshot.model,
-                    frame=frame,
-                    previous_context=previous_context,
-                    recent_bubbles=recent_bubbles,
-                )
-        provider = self._provider
-        if provider is None:
-            raise RuntimeError("屏幕识别视觉模型未配置")
-        return await self._analyze_with_provider(
-            provider=provider,
-            model=self._model,
-            frame=frame,
-            previous_context=previous_context,
-            recent_bubbles=recent_bubbles,
-        )
+        async with self._models.activate(frame.role_id, "vision") as snapshot:
+            return await self._analyze_with_provider(
+                provider=snapshot.provider,
+                model=snapshot.model,
+                frame=frame,
+                previous_context=previous_context,
+                recent_bubbles=recent_bubbles,
+            )
 
     async def _analyze_with_provider(
         self,

@@ -40,7 +40,7 @@ class ScenePromptProvider(Protocol):
 
     async def __call__(
         self,
-        provider: ChatProvider | None,
+        provider: ChatProvider,
         *,
         model: str,
         event: SceneObservationCommitted,
@@ -59,8 +59,8 @@ class AutoCgController:
         background: BackgroundTasks,
         generate_tool: GenerateImageTool,
         tool_registry: _ToolLookup,
-        light_provider: ChatProvider | None = None,
-        light_model: str = "",
+        light_provider: ChatProvider,
+        light_model: str,
         prompt_provider: ScenePromptProvider = prepare_scene_prompt,
     ) -> None:
         self._background = background

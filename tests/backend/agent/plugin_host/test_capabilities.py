@@ -228,14 +228,6 @@ def test_tools_capability_plugin_tool_is_external_only_when_declared():
     assert not registry.is_external_allowed("undeclared")
 
 
-def test_tools_capability_without_registry_raises():
-    capability = ToolsCapability(
-        None, EffectScope("demo"), PluginContributions(), "demo_plugin"
-    )
-    with pytest.raises(RuntimeError, match="未提供 ToolRegistry"):
-        capability.register(_FakeTool())
-
-
 # ── LifecycleCapability ───────────────────────────────────────────────────
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from shiori_sdk.sessions import SessionUndo
 from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.extensions import Dependencies
+from shiori_sdk.runtime import HostServiceUnavailable
 from .context import FakePluginContext
 from .hooks import FakeToolHooks
 from .diagnostics import FakeDiagnostics
@@ -86,7 +87,12 @@ class FakeBackground:
 
 
 class FakeExtensionContext(FakePluginContext):
-    """Inject only SDK fakes; no host install, config, database or session services."""
+    """Inject only SDK fakes; no host install, config, database or session services.
+
+    ``workspace`` and ``session_manager`` left as ``None`` model a host that lacks
+    the service: reading them raises ``HostServiceUnavailable`` like the host does.
+    ``memory_engine`` stays optional because the host has none when memory is off.
+    """
 
     def __init__(
         self,
@@ -99,16 +105,34 @@ class FakeExtensionContext(FakePluginContext):
         memory_engine: MemoryEngine | None = None,
     ):
         super().__init__(plugin_id)
-        self.workspace = workspace
+        self._workspace = workspace
         self.config = FakeConfig(config)
         self.tool_hooks = FakeToolHooks()
         self.bot_commands = FakeBotCommands()
         self.dependencies = dependencies or FakeDependencies()
-        self.session_manager = session_manager
+        self._session_manager = session_manager
         self.memory_engine = memory_engine
         self.background = FakeBackground(self)
         self.diagnostics = FakeDiagnostics()
         self.storage = FakeMemoryStorage()
+
+    @property
+    def workspace(self) -> Path:
+        """Returns the supplied workspace, failing like a host that has none."""
+        if self._workspace is None:
+            raise HostServiceUnavailable.for_capability(
+                self.plugin_id, "workspace", ("workspace",)
+            )
+        return self._workspace
+
+    @property
+    def session_manager(self) -> SessionUndo:
+        """Returns the supplied session undo service, failing like a host without one."""
+        if self._session_manager is None:
+            raise HostServiceUnavailable.for_capability(
+                self.plugin_id, "session_manager", ("session_manager",)
+            )
+        return self._session_manager
 
     async def aclose(self) -> None:
         """Remove subscriptions and reverse cleanups, then clear contributions."""

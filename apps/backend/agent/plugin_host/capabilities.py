@@ -76,7 +76,7 @@ class ToolsCapability:
 
     def __init__(
         self,
-        registry: ToolRegistry | None,
+        registry: ToolRegistry,
         effects: EffectScope,
         contributions: PluginContributions,
         plugin_id: str,
@@ -100,10 +100,6 @@ class ToolsCapability:
         external_allowed: 显式声明外部上下文（群聊、陌生私聊）里非用户本人发起的
         回合也能使用此工具；默认不可用。
         """
-        if self._registry is None:
-            raise RuntimeError(
-                f"插件 {self._plugin_id} 请求 tools 能力，但宿主未提供 ToolRegistry"
-            )
         name = str(tool.name)
         self._effects.ensure_active(f"tool:{name}")
         self._registry.register(
@@ -120,8 +116,7 @@ class ToolsCapability:
         self._effects.add(f"tool:{name}", lambda: self._unregister(name))
 
     def _unregister(self, name: str) -> None:
-        if self._registry is not None:
-            self._registry.unregister(name)
+        self._registry.unregister(name)
         if name in self._contributions.tool_names:
             self._contributions.tool_names.remove(name)
 
@@ -134,14 +129,10 @@ class ToolsCapability:
         ``register`` above so the tool is reclaimed on unload; this only lets
         a plugin look up and call a tool (its own or another's).
         """
-        if self._registry is None:
-            return None
         return self._registry.get_tool(name)
 
     def get_context(self) -> dict[str, str]:
         """Returns the current tool-call context (read-only passthrough)."""
-        if self._registry is None:
-            return {}
         return self._registry.get_context()
 
 

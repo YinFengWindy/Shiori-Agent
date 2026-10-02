@@ -371,7 +371,6 @@ void app.whenReady().then(async () => {
       && activeDesktopSurfaces.interactionTargets().length > 0
       && !activeVoiceRecorder.isBusy
     ),
-    roleId: () => activeDesktopSurfaces.interactionTargets()[0]?.roleId ?? null,
     microphoneDeviceId: () => voiceSettings?.microphoneDeviceId ?? "",
     publishState: publishVoiceState,
     onNewInput: (previousTurnId, nextTurnId) => {

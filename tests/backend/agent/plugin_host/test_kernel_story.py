@@ -39,6 +39,9 @@ def test_story_requires_active_novelai_and_unloads_before_it(
         [packages],
         services=HostServices(
             http=FakeHttp(),
+            # NovelAI declares light_provider; Story never reaches the model here.
+            light_provider=SimpleNamespace(chat=AsyncMock()),
+            light_model="light-model",
             session_manager=SessionManager(tmp_path / "workspace"),
             event_bus=EventBus(),
             tool_registry=ToolRegistry(),

@@ -53,8 +53,8 @@ class StorySimulationHandler:
         role_store: Roles,
         background: BackgroundTasks,
         storage: PrivateStorage,
+        models: RoleModels,
         director: StoryDirector | None = None,
-        models: RoleModels | None = None,
         image_tool: ImageGenerationAPI | None = None,
     ) -> None:
         self._roles = role_store
@@ -575,14 +575,6 @@ class StorySimulationHandler:
                 turn,
                 emit_event,
                 schedule_visual_resource=self._schedule_story_cg,
-            )
-            return
-        if self._models is None:
-            await self._fail_generation(
-                service,
-                turn,
-                emit_event,
-                StoryProviderUnavailableError("Story Director 尚未配置角色运行时"),
             )
             return
         story_id = service.repository.story_id_for_turn(str(turn["id"]))

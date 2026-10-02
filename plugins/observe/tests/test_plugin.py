@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 import pytest
 from plugins.observe.backend.plugin import setup
+from shiori_sdk import HostServiceUnavailable
 from shiori_sdk.memory.committed import TurnCommitted
 from shiori_sdk.memory.events import (
     MemoryWritten,
@@ -237,10 +238,14 @@ async def test_memory_written_event_translated_and_persisted(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
-async def test_setup_skips_without_workspace():
-    async with _loaded(None) as (ctx, _):
-        assert ctx.exported is None
-        assert not ctx.diagnostics.owners
+async def test_setup_fails_instead_of_skipping_without_workspace():
+    """A host without workspace must stop setup, not load observe half-disabled."""
+    ctx = FakeExtensionContext("observe")
+    with pytest.raises(HostServiceUnavailable, match="workspace"):
+        await setup(ctx)
+    assert ctx.exported is None
+    assert not ctx.diagnostics.owners
+    await ctx.aclose()
 
 
 @pytest.mark.asyncio

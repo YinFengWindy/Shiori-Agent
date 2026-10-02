@@ -1,3 +1,4 @@
+from shiori_sdk.testing.models import FakeChatProvider
 from shiori_sdk.testing.extensions import FakeBackground
 from shiori_sdk.testing.context import FakePluginContext
 import asyncio
@@ -48,6 +49,8 @@ def test_controller_advances_cooldown_for_passive_observations(tmp_path: Path) -
     policy.advance_turn(session_key)
     policy.record_success(session_key, "rain")
     controller = AutoCgController(
+        light_provider=FakeChatProvider(),
+        light_model="light",
         prompt_provider=AsyncMock(
             return_value={
                 "prompt": "1girl, rain",
@@ -72,6 +75,8 @@ def test_controller_advances_cooldown_for_passive_observations(tmp_path: Path) -
 @pytest.mark.asyncio
 async def test_new_observation_cancels_stale_in_flight_task(tmp_path: Path) -> None:
     controller = AutoCgController(
+        light_provider=FakeChatProvider(),
+        light_model="light",
         prompt_provider=AsyncMock(
             return_value={
                 "prompt": "1girl, rain",
@@ -123,6 +128,8 @@ async def test_controller_records_state_only_after_image_push_succeeds(
             return '{"output_paths": ["cg.png"]}'
 
     controller = AutoCgController(
+        light_provider=FakeChatProvider(),
+        light_model="light",
         prompt_provider=AsyncMock(
             return_value={
                 "prompt": "1girl, rain",
@@ -177,6 +184,8 @@ async def test_controller_retries_generation_once_and_pushes_one_image(
 
     generate_tool = GenerateTool()
     controller = AutoCgController(
+        light_provider=FakeChatProvider(),
+        light_model="light",
         prompt_provider=AsyncMock(
             return_value={
                 "prompt": "1girl, rain",
@@ -220,6 +229,8 @@ async def test_controller_abandons_after_one_generation_retry(
 
     generate_tool = GenerateTool()
     controller = AutoCgController(
+        light_provider=FakeChatProvider(),
+        light_model="light",
         prompt_provider=AsyncMock(
             return_value={
                 "prompt": "1girl, rain",
@@ -256,6 +267,8 @@ async def test_prompt_model_is_not_called_for_ineligible_cg(tmp_path, blocked):
         )
     prompt = AsyncMock()
     controller = AutoCgController(
+        light_provider=FakeChatProvider(),
+        light_model="light",
         role_store=_roles(tmp_path, enabled=blocked != "disabled"),
         policy=policy,
         session_manager=SimpleNamespace(

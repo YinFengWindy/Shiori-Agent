@@ -15,8 +15,6 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     """Registers Story RPC, storage, background work and its required NovelAI API."""
     from shiori_sdk.rpc import Concurrency
 
-    if ctx.workspace is None:
-        raise RuntimeError("story requires a workspace")
     novelai = ctx.dependencies.require("novelai")
     if not isinstance(novelai, ImageGenerationAPI):
         raise TypeError("NovelAI dependency must export ImageGenerationAPI")

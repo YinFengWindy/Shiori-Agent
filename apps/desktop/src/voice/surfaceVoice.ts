@@ -36,7 +36,7 @@ export class SurfaceVoiceController {
       && !["idle", "error"].includes(this.controller.currentState.kind)) return false;
     const previous = this.owner;
     this.owner = target;
-    const accepted = this.controller.startPress(windowId === null ? "hotkey" : "surface", undefined, target.roleId);
+    const accepted = this.controller.startPress(windowId === null ? "hotkey" : "surface", target.roleId);
     if (!accepted) this.owner = previous;
     else if (previous && previous.windowId !== target.windowId) this.surfaces.publishVoice(previous.windowId, { status: "idle" });
     return accepted;

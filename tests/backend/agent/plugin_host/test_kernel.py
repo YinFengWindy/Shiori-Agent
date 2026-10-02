@@ -845,6 +845,53 @@ async def setup(ctx):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("capability", "service", "with_workspace"),
+    [
+        ("roles", "role_store", True),
+        ("models", "role_runtime_registry", True),
+        ("sessions", "session_manager", True),
+        ("memory", "role_store", True),
+        ("memory", "workspace", False),
+        ("http", "http", True),
+        ("light_model", "light_model", True),
+        ("tools", "tool_registry", True),
+        ("kv", "workspace", False),
+    ],
+)
+async def test_declared_capability_without_host_service_fails_before_setup(
+    tmp_path: Path, capability: str, service: str, with_workspace: bool
+):
+    """宿主缺服务时报“宿主未提供服务”，而不是误报插件未申请，且不进入 setup。"""
+    root = tmp_path / "plugins"
+    plugin_dir = root / "needs_service"
+    (plugin_dir / "backend").mkdir(parents=True)
+    (plugin_dir / "backend" / "plugin.py").write_text(
+        "async def setup(ctx):\n    raise AssertionError('setup must not run')\n",
+        encoding="utf-8",
+    )
+    (plugin_dir / "manifest.yaml").write_text(
+        f"api: 2\nid: needs_service\ncapabilities:\n  - {capability}\n",
+        encoding="utf-8",
+    )
+    kernel = PluginKernel(
+        [root],
+        services=HostServices(
+            event_bus=EventBus(),
+            workspace=tmp_path / "workspace" if with_workspace else None,
+        ),
+    )
+    await kernel.load_all()
+
+    state = next(row for row in kernel.states() if row["id"] == "needs_service")
+    assert state["state"] == "FAILED"
+    assert f"'{capability}'" in state["error"]
+    assert f"宿主未提供服务 {service}" in state["error"]
+    # 缺 workspace 时不能退回写插件目录（#209）
+    assert not (plugin_dir / ".kv.json").exists()
+
+
+@pytest.mark.asyncio
 async def test_weather_tool_via_facade(tmp_path: Path):
     stage_plugin_package(PLUGIN_FIXTURES / "weather", tmp_path / "weather")
     tools = ToolRegistry()

@@ -14,6 +14,26 @@ class CapabilityNotGranted(AttributeError):
     """The plugin tried to access a capability absent from its manifest."""
 
 
+class HostServiceUnavailable(RuntimeError):
+    """The manifest declared a capability, but the host lacks the service behind it.
+
+    Distinct from ``CapabilityNotGranted``: the plugin asked correctly and the host
+    is misassembled. The host raises it before calling ``setup`` and names the
+    missing service. Deliberately not an ``AttributeError`` so ``getattr`` defaults
+    and ``__getattr__`` fallbacks can never swallow it.
+    """
+
+    @classmethod
+    def for_capability(
+        cls, plugin_id: str, capability: str, services: Iterable[str]
+    ) -> "HostServiceUnavailable":
+        """Builds the shared message naming the declared capability and its services."""
+        return cls(
+            f"插件 {plugin_id} 声明了 capability {capability!r}，"
+            f"但宿主未提供服务 {'、'.join(services)}"
+        )
+
+
 # manifest 只能声明这里列出的宿主能力；宿主 manifest 解析与 SDK 测试替身共用这一份。
 KNOWN_CAPABILITIES = frozenset(
     {

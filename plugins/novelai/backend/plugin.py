@@ -99,12 +99,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     """装配 novelai：生图服务层、工具、自动 CG、桥接 RPC。"""
 
     workspace = ctx.workspace
-    if workspace is None:
-        raise RuntimeError("NovelAI 插件需要 workspace")
     settings = _load_settings(ctx)
     role_store = ctx.roles
-    if role_store is None:
-        raise RuntimeError("NovelAI 插件需要 role_store")
     role_state = NovelAIRoleState(role_store)
     role_state.reconcile()
     ctx.events.on(RoleDeleted, role_state.on_role_deleted)

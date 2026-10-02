@@ -10,8 +10,6 @@ from .tool import computer_tools
 
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Contributes lazy tools without launching or attaching to any desktop app."""
-    if ctx.workspace is None:
-        raise RuntimeError("Computer Use 需要宿主 workspace")
     desktop = ComputerDesktop(
         plugin_data_dir(ctx.workspace, ctx.plugin_id),
         ComputerUseConfig.model_validate(ctx.config.as_dict()),

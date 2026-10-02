@@ -10,6 +10,8 @@ import pytest
 
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.manifest import PluginManifest
+from shiori_sdk import HostServiceUnavailable
+
 from agent.plugin_host.runtime_context import (
     CapabilityNotGranted,
     PluginRuntimeContext,
@@ -56,6 +58,15 @@ def test_capability_not_granted_is_attribute_error():
     context = _make_context({})
     assert issubclass(CapabilityNotGranted, AttributeError)
     assert getattr(context, "tools", "fallback") == "fallback"
+
+
+def test_declared_capability_without_host_service_is_not_reported_as_ungranted():
+    """宿主缺服务与插件未申请是两种错误；前者不能被 getattr 默认值吞成 None。"""
+    context = _make_context({"workspace": None})
+    with pytest.raises(HostServiceUnavailable, match="宿主未提供服务 workspace"):
+        _ = context.workspace
+    with pytest.raises(HostServiceUnavailable):
+        getattr(context, "workspace", "fallback")
 
 
 def test_granted_reports_sorted_capability_names():

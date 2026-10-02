@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from agent.plugin_host.kv import PluginKVStore
+from shiori_sdk.testing.models import FakeChatProvider
 from shiori_sdk.role_events import SceneObservationCommitted
 from plugins.novelai.backend.auto_cg import AutoCgPolicy
 from plugins.novelai.backend.auto_cg_controller import AutoCgController
@@ -47,6 +48,8 @@ def _observation(**overrides: Any) -> SceneObservationCommitted:
 @pytest.mark.asyncio
 async def test_cg_task_holds_generation_until_image_work_finishes(tmp_path):
     controller = AutoCgController(
+        light_provider=FakeChatProvider(),
+        light_model="light",
         prompt_provider=AsyncMock(
             return_value={
                 "prompt": "1girl, rain",

@@ -27,7 +27,6 @@ from agent.tools.turn_scope import current_tool_turn
 from agent.tools.registry import ToolRegistry
 from core.roles.role_runtime import RoleRuntimeRegistry
 from agent.provider import LLMProvider
-from core.net.http import get_default_http_requester
 from shiori_sdk.http import HttpClient
 from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.config import PluginConfig
@@ -59,6 +58,10 @@ from agent.plugin_host.discovery import discover_plugins
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
+from agent.plugin_host.host_service_requirements import (
+    provided_service,
+    require_host_services,
+)
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import (
     ManifestError,
@@ -133,7 +136,10 @@ class HostServices:
     memory_engine: MemoryEngine | None = None
     app_config: Any = None
     light_provider: LLMProvider | None = None
-    light_model: str = ""
+    # None = 宿主未提供轻量模型名；bootstrap 总会解析出一个（缺省回落到主模型）。
+    light_model: str | None = None
+    # http capability 的唯一来源：bootstrap 注入共享 external_default 请求器，
+    # 内核不再回退到进程级默认实例；缺失时声明 http 的插件 setup 前失败。
     http: HttpClient | None = None
     plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     raw_plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -458,6 +464,9 @@ class PluginKernel:
                 f"v2 插件 {handle.record.name} 的入口缺少 setup(ctx) 函数"
             )
         setup_fn = cast("Callable[[SdkRuntimeContext], Awaitable[None]]", setup)
+        grants = handle.record.manifest.capabilities
+        services = self._services
+        require_host_services(handle.plugin_id, grants, services)
         rpc = (
             RpcCapability(
                 self.rpc, handle.effects, handle.plugin_id, self._services.event_bus
@@ -466,8 +475,6 @@ class PluginKernel:
             else None
         )
         capabilities = self._build_capabilities(handle, rpc=rpc)
-        grants = handle.record.manifest.capabilities
-        services = self._services
         sessions = None
         if (
             "sessions" in grants
@@ -546,15 +553,21 @@ class PluginKernel:
                 else None
             ),
             sessions=sessions,
-            tools=ToolsCapability(
-                services.tool_registry,
-                handle.effects,
-                handle.contributions,
-                handle.plugin_id,
+            tools=(
+                ToolsCapability(
+                    services.tool_registry,
+                    handle.effects,
+                    handle.contributions,
+                    handle.plugin_id,
+                )
+                if services.tool_registry is not None
+                else None
             ),
             kv=(
                 open_plugin_kv(
-                    workspace=services.workspace,
+                    workspace=provided_service(
+                        handle.plugin_id, "kv", services.workspace
+                    ),
                     plugin_id=handle.plugin_id,
                     plugin_dir=handle.record.plugin_dir,
                     legacy_plugin_root=services.legacy_plugin_root,
@@ -562,11 +575,7 @@ class PluginKernel:
                 if "kv" in grants
                 else None
             ),
-            http=(
-                (services.http or get_default_http_requester("external_default"))
-                if "http" in grants
-                else None
-            ),
+            http=services.http if "http" in grants else None,
             resources=HostResources().as_capability(),
             processes=HostProcesses().as_capability(),
             tool_turn=current_tool_turn,

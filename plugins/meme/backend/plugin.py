@@ -59,7 +59,7 @@ class _MemeReactions:
     def __init__(
         self,
         workspace: Path,
-        session_manager: "PluginSessions | None",
+        session_manager: "PluginSessions",
         roles: "Roles",
         resources: "Resources",
         catalog: Path,
@@ -98,18 +98,13 @@ class _MemeReactions:
         )
 
     def _role_id_for_session(self, session_key: str) -> str:
-        manager = self._session_manager
-        if manager is None:
-            return ""
-        session = manager.get_or_create(session_key)
+        session = self._session_manager.get_or_create(session_key)
         metadata = session.metadata if isinstance(session.metadata, dict) else {}
         return str(metadata.get("role_id") or "").strip()
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
     """Register prompt and reply contributions within the plugin effect scope."""
-    if ctx.workspace is None:
-        raise ValueError("meme 插件需要 workspace")
     reactions = _MemeReactions(
         ctx.workspace,
         ctx.sessions,
