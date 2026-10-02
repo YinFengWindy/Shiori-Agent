@@ -3,11 +3,9 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-
-from agent.plugin_host.data_migration import migrate_private_data
-
-from agent.plugin_host.local_config import resolve_local_config
 from typing import Any
+
+from shiori_sdk.memory.build import MemoryStorage
 
 
 @dataclass(frozen=True)
@@ -49,9 +47,15 @@ def load_default_memory_config(
     *,
     plugin_dir: Path | None = None,
     workspace: Path | None = None,
+    storage: MemoryStorage | None = None,
 ) -> DefaultMemoryConfig:
     """Loads workspace overrides, migrating legacy files before parsing."""
-    path = resolve_local_config(
+    if workspace is None:
+        path = (plugin_dir or Path(__file__).parent) / "config.local.toml"
+        return _build_config(_read_toml(path))
+    if storage is None:
+        raise RuntimeError("workspace config requires injected storage")
+    path = storage.resolve_config(
         plugin_id="default_memory",
         plugin_dir=plugin_dir or Path(__file__).resolve().parent,
         workspace=workspace,
@@ -94,9 +98,12 @@ def ensure_default_memory_config_file(
     *,
     plugin_dir: Path | None = None,
     workspace: Path | None = None,
+    storage: MemoryStorage | None = None,
 ) -> Path:
     """Ensures editable configuration exists only under workspace/plugin-data."""
-    return resolve_local_config(
+    if workspace is None or storage is None:
+        raise RuntimeError("创建插件配置需要 workspace 和 storage，不能写入插件目录")
+    return storage.resolve_config(
         plugin_id="default_memory",
         plugin_dir=plugin_dir or Path(__file__).resolve().parent,
         workspace=workspace,
@@ -108,9 +115,10 @@ def resolve_memory_db_path(
     *,
     workspace: Path,
     default_config: DefaultMemoryConfig,
+    storage: MemoryStorage,
 ) -> Path:
     if not default_config.db_path:
-        return migrate_private_data(
+        return storage.migrate_data(
             workspace,
             "default_memory",
             "memory2.db",

@@ -4,8 +4,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from core.common.message_source import MessageSource
 from bus.events import InboundMessage
+from shiori_sdk.tool_chain import ToolCall as ToolCall
+from shiori_sdk.tool_chain import ToolCallGroup as ToolCallGroup
+
+from core.common.message_source import MessageSource
 
 if TYPE_CHECKING:
     from conversation.context_scope import ContextScope
@@ -15,20 +18,6 @@ if TYPE_CHECKING:
 class ChatMessage:
     role: str
     content: str
-
-
-@dataclass
-class ToolCall:
-    call_id: str
-    name: str
-    arguments: dict[str, Any] = field(default_factory=dict)
-    result: str = ""
-
-
-@dataclass
-class ToolCallGroup:
-    text: str
-    calls: list[ToolCall] = field(default_factory=list)
 
 
 @dataclass

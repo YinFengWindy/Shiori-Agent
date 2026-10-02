@@ -1,7 +1,7 @@
 """Build the actual host API and its production resources without development trees."""
 
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 from setuptools import find_namespace_packages, setup
 from setuptools.command.build_py import build_py
@@ -15,7 +15,6 @@ HOST_PACKAGES = (
     "core",
     "desktop_bridge",
     "infra",
-    "memory2",
     "proactive_v2",
     "prompts",
     "session",

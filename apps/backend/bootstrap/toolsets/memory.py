@@ -28,6 +28,11 @@ class MemoryToolsetProvider(ToolsetProvider):
             deps.light_provider,
             http_resources,
             event_publisher=deps.event_publisher,
+            runtime_roles=(
+                deps.role_runtime_registry.repository.store
+                if deps.role_runtime_registry is not None
+                else None
+            ),
         )
         return build_registration_result(
             registry=registry,

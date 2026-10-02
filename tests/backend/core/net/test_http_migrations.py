@@ -2,7 +2,6 @@ import json
 
 import httpx
 import pytest
-
 from agent.tools.web_fetch import WebFetchTool
 from core.net.http import (
     HttpRequester,
@@ -13,7 +12,6 @@ from core.net.http import (
     configure_default_shared_http_resources,
     get_default_shared_http_resources,
 )
-from memory2.embedder import Embedder
 
 
 def _build_requester(handler) -> HttpRequester:
@@ -61,60 +59,5 @@ async def test_web_fetch_tool_uses_injected_requester():
         )
         assert payload["status"] == 200
         assert payload["text"] == "hello from shared requester"
-    finally:
-        await requester.client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_embedder_uses_injected_requester():
-    def _handler(request: httpx.Request) -> httpx.Response:
-        payload = json.loads(request.content.decode("utf-8"))
-        assert payload["input"] == ["first", "second"]
-        assert "dimensions" not in payload
-        return httpx.Response(
-            200,
-            request=request,
-            json={
-                "data": [
-                    {"index": 1, "embedding": [0.2, 0.3]},
-                    {"index": 0, "embedding": [0.0, 0.1]},
-                ]
-            },
-        )
-
-    requester = _build_requester(_handler)
-    try:
-        embedder = Embedder(
-            base_url="https://embeddings.example.com/v1",
-            api_key="test-key",
-            requester=requester,
-        )
-        vectors = await embedder.embed_batch(["first", "second"])
-        assert vectors == [[0.0, 0.1], [0.2, 0.3]]
-    finally:
-        await requester.client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_embedder_sends_configured_output_dimension():
-    def _handler(request: httpx.Request) -> httpx.Response:
-        payload = json.loads(request.content.decode("utf-8"))
-        assert payload["dimensions"] == 768
-        return httpx.Response(
-            200,
-            request=request,
-            json={"data": [{"index": 0, "embedding": [0.1, 0.2]}]},
-        )
-
-    requester = _build_requester(_handler)
-    try:
-        embedder = Embedder(
-            base_url="https://embeddings.example.com/v1",
-            api_key="test-key",
-            output_dimensionality=768,
-            requester=requester,
-        )
-        vectors = await embedder.embed_batch(["first"])
-        assert vectors == [[0.1, 0.2]]
     finally:
         await requester.client.aclose()

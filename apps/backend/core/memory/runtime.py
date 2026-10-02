@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from contextvars import ContextVar
 import inspect
 import logging
+from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
+
+from shiori_sdk.memory.build import BuildResource
 
 if TYPE_CHECKING:
     from core.memory.engine import (
@@ -33,6 +34,7 @@ class MemoryRuntime:
     markdown: "MarkdownMemoryRuntime"
     engine: "MemoryEngine"
     closeables: list[object] = field(default_factory=list[object])
+    resources: list[BuildResource] = field(default_factory=list)
     _session_metadata_var: ContextVar[dict[str, Any] | None] = field(
         default_factory=lambda: ContextVar(
             "memory_runtime_session_metadata",
@@ -92,6 +94,15 @@ class MemoryRuntime:
 
     async def aclose(self) -> None:
         first_error: Exception | None = None
+        resources, self.resources = self.resources, []
+        for resource in reversed(resources):
+            try:
+                result = resource.cleanup()
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
         for closeable in reversed(self.closeables):
             try:
                 if hasattr(closeable, "aclose"):

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from agent.config_models import Config
 from agent.provider import LLMProvider
+from agent.skills import SkillsLoader
 from agent.tools.meta import register_memory_meta_tools
 from agent.tools.registry import ToolRegistry
 from core.memory.markdown import build_markdown_memory_runtime
@@ -15,12 +16,18 @@ from core.memory.plugin import (
 )
 from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
-from bootstrap.runtime.construction import track_build_closeables
+from core.roles import RoleStore
+
+from bootstrap.memory_capabilities import (
+    HostMemoryRoles,
+    HostMemoryStorage,
+    memory_build_config,
+)
 from bootstrap.memory_plugins import normalize_memory_engine
+from bootstrap.runtime.construction import MemoryBuildResources, track_build_closeables
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
-    from core.memory.markdown import MarkdownMemoryRuntime
 
 
 # 统一插件构造入口，运行时与管理工具复用同一套路由。
@@ -31,7 +38,7 @@ def _build_memory_plugin_runtime(
     provider: LLMProvider,
     light_provider: LLMProvider | None,
     http_resources: SharedHttpResources,
-    markdown: "MarkdownMemoryRuntime",
+    roles: RoleStore,
     event_publisher: "EventBus | None" = None,
 ) -> MemoryPluginRuntime:
     from bootstrap.wiring import resolve_memory_plugin
@@ -40,13 +47,21 @@ def _build_memory_plugin_runtime(
     plugin = resolve_memory_plugin(engine_name)
     return plugin.build(
         MemoryPluginBuildDeps(
-            config=config,
+            config=memory_build_config(config),
             workspace=workspace,
             provider=provider,
             light_provider=light_provider,
-            http_resources=http_resources,
+            requester=http_resources.external_default,
             event_publisher=event_publisher,
-            markdown=markdown,
+            storage=HostMemoryStorage(),
+            roles=HostMemoryRoles(roles),
+            skills=lambda: [
+                skill["name"]
+                for skill in SkillsLoader(workspace).list_skills(
+                    filter_unavailable=False
+                )
+            ],
+            resources=MemoryBuildResources(),
         )
     )
 
@@ -65,25 +80,11 @@ def ensure_memory_plugin_storage(
     from bootstrap.wiring import resolve_memory_plugin
 
     plugin = resolve_memory_plugin(engine_name)
-    initializer = getattr(plugin, "ensure_workspace_storage", None)
-    if not callable(initializer):
-        return []
-    result: object = initializer(config=config, workspace=workspace)
-    if isinstance(result, list):
-        normalized: list[tuple[Path, bool]] = []
-        for item in cast(list[object], result):
-            if isinstance(item, tuple):
-                values = cast(tuple[object, ...], item)
-                if len(values) != 2:
-                    continue
-                raw_path, raw_existed = values
-                path = Path(str(raw_path))
-                normalized.append((path, bool(raw_existed)))
-            elif isinstance(item, str | Path):
-                path = Path(item)
-                normalized.append((path, path.exists()))
-        return normalized
-    return []
+    return plugin.ensure_workspace_storage(
+        config=memory_build_config(config),
+        workspace=workspace,
+        storage=HostMemoryStorage(),
+    )
 
 
 def build_memory_runtime(
@@ -94,6 +95,7 @@ def build_memory_runtime(
     light_provider: LLMProvider | None,
     http_resources: SharedHttpResources,
     event_publisher: "EventBus | None" = None,
+    runtime_roles: RoleStore | None = None,
 ) -> MemoryRuntime:
     # 1. markdown 是默认记忆层，任何 engine 都共用。
     markdown = build_markdown_memory_runtime(
@@ -107,6 +109,7 @@ def build_memory_runtime(
     )
 
     closeables: list[object] = []
+    resources = []
     if _memory_plugin_enabled(config):
         plugin_runtime = _build_memory_plugin_runtime(
             config=config,
@@ -114,11 +117,13 @@ def build_memory_runtime(
             provider=provider,
             light_provider=light_provider,
             http_resources=http_resources,
-            markdown=markdown,
+            roles=runtime_roles if runtime_roles is not None else RoleStore(workspace),
             event_publisher=event_publisher,
         )
         engine = plugin_runtime.engine
-        closeables.extend(plugin_runtime.closeables)
+        resources = plugin_runtime.resources
+        if not resources:
+            closeables.extend(plugin_runtime.closeables)
         track_build_closeables(closeables)
         register_memory_meta_tools(
             tools,
@@ -131,6 +136,7 @@ def build_memory_runtime(
         markdown=markdown,
         engine=engine,
         closeables=closeables,
+        resources=resources,
     )
 
 

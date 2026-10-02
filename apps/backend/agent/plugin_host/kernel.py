@@ -6,24 +6,23 @@
 
 from __future__ import annotations
 
-from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
-
 import asyncio
 import importlib.util
-from importlib.abc import Loader
 import itertools
 import logging
 import sys
 from collections.abc import Awaitable, Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
+from importlib.abc import Loader
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
+from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.capabilities import (
-    BackgroundCapability,
     AccountsCapability,
+    BackgroundCapability,
     BotCommandsCapability,
     ChannelsCapability,
     LifecycleCapability,
@@ -32,42 +31,45 @@ from agent.plugin_host.capabilities import (
     ToolHooksCapability,
     ToolsCapability,
 )
-from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.config_schema import (
     PluginConfigSchemaRegistry,
     resolve_config_model,
 )
-from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.dependencies import PluginDependencies, PluginDependencyError
-from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
-from agent.plugin_host.events import ScopedEventBus
-from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
 from agent.plugin_host.diagnostics import (
     PackageContractError,
     PluginDiagnostic,
     RendererActivationError,
 )
-from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.discovery import discover_plugins
+from agent.plugin_host.effects import EffectScope
+from agent.plugin_host.events import ScopedEventBus
+from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
+from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import (
     ManifestError,
     PluginManifest,
+)
+from agent.plugin_host.memory import HostMemoryCapability
+from agent.plugin_host.package_fingerprint import (
+    PackageContent,
+    inspect_package_content,
 )
 from agent.plugin_host.plugin_data import (
     open_plugin_kv,
 )
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.plugin_host.runtime_context import PluginRuntimeContext, PluginSetupContext
-from agent.plugin_host.unload import PluginRestartRequired
-from agent.plugin_host.package_fingerprint import (
-    PackageContent,
-    inspect_package_content,
-)
+from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
+from agent.plugin_host.scene_observations import SceneObservationsCapability
 from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
+from agent.plugin_host.unload import PluginRestartRequired
 from bus.event_bus import EventBus
+from core.roles import RoleStore
 from core.scene.demand import SceneObservationDemand
-from agent.plugin_host.scene_observations import SceneObservationsCapability
+from shiori_sdk import PluginRuntimeContext as SdkRuntimeContext
+from shiori_sdk.memory.engine import MemoryEngine
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +114,9 @@ class HostServices:
     # 宿主唯一的 RoleStore 实例（bootstrap 里的 canonical 那个）。插件经
     # role_store capability 拿到的必须是它本身，见 manifest.KNOWN_CAPABILITIES
     # 里那段注释：另起一个实例就是另起一把写锁。
-    role_store: Any = None
+    role_store: RoleStore | None = None
     session_manager: Any = None
-    memory_engine: Any = None
+    memory_engine: MemoryEngine | None = None
     app_config: Any = None
     light_provider: Any = None
     light_model: str = ""
@@ -441,12 +443,19 @@ class PluginKernel:
                 f"v2 插件 {handle.record.name} 的入口缺少 setup(ctx) 函数"
             )
         setup_fn = cast("Callable[[SdkRuntimeContext], Awaitable[None]]", setup)
+        rpc = (
+            RpcCapability(
+                self.rpc, handle.effects, handle.plugin_id, self._services.event_bus
+            )
+            if "rpc" in handle.record.manifest.capabilities
+            else None
+        )
         context: PluginSetupContext = PluginRuntimeContext(
             plugin_id=handle.plugin_id,
             plugin_dir=handle.record.plugin_dir,
             manifest=handle.record.manifest,
             effects=handle.effects,
-            capabilities=self._build_capabilities(handle),
+            capabilities=self._build_capabilities(handle, rpc=rpc),
             lifecycle=(
                 LifecycleCapability(handle.contributions, handle.effects)
                 if "lifecycle" in handle.record.manifest.capabilities
@@ -457,11 +466,29 @@ class PluginKernel:
                 if "events" in handle.record.manifest.capabilities
                 else None
             ),
+            memory=(
+                HostMemoryCapability(
+                    self._services.workspace,
+                    self._services.role_store,
+                    self._services.memory_engine,
+                )
+                if "memory" in handle.record.manifest.capabilities
+                and self._services.workspace is not None
+                and self._services.role_store is not None
+                else None
+            ),
+            rpc=rpc,
             publish_api=lambda api: setattr(handle, "instance", api),
         )
-        await setup_fn(context.as_sdk_context())
+        await setup_fn(
+            context.as_memory_context()
+            if "memory" in handle.record.manifest.capabilities
+            else context.as_sdk_context()
+        )
 
-    def _build_capabilities(self, handle: PluginHandle) -> dict[str, Any]:
+    def _build_capabilities(
+        self, handle: PluginHandle, *, rpc: RpcCapability | None
+    ) -> dict[str, Any]:
         from agent.plugin_host.config import PluginConfig
 
         services = self._services
@@ -470,6 +497,7 @@ class PluginKernel:
                 services.scene_observations, handle.effects
             ),
             "events": lambda: None,
+            "memory": lambda: None,
             "kv": lambda: open_plugin_kv(
                 workspace=services.workspace,
                 plugin_id=handle.plugin_id,
@@ -521,9 +549,7 @@ class PluginKernel:
             "bot_commands": lambda: BotCommandsCapability(
                 handle.contributions, handle.effects
             ),
-            "rpc": lambda: RpcCapability(
-                self.rpc, handle.effects, handle.plugin_id, services.event_bus
-            ),
+            "rpc": lambda: rpc,
             "dependencies": lambda: PluginDependencies(
                 handle.record.manifest.dependencies,
                 self._dependency_api,

@@ -48,6 +48,7 @@ KNOWN_CAPABILITIES = frozenset(
         # atomic_save_json 只保证单次写原子、不防丢更新。
         "role_store",
         "memory_engine",
+        "memory",
         "session_manager",
         "light_provider",
         "light_model",

@@ -40,8 +40,7 @@ from core.memory.markdown.formatting import (
     build_consolidation_source_ref,
     _select_consolidation_window,
 )
-from memory2.store import MemoryStore2
-from plugins.default_memory.backend.engine import DefaultMemoryEngine
+from tests.backend.core.memory.markdown.memory_double import CommittedMemory
 from plugins.plugin_undo.backend.plugin import PluginUndo
 from session.manager import Session, SessionManager
 from session.manager.models import consolidation_cursor
@@ -192,9 +191,8 @@ async def test_undo_waits_for_started_commit_and_cleans_its_real_memory_sources(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     manager, session, maintenance, event_bus = _setup(tmp_path)
-    memory_store = MemoryStore2(tmp_path / "memory2.db")
-    memory_engine = DefaultMemoryEngine.__new__(DefaultMemoryEngine)
-    memory_engine._v2_store = memory_store
+    memory_store = CommittedMemory([message["id"] for message in session.messages])
+    memory_engine = memory_store
     entered, resume = asyncio.Event(), asyncio.Event()
     item_ids: list[str] = []
 
@@ -293,9 +291,8 @@ async def test_manual_timeout_keeps_lock_until_threaded_markdown_commit_finishes
     release = threading.Event()
     event_loop = asyncio.get_running_loop()
     maintenance_task: asyncio.Task[Any] | None = None
-    memory_store = MemoryStore2(tmp_path / "memory2.db")
-    engine = DefaultMemoryEngine.__new__(DefaultMemoryEngine)
-    engine._v2_store = memory_store
+    memory_store = CommittedMemory([message["id"] for message in session.messages])
+    engine = memory_store
     item_ids: list[str] = []
     original_append = MarkdownMemoryStore.append_history_once
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.memory.engine import MemoryToolProfile, MemoryToolSpec
+from shiori_sdk.memory.engine import MemoryToolProfile, MemoryToolSpec
 
 
 def _build_long_term_prompt(*, conversation: str, existing_profile: str) -> str:
