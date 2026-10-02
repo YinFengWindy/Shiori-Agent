@@ -5,10 +5,48 @@ import importlib.util
 import json
 import sys
 import sysconfig
-from importlib.metadata import distributions, version
+import zipfile
+from importlib.metadata import Distribution, distributions, version
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
+
+
+def content_mismatch(dist: Distribution, wheel: Path) -> list[str]:
+    """Installed paths whose content differs from the wheelhouse wheel ``wheel``.
+
+    An installer cache can serve an older build with the same name, version
+    and recorded wheel URL, so only the installed bytes prove the wheel file
+    was installed. Every wheel member must match; every installed package file
+    must come from the wheel. Installer-written dist-info files and bytecode
+    are not wheel content.
+    """
+    with zipfile.ZipFile(wheel) as archive:
+        members = {name for name in archive.namelist() if not name.endswith("/")}
+        # .data payloads are relocated on install and are not expected here.
+        assert not any(
+            name.split("/", 1)[0].endswith(".data") for name in members
+        ), f"Unsupported .data payload in {wheel.name}"
+        stale = [
+            name
+            for name in sorted(members)
+            if not name.endswith(".dist-info/RECORD")
+            and (
+                not (path := Path(str(dist.locate_file(name)))).is_file()
+                or path.read_bytes() != archive.read(name)
+            )
+        ]
+    assert dist.files is not None, f"No RECORD for {wheel.name}"
+    for file in dist.files:
+        parts = file.parts
+        if (
+            parts[0] != ".."
+            and not parts[0].endswith(".dist-info")
+            and "__pycache__" not in parts
+            and str(file) not in members
+        ):
+            stale.append(str(file))
+    return stale
 
 
 def audit() -> dict[str, object]:
@@ -42,6 +80,10 @@ def audit() -> dict[str, object]:
             ), f"Not installed from a local wheel: {name}"
             wheel = Path(url2pathname(urlparse(origin).path)).resolve()
             assert wheel.is_relative_to(wheelhouse), (name, str(wheel))
+            stale = content_mismatch(dist, wheel)
+            assert (
+                not stale
+            ), f"Installed {name} differs from wheelhouse wheel {wheel.name}: {stale}"
         installed[name] = dist.version
     assert not set(config["host_distributions"]) & installed.keys()
     allowed = set(config["allowed_plugins"])

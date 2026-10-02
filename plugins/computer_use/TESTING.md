@@ -7,7 +7,7 @@ From a copy outside the repository with a private wheelhouse available:
 
 ```sh
 uv venv .venv --python 3.12
-uv pip install --python .venv --find-links /absolute/path/to/wheelhouse ".[test]"
+uv pip install --python .venv --find-links /absolute/path/to/wheelhouse --refresh-package shiori-sdk ".[test]"
 uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 ```
 

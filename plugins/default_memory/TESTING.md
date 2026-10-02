@@ -8,7 +8,7 @@
 
 ```sh
 uv venv .venv --python 3.12
-uv pip install --python .venv --find-links /path/to/wheelhouse "shiori-plugin-default-memory[test]==0.1.0"
+uv pip install --python .venv --find-links /path/to/wheelhouse --refresh-package shiori-sdk --refresh-package shiori-plugin-default-memory "shiori-plugin-default-memory[test]==0.1.0"
 uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 ```
 

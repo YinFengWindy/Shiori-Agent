@@ -133,8 +133,11 @@ def install_from_wheelhouse(
 
     The local step uses exact wheel files with ``--no-index --no-deps``; the
     third-party step contains no ``shiori-*`` requirement, so neither the SDK
-    nor a plugin can be resolved from a public index. ``uv pip check`` then
-    proves the combined environment satisfies every declared requirement.
+    nor a plugin can be resolved from a public index. The local step also
+    bypasses the uv cache and reinstalls, so a cached or already installed
+    build with the same name and version cannot stand in for the wheel file;
+    third-party downloads keep the cache. ``uv pip check`` then proves the
+    combined environment satisfies every declared requirement.
     """
     wheels, dependencies = wheelhouse_closure(local, wheelhouse)
     remote = sorted({*dependencies, *third_party})
@@ -143,7 +146,14 @@ def install_from_wheelhouse(
             raise ValueError(f"{requirement} must come from the local wheelhouse")
     command = [UV, "pip", "install", "--python", str(python)]
     run(
-        [*command, "--no-index", "--no-deps", *map(str, wheels)],
+        [
+            *command,
+            "--no-index",
+            "--no-deps",
+            "--no-cache",
+            "--reinstall",
+            *map(str, wheels),
+        ],
         cwd=cwd,
         log=log.with_name(f"{log.stem}-local.log"),
     )
