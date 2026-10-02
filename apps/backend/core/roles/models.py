@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
 from typing import Any
+from shiori_sdk.values import now_iso, normalize_rel_path
 
 from .profile_models import RoleProfile
 
 DEFAULT_ASSET_CATEGORY_ID = "default"
-
-
-def now_iso() -> str:
-    return datetime.now().astimezone().isoformat()
 
 
 def normalize_role_id(role_id: str) -> str:
@@ -19,12 +15,6 @@ def normalize_role_id(role_id: str) -> str:
     if not clean:
         raise ValueError("role_id 不能为空")
     return clean
-
-
-def normalize_rel_path(path: str | None) -> str | None:
-    if not path:
-        return None
-    return path.replace("\\", "/")
 
 
 @dataclass(frozen=True)

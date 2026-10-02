@@ -8,23 +8,23 @@ from .tool import DesktopPetActionTool
 from .bubbles import register_bubble_rpc
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.plugin_services import ServicePluginContext as PluginRuntimeContext
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
     """Registers pet-owned data, explicit role-save participation and RPCs."""
-    from desktop_bridge.method_policy import Concurrency
-    from bus.events_lifecycle import RoleDeleted
+    from shiori_sdk.rpc import Concurrency
+    from shiori_sdk.role_events import RoleDeleted
 
-    # Prepared and active runtimes share RoleStore; use the same stateless
+    # Prepared and active runtimes share Roles; use the same stateless
     # callback identities even though plugin.py is imported per generation.
     from .pet_state import PLUGIN_ID, RolePetStateStore
     from .reconcile import PetStateReconciler
 
-    role_store = ctx.role_store
-    if role_store is None:
+    role_store = ctx.roles
+    if ctx.workspace is None:
         raise RuntimeError("桌宠插件需要 role_store")
-    reconciler = PetStateReconciler(role_store)
+    reconciler = PetStateReconciler(role_store, ctx.workspace, ctx.storage)
     reconciler.reconcile()
     ctx.effect(
         "role_settings",
@@ -43,7 +43,9 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         always_on=True,
         search_hint="桌宠 移动 位置 动作 挥手 跳跃",
     )
-    handlers = DesktopPetRpcHandlers(role_store=role_store)
+    handlers = DesktopPetRpcHandlers(
+        role_store=role_store, workspace=ctx.workspace, storage=ctx.storage
+    )
     register_bubble_rpc(ctx.rpc)
     ctx.rpc.register(
         "binding.get", handlers.binding_get, concurrency=Concurrency.READ_ONLY

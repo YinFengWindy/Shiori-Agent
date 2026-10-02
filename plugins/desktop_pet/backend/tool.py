@@ -8,9 +8,9 @@ from copy import deepcopy
 from typing import Any
 from uuid import uuid4
 
-from agent.tools.base import Tool
-from agent.plugin_host.capabilities import RpcCapability
-from core.roles.store import RoleStore
+from shiori_sdk.tools import Tool, ToolsCapability
+from shiori_sdk.rpc import RpcCapability
+from shiori_sdk.roles import Roles
 
 from .pet_state import RolePetStateStore
 from .models import RolePetState
@@ -65,9 +65,9 @@ class DesktopPetActionTool(Tool):
     def __init__(
         self,
         *,
-        role_store: RoleStore,
+        role_store: Roles,
         rpc: RpcCapability,
-        tool_registry: Any,
+        tool_registry: ToolsCapability,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._role_store = role_store

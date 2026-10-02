@@ -216,6 +216,15 @@ Actual kernel ordering, role saves, session media adoption, runtime lease
 retention, screen/desktop-pet integration and Windows Job cleanup remain in host
 tests. PR CI includes a dedicated Windows process-lifecycle job.
 
+Desktop pet also consumes `roles`, `storage`, `tools`, `rpc` and typed
+`role_events.RoleDeleted` through this context. Sprite packages, role selection,
+exclusive visibility and asset reconciliation remain plugin policies. Host
+integration tests exercise canonical role locks, atomic saves, migration receipts
+and kernel replacement with those public capabilities. `rpc.register` supports
+`admission_exempt=True` for bounded controls that must remain reachable while
+ordinary admission pauses; desktop-pet bubble dismissal uses this flag.
+Pure timestamp/path helpers are defined once in `shiori_sdk.values`.
+
 ## Channel and account contracts
 
 Channel plugins use `shiori_sdk.channels.context.ChannelPluginContext`; transport startup receives `shiori_sdk.channels.ChannelContext`. Account values/rules/targets live in `shiori_sdk.accounts`, message values in `shiori_sdk.messages`, stream events in `shiori_sdk.channel_events`, and provenance/quote helpers in `shiori_sdk.channels.message_source` and `reply_context`. The host injects intake, routing, attachment storage, HTTP and avatar services; it retains lifecycle and cache policy.

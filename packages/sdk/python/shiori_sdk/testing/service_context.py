@@ -54,4 +54,6 @@ class FakeServiceContext(FakeExtensionContext):
         finally:
             self.tools.tools.clear()
             self.rpc.handlers.clear()
+            self.rpc.concurrency.clear()
+            self.rpc.admission_exempt.clear()
             self.scene_observations.predicates.clear()

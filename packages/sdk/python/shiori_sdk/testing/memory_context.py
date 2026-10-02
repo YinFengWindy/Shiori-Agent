@@ -15,6 +15,7 @@ class FakeRpc:
     def __init__(self):
         self.handlers: dict[str, RpcHandler] = {}
         self.concurrency: dict[str, Concurrency] = {}
+        self.admission_exempt: dict[str, bool] = {}
         self.events: list[tuple[str, dict[str, object]]] = []
 
     def register(
@@ -23,9 +24,11 @@ class FakeRpc:
         handler: RpcHandler,
         *,
         concurrency: Concurrency = Concurrency.MUTATION,
+        admission_exempt: bool = False,
     ) -> None:
         self.handlers[name] = handler
         self.concurrency[name] = concurrency
+        self.admission_exempt[name] = admission_exempt
 
     async def emit(self, name: str, payload: dict[str, object]) -> bool:
         """Record one plugin event for assertion."""
@@ -75,3 +78,4 @@ class FakeMemoryPluginContext(FakePluginContext):
         await super().aclose()
         self.rpc.handlers.clear()
         self.rpc.concurrency.clear()
+        self.rpc.admission_exempt.clear()

@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from agent.plugin_host.data_migration import migrate_private_data
-from agent.plugin_host.plugin_data import plugin_data_dir
-from core.roles.store import RoleStore
+from shiori_sdk.extensions import PrivateStorage
+from shiori_sdk.storage import plugin_data_dir
+from shiori_sdk.roles import Roles
 
 PLUGIN_ID = "desktop_pet"
 
@@ -25,20 +25,20 @@ def asset_path(workspace: Path, value: str) -> Path:
     return path
 
 
-def prepare_assets(roles: RoleStore) -> None:
+def prepare_assets(roles: Roles, workspace: Path, storage: PrivateStorage) -> None:
     """Copy legacy bytes before atomically publishing every package's new paths."""
-    with roles.lock:
+    with roles.read_scope():
         data = roles.extensions.read(PLUGIN_ID)
         current_ids = {role.id for role in roles.list_roles()}
         changed = False
         for role_id in current_ids:
             state = data.get(role_id, {})
-            target = role_asset_directory(roles.workspace, role_id)
-            migrate_private_data(
-                roles.workspace,
+            target = role_asset_directory(workspace, role_id)
+            target = storage.migrate_data(
+                workspace,
                 PLUGIN_ID,
                 target.name,
-                roles.assets_dir / role_id / "pets",
+                roles.asset_path(f"assets/{role_id}/pets"),
             )
             prefix = f"assets/{role_id}/pets/"
             for package in state.get("pet_packages", []):
@@ -49,7 +49,7 @@ def prepare_assets(roles: RoleStore) -> None:
                         if not resolved.is_relative_to(target.resolve()):
                             raise ValueError("桌宠迁移素材路径越界")
                         package[key] = resolved.relative_to(
-                            roles.workspace.resolve()
+                            workspace.resolve()
                         ).as_posix()
                         changed = True
         if changed:

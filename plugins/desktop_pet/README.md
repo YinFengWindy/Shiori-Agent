@@ -1,6 +1,6 @@
 # desktop_pet
 
-桌宠包模型、校验、导入服务、角色选择与单点启用状态由 `backend/` 拥有。
+桌宠包模型、校验、导入服务、角色选择与单点启用状态由 `backend/` 拥有。后端仅依赖 `shiori-sdk` 与 Pillow；`setup(ctx)` 通过 SDK 的 `roles`、`storage`、`events`、`tools`、`rpc` 能力装配，角色存储和迁移实现由宿主注入。插件测试使用 `shiori-sdk[testing]`，独立安装见 `TESTING.md`。
 角色能力页中的开关由 `ui/roleSettings.tsx` 贡献，修改草稿后仍通过角色页的「保存」提交；选择/删除桌宠包后的投影刷新保留其他角色字段的未保存修改。
 
 ## 持久化边界

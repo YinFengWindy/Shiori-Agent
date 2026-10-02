@@ -4,25 +4,29 @@ from __future__ import annotations
 
 import shutil
 
-from bus.events_lifecycle import RoleDeleted
-from core.roles.store import RoleStore
+from shiori_sdk.role_events import RoleDeleted
+from shiori_sdk.roles import Roles
+from shiori_sdk.extensions import PrivateStorage
+from pathlib import Path
 
 from .pet_state import PLUGIN_ID, RolePetStateStore
 from .models import RolePetState
 from .storage import prepare_assets, role_asset_directory, asset_path
-from agent.plugin_host.plugin_data import plugin_data_dir
+from shiori_sdk.storage import plugin_data_dir
 
 
 class PetStateReconciler:
     """Cleans deleted roles even if their deletion happened while disabled."""
 
-    def __init__(self, roles: RoleStore) -> None:
+    def __init__(self, roles: Roles, workspace: Path, storage: PrivateStorage) -> None:
+        self._workspace = workspace
+        self._storage = storage
         self._roles = roles
 
     def reconcile(self) -> None:
         """Prunes missing roles and orphan package directories under one lock."""
-        with self._roles.lock:
-            prepare_assets(self._roles)
+        with self._roles.read_scope():
+            prepare_assets(self._roles, self._workspace, self._storage)
             roles = self._roles.list_roles()
             role_ids = {role.id for role in roles}
 
@@ -39,7 +43,7 @@ class PetStateReconciler:
                         package
                         for package in state.pet_packages
                         if asset_path(
-                            self._roles.workspace, package.spritesheet_path
+                            self._workspace, package.spritesheet_path
                         ).is_file()
                     ]
                     if state.selected_pet_package_id not in {
@@ -57,7 +61,7 @@ class PetStateReconciler:
             states = {
                 role.id: role for role in RolePetStateStore(self._roles).list_roles()
             }
-            root = plugin_data_dir(self._roles.workspace, PLUGIN_ID)
+            root = plugin_data_dir(self._workspace, PLUGIN_ID)
             if root.exists():
                 for pets in root.glob("pets-*"):
                     if not pets.is_dir() or pets.is_symlink():
@@ -76,15 +80,13 @@ class PetStateReconciler:
                             shutil.rmtree(package_dir)
             # Legacy pet-only folders are removed after metadata was committed.
             # Unrelated role images survive even when deletion kept role assets.
-            for asset_dir in self._roles.assets_dir.iterdir():
+            for asset_dir in self._roles.asset_path("assets").glob("*"):
                 pets = asset_dir / "pets"
                 if not pets.is_dir() or pets.is_symlink() or asset_dir.is_symlink():
                     continue
                 if (
                     asset_dir.name not in role_ids
-                    or role_asset_directory(
-                        self._roles.workspace, asset_dir.name
-                    ).exists()
+                    or role_asset_directory(self._workspace, asset_dir.name).exists()
                 ):
                     shutil.rmtree(pets)
 

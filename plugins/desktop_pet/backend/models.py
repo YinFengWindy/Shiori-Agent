@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from core.roles.models import normalize_rel_path, now_iso
+from shiori_sdk.values import normalize_rel_path, now_iso
 
 
 @dataclass(frozen=True)
@@ -79,8 +79,10 @@ class RolePetState:
         return result
 
     @classmethod
-    def from_dict(cls, role_id: str, payload: dict[str, Any]) -> "RolePetState":
+    def from_dict(cls, role_id: str, payload: object) -> "RolePetState":
         """Validates package membership before exposing an enabled selection."""
+        if not isinstance(payload, dict):
+            raise ValueError("桌宠角色状态必须是对象")
         packages = [
             RolePetPackage.from_dict(item)
             for item in (payload.get("pet_packages") or [])
