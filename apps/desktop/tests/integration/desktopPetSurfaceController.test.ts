@@ -5,24 +5,28 @@ import { DesktopSurfaceHost, surfaceStateChannel, type SurfaceWindowHandle } fro
 import { DesktopVoiceController } from "../../src/voice/controller";
 import { SurfaceVoiceController } from "../../src/voice/surfaceVoice";
 import { DesktopPetController, desktopPetSurfaceId, type DesktopPetSurfaces } from "../../../../plugins/desktop_pet/background/controller";
+import type { DesktopPetSettings } from "../../../../plugins/desktop_pet/background/types";
 
 /** Actual owners assembled through public capabilities; no pet KV reader participates. */
 function harness() {
   const key = { pluginId: "desktop_pet", surfaceId: desktopPetSurfaceId };
   const sent: { channel: string; payload: unknown }[] = [];
-  let destroyed = false;
-  let closed = () => {};
-  let bounds = { x: 0, y: 0, width: 0, height: 0 };
   let shown = 0;
-  const window: SurfaceWindowHandle = {
-    id: 47, setBounds: (value) => { bounds = value; }, getBounds: () => bounds,
-    isDestroyed: () => destroyed, destroy: () => { destroyed = true; closed(); },
-    showInactive: () => { shown++; }, hide() {}, setIgnoreMouseEvents() {},
-    send: (channel, payload) => { sent.push({ channel, payload }); },
-    onClosed: (listener) => { closed = listener; },
+  let nextWindowId = 47;
+  const createWindow = (): SurfaceWindowHandle => {
+    let destroyed = false;
+    let closed = () => {};
+    let bounds = { x: 0, y: 0, width: 0, height: 0 };
+    return {
+      id: nextWindowId++, setBounds: (value) => { bounds = value; }, getBounds: () => bounds,
+      isDestroyed: () => destroyed, destroy: () => { destroyed = true; closed(); },
+      showInactive: () => { shown++; }, hide() {}, setIgnoreMouseEvents() {},
+      send: (channel, payload) => { sent.push({ channel, payload }); },
+      onClosed: (listener) => { closed = listener; },
+    };
   };
   const host = new DesktopSurfaceHost({
-    createWindow: () => window,
+    createWindow,
     workAreaFor: () => ({ x: 0, y: 0, width: 1920, height: 1080 }),
     cursorScreenPoint: () => ({ x: 0, y: 0 }),
     onInteractionChanged: () => surfaceVoice?.revalidate(),
@@ -38,10 +42,13 @@ function harness() {
     workArea: async () => host.workArea(key),
   };
   let roleId = "role-a";
+  let bindingGate: Promise<void> = Promise.resolve();
+  let saveGate: Promise<void> = Promise.resolve();
+  const saves: DesktopPetSettings[] = [];
   const pet = new DesktopPetController({
     surfaces, settings: { visible: false, roleId: null, packageId: null, positions: {} },
-    saveSettings: async () => {},
-    resolveBinding: async () => ({ roleId, package: { id: "pet", displayName: "Pet", spritesheetUrl: "asset://pet" } }),
+    saveSettings: async (settings) => { saves.push(settings); await saveGate; },
+    resolveBinding: async () => { await bindingGate; return { roleId, package: { id: "pet", displayName: "Pet", spritesheetUrl: "asset://pet" } }; },
   });
   const asr = deferred<{ text: string }>();
   const requests: string[] = [];
@@ -74,7 +81,12 @@ function harness() {
       entry.callback();
     }
   };
-  return { key, host, pet, voice, surfaceVoice, sent, requests, asr, advancePress, shown: () => shown, setRole: (id: string) => { roleId = id; } };
+  return {
+    key, host, pet, voice, surfaceVoice, sent, requests, asr, advancePress, saves,
+    shown: () => shown, setRole: (id: string) => { roleId = id; },
+    holdBinding: (gate: Promise<void>) => { bindingGate = gate; },
+    holdSave: (gate: Promise<void>) => { saveGate = gate; },
+  };
 }
 
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -120,4 +132,40 @@ test("a role change during ASR cannot submit the old speech to the replacement r
     await tick();
     assert.deepEqual(h.requests, ["voice.transcribe"]);
   } finally { h.voice.dispose(); await h.pet.terminate(); }
+});
+
+test("hide keeps voice revoked while an older sync resumes and the hide save is pending", async () => {
+  const h = harness();
+  const bindingReady = deferred<void>();
+  const saveReady = deferred<void>();
+  try {
+    await h.pet.show();
+    h.host.markReady(h.key);
+    h.saves.length = 0;
+    h.holdBinding(bindingReady.promise);
+    const syncing = h.pet.sync();
+    await tick();
+    h.holdSave(saveReady.promise);
+    const hiding = h.pet.hide();
+    assert.deepEqual(h.host.interactionTargets(), []);
+    bindingReady.resolve();
+    await tick();
+    assert.deepEqual(h.host.interactionTargets(), [], "an obsolete binding continuation must not re-admit the hidden surface");
+    assert.equal(h.surfaceVoice.startPress(47), false);
+    assert.equal(h.voice.currentState.kind, "idle");
+    assert.deepEqual(h.saves.map((settings) => settings.visible), [false]);
+    saveReady.resolve();
+    await Promise.all([syncing, hiding]);
+    await h.pet.show();
+    h.host.markReady(h.key);
+    const target = h.host.interactionTargets()[0];
+    assert.ok(target);
+    assert.notEqual(target.windowId, 47, "explicit show creates a fresh live window identity");
+    assert.equal(h.surfaceVoice.startPress(target.windowId), true);
+  } finally {
+    bindingReady.resolve();
+    saveReady.resolve();
+    h.voice.dispose();
+    await h.pet.terminate();
+  }
 });

@@ -26,6 +26,7 @@ function harness(initial: Partial<DesktopPetSettings> = {}) {
   let createGate: Promise<void> = Promise.resolve();
   let bindingGate: Promise<void> = Promise.resolve();
   let areaGate: Promise<void> = Promise.resolve();
+  let saveGate: Promise<void> = Promise.resolve();
   const surfaces: DesktopPetSurfaces = {
     create: async (...args) => { creates.push(args); await createGate; return { x: 100, y: 200, displayId: "display-1" }; },
     destroy: async (id) => { destroyed.push(id); },
@@ -39,7 +40,7 @@ function harness(initial: Partial<DesktopPetSettings> = {}) {
   const controller = new DesktopPetController({
     surfaces,
     settings: { visible: false, roleId: null, packageId: null, positions: {}, ...initial },
-    saveSettings: async (value) => { saves.push(value); },
+    saveSettings: async (value) => { saves.push(value); await saveGate; },
     resolveBinding: async () => { await bindingGate; return nextBinding; },
     onError: (operation) => { errors.push(operation); },
   });
@@ -49,6 +50,7 @@ function harness(initial: Partial<DesktopPetSettings> = {}) {
     holdCreate: (value: Promise<void>) => { createGate = value; },
     holdBinding: (value: Promise<void>) => { bindingGate = value; },
     holdArea: (value: Promise<void>) => { areaGate = value; },
+    holdSave: (value: Promise<void>) => { saveGate = value; },
   };
 }
 
@@ -132,6 +134,79 @@ test("hide immediately revokes interaction and then destroys the surface", async
   assert.deepEqual(pet.destroyed, [desktopPetSurfaceId]);
   assert.equal(pet.controller.isRunning, false);
   assert.equal(pet.controller.currentSettings.visible, false);
+});
+
+test("new hide intent retires an older binding read without re-admitting or saving visible state", async () => {
+  for (const hideViaSync of [false, true]) {
+    const pet = harness();
+    await pet.controller.show();
+    pet.saves.length = 0;
+    const bindingReady = deferred<void>();
+    const saveReady = deferred<void>();
+    pet.holdBinding(bindingReady.promise);
+    pet.holdSave(saveReady.promise);
+    const syncing = pet.controller.sync();
+    await flush();
+    const hiding = hideViaSync ? pet.controller.sync(false) : pet.controller.hide();
+    assert.equal(pet.targets.at(-1), null);
+    const afterHide = pet.targets.length;
+    bindingReady.resolve();
+    await flush();
+    assert.ok(pet.targets.slice(afterHide).every((target) => target === null));
+    assert.deepEqual(pet.saves.map((settings) => settings.visible), [false]);
+    const showingAgain = pet.controller.show();
+    await flush();
+    assert.ok(pet.targets.slice(afterHide).every((target) => target === null));
+    saveReady.resolve();
+    await Promise.all([syncing, hiding, showingAgain]);
+    assert.deepEqual(pet.targets.at(-1), { roleId: "role-1", available: true });
+    assert.equal(pet.controller.currentSettings.visible, true);
+  }
+});
+
+test("hide during create never publishes the obsolete show and a later show still works", async () => {
+  const pet = harness();
+  const created = deferred<void>();
+  pet.holdCreate(created.promise);
+  const showing = pet.controller.show();
+  await flush();
+  const hiding = pet.controller.hide();
+  created.resolve();
+  await Promise.all([showing, hiding]);
+  assert.deepEqual(pet.targets, []);
+  assert.deepEqual(pet.states, []);
+  assert.deepEqual(pet.saves.map((settings) => settings.visible), [false]);
+  assert.deepEqual(pet.destroyed, [desktopPetSurfaceId]);
+  await pet.controller.show();
+  assert.equal(pet.creates.length, 2);
+  assert.deepEqual(pet.targets.at(-1), { roleId: "role-1", available: true });
+});
+
+test("hide retires already queued show requests before they open a window", async () => {
+  const pet = harness();
+  const showing = pet.controller.show();
+  const hiding = pet.controller.hide();
+  await Promise.all([showing, hiding]);
+  assert.deepEqual(pet.creates, []);
+  assert.deepEqual(pet.targets, []);
+  assert.deepEqual(pet.saves.map((settings) => settings.visible), [false]);
+});
+
+test("forced hide still refreshes role-save binding metadata after reclaiming the window", async () => {
+  const pet = harness();
+  await pet.controller.show();
+  const bindingReady = deferred<void>();
+  pet.holdBinding(bindingReady.promise);
+  pet.setBinding(null);
+  const hiding = pet.controller.sync(false);
+  await flush();
+  assert.deepEqual(pet.destroyed, [desktopPetSurfaceId]);
+  assert.equal(pet.targets.at(-1), null);
+  bindingReady.resolve();
+  await hiding;
+  assert.equal(pet.controller.currentSettings.visible, false);
+  assert.equal(pet.controller.currentSettings.roleId, null);
+  assert.equal(pet.controller.currentSettings.packageId, null);
 });
 
 test("disable destroys a running surface and a pending binding never opens one", async () => {
