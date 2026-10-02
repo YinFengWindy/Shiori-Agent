@@ -5,6 +5,7 @@ from collections.abc import Callable
 from shiori_sdk.channels.chat_types import is_group_chat_type
 from shiori_sdk.channels.message_source import addresses_account
 from shiori_sdk.channels.projection import plugin_metadata, project_inbound
+from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 
 
@@ -19,7 +20,7 @@ class FakeChannelHub:
     is handed to ``on_heard`` as kept in the group's listening records.
 
     Projection is the host's own (``shiori_sdk.channels.projection``); each
-    chat's thread is ``thread:<role_id>:<channel>:<chat_id>``, and a turn whose
+    chat's thread is the host's ``network_thread_id``, and a turn whose
     platform message ID that thread already received is marked
     ``conversation_duplicate`` as the host does.
     """
@@ -100,7 +101,7 @@ class FakeChannelHub:
             message,
             metadata,
             role_id=self.role_id,
-            thread_id=f"thread:{self.role_id}:{message.channel}:{message.chat_id}",
+            thread_id=network_thread_id(self.role_id, message.channel, message.chat_id),
             session_key=self.session_key,
             default_chat_type=self.default_chat_type,
         )

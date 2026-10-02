@@ -341,7 +341,8 @@ async def test_before_turn_memory_context_guard_blocks_unconsolidated_tail():
 @pytest.mark.asyncio
 async def test_before_turn_memory_context_guard_counts_only_the_turn_context(tmp_path):
     """群里积压再多，桌面回合只按用户上下文自己的游标算积压（#523）。"""
-    from conversation.service import desktop_thread_id, network_thread_id
+    from conversation.service import desktop_thread_id
+    from shiori_sdk.channels.threads import network_thread_id
 
     session = _DummySession("role:mira")
     session.metadata["role_id"] = "mira"

@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from conversation.service import desktop_thread_id, network_thread_id
+from conversation.service import desktop_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from core.roles import (
     LonelinessHeartbeatLoop,
     RoleRelationshipRuntimeService,

@@ -18,7 +18,7 @@ from agent.lifecycle.types import AfterReasoningInput, TurnState
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import turn_context_view
-from conversation.service import network_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from core.roles import RoleRelationshipRuntimeService, RoleStore
 from core.roles.reply_state import InvalidRoleReply, RoleReply
 from proactive_v2.presence import PresenceStore

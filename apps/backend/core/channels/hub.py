@@ -18,11 +18,8 @@ from shiori_sdk.accounts.models import (
     delivered_via_account,
 )
 from conversation.models import ThreadRecord
-from conversation.service import (
-    ConversationService,
-    LegacySessionDescriptor,
-    network_thread_id,
-)
+from conversation.service import ConversationService, LegacySessionDescriptor
+from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.channels.message_source import (
     GROUP_NAME_KEY,
     REPLY_TO_SENDER_ID_KEY,

@@ -27,11 +27,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from conversation.service import (
-    desktop_thread_id,
-    is_scheduler_thread,
-    network_thread_id,
-)
+from conversation.service import desktop_thread_id, is_scheduler_thread
+from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.channels.message_source import MessageSource
 from core.identity import UserIdentity, UserIdentityStore
 from session.manager.helpers import role_id_from_session_key, role_session_key

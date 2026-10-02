@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from conversation.context_scope import history_start, turn_context_view
-from conversation.service import network_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from session.manager import Session, SessionManager
 from session.manager.consolidation import ConsolidationCommitRequest
 

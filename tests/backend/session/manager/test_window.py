@@ -8,7 +8,8 @@ from conversation.context_scope import (
     turn_context_view,
     user_context_view,
 )
-from conversation.service import desktop_thread_id, network_thread_id
+from conversation.service import desktop_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from core.identity import UserIdentityStore, IdentityChat
 from shiori_sdk.accounts.models import AccountRecord
 from session.manager import SessionManager

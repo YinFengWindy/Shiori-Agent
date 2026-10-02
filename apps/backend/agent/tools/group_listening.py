@@ -16,7 +16,7 @@ from typing import Any
 
 from shiori_sdk.tools import Tool
 from conversation.listening import GroupListeningControl, ListenableGroup
-from conversation.service import network_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 
 
 def _candidates(groups: list[ListenableGroup]) -> str:

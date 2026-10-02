@@ -14,7 +14,7 @@ from agent.provider import LLMProvider
 from agent.prompting.input_budget import BudgetPolicy
 from shiori_sdk.messages import InboundMessage
 from conversation.context_scope import history_start, turn_context_view
-from conversation.service import network_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from core.compaction_summary import WorkingSummary
 from core.memory.markdown import MarkdownMemoryStore
 from core.roles import RoleStore

@@ -8,6 +8,7 @@ from conversation.listening_store import GroupListeningStore
 from conversation.models import ContactRecord, ThreadRecord
 from conversation.projector import ConversationStateProjector
 from conversation.store import ConversationStore
+from shiori_sdk.channels.threads import network_thread_id, role_thread_prefix
 from shiori_sdk.channels.chat_types import (
     CHAT_TYPE_GROUP,
     CHAT_TYPE_PRIVATE,
@@ -26,19 +27,9 @@ def desktop_chat_id(role_id: str) -> str:
     return f"role:{role_id}"
 
 
-def role_thread_prefix(role_id: str) -> str:
-    """The prefix every thread ID of ``role_id`` starts with."""
-    return f"thread:{role_id}:"
-
-
 def desktop_thread_id(role_id: str) -> str:
     """Returns the formal thread ID of one role's desktop session."""
     return f"{role_thread_prefix(role_id)}desktop"
-
-
-def network_thread_id(role_id: str, channel: str, chat_id: str) -> str:
-    """Returns the formal thread ID of one role's external channel session."""
-    return f"{role_thread_prefix(role_id)}{channel}:{chat_id}"
 
 
 def scheduler_thread_id(role_id: str, job_id: str) -> str:

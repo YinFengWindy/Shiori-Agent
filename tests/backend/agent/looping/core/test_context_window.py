@@ -14,7 +14,8 @@ from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
 from bus.events_context import ContextWindowChanged
 from bus.processing import ProcessingState
-from conversation.service import desktop_thread_id, network_thread_id
+from conversation.service import desktop_thread_id
+from shiori_sdk.channels.threads import network_thread_id
 from core.roles.model_runtime import RoleModelRuntime
 from core.roles.role_runtime import RoleRuntimeRegistry
 from core.roles.services import RoleRepository

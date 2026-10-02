@@ -55,7 +55,7 @@ async def test_minimal_request_uses_real_prompt_controller_and_transport(
     from agent.prompting.input_budget import BudgetPolicy
     from bus.event_bus import EventBus
     from conversation.context_scope import history_start, turn_context_view
-    from conversation.service import network_thread_id
+    from shiori_sdk.channels.threads import network_thread_id
     from core.compaction import CompactionFailedError
     from core.roles import RoleStore
     from shiori_sdk.context import ContextBudgetObserved
@@ -1162,7 +1162,7 @@ async def test_safety_retry_reads_committed_compaction_with_frozen_input_and_his
     from agent.provider import LLMProvider
     from agent.prompting.input_budget import BudgetPolicy
     from conversation.context_scope import history_start, turn_context_view
-    from conversation.service import network_thread_id
+    from shiori_sdk.channels.threads import network_thread_id
     from session.maintenance_progress import window_key
 
     h = memory_harness
