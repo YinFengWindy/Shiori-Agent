@@ -2,46 +2,38 @@
 
 from __future__ import annotations
 
-from shiori_sdk.testing.channel_intake import FakeChannelIntake as ChannelIntake
 import asyncio
 import importlib
 import sys
 import types
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
-from shiori_sdk.testing.events import FakeEvents as EventBus
+from shiori_sdk.testing.events import FakeEvents
 from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.channels.services import CHANNEL_INTAKE_RETRY_NOTICE
 from shiori_sdk.channel_events import (
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
 )
-from shiori_sdk.channels import ChannelContext
+from shiori_sdk.testing.channel_context import (
+    FakeChannelDeclarations,
+    fake_channel_context,
+)
 from shiori_sdk.testing.channel_sessions import FakeChannelSessions
-from shiori_sdk.testing.channel_services import FakeAttachmentStore
+from shiori_sdk.testing.channel_services import (
+    FakeInterruptController,
+    FakeMessageBus,
+    FakePushSenders,
+)
 from shiori_sdk.testing.channel_hub import FakeChannelHub
 
 _CHANNEL_PACKAGE = "plugins.telegram.backend.channel"
 _CHANNEL_DIR = Path(__file__).resolve().parents[1] / "backend" / "channel"
-
-
-class _Bus:
-    def __init__(self) -> None:
-        self.inbound = []
-        self.outbound = []
-
-    async def publish_inbound(self, msg) -> None:
-        self.inbound.append(msg)
-
-    def subscribe_outbound(self, channel, callback) -> None:
-        self.outbound.append((channel, callback))
-
-    def unsubscribe_outbound(self, channel, callback) -> None:
-        self.outbound = [item for item in self.outbound if item != (channel, callback)]
 
 
 def _import_telegram_channel(monkeypatch: pytest.MonkeyPatch):
@@ -213,27 +205,21 @@ def _import_telegram_channel(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.asyncio
 async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     mod = _import_telegram_channel(monkeypatch)
-    bus = _Bus()
-    event_bus = EventBus()
+    bus = FakeMessageBus()
+    event_bus = FakeEvents()
     session_manager = FakeChannelSessions()
-    interrupt_controller = MagicMock()
-    interrupt_controller.request_interrupt.return_value = SimpleNamespace(
-        status="interrupted",
-        session_key="telegram:123",
-        message="已中断",
-    )
-    channel = mod.TelegramChannel(
-        "token",
-        bus,
-        session_manager,
+    interrupt_controller = FakeInterruptController(message="已中断")
+    channel = mod.TelegramChannel("token")
+    ctx = fake_channel_context(
+        tmp_path / "uploads",
+        bus=bus,
+        session_manager=session_manager,
+        event_bus=event_bus,
+        interrupt_controller=interrupt_controller,
         bot_commands=[
             ("memorystatus", "查看记忆整理状态"),
             ("kvcache", "查看 KVCache 状态"),
         ],
-        event_bus=event_bus,
-        interrupt_controller=interrupt_controller,
-        intake_factory=ChannelIntake,
-        attachment_store=FakeAttachmentStore(tmp_path / "uploads"),
         channel_hub=FakeChannelHub(allowed=False),
     )
     channel._telegram_outbound_limiter = mod.TelegramOutboundLimiter(
@@ -250,7 +236,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     monkeypatch.setattr(mod, "send_markdown", AsyncMock())
     monkeypatch.setattr(mod, "send_stream_markdown", AsyncMock())
     monkeypatch.setattr(mod, "send_thinking_block", AsyncMock())
-    await channel.start()
+    await channel.start(ctx)
     hub = channel._channel_hub
     assert hub is not None
     channel._channel_hub = None
@@ -263,7 +249,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
         "stop",
         "chatid",
     ]
-    assert bus.outbound[0][0] == "telegram"
+    assert list(bus.outbound) == ["telegram"]
 
     class _File:
         def __init__(self, suffix):
@@ -315,11 +301,9 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
         effective_user=SimpleNamespace(id=1, username="Alice"),
     )
     await channel._on_stop_command(stop_update, context)
-    interrupt_controller.request_interrupt.assert_called_once_with(
-        session_key="telegram:123",
-        sender="1",
-        command="/stop",
-    )
+    assert interrupt_controller.requests == [
+        {"session_key": "telegram:123", "sender": "1", "command": "/stop"}
+    ]
     assert len(bus.inbound) == 1
 
     status_update = SimpleNamespace(
@@ -629,19 +613,21 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
         await asyncio.gather(*created)
     channel._on_polling_error(mod.TelegramError("warn"))
     await channel.stop()
-    assert bus.outbound == []
+    assert bus.outbound == {}
     assert event_bus._subscriptions == []
-    await channel.start()
-    assert len(bus.outbound) == 1
+    await channel.start(ctx)
+    assert bus.outbound == {"telegram": [channel._on_response]}
     assert len(event_bus._subscriptions) == 4
     await channel.stop()
-    assert bus.outbound == []
+    assert bus.outbound == {}
     assert {
         "session_key": "role:mira",
+        "chat_id": "123",
         "message_id": "role:mira:0",
         "thread_id": "thread:mira:telegram:123",
         "delivery_status": "sent",
         "external_message_id": "99",
+        "via_account": None,
     } in hub.deliveries
 
     merged, meta = mod._build_inbound_text_with_reply("hi", None)
@@ -653,18 +639,9 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert "[图片]" in merged
 
 
-def test_telegram_hooks_keep_private_streaming_and_rendering_rules(
-    monkeypatch, tmp_path
-):
+def test_telegram_hooks_keep_private_streaming_and_rendering_rules(monkeypatch):
     mod = _import_telegram_channel(monkeypatch)
-    channel = mod.TelegramChannel(
-        "token",
-        _Bus(),
-        FakeChannelSessions(),
-        intake_factory=ChannelIntake,
-        attachment_store=FakeAttachmentStore(tmp_path / "uploads"),
-        channel_hub=FakeChannelHub(allowed=False),
-    )
+    channel = mod.TelegramChannel("token")
 
     assert channel.supports_stream_events("123")
     assert not channel.supports_stream_events("-1001")
@@ -681,16 +658,9 @@ async def test_telegram_channel_buffers_received_input_during_pause(
     monkeypatch, tmp_path
 ):
     mod = _import_telegram_channel(monkeypatch)
-    bus = _Bus()
-    channel = mod.TelegramChannel(
-        "token",
-        bus,
-        FakeChannelSessions(),
-        intake_factory=ChannelIntake,
-        attachment_store=FakeAttachmentStore(tmp_path / "uploads"),
-        channel_hub=FakeChannelHub(allowed=False),
-    )
-    channel._channel_hub = None
+    bus = FakeMessageBus()
+    channel = mod.TelegramChannel("token")
+    await channel.start(fake_channel_context(tmp_path / "uploads", bus=bus))
     channel.pause_intake()
     message = InboundMessage(
         channel="telegram", sender="1", chat_id="1", content="during save"
@@ -699,8 +669,8 @@ async def test_telegram_channel_buffers_received_input_during_pause(
     assert bus.inbound == []
     channel.resume_intake()
     await channel._intake.drain()
-    assert bus.inbound == [message]
-    await channel._intake.close()
+    assert [item.content for item in bus.inbound] == ["during save"]
+    await channel.stop()
 
 
 @pytest.mark.asyncio
@@ -710,24 +680,16 @@ async def test_telegram_channel_notifies_pending_input_before_disconnect(
     mod = _import_telegram_channel(monkeypatch)
     send = AsyncMock()
     monkeypatch.setattr(mod.TelegramChannel, "send", send)
-    bus = _Bus()
-    channel = mod.TelegramChannel(
-        "token",
-        bus,
-        FakeChannelSessions(),
-        intake_factory=ChannelIntake,
-        attachment_store=FakeAttachmentStore(tmp_path / "uploads"),
-        channel_hub=FakeChannelHub(allowed=False),
-    )
-    channel._channel_hub = None
+    bus = FakeMessageBus()
+    channel = mod.TelegramChannel("token")
+    await channel.start(fake_channel_context(tmp_path / "uploads", bus=bus))
     channel.pause_intake()
     await channel._publish_inbound(
         InboundMessage(channel="telegram", sender="1", chat_id="1", content="pending")
     )
     await channel.stop()
     assert bus.inbound == []
-    send.assert_awaited_once()
-    assert "重新发送" in send.await_args.args[1]
+    send.assert_awaited_once_with("1", CHANNEL_INTAKE_RETRY_NOTICE)
 
 
 @pytest.mark.asyncio
@@ -736,25 +698,25 @@ async def test_telegram_channel_rejects_a_chat_without_receiving_account(
     tmp_path: Path,
 ):
     mod = _import_telegram_channel(monkeypatch)
-    bus = _Bus()
+    bus = FakeMessageBus()
     session_manager = FakeChannelSessions()
 
-    interrupt_controller = MagicMock()
-    event_bus = EventBus()
-    channel = mod.TelegramChannel(
-        token="token",
-        bus=bus,
-        session_manager=session_manager,
-        event_bus=event_bus,
-        interrupt_controller=interrupt_controller,
-        intake_factory=ChannelIntake,
-        attachment_store=FakeAttachmentStore(tmp_path / "uploads"),
-        channel_hub=FakeChannelHub(allowed=False),
-    )
+    interrupt_controller = FakeInterruptController()
+    event_bus = FakeEvents()
+    channel = mod.TelegramChannel(token="token")
     monkeypatch.setattr(mod, "send_markdown", AsyncMock())
     monkeypatch.setattr(mod, "send_stream_markdown", AsyncMock())
     monkeypatch.setattr(mod, "send_thinking_block", AsyncMock())
-    await channel.start()
+    await channel.start(
+        fake_channel_context(
+            tmp_path / "uploads",
+            bus=bus,
+            session_manager=session_manager,
+            event_bus=event_bus,
+            interrupt_controller=interrupt_controller,
+            channel_hub=FakeChannelHub(allowed=False),
+        )
+    )
     context = SimpleNamespace(bot=channel._app.bot)
     update = SimpleNamespace(
         effective_message=SimpleNamespace(
@@ -780,20 +742,18 @@ async def test_telegram_group_rejects_a_chat_without_receiving_account(
     tmp_path: Path,
 ):
     mod = _import_telegram_channel(monkeypatch)
-    bus = _Bus()
-    interrupt_controller = MagicMock()
-    channel = mod.TelegramChannel(
-        token="token",
-        bus=bus,
-        session_manager=FakeChannelSessions(),
-        event_bus=EventBus(),
-        interrupt_controller=interrupt_controller,
-        intake_factory=ChannelIntake,
-        attachment_store=FakeAttachmentStore(tmp_path / "uploads"),
-        channel_hub=FakeChannelHub(allowed=False),
-    )
+    bus = FakeMessageBus()
+    interrupt_controller = FakeInterruptController()
+    channel = mod.TelegramChannel(token="token")
     monkeypatch.setattr(mod, "send_markdown", AsyncMock())
-    await channel.start()
+    await channel.start(
+        fake_channel_context(
+            tmp_path / "uploads",
+            bus=bus,
+            interrupt_controller=interrupt_controller,
+            channel_hub=FakeChannelHub(allowed=False),
+        )
+    )
     context = SimpleNamespace(bot=channel._app.bot)
 
     def _update(user_id: int, username: str, text: str, message_id: int):
@@ -815,7 +775,7 @@ async def test_telegram_group_rejects_a_chat_without_receiving_account(
     await channel._on_message(_update(6, "friend", "hello", 3), context)
 
     assert bus.inbound == []
-    interrupt_controller.request_interrupt.assert_not_called()
+    assert interrupt_controller.requests == []
     await channel.stop()
 
 
@@ -825,17 +785,13 @@ async def test_telegram_rejected_sender_triggers_no_side_effects(
     tmp_path: Path,
 ):
     mod = _import_telegram_channel(monkeypatch)
-    bus = _Bus()
-    channel = mod.TelegramChannel(
-        token="token",
-        bus=bus,
-        session_manager=FakeChannelSessions(),
-        event_bus=EventBus(),
-        intake_factory=ChannelIntake,
-        attachment_store=FakeAttachmentStore(tmp_path / "uploads"),
-        channel_hub=FakeChannelHub(allowed=False),
+    bus = FakeMessageBus()
+    channel = mod.TelegramChannel(token="token")
+    await channel.start(
+        fake_channel_context(
+            tmp_path / "uploads", bus=bus, channel_hub=FakeChannelHub(allowed=False)
+        )
     )
-    await channel.start()
     typing = AsyncMock()
     remember = AsyncMock()
     get_file = AsyncMock()
@@ -882,46 +838,23 @@ async def test_telegram_rejected_sender_triggers_no_side_effects(
     await channel.stop()
 
 
-class _PushTool:
-    def __init__(self) -> None:
-        self.registered: list[str] = []
-        self.unregistered: list[str] = []
-
-    def register_channel(self, name: str, **_kwargs: object) -> None:
-        self.registered.append(name)
-
-    def unregister_channel(self, name: str, **_kwargs: object) -> None:
-        self.unregistered.append(name)
-
-
 @pytest.mark.asyncio
 async def test_plugin_channel_takes_runtime_state_and_commands_from_context(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     """插件在 setup 时只有 token；bus、会话与 bot 命令都来自 ChannelHost 的 ctx。"""
     mod = _import_telegram_channel(monkeypatch)
-    channel = mod.TelegramChannel(
-        token="token",
-        intake_factory=ChannelIntake,
-        attachment_store=FakeAttachmentStore(tmp_path / "uploads"),
-        channel_hub=FakeChannelHub(allowed=False),
-    )
+    channel = mod.TelegramChannel(token="token")
     assert channel.name == "telegram"
     assert channel.configuration_key is None
-    bus = _Bus()
-    push_tool = _PushTool()
-    hub = SimpleNamespace(name="hub")
-    ctx = ChannelContext(
-        intake_factory=ChannelIntake,
+    bus = FakeMessageBus()
+    push_tool = FakePushSenders()
+    hub = FakeChannelHub()
+    ctx = fake_channel_context(
+        tmp_path / "uploads",
         bus=bus,
-        session_manager=FakeChannelSessions(),
-        event_bus=EventBus(),
         push_tool=push_tool,
-        attachment_store=FakeAttachmentStore(tmp_path / "uploads"),
-        http_resources=SimpleNamespace(),
-        interrupt_controller=None,
         bot_commands=[("memorystatus", "查看记忆整理状态")],
-        log=MagicMock(),
         channel_hub=hub,
     )
 
@@ -933,11 +866,17 @@ async def test_plugin_channel_takes_runtime_state_and_commands_from_context(
     assert channel._attachments.create_path("x_", ".txt").parent == (
         tmp_path / "uploads"
     )
-    assert bus.outbound == [("telegram", channel._on_response)]
-    assert push_tool.registered == ["telegram"]
+    assert bus.outbound == {"telegram": [channel._on_response]}
+    assert sorted(push_tool.registrations["telegram"]) == [
+        "file",
+        "image",
+        "stream_text",
+        "target_resolver",
+        "text",
+    ]
     await channel.stop()
-    assert bus.outbound == []
-    assert push_tool.unregistered == ["telegram"]
+    assert bus.outbound == {}
+    assert push_tool.registrations == {}
 
 
 @pytest.mark.asyncio
@@ -945,27 +884,19 @@ async def test_telegram_chatid_reports_ids_without_role_binding(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    from shiori_sdk.testing.channel_context import (
-        FakeChannelDeclarations as load_manifest,
-    )
-
     mod = _import_telegram_channel(monkeypatch)
-    manifest = load_manifest(Path(__file__).resolve().parents[1])
-    assert manifest is not None
-    bus = _Bus()
+    manifest = FakeChannelDeclarations(Path(__file__).resolve().parents[1])
+    bus = FakeMessageBus()
     channel = mod.TelegramChannel(
-        token="token",
-        bus=bus,
-        session_manager=FakeChannelSessions(),
-        event_bus=EventBus(),
-        chat_types=manifest.channel_chat_types("telegram"),
-        intake_factory=ChannelIntake,
-        attachment_store=FakeAttachmentStore(tmp_path / "uploads"),
-        channel_hub=FakeChannelHub(allowed=False),
+        token="token", chat_types=manifest.channel_chat_types("telegram")
     )
     send = AsyncMock()
     monkeypatch.setattr(mod, "send_markdown", send)
-    await channel.start()
+    await channel.start(
+        fake_channel_context(
+            tmp_path / "uploads", bus=bus, channel_hub=FakeChannelHub(allowed=False)
+        )
+    )
     remember = AsyncMock()
     monkeypatch.setattr(channel, "_remember_username", remember)
     context = SimpleNamespace(bot=channel._app.bot)

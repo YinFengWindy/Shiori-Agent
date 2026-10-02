@@ -8,10 +8,13 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from contextvars import Context
 
+from shiori_sdk.channels.services import (
+    CHANNEL_INTAKE_CAPACITY,
+    CHANNEL_INTAKE_RETRY_NOTICE,
+)
 from shiori_sdk.messages import InboundMessage
 
 logger = logging.getLogger(__name__)
-_RETRY_MESSAGE = "渠道配置正在切换，这条消息尚未处理，请稍后重新发送。"
 
 
 class ChannelIntake:
@@ -23,7 +26,7 @@ class ChannelIntake:
         # Senders may return a platform message id; notices ignore it.
         send: Callable[[str, str], Awaitable[str | None]],
         *,
-        capacity: int = 256,
+        capacity: int = CHANNEL_INTAKE_CAPACITY,
     ) -> None:
         if capacity < 1:
             raise ValueError("Channel intake capacity must be positive")
@@ -84,7 +87,7 @@ class ChannelIntake:
                     logger.exception("Channel retry notice could not be delivered")
 
     async def _reject(self, message: InboundMessage) -> None:
-        _ = await self._send(message.chat_id, _RETRY_MESSAGE)
+        _ = await self._send(message.chat_id, CHANNEL_INTAKE_RETRY_NOTICE)
 
     async def drain(self) -> None:
         """Waits for scheduled admission and reports any asynchronous failure."""

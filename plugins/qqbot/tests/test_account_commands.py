@@ -1,32 +1,28 @@
 from __future__ import annotations
 
-from shiori_sdk.testing.accounts import FakeAccounts
-from shiori_sdk.testing.extensions import FakeConfig
-
-from types import SimpleNamespace
-
 import httpx
 import pytest
 
 import plugins.qqbot.backend.gateway as gateway_module
+from shiori_sdk.testing.channel_context import fake_channel_context
 from shiori_sdk.testing.storage import FakeKV
 from plugins.qqbot.backend.account_channel import QQBotAccountsChannel
 from plugins.qqbot.backend.accounts import QQBotAccountStore
 from plugins.qqbot.backend.channel import QQBotChannel
 
 
-def _manager(tmp_path):
+def _manager(setup_context):
     store = QQBotAccountStore(FakeKV())
-    accounts = FakeAccounts("qqbot", id_factory=lambda value: value)
-    manager = QQBotAccountsChannel(
-        SimpleNamespace(config=FakeConfig(), accounts=accounts), store, ()
-    )
-    return manager, store, accounts
+    context = setup_context()
+    manager = QQBotAccountsChannel(context, store, ())
+    return manager, store, context.accounts
 
 
 @pytest.mark.asyncio
-async def test_application_target_directories_are_isolated(tmp_path, monkeypatch):
-    manager, store, accounts = _manager(tmp_path)
+async def test_application_target_directories_are_isolated(
+    tmp_path, monkeypatch, setup_context
+):
+    manager, store, accounts = _manager(setup_context)
 
     async def preflight(app_id, secret):
         assert secret == f"secret-{app_id}"
@@ -59,9 +55,9 @@ async def test_application_target_directories_are_isolated(tmp_path, monkeypatch
 
 @pytest.mark.asyncio
 async def test_failed_credential_preflight_preserves_running_account(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, setup_context
 ):
-    manager, store, _ = _manager(tmp_path)
+    manager, store, _ = _manager(setup_context)
 
     async def valid(app_id, secret):
         pass
@@ -85,8 +81,10 @@ async def test_failed_credential_preflight_preserves_running_account(
 
 
 @pytest.mark.asyncio
-async def test_gateway_handover_failure_restores_old_credentials(tmp_path, monkeypatch):
-    manager, store, _ = _manager(tmp_path)
+async def test_gateway_handover_failure_restores_old_credentials(
+    tmp_path, monkeypatch, setup_context
+):
+    manager, store, _ = _manager(setup_context)
 
     async def valid(app_id, secret):
         pass
@@ -106,7 +104,7 @@ async def test_gateway_handover_failure_restores_old_credentials(tmp_path, monke
     await manager.save_and_connect(
         {"role_id": "mira", "app_id": "100", "client_secret": "working"}
     )
-    manager._runtime = SimpleNamespace()
+    manager._runtime = fake_channel_context(tmp_path / "uploads")
 
     with pytest.raises(RuntimeError, match="gateway rejected"):
         await manager.save_and_connect(
@@ -118,8 +116,10 @@ async def test_gateway_handover_failure_restores_old_credentials(tmp_path, monke
 
 
 @pytest.mark.asyncio
-async def test_failed_new_gateway_does_not_create_an_account(tmp_path, monkeypatch):
-    manager, store, _ = _manager(tmp_path)
+async def test_failed_new_gateway_does_not_create_an_account(
+    tmp_path, monkeypatch, setup_context
+):
+    manager, store, _ = _manager(setup_context)
 
     async def valid(app_id, secret):
         pass
@@ -133,7 +133,7 @@ async def test_failed_new_gateway_does_not_create_an_account(tmp_path, monkeypat
     monkeypatch.setattr(manager, "_preflight", valid)
     monkeypatch.setattr(QQBotChannel, "start", start)
     monkeypatch.setattr(QQBotChannel, "stop", stop)
-    manager._runtime = SimpleNamespace()
+    manager._runtime = fake_channel_context(tmp_path / "uploads")
 
     with pytest.raises(RuntimeError, match="gateway rejected"):
         await manager.save_and_connect(
@@ -147,9 +147,9 @@ async def test_failed_new_gateway_does_not_create_an_account(tmp_path, monkeypat
 
 @pytest.mark.asyncio
 async def test_credential_preflight_opens_and_closes_its_own_http_client(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, setup_context
 ):
-    manager, _, _ = _manager(tmp_path)
+    manager, _, _ = _manager(setup_context)
     real_client = httpx.AsyncClient
     clients: list[httpx.AsyncClient] = []
 
@@ -175,8 +175,9 @@ async def test_credential_preflight_opens_and_closes_its_own_http_client(
 @pytest.mark.asyncio
 async def test_deleted_application_closes_gateway_and_forgets_credentials(
     tmp_path,
+    setup_context,
 ):
-    manager, store, accounts = _manager(tmp_path)
+    manager, store, accounts = _manager(setup_context)
     for app_id in ("100", "200"):
         store.save(
             {

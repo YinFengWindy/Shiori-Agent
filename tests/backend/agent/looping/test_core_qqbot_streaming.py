@@ -179,6 +179,24 @@ def _stream_sink(channel: QQBotChannel, event_bus: EventBus, inbound: InboundMes
     return AgentLoop._build_stream_event_sink(loop, inbound)
 
 
+async def _wait_for_stream_requests(api: _QQApi, count: int) -> None:
+    """Wait until the platform has received ``count`` preview writes.
+
+    The final delivery itself waits for an in-flight preview write, so the
+    test only needs the request to have reached the platform.
+    """
+    async with asyncio.timeout(1):
+        while len(api.stream_bodies()) < count:
+            await asyncio.sleep(0.001)
+
+
+async def _stop_without_further_requests(channel: QQBotChannel, api: _QQApi) -> None:
+    """Stopping after the turn ended must not issue late preview writes or recalls."""
+    calls = len(api.calls)
+    await channel.stop()
+    assert api.calls[calls:] == []
+
+
 def _final_reply(content: str) -> OutboundMessage:
     return OutboundMessage(
         channel="qqbot",
@@ -226,7 +244,7 @@ async def test_bus_dispatch_does_not_replay_uncertain_or_partial_qq_delivery(
     assert sink is not None
     try:
         await sink("半句")
-        await channel._drain_live_tasks()
+        await _wait_for_stream_requests(api, 1)
         reply = _final_reply("半句话。")
         if failure == "image":
             reply.media = ["https://example.invalid/image.png"]
@@ -235,8 +253,7 @@ async def test_bus_dispatch_does_not_replay_uncertain_or_partial_qq_delivery(
             ["半句话。"] if failure == "fallback_timeout" else []
         )
         assert hub.deliveries == ["failed"]
-        assert channel._live_states == {}
-        assert channel._live_tasks == set()
+        await _stop_without_further_requests(channel, api)
     finally:
         await channel.stop()
 
@@ -269,15 +286,14 @@ async def test_delayed_old_final_preserves_both_turns_stream_ownership(
     try:
         async with bus.transport_lock:
             await first_sink("第一轮预览")
-            await channel._drain_live_tasks()
+            await _wait_for_stream_requests(api, 1)
             await bus.publish_outbound(_final_reply("第一轮完整回复"))
             loop = object.__new__(AgentLoop)
             loop._event_bus = event_bus
             await loop._observe_turn_started(second, SESSION_KEY)
             await second_sink("第二轮预览")
-            await channel._drain_live_tasks()
+            await _wait_for_stream_requests(api, 2)
         await asyncio.wait_for(bus.drain_outbound(), 1)
-        assert len(channel._live_states) == 1
         second_reply = _final_reply("第二轮完整回复")
         second_reply.metadata["external_message_id"] = "msg-2"
         await bus.publish_outbound(second_reply)
@@ -299,8 +315,7 @@ async def test_delayed_old_final_preserves_both_turns_stream_ownership(
         ]
         assert api.markdown_messages() == []
         assert hub.deliveries == ["sent", "sent"]
-        assert channel._live_states == {}
-        assert channel._live_tasks == set()
+        await _stop_without_further_requests(channel, api)
     finally:
         bus.stop()
         dispatcher.cancel()
@@ -323,20 +338,19 @@ async def test_cancelled_turn_cleans_only_abandoned_preview(
     try:
         async with bus.transport_lock:
             await sink("取消前的预览")
-            await channel._drain_live_tasks()
+            await _wait_for_stream_requests(api, 1)
             if final_queued:
                 await bus.publish_outbound(_final_reply("已经提交的完整回复"))
             await event_bus.observe(
                 TurnCancelled(SESSION_KEY, "qqbot", CHAT_ID, "msg-1")
             )
-            assert bool(channel._live_states) is final_queued
-            if not final_queued:
-                assert api.calls[-1][:2] == (
-                    "DELETE",
-                    "/v2/users/user-1/messages/stream-1",
-                )
-                assert channel._reply_buffers == {}
-                assert channel._live_stop_events == {}
+            # A queued final reply still owns the preview; otherwise it is recalled.
+            recalls = [call[:2] for call in api.calls if call[0] == "DELETE"]
+            assert recalls == (
+                []
+                if final_queued
+                else [("DELETE", "/v2/users/user-1/messages/stream-1")]
+            )
             await event_bus.observe(
                 TurnStarted(
                     SESSION_KEY,
@@ -348,9 +362,9 @@ async def test_cancelled_turn_cleans_only_abandoned_preview(
                 )
             )
         await asyncio.wait_for(bus.drain_outbound(), 1)
-        assert channel._live_states == {}
         assert api.markdown_messages() == []
         assert hub.deliveries == (["sent"] if final_queued else [])
+        await _stop_without_further_requests(channel, api)
     finally:
         bus.stop()
         dispatcher.cancel()
@@ -392,7 +406,7 @@ async def test_bus_cancelled_delivery_with_failed_recall_never_replays(
     assert sink is not None
     await sink("取消前的预览")
     if cancel_terminal:
-        await channel._drain_live_tasks()
+        await _wait_for_stream_requests(api, 1)
     dispatch = asyncio.create_task(bus._dispatch_message(_final_reply("完整回复")))
     try:
         await asyncio.wait_for(entered.wait(), 1)
@@ -411,8 +425,7 @@ async def test_bus_cancelled_delivery_with_failed_recall_never_replays(
             assert "取消投递后撤回流式预览失败" in caplog.text
         if cancel_terminal and request_fails:
             assert "取消流式投递后等待发送回执失败" in caplog.text
-        assert channel._live_states == {}
-        assert channel._live_tasks == set()
+        await _stop_without_further_requests(channel, api)
     finally:
         release.set()
         await channel.stop()

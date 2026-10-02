@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from plugins.telegram.backend.channel.inbound import _InboundMixin
+from shiori_sdk.testing.channel_hub import FakeChannelHub
+from shiori_sdk.testing.channel_services import FakeMessageBus
 
 
 @pytest.mark.asyncio
@@ -75,22 +77,10 @@ async def test_unbound_chat_is_observed_without_publishing_its_message():
 async def test_private_pairing_code_binds_with_platform_scope_only_in_private_chats():
     from shiori_sdk.messages import InboundMessage
 
-    pairings = []
-
-    class Hub:
-        def is_sender_allowed(self, **_kwargs):
-            return True
-
-        def claim_pairing(self, message, *, scope):
-            pairings.append((message.chat_id, scope))
-            return message.content == "PAIR1234"
-
-        def route_account_inbound(self, message):
-            return message
-
-    bus = SimpleNamespace(publish_inbound=AsyncMock())
+    hub = FakeChannelHub(pairing_code="PAIR1234")
+    bus = FakeMessageBus()
     channel = _InboundMixin()
-    channel._channel_hub = Hub()
+    channel._channel_hub = hub
     channel.mark_online = Mock()
     channel.send = AsyncMock()
     channel._require_bus = Mock(return_value=bus)
@@ -101,15 +91,20 @@ async def test_private_pairing_code_binds_with_platform_scope_only_in_private_ch
             sender="77",
             chat_id=chat_id,
             content="PAIR1234",
-            metadata={"account_id": "telegram:1", "chat_type": chat_type},
+            # The group message @s the Bot, so the host starts a turn with it.
+            metadata={
+                "account_id": "telegram:1",
+                "chat_type": chat_type,
+                "mentioned": True,
+            },
         )
 
     await channel._accept_inbound(inbound("77", "private"))
     await channel._accept_inbound(inbound("-1001", "supergroup"))
 
-    assert pairings == [("77", "platform")]
+    assert hub.pairings == [("77", "PAIR1234", "platform")]
     channel.send.assert_awaited_once_with("77", "已绑定")
-    [published] = [call.args[0] for call in bus.publish_inbound.await_args_list]
+    [published] = bus.inbound
     assert published.chat_id == "-1001"
 
 
@@ -120,14 +115,9 @@ async def test_received_message_refreshes_its_sender_and_chat_avatars():
     channel = _InboundMixin()
     channel._avatars = Mock(refresh=Mock(return_value=None))
     channel.bot = Mock()
-    channel._channel_hub = SimpleNamespace(
-        is_sender_allowed=lambda **_kwargs: True,
-        route_account_inbound=lambda message: message,
-    )
+    channel._channel_hub = FakeChannelHub()
     channel.mark_online = Mock()
-    channel._require_bus = Mock(
-        return_value=SimpleNamespace(publish_inbound=AsyncMock())
-    )
+    channel._require_bus = Mock(return_value=FakeMessageBus())
 
     await channel._accept_inbound(
         InboundMessage(
@@ -135,7 +125,11 @@ async def test_received_message_refreshes_its_sender_and_chat_avatars():
             sender="77",
             chat_id="-1001",
             content="hello",
-            metadata={"account_id": "telegram:1", "chat_type": "supergroup"},
+            metadata={
+                "account_id": "telegram:1",
+                "chat_type": "supergroup",
+                "mentioned": True,
+            },
         )
     )
 

@@ -3,11 +3,12 @@ from __future__ import annotations
 from shiori_sdk.testing.processes import FakeProcesses
 from shiori_sdk.testing.http import FakeHttp
 from shiori_sdk.testing.accounts import FakeAccounts
-from shiori_sdk.testing.channel_intake import FakeChannelIntake
+from shiori_sdk.testing.channel_context import fake_channel_context
+from shiori_sdk.testing.channel_hub import FakeChannelHub
+from shiori_sdk.testing.channel_services import FakeMessageBus
 
 import asyncio
 from dataclasses import asdict
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -475,27 +476,10 @@ async def test_account_added_after_handover_resume_receives_private_messages(
         return socket
 
     monkeypatch.setattr("plugins.qq.backend.accounts_runtime.OneBotSocket", open_socket)
-    routed = []
-    bus = SimpleNamespace(
-        publish_inbound=AsyncMock(),
-        subscribe_outbound=lambda *_args: None,
-        unsubscribe_outbound=lambda *_args: None,
-    )
-    ctx = SimpleNamespace(
-        intake_factory=FakeChannelIntake,
-        bus=bus,
-        push_tool=SimpleNamespace(
-            register_channel=lambda *_args, **_kwargs: None,
-            unregister_channel=lambda *_args: None,
-        ),
-        channel_hub=SimpleNamespace(
-            claim_pairing=lambda _message, *, scope: False,
-            route_account_inbound=lambda message, **_: routed.append(message)
-            or message,
-        ),
-        http_resources=SimpleNamespace(),
-        attachment_store=SimpleNamespace(),
-        intake_paused=True,
+    bus, hub = FakeMessageBus(), FakeChannelHub()
+    routed = hub.offered
+    ctx = fake_channel_context(
+        tmp_path / "uploads", bus=bus, channel_hub=hub, intake_paused=True
     )
     await runtime.start(ctx)
     runtime.resume_intake()
@@ -522,6 +506,6 @@ async def test_account_added_after_handover_resume_receives_private_messages(
     )
 
     assert [message.content for message in routed] == ["你好"]
-    [call] = bus.publish_inbound.await_args_list
-    assert call.args[0].metadata["account_id"] == "qq-101"
+    [published] = bus.inbound
+    assert published.metadata["account_id"] == "qq-101"
     await runtime.stop()

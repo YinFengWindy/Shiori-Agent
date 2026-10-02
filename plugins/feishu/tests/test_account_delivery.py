@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -7,6 +8,7 @@ import httpx
 import pytest
 
 from shiori_sdk.accounts.targets import UncertainDeliveryError
+from shiori_sdk.testing.channel_context import FakeChannelPluginContext
 from plugins.feishu.backend.account_delivery import FeishuAccountDelivery
 
 
@@ -17,15 +19,12 @@ def _png(tmp_path) -> str:
     return str(path)
 
 
-class _KV:
-    def __init__(self) -> None:
-        self.data = {
-            "profile:feishu:app": {"open_id": "ou_bot"},
-            "targets:feishu:app": {"oc_b": "ou_b", "oc_a": "ou_a"},
-        }
-
-    def get(self, key: str, default=None):
-        return self.data.get(key, default)
+def _setup_context() -> FakeChannelPluginContext:
+    """The plugin's setup context with one application's stored profile and targets."""
+    context = FakeChannelPluginContext("feishu", Path(__file__).resolve().parents[1])
+    context.kv.set("profile:feishu:app", {"open_id": "ou_bot"})
+    context.kv.set("targets:feishu:app", {"oc_b": "ou_b", "oc_a": "ou_a"})
+    return context
 
 
 @pytest.mark.asyncio
@@ -36,7 +35,7 @@ async def test_profile_and_targets_stay_scoped_to_the_selected_account() -> None
             "feishu:app" if payload["account_id"] == "feishu:feishu:app" else None
         ),
     )
-    delivery = FeishuAccountDelivery(SimpleNamespace(kv=_KV()), accounts)
+    delivery = FeishuAccountDelivery(_setup_context(), accounts)
 
     result = await delivery.targets(
         {"account_id": "feishu:feishu:app", "kind": "known"}
@@ -65,7 +64,7 @@ async def test_account_send_requires_private_target_and_certain_receipt() -> Non
         channel=lambda ref: channel if ref == "feishu:app" else None,
         ref_for_account=lambda payload: "feishu:app",
     )
-    delivery = FeishuAccountDelivery(SimpleNamespace(kv=_KV()), accounts)
+    delivery = FeishuAccountDelivery(_setup_context(), accounts)
     payload = {
         "account_id": "feishu:feishu:app",
         "target_kind": "private",
@@ -107,7 +106,7 @@ async def test_account_send_delivers_images_after_the_text(tmp_path) -> None:
     accounts = SimpleNamespace(
         channel=lambda ref: channel, ref_for_account=lambda payload: "feishu:app"
     )
-    delivery = FeishuAccountDelivery(SimpleNamespace(kv=_KV()), accounts)
+    delivery = FeishuAccountDelivery(_setup_context(), accounts)
     payload = {
         "account_id": "feishu:feishu:app",
         "target_kind": "private",
@@ -140,7 +139,7 @@ async def test_invalid_local_image_is_refused_before_any_send(tmp_path) -> None:
     accounts = SimpleNamespace(
         channel=lambda ref: channel, ref_for_account=lambda payload: "feishu:app"
     )
-    delivery = FeishuAccountDelivery(SimpleNamespace(kv=_KV()), accounts)
+    delivery = FeishuAccountDelivery(_setup_context(), accounts)
     with pytest.raises(ValueError, match="图片文件不存在"):
         await delivery.send_account(
             {

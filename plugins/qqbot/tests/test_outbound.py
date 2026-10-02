@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import Mock
-
 import httpx
 import pytest
 
@@ -13,6 +11,14 @@ from plugins.qqbot.backend.channel import QQBotChannel
 from plugins.qqbot.backend.stream_delivery import _StreamState
 from shiori_sdk.messages import OutboundMessage
 from shiori_sdk.channels.errors import NonRetryableDeliveryError
+from shiori_sdk.testing.channel_hub import FakeChannelHub
+
+
+def _receipts(hub: FakeChannelHub) -> list[tuple[object, object, object]]:
+    return [
+        (item["delivery_status"], item["external_message_id"], item["via_account"])
+        for item in hub.deliveries
+    ]
 
 
 @pytest.mark.parametrize("terminal", [False, True])
@@ -34,7 +40,8 @@ async def test_cancelled_delivery_retains_only_completed_receipt(terminal):
 
     channel = QQBotChannel("app", "secret")
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    channel._channel_hub = Mock()
+    hub = FakeChannelHub()
+    channel._channel_hub = hub
     key = ("role:mira", "c2c:app:user", "incoming")
     if terminal:
         channel._live_states[key] = _StreamState(
@@ -67,13 +74,9 @@ async def test_cancelled_delivery_retains_only_completed_receipt(terminal):
         release.set()
         with pytest.raises(asyncio.CancelledError):
             await delivery
-        channel._channel_hub.mark_delivery.assert_called_once_with(
-            message,
-            default_channel="qqbot",
-            delivery_status="failed",
-            external_message_id="outgoing-stream" if terminal else "",
-            via_account=None,
-        )
+        assert _receipts(hub) == [
+            ("failed", "outgoing-stream" if terminal else "", None)
+        ]
         assert recalls == (
             [] if terminal else ["/v2/users/user/messages/outgoing-stream"]
         )
@@ -118,7 +121,7 @@ async def test_reply_records_retained_receipt_instead_of_turn_id(mode):
     }
     channel = QQBotChannel("app", "secret", via_account=lambda: via)
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    hub = Mock()
+    hub = FakeChannelHub()
     channel._channel_hub = hub
     if mode in {"stream", "fallback"}:
         channel._live_states[("role:mira", "c2c:app:user", "incoming")] = _StreamState(
@@ -149,14 +152,14 @@ async def test_reply_records_retained_receipt_instead_of_turn_id(mode):
                 await channel._on_response(message)
         else:
             await channel._on_response(message)
-        hub.mark_delivery.assert_called_once_with(
-            message,
-            default_channel="qqbot",
-            delivery_status="failed" if mode == "failed" else "sent",
-            external_message_id=receipts[0] if receipts else "",
-            # Only a sent reply records the account it went out through.
-            via_account=None if mode == "failed" else via,
-        )
+        # Only a sent reply records the account it went out through.
+        assert _receipts(hub) == [
+            (
+                "failed" if mode == "failed" else "sent",
+                receipts[0] if receipts else "",
+                None if mode == "failed" else via,
+            )
+        ]
         if mode == "fallback":
             assert receipts == ["sent-1"]
     finally:

@@ -2,26 +2,28 @@
 
 from __future__ import annotations
 
-from shiori_sdk.testing.channel_intake import FakeChannelIntake as ChannelIntake
 import asyncio
 import io
 import json
-import logging
 import threading
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
 
 import httpx
 import pytest
 from PIL import Image
 
-from shiori_sdk.testing.events import FakeEvents as EventBus
-from shiori_sdk.messages import InboundMessage, OutboundMessage
-from shiori_sdk.testing.channel_services import FakeAttachmentStore as AttachmentStore
+from shiori_sdk.testing.events import FakeEvents
 from shiori_sdk.channels import ChannelContext
+from shiori_sdk.testing.channel_context import fake_channel_context
+from shiori_sdk.testing.channel_hub import FakeChannelHub
+from shiori_sdk.testing.channel_services import (
+    FakeInterruptController,
+    FakeMessageBus,
+    FakePushSenders,
+)
 from plugins.feishu.backend.channel import FeishuChannel
 from plugins.feishu.backend.ws import EventCallback
 
@@ -229,86 +231,16 @@ class ConnectionFactoryRecorder:
         raise AssertionError("fake long connection never connected")
 
 
-class Bus:
-    def __init__(self) -> None:
-        self.inbound: list[InboundMessage] = []
-        self.outbound: list[tuple[str, object]] = []
-
-    async def publish_inbound(self, message: InboundMessage) -> None:
-        self.inbound.append(message)
-
-    def subscribe_outbound(self, channel: str, callback: object) -> None:
-        self.outbound.append((channel, callback))
-
-    def unsubscribe_outbound(self, channel: str, callback: object) -> None:
-        self.outbound = [item for item in self.outbound if item != (channel, callback)]
-
-
-class PushTool:
-    def __init__(self) -> None:
-        self.registered: dict[str, dict[str, object]] = {}
-        self.removed: list[str] = []
-
-    def register_channel(self, name: str, **kwargs: object) -> None:
-        self.registered[name] = kwargs
-
-    def unregister_channel(self, name: str, **kwargs: object) -> None:
-        self.removed.append(name)
-
-
-class Hub:
-    """Routes like the real hub: bound chats land on the role session."""
-
-    def __init__(self, *, allowed: bool = True, blocked: bool = False) -> None:
-        self.allowed = allowed
-        self.blocked = blocked
-        self.deliveries: list[str] = []
-        # The pending pairing code, and every (content, scope) offered to it.
-        self.pairing_code = ""
-        self.pairings: list[tuple[str, str]] = []
-
-    def is_sender_allowed(self, **kwargs: object) -> bool:
-        return self.allowed
-
-    def claim_pairing(self, message: InboundMessage, *, scope: str) -> bool:
-        self.pairings.append((message.content, scope))
-        return bool(self.pairing_code) and message.content == self.pairing_code
-
-    def is_sender_blocked(self, **kwargs: object) -> bool:
-        return self.blocked
-
-    def route_inbound(self, message: InboundMessage) -> InboundMessage:
-        message.metadata.update(
-            {"role_id": "mira", "session_key_override": "role:mira"}
-        )
-        return message
-
-    def resolve_runtime_session_key(self, channel: str, chat_id: str) -> str:
-        return "role:mira"
-
-    def mark_delivery(self, message: OutboundMessage, **kwargs: object) -> None:
-        self.deliveries.append(str(kwargs["delivery_status"]))
-
-
-class Interrupts:
-    def __init__(self) -> None:
-        self.requests: list[dict[str, str]] = []
-
-    def request_interrupt(self, **kwargs: str) -> SimpleNamespace:
-        self.requests.append(kwargs)
-        return SimpleNamespace(message="已停止当前回复。")
-
-
 @dataclass
 class Harness:
     channel: FeishuChannel
     api: FakeFeishu
     factory: ConnectionFactoryRecorder
-    bus: Bus
-    push_tool: PushTool
-    hub: Hub
-    event_bus: EventBus
-    interrupts: Interrupts
+    bus: FakeMessageBus
+    push_tool: FakePushSenders
+    hub: FakeChannelHub
+    event_bus: FakeEvents
+    interrupts: FakeInterruptController
     context: ChannelContext
 
     async def start(self) -> FakeConnection:
@@ -338,20 +270,17 @@ def build_harness(
         connection_factory=factory,
         **channel_kwargs,
     )
-    bus, push_tool, hub = Bus(), PushTool(), Hub(allowed=allowed, blocked=blocked)
-    event_bus, interrupts = EventBus(), Interrupts()
-    context = ChannelContext(
-        intake_factory=ChannelIntake,
-        bus=cast(Any, bus),
-        session_manager=cast(Any, SimpleNamespace()),
+    bus, push_tool = FakeMessageBus(), FakePushSenders()
+    hub = FakeChannelHub(allowed=allowed, blocked=blocked)
+    event_bus = FakeEvents()
+    interrupts = FakeInterruptController(message="已停止当前回复。")
+    context = fake_channel_context(
+        tmp_path / "uploads",
+        bus=bus,
         event_bus=event_bus,
-        push_tool=cast(Any, push_tool),
-        attachment_store=AttachmentStore(tmp_path / "uploads"),
-        http_resources=cast(Any, SimpleNamespace()),
-        interrupt_controller=cast(Any, interrupts),
-        bot_commands=[],
-        log=logging.getLogger("test.feishu"),
-        channel_hub=cast(Any, hub),
+        push_tool=push_tool,
+        interrupt_controller=interrupts,
+        channel_hub=hub,
     )
     return Harness(
         channel, api, factory, bus, push_tool, hub, event_bus, interrupts, context
