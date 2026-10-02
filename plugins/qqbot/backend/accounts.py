@@ -3,27 +3,27 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
-from agent.plugin_host.kv import PluginKVStore
-from agent.config import resolve_config_references
+from shiori_sdk.storage import KeyValueStore
 
 _ENV = re.compile(r"^\$\{([A-Za-z_][A-Za-z_0-9]*)\}$")
 _KEY = "application_accounts"
 
 
-def resolve_secret(value: str) -> str:
+def resolve_secret(value: str, resolver: Callable[[str], str]) -> str:
     """Resolve a stored environment reference only at connection time."""
     if not _ENV.fullmatch(value):
         return value
-    resolved = str(resolve_config_references(value))
+    resolved = resolver(value)
     return "" if resolved == value else resolved
 
 
 class QQBotAccountStore:
     """Persist account credentials and observed targets under plugin data."""
 
-    def __init__(self, kv: PluginKVStore) -> None:
+    def __init__(self, kv: KeyValueStore) -> None:
         self._kv = kv
 
     def list(self) -> list[dict[str, Any]]:

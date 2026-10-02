@@ -5,16 +5,17 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Callable
+from shiori_sdk.accounts import ConnectionState
 
 import websockets
 
-from agent.looping.interrupt import InterruptController
-from bus.events_lifecycle import StreamDeltaReady, TurnCancelled, TurnStarted
-from bus.queue import MessageBus
-from core.channels import ChannelHub
-from core.common.channel_chat_types import ChatTypeDeclaration
-from infra.channels.contract import ChannelContext
-from infra.channels.intake import ChannelIntake
+from shiori_sdk.channels.services import InterruptController
+from shiori_sdk.channel_events import StreamDeltaReady, TurnCancelled, TurnStarted
+from shiori_sdk.channels.services import MessageBus
+from shiori_sdk.channels.services import ChannelHub
+from shiori_sdk.channels.chat_types import ChatTypeDeclaration
+from shiori_sdk.channels import ChannelContext
+from shiori_sdk.channels.services import ChannelIntake
 
 from .formatting import CHANNEL, PUSH_TARGET_HINT, SYSTEM_PROMPT_HINT
 from .gateway import _GatewayMixin, _TokenCache
@@ -43,7 +44,7 @@ class QQBotChannel(
         chat_types: tuple[ChatTypeDeclaration, ...] = (),
         *,
         account_id: str = "",
-        on_status: Callable[[str, str, str, str], None] | None = None,
+        on_status: Callable[[ConnectionState, str, str, str], None] | None = None,
         on_target: Callable[[str], None] | None = None,
         via_account: Callable[[], dict[str, str]] | None = None,
     ) -> None:
@@ -70,7 +71,7 @@ class QQBotChannel(
         self._ready = asyncio.Event()
         self._first_gateway_result: tuple[str, str] = ("", "")
         self._connection_state = "unknown"
-        self._intake = ChannelIntake(self._accept_inbound, self.send)
+        self._intake: ChannelIntake | None = None
         self._event_bus = None
         self._push_tool = None
         self._event_bindings = [
@@ -117,6 +118,7 @@ class QQBotChannel(
         self._channel_hub = ctx.channel_hub
         self._event_bus = ctx.event_bus
         self._push_tool = ctx.push_tool
+        self._intake = ctx.intake_factory(self._accept_inbound, self.send)
         self._open_http_client()
         self._public_hooks = public_hooks
         if public_hooks and not self._events_bound:
@@ -152,7 +154,8 @@ class QQBotChannel(
             self._task = None
         for session_key in list(self._live_tasks_by_turn):
             await self._finish_live_tasks(session_key)
-        await self._intake.close()
+        if self._intake is not None:
+            await self._intake.close()
         await self._close_http_client()
         if self._bus is not None and self._outbound_bound:
             self._bus.unsubscribe_outbound(CHANNEL, self._on_response)
@@ -167,11 +170,13 @@ class QQBotChannel(
 
     def pause_intake(self) -> None:
         """Buffers incoming turns while existing replies remain deliverable."""
-        self._intake.pause()
+        if self._intake is not None:
+            self._intake.pause()
 
     def resume_intake(self) -> None:
         """Restores intake after a rejected settings transaction."""
-        self._intake.resume()
+        if self._intake is not None:
+            self._intake.resume()
 
     def _require_bus(self) -> MessageBus:
         if self._bus is None:

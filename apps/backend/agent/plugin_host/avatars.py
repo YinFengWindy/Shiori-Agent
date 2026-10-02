@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
 
 from agent.plugin_host.effects import EffectScope
 from core.channel_avatars import AvatarKey, ChannelAvatarStore
+from shiori_sdk.channels.avatars import AvatarFetch as AvatarFetch
 
 logger = logging.getLogger(__name__)
-
-# 插件提供的头像下载：返回图片字节；平台上确实没有头像时返回 None。
-AvatarFetch = Callable[[], Awaitable[bytes | None]]
 
 
 class AvatarsCapability:

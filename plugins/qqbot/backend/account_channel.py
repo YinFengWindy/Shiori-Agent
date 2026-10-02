@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from shiori_sdk.channel_events import StreamDeltaReady, TurnCancelled, TurnStarted
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
@@ -16,9 +17,9 @@ from .channel import QQBotChannel
 from .formatting import CHANNEL, PUSH_TARGET_HINT
 
 if TYPE_CHECKING:
-    from core.common.channel_chat_types import ChatTypeDeclaration
-    from infra.channels.contract import ChannelContext
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.channels.chat_types import ChatTypeDeclaration
+    from shiori_sdk.channels import ChannelContext
+    from shiori_sdk.channels.context import ChannelPluginContext
 
 
 class QQBotAccountsChannel(
@@ -30,16 +31,23 @@ class QQBotAccountsChannel(
 
     def __init__(
         self,
-        ctx: PluginRuntimeContext,
+        ctx: ChannelPluginContext,
         store: QQBotAccountStore,
         chat_types: tuple[ChatTypeDeclaration, ...],
     ) -> None:
         self._store = store
+        self._resolve_reference = ctx.config.resolve_reference
         self._chat_types = chat_types
         self._channels: dict[str, QQBotChannel] = {}
         self._identity = QQBotAccountIdentity(ctx, store)
         self._runtime: ChannelContext | None = None
         self._avatar_tasks: dict[str, asyncio.Task[None]] = {}
+        # Event buses remove by callback identity, including bound methods.
+        self._event_bindings = (
+            (TurnStarted, self._on_turn_started),
+            (StreamDeltaReady, self._on_stream_delta),
+            (TurnCancelled, self._on_turn_cancelled),
+        )
 
     @property
     def configuration_key(self) -> object:
@@ -50,7 +58,7 @@ class QQBotAccountsChannel(
         app_id = row["app_id"]
         return QQBotChannel(
             app_id,
-            resolve_secret(row["client_secret"]),
+            resolve_secret(row["client_secret"], self._resolve_reference),
             self._chat_types,
             account_id=self._identity.account_id(app_id),
             on_status=lambda state, error, name, bot_id: self._identity.report(
@@ -62,8 +70,6 @@ class QQBotAccountsChannel(
 
     async def start(self, ctx: ChannelContext) -> None:
         """Register one public channel, then start each configured gateway."""
-        from bus.events_lifecycle import StreamDeltaReady, TurnCancelled, TurnStarted
-
         self._runtime = ctx
         ctx.push_tool.register_channel(
             CHANNEL,
@@ -73,11 +79,7 @@ class QQBotAccountsChannel(
             description=PUSH_TARGET_HINT,
         )
         ctx.bus.subscribe_outbound(CHANNEL, self._on_response)
-        for event_type, handler in (
-            (TurnStarted, self._on_turn_started),
-            (StreamDeltaReady, self._on_stream_delta),
-            (TurnCancelled, self._on_turn_cancelled),
-        ):
+        for event_type, handler in self._event_bindings:
             ctx.event_bus.on(event_type, handler)
         for row in self._store.list():
             if not self._identity.account_id(row["app_id"]):
@@ -91,8 +93,6 @@ class QQBotAccountsChannel(
 
     async def stop(self) -> None:
         """Stop only gateways owned by this plugin instance."""
-        from bus.events_lifecycle import StreamDeltaReady, TurnCancelled, TurnStarted
-
         for app_id in list(self._avatar_tasks):
             await self._cancel_avatar(app_id)
         for channel in tuple(self._channels.values()):
@@ -102,11 +102,7 @@ class QQBotAccountsChannel(
             ctx = self._runtime
             ctx.bus.unsubscribe_outbound(CHANNEL, self._on_response)
             ctx.push_tool.unregister_channel(CHANNEL, text=self.send)
-            for event_type, handler in (
-                (TurnStarted, self._on_turn_started),
-                (StreamDeltaReady, self._on_stream_delta),
-                (TurnCancelled, self._on_turn_cancelled),
-            ):
+            for event_type, handler in self._event_bindings:
                 ctx.event_bus.off(event_type, handler)
             self._runtime = None
         self._identity.unregister_all()
@@ -141,7 +137,7 @@ class QQBotAccountsChannel(
 
     async def _connect(self, row: dict[str, Any]) -> QQBotChannel | None:
         app_id = row["app_id"]
-        if not resolve_secret(row["client_secret"]):
+        if not resolve_secret(row["client_secret"], self._resolve_reference):
             self._identity.report(
                 app_id, "login_required", "App Secret 环境变量未设置", ""
             )

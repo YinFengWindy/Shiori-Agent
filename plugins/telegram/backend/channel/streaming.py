@@ -7,7 +7,7 @@ import logging
 from collections.abc import Coroutine
 from typing import Any
 
-from bus.events_lifecycle import (
+from shiori_sdk.channel_events import (
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,

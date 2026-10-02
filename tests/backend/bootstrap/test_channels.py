@@ -9,17 +9,17 @@ from bus.event_bus import EventBus
 from bus.queue import MessageBus
 from core.net.http import SharedHttpResources
 from session.manager import SessionManager
-from plugins.qqbot.backend.channel import QQBotChannel
 
 
 @pytest.mark.asyncio
-async def test_unchanged_credentials_reuse_independently_owned_qqbot_connection(
+async def test_unchanged_key_reuses_independently_owned_connection(
     tmp_path,
 ):
     resources = SharedHttpResources()
-    old = QQBotChannel("account-A", "secret-A")
-    new = QQBotChannel("account-A", "secret-A")
-    changed = QQBotChannel("account-B", "secret-B")
+    old = _KeyedChannel(uses_bot_commands=False)
+    new = _KeyedChannel(uses_bot_commands=False)
+    changed = _KeyedChannel(uses_bot_commands=False)
+    changed.configuration_key = ("fake", "replacement")
     context = dict(
         bus=MessageBus(),
         session_manager=SessionManager(tmp_path),
@@ -36,8 +36,9 @@ async def test_unchanged_credentials_reuse_independently_owned_qqbot_connection(
         )
         assert candidate.channels == [old]
         assert not active.requires_exclusive_handover(candidate)
-        # The discarded duplicate is stopped without ever opening a client.
-        assert new._client is None
+        # The discarded duplicate is stopped without ever starting a connection.
+        new.stop.assert_awaited_once()
+        new.start.assert_not_awaited()
         replacement = await start_channels(
             plugin_channels=[changed], previous_host=active, **context
         )
@@ -199,6 +200,10 @@ async def test_start_channels_wires_plugin_channels_with_shared_context(tmp_path
     assert context.interrupt_controller is controller
     assert context.http_resources is resources
     assert context.channel_hub is not None
+    attachment = context.attachment_store.write_bytes(
+        b"shared attachment", prefix="channel_", suffix=".bin"
+    )
+    assert attachment.parent == tmp_path / "uploads"
 
 
 @pytest.mark.asyncio

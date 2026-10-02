@@ -24,6 +24,12 @@ class PluginConfig:
         """Returns unexpanded plugin values for reference-preserving migrations."""
         return dict(self._raw_values)
 
+    def resolve_reference(self, value: str) -> str:
+        """Resolve plugin-stored credentials using the host's configuration policy."""
+        from agent.config import resolve_config_references
+
+        return str(resolve_config_references(value))
+
     def __getattr__(self, key: str) -> Any:
         try:
             return self._values[key]

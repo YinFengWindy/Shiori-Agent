@@ -5,11 +5,12 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from bus.events import InboundMessage
-from core.channels.pairing_command import answer_pairing_code
-from core.common.message_source import GROUP_NAME_KEY, addresses_account
-from infra.channels.contract import ChannelContext
-from infra.channels.intake import ChannelIntake
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.channels.pairing_command import answer_pairing_code
+from shiori_sdk.channels.message_source import GROUP_NAME_KEY, addresses_account
+from shiori_sdk.channels import ChannelContext
+from shiori_sdk.channels.services import ChannelIntake
+from shiori_sdk.http import HttpGet
 
 from .accounts_actions import QQAccountActions, qq_chat_target
 from .accounts_avatar import refresh_message_avatars
@@ -22,7 +23,7 @@ from .channel.group_filter import strip_at_segments, strip_reply_segments
 from .onebot import OneBotSocket
 
 if TYPE_CHECKING:
-    from agent.plugin_host.avatars import AvatarsCapability
+    from shiori_sdk.channels.avatars import AvatarsCapability
 
 # The text of a message that is only pictures, as other channels write it.
 IMAGE_PLACEHOLDER = "[图片]"
@@ -46,6 +47,7 @@ class QQInboundAdapter:
     _group_names: QQGroupNames
     # The host's avatar cache for senders and groups; None when not granted.
     _avatars: AvatarsCapability | None = None
+    _http: HttpGet
 
     def pause_intake(self) -> None:
         """Buffers incoming messages during host generation replacement."""
@@ -62,6 +64,9 @@ class QQInboundAdapter:
     def _start_intake(self, ref: str) -> None:
         if ref in self._intakes:
             return
+        if self._ctx is None:
+            # Accounts may authenticate before the transport is started; admission starts with it.
+            return
 
         async def send_notice(chat_id: str, message: str) -> str:
             kind, target = qq_chat_target(chat_id)
@@ -69,7 +74,7 @@ class QQInboundAdapter:
                 await self._actions.send_target(self._ids[ref], kind, target, message)
             )["message_id"]
 
-        intake = ChannelIntake(self._accept_inbound, send_notice)
+        intake = self._ctx.intake_factory(self._accept_inbound, send_notice)
         intake.start(paused=self._intake_paused)
         self._intakes[ref] = intake
 
@@ -110,7 +115,7 @@ class QQInboundAdapter:
     def _refresh_avatars(self, message: InboundMessage) -> None:
         """Refreshes the avatars ``message`` shows, when the host caches avatars."""
         if self._avatars is not None:
-            refresh_message_avatars(self._avatars, message)
+            refresh_message_avatars(self._avatars, message, requester=self._http)
 
     async def _accept_inbound(self, message: InboundMessage) -> None:
         ctx = self._ctx

@@ -5,30 +5,32 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from telegram import BotCommand, Update
 from telegram.error import InvalidToken
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
-from agent.looping.interrupt import InterruptController
-from bus.event_bus import EventBus
-from bus.event_binding import EventBinding
-from bus.events_lifecycle import (
+from shiori_sdk.channels.services import InterruptController
+from shiori_sdk.runtime import EventsCapability as EventBus
+from shiori_sdk.event_binding import EventBinding
+from shiori_sdk.channel_events import (
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
     TurnStarted,
 )
-from bus.queue import MessageBus
-from core.accounts import ViaAccount
-from core.channels import ChannelHub
-from core.common.channel_chat_types import CHAT_ID_COMMANDS, ChatTypeDeclaration
-from infra.channels.base import AttachmentStore, MessageDeduper, SessionIdentityIndex
-from infra.channels.contract import ChannelContext
-from infra.channels.intake import ChannelIntake
-from session.manager import SessionManager
+from shiori_sdk.channels.services import MessageBus
+from shiori_sdk.accounts import ViaAccount
+from shiori_sdk.storage import read_mapping
+from shiori_sdk.channels.services import ChannelHub
+from shiori_sdk.channels.chat_types import CHAT_ID_COMMANDS, ChatTypeDeclaration
+from shiori_sdk.channels.services import AttachmentStore, IntakeFactory
+from shiori_sdk.channels.identity_index import SessionIdentityIndex
+from .dedupe import MessageDeduper
+from shiori_sdk.channels import ChannelContext
+from shiori_sdk.channels.services import ChannelIntake
+from shiori_sdk.channels.services import ChannelSessions as SessionManager
 
 from ..utils import (
     TelegramLiveEditQueue,
@@ -54,10 +56,10 @@ from .streaming import _StreamingMixin
 logger = logging.getLogger("plugins.telegram.channel")
 
 if TYPE_CHECKING:
-    from agent.plugin_host.avatars import AvatarsCapability
-    from agent.plugin_host.capabilities import AccountsCapability
-    from agent.plugin_host.kv import PluginKVStore
-    from core.accounts import ConnectionState
+    from shiori_sdk.channels.avatars import AvatarsCapability
+    from shiori_sdk.accounts.capability import AccountsCapability
+    from shiori_sdk.storage import KeyValueStore
+    from shiori_sdk.accounts import ConnectionState
 
 
 class TelegramChannel(
@@ -90,8 +92,10 @@ class TelegramChannel(
         config_ref: str = "",
         accounts: "AccountsCapability | None" = None,
         avatars: "AvatarsCapability | None" = None,
-        known_store: "PluginKVStore | None" = None,
+        known_store: "KeyValueStore | None" = None,
         role_id: str | None = None,
+        intake_factory: IntakeFactory | None = None,
+        attachment_store: AttachmentStore | None = None,
     ) -> None:
         # bus / session_manager 在宿主里由 start(ctx) 注入；构造参数只留给
         # 不经 ChannelHost 直接驱动渠道的测试。
@@ -122,7 +126,7 @@ class TelegramChannel(
         self._message_deduper = MessageDeduper(_SEEN_MSG_MAXSIZE)
         self._channel_hub = channel_hub
         self._session_manager: SessionManager | None = None
-        self._attachments = AttachmentStore()
+        self._attachments = attachment_store
         self._identity_index: SessionIdentityIndex | None = None
         self.user_map: dict[str, str] = {}
         if session_manager is not None:
@@ -157,7 +161,11 @@ class TelegramChannel(
         self._outbound_bound = False
         self._events_bound = False
         self._push_tool = None
-        self._intake = ChannelIntake(self._accept_inbound, self.send)
+        self._intake: ChannelIntake | None = (
+            intake_factory(self._accept_inbound, self.send)
+            if intake_factory is not None
+            else None
+        )
         self._event_bindings = (
             EventBinding(TurnStarted, self._on_turn_started),
             EventBinding(StreamDeltaReady, self._on_stream_delta),
@@ -209,6 +217,11 @@ class TelegramChannel(
         if self._accounts is not None:
             candidate_id = bot_account_id(self._token)
             self._report_account("connecting")
+        if ctx is not None:
+            self._intake = ctx.intake_factory(self._accept_inbound, self.send)
+            self._attachments = ctx.attachment_store
+        if self._intake is None:
+            raise RuntimeError("TelegramChannel requires injected intake")
         self._intake.start(paused=ctx.intake_paused if ctx is not None else False)
         if ctx is not None:
             self._bus = ctx.bus
@@ -354,17 +367,9 @@ class TelegramChannel(
             self._report_account("online")
 
     def _bind_session_manager(self, session_manager: SessionManager) -> None:
-        """Binds workspace-backed state: uploads, username index and fallback hub."""
+        """Bind the injected host identity view; routing and attachments are explicit services."""
         self._session_manager = session_manager
-        ws = getattr(session_manager, "workspace", None)
-        self._attachments = AttachmentStore(Path(ws) / "uploads" if ws else None)
-        if self._channel_hub is None and ws:
-            self._channel_hub = ChannelHub.from_workspace(
-                Path(ws),
-                session_manager=session_manager,
-            )
-        self._identity_index = SessionIdentityIndex(
-            session_manager,
+        self._identity_index = session_manager.identity_index(
             channel=self._channel,
             metadata_key="username",
             normalizer=lambda value: value.lower(),
@@ -393,7 +398,8 @@ class TelegramChannel(
 
     async def stop(self) -> None:
         """Stops intake and releases owned subscriptions, including partial starts."""
-        self._intake.pause()
+        if self._intake is not None:
+            self._intake.pause()
         try:
             await self._stop_connection()
         finally:
@@ -406,10 +412,12 @@ class TelegramChannel(
         if self._known_store is None:
             return
         key = f"known_chats:{self._config_ref}"
-        known = dict(self._known_store.get(key, {}))
+        known = read_mapping(self._known_store, key)
         chat_id = str(getattr(chat, "id"))
         chat_type = str(getattr(chat, "type", "unknown") or "unknown")
         previous = known.get(chat_id, {})
+        if not isinstance(previous, dict):
+            raise ValueError("Stored Telegram conversation must be an object")
         topics = list(previous.get("topics", []))
         topic = getattr(message, "message_thread_id", None)
         if isinstance(topic, int) and topic > 0 and topic not in topics:
@@ -430,11 +438,13 @@ class TelegramChannel(
 
     def pause_intake(self) -> None:
         """Buffers new incoming turns while keeping accepted replies deliverable."""
-        self._intake.pause()
+        if self._intake is not None:
+            self._intake.pause()
 
     def resume_intake(self) -> None:
         """Restores intake after a rejected channel removal."""
-        self._intake.resume()
+        if self._intake is not None:
+            self._intake.resume()
 
     def _unbind_runtime(self) -> None:
         if self._outbound_bound:
@@ -461,7 +471,8 @@ class TelegramChannel(
             await updater.stop()
         if self._app.running:
             await self._app.stop()
-        await self._intake.close()
+        if self._intake is not None:
+            await self._intake.close()
         await self._app.shutdown()
         logger.info("TelegramChannel 已停止")
 

@@ -4,8 +4,8 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
-from bus.events import InboundMessage
-from core.channels.pairing_command import answer_pairing_code
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.channels.pairing_command import answer_pairing_code
 
 MESSAGE = InboundMessage(
     channel="qq",

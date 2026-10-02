@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, field_validator
 
-from agent.config import resolve_config_references
+from collections.abc import Callable
 
 from .formatting import DOMAINS, FEISHU_DOMAIN, LARK_DOMAIN
 
 if TYPE_CHECKING:
-    from agent.plugin_host.kv import PluginKVStore
+    from shiori_sdk.storage import KeyValueStore
 
 UNRESOLVED_ENV_RE = re.compile(r"^\$\{\w+\}$")
 _DOMAIN_ALIASES = {FEISHU_DOMAIN: "feishu", LARK_DOMAIN: "lark"}
@@ -64,9 +64,9 @@ class FeishuAppConfig(BaseModel):
         """Regional OpenAPI endpoint."""
         return DOMAINS[self.domain]
 
-    def resolved_secret(self) -> str:
+    def resolved_secret(self, resolver: Callable[[str], str]) -> str:
         """The usable secret; empty when missing or its ``${NAME}`` is unset."""
-        secret = str(resolve_config_references(self.app_secret)).strip()
+        secret = resolver(self.app_secret).strip()
         return "" if UNRESOLVED_ENV_RE.fullmatch(secret) else secret
 
 
@@ -82,7 +82,7 @@ class FeishuApplication(FeishuAppConfig):
 class FeishuApplicationStore:
     """The ``applications`` list in the plugin KV store, keyed by ``ref``."""
 
-    def __init__(self, kv: PluginKVStore) -> None:
+    def __init__(self, kv: KeyValueStore) -> None:
         self._kv = kv
 
     def rows(self) -> list[Any]:

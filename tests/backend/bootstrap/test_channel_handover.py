@@ -63,6 +63,7 @@ def hosts(events, *, fail_start=False, fail_stop=False):
     push = MessagePushTool()
     push.set_transport_lock(bus.transport_lock)
     ctx = ChannelContext(
+        intake_factory=ChannelIntake,
         bus=bus,
         push_tool=push,
         session_manager=None,

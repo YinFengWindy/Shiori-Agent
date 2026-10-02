@@ -132,6 +132,7 @@ async def test_list_reports_every_discovered_plugin_enabled_by_default(
         assert set(by_id["qqbot"]["capabilities"]) == {
             "channels",
             "kv",
+            "config",
             "accounts",
             "rpc",
         }

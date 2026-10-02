@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from core.accounts.target_contract import UncertainDeliveryError
+from shiori_sdk.accounts.targets import UncertainDeliveryError
 from plugins.feishu.backend.account_delivery import FeishuAccountDelivery
 
 

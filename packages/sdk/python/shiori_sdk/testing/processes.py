@@ -1,6 +1,8 @@
 """Native boundary fakes that never launch a process or connect to MCP."""
 
 import asyncio
+import subprocess
+from pathlib import Path
 from contextvars import ContextVar
 from collections.abc import Awaitable, Callable
 from functools import wraps
@@ -78,6 +80,18 @@ class FakeProcesses:
     ) -> tuple[asyncio.subprocess.Process, ProcessOwner | None]:
         """Reject accidental native process starts in independent plugin tests."""
         raise AssertionError(f"Native spawn requires an explicit fixture: {command}")
+
+    def popen(
+        self,
+        command: list[str],
+        *,
+        cwd: Path,
+        env: dict[str, str],
+        stdout: BinaryIO,
+        stderr: int | BinaryIO,
+    ) -> tuple[subprocess.Popen[bytes], ProcessOwner | None]:
+        """Require an explicit fake child for every synchronous launch."""
+        raise AssertionError(f"Native popen requires an explicit fixture: {command}")
 
 
 class FakeToolTurn:

@@ -20,10 +20,10 @@ from typing import TYPE_CHECKING, Any
 from telegram import Bot
 from telegram.error import TelegramError
 
-from agent.config import resolve_config_references
+from collections.abc import Callable
 
 if TYPE_CHECKING:
-    from agent.plugin_host.kv import PluginKVStore
+    from shiori_sdk.storage import KeyValueStore
 
 BOTS_KEY = "bots"
 # Per-Bot KV caches written by the channel and account API.
@@ -42,9 +42,9 @@ def avatar_key(ref: str) -> str:
     return f"avatar:{ref}"
 
 
-def resolve_token(token: str) -> str:
+def resolve_token(token: str, resolver: Callable[[str], str]) -> str:
     """The usable Token behind a stored value; empty when its variable is unset."""
-    resolved = str(resolve_config_references(token)).strip()
+    resolved = resolver(token).strip()
     return "" if _ENV_REFERENCE.fullmatch(resolved) else resolved
 
 
@@ -56,7 +56,7 @@ def valid_ref(ref: str) -> bool:
 class TelegramBotStore:
     """The plugin's saved Bots; the only place their Tokens are kept."""
 
-    def __init__(self, kv: PluginKVStore) -> None:
+    def __init__(self, kv: KeyValueStore) -> None:
         self._kv = kv
 
     def list(self) -> list[dict[str, Any]]:
@@ -86,9 +86,11 @@ class TelegramBotStore:
             self._kv.delete(f"{prefix}:{ref}")
 
 
-async def verify_bot_token(payload: dict[str, Any]) -> dict[str, str]:
+async def verify_bot_token(
+    payload: dict[str, Any], resolver: Callable[[str], str]
+) -> dict[str, object]:
     """Return the authenticated Bot identity without echoing its credential."""
-    token = resolve_token(str(payload.get("token") or "").strip())
+    token = resolve_token(str(payload.get("token") or "").strip(), resolver)
     if not token:
         raise ValueError("Bot Token is required")
     try:

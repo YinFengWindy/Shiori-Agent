@@ -7,10 +7,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-from bus.events import OutboundMessage
-from bus.errors import NonRetryableDeliveryError
-from core.common.media import detect_image_mime_from_header
-from infra.channels.session_key import resolve_outbound_session_key
+from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.channels.errors import NonRetryableDeliveryError
+from shiori_sdk.media import detect_image_mime_from_header
+from shiori_sdk.channels.session_key import resolve_outbound_session_key
 
 from .formatting import CHANNEL, SUPPORTED_IMAGE_MIME_TYPES, iter_stream_chunks
 from .stream_delivery import _StreamState

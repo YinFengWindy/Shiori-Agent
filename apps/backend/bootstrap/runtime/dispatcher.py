@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from bootstrap.runtime.generations import RuntimeLease
+
 from core.common.runtime_scope import bind_runtime, current_runtime_lease
 
 if TYPE_CHECKING:
@@ -21,6 +23,10 @@ class RuntimeDispatcher:
         while True:
             item = await self._app.bus.consume_inbound()
             inherited = item.runtime_lease
+            if inherited is not None and not isinstance(inherited, RuntimeLease):
+                raise TypeError(
+                    "Inbound runtime ownership must be supplied by the host"
+                )
             if inherited is None:
                 await self._app.wait_for_admission()
             async with inherited or self._app.acquire() as lease:

@@ -7,7 +7,7 @@ import pytest
 from telegram.error import Forbidden, TimedOut
 
 from plugins.telegram.backend.account_api import TelegramAccountApi
-from core.accounts.target_contract import UncertainDeliveryError
+from shiori_sdk.accounts.targets import UncertainDeliveryError
 
 
 def _png(tmp_path) -> str:

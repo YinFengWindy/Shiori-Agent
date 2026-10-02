@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from plugins.qqbot.backend.account_sending import _AccountSendingMixin
-from core.accounts.target_contract import UncertainDeliveryError
+from shiori_sdk.accounts.targets import UncertainDeliveryError
 
 
 def _png(tmp_path) -> str:

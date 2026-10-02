@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from infra.channels.intake import ChannelIntake
 import logging
 
 from agent.looping.interrupt import InterruptController
@@ -12,7 +13,8 @@ from core.roles.store import RoleStore
 from core.common.channel_directory import ChannelDirectory
 from core.net.http import SharedHttpResources
 from infra.channels.base import AttachmentStore
-from infra.channels.contract import Channel, ChannelContext
+from infra.channels.contract import Channel
+from infra.channels.runtime_context import RuntimeChannelContext
 from session.manager import SessionManager
 
 logger = logging.getLogger(__name__)
@@ -34,11 +36,12 @@ async def start_channels(
     role_store: RoleStore | None = None,
 ) -> ChannelHost:
     """Constructs a traffic-free host, optionally reusing unchanged connections."""
-    attachment_store = AttachmentStore()
+    attachment_store = AttachmentStore(session_manager.workspace / "uploads")
     channel_hub: ChannelHub | None = None
 
-    def _ctx_factory(channel: Channel) -> ChannelContext:
-        return ChannelContext(
+    def _ctx_factory(channel: Channel) -> RuntimeChannelContext:
+        return RuntimeChannelContext(
+            intake_factory=ChannelIntake,
             bus=bus,
             session_manager=session_manager,
             event_bus=event_bus,

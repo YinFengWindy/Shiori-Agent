@@ -60,12 +60,14 @@ def test_dynamic_import_aliases_do_not_leak_or_match_unrelated_callables() -> No
     )
 
 
-def test_scan_includes_sdk_and_plugin_tests(tmp_path: Path) -> None:
+def test_scan_includes_sdk_plugin_tests_and_packaged_support(tmp_path: Path) -> None:
     paths = [
         "packages/sdk/python/shiori_sdk/example.py",
         "packages/sdk/python/shiori_sdk/stub.pyi",
         "plugins/demo/backend/plugin.py",
         "plugins/demo/tests/test_plugin.py",
+        "plugins/demo/testing/http.py",
+        "plugins/demo/testing/stub.pyi",
     ]
     for name in paths:
         path = tmp_path / name

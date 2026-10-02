@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from shiori_sdk.testing.processes import FakeProcesses
+
 import asyncio
 import base64
 import io
@@ -20,7 +22,7 @@ from plugins.qq.backend.managed_napcat import ManagedNapCat
 async def test_per_account_ports_profiles_and_logout_are_isolated(
     monkeypatch, tmp_path
 ):
-    manager = ManagedNapCat(tmp_path)
+    manager = ManagedNapCat(tmp_path, FakeProcesses())
     official_qq = tmp_path / "official-qq" / "resources" / "app"
     monkeypatch.setattr(
         manager, "prepare", lambda: asyncio.sleep(0, result=official_qq)
@@ -38,7 +40,7 @@ async def test_per_account_ports_profiles_and_logout_are_isolated(
         launched.append((command, kwargs, process))
         return process, Mock()
 
-    monkeypatch.setattr(managed_napcat, "popen_owned", popen)
+    monkeypatch.setattr(manager._process_service, "popen", popen)
     await manager.start(first, "101")
     await manager.start(second, "202")
     assert len(launched) == 2
@@ -99,7 +101,7 @@ async def test_per_account_ports_profiles_and_logout_are_isolated(
 async def test_managed_status_uses_official_png_instead_of_scan_url(
     monkeypatch, tmp_path
 ):
-    manager = ManagedNapCat(tmp_path)
+    manager = ManagedNapCat(tmp_path, FakeProcesses())
     ref = "c" * 32
     process = Mock()
     process.poll.return_value = None
@@ -136,7 +138,7 @@ async def test_managed_status_uses_official_png_instead_of_scan_url(
 async def test_refresh_rejects_missing_or_stale_png(
     monkeypatch, tmp_path, old_image_present
 ):
-    manager = ManagedNapCat(tmp_path)
+    manager = ManagedNapCat(tmp_path, FakeProcesses())
     ref = "d" * 32
     if old_image_present:
         image = io.BytesIO()
@@ -157,12 +159,12 @@ async def test_refresh_rejects_missing_or_stale_png(
 
 @pytest.mark.asyncio
 async def test_unreclaimable_port_blocks_launch(monkeypatch, tmp_path):
-    manager = ManagedNapCat(tmp_path)
+    manager = ManagedNapCat(tmp_path, FakeProcesses())
     monkeypatch.setattr(
         manager, "prepare", lambda: asyncio.sleep(0, result=tmp_path / "qq")
     )
     launched = Mock()
-    monkeypatch.setattr(managed_napcat, "popen_owned", launched)
+    monkeypatch.setattr(manager._process_service, "popen", launched)
     reclaim = AsyncMock(side_effect=RuntimeError("已被占用"))
     monkeypatch.setattr(managed_napcat.guard, "reclaim_port", reclaim)
     with pytest.raises(RuntimeError, match="已被占用"):

@@ -7,13 +7,13 @@ name = "shiori-plugin-telegram"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "shiori-agent==0.1.0",
+    "shiori-sdk==3.0.0",
     "python-telegram-bot>=22.7",
     "telegramify-markdown",
 ]
 
 [project.optional-dependencies]
-test = ["shiori-plugin-testkit==0.1.0"]
+test = ["shiori-sdk[testing]==3.0.0", "Pillow>=11.0"]
 
 [tool.setuptools]
 include-package-data = false
@@ -33,4 +33,4 @@ testpaths = ["tests"]
 addopts = "-W error --import-mode=importlib"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-required_plugins = ["pytest-asyncio", "shiori-plugin-testkit"]
+required_plugins = ["pytest-asyncio", "shiori-sdk"]

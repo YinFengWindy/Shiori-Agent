@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING, Any
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bus.events import InboundMessage
-from core.accounts import VIA_ACCOUNT_KEY
-from core.channels.pairing_command import answer_pairing_code
-from core.common.message_source import MENTIONED_KEY
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.accounts import VIA_ACCOUNT_KEY
+from shiori_sdk.channels.pairing_command import answer_pairing_code
+from shiori_sdk.channels.message_source import MENTIONED_KEY
 
 from .avatar import refresh_message_avatars
 from .formatting import _build_inbound_text_with_reply
@@ -23,7 +23,7 @@ from .identity import (
 )
 
 if TYPE_CHECKING:
-    from agent.plugin_host.avatars import AvatarsCapability
+    from shiori_sdk.channels.avatars import AvatarsCapability
 
 logger = logging.getLogger("plugins.telegram.channel")
 
@@ -175,6 +175,8 @@ class _InboundMixin:
         return self._channel_hub.route_inbound(message)
 
     async def _publish_inbound(self, message: InboundMessage) -> None:
+        if self._intake is None:
+            raise RuntimeError("TelegramChannel requires injected intake")
         await self._intake.submit(message)
 
     async def _accept_inbound(self, message: InboundMessage) -> None:

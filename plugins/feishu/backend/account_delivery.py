@@ -7,19 +7,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
+from shiori_sdk.storage import read_mapping
 
-from core.accounts import VIA_ACCOUNT_KEY
-from core.accounts.target_contract import (
+from shiori_sdk.accounts import VIA_ACCOUNT_KEY
+from shiori_sdk.accounts.targets import (
     GROUP_MEMBER_TARGET,
     UncertainDeliveryError,
     account_send_media,
 )
-from core.common.media import detect_image_mime_from_header
+from shiori_sdk.media import detect_image_mime_from_header
 
 from .accounts import FeishuAccounts
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.channels.context import ChannelPluginContext
 
 
 # Image types Feishu's image upload accepts (it also takes TIFF and ICO, which
@@ -32,7 +33,7 @@ _IMAGE_MIME_TYPES = frozenset(
 class FeishuAccountDelivery:
     """Queries observed targets and sends through a connected application."""
 
-    def __init__(self, ctx: PluginRuntimeContext, accounts: FeishuAccounts) -> None:
+    def __init__(self, ctx: ChannelPluginContext, accounts: FeishuAccounts) -> None:
         self._ctx = ctx
         self._accounts = accounts
 
@@ -42,7 +43,7 @@ class FeishuAccountDelivery:
         if self._accounts.application(ref) is None:
             raise KeyError("飞书账号不存在")
         identity = self._ctx.kv.get(f"profile:{ref}", {})
-        targets = self._ctx.kv.get(f"targets:{ref}", {})
+        targets = read_mapping(self._ctx.kv, f"targets:{ref}")
         return {
             "identity": identity,
             "targets": [

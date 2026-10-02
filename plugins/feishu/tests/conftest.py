@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from shiori_sdk.testing.channel_intake import FakeChannelIntake as ChannelIntake
 import asyncio
 import io
 import json
@@ -17,10 +18,10 @@ import httpx
 import pytest
 from PIL import Image
 
-from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
-from infra.channels.base import AttachmentStore
-from infra.channels.contract import ChannelContext
+from shiori_sdk.testing.events import FakeEvents as EventBus
+from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.testing.channel_services import FakeAttachmentStore as AttachmentStore
+from shiori_sdk.channels import ChannelContext
 from plugins.feishu.backend.channel import FeishuChannel
 from plugins.feishu.backend.ws import EventCallback
 
@@ -340,6 +341,7 @@ def build_harness(
     bus, push_tool, hub = Bus(), PushTool(), Hub(allowed=allowed, blocked=blocked)
     event_bus, interrupts = EventBus(), Interrupts()
     context = ChannelContext(
+        intake_factory=ChannelIntake,
         bus=cast(Any, bus),
         session_manager=cast(Any, SimpleNamespace()),
         event_bus=event_bus,

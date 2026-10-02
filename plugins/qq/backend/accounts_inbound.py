@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from bus.events import InboundMessage
-from core.accounts import VIA_ACCOUNT_KEY
-from core.common.message_source import (
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.accounts import VIA_ACCOUNT_KEY
+from shiori_sdk.channels.message_source import (
     MENTIONED_IDS_KEY,
     MENTIONED_KEY,
     SENDER_NAME_KEY,

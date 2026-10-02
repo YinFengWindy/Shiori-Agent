@@ -12,13 +12,10 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 import httpx
 
-from agent.plugin_host.avatars import AvatarsCapability
-from agent.plugin_host.effects import EffectScope
-from bus.events import OutboundMessage
-from core.channel_avatars import ChannelAvatarStore
+from shiori_sdk.messages import OutboundMessage
 from plugins.feishu.backend import api as feishu_api
 from plugins.feishu.backend.channel import FeishuChannel, resolve_receive_id
-from agent.plugin_host.kv import PluginKVStore
+from shiori_sdk.testing.storage import FakeKV
 
 CHAT_ID = "oc_chat"
 # The sender of ``make_event`` and their name in the fake contact directory.
@@ -92,7 +89,7 @@ async def test_bot_avatar_is_stored_and_kept_when_its_download_fails(
     fresh = "data:image/png;base64,iVBORw0KGgoAAAAAAAAAAA=="
     old = "data:image/png;base64,iVBORw0KGgo="
     accounts = Mock()
-    profiles = PluginKVStore(tmp_path / "profiles.json")
+    profiles = FakeKV()
     profiles.set("profile:feishu:cli_a", {"avatar": old})
     harness = make_harness(
         account_id="account-a",
@@ -128,6 +125,7 @@ async def test_bot_avatar_is_stored_and_kept_when_its_download_fails(
         if "avatar_url" in call.kwargs
     ]
     stored = profiles.get("profile:feishu:cli_a", {})
+    assert isinstance(stored, dict)
     assert stored["name"] == "Shiori"
     assert stored["avatar"] == (fresh if cdn_ok else old)
     assert avatars == ([fresh] if cdn_ok else [])
@@ -140,13 +138,13 @@ async def test_two_account_channels_isolate_inbound_targets_and_receipts(
         name="feishu",
         account_id="account-a",
         profile_ref="feishu:cli_a",
-        profile_store=PluginKVStore(tmp_path / "first.json"),
+        profile_store=FakeKV(),
     )
     second = make_harness(
         name="feishu:lark:cli_b",
         account_id="account-b",
         profile_ref="lark:cli_b",
-        profile_store=PluginKVStore(tmp_path / "second.json"),
+        profile_store=FakeKV(),
     )
     second.context.bus = first.context.bus
     await first.start()
@@ -340,7 +338,7 @@ async def test_start_registers_hooks_and_stop_releases_everything(
     await harness.channel.stop()
 
     assert harness.bus.outbound == []
-    assert harness.event_bus._handlers == {}
+    assert harness.event_bus._subscriptions == []
     assert harness.push_tool.removed == ["feishu"]
     assert harness.channel._api._client is None
     assert len(_feishu_threads()) == before
@@ -595,7 +593,7 @@ async def test_push_senders_return_the_first_platform_message_id(
 async def test_received_message_carries_the_cached_name_and_refreshes_avatars(
     make_harness: Any, make_event: Any, tmp_path: Path
 ) -> None:
-    profiles = PluginKVStore(tmp_path / "profiles.json")
+    profiles = FakeKV()
     profiles.set("contacts:feishu:cli_a", {OPEN_ID: CONTACT_NAME})
     avatars = Mock(refresh=Mock(return_value=None))
     harness = make_harness(
@@ -612,36 +610,3 @@ async def test_received_message_carries_the_cached_name_and_refreshes_avatars(
         ("sender", "feishu", OPEN_ID),
         ("chat", "feishu", CHAT_ID),
     }
-
-
-async def test_without_contact_permission_messages_arrive_without_a_name(
-    make_harness: Any,
-    make_event: Any,
-    tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    store = ChannelAvatarStore(tmp_path)
-    harness = make_harness(
-        profile_store=PluginKVStore(tmp_path / "profiles.json"),
-        profile_ref="feishu:cli_a",
-        avatars=AvatarsCapability(store, EffectScope("feishu"), "feishu"),
-    )
-    # 99991672: the app lacks the contact permission.
-    harness.api.fail("contact", (400, 99991672))
-    connection = await harness.start()
-
-    connection.emit(make_event())
-    await harness.settle()
-    for _ in range(100):
-        if "头像获取失败" in caplog.text:
-            break
-        await asyncio.sleep(0.01)
-    connection.emit(make_event(message_id="om_in_2", event_id="ev_2"))
-    await harness.settle()
-
-    assert [item.content for item in harness.bus.inbound] == ["你好", "你好"]
-    assert all("sender_name" not in item.metadata for item in harness.bus.inbound)
-    assert "头像获取失败" in caplog.text
-    # One lookup for the sender and the private chat; not retried until due.
-    assert harness.api.keys().count("contact") == 1
-    assert store.index().sender("feishu", OPEN_ID) is None

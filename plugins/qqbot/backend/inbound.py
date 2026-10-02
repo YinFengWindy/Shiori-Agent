@@ -3,11 +3,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from bus.events import InboundMessage
-from core.accounts import VIA_ACCOUNT_KEY
-from core.channels.chat_id_command import answer_chat_id_command
-from core.channels.pairing_command import answer_pairing_code
-from core.common.channel_chat_types import is_chat_id_command
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.accounts import VIA_ACCOUNT_KEY
+from shiori_sdk.channels.chat_id_command import answer_chat_id_command
+from shiori_sdk.channels.pairing_command import answer_pairing_code
+from shiori_sdk.channels.chat_types import is_chat_id_command
 
 from .formatting import CHANNEL, as_dict
 
@@ -101,6 +101,8 @@ class _InboundMixin:
         )
 
     async def _publish_inbound(self, message: InboundMessage) -> None:
+        if self._intake is None:
+            raise RuntimeError("QQBotChannel 尚未启动")
         await self._intake.submit(message)
 
     async def _accept_inbound(self, message: InboundMessage) -> None:

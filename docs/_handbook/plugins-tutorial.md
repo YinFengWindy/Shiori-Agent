@@ -138,7 +138,7 @@ channels:
 
 ### 渠道钩子（Runtime API 2.3）
 
-核心不按渠道名写死策略，而是向渠道对象询问下面几个可选钩子；不实现就取中性默认值。协议定义在 `infra.channels.contract`：
+核心不按渠道名写死策略，而是向渠道对象询问下面几个可选钩子；不实现就取中性默认值。协议定义在 `shiori_sdk.channels`：
 
 | 钩子 | 作用 | 不实现时 |
 | --- | --- | --- |
@@ -262,18 +262,18 @@ if (pet) await pet.background.call("sync", { forceVisible: false });
 
 ## 测试、安装与数据升级
 
-测试放在本包 `tests/`，文件与 `backend/` 模块对应。通过显式安装的 `shiori-plugin-testkit` 使用公共 fake 与包暂存：
+测试放在本包 `tests/`，文件与 `backend/` 模块对应。通过显式安装的 `shiori-sdk[testing]` 使用公共 fake 与包暂存：
 
 ```python
 from pathlib import Path
-from shiori_plugin_testkit.packages import stage_plugin_package
+from shiori_sdk.testing.packages import stage_plugin_package
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 # 在 tmp_path 下整包暂存，保留源码/manifest/资源，排除运行状态和构建缓存。
 # staged = stage_plugin_package(PLUGIN_DIR, tmp_path / "plugins/example")
 ```
 
-兄弟插件通过 `plugin_directory("citation")` 定位，并在 `pyproject.toml` 明确声明安装依赖；不得推导原仓库路径，也不得导入宿主测试树。异步测试由 pytest-asyncio 执行，公共支持来自 testkit 的 pytest entry point。宿主 fixture 仅存在于 `tests/conftest.py`。
+兄弟插件通过 `plugin_directory("citation")` 定位，并在 `pyproject.toml` 明确声明安装依赖；不得推导原仓库路径，也不得导入宿主测试树。异步测试由 pytest-asyncio 执行，公共支持来自 SDK 的 pytest entry point；独立插件测试不安装宿主。真实 AppRuntime 集成 fixture 由宿主开发包 `shiori-host-testing` 提供，在宿主 `tests/conftest.py` 注册。
 
 仓库开发使用 `uv sync --dev`，再 `uv run pytest plugins/example/tests`。仓库外验收运行 `uv run python scripts/verify_plugin_tests.py --plugins example --output <仓库外新目录>`：从副本构建非 editable wheel，在独立环境运行真实插件测试，检查模块来源，并确认 await 后故意失败的异步断言真正执行。完整步骤见 [插件测试](../agents/plugin-testing.md) 与各包 `TESTING.md`。
 

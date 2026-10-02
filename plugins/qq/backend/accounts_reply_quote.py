@@ -8,9 +8,9 @@ from dataclasses import replace
 
 from websockets.exceptions import ConnectionClosed
 
-from bus.events import InboundMessage
-from core.common.message_source import REPLY_TO_SENDER_ID_KEY
-from infra.channels.reply_context import with_reply_quote
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.channels.message_source import REPLY_TO_SENDER_ID_KEY
+from shiori_sdk.channels.reply_context import with_reply_quote
 
 from .accounts_actions import RepliedMessage
 from .channel.compat import extract_cq_images

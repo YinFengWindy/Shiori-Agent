@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from shiori_sdk.testing.channel_intake import FakeChannelIntake as ChannelIntake
 import base64
 import json
 import logging
@@ -11,12 +12,17 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
-from infra.channels.base import AttachmentStore
-from infra.channels.contract import ChannelContext
+from shiori_sdk.testing.events import FakeEvents as EventBus
+from shiori_sdk.messages import InboundMessage, OutboundMessage
+from shiori_sdk.channels import ChannelContext
 import plugins.qqbot.backend.channel as qqbot_channel
 from plugins.qqbot.backend.channel import QQBotChannel
+
+
+def _channel(*args, **kwargs) -> QQBotChannel:
+    channel = QQBotChannel(*args, **kwargs)
+    channel._intake = ChannelIntake(channel._accept_inbound, channel.send)
+    return channel
 
 
 class _Bus:
@@ -77,11 +83,12 @@ class _Hub:
 
 def _context(bus: _Bus, push_tool: _PushTool, hub: _Hub) -> ChannelContext:
     return ChannelContext(
+        intake_factory=ChannelIntake,
         bus=cast(Any, bus),
         session_manager=cast(Any, SimpleNamespace()),
         event_bus=EventBus(),
         push_tool=cast(Any, push_tool),
-        attachment_store=AttachmentStore(),
+        attachment_store=MagicMock(),
         http_resources=cast(Any, SimpleNamespace()),
         interrupt_controller=None,
         bot_commands=[],
@@ -96,7 +103,7 @@ async def test_qqbot_channel_registers_and_stops_cleanly(
 ) -> None:
     bus = _Bus()
     push_tool = _PushTool()
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
 
     async def _no_gateway_loop() -> None:
         return None
@@ -113,7 +120,7 @@ async def test_qqbot_channel_registers_and_stops_cleanly(
     assert channel._client is None
 
     assert bus.outbound == []
-    assert context.event_bus._handlers == {}
+    assert context.event_bus._subscriptions == []
     assert push_tool.removed == ["qqbot"]
     assert push_tool.registrations == [
         ("qqbot", ["description", "image", "stream_text", "text"])
@@ -122,7 +129,7 @@ async def test_qqbot_channel_registers_and_stops_cleanly(
 
 @pytest.mark.asyncio
 async def test_qqbot_pauses_intake_until_removal_is_rolled_back():
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._bus = _Bus()
     channel._send_input_notify = AsyncMock()
     channel.pause_intake()
@@ -150,7 +157,7 @@ async def test_qqbot_reports_pending_input_before_closing_original_account(monke
         notices.append((self._app_id, chat_id, text))
 
     monkeypatch.setattr(QQBotChannel, "send", send)
-    channel = QQBotChannel("old-account", "secret")
+    channel = _channel("old-account", "secret")
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(lambda _request: httpx.Response(200))
     )
@@ -217,7 +224,7 @@ async def test_qqbot_gateway_sends_identify_payload(
     monkeypatch.setattr(qqbot_channel.websockets, "connect", lambda _url: websocket)
 
     statuses: list[tuple[str, str, str, str]] = []
-    await QQBotChannel(
+    await _channel(
         "app", "secret", on_status=lambda *status: statuses.append(status)
     )._run_gateway("wss://gateway.invalid", "token")
 
@@ -237,7 +244,7 @@ async def test_qqbot_gateway_sends_identify_payload(
 @pytest.mark.asyncio
 async def test_qqbot_c2c_inbound_is_role_routed_and_deduplicated() -> None:
     bus = _Bus()
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._bus = bus
     channel._channel_hub = _Hub()
     channel._send_input_notify = AsyncMock()
@@ -265,7 +272,7 @@ async def test_c2c_inbound_is_scoped_to_its_application_account() -> None:
         "display_name": "Bot",
         "prefix": "QQ 机器人「Bot」（AppID app-1）",
     }
-    channel = QQBotChannel(
+    channel = _channel(
         "app-1", "secret", account_id="account-1", via_account=lambda: via
     )
     channel._bus = bus
@@ -285,7 +292,7 @@ async def test_c2c_inbound_is_scoped_to_its_application_account() -> None:
 @pytest.mark.asyncio
 async def test_qqbot_c2c_inbound_requires_role_binding() -> None:
     bus = _Bus()
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._bus = bus
     channel._channel_hub = _Hub(allowed=False)
     channel._send_input_notify = AsyncMock()
@@ -306,7 +313,7 @@ async def test_qqbot_c2c_inbound_requires_role_binding() -> None:
 
 @pytest.mark.asyncio
 async def test_qqbot_send_uses_official_markdown_api() -> None:
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(return_value={})
 
@@ -328,7 +335,7 @@ async def test_qqbot_send_uses_official_markdown_api() -> None:
 
 @pytest.mark.asyncio
 async def test_qqbot_send_image_uploads_public_url_then_sends_media() -> None:
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(side_effect=[{"file_info": "uploaded-file"}, {}])
 
@@ -364,7 +371,7 @@ async def test_qqbot_send_image_uploads_local_gif_without_converting(
     raw = b"GIF89a" + b"animated-sticker-data"
     image = tmp_path / "sticker.gif"
     image.write_bytes(raw)
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(side_effect=[{"file_info": "gif-file"}, {}])
 
@@ -384,7 +391,7 @@ async def test_qqbot_send_image_rejects_unsupported_local_file(
 ) -> None:
     image = tmp_path / "not-an-image.txt"
     image.write_text("not an image", encoding="utf-8")
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock()
 
@@ -397,7 +404,7 @@ async def test_qqbot_send_image_rejects_unsupported_local_file(
 
 @pytest.mark.asyncio
 async def test_qqbot_send_image_requires_file_info_from_upload() -> None:
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(return_value={})
 
@@ -410,7 +417,7 @@ async def test_qqbot_send_image_requires_file_info_from_upload() -> None:
 @pytest.mark.asyncio
 async def test_qqbot_response_records_delivery_for_role_thread() -> None:
     hub = _Hub()
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._channel_hub = hub
     channel.send = AsyncMock()
 
@@ -434,7 +441,7 @@ async def test_qqbot_response_records_delivery_for_role_thread() -> None:
 @pytest.mark.asyncio
 async def test_qqbot_response_sends_media_and_records_delivery_after_success() -> None:
     hub = _Hub()
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._channel_hub = hub
     channel.send = AsyncMock()
     channel.send_image = AsyncMock()
@@ -459,7 +466,7 @@ async def test_qqbot_response_sends_media_and_records_delivery_after_success() -
 @pytest.mark.asyncio
 async def test_qqbot_response_marks_media_failure_without_sent_status() -> None:
     hub = _Hub()
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._channel_hub = hub
     channel.send_image = AsyncMock(side_effect=RuntimeError("upload failed"))
 
@@ -482,7 +489,7 @@ async def test_qqbot_stop_uses_bound_role_session() -> None:
     interrupt = SimpleNamespace(
         request_interrupt=MagicMock(return_value=SimpleNamespace(message="已中断"))
     )
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._channel_hub = hub
     channel._interrupt_controller = interrupt
     channel.send = AsyncMock()
@@ -500,7 +507,7 @@ async def test_qqbot_stop_uses_bound_role_session() -> None:
 @pytest.mark.asyncio
 async def test_qqbot_stop_from_unadmitted_sender_is_ignored() -> None:
     interrupt = SimpleNamespace(request_interrupt=MagicMock())
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._channel_hub = _Hub(allowed=False)
     channel._interrupt_controller = interrupt
     channel.send = AsyncMock()
@@ -528,14 +535,14 @@ async def test_qqbot_stop_from_unadmitted_sender_is_ignored() -> None:
 async def test_qqbot_chatid_answers_without_entering_the_role(
     hub: _Hub, replies: list[tuple[str, str]]
 ) -> None:
-    from agent.plugin_host.manifest import load_manifest
+    from shiori_sdk.testing.channel_context import FakeChannelDeclarations
 
-    manifest = load_manifest(Path(qqbot_channel.__file__).resolve().parents[1])
+    manifest = FakeChannelDeclarations(
+        Path(qqbot_channel.__file__).resolve().parents[1]
+    )
     assert manifest is not None
     bus = _Bus()
-    channel = QQBotChannel(
-        "app", "secret", chat_types=manifest.channel_chat_types("qqbot")
-    )
+    channel = _channel("app", "secret", chat_types=manifest.channel_chat_types("qqbot"))
     channel._bus = bus
     channel._channel_hub = hub
     channel._send_input_notify = AsyncMock()
@@ -553,7 +560,7 @@ async def test_qqbot_chatid_answers_without_entering_the_role(
 
 @pytest.mark.asyncio
 async def test_qqbot_push_senders_return_the_platform_message_id() -> None:
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(
         side_effect=[
@@ -577,7 +584,7 @@ async def test_qqbot_push_senders_return_the_platform_message_id() -> None:
 
 @pytest.mark.asyncio
 async def test_qqbot_stream_fallback_returns_the_plain_message_id() -> None:
-    channel = QQBotChannel("app", "secret")
+    channel = _channel("app", "secret")
     channel._get_access_token = AsyncMock(return_value="access-token")
     channel._api_request = AsyncMock(return_value={"id": "plain-id"})
 
@@ -606,7 +613,7 @@ async def test_qqbot_pairing_code_binds_with_app_scope_without_entering_the_role
 ):
     bus = _Bus()
     hub = _PairingHub()
-    channel = QQBotChannel("app-1", "secret", account_id="account-1")
+    channel = _channel("app-1", "secret", account_id="account-1")
     channel._bus = bus
     channel._channel_hub = hub
     channel._send_input_notify = AsyncMock()

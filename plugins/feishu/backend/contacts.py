@@ -14,14 +14,14 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from bus.events import InboundMessage
+from shiori_sdk.messages import InboundMessage
 
 from .api import FeishuApi
 from .formatting import as_dict
 
 if TYPE_CHECKING:
-    from agent.plugin_host.avatars import AvatarsCapability
-    from agent.plugin_host.kv import PluginKVStore
+    from shiori_sdk.channels.avatars import AvatarsCapability
+    from shiori_sdk.storage import KeyValueStore
 
 
 class FeishuContacts:
@@ -31,7 +31,7 @@ class FeishuContacts:
         self,
         api: FeishuApi,
         *,
-        store: PluginKVStore | None,
+        store: KeyValueStore | None,
         ref: str,
         avatars: AvatarsCapability | None,
     ) -> None:

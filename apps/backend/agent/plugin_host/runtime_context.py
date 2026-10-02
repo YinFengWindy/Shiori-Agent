@@ -41,6 +41,9 @@ from shiori_sdk.tools import ToolsCapability as SdkToolsCapability
 from agent.plugin_host.kv import PluginKVStore
 from shiori_sdk.http import HttpClient
 from shiori_sdk.processes import Processes, Resources, ToolTurn
+from shiori_sdk.channels.context import ChannelPluginContext, ChannelsCapability
+from shiori_sdk.accounts.capability import AccountsCapability
+from shiori_sdk.channels.avatars import AvatarsCapability
 
 
 class PluginSetupContext:
@@ -86,6 +89,9 @@ class PluginSetupContext:
         scene_observations: SceneObservations | None = None,
         light_provider: ChatProvider | None = None,
         light_model: str | None = None,
+        channels: ChannelsCapability | None = None,
+        accounts: AccountsCapability | None = None,
+        avatars: AvatarsCapability | None = None,
     ) -> None:
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
@@ -120,6 +126,9 @@ class PluginSetupContext:
         self._scene_observations = scene_observations
         self._light_provider = light_provider
         self._light_model = light_model
+        self._channels = channels
+        self._accounts = accounts
+        self._avatars = avatars
 
     def as_sdk_context(self) -> SdkRuntimeContext:
         """Checks the setup boundary against this static base, without __getattr__."""
@@ -356,6 +365,31 @@ class PluginSetupContext:
     def as_service_context(self) -> ServicePluginContext:
         """Check service injection without the legacy dynamic attribute path."""
         return self
+
+    @property
+    def channels(self) -> ChannelsCapability:
+        """Return statically checked channel contribution services."""
+        if "channels" not in self.granted or self._channels is None:
+            raise CapabilityNotGranted("Plugin did not request channels")
+        return self._channels
+
+    @property
+    def accounts(self) -> AccountsCapability:
+        """Return statically checked account registration and lifecycle services."""
+        if "accounts" not in self.granted or self._accounts is None:
+            raise CapabilityNotGranted("Plugin did not request accounts")
+        return self._accounts
+
+    def as_channel_context(self) -> ChannelPluginContext:
+        """Check the actual setup boundary without dynamic legacy attributes."""
+        return self
+
+    @property
+    def avatars(self) -> AvatarsCapability:
+        """Return the explicitly granted shared avatar-cache contract."""
+        if "avatars" not in self.granted or self._avatars is None:
+            raise CapabilityNotGranted("Plugin did not request avatars")
+        return self._avatars
 
 
 class PluginRuntimeContext(PluginSetupContext):

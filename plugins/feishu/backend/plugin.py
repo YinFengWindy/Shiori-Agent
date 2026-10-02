@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
-from infra.channels.account_group import AccountChannelGroup
+from shiori_sdk.accounts.targets import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 
 from .account_delivery import FeishuAccountDelivery
 from .accounts import FeishuAccounts
@@ -13,14 +12,14 @@ from .config import FeishuAppConfig
 from .formatting import CHANNEL
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.channels.context import ChannelPluginContext
 
 
-async def setup(ctx: "PluginRuntimeContext") -> None:
+async def setup(ctx: "ChannelPluginContext") -> None:
     """Registers saved applications and the RPCs that manage them."""
-    from desktop_bridge.method_policy import Concurrency
+    from shiori_sdk.rpc import Concurrency
 
-    group = AccountChannelGroup(CHANNEL)
+    group = ctx.channels.group(CHANNEL)
     ctx.channels.add(group)
     accounts = FeishuAccounts(ctx, group)
     delivery = FeishuAccountDelivery(ctx, accounts)

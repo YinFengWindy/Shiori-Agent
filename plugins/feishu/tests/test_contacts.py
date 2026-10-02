@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 import io
-import logging
 from pathlib import Path
 
 import httpx
 import pytest
+from shiori_sdk.testing.avatars import FakeAvatars
 from PIL import Image
 
-from agent.plugin_host.avatars import AvatarsCapability
-from agent.plugin_host.effects import EffectScope
-from agent.plugin_host.kv import PluginKVStore
-from bus.events import InboundMessage
-from core.channel_avatars import ChannelAvatarStore
+from shiori_sdk.testing.storage import FakeKV
+from shiori_sdk.messages import InboundMessage
 from plugins.feishu.backend.api import FeishuApi
 from plugins.feishu.backend.contacts import FeishuContacts
 
@@ -52,15 +49,14 @@ def _contacts(tmp_path: Path, *, permitted: bool, lookups: list[str]):
         transport=httpx.MockTransport(handler),
     )
     api.open()
-    store = ChannelAvatarStore(tmp_path)
-    avatars = AvatarsCapability(store, EffectScope("feishu"), "feishu")
+    avatars = FakeAvatars()
     contacts = FeishuContacts(
         api,
-        store=PluginKVStore(tmp_path / "kv.json"),
+        store=FakeKV(),
         ref="feishu:cli_a",
         avatars=avatars,
     )
-    return api, contacts, avatars, store
+    return api, contacts, avatars, avatars
 
 
 def _message() -> InboundMessage:
@@ -74,16 +70,14 @@ async def test_one_lookup_names_the_sender_and_caches_both_avatars(tmp_path):
     api, contacts, avatars, store = _contacts(tmp_path, permitted=True, lookups=lookups)
 
     contacts.refresh(_message())
-    for task in list(avatars._tasks):
-        await task
+    await avatars.drain()
     await api.aclose()
 
     assert lookups == [f"/open-apis/contact/v3/users/{OPEN_ID}"]
     assert contacts.name(OPEN_ID) == "小王"
-    index = store.index()
-    assert index.sender(CHANNEL, OPEN_ID) is not None
+    assert store.images[("sender", CHANNEL, OPEN_ID)] == _png()
     # A private chat shows the other person's avatar.
-    assert index.chat(CHANNEL, CHAT_ID) is not None
+    assert store.images[("chat", CHANNEL, CHAT_ID)] == _png()
 
 
 async def test_without_the_contact_permission_there_is_no_name_or_avatar(
@@ -94,13 +88,11 @@ async def test_without_the_contact_permission_there_is_no_name_or_avatar(
         tmp_path, permitted=False, lookups=lookups
     )
 
-    with caplog.at_level(logging.WARNING):
-        contacts.refresh(_message())
-        for task in list(avatars._tasks):
-            await task
+    contacts.refresh(_message())
+    with pytest.raises(ExceptionGroup):
+        await avatars.drain()
     await api.aclose()
 
     assert len(lookups) == 1
-    assert "头像获取失败" in caplog.text
     assert contacts.name(OPEN_ID) is None
-    assert store.index().sender(CHANNEL, OPEN_ID) is None
+    assert ("sender", CHANNEL, OPEN_ID) not in store.images

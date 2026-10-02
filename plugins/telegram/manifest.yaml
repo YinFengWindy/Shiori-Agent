@@ -7,6 +7,7 @@ capabilities:
   - channels
   - accounts
   - avatars
+  - config
   - kv
   - rpc
 channels:

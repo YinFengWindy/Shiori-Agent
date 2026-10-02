@@ -6,8 +6,8 @@ import html
 import logging
 import re
 
-from core.net.http import HttpRequester, RequestBudget
-from infra.channels.base import AttachmentStore
+from shiori_sdk.http import HttpGet, RequestBudget
+from shiori_sdk.channels.services import AttachmentStore as AttachmentStorage
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +23,13 @@ def extract_cq_images(raw: str) -> tuple[str, list[str]]:
 
 async def download_to_temp(
     urls: list[str],
-    requester: HttpRequester,
-    attachments: AttachmentStore | None = None,
+    requester: HttpGet,
+    attachments: AttachmentStorage,
 ) -> list[str]:
     """Download inbound QQ images into the attachment store."""
     if not urls:
         return []
     paths: list[str] = []
-    attachment_store = attachments or AttachmentStore()
     ext_map = {
         "image/jpeg": ".jpg",
         "image/png": ".png",
@@ -49,7 +48,7 @@ async def download_to_temp(
             response.raise_for_status()
             content_type = response.headers.get("content-type", "image/jpeg")
             extension = ext_map.get(content_type.split(";")[0].strip(), ".jpg")
-            path = attachment_store.write_bytes(
+            path = attachments.write_bytes(
                 response.content,
                 prefix="shiori_qq_",
                 suffix=extension,

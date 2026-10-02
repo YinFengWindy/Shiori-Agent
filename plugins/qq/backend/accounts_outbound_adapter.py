@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from bus.events import OutboundMessage
-from core.common.channel_chat_types import REPLY_MENTION_IDS_KEY
-from infra.channels.contract import ChannelContext
+from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.channels.chat_types import REPLY_MENTION_IDS_KEY
+from shiori_sdk.channels import ChannelContext
 
 from .accounts_actions import qq_chat_target, qq_number
 from .onebot import OneBotError, OneBotSocket

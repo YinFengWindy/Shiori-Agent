@@ -580,12 +580,43 @@ class PluginKernel:
             ),
             light_provider=services.light_provider,
             light_model=services.light_model,
+            channels=ChannelsCapability(
+                handle.contributions,
+                handle.effects,
+                plugin_id=handle.plugin_id,
+                declared=frozenset(
+                    declaration.name for declaration in handle.record.manifest.channels
+                ),
+                instance_prefixes=tuple(
+                    declaration.instance_prefix
+                    for declaration in handle.record.manifest.channels
+                    if declaration.instance_prefix
+                ),
+            ),
+            accounts=(
+                AccountsCapability(
+                    services.role_store.accounts,
+                    handle.effects,
+                    handle.plugin_id,
+                    self._account_generation,
+                )
+                if "accounts" in grants and services.role_store is not None
+                else None
+            ),
+            avatars=(
+                AvatarsCapability(
+                    services.role_store.avatars, handle.effects, handle.plugin_id
+                )
+                if "avatars" in grants and services.role_store is not None
+                else None
+            ),
             publish_api=lambda api: setattr(handle, "instance", api),
         )
         context.as_hook_context()
         context.as_command_context()
         context.as_observe_context()
         context.as_service_context()
+        context.as_channel_context()
         await setup_fn(
             context.as_memory_context()
             if "memory" in handle.record.manifest.capabilities
@@ -617,28 +648,9 @@ class PluginKernel:
             "proactive_gates": lambda: ProactiveGatesCapability(
                 handle.contributions, handle.effects
             ),
-            "channels": lambda: ChannelsCapability(
-                handle.contributions,
-                handle.effects,
-                plugin_id=handle.plugin_id,
-                declared=frozenset(
-                    declaration.name for declaration in handle.record.manifest.channels
-                ),
-                instance_prefixes=tuple(
-                    declaration.instance_prefix
-                    for declaration in handle.record.manifest.channels
-                    if declaration.instance_prefix
-                ),
-            ),
-            "accounts": lambda: AccountsCapability(
-                services.role_store.accounts,
-                handle.effects,
-                handle.plugin_id,
-                self._account_generation,
-            ),
-            "avatars": lambda: AvatarsCapability(
-                services.role_store.avatars, handle.effects, handle.plugin_id
-            ),
+            "channels": lambda: None,
+            "accounts": lambda: None,
+            "avatars": lambda: None,
             "background": lambda: None,
             "bot_commands": lambda: None,
             "rpc": lambda: rpc,

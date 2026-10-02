@@ -1,5 +1,4 @@
 """QQ account channel and group target prefixes."""
 
-from core.common.channel_identifiers import QQ_GROUP_PREFIX
-
+QQ_GROUP_PREFIX = "gqq:"
 GROUP_PREFIX = QQ_GROUP_PREFIX

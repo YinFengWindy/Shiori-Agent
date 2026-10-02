@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from core.common.channel_chat_types import is_group_chat_type
-from core.common.message_source import GROUP_NAME_KEY, SENDER_NAME_KEY
+from shiori_sdk.channels.chat_types import is_group_chat_type
+from shiori_sdk.channels.message_source import GROUP_NAME_KEY, SENDER_NAME_KEY
 
 if TYPE_CHECKING:
     from telegram import Chat, Message, User

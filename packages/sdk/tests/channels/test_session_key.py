@@ -1,5 +1,5 @@
-from bus.events import OutboundMessage
-from infra.channels.session_key import resolve_outbound_session_key
+from shiori_sdk.messages import OutboundMessage
+from shiori_sdk.channels.session_key import resolve_outbound_session_key
 
 
 def test_resolve_outbound_session_key_prefers_role_runtime_key() -> None:

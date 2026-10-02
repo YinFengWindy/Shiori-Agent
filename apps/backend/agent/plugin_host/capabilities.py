@@ -292,6 +292,12 @@ class ChannelsCapability:
             label=f"channel:{getattr(channel, 'name', channel)}",
         )
 
+    def group(self, name: str):
+        """Construct the host lifecycle coordinator without transferring its implementation."""
+        from infra.channels.account_group import AccountChannelGroup
+
+        return AccountChannelGroup(name)
+
 
 class AccountsCapability:
     """Plugin-scoped registration and reporting for communication accounts.

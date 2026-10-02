@@ -6,8 +6,9 @@ import asyncio
 from dataclasses import replace
 from typing import Any
 
-from core.accounts import AccountResponseRules
-from infra.channels.intake import ChannelIntake
+from shiori_sdk.accounts import AccountResponseRules
+from shiori_sdk.channels.services import ChannelIntake
+from shiori_sdk.accounts.capability import AccountsCapability
 
 from .accounts_store import (
     QQAccountsStore,
@@ -37,7 +38,7 @@ class QQAccountSettings:
     _locks: dict[str, asyncio.Lock]
     _intakes: dict[str, ChannelIntake]
     _avatar_tasks: dict[str, asyncio.Task[None]]
-    _accounts: Any
+    _accounts: AccountsCapability
 
     def _ref_for(self, account_id: str) -> str:
         """The owning runtime resolves a host account to its private config."""
@@ -57,7 +58,7 @@ class QQAccountSettings:
         connection, error = self._states.get(ref, ("offline", ""))
         return {**config.public_dict(), "connection": connection, "error": error}
 
-    async def begin_login(self, payload: dict[str, Any]) -> dict[str, str]:
+    async def begin_login(self, payload: dict[str, object]) -> dict[str, object]:
         """Allocates one temporary NapCat instance without saving an account."""
         role_id = str(payload.get("role_id") or "").strip()
         if not managed_available():

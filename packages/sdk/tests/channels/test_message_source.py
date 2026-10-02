@@ -1,5 +1,5 @@
-from bus.events import InboundMessage
-from core.common.message_source import (
+from shiori_sdk.messages import InboundMessage
+from shiori_sdk.channels.message_source import (
     MessageSource,
     addresses_account,
     with_message_source,

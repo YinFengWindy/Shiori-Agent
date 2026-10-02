@@ -1,0 +1,88 @@
+"""Host-free message, attachment and sender fixtures for transport tests."""
+
+import asyncio
+from pathlib import Path
+from uuid import uuid4
+
+from shiori_sdk.channels.services import OutboundHandler, Sender
+from shiori_sdk.messages import InboundMessage, OutboundMessage
+
+
+class FakeMessageBus:
+    """Record admitted input and dispatch replies without runtime leases or retry policy."""
+
+    def __init__(self):
+        self.inbound: list[InboundMessage] = []
+        self._inbound: asyncio.Queue[InboundMessage] = asyncio.Queue()
+        self.outbound: dict[str, list[OutboundHandler]] = {}
+
+    async def publish_inbound(self, msg: InboundMessage) -> None:
+        """Record input and make it available to a waiting test."""
+        self.inbound.append(msg)
+        await self._inbound.put(msg)
+
+    async def consume_inbound(self) -> InboundMessage:
+        """Return the next admitted input."""
+        return await self._inbound.get()
+
+    @property
+    def inbound_size(self) -> int:
+        """Number of messages not consumed by a test."""
+        return self._inbound.qsize()
+
+    def subscribe_outbound(self, channel: str, callback: OutboundHandler) -> None:
+        """Register a connection's reply callback."""
+        self.outbound.setdefault(channel, []).append(callback)
+
+    def unsubscribe_outbound(self, channel: str, callback: OutboundHandler) -> None:
+        """Remove only the specified connection's callback."""
+        self.outbound[channel] = [
+            cb for cb in self.outbound.get(channel, []) if cb != callback
+        ]
+
+    async def publish_outbound(self, msg: OutboundMessage) -> None:
+        """Deliver once; retry semantics are verified by real host integration tests."""
+        for callback in self.outbound.get(msg.channel, []):
+            await callback(msg)
+
+    def has_pending_outbound(
+        self, channel: str, chat_id: str, external_message_id: str
+    ) -> bool:
+        """The fake dispatches immediately and never owns a pending reply queue."""
+        return False
+
+
+class FakeAttachmentStore:
+    """Write test attachments only beneath an explicitly supplied directory."""
+
+    def __init__(self, root: Path):
+        self.root = root
+
+    def create_path(self, prefix: str, suffix: str) -> Path:
+        """Allocate a path beneath this fixture's root."""
+        self.root.mkdir(parents=True, exist_ok=True)
+        return self.root / f"{prefix}{uuid4().hex}{suffix}"
+
+    def write_bytes(self, data: bytes, *, prefix: str, suffix: str) -> Path:
+        """Persist received bytes for attachment assertions."""
+        path = self.create_path(prefix, suffix)
+        path.write_bytes(data)
+        return path
+
+
+class FakePushSenders:
+    """Record the public senders owned by each connection."""
+
+    def __init__(self):
+        self.senders: dict[str, Sender | None] = {}
+
+    def register_channel(
+        self, channel: str, text: Sender | None = None, **kwargs: object
+    ) -> None:
+        """Retain a sender registration for a test-owned channel."""
+        self.senders[channel] = text
+
+    def unregister_channel(self, channel: str, *, text: Sender | None = None) -> None:
+        """Keep replacement registrations when the previous connection stops."""
+        if text is None or self.senders.get(channel) == text:
+            self.senders.pop(channel, None)

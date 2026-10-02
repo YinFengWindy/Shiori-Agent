@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from shiori_sdk.storage import read_mapping
 
-from core.accounts import (
+from shiori_sdk.accounts import (
     AccountDeletionPlan,
     AccountResponseRules,
     response_rules_to_dict,
     stored_response_rules,
 )
-from infra.channels.account_group import AccountChannelGroup
+from shiori_sdk.channels.group import AccountChannelGroup
 
 from .channel import FeishuChannel
 from .config import FeishuAppConfig, FeishuApplication, FeishuApplicationStore
@@ -18,13 +19,13 @@ from .formatting import CHANNEL
 from .identity import verify_app
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.channels.context import ChannelPluginContext
 
 
 class FeishuAccounts:
     """Saved applications, their host accounts and their member channels."""
 
-    def __init__(self, ctx: PluginRuntimeContext, group: AccountChannelGroup) -> None:
+    def __init__(self, ctx: ChannelPluginContext, group: AccountChannelGroup) -> None:
         self._ctx = ctx
         self._group = group
         self._store = FeishuApplicationStore(ctx.kv)
@@ -44,7 +45,7 @@ class FeishuAccounts:
             if app.role_id and not self._ctx.accounts.role_exists(app.role_id):
                 self._store.remove(app.ref)
                 continue
-            profile = self._ctx.kv.get(f"profile:{app.ref}", {})
+            profile = read_mapping(self._ctx.kv, f"profile:{app.ref}")
             snapshot = self._ctx.accounts.register_saved(
                 platform="feishu",
                 platform_account_id=app.ref,
@@ -79,7 +80,7 @@ class FeishuAccounts:
         return self._store.get(ref)
 
     async def _connect(self, app: FeishuApplication, account_id: str) -> None:
-        secret = app.resolved_secret()
+        secret = app.resolved_secret(self._ctx.config.resolve_reference)
         if not secret:
             self._ctx.accounts.report(
                 account_id,
@@ -113,8 +114,8 @@ class FeishuAccounts:
 
     async def verify(self, app: FeishuAppConfig) -> dict[str, str]:
         """Authenticates credentials; a known app must still be the same bot."""
-        identity = await verify_app(app)
-        known = self._ctx.kv.get(f"profile:{app.ref}", {})
+        identity = await verify_app(app, resolver=self._ctx.config.resolve_reference)
+        known = read_mapping(self._ctx.kv, f"profile:{app.ref}")
         known_id = str(known.get("open_id") or "")
         if known_id and known_id != identity["open_id"]:
             raise ValueError("应用凭据指向不同的机器人，请新建账号")
@@ -143,7 +144,7 @@ class FeishuAccounts:
             response_rules=existing.response_rules if existing else None,
         )
         self._store.save(app)
-        profile = self._ctx.kv.get(f"profile:{app.ref}", {})
+        profile = read_mapping(self._ctx.kv, f"profile:{app.ref}")
         snapshot = self._ctx.accounts.register(
             platform="feishu",
             platform_account_id=app.ref,

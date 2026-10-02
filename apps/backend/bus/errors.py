@@ -1,9 +1,5 @@
-"""Outbound delivery failures with transport-level recovery constraints."""
+"""Host imports of the single SDK value contract."""
 
-
-class NonRetryableDeliveryError(RuntimeError):
-    """A delivery must not be replayed or replaced with a generic error notice.
-
-    Channels raise this after exhausting safe recovery, including when a remote
-    write may already be visible or a multipart delivery only partly succeeded.
-    """
+from shiori_sdk.channels.errors import (
+    NonRetryableDeliveryError as NonRetryableDeliveryError,
+)

@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import httpx
+from collections.abc import Callable
 
 from .api import FeishuApi
 from .config import FeishuAppConfig
 
 
 async def verify_app(
-    app: FeishuAppConfig, *, transport: httpx.AsyncBaseTransport | None = None
+    app: FeishuAppConfig,
+    *,
+    resolver: Callable[[str], str],
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> dict[str, str]:
     """Authenticates a draft without replacing a live account connection."""
-    secret = app.resolved_secret()
+    secret = app.resolved_secret(resolver)
     if not secret:
         raise ValueError("App ID 和 App Secret 必须有效")
     api = FeishuApi(app.app_id, secret, app.base_url, transport=transport)

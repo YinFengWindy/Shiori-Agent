@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import os
-from collections import deque
 from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
 from core.common.workspace import resolve_default_workspace
-from session.manager import SessionManager
+from shiori_sdk.channels.services import ChannelSessions
 
 
 class AttachmentStore:
@@ -57,7 +56,7 @@ class SessionIdentityIndex:
 
     def __init__(
         self,
-        session_manager: SessionManager,
+        session_manager: ChannelSessions,
         *,
         channel: str,
         metadata_key: str,
@@ -74,14 +73,17 @@ class SessionIdentityIndex:
     def rebuild(self) -> dict[str, str]:
         self.mapping.clear()
         for entry in self._session_manager.get_channel_metadata(self._channel):
-            if not self._accepts_chat_id(entry["chat_id"]):
+            if not self._accepts_chat_id(str(entry["chat_id"])):
                 continue
-            raw_value = entry["metadata"].get(self._metadata_key)
+            metadata = entry["metadata"]
+            if not isinstance(metadata, dict):
+                continue
+            raw_value = metadata.get(self._metadata_key)
             if not isinstance(raw_value, str):
                 continue
             normalized = self._normalize(raw_value)
             if normalized:
-                self.mapping[normalized] = entry["chat_id"]
+                self.mapping[normalized] = str(entry["chat_id"])
         return dict(self.mapping)
 
     def resolve(self, identity: str) -> str | None:
@@ -97,29 +99,9 @@ class SessionIdentityIndex:
         if not normalized:
             return
         self.mapping[normalized] = chat_id
-        session = self._session_manager.get_or_create(f"{self._channel}:{chat_id}")
-        if session.metadata.get(self._metadata_key) == normalized:
-            return
-        session.metadata[self._metadata_key] = normalized
-        await self._session_manager.save_async(session)
+        await self._session_manager.remember_channel_identity(
+            self._channel, chat_id, self._metadata_key, normalized
+        )
 
     def _normalize(self, value: str) -> str:
         return self._normalizer((value or "").strip())
-
-
-class MessageDeduper:
-    """滑动窗口去重，避免 channel 重投或重复事件被处理多次。"""
-
-    def __init__(self, max_size: int) -> None:
-        self._max_size = max(1, max_size)
-        self._seen: set[str] = set()
-        self._order: deque[str] = deque()
-
-    def seen(self, key: str) -> bool:
-        if key in self._seen:
-            return True
-        self._seen.add(key)
-        self._order.append(key)
-        while len(self._order) > self._max_size:
-            self._seen.discard(self._order.popleft())
-        return False

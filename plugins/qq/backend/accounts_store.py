@@ -8,14 +8,14 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from agent.plugin_host.plugin_data import plugin_data_dir
-from core.accounts import (
+from shiori_sdk.storage import plugin_data_dir
+from shiori_sdk.accounts import (
     AccountResponseRules,
     ViaAccount,
     response_rules_to_dict,
     stored_response_rules,
 )
-from infra.persistence.json_store import atomic_save_json
+from shiori_sdk.files.json import atomic_save_json
 
 
 @dataclass(frozen=True)

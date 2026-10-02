@@ -4,12 +4,11 @@ import io
 
 import httpx
 import pytest
+from shiori_sdk.testing.avatars import FakeAvatars
+from shiori_sdk.testing.http import FakeHttp
 from PIL import Image
 
 import plugins.qq.backend.accounts_avatar as accounts_avatar
-from agent.plugin_host.avatars import AvatarsCapability
-from agent.plugin_host.effects import EffectScope
-from core.channel_avatars import ChannelAvatarStore
 from plugins.qq.backend.accounts_avatar import fetch_qq_avatar, refresh_message_avatars
 from plugins.qq.backend.accounts_inbound import inbound_message
 
@@ -24,7 +23,7 @@ async def test_avatar_is_fetched_for_the_qq_number_as_a_data_uri():
         seen.append(str(request.url))
         return httpx.Response(200, content=_PNG)
 
-    avatar = await fetch_qq_avatar("101", transport=httpx.MockTransport(handle))
+    avatar = await fetch_qq_avatar("101", requester=FakeHttp(handle))
 
     assert seen == ["https://q1.qlogo.cn/g?b=qq&nk=101&s=100"]
     assert avatar is not None and avatar.startswith("data:image/png;base64,")
@@ -36,9 +35,9 @@ async def test_avatar_is_fetched_for_the_qq_number_as_a_data_uri():
     [httpx.Response(502), httpx.Response(200, content=b"<html>")],
 )
 async def test_unusable_avatar_responses_are_reported_as_unavailable(response):
-    transport = httpx.MockTransport(lambda _request: response)
+    requester = FakeHttp(lambda _request: response)
 
-    assert await fetch_qq_avatar("101", transport=transport) is None
+    assert await fetch_qq_avatar("101", requester=requester) is None
 
 
 def _picture() -> bytes:
@@ -74,26 +73,23 @@ def _message(kind: str):
         ("private", "902", "https://q1.qlogo.cn/g?b=qq&nk=902&s=100"),
     ],
 )
-async def test_message_avatars_are_fetched_from_qlogo_and_cached(
+async def test_message_avatars_supply_platform_urls_and_bytes_to_host_cache(
     tmp_path, monkeypatch, kind, chat_id, chat_url
 ):
     requested: list[str] = []
 
-    async def qlogo(url: str) -> bytes:
+    async def qlogo(url: str, **_kwargs) -> bytes:
         requested.append(url)
         return _picture()
 
     monkeypatch.setattr(accounts_avatar, "download_avatar", qlogo)
-    store = ChannelAvatarStore(tmp_path)
-    avatars = AvatarsCapability(store, EffectScope("qq"), "qq")
+    avatars = FakeAvatars()
 
-    refresh_message_avatars(avatars, _message(kind))
-    for task in list(avatars._tasks):
-        await task
+    refresh_message_avatars(avatars, _message(kind), requester=FakeHttp())
+    await avatars.drain()
 
     assert sorted(requested) == sorted(
         [chat_url, "https://q1.qlogo.cn/g?b=qq&nk=902&s=100"]
     )
-    index = store.index()
-    assert index.sender("qq", "902") is not None
-    assert index.chat("qq", chat_id) is not None
+    assert avatars.images[("sender", "qq", "902")] == _picture()
+    assert avatars.images[("chat", "qq", chat_id)] == _picture()

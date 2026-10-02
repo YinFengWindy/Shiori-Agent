@@ -4,22 +4,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.accounts import VIA_ACCOUNT_KEY, AccountDeletionPlan
-from core.accounts.target_contract import (
+from shiori_sdk.accounts import VIA_ACCOUNT_KEY, AccountDeletionPlan
+from shiori_sdk.accounts.targets import (
     ACCOUNT_SEND_METHOD,
     ACCOUNT_TARGETS_METHOD,
     account_send_media,
 )
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.channels.context import ChannelPluginContext
 
 
-async def setup(ctx: "PluginRuntimeContext") -> None:
+async def setup(ctx: "ChannelPluginContext") -> None:
     """Loads the plugin-owned accounts and contributes one multi-account channel."""
     from pathlib import Path
 
-    from desktop_bridge.method_policy import Concurrency
+    from shiori_sdk.rpc import Concurrency
 
     from .accounts_runtime import QQAccountsRuntime
     from .accounts_store import QQAccountsStore
@@ -27,7 +27,13 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     workspace = ctx.workspace
     if not isinstance(workspace, Path):
         raise RuntimeError("QQ 插件需要持久化 workspace")
-    runtime = QQAccountsRuntime(QQAccountsStore(workspace), ctx.accounts, ctx.avatars)
+    runtime = QQAccountsRuntime(
+        QQAccountsStore(workspace),
+        ctx.accounts,
+        ctx.avatars,
+        processes=ctx.processes,
+        http=ctx.http,
+    )
     await runtime.load()
     ctx.channels.add(runtime)
 

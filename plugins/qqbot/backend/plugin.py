@@ -3,16 +3,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .account_channel import QQBotAccountsChannel
-from core.accounts import (
+from shiori_sdk.accounts import (
     AccountDeletionPlan,
     AccountResponseRules,
     response_rules_to_dict,
 )
-from core.accounts.target_contract import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
+from shiori_sdk.accounts.targets import ACCOUNT_SEND_METHOD, ACCOUNT_TARGETS_METHOD
 from .accounts import QQBotAccountStore
 
 if TYPE_CHECKING:
-    from agent.plugin_host.runtime_context import PluginRuntimeContext
+    from shiori_sdk.channels.context import ChannelPluginContext
 
 
 def _app_id(config_ref: str) -> str:
@@ -21,9 +21,9 @@ def _app_id(config_ref: str) -> str:
     return config_ref.removeprefix("app:")
 
 
-async def setup(ctx: "PluginRuntimeContext") -> None:
+async def setup(ctx: "ChannelPluginContext") -> None:
     """Contribute one multi-application channel over the plugin-owned accounts."""
-    from desktop_bridge.method_policy import Concurrency
+    from shiori_sdk.rpc import Concurrency
 
     store = QQBotAccountStore(ctx.kv)
     channel = QQBotAccountsChannel(ctx, store, ctx.manifest.channel_chat_types("qqbot"))

@@ -11,6 +11,17 @@ class KeyValueStore(Protocol):
 
     def get(self, key: str, default: object = None) -> object: ...
     def set(self, key: str, value: object) -> None: ...
+    def delete(self, key: str) -> None:
+        """Remove plugin-owned data idempotently."""
+        ...
+
+
+def read_mapping(store: KeyValueStore, key: str) -> dict[str, object]:
+    """Read one plugin record, rejecting corrupted non-object storage without a fallback."""
+    value = store.get(key, {})
+    if not isinstance(value, dict) or any(not isinstance(name, str) for name in value):
+        raise ValueError(f"Stored plugin record {key!r} must be an object")
+    return dict(value)
 
 
 def plugin_data_dir(workspace: Path, plugin_id: str) -> Path:

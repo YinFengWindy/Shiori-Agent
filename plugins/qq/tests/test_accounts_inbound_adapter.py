@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from shiori_sdk.testing.http import FakeHttp
 
 import plugins.qq.backend.accounts_inbound_adapter as inbound_adapter
 from plugins.qq.backend.accounts_actions import RepliedMessage
@@ -22,6 +23,7 @@ def _actions(**actions: object) -> SimpleNamespace:
 
 def _adapter() -> QQInboundAdapter:
     adapter = QQInboundAdapter()
+    adapter._http = FakeHttp()
     adapter._actions = _actions()
     return adapter
 

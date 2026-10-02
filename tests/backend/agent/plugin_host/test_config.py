@@ -27,3 +27,19 @@ def test_config_exposes_raw_reference_without_changing_resolved_values():
     assert raw["client_secret"] == "${QQBOT_SECRET}"
     raw["client_secret"] = "changed"
     assert config.raw_as_dict()["client_secret"] == "${QQBOT_SECRET}"
+
+
+def test_stored_secret_resolution_uses_environment_then_workspace_file(
+    tmp_path, monkeypatch
+):
+    from agent import config as agent_config
+
+    config = PluginConfig({})
+    monkeypatch.setenv("CHANNEL_SECRET", "environment-secret")
+    assert config.resolve_reference("${CHANNEL_SECRET}") == "environment-secret"
+    monkeypatch.delenv("CHANNEL_SECRET")
+    memory = tmp_path / "memory"
+    memory.mkdir()
+    (memory / "CHANNEL_SECRET").write_text("file-secret", encoding="utf-8")
+    monkeypatch.setattr(agent_config, "resolve_default_workspace", lambda: tmp_path)
+    assert config.resolve_reference("${CHANNEL_SECRET}") == "file-secret"

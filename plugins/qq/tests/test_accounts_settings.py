@@ -1,43 +1,16 @@
 from __future__ import annotations
 
+from shiori_sdk.testing.processes import FakeProcesses
+from shiori_sdk.testing.http import FakeHttp
+from shiori_sdk.testing.accounts import FakeAccounts
+
 import asyncio
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 from plugins.qq.backend.accounts_runtime import QQAccountsRuntime
 from plugins.qq.backend.accounts_store import QQAccountsStore, QQConnectionConfig
-
-
-class _Accounts:
-    def __init__(self) -> None:
-        self.reports: list[tuple[str, str]] = []
-
-    def register(
-        self,
-        *,
-        platform,
-        platform_account_id,
-        config_ref,
-        role_id,
-        display_name,
-        response_rules=None,
-    ):
-        return SimpleNamespace(record=SimpleNamespace(id=f"qq-{platform_account_id}"))
-
-    def check_owner(self, *, config_ref, role_id, **_identity):
-        if not role_id:
-            raise ValueError("账号没有所属角色")
-
-    def role_exists(self, role_id):
-        return True
-
-    def register_saved(self, **fields):
-        return self.register(**fields) if fields.get("role_id") else None
-
-    def report(self, account_id, *, connection, capabilities=frozenset(), error=""):
-        self.reports.append((account_id, connection))
 
 
 @pytest.mark.asyncio
@@ -48,11 +21,17 @@ async def test_temporary_login_uses_private_endpoint_without_persisting_an_accou
         "plugins.qq.backend.accounts_settings.managed_available", lambda: True
     )
     store = QQAccountsStore(tmp_path)
-    runtime = QQAccountsRuntime(store, _Accounts())
+    runtime = QQAccountsRuntime(
+        store,
+        FakeAccounts("qq", id_factory=lambda value: f"qq-{value}"),
+        processes=FakeProcesses(),
+        http=FakeHttp(),
+    )
     start = AsyncMock()
     monkeypatch.setattr(runtime._managed, "start", start)
 
     ref = (await runtime.begin_login({"role_id": "mira"}))["ref"]
+    assert isinstance(ref, str)
     temporary = runtime._configs[ref]
     assert temporary.ws_uri.startswith("ws://127.0.0.1:")
     assert temporary.ws_token
@@ -61,7 +40,12 @@ async def test_temporary_login_uses_private_endpoint_without_persisting_an_accou
     assert temporary.ws_token not in str(runtime.settings())
     start.assert_not_awaited()
 
-    reopened = QQAccountsRuntime(store, _Accounts())
+    reopened = QQAccountsRuntime(
+        store,
+        FakeAccounts("qq", id_factory=lambda value: f"qq-{value}"),
+        processes=FakeProcesses(),
+        http=FakeHttp(),
+    )
     await reopened.load()
     assert ref not in reopened._configs
     assert not reopened._managed._files.account_dir(ref).exists()
@@ -94,8 +78,10 @@ async def test_deleted_managed_account_disconnects_and_purges_only_its_data(tmp_
             for ref, uin in (("aa", "101"), ("bb", "202"))
         }
     )
-    accounts = _Accounts()
-    runtime = QQAccountsRuntime(store, accounts)
+    accounts = FakeAccounts("qq", id_factory=lambda value: f"qq-{value}")
+    runtime = QQAccountsRuntime(
+        store, accounts, processes=FakeProcesses(), http=FakeHttp()
+    )
     socket = _Socket()
     runtime._sockets["aa"] = socket
     reconnect = asyncio.create_task(asyncio.sleep(3600))

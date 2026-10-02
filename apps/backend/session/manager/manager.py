@@ -6,6 +6,7 @@ import asyncio
 import logging
 from pathlib import Path
 from typing import Any
+from collections.abc import Callable
 
 from conversation.projector import ConversationStateProjector
 from conversation.store import ConversationStore
@@ -15,6 +16,25 @@ from .models import Session
 
 
 class _ManagerCoreMixin:
+    def identity_index(
+        self,
+        *,
+        channel: str,
+        metadata_key: str,
+        normalizer: Callable[[str], str] | None = None,
+        accepts_chat_id: Callable[[str], bool] | None = None,
+    ):
+        """Construct a host-owned identity view over this session manager."""
+        from infra.channels.base import SessionIdentityIndex
+
+        return SessionIdentityIndex(
+            self,
+            channel=channel,
+            metadata_key=metadata_key,
+            normalizer=normalizer,
+            accepts_chat_id=accepts_chat_id,
+        )
+
     def __init__(self, workspace: Path):
         self.workspace = workspace
         self.session_dir = workspace / "sessions"
@@ -77,3 +97,12 @@ class _ManagerCoreMixin:
         except Exception as e:
             logging.warning("Failed to read channel metadata for %s: %s", channel, e)
             return []
+
+    async def remember_channel_identity(
+        self, channel: str, chat_id: str, key: str, value: str
+    ) -> None:
+        """Persist channel identity metadata only when the normalized value changes."""
+        session = self.get_or_create(f"{channel}:{chat_id}")
+        if session.metadata.get(key) != value:
+            session.metadata[key] = value
+            await self.save_async(session)

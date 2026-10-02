@@ -7,7 +7,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from core.channels.chat_id_command import answer_chat_id_command
+from shiori_sdk.channels.chat_id_command import answer_chat_id_command
 
 from ..utils.topic import telegram_topic_kwargs
 from .compat import _call_send_markdown
