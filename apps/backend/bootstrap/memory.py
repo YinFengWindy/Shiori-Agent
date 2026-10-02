@@ -24,7 +24,7 @@ from bootstrap.memory_capabilities import (
     memory_build_config,
 )
 from bootstrap.memory_plugins import normalize_memory_engine
-from bootstrap.runtime.construction import MemoryBuildResources, track_build_closeables
+from bootstrap.runtime.construction import MemoryBuildResources
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
@@ -108,7 +108,7 @@ def build_memory_runtime(
         recent_context_model=config.light_model or config.model,
     )
 
-    closeables: list[object] = []
+    # 插件登记的资源是唯一移交渠道；回滚由 MemoryBuildResources 在外层装配作用域登记。
     resources = []
     if _memory_plugin_enabled(config):
         plugin_runtime = _build_memory_plugin_runtime(
@@ -122,9 +122,6 @@ def build_memory_runtime(
         )
         engine = plugin_runtime.engine
         resources = plugin_runtime.resources
-        if not resources:
-            closeables.extend(plugin_runtime.closeables)
-        track_build_closeables(closeables)
         register_memory_meta_tools(
             tools,
             engine,
@@ -135,7 +132,6 @@ def build_memory_runtime(
     return MemoryRuntime(
         markdown=markdown,
         engine=engine,
-        closeables=closeables,
         resources=resources,
     )
 

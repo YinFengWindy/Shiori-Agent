@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import inspect
-import logging
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any
 
 from shiori_sdk.memory.build import BuildResource
 
@@ -18,22 +17,13 @@ if TYPE_CHECKING:
     )
     from core.memory.markdown import MarkdownMemoryRuntime
 
-logger = logging.getLogger(__name__)
-
-
-class _AsyncCloseable(Protocol):
-    def aclose(self) -> object: ...
-
-
-class _Closeable(Protocol):
-    def close(self) -> object: ...
-
 
 @dataclass
 class MemoryRuntime:
+    """Markdown memory, the selected engine, and the engine's transferred resources."""
+
     markdown: "MarkdownMemoryRuntime"
     engine: "MemoryEngine"
-    closeables: list[object] = field(default_factory=list[object])
     resources: list[BuildResource] = field(default_factory=list)
     _session_metadata_var: ContextVar[dict[str, Any] | None] = field(
         default_factory=lambda: ContextVar(
@@ -93,6 +83,7 @@ class MemoryRuntime:
         return await self.engine.mutate(request)
 
     async def aclose(self) -> None:
+        """Runs transferred cleanups in reverse order and re-raises the first error."""
         first_error: Exception | None = None
         resources, self.resources = self.resources, []
         for resource in reversed(resources):
@@ -103,21 +94,5 @@ class MemoryRuntime:
             except Exception as exc:
                 if first_error is None:
                     first_error = exc
-        for closeable in reversed(self.closeables):
-            try:
-                if hasattr(closeable, "aclose"):
-                    result = cast(_AsyncCloseable, closeable).aclose()
-                    if inspect.isawaitable(result):
-                        await result
-                elif hasattr(closeable, "close"):
-                    _ = cast(_Closeable, closeable).close()
-            except Exception as exc:
-                if first_error is None:
-                    first_error = exc
-                logger.warning(
-                    "memory runtime close failed for %s: %s",
-                    type(closeable).__name__,
-                    exc,
-                )
         if first_error is not None:
             raise first_error

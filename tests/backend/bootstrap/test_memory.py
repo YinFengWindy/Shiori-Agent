@@ -13,6 +13,7 @@ from agent.provider import LLMProvider
 from agent.tools.registry import ToolRegistry
 from bootstrap.memory import build_memory_runtime, ensure_memory_plugin_storage
 from bootstrap.paths import REPOSITORY_ROOT
+from bootstrap.runtime.construction import prepare_core_runtime
 from core.memory.engine import (
     MemoryCapability,
 )
@@ -94,7 +95,7 @@ async def test_disabled_memory_does_not_resolve_or_initialize_an_engine(
             config, tmp_path, ToolRegistry(), Mock(spec=LLMProvider), None, http
         )
         assert runtime.engine.describe().name == "disabled"
-        assert runtime.closeables == []
+        assert runtime.resources == []
     finally:
         await http.aclose()
 
@@ -106,6 +107,81 @@ def test_retired_engine_in_source_layout_fails_without_creating_data(tmp_path):
     with pytest.raises(ValueError, match="未知 memory engine: akasha"):
         ensure_memory_plugin_storage(config, tmp_path)
     assert not (tmp_path / "plugin-data").exists()
+
+
+class _ResourceOwningPlugin:
+    """Registers resources of every cleanup shape through the single handoff channel."""
+
+    plugin_id = "custom"
+
+    def __init__(self, closed: list[str]) -> None:
+        self.closed = closed
+
+    def build(self, deps):
+        database = SimpleNamespace(close=lambda: self.closed.append("database"))
+
+        async def close_http() -> None:
+            self.closed.append("http")
+
+        deps.resources.register(database, database.close)
+        deps.resources.register(object(), close_http)
+        return MemoryPluginRuntime(
+            engine=cast(Any, SimpleNamespace(describe=lambda: None)),
+            resources=deps.resources.transfer(),
+        )
+
+
+def _build_with_resource_plugin(monkeypatch, tmp_path: Path, closed: list[str]):
+    import bootstrap.memory as memory_module
+
+    monkeypatch.setattr(memory_module, "register_memory_meta_tools", Mock())
+    monkeypatch.setattr(
+        "bootstrap.wiring.resolve_memory_plugin",
+        lambda name: _ResourceOwningPlugin(closed),
+    )
+    return build_memory_runtime(
+        config=Config(
+            provider="test",
+            model="gpt-test",
+            api_key="k",
+            memory=MemoryConfig(enabled=True, engine="custom"),
+        ),
+        workspace=tmp_path,
+        tools=ToolRegistry(),
+        provider=cast(Any, SimpleNamespace()),
+        light_provider=None,
+        http_resources=cast(Any, SimpleNamespace(external_default=SimpleNamespace())),
+    )
+
+
+@pytest.mark.asyncio
+async def test_every_registered_plugin_resource_closes_on_runtime_aclose(
+    monkeypatch, tmp_path: Path
+):
+    closed: list[str] = []
+    runtime = await prepare_core_runtime(
+        monkeypatch, tmp_path, closed, builder=_build_with_resource_plugin
+    )
+    assert closed == []
+    await runtime.aclose()
+    assert closed == ["http", "database"]
+
+
+@pytest.mark.asyncio
+async def test_every_registered_plugin_resource_rolls_back_on_assembly_failure(
+    monkeypatch, tmp_path: Path
+):
+    closed: list[str] = []
+
+    def failing_assembly(*args):
+        _build_with_resource_plugin(*args)
+        raise ValueError("later assembly step failed")
+
+    with pytest.raises(ValueError, match="later assembly step failed"):
+        await prepare_core_runtime(
+            monkeypatch, tmp_path, closed, builder=failing_assembly
+        )
+    assert closed == ["http", "database"]
 
 
 def test_build_memory_runtime_uses_memory_plugin(monkeypatch, tmp_path: Path):

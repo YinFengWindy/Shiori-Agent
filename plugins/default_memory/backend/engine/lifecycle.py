@@ -111,7 +111,6 @@ class DefaultMemoryEngine(
         self._tagger: ProcedureTagger | None = None
         self._post_response_worker: PostResponseMemoryWorker | None = None
         self._event_bus = event_publisher
-        self.closeables: list[object] = []
 
         db_path = resolve_memory_db_path(
             workspace=workspace,
@@ -169,7 +168,6 @@ class DefaultMemoryEngine(
             implicit_memory_handler=self._extract_and_save_post_response,
         )
         self._wire_memory2_events()
-        self.closeables = [self._v2_store, self._embedder]
 
     @classmethod
     def ensure_workspace_storage(

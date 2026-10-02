@@ -4,11 +4,53 @@ from pathlib import Path
 
 from shiori_sdk.testing.memory import FakeMemoryStorage
 
+from plugins.default_memory.backend import config as config_module
 from plugins.default_memory.backend.config import (
     ensure_default_memory_config_file,
     load_default_memory_config,
+    render_default_memory_config,
     resolve_memory_db_path,
 )
+
+
+class _RecordingStorage(FakeMemoryStorage):
+    """Records what the plugin asks the host storage port to resolve."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def resolve_config(self, **kwargs) -> Path:
+        self.calls.append(kwargs)
+        return super().resolve_config(**kwargs)
+
+
+def test_loader_and_ensure_resolve_through_storage_with_plugin_identity(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    storage = _RecordingStorage()
+    migrated = workspace / "plugin-data" / "default_memory" / "config.local.toml"
+    migrated.parent.mkdir(parents=True)
+    migrated.write_text('db_path = "migrated.db"\n', encoding="utf-8")
+
+    cfg = load_default_memory_config(workspace=workspace, storage=storage)
+    ensure_default_memory_config_file(workspace=workspace, storage=storage)
+
+    backend_dir = Path(config_module.__file__).resolve().parent
+    assert cfg.db_path == "migrated.db"
+    assert storage.calls == [
+        {
+            "plugin_id": "default_memory",
+            "plugin_dir": backend_dir,
+            "workspace": workspace,
+        },
+        {
+            "plugin_id": "default_memory",
+            "plugin_dir": backend_dir,
+            "workspace": workspace,
+            "default_text": render_default_memory_config(),
+        },
+    ]
 
 
 def test_clean_workspace_creates_editable_defaults_in_data_directory(

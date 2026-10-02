@@ -11,7 +11,7 @@ from shiori_sdk.memory.engine import (
     MemoryMutation,
     MemoryScope,
 )
-from shiori_sdk.testing.memory import FakeMemoryRoles
+from shiori_sdk.testing.memory import FakeMemoryRoles, FakeMemoryStorage
 
 from plugins.default_memory.backend.semantic.memorizer import Memorizer
 from plugins.default_memory.backend.semantic.store import MemoryStore2
@@ -204,7 +204,9 @@ async def test_default_memory_engine_allows_authorized_shared_write(
 async def test_default_memory_engine_forget_filters_to_matching_role_and_scope(
     tmp_path: Path, make_engine
 ):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     engine = make_engine(retriever=cast(Any, SimpleNamespace()))
     engine._v2_store = store
     try:
@@ -465,7 +467,7 @@ async def test_memorize_tool_should_not_create_second_active_procedure_when_incr
         async def embed(self, text: str) -> list[float]:
             return [1.0, 0.0]
 
-    store = MemoryStore2(":memory:")
+    store = MemoryStore2(":memory:", open_database=FakeMemoryStorage().open_database)
     memorizer = Memorizer(store, cast(Any, _Embedder()))
     tool = make_engine(
         retriever=MagicMock(),

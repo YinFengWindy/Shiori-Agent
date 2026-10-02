@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 import pytest
+from shiori_sdk.testing.memory import FakeMemoryStorage
 
 from plugins.default_memory.backend.semantic.memorizer import (
     Memorizer,
@@ -23,7 +24,7 @@ async def test_memorizer_profile_supersede_keeps_high_emotional_weight_item_unde
             }
             return mapping[text]
 
-    store = MemoryStore2(":memory:")
+    store = MemoryStore2(":memory:", open_database=FakeMemoryStorage().open_database)
     memorizer = Memorizer(store, cast(Any, _Embedder()))
 
     await memorizer.save_item(
@@ -56,7 +57,7 @@ async def test_memorizer_profile_supersede_retires_low_emotional_weight_item_at_
             }
             return mapping[text]
 
-    store = MemoryStore2(":memory:")
+    store = MemoryStore2(":memory:", open_database=FakeMemoryStorage().open_database)
     memorizer = Memorizer(store, cast(Any, _Embedder()))
 
     await memorizer.save_item(
@@ -101,7 +102,9 @@ def test_parse_history_entry_happened_at_from_prefix():
 
 
 def test_save_from_consolidation_writes_happened_at(tmp_path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     memorizer = Memorizer(store, cast(Any, _FakeEmbedder_consolidation_idempotency()))
 
     async def _run() -> None:
@@ -121,7 +124,9 @@ def test_save_from_consolidation_writes_happened_at(tmp_path):
 
 
 def test_save_from_consolidation_skips_duplicate_source_ref(tmp_path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     memorizer = Memorizer(store, cast(Any, _FakeEmbedder_consolidation_idempotency()))
 
     async def _run() -> None:
@@ -156,7 +161,9 @@ class _FakeEmbedder_event_semantic_dedup:
 
 
 def test_near_duplicate_event_not_saved_again(tmp_path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     embedder = _FakeEmbedder_event_semantic_dedup(
         {
             "用户把仓库脱敏后公开发布": [1.0, 0.0],
@@ -188,7 +195,9 @@ def test_near_duplicate_event_not_saved_again(tmp_path):
 
 
 def test_distinct_event_saves_normally(tmp_path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     embedder = _FakeEmbedder_event_semantic_dedup(
         {
             "用户把仓库脱敏后公开发布": [1.0, 0.0],
@@ -220,7 +229,9 @@ def test_distinct_event_saves_normally(tmp_path):
 
 
 def test_reinforcement_incremented_on_dedup(tmp_path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     embedder = _FakeEmbedder_event_semantic_dedup(
         {
             "用户把仓库脱敏后公开发布": [1.0, 0.0],
@@ -252,7 +263,9 @@ def test_reinforcement_incremented_on_dedup(tmp_path):
 
 
 def test_emotional_weight_merged_on_event_dedup(tmp_path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     embedder = _FakeEmbedder_event_semantic_dedup(
         {
             "用户把仓库脱敏后公开发布": [1.0, 0.0],
@@ -286,7 +299,9 @@ def test_emotional_weight_merged_on_event_dedup(tmp_path):
 
 
 def test_dedup_window_is_7_days(tmp_path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     embedder = _FakeEmbedder_event_semantic_dedup(
         {
             "用户把仓库脱敏后公开发布": [1.0, 0.0],
@@ -338,7 +353,9 @@ class _FakeEmbedder_dedup_baseline:
 
 def test_baseline_exact_hash_prevents_double_write(tmp_path):
     """[PASS] content_hash 去重：完全相同的 summary 写两次，DB 只有一条，reinforcement=2。"""
-    store = MemoryStore2(tmp_path / "m.db")
+    store = MemoryStore2(
+        tmp_path / "m.db", open_database=FakeMemoryStorage().open_database
+    )
     embedder = _FakeEmbedder_dedup_baseline({"查 Steam 必须用 steam MCP": [1.0, 0.0]})
     memorizer = Memorizer(store, cast(Any, embedder))
 
@@ -378,7 +395,7 @@ def test_merge_item_should_keep_procedure_metadata_consistent():
             "合并后的 Steam 查询规则：先用 steam_mcp，再补充区服确认": [0.9, 0.1],
         }
     )
-    store = MemoryStore2(":memory:")
+    store = MemoryStore2(":memory:", open_database=FakeMemoryStorage().open_database)
     memorizer = Memorizer(store, cast(Any, embedder))
 
     row_ref = store.upsert_item(
@@ -427,7 +444,7 @@ def test_merge_item_should_refresh_trigger_tags_for_procedure():
             "查 Steam 必须先使用 steam_mcp": [0.9, 0.1],
         }
     )
-    store = MemoryStore2(":memory:")
+    store = MemoryStore2(":memory:", open_database=FakeMemoryStorage().open_database)
     memorizer = Memorizer(store, cast(Any, embedder))
 
     row_ref = store.upsert_item(
@@ -480,7 +497,7 @@ def test_save_item_with_supersede_does_not_cross_role_scope():
             "Mira 视角：用户更偏好简洁中文回复": [1.0, 0.0],
         }
     )
-    store = MemoryStore2(":memory:")
+    store = MemoryStore2(":memory:", open_database=FakeMemoryStorage().open_database)
     memorizer = Memorizer(store, cast(Any, embedder))
 
     asyncio.run(

@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from shiori_sdk.testing.memory import FakeMemoryStorage
+
 from plugins.default_memory.backend.semantic.store import MemoryStore2
 
 
 def test_upsert_consolidation_event_fills_missing_happened_at_on_duplicate(tmp_path):
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
 
     store.upsert_consolidation_event(
         source_ref="session@1",
@@ -26,7 +30,9 @@ def test_upsert_consolidation_event_fills_missing_happened_at_on_duplicate(tmp_p
 
 
 def test_upsert_item_reinforces_equivalent_summaries(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "mem.db")
+    store = MemoryStore2(
+        tmp_path / "mem.db", open_database=FakeMemoryStorage().open_database
+    )
     try:
         first = store.upsert_item(
             "procedure", "Hello   world", [1.0, 0.0], source_ref="s1"
@@ -52,7 +58,9 @@ def test_upsert_item_reinforces_equivalent_summaries(tmp_path: Path):
 
 
 def test_upsert_consolidation_event_is_idempotent_per_source_ref(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "mem.db")
+    store = MemoryStore2(
+        tmp_path / "mem.db", open_database=FakeMemoryStorage().open_database
+    )
     try:
         created = store.upsert_consolidation_event(
             source_ref="r1", summary="Event A", embedding=[0.0, 1.0]
@@ -68,7 +76,9 @@ def test_upsert_consolidation_event_is_idempotent_per_source_ref(tmp_path: Path)
 
 
 def test_record_replacements_keeps_both_summaries_and_extras(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "mem.db")
+    store = MemoryStore2(
+        tmp_path / "mem.db", open_database=FakeMemoryStorage().open_database
+    )
     try:
         old_res = store.upsert_item(
             "procedure",

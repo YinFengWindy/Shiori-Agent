@@ -86,7 +86,6 @@ class MemoryPlugin:
         )
         return MemoryPluginRuntime(
             engine=engine,
-            closeables=list(engine.closeables),
             admin=engine,
             resources=deps.resources.transfer(),
         )

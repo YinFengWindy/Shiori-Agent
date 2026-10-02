@@ -94,10 +94,14 @@ class MemoryPluginBuildDeps:
 
 @dataclass
 class MemoryPluginRuntime:
-    """A completed engine and the resources transferred to its runtime owner."""
+    """A completed engine and the resources transferred to its runtime owner.
+
+    ``resources`` is the only ownership channel: it must be the result of
+    ``deps.resources.transfer()`` so every registered allocation is closed by the
+    host at shutdown and on assembly rollback.
+    """
 
     engine: MemoryEngine
-    closeables: list[object] = field(default_factory=list)
     admin: MemoryAdminApi | None = None
     resources: list[BuildResource] = field(default_factory=list)
 

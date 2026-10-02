@@ -4,11 +4,15 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from shiori_sdk.testing.memory import FakeMemoryStorage
+
 from plugins.default_memory.backend.semantic.store import MemoryStore2
 
 
 def test_store_time_range_filters_mixed_timezone_happened_at(tmp_path: Path) -> None:
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     tz = ZoneInfo("Asia/Shanghai")
     store.upsert_item(
         "event",
@@ -45,7 +49,9 @@ def test_store_time_range_filters_mixed_timezone_happened_at(tmp_path: Path) -> 
 def test_store_time_range_limit_keeps_latest_events_in_chronological_order(
     tmp_path: Path,
 ) -> None:
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     tz = ZoneInfo("Asia/Shanghai")
     for hour in (9, 10, 11):
         store.upsert_item(
@@ -68,7 +74,9 @@ def test_store_time_range_limit_keeps_latest_events_in_chronological_order(
 
 
 def test_store_keyword_search_respects_required_scope(tmp_path: Path) -> None:
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     store.upsert_item(
         "event",
         "用户在当前会话讨论支付问题",
@@ -96,7 +104,9 @@ def test_store_keyword_search_respects_required_scope(tmp_path: Path) -> None:
 def test_store_keyword_time_filter_prefilters_before_candidate_limit(
     tmp_path: Path,
 ) -> None:
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     tz = ZoneInfo("Asia/Shanghai")
     for index in range(1005):
         store.upsert_item(
@@ -130,7 +140,9 @@ def test_store_keyword_time_filter_prefilters_before_candidate_limit(
 
 
 def test_keyword_match_procedures_filters_memory_type(tmp_path: Path):
-    store = MemoryStore2(tmp_path / "mem.db")
+    store = MemoryStore2(
+        tmp_path / "mem.db", open_database=FakeMemoryStorage().open_database
+    )
     try:
         store.upsert_consolidation_event(
             source_ref="r1", summary="Event A", embedding=[0.0, 1.0]
@@ -158,7 +170,9 @@ def test_keyword_match_procedures_filters_memory_type(tmp_path: Path):
 
 
 def test_store_keyword_search_respects_time_range(tmp_path: Path) -> None:
-    store = MemoryStore2(tmp_path / "memory2.db")
+    store = MemoryStore2(
+        tmp_path / "memory2.db", open_database=FakeMemoryStorage().open_database
+    )
     tz = ZoneInfo("Asia/Shanghai")
     store.upsert_item(
         "event",
