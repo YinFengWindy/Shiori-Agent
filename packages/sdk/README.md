@@ -165,3 +165,10 @@ reply; reload uses the new export. Consumers do not inspect Observe's database.
 `testing.diagnostics.FakeDiagnostics` provide independent contract doubles.
 Diagnostics fakes record callbacks without modifying process-wide handlers. Global
 hook restoration and real lifecycle ordering stay in host integration tests.
+
+
+`shiori_sdk.storage.plugin_data_dir` and `PLUGIN_DATA_DIRNAME` own the pure canonical
+private-data layout and portable plugin-ID validation; host migration and SDK fakes
+use the same helper. `PrivateStorage.migrate_data` returns the authoritative target.
+Observe passes that resolved database path to both writer and public telemetry reader,
+so an injected storage root remains consistent and reads never create storage.

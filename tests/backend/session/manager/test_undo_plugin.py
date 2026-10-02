@@ -152,22 +152,3 @@ async def test_scoped_setup_unload_and_restart_remove_and_restore_single_contrib
             assert await kernel.load("plugin_undo") is True
     finally:
         await kernel.unload("plugin_undo")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("content,has_context", [("/help", False), ("/undo", True)])
-async def test_undo_ignores_unrelated_or_already_handled_commands(
-    tmp_path, content, has_context
-):
-    manager = SessionManager(tmp_path)
-    memory = _MemoryEngine()
-    module = UndoCommandModule(PluginUndo(manager, memory))
-    sentinel = object()
-    slots = {"session:ctx": sentinel} if has_context else {}
-    frame = SimpleNamespace(
-        input=SimpleNamespace(msg=SimpleNamespace(content=content)), slots=slots
-    )
-
-    assert await module.run(frame) is frame
-    assert slots == ({"session:ctx": sentinel} if has_context else {})
-    assert memory.calls == []

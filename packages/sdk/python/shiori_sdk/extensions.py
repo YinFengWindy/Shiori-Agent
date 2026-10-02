@@ -39,7 +39,12 @@ class BackgroundTasks(Protocol):
 
 
 class PrivateStorage(Protocol):
-    """Delegate data migration to the host's existing receipt/lease owner."""
+    """Delegate migration to the host owner and use its returned destination.
+
+    Files for one plugin share the owner's selected directory. The canonical
+    layout is given by storage.plugin_data_dir; consumers must honor the actual
+    migration result when the owner selects a different storage root.
+    """
 
     def migrate_data(
         self, workspace: Path, plugin_id: str, name: str, source: Path

@@ -373,3 +373,42 @@ async def test_unload_flushes_final_errors_and_stops_observations(
         ).fetchone() == ("last collected error",)
     assert not ctx.diagnostics.owners
     _assert_connections_closed(opened_connections)
+
+
+@pytest.mark.asyncio
+async def test_writer_and_public_reader_use_the_storage_owners_resolved_database(
+    tmp_path,
+):
+    from plugins.observe.backend.storage import database_path
+    from plugins.observe.backend.telemetry import ObserveTelemetry
+    from shiori_sdk.testing.memory import FakeMemoryStorage
+
+    workspace = tmp_path / "workspace"
+    destination = tmp_path / "relocated-private-data"
+
+    class Storage(FakeMemoryStorage):
+        def migrate_data(self, workspace, plugin_id, name, source):
+            return destination / name
+
+    ctx = FakeExtensionContext("observe", workspace=workspace)
+    ctx.storage = Storage()
+    try:
+        await setup(ctx)
+        reader = ctx.exported
+        assert isinstance(reader, ObserveTelemetry)
+        await ctx.events.emit(
+            _turn_committed(
+                assistant_response="stored at the owner-selected path",
+                react_stats={"cache_prompt_tokens": 100, "cache_hit_tokens": 75},
+            )
+        )
+        async with asyncio.timeout(5):
+            while not (turns := reader.recent_cache_turns("cli:1")):
+                await asyncio.sleep(0.01)
+        assert turns[0].reply == "stored at the owner-selected path"
+        assert (turns[0].prompt_tokens, turns[0].hit_tokens) == (100, 75)
+        assert (destination / "observe.db").is_file()
+        assert not database_path(workspace).exists()
+    finally:
+        await ctx.aclose()
+    assert (destination / ".last_cleanup").is_file()

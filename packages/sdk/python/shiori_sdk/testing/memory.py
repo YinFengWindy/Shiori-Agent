@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from shiori_sdk.memory.build import BuildResource
+from shiori_sdk.storage import plugin_data_dir
 
 
 @dataclass
@@ -42,7 +43,7 @@ class FakeMemoryStorage:
         default_text: str | None = None,
     ) -> Path:
         path = (
-            workspace / "plugin-data" / plugin_id if workspace else plugin_dir
+            plugin_data_dir(workspace, plugin_id) if workspace else plugin_dir
         ) / "config.local.toml"
         if default_text is not None and not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,7 +53,7 @@ class FakeMemoryStorage:
     def migrate_data(
         self, workspace: Path, plugin_id: str, name: str, source: Path
     ) -> Path:
-        return workspace / "plugin-data" / plugin_id / name
+        return plugin_data_dir(workspace, plugin_id) / name
 
     def open_database(self, path: Path) -> sqlite3.Connection:
         return sqlite3.connect(path, check_same_thread=False)
