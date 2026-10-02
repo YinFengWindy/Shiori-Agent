@@ -29,7 +29,6 @@ from core.roles.role_runtime import RoleRuntimeRegistry
 from agent.provider import LLMProvider
 from core.net.http import get_default_http_requester
 from shiori_sdk.http import HttpClient
-from desktop_bridge.session_presenter import DesktopSessionPresenter
 from agent.plugin_host.avatars import AvatarsCapability
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.storage import PluginStorage
@@ -469,6 +468,21 @@ class PluginKernel:
         capabilities = self._build_capabilities(handle, rpc=rpc)
         grants = handle.record.manifest.capabilities
         services = self._services
+        sessions = None
+        if (
+            "sessions" in grants
+            and services.session_manager is not None
+            and services.workspace is not None
+        ):
+            # Presentation belongs to runtime assembly: importing the desktop
+            # package while bootstrap.app imports the kernel creates a cycle.
+            from desktop_bridge.session_presenter import DesktopSessionPresenter
+
+            sessions = HostPluginSessions(
+                services.session_manager,
+                services.workspace,
+                DesktopSessionPresenter(None, services.relationship_runtime),
+            ).as_capability()
         context: PluginSetupContext = PluginRuntimeContext(
             plugin_id=handle.plugin_id,
             plugin_dir=handle.record.plugin_dir,
@@ -531,16 +545,7 @@ class PluginKernel:
                 if services.role_runtime_registry is not None
                 else None
             ),
-            sessions=(
-                HostPluginSessions(
-                    services.session_manager,
-                    services.workspace,
-                    DesktopSessionPresenter(None, services.relationship_runtime),
-                ).as_capability()
-                if services.session_manager is not None
-                and services.workspace is not None
-                else None
-            ),
+            sessions=sessions,
             tools=ToolsCapability(
                 services.tool_registry,
                 handle.effects,
