@@ -33,3 +33,31 @@ async def test_injected_context_attribution_flush_and_idempotent_uninstall():
     assert diagnostics.owners == []
     assert len(events) == 1
     assert events[0].session_keys == ["external:1"]
+
+
+def _error(message: str) -> logging.LogRecord:
+    return logging.LogRecord(
+        "external.plugin", logging.ERROR, "/elsewhere/plugin.py", 1, message, (), None
+    )
+
+
+@pytest.mark.asyncio
+async def test_retiring_the_old_collector_keeps_the_new_one_recording_once():
+    diagnostics = FakeDiagnostics()
+    old_events, new_events = [], []
+    old = GlobalErrorCollector(SimpleNamespace(emit=old_events.append), diagnostics)
+    new = GlobalErrorCollector(SimpleNamespace(emit=new_events.append), diagnostics)
+    old.install()
+    new.install()
+    try:
+        await old.uninstall()
+        assert diagnostics.owners == [new]
+        assert diagnostics.system == new._on_sys_except
+        assert diagnostics.handler is not None
+        diagnostics.handler.emit(_error("one observed error"))
+        await new.uninstall()
+        assert old_events == []
+        assert len(new_events) == 1 and new_events[0].count == 1
+    finally:
+        await new.uninstall()
+        await old.uninstall()

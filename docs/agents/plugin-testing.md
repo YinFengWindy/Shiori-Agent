@@ -83,7 +83,7 @@ runtime lease、kernel 卸载顺序及 screen_perception/desktop_pet 组合留�
 真实 Windows owned_spawn/WindowsJob/MCP 清理随 PR 的窄范围 Windows job 执行。
 独立插件测试不会通过桌宠的依赖重新安装宿主，Story 明确声明 Windows 所需 tzdata。
 
-#589 渠道迁移先以 QQBot 完成独立验证。账号、规则、目标、会话键、消息与渠道声明的纯值测试随定义移入 `packages/sdk/tests/accounts` 和 `packages/sdk/tests/channels`；真实消息总线/AgentLoop 流式与取消验证留在 `tests/backend/agent/looping/test_core_qqbot_streaming.py`，通过公开渠道启动、外部 HTTP/WebSocket 替身装配。重载与角色删除保留在宿主 plugin_management 集成测试，平台凭据和私有连接状态断言留在 QQBot 自己的测试。
+#589 渠道迁移先以 QQBot 完成独立验证。账号、规则、目标、会话键、消息与渠道声明的纯值测试随定义移入 `packages/sdk/tests/accounts` 和 `packages/sdk/tests/channels`；AgentLoop 流式门控与消息总线重试由宿主中性测试（`tests/backend/agent/looping/core/test_streaming.py`、`tests/backend/bus/test_queue.py`）覆盖；QQBot 的流式预览、取消与不可重发投递，以及重启加载、规则持久化与孤儿清理都在 QQBot 自己的测试中验证。
 
 QQ 已在同票完成 SDK-only 安装验证；平台原文来源/引用的纯函数与测试分别归 `shiori_sdk.channels.message_source`、`reply_context` 及 SDK 镜像测试。投递账本、账号重启/删除与头像持久化集成留在宿主对应 owner 测试。NapCat 使用宿主 `Processes.popen`，Windows CI 保留已有进程测试并加入同步能力和 QQ 直接调用者。
 

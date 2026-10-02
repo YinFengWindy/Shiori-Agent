@@ -9,6 +9,11 @@ import pytest
 from plugins.screen_perception.backend.tool import ObserveScreenTool
 
 
+def test_observe_screen_role_is_supplied_only_by_host_context() -> None:
+    """The host registry overrides any model-supplied role for declared keys."""
+    assert ObserveScreenTool.context_precedence == frozenset({"role_id"})
+
+
 def test_observe_screen_description_matches_role_owned_availability() -> None:
     assert "屏幕观察已开启" not in ObserveScreenTool.description
     assert "桌宠" not in ObserveScreenTool.description

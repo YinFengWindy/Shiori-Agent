@@ -1,38 +1,24 @@
-"""Bootstrap passes the selected workspace's attachment storage to Telegram."""
+"""Received pictures are downloaded into the attachment storage the host provides."""
 
-import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import pytest
 from telegram import Chat, Message, PhotoSize, Update, User
 from telegram.ext import Application, BaseHandler
 
-from agent.plugin_host.capabilities import AccountsCapability
-from agent.plugin_host.effects import EffectScope
-from agent.tools.message_push import MessagePushTool
-from bootstrap.channels import start_channels
-from bus.event_bus import EventBus
-from bus.queue import MessageBus
-from core.net.http import SharedHttpResources
-from core.roles import RoleStore
 from plugins.telegram.backend.channel.lifecycle import TelegramChannel
-from session.manager import SessionManager
+from shiori_sdk.testing.accounts import FakeAccounts
+from shiori_sdk.testing.channel_context import fake_channel_context
+from shiori_sdk.testing.channel_services import FakeMessageBus
 
 
-async def test_telegram_download_uses_bootstrapped_workspace(tmp_path, monkeypatch):
-    selected = tmp_path / "selected"
-    default = tmp_path / "default"
-    monkeypatch.setattr(
-        "infra.channels.base.resolve_default_workspace", lambda: default
-    )
-    roles = RoleStore(selected)
-    roles.create_role(role_id="mira", name="Mira", system_prompt="m")
-    roles.accounts.publish_generation("g1")
-    effects = EffectScope("telegram")
-    accounts = AccountsCapability(roles.accounts, effects, "telegram", "g1")
-
+@pytest.mark.asyncio
+async def test_photo_is_downloaded_into_the_host_attachment_storage(
+    tmp_path, monkeypatch
+):
     async def download(path: Path) -> Path:
         path.write_bytes(b"telegram photo")
         return path
@@ -63,23 +49,12 @@ async def test_telegram_download_uses_bootstrapped_workspace(tmp_path, monkeypat
     builder.build.return_value = app
     monkeypatch.setattr(Application, "builder", lambda: builder)
     channel = TelegramChannel(
-        "123:token", config_ref="123", accounts=accounts, role_id="mira"
+        "123:token", config_ref="123", accounts=FakeAccounts("telegram"), role_id="mira"
     )
-    bus = MessageBus()
-    http = SharedHttpResources()
-    host = await start_channels(
-        bus=bus,
-        session_manager=SessionManager(selected),
-        push_tool=MessagePushTool(),
-        http_resources=http,
-        event_bus=EventBus(),
-        plugin_channels=[channel],
-        role_store=roles,
-    )
+    bus = FakeMessageBus()
+    uploads = tmp_path / "uploads"
+    await channel.start(fake_channel_context(uploads, bus=bus))
     try:
-        await host.start_all()
-        assert host.failures == []
-        app.updater.start_polling.assert_awaited_once()
         update = Update(
             update_id=1,
             message=Message(
@@ -94,12 +69,13 @@ async def test_telegram_download_uses_bootstrapped_workspace(tmp_path, monkeypat
         # Dispatch through the handler registered with Telegram's application.
         handler = next(handler for handler in handlers if handler.check_update(update))
         await handler.callback(update, SimpleNamespace(bot=bot))
-        inbound = await asyncio.wait_for(bus.consume_inbound(), 1)
+        await channel._intake.drain()
+
+        [inbound] = bus.inbound
+        assert inbound.content == "Look at this"
+        bot.get_file.assert_awaited_once_with("photo-1")
         [path] = [Path(value) for value in inbound.media]
         assert path.read_bytes() == b"telegram photo"
-        assert path.parent == selected / "uploads"
-        assert not (default / "uploads").exists()
+        assert path.parent == uploads
     finally:
-        await host.stop_all()
-        assert await effects.dispose_all() == []
-        await http.aclose()
+        await channel.stop()

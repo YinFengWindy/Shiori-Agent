@@ -289,3 +289,42 @@ async def test_prompt_model_is_not_called_for_ineligible_cg(tmp_path, blocked):
     await asyncio.gather(*controller.tasks.values())
     prompt.assert_not_awaited()
     await controller.terminate()
+
+
+@pytest.mark.asyncio
+async def test_cg_work_is_spawned_as_runtime_retaining_background(tmp_path: Path):
+    """CG generation must ask the host to retain the runtime until it finishes."""
+
+    class RecordingBackground(FakeBackground):
+        def __init__(self) -> None:
+            super().__init__(FakePluginContext())
+            self.runtime_names: list[str] = []
+
+        def spawn(self, coro, *, name):
+            raise AssertionError("auto CG must not use a non-retaining task")
+
+        def spawn_runtime(self, coro, *, name):
+            self.runtime_names.append(name)
+            return asyncio.create_task(coro, name=name)
+
+    background = RecordingBackground()
+    controller = AutoCgController(
+        light_provider=FakeChatProvider(),
+        light_model="light",
+        prompt_provider=AsyncMock(return_value=None),
+        role_store=_roles(tmp_path),
+        policy=AutoCgPolicy(FakeKV()),
+        session_manager=SimpleNamespace(
+            get_or_create=lambda _: SimpleNamespace(metadata={})
+        ),
+        generate_tool=None,
+        tool_registry=None,
+        background=background,
+    )
+
+    controller.schedule(
+        _observation(visual_description="少女站在雨里", transition="started")
+    )
+    await controller.terminate()
+
+    assert background.runtime_names == ["novelai_auto_cg:role:mira"]

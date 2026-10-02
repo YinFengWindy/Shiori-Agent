@@ -30,3 +30,28 @@ def test_enabling_one_role_replaces_visibility_and_missing_selection_rejects(tmp
         state.set_enabled("second", True)
     with pytest.raises(KeyError, match="桌宠包不存在"):
         state.select_package("second", "missing")
+
+
+def test_role_save_draft_is_exclusive_validated_and_projects_only_visibility():
+    package = RolePetPackage(
+        "pet", "codex-sprite@1", "Pet", "pet.json", "pet.webp", "t"
+    )
+    bound = {"pet_packages": [package.to_dict()], "selected_pet_package_id": "pet"}
+    data = {"first": {**bound, "desktop_pet_enabled": True}, "second": dict(bound)}
+    RolePetStateStore.write_draft("second", {"enabled": True}, data)
+    assert RolePetStateStore.project("first", data) == {
+        "enabled": False,
+        "available": True,
+    }
+    assert RolePetStateStore.project("second", data) == {
+        "enabled": True,
+        "available": True,
+    }
+    assert RolePetStateStore.project("absent", data) == {
+        "enabled": False,
+        "available": False,
+    }
+    with pytest.raises(ValueError, match="布尔值"):
+        RolePetStateStore.write_draft("second", {"enabled": "yes"}, data)
+    with pytest.raises(ValueError, match="启用桌宠前"):
+        RolePetStateStore.write_draft("absent", {"enabled": True}, data)

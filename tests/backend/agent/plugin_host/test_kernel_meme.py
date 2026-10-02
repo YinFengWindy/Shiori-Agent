@@ -121,7 +121,7 @@ async def test_meme_without_session_service_fails_setup_instead_of_degrading(
 
 
 @pytest.mark.asyncio
-async def test_meme_prompt_module_injects_bottom_section(
+async def test_meme_prompt_module_runs_between_ctx_emit_and_render(
     tmp_path: Path, load_kernel: _KernelLoader
 ) -> None:
     _write_meme_workspace(tmp_path)
@@ -146,8 +146,8 @@ async def test_meme_prompt_module_injects_bottom_section(
 
     await module.run(frame)
 
-    assert ctx.system_sections_bottom[0].name == "memes"
-    assert "<meme:shy>" in ctx.system_sections_bottom[0].content
+    # Section wording is asserted by the plugin tests.
+    assert len(ctx.system_sections_bottom) == 1
     ordered = default_prompt_render_modules(
         bus, MagicMock(), kernel.prompt_render_modules
     )
@@ -211,59 +211,7 @@ async def test_meme_kernel_staging_excludes_package_virtual_environments(
 
 
 @pytest.mark.asyncio
-async def test_meme_plugin_decorates_after_reasoning(
-    tmp_path: Path, load_kernel: _KernelLoader
-) -> None:
-    image = _write_meme_workspace(tmp_path)
-    kernel, bus = await load_kernel(tmp_path)
-    ctx = AfterReasoningCtx(
-        session_key="telegram:1",
-        channel="telegram",
-        chat_id="1",
-        tools_used=(),
-        thinking=None,
-        response_metadata=ResponseMetadata(raw_text="好的 <meme:shy>"),
-        streamed=False,
-        tool_chain=(),
-        context_retry={},
-        reply="好的 <meme:shy>",
-    )
-
-    out = await bus.emit(ctx)
-
-    assert out.reply == "好的"
-    assert out.media == [str(image)]
-    assert out.meme_tag == "shy"
-
-
-@pytest.mark.asyncio
-async def test_meme_plugin_strips_empty_protocol_tag(
-    tmp_path: Path, load_kernel: _KernelLoader
-) -> None:
-    _write_meme_workspace(tmp_path)
-    kernel, bus = await load_kernel(tmp_path)
-    ctx = AfterReasoningCtx(
-        session_key="telegram:1",
-        channel="telegram",
-        chat_id="1",
-        tools_used=(),
-        thinking=None,
-        response_metadata=ResponseMetadata(raw_text="好的 <meme:>"),
-        streamed=False,
-        tool_chain=(),
-        context_retry={},
-        reply="好的 <meme:>",
-    )
-
-    out = await bus.emit(ctx)
-
-    assert out.reply == "好的"
-    assert out.media == []
-    assert out.meme_tag is None
-
-
-@pytest.mark.asyncio
-async def test_role_reactions_use_sendable_assets_and_global_emoji(
+async def test_role_reactions_resolve_before_citation_cleanup_and_persist(
     tmp_path: Path,
     load_kernel: _KernelLoader,
 ) -> None:
@@ -284,29 +232,8 @@ async def test_role_reactions_use_sendable_assets_and_global_emoji(
         get_or_create=lambda _key: SimpleNamespace(metadata={"role_id": "mira"})
     )
     kernel, bus = await load_kernel(tmp_path, session_manager=session_manager)
-    prompt_ctx = PromptRenderCtx(
-        session_key="role:mira",
-        channel="desktop",
-        chat_id="role:mira",
-        content="你好",
-        media=None,
-        timestamp=datetime.now(timezone.utc),
-        history=[],
-        skill_names=[],
-        retrieved_memory_block="",
-        disabled_sections=set(),
-        turn_injection_prompt="",
-        session_metadata={"role_id": "mira"},
-    )
-
-    await kernel.prompt_render_modules[-1].run(
-        SimpleNamespace(slots={"prompt:ctx": prompt_ctx})
-    )
-    prompt = prompt_ctx.system_sections_bottom[0].content
-    assert "<meme:分类ID>" in prompt
-    assert "reactions: 表情包" in prompt
-    assert "heart: ❤️" in prompt
-
+    # Real after_reasoning pipeline: meme must consume its valid tags before
+    # citation's protocol cleanup, and the persisted message must match outbound.
     out, session = await _run_reply(
         kernel,
         bus,
@@ -320,51 +247,6 @@ async def test_role_reactions_use_sendable_assets_and_global_emoji(
     assert session.messages[-1]["content"] == "喜欢 ❤️"
     assert session.messages[-1]["cited_memory_ids"] == ["mem_1"]
     assert session.messages[-1]["media"] == out.media
-
-
-@pytest.mark.asyncio
-async def test_role_reactions_reject_disabled_category_and_unknown_emoji(
-    tmp_path: Path,
-    load_kernel: _KernelLoader,
-) -> None:
-    image = tmp_path / "reaction.png"
-    image.write_bytes(b"reaction")
-    store = RoleStore(tmp_path)
-    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
-    store.update_role(
-        "mira",
-        asset_categories=[
-            {"id": "default", "name": "默认"},
-            {"id": "private", "name": "私有", "allow_role_send": False},
-        ],
-        illustration_sources=[image],
-        illustration_category_id="private",
-    )
-    kernel, bus = await load_kernel(
-        tmp_path,
-        session_manager=SimpleNamespace(
-            get_or_create=lambda _key: SimpleNamespace(metadata={"role_id": "mira"})
-        ),
-    )
-    ctx = AfterReasoningCtx(
-        session_key="role:mira",
-        channel="desktop",
-        chat_id="role:mira",
-        tools_used=(),
-        thinking=None,
-        response_metadata=ResponseMetadata(
-            raw_text="好 <emoji:unknown> <meme:private>"
-        ),
-        streamed=False,
-        tool_chain=(),
-        context_retry={},
-        reply="好 <emoji:unknown> <meme:private>",
-    )
-
-    out = await bus.emit(ctx)
-
-    assert out.reply == "好"
-    assert out.media == []
 
 
 async def _run_reply(kernel: PluginKernel, bus: EventBus, reply: str, *, role_id: str):

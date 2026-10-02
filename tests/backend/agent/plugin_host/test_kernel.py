@@ -18,11 +18,11 @@ from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 import sys
 
-from tests.backend.agent.plugin_host.conftest import (
+from shiori_sdk.testing.packages import stage_plugin_package
+from tests.support.plugin_kernel import (
     REPOSITORY_ROOT,
     before_turn_ctx,
     make_kernel,
-    stage_plugin_package,
     PLUGIN_FIXTURES,
 )
 

@@ -16,12 +16,57 @@ from shiori_sdk.testing.channel_services import FakeMessageBus
 from shiori_sdk.testing.events import FakeEvents
 from shiori_sdk.messages import InboundMessage, OutboundMessage
 from shiori_sdk.channel_events import StreamDeltaReady, TurnCancelled, TurnStarted
+from shiori_sdk.channels.errors import NonRetryableDeliveryError
 import plugins.qqbot.backend.streaming as qqbot_streaming
 from plugins.qqbot.backend.channel import QQBotChannel
-from plugins.qqbot.testing.http import MESSAGE_PATH, STREAM_PATH, QQBotHttp
 
 SESSION_KEY = "role:mira"
 CHAT_ID = "c2c:app:user-1"
+
+STREAM_PATH = "/v2/users/user-1/stream_messages"
+MESSAGE_PATH = "/v2/users/user-1/messages"
+
+
+class QQBotHttp:
+    """Answers the official QQBot HTTP API offline and models stream expiry."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, dict[str, object]]] = []
+        self.fail_stream_from: int | None = None
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        """Answer authentication, discovery and message requests without network IO."""
+        if request.url.path == "/app/getAppAccessToken":
+            return httpx.Response(200, json={"access_token": "tok", "expires_in": 7200})
+        if request.url.path == "/gateway":
+            return httpx.Response(200, json={"url": "wss://gateway.invalid"})
+        body = json.loads(request.content) if request.content else {}
+        assert isinstance(body, dict)
+        self.calls.append((request.method, request.url.path, body))
+        if request.url.path == STREAM_PATH:
+            if (
+                self.fail_stream_from is not None
+                and len(self.stream_bodies()) > self.fail_stream_from
+            ):
+                return httpx.Response(400, json={"message": "stream expired"})
+            return httpx.Response(200, json={"id": "stream-1"})
+        return httpx.Response(200, json={})
+
+    def stream_bodies(self) -> list[dict[str, object]]:
+        """Return stream payloads in their request order, including rejected calls."""
+        return [body for _method, path, body in self.calls if path == STREAM_PATH]
+
+    def markdown_messages(self) -> list[str]:
+        """Return final Markdown content sent through the ordinary message API."""
+        messages: list[str] = []
+        for method, path, body in self.calls:
+            if method == "POST" and path == MESSAGE_PATH and "markdown" in body:
+                markdown = body["markdown"]
+                assert isinstance(markdown, dict)
+                content = markdown["content"]
+                assert isinstance(content, str)
+                messages.append(content)
+        return messages
 
 
 async def _started_channel(
@@ -86,6 +131,13 @@ def _assert_no_turn_state(channel: QQBotChannel) -> None:
     assert channel._reply_buffers == {}
     assert channel._live_stop_events == {}
     assert channel._live_tasks == set()
+
+
+async def _stop_without_further_requests(channel: QQBotChannel, api: QQBotHttp) -> None:
+    """Stopping after the turn ended must not issue late preview writes or recalls."""
+    calls = len(api.calls)
+    await channel.stop()
+    assert api.calls[calls:] == []
 
 
 def _final_reply(content: str) -> OutboundMessage:
@@ -229,6 +281,71 @@ async def test_old_final_after_a_newer_turn_clears_only_its_own_turn(
 
 
 @pytest.mark.asyncio
+async def test_newer_inbound_before_the_first_delta_keeps_each_turns_stream(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
+    api = QQBotHttp()
+    bus = FakeMessageBus()
+    channel, event_bus, hub, first = await _started_channel(api, tmp_path, bus)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        result = api.handler(request)
+        if request.url.path == STREAM_PATH:
+            body = json.loads(request.content)
+            return httpx.Response(200, json={"id": f"stream-{body['msg_id']}"})
+        return result
+
+    channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    # The newer message changes the chat's latest anchor before the old turn
+    # emits anything; the old turn's events still own msg-1.
+    await channel._handle_c2c(
+        {"id": "msg-2", "author": {"user_openid": "user-1"}, "content": "第二问"}
+    )
+    await channel._intake.drain()
+    second = bus.inbound[-1]
+    first_sink = _stream_sink(channel, event_bus, first)
+    second_sink = _stream_sink(channel, event_bus, second)
+    assert first_sink is not None and second_sink is not None
+    await first_sink("第一轮预览")
+    await channel._drain_live_tasks()
+    # The old final is still queued when the next turn starts.
+    bus.pending_outbound.add(("qqbot", CHAT_ID, "msg-1"))
+    await event_bus.emit(
+        TurnStarted(
+            session_key=SESSION_KEY,
+            channel="qqbot",
+            chat_id=CHAT_ID,
+            content=second.content,
+            timestamp=datetime.now(),
+            external_message_id="msg-2",
+        )
+    )
+    await second_sink("第二轮预览")
+    await channel._drain_live_tasks()
+    bus.pending_outbound.clear()
+
+    await channel._on_response(_final_reply("第一轮完整回复"))
+    second_reply = _final_reply("第二轮完整回复")
+    second_reply.metadata["external_message_id"] = "msg-2"
+    await channel._on_response(second_reply)
+
+    assert [
+        (body["msg_id"], body["index"], body["input_state"], body.get("stream_msg_id"))
+        for body in api.stream_bodies()
+    ] == [
+        ("msg-1", 0, 1, None),
+        ("msg-2", 0, 1, None),
+        ("msg-1", 1, 10, "stream-msg-1"),
+        ("msg-2", 1, 10, "stream-msg-2"),
+    ]
+    assert api.markdown_messages() == []
+    assert hub.delivery_statuses() == ["sent", "sent"]
+    _assert_no_turn_state(channel)
+    await _stop_without_further_requests(channel, api)
+
+
+@pytest.mark.asyncio
 async def test_qqbot_final_reply_cancels_a_throttled_refresh(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -304,7 +421,10 @@ async def test_final_reply_waits_for_inflight_stream_id_and_index(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["timeout", "server", "missing_id", "recall"])
+@pytest.mark.parametrize(
+    "failure",
+    ["timeout", "server", "missing_id", "recall", "fallback_timeout", "image"],
+)
 async def test_uncertain_stream_or_failed_recall_never_resends_or_marks_sent(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: str
 ) -> None:
@@ -321,32 +441,51 @@ async def test_uncertain_stream_or_failed_recall_never_resends_or_marks_sent(
                 return httpx.Response(500)
             if failure == "missing_id":
                 return httpx.Response(200, json={})
-            if json.loads(request.content)["input_state"] == 10:
+            if failure == "fallback_timeout":
+                return httpx.Response(400)
+            if failure == "recall" and json.loads(request.content)["input_state"] == 10:
                 return httpx.Response(400)
         if request.method == "DELETE":
+            return httpx.Response(500)
+        if failure == "fallback_timeout" and request.url.path == MESSAGE_PATH:
+            raise httpx.ReadTimeout("plain receipt lost", request=request)
+        if request.url.path.endswith("/files"):
             return httpx.Response(500)
         return result
 
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     sink = _stream_sink(channel, event_bus, inbound)
     assert sink is not None
+    reply = _final_reply("半句话。")
+    if failure == "image":
+        # The text already streamed; only the following image upload fails.
+        reply.media = ["https://example.invalid/image.png"]
     try:
         await sink("半句")
         await channel._drain_live_tasks()
-        with pytest.raises((httpx.HTTPError, RuntimeError)):
-            await channel._on_response(_final_reply("半句话。"))
-        assert api.markdown_messages() == []
+        # A replay could duplicate the preview, the fallback or an earlier part.
+        with pytest.raises(NonRetryableDeliveryError):
+            await channel._on_response(reply)
+        assert api.markdown_messages() == (
+            ["半句话。"] if failure == "fallback_timeout" else []
+        )
         assert hub.delivery_statuses() == ["failed"]
         assert channel._live_states == {}
         assert channel._live_tasks == set()
+        await _stop_without_further_requests(channel, api)
     finally:
         await channel.stop()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("cancel_terminal", [False, True])
+@pytest.mark.parametrize("request_fails", [False, True])
 async def test_cancelled_final_delivery_waits_for_receipt_and_never_marks_sent(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cancel_terminal: bool
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    cancel_terminal: bool,
+    request_fails: bool,
 ) -> None:
     monkeypatch.setattr(qqbot_streaming, "LIVE_STREAM_MIN_INTERVAL_S", 0)
     api = QQBotHttp()
@@ -361,6 +500,11 @@ async def test_cancelled_final_delivery_waits_for_receipt_and_never_marks_sent(
             if terminal == cancel_terminal:
                 entered.set()
                 await release.wait()
+                if request_fails:
+                    return httpx.Response(500)
+        if request.method == "DELETE":
+            # The recall itself fails: nothing may be replayed after it.
+            return httpx.Response(500)
         return result
 
     channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -378,13 +522,24 @@ async def test_cancelled_final_delivery_waits_for_receipt_and_never_marks_sent(
         assert not final.done()
         release.set()
         with pytest.raises(asyncio.CancelledError):
-            await final
+            await asyncio.wait_for(final, 3)
         assert hub.delivery_statuses() == ["failed"]
         assert api.markdown_messages() == []
         assert channel._live_tasks == set()
         assert channel._live_states == {}
-        if not cancel_terminal:
-            assert api.calls[-1][:2] == ("DELETE", "/v2/users/user-1/messages/stream-1")
+        # Only an acknowledged, unfinished preview is recalled.
+        recall_attempted = cancel_terminal == request_fails
+        recalls = [call[:2] for call in api.calls if call[0] == "DELETE"]
+        assert recalls == (
+            [("DELETE", "/v2/users/user-1/messages/stream-1")]
+            if recall_attempted
+            else []
+        )
+        if recall_attempted:
+            assert "取消投递后撤回流式预览失败" in caplog.text
+        if cancel_terminal and request_fails:
+            assert "取消流式投递后等待发送回执失败" in caplog.text
+        await _stop_without_further_requests(channel, api)
     finally:
         release.set()
         await channel.stop()

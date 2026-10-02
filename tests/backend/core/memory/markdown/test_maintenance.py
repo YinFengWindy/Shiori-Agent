@@ -46,7 +46,6 @@ from core.memory.markdown.formatting import (
     _select_consolidation_window,
 )
 from tests.backend.core.memory.markdown.memory_double import CommittedMemory
-from plugins.plugin_undo.backend.plugin import PluginUndo
 from session.manager import Session, SessionManager
 from session.manager.models import consolidation_cursor
 
@@ -157,6 +156,34 @@ def _draft(session: Session, *, archive_all: bool = False):
     )
 
 
+async def _undo_last_turn(
+    manager: SessionManager, memory: CommittedMemory | None, session_key: str
+) -> dict[str, Any] | None:
+    """Drive the host undo contract the way an undo command consumer does.
+
+    Memory sources are resolved as a dry run inside the session undo, then the
+    real rollback runs after the turn is deleted. Returns the rollback result,
+    or ``None`` when there was no turn to undo.
+    """
+    resolved: list[str] = []
+
+    def resolve_sources(message_ids: list[str]) -> list[str]:
+        resolved[:] = message_ids
+        if memory is None:
+            return []
+        preview = memory.undo_by_message_sources(message_ids, dry_run=True)
+        return list(preview["rollback_source_ids"])
+
+    result = await manager.undo_last_turn(
+        session_key, rollback_source_resolver=resolve_sources
+    )
+    if result is None:
+        return None
+    if memory is None:
+        return {"affected_ids": []}
+    return memory.undo_by_message_sources(resolved or result.deleted_ids)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("background", [False, True])
 async def test_prepared_draft_is_rejected_before_markdown_or_memory_writes_after_undo(
@@ -190,7 +217,7 @@ async def test_prepared_draft_is_rejected_before_markdown_or_memory_writes_after
         )
     try:
         await asyncio.wait_for(prepared.wait(), timeout=2)
-        assert "已撤销上一轮对话" in await PluginUndo(manager, None).undo(session.key)
+        assert await _undo_last_turn(manager, None, session.key) is not None
         resume.set()
         result = await asyncio.wait_for(task, timeout=2)
         after_files = {
@@ -250,17 +277,17 @@ async def test_undo_waits_for_started_commit_and_cleans_its_real_memory_sources(
     try:
         await asyncio.wait_for(entered.wait(), timeout=2)
         undo_task = asyncio.create_task(
-            PluginUndo(manager, memory_engine).undo(session.key)
+            _undo_last_turn(manager, memory_engine, session.key)
         )
         await asyncio.sleep(0)
         assert not undo_task.done()
         assert len(session.messages) == 6
         resume.set()
-        result, reply = await asyncio.wait_for(
+        result, rollback = await asyncio.wait_for(
             asyncio.gather(commit_task, undo_task), timeout=2
         )
         assert result.trace["mode"] == "markdown"
-        assert "失效记忆：1 条" in reply
+        assert rollback is not None and rollback["affected_ids"] == item_ids
         assert memory_store.get_items_by_ids(item_ids)[0]["status"] == "superseded"
         assert len(session.messages) == 4
         assert session.last_consolidated == 0
@@ -376,21 +403,21 @@ async def test_manual_timeout_keeps_lock_until_threaded_markdown_commit_finishes
         await asyncio.wait_for(entered.wait(), timeout=2)
         # The real AgentLoop wait_for has cancelled maintenance while its thread writes.
         await asyncio.wait_for(wait_for_cancellation(), timeout=2)
-        undo_task = asyncio.create_task(PluginUndo(manager, engine).undo(session.key))
+        undo_task = asyncio.create_task(_undo_last_turn(manager, engine, session.key))
         for _ in range(5):
             await asyncio.sleep(0)
         assert not undo_task.done()
         assert not task.done()
         assert len(session.messages) == 6
         release.set()
-        outcome, reply = await asyncio.wait_for(
+        outcome, rollback = await asyncio.wait_for(
             asyncio.gather(task, undo_task, return_exceptions=True), timeout=2
         )
         assert isinstance(outcome, TimeoutError)
         assert "memory consolidation busy" in str(outcome)
         assert finished.is_set()
-        assert isinstance(reply, str)
-        assert "失效记忆：1 条" in reply
+        assert isinstance(rollback, dict)
+        assert rollback["affected_ids"] == item_ids
         assert memory_store.get_items_by_ids(item_ids)[0]["status"] == "superseded"
         assert len(session.messages) == 4
         assert session.last_consolidated == 0

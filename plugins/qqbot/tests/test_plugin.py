@@ -71,3 +71,39 @@ async def test_setup_persists_rules_and_deletion_through_registered_hooks() -> N
         assert channel._store.list() == []
     finally:
         await ctx.aclose()
+
+
+@pytest.mark.asyncio
+async def test_restart_keeps_saved_rules_and_purges_apps_of_deleted_roles() -> None:
+    first = FakeChannelPluginContext("qqbot", PLUGIN_DIR)
+    first.kv.set(
+        "application_accounts",
+        [
+            {"app_id": app_id, "client_secret": f"secret-{app_id}", "role_id": role}
+            for app_id, role in (("100", "mira"), ("300", "gone"))
+        ],
+    )
+    first.accounts.available_roles = {"mira", "gone"}
+    rules = AccountResponseRules(private_enabled=False, blocked_sender_ids=("spam",))
+    try:
+        await setup(first.as_capability())
+        assert first.accounts.rules_handler is not None
+        first.accounts.rules_handler("app:100", rules)
+    finally:
+        await first.aclose()
+
+    # The role owning 300 was deleted while the plugin was not loaded.
+    restarted = FakeChannelPluginContext("qqbot", PLUGIN_DIR)
+    restarted.kv = first.kv
+    restarted.accounts.available_roles = {"mira"}
+    try:
+        await setup(restarted.as_capability())
+        assert {
+            snapshot.record.id: snapshot.record.response_rules
+            for snapshot in restarted.accounts.records.values()
+        } == {"qqbot:100": rules}
+        stored = restarted.kv.get("application_accounts")
+        assert isinstance(stored, list)
+        assert [row["app_id"] for row in stored] == ["100"]
+    finally:
+        await restarted.aclose()

@@ -14,7 +14,7 @@ uv run --no-project --python .venv python -m pytest -c pyproject.toml tests
 
 测试不联网：飞书 REST 由 `httpx.MockTransport` 替代，长连接由假连接替代；`tests/test_ws.py` 另用真实 lark-oapi 客户端在私有事件循环上做离线校验，lark-oapi 升级时它会先报出本插件依赖的私有接口是否变化。
 
-真实重载、角色/账号删除留在宿主 `tests/backend/desktop_bridge/runtime/test_plugin_management_feishu.py`；真实头像缓存位于宿主 `tests/backend/agent/plugin_host/test_avatars_feishu.py`。平台集成通过公开渠道启动与外部网络替身装配，飞书的独立测试无需宿主 fixture。每轮修改可运行 `uv run python -m scripts.verify_plugin_tests --plugins feishu` 获得仓库外 wheel 安装、来源与异步执行证据。
+保存的应用在加载时的注册、规则持久化与孤儿清理在本插件 `tests/test_accounts.py` 验证。宿主 `tests/backend/desktop_bridge/runtime/test_plugin_management_feishu.py` 只经 bridge 请求验证真实重载与角色/账号删除；头像缓存由宿主的中性测试覆盖。平台集成通过公开渠道启动与外部网络替身装配，飞书的独立测试无需宿主 fixture。每轮修改可运行 `uv run python -m scripts.verify_plugin_tests --plugins feishu` 获得仓库外 wheel 安装、来源与异步执行证据。
 
 # 用真实飞书应用手动验收
 

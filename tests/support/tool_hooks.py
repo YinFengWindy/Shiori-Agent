@@ -1,14 +1,15 @@
-"""Real host loop assembly for public plugin-hook integration regressions."""
+"""Neutral tool-hook fixtures for host loop protocol regressions.
 
-import asyncio
-import tempfile
+Host tests exercise the finalize protocol (deny with ``finalize=True`` ->
+truncate the remaining batch -> closing summary) with a hook that carries no
+plugin policy. Repeat thresholds and exclusions belong to the
+``tool_loop_guard`` plugin's own tests.
+"""
+
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
-
-import httpx
-import pytest
-from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
 from agent.looping.core import AgentLoop
 from shiori_host_testing.memory import FakeMemoryEngine
@@ -18,23 +19,41 @@ from agent.looping.ports import (
     LLMConfig,
     MemoryServices,
 )
-from agent.plugin_host import HostServices, PluginKernel
 from agent.provider import LLMResponse
-from agent.subagent import SubAgent
 from agent.tool_hooks.base import ToolHook
+from agent.tool_hooks.types import HookContext
+from shiori_sdk.tool_hooks import HookOutcome
 from shiori_sdk.tools import Tool
 from agent.tools.registry import ToolRegistry
-from bus.event_bus import EventBus
-from core.net.http import (
-    SharedHttpResources,
-    clear_default_shared_http_resources,
-    configure_default_shared_http_resources,
-)
-
-PLUGIN_DIR = plugin_directory("tool_loop_guard")
 
 
-class _DummyTool(Tool):
+class FinalizeOnCallHook(ToolHook):
+    """Denies the listed call ids with ``finalize=True`` and passes the rest.
+
+    The hook has no notion of repetition: tests pick which call triggers the
+    finalize decision, so they assert only how the host loop consumes it.
+    """
+
+    name = "test:finalize_on_call"
+    event = "pre_tool_use"
+
+    def __init__(self, *call_ids: str) -> None:
+        self._call_ids = frozenset(call_ids)
+        self.seen: list[str] = []
+
+    def matches(self, ctx: HookContext) -> bool:
+        return True
+
+    async def run(self, ctx: HookContext) -> HookOutcome:
+        self.seen.append(ctx.request.call_id)
+        if ctx.request.call_id in self._call_ids:
+            return HookOutcome(decision="deny", reason="测试要求收尾", finalize=True)
+        return HookOutcome()
+
+
+class DummyTool(Tool):
+    """Tool with one integer argument that records each execution."""
+
     def __init__(self, name: str = "dummy") -> None:
         self._name = name
         self.calls: list[dict] = []
@@ -62,7 +81,9 @@ class _DummyTool(Tool):
         return f"ok:{kwargs.get('x')}"
 
 
-class _FakeProvider:
+class FakeProvider:
+    """Replays scripted responses and records every chat request."""
+
     def __init__(self, responses: list[LLMResponse]) -> None:
         self._responses = list(responses)
         self.calls: list[dict] = []
@@ -92,36 +113,18 @@ def _assert_no_unresolved_tool_calls(messages: list[dict]) -> None:
         )
 
 
-class _StrictProvider(_FakeProvider):
+class StrictProvider(FakeProvider):
+    """Fails the request when any earlier assistant tool call lacks a result."""
+
     async def chat(self, **kwargs):
         messages = kwargs.get("messages") or []
         _assert_no_unresolved_tool_calls(messages)
         return await super().chat(**kwargs)
 
 
-@pytest.fixture(autouse=True)
-def _shared_http_resources(monkeypatch):
-    def reject_network(request: httpx.Request) -> httpx.Response:
-        raise AssertionError(f"unexpected HTTP request: {request.method} {request.url}")
+class ExitTool(Tool):
+    """Mandatory exit tool that only counts its invocations."""
 
-    client_type = httpx.AsyncClient
-
-    def offline_client(**kwargs):
-        return client_type(transport=httpx.MockTransport(reject_network), **kwargs)
-
-    # Keep real requesters/resources while avoiding TLS setup for offline loop tests.
-    with monkeypatch.context() as patch:
-        patch.setattr(httpx, "AsyncClient", offline_client)
-        resources = SharedHttpResources()
-    configure_default_shared_http_resources(resources)
-    try:
-        yield
-    finally:
-        clear_default_shared_http_resources(resources)
-        asyncio.run(resources.aclose())
-
-
-class _ExitTool(Tool):
     def __init__(self, name: str = "checkpoint") -> None:
         self._name = name
         self.called = 0
@@ -147,13 +150,15 @@ class _ExitTool(Tool):
         return "noted"
 
 
-def _make_agent_loop_with_tools(
+def make_agent_loop_with_tools(
     tmp_path: Path,
-    provider: _FakeProvider,
+    provider: FakeProvider,
     tools_to_register: list[Tool],
     *,
+    hooks: Sequence[ToolHook] = (),
     tool_search_enabled: bool = False,
 ) -> AgentLoop:
+    """Builds a real ``AgentLoop`` with the given tools and tool hooks."""
     tools = ToolRegistry()
     for tool in tools_to_register:
         tools.register(tool)
@@ -173,30 +178,5 @@ def _make_agent_loop_with_tools(
             )
         ),
     )
-    loop.add_tool_hooks(_tool_loop_guard_hooks())
+    loop.add_tool_hooks(list(hooks))
     return loop
-
-
-def _make_agent_loop(tmp_path: Path, provider: _FakeProvider, tool: Tool) -> AgentLoop:
-    return _make_agent_loop_with_tools(tmp_path, provider, [tool])
-
-
-def _tool_loop_guard_hooks(
-    *, plugin_configs: dict[str, dict[str, Any]] | None = None
-) -> list[ToolHook]:
-    with tempfile.TemporaryDirectory() as tmp:
-        plugin_dir = Path(tmp) / "tool_loop_guard"
-        stage_plugin_package(PLUGIN_DIR, plugin_dir)
-        kernel = PluginKernel(
-            [Path(tmp)],
-            services=HostServices(
-                event_bus=EventBus(), plugin_configs=plugin_configs or {}
-            ),
-        )
-        asyncio.run(kernel.load_all())
-        return kernel.tool_hooks
-
-
-def _install_tool_loop_guard(subagent: SubAgent) -> SubAgent:
-    subagent.add_tool_hooks(_tool_loop_guard_hooks())
-    return subagent

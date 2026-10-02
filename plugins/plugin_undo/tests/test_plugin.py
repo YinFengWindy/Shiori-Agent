@@ -43,10 +43,12 @@ async def test_preview_then_session_delete_then_memory_cleanup(failure, caplog):
     assert manager.deleted
     assert manager.rollback_sources == ["cli:1:0", "cli:1:1", "cli:1:2"]
     assert [c["dry_run"] for c in memory.calls] == [True, False]
+    assert "已撤销上一轮对话" in result.abort_reply
     assert ("记忆清理失败" in result.abort_reply) == failure
     assert "删除消息：2 条" in result.abort_reply
     if failure:
         assert "deleted_ids=['cli:1:0', 'cli:1:1']" in caplog.text
+        assert "'affected_ids': ['mem1']" in caplog.text
     else:
         assert "失效记忆：1 条" in result.abort_reply
         assert "恢复旧记忆：1 条" in result.abort_reply
