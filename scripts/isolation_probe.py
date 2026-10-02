@@ -7,12 +7,15 @@ import sys
 import sysconfig
 from importlib.metadata import distributions, version
 from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 
 def audit() -> dict[str, object]:
     """Fail if imports, installations, or executed modules escape the private environment."""
     config = json.loads(Path("isolation.json").read_text(encoding="utf-8"))
     repository = Path(config["repository"]).resolve()
+    wheelhouse = Path(config["wheelhouse"]).resolve()
     site = Path(sysconfig.get_paths()["purelib"]).resolve()
     for entry in sys.path:
         assert not Path(entry).resolve().is_relative_to(repository), entry
@@ -27,6 +30,14 @@ def audit() -> dict[str, object]:
         assert not direct or not json.loads(direct).get("dir_info", {}).get(
             "editable"
         ), f"Editable installation: {name}"
+        if name.startswith("shiori-"):
+            # Index installs record no direct_url.json; a wheel file does.
+            origin = json.loads(direct or "{}").get("url", "")
+            assert origin.startswith(
+                "file:"
+            ), f"Not installed from a local wheel: {name}"
+            wheel = Path(url2pathname(urlparse(origin).path)).resolve()
+            assert wheel.is_relative_to(wheelhouse), (name, str(wheel))
         installed[name] = dist.version
     assert (
         not {"shiori-agent", "shiori-host-testing", "shiori-plugin-testkit"}
@@ -69,6 +80,7 @@ def audit() -> dict[str, object]:
         "repository_path_injection": False,
         "editable": False,
         "source_packages": config["source_packages"],
+        "wheelhouse": str(wheelhouse),
     }
     Path("provenance.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     return result

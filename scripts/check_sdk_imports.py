@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from collections import Counter
+import os
 from pathlib import Path
 import tomllib
 
@@ -39,6 +40,7 @@ def _identities(node: ast.AST, bindings: dict[str, set[str]]) -> set[str]:
                 "importlib",
                 "importlib.resources",
                 "builtins",
+                "pkgutil",
                 "unittest",
                 "unittest.mock",
                 "unittest.mock.patch",
@@ -129,6 +131,7 @@ def _scope_imports(
                     "importlib.resources.open_text",
                     "importlib.resources.open_binary",
                     "pkgutil.get_data",
+                    "pkgutil.resolve_name",
                 }
             )
             # pytest's monkeypatch is a fixture rather than an imported function;
@@ -146,7 +149,8 @@ def _scope_imports(
                 ]
                 for argument in arguments:
                     for name in _strings(argument, strings):
-                        if name.split(".")[0] in forbidden:
+                        # pkgutil.resolve_name also accepts "module:attribute".
+                        if name.replace(":", ".").split(".")[0] in forbidden:
                             edges[name] += 1
         elif isinstance(
             node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
@@ -185,17 +189,65 @@ def host_imports(source: str, forbidden: frozenset[str] = HOST_ROOTS) -> Counter
     return edges
 
 
+# Development state that is never runtime code, wherever it sits in a package.
+_DEVELOPMENT_DIRECTORIES = frozenset(
+    {
+        ".venv",
+        "__pycache__",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".mypy_cache",
+        "node_modules",
+    }
+)
+# setuptools writes these next to a plugin's pyproject.toml. A directory with the
+# same name inside the package (e.g. ``backend/build/``) is importable code.
+_PLUGIN_BUILD_OUTPUTS = frozenset({"build", "dist"})
+
+
+def _source_files(folder: Path, *, package_root: bool) -> list[Path]:
+    """Lists Python sources below ``folder``; exclusions are relative to it.
+
+    The checkout location never matters: only directories below the scan root
+    are judged, so a repository cloned under ``.../build/`` is still scanned.
+    """
+    files: list[Path] = []
+    for directory, names, filenames in os.walk(folder):
+        current = Path(directory)
+        names[:] = [
+            name
+            for name in names
+            if name not in _DEVELOPMENT_DIRECTORIES
+            and not name.endswith(".egg-info")
+            and not (current / name / "pyvenv.cfg").is_file()
+            and not (
+                package_root and current == folder and name in _PLUGIN_BUILD_OUTPUTS
+            )
+        ]
+        files.extend(
+            current / name for name in filenames if name.endswith((".py", ".pyi"))
+        )
+    return sorted(files)
+
+
 def scan(root: Path) -> dict[str, dict[str, int]]:
-    """Scans SDK and plugin sources, tests and packaged test support, never builds."""
-    folders = [root / "packages/sdk/python", root / "packages/sdk/tests"]
+    """Scans SDK and plugin sources, tests and packaged test support.
+
+    Only development state (virtual environments, caches) and a plugin's own
+    root-level build outputs are skipped; every other directory is scanned.
+    """
+    folders = [
+        (root / "packages/sdk/python", False),
+        (root / "packages/sdk/tests", False),
+    ]
     # Include arbitrary packaged support directories as well as backend/tests:
     # moving an import into a new Python package must not evade the guard.
-    folders.extend(plugin for plugin in (root / "plugins").iterdir() if plugin.is_dir())
+    folders.extend(
+        (plugin, True) for plugin in (root / "plugins").iterdir() if plugin.is_dir()
+    )
     found: dict[str, dict[str, int]] = {}
-    for folder in folders:
-        for path in sorted((*folder.rglob("*.py"), *folder.rglob("*.pyi"))):
-            if any(part in {".venv", "build", "__pycache__"} for part in path.parts):
-                continue
+    for folder, package_root in folders:
+        for path in _source_files(folder, package_root=package_root):
             source = path.read_text(encoding="utf-8")
             sdk = path.is_relative_to(root / "packages/sdk")
             forbidden = HOST_ROOTS | {"plugins"} if sdk else HOST_ROOTS

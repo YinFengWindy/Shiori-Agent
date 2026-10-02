@@ -46,7 +46,7 @@ uv run python -m scripts.verify_plugin_tests --output /absolute/path/outside-rep
 
 输出必须是仓库外的新目录；省略时创建系统临时目录。`--plugins novelai story` 选择目标，省略时发现所有有 Python 测试的插件；`--jobs N` 控制并发，默认 CPU 数。不存在迁移豁免、白名单或宿主安装分支。基准 20 插件为 browser_use、citation、computer_use、context_pressure、default_memory、desktop_pet、feishu、meme、novelai、observe、plugin_undo、qq、qqbot、screen_perception、shell_restore、shell_safety、status_commands、story、telegram、tool_loop_guard；新增插件自动纳入发现。
 
-脚本在仓库外暂存插件并构建普通 wheel，每个目标使用独立 venv，只安装目标 `[test]`、SDK/testing 与显式依赖。闭包合并运行时和目标 test extra，传递兄弟依赖只启用依赖边显式请求的 extra，marker 按执行解释器求值。不会默认加入 default_memory 或宿主；任何选中的宿主依赖直接失败。静态守护还检查所有未选中的 optional extra。
+脚本在仓库外暂存插件并构建普通 wheel，每个目标使用独立 venv，只安装目标 `[test]`、SDK/testing 与显式依赖。所有 `shiori-*` 包（SDK、目标与兄弟插件）以 `--no-index --no-deps` 从本地 wheelhouse 的 wheel 文件安装，闭包中缺少本地 wheel 即失败，不会回退到公网同名包；其余第三方依赖单独从索引解析，最后以 `uv pip check` 校验整体依赖，来源探针还要求每个 `shiori-*` 分发记录的来源是 wheelhouse 内的 wheel 文件。`verify_sdk`、`verify_host_distribution` 使用同一安装方式。闭包合并运行时和目标 test extra，传递兄弟依赖只启用依赖边显式请求的 extra，marker 按执行解释器求值。不会默认加入 default_memory 或宿主；任何选中的宿主依赖直接失败。静态守护还检查所有未选中的 optional extra。
 
 每套 pytest 的开始与结束均审计实际宿主顶层包不可导入、已安装分发来自本环境、没有 editable 或仓库路径注入、插件闭包精确、目标代码与副本相同、SDK 版本与 Runtime API 一致。执行探针在初始 conftest 加载前启用，覆盖全部已暂存目标及兄弟依赖的 backend/testing，并拒绝执行仓库内 SDK/宿主源码；临时模块别名即使随后从 sys.modules 删除也不能绕过。已安装入口的来源与哈希覆盖当前目标声明的完整插件依赖闭包，测试本身仍从副本 tests 运行。独立 suite/probe basetemp 避免并行清理彼此证据。全部单测以 `-W error` 真实执行；另开解释器运行故意在 await 后失败的异步用例，要求退出码 1 和执行标记。
 
@@ -61,7 +61,7 @@ uv run python -m scripts.verify_host_distribution
 pnpm run sdk:smoke
 ```
 
-Python 守护检查 SDK、所有插件 Python 源码/测试/打包辅助目录和 .pyi，包含 TYPE_CHECKING、动态导入别名、可求值字符串拼接、字符串 patch、宿主资源包和源目录向外推导。宿主清单从实际 backend 包/模块发现，同时禁止已移除的旧宿主入口；SDK 还禁止具体插件实现依赖。规则有针对性反例，但不是任意 Python 程序的安全沙箱；仓库外真实执行负责检出未被静态识别、实际触发的环境依赖。
+Python 守护检查 SDK、所有插件 Python 源码/测试/打包辅助目录和 .pyi，包含 TYPE_CHECKING、动态导入别名、可求值字符串拼接、字符串 patch、宿主资源包（`importlib.resources`、`pkgutil.get_data`/`resolve_name`，含 `import pkgutil` 属性写法）和资源路径越界：`Path`/`pathlib.Path(__file__)` 的 `parent`/`parents[n]`/`joinpath`/`/`，`os.path.dirname`/`join`/`abspath` 组合，以及 `Path.cwd()`、`os.getcwd()` 或相对路径拼出的 `apps/backend`、`apps/desktop`、`tests/backend`；插件包内部的相对路径不受影响。排除只按扫描根内的相对位置判断：任意层级的虚拟环境（`.venv` 或含 `pyvenv.cfg` 的目录）、缓存目录与 `*.egg-info`，以及插件根目录下的 setuptools 产物 `build/`、`dist/`（与 `stage_plugin_package` 一致）；检出目录本身叫什么不影响扫描，插件包内部的 `backend/build/` 等子包照常扫描。宿主清单从实际 backend 包/模块发现，同时禁止已移除的旧宿主入口；SDK 还禁止具体插件实现依赖。规则有针对性反例，但不是任意 Python 程序的安全沙箱；仓库外真实执行负责检出未被静态识别、实际触发的环境依赖。
 
 五个 CI job 保留：check-and-test 覆盖宿主集成与真实生产 wheel 资源；plugin-isolation 执行全部插件；desktop-check-and-test 验证 renderer；sdk-artifacts 构建并在仓库外安装 npm tarball/Python wheel、执行 SDK 单测；windows-process-lifecycle 验证 Windows 进程。宿主 wheel 探针保留生产技能、emoji、配置模板初始化和排除私有状态的断言，与无宿主插件证据独立。
 

@@ -96,7 +96,10 @@ wheel probe first collects/runs an unrelated test with only the base SDK and pyt
 checks the missing-extra diagnostic, then installs the extra and runs all SDK tests.
 The plugin probe discovers all plugin suites (currently all 20 baseline plugins),
 builds ordinary wheels from external copies, and installs only each target's
-declared dependency closure. No host or default-memory package is injected.
+declared dependency closure. Every `shiori-*` package comes from the local
+wheelhouse with `--no-index --no-deps`; a missing local wheel fails instead of
+falling back to an index. Third-party requirements are installed separately and
+`uv pip check` verifies the result. No host or default-memory package is injected.
 Each suite and its awaited failure probe owns a separate pytest temporary directory.
 Provenance checks run before and after the suite, checking host absence, all
 distribution origins, editable installs, repository path injection and SDK versions.
@@ -107,8 +110,13 @@ Installed entry origins and hashes cover the target's complete declared plugin c
 
 The import guard has no exemptions. It checks SDK and plugin Python sources,
 tests, stubs and packaged testing helpers, including TYPE_CHECKING, import aliases,
-literal/string-composed dynamic imports, string patch targets and source-relative
-host resource guesses. Host roots follow the actual backend package/module tree.
+literal/string-composed dynamic imports, string patch targets, `importlib.resources`
+and `pkgutil` resource access, and host resource paths built from `__file__`
+(`Path`/`pathlib.Path`, `os.path.dirname`/`join`) or from the working directory.
+Exclusions are judged relative to the scanned package: virtual environments,
+caches and a plugin's root-level `build/`/`dist/` outputs; package-internal
+directories such as `backend/build/` are scanned wherever the checkout lives.
+Host roots follow the actual backend package/module tree.
 SDK dependencies cannot point to concrete plugins. Declared public sibling plugin
 dependencies remain valid. This static guard is complemented by external execution;
 it does not claim to sandbox arbitrary Python.

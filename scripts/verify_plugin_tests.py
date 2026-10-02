@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import email.parser
 import json
 import os
 import shutil
@@ -12,6 +13,7 @@ import tempfile
 import time
 import tomllib
 import traceback
+import zipfile
 from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -112,12 +114,112 @@ def build_wheels(
         return {name: future.result() for name, future in futures.items()}
 
 
+def _wheel_name(wheel: Path) -> str:
+    return canonicalize_name(wheel.name.split("-")[0])
+
+
+def _requires_dist(wheel: Path) -> list[str]:
+    with zipfile.ZipFile(wheel) as archive:
+        metadata = next(
+            name
+            for name in archive.namelist()
+            if name.count("/") == 1 and name.endswith(".dist-info/METADATA")
+        )
+        message = email.parser.Parser().parsestr(archive.read(metadata).decode())
+    return message.get_all("Requires-Dist") or []
+
+
+def wheelhouse_closure(
+    local: Iterable[str], wheelhouse: Path
+) -> tuple[list[Path], list[str]]:
+    """Splits the closure of ``local`` into wheel files and third-party requirements.
+
+    Each ``local`` requirement and every ``shiori-*`` dependency must be a wheel
+    built into ``wheelhouse``; one missing there fails instead of falling back
+    to a same-named index package. Markers are evaluated for this interpreter
+    and each active extra.
+    """
+    available = {_wheel_name(wheel): wheel for wheel in wheelhouse.glob("*.whl")}
+    selected: dict[str, Path] = {}
+    third_party: list[str] = []
+    visited: set[tuple[str, str]] = set()
+    pending = [(Requirement(requirement), "", True) for requirement in local]
+    while pending:
+        requirement, context, root = pending.pop()
+        if requirement.marker and not requirement.marker.evaluate({"extra": context}):
+            continue
+        name = canonicalize_name(requirement.name)
+        if name not in available:
+            if root or name.startswith("shiori-"):
+                raise ValueError(
+                    f"{requirement} is not built in the local wheelhouse {wheelhouse}"
+                )
+            requirement.marker = None
+            third_party.append(str(requirement))
+            continue
+        wheel = available[name]
+        version = wheel.name.split("-")[1]
+        if not requirement.specifier.contains(version, prereleases=True):
+            raise ValueError(f"Local wheel {wheel.name} does not satisfy {requirement}")
+        selected[name] = wheel
+        for extra in ("", *map(canonicalize_name, requirement.extras)):
+            if (name, extra) in visited:
+                continue
+            visited.add((name, extra))
+            pending.extend(
+                (Requirement(dependency), extra, False)
+                for dependency in _requires_dist(wheel)
+            )
+    return sorted(selected.values()), sorted(set(third_party))
+
+
+def install_from_wheelhouse(
+    python: Path,
+    wheelhouse: Path,
+    local: Iterable[str],
+    *,
+    third_party: Iterable[str] = (),
+    cwd: Path,
+    log: Path,
+) -> None:
+    """Installs local packages offline, then only third-party requirements.
+
+    The local step uses exact wheel files with ``--no-index --no-deps``; the
+    third-party step contains no ``shiori-*`` requirement, so neither the SDK
+    nor a plugin can be resolved from a public index. ``uv pip check`` then
+    proves the combined environment satisfies every declared requirement.
+    """
+    wheels, dependencies = wheelhouse_closure(local, wheelhouse)
+    remote = sorted({*dependencies, *third_party})
+    for requirement in remote:
+        if canonicalize_name(Requirement(requirement).name).startswith("shiori-"):
+            raise ValueError(f"{requirement} must come from the local wheelhouse")
+    command = [UV, "pip", "install", "--python", str(python)]
+    run(
+        [*command, "--no-index", "--no-deps", *map(str, wheels)],
+        cwd=cwd,
+        log=log.with_name(f"{log.stem}-local.log"),
+    )
+    if remote:
+        run(
+            [*command, *remote],
+            cwd=cwd,
+            log=log.with_name(f"{log.stem}-third-party.log"),
+        )
+    run(
+        [UV, "pip", "check", "--python", str(python)],
+        cwd=cwd,
+        log=log.with_name(f"{log.stem}-check.log"),
+    )
+
+
 def write_provenance_probe(
     case: Path,
     modules: dict[str, str],
     allowed: list[str],
     *,
     source_packages: Iterable[Path],
+    wheelhouse: Path,
 ) -> None:
     """Copy a standalone probe; the child never imports runner code from the checkout."""
     shutil.copyfile(
@@ -131,6 +233,8 @@ def write_provenance_probe(
         "allowed_plugins": allowed,
         "modules": modules,
         "source_packages": sorted(str(source.resolve()) for source in source_packages),
+        # Every installed shiori-* distribution must come from these wheel files.
+        "wheelhouse": str(wheelhouse.resolve()),
         "sdk_version": json.loads(
             (REPOSITORY / "packages/sdk/package.json").read_text(encoding="utf-8")
         )["version"],
@@ -162,17 +266,10 @@ def verify_plugin(
         log=case / "venv.log",
     )
     python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    run(
-        [
-            UV,
-            "pip",
-            "install",
-            "--python",
-            str(python),
-            "--find-links",
-            str(wheelhouse),
-            f"{wheel}[test]",
-        ],
+    install_from_wheelhouse(
+        python,
+        wheelhouse,
+        [f"{_wheel_name(wheel)}[test]"],
         cwd=case,
         log=case / "install.log",
     )
@@ -188,6 +285,7 @@ def verify_plugin(
         # Other targets also coexist in the artifact's staging directory. No
         # test may execute their uninstalled implementations through an alias.
         source_packages=sources.values(),
+        wheelhouse=wheelhouse,
     )
     output = run(
         [

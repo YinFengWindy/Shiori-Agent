@@ -12,6 +12,7 @@ from scripts.verify_plugin_tests import (
     REPOSITORY,
     UV,
     build_wheel,
+    install_from_wheelhouse,
     run,
     write_provenance_probe,
 )
@@ -21,7 +22,7 @@ def main() -> None:
     """Builds and tests the non-editable artifact in a repository-external directory."""
     output = Path(tempfile.mkdtemp(prefix="shiori-sdk-wheel-"))
     source = REPOSITORY / "packages/sdk"
-    wheel = build_wheel(source, output, output / "build.log")
+    build_wheel(source, output, output / "build.log")
     venv = output / ".venv"
     run(
         [UV, "venv", "--python", sys.executable, str(venv)],
@@ -30,8 +31,12 @@ def main() -> None:
     )
     python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     # The base wheel's auto-loaded pytest entry must not require testing extras.
-    run(
-        [UV, "pip", "install", "--python", str(python), str(wheel), "pytest>=9.0"],
+    # ``output`` is the wheelhouse: it holds only the SDK wheel built above.
+    install_from_wheelhouse(
+        python,
+        output,
+        ["shiori-sdk"],
+        third_party=["pytest>=9.0"],
         cwd=output,
         log=output / "bare-install.log",
     )
@@ -68,14 +73,18 @@ def main() -> None:
     )
     assert "requires shiori-sdk[testing]" in missing_extra
     print("Base SDK + pytest: collection/run passed; missing testing extra diagnosed")
-    run(
-        [UV, "pip", "install", "--python", str(python), f"{wheel}[testing]"],
-        cwd=output,
-        log=output / "install.log",
+    install_from_wheelhouse(
+        python, output, ["shiori-sdk[testing]"], cwd=output, log=output / "install.log"
     )
-    shutil.copytree(source / "tests", output / "tests")
+    # Development pyc files name repository paths in co_filename; executing them
+    # would trip the provenance probe, so the copy keeps only test sources.
+    shutil.copytree(
+        source / "tests",
+        output / "tests",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"),
+    )
     shutil.copyfile(source / "pyproject.toml", output / "pyproject.toml")
-    write_provenance_probe(output, {}, [], source_packages=[])
+    write_provenance_probe(output, {}, [], source_packages=[], wheelhouse=output)
     run(
         [str(python), "-c", "import verify_provenance; verify_provenance.audit()"],
         cwd=output,
