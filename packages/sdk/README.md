@@ -30,7 +30,10 @@ The core lifecycle surface includes `PluginRuntimeContext`,
 `Dispose`, `EventHandler`, `AfterStepCtx`, `AfterReasoningCtx` and `ResponseMetadata`.
 The host owns phase execution, storage, capability authorization and cleanup.
 `setup(ctx)` receives its declared capabilities; undeclared access raises
-`CapabilityNotGranted`. Runtime injection is checked through a static
+`CapabilityNotGranted`. A declared capability whose backing host service is
+missing fails before `setup` with `HostServiceUnavailable`, naming the service,
+so declared services such as `workspace` or `session_manager` are never `None`.
+Runtime injection is checked through a static
 `PluginSetupContext` without the legacy context's dynamic attribute fallback.
 Typed setup contexts also cover memory, hooks, commands, diagnostics, role/model
 and process services, channels and accounts. Their capability protocols and

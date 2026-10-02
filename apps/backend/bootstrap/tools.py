@@ -646,6 +646,7 @@ def build_core_runtime(
             app_config=config,
             light_provider=plugin_light_provider,
             light_model=plugin_light_model,
+            http=http_resources.external_default,
             plugin_configs=config.plugins,
             raw_plugin_configs=config.raw_plugin_configs,
             relationship_runtime=relationship_runtime,

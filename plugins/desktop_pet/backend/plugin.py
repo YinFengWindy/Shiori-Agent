@@ -22,8 +22,6 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     from .reconcile import PetStateReconciler
 
     role_store = ctx.roles
-    if ctx.workspace is None:
-        raise RuntimeError("桌宠插件需要 role_store")
     reconciler = PetStateReconciler(role_store, ctx.workspace, ctx.storage)
     reconciler.reconcile()
     ctx.effect(

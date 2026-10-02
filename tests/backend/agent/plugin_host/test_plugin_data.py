@@ -87,17 +87,6 @@ def test_kv_lands_under_the_workspace_not_the_plugin_directory(tmp_path: Path):
     assert not (plugin_dir / ".kv.json").exists()
 
 
-def test_missing_workspace_fails_loudly_instead_of_falling_back(tmp_path: Path):
-    """宿主没给 workspace 时必须报错，不能悄悄退回写插件目录——那正是 #209 的病根。"""
-    plugin_dir = tmp_path / "demo"
-    plugin_dir.mkdir()
-
-    with pytest.raises(RuntimeError, match="workspace"):
-        _ = open_plugin_kv(workspace=None, plugin_id="demo", plugin_dir=plugin_dir)
-
-    assert not (plugin_dir / ".kv.json").exists()
-
-
 def test_legacy_kv_in_the_plugin_directory_is_migrated_once(tmp_path: Path):
     """已有用户的数据存在插件目录里；不迁移会让 novelai 的冷却与场景去重归零。"""
     workspace = tmp_path / "workspace"

@@ -179,12 +179,7 @@ def _is_memory_engine(engine: object, name: str) -> bool:
     return str(describe().name) == name
 
 
-def _data_path(
-    *, plugin_dir: Path, workspace: Path | None, storage: MemoryStorage
-) -> Path:
-
-    if workspace is None:
-        raise RuntimeError("default_memory 插件需要 workspace，不能写入安装包")
+def _data_path(*, plugin_dir: Path, workspace: Path, storage: MemoryStorage) -> Path:
     source = workspace / "observe" / "recall_inspector.jsonl"
     if not source.exists():
         source = plugin_dir / ".data" / "recall_turns.jsonl"

@@ -17,18 +17,13 @@ if TYPE_CHECKING:
 
 async def setup(ctx: "ChannelPluginContext") -> None:
     """Loads the plugin-owned accounts and contributes one multi-account channel."""
-    from pathlib import Path
-
     from shiori_sdk.rpc import Concurrency
 
     from .accounts_runtime import QQAccountsRuntime
     from .accounts_store import QQAccountsStore
 
-    workspace = ctx.workspace
-    if not isinstance(workspace, Path):
-        raise RuntimeError("QQ 插件需要持久化 workspace")
     runtime = QQAccountsRuntime(
-        QQAccountsStore(workspace),
+        QQAccountsStore(ctx.workspace),
         ctx.accounts,
         ctx.avatars,
         processes=ctx.processes,

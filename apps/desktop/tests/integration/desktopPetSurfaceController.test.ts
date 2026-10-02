@@ -57,7 +57,6 @@ function harness() {
   const voice = new DesktopVoiceController({
     recorder: { start: async () => {}, stop: async () => new Uint8Array([1]), cancel: async () => {} },
     isEnabled: () => host.interactionTargets().length > 0,
-    roleId: () => host.interactionTargets()[0]?.roleId ?? null,
     publishState: (state) => surfaceVoice?.publish(state),
     now: () => now,
     schedule: (callback, delay) => {

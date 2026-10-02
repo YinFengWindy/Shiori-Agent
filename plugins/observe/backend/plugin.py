@@ -32,14 +32,9 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     与旧 terminate() 里"先 uninstall 采集器、再依次取消 retention/writer"的
     手写顺序等价（#183）。
     """
-    workspace = ctx.workspace
-    if workspace is None:
-        logger.warning("observe 插件缺少 workspace，跳过加载")
-        return
-
     from .storage import prepare_storage
 
-    db_path = prepare_storage(workspace, ctx.storage)
+    db_path = prepare_storage(ctx.workspace, ctx.storage)
     writer = TraceWriter(db_path)
     writer_task = ctx.background.spawn(writer.run(), name="writer")
     await writer.wait_ready(writer_task)

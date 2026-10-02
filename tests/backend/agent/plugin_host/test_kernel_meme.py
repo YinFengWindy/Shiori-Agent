@@ -98,6 +98,33 @@ async def _load_kernel(
 
 
 @pytest.mark.asyncio
+async def test_meme_without_session_service_fails_setup_instead_of_degrading(
+    tmp_path: Path,
+) -> None:
+    """缺会话服务时 meme 不再以空 role 静默加载，而是 setup 失败并指明缺失服务。"""
+    root = tmp_path / "plugins"
+    stage_plugin_package(PLUGIN_ROOT, root / "meme")
+    stage_plugin_package(plugin_directory("citation"), root / "citation")
+    kernel = PluginKernel(
+        [root],
+        services=HostServices(
+            event_bus=EventBus(), workspace=tmp_path, role_store=RoleStore(tmp_path)
+        ),
+    )
+    await kernel.load_all()
+    try:
+        state = next(row for row in kernel.states() if row["id"] == "meme")
+        assert state["state"] == "FAILED"
+        assert "宿主未提供服务 session_manager" in state["error"]
+        assert not any(
+            type(module).__name__ == "MemePromptModule"
+            for module in kernel.prompt_render_modules
+        )
+    finally:
+        await kernel.terminate_all()
+
+
+@pytest.mark.asyncio
 async def test_meme_prompt_module_injects_bottom_section(
     tmp_path: Path, load_kernel: _KernelLoader
 ) -> None:

@@ -127,8 +127,6 @@ def _string_list(value: object) -> list[str]:
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
     """Register scoped undo command and before-turn contribution."""
-    if ctx.session_manager is None:
-        raise RuntimeError("plugin_undo requires a session manager")
     engine = ctx.memory_engine
     plugin = PluginUndo(
         ctx.session_manager, engine if isinstance(engine, MemoryUndo) else None

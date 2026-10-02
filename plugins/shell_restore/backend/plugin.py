@@ -15,14 +15,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger("plugin.shell_restore")
 
 
-def _restore_dir(workspace: Path | None) -> str:
+def _restore_dir(workspace: Path) -> str:
     configured = os.environ.get("AKASIC_RESTORE_DIR")
     if configured is not None:
         if not configured.strip():
             raise ValueError("AKASIC_RESTORE_DIR 不能为空")
         return configured
-    if workspace is None:
-        raise RuntimeError("shell_restore 插件需要 workspace")
     return str((workspace / "recovery" / "shell_restore").resolve())
 
 

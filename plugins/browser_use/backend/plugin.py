@@ -10,8 +10,6 @@ from .tool import browser_tools
 
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Contributes discoverable tools; no native process runs until the first action."""
-    if ctx.workspace is None:
-        raise RuntimeError("Browser Use 需要宿主 workspace")
     sessions = BrowserSessions(
         plugin_data_dir(ctx.workspace, ctx.plugin_id),
         BrowserUseConfig.model_validate(ctx.config.as_dict()),

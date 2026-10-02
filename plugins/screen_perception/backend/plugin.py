@@ -9,8 +9,6 @@ from .tool import ObserveScreenTool
 
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Registers role-bound screen perception independently of presentation plugins."""
-    if ctx.roles is None or ctx.models is None:
-        raise RuntimeError("屏幕感知插件需要角色存储与模型运行时")
     tool = ObserveScreenTool(
         capture=PrimaryScreenCapture(),
         analyzer=ObservationModelAdapter(

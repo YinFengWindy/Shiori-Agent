@@ -9,22 +9,12 @@ from typing import Any
 import pytest
 from shiori_sdk.lifecycle import AfterToolResultCtx
 from shiori_sdk.rpc import Concurrency
-from shiori_sdk.testing.memory import FakeMemoryStorage
 from shiori_sdk.testing.memory_context import FakeMemoryPluginContext
 
 from plugins.default_memory.backend.plugin import (
     ContextPrepareRecordModule,
     _DefaultMemoryRecorder,
 )
-
-
-def test_missing_workspace_rejects_package_log_fallback(tmp_path):
-    from plugins.default_memory.backend.plugin import _data_path
-
-    with pytest.raises(RuntimeError, match="不能写入安装包"):
-        _data_path(plugin_dir=tmp_path, workspace=None, storage=FakeMemoryStorage())
-    assert not (tmp_path / ".data").exists()
-
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 

@@ -28,7 +28,6 @@ export type DesktopVoiceControllerOptions = {
   recorder: VoiceRecorder;
   bridge: VoiceBridge;
   isEnabled: () => boolean;
-  roleId: () => string | null;
   publishState: (payload: VoiceStatePayload) => void;
   /** Selects the new turn and retires queued speech owned by the previous turn. */
   onNewInput?: (previousTurnId: string | null, nextTurnId: string) => void;
@@ -74,8 +73,8 @@ export class DesktopVoiceController {
     return this.activeTurnId;
   }
 
-  /** Starts the shared press-pending phase for a pet or global-hotkey input. */
-  startPress(source: VoiceInputSource, atMs = this.now(), roleId = this.options.roleId()): boolean {
+  /** Starts the shared press-pending phase for a pet or global-hotkey input addressed to `roleId`. */
+  startPress(source: VoiceInputSource, roleId: string, atMs = this.now()): boolean {
     if (this.disposed || !this.options.isEnabled() || !roleId) return false;
     if (["waiting_reply", "speaking_prepare", "speaking", "finish_current_sentence_then_idle"].includes(this.state.kind)) {
       if (this.pendingReplyPress) return false;

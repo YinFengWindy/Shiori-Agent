@@ -100,26 +100,21 @@ def legacy_plugin_files(
 
 def open_plugin_kv(
     *,
-    workspace: Path | None,
+    workspace: Path,
     plugin_id: str,
     plugin_dir: Path,
     legacy_plugin_root: Path | None = None,
 ) -> PluginKVStore:
     """Opens a plugin's KV store under the workspace, migrating legacy data once.
 
-    宿主未提供 workspace 时直接报错，而不是退回写插件目录——那正是 #209 的
-    病根，留一条静默回退等于把 bug 保留在最不容易被发现的路径上。
+    workspace 必传：内核在 setup 前已对缺 workspace 的宿主报 HostServiceUnavailable，
+    这里不存在退回写插件目录的路径（#209 的病根）。
 
     ``legacy_plugin_root`` 是插件包上移到仓库顶层之前的存放位置
     （``apps/backend/plugins``）。`.kv.json` 被 gitignore 覆盖，所以目录重命名
     经 git 落到本地时**不会**跟着搬——旧数据会留在那个位置，必须一并作为迁移来源。
     """
 
-    if workspace is None:
-        raise RuntimeError(
-            f"插件 {plugin_id} 需要 kv 存储，但宿主未提供 workspace；"
-            "插件数据不能写入插件目录（见 issue #209）"
-        )
     candidates = [
         workspace / "plugins" / plugin_id / _KV_FILENAME,
         plugin_dir / _LEGACY_KV_FILENAME,

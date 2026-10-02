@@ -19,6 +19,7 @@ from bootstrap.wiring import wire_turn_lifecycle
 from bus.event_bus import EventBus
 from bus.events import InboundMessage
 from bus.events_lifecycle import TurnCommitted
+from core.roles import RoleStore
 
 
 class _DummySession:
@@ -313,6 +314,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
             event_bus=event_bus,
             workspace=tmp_path,
             session_manager=session_manager,
+            role_store=RoleStore(tmp_path),
         ),
     )
     await kernel.load_all()
