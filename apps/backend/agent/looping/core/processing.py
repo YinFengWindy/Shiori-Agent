@@ -45,6 +45,8 @@ class _ProcessingMixin:
     async def process_inbound(self, item: InboundItem) -> None:
         """Processes one dequeued transport item using this captured runtime."""
         key = item.session_key
+        if await self._compact_command(item, key, dispatch_outbound=True) is not None:
+            return
         self._active_turn_states[key] = self._build_initial_turn_state(item, key)
         task = asyncio.create_task(self._process_role_scoped(item, key))
         self._active_tasks[key] = task
@@ -273,6 +275,9 @@ class _ProcessingMixin:
             metadata=merged_metadata,
         )
         key = session_key
+        command = await self._compact_command(msg, key, dispatch_outbound=False)
+        if command is not None:
+            return command.content
         self._active_turn_states[key] = self._build_initial_turn_state(msg, key)
         task = asyncio.create_task(
             self._process_role_scoped(

@@ -21,7 +21,7 @@ from .helpers import (
 if TYPE_CHECKING:
     from agent.tools.registry import ToolRegistry
     from conversation.context_scope import ContextView
-    from session.manager import SessionManager
+    from session.manager import Session, SessionManager
     from session.manager.window import WindowPreparation
 
 
@@ -33,7 +33,7 @@ class CompactionRenderer:
     view: ContextView | None
     message_limit: int
     input: PromptRenderInput
-    current_message: dict
+    current_message: dict | None
     render_prompt: Callable[[PromptRenderInput], Awaitable[PromptRenderResult]]
     tools: ToolRegistry
     search_enabled: bool
@@ -66,8 +66,16 @@ class CompactionRenderer:
     ) -> list[dict]:
         """Re-render dynamic context while protecting current input and attachments."""
         snapshot = self._snapshot(prepared)
+        return await self.render_snapshot(
+            snapshot, prepared.stop, summary, visible_tools
+        )
+
+    async def render_snapshot(
+        self, snapshot: Session, start: int, summary: str, visible_tools: list[str]
+    ) -> list[dict]:
+        """Render both the current and candidate windows through the prompt owner."""
         history = snapshot.get_history(
-            start_index=prepared.stop, include=history_filter(self.view)
+            start_index=start, include=history_filter(self.view)
         )
         sources = get_window_sources(snapshot, 500, self.view, self.heard())
         injection = build_turn_injection_prompt(
@@ -89,6 +97,9 @@ class CompactionRenderer:
                 turn_injection_prompt=injection,
             )
         )
-        if self.current_message.get("role") == "user":
+        if (
+            self.current_message is not None
+            and self.current_message.get("role") == "user"
+        ):
             candidate.messages[-1] = deepcopy(self.current_message)
         return with_working_summary(candidate.messages, summary)

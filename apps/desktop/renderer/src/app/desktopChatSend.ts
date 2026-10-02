@@ -1,5 +1,6 @@
 import type { ChatSendFailure } from "../chat/chatSendFailure";
 import { errorMessage } from "@shiori/sdk";
+import { errorFeedback } from "@shiori/sdk/host-internal";
 import type { DesktopSessionStateArgs } from "./desktopSessionTypes";
 import type { useDesktopChatTurns } from "./useDesktopChatTurns";
 import type { createDesktopSessionSnapshot } from "./desktopSessionSnapshot";
@@ -9,6 +10,7 @@ import { fetchRoleSession, parseSessionMessageUpdatePayload } from "./desktopSes
 import type { createDesktopSessionMessages } from "./desktopSessionMessages";
 import type { createDesktopSessionCache } from "./desktopSessionCache";
 import { canSendSessionState } from "./desktopSendingSessions";
+import { compactChatContext, isCompactCommand } from "../chat/chatContextActions";
 type Args = Pick<DesktopSessionStateArgs, "activeRoleIdRef" | "activeSessionRef" | "sendingSessionsRef" | "reportSendFailure">
   & Pick<ReturnType<typeof useDesktopChatTurns>, "pendingUserMessagesRef" | "latestTurnIdsRef" | "markSessionSending" | "isLatestChatTurn" | "isCurrentChatTurn" | "completeChatTurn">
   & Pick<ReturnType<typeof createDesktopSessionSnapshot>, "updateCommittedActiveSession">
@@ -39,6 +41,16 @@ export function createDesktopChatSend({
     const sessionKey = previousSession?.key ?? "";
     if ((!content && media.length === 0) || !roleId || !sessionKey) return false;
     if (!canSendSessionState(sendingSessionsRef.current, sessionKey)) return false;
+    if (isCompactCommand(content)) {
+      try {
+        await compactChatContext(roleId, () => activeRoleIdRef.current === roleId && activeSessionRef.current?.key === sessionKey);
+      } catch (error) {
+        const failure = errorFeedback(error, "上下文操作未完成，请稍后重试");
+        reportSendFailure({ message: `压缩失败：${failure.message}`, details: { detail: failure.detail } });
+      }
+      // No chat was sent: callers must preserve their draft and attachments.
+      return false;
+    }
     const persistedReplyTarget = currentReplyTarget;
     const clientMessageId = window.crypto.randomUUID();
     const turnId = window.crypto.randomUUID();

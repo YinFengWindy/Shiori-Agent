@@ -1,4 +1,4 @@
-"""One transactional compaction controller for automatic and future manual entrypoints."""
+"""One transactional compaction controller for automatic and manual entrypoints."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ class CompactionResult:
     model: str = ""
 
     def dump(self) -> dict:
-        """Serializable state for request traces and future desktop/manual consumers."""
+        """Serializable state shared by request traces, desktop, and commands."""
         return asdict(self)
 
 
@@ -81,6 +81,11 @@ class CompactionController:
         self.sessions = sessions
         self.memory = memory
         self.writer = writer
+        self._active: set[str] = set()
+
+    def is_busy(self, session_key: str) -> bool:
+        """Report the controller gate, including sessions without a role runtime."""
+        return session_key in self._active
 
     async def ensure(
         self,
@@ -93,6 +98,42 @@ class CompactionController:
         render: Callable[[WindowPreparation, str], Awaitable[list[dict]]],
         measure: Callable[[list[dict]], InputBudget],
         reason: str = "automatic",
+    ) -> tuple[list[dict], CompactionResult]:
+        """Reject repeated work before memory extraction or summary generation."""
+        if self.is_busy(session_key):
+            raise CompactionFailedError(
+                CompactionResult(
+                    failure_stage="busy",
+                    error="上下文正在压缩，请稍后重试",
+                    reason=reason,
+                )
+            )
+        self._active.add(session_key)
+        try:
+            return await self._ensure(
+                session_key=session_key,
+                view=view,
+                policy=policy,
+                message_limit=message_limit,
+                budget=budget,
+                render=render,
+                measure=measure,
+                reason=reason,
+            )
+        finally:
+            self._active.remove(session_key)
+
+    async def _ensure(
+        self,
+        *,
+        session_key: str,
+        view: ContextView | None,
+        policy: CompactionPolicy,
+        message_limit: int,
+        budget: InputBudget,
+        render: Callable[[WindowPreparation, str], Awaitable[list[dict]]],
+        measure: Callable[[list[dict]], InputBudget],
+        reason: str,
     ) -> tuple[list[dict], CompactionResult]:
         """Try successively fewer complete turns; never publish an over-budget draft."""
         state = CompactionResult(

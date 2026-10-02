@@ -10,11 +10,14 @@ import { PlusIcon, SendIcon } from "../shared/icons";
 import type { ChatReplyTarget, ChatSendRequest } from "../shared/types";
 import { AutosizeTextarea, compactPressableClass, cx } from "@shiori/sdk";
 import { ChatModelMenu } from "./ChatModelMenu";
+import { ChatContextRing } from "./ChatContextRing";
+import { useChatContext } from "./useChatContext";
+import { isCompactCommand } from "./chatContextActions";
 
 /** Shared by send and stop so swapping between them keeps the same press feel. */
 const sendButtonClass = cx(
   compactPressableClass,
-  "send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-gradient-accent p-0 text-ink shadow-soft hover:brightness-105 disabled:cursor-default disabled:opacity-40",
+  "send-btn grid h-[30px] w-[30px] flex-none cursor-pointer place-items-center rounded-full border-0 bg-gradient-accent p-0 text-ink shadow-soft hover:brightness-105 disabled:cursor-default disabled:opacity-40",
 );
 
 /** Text the surface asks the composer to put in the draft (e.g. an empty-state suggestion); `id` makes repeats distinct. */
@@ -60,6 +63,7 @@ export const ChatComposer = React.memo(function ChatComposer({
   const [draft, setDraft] = useState("");
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<string[]>([]);
+  const context = useChatContext(activeRoleId, sessionKey, bridgeReady, sending);
   const canSubmit = canSubmitChatMessage(draft, pendingAttachments);
   const composerInputDisabled = !activeRoleId || sending || !bridgeReady;
   const limits = getChatComposerLimits(paneHeight);
@@ -119,6 +123,10 @@ export const ChatComposer = React.memo(function ChatComposer({
     if (!activeRoleId || !bridgeReady || sending || !canSubmit) {
       return;
     }
+    if (isCompactCommand(draft)) {
+      await context.compact();
+      return;
+    }
     setEmojiPickerOpen(false);
     const request: ChatSendRequest = {
       content: draft,
@@ -163,7 +171,7 @@ export const ChatComposer = React.memo(function ChatComposer({
       <div className="pointer-events-auto mx-auto w-full max-w-[700px] px-5 md:px-6">
         <div
           ref={composerRef}
-          className="composer grid w-full flex-none gap-1.5 overflow-hidden rounded-lg border border-white/75 bg-white/90 px-3 pb-2 pt-2.5 shadow-panel backdrop-blur-lg"
+          className="composer grid min-w-0 w-full grid-cols-[minmax(0,1fr)] flex-none gap-1.5 overflow-hidden rounded-lg border border-white/75 bg-white/90 px-3 pb-2 pt-2.5 shadow-panel backdrop-blur-lg"
           style={{ maxHeight: limits.composerMaxHeight }}
         >
           {replyTarget ? (
@@ -194,9 +202,9 @@ export const ChatComposer = React.memo(function ChatComposer({
             onKeyDown={handleComposerKeyDown}
             placeholder="给当前角色发送消息..."
           />
-          <div className="composer-actions flex items-center gap-2">
+          <div className="composer-actions flex min-w-0 items-center gap-2">
             <button
-              className="grid h-[30px] w-[30px] place-items-center rounded-full border-0 bg-transparent p-0 text-ink-secondary transition hover:bg-accent-softer hover:text-accent-text focus:outline-none disabled:cursor-default disabled:opacity-40"
+              className="grid h-[30px] w-[30px] flex-none place-items-center rounded-full border-0 bg-transparent p-0 text-ink-secondary transition hover:bg-accent-softer hover:text-accent-text focus:outline-none disabled:cursor-default disabled:opacity-40"
               type="button"
               aria-label="添加附件"
               onClick={() => void pickChatAttachments()}
@@ -213,6 +221,7 @@ export const ChatComposer = React.memo(function ChatComposer({
               onSelectEmoji={handleSelectEmoji}
               onToggle={() => setEmojiPickerOpen((current) => !current)}
             />
+            <ChatContextRing status={context.status} busy={context.busy} notice={context.notice} unavailable={context.unavailable} onCompact={context.compact} />
             {/* One button whose icon crossfades between send and stop, so focus and press state survive the swap. */}
             <button
               className={sendButtonClass}

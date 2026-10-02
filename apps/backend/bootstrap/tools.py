@@ -485,6 +485,7 @@ def build_core_runtime(
         model_resolver=role_model_resolver,
         shared_execution=shared.role_runtime_registry if shared else None,
         self_initializer=RoleSelfInitializer(role_store, LlmRoleSelfSeedGenerator()),
+        event_bus=event_bus,
     )
     loop_ref: dict[str, AgentLoop] = {}
     tools, push_tool, scheduler, mcp_registry, memory_runtime = build_registered_tools(

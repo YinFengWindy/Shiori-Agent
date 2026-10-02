@@ -13,6 +13,7 @@ from agent.looping.core import AgentLoop
 import agent.looping.core as loop_core
 from agent.looping.ports import SessionServices
 from bus.event_bus import EventBus
+from bus.events_context import ContextWindowChanged
 from bus.events_lifecycle import TurnCommitted
 from agent.core.passive_turn.helpers import get_window_history
 from conversation.context_scope import (
@@ -47,6 +48,31 @@ from tests.backend.core.memory.markdown.memory_double import CommittedMemory
 from plugins.plugin_undo.backend.plugin import PluginUndo
 from session.manager import Session, SessionManager
 from session.manager.models import consolidation_cursor
+
+
+@pytest.mark.parametrize("fails", [False, True])
+async def test_standalone_memory_completion_notifies_after_lock_release(
+    memory_harness, fails
+):
+    h = memory_harness
+    session = h.manager.get_or_create("cli:standalone")
+    session.metadata["role_id"] = "mira"
+    session.add_message("user", "tea")
+    session.add_message("assistant", "done")
+    h.manager.save(session)
+    h.fail = fails
+    observed = []
+    h.bus.on(
+        ContextWindowChanged,
+        lambda event: observed.append(
+            (event.session_key, h.maintenance.is_busy(session.key))
+        ),
+    )
+    result = await h.maintenance.consolidate(
+        ConsolidateRequest(session=session, through_index=2)
+    )
+    assert result.trace["mode"] == ("failed" if fails else "markdown")
+    assert observed == [(session.key, False)]
 
 
 @pytest.mark.asyncio

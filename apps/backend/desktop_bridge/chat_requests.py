@@ -10,6 +10,8 @@ from infra.channels.reply_context import build_inbound_text_with_reply_context
 from .app_service import DesktopAppService
 from .chat_service import ChatTurnBusyError, DesktopChatService
 from .session_presenter import DesktopSessionPresenter
+from .context_requests import DesktopContextRequests
+from shiori_sdk.commands import normalize_command
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 
@@ -40,6 +42,7 @@ class DesktopChatRequestHandler:
         start_chat_turn: Callable[..., None],
         session_presenter: DesktopSessionPresenter,
         sanitize_voice_metrics: Callable[[object], dict[str, str | int] | None],
+        context_requests: DesktopContextRequests | None = None,
     ) -> None:
         self._role_service = role_service
         self._app_service = app_service
@@ -47,6 +50,7 @@ class DesktopChatRequestHandler:
         self._start_chat_turn = start_chat_turn
         self._session_presenter = session_presenter
         self._sanitize_voice_metrics = sanitize_voice_metrics
+        self._context_requests = context_requests
 
     async def handle(
         self,
@@ -56,6 +60,13 @@ class DesktopChatRequestHandler:
         request_id: str,
         emit_event: EventEmitter,
     ) -> dict[str, Any] | None:
+        if method in {"chat.context.status", "chat.context.compact"}:
+            if self._context_requests is None:
+                raise RuntimeError("上下文压缩尚未就绪")
+            return await self._context_requests.invoke(
+                str(payload.get("role_id") or "").strip(),
+                compact=method == "chat.context.compact",
+            )
         if method == "chat.send":
             return await self._send(
                 payload, request_id=request_id, emit_event=emit_event
@@ -185,6 +196,12 @@ class DesktopChatRequestHandler:
             payload.get("turn_id") or payload.get("client_message_id") or request_id
         ).strip()
         content = str(payload.get("content") or "").strip()
+        if normalize_command(content) == "/compact":
+            if self._context_requests is None:
+                raise RuntimeError("上下文压缩尚未就绪")
+            return {
+                "context": await self._context_requests.invoke(role_id, compact=True)
+            }
         raw_media = payload.get("media")
         media = (
             [str(item).strip() for item in raw_media if str(item).strip()]

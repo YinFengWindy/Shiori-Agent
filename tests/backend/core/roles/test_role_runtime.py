@@ -15,6 +15,34 @@ from core.roles.model_errors import ModelConfigurationError
 from core.roles.model_runtime import RoleModelRuntime
 from core.roles.self_initializer import RoleSelfInitializer
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
+from bus.event_bus import EventBus
+from bus.events_context import ContextWindowChanged
+
+
+@pytest.mark.parametrize("fails", [False, True])
+async def test_context_refresh_is_published_after_role_gate_release(tmp_path, fails):
+    store = RoleStore(tmp_path)
+    role = store.create_role(role_id="mira", name="Mira", system_prompt="test")
+    bus = EventBus()
+    registry = RoleRuntimeRegistry(RoleRepository(store), event_bus=bus)
+    runtime = await registry.get(role.id)
+    observed = []
+    bus.on(
+        ContextWindowChanged,
+        lambda event: observed.append((event.session_key, runtime.busy)),
+    )
+
+    async def operation():
+        assert runtime.busy
+        if fails:
+            raise RuntimeError("failed formal turn")
+
+    if fails:
+        with pytest.raises(RuntimeError, match="failed formal turn"):
+            await runtime.execute_thread(_context(role), operation)
+    else:
+        await runtime.execute_thread(_context(role), operation)
+    assert observed == [("role:mira", False)]
 
 
 def _context(role, *, thread_id: str = "thread:mira:desktop"):

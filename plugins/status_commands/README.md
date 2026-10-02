@@ -9,6 +9,8 @@
 | `/memorystatus` | `/memory_status`、`/compact_status` | 当前会话记忆整理位置、尚未整理的真实用户消息数、最后已整理消息预览 |
 | `/kvcache` | `/cache_status` | 最近几轮的缓存命中率、token 数量及回复预览 |
 
+`/compact_status` 只读取记忆整理状态。主动压缩上下文使用宿主的 `/compact`；它与桌面输入框圆环共用上下文压缩控制器，不属于本插件。
+
 命令不区分大小写，支持 Telegram 的 `@bot` 后缀。`/kvcache` 默认显示 5 轮，整数参数限制在 1–30；无效参数使用默认值。
 
 ## 可选遥测读取
